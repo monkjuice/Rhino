@@ -1,6 +1,7 @@
 #pragma once
-#include "Session.h"
+#include "DeviceEditorPanel.h"
 #include <algorithm>
+#include <utility>
 #include <vector>
 
 namespace theta
@@ -27,23 +28,18 @@ private:
     void selectDevice(int device);
     int selectedPluginIndex() const;
     void rebuildDeviceCards();
-    void rebuildParameterControls();
     void sync();
 
     Session& session;
-    int selectedTrack = 0, selectedDevice = 0;
-    bool syncing = false;
+    DeviceEditorPanel editor;
+    int selectedTrack = 0, selectedDevice = 0, renderedSelectedDevice = -1;
     std::vector<Session::DeviceSlot> slots;
-    std::vector<Session::DeviceParameter> parameters;
     juce::Label title, context, selectedDeviceLabel, outputLabel;
     juce::TextButton open {"Open"}, bypass {"Bypass"}, remove {"Delete"}, add {"+"};
     juce::Viewport chainViewport;
     juce::Component chainContent;
     juce::OwnedArray<juce::TextButton> deviceCards;
     juce::OwnedArray<juce::Label> signalArrows;
-    juce::OwnedArray<juce::Label> parameterLabels, parameterValues;
-    juce::OwnedArray<juce::Slider> parameterSliders;
-    juce::OwnedArray<juce::TextButton> parameterAutomation;
     std::unique_ptr<FloatingDeviceWindow> floatingWindow;
 };
 }

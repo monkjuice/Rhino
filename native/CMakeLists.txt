@@ -63,6 +63,7 @@ target_sources(ThetaNative PRIVATE
     src/ArrangementGestures.cpp
     src/ArrangementDrops.cpp
     src/BrowserPanel.cpp
+    src/DeviceEditorPanel.cpp
     src/DeviceRack.cpp
     src/Playhead.cpp
     # Devices

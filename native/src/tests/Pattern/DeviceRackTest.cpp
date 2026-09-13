@@ -1,4 +1,5 @@
 #include "DeviceRackTest.h"
+#include "../../DeviceRack.h"
 #include "../../Session.h"
 #include <stdexcept>
 
@@ -29,6 +30,16 @@ void runPatternDeviceRackTest()
             && signalChain[1].kind == Session::DeviceKind::Instrument
             && signalChain[2].kind == Session::DeviceKind::AudioEffect,
             "Device View follows MIDI effect to instrument to audio effect signal order");
+    DeviceRack deviceView(session);
+    deviceView.setSize(900, 280);
+    const auto cardsBeforeInsert = deviceView.deviceCards.size();
+    require(session.addAudioEffect(Session::AudioEffect::Reverb, 0).wasOk(),
+            "Device View test can append an effect after layout");
+    require(deviceView.deviceCards.size() == cardsBeforeInsert + 1,
+            "Adding an effect rebuilds the visible device cards");
+    for (auto* card : deviceView.deviceCards)
+        require(card != nullptr && card->isVisible() && !card->getBounds().isEmpty(),
+                "Rebuilt device cards are visible and laid out immediately");
     require(session.addAudioEffect(Session::AudioEffect::Equaliser).wasOk(), "Audio FX browser action inserts EQ");
     require(effectTrack->pluginList.size() == initialAudioPluginCount + 1, "Audio FX insert grows the audio track chain");
     auto audioDevices = session.deviceSlots(1);

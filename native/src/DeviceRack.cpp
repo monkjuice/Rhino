@@ -754,6 +754,11 @@ void DeviceRack::rebuildDeviceCards()
     add.toFront(false);
     outputLabel.toFront(false);
     renderedSelectedDevice = selectedDevice;
+    if (getWidth() > 24 && getHeight() > 0)
+    {
+        resized();
+        repaint(chainViewport.getBounds());
+    }
 }
 
 void DeviceRack::changeListenerCallback(juce::ChangeBroadcaster*)

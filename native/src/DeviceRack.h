@@ -21,6 +21,7 @@ public:
     std::function<void(juce::String)> status;
 
 private:
+    friend void runPatternDeviceRackTest();
     class FloatingDeviceWindow;
     void changeListenerCallback(juce::ChangeBroadcaster*) override;
     void openSelectedDevice();

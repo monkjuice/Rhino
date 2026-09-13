@@ -125,6 +125,22 @@
         session.edit->getTransport().setPosition(tracktion::core::TimePosition::fromSeconds(0.5));
         view.zoom(0.5, 0.5);
         require(view.playhead == view.xFor(0.5), "Zoom must preserve the fractional playhead position before the next vblank");
+        view.fit();
+        const auto spanBeforeWheelZoom = view.viewSpan;
+        const auto wheelPoint = juce::Point<float>(view.xFor(0.5), 100.0f);
+        const auto shiftWheelEvent = juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), wheelPoint,
+            juce::ModifierKeys(juce::ModifierKeys::shiftModifier), 1.0f, 0, 0, 0, 0,
+            &view, &view, juce::Time::getCurrentTime(), wheelPoint, juce::Time::getCurrentTime(), 1, false);
+        juce::MouseWheelDetails shiftWheel;
+        shiftWheel.deltaY = 1.0f;
+        view.mouseWheelMove(shiftWheelEvent, shiftWheel);
+        require(view.viewSpan < spanBeforeWheelZoom, "Shift-wheel zooms the arrangement like the note editor");
+        const auto spanBeforeHorizontalWheelZoom = view.viewSpan;
+        shiftWheel.deltaY = 0.0f;
+        shiftWheel.deltaX = -1.0f;
+        view.mouseWheelMove(shiftWheelEvent, shiftWheel);
+        require(view.viewSpan < spanBeforeHorizontalWheelZoom,
+                "Shift-wheel zoom handles platforms that report the gesture as horizontal scrolling");
         require(close(playheadTime(session.edit->getTransport()), 0.5), "Stopped playhead follows the seek position");
         view.fit();
         require(view.playhead == view.xFor(0.5), "Fit must update the playhead immediately");

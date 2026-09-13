@@ -244,7 +244,11 @@ void Arrangement::mouseMove(const juce::MouseEvent& event)
 void Arrangement::mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel)
 {
     if (dragging) return;
-    if (event.mods.isCommandDown()) zoom(std::exp(-wheel.deltaY * 2.0), timeAt(event.position.x));
+    if (event.mods.isShiftDown())
+    {
+        const auto wheelDelta = std::abs(wheel.deltaY) >= std::abs(wheel.deltaX) ? wheel.deltaY : -wheel.deltaX;
+        zoom(std::exp(-wheelDelta * 2.0f), timeAt(event.position.x));
+    }
     else if (std::abs(wheel.deltaY) > std::abs(wheel.deltaX)
              && static_cast<float>(session.trackCount()) * laneHeight() > laneContentHeight() + 1.0f)
     {

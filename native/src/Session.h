@@ -217,7 +217,7 @@ private:
         bool active = false;
     };
     void refreshAfterUndoRedo(bool changed);
-    void initialiseExternalPlugins();
+    void initialiseExternalPlugins(bool retry = false);
     void setPatternInstrument(bool useDrums);
     void ensureEditablePatternClip();
     AutomationRuntime& automationRuntimeFor(DeviceTarget);

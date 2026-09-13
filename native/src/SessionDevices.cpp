@@ -63,6 +63,9 @@ juce::Result Session::addClipAudioEffect(AudioEffect effect, te::EditItemID clip
 
 juce::Result Session::addInstrument(Instrument instrument, int trackIndex)
 {
+    if (instrument == Instrument::ThetaForge && !forgeDescription)
+        initialiseExternalPlugins(true);
+
     const auto tracks = te::getAudioTracks(*edit);
     if (!juce::isPositiveAndBelow(trackIndex, tracks.size()))
         return juce::Result::fail("Drop instruments on a track.");

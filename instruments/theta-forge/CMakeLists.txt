@@ -69,6 +69,7 @@ if (BUILD_TESTING)
     target_compile_definitions(ThetaForgeTests PRIVATE
         JUCE_WEB_BROWSER=0
         JUCE_USE_CURL=0
+        THETA_FORGE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
         JUCE_IGNORE_VST3_MISMATCHED_PARAMETER_ID_WARNING=1)
     add_test(NAME forge_preset_round_trip COMMAND ThetaForgeTests)
 endif()

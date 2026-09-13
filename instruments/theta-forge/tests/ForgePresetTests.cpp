@@ -47,6 +47,19 @@ int main()
     require(std::abs(value(processor, "macroWeight") - 0.73f) < 0.001f, "preset restores macro");
     require(std::abs(value(processor, "macroSpace") - 0.41f) < 0.001f, "preset restores FX macro");
 
+    const auto depthPreset = juce::File(THETA_FORGE_SOURCE_DIR)
+        .getChildFile("presets").getChildFile("Romantika Depth.forgepreset");
+    require(depthPreset.existsAsFile(), "bundled depth preset exists");
+    require(processor.loadPreset(depthPreset).wasOk(), "bundled depth preset loads");
+    require(std::abs(value(processor, "release") - 0.95f) < 0.001f,
+            "bundled depth preset restores its long release");
+    require(std::abs(value(processor, "chorusMix") - 0.2f) < 0.001f,
+            "bundled depth preset restores moderate chorus");
+    require(std::abs(value(processor, "drive") - 0.36f) < 0.001f,
+            "bundled depth preset restores dense drive");
+    require(std::abs(value(processor, "delayMix") - 0.04f) < 0.001f,
+            "bundled depth preset keeps the internal delay low");
+
     const auto invalid = directory.getChildFile("Invalid.forgepreset");
     require(invalid.replaceWithText("<NotForge />"), "invalid fixture writes");
     const auto before = value(processor, "cutoff");

@@ -86,12 +86,12 @@ void Arrangement::paint(juce::Graphics& g)
                                                 std::max(1, getHeight() - static_cast<int>(lanesTop) - 18)));
         const auto fallback = juce::Colour(clip.track == 0 ? 0xff414c34 : 0xff284b59);
         const auto label = clip.colour.isTransparent() ? fallback : clip.colour;
-        g.setColour(label.withAlpha(clip.id == selected ? 0.82f : 0.68f));
+        g.setColour(label.withAlpha(isSelected(clip.id) ? 0.82f : 0.68f));
         g.fillRect(box);
         g.setColour(label.brighter(0.55f));
         g.fillRect(box.withHeight(4.0f));
-        g.setColour(juce::Colour(clip.id == selected ? 0xffdce9b1 : 0xff617985));
-        g.drawRect(box.reduced(0.5f), clip.id == selected ? 2.0f : 1.0f);
+        g.setColour(juce::Colour(isSelected(clip.id) ? 0xffdce9b1 : 0xff617985));
+        g.drawRect(box.reduced(0.5f), isSelected(clip.id) ? 2.0f : 1.0f);
         g.setColour(juce::Colour(0xffe0e7ec));
         if (visible.getWidth() >= 24.0f)
             g.drawText(clip.name, visible.reduced(6.0f, 0).withHeight(23.0f), juce::Justification::centredLeft, true);
@@ -313,6 +313,13 @@ void Arrangement::paint(juce::Graphics& g)
     {
         g.setColour(juce::Colour(0xff75828e));
         g.drawText("Drop audio here, or use Add audio", lane(1).reduced(16, 0), juce::Justification::centredLeft);
+    }
+    if (marqueeSelecting)
+    {
+        g.setColour(juce::Colour(0x285ab9d6));
+        g.fillRect(marqueeBounds);
+        g.setColour(juce::Colour(0xff5ab9d6));
+        g.drawRect(marqueeBounds, 1.0f);
     }
     if (playhead >= headerWidth)
     {

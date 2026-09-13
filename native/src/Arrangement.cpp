@@ -169,6 +169,16 @@ bool Arrangement::keyPressed(const juce::KeyPress& key)
         duplicateSelected();
         return true;
     }
+    if (key.getModifiers().isCommandDown() && key.getKeyCode() == 'C')
+    {
+        copySelection();
+        return true;
+    }
+    if (key.getModifiers().isCommandDown() && key.getKeyCode() == 'V')
+    {
+        pasteSelection();
+        return true;
+    }
     if (!key.getModifiers().isAnyModifierKeyDown() && key.getKeyCode() == 'C')
     {
         const auto result = session.cycleClipColour(selected);
@@ -195,7 +205,7 @@ bool Arrangement::keyPressed(const juce::KeyPress& key)
             if (status) status(result.wasOk() ? "Automation lane deleted" : result.getErrorMessage());
             return true;
         }
-        session.deleteClip(selected);
+        deleteSelection();
         return true;
     }
     return false;
@@ -204,7 +214,55 @@ bool Arrangement::keyPressed(const juce::KeyPress& key)
 void Arrangement::cancelDrag()
 {
     dragging = false;
+    marqueeSelecting = false;
     loopGesture = LoopGesture::none;
+}
+
+bool Arrangement::isSelected(te::EditItemID id) const
+{
+    return std::find(selectedClips.begin(), selectedClips.end(), id) != selectedClips.end();
+}
+
+void Arrangement::setSelection(std::vector<te::EditItemID> ids, te::EditItemID primary)
+{
+    selectedClips.clear();
+    for (const auto id : ids)
+        if (!isSelected(id)) selectedClips.push_back(id);
+    selected = primary;
+    if (selected == te::EditItemID() || !isSelected(selected))
+        selected = selectedClips.empty() ? te::EditItemID() : selectedClips.front();
+}
+
+void Arrangement::copySelection()
+{
+    if (selectedClips.empty() && selected != te::EditItemID()) selectedClips = {selected};
+    clipboard = selectedClips;
+    if (status) status(clipboard.empty() ? "Select clips to copy" : "Copied " + juce::String(clipboard.size()) + " clip" + (clipboard.size() == 1 ? "" : "s"));
+}
+
+void Arrangement::pasteSelection()
+{
+    if (clipboard.empty())
+    {
+        if (status) status("Copy one or more clips first");
+        return;
+    }
+    std::vector<te::EditItemID> pasted;
+    const auto result = session.pasteClips(clipboard, std::max(0.0, pasteTime), selectedTrack, pasted);
+    if (result.failed())
+    {
+        if (status) status(result.getErrorMessage());
+        return;
+    }
+    setSelection(std::move(pasted));
+    if (status) status("Pasted " + juce::String(selectedClips.size()) + " clip" + (selectedClips.size() == 1 ? "" : "s"));
+}
+
+void Arrangement::deleteSelection()
+{
+    if (selectedClips.empty() && selected != te::EditItemID()) selectedClips = {selected};
+    for (const auto id : selectedClips) session.deleteClip(id);
+    setSelection({});
 }
 
 void Arrangement::selectTrack(int track)
@@ -227,6 +285,18 @@ void Arrangement::splitSelectedAtPlayhead()
 void Arrangement::duplicateSelected()
 {
     cancelDrag();
+    if (selectedClips.size() > 1)
+    {
+        copySelection();
+        pasteTime = std::max(pasteTime, [&]
+        {
+            double end = 0.0;
+            for (const auto& clip : clips) if (isSelected(clip.id)) end = std::max(end, clip.position.end);
+            return end;
+        }());
+        pasteSelection();
+        return;
+    }
     const auto result = session.duplicateClip(selected);
     if (result.failed() && status) status(result.getErrorMessage());
 }
@@ -255,7 +325,7 @@ void Arrangement::changeListenerCallback(juce::ChangeBroadcaster*)
     }
     sync();
 }
-void Arrangement::editWillChange() { cancelDrag(); clips.clear(); waveforms.clear(); selected = {}; }
+void Arrangement::editWillChange() { cancelDrag(); clips.clear(); waveforms.clear(); setSelection({}); }
 void Arrangement::editDidChange() { sync(); fit(); }
 
 void Arrangement::updatePlayhead()

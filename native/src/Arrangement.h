@@ -58,6 +58,11 @@ private:
     void updateScroll();
     void zoom(double factor, double anchor);
     void cancelDrag();
+    bool isSelected(te::EditItemID) const;
+    void setSelection(std::vector<te::EditItemID>, te::EditItemID primary = {});
+    void copySelection();
+    void pasteSelection();
+    void deleteSelection();
     void selectTrack(int track);
     void splitSelectedAtPlayhead();
     void duplicateSelected();
@@ -97,8 +102,13 @@ private:
     juce::VBlankAttachment vblank;
     double viewStart = 0.0, viewSpan = 8.0, songEnd = 2.0, trackScroll = 0.0;
     te::EditItemID selected;
+    std::vector<te::EditItemID> selectedClips, clipboard;
     int selectedTrack = 0;
     bool dragging = false;
+    bool marqueeSelecting = false;
+    juce::Rectangle<float> marqueeBounds;
+    juce::Point<float> marqueeAnchor;
+    double pasteTime = 0.0;
     ClipGesture gesture = ClipGesture::move;
     ClipGeometry original, preview;
     int originalTrack = 0, previewTrack = 0;

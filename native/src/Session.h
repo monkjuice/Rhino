@@ -195,6 +195,8 @@ public:
     juce::Result editClip(te::EditItemID, ClipGeometry, ClipGesture, int targetTrack = -1);
     juce::Result splitClip(te::EditItemID, double splitTimeSeconds);
     juce::Result duplicateClip(te::EditItemID);
+    juce::Result pasteClips(const std::vector<te::EditItemID>& source, double destinationStart,
+                            int destinationTrack, std::vector<te::EditItemID>& pasted);
     void deleteClip(te::EditItemID);
     juce::Result cycleClipColour(te::EditItemID);
     int clipPluginCount(te::EditItemID) const;

@@ -56,7 +56,7 @@ double Arrangement::snappedClipMoveStart(double desiredStart, double length, int
 
     for (const auto& clip : clips)
     {
-        if (clip.id == selected || clip.track != targetTrack)
+        if (isSelected(clip.id) || clip.track != targetTrack)
             continue;
         for (const auto edge : {clip.position.start, clip.position.end})
         {

@@ -55,6 +55,19 @@
             require(stream != nullptr && juce::PNGImageFormat().writeImageToStream(picture, *stream), "Write arrangement snapshot");
         }
 
+        scenario("gestures: clip clipboard");
+        view.setSelection({id});
+        view.selectedTrack = 1;
+        view.pasteTime = 2.0;
+        view.keyPressed(juce::KeyPress('C', juce::ModifierKeys::commandModifier, 0));
+        view.keyPressed(juce::KeyPress('V', juce::ModifierKeys::commandModifier, 0));
+        require(view.selectedClips.size() == 1, "Paste selects the new clip");
+        const auto pastedID = view.selectedClips.front();
+        const auto* pasted = session.findAudioClip(pastedID);
+        require(pasted != nullptr, "Ctrl-V creates an audio clip");
+        require(close(pasted->getPosition().time.getStart().inSeconds(), 2.0), "Paste anchors the copied clip at the arrangement cursor");
+        view.setSelection({id});
+
         scenario("persistence: track state");
         session.toggleTrackMute(1);
         require(te::getAudioTracks(*session.edit)[1]->isMuted(false), "Audio mute");

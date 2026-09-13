@@ -172,6 +172,72 @@ juce::Result Session::duplicateClip(te::EditItemID id)
     return juce::Result::ok();
 }
 
+juce::Result Session::pasteClips(const std::vector<te::EditItemID>& source, double destinationStart,
+                                 int destinationTrack, std::vector<te::EditItemID>& pasted)
+{
+    struct SourceClip { te::Clip* clip; ClipGeometry position; int track; };
+    std::vector<SourceClip> originals;
+    auto tracks = te::getAudioTracks(*edit);
+    for (const auto id : source)
+    {
+        auto* clip = findClip(id);
+        if (clip == nullptr) continue;
+        const auto track = tracks.indexOf(dynamic_cast<te::AudioTrack*>(clip->getClipTrack()));
+        if (track < 0) continue;
+        const auto p = clip->getPosition();
+        originals.push_back({clip, {p.time.getStart().inSeconds(), p.time.getEnd().inSeconds(), p.offset.inSeconds()}, track});
+    }
+    if (originals.empty()) return juce::Result::fail("Copy one or more clips first.");
+    if (!std::isfinite(destinationStart) || destinationStart < 0.0 || destinationTrack < 0)
+        return juce::Result::fail("Choose a valid paste location.");
+
+    const auto firstTime = std::min_element(originals.begin(), originals.end(), [] (const auto& a, const auto& b) { return a.position.start < b.position.start; })->position.start;
+    const auto firstTrack = std::min_element(originals.begin(), originals.end(), [] (const auto& a, const auto& b) { return a.track < b.track; })->track;
+    const auto lastTrack = std::max_element(originals.begin(), originals.end(), [] (const auto& a, const auto& b) { return a.track < b.track; })->track;
+    const auto requiredTracks = destinationTrack + lastTrack - firstTrack + 1;
+
+    edit->getUndoManager().beginNewTransaction("Paste clips");
+    while (te::getAudioTracks(*edit).size() < requiredTracks)
+    {
+        const auto index = te::getAudioTracks(*edit).size();
+        auto newTrack = edit->insertNewAudioTrack(te::TrackInsertPoint::getEndOfTracks(*edit), nullptr, false);
+        if (newTrack == nullptr) return juce::Result::fail("Could not create a track for pasted clips.");
+        newTrack->setName("Audio " + juce::String(index));
+        newTrack->pluginList.insertPlugin(edit->getPluginCache().createNewPlugin(UtilityDevice::xmlTypeName, {}), 0, nullptr);
+    }
+
+    pasted.clear();
+    for (const auto& item : originals)
+    {
+        auto* target = te::getAudioTracks(*edit)[destinationTrack + item.track - firstTrack];
+        const auto start = destinationStart + item.position.start - firstTime;
+        const auto range = tracktion::core::TimeRange {tracktion::core::TimePosition::fromSeconds(start),
+                                                        tracktion::core::TimePosition::fromSeconds(start + item.position.end - item.position.start)};
+        te::Clip* copy = nullptr;
+        if (auto* audio = dynamic_cast<te::WaveAudioClip*>(item.clip))
+        {
+            copy = target->insertWaveClip(audio->getName() + " copy", audio->getSourceFileReference().getFile(),
+                                          {range, tracktion::core::TimeDuration::fromSeconds(item.position.offset)}, false).get();
+            if (copy != nullptr) copy->setColour(audio->getColour());
+        }
+        else if (auto* midi = dynamic_cast<te::MidiClip*>(item.clip))
+            if (auto midiCopy = target->insertMIDIClip(midi->getName() + " copy", range, nullptr))
+            {
+                midiCopy->cloneFrom(midi);
+                midiCopy->setPosition({range, tracktion::core::TimeDuration::fromSeconds(item.position.offset)});
+                copy = midiCopy.get();
+            }
+        if (copy == nullptr) return juce::Result::fail("The clip could not be pasted.");
+        pasted.push_back(copy->itemID);
+    }
+    refreshLoop();
+    edit->getUndoManager().beginNewTransaction();
+    markModified();
+    if (edit->getTransport().isPlaying()) edit->restartPlayback();
+    sendSynchronousChangeMessage();
+    return juce::Result::ok();
+}
+
 void Session::deleteClip(te::EditItemID id)
 {
     if (auto* clip = findClip(id))

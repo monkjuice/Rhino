@@ -19,6 +19,7 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
         return;
     }
     if (!event.mods.isLeftButtonDown()) return;
+    pasteTime = snapped(std::max(0.0, timeAt(event.position.x)), event.mods.isAltDown());
     for (int track = 0; track < session.trackCount(); ++track)
         if (lane(track).withX(0.0f).contains(event.position))
         {
@@ -43,10 +44,30 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
         repaint();
         return;
     }
+    if (juce::KeyPress::isKeyCurrentlyDown('S') && event.position.x >= headerWidth && event.position.y >= lanesTop)
+    {
+        marqueeSelecting = true;
+        marqueeAnchor = event.position;
+        marqueeBounds = {event.position.x, event.position.y, 0.0f, 0.0f};
+        repaint();
+        return;
+    }
     const auto index = hit(event.position);
-    if (index < 0) { selected = {}; repaint(); return; }
+    if (index < 0) { setSelection({}); repaint(); return; }
     const auto& clip = clips[static_cast<size_t>(index)];
-    selected = clip.id;
+    if (event.mods.isShiftDown())
+    {
+        auto next = selectedClips;
+        if (isSelected(clip.id))
+            next.erase(std::remove(next.begin(), next.end(), clip.id), next.end());
+        else
+            next.push_back(clip.id);
+        setSelection(std::move(next), clip.id);
+    }
+    else if (!isSelected(clip.id))
+        setSelection({clip.id}, clip.id);
+    else
+        selected = clip.id;
     selectTrack(clip.track);
     if (clip.waveform == nullptr)
     {
@@ -89,6 +110,13 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
 
 void Arrangement::mouseDrag(const juce::MouseEvent& event)
 {
+    if (marqueeSelecting)
+    {
+        marqueeBounds = {std::min(marqueeAnchor.x, event.position.x), std::min(marqueeAnchor.y, event.position.y),
+                         std::abs(event.position.x - marqueeAnchor.x), std::abs(event.position.y - marqueeAnchor.y)};
+        repaint();
+        return;
+    }
     if (automationDragging)
     {
         for (const auto& clip : clips)
@@ -155,6 +183,17 @@ void Arrangement::mouseDrag(const juce::MouseEvent& event)
 
 void Arrangement::mouseUp(const juce::MouseEvent& event)
 {
+    if (marqueeSelecting)
+    {
+        mouseDrag(event);
+        std::vector<te::EditItemID> hits;
+        for (const auto& clip : clips)
+            if (bounds(clip).intersects(marqueeBounds)) hits.push_back(clip.id);
+        marqueeSelecting = false;
+        setSelection(std::move(hits));
+        repaint();
+        return;
+    }
     if (automationDragging)
     {
         mouseDrag(event);

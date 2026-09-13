@@ -54,10 +54,18 @@ public:
     {
         ThetaArp
     };
+    enum class DeviceKind
+    {
+        MidiEffect,
+        Instrument,
+        AudioEffect
+    };
     struct DeviceSlot
     {
         juce::String name;
         juce::String type;
+        DeviceKind kind = DeviceKind::AudioEffect;
+        int pluginIndex = -1;
         bool enabled = true;
         bool removable = false;
     };

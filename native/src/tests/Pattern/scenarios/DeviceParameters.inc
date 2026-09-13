@@ -2,19 +2,21 @@
             Session parameterSession;
             auto* parameterTrack = te::getAudioTracks(*parameterSession.edit)[1];
             require(parameterSession.addAudioEffect(Session::AudioEffect::Reverb).wasOk(), "Audio FX browser action inserts Reverb");
-            const auto reverbSlot = static_cast<int>(parameterTrack->pluginList.size()) - 1;
+            const auto reverbDevices = parameterSession.deviceSlots(1);
+            const auto reverbSlot = reverbDevices.empty() ? -1 : reverbDevices.back().pluginIndex;
             auto reverbParameters = parameterSession.deviceParameters(1, reverbSlot);
             require(!reverbParameters.empty(), "Inserted Reverb exposes editable parameters");
             const auto oldReverbValue = reverbParameters.front().value;
             const auto newReverbValue = oldReverbValue == reverbParameters.front().minimum
                 ? reverbParameters.front().maximum : reverbParameters.front().minimum;
-            require(parameterSession.beginDeviceParameterGesture(1, reverbSlot, 0).wasOk(), "Device rack starts parameter gestures");
-            require(parameterSession.setDeviceParameter(1, reverbSlot, 0, newReverbValue).wasOk(), "Device rack edits effect parameters");
-            require(parameterSession.endDeviceParameterGesture(1, reverbSlot, 0).wasOk(), "Device rack ends parameter gestures");
+            require(parameterSession.beginDeviceParameterGesture(1, reverbSlot, 0).wasOk(), "Device View starts parameter gestures");
+            require(parameterSession.setDeviceParameter(1, reverbSlot, 0, newReverbValue).wasOk(), "Device View edits effect parameters");
+            require(parameterSession.endDeviceParameterGesture(1, reverbSlot, 0).wasOk(), "Device View ends parameter gestures");
             reverbParameters = parameterSession.deviceParameters(1, reverbSlot);
-            require(std::abs(reverbParameters.front().value - newReverbValue) < 0.0001f, "Edited effect parameter value is reflected in the rack");
+            require(std::abs(reverbParameters.front().value - newReverbValue) < 0.0001f, "Edited effect parameter value is reflected in Device View");
             require(parameterSession.addAudioEffect(Session::AudioEffect::ThetaSpace).wasOk(), "Audio FX browser action inserts Theta Space");
-            const auto thetaSlot = static_cast<int>(parameterTrack->pluginList.size()) - 1;
+            const auto thetaDevices = parameterSession.deviceSlots(1);
+            const auto thetaSlot = thetaDevices.empty() ? -1 : thetaDevices.back().pluginIndex;
             auto thetaParameters = parameterSession.deviceParameters(1, thetaSlot);
             require(thetaParameters.size() >= 6, "Theta Space exposes its macro controls");
             require(parameterSession.setDeviceParameter(1, thetaSlot, 0, thetaParameters.front().maximum).wasOk(),
@@ -48,7 +50,7 @@
                     && waveParameters[4].name == "Tune 2" && waveParameters[5].name == "Cutoff"
                     && waveParameters[10].name == "Attack" && waveParameters[17].name == "Output"
                     && waveParameters[18].name == "LFO Rate" && waveParameters[22].name == "LFO Motion",
-                    "Theta Wave exposes a full synth panel surface after the rack macros");
+                    "Theta Wave exposes a full synth panel surface after the Device View macros");
             const auto developmentForge = juce::File(juce::String(THETA_SOURCE_DIR))
                 .getChildFile("../instruments/theta-forge/build/ThetaForge_artefacts/Release/VST3/Theta Forge.vst3");
             if (developmentForge.exists())

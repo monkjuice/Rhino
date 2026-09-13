@@ -94,9 +94,25 @@ public:
         browser.status = files.status;
         rack.status = files.status;
         browserToggle.onClick = [this] { browserOpen = !browserOpen; resized(); repaint(); };
-        rackToggle.onClick = [this] { rackOpen = !rackOpen; resized(); repaint(); };
+        editorToggle.onClick = [this]
+        {
+            clipEditorOpen = !clipEditorOpen;
+            if (!clipEditorOpen && !rackOpen) rackOpen = true;
+            resized();
+            repaint();
+        };
+        rackToggle.onClick = [this]
+        {
+            rackOpen = !rackOpen;
+            if (!rackOpen && !clipEditorOpen) clipEditorOpen = true;
+            resized();
+            repaint();
+        };
         browserToggle.setTooltip("Hide browser");
-        rackToggle.setTooltip("Hide device rack");
+        editorToggle.setButtonText("Clip");
+        rackToggle.setButtonText("Devices");
+        editorToggle.setTooltip("Show or hide the Clip / MIDI Editor");
+        rackToggle.setTooltip("Show or hide Device View");
         editorResolution.addItem("1/16", 16);
         editorResolution.addItem("1/32", 32);
         editorResolution.addItem("1/64", 64);
@@ -121,10 +137,10 @@ public:
         scaleHighlight.setSelectedId(1, juce::dontSendNotification);
         scaleHighlight.setTooltip("Highlight notes in a scale");
         scaleHighlight.onChange = [this] { grid.setScaleHighlight(scaleHighlight.getSelectedId()); };
-        for (auto* toggle : {&browserToggle, &rackToggle})
+        for (auto* toggle : {&browserToggle, &editorToggle, &rackToggle})
         {
             toggle->setColour(juce::TextButton::buttonColourId, juce::Colour(0xff252b31));
-            toggle->setColour(juce::TextButton::buttonOnColourId, juce::Colour(0xff252b31));
+            toggle->setColour(juce::TextButton::buttonOnColourId, juce::Colour(0xff38505b));
             toggle->setColour(juce::TextButton::textColourOffId, juce::Colour(0xffaeb8c1));
             toggle->setColour(juce::TextButton::textColourOnId, juce::Colour(0xffdce5ea));
         }
@@ -134,8 +150,8 @@ public:
         title.setText("THETA", juce::dontSendNotification);
         title.setFont(juce::FontOptions(22.0f));
         logStatus("PATTERN 1  /  4OSC     Draw notes, then press Play");
-        gainLabel.setText("SYNTH GAIN", juce::dontSendNotification);
-        audioGainLabel.setText("AUDIO GAIN", juce::dontSendNotification);
+        gainLabel.setText("PATTERN TRACK", juce::dontSendNotification);
+        audioGainLabel.setText("AUDIO 1 TRACK", juce::dontSendNotification);
         hint.setText({}, juce::dontSendNotification);
         hint.setVisible(false);
         hint.setColour(juce::Label::textColourId, juce::Colour(0xff8d98a3));
@@ -231,7 +247,7 @@ public:
         };
         for (auto* component : std::initializer_list<juce::Component*>{
                  &title, &status, &position, &gainLabel, &gain, &audioGainLabel, &audioGain, &play, &stop, &panic, &import, &settings,
-                 &browser, &browserToggle, &rackToggle, &grid, &arrangement, &rack, &tempo, &undo, &redo, &clear, &hint, &fileMenu, &editMenu, &helpMenu,
+                 &browser, &browserToggle, &editorToggle, &rackToggle, &grid, &arrangement, &rack, &tempo, &undo, &redo, &clear, &hint, &fileMenu, &editMenu, &helpMenu,
                  &documentName, &patternLabel, &editorResolution, &editorZoomOut, &editorZoomIn, &scaleHighlight})
             addAndMakeVisible(component);
         session.edit->getTransport().addChangeListener(this);
@@ -240,7 +256,7 @@ public:
         session.edit->getUndoManager().addChangeListener(this);
         patternLabel.setText("PATTERN 1  /  NOTE EDITOR", juce::dontSendNotification);
         patternLabel.setColour(juce::Label::textColourId, juce::Colour(0xffb8c4aa));
-        setSize(1120, 760);
+        setSize(1280, 900);
         changeListenerCallback(nullptr);
         // This updates a text readout only. Pointer events and control painting
         // are not throttled to this timer; there is no full-window repaint loop.
@@ -262,7 +278,7 @@ public:
         g.fillAll(juce::Colour(0xff171a1e));
         const auto bottomX = (browserOpen ? browserWidth : collapsedRailWidth) + 18;
         g.setColour(juce::Colour(0xff24282d));
-        g.fillRect(bottomX, getHeight() - 64, getWidth() - bottomX - 24 - (rackOpen ? 0 : collapsedRailWidth), 44);
+        g.fillRect(bottomX, getHeight() - 64, getWidth() - bottomX - 24, 44);
         if (!browserOpen)
         {
             g.setColour(juce::Colour(0xff11161b));
@@ -273,15 +289,10 @@ public:
             g.setColour(juce::Colour(0xff3a434b));
             g.fillRect(browserWidth, browserTop, 4, getHeight() - browserTop);
         }
-        if (!rackOpen)
-        {
-            g.setColour(juce::Colour(0xff11161b));
-            g.fillRect(getWidth() - collapsedRailWidth, browserTop, collapsedRailWidth, getHeight() - browserTop);
-        }
-        if (rackOpen)
+        if (clipEditorOpen && rackOpen)
         {
             g.setColour(juce::Colour(0xff3a434b));
-            g.fillRect(rackSplitterBounds());
+            g.fillRect(deviceSplitterBounds());
         }
         g.setColour(juce::Colour(0xff3a434b));
         g.fillRect(arrangementSplitterBounds());
@@ -291,16 +302,14 @@ public:
     {
         constexpr int gap = 18;
         const auto leftWidth = browserOpen ? browserWidth : collapsedRailWidth;
-        const auto rightRail = rackOpen ? 0 : collapsedRailWidth;
         const auto editorX = leftWidth + gap;
-        const auto editorW = getWidth() - editorX - 24 - rightRail;
+        const auto editorW = getWidth() - editorX - 24;
         const auto arrangementTop = 132;
         arrangementHeight = juce::jlimit(150, std::max(150, getHeight() - 350), arrangementHeight);
         const auto arrangementBottom = arrangementTop + arrangementHeight;
         const auto lowerTop = arrangementBottom + 34;
         const auto bottomPanelTop = getHeight() - 64;
         const auto lowerH = std::max(112, bottomPanelTop - lowerTop - 14);
-        const auto lowerW = rackOpen ? std::max(300, editorW - rackWidth - gap) : editorW;
         title.setBounds(24, 10, 118, 30);
         fileMenu.setBounds(148, 12, 52, 28);
         editMenu.setBounds(204, 12, 52, 28);
@@ -323,25 +332,43 @@ public:
         browserToggle.setTooltip(browserOpen ? "Hide browser" : "Show browser");
         browserToggle.setBounds(browserOpen ? leftWidth - 28 : 8, browserTop + 14, browserOpen ? 22 : 28, browserOpen ? 22 : 82);
         arrangement.setBounds(editorX, arrangementTop, editorW, arrangementHeight);
-        patternLabel.setBounds(editorX, arrangementBottom + 10, std::max(80, lowerW - 340), 24);
-        scaleHighlight.setVisible(!session.isPatternDrums());
-        if (!session.isPatternDrums())
-            scaleHighlight.setBounds(editorX + std::max(90, lowerW - 328), arrangementBottom + 12, 146, 20);
-        editorZoomOut.setBounds(editorX + std::max(90, lowerW - 174), arrangementBottom + 12, 25, 20);
-        editorZoomIn.setBounds(editorX + std::max(90, lowerW - 145), arrangementBottom + 12, 25, 20);
-        editorResolution.setBounds(editorX + std::max(90, lowerW - 78), arrangementBottom + 12, 70, 20);
-        grid.setBounds(editorX, lowerTop, lowerW, lowerH);
+        editorToggle.setToggleState(clipEditorOpen, juce::dontSendNotification);
+        rackToggle.setToggleState(rackOpen, juce::dontSendNotification);
+        editorToggle.setBounds(editorX, arrangementBottom + 10, 48, 22);
+        rackToggle.setBounds(editorX + 54, arrangementBottom + 10, 72, 22);
+        patternLabel.setVisible(clipEditorOpen);
+        patternLabel.setBounds(editorX + 136, arrangementBottom + 10, std::max(80, editorW - 500), 24);
+        scaleHighlight.setVisible(clipEditorOpen && !session.isPatternDrums());
+        if (clipEditorOpen && !session.isPatternDrums())
+            scaleHighlight.setBounds(editorX + std::max(260, editorW - 328), arrangementBottom + 12, 146, 20);
+        editorZoomOut.setVisible(clipEditorOpen);
+        editorZoomIn.setVisible(clipEditorOpen);
+        editorResolution.setVisible(clipEditorOpen);
+        editorZoomOut.setBounds(editorX + std::max(414, editorW - 174), arrangementBottom + 12, 25, 20);
+        editorZoomIn.setBounds(editorX + std::max(443, editorW - 145), arrangementBottom + 12, 25, 20);
+        editorResolution.setBounds(editorX + std::max(510, editorW - 78), arrangementBottom + 12, 70, 20);
+
+        grid.setVisible(clipEditorOpen);
         rack.setVisible(rackOpen);
-        if (rackOpen)
-            rack.setBounds(editorX + lowerW + gap, lowerTop, rackWidth, lowerH);
+        if (clipEditorOpen && rackOpen)
+        {
+            deviceViewHeight = juce::jlimit(112, std::max(112, lowerH - 112), deviceViewHeight);
+            const auto clipHeight = std::max(0, lowerH - deviceViewHeight - 8);
+            grid.setBounds(editorX, lowerTop, editorW, clipHeight);
+            rack.setBounds(editorX, lowerTop + clipHeight + 8, editorW, deviceViewHeight);
+        }
+        else if (clipEditorOpen)
+        {
+            grid.setBounds(editorX, lowerTop, editorW, lowerH);
+            rack.setBounds(editorX, lowerTop + lowerH, editorW, 0);
+        }
         else
-            rack.setBounds(getWidth(), lowerTop, 0, lowerH);
-        rackToggle.setButtonText(rackOpen ? ">" : "R");
-        rackToggle.setTooltip(rackOpen ? "Hide device rack" : "Show device rack");
-        rackToggle.setBounds(rackOpen ? rack.getRight() - 28 : getWidth() - collapsedRailWidth + 8,
-                             rackOpen ? rack.getY() + 5 : lowerTop + 14,
-                             rackOpen ? 22 : 28, rackOpen ? 22 : 82);
+        {
+            grid.setBounds(editorX, lowerTop, editorW, 0);
+            rack.setBounds(editorX, lowerTop, editorW, lowerH);
+        }
         browserToggle.toFront(false);
+        editorToggle.toFront(false);
         rackToggle.toFront(false);
         hint.setBounds(0, 0, 0, 0);
         const auto half = (editorW - 28) / 2;
@@ -353,7 +380,8 @@ public:
 
     void mouseMove(const juce::MouseEvent& event) override
     {
-        setMouseCursor(isOverArrangementSplitter(event.position) ? juce::MouseCursor::UpDownResizeCursor
+        setMouseCursor((isOverArrangementSplitter(event.position) || isOverDeviceSplitter(event.position))
+            ? juce::MouseCursor::UpDownResizeCursor
             : isOverSplitter(event.position) ? juce::MouseCursor::LeftRightResizeCursor
             : juce::MouseCursor::NormalCursor);
     }
@@ -361,12 +389,12 @@ public:
     void mouseDown(const juce::MouseEvent& event) override
     {
         resizingBrowser = browserOpen && std::abs(event.x - browserWidth) <= 5 && event.y >= browserTop;
-        resizingRack = rackOpen && rackSplitterBounds().expanded(4, 0).contains(event.getPosition());
+        resizingDeviceView = isOverDeviceSplitter(event.position);
         resizingArrangement = isOverArrangementSplitter(event.position);
         resizeStartX = event.x;
         resizeStartY = event.y;
         resizeStartBrowserWidth = browserWidth;
-        resizeStartRackWidth = rackWidth;
+        resizeStartDeviceViewHeight = deviceViewHeight;
         resizeStartArrangementHeight = arrangementHeight;
     }
 
@@ -378,9 +406,11 @@ public:
             resized();
             repaint();
         }
-        else if (resizingRack)
+        else if (resizingDeviceView)
         {
-            rackWidth = juce::jlimit(220, std::max(220, getWidth() - browserWidth - 420), resizeStartRackWidth - (event.x - resizeStartX));
+            const auto available = std::max(112, grid.getHeight() + rack.getHeight() + 8);
+            deviceViewHeight = juce::jlimit(112, std::max(112, available - 112),
+                                            resizeStartDeviceViewHeight - (event.y - resizeStartY));
             resized();
             repaint();
         }
@@ -395,7 +425,7 @@ public:
     void mouseUp(const juce::MouseEvent&) override
     {
         resizingBrowser = false;
-        resizingRack = false;
+        resizingDeviceView = false;
         resizingArrangement = false;
     }
 
@@ -568,10 +598,10 @@ private:
             position.setText(text, juce::dontSendNotification);
     }
 
-    juce::Rectangle<int> rackSplitterBounds() const
+    juce::Rectangle<int> deviceSplitterBounds() const
     {
-        if (!rackOpen) return {};
-        return {rack.getX() - 10, rack.getY(), 4, rack.getHeight()};
+        if (!clipEditorOpen || !rackOpen) return {};
+        return {grid.getX(), grid.getBottom() + 2, grid.getWidth(), 4};
     }
 
     juce::Rectangle<int> arrangementSplitterBounds() const
@@ -581,13 +611,19 @@ private:
 
     bool isOverSplitter(juce::Point<float> point) const
     {
-        return (browserOpen && std::abs(point.x - static_cast<float>(browserWidth)) <= 5.0f && point.y >= static_cast<float>(browserTop))
-            || (rackOpen && rackSplitterBounds().expanded(4, 0).toFloat().contains(point));
+        return browserOpen && std::abs(point.x - static_cast<float>(browserWidth)) <= 5.0f
+            && point.y >= static_cast<float>(browserTop);
     }
 
     bool isOverArrangementSplitter(juce::Point<float> point) const
     {
         return arrangementSplitterBounds().expanded(0, 4).toFloat().contains(point);
+    }
+
+    bool isOverDeviceSplitter(juce::Point<float> point) const
+    {
+        if (!clipEditorOpen || !rackOpen) return false;
+        return deviceSplitterBounds().expanded(0, 4).toFloat().contains(point);
     }
 
     Session& session;
@@ -600,7 +636,7 @@ private:
     juce::Slider tempo;
     juce::TextButton undo {"Undo"}, redo {"Redo"}, clear {"Clear"};
     juce::TextButton play {"Play"}, stop {"Stop"}, panic {"Panic"}, import {"Add audio"}, settings {"Audio settings"};
-    juce::TextButton browserToggle {"<"}, rackToggle {">"};
+    juce::TextButton browserToggle {"<"}, editorToggle {"Clip"}, rackToggle {"Devices"};
     juce::ComboBox editorResolution;
     juce::TextButton editorZoomOut, editorZoomIn;
     juce::ComboBox scaleHighlight;
@@ -608,10 +644,12 @@ private:
     juce::Component::SafePointer<juce::DialogWindow> audioSettings;
     juce::TextButton fileMenu {"File"}, editMenu {"Edit"}, helpMenu {"Help"};
     ProjectFiles files;
-    int browserWidth = 244, rackWidth = 312, arrangementHeight = 246;
-    int resizeStartX = 0, resizeStartY = 0, resizeStartBrowserWidth = 244, resizeStartRackWidth = 312, resizeStartArrangementHeight = 246;
+    int browserWidth = 244, arrangementHeight = 246, deviceViewHeight = 260;
+    int resizeStartX = 0, resizeStartY = 0, resizeStartBrowserWidth = 244;
+    int resizeStartArrangementHeight = 246, resizeStartDeviceViewHeight = 260;
     static constexpr int browserTop = 74, collapsedRailWidth = 44;
-    bool browserOpen = true, rackOpen = true, resizingBrowser = false, resizingRack = false, resizingArrangement = false;
+    bool browserOpen = true, clipEditorOpen = true, rackOpen = true;
+    bool resizingBrowser = false, resizingDeviceView = false, resizingArrangement = false;
     bool updatingEditorResolution = false;
 };
 

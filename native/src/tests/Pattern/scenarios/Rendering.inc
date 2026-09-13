@@ -113,7 +113,8 @@
             require(fxSession.importAudio(output.getFile()).wasOk(), "Theta Space test imports rendered audio");
             require(fxSession.addAudioEffect(Session::AudioEffect::ThetaSpace).wasOk(), "Theta Space can be inserted for render stability");
             auto* fxTrack = te::getAudioTracks(*fxSession.edit)[1];
-            const auto thetaSlot = fxTrack->pluginList.size() - 1;
+            const auto fxDevices = fxSession.deviceSlots(1);
+            const auto thetaSlot = fxDevices.empty() ? -1 : fxDevices.back().pluginIndex;
             auto* thetaSpace = dynamic_cast<ThetaSpaceDevice*>(fxTrack->pluginList[thetaSlot]);
             require(thetaSpace != nullptr, "Inserted effect is Theta Space");
             require(fxSession.setDeviceParameter(1, thetaSlot, 0, 1.0f).wasOk(), "Theta Space test sets wet mix");

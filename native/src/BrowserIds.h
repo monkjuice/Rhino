@@ -3,7 +3,7 @@
 #include <optional>
 
 // Browser drag-and-drop descriptions have the form "theta-browser:<kind>:<id>".
-// Both the arrangement and the device rack accept these drops, so the id tables
+// Both the arrangement and Device View accept these drops, so the id tables
 // live here rather than once per drop target.
 
 namespace theta

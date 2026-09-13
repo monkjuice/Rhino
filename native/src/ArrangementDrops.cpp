@@ -86,7 +86,7 @@ void Arrangement::itemDropped(const juce::DragAndDropTarget::SourceDetails& deta
                 selected = clip.id;
                 selectTrack(clip.track);
                 if (status) status("Added browser effect to " + session.trackName(clip.track)
-                    + " track rack for selected MIDI clip");
+                    + " Device View for selected MIDI clip");
                 return;
             }
             selected = clip.id;
@@ -141,7 +141,7 @@ juce::Result Arrangement::applyBrowserDrop(const juce::String& description, int 
         const auto result = session.addAudioEffect(*effect, track);
         if (result.failed()) return result;
         selectTrack(track);
-        if (status) status("Added browser effect to " + session.trackName(track) + " track rack");
+        if (status) status("Added browser effect to " + session.trackName(track) + " Device View");
         return juce::Result::ok();
     }
 
@@ -167,7 +167,7 @@ juce::Result Arrangement::applyBrowserDrop(const juce::String& description, int 
         const auto result = session.addMidiEffect(*effect, track);
         if (result.failed()) return result;
         selectTrack(track);
-        if (status) status("Added MIDI FX to " + session.trackName(track) + " track rack");
+        if (status) status("Added MIDI FX to " + session.trackName(track) + " Device View");
         return juce::Result::ok();
     }
 

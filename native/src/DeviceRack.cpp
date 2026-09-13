@@ -41,6 +41,17 @@ void styleAutomationButton(juce::TextButton& button, const Session::DeviceParame
         : parameter.automationOverridden ? "Manual override. Click to follow automation"
         : "Following automation. Click to hold manual value");
 }
+
+juce::String deviceKindName(Session::DeviceKind kind)
+{
+    switch (kind)
+    {
+        case Session::DeviceKind::MidiEffect:  return "MIDI EFFECT";
+        case Session::DeviceKind::Instrument:  return "INSTRUMENT";
+        case Session::DeviceKind::AudioEffect: return "AUDIO EFFECT";
+    }
+    return "DEVICE";
+}
 }
 
 class DeviceRack::FloatingDeviceWindow final : public juce::DocumentWindow
@@ -130,8 +141,10 @@ public:
         void refresh()
         {
             const auto deviceSlots = session.deviceSlots(track);
-            deviceName = juce::isPositiveAndBelow(slot, deviceSlots.size()) ? deviceSlots[static_cast<size_t>(slot)].name : "Device";
-            const auto deviceType = juce::isPositiveAndBelow(slot, deviceSlots.size()) ? deviceSlots[static_cast<size_t>(slot)].type : juce::String();
+            const auto visibleSlot = std::find_if(deviceSlots.begin(), deviceSlots.end(),
+                                                  [this](const auto& candidate) { return candidate.pluginIndex == slot; });
+            deviceName = visibleSlot != deviceSlots.end() ? visibleSlot->name : "Device";
+            const auto deviceType = visibleSlot != deviceSlots.end() ? visibleSlot->type : juce::String();
             isThetaWave = deviceType == ThetaWaveDevice::xmlTypeName;
             deviceTypeLabel = deviceType == ThetaWaveDevice::xmlTypeName ? "THETA SYNTH"
                 : deviceType == DrumDevice::xmlTypeName || deviceType == te::FourOscPlugin::xmlTypeName ? "THETA INSTRUMENT"
@@ -510,40 +523,44 @@ private:
 DeviceRack::DeviceRack(Session& s) : session(s)
 {
     setOpaque(true);
-    title.setText("RACK", juce::dontSendNotification);
+    title.setText("DEVICE VIEW", juce::dontSendNotification);
     title.setColour(juce::Label::textColourId, juce::Colour(0xffcbd6de));
     title.setFont(juce::FontOptions(13.0f));
-    pattern.setClickingTogglesState(true);
-    audio.setClickingTogglesState(true);
-    pattern.setButtonText("Pat");
-    audio.setButtonText("Trk");
+    context.setColour(juce::Label::textColourId, juce::Colour(0xff89959f));
+    context.setFont(juce::FontOptions(12.0f));
+    selectedDeviceLabel.setColour(juce::Label::textColourId, juce::Colour(0xffdce5ea));
+    selectedDeviceLabel.setFont(juce::FontOptions(12.0f).withStyle("Bold"));
+    outputLabel.setText("TRACK OUTPUT", juce::dontSendNotification);
+    outputLabel.setColour(juce::Label::textColourId, juce::Colour(0xff82909a));
+    outputLabel.setFont(juce::FontOptions(10.0f));
+    outputLabel.setJustificationType(juce::Justification::centred);
     open.setButtonText("Edit");
-    bypass.setButtonText("On");
-    remove.setButtonText("Del");
-    pattern.setTooltip("Pattern devices");
-    audio.setTooltip("Selected audio track devices");
+    bypass.setButtonText("Enabled");
+    remove.setButtonText("Delete");
+    add.setButtonText("+");
     open.setTooltip("Open selected device editor");
     bypass.setTooltip("Bypass or enable selected device");
     remove.setTooltip("Delete selected device");
-    pattern.setRadioGroupId(29, juce::dontSendNotification);
-    audio.setRadioGroupId(29, juce::dontSendNotification);
-    pattern.onClick = [this] { selectTrack(0); };
-    audio.onClick = [this] { selectTrack(1); };
+    add.setTooltip("Add a device at the end of this track's chain");
+    add.onClick = [this] { showAddMenu(); };
     open.onClick = [this] { openSelectedDevice(); };
     bypass.onClick = [this]
     {
-        const auto result = session.toggleDeviceEnabled(selectedTrack, selectedSlot);
+        const auto result = session.toggleDeviceEnabled(selectedTrack, selectedPluginIndex());
         if (result.failed() && status) status(result.getErrorMessage());
     };
     remove.onClick = [this]
     {
-        const auto result = session.deleteDevice(selectedTrack, selectedSlot);
+        const auto result = session.deleteDevice(selectedTrack, selectedPluginIndex());
         if (result.failed() && status) status(result.getErrorMessage());
     };
-    list.setRowHeight(28);
-    list.setColour(juce::ListBox::backgroundColourId, juce::Colour(0xff20262b));
-    list.setColour(juce::ListBox::outlineColourId, juce::Colour(0xff343c44));
-    for (auto* component : std::initializer_list<juce::Component*>{&title, &pattern, &audio, &open, &bypass, &remove, &list})
+    chainViewport.setViewedComponent(&chainContent, false);
+    chainViewport.setScrollBarsShown(false, true);
+    chainViewport.setScrollBarThickness(8);
+    chainContent.addAndMakeVisible(add);
+    chainContent.addAndMakeVisible(outputLabel);
+    for (auto* component : std::initializer_list<juce::Component*>{&title, &context, &open, &bypass, &remove,
+                                                                    &chainViewport, &selectedDeviceLabel})
         addAndMakeVisible(component);
     session.addChangeListener(this);
     selectTrack(0);
@@ -559,28 +576,49 @@ void DeviceRack::paint(juce::Graphics& g)
     g.fillAll(juce::Colour(0xff1b2025));
     g.setColour(juce::Colour(0xff303840));
     g.drawRect(getLocalBounds());
+    g.drawHorizontalLine(chainViewport.getBottom() + 7, 12.0f, static_cast<float>(getWidth() - 12));
 }
 
 void DeviceRack::resized()
 {
-    title.setBounds(12, 4, 56, 24);
-    pattern.setBounds(74, 5, 34, 24);
-    audio.setBounds(112, 5, 34, 24);
-    open.setBounds(getWidth() - 158, 5, 44, 24);
-    bypass.setBounds(getWidth() - 108, 5, 34, 24);
-    remove.setBounds(getWidth() - 68, 5, 34, 24);
+    title.setBounds(12, 5, 92, 24);
+    context.setBounds(106, 5, std::max(40, getWidth() - 342), 24);
+    open.setBounds(getWidth() - 224, 5, 52, 24);
+    bypass.setBounds(getWidth() - 166, 5, 72, 24);
+    remove.setBounds(getWidth() - 88, 5, 76, 24);
+    chainViewport.setBounds(12, 36, getWidth() - 24, 84);
+
+    constexpr int cardWidth = 148;
+    constexpr int cardHeight = 58;
+    constexpr int arrowWidth = 28;
+    int x = 0;
+    for (int i = 0; i < deviceCards.size(); ++i)
+    {
+        deviceCards[i]->setBounds(x, 1, cardWidth, cardHeight);
+        x += cardWidth;
+        if (juce::isPositiveAndBelow(i, signalArrows.size()))
+        {
+            signalArrows[i]->setBounds(x, 1, arrowWidth, cardHeight);
+            x += arrowWidth;
+        }
+    }
+    add.setBounds(x, 6, 46, 48);
+    x += 46;
+    if (auto* finalArrow = signalArrows.getLast())
+    {
+        finalArrow->setBounds(x, 1, arrowWidth, cardHeight);
+        x += arrowWidth;
+    }
+    outputLabel.setBounds(x, 1, 92, cardHeight);
+    x += 92;
+    chainContent.setSize(std::max(chainViewport.getWidth(), x), cardHeight + 10);
+
+    selectedDeviceLabel.setBounds(14, 130, getWidth() - 28, 22);
     const auto paramCount = std::min(6, static_cast<int>(parameters.size()));
-    const auto columns = paramCount > 3 ? 3 : std::max(1, paramCount);
-    const auto rows = paramCount > 3 ? 2 : 1;
-    const auto parameterHeight = paramCount > 0 ? (rows == 2 ? 206 : 132) : 0;
-    const auto availableHeight = std::max(60, getHeight() - 42);
-    const auto desiredListHeight = 10 + std::max(3, getNumRows()) * list.getRowHeight();
-    const auto maxListHeight = paramCount > 0
-        ? std::max(76, availableHeight - parameterHeight - 10)
-        : availableHeight;
-    const auto listHeight = juce::jlimit(76, maxListHeight, desiredListHeight);
-    list.setBounds(12, 34, getWidth() - 24, listHeight);
-    const auto parameterArea = juce::Rectangle<int>(12, list.getBottom() + 10, getWidth() - 24, parameterHeight).reduced(2, 0);
+    const auto columns = std::max(1, std::min(paramCount, getWidth() >= 900 ? 6 : getWidth() >= 560 ? 4 : 3));
+    const auto rows = paramCount > 0 ? (paramCount + columns - 1) / columns : 1;
+    const auto parameterArea = juce::Rectangle<int>(12, 154, getWidth() - 24,
+                                                     std::max(0, getHeight() - 160)).reduced(2, 0);
     const auto cellWidth = columns > 0 ? parameterArea.getWidth() / columns : parameterArea.getWidth();
     const auto cellHeight = rows > 0 ? parameterArea.getHeight() / rows : parameterArea.getHeight();
     for (int i = 0; i < parameterSliders.size(); ++i)
@@ -606,7 +644,7 @@ void DeviceRack::resized()
         const juce::Rectangle<int> cell(parameterArea.getX() + col * cellWidth,
                                         parameterArea.getY() + row * cellHeight,
                                         cellWidth, cellHeight);
-        const auto knobSize = std::min({64, std::max(42, cell.getWidth() - 28), std::max(42, cell.getHeight() - 28)});
+        const auto knobSize = std::min({64, std::max(34, cell.getWidth() - 28), std::max(34, cell.getHeight() - 36)});
         name->setBounds(cell.getX() + 4, cell.getY(), cell.getWidth() - 8, 18);
         slider->setBounds(cell.withSizeKeepingCentre(knobSize, knobSize).translated(0, 4));
         value->setBounds(cell.getX() + 4, cell.getBottom() - 20, cell.getWidth() - 8, 18);
@@ -614,48 +652,17 @@ void DeviceRack::resized()
     }
 }
 
-int DeviceRack::getNumRows()
-{
-    return static_cast<int>(slots.size());
-}
-
-void DeviceRack::paintListBoxItem(int row, juce::Graphics& g, int width, int height, bool selected)
-{
-    if (!juce::isPositiveAndBelow(row, slots.size())) return;
-    const auto& slot = slots[static_cast<size_t>(row)];
-    g.fillAll(selected ? juce::Colour(0xff34424a) : juce::Colour(row % 2 == 0 ? 0xff20262b : 0xff242a30));
-    g.setColour(slot.enabled ? juce::Colour(0xffc6d58c) : juce::Colour(0xff6e7780));
-    g.fillRect(8, height / 2 - 4, 8, 8);
-    g.setFont(juce::FontOptions(13.0f));
-    g.setColour(slot.enabled ? juce::Colour(0xffe5ebef) : juce::Colour(0xff9aa4ad));
-    g.drawText(slot.name, 24, 0, width / 2 - 24, height, juce::Justification::centredLeft, true);
-    g.setColour(juce::Colour(0xff8f9aa4));
-    g.drawText(slot.type, width / 2, 0, width / 2 - 12, height, juce::Justification::centredLeft, true);
-}
-
-void DeviceRack::selectedRowsChanged(int lastRowSelected)
-{
-    selectedSlot = juce::jlimit(0, std::max(0, static_cast<int>(slots.size()) - 1), lastRowSelected);
-    sync();
-}
-
-void DeviceRack::listBoxItemDoubleClicked(int row, const juce::MouseEvent&)
-{
-    selectedSlot = juce::jlimit(0, std::max(0, static_cast<int>(slots.size()) - 1), row);
-    openSelectedDevice();
-}
-
 void DeviceRack::openSelectedDevice()
 {
     if (slots.empty())
         return;
-    selectedSlot = juce::jlimit(0, static_cast<int>(slots.size()) - 1, selectedSlot);
+    selectedDevice = juce::jlimit(0, static_cast<int>(slots.size()) - 1, selectedDevice);
     // Destroy any active AudioProcessorEditor before asking the wrapped
     // processor for its editor again. JUCE permits one active editor per
     // processor and createEditorIfNeeded may otherwise return the old pointer.
     floatingWindow.reset();
-    floatingWindow = std::make_unique<FloatingDeviceWindow>(session, selectedTrack, selectedSlot);
-    if (status) status("Opened " + slots[static_cast<size_t>(selectedSlot)].name + " device panel");
+    floatingWindow = std::make_unique<FloatingDeviceWindow>(session, selectedTrack, selectedPluginIndex());
+    if (status) status("Opened " + slots[static_cast<size_t>(selectedDevice)].name + " device panel");
 }
 
 bool DeviceRack::isInterestedInDragSource(const juce::DragAndDropTarget::SourceDetails& details)
@@ -686,6 +693,102 @@ void DeviceRack::itemDropped(const juce::DragAndDropTarget::SourceDetails& detai
     }
 }
 
+void DeviceRack::showAddMenu()
+{
+    juce::PopupMenu audioEffects, instruments, midiEffects, menu;
+    audioEffects.addItem(101, "EQ");
+    audioEffects.addItem(102, "Reverb");
+    audioEffects.addItem(103, "Delay");
+    audioEffects.addItem(104, "Compressor");
+    audioEffects.addItem(105, "Theta Space");
+    audioEffects.addItem(106, "Theta Bloom");
+    instruments.addItem(201, "4OSC");
+    instruments.addItem(202, "Theta Wave");
+    instruments.addItem(203, "Theta Forge", session.isForgeAvailable());
+    instruments.addItem(204, "Theta Drums");
+    midiEffects.addItem(301, "Theta Arp");
+    menu.addSubMenu("Audio Effects", audioEffects);
+    menu.addSubMenu("Instruments", instruments);
+    menu.addSubMenu("MIDI Effects", midiEffects);
+    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(add),
+        [safe = juce::Component::SafePointer<DeviceRack>(this)](int result)
+        {
+            if (safe == nullptr || result == 0) return;
+            juce::Result added = juce::Result::fail("That device could not be created.");
+            if (result >= 101 && result <= 106)
+                added = safe->session.addAudioEffect(static_cast<Session::AudioEffect>(result - 101), safe->selectedTrack);
+            else if (result >= 201 && result <= 204)
+                added = safe->session.addInstrument(static_cast<Session::Instrument>(result - 201), safe->selectedTrack);
+            else if (result == 301)
+                added = safe->session.addMidiEffect(Session::MidiEffect::ThetaArp, safe->selectedTrack);
+
+            if (safe->status)
+                safe->status(added.wasOk() ? "Added device to " + safe->session.trackName(safe->selectedTrack)
+                                           : added.getErrorMessage());
+            if (added.wasOk())
+            {
+                safe->sync();
+                const auto wantedKind = result >= 101 && result <= 106 ? Session::DeviceKind::AudioEffect
+                    : result >= 201 && result <= 204 ? Session::DeviceKind::Instrument
+                    : Session::DeviceKind::MidiEffect;
+                for (int i = 0; i < static_cast<int>(safe->slots.size()); ++i)
+                    if (safe->slots[static_cast<size_t>(i)].kind == wantedKind)
+                        safe->selectedDevice = i;
+                safe->sync();
+                if (juce::isPositiveAndBelow(safe->selectedDevice, safe->deviceCards.size()))
+                    safe->chainViewport.setViewPosition(safe->deviceCards[safe->selectedDevice]->getX(), 0);
+            }
+        });
+}
+
+int DeviceRack::selectedPluginIndex() const
+{
+    return juce::isPositiveAndBelow(selectedDevice, slots.size())
+        ? slots[static_cast<size_t>(selectedDevice)].pluginIndex : -1;
+}
+
+void DeviceRack::selectDevice(int device)
+{
+    selectedDevice = juce::jlimit(0, std::max(0, static_cast<int>(slots.size()) - 1), device);
+    sync();
+}
+
+void DeviceRack::rebuildDeviceCards()
+{
+    deviceCards.clear(true);
+    signalArrows.clear(true);
+    for (int i = 0; i < static_cast<int>(slots.size()); ++i)
+    {
+        const auto& slot = slots[static_cast<size_t>(i)];
+        auto* card = deviceCards.add(new juce::TextButton());
+        card->setButtonText(slot.name + "\n" + deviceKindName(slot.kind) + (slot.enabled ? "  /  ON" : "  /  BYPASSED"));
+        card->setTooltip(deviceKindName(slot.kind) + " · processing position " + juce::String(i + 1));
+        card->setToggleState(i == selectedDevice, juce::dontSendNotification);
+        card->setColour(juce::TextButton::buttonColourId,
+                        slot.enabled ? juce::Colour(0xff252d33) : juce::Colour(0xff202429));
+        card->setColour(juce::TextButton::buttonOnColourId,
+                        slot.enabled ? juce::Colour(0xff38505b) : juce::Colour(0xff303a40));
+        card->setColour(juce::TextButton::textColourOffId,
+                        slot.enabled ? juce::Colour(0xffdce5ea) : juce::Colour(0xff77818a));
+        card->setColour(juce::TextButton::textColourOnId,
+                        slot.enabled ? juce::Colour(0xffedf4f7) : juce::Colour(0xff98a2aa));
+        card->onClick = [this, i] { selectDevice(i); };
+        chainContent.addAndMakeVisible(card);
+    }
+    const auto arrowCount = static_cast<int>(slots.size()) + 1;
+    for (int i = 0; i < arrowCount; ++i)
+    {
+        auto* arrow = signalArrows.add(new juce::Label());
+        arrow->setText(juce::String::fromUTF8("\xe2\x86\x92"), juce::dontSendNotification);
+        arrow->setColour(juce::Label::textColourId, juce::Colour(0xff6f7d86));
+        arrow->setFont(juce::FontOptions(18.0f));
+        arrow->setJustificationType(juce::Justification::centred);
+        chainContent.addAndMakeVisible(arrow);
+    }
+    add.toFront(false);
+    outputLabel.toFront(false);
+}
+
 void DeviceRack::rebuildParameterControls()
 {
     while (parameterLabels.size() < static_cast<int>(parameters.size()))
@@ -708,23 +811,23 @@ void DeviceRack::rebuildParameterControls()
         slider->setColour(juce::Slider::thumbColourId, juce::Colour(0xff4bb0d2));
         slider->onDragStart = [this, index]
         {
-            const auto result = session.beginDeviceParameterGesture(selectedTrack, selectedSlot, index);
+            const auto result = session.beginDeviceParameterGesture(selectedTrack, selectedPluginIndex(), index);
             if (result.failed() && status) status(result.getErrorMessage());
         };
         slider->onValueChange = [this, index, slider]
         {
             if (syncing) return;
-            const auto result = session.setDeviceParameter(selectedTrack, selectedSlot, index, static_cast<float>(slider->getValue()));
+            const auto result = session.setDeviceParameter(selectedTrack, selectedPluginIndex(), index, static_cast<float>(slider->getValue()));
             if (result.failed() && status) status(result.getErrorMessage());
         };
         slider->onDragEnd = [this, index]
         {
-            const auto result = session.endDeviceParameterGesture(selectedTrack, selectedSlot, index);
+            const auto result = session.endDeviceParameterGesture(selectedTrack, selectedPluginIndex(), index);
             if (result.failed() && status) status(result.getErrorMessage());
         };
         automation->onClick = [this, index]
         {
-            const auto result = session.toggleParameterAutomationOverride(selectedTrack, selectedSlot, index);
+            const auto result = session.toggleParameterAutomationOverride(selectedTrack, selectedPluginIndex(), index);
             if (status)
                 status(result.wasOk() ? "Toggled parameter automation" : result.getErrorMessage());
         };
@@ -764,29 +867,29 @@ void DeviceRack::changeListenerCallback(juce::ChangeBroadcaster*)
 void DeviceRack::selectTrack(int track)
 {
     selectedTrack = juce::jlimit(0, std::max(0, session.trackCount() - 1), track);
-    pattern.setToggleState(selectedTrack == 0, juce::dontSendNotification);
-    audio.setButtonText("Trk");
-    audio.setToggleState(selectedTrack > 0, juce::dontSendNotification);
-    selectedSlot = 0;
+    selectedDevice = 0;
     sync();
 }
 
 void DeviceRack::sync()
 {
     selectedTrack = juce::jlimit(0, std::max(0, session.trackCount() - 1), selectedTrack);
-    pattern.setToggleState(selectedTrack == 0, juce::dontSendNotification);
-    audio.setButtonText("Trk");
-    audio.setToggleState(selectedTrack > 0, juce::dontSendNotification);
+    const auto previousPluginIndex = selectedPluginIndex();
     slots = session.deviceSlots(selectedTrack);
-    selectedSlot = juce::jlimit(0, std::max(0, static_cast<int>(slots.size()) - 1), selectedSlot);
-    parameters = session.deviceParameters(selectedTrack, selectedSlot);
-    list.updateContent();
-    if (!slots.empty())
-        list.selectRow(selectedSlot, juce::dontSendNotification);
+    if (previousPluginIndex >= 0)
+        for (int i = 0; i < static_cast<int>(slots.size()); ++i)
+            if (slots[static_cast<size_t>(i)].pluginIndex == previousPluginIndex)
+                selectedDevice = i;
+    selectedDevice = juce::jlimit(0, std::max(0, static_cast<int>(slots.size()) - 1), selectedDevice);
+    parameters = session.deviceParameters(selectedTrack, selectedPluginIndex());
+    context.setText(session.trackName(selectedTrack) + "  /  SIGNAL CHAIN", juce::dontSendNotification);
+    selectedDeviceLabel.setText(slots.empty() ? "No devices — use + or drag from the Browser"
+        : slots[static_cast<size_t>(selectedDevice)].name + "  /  CONTROLS", juce::dontSendNotification);
+    rebuildDeviceCards();
     bypass.setEnabled(!slots.empty());
     open.setEnabled(!slots.empty());
-    remove.setEnabled(!slots.empty() && slots[static_cast<size_t>(selectedSlot)].removable);
-    bypass.setButtonText(!slots.empty() && !slots[static_cast<size_t>(selectedSlot)].enabled ? "Off" : "On");
+    remove.setEnabled(!slots.empty() && slots[static_cast<size_t>(selectedDevice)].removable);
+    bypass.setButtonText(!slots.empty() && !slots[static_cast<size_t>(selectedDevice)].enabled ? "Bypassed" : "Enabled");
     rebuildParameterControls();
 }
 }

@@ -234,6 +234,14 @@ juce::Result switchTrackInstrument(te::Edit& edit, te::AudioTrack& track, Sessio
                                    const juce::PluginDescription* forgeDescription)
 {
     te::Plugin* selected = nullptr;
+    int instrumentInsertIndex = 0;
+    while (instrumentInsertIndex < track.pluginList.size())
+    {
+        auto* plugin = track.pluginList[instrumentInsertIndex];
+        if (plugin == nullptr || plugin->getPluginType() != ThetaArpDevice::xmlTypeName)
+            break;
+        ++instrumentInsertIndex;
+    }
     const auto selectedType = instrument == Session::Instrument::Drums ? juce::String(DrumDevice::xmlTypeName)
         : instrument == Session::Instrument::ThetaWave ? juce::String(ThetaWaveDevice::xmlTypeName)
         : juce::String(te::FourOscPlugin::xmlTypeName);
@@ -251,13 +259,13 @@ juce::Result switchTrackInstrument(te::Edit& edit, te::AudioTrack& track, Sessio
             if (created == nullptr)
                 return juce::Result::fail("Theta Forge.vst3 could not be loaded.");
             selected = created.get();
-            track.pluginList.insertPlugin(created, 0, nullptr);
+            track.pluginList.insertPlugin(created, instrumentInsertIndex, nullptr);
             changed = true;
         }
     }
     else
     {
-        auto result = ensurePlugin(edit, track, selectedType, 0, selected, changed);
+        auto result = ensurePlugin(edit, track, selectedType, instrumentInsertIndex, selected, changed);
         if (result.failed())
             return result;
     }

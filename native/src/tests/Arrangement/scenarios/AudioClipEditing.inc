@@ -45,7 +45,7 @@
         view.itemDropped({"theta-browser:effect:ThetaSpace", nullptr,
                           {static_cast<int>(view.xFor(0.25)), static_cast<int>(view.lane(1).getCentreY())}});
         require(static_cast<int>(session.deviceSlots(1).size()) == audioTrackSlots,
-                "Dropping an audio effect on an audio clip leaves the track rack unchanged");
+                "Dropping an audio effect on an audio clip leaves the track Device View unchanged");
         require(session.clipPluginCount(id) == clipSlots + 1,
                 "Dropping an audio effect on an audio clip inserts clip-local FX");
         session.undo();

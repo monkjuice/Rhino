@@ -2,10 +2,53 @@
 #include <algorithm>
 #include <set>
 
-// Device creation, inspection and parameter gestures. Serves DeviceRack.
+// Device creation, inspection and parameter gestures. Serves Device View.
 
 namespace theta
 {
+namespace
+{
+bool isTrackInfrastructure(const juce::String& type)
+{
+    // Tracktion represents permanent channel-strip facilities as plugins in
+    // the processing graph. They are deliberately not user devices.
+    return type == UtilityDevice::xmlTypeName || type == "volume" || type == "level";
+}
+
+bool isBuiltInInstrument(const juce::String& type)
+{
+    return type == te::FourOscPlugin::xmlTypeName || type == DrumDevice::xmlTypeName
+        || type == ThetaWaveDevice::xmlTypeName;
+}
+
+Session::DeviceKind deviceKind(te::Plugin& plugin)
+{
+    const auto type = plugin.getPluginType();
+    if (type == ThetaArpDevice::xmlTypeName)
+        return Session::DeviceKind::MidiEffect;
+    if (isBuiltInInstrument(type) || isForgePlugin(plugin))
+        return Session::DeviceKind::Instrument;
+    return Session::DeviceKind::AudioEffect;
+}
+
+bool isSelectedPatternInstrument(te::Plugin& plugin, const juce::String& selected)
+{
+    const auto type = plugin.getPluginType();
+    if (type == te::FourOscPlugin::xmlTypeName) return selected.isEmpty() || selected == "synth";
+    if (type == DrumDevice::xmlTypeName) return selected == "drums";
+    if (type == ThetaWaveDevice::xmlTypeName) return selected == "wave";
+    if (isForgePlugin(plugin)) return selected == "forge";
+    return true;
+}
+
+int channelStripInsertIndex(te::AudioTrack& track)
+{
+    for (int i = 0; i < track.pluginList.size(); ++i)
+        if (auto* plugin = track.pluginList[i]; plugin != nullptr && isTrackInfrastructure(plugin->getPluginType()))
+            return i;
+    return track.pluginList.size();
+}
+}
 
 juce::Result Session::addAudioEffect(AudioEffect effect, int trackIndex)
 {
@@ -23,7 +66,7 @@ juce::Result Session::addAudioEffect(AudioEffect effect, int trackIndex)
     auto plugin = edit->getPluginCache().createNewPlugin(type, {});
     if (plugin == nullptr)
         return juce::Result::fail(name + " could not be created.");
-    track->pluginList.insertPlugin(plugin, track->pluginList.size(), nullptr);
+    track->pluginList.insertPlugin(plugin, channelStripInsertIndex(*track), nullptr);
     edit->getUndoManager().beginNewTransaction();
     markModified();
     if (edit->getTransport().isPlaying())
@@ -136,8 +179,7 @@ juce::Result Session::addMidiEffect(MidiEffect effect, int trackIndex)
     for (int i = 0; i < track->pluginList.size(); ++i)
     {
         auto* existing = track->pluginList[i];
-        if (existing != nullptr && (existing->getPluginType() == te::FourOscPlugin::xmlTypeName
-                                    || existing->getPluginType() == DrumDevice::xmlTypeName))
+        if (existing != nullptr && deviceKind(*existing) == DeviceKind::Instrument)
         {
             insertIndex = i;
             break;
@@ -159,14 +201,20 @@ std::vector<Session::DeviceSlot> Session::deviceSlots(int track) const
     std::vector<DeviceSlot> slots;
     const auto tracks = te::getAudioTracks(*edit);
     if (!juce::isPositiveAndBelow(track, tracks.size())) return slots;
-    for (auto* plugin : tracks[track]->pluginList)
+    const auto selectedPatternInstrument = edit->state.getProperty("thetaPatternInstrument").toString();
+    for (int pluginIndex = 0; pluginIndex < tracks[track]->pluginList.size(); ++pluginIndex)
     {
+        auto* plugin = tracks[track]->pluginList[pluginIndex];
         if (plugin == nullptr) continue;
         const auto type = plugin->getPluginType();
-        const auto coreStarterDevice = track == 0 && (type == UtilityDevice::xmlTypeName
-            || type == te::FourOscPlugin::xmlTypeName || type == DrumDevice::xmlTypeName);
-        slots.push_back({plugin->getDisplayName(), type, plugin->isEnabled(),
-                         !coreStarterDevice && type != UtilityDevice::xmlTypeName});
+        if (isTrackInfrastructure(type))
+            continue;
+        if (track == 0 && (isBuiltInInstrument(type) || isForgePlugin(*plugin))
+            && !isSelectedPatternInstrument(*plugin, selectedPatternInstrument))
+            continue;
+        const auto corePatternInstrument = track == 0 && deviceKind(*plugin) == DeviceKind::Instrument;
+        slots.push_back({plugin->getDisplayName(), type, deviceKind(*plugin), pluginIndex,
+                         plugin->isEnabled(), !corePatternInstrument});
     }
     return slots;
 }

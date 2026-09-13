@@ -65,6 +65,31 @@
         selectionGrid.changeListenerCallback(nullptr);
         require(!session.hasNote(1, 49) && session.hasNote(2, 49) && session.noteLengthSteps(2, 49) == 4,
                 "Dragging from the body of a sustained note follows the pointer and preserves its length");
+        juce::ValueTree halfNoteState;
+        require(session.addNote(6.0, 49, 0.5, &halfNoteState).wasOk(),
+                "Can create a half-cell note for fractional drag testing");
+        selectionGrid.changeListenerCallback(nullptr);
+        const auto* halfNote = selectionGrid.noteForState(halfNoteState);
+        require(halfNote != nullptr, "The half-cell note appears in the editor");
+        const auto halfNoteFrom = selectionGrid.boundsFor(*halfNote).getCentre();
+        const auto halfNoteRight = halfNoteFrom.translated(selectionGrid.cellWidth() * 0.5f, 0.0f);
+        selectionGrid.mouseDown(gridEvent(halfNoteFrom, halfNoteFrom, false));
+        selectionGrid.mouseDrag(gridEvent(halfNoteFrom, halfNoteRight, true));
+        selectionGrid.mouseUp(gridEvent(halfNoteFrom, halfNoteRight, true));
+        selectionGrid.changeListenerCallback(nullptr);
+        const auto* movedHalfNote = selectionGrid.noteForState(halfNoteState);
+        require(movedHalfNote != nullptr && close(movedHalfNote->start, 6.5),
+                "A half-cell note can be dragged into the second half of the same cell");
+        const auto halfNoteLeft = halfNoteRight.translated(-selectionGrid.cellWidth() * 0.5f, 0.0f);
+        selectionGrid.mouseDown(gridEvent(halfNoteRight, halfNoteRight, false));
+        selectionGrid.mouseDrag(gridEvent(halfNoteRight, halfNoteLeft, true));
+        selectionGrid.mouseUp(gridEvent(halfNoteRight, halfNoteLeft, true));
+        selectionGrid.changeListenerCallback(nullptr);
+        movedHalfNote = selectionGrid.noteForState(halfNoteState);
+        require(movedHalfNote != nullptr && close(movedHalfNote->start, 6.0),
+                "A half-cell note can be dragged back from the second half of a cell");
+        require(session.removeNotes({halfNoteState}), "Can remove the fractional drag fixture");
+        selectionGrid.changeListenerCallback(nullptr);
         selectionGrid.selectedNotes.reset();
         selectionGrid.selectedNotes.set(static_cast<size_t>(selectionGrid.indexForCell(2, 49)));
         const auto resolutionBeforeDivision = session.editorStepResolution();

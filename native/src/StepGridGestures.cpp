@@ -146,12 +146,17 @@ void StepGrid::mouseDown(const juce::MouseEvent& event)
         if (movingGroup)
             for (const auto& state : selectedStates())
                 if (const auto* note = noteForState(state))
-                    movingNotes.push_back({state, note->start, note->pitch});
+                    movingNotes.push_back({state, note->start, note->length, note->pitch});
         if (movingNotes.empty())
-            movingNotes.push_back({clicked.state, clicked.start, clicked.pitch});
+            movingNotes.push_back({clicked.state, clicked.start, clicked.length, clicked.pitch});
         const auto grabbedCell = cellHit(event.position);
-        lastMoveStep = grabbedCell % Session::steps;
         lastMovePitch = pitchForIndex(grabbedCell);
+        dragStartStep = stepScroll + (event.position.x - labelWidth) / cellWidth();
+        movedStepDelta = 0.0;
+        moveStepQuantum = 1.0;
+        for (const auto& note : movingNotes)
+            moveStepQuantum = std::min(moveStepQuantum, note.length);
+        moveStepQuantum = std::max(0.001, moveStepQuantum);
         dragPosition = event.position;
         verticalAutoScroll = 0.0f;
         noteMoved = false;
@@ -191,9 +196,9 @@ int StepGrid::indexForCell(int step, int pitch) const
     return row * Session::steps + step;
 }
 
-juce::Result StepGrid::moveCurrentNotesBy(int stepDelta, int pitchDelta)
+juce::Result StepGrid::moveCurrentNotesBy(double stepDelta, int pitchDelta)
 {
-    if (movingNotes.empty() || (stepDelta == 0 && pitchDelta == 0))
+    if (movingNotes.empty() || (std::abs(stepDelta) < 0.0001 && pitchDelta == 0))
         return juce::Result::ok();
     std::vector<juce::ValueTree> sources;
     sources.reserve(movingNotes.size());
@@ -219,13 +224,14 @@ juce::Result StepGrid::moveCurrentNotesBy(int stepDelta, int pitchDelta)
 void StepGrid::moveDraggedNotesAt(juce::Point<float> position)
 {
     const auto index = cellHit(position);
-    if (index < 0 || lastMoveStep < 0 || lastMovePitch < 0)
+    if (index < 0 || dragStartStep < 0.0 || lastMovePitch < 0)
         return;
-    const auto step = index % Session::steps;
+    const auto pointerStep = stepScroll + (position.x - labelWidth) / cellWidth();
+    const auto totalStepDelta = std::round((pointerStep - dragStartStep) / moveStepQuantum) * moveStepQuantum;
     const auto pitch = pitchForIndex(index);
-    if (moveCurrentNotesBy(step - lastMoveStep, pitch - lastMovePitch).wasOk())
+    if (moveCurrentNotesBy(totalStepDelta - movedStepDelta, pitch - lastMovePitch).wasOk())
     {
-        lastMoveStep = step;
+        movedStepDelta = totalStepDelta;
         lastMovePitch = pitch;
     }
 }
@@ -363,8 +369,10 @@ void StepGrid::mouseUp(const juce::MouseEvent&)
     movingNoteState = {};
     movingNotes.clear();
     movingGroup = false;
-    lastMoveStep = -1;
     lastMovePitch = -1;
+    dragStartStep = -1.0;
+    movedStepDelta = 0.0;
+    moveStepQuantum = 1.0;
     dragPosition = {-1.0f, -1.0f};
     stopTimer();
     resizingNoteState = {};

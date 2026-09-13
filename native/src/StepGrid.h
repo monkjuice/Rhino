@@ -28,7 +28,7 @@ private:
     friend int runArrangementTest();
     enum class Gesture { none, draw, move, resize, select };
     struct CopiedNote { double step = 0.0; int pitch = 0; double length = 1.0; int velocity = 100; };
-    struct MovingNote { juce::ValueTree state; double step = 0.0; int pitch = 0; };
+    struct MovingNote { juce::ValueTree state; double step = 0.0, length = 1.0; int pitch = 0; };
     struct VisibleNote
     {
         juce::ValueTree state;
@@ -70,7 +70,7 @@ private:
     bool pasteSelection();
     bool deleteSelection();
     bool fillSelectionToClipEnd();
-    juce::Result moveCurrentNotesBy(int stepDelta, int pitchDelta);
+    juce::Result moveCurrentNotesBy(double stepDelta, int pitchDelta);
     juce::Result resizeCurrentNoteTo(int index);
     juce::Result resizeCurrentNoteTo(juce::Point<float>, bool freeLength);
     void updatePointer(juce::Point<float>, const juce::ModifierKeys&);
@@ -94,10 +94,11 @@ private:
     Gesture gesture = Gesture::none;
     bool adding = true, showingDrumLabels = false, noteMoved = false, manualPitchScroll = false, movingGroup = false, resizingFromLeft = false;
     int lastHit = -1, pasteAnchorIndex = -1, clipboardBasePitch = 0;
-    int lastMoveStep = -1, lastMovePitch = -1;
+    int lastMovePitch = -1;
     int visibleStepCount = Session::defaultSteps;
     int lowestVisiblePitch = Session::lowestNote;
     double stepScroll = 0.0, stepZoom = 1.0;
+    double dragStartStep = -1.0, movedStepDelta = 0.0, moveStepQuantum = 1.0;
     double resizingStartStep = 0.0;
     juce::ValueTree movingNoteState, resizingNoteState;
     bool subdivisionActive = false;

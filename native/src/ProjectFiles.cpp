@@ -164,6 +164,13 @@ void ProjectFiles::renderWav(const juce::File& file)
             parameters.audioFormat = &wav;
             parameters.sampleRateForAudio = 48000;
             parameters.bitDepth = 24;
+            parameters.blockSizeForAudio = 512;
+            // Arrangement tracks sum at the master bus. Leave a little true
+            // playback headroom instead of letting the PCM writer hard-clip
+            // overlapping clips or effect tails.
+            parameters.shouldNormalise = true;
+            parameters.normaliseToLevelDb = -1.0f;
+            parameters.ditheringEnabled = true;
             parameters.time = {{}, tracktion::core::TimePosition{} + length};
             te::Renderer::RenderTask task("Export WAV", parameters, nullptr, nullptr);
             while (task.runJob() != juce::ThreadPoolJob::jobHasFinished) {}

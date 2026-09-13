@@ -9,6 +9,8 @@
         parameters.audioFormat = &wav;
         parameters.sampleRateForAudio = 48000;
         parameters.bitDepth = 24;
+        parameters.shouldNormalise = true;
+        parameters.normaliseToLevelDb = -1.0f;
         parameters.time = session.pattern().getPosition().time;
         {
             te::Renderer::RenderTask task("Pattern test", parameters, nullptr, nullptr);
@@ -35,7 +37,7 @@
                 require(std::isfinite(sample), "Render must contain finite samples");
                 peak = std::max(peak, std::abs(sample));
             }
-        require(peak > 0.0001f && peak < 1.0f, "Synth output must be audible and below clipping");
+        require(peak > 0.0001f && peak <= 0.90f, "Peak-normalised render must retain export headroom");
         reader.reset();
 
         {

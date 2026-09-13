@@ -22,7 +22,7 @@ Research deliverables: [open-source DAW and Ableton study](research/DAW-STUDY.md
 - A display-synchronized playhead with narrow repaint regions and cached note display data.
 - VST3 hosting through Tracktion Engine, with the independent Theta Forge synth discoverable from its development build or a standard VST3 installation and shown with its plugin-owned editor.
 
-This is an early composition workflow, not a complete DAW. Recording, media bundling/relinking, a general plugin browser/scanner, and the live launcher are not implemented yet. WAV export renders the complete arrangement offline at 48 kHz/24-bit. macOS has not been built or tested.
+This is an early composition workflow, not a complete DAW. Recording, media bundling/relinking, a general plugin browser/scanner, and the live launcher are not implemented yet. WAV export renders the complete arrangement offline at 48 kHz/24-bit, peak-normalised to -1 dBFS to preserve headroom. macOS has not been built or tested.
 
 ## Run On Windows
 

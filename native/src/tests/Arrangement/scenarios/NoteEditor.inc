@@ -40,6 +40,30 @@
         require(close(selectionGrid.playheadXForTime(session.edit->getTransport().getPosition().inSeconds()), rulerPoint.x)
                     && close(selectionGrid.playhead, rulerPoint.x),
                 "Clicking the note-editor ruler seeks within the selected clip");
+        const auto editedClipRange = session.pattern().getPosition().time;
+        require(selectionGrid.keyPressed(juce::KeyPress('L', juce::ModifierKeys::ctrlModifier, 'l')),
+                "Ctrl-L is handled by the focused note editor");
+        require(session.hasManualLoopRange()
+                && close(session.edit->getTransport().getLoopRange().getStart().inSeconds(), editedClipRange.getStart().inSeconds())
+                && close(session.edit->getTransport().getLoopRange().getEnd().inSeconds(), editedClipRange.getEnd().inSeconds())
+                && session.edit->getTransport().looping,
+                "Ctrl-L loops the entire edited MIDI clip");
+        session.clearManualLoopRange();
+        const auto loopStartPoint = juce::Point<float>(selectionGrid.cell(4, 0).getX(), 13.0f);
+        const auto loopEndPoint = juce::Point<float>(selectionGrid.cell(12, 0).getX(), 13.0f);
+        selectionGrid.mouseDown(gridEvent(loopStartPoint, loopStartPoint, false));
+        selectionGrid.mouseDrag(gridEvent(loopStartPoint, loopEndPoint, true));
+        selectionGrid.mouseUp(gridEvent(loopStartPoint, loopEndPoint, true));
+        const auto expectedLoopStart = juce::jmap(4.0 / session.editorStepCount(),
+                                                  editedClipRange.getStart().inSeconds(), editedClipRange.getEnd().inSeconds());
+        const auto expectedLoopEnd = juce::jmap(12.0 / session.editorStepCount(),
+                                                editedClipRange.getStart().inSeconds(), editedClipRange.getEnd().inSeconds());
+        require(close(session.edit->getTransport().getLoopRange().getStart().inSeconds(), expectedLoopStart)
+                && close(session.edit->getTransport().getLoopRange().getEnd().inSeconds(), expectedLoopEnd),
+                "Dragging the note-editor ruler draws a snapped loop inside the clip");
+        selectionGrid.mouseDown(gridEvent(loopStartPoint, loopStartPoint, false,
+            juce::ModifierKeys(juce::ModifierKeys::rightButtonModifier)));
+        require(!session.hasManualLoopRange(), "Right-clicking the note-editor ruler clears its manual loop");
         const auto rowForPitch = [&selectionGrid](int pitch)
         {
             return selectionGrid.lowestVisiblePitch + Session::pitches - 1 - pitch;

@@ -130,6 +130,33 @@ void StepGrid::paint(juce::Graphics& g)
             }
         }
     }
+    {
+        auto loopStartX = -1.0f;
+        auto loopEndX = -1.0f;
+        if (loopDragActive)
+        {
+            loopStartX = labelWidth + static_cast<float>(loopPreviewStartStep - stepScroll) * cellWidth();
+            loopEndX = labelWidth + static_cast<float>(loopPreviewEndStep - stepScroll) * cellWidth();
+        }
+        else if (session.hasManualLoopRange())
+        {
+            const auto range = session.edit->getTransport().getLoopRange();
+            loopStartX = loopXForTimelineTime(range.getStart().inSeconds());
+            loopEndX = loopXForTimelineTime(range.getEnd().inSeconds());
+        }
+        const auto left = std::max(labelWidth, std::min(loopStartX, loopEndX));
+        const auto right = std::min(gridRight(), std::max(loopStartX, loopEndX));
+        if (right > left)
+        {
+            const juce::Rectangle<float> loopBounds {left, 0.0f, right - left, headerHeight + rowAreaHeight()};
+            g.setColour(juce::Colour(0x245ab9d6));
+            g.fillRect(loopBounds);
+            g.setColour(juce::Colour(0xff5ab9d6));
+            g.fillRect(loopBounds.withHeight(3.0f));
+            g.drawVerticalLine(juce::roundToInt(left), 0.0f, headerHeight);
+            g.drawVerticalLine(juce::roundToInt(right), 0.0f, headerHeight);
+        }
+    }
     if (!session.isPatternDrums())
     {
         const auto maxLowest = 127 - Session::pitches + 1;

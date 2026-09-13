@@ -9,6 +9,39 @@
 namespace theta
 {
 
+juce::Result StepGrid::loopEditedClip()
+{
+    const auto range = session.pattern().getPosition().time;
+    return session.setLoopRange(range.getStart().inSeconds(), range.getEnd().inSeconds());
+}
+
+double StepGrid::loopStepAt(float x, bool free) const
+{
+    auto step = std::clamp(stepScroll + (x - labelWidth) / cellWidth(),
+                           0.0, static_cast<double>(session.editorStepCount()));
+    return free ? std::round(step * 16.0) / 16.0 : std::round(step);
+}
+
+double StepGrid::timelineTimeForLoopStep(double step) const
+{
+    const auto range = session.pattern().getPosition().time;
+    const auto start = range.getStart().inSeconds();
+    const auto end = range.getEnd().inSeconds();
+    const auto fraction = std::clamp(step / static_cast<double>(session.editorStepCount()), 0.0, 1.0);
+    return juce::jmap(fraction, start, end);
+}
+
+float StepGrid::loopXForTimelineTime(double seconds) const
+{
+    const auto range = session.pattern().getPosition().time;
+    const auto start = range.getStart().inSeconds();
+    const auto duration = range.getEnd().inSeconds() - start;
+    if (duration <= 0.0)
+        return -1.0f;
+    const auto step = (seconds - start) / duration * session.editorStepCount();
+    return labelWidth + static_cast<float>(step - stepScroll) * cellWidth();
+}
+
 int StepGrid::cellHit(juce::Point<float> point) const
 {
     if (point.x < labelWidth || point.y < headerHeight || point.x >= gridRight() || point.y >= headerHeight + rowAreaHeight())
@@ -59,6 +92,11 @@ int StepGrid::resizeHit(juce::Point<float> point) const
 
 void StepGrid::updatePointer(juce::Point<float> position, const juce::ModifierKeys& modifiers)
 {
+    if (position.y >= 0.0f && position.y < headerHeight && position.x >= labelWidth && position.x < gridRight())
+    {
+        setMouseCursor(juce::MouseCursor::CrosshairCursor);
+        return;
+    }
     const auto note = hit(position);
     if (isShortcutDown(modifiers) && note >= 0)
         setMouseCursor(juce::MouseCursor::NormalCursor);
@@ -91,10 +129,18 @@ void StepGrid::mouseDown(const juce::MouseEvent& event)
         repaint();
         return;
     }
-    if (!event.mods.isRightButtonDown()
-        && event.position.y >= 0.0f && event.position.y < headerHeight
+    if (event.position.y >= 0.0f && event.position.y < headerHeight
         && event.position.x >= labelWidth && event.position.x < gridRight())
     {
+        grabKeyboardFocus();
+        if (event.mods.isRightButtonDown())
+        {
+            session.clearManualLoopRange();
+            repaint();
+            return;
+        }
+        if (!event.mods.isLeftButtonDown())
+            return;
         const auto localStep = std::clamp(stepScroll + (event.position.x - labelWidth) / cellWidth(),
                                           0.0, static_cast<double>(session.editorStepCount()));
         const auto localBeat = localStep * 4.0 / static_cast<double>(session.editorStepResolution());
@@ -106,6 +152,9 @@ void StepGrid::mouseDown(const juce::MouseEvent& event)
         const auto clippedTime = std::clamp(requestedTime, position.time.getStart().inSeconds(), position.time.getEnd().inSeconds());
         session.edit->getTransport().setPosition(tracktion::core::TimePosition::fromSeconds(clippedTime));
         updatePlayhead();
+        loopDragActive = true;
+        loopAnchorStep = loopStepAt(event.position.x, event.mods.isAltDown());
+        loopPreviewStartStep = loopPreviewEndStep = loopAnchorStep;
         return;
     }
     if (!event.mods.isRightButtonDown() && !isShortcutDown(event.mods))
@@ -320,6 +369,14 @@ juce::Result StepGrid::resizeCurrentNoteTo(juce::Point<float> position, bool fre
 
 void StepGrid::mouseDrag(const juce::MouseEvent& event)
 {
+    if (loopDragActive)
+    {
+        const auto edge = loopStepAt(event.position.x, event.mods.isAltDown());
+        loopPreviewStartStep = std::min(loopAnchorStep, edge);
+        loopPreviewEndStep = std::max(loopAnchorStep, edge);
+        repaint();
+        return;
+    }
     if (gesture == Gesture::none) return;
     dragPosition = event.position;
     if (gesture == Gesture::select)
@@ -357,8 +414,18 @@ void StepGrid::mouseDrag(const juce::MouseEvent& event)
     lastHit = index;
 }
 
-void StepGrid::mouseUp(const juce::MouseEvent&)
+void StepGrid::mouseUp(const juce::MouseEvent& event)
 {
+    if (loopDragActive)
+    {
+        mouseDrag(event);
+        loopDragActive = false;
+        if (event.getDistanceFromDragStart() >= 3 && loopPreviewEndStep > loopPreviewStartStep)
+            session.setLoopRange(timelineTimeForLoopStep(loopPreviewStartStep),
+                                 timelineTimeForLoopStep(loopPreviewEndStep));
+        repaint();
+        return;
+    }
     if (gesture == Gesture::move && !movingGroup && !noteMoved && movingNoteState.isValid())
         session.removeNotes({movingNoteState});
     if (gesture != Gesture::none) session.endNoteGesture();

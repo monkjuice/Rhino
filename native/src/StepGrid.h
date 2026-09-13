@@ -75,6 +75,10 @@ private:
     juce::Result resizeCurrentNoteTo(juce::Point<float>, bool freeLength);
     void updatePointer(juce::Point<float>, const juce::ModifierKeys&);
     void updateMarqueeSelection();
+    juce::Result loopEditedClip();
+    double loopStepAt(float x, bool free) const;
+    double timelineTimeForLoopStep(double step) const;
+    float loopXForTimelineTime(double seconds) const;
     int pitchForIndex(int index) const;
     int indexForCell(int step, int pitch) const;
     int automaticLowestPitch() const;
@@ -111,6 +115,9 @@ private:
     juce::Point<float> selectionAnchor {-1.0f, -1.0f};
     juce::Rectangle<float> selectionBox;
     float playhead = -1.0f;
+    bool loopDragActive = false;
+    double loopAnchorStep = 0.0, loopPreviewStartStep = 0.0, loopPreviewEndStep = 0.0;
+    juce::TextButton loopButton;
     juce::ScrollBar horizontalScroll {false};
     juce::VBlankAttachment vblank;
     static constexpr float labelWidth = 54.0f, headerHeight = 26.0f, scrollHeight = 14.0f, footerHeight = 24.0f;

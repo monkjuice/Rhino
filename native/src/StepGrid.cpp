@@ -13,6 +13,15 @@ StepGrid::StepGrid(Session& s) : session(s), vblank(this, [this] { updatePlayhea
     setWantsKeyboardFocus(true);
     setTitle("Pattern notes");
     setDescription("One bar step editor. Drag to draw or erase notes.");
+    loopButton.setButtonText(juce::String::charToString(0x27f3));
+    loopButton.setTooltip("Loop the entire edited clip (Ctrl+L). Drag on the ruler to draw a loop; right-click to clear it.");
+    loopButton.setWantsKeyboardFocus(false);
+    loopButton.onClick = [this]
+    {
+        loopEditedClip();
+        grabKeyboardFocus();
+    };
+    addAndMakeVisible(loopButton);
     horizontalScroll.addListener(this);
     addAndMakeVisible(horizontalScroll);
     session.addChangeListener(this);
@@ -204,6 +213,11 @@ bool StepGrid::keyPressed(const juce::KeyPress& key)
         session.redo();
         return true;
     }
+    if (command && key.getKeyCode() == 'L')
+    {
+        loopEditedClip();
+        return true;
+    }
     if (command && key.getKeyCode() == 'A')
         return selectAllNotes();
     if (command && key.getKeyCode() == 'C')
@@ -280,6 +294,13 @@ void StepGrid::changeListenerCallback(juce::ChangeBroadcaster*)
     if (!manualPitchScroll)
         lowestVisiblePitch = automaticLowestPitch();
     rebuildVisibleNotes();
+    const auto& clipRange = session.pattern().getPosition().time;
+    const auto& loopRange = session.edit->getTransport().getLoopRange();
+    const auto loopsEditedClip = session.hasManualLoopRange()
+        && std::abs(loopRange.getStart().inSeconds() - clipRange.getStart().inSeconds()) < 0.0001
+        && std::abs(loopRange.getEnd().inSeconds() - clipRange.getEnd().inSeconds()) < 0.0001;
+    loopButton.setColour(juce::TextButton::buttonColourId,
+                         loopsEditedClip ? juce::Colour(0xff397f94) : juce::Colour(0xff30373e));
     if (previousLowestPitch != lowestVisiblePitch)
         repaint();
 }
@@ -392,6 +413,7 @@ void StepGrid::scrollBarMoved(juce::ScrollBar* bar, double start)
 
 void StepGrid::resized()
 {
+    loopButton.setBounds(4, 2, static_cast<int>(labelWidth) - 8, static_cast<int>(headerHeight) - 4);
     syncHorizontalScroll();
     horizontalScroll.setBounds(static_cast<int>(labelWidth),
                                getHeight() - static_cast<int>(footerHeight + scrollHeight),

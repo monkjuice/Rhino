@@ -55,8 +55,8 @@
                 require(parameterSession.isForgeAvailable(), "Theta discovers the development Forge VST3 bundle");
             if (parameterSession.isForgeAvailable())
             {
-                require(parameterSession.addInstrument(Session::Instrument::ThetaForge, 1).wasOk(),
-                        "Audio track can host the independent Theta Forge VST3");
+                require(parameterSession.insertInstrumentClip(Session::Instrument::ThetaForge, 1, 0.0).wasOk(),
+                        "An arrangement drop can create a clip routed to the independent Theta Forge VST3");
                 int forgeSlot = -1;
                 for (int i = 0; i < parameterTrack->pluginList.size(); ++i)
                     if (auto* plugin = parameterTrack->pluginList[i]; plugin != nullptr

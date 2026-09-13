@@ -119,6 +119,7 @@ juce::Result Session::insertInstrumentClip(Instrument instrument, int trackIndex
     const auto useDrums = instrument == Instrument::Drums;
     const auto name = useDrums ? juce::String("Theta Drums")
         : instrument == Instrument::ThetaWave ? juce::String("Theta Wave")
+        : instrument == Instrument::ThetaForge ? juce::String("Theta Forge")
         : juce::String("4OSC synth");
     const auto start = tracktion::core::TimePosition::fromSeconds(startSeconds);
     const auto end = start + tracktion::core::TimeDuration::fromSeconds(
@@ -127,12 +128,15 @@ juce::Result Session::insertInstrumentClip(Instrument instrument, int trackIndex
 
     edit->getUndoManager().beginNewTransaction("Add " + name);
     bool instrumentChanged = false;
-    const auto result = switchTrackInstrument(*edit, *track, instrument, instrumentChanged);
+    const auto result = switchTrackInstrument(*edit, *track, instrument, instrumentChanged,
+                                              forgeDescription ? &*forgeDescription : nullptr);
     if (result.failed())
         return result;
     if (trackIndex == 0)
         edit->state.setProperty("thetaPatternInstrument",
-                                useDrums ? "drums" : instrument == Instrument::ThetaWave ? "wave" : "synth",
+                                useDrums ? "drums"
+                                    : instrument == Instrument::ThetaWave ? "wave"
+                                    : instrument == Instrument::ThetaForge ? "forge" : "synth",
                                 &edit->getUndoManager());
 
     auto clip = track->insertMIDIClip(name, {start, end}, nullptr);

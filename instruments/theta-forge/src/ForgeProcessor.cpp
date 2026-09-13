@@ -51,6 +51,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout Processor::parameterLayout()
     result.push_back(parameter("mono", "Mono", {0.0f, 1.0f, 1.0f}, 0.0f));
     result.push_back(parameter("legato", "Legato", {0.0f, 1.0f, 1.0f}, 1.0f));
     result.push_back(parameter("glide", "Glide", {0.0f, 2.0f, 0.0f, 0.35f}, 0.08f));
+    result.push_back(parameter("macroShape", "Macro Shape", {0.0f, 1.0f}, 0.0f));
+    result.push_back(parameter("macroMotion", "Macro Motion", {0.0f, 1.0f}, 0.0f));
+    result.push_back(parameter("macroWeight", "Macro Weight", {0.0f, 1.0f}, 0.0f));
+    result.push_back(parameter("macroSpace", "Macro Space", {0.0f, 1.0f}, 0.0f));
     return {result.begin(), result.end()};
 }
 
@@ -98,7 +102,7 @@ void Processor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
 Patch Processor::patch() const
 {
     const auto value = [this] (const char* id) { return state.getRawParameterValue(id)->load(); };
-    return {value("oscAPosition"), value("oscBPosition"), value("oscBLevel"), value("oscBTune"),
+    Patch result {value("oscAPosition"), value("oscBPosition"), value("oscBLevel"), value("oscBTune"),
             value("subLevel"), value("noiseLevel"), value("unison"), value("detune"), value("cutoff"),
             value("resonance"), value("attack"), value("decay"), value("sustain"), value("release"),
             value("filterEnvAmount"), value("filterAttack"), value("filterDecay"), value("filterSustain"),
@@ -106,6 +110,20 @@ Patch Processor::patch() const
             value("lfoPosition"), value("lfoPitch"), value("chorusMix"), value("chorusRate"),
             value("chorusDepth"), value("delayMix"), value("delayTime"), value("delayFeedback"),
             value("polyphony"), value("mono"), value("legato"), value("glide")};
+    const auto shape = value("macroShape");
+    const auto motion = value("macroMotion");
+    const auto weight = value("macroWeight");
+    const auto space = value("macroSpace");
+    result.oscAPosition = juce::jlimit(0.0f, 1.0f, result.oscAPosition + shape * 0.35f);
+    result.oscBPosition = juce::jlimit(0.0f, 1.0f, result.oscBPosition + shape * 0.22f);
+    result.drive = juce::jlimit(0.0f, 1.0f, result.drive + shape * 0.32f + weight * 0.18f);
+    result.lfoPosition = juce::jlimit(-1.0f, 1.0f, result.lfoPosition + motion * 0.55f);
+    result.chorusMix = juce::jlimit(0.0f, 1.0f, result.chorusMix + motion * 0.22f + space * 0.22f);
+    result.subLevel = juce::jlimit(0.0f, 1.0f, result.subLevel + weight * 0.55f);
+    result.cutoff = juce::jlimit(30.0f, 18000.0f, result.cutoff * std::pow(0.58f, weight));
+    result.delayMix = juce::jlimit(0.0f, 1.0f, result.delayMix + space * 0.48f);
+    result.delayFeedback = juce::jlimit(0.0f, 0.92f, result.delayFeedback + space * 0.18f);
+    return result;
 }
 
 juce::AudioProcessorEditor* Processor::createEditor() { return new Editor(*this); }
@@ -121,6 +139,42 @@ void Processor::setStateInformation(const void* data, int size)
     if (const auto xml = getXmlFromBinary(data, size))
         if (xml->hasTagName(state.state.getType()))
             state.replaceState(juce::ValueTree::fromXml(*xml));
+}
+
+juce::Result Processor::savePreset(const juce::File& destination, const juce::String& name)
+{
+    if (destination == juce::File {}) return juce::Result::fail("Choose a preset file first.");
+    juce::ValueTree preset("ThetaForgePreset");
+    preset.setProperty("formatVersion", 1, nullptr);
+    preset.setProperty("name", name.trim().isNotEmpty() ? name.trim()
+                                                        : destination.getFileNameWithoutExtension(), nullptr);
+    preset.addChild(state.copyState(), -1, nullptr);
+    const auto xml = preset.createXml();
+    if (xml == nullptr) return juce::Result::fail("Forge could not create the preset data.");
+
+    juce::TemporaryFile temporary(destination);
+    if (!xml->writeTo(temporary.getFile(), {}))
+        return juce::Result::fail("Forge could not write the preset file.");
+    if (!temporary.overwriteTargetFileWithTemporary())
+        return juce::Result::fail("Forge could not replace the preset file.");
+    return juce::Result::ok();
+}
+
+juce::Result Processor::loadPreset(const juce::File& source)
+{
+    const auto xml = juce::XmlDocument::parse(source);
+    if (xml == nullptr) return juce::Result::fail("That file is not readable XML.");
+    const auto preset = juce::ValueTree::fromXml(*xml);
+    if (!preset.hasType("ThetaForgePreset"))
+        return juce::Result::fail("That file is not a Theta Forge preset.");
+    const auto version = static_cast<int>(preset.getProperty("formatVersion", 0));
+    if (version < 1 || version > 1)
+        return juce::Result::fail("This Forge preset version is not supported.");
+    const auto savedState = preset.getChildWithName(state.state.getType());
+    if (!savedState.isValid())
+        return juce::Result::fail("The preset does not contain Forge parameter state.");
+    state.replaceState(savedState.createCopy());
+    return juce::Result::ok();
 }
 }
 

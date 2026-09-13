@@ -49,3 +49,26 @@ target_compile_definitions(ThetaForge PRIVATE
     # applicable, while the explicit ParameterID version hints above retain
     # stable host automation IDs.
     JUCE_IGNORE_VST3_MISMATCHED_PARAMETER_ID_WARNING=1)
+
+include(CTest)
+if (BUILD_TESTING)
+    juce_add_console_app(ThetaForgeTests PRODUCT_NAME "Theta Forge Tests")
+    set_target_properties(ThetaForgeTests PROPERTIES EXCLUDE_FROM_ALL FALSE)
+    target_sources(ThetaForgeTests PRIVATE
+        tests/ForgePresetTests.cpp
+        core/ForgeCore.h
+        ui/ForgeVisuals.h
+        src/ForgeProcessor.cpp
+        src/ForgeProcessor.h
+        src/ForgeEditor.cpp
+        src/ForgeEditor.h)
+    target_link_libraries(ThetaForgeTests PRIVATE
+        juce::juce_audio_utils
+        juce::juce_recommended_config_flags
+        juce::juce_recommended_warning_flags)
+    target_compile_definitions(ThetaForgeTests PRIVATE
+        JUCE_WEB_BROWSER=0
+        JUCE_USE_CURL=0
+        JUCE_IGNORE_VST3_MISMATCHED_PARAMETER_ID_WARNING=1)
+    add_test(NAME forge_preset_round_trip COMMAND ThetaForgeTests)
+endif()

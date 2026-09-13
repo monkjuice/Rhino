@@ -5,18 +5,80 @@
 
 namespace theta::forge::ui
 {
-inline constexpr int parameterCount = 35;
+inline constexpr int parameterCount = 39;
+inline const auto electricBlue = juce::Colour(0xff45a8ff);
+inline const auto signalViolet = juce::Colour(0xff9a6cff);
+inline const auto panel = juce::Colour(0xff111522);
+inline const auto panelRaised = juce::Colour(0xff191d2d);
+inline const auto line = juce::Colour(0xff34394e);
+inline const auto text = juce::Colour(0xffe8eaff);
+inline const auto mutedText = juce::Colour(0xff8f95ad);
 
 inline juce::Colour accentForParameter(int index)
 {
-    if (index < 8) return juce::Colour(0xffff7a59);
-    if (index < 10) return juce::Colour(0xff4de0c1);
-    if (index < 14) return juce::Colour(0xffffc66d);
-    if (index < 19) return juce::Colour(0xffc996ff);
-    if (index < 25) return juce::Colour(0xff65bfff);
-    if (index < 31) return juce::Colour(0xfff08bc2);
-    return juce::Colour(0xff8fd879);
+    return (index >= 35 || (index >= 14 && index < 25) || index == 27 || index == 30)
+        ? signalViolet : electricBlue;
 }
+
+class LookAndFeel final : public juce::LookAndFeel_V4
+{
+public:
+    void drawRotarySlider(juce::Graphics& g, int x, int y, int width, int height,
+                          float position, float startAngle, float endAngle, juce::Slider& slider) override
+    {
+        auto area = juce::Rectangle<float>(static_cast<float>(x), static_cast<float>(y),
+                                            static_cast<float>(width), static_cast<float>(height)).reduced(6.0f);
+        const auto diameter = juce::jmin(area.getWidth(), area.getHeight());
+        auto knob = juce::Rectangle<float>(diameter, diameter).withCentre(area.getCentre());
+        const auto centre = knob.getCentre();
+        const auto radius = diameter * 0.5f;
+        const auto angle = juce::jmap(position, startAngle, endAngle);
+        const auto accent = slider.findColour(juce::Slider::rotarySliderFillColourId);
+        const auto polar = [centre] (float distance, float polarAngle)
+        {
+            return centre + juce::Point<float>(std::sin(polarAngle) * distance,
+                                                -std::cos(polarAngle) * distance);
+        };
+
+        juce::Path ticks;
+        for (int i = 0; i <= 18; ++i)
+        {
+            const auto tickAngle = juce::jmap(static_cast<float>(i) / 18.0f, startAngle, endAngle);
+            const auto inner = polar(radius * 0.82f, tickAngle);
+            const auto outer = polar(radius * (i % 3 == 0 ? 0.98f : 0.93f), tickAngle);
+            ticks.startNewSubPath(inner); ticks.lineTo(outer);
+        }
+        g.setColour(line);
+        g.strokePath(ticks, juce::PathStrokeType(1.0f));
+
+        auto body = knob.reduced(radius * 0.19f);
+        juce::ColourGradient metal(juce::Colour(0xff34394b), body.getX(), body.getY(),
+                                   juce::Colour(0xff111522), body.getRight(), body.getBottom(), false);
+        g.setGradientFill(metal);
+        g.fillEllipse(body);
+        g.setColour(juce::Colour(0xff050711));
+        g.drawEllipse(body, 2.0f);
+
+        juce::Path active;
+        active.addCentredArc(centre.x, centre.y, radius * 0.71f, radius * 0.71f, 0.0f,
+                             startAngle, angle, true);
+        g.setColour(accent.withAlpha(0.18f));
+        g.strokePath(active, juce::PathStrokeType(6.0f, juce::PathStrokeType::curved,
+                                                  juce::PathStrokeType::rounded));
+        g.setColour(accent);
+        g.strokePath(active, juce::PathStrokeType(2.0f, juce::PathStrokeType::curved,
+                                                  juce::PathStrokeType::rounded));
+
+        juce::Path pointer;
+        pointer.startNewSubPath(centre);
+        pointer.lineTo(polar(radius * 0.52f, angle));
+        g.setColour(text);
+        g.strokePath(pointer, juce::PathStrokeType(2.2f, juce::PathStrokeType::curved,
+                                                   juce::PathStrokeType::rounded));
+        g.setColour(accent);
+        g.fillEllipse(juce::Rectangle<float>(5.0f, 5.0f).withCentre(centre));
+    }
+};
 
 inline float waveform(float phase, float position)
 {
@@ -48,49 +110,49 @@ template <typename NormalisedValue>
 void paint(juce::Graphics& g, juce::Rectangle<int> componentBounds, NormalisedValue value)
 {
     const auto bounds = componentBounds.toFloat();
-    juce::ColourGradient background(juce::Colour(0xff10151e), 0.0f, 0.0f,
-                                    juce::Colour(0xff202235), bounds.getRight(), bounds.getBottom(), false);
+    juce::ColourGradient background(juce::Colour(0xff090b13), 0.0f, 0.0f,
+                                    juce::Colour(0xff17182a), bounds.getRight(), bounds.getBottom(), false);
     g.setGradientFill(background);
     g.fillRect(bounds);
     const auto frame = bounds.reduced(16.0f);
-    g.setColour(juce::Colour(0xff33424d));
-    g.drawRoundedRectangle(frame, 9.0f, 1.0f);
-    g.setColour(juce::Colour(0xffff7a59));
-    g.fillRoundedRectangle(frame.getX(), frame.getY(), 6.0f, frame.getHeight(), 3.0f);
+    g.setColour(line);
+    g.drawRoundedRectangle(frame, 3.0f, 1.0f);
+    g.setColour(electricBlue);
+    g.fillRect(frame.getX(), frame.getY(), 4.0f, frame.getHeight());
+    g.setColour(signalViolet.withAlpha(0.7f));
+    g.fillRect(frame.getRight() - 2.0f, frame.getY(), 2.0f, frame.getHeight());
 
-    g.setColour(juce::Colour(0xfff7f4e9));
+    g.setColour(text);
     g.setFont(juce::FontOptions(36.0f, juce::Font::bold));
     g.drawText("FORGE", 36, 26, 220, 42, juce::Justification::centredLeft);
-    g.setColour(juce::Colour(0xffffc66d));
+    g.setColour(signalViolet);
     g.setFont(juce::FontOptions(11.0f));
-    g.drawText("SHAPE SOUND. LEAVE A MARK.", 39, 68, 260, 18, juce::Justification::centredLeft);
-    g.setColour(juce::Colour(0xff94a9b6));
-    g.drawText("TWO OSCILLATOR INSTRUMENT", componentBounds.getWidth() - 300, 43, 260, 18,
-               juce::Justification::centredRight);
+    g.drawText("SYNTHETIC SIGNAL FORGE // UNIT 01", 39, 68, 280, 18, juce::Justification::centredLeft);
 
     const auto waveArea = juce::Rectangle<float>(36.0f, 104.0f, componentBounds.getWidth() - 72.0f, 105.0f);
-    g.setColour(juce::Colour(0xff151f2a));
-    g.fillRoundedRectangle(waveArea, 8.0f);
-    g.setColour(juce::Colour(0xff2c3a45));
-    for (int line = 1; line < 4; ++line)
-        g.drawHorizontalLine(static_cast<int>(waveArea.getY() + waveArea.getHeight() * line / 4.0f),
+    g.setColour(panel);
+    g.fillRoundedRectangle(waveArea, 3.0f);
+    g.setColour(line);
+    for (int gridLine = 1; gridLine < 4; ++gridLine)
+        g.drawHorizontalLine(static_cast<int>(waveArea.getY() + waveArea.getHeight() * gridLine / 4.0f),
                              waveArea.getX(), waveArea.getRight());
-    drawWaveform(g, waveArea.reduced(12.0f, 16.0f), value(0), juce::Colour(0xffff7a59));
-    drawWaveform(g, waveArea.reduced(12.0f, 28.0f), value(1), juce::Colour(0xff4de0c1));
+    drawWaveform(g, waveArea.reduced(12.0f, 16.0f), value(0), electricBlue);
+    drawWaveform(g, waveArea.reduced(12.0f, 28.0f), value(1), signalViolet);
 
     constexpr auto lowerY = 226.0f;
-    g.setColour(juce::Colour(0xff18212c));
+    g.setColour(panelRaised);
     g.fillRoundedRectangle(36.0f, lowerY, componentBounds.getWidth() - 72.0f,
-                           componentBounds.getHeight() - lowerY - 32.0f, 8.0f);
-    g.setColour(juce::Colour(0xff94a9b6));
+                           componentBounds.getHeight() - lowerY - 32.0f, 3.0f);
+    g.setColour(mutedText);
     g.setFont(juce::FontOptions(10.0f));
-    g.drawText("OSCILLATOR FORGE", 52, 238, 220, 16, juce::Justification::centredLeft);
-    g.drawText("OSCILLATORS", 52, 238, 180, 16, juce::Justification::centredLeft);
+    g.drawText("CONTROL MATRIX // " + juce::String(value(35) + value(36) + value(37) + value(38) > 0.0f ? "MACRO ACTIVE" : "DIRECT"),
+               52, 238, 280, 16, juce::Justification::centredLeft);
 }
 
 inline bool isParameterVisible(int index, int page)
 {
-    return page == 0 ? (index < 19 || index >= 31) : (index >= 19 && index < 31);
+    return page == 0 ? (index < 19 || index >= 31)
+                     : ((index >= 19 && index < 31) || index >= 35);
 }
 
 inline juce::Rectangle<int> controlCell(juce::Rectangle<int> bounds, int index, int page)
@@ -101,12 +163,17 @@ inline juce::Rectangle<int> controlCell(juce::Rectangle<int> bounds, int index, 
     const auto controlHeight = juce::jmax(300, bounds.getHeight() - controlTop - 40);
     if (page == 1)
     {
+        if (index >= 35)
+        {
+            const auto cellWidth = available / 4;
+            return {left + (index - 35) * cellWidth, controlTop + controlHeight * 2 / 3, cellWidth, controlHeight / 3};
+        }
         const auto local = index - 19;
         const auto cellWidth = available / 6;
-        const auto rowHeight = controlHeight / 2;
+        const auto rowHeight = controlHeight / 3;
         return {left + (local % 6) * cellWidth, controlTop + (local / 6) * rowHeight, cellWidth, rowHeight};
     }
-    const auto rowHeight = controlHeight / 3;
+    const auto rowHeight = controlHeight / 4;
     if (index < 8)
     {
         const auto cellWidth = available / 8;
@@ -117,6 +184,11 @@ inline juce::Rectangle<int> controlCell(juce::Rectangle<int> bounds, int index, 
         const auto local = index - 8;
         const auto cellWidth = available / 6;
         return {left + local * cellWidth, controlTop + rowHeight, cellWidth, rowHeight};
+    }
+    if (index >= 35)
+    {
+        const auto cellWidth = available / 4;
+        return {left + (index - 35) * cellWidth, controlTop + rowHeight * 3, cellWidth, rowHeight};
     }
     const auto local = index < 19 ? index - 14 : index - 26;
     const auto cellWidth = available / 9;

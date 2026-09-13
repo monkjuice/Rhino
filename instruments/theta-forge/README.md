@@ -4,6 +4,9 @@ Theta Forge is Theta's independent synthesizer project. It is a VST3 and
 standalone JUCE application that deliberately owns no Tracktion or Theta-DAW
 types. Its initial sound engine is a focused, two-oscillator wavetable-style
 synth with sub/noise, unison, a resonant filter, ADSR, and host automation.
+Its four performance macros shape harmonics, motion, weight, and the serial
+chorus/delay path. The editor can save and load versioned `.forgepreset` files;
+host project state remains independent and continues to use the VST3 state API.
 
 It takes inspiration from the fast, visual sound-design workflow of modern
 hybrid synths. It does not reuse Serum code, assets, names, presets, or UI.

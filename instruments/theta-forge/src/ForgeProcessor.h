@@ -27,6 +27,8 @@ public:
     void changeProgramName(int, const juce::String&) override {}
     void getStateInformation(juce::MemoryBlock&) override;
     void setStateInformation(const void*, int) override;
+    juce::Result savePreset(const juce::File&, const juce::String& name);
+    juce::Result loadPreset(const juce::File&);
     juce::AudioProcessorValueTreeState state;
 
 private:

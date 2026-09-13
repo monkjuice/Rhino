@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ForgeProcessor.h"
+#include "../ui/ForgeVisuals.h"
 #include <array>
 
 namespace theta::forge
@@ -20,11 +21,18 @@ private:
         std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachment;
     };
     Processor& processor;
-    std::array<Control, 35> controls;
+    ui::LookAndFeel lookAndFeel;
+    std::array<Control, 39> controls;
     juce::TextButton synthPage {"SYNTH"}, motionPage {"MOTION / FX"};
+    juce::TextButton loadPreset {"LOAD"}, savePreset {"SAVE"};
+    juce::Label presetName;
+    std::unique_ptr<juce::FileChooser> fileChooser;
     int currentPage = 0;
 
     void timerCallback() override;
     void showPage(int);
+    void choosePresetToLoad();
+    void choosePresetToSave();
+    void showPresetResult(const juce::Result&, const juce::File&);
 };
 }

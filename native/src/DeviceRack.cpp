@@ -463,6 +463,20 @@ public:
             plugin = tracks[track]->pluginList[slot];
 
         if (plugin != nullptr)
+        {
+            if (auto* processor = plugin->getWrappedAudioProcessor(); processor != nullptr && processor->hasEditor())
+                if (auto pluginEditor = processor->createEditorAndMakeActive())
+                {
+                    const auto editorSize = pluginEditor->getBounds();
+                    const auto editorCanResize = pluginEditor->isResizable();
+                    setName(plugin->getName());
+                    setResizable(editorCanResize, editorCanResize);
+                    setContentOwned(pluginEditor, true);
+                    centreWithSize(std::max(320, editorSize.getWidth()), std::max(240, editorSize.getHeight()));
+                    setVisible(true);
+                    return;
+                }
+
             if (auto pluginEditor = plugin->createEditor())
             {
                 const auto editorSize = pluginEditor->getBounds();
@@ -474,6 +488,7 @@ public:
                 setVisible(true);
                 return;
             }
+        }
 
         setResizable(false, false);
         auto* editor = new Editor(session, track, slot);
@@ -635,6 +650,10 @@ void DeviceRack::openSelectedDevice()
     if (slots.empty())
         return;
     selectedSlot = juce::jlimit(0, static_cast<int>(slots.size()) - 1, selectedSlot);
+    // Destroy any active AudioProcessorEditor before asking the wrapped
+    // processor for its editor again. JUCE permits one active editor per
+    // processor and createEditorIfNeeded may otherwise return the old pointer.
+    floatingWindow.reset();
     floatingWindow = std::make_unique<FloatingDeviceWindow>(session, selectedTrack, selectedSlot);
     if (status) status("Opened " + slots[static_cast<size_t>(selectedSlot)].name + " device panel");
 }

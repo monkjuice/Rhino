@@ -67,6 +67,17 @@
                 require(forgeSlot >= 0, "Forge is represented by Tracktion's external-plugin wrapper");
                 require(parameterTrack->pluginList[forgeSlot]->createEditor() != nullptr,
                         "Tracktion creates Forge's plugin-owned editor for Theta");
+                auto* forgeProcessor = parameterTrack->pluginList[forgeSlot]->getWrappedAudioProcessor();
+                require(forgeProcessor != nullptr && forgeProcessor->hasEditor(),
+                        "Forge exposes its custom editor through the wrapped VST3 processor");
+                std::unique_ptr<juce::AudioProcessorEditor> firstForgeEditor(forgeProcessor->createEditorAndMakeActive());
+                require(firstForgeEditor != nullptr && firstForgeEditor->getWidth() >= 900,
+                        "Forge custom editor opens on the first direct request");
+                firstForgeEditor.reset();
+                std::unique_ptr<juce::AudioProcessorEditor> reopenedForgeEditor(forgeProcessor->createEditorAndMakeActive());
+                require(reopenedForgeEditor != nullptr && reopenedForgeEditor->getWidth() >= 900,
+                        "Forge custom editor reopens after its previous window closes");
+                reopenedForgeEditor.reset();
                 const auto forgeParameters = parameterSession.deviceParameters(1, forgeSlot);
                 require(forgeParameters.size() >= 35,
                         "Tracktion exposes Forge VST3 parameters to Theta");

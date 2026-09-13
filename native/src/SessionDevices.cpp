@@ -74,7 +74,7 @@ juce::Result Session::addInstrument(Instrument instrument, int trackIndex)
     {
         case Instrument::FourOsc: type = te::FourOscPlugin::xmlTypeName; name = "4OSC"; break;
         case Instrument::ThetaWave: type = ThetaWaveDevice::xmlTypeName; name = "Theta Wave"; break;
-        case Instrument::ThetaForge: type = ThetaForgeDevice::xmlTypeName; name = "Theta Forge"; break;
+        case Instrument::ThetaForge: name = "Theta Forge"; break;
         case Instrument::Drums:   type = DrumDevice::xmlTypeName;        name = "Theta Drums"; break;
         case Instrument::Utility: type = UtilityDevice::xmlTypeName;     name = "Utility"; break;
     }
@@ -90,9 +90,10 @@ juce::Result Session::addInstrument(Instrument instrument, int trackIndex)
     }
     else
     {
-        const auto result = switchTrackInstrument(*edit, *track, instrument, changed);
+        const auto result = switchTrackInstrument(*edit, *track, instrument, changed,
+                                                  forgeDescription ? &*forgeDescription : nullptr);
         if (result.failed())
-            return juce::Result::fail(name + " could not be created.");
+            return result;
     }
     if (trackIndex == 0 && instrument != Instrument::Utility)
         edit->state.setProperty("thetaPatternInstrument",

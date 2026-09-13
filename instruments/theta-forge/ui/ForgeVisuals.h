@@ -5,7 +5,7 @@
 
 namespace theta::forge::ui
 {
-inline constexpr int parameterCount = 31;
+inline constexpr int parameterCount = 35;
 
 inline juce::Colour accentForParameter(int index)
 {
@@ -14,7 +14,8 @@ inline juce::Colour accentForParameter(int index)
     if (index < 14) return juce::Colour(0xffffc66d);
     if (index < 19) return juce::Colour(0xffc996ff);
     if (index < 25) return juce::Colour(0xff65bfff);
-    return juce::Colour(0xfff08bc2);
+    if (index < 31) return juce::Colour(0xfff08bc2);
+    return juce::Colour(0xff8fd879);
 }
 
 inline float waveform(float phase, float position)
@@ -87,13 +88,25 @@ void paint(juce::Graphics& g, juce::Rectangle<int> componentBounds, NormalisedVa
     g.drawText("OSCILLATORS", 52, 238, 180, 16, juce::Justification::centredLeft);
 }
 
-inline juce::Rectangle<int> controlCell(juce::Rectangle<int> bounds, int index)
+inline bool isParameterVisible(int index, int page)
+{
+    return page == 0 ? (index < 19 || index >= 31) : (index >= 19 && index < 31);
+}
+
+inline juce::Rectangle<int> controlCell(juce::Rectangle<int> bounds, int index, int page)
 {
     const auto left = 44;
     const auto available = bounds.getWidth() - 88;
     const auto controlTop = 262;
-    const auto controlHeight = juce::jmax(380, bounds.getHeight() - controlTop - 40);
-    const auto rowHeight = controlHeight / 4;
+    const auto controlHeight = juce::jmax(300, bounds.getHeight() - controlTop - 40);
+    if (page == 1)
+    {
+        const auto local = index - 19;
+        const auto cellWidth = available / 6;
+        const auto rowHeight = controlHeight / 2;
+        return {left + (local % 6) * cellWidth, controlTop + (local / 6) * rowHeight, cellWidth, rowHeight};
+    }
+    const auto rowHeight = controlHeight / 3;
     if (index < 8)
     {
         const auto cellWidth = available / 8;
@@ -105,14 +118,8 @@ inline juce::Rectangle<int> controlCell(juce::Rectangle<int> bounds, int index)
         const auto cellWidth = available / 6;
         return {left + local * cellWidth, controlTop + rowHeight, cellWidth, rowHeight};
     }
-    if (index < 23)
-    {
-        const auto local = index - 14;
-        const auto cellWidth = available / 9;
-        return {left + local * cellWidth, controlTop + rowHeight * 2, cellWidth, rowHeight};
-    }
-    const auto local = index - 23;
-    const auto cellWidth = available / 8;
-    return {left + local * cellWidth, controlTop + rowHeight * 3, cellWidth, rowHeight};
+    const auto local = index < 19 ? index - 14 : index - 26;
+    const auto cellWidth = available / 9;
+    return {left + local * cellWidth, controlTop + rowHeight * 2, cellWidth, rowHeight};
 }
 }

@@ -5,8 +5,8 @@
 #include "ThetaBloomDevice.h"
 #include "ThetaArpDevice.h"
 #include "ThetaWaveDevice.h"
-#include "ThetaForgeDevice.h"
 #include "ClipGeometry.h"
+#include <optional>
 #include <vector>
 
 namespace theta
@@ -155,6 +155,7 @@ public:
     juce::Result addAudioEffect(AudioEffect, int track = 1);
     juce::Result addClipAudioEffect(AudioEffect, te::EditItemID);
     juce::Result addInstrument(Instrument, int track);
+    bool isForgeAvailable() const { return forgeDescription.has_value(); }
     juce::Result addMidiEffect(MidiEffect, int track);
     int trackCount() const;
     juce::String trackName(int track) const;
@@ -216,6 +217,7 @@ private:
         bool active = false;
     };
     void refreshAfterUndoRedo(bool changed);
+    void initialiseExternalPlugins();
     void setPatternInstrument(bool useDrums);
     void ensureEditablePatternClip();
     AutomationRuntime& automationRuntimeFor(DeviceTarget);
@@ -230,6 +232,7 @@ private:
     tracktion::core::TimeRange manualLoopRange;
     DeviceTarget lastTouchedParameter;
     std::vector<AutomationRuntime> automationRuntime;
+    std::optional<juce::PluginDescription> forgeDescription;
 };
 int runSelfTest();
 int runPatternTest();

@@ -176,43 +176,6 @@ int runSelfTest()
         require(sweepPeak > 0.0001f && sweepPeak < 1.0f && maxJump < 0.9f);
         wave->deinitialise();
 
-        forge::Core forgeCore;
-        forgeCore.initialise(48000.0);
-        forge::Patch forgePatch;
-        forgePatch.unison = 8.0f;
-        forgePatch.detune = 0.8f;
-        forgePatch.cutoff = 180.0f;
-        forgePatch.resonance = 0.75f;
-        forgePatch.filterEnvAmount = 0.9f;
-        forgePatch.lfoRate = 7.0f;
-        forgePatch.lfoCutoff = 0.65f;
-        forgePatch.lfoPosition = 0.7f;
-        forgePatch.lfoPitch = 1.5f;
-        forgePatch.drive = 0.7f;
-        forgePatch.chorusMix = 0.45f;
-        forgePatch.chorusRate = 1.2f;
-        forgePatch.chorusDepth = 0.8f;
-        forgePatch.delayMix = 0.3f;
-        forgePatch.delayTime = 0.08f;
-        forgePatch.delayFeedback = 0.7f;
-        forgeCore.noteOn(36, 0.9f);
-        float forgePeak = 0.0f, stereoDifference = 0.0f;
-        for (int i = 0; i < 16384; ++i)
-        {
-            float left = 0.0f, right = 0.0f;
-            forgeCore.renderSample(forgePatch, left, right);
-            require(std::isfinite(left) && std::isfinite(right));
-            forgePeak = std::max({forgePeak, std::abs(left), std::abs(right)});
-            stereoDifference += std::abs(left - right);
-        }
-        require(forgePeak > 0.0001f && forgePeak <= 1.0f && stereoDifference > 0.01f);
-        forgeCore.noteOff(36);
-        for (int i = 0; i < 48000; ++i)
-        {
-            float left = 0.0f, right = 0.0f;
-            forgeCore.renderSample(forgePatch, left, right);
-            require(std::isfinite(left) && std::isfinite(right));
-        }
         session.releaseAudioDevice();
         return 0;
     }

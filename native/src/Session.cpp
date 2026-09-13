@@ -22,7 +22,7 @@ Session::Session() : engine(commandLineTestMode ? "Theta Native Tests" : "Theda 
     engine.getPluginManager().createBuiltInType<ThetaBloomDevice>();
     engine.getPluginManager().createBuiltInType<ThetaArpDevice>();
     engine.getPluginManager().createBuiltInType<ThetaWaveDevice>();
-    engine.getPluginManager().createBuiltInType<ThetaForgeDevice>();
+    initialiseExternalPlugins();
     edit = te::createEmptyEdit(engine, {});
     edit->state.setProperty("thetaFormatVersion", 1, nullptr);
     edit->tempoSequence.getTempo(0)->setBpm(120.0);
@@ -226,7 +226,8 @@ juce::Result Session::restoreProject(const juce::ValueTree& state, const juce::F
     else if (patternInstrument == "forge")
     {
         bool instrumentChanged = false;
-        juce::ignoreUnused(switchTrackInstrument(*edit, *tracks[0], Instrument::ThetaForge, instrumentChanged));
+        juce::ignoreUnused(switchTrackInstrument(*edit, *tracks[0], Instrument::ThetaForge, instrumentChanged,
+                                                 forgeDescription ? &*forgeDescription : nullptr));
     }
     else
     {

@@ -20,8 +20,9 @@ Research deliverables: [open-source DAW and Ableton study](research/DAW-STUDY.md
 - Mute/solo controls for both tracks, timeline seeking, zoom, scrolling, and optional 1/16-note snapping.
 - Native project save/open, unsaved-change prompts, and background file writing/parsing.
 - A display-synchronized playhead with narrow repaint regions and cached note display data.
+- VST3 hosting through Tracktion Engine, with the independent Theta Forge synth discoverable from its development build or a standard VST3 installation and shown with its plugin-owned editor.
 
-This is an early composition workflow, not a complete DAW. The arrangement currently has two tracks: one fixed one-bar synth pattern and one editable audio track. Adding/reordering tracks, arranging multiple MIDI patterns, the live launcher, recording, export UI, media bundling/relinking, and external plugin hosting are not implemented yet. macOS has not been built or tested.
+This is an early composition workflow, not a complete DAW. Recording, export UI, media bundling/relinking, a general plugin browser/scanner, and the live launcher are not implemented yet. macOS has not been built or tested.
 
 ## Run On Windows
 

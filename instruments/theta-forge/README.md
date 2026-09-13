@@ -20,3 +20,7 @@ cmake --build instruments/theta-forge/build --config Release --parallel 2
 The VST3 is emitted below `build/ThetaForge_artefacts/Release/VST3`. Install or
 copy it only after validating it in a host; do not add generated plugin bundles
 to Git.
+
+Theta's development build discovers that bundle directly, then instantiates it
+through Tracktion Engine's standard external-plugin wrapper. The editor shown in
+Theta is this plugin's own editor; Forge has no dependency on Theta or Tracktion.

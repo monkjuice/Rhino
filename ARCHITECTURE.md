@@ -6,7 +6,7 @@ Status: research-backed direction, 2026-09-08. A small [native engine evaluation
 
 Build a desktop DAW for complete songs, with electronic composition first and audio recording alongside it. Large projects and predictable playback matter.
 
-Confirmed: prioritize Windows development now while keeping macOS in the architecture; personal use; internal modular instruments/effects are required, while external plugin hosting is not an initial requirement. Both arrangement and live clip workflows matter, starting with electronic music. Target hardware, project sizes, and the initial sound palette remain to be established.
+Confirmed: prioritize Windows development now while keeping macOS in the architecture; personal use; internal modular instruments/effects and VST3 hosting are required. Forge is developed as an independent VST3 and loaded through Tracktion rather than duplicated as a built-in Theta device. Both arrangement and live clip workflows matter, starting with electronic music. Target hardware, project sizes, and the initial sound palette remain to be established.
 
 UI performance, consistent frame pacing/FPS, and immediate pointer response are confirmed priorities alongside visual quality. These are frontend acceptance criteria under real audio and editing load, not optional polish.
 
@@ -40,7 +40,7 @@ The audio device clock owns transport. The audio thread must never wait for the 
 
 Audio buffers do not travel through a JavaScript UI bridge. The UI sends commands such as `moveClip` or `setParameter`; it receives acknowledged model changes and bounded-rate meters. This does not imply that arbitrary JavaScript gestures have zero latency: the native controller converts accepted changes into engine events with explicit scheduling rules.
 
-Built-in device processing is native and uses a registry with stable device/parameter identities, preparation and processing lifecycles, versioned state, and editor-independent DSP. Start with modules compiled into the application; modularity does not require a dynamic binary plugin ABI. If third-party hosting is added later, scanning should run in a separate process with timeout and crash handling. Isolating third-party processing itself is a separate decision with performance and synchronization costs.
+Built-in device processing is native and uses a registry with stable device/parameter identities, preparation and processing lifecycles, versioned state, and editor-independent DSP. Independent instruments such as Forge use VST3 and Tracktion's external-plugin wrapper so their DSP, state, automation surface, and editor stay host-independent. Forge currently uses targeted discovery; a general third-party scanner should run in a separate process with timeout and crash handling. Isolating third-party processing itself is a separate decision with performance and synchronization costs.
 
 ## Interface decision
 
@@ -91,7 +91,7 @@ These are evaluation proposals, not passed benchmarks or supported product limit
 3. Prove native audio output, MIDI sequencing, streamed playback, recording, and rendering independently of the UI.
 4. Compare frontend candidates against the same engine and fixtures; record the decision.
 5. Build out one complete workflow on the selected native stack.
-6. Add routing, automation, racks, clip launching, and editing depth in measured increments. Add external plugin hosting only if wanted.
+6. Expand the proven Forge VST3 path into a general plugin browser and crash-isolated scanner, then add routing, automation, racks, clip launching, and editing depth in measured increments.
 
 ## Primary references
 

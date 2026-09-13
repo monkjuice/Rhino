@@ -47,6 +47,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout Processor::parameterLayout()
     result.push_back(parameter("delayMix", "Delay Mix", {0.0f, 1.0f}, 0.0f));
     result.push_back(parameter("delayTime", "Delay Time", {0.02f, 2.0f, 0.0f, 0.35f}, 0.375f));
     result.push_back(parameter("delayFeedback", "Delay Feedback", {0.0f, 0.92f}, 0.3f));
+    result.push_back(parameter("polyphony", "Polyphony", {1.0f, 16.0f, 1.0f}, 8.0f));
+    result.push_back(parameter("mono", "Mono", {0.0f, 1.0f, 1.0f}, 0.0f));
+    result.push_back(parameter("legato", "Legato", {0.0f, 1.0f, 1.0f}, 1.0f));
+    result.push_back(parameter("glide", "Glide", {0.0f, 2.0f, 0.0f, 0.35f}, 0.08f));
     return {result.begin(), result.end()};
 }
 
@@ -80,7 +84,7 @@ void Processor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
             const auto metadata = *event;
             if (metadata.samplePosition > i) break;
             const auto message = metadata.getMessage();
-            if (message.isNoteOn()) core.noteOn(message.getNoteNumber(), message.getFloatVelocity());
+            if (message.isNoteOn()) core.noteOn(message.getNoteNumber(), message.getFloatVelocity(), values);
             else if (message.isNoteOff()) core.noteOff(message.getNoteNumber());
             else if (message.isAllNotesOff()) core.allNotesOff();
             ++event;
@@ -100,7 +104,8 @@ Patch Processor::patch() const
             value("filterEnvAmount"), value("filterAttack"), value("filterDecay"), value("filterSustain"),
             value("filterRelease"), value("lfoRate"), value("lfoCutoff"), value("drive"), value("output"),
             value("lfoPosition"), value("lfoPitch"), value("chorusMix"), value("chorusRate"),
-            value("chorusDepth"), value("delayMix"), value("delayTime"), value("delayFeedback")};
+            value("chorusDepth"), value("delayMix"), value("delayTime"), value("delayFeedback"),
+            value("polyphony"), value("mono"), value("legato"), value("glide")};
 }
 
 juce::AudioProcessorEditor* Processor::createEditor() { return new Editor(*this); }

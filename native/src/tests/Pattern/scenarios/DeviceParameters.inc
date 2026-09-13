@@ -49,20 +49,29 @@
                     && waveParameters[10].name == "Attack" && waveParameters[17].name == "Output"
                     && waveParameters[18].name == "LFO Rate" && waveParameters[22].name == "LFO Motion",
                     "Theta Wave exposes a full synth panel surface after the rack macros");
-            require(parameterSession.addInstrument(Session::Instrument::ThetaForge, 1).wasOk(), "Audio track can host Theta Forge");
-            int forgeSlot = -1;
-            for (int i = 0; i < parameterTrack->pluginList.size(); ++i)
-                if (auto* plugin = parameterTrack->pluginList[i]; plugin != nullptr && plugin->getPluginType() == ThetaForgeDevice::xmlTypeName)
-                    forgeSlot = i;
-            require(forgeSlot >= 0, "Theta Forge is inserted in the target track chain");
-            auto forgeParameters = parameterSession.deviceParameters(1, forgeSlot);
-            require(forgeParameters.size() == 31 && forgeParameters[0].name == "A Position"
-                    && forgeParameters[8].name == "Cutoff" && forgeParameters[13].name == "Release"
-                    && forgeParameters[14].name == "Filter Env" && forgeParameters[19].name == "LFO Rate"
-                    && forgeParameters[22].name == "Output" && forgeParameters[25].name == "Chorus Mix"
-                    && forgeParameters[28].name == "Delay Mix" && forgeParameters[30].name == "Delay Feedback",
-                    "Theta Forge exposes its oscillator, modulation, effects, and output controls");
-            require(parameterSession.addInstrument(Session::Instrument::ThetaForge, 0).wasOk(),
-                    "Theta Forge can replace the Pattern synth");
-            require(parameterSession.projectSnapshot().getProperty("thetaPatternInstrument").toString() == "forge",
-                    "Pattern-grid Forge selection persists in the project state");
+            const auto developmentForge = juce::File(juce::String(THETA_SOURCE_DIR))
+                .getChildFile("../instruments/theta-forge/build/ThetaForge_artefacts/Release/VST3/Theta Forge.vst3");
+            if (developmentForge.exists())
+                require(parameterSession.isForgeAvailable(), "Theta discovers the development Forge VST3 bundle");
+            if (parameterSession.isForgeAvailable())
+            {
+                require(parameterSession.addInstrument(Session::Instrument::ThetaForge, 1).wasOk(),
+                        "Audio track can host the independent Theta Forge VST3");
+                int forgeSlot = -1;
+                for (int i = 0; i < parameterTrack->pluginList.size(); ++i)
+                    if (auto* plugin = parameterTrack->pluginList[i]; plugin != nullptr
+                        && plugin->getPluginType() == te::ExternalPlugin::xmlTypeName
+                        && plugin->getWrappedAudioProcessor() != nullptr
+                        && plugin->getWrappedAudioProcessor()->getName().containsIgnoreCase("Forge"))
+                        forgeSlot = i;
+                require(forgeSlot >= 0, "Forge is represented by Tracktion's external-plugin wrapper");
+                require(parameterTrack->pluginList[forgeSlot]->createEditor() != nullptr,
+                        "Tracktion creates Forge's plugin-owned editor for Theta");
+                const auto forgeParameters = parameterSession.deviceParameters(1, forgeSlot);
+                require(forgeParameters.size() >= 35,
+                        "Tracktion exposes Forge VST3 parameters to Theta");
+                require(parameterSession.addInstrument(Session::Instrument::ThetaForge, 0).wasOk(),
+                        "The Forge VST3 can replace the Pattern synth");
+                require(parameterSession.projectSnapshot().getProperty("thetaPatternInstrument").toString() == "forge",
+                        "Pattern-grid Forge selection persists in the project state");
+            }

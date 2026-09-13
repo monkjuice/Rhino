@@ -168,7 +168,18 @@ Session::Instrument activeTrackInstrument(te::AudioTrack& track)
     if (auto* wave = findThetaWave(track))
         if (wave->isEnabled())
             return Session::Instrument::ThetaWave;
+    for (auto* plugin : track.pluginList)
+        if (plugin != nullptr && plugin->isEnabled() && isForgePlugin(*plugin))
+            return Session::Instrument::ThetaForge;
     return Session::Instrument::FourOsc;
+}
+
+bool isForgePlugin(const te::Plugin& plugin)
+{
+    if (auto* processor = plugin.getWrappedAudioProcessor())
+        return processor->getName().containsIgnoreCase("Theta Forge")
+            || processor->getName().equalsIgnoreCase("Forge");
+    return false;
 }
 
 tracktion::core::TimeRange firstFreeDuplicateRange(te::Clip& source)
@@ -219,16 +230,37 @@ juce::Result ensurePlugin(te::Edit& edit, te::AudioTrack& track, const juce::Str
     return juce::Result::ok();
 }
 
-juce::Result switchTrackInstrument(te::Edit& edit, te::AudioTrack& track, Session::Instrument instrument, bool& changed)
+juce::Result switchTrackInstrument(te::Edit& edit, te::AudioTrack& track, Session::Instrument instrument, bool& changed,
+                                   const juce::PluginDescription* forgeDescription)
 {
     te::Plugin* selected = nullptr;
     const auto selectedType = instrument == Session::Instrument::Drums ? juce::String(DrumDevice::xmlTypeName)
         : instrument == Session::Instrument::ThetaWave ? juce::String(ThetaWaveDevice::xmlTypeName)
-        : instrument == Session::Instrument::ThetaForge ? juce::String(ThetaForgeDevice::xmlTypeName)
         : juce::String(te::FourOscPlugin::xmlTypeName);
-    auto result = ensurePlugin(edit, track, selectedType, 0, selected, changed);
-    if (result.failed())
-        return result;
+    if (instrument == Session::Instrument::ThetaForge)
+    {
+        for (auto* plugin : track.pluginList)
+            if (plugin != nullptr && isForgePlugin(*plugin))
+                selected = plugin;
+
+        if (selected == nullptr)
+        {
+            if (forgeDescription == nullptr)
+                return juce::Result::fail("Theta Forge.vst3 was not found. Build or install the Forge VST3 first.");
+            auto created = edit.getPluginCache().createNewPlugin(te::ExternalPlugin::xmlTypeName, *forgeDescription);
+            if (created == nullptr)
+                return juce::Result::fail("Theta Forge.vst3 could not be loaded.");
+            selected = created.get();
+            track.pluginList.insertPlugin(created, 0, nullptr);
+            changed = true;
+        }
+    }
+    else
+    {
+        auto result = ensurePlugin(edit, track, selectedType, 0, selected, changed);
+        if (result.failed())
+            return result;
+    }
 
     if (auto* fourOsc = findPlugin(track, te::FourOscPlugin::xmlTypeName))
         if (fourOsc->isEnabled() != (instrument == Session::Instrument::FourOsc))
@@ -243,8 +275,9 @@ juce::Result switchTrackInstrument(te::Edit& edit, te::AudioTrack& track, Sessio
             wave->setEnabled(instrument == Session::Instrument::ThetaWave);
             changed = true;
         }
-    if (auto* forge = findPlugin(track, ThetaForgeDevice::xmlTypeName))
-        if (forge->isEnabled() != (instrument == Session::Instrument::ThetaForge))
+    for (auto* forge : track.pluginList)
+        if (forge != nullptr && isForgePlugin(*forge)
+            && forge->isEnabled() != (instrument == Session::Instrument::ThetaForge))
         {
             forge->setEnabled(instrument == Session::Instrument::ThetaForge);
             changed = true;

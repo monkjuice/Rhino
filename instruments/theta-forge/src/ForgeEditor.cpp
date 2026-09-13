@@ -5,9 +5,9 @@ namespace theta::forge
 {
 namespace
 {
-constexpr std::array<const char*, 31> ids {"oscAPosition", "oscBPosition", "oscBLevel", "oscBTune", "subLevel", "noiseLevel", "unison", "detune", "cutoff", "resonance", "attack", "decay", "sustain", "release", "filterEnvAmount", "filterAttack", "filterDecay", "filterSustain", "filterRelease", "lfoRate", "lfoCutoff", "drive", "output", "lfoPosition", "lfoPitch", "chorusMix", "chorusRate", "chorusDepth", "delayMix", "delayTime", "delayFeedback"};
-constexpr std::array<const char*, 31> names {"A POS", "B POS", "B LEVEL", "B TUNE", "SUB", "NOISE", "UNISON", "DETUNE", "CUTOFF", "RES", "ATTACK", "DECAY", "SUSTAIN", "RELEASE", "ENV > FILTER", "F ATTACK", "F DECAY", "F SUSTAIN", "F RELEASE", "LFO RATE", "LFO > FILTER", "DRIVE", "OUTPUT", "LFO > POS", "LFO > PITCH", "CHORUS", "CH RATE", "CH DEPTH", "DELAY", "TIME", "FEEDBACK"};
-constexpr std::array<const char*, 31> tips {
+constexpr std::array<const char*, 35> ids {"oscAPosition", "oscBPosition", "oscBLevel", "oscBTune", "subLevel", "noiseLevel", "unison", "detune", "cutoff", "resonance", "attack", "decay", "sustain", "release", "filterEnvAmount", "filterAttack", "filterDecay", "filterSustain", "filterRelease", "lfoRate", "lfoCutoff", "drive", "output", "lfoPosition", "lfoPitch", "chorusMix", "chorusRate", "chorusDepth", "delayMix", "delayTime", "delayFeedback", "polyphony", "mono", "legato", "glide"};
+constexpr std::array<const char*, 35> names {"A POS", "B POS", "B LEVEL", "B TUNE", "SUB", "NOISE", "UNISON", "DETUNE", "CUTOFF", "RES", "ATTACK", "DECAY", "SUSTAIN", "RELEASE", "ENV > FILTER", "F ATTACK", "F DECAY", "F SUSTAIN", "F RELEASE", "LFO RATE", "LFO > FILTER", "DRIVE", "OUTPUT", "LFO > POS", "LFO > PITCH", "CHORUS", "CH RATE", "CH DEPTH", "DELAY", "TIME", "FEEDBACK", "POLY", "MONO", "LEGATO", "GLIDE"};
+constexpr std::array<const char*, 35> tips {
     "Scan oscillator A's harmonic shape", "Scan oscillator B's harmonic shape", "Set oscillator B's level", "Tune oscillator B in semitones",
     "Blend a grounded sub oscillator", "Add a little heat and air", "Stack voices for width", "Spread stacked oscillator voices",
     "Open or close the low-pass filter", "Emphasise the filter edge", "Set how the sound begins", "Set the fall after the attack",
@@ -16,7 +16,9 @@ constexpr std::array<const char*, 31> tips {
     "Set the filter envelope release", "Set free-running LFO speed", "Move cutoff with the LFO",
     "Add saturation and density", "Set Forge's final level", "Animate both oscillator positions",
     "Add vibrato or wide pitch movement", "Blend the stereo chorus", "Set chorus movement speed",
-    "Set chorus delay sweep", "Blend the ping-pong delay", "Set delay time in seconds", "Set delay regeneration"};
+    "Set chorus delay sweep", "Blend the ping-pong delay", "Set delay time in seconds", "Set delay regeneration",
+    "Limit simultaneous notes", "Use one voice for basses and leads", "Keep envelopes running across overlapping mono notes",
+    "Slide smoothly between monophonic notes"};
 }
 
 Editor::Editor(Processor& p) : AudioProcessorEditor(&p), processor(p)
@@ -40,10 +42,20 @@ Editor::Editor(Processor& p) : AudioProcessorEditor(&p), processor(p)
         addAndMakeVisible(control.label);
         addAndMakeVisible(control.slider);
     }
+    for (auto* button : {&synthPage, &motionPage})
+    {
+        button->setClickingTogglesState(false);
+        button->setColour(juce::TextButton::buttonColourId, juce::Colour(0xff1b2631));
+        button->setColour(juce::TextButton::textColourOffId, juce::Colour(0xffd7e2e8));
+        addAndMakeVisible(button);
+    }
+    synthPage.onClick = [this] { showPage(0); };
+    motionPage.onClick = [this] { showPage(1); };
     setResizable(true, true);
     setResizeLimits(900, 600, 1600, 1000);
-    setSize(1100, 820);
+    setSize(1100, 700);
     startTimerHz(24);
+    showPage(0);
 }
 
 void Editor::paint(juce::Graphics& g)
@@ -56,12 +68,27 @@ void Editor::paint(juce::Graphics& g)
 
 void Editor::resized()
 {
+    synthPage.setBounds(330, 38, 86, 28);
+    motionPage.setBounds(422, 38, 116, 28);
     for (int i = 0; i < static_cast<int>(controls.size()); ++i)
     {
-        auto cell = ui::controlCell(getLocalBounds(), i).reduced(7);
+        const auto visible = ui::isParameterVisible(i, currentPage);
+        controls[static_cast<size_t>(i)].label.setVisible(visible);
+        controls[static_cast<size_t>(i)].slider.setVisible(visible);
+        if (!visible) continue;
+        auto cell = ui::controlCell(getLocalBounds(), i, currentPage).reduced(7);
         controls[static_cast<size_t>(i)].label.setBounds(cell.removeFromTop(20));
         controls[static_cast<size_t>(i)].slider.setBounds(cell);
     }
+}
+
+void Editor::showPage(int page)
+{
+    currentPage = juce::jlimit(0, 1, page);
+    synthPage.setColour(juce::TextButton::buttonColourId, currentPage == 0 ? juce::Colour(0xffff7a59) : juce::Colour(0xff1b2631));
+    motionPage.setColour(juce::TextButton::buttonColourId, currentPage == 1 ? juce::Colour(0xff65bfff) : juce::Colour(0xff1b2631));
+    resized();
+    repaint();
 }
 
 void Editor::timerCallback()

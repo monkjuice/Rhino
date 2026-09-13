@@ -74,7 +74,8 @@ juce::Result Session::editClip(te::EditItemID id, ClipGeometry next, ClipGesture
         if (movingMidi)
         {
             bool instrumentChanged = false;
-            const auto result = switchTrackInstrument(*edit, *target, sourceInstrument, instrumentChanged);
+            const auto result = switchTrackInstrument(*edit, *target, sourceInstrument, instrumentChanged,
+                                                      forgeDescription ? &*forgeDescription : nullptr);
             if (result.failed())
                 return result;
             if (targetTrack == 0)

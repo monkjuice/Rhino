@@ -71,9 +71,11 @@ te::FourOscPlugin* findFourOsc(te::AudioTrack& track);
 ThetaWaveDevice* findThetaWave(te::AudioTrack& track);
 DrumDevice* findDrumDevice(te::AudioTrack& track);
 Session::Instrument activeTrackInstrument(te::AudioTrack& track);
+bool isForgePlugin(const te::Plugin& plugin);
 tracktion::core::TimeRange firstFreeDuplicateRange(te::Clip& source);
 juce::Result ensurePlugin(te::Edit& edit, te::AudioTrack& track, const juce::String& type,
                           int insertIndex, te::Plugin*& plugin, bool& changed);
-juce::Result switchTrackInstrument(te::Edit& edit, te::AudioTrack& track, Session::Instrument instrument, bool& changed);
+juce::Result switchTrackInstrument(te::Edit& edit, te::AudioTrack& track, Session::Instrument instrument, bool& changed,
+                                   const juce::PluginDescription* forgeDescription = nullptr);
 
 }

@@ -20,8 +20,11 @@ private:
         std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachment;
     };
     Processor& processor;
-    std::array<Control, 31> controls;
+    std::array<Control, 35> controls;
+    juce::TextButton synthPage {"SYNTH"}, motionPage {"MOTION / FX"};
+    int currentPage = 0;
 
     void timerCallback() override;
+    void showPage(int);
 };
 }

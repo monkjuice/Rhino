@@ -1,6 +1,5 @@
 #include "DeviceRack.h"
 #include "BrowserIds.h"
-#include "ForgeVisuals.h"
 #include <cmath>
 #include <optional>
 
@@ -55,8 +54,7 @@ public:
         {
             setOpaque(true);
             refresh();
-            setSize(isThetaWave ? 920 : isThetaForge ? 1100 : 680,
-                    isThetaWave ? 800 : isThetaForge ? 820 : 430);
+            setSize(isThetaWave ? 920 : 680, isThetaWave ? 800 : 430);
             startTimerHz(30);
         }
 
@@ -68,12 +66,6 @@ public:
                 paintThetaWave(g);
                 return;
             }
-            if (isThetaForge)
-            {
-                forge::ui::paint(g, getLocalBounds(), [this](int index) { return normalisedValue(index); });
-                return;
-            }
-
             const auto bounds = getLocalBounds().toFloat();
             g.setColour(juce::Colour(0xff1a1d21));
             g.fillRect(bounds.reduced(18.0f, 18.0f));
@@ -109,12 +101,6 @@ public:
                 layoutThetaWave();
                 return;
             }
-            if (isThetaForge)
-            {
-                layoutThetaForge();
-                return;
-            }
-
             const auto count = static_cast<int>(sliders.size());
             const int top = 238;
             const int cellWidth = 182;
@@ -137,11 +123,8 @@ public:
         {
             animationPhase += 0.12f;
             refreshParameterValues();
-            if (isThetaForge)
-                repaint();
-            else
-                repaint(isThetaWave ? getLocalBounds().reduced(28, 74).withHeight(154)
-                                    : juce::Rectangle<int>(210, 88, 260, 126).expanded(2));
+            repaint(isThetaWave ? getLocalBounds().reduced(28, 74).withHeight(154)
+                                : juce::Rectangle<int>(210, 88, 260, 126).expanded(2));
         }
 
         void refresh()
@@ -150,9 +133,7 @@ public:
             deviceName = juce::isPositiveAndBelow(slot, deviceSlots.size()) ? deviceSlots[static_cast<size_t>(slot)].name : "Device";
             const auto deviceType = juce::isPositiveAndBelow(slot, deviceSlots.size()) ? deviceSlots[static_cast<size_t>(slot)].type : juce::String();
             isThetaWave = deviceType == ThetaWaveDevice::xmlTypeName;
-            isThetaForge = deviceType == ThetaForgeDevice::xmlTypeName;
             deviceTypeLabel = deviceType == ThetaWaveDevice::xmlTypeName ? "THETA SYNTH"
-                : deviceType == ThetaForgeDevice::xmlTypeName ? "FORGE INSTRUMENT"
                 : deviceType == DrumDevice::xmlTypeName || deviceType == te::FourOscPlugin::xmlTypeName ? "THETA INSTRUMENT"
                 : "THETA FX";
             parameters = session.deviceParameters(track, slot);
@@ -189,9 +170,7 @@ public:
                             values[index]->setText(parameters[static_cast<size_t>(index)].valueText, juce::dontSendNotification);
                             slider->setTooltip(parameters[static_cast<size_t>(index)].name + ": "
                                                + parameters[static_cast<size_t>(index)].valueText);
-                            if (isThetaForge)
-                                repaint();
-                            else if (isThetaWave)
+                            if (isThetaWave)
                                 repaint(oscillatorArea.getUnion(envelopeArea).expanded(2));
                         }
                     }
@@ -216,22 +195,22 @@ public:
             syncing = true;
             for (int i = 0; i < labels.size(); ++i)
             {
-                const auto visible = i < static_cast<int>(parameters.size()) && (isThetaWave || isThetaForge || i < 6);
+                const auto visible = i < static_cast<int>(parameters.size()) && (isThetaWave || i < 6);
                 labels[i]->setVisible(visible);
                 values[i]->setVisible(visible);
                 sliders[i]->setVisible(visible);
                 automationButtons[i]->setVisible(visible);
                 if (!visible) continue;
                 const auto& parameter = parameters[static_cast<size_t>(i)];
-                const auto accent = isThetaForge ? forge::ui::accentForParameter(i) : thetaWaveAccent(i);
+                const auto accent = thetaWaveAccent(i);
                 labels[i]->setText(parameter.name, juce::dontSendNotification);
                 values[i]->setText(parameter.valueText, juce::dontSendNotification);
                 sliders[i]->setRange(parameter.minimum, parameter.maximum, parameter.discrete ? 1.0 : 0.0);
                 sliders[i]->setValue(parameter.value, juce::dontSendNotification);
-                sliders[i]->setColour(juce::Slider::trackColourId, (isThetaWave || isThetaForge) ? accent : juce::Colour(0xff8cc5d2));
-                sliders[i]->setColour(juce::Slider::rotarySliderFillColourId, (isThetaWave || isThetaForge) ? accent : juce::Colour(0xff8cc5d2));
+                sliders[i]->setColour(juce::Slider::trackColourId, isThetaWave ? accent : juce::Colour(0xff8cc5d2));
+                sliders[i]->setColour(juce::Slider::rotarySliderFillColourId, isThetaWave ? accent : juce::Colour(0xff8cc5d2));
                 sliders[i]->setColour(juce::Slider::rotarySliderOutlineColourId, juce::Colour(0xff30414b));
-                sliders[i]->setColour(juce::Slider::thumbColourId, (isThetaWave || isThetaForge) ? accent.brighter(0.25f) : juce::Colour(0xffc6d58c));
+                sliders[i]->setColour(juce::Slider::thumbColourId, isThetaWave ? accent.brighter(0.25f) : juce::Colour(0xffc6d58c));
                 sliders[i]->setTooltip(parameter.name + ": " + parameter.valueText);
                 styleAutomationButton(*automationButtons[i], parameter);
             }
@@ -408,26 +387,6 @@ public:
             automationButtons[index]->setBounds(sliders[index]->getRight() - 12, sliders[index]->getY() - 2, 20, 18);
         }
 
-        void layoutThetaForge()
-        {
-            for (int i = 0; i < labels.size(); ++i)
-            {
-                const auto visible = i < forge::ui::parameterCount && i < static_cast<int>(parameters.size());
-                labels[i]->setVisible(visible);
-                values[i]->setVisible(visible);
-                sliders[i]->setVisible(visible);
-                automationButtons[i]->setVisible(visible);
-                if (!visible) continue;
-
-                auto cell = forge::ui::controlCell(getLocalBounds(), i).reduced(7);
-                labels[i]->setBounds(cell.removeFromTop(18));
-                values[i]->setBounds(cell.removeFromBottom(18));
-                const auto knobSize = std::min({72, cell.getWidth() - 12, cell.getHeight() - 4});
-                sliders[i]->setBounds(cell.withSizeKeepingCentre(knobSize, knobSize));
-                automationButtons[i]->setBounds(sliders[i]->getRight() - 12, sliders[i]->getY() - 2, 20, 18);
-            }
-        }
-
         void layoutThetaWave()
         {
             const auto bounds = getLocalBounds().reduced(28);
@@ -485,7 +444,6 @@ public:
         int track = 0, slot = 0;
         bool syncing = false;
         bool isThetaWave = false;
-        bool isThetaForge = false;
         float animationPhase = 0.0f;
         juce::String deviceName, deviceTypeLabel;
         juce::Rectangle<int> oscillatorArea, filterArea, envelopeArea, voiceArea;
@@ -499,6 +457,24 @@ public:
         : DocumentWindow("Theta Device", juce::Colour(0xff0f1114), DocumentWindow::closeButton)
     {
         setUsingNativeTitleBar(true);
+        const auto tracks = te::getAudioTracks(*session.edit);
+        if (juce::isPositiveAndBelow(track, tracks.size())
+            && juce::isPositiveAndBelow(slot, tracks[track]->pluginList.size()))
+            plugin = tracks[track]->pluginList[slot];
+
+        if (plugin != nullptr)
+            if (auto pluginEditor = plugin->createEditor())
+            {
+                const auto editorSize = pluginEditor->getBounds();
+                const auto editorCanResize = pluginEditor->allowWindowResizing();
+                setName(plugin->getName());
+                setResizable(editorCanResize, editorCanResize);
+                setContentOwned(pluginEditor.release(), true);
+                centreWithSize(std::max(320, editorSize.getWidth()), std::max(240, editorSize.getHeight()));
+                setVisible(true);
+                return;
+            }
+
         setResizable(false, false);
         auto* editor = new Editor(session, track, slot);
         const auto editorSize = editor->getBounds();
@@ -511,6 +487,9 @@ public:
     {
         setVisible(false);
     }
+
+private:
+    te::Plugin::Ptr plugin;
 };
 
 DeviceRack::DeviceRack(Session& s) : session(s)

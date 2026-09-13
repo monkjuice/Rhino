@@ -49,6 +49,7 @@ target_sources(ThetaNative PRIVATE
     src/SessionClips.cpp
     src/SessionAutomation.cpp
     src/SessionTransport.cpp
+    src/SessionExternalPlugins.cpp
     src/DeviceMacros.cpp
     # UI
     src/StepGrid.cpp
@@ -71,7 +72,6 @@ target_sources(ThetaNative PRIVATE
     src/ThetaBloomDevice.cpp
     src/ThetaSpaceDevice.cpp
     src/ThetaWaveDevice.cpp
-    src/ThetaForgeDevice.cpp
     # App
     src/Main.cpp
     src/ProjectFiles.cpp
@@ -81,10 +81,11 @@ target_sources(ThetaNative PRIVATE
     src/tests/Pattern/WorkflowTest.cpp
     src/tests/Arrangement/ClipGeometryTest.cpp
     src/tests/Arrangement/WorkflowTest.cpp)
-target_include_directories(ThetaNative PRIVATE src ../instruments/theta-forge/core ../instruments/theta-forge/ui)
+target_include_directories(ThetaNative PRIVATE src)
 target_compile_definitions(ThetaNative PRIVATE
     JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
-    JUCE_PLUGINHOST_VST3=0 JUCE_PLUGINHOST_AU=0
+    JUCE_PLUGINHOST_VST3=1 JUCE_PLUGINHOST_AU=0
+    THETA_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
     JUCE_MODAL_LOOPS_PERMITTED=0
     TRACKTION_ENABLE_TIMESTRETCH_SOUNDTOUCH=1)
 target_link_libraries(ThetaNative PRIVATE

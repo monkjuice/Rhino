@@ -21,6 +21,7 @@ struct Patch
     float lfoPosition = 0.0f, lfoPitch = 0.0f;
     float chorusMix = 0.0f, chorusRate = 0.35f, chorusDepth = 0.4f;
     float delayMix = 0.0f, delayTime = 0.375f, delayFeedback = 0.3f;
+    float polyphony = 8.0f, mono = 0.0f, legato = 1.0f, glide = 0.08f;
 };
 
 class Core final
@@ -50,26 +51,53 @@ public:
         std::fill(delayLeft.begin(), delayLeft.end(), 0.0f);
         std::fill(delayRight.begin(), delayRight.end(), 0.0f);
         noiseState = 0x9e3779b9u;
+        heldCount = 0;
+        monoMode = false;
     }
 
     void noteOn(int note, float velocity)
     {
-        auto& voice = voices[nextVoice++ % voices.size()];
-        voice = {};
-        voice.active = true;
-        voice.note = note;
-        voice.velocity = juce::jlimit(0.0f, 1.0f, velocity);
-        voice.ampStage = voice.filterStage = EnvelopeStage::attack;
-        for (size_t i = 0; i < voice.phaseA.size(); ++i)
+        noteOn(note, velocity, Patch {});
+    }
+
+    void noteOn(int note, float velocity, const Patch& patch)
+    {
+        monoMode = patch.mono >= 0.5f;
+        if (monoMode)
         {
-            const auto offset = static_cast<float>(i) / static_cast<float>(voice.phaseA.size());
-            voice.phaseA[i] = std::fmod(offset * 0.37f + static_cast<float>(note) * 0.013f, 1.0f);
-            voice.phaseB[i] = std::fmod(offset * 0.61f + static_cast<float>(note) * 0.019f, 1.0f);
+            hold(note);
+            auto& voice = voices[0];
+            const auto continueEnvelope = voice.active && patch.legato >= 0.5f;
+            if (!continueEnvelope)
+                startVoice(voice, note, velocity);
+            else
+            {
+                voice.note = note;
+                voice.targetHz = noteFrequency(note);
+                voice.velocity = juce::jlimit(0.0f, 1.0f, velocity);
+            }
+            if (patch.glide <= 0.0001f) voice.currentHz = voice.targetHz;
+            return;
         }
+
+        const auto voiceCount = static_cast<size_t>(juce::jlimit(1, static_cast<int>(voices.size()), juce::roundToInt(patch.polyphony)));
+        auto& voice = voices[nextVoice++ % voiceCount];
+        startVoice(voice, note, velocity);
     }
 
     void noteOff(int note)
     {
+        if (monoMode)
+        {
+            releaseHeld(note);
+            auto& voice = voices[0];
+            if (voice.active && voice.note == note && heldCount > 0)
+            {
+                voice.note = heldNotes[static_cast<size_t>(heldCount - 1)];
+                voice.targetHz = noteFrequency(voice.note);
+                return;
+            }
+        }
         for (auto& voice : voices)
             if (voice.active && voice.note == note && voice.ampStage != EnvelopeStage::release)
             {
@@ -128,6 +156,7 @@ private:
         float velocity = 0.0f;
         std::array<float, 8> phaseA {}, phaseB {};
         float phaseSub = 0.0f;
+        float currentHz = 0.0f, targetHz = 0.0f;
         float ampEnvelope = 0.0f, filterEnvelope = 0.0f;
         float ampReleaseStart = 0.0f, filterReleaseStart = 0.0f;
         float lowLeft = 0.0f, bandLeft = 0.0f, lowRight = 0.0f, bandRight = 0.0f;
@@ -135,6 +164,40 @@ private:
     };
 
     static float wrap(float phase) { return phase - std::floor(phase); }
+    static float noteFrequency(int note) { return static_cast<float>(juce::MidiMessage::getMidiNoteInHertz(note)); }
+
+    void startVoice(Voice& voice, int note, float velocity)
+    {
+        voice = {};
+        voice.active = true;
+        voice.note = note;
+        voice.velocity = juce::jlimit(0.0f, 1.0f, velocity);
+        voice.currentHz = voice.targetHz = noteFrequency(note);
+        voice.ampStage = voice.filterStage = EnvelopeStage::attack;
+        for (size_t i = 0; i < voice.phaseA.size(); ++i)
+        {
+            const auto offset = static_cast<float>(i) / static_cast<float>(voice.phaseA.size());
+            voice.phaseA[i] = std::fmod(offset * 0.37f + static_cast<float>(note) * 0.013f, 1.0f);
+            voice.phaseB[i] = std::fmod(offset * 0.61f + static_cast<float>(note) * 0.019f, 1.0f);
+        }
+    }
+
+    void hold(int note)
+    {
+        releaseHeld(note);
+        if (heldCount < static_cast<int>(heldNotes.size())) heldNotes[static_cast<size_t>(heldCount++)] = note;
+    }
+
+    void releaseHeld(int note)
+    {
+        for (int i = 0; i < heldCount; ++i)
+            if (heldNotes[static_cast<size_t>(i)] == note)
+            {
+                for (int j = i; j + 1 < heldCount; ++j) heldNotes[static_cast<size_t>(j)] = heldNotes[static_cast<size_t>(j + 1)];
+                --heldCount;
+                return;
+            }
+    }
 
     static float morph(float phase, float position)
     {
@@ -183,7 +246,11 @@ private:
     void renderOscillators(Voice& voice, const Patch& patch, float lfo, float& left, float& right)
     {
         const auto dt = static_cast<float>(1.0 / sampleRate);
-        const auto hz = static_cast<float>(juce::MidiMessage::getMidiNoteInHertz(voice.note));
+        const auto glide = juce::jlimit(0.0f, 2.0f, patch.glide);
+        if (glide <= 0.0001f) voice.currentHz = voice.targetHz;
+        else voice.currentHz += (voice.targetHz - voice.currentHz)
+            * (1.0f - std::exp(-1.0f / (static_cast<float>(sampleRate) * glide)));
+        const auto hz = voice.currentHz;
         const auto pitchRatio = std::pow(2.0f, juce::jlimit(-12.0f, 12.0f, patch.lfoPitch) * lfo / 12.0f);
         const auto hzB = hz * std::pow(2.0f, patch.oscBTune / 12.0f);
         const auto positionA = juce::jlimit(0.0f, 1.0f, patch.oscAPosition + lfo * patch.lfoPosition * 0.5f);
@@ -273,5 +340,8 @@ private:
     std::uint32_t noiseState = 0x9e3779b9u;
     std::vector<float> chorusLeft, chorusRight, delayLeft, delayRight;
     size_t chorusWrite = 0, delayWrite = 0;
+    std::array<int, 16> heldNotes {};
+    int heldCount = 0;
+    bool monoMode = false;
 };
 }

@@ -84,6 +84,8 @@ private:
     juce::Rectangle<float> lane(int track) const;
     float laneHeight() const;
     float laneContentHeight() const;
+    ClipGeometry displayedPosition(const ClipView&) const;
+    int displayedTrack(const ClipView&) const;
     juce::Rectangle<float> bounds(const ClipView&) const;
     int hit(juce::Point<float>) const;
     void changeListenerCallback(juce::ChangeBroadcaster*) override;

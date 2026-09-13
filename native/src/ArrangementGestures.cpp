@@ -171,6 +171,10 @@ void Arrangement::mouseDrag(const juce::MouseEvent& event)
             targetTrack = session.trackCount();
         else
             targetTrack = originalTrack;
+        auto lowestSelectedTrack = originalTrack;
+        for (const auto& selectedClip : clips)
+            if (isSelected(selectedClip.id)) lowestSelectedTrack = std::min(lowestSelectedTrack, selectedClip.track);
+        targetTrack = std::max(targetTrack, originalTrack - lowestSelectedTrack);
     }
     const auto rawStart = anchor + timeAt(event.position.x) - dragTime;
     const auto editTime = gesture == ClipGesture::move
@@ -178,7 +182,7 @@ void Arrangement::mouseDrag(const juce::MouseEvent& event)
         : snapped(rawStart, event.mods.isAltDown());
     preview = previewClipEdit(original, gesture, editTime, sourceDuration);
     previewTrack = targetTrack;
-    repaint(lane(originalTrack).getUnion(lane(juce::jlimit(0, session.trackCount() - 1, previewTrack))).getSmallestIntegerContainer());
+    repaint();
 }
 
 void Arrangement::mouseUp(const juce::MouseEvent& event)
@@ -243,10 +247,37 @@ void Arrangement::mouseUp(const juce::MouseEvent& event)
     {
         mouseDrag(event);
         dragging = false;
-        const auto result = session.editClip(selected, preview, gesture, gesture == ClipGesture::move ? previewTrack : -1);
-        if (result.failed() && status) status(result.getErrorMessage());
-        else if (gesture == ClipGesture::move)
-            selectTrack(juce::jlimit(0, std::max(0, session.trackCount() - 1), previewTrack));
+        if (gesture == ClipGesture::move && selectedClips.size() > 1)
+        {
+            struct Move { te::EditItemID id; ClipGeometry position; int track; };
+            std::vector<Move> moves;
+            for (const auto& clip : clips)
+                if (isSelected(clip.id)) moves.push_back({clip.id, clip.position, clip.track});
+            std::sort(moves.begin(), moves.end(), [this] (const auto& a, const auto& b)
+            {
+                return a.track + previewTrack - originalTrack < b.track + previewTrack - originalTrack;
+            });
+            const auto timeDelta = preview.start - original.start;
+            const auto trackDelta = previewTrack - originalTrack;
+            juce::Result result = juce::Result::ok();
+            for (const auto& move : moves)
+            {
+                const auto length = move.position.end - move.position.start;
+                result = session.editClip(move.id, {std::max(0.0, move.position.start + timeDelta),
+                                                    std::max(0.0, move.position.start + timeDelta) + length,
+                                                    move.position.offset}, ClipGesture::move, move.track + trackDelta);
+                if (result.failed()) break;
+            }
+            if (result.failed() && status) status(result.getErrorMessage());
+            else selectTrack(juce::jlimit(0, std::max(0, session.trackCount() - 1), previewTrack));
+        }
+        else
+        {
+            const auto result = session.editClip(selected, preview, gesture, gesture == ClipGesture::move ? previewTrack : -1);
+            if (result.failed() && status) status(result.getErrorMessage());
+            else if (gesture == ClipGesture::move)
+                selectTrack(juce::jlimit(0, std::max(0, session.trackCount() - 1), previewTrack));
+        }
     }
     cancelDrag();
     repaint();

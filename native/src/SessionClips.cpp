@@ -221,12 +221,19 @@ juce::Result Session::pasteClips(const std::vector<te::EditItemID>& source, doub
             if (copy != nullptr) copy->setColour(audio->getColour());
         }
         else if (auto* midi = dynamic_cast<te::MidiClip*>(item.clip))
+        {
+            bool instrumentChanged = false;
+            const auto sourceInstrument = activeTrackInstrument(*te::getAudioTracks(*edit)[item.track]);
+            const auto instrumentResult = switchTrackInstrument(*edit, *target, sourceInstrument, instrumentChanged,
+                                                                forgeDescription ? &*forgeDescription : nullptr);
+            if (instrumentResult.failed()) return instrumentResult;
             if (auto midiCopy = target->insertMIDIClip(midi->getName() + " copy", range, nullptr))
             {
                 midiCopy->cloneFrom(midi);
                 midiCopy->setPosition({range, tracktion::core::TimeDuration::fromSeconds(item.position.offset)});
                 copy = midiCopy.get();
             }
+        }
         if (copy == nullptr) return juce::Result::fail("The clip could not be pasted.");
         pasted.push_back(copy->itemID);
     }

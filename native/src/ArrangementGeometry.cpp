@@ -30,10 +30,25 @@ double Arrangement::timeAt(float x) const
     return viewStart + (x - headerWidth) / lane(0).getWidth() * viewSpan;
 }
 
+ClipGeometry Arrangement::displayedPosition(const ClipView& clip) const
+{
+    if (!dragging || !isSelected(clip.id) || gesture != ClipGesture::move)
+        return dragging && clip.id == selected ? preview : clip.position;
+    const auto delta = preview.start - original.start;
+    return {clip.position.start + delta, clip.position.end + delta, clip.position.offset};
+}
+
+int Arrangement::displayedTrack(const ClipView& clip) const
+{
+    if (!dragging || !isSelected(clip.id) || gesture != ClipGesture::move)
+        return dragging && clip.id == selected ? previewTrack : clip.track;
+    return clip.track + previewTrack - originalTrack;
+}
+
 juce::Rectangle<float> Arrangement::bounds(const ClipView& clip) const
 {
-    const auto p = dragging && clip.id == selected ? preview : clip.position;
-    const auto track = dragging && clip.id == selected ? previewTrack : clip.track;
+    const auto p = displayedPosition(clip);
+    const auto track = displayedTrack(clip);
     return {xFor(p.start), lane(track).getY() + 5.0f,
             std::max(1.0f, xFor(p.end) - xFor(p.start)), lane(track).getHeight() - 10.0f};
 }

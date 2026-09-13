@@ -76,7 +76,7 @@ void Arrangement::paint(juce::Graphics& g)
     for (const auto& clip : clips)
     {
         hasAudio |= clip.track == 1;
-        const auto paintTrack = dragging && clip.id == selected ? previewTrack : clip.track;
+        const auto paintTrack = displayedTrack(clip);
         const auto box = bounds(clip);
         const auto visible = box.getIntersection(lane(paintTrack))
             .getIntersection({0.0f, lanesTop, static_cast<float>(getWidth() - 14), laneContentHeight()});
@@ -105,7 +105,7 @@ void Arrangement::paint(juce::Graphics& g)
             g.setColour(juce::Colour(0xffeaf0f3));
             g.drawText("FX" + juce::String(clip.clipPlugins), badge, juce::Justification::centred, true);
         }
-        const auto position = dragging && clip.id == selected ? preview : clip.position;
+        const auto position = displayedPosition(clip);
         const auto automationStack = automationBounds(clip);
         const auto activeLane = displayedAutomationIndex(clip);
         const auto automationAreaFor = [&] (int laneIndex, int laneCount)

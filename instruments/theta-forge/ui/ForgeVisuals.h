@@ -83,10 +83,13 @@ public:
 inline float waveform(float phase, float position)
 {
     const auto sine = std::sin(phase * juce::MathConstants<float>::twoPi);
+    const auto triangle = 1.0f - 4.0f * std::abs(phase - 0.5f);
     const auto saw = phase * 2.0f - 1.0f;
     const auto square = phase < 0.5f ? 1.0f : -1.0f;
-    const auto first = juce::jmap(juce::jlimit(0.0f, 1.0f, position * 2.0f), sine, saw);
-    return juce::jmap(juce::jlimit(0.0f, 1.0f, position * 2.0f - 1.0f), first, square);
+    const float frames[] {sine, triangle, saw, square};
+    const auto scaled = juce::jlimit(0.0f, 1.0f, position) * 3.0f;
+    const auto index = std::min(2, static_cast<int>(scaled));
+    return juce::jmap(scaled - static_cast<float>(index), frames[index], frames[index + 1]);
 }
 
 inline void drawWaveform(juce::Graphics& g, juce::Rectangle<float> area, float position, juce::Colour colour)
@@ -106,8 +109,69 @@ inline void drawWaveform(juce::Graphics& g, juce::Rectangle<float> area, float p
     g.strokePath(path, juce::PathStrokeType(1.8f));
 }
 
+inline juce::Rectangle<int> contentBounds(juce::Rectangle<int> bounds)
+{
+    return bounds.reduced(36).withTrimmedTop(68);
+}
+
+inline void drawPanel(juce::Graphics& g, juce::Rectangle<int> area, const juce::String& title,
+                      const juce::String& detail, juce::Colour accent)
+{
+    const auto box = area.toFloat();
+    g.setColour(panelRaised);
+    g.fillRoundedRectangle(box, 4.0f);
+    g.setColour(line);
+    g.drawRoundedRectangle(box, 4.0f, 1.0f);
+    g.setColour(accent);
+    g.fillRoundedRectangle(box.withHeight(3.0f), 2.0f);
+    g.setColour(text);
+    g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
+    g.drawText(title, area.reduced(12, 7).withHeight(16), juce::Justification::centredLeft);
+    g.setColour(mutedText);
+    g.setFont(juce::FontOptions(9.0f));
+    g.drawText(detail, area.reduced(12, 7).withHeight(16), juce::Justification::centredRight);
+}
+
+inline juce::Rectangle<int> cell(juce::Rectangle<int> area, int index, int count)
+{
+    const auto width = area.getWidth() / std::max(1, count);
+    return {area.getX() + index * width, area.getY(), width, area.getHeight()};
+}
+
+struct SynthLayout
+{
+    juce::Rectangle<int> oscA, oscB, sourceA, sourceB, mix, filter, ampEnvelope, filterEnvelope, macros;
+};
+
+inline SynthLayout synthLayout(juce::Rectangle<int> bounds)
+{
+    auto content = contentBounds(bounds);
+    const auto visualHeight = juce::jlimit(86, 112, bounds.getHeight() / 6);
+    const auto sourceHeight = juce::jlimit(84, 106, bounds.getHeight() / 7);
+    const auto macroHeight = juce::jlimit(74, 92, bounds.getHeight() / 8);
+    auto visual = content.removeFromTop(visualHeight);
+    content.removeFromTop(10);
+    auto sources = content.removeFromTop(sourceHeight);
+    content.removeFromTop(10);
+    auto macros = content.removeFromBottom(macroHeight);
+    content.removeFromBottom(10);
+    const auto filterWidth = content.getWidth() * 3 / 11;
+    auto filter = content.removeFromLeft(filterWidth);
+    content.removeFromLeft(10);
+    auto amp = content.removeFromLeft((content.getWidth() - 10) / 2);
+    content.removeFromLeft(10);
+    const auto sourceAWidth = sources.getWidth() * 3 / 8;
+    auto sourceA = sources.removeFromLeft(sourceAWidth);
+    sources.removeFromLeft(8);
+    const auto sourceBWidth = sources.getWidth() * 3 / 5;
+    auto sourceB = sources.removeFromLeft(sourceBWidth);
+    sources.removeFromLeft(8);
+    return {visual.removeFromLeft(visual.getWidth() / 2 - 5), visual,
+            sourceA, sourceB, sources, filter, amp, content, macros};
+}
+
 template <typename NormalisedValue>
-void paint(juce::Graphics& g, juce::Rectangle<int> componentBounds, NormalisedValue value)
+void paint(juce::Graphics& g, juce::Rectangle<int> componentBounds, int page, NormalisedValue value)
 {
     const auto bounds = componentBounds.toFloat();
     juce::ColourGradient background(juce::Colour(0xff090b13), 0.0f, 0.0f,
@@ -129,69 +193,83 @@ void paint(juce::Graphics& g, juce::Rectangle<int> componentBounds, NormalisedVa
     g.setFont(juce::FontOptions(11.0f));
     g.drawText("SYNTHETIC SIGNAL FORGE // UNIT 01", 39, 68, 280, 18, juce::Justification::centredLeft);
 
-    const auto waveArea = juce::Rectangle<float>(36.0f, 104.0f, componentBounds.getWidth() - 72.0f, 105.0f);
-    g.setColour(panel);
-    g.fillRoundedRectangle(waveArea, 3.0f);
-    g.setColour(line);
-    for (int gridLine = 1; gridLine < 4; ++gridLine)
-        g.drawHorizontalLine(static_cast<int>(waveArea.getY() + waveArea.getHeight() * gridLine / 4.0f),
-                             waveArea.getX(), waveArea.getRight());
-    drawWaveform(g, waveArea.reduced(12.0f, 16.0f), value(0), electricBlue);
-    drawWaveform(g, waveArea.reduced(12.0f, 28.0f), value(1), signalViolet);
+    if (page == 0)
+    {
+        const auto layout = synthLayout(componentBounds);
+        drawPanel(g, layout.oscA, "OSC A", "BASIC MORPH", electricBlue);
+        drawPanel(g, layout.oscB, "OSC B", "BASIC MORPH", signalViolet);
+        for (const auto& area : {layout.oscA, layout.oscB})
+        {
+            g.setColour(line.withAlpha(0.75f));
+            g.drawHorizontalLine(area.getCentreY() + 8, area.getX() + 12, area.getRight() - 12);
+        }
+        drawWaveform(g, layout.oscA.toFloat().reduced(14.0f, 29.0f), value(0), electricBlue);
+        drawWaveform(g, layout.oscB.toFloat().reduced(14.0f, 29.0f), value(1), signalViolet);
+        drawPanel(g, layout.sourceA, "OSC A", "POSITION / STACK", electricBlue);
+        drawPanel(g, layout.sourceB, "OSC B", "POSITION / MIX / TUNE", signalViolet);
+        drawPanel(g, layout.mix, "SOURCES", "SUB / NOISE", electricBlue);
+        drawPanel(g, layout.filter, "FILTER", "LOW-PASS VOICE FILTER", signalViolet);
+        drawPanel(g, layout.ampEnvelope, "AMP ENVELOPE", "VOLUME SHAPE", electricBlue);
+        drawPanel(g, layout.filterEnvelope, "FILTER ENVELOPE", "CUTOFF SHAPE", signalViolet);
+        drawPanel(g, layout.macros, "PERFORMANCE MACROS",
+                  value(35) + value(36) + value(37) + value(38) > 0.0f ? "MACRO ACTIVE" : "DIRECT", signalViolet);
+        return;
+    }
 
-    constexpr auto lowerY = 226.0f;
-    g.setColour(panelRaised);
-    g.fillRoundedRectangle(36.0f, lowerY, componentBounds.getWidth() - 72.0f,
-                           componentBounds.getHeight() - lowerY - 32.0f, 3.0f);
-    g.setColour(mutedText);
-    g.setFont(juce::FontOptions(10.0f));
-    g.drawText("CONTROL MATRIX // " + juce::String(value(35) + value(36) + value(37) + value(38) > 0.0f ? "MACRO ACTIVE" : "DIRECT"),
-               52, 238, 280, 16, juce::Justification::centredLeft);
+    auto content = contentBounds(componentBounds);
+    const auto macroHeight = juce::jlimit(74, 92, componentBounds.getHeight() / 8);
+    auto macros = content.removeFromBottom(macroHeight);
+    content.removeFromBottom(10);
+    const auto topHeight = content.getHeight() / 2 - 5;
+    auto motion = content.removeFromTop(topHeight);
+    content.removeFromTop(10);
+    const auto lfo = motion.removeFromLeft(motion.getWidth() * 2 / 3 - 5);
+    motion.removeFromLeft(10);
+    drawPanel(g, lfo, "LFO 1", "RATE / FILTER / POSITION / PITCH", signalViolet);
+    drawPanel(g, motion, "TONE", "DRIVE / OUTPUT", electricBlue);
+    drawPanel(g, content, "FX + VOICE", "CHORUS / DELAY / VOICING", signalViolet);
+    drawPanel(g, macros, "PERFORMANCE MACROS", "SHAPE / MOTION / WEIGHT / SPACE", signalViolet);
 }
 
 inline bool isParameterVisible(int index, int page)
 {
-    return page == 0 ? (index < 19 || index >= 31)
-                     : ((index >= 19 && index < 31) || index >= 35);
+    return page == 0 ? (index < 19 || index >= 35) : index >= 19;
 }
 
 inline juce::Rectangle<int> controlCell(juce::Rectangle<int> bounds, int index, int page)
 {
-    const auto left = 44;
-    const auto available = bounds.getWidth() - 88;
-    const auto controlTop = 262;
-    const auto controlHeight = juce::jmax(300, bounds.getHeight() - controlTop - 40);
-    if (page == 1)
+    if (page == 0)
     {
-        if (index >= 35)
-        {
-            const auto cellWidth = available / 4;
-            return {left + (index - 35) * cellWidth, controlTop + controlHeight * 2 / 3, cellWidth, controlHeight / 3};
-        }
-        const auto local = index - 19;
-        const auto cellWidth = available / 6;
-        const auto rowHeight = controlHeight / 3;
-        return {left + (local % 6) * cellWidth, controlTop + (local / 6) * rowHeight, cellWidth, rowHeight};
+        const auto layout = synthLayout(bounds);
+        if (index == 0) return cell(layout.sourceA, 0, 3);
+        if (index == 6) return cell(layout.sourceA, 1, 3);
+        if (index == 7) return cell(layout.sourceA, 2, 3);
+        if (index >= 1 && index <= 3) return cell(layout.sourceB, index - 1, 3);
+        if (index >= 4 && index <= 5) return cell(layout.mix, index - 4, 2);
+        if (index == 8) return cell(layout.filter, 0, 3);
+        if (index == 9) return cell(layout.filter, 1, 3);
+        if (index == 14) return cell(layout.filter, 2, 3);
+        if (index >= 10 && index <= 13) return cell(layout.ampEnvelope, index - 10, 4);
+        if (index >= 15 && index <= 18) return cell(layout.filterEnvelope, index - 15, 4);
+        return cell(layout.macros, index - 35, 4);
     }
-    const auto rowHeight = controlHeight / 4;
-    if (index < 8)
-    {
-        const auto cellWidth = available / 8;
-        return {left + index * cellWidth, controlTop, cellWidth, rowHeight};
-    }
-    if (index < 14)
-    {
-        const auto local = index - 8;
-        const auto cellWidth = available / 6;
-        return {left + local * cellWidth, controlTop + rowHeight, cellWidth, rowHeight};
-    }
-    if (index >= 35)
-    {
-        const auto cellWidth = available / 4;
-        return {left + (index - 35) * cellWidth, controlTop + rowHeight * 3, cellWidth, rowHeight};
-    }
-    const auto local = index < 19 ? index - 14 : index - 26;
-    const auto cellWidth = available / 9;
-    return {left + local * cellWidth, controlTop + rowHeight * 2, cellWidth, rowHeight};
+
+    auto content = contentBounds(bounds);
+    const auto macroHeight = juce::jlimit(74, 92, bounds.getHeight() / 8);
+    auto macros = content.removeFromBottom(macroHeight);
+    content.removeFromBottom(10);
+    const auto topHeight = content.getHeight() / 2 - 5;
+    auto motion = content.removeFromTop(topHeight);
+    content.removeFromTop(10);
+    const auto lfo = motion.removeFromLeft(motion.getWidth() * 2 / 3 - 5);
+    motion.removeFromLeft(10);
+    if (index >= 19 && index <= 20) return cell(lfo, index - 19, 4);
+    if (index == 23) return cell(lfo, 2, 4);
+    if (index == 24) return cell(lfo, 3, 4);
+    if (index == 21) return cell(motion, 0, 2);
+    if (index == 22) return cell(motion, 1, 2);
+    if (index >= 25 && index <= 30) return cell(content, index - 25, 10);
+    if (index >= 31 && index <= 34) return cell(content, index - 21, 10);
+    return cell(macros, index - 35, 4);
 }
 }

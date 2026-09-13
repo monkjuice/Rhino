@@ -21,6 +21,31 @@ constexpr std::array<const char*, 39> tips {
     "Slide smoothly between monophonic notes", "Push oscillator shape and harmonic drive",
     "Animate wavetable position and stereo movement", "Add sub weight and darken the signal",
     "Open the chorus and ping-pong delay chain"};
+
+juce::String displayValue(int index, double value)
+{
+    const auto percent = [] (double v) { return juce::String(juce::roundToInt(v * 100.0)) + "%"; };
+    const auto seconds = [] (double v)
+    {
+        return v < 1.0 ? juce::String(juce::roundToInt(v * 1000.0)) + " ms"
+                       : juce::String(v, 2) + " s";
+    };
+    switch (index)
+    {
+        case 0: case 1: case 2: case 4: case 5: case 7: case 9: case 21: case 25:
+        case 27: case 28: case 29: case 30: case 35: case 36: case 37: case 38: return percent(value);
+        case 3: case 24: return juce::String(value > 0.0 ? "+" : "") + juce::String(juce::roundToInt(value)) + " st";
+        case 6: case 31: return juce::String(juce::roundToInt(value));
+        case 8: return value >= 1000.0 ? juce::String(value / 1000.0, 1) + " kHz" : juce::String(juce::roundToInt(value)) + " Hz";
+        case 10: case 11: case 13: case 15: case 16: case 18: case 26: case 34: return seconds(value);
+        case 12: case 17: return percent(value);
+        case 14: case 20: case 23: return juce::String(value >= 0.0 ? "+" : "") + percent(value);
+        case 19: return juce::String(value, 2) + " Hz";
+        case 22: return juce::String(value, 2);
+        case 32: case 33: return value >= 0.5 ? "ON" : "OFF";
+        default: return juce::String(value, 2);
+    }
+}
 }
 
 Editor::Editor(Processor& p) : AudioProcessorEditor(&p), processor(p)
@@ -40,6 +65,10 @@ Editor::Editor(Processor& p) : AudioProcessorEditor(&p), processor(p)
         control.slider.setColour(juce::Slider::thumbColourId, ui::accentForParameter(static_cast<int>(i)));
         control.slider.setColour(juce::Slider::textBoxTextColourId, ui::text);
         control.slider.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
+        control.slider.textFromValueFunction = [index = static_cast<int>(i)] (double value)
+        {
+            return displayValue(index, value);
+        };
         control.slider.setTooltip(tips[i]);
         control.attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(processor.state, ids[i], control.slider);
         addAndMakeVisible(control.label);
@@ -62,7 +91,7 @@ Editor::Editor(Processor& p) : AudioProcessorEditor(&p), processor(p)
     presetName.setColour(juce::Label::textColourId, ui::mutedText);
     addAndMakeVisible(presetName);
     setResizable(true, true);
-    setResizeLimits(900, 600, 1600, 1000);
+    setResizeLimits(980, 640, 1600, 1000);
     setSize(1100, 700);
     startTimerHz(24);
     showPage(0);
@@ -70,7 +99,7 @@ Editor::Editor(Processor& p) : AudioProcessorEditor(&p), processor(p)
 
 void Editor::paint(juce::Graphics& g)
 {
-    ui::paint(g, getLocalBounds(), [this](int index)
+    ui::paint(g, getLocalBounds(), currentPage, [this](int index)
     {
         return processor.state.getRawParameterValue(ids[static_cast<size_t>(index)])->load();
     });

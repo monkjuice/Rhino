@@ -128,8 +128,9 @@ public:
             toggle->setColour(juce::TextButton::textColourOffId, juce::Colour(0xffaeb8c1));
             toggle->setColour(juce::TextButton::textColourOnId, juce::Colour(0xffdce5ea));
         }
-        open.onClick = [this] { files.open(); };
-        save.onClick = [this] { files.save(); };
+        fileMenu.onClick = [this] { showFileMenu(); };
+        editMenu.onClick = [this] { showEditMenu(); };
+        helpMenu.onClick = [this] { showHelpMenu(); };
         title.setText("THETA", juce::dontSendNotification);
         title.setFont(juce::FontOptions(22.0f));
         logStatus("PATTERN 1  /  4OSC     Draw notes, then press Play");
@@ -230,7 +231,7 @@ public:
         };
         for (auto* component : std::initializer_list<juce::Component*>{
                  &title, &status, &position, &gainLabel, &gain, &audioGainLabel, &audioGain, &play, &stop, &panic, &import, &settings,
-                 &browser, &browserToggle, &rackToggle, &grid, &arrangement, &rack, &tempo, &undo, &redo, &clear, &hint, &open, &save,
+                 &browser, &browserToggle, &rackToggle, &grid, &arrangement, &rack, &tempo, &undo, &redo, &clear, &hint, &fileMenu, &editMenu, &helpMenu,
                  &documentName, &patternLabel, &editorResolution, &editorZoomOut, &editorZoomIn, &scaleHighlight})
             addAndMakeVisible(component);
         session.edit->getTransport().addChangeListener(this);
@@ -300,11 +301,12 @@ public:
         const auto bottomPanelTop = getHeight() - 64;
         const auto lowerH = std::max(112, bottomPanelTop - lowerTop - 14);
         const auto lowerW = rackOpen ? std::max(300, editorW - rackWidth - gap) : editorW;
-        title.setBounds(24, 10, 150, 30);
-        documentName.setBounds(190, 10, getWidth() - 530, 30);
+        title.setBounds(24, 10, 118, 30);
+        fileMenu.setBounds(148, 12, 52, 28);
+        editMenu.setBounds(204, 12, 52, 28);
+        helpMenu.setBounds(260, 12, 52, 28);
+        documentName.setBounds(326, 10, getWidth() - 478, 30);
         settings.setBounds(getWidth() - 152, 12, 128, 28);
-        open.setBounds(getWidth() - 320, 12, 72, 28);
-        save.setBounds(getWidth() - 240, 12, 72, 28);
         status.setBounds(24, 42, getWidth() - 48, 24);
         play.setBounds(editorX, 82, 38, 34);
         stop.setBounds(editorX + 46, 82, 38, 34);
@@ -409,6 +411,11 @@ public:
             files.open();
             return true;
         }
+        if (key.getModifiers().isCommandDown() && key.getModifiers().isShiftDown() && key.getKeyCode() == 'E')
+        {
+            files.exportWav();
+            return true;
+        }
         if (key.getModifiers().isCommandDown() && key.getKeyCode() == 'F')
         {
             browser.focusSearch();
@@ -438,6 +445,64 @@ public:
 
 private:
     juce::TooltipWindow tooltipWindow {this, 700};
+    void showFileMenu()
+    {
+        juce::PopupMenu menu;
+        menu.addItem(1, "Open project...", true, false);
+        menu.addItem(2, "Save", true, false);
+        menu.addItem(3, "Save as...");
+        menu.addSeparator();
+        menu.addItem(4, "Export WAV...", true, false);
+        menu.addSeparator();
+        menu.addItem(5, "Quit");
+        menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(fileMenu),
+            [safe = juce::Component::SafePointer<ControlWindow>(this)](int result)
+            {
+                if (safe == nullptr) return;
+                if (result == 1) safe->files.open();
+                else if (result == 2) safe->files.save();
+                else if (result == 3) safe->files.save(true);
+                else if (result == 4) safe->files.exportWav();
+                else if (result == 5) safe->requestClose();
+            });
+    }
+
+    void showEditMenu()
+    {
+        juce::PopupMenu menu;
+        menu.addItem(1, "Undo", session.edit->getUndoManager().canUndo(), false);
+        menu.addItem(2, "Redo", session.edit->getUndoManager().canRedo(), false);
+        menu.addSeparator();
+        menu.addItem(3, "Clear pattern");
+        menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(editMenu),
+            [safe = juce::Component::SafePointer<ControlWindow>(this)](int result)
+            {
+                if (safe == nullptr) return;
+                if (result == 1) safe->session.undo();
+                else if (result == 2) safe->session.redo();
+                else if (result == 3) safe->session.clearPattern();
+            });
+    }
+
+    void showHelpMenu()
+    {
+        juce::PopupMenu menu;
+        menu.addItem(1, "Keyboard shortcuts");
+        menu.addItem(2, "About Theta");
+        menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(helpMenu),
+            [safe = juce::Component::SafePointer<ControlWindow>(this)](int result)
+            {
+                if (safe == nullptr) return;
+                if (result == 1)
+                    juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon, "Keyboard shortcuts",
+                        "Space  Play/Pause\nCtrl+O  Open project\nCtrl+S  Save project\nCtrl+Shift+S  Save as\n"
+                        "Ctrl+Shift+E  Export WAV\nCtrl+Z  Undo\nCtrl+Y / Ctrl+Shift+Z  Redo\nCtrl+F  Search browser");
+                else if (result == 2)
+                    juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon, "About Theta",
+                        "Theta\nA native desktop DAW for patterns, arrangement, and offline WAV export.");
+            });
+    }
+
     void editWillChange() override
     {
         session.edit->getTransport().removeChangeListener(this);
@@ -541,7 +606,7 @@ private:
     juce::ComboBox scaleHighlight;
     std::unique_ptr<juce::FileChooser> chooser;
     juce::Component::SafePointer<juce::DialogWindow> audioSettings;
-    juce::TextButton open {"Open"}, save {"Save"};
+    juce::TextButton fileMenu {"File"}, editMenu {"Edit"}, helpMenu {"Help"};
     ProjectFiles files;
     int browserWidth = 244, rackWidth = 312, arrangementHeight = 246;
     int resizeStartX = 0, resizeStartY = 0, resizeStartBrowserWidth = 244, resizeStartRackWidth = 312, resizeStartArrangementHeight = 246;

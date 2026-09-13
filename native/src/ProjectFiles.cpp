@@ -107,6 +107,80 @@ void ProjectFiles::openFile(const juce::File& file)
     confirmUnsaved([weak = juce::WeakReference<ProjectFiles>(this), file] { if (weak) weak->load(file); });
 }
 
+void ProjectFiles::exportWav()
+{
+    if (busy)
+    {
+        report("Please wait for the current file operation.");
+        return;
+    }
+
+    const auto folder = session.projectFile == juce::File{}
+        ? juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
+        : session.projectFile.getParentDirectory();
+    const auto name = session.projectFile == juce::File{} ? "Untitled.wav"
+                                                           : session.projectFile.getFileNameWithoutExtension() + ".wav";
+    busy = true;
+    chooser = std::make_unique<juce::FileChooser>("Export WAV", folder.getChildFile(name), "*.wav");
+    chooser->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles
+                        | juce::FileBrowserComponent::warnAboutOverwriting,
+        [weak = juce::WeakReference<ProjectFiles>(this)](const juce::FileChooser& selected)
+        {
+            if (!weak) return;
+            weak->busy = false;
+            const auto selectedFile = selected.getResult();
+            if (selectedFile == juce::File{}) return;
+            weak->renderWav(selectedFile.hasFileExtension("wav") ? selectedFile
+                                                                  : selectedFile.withFileExtension("wav"));
+        });
+}
+
+void ProjectFiles::renderWav(const juce::File& file)
+{
+    if (busy) return;
+    const auto length = session.edit->getLength();
+    if (length.inSeconds() <= 0.0)
+    {
+        report("There is no arrangement to export.");
+        return;
+    }
+
+    // Rendering has its own offline playback context. Freeze edit commands
+    // until it completes so that the output is one coherent arrangement.
+    busy = true;
+    if (loadingChanged) loadingChanged(true);
+    session.stop();
+    report("Exporting " + file.getFileName() + "...");
+    auto* edit = session.edit.get();
+    workers.addJob([weak = juce::WeakReference<ProjectFiles>(this), edit, file, length]
+    {
+        juce::TemporaryFile temporary(file);
+        juce::WavAudioFormat wav;
+        bool success = false;
+        juce::String error;
+        {
+            te::Renderer::Parameters parameters(*edit);
+            parameters.destFile = temporary.getFile();
+            parameters.audioFormat = &wav;
+            parameters.sampleRateForAudio = 48000;
+            parameters.bitDepth = 24;
+            parameters.time = {{}, tracktion::core::TimePosition{} + length};
+            te::Renderer::RenderTask task("Export WAV", parameters, nullptr, nullptr);
+            while (task.runJob() != juce::ThreadPoolJob::jobHasFinished) {}
+            error = task.errorMessage;
+            success = error.isEmpty() && temporary.overwriteTargetFileWithTemporary();
+        }
+        juce::MessageManager::callAsync([weak, file, success, error]
+        {
+            if (!weak) return;
+            weak->busy = false;
+            if (weak->loadingChanged) weak->loadingChanged(false);
+            weak->report(success ? "Exported " + file.getFileName()
+                                 : "Could not export WAV" + (error.isEmpty() ? juce::String{} : ": " + error));
+        });
+    });
+}
+
 void ProjectFiles::load(const juce::File& file)
 {
     if (busy) return;

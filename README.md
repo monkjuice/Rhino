@@ -22,7 +22,7 @@ Research deliverables: [open-source DAW and Ableton study](research/DAW-STUDY.md
 - A display-synchronized playhead with narrow repaint regions and cached note display data.
 - VST3 hosting through Tracktion Engine, with the independent Theta Forge synth discoverable from its development build or a standard VST3 installation and shown with its plugin-owned editor.
 
-This is an early composition workflow, not a complete DAW. Recording, export UI, media bundling/relinking, a general plugin browser/scanner, and the live launcher are not implemented yet. macOS has not been built or tested.
+This is an early composition workflow, not a complete DAW. Recording, media bundling/relinking, a general plugin browser/scanner, and the live launcher are not implemented yet. WAV export renders the complete arrangement offline at 48 kHz/24-bit. macOS has not been built or tested.
 
 ## Run On Windows
 
@@ -82,6 +82,6 @@ Save writes a detached project snapshot on a worker thread to a temporary file b
 
 Windows validation includes the Release build and five CTest cases. Tests cover arrangement geometry, Utility DSP, note gestures and undo/redo, tempo and loop duration, a real 48 kHz MIDI-to-synth WAV render, audio import, project state/media-reference round trips, invalid-project rejection, and changes made after a save snapshot. The arrangement workflow exercises pointer drags, visible waveform drawing, cancellation, mute/solo undo, deletion/recovery, reopened clip offsets, and a render that verifies the trimmed source region.
 
-These checks do not establish physical audio-device behavior, end-to-end pointer latency, sustained FPS, large-project capacity, or macOS compatibility. The render is an integration test; there is no export button yet.
+These checks do not establish physical audio-device behavior, end-to-end pointer latency, sustained FPS, large-project capacity, or macOS compatibility. The render is an integration test; the File menu exposes the same offline WAV-rendering path.
 
 Audio scheduling belongs to Tracktion rather than the UI. Control feedback is event-driven, playheads follow display refresh, and a separate 10 Hz timer updates only transport text. Audio thumbnails cache waveform data and scan samples in the background. Clip drags use a local preview and update the engine once on release. Audio-import metadata work and engine reconstruction still need further work to avoid long message-thread stalls. Large mock sessions and benchmark scaffolding are deliberately deferred while development uses small correctness checks.

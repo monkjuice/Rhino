@@ -11,11 +11,13 @@ public:
     void save(bool saveAs = false, std::function<void(bool)> completion = {});
     void open();
     void openFile(const juce::File&);
+    void exportWav();
     void confirmUnsaved(std::function<void()>);
     std::function<void(juce::String)> status;
     std::function<void(bool)> loadingChanged;
 private:
     void write(const juce::File&, std::function<void(bool)>);
+    void renderWav(const juce::File&);
     void chooseOpen();
     void load(const juce::File&);
     void report(const juce::String& text) { if (status) status(text); }

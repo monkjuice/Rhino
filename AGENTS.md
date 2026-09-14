@@ -29,7 +29,7 @@ Application code, `native/src`:
 | Session model and engine ownership | `Session.h` declares everything; `Session.cpp` holds construction, project load/save and undo. Implementation is split across `Session*.cpp` by responsibility — notes, devices, automation, clips, presets, tracks, transport. |
 | Note grid UI | `StepGrid.*` — the 16-step pattern editor |
 | Arrangement UI | `Arrangement.*`, `ArrangementGeometry.cpp`, `ClipGeometry.h` |
-| Session view (clip launcher) UI | `SessionView.h`, `SessionView.cpp`, `SessionViewPainter.cpp`, `SessionViewGestures.cpp` |
+| Session view (clip launcher) UI, paused, see [SESSION-VIEW.md](SESSION-VIEW.md) | `SessionView.h`, `SessionView.cpp`, `SessionViewPainter.cpp`, `SessionViewGestures.cpp` |
 | Scenes, clip slots and launching | `SessionSlots.cpp` |
 | Mixer: track volume, pan, mute, solo, main output | `SessionMixer.cpp` |
 | Device rack and editors | `DeviceRack.*` |
@@ -42,7 +42,7 @@ Application code, `native/src`:
 
 The UI depends on `Session`; `Session` knows nothing about the UI. Keep that direction.
 
-The session view and the arrangement are two presentations of one project, not two documents. Tracks, devices, the mixer and the transport are shared because both views read the same `Session`; never let a view cache a copy of that state. Selection, focus, scroll and zoom are per-view and should stay that way. Clips are the one thing that genuinely differs: slot clips belong to scenes, timeline clips belong to the arrangement, exactly as in Live. Because they are separate, the only way between them is to copy: `copySlotClipToArrangement` and `copyClipToSlot` in `SessionSlots.cpp`, reached from the right-click menu in either view. Neither view should ever try to display the other's clips.
+The session view and the arrangement are two presentations of one project, not two documents. Tracks, devices, the mixer and the transport are shared because both views read the same `Session`; never let a view cache a copy of that state. Selection, focus, scroll and zoom are per-view and should stay that way. Clips are the one thing that genuinely differs: slot clips belong to scenes, timeline clips belong to the arrangement, exactly as in Live. The session view is currently switched off in the shell: `sessionViewEnabled` in `Main.cpp` gates the control-bar switch and the Tab shortcut, while the model and tests keep running. Read [SESSION-VIEW.md](SESSION-VIEW.md) before touching any of it. Because the two sets of clips are separate, the only way between them is to copy: `copySlotClipToArrangement` and `copyClipToSlot` in `SessionSlots.cpp`, reached from the right-click menu in either view. Neither view should ever try to display the other's clips.
 
 Every source file is listed explicitly in `native/CMakeLists.txt` — nothing is globbed. A new `.cpp` needs a line there or it silently will not compile.
 

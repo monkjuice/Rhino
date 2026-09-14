@@ -98,6 +98,12 @@ public:
     }
 };
 
+// Session view development is paused; see SESSION-VIEW.md for what exists, what
+// is missing, and how to pick it up. The view and its model are still built and
+// tested, but nothing in the shell reaches them. Setting this to true restores
+// the control-bar switch and the Tab shortcut.
+static constexpr bool sessionViewEnabled = false;
+
 class ControlWindow final : public juce::Component,
                             public juce::DragAndDropContainer,
                             private Session::Listener,
@@ -345,11 +351,17 @@ public:
         // but transport should remain beside the display rather than drifting
         // to the arrangement's left edge.
         const auto transportX = std::max(152, displayX - 294);
-        sessionToggle.setBounds(48, 34, 50, 30);
-        arrangementToggle.setBounds(98, 34, 50, 30);
-        sessionToggle.setToggleState(sessionViewOpen, juce::dontSendNotification);
-        arrangementToggle.setToggleState(!sessionViewOpen, juce::dontSendNotification);
-        backToArrangement.setBounds(48, 66, 124, 22);
+        sessionToggle.setVisible(sessionViewEnabled);
+        arrangementToggle.setVisible(sessionViewEnabled);
+        if constexpr (sessionViewEnabled)
+        {
+            sessionToggle.setBounds(48, 34, 50, 30);
+            arrangementToggle.setBounds(98, 34, 50, 30);
+            sessionToggle.setToggleState(sessionViewOpen, juce::dontSendNotification);
+            arrangementToggle.setToggleState(!sessionViewOpen, juce::dontSendNotification);
+        }
+        if constexpr (sessionViewEnabled)
+            backToArrangement.setBounds(48, 66, 124, 22);
         play.setBounds(transportX, 34, 38, 30);
         stop.setBounds(transportX + 58, 34, 38, 30);
         panic.setBounds(transportX + 116, 34, 38, 30);
@@ -503,11 +515,12 @@ public:
             browser.focusSearch();
             return true;
         }
-        if (key.getKeyCode() == juce::KeyPress::tabKey && !key.getModifiers().isAnyModifierKeyDown())
-        {
-            setSessionViewOpen(!sessionViewOpen);
-            return true;
-        }
+        if constexpr (sessionViewEnabled)
+            if (key.getKeyCode() == juce::KeyPress::tabKey && !key.getModifiers().isAnyModifierKeyDown())
+            {
+                setSessionViewOpen(!sessionViewOpen);
+                return true;
+            }
         if (key.getKeyCode() == juce::KeyPress::spaceKey)
         {
             session.togglePlayback();
@@ -532,13 +545,20 @@ public:
     // over to whatever the view being shown already had selected.
     void setSessionViewOpen(bool open)
     {
-        if (sessionViewOpen == open) return;
-        sessionViewOpen = open;
-        rack.selectTrack(open ? sessionView.selectedTrackIndex() : arrangement.selectedTrackIndex());
-        logStatus(open ? "Session view: click a clip to launch it"
-                       : "Arrangement view");
-        resized();
-        repaint();
+        if constexpr (sessionViewEnabled)
+        {
+            if (sessionViewOpen == open) return;
+            sessionViewOpen = open;
+            rack.selectTrack(open ? sessionView.selectedTrackIndex() : arrangement.selectedTrackIndex());
+            logStatus(open ? "Session view: click a clip to launch it"
+                           : "Arrangement view");
+            resized();
+            repaint();
+        }
+        else
+        {
+            juce::ignoreUnused(open);
+        }
     }
 
     void requestClose() { files.confirmUnsaved([] { juce::JUCEApplication::getInstance()->quit(); }); }
@@ -604,7 +624,7 @@ private:
                 if (result == 1)
                     juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon, "Keyboard shortcuts",
                         "Space  Play/Pause\nCtrl+O  Open project\nCtrl+S  Save project\nCtrl+Shift+S  Save as\n"
-                        "Ctrl+Shift+E  Export WAV\nCtrl+Z  Undo\nCtrl+Y / Ctrl+Shift+Z  Redo\nCtrl+F  Search browser\nTab  Session / Arrangement view\n?  Show/hide Info View");
+                        "Ctrl+Shift+E  Export WAV\nCtrl+Z  Undo\nCtrl+Y / Ctrl+Shift+Z  Redo\nCtrl+F  Search browser\n?  Show/hide Info View");
                 else if (result == 2)
                     juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon, "About Theta",
                         "Theta\nA native desktop DAW for patterns, arrangement, and offline WAV export.");
@@ -714,11 +734,12 @@ private:
     {
         // The engine raises a track's slot-override flag from the audio thread
         // without broadcasting, so this is polled rather than event-driven.
-        if (const auto overriding = session.anyTrackPlayingSlots(); overriding != backToArrangement.isVisible())
-        {
-            backToArrangement.setVisible(overriding);
-            resized();
-        }
+        if constexpr (sessionViewEnabled)
+            if (const auto overriding = session.anyTrackPlayingSlots(); overriding != backToArrangement.isVisible())
+            {
+                backToArrangement.setVisible(overriding);
+                resized();
+            }
         if (session.edit->getTransport().isPlaying())
             session.applyClipAutomationAt(playheadTime(session.edit->getTransport()));
         const auto seconds = session.edit->getTransport().getPosition().inSeconds();

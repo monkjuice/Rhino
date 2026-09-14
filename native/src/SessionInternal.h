@@ -72,6 +72,9 @@ ThetaWaveDevice* findThetaWave(te::AudioTrack& track);
 DrumDevice* findDrumDevice(te::AudioTrack& track);
 Session::Instrument activeTrackInstrument(te::AudioTrack& track);
 bool isForgePlugin(const te::Plugin& plugin);
+bool isInstrumentPlugin(te::Plugin& plugin);
+te::Plugin* trackInstrument(te::AudioTrack& track);
+void collapseStackedInstruments(te::Edit& edit);
 tracktion::core::TimeRange firstFreeDuplicateRange(te::Clip& source);
 juce::Result ensurePlugin(te::Edit& edit, te::AudioTrack& track, const juce::String& type,
                           int insertIndex, te::Plugin*& plugin, bool& changed);

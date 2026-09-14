@@ -32,20 +32,9 @@ Session::Session() : engine(commandLineTestMode ? "Theta Native Tests" : "Theda 
     edit->ensureNumberOfAudioTracks(2);
     auto* track = te::getAudioTracks(*edit)[0];
     track->setName("Pattern synth");
+    // The starter track gets one instrument. Dropping another replaces it.
     auto synthPlugin = edit->getPluginCache().createNewPlugin(te::FourOscPlugin::xmlTypeName, {});
-    synth = dynamic_cast<te::FourOscPlugin*>(synthPlugin.get());
     track->pluginList.insertPlugin(synthPlugin, 0, nullptr);
-    auto drumPlugin = edit->getPluginCache().createNewPlugin(DrumDevice::xmlTypeName, {});
-    drums = dynamic_cast<DrumDevice*>(drumPlugin.get());
-    drums->setEnabled(false);
-    track->pluginList.insertPlugin(drumPlugin, 1, nullptr);
-    auto wavePlugin = edit->getPluginCache().createNewPlugin(ThetaWaveDevice::xmlTypeName, {});
-    thetaWave = dynamic_cast<ThetaWaveDevice*>(wavePlugin.get());
-    if (thetaWave != nullptr)
-    {
-        thetaWave->setEnabled(false);
-        track->pluginList.insertPlugin(wavePlugin, 2, nullptr);
-    }
     auto device = edit->getPluginCache().createNewPlugin(UtilityDevice::xmlTypeName, {});
     utility = dynamic_cast<UtilityDevice*>(device.get());
     track->pluginList.insertPlugin(device, track->pluginList.size(), nullptr);
@@ -174,9 +163,6 @@ juce::Result Session::restoreProject(const juce::ValueTree& state, const juce::F
     te::MidiClip* nextPattern = nullptr;
     UtilityDevice* nextUtility = nullptr;
     UtilityDevice* nextAudioUtility = nullptr;
-    te::FourOscPlugin* nextSynth = nullptr;
-    ThetaWaveDevice* nextThetaWave = nullptr;
-    DrumDevice* nextDrums = nullptr;
     for (auto* track : tracks)
         for (auto* clip : track->getClips())
             if (auto* midi = dynamic_cast<te::MidiClip*>(clip))
@@ -184,31 +170,19 @@ juce::Result Session::restoreProject(const juce::ValueTree& state, const juce::F
                 if (track == tracks[0]) nextPattern = midi;
             }
     for (auto plugin : tracks[0]->pluginList)
-    {
         if (auto* device = dynamic_cast<UtilityDevice*>(plugin)) nextUtility = device;
-        if (auto* device = dynamic_cast<te::FourOscPlugin*>(plugin)) nextSynth = device;
-        if (auto* device = dynamic_cast<ThetaWaveDevice*>(plugin)) nextThetaWave = device;
-        if (auto* device = dynamic_cast<DrumDevice*>(plugin)) nextDrums = device;
-    }
     for (auto plugin : tracks[1]->pluginList)
         if (auto* device = dynamic_cast<UtilityDevice*>(plugin)) nextAudioUtility = device;
-    if (!nextPattern || !nextUtility || !nextSynth)
-        return juce::Result::fail("The project is missing its pattern or synth devices.");
-    if (!nextDrums)
+    if (!nextPattern || !nextUtility)
+        return juce::Result::fail("The project is missing its pattern track devices.");
+    // Documents written when a track could stack instruments collapse here.
+    collapseStackedInstruments(*candidate);
+    if (trackInstrument(*tracks[0]) == nullptr)
     {
-        auto device = candidate->getPluginCache().createNewPlugin(DrumDevice::xmlTypeName, {});
-        nextDrums = dynamic_cast<DrumDevice*>(device.get());
-        if (!nextDrums) return juce::Result::fail("The drum device could not be created.");
-        nextDrums->setEnabled(false);
-        tracks[0]->pluginList.insertPlugin(device, 1, nullptr);
-    }
-    if (!nextThetaWave)
-    {
-        auto device = candidate->getPluginCache().createNewPlugin(ThetaWaveDevice::xmlTypeName, {});
-        nextThetaWave = dynamic_cast<ThetaWaveDevice*>(device.get());
-        if (!nextThetaWave) return juce::Result::fail("The wavetable device could not be created.");
-        nextThetaWave->setEnabled(false);
-        tracks[0]->pluginList.insertPlugin(device, 2, nullptr);
+        auto device = candidate->getPluginCache().createNewPlugin(te::FourOscPlugin::xmlTypeName, {});
+        if (device == nullptr)
+            return juce::Result::fail("The pattern track instrument could not be created.");
+        tracks[0]->pluginList.insertPlugin(device, 0, nullptr);
     }
     if (!nextAudioUtility)
     {
@@ -223,9 +197,6 @@ juce::Result Session::restoreProject(const juce::ValueTree& state, const juce::F
     patternClipID = patternClip->itemID;
     utility = nextUtility;
     audioUtility = nextAudioUtility;
-    synth = nextSynth;
-    thetaWave = nextThetaWave;
-    drums = nextDrums;
     const auto patternInstrument = edit->state.getProperty("thetaPatternInstrument").toString();
     if (patternInstrument == "wave")
     {

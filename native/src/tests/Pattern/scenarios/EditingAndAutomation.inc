@@ -35,18 +35,29 @@
                 "Switching back restores the source clip's editor grid");
         session.undo();
         require(session.selectPatternClip(originalGridClip).wasOk(), "Original grid clip remains editable after undoing the extra clip");
+        // The track's instrument is replaced when it changes, so these read
+        // whichever 4OSC is on the pattern track right now.
+        const auto patternSynth = [&session]
+        {
+            auto* plugin = dynamic_cast<te::FourOscPlugin*>(session.patternInstrument());
+            if (plugin == nullptr) throw std::runtime_error("Pattern track is not running 4OSC");
+            return plugin;
+        };
         session.setEditorStepCount(Session::defaultSteps);
         session.applyPatternPreset(Session::PatternPreset::HouseKit);
         require(sequence.getNumNotes() == 10, "Drum kit preset loads notes");
-        require(!session.synth->isEnabled() && session.drums->isEnabled(), "Drum kit preset enables drum instrument");
+        require(session.isPatternDrums(), "Drum kit preset switches the track to the drum instrument");
+        require(dynamic_cast<te::FourOscPlugin*>(session.patternInstrument()) == nullptr,
+                "Switching instrument replaces the previous one rather than leaving it dormant");
         session.panicReset(false);
         require(!session.edit->getTransport().isPlaying(), "Panic reset stops playback");
         session.undo();
         require(sequence.getNumNotes() == 3, "Undo restores notes before preset load");
-        require(session.synth->isEnabled() && !session.drums->isEnabled(), "Undo restores synth instrument");
+        require(!session.isPatternDrums(), "Undo restores the synth instrument");
+
         session.redo();
         require(sequence.getNumNotes() == 10, "Redo restores preset load");
-        require(!session.synth->isEnabled() && session.drums->isEnabled(), "Redo restores drum instrument");
+        require(session.isPatternDrums(), "Redo restores the drum instrument");
         session.clearPattern();
         require(sequence.getNumNotes() == 0, "Clear notes");
         session.undo();
@@ -90,14 +101,14 @@
         session.applyPatternPreset(Session::PatternPreset::ChordPad);
         require(!session.isPatternDrums() && session.hasNote(0, 48) && session.hasNote(0, 64) && session.hasNote(8, 65),
                 "Chord pad preset loads sustained synth chords");
-        require(session.synth->ampRelease->getCurrentValue() > 0.5f && session.synth->ampRelease->getCurrentValue() < 1.2f
-                && session.synth->chorusMix->getCurrentValue() > 0.2f && session.synth->reverbMix->getCurrentValue() < 0.15f,
+        require(patternSynth()->ampRelease->getCurrentValue() > 0.5f && patternSynth()->ampRelease->getCurrentValue() < 1.2f
+                && patternSynth()->chorusMix->getCurrentValue() > 0.2f && patternSynth()->reverbMix->getCurrentValue() < 0.15f,
                 "Chord pad preset shapes the 4OSC patch for controlled sustain");
         session.applyPatternPreset(Session::PatternPreset::SubBass);
         require(!session.isPatternDrums() && session.hasNote(0, 36) && session.hasNote(12, 34),
                 "Sub bass preset loads a low mono bass line");
-        require(session.synth->ampRelease->getCurrentValue() < 0.4f && session.synth->chorusMix->getCurrentValue() == 0.0f
-                && static_cast<int>(session.synth->state.getProperty("voices")) == 1,
+        require(patternSynth()->ampRelease->getCurrentValue() < 0.4f && patternSynth()->chorusMix->getCurrentValue() == 0.0f
+                && static_cast<int>(patternSynth()->state.getProperty("voices")) == 1,
                 "Sub bass preset shapes the 4OSC patch for clean mono low end");
         auto synthMacros = session.deviceParameters(0, 0);
         require(synthMacros.size() == 6 && synthMacros[0].name == "Attack" && synthMacros[1].name == "Decay"
@@ -106,16 +117,16 @@
         require(synthMacros[0].minimum == 0.001f && synthMacros[0].maximum == 6.0f,
                 "4OSC Attack rack range is 1 to 6000 ms");
         require(session.setDeviceParameter(0, 0, 0, 60.0f).wasOk()
-                    && session.synth->ampAttack->getCurrentValue() == 6.0f,
+                    && patternSynth()->ampAttack->getCurrentValue() == 6.0f,
                 "4OSC Attack rack edits are capped at 6000 ms");
         require(session.setDeviceParameter(0, 0, 0, 1.0f).wasOk()
-                    && session.synth->ampAttack->getCurrentValue() == 1.0f,
+                    && patternSynth()->ampAttack->getCurrentValue() == 1.0f,
                 "4OSC Attack leaves the cap when set lower");
-        const auto previousAttack = session.synth->ampAttack->getCurrentValue();
+        const auto previousAttack = patternSynth()->ampAttack->getCurrentValue();
         require(session.setDeviceParameter(0, 0, 0, previousAttack + 0.05f).wasOk(), "4OSC Attack macro can be edited from the rack");
-        require(session.synth->ampAttack->getCurrentValue() > previousAttack, "4OSC Attack macro writes to the synth envelope");
+        require(patternSynth()->ampAttack->getCurrentValue() > previousAttack, "4OSC Attack macro writes to the synth envelope");
         const auto automatedClip = session.pattern().itemID;
-        const auto manualAttack = session.synth->ampAttack->getCurrentValue();
+        const auto manualAttack = patternSynth()->ampAttack->getCurrentValue();
         const auto attackMinimum = synthMacros[0].minimum;
         const auto attackMaximum = std::min(synthMacros[0].maximum, attackMinimum + 1.0f);
         require(session.setClipAutomationRamp(automatedClip, {0, 0, 0}, 0.0, 1.0, attackMinimum, attackMaximum).wasOk(),
@@ -147,20 +158,20 @@
                 && !synthMacros[0].automationOverridden && !synthMacros[1].automationOverridden && !synthMacros[2].automationOverridden,
                 "Automated parameters report following state to device panels");
         session.applyClipAutomationAt(0.5);
-        require(std::abs(session.synth->ampAttack->getCurrentValue() - (attackMinimum + attackMaximum) * 0.5f) < 0.02f,
+        require(std::abs(patternSynth()->ampAttack->getCurrentValue() - (attackMinimum + attackMaximum) * 0.5f) < 0.02f,
                 "Clip automation applies interpolated parameter values during playback");
-        require(std::abs(session.synth->ampDecay->getCurrentValue()
+        require(std::abs(patternSynth()->ampDecay->getCurrentValue()
                          - (decayMinimum + (decayMaximum - decayMinimum) * 0.25f)) < 0.02f,
                 "Multiple clip automation lanes apply together");
         session.applyClipAutomationAt(1.5);
-        require(std::abs(session.synth->ampAttack->getCurrentValue() - manualAttack) < 0.02f,
+        require(std::abs(patternSynth()->ampAttack->getCurrentValue() - manualAttack) < 0.02f,
                 "Clip automation restores the manual value after its lane");
         session.applyClipAutomationAt(0.5);
         const auto overrideAttack = juce::jlimit(attackMinimum, attackMaximum, attackMinimum + 0.2f);
         require(session.setDeviceParameter(0, 0, 0, overrideAttack).wasOk(),
                 "Manual parameter edits can override active automation");
         session.applyClipAutomationAt(0.75);
-        require(std::abs(session.synth->ampAttack->getCurrentValue() - overrideAttack) < 0.02f,
+        require(std::abs(patternSynth()->ampAttack->getCurrentValue() - overrideAttack) < 0.02f,
                 "Manual override wins over clip automation until automation is re-enabled");
         synthMacros = session.deviceParameters(0, 0);
         require(synthMacros[0].automated && synthMacros[0].automationOverridden,
@@ -168,7 +179,7 @@
         require(session.toggleParameterAutomationOverride(0, 0, 0).wasOk(),
                 "Automation indicators can return a parameter to automation");
         session.applyClipAutomationAt(0.75);
-        require(std::abs(session.synth->ampAttack->getCurrentValue()
+        require(std::abs(patternSynth()->ampAttack->getCurrentValue()
                          - (attackMinimum + (attackMaximum - attackMinimum) * 0.75f)) < 0.02f,
                 "Re-enabled automation drives the parameter again");
         require(session.deleteClipAutomation(automatedClip, {0, 0, 1}).wasOk(),
@@ -207,20 +218,49 @@
                 "A MIDI note can sustain to the end of an extended clip");
         require(session.patternLengthBeats() > 44.9,
                 "Selected MIDI clip exposes extended length for fill operations");
-        require(session.synth->chorusMix->getCurrentValue() > 0.1f && session.synth->oscParams[0]->detune->getCurrentValue() > 0.05f
-                && static_cast<int>(session.synth->state.getProperty("voices")) == 1,
+        require(patternSynth()->chorusMix->getCurrentValue() > 0.1f && patternSynth()->oscParams[0]->detune->getCurrentValue() > 0.05f
+                && static_cast<int>(patternSynth()->state.getProperty("voices")) == 1,
                 "Reese bass preset shapes the 4OSC patch for detuned bass movement");
         session.applyPatternPreset(Session::PatternPreset::SirenLead);
         require(!session.isPatternDrums() && session.hasNote(4, 72) && session.hasNote(10, 48),
                 "Siren lead preset loads a rising and falling synth line");
         session.applyPatternPreset(Session::PatternPreset::WavePad);
-        require(session.thetaWave->isEnabled() && !session.synth->isEnabled() && !session.drums->isEnabled(),
+        require(session.patternInstrumentKind() == Session::Instrument::ThetaWave,
                 "Wave pad preset enables Theta Wave");
         require(!session.isPatternDrums() && session.hasNote(0, 48) && session.hasNote(8, 62),
                 "Wave pad preset loads sustained wavetable chords");
         session.applyPatternPreset(Session::PatternPreset::WaveBass);
-        require(session.thetaWave->isEnabled() && session.hasNote(0, 36) && session.hasNote(12, 39),
+        require(session.patternInstrumentKind() == Session::Instrument::ThetaWave && session.hasNote(0, 36) && session.hasNote(12, 39),
                 "Wave bass preset keeps Theta Wave active with low notes");
         session.applyPatternPreset(Session::PatternPreset::WavePluck);
-        require(session.thetaWave->isEnabled() && session.hasNote(0, 60) && session.hasNote(12, 74),
+        require(session.patternInstrumentKind() == Session::Instrument::ThetaWave && session.hasNote(0, 60) && session.hasNote(12, 74),
                 "Wave pluck preset keeps Theta Wave active with bright notes");
+
+        // Swapping a track's instrument is a device change, not a clip change:
+        // the pattern stays put and the instrument under it is replaced. This
+        // runs last and leaves the track on the instrument it found.
+        {
+            const auto notesBeforeSwap = session.pattern().getSequence().getNumNotes();
+            require(notesBeforeSwap > 0, "The pattern has notes to preserve");
+            require(session.addInstrument(Session::Instrument::FourOsc, 0).wasOk(),
+                    "The pattern track accepts a different instrument");
+            require(session.patternInstrumentKind() == Session::Instrument::FourOsc,
+                    "Dropping an instrument switches the track to it");
+            const auto patternInstruments = [&session]
+            {
+                int count = 0;
+                for (const auto& slot : session.deviceSlots(0))
+                    if (slot.kind == Session::DeviceKind::Instrument) ++count;
+                return count;
+            };
+            require(patternInstruments() == 1,
+                    "The instrument it replaced is gone rather than left dormant");
+            require(session.pattern().getSequence().getNumNotes() == notesBeforeSwap,
+                    "Switching instrument leaves the pattern notes untouched");
+            require(session.addInstrument(Session::Instrument::ThetaWave, 0).wasOk(),
+                    "The track accepts the previous instrument back");
+            require(session.patternInstrumentKind() == Session::Instrument::ThetaWave,
+                    "Switching back restores Theta Wave");
+            require(session.pattern().getSequence().getNumNotes() == notesBeforeSwap,
+                    "Notes survive switching back as well");
+        }

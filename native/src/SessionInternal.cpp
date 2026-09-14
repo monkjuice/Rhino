@@ -214,6 +214,24 @@ tracktion::core::TimeRange firstFreeDuplicateRange(te::Clip& source)
     return {start, start + length};
 }
 
+// A track has one instrument, as it does in Live and Logic. These two answer
+// "which plugin is it", and switchTrackInstrument below is the only thing that
+// changes the answer.
+bool isInstrumentPlugin(te::Plugin& plugin)
+{
+    const auto type = plugin.getPluginType();
+    return type == te::FourOscPlugin::xmlTypeName || type == DrumDevice::xmlTypeName
+        || type == ThetaWaveDevice::xmlTypeName || isForgePlugin(plugin);
+}
+
+te::Plugin* trackInstrument(te::AudioTrack& track)
+{
+    for (auto* plugin : track.pluginList)
+        if (plugin != nullptr && isInstrumentPlugin(*plugin))
+            return plugin;
+    return nullptr;
+}
+
 juce::Result ensurePlugin(te::Edit& edit, te::AudioTrack& track, const juce::String& type,
                           int insertIndex, te::Plugin*& plugin, bool& changed)
 {
@@ -230,10 +248,39 @@ juce::Result ensurePlugin(te::Edit& edit, te::AudioTrack& track, const juce::Str
     return juce::Result::ok();
 }
 
+// Projects written while a track could stack several instruments keep the
+// enabled one and lose the rest. Whichever was audible stays audible.
+void collapseStackedInstruments(te::Edit& edit)
+{
+    for (auto* track : te::getAudioTracks(edit))
+    {
+        juce::Array<te::Plugin*> instruments;
+        for (auto* plugin : track->pluginList)
+            if (plugin != nullptr && isInstrumentPlugin(*plugin))
+                instruments.add(plugin);
+        if (instruments.size() < 2)
+            continue;
+        te::Plugin* keep = nullptr;
+        for (auto* plugin : instruments)
+            if (plugin->isEnabled())
+            {
+                keep = plugin;
+                break;
+            }
+        if (keep == nullptr)
+            keep = instruments.getFirst();
+        for (auto* plugin : instruments)
+            if (plugin != keep)
+                plugin->removeFromParent();
+        if (!keep->isEnabled())
+            keep->setEnabled(true);
+    }
+}
+
 juce::Result switchTrackInstrument(te::Edit& edit, te::AudioTrack& track, Session::Instrument instrument, bool& changed,
                                    const juce::PluginDescription* forgeDescription)
 {
-    te::Plugin* selected = nullptr;
+    // MIDI effects run ahead of the instrument, so a new one goes in after them.
     int instrumentInsertIndex = 0;
     while (instrumentInsertIndex < track.pluginList.size())
     {
@@ -242,16 +289,41 @@ juce::Result switchTrackInstrument(te::Edit& edit, te::AudioTrack& track, Sessio
             break;
         ++instrumentInsertIndex;
     }
-    const auto selectedType = instrument == Session::Instrument::Drums ? juce::String(DrumDevice::xmlTypeName)
-        : instrument == Session::Instrument::ThetaWave ? juce::String(ThetaWaveDevice::xmlTypeName)
-        : juce::String(te::FourOscPlugin::xmlTypeName);
-    if (instrument == Session::Instrument::ThetaForge)
-    {
-        for (auto* plugin : track.pluginList)
-            if (plugin != nullptr && isForgePlugin(*plugin))
-                selected = plugin;
 
-        if (selected == nullptr)
+    juce::Array<te::Plugin*> existingInstruments;
+    for (auto* plugin : track.pluginList)
+        if (plugin != nullptr && isInstrumentPlugin(*plugin))
+            existingInstruments.add(plugin);
+
+    const auto wants = [instrument](te::Plugin& plugin)
+    {
+        const auto type = plugin.getPluginType();
+        switch (instrument)
+        {
+            case Session::Instrument::FourOsc:    return type == te::FourOscPlugin::xmlTypeName;
+            case Session::Instrument::ThetaWave:  return type == ThetaWaveDevice::xmlTypeName;
+            case Session::Instrument::Drums:      return type == DrumDevice::xmlTypeName;
+            case Session::Instrument::ThetaForge: return isForgePlugin(plugin);
+            case Session::Instrument::Utility:    break;
+        }
+        return false;
+    };
+
+    te::Plugin* selected = nullptr;
+    for (auto* plugin : existingInstruments)
+        if (wants(*plugin))
+        {
+            selected = plugin;
+            break;
+        }
+
+    if (selected == nullptr)
+    {
+        // Put the replacement where the old instrument was, so MIDI effects
+        // before it and audio effects after it keep their order.
+        if (auto* current = existingInstruments.getFirst())
+            instrumentInsertIndex = track.pluginList.indexOf(current);
+        if (instrument == Session::Instrument::ThetaForge)
         {
             if (forgeDescription == nullptr)
                 return juce::Result::fail("Theta Forge.vst3 was not found. Build or install the Forge VST3 first.");
@@ -259,46 +331,34 @@ juce::Result switchTrackInstrument(te::Edit& edit, te::AudioTrack& track, Sessio
             if (created == nullptr)
                 return juce::Result::fail("Theta Forge.vst3 could not be loaded.");
             selected = created.get();
-            track.pluginList.insertPlugin(created, instrumentInsertIndex, nullptr);
+            track.pluginList.insertPlugin(created, juce::jlimit(0, track.pluginList.size(), instrumentInsertIndex), nullptr);
+            changed = true;
+        }
+        else
+        {
+            const auto type = instrument == Session::Instrument::Drums ? juce::String(DrumDevice::xmlTypeName)
+                : instrument == Session::Instrument::ThetaWave ? juce::String(ThetaWaveDevice::xmlTypeName)
+                : juce::String(te::FourOscPlugin::xmlTypeName);
+            auto created = edit.getPluginCache().createNewPlugin(type, {});
+            if (created == nullptr)
+                return juce::Result::fail("The target track device could not be created.");
+            selected = created.get();
+            track.pluginList.insertPlugin(created, juce::jlimit(0, track.pluginList.size(), instrumentInsertIndex), nullptr);
             changed = true;
         }
     }
-    else
-    {
-        auto result = ensurePlugin(edit, track, selectedType, instrumentInsertIndex, selected, changed);
-        if (result.failed())
-            return result;
-    }
 
-    if (auto* fourOsc = findPlugin(track, te::FourOscPlugin::xmlTypeName))
-        if (fourOsc->isEnabled() != (instrument == Session::Instrument::FourOsc))
+    // One instrument per track: everything the switch replaced goes away rather
+    // than lingering disabled. Its patch goes with it, which is what replacing
+    // an instrument means in Live and Logic.
+    for (auto* plugin : existingInstruments)
+        if (plugin != selected)
         {
-            fourOsc->setEnabled(instrument == Session::Instrument::FourOsc);
+            plugin->removeFromParent();
             changed = true;
         }
 
-    if (auto* wave = findPlugin(track, ThetaWaveDevice::xmlTypeName))
-        if (wave->isEnabled() != (instrument == Session::Instrument::ThetaWave))
-        {
-            wave->setEnabled(instrument == Session::Instrument::ThetaWave);
-            changed = true;
-        }
-    for (auto* forge : track.pluginList)
-        if (forge != nullptr && isForgePlugin(*forge)
-            && forge->isEnabled() != (instrument == Session::Instrument::ThetaForge))
-        {
-            forge->setEnabled(instrument == Session::Instrument::ThetaForge);
-            changed = true;
-        }
-
-    if (auto* drumDevice = findDrumDevice(track))
-        if (drumDevice->isEnabled() != (instrument == Session::Instrument::Drums))
-        {
-            drumDevice->setEnabled(instrument == Session::Instrument::Drums);
-            changed = true;
-        }
-
-    if (selected != nullptr && !selected->isEnabled())
+    if (!selected->isEnabled())
     {
         selected->setEnabled(true);
         changed = true;

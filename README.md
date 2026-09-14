@@ -13,6 +13,7 @@ Research deliverables: [open-source DAW and Ableton study](research/DAW-STUDY.md
 - A startup loading screen showing engine, audio-device, and workspace initialization.
 - One-bar, 16-step note grid covering MIDI notes 48-59.
 - Playback through Tracktion's 4OSC synth and Theta's internal Utility gain device.
+- One instrument per track, as in Live and Logic. Dropping a different instrument on a track replaces the one already there and keeps the track's clips, so the pattern stays and the sound changes.
 - Drawing and erasing notes, grouped undo/redo, and tempo control from 40-240 BPM.
 - Play, pause, stop, looping, and audio hardware settings.
 - Audio import onto a separate track, with successive files appended. The browser also includes generated Whistle and Siren WAV samples; these are audio clips, not MIDI presets.

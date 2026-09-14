@@ -287,8 +287,26 @@
         require(view.applyBrowserDrop("theta-browser:effect:ThetaBloom", 2).wasOk(), "Theta Bloom browser row creates an audio effect");
         require(session.deviceSlots(2).size() == audio2DevicesAfterSound + 1, "Dropped Theta Bloom appears on the target track");
         session.undo();
+        const auto instrumentsOnAudio2 = [&session]
+        {
+            int count = 0;
+            juce::String type;
+            for (const auto& slot : session.deviceSlots(2))
+                if (slot.kind == Session::DeviceKind::Instrument)
+                {
+                    ++count;
+                    type = slot.type;
+                }
+            return std::make_pair(count, type);
+        };
         require(view.applyBrowserDrop("theta-browser:instrument:Drums", 2).wasOk(), "Instrument browser rows can be dropped onto non-first tracks");
-        require(session.deviceSlots(2).size() == audio2DevicesAfterSound + 1, "Dropped instrument appears on the target track");
+        {
+            const auto [count, type] = instrumentsOnAudio2();
+            require(count == 1, "A track holds one instrument, so dropping another replaces it rather than stacking");
+            require(type == DrumDevice::xmlTypeName, "The dropped instrument is the one the track now runs");
+        }
+        require(session.deviceSlots(2).size() == audio2DevicesAfterSound,
+                "Replacing an instrument leaves the rest of the device chain alone");
         session.undo();
         const auto instrumentClipCount = te::getAudioTracks(*session.edit)[2]->getClips().size();
         view.itemDropped({"theta-browser:instrument:FourOsc", nullptr,

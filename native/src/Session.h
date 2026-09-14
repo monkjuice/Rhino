@@ -300,9 +300,10 @@ public:
     std::unique_ptr<te::Edit> edit;
     UtilityDevice* utility = nullptr; // owned by edit's plugin list
     UtilityDevice* audioUtility = nullptr; // owned by edit's plugin list
-    te::FourOscPlugin* synth = nullptr; // owned by edit's plugin list
-    ThetaWaveDevice* thetaWave = nullptr; // owned by edit's plugin list
-    DrumDevice* drums = nullptr; // owned by edit's plugin list
+    // A track has one instrument, so there is nothing stable to cache: switching
+    // removes the previous plugin. Ask the track instead.
+    te::Plugin* patternInstrument() const;
+    Instrument patternInstrumentKind() const;
 private:
     // The arrangement workflow test reaches engine-level slot state through
     // this, the same way it does for StepGrid and Arrangement.

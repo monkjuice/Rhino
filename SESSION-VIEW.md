@@ -94,7 +94,34 @@ and both copy rather than move.
 
 ## Known gaps, most important first
 
-### 1. The note and drum editor cannot open a slot clip
+### 1. One instrument per track (resolved)
+
+Kept here because it shaped the design. **This is now implemented**; no action
+is needed.
+
+Live gives a track exactly one instrument, with MIDI effects before it and audio
+effects after it, and racks nest chains rather than adding a second instrument to
+the track's own chain. Logic is the same: a software instrument track has one
+instrument slot, and Track Stacks group several tracks rather than stacking
+instruments on one. That rule is what makes a clip launcher coherent, because the
+instrument belongs to the track, a slot clip is only note data, and clips on a
+track are therefore interchangeable.
+
+Theta used to keep every instrument on a track at once and toggle `setEnabled`
+so one was audible. `switchTrackInstrument` now replaces instead: the new
+instrument goes in at the old one's index, keeping MIDI effects before it and
+audio effects after it, and the previous instrument is removed along with its
+patch. Clips are untouched, so the pattern stays and the instrument under it
+changes. `collapseStackedInstruments` migrates projects saved under the old
+model on load, keeping whichever instrument was enabled.
+
+The consequence for slots is that a preset still carries an instrument with it,
+so dropping a preset into a slot sets the whole track's instrument. That is
+inherent to bundling notes with a sound and is worth revisiting if slot clips
+ever need to be freely mixed on one track, but it is no longer tangled up with a
+stack of dormant plugins.
+
+### 2. The note and drum editor cannot open a slot clip
 
 Confirmed by inspection, and the clearest reason the two views feel unequal:
 double-clicking a session clip gets you nothing, while an arrangement clip loads
@@ -129,7 +156,7 @@ first MIDI clip on track 0 when that returns null. If a slot clip ever becomes
 the edited pattern without `findClip` seeing slots, the editor will quietly jump
 to a different clip after any undo.
 
-### 2. Per-track Back to Arrangement
+### 3. Per-track Back to Arrangement
 
 Live shows a small handback button **on each track** whose session clips are
 overriding the timeline, in addition to the global one, with the tooltip:
@@ -144,7 +171,7 @@ and a spot in the arrangement's track header. That header is already crowded at
 small lane heights, which is why `Arrangement::showTrackMixer` hides the fader
 below 56px; the same treatment likely applies.
 
-### 3. No drag between views, and no Arrangement Record
+### 4. No drag between views, and no Arrangement Record
 
 Live offers three routes across: copy and paste, dragging over the view
 selectors, and recording a session performance into the arrangement. Theta has
@@ -154,7 +181,7 @@ timeline at the positions they played. That needs a recording mode, a write path
 from `LaunchHandle` state into timeline clips, and a decision about what happens
 to existing arrangement material underneath.
 
-### 4. Smaller missing pieces
+### 5. Smaller missing pieces
 
 - **Level meters** on the mixer. Live shows peak and RMS per track. This needs a
   level-measuring plugin per track and a bounded-rate UI read; do not poll the

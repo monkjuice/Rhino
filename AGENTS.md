@@ -42,6 +42,8 @@ Application code, `native/src`:
 
 The UI depends on `Session`; `Session` knows nothing about the UI. Keep that direction.
 
+A track has exactly one instrument, matching Live and Logic. Dropping an instrument replaces the one already there and removes it; the track's clips are untouched, so the pattern survives the swap. Never cache an instrument pointer across a switch.
+
 The session view and the arrangement are two presentations of one project, not two documents. Tracks, devices, the mixer and the transport are shared because both views read the same `Session`; never let a view cache a copy of that state. Selection, focus, scroll and zoom are per-view and should stay that way. Clips are the one thing that genuinely differs: slot clips belong to scenes, timeline clips belong to the arrangement, exactly as in Live. The session view is currently switched off in the shell: `sessionViewEnabled` in `Main.cpp` gates the control-bar switch and the Tab shortcut, while the model and tests keep running. Read [SESSION-VIEW.md](SESSION-VIEW.md) before touching any of it. Because the two sets of clips are separate, the only way between them is to copy: `copySlotClipToArrangement` and `copyClipToSlot` in `SessionSlots.cpp`, reached from the right-click menu in either view. Neither view should ever try to display the other's clips.
 
 Every source file is listed explicitly in `native/CMakeLists.txt` — nothing is globbed. A new `.cpp` needs a line there or it silently will not compile.

@@ -126,21 +126,44 @@ juce::Result Session::insertInstrumentClip(Instrument instrument, int trackIndex
 
 void Session::setPatternInstrument(bool useDrums)
 {
-    if (synth) synth->setEnabled(!useDrums);
-    if (thetaWave) thetaWave->setEnabled(false);
-    if (drums) drums->setEnabled(useDrums);
+    const auto tracks = te::getAudioTracks(*edit);
+    if (tracks.isEmpty()) return;
+    bool changed = false;
+    juce::ignoreUnused(switchTrackInstrument(*edit, *tracks[0],
+                                             useDrums ? Instrument::Drums : Instrument::FourOsc, changed));
     edit->state.setProperty("thetaPatternInstrument", useDrums ? "drums" : "synth", &edit->getUndoManager());
+}
+
+// The instrument belongs to the track the edited pattern sits on, so this is a
+// lookup rather than a cached flag.
+te::Plugin* Session::patternInstrument() const
+{
+    auto* track = patternClip != nullptr ? patternClip->getClipTrack() : nullptr;
+    auto* audioTrack = dynamic_cast<te::AudioTrack*>(track);
+    if (audioTrack == nullptr)
+    {
+        const auto tracks = te::getAudioTracks(*edit);
+        if (tracks.isEmpty()) return nullptr;
+        audioTrack = tracks[0];
+    }
+    return trackInstrument(*audioTrack);
+}
+
+Session::Instrument Session::patternInstrumentKind() const
+{
+    if (auto* plugin = patternInstrument())
+    {
+        const auto type = plugin->getPluginType();
+        if (type == DrumDevice::xmlTypeName) return Instrument::Drums;
+        if (type == ThetaWaveDevice::xmlTypeName) return Instrument::ThetaWave;
+        if (isForgePlugin(*plugin)) return Instrument::ThetaForge;
+    }
+    return Instrument::FourOsc;
 }
 
 bool Session::isPatternDrums() const
 {
-    auto* track = patternClip != nullptr ? patternClip->getClipTrack() : nullptr;
-    if (track == nullptr) return drums != nullptr && drums->isEnabled();
-    auto* audioTrack = dynamic_cast<te::AudioTrack*>(track);
-    if (audioTrack == nullptr) return false;
-    if (auto* drumDevice = findDrumDevice(*audioTrack))
-        return drumDevice->isEnabled();
-    return false;
+    return patternInstrumentKind() == Instrument::Drums;
 }
 
 // Puts a track into the state a preset expects: the right instrument, its

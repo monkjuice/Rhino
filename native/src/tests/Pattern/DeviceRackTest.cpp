@@ -12,9 +12,11 @@ void runPatternDeviceRackTest()
         if (!valid) throw std::runtime_error(message);
     };
     Session session;
-    require(session.utility != nullptr && session.audioUtility != nullptr && session.synth != nullptr
-            && session.thetaWave != nullptr && session.drums != nullptr,
-            "Session creates synth, wavetable, drum, and Utility devices");
+    require(session.utility != nullptr && session.audioUtility != nullptr,
+            "Session creates the Utility devices on both starter tracks");
+    require(session.patternInstrument() != nullptr
+            && session.patternInstrumentKind() == Session::Instrument::FourOsc,
+            "The starter pattern track carries one instrument, 4OSC");
     auto* effectTrack = te::getAudioTracks(*session.edit)[1];
     const auto initialAudioPluginCount = effectTrack->pluginList.size();
     const auto patternDevices = session.deviceSlots(0);

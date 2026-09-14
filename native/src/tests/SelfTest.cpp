@@ -54,13 +54,18 @@ int runSelfTest()
         require(std::abs(reloaded->getAutomatableParameterByID("gainDb")->getCurrentValue() + 12.0f) < 1.0e-5f);
         device.deinitialise();
 
-        session.drums->initialise({{}, 48000.0, 512});
+        // The drum DSP is exercised on its own instance rather than the one on
+        // the pattern track, which is replaced whenever the instrument changes.
+        auto drumPlugin = session.edit->getPluginCache().createNewPlugin(DrumDevice::xmlTypeName, {});
+        auto* drums = dynamic_cast<DrumDevice*>(drumPlugin.get());
+        require(drums != nullptr);
+        drums->initialise({{}, 48000.0, 512});
         juce::AudioBuffer<float> drumBuffer(2, 4096);
         drumBuffer.clear();
         te::MidiMessageArray midi;
         midi.addMidiMessage(juce::MidiMessage::noteOn(1, 56, 1.0f), 0.0, {});
         te::PluginRenderContext drumContext(&drumBuffer, 0, drumBuffer.getNumSamples(), &midi, 0.0, {}, true, false, true, false);
-        session.drums->applyToBuffer(drumContext);
+        drums->applyToBuffer(drumContext);
         float clapPeak = 0.0f;
         for (int c = 0; c < drumBuffer.getNumChannels(); ++c)
             for (int i = 0; i < drumBuffer.getNumSamples(); ++i)
@@ -73,13 +78,13 @@ int runSelfTest()
 
         // Tracktion timestamps plugin MIDI relative to the render block. A hit
         // must begin at that sample rather than at the start of the callback.
-        session.drums->reset();
+        drums->reset();
         drumBuffer.clear();
         midi.clear();
         constexpr int eventOffset = 128;
         midi.addMidiMessage(juce::MidiMessage::noteOn(1, 48, 1.0f), eventOffset / 48000.0, {});
         te::PluginRenderContext offsetDrumContext(&drumBuffer, 4, 512, &midi, 0.0, {}, true, false, true, false);
-        session.drums->applyToBuffer(offsetDrumContext);
+        drums->applyToBuffer(offsetDrumContext);
         for (int c = 0; c < drumBuffer.getNumChannels(); ++c)
             for (int i = 4; i < 4 + eventOffset; ++i)
                 require(drumBuffer.getSample(c, i) == 0.0f);
@@ -88,7 +93,7 @@ int runSelfTest()
             for (int i = 4 + eventOffset; i < 4 + 512; ++i)
                 offsetKickPeak = std::max(offsetKickPeak, std::abs(drumBuffer.getSample(c, i)));
         require(offsetKickPeak > 0.0001f);
-        session.drums->deinitialise();
+        drums->deinitialise();
 
         auto bloomPlugin = session.edit->getPluginCache().createNewPlugin(ThetaBloomDevice::xmlTypeName, {});
         auto* bloom = dynamic_cast<ThetaBloomDevice*>(bloomPlugin.get());

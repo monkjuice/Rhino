@@ -18,10 +18,10 @@
         auto loadedXml = juce::parseXML(project.getFile());
         require(loadedXml != nullptr, "Read saved project");
         require(session.restoreProject(juce::ValueTree::fromXml(*loadedXml), project.getFile()).wasOk(), "Restore project");
-        require(session.utility != nullptr && session.audioUtility != nullptr && session.synth != nullptr
-                && session.thetaWave != nullptr && session.drums != nullptr,
-                "Project restore keeps synth, wavetable, drum, and Utility devices");
-        require(!session.synth->isEnabled() && session.drums->isEnabled(), "Project restore keeps drum instrument selection");
+        require(session.utility != nullptr && session.audioUtility != nullptr,
+                "Project restore keeps the Utility devices");
+        require(session.patternInstrument() != nullptr, "Project restore keeps the pattern track instrument");
+        require(session.isPatternDrums(), "Project restore keeps drum instrument selection");
         require(session.pattern().getSequence().getNumNotes() == 10, "Notes survive project reopen");
         require(std::abs(session.tempo() - 90.0) < 0.001, "Tempo survives project reopen");
         require(!session.hasUnsavedChanges(), "Opened project is clean");

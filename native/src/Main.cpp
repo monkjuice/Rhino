@@ -9,6 +9,7 @@
 #include "StartupScreen.h"
 #include "TransportDisplay.h"
 #include <cmath>
+#include <functional>
 #include <stdexcept>
 
 #if JUCE_WINDOWS
@@ -145,11 +146,6 @@ public:
             toggle->setColour(juce::TextButton::textColourOffId, juce::Colour(0xffaeb8c1));
             toggle->setColour(juce::TextButton::textColourOnId, juce::Colour(0xffdce5ea));
         }
-        fileMenu.onClick = [this] { showFileMenu(); };
-        editMenu.onClick = [this] { showEditMenu(); };
-        helpMenu.onClick = [this] { showHelpMenu(); };
-        title.setText("THETA", juce::dontSendNotification);
-        title.setFont(juce::FontOptions(22.0f));
         logStatus("PATTERN 1  /  4OSC     Draw notes, then press Play");
         gainLabel.setText("PATTERN TRACK", juce::dontSendNotification);
         audioGainLabel.setText("AUDIO 1 TRACK", juce::dontSendNotification);
@@ -242,36 +238,16 @@ public:
             session.panicReset();
             logStatus("Panic reset: stopped transport, reset plugins, restarted audio device");
         };
-        import.onClick = [this] { chooseAudio(); };
         play.setButtonText(L"\u25b6");
         stop.setButtonText(L"\u25a0");
         panic.setButtonText("!");
-        import.setButtonText(L"\uff0b");
         play.setTooltip("Play or pause");
         stop.setTooltip("Stop and return to start");
         panic.setTooltip("Panic reset audio");
-        import.setTooltip("Add audio");
-        settings.onClick = [this]
-        {
-            if (audioSettings != nullptr)
-            {
-                audioSettings->toFront(true);
-                return;
-            }
-            auto selector = std::make_unique<juce::AudioDeviceSelectorComponent>(
-                session.engine.getDeviceManager().deviceManager, 0, 2, 0, 2, true, false, true, false);
-            selector->setSize(520, 420);
-            juce::DialogWindow::LaunchOptions options;
-            options.content.setOwned(selector.release());
-            options.dialogTitle = "Audio settings";
-            options.dialogBackgroundColour = juce::Colour(0xff202327);
-            options.useNativeTitleBar = true;
-            audioSettings = options.launchAsync();
-        };
         for (auto* component : std::initializer_list<juce::Component*>{
-                 &title, &status, &position, &gainLabel, &gain, &audioGainLabel, &audioGain, &play, &stop, &panic, &settings,
-                 &browser, &browserToggle, &editorToggle, &rackToggle, &grid, &arrangement, &rack, &tempo, &timeSignature, &undo, &redo, &clear, &metronome, &metronomeMenu, &hint, &fileMenu, &editMenu, &helpMenu,
-                 &documentName, &patternLabel, &editorResolution, &editorZoomOut, &editorZoomIn, &scaleHighlight})
+                 &status, &position, &gainLabel, &gain, &audioGainLabel, &audioGain, &play, &stop, &panic,
+                 &browser, &browserToggle, &editorToggle, &rackToggle, &grid, &arrangement, &rack, &tempo, &timeSignature, &undo, &redo, &clear, &metronome, &metronomeMenu, &hint,
+                 &patternLabel, &editorResolution, &editorZoomOut, &editorZoomIn, &scaleHighlight})
             addAndMakeVisible(component);
         session.edit->getTransport().addChangeListener(this);
         session.addChangeListener(this);
@@ -327,44 +303,40 @@ public:
         const auto leftWidth = browserOpen ? browserWidth : collapsedRailWidth;
         const auto editorX = leftWidth + gap;
         const auto editorW = getWidth() - editorX - 24;
-        const auto arrangementTop = 132;
+        // The transport is a full-width bar. Both the browser and arrangement
+        // begin below it, so their top edges remain aligned.
+        const auto arrangementTop = browserTop;
         arrangementHeight = juce::jlimit(150, std::max(150, getHeight() - 350), arrangementHeight);
         const auto arrangementBottom = arrangementTop + arrangementHeight;
         const auto lowerTop = arrangementBottom + 34;
         const auto bottomPanelTop = getHeight() - 64;
         const auto lowerH = std::max(112, bottomPanelTop - lowerTop - 14);
-        title.setBounds(24, 10, 118, 30);
-        fileMenu.setBounds(148, 12, 52, 28);
-        editMenu.setBounds(204, 12, 52, 28);
-        helpMenu.setBounds(260, 12, 52, 28);
-        documentName.setBounds(326, 10, getWidth() - 478, 30);
-        settings.setBounds(getWidth() - 152, 12, 128, 28);
-        status.setBounds(24, 42, getWidth() - 48, 24);
+        status.setBounds(24, 4, getWidth() - 48, 20);
         const auto displayWidth = juce::jlimit(240, 320, getWidth() / 4);
         const auto displayX = getWidth() / 2 - displayWidth / 2;
         // Keep the control bar as one visual cluster. The browser may resize,
         // but transport should remain beside the display rather than drifting
         // to the arrangement's left edge.
-        const auto transportX = std::max(editorX, displayX - 294);
-        play.setBounds(transportX, 83, 38, 30);
-        stop.setBounds(transportX + 58, 83, 38, 30);
-        panic.setBounds(transportX + 116, 83, 38, 30);
-        position.setBounds(displayX, 70, displayWidth, 56);
+        const auto transportX = std::max(16, displayX - 294);
+        play.setBounds(transportX, 34, 38, 30);
+        stop.setBounds(transportX + 58, 34, 38, 30);
+        panic.setBounds(transportX + 116, 34, 38, 30);
+        position.setBounds(displayX, 21, displayWidth, 56);
         constexpr int rightControlsWidth = 356;
         auto rightX = std::min(displayX + displayWidth + 52, getWidth() - 24 - rightControlsWidth);
         rightX = std::max(displayX + displayWidth + 8, rightX);
-        tempo.setBounds(rightX, 83, 100, 30);
+        tempo.setBounds(rightX, 34, 100, 30);
         rightX += 108;
-        timeSignature.setBounds(rightX, 83, 70, 30);
+        timeSignature.setBounds(rightX, 34, 70, 30);
         rightX += 78;
-        undo.setBounds(rightX, 83, 34, 30);
+        undo.setBounds(rightX, 34, 34, 30);
         rightX += 40;
-        redo.setBounds(rightX, 83, 34, 30);
+        redo.setBounds(rightX, 34, 34, 30);
         rightX += 40;
-        clear.setBounds(rightX, 83, 34, 30);
+        clear.setBounds(rightX, 34, 34, 30);
         rightX += 42;
-        metronome.setBounds(rightX, 83, 30, 30);
-        metronomeMenu.setBounds(rightX + 30, 83, 18, 30);
+        metronome.setBounds(rightX, 34, 30, 30);
+        metronomeMenu.setBounds(rightX + 30, 34, 18, 30);
         browser.setVisible(browserOpen);
         browser.setBounds(0, browserTop, browserWidth, getHeight() - browserTop);
         browserToggle.setButtonText(browserOpen ? "<" : "B");
@@ -511,10 +483,14 @@ public:
 
     void requestClose() { files.confirmUnsaved([] { juce::JUCEApplication::getInstance()->quit(); }); }
     void openProjectFile(const juce::File& file) { files.openFile(file); }
+    void showFileMenuFrom(juce::Component& target) { showFileMenu(&target); }
+    void showEditMenuFrom(juce::Component& target) { showEditMenu(&target); }
+    void showHelpMenuFrom(juce::Component& target) { showHelpMenu(&target); }
+    std::function<void(const juce::String&)> projectTitleChanged;
 
 private:
     juce::TooltipWindow tooltipWindow {this, 700};
-    void showFileMenu()
+    void showFileMenu(juce::Component* target = nullptr)
     {
         juce::PopupMenu menu;
         menu.addItem(1, "Open project...", true, false);
@@ -524,7 +500,7 @@ private:
         menu.addItem(4, "Export WAV...", true, false);
         menu.addSeparator();
         menu.addItem(5, "Quit");
-        menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(fileMenu),
+        menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(target != nullptr ? *target : fileMenu),
             [safe = juce::Component::SafePointer<ControlWindow>(this)](int result)
             {
                 if (safe == nullptr) return;
@@ -536,29 +512,32 @@ private:
             });
     }
 
-    void showEditMenu()
+    void showEditMenu(juce::Component* target = nullptr)
     {
         juce::PopupMenu menu;
         menu.addItem(1, "Undo", session.edit->getUndoManager().canUndo(), false);
         menu.addItem(2, "Redo", session.edit->getUndoManager().canRedo(), false);
         menu.addSeparator();
         menu.addItem(3, "Clear pattern");
-        menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(editMenu),
+        menu.addSeparator();
+        menu.addItem(4, "Audio settings...");
+        menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(target != nullptr ? *target : editMenu),
             [safe = juce::Component::SafePointer<ControlWindow>(this)](int result)
             {
                 if (safe == nullptr) return;
                 if (result == 1) safe->session.undo();
                 else if (result == 2) safe->session.redo();
                 else if (result == 3) safe->session.clearPattern();
+                else if (result == 4) safe->showAudioSettings();
             });
     }
 
-    void showHelpMenu()
+    void showHelpMenu(juce::Component* target = nullptr)
     {
         juce::PopupMenu menu;
         menu.addItem(1, "Keyboard shortcuts");
         menu.addItem(2, "About Theta");
-        menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(helpMenu),
+        menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(target != nullptr ? *target : helpMenu),
             [safe = juce::Component::SafePointer<ControlWindow>(this)](int result)
             {
                 if (safe == nullptr) return;
@@ -621,18 +600,22 @@ private:
         session.edit->getUndoManager().addChangeListener(this);
         changeListenerCallback(nullptr);
     }
-    void chooseAudio()
+    void showAudioSettings()
     {
-        chooser = std::make_unique<juce::FileChooser>("Add audio", juce::File{}, "*.wav;*.aiff;*.aif;*.flac;*.ogg;*.mp3");
-        chooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
-            [safe = juce::Component::SafePointer<ControlWindow>(this)](const juce::FileChooser& selected)
-            {
-                if (safe == nullptr || selected.getResult() == juce::File{}) return;
-                const auto result = safe->session.importAudio(selected.getResult());
-                if (result.wasOk()) safe->arrangement.fit();
-                safe->logStatus(result.wasOk() ? selected.getResult().getFileName()
-                                               : result.getErrorMessage());
-            });
+        if (audioSettings != nullptr)
+        {
+            audioSettings->toFront(true);
+            return;
+        }
+        auto selector = std::make_unique<juce::AudioDeviceSelectorComponent>(
+            session.engine.getDeviceManager().deviceManager, 0, 2, 0, 2, true, false, true, false);
+        selector->setSize(520, 420);
+        juce::DialogWindow::LaunchOptions options;
+        options.content.setOwned(selector.release());
+        options.dialogTitle = "Audio settings";
+        options.dialogBackgroundColour = juce::Colour(0xff202327);
+        options.useNativeTitleBar = true;
+        audioSettings = options.launchAsync();
     }
 
     void logStatus(const juce::String& message)
@@ -665,7 +648,8 @@ private:
             editorResolution.setSelectedId(session.editorStepResolution(), juce::dontSendNotification);
         }
         const auto name = session.projectFile == juce::File{} ? juce::String("Untitled") : session.projectFile.getFileNameWithoutExtension();
-        documentName.setText(name + (session.hasUnsavedChanges() ? " *" : ""), juce::dontSendNotification);
+        const auto displayName = name + (session.hasUnsavedChanges() ? " *" : "");
+        if (projectTitleChanged) projectTitleChanged(displayName);
     }
 
     void timerCallback() override
@@ -715,7 +699,7 @@ private:
     }
 
     Session& session;
-    juce::Label title, status, gainLabel, audioGainLabel, hint, documentName, patternLabel;
+    juce::Label status, gainLabel, audioGainLabel, hint, patternLabel;
     TransportDisplay position;
     juce::Slider gain, audioGain;
     BrowserPanel browser;
@@ -726,19 +710,18 @@ private:
     juce::ComboBox timeSignature;
     juce::TextButton metronome, metronomeMenu;
     juce::TextButton undo {"Undo"}, redo {"Redo"}, clear {"Clear"};
-    juce::TextButton play {"Play"}, stop {"Stop"}, panic {"Panic"}, import {"Add audio"}, settings {"Audio settings"};
+    juce::TextButton play {"Play"}, stop {"Stop"}, panic {"Panic"};
     juce::TextButton browserToggle {"<"}, editorToggle {"Clip"}, rackToggle {"Devices"};
     juce::ComboBox editorResolution;
     juce::TextButton editorZoomOut, editorZoomIn;
     juce::ComboBox scaleHighlight;
-    std::unique_ptr<juce::FileChooser> chooser;
     juce::Component::SafePointer<juce::DialogWindow> audioSettings;
     juce::TextButton fileMenu {"File"}, editMenu {"Edit"}, helpMenu {"Help"};
     ProjectFiles files;
     int browserWidth = 244, arrangementHeight = 246, deviceViewHeight = 220;
     int resizeStartX = 0, resizeStartY = 0, resizeStartBrowserWidth = 244;
     int resizeStartArrangementHeight = 246, resizeStartDeviceViewHeight = 220;
-    static constexpr int browserTop = 74, collapsedRailWidth = 44;
+    static constexpr int browserTop = 94, collapsedRailWidth = 44;
     bool browserOpen = true, clipEditorOpen = true, rackOpen = false;
     bool resizingBrowser = false, resizingDeviceView = false, resizingArrangement = false;
     bool updatingEditorResolution = false;
@@ -837,6 +820,28 @@ private:
                 window->setContentOwned(new ControlWindow(*session), true);
                 window->setResizeLimits(960, 680, 2400, 1600);
                 window->centreWithSize(1120, 760);
+                if (auto* controls = dynamic_cast<ControlWindow*>(window->getContentComponent()))
+                {
+                    const juce::Component::SafePointer<ControlWindow> safeControls(controls);
+                    const juce::Component::SafePointer<Window> safeWindow(window.get());
+                    window->fileRequested = [safeControls](juce::Component& target)
+                    {
+                        if (safeControls != nullptr) safeControls->showFileMenuFrom(target);
+                    };
+                    window->editRequested = [safeControls](juce::Component& target)
+                    {
+                        if (safeControls != nullptr) safeControls->showEditMenuFrom(target);
+                    };
+                    window->helpRequested = [safeControls](juce::Component& target)
+                    {
+                        if (safeControls != nullptr) safeControls->showHelpMenuFrom(target);
+                    };
+                    controls->projectTitleChanged = [safeWindow](const juce::String& title)
+                    {
+                        if (safeWindow != nullptr) safeWindow->setProjectTitle(title);
+                    };
+                    window->setProjectTitle("Untitled");
+                }
                 if (projectToOpen != juce::File{})
                     if (auto* controls = dynamic_cast<ControlWindow*>(window->getContentComponent()))
                         controls->openProjectFile(projectToOpen);
@@ -857,7 +862,21 @@ private:
 
     struct Window final : juce::DocumentWindow
     {
-        Window() : DocumentWindow("Theta", juce::Colour(0xff171a1e), allButtons)
+        struct TitleMenuButton final : juce::TextButton
+        {
+            using juce::TextButton::TextButton;
+
+            void paintButton(juce::Graphics& g, bool highlighted, bool pressed) override
+            {
+                auto colour = findColour(juce::TextButton::textColourOffId);
+                if (highlighted || pressed) colour = colour.brighter(0.25f);
+                g.setColour(colour);
+                g.setFont(juce::FontOptions(13.0f));
+                g.drawFittedText(getButtonText(), getLocalBounds(), juce::Justification::centred, 1);
+            }
+        };
+
+        Window() : DocumentWindow({}, juce::Colour(0xff171a1e), allButtons)
         {
             // Keep the frame and content in JUCE's single client-area layout.
             // Native Windows non-client bounds can put the title bar above the
@@ -873,8 +892,37 @@ private:
             setDropShadowEnabled(true);
            #endif
             setResizable(true, false);
+            projectTitle.setJustificationType(juce::Justification::centred);
+            projectTitle.setColour(juce::Label::textColourId, juce::Colours::white);
+            projectTitle.setInterceptsMouseClicks(false, false);
+            projectTitle.setText("Untitled", juce::dontSendNotification);
+            for (auto* menu : {&fileMenu, &editMenu, &helpMenu})
+                menu->setColour(juce::TextButton::textColourOffId, juce::Colour(0xffd7dde2));
+            for (auto* component : std::initializer_list<juce::Component*>{&fileMenu, &editMenu, &helpMenu, &projectTitle})
+                addAndMakeVisible(component);
+            fileMenu.onClick = [this] { if (fileRequested) fileRequested(fileMenu); };
+            editMenu.onClick = [this] { if (editRequested) editRequested(editMenu); };
+            helpMenu.onClick = [this] { if (helpRequested) helpRequested(helpMenu); };
         }
+
+        void resized() override
+        {
+            DocumentWindow::resized();
+            const auto h = getTitleBarHeight();
+            fileMenu.setBounds(10, 0, 42, h);
+            editMenu.setBounds(56, 0, 42, h);
+            helpMenu.setBounds(102, 0, 44, h);
+            projectTitle.setBounds(160, 0, std::max(80, getWidth() - 320), h);
+        }
+
+        void setProjectTitle(const juce::String& text) { projectTitle.setText(text, juce::dontSendNotification); }
         void closeButtonPressed() override { juce::JUCEApplication::getInstance()->systemRequestedQuit(); }
+
+        std::function<void(juce::Component&)> fileRequested, editRequested, helpRequested;
+
+    private:
+        TitleMenuButton fileMenu {"File"}, editMenu {"Edit"}, helpMenu {"Help"};
+        juce::Label projectTitle;
     };
     Theme theme;
     std::unique_ptr<juce::FileLogger> logger;

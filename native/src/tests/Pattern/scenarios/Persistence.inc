@@ -23,7 +23,6 @@
                 "Project restore keeps synth, wavetable, drum, and Utility devices");
         require(!session.synth->isEnabled() && session.drums->isEnabled(), "Project restore keeps drum instrument selection");
         require(session.pattern().getSequence().getNumNotes() == 10, "Notes survive project reopen");
-        require(!session.pattern().canUseProxy(), "Restored MIDI clips use real-time boundary playback");
         require(std::abs(session.tempo() - 90.0) < 0.001, "Tempo survives project reopen");
         require(!session.hasUnsavedChanges(), "Opened project is clean");
         require(te::getAudioTracks(*session.edit)[1]->getClips().size() == 1, "Audio clip survives project reopen");

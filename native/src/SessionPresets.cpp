@@ -94,7 +94,6 @@ juce::Result Session::insertPatternPreset(PatternPreset preset, int trackIndex, 
     auto clip = track->insertMIDIClip(data.name, {start, end}, nullptr);
     if (clip == nullptr)
         return juce::Result::fail("The pattern clip could not be added.");
-    prepareMidiClipForPlayback(*clip);
     clip->setColour(presetColour(preset));
     fillMidiClip(*clip, data, edit->getUndoManager());
     refreshLoop();
@@ -143,7 +142,6 @@ juce::Result Session::insertInstrumentClip(Instrument instrument, int trackIndex
     auto clip = track->insertMIDIClip(name, {start, end}, nullptr);
     if (clip == nullptr)
         return juce::Result::fail("The instrument clip could not be added.");
-    prepareMidiClipForPlayback(*clip);
     clip->setColour(instrumentColour(instrument));
     patternClip = clip.get();
     patternClipID = patternClip->itemID;
@@ -179,7 +177,6 @@ juce::Result Session::selectPatternClip(te::EditItemID id)
 {
     auto* midi = dynamic_cast<te::MidiClip*>(findClip(id));
     if (midi == nullptr) return juce::Result::fail("Select a MIDI clip to edit notes.");
-    prepareMidiClipForPlayback(*midi);
     patternClip = midi;
     patternClipID = id;
     sendSynchronousChangeMessage();

@@ -159,7 +159,6 @@ juce::Result Session::duplicateClip(te::EditItemID id)
         {
             midiCopy->cloneFrom(midi);
             midiCopy->setPosition({duplicateRange, old.offset});
-            prepareMidiClipForPlayback(*midiCopy);
             copy = midiCopy.get();
         }
     if (copy == nullptr)
@@ -232,7 +231,6 @@ juce::Result Session::pasteClips(const std::vector<te::EditItemID>& source, doub
             {
                 midiCopy->cloneFrom(midi);
                 midiCopy->setPosition({range, tracktion::core::TimeDuration::fromSeconds(item.position.offset)});
-                prepareMidiClipForPlayback(*midiCopy);
                 copy = midiCopy.get();
             }
         }
@@ -263,7 +261,6 @@ void Session::deleteClip(te::EditItemID id)
                 for (auto* existing : tracks[0]->getClips())
                     if (auto* midi = dynamic_cast<te::MidiClip*>(existing))
                     {
-                        prepareMidiClipForPlayback(*midi);
                         patternClip = midi;
                         break;
                     }
@@ -273,7 +270,6 @@ void Session::deleteClip(te::EditItemID id)
                     patternClip = tracks[0]->insertMIDIClip("Pattern 1", {{}, end}, nullptr).get();
                     if (patternClip != nullptr)
                     {
-                        prepareMidiClipForPlayback(*patternClip);
                         patternClip->setColour(presetColour(PatternPreset::WarmPulse));
                         patternClip->state.setProperty(starterPlaceholderID, true, nullptr);
                     }

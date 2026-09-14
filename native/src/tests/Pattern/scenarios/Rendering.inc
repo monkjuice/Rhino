@@ -53,13 +53,6 @@
                 require(previous != nullptr && repeatedDrums.duplicateClip(previous->itemID).wasOk(),
                         "Repeated drum regression appends an adjacent clip");
             }
-            for (auto* clip : drumTrack->getClips())
-            {
-                auto* midi = dynamic_cast<te::MidiClip*>(clip);
-                require(midi != nullptr && !midi->canUseProxy(),
-                        "Adjacent drum clips use real-time MIDI boundary playback");
-            }
-
             juce::TemporaryFile repeatedOutput(".wav");
             te::Renderer::Parameters repeatedParameters(*repeatedDrums.edit);
             repeatedParameters.destFile = repeatedOutput.getFile();

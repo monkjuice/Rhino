@@ -143,20 +143,41 @@ void DrumDevice::applyToBuffer(const te::PluginRenderContext& context)
         return;
 
     SCOPED_REALTIME_CHECK
-    if (context.bufferForMidiMessages != nullptr)
-        for (const auto& midi : *context.bufferForMidiMessages)
-            if (midi.isNoteOn())
-                trigger(midi.getNoteNumber(), midi.getFloatVelocity());
-
-    for (int frame = context.bufferStartSample; frame < context.bufferStartSample + context.bufferNumSamples; ++frame)
+    const auto* midiMessages = context.bufferForMidiMessages;
+    const auto renderFrame = [this, &context](int localFrame)
     {
         float sample = 0.0f;
         for (auto& voice : voices)
             if (voice.active)
                 sample += render(voice);
         sample = std::clamp(sample, -0.95f, 0.95f);
+        const auto frame = context.bufferStartSample + localFrame;
         for (int channel = 0; channel < context.destBuffer->getNumChannels(); ++channel)
             context.destBuffer->setSample(channel, frame, std::clamp(context.destBuffer->getSample(channel, frame) + sample, -0.95f, 0.95f));
+    };
+
+    if (midiMessages == nullptr)
+    {
+        for (int localFrame = 0; localFrame < context.bufferNumSamples; ++localFrame)
+            renderFrame(localFrame);
+        return;
+    }
+
+    if (midiMessages->isAllNotesOff)
+        midiPanic();
+    auto midi = midiMessages->begin();
+    const auto midiEnd = midiMessages->end();
+    for (int localFrame = 0; localFrame < context.bufferNumSamples; ++localFrame)
+    {
+        while (midi != midiEnd && juce::roundToInt(midi->getTimeStamp() * sampleRate) <= localFrame)
+        {
+            if (midi->isNoteOn())
+                trigger(midi->getNoteNumber(), midi->getFloatVelocity());
+            else if (midi->isAllNotesOff())
+                midiPanic();
+            ++midi;
+        }
+        renderFrame(localFrame);
     }
 }
 

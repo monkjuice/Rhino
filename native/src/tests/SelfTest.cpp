@@ -70,6 +70,24 @@ int runSelfTest()
                 clapPeak = std::max(clapPeak, std::abs(sample));
             }
         require(clapPeak > 0.0001f && clapPeak < 1.0f);
+
+        // Tracktion timestamps plugin MIDI relative to the render block. A hit
+        // must begin at that sample rather than at the start of the callback.
+        session.drums->reset();
+        drumBuffer.clear();
+        midi.clear();
+        constexpr int eventOffset = 128;
+        midi.addMidiMessage(juce::MidiMessage::noteOn(1, 48, 1.0f), eventOffset / 48000.0, {});
+        te::PluginRenderContext offsetDrumContext(&drumBuffer, 4, 512, &midi, 0.0, {}, true, false, true, false);
+        session.drums->applyToBuffer(offsetDrumContext);
+        for (int c = 0; c < drumBuffer.getNumChannels(); ++c)
+            for (int i = 4; i < 4 + eventOffset; ++i)
+                require(drumBuffer.getSample(c, i) == 0.0f);
+        float offsetKickPeak = 0.0f;
+        for (int c = 0; c < drumBuffer.getNumChannels(); ++c)
+            for (int i = 4 + eventOffset; i < 4 + 512; ++i)
+                offsetKickPeak = std::max(offsetKickPeak, std::abs(drumBuffer.getSample(c, i)));
+        require(offsetKickPeak > 0.0001f);
         session.drums->deinitialise();
 
         auto bloomPlugin = session.edit->getPluginCache().createNewPlugin(ThetaBloomDevice::xmlTypeName, {});

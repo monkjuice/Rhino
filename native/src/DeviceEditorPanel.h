@@ -10,10 +10,13 @@ class DeviceEditorPanel final : public juce::Component
 {
 public:
     explicit DeviceEditorPanel(Session&);
-    void setTarget(int track, int pluginSlot, const Session::DeviceSlot*);
+    void setTarget(int track, const Session::DeviceSlot&, bool selected);
+    int preferredWidth() const;
     void paint(juce::Graphics&) override;
     void resized() override;
+    void mouseDown(const juce::MouseEvent&) override;
     std::function<void(juce::String)> status;
+    std::function<void()> selected;
 
 private:
     enum class Face { Generic, ThetaSpace };
@@ -25,13 +28,15 @@ private:
 
     Session& session;
     int track = -1, pluginSlot = -1;
-    bool syncing = false;
+    bool syncing = false, isSelected = false;
     Face face = Face::Generic;
     juce::String deviceName;
     std::vector<Session::DeviceParameter> parameters;
     juce::OwnedArray<juce::Label> parameterLabels, parameterValues;
     juce::OwnedArray<juce::Slider> parameterSliders;
     juce::OwnedArray<juce::TextButton> parameterAutomation;
-    juce::Rectangle<int> visualArea;
+    juce::Label title;
+    juce::TextButton power;
+    juce::Rectangle<int> contentArea, visualArea;
 };
 }

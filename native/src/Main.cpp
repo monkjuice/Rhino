@@ -644,9 +644,9 @@ private:
     juce::Component::SafePointer<juce::DialogWindow> audioSettings;
     juce::TextButton fileMenu {"File"}, editMenu {"Edit"}, helpMenu {"Help"};
     ProjectFiles files;
-    int browserWidth = 244, arrangementHeight = 246, deviceViewHeight = 280;
+    int browserWidth = 244, arrangementHeight = 246, deviceViewHeight = 220;
     int resizeStartX = 0, resizeStartY = 0, resizeStartBrowserWidth = 244;
-    int resizeStartArrangementHeight = 246, resizeStartDeviceViewHeight = 280;
+    int resizeStartArrangementHeight = 246, resizeStartDeviceViewHeight = 220;
     static constexpr int browserTop = 74, collapsedRailWidth = 44;
     bool browserOpen = true, clipEditorOpen = true, rackOpen = true;
     bool resizingBrowser = false, resizingDeviceView = false, resizingArrangement = false;

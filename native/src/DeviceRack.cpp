@@ -42,16 +42,6 @@ void styleAutomationButton(juce::TextButton& button, const Session::DeviceParame
         : "Following automation. Click to hold manual value");
 }
 
-juce::String deviceKindName(Session::DeviceKind kind)
-{
-    switch (kind)
-    {
-        case Session::DeviceKind::MidiEffect:  return "MIDI EFFECT";
-        case Session::DeviceKind::Instrument:  return "INSTRUMENT";
-        case Session::DeviceKind::AudioEffect: return "AUDIO EFFECT";
-    }
-    return "DEVICE";
-}
 }
 
 class DeviceRack::FloatingDeviceWindow final : public juce::DocumentWindow
@@ -520,7 +510,7 @@ private:
     te::Plugin::Ptr plugin;
 };
 
-DeviceRack::DeviceRack(Session& s) : session(s), editor(s)
+DeviceRack::DeviceRack(Session& s) : session(s)
 {
     setOpaque(true);
     title.setText("DEVICE VIEW", juce::dontSendNotification);
@@ -528,28 +518,18 @@ DeviceRack::DeviceRack(Session& s) : session(s), editor(s)
     title.setFont(juce::FontOptions(13.0f));
     context.setColour(juce::Label::textColourId, juce::Colour(0xff89959f));
     context.setFont(juce::FontOptions(12.0f));
-    selectedDeviceLabel.setColour(juce::Label::textColourId, juce::Colour(0xffdce5ea));
-    selectedDeviceLabel.setFont(juce::FontOptions(12.0f).withStyle("Bold"));
     outputLabel.setText("TRACK OUTPUT", juce::dontSendNotification);
     outputLabel.setColour(juce::Label::textColourId, juce::Colour(0xff82909a));
     outputLabel.setFont(juce::FontOptions(10.0f));
     outputLabel.setJustificationType(juce::Justification::centred);
     open.setButtonText("Edit");
-    bypass.setButtonText("Enabled");
     remove.setButtonText("Delete");
     add.setButtonText("+");
     open.setTooltip("Open selected device editor");
-    bypass.setTooltip("Bypass or enable selected device");
     remove.setTooltip("Delete selected device");
     add.setTooltip("Add a device at the end of this track's chain");
-    editor.status = [this](const juce::String& message) { if (status) status(message); };
     add.onClick = [this] { showAddMenu(); };
     open.onClick = [this] { openSelectedDevice(); };
-    bypass.onClick = [this]
-    {
-        const auto result = session.toggleDeviceEnabled(selectedTrack, selectedPluginIndex());
-        if (result.failed() && status) status(result.getErrorMessage());
-    };
     remove.onClick = [this]
     {
         const auto result = session.deleteDevice(selectedTrack, selectedPluginIndex());
@@ -560,8 +540,7 @@ DeviceRack::DeviceRack(Session& s) : session(s), editor(s)
     chainViewport.setScrollBarThickness(8);
     chainContent.addAndMakeVisible(add);
     chainContent.addAndMakeVisible(outputLabel);
-    for (auto* component : std::initializer_list<juce::Component*>{&title, &context, &open, &bypass, &remove,
-                                                                    &chainViewport, &selectedDeviceLabel, &editor})
+    for (auto* component : std::initializer_list<juce::Component*>{&title, &context, &open, &remove, &chainViewport})
         addAndMakeVisible(component);
     session.addChangeListener(this);
     selectTrack(0);
@@ -577,45 +556,29 @@ void DeviceRack::paint(juce::Graphics& g)
     g.fillAll(juce::Colour(0xff1b2025));
     g.setColour(juce::Colour(0xff303840));
     g.drawRect(getLocalBounds());
-    g.drawHorizontalLine(chainViewport.getBottom() + 7, 12.0f, static_cast<float>(getWidth() - 12));
 }
 
 void DeviceRack::resized()
 {
-    title.setBounds(12, 5, 92, 24);
-    context.setBounds(106, 5, std::max(40, getWidth() - 342), 24);
-    open.setBounds(getWidth() - 224, 5, 52, 24);
-    bypass.setBounds(getWidth() - 166, 5, 72, 24);
-    remove.setBounds(getWidth() - 88, 5, 76, 24);
-    chainViewport.setBounds(12, 36, getWidth() - 24, 84);
+    title.setBounds(12, 3, 92, 22);
+    context.setBounds(106, 3, std::max(40, getWidth() - 282), 22);
+    open.setBounds(getWidth() - 148, 3, 52, 22);
+    remove.setBounds(getWidth() - 90, 3, 78, 22);
+    chainViewport.setBounds(12, 29, getWidth() - 24, std::max(0, getHeight() - 35));
 
-    constexpr int cardWidth = 148;
-    constexpr int cardHeight = 58;
-    constexpr int arrowWidth = 28;
+    const auto panelHeight = std::max(0, chainViewport.getHeight() - 9);
     int x = 0;
-    for (int i = 0; i < deviceCards.size(); ++i)
+    for (auto* panel : devicePanels)
     {
-        deviceCards[i]->setBounds(x, 1, cardWidth, cardHeight);
-        x += cardWidth;
-        if (juce::isPositiveAndBelow(i, signalArrows.size()))
-        {
-            signalArrows[i]->setBounds(x, 1, arrowWidth, cardHeight);
-            x += arrowWidth;
-        }
+        const auto panelWidth = panel->preferredWidth();
+        panel->setBounds(x, 0, panelWidth, panelHeight);
+        x += panelWidth + 4;
     }
-    add.setBounds(x, 6, 46, 48);
+    add.setBounds(x, 0, 42, panelHeight);
     x += 46;
-    if (auto* finalArrow = signalArrows.getLast())
-    {
-        finalArrow->setBounds(x, 1, arrowWidth, cardHeight);
-        x += arrowWidth;
-    }
-    outputLabel.setBounds(x, 1, 92, cardHeight);
-    x += 92;
-    chainContent.setSize(std::max(chainViewport.getWidth(), x), cardHeight + 10);
-
-    selectedDeviceLabel.setBounds(14, 130, getWidth() - 28, 22);
-    editor.setBounds(12, 154, getWidth() - 24, std::max(0, getHeight() - 160));
+    outputLabel.setBounds(x, 0, 88, panelHeight);
+    x += 88;
+    chainContent.setSize(std::max(chainViewport.getWidth(), x), panelHeight);
 }
 
 void DeviceRack::openSelectedDevice()
@@ -701,8 +664,8 @@ void DeviceRack::showAddMenu()
                     if (safe->slots[static_cast<size_t>(i)].kind == wantedKind)
                         safe->selectedDevice = i;
                 safe->sync();
-                if (juce::isPositiveAndBelow(safe->selectedDevice, safe->deviceCards.size()))
-                    safe->chainViewport.setViewPosition(safe->deviceCards[safe->selectedDevice]->getX(), 0);
+                if (juce::isPositiveAndBelow(safe->selectedDevice, safe->devicePanels.size()))
+                    safe->chainViewport.setViewPosition(safe->devicePanels[safe->selectedDevice]->getX(), 0);
             }
         });
 }
@@ -719,41 +682,19 @@ void DeviceRack::selectDevice(int device)
     sync();
 }
 
-void DeviceRack::rebuildDeviceCards()
+void DeviceRack::rebuildDevicePanels()
 {
-    deviceCards.clear(true);
-    signalArrows.clear(true);
+    devicePanels.clear(true);
     for (int i = 0; i < static_cast<int>(slots.size()); ++i)
     {
-        const auto& slot = slots[static_cast<size_t>(i)];
-        auto* card = deviceCards.add(new juce::TextButton());
-        card->setButtonText(slot.name + "\n" + deviceKindName(slot.kind) + (slot.enabled ? "  /  ON" : "  /  BYPASSED"));
-        card->setTooltip(deviceKindName(slot.kind) + " · processing position " + juce::String(i + 1));
-        card->setToggleState(i == selectedDevice, juce::dontSendNotification);
-        card->setColour(juce::TextButton::buttonColourId,
-                        slot.enabled ? juce::Colour(0xff252d33) : juce::Colour(0xff202429));
-        card->setColour(juce::TextButton::buttonOnColourId,
-                        slot.enabled ? juce::Colour(0xff38505b) : juce::Colour(0xff303a40));
-        card->setColour(juce::TextButton::textColourOffId,
-                        slot.enabled ? juce::Colour(0xffdce5ea) : juce::Colour(0xff77818a));
-        card->setColour(juce::TextButton::textColourOnId,
-                        slot.enabled ? juce::Colour(0xffedf4f7) : juce::Colour(0xff98a2aa));
-        card->onClick = [this, i] { selectDevice(i); };
-        chainContent.addAndMakeVisible(card);
-    }
-    const auto arrowCount = static_cast<int>(slots.size()) + 1;
-    for (int i = 0; i < arrowCount; ++i)
-    {
-        auto* arrow = signalArrows.add(new juce::Label());
-        arrow->setText(juce::String::fromUTF8("\xe2\x86\x92"), juce::dontSendNotification);
-        arrow->setColour(juce::Label::textColourId, juce::Colour(0xff6f7d86));
-        arrow->setFont(juce::FontOptions(18.0f));
-        arrow->setJustificationType(juce::Justification::centred);
-        chainContent.addAndMakeVisible(arrow);
+        auto* panel = devicePanels.add(new DeviceEditorPanel(session));
+        panel->status = [this](const juce::String& message) { if (status) status(message); };
+        panel->selected = [this, i] { selectDevice(i); };
+        panel->setTarget(selectedTrack, slots[static_cast<size_t>(i)], i == selectedDevice);
+        chainContent.addAndMakeVisible(panel);
     }
     add.toFront(false);
     outputLabel.toFront(false);
-    renderedSelectedDevice = selectedDevice;
     if (getWidth() > 24 && getHeight() > 0)
     {
         resized();
@@ -794,14 +735,11 @@ void DeviceRack::sync()
                 selectedDevice = i;
     selectedDevice = juce::jlimit(0, std::max(0, static_cast<int>(slots.size()) - 1), selectedDevice);
     context.setText(session.trackName(selectedTrack) + "  /  SIGNAL CHAIN", juce::dontSendNotification);
-    selectedDeviceLabel.setText(slots.empty() ? "No devices — use + or drag from the Browser"
-        : slots[static_cast<size_t>(selectedDevice)].name + "  /  CONTROLS", juce::dontSendNotification);
-    if (chainChanged || renderedSelectedDevice != selectedDevice)
-        rebuildDeviceCards();
-    bypass.setEnabled(!slots.empty());
+    if (chainChanged)
+        rebuildDevicePanels();
+    for (int i = 0; i < devicePanels.size() && i < static_cast<int>(slots.size()); ++i)
+        devicePanels[i]->setTarget(selectedTrack, slots[static_cast<size_t>(i)], i == selectedDevice);
     open.setEnabled(!slots.empty());
     remove.setEnabled(!slots.empty() && slots[static_cast<size_t>(selectedDevice)].removable);
-    bypass.setButtonText(!slots.empty() && !slots[static_cast<size_t>(selectedDevice)].enabled ? "Bypassed" : "Enabled");
-    editor.setTarget(selectedTrack, selectedPluginIndex(), slots.empty() ? nullptr : &slots[static_cast<size_t>(selectedDevice)]);
 }
 }

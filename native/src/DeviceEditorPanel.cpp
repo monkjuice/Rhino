@@ -34,19 +34,49 @@ float normalisedValue(const Session::DeviceParameter& parameter)
 DeviceEditorPanel::DeviceEditorPanel(Session& s) : session(s)
 {
     setOpaque(false);
+    title.setFont(juce::FontOptions(11.0f).withStyle("Bold"));
+    title.setColour(juce::Label::textColourId, juce::Colour(0xffdce5ea));
+    title.setInterceptsMouseClicks(false, false);
+    power.setTooltip("Enable or bypass this device");
+    power.onClick = [this]
+    {
+        const auto result = session.toggleDeviceEnabled(track, pluginSlot);
+        if (result.failed() && status) status(result.getErrorMessage());
+    };
+    addAndMakeVisible(title);
+    addAndMakeVisible(power);
+    addMouseListener(this, true);
 }
 
-void DeviceEditorPanel::setTarget(int nextTrack, int nextPluginSlot, const Session::DeviceSlot* device)
+void DeviceEditorPanel::setTarget(int nextTrack, const Session::DeviceSlot& device, bool nextSelected)
 {
     track = nextTrack;
-    pluginSlot = nextPluginSlot;
-    deviceName = device != nullptr ? device->name : juce::String();
-    face = device != nullptr && device->type == ThetaSpaceDevice::xmlTypeName ? Face::ThetaSpace : Face::Generic;
+    pluginSlot = device.pluginIndex;
+    deviceName = device.name;
+    isSelected = nextSelected;
+    face = device.type == ThetaSpaceDevice::xmlTypeName ? Face::ThetaSpace : Face::Generic;
     parameters = session.deviceParameters(track, pluginSlot);
+    title.setText(deviceName, juce::dontSendNotification);
+    power.setButtonText(device.enabled ? juce::String::fromUTF8("\xe2\x97\x8f") : juce::String::fromUTF8("\xe2\x97\x8b"));
+    power.setColour(juce::TextButton::textColourOffId,
+                    device.enabled ? juce::Colour(0xffc6d58c) : juce::Colour(0xff6f7982));
     ensureControls();
     styleControls();
     resized();
     repaint();
+}
+
+int DeviceEditorPanel::preferredWidth() const
+{
+    if (face == Face::ThetaSpace)
+        return 460;
+    const auto columns = std::max(2, std::min(6, visibleParameterCount()));
+    return juce::jlimit(190, 470, 46 + columns * 66);
+}
+
+void DeviceEditorPanel::mouseDown(const juce::MouseEvent&)
+{
+    if (selected) selected();
 }
 
 int DeviceEditorPanel::visibleParameterCount() const
@@ -131,23 +161,24 @@ void DeviceEditorPanel::styleControls()
 
 void DeviceEditorPanel::paint(juce::Graphics& g)
 {
+    const auto bounds = getLocalBounds().toFloat();
+    g.setColour(juce::Colour(0xff171d22));
+    g.fillRoundedRectangle(bounds, 3.0f);
+    g.setColour(juce::Colour(0xff222a30));
+    g.fillRoundedRectangle(bounds.withHeight(23.0f), 3.0f);
+    g.setColour(isSelected ? juce::Colour(0xff75b9cc) : juce::Colour(0xff3a454d));
+    g.drawRoundedRectangle(bounds.reduced(0.5f), 3.0f, isSelected ? 1.5f : 1.0f);
+
     if (parameters.empty())
     {
         g.setColour(juce::Colour(0xff75818a));
-        g.setFont(juce::FontOptions(12.0f));
-        g.drawText(deviceName.isEmpty() ? "Select a device" : "This device has no exposed parameters",
-                   getLocalBounds(), juce::Justification::centred);
+        g.setFont(juce::FontOptions(11.0f));
+        g.drawText("No exposed parameters", contentArea, juce::Justification::centred);
         return;
     }
 
     if (face != Face::ThetaSpace)
         return;
-
-    const auto bounds = getLocalBounds().toFloat();
-    g.setColour(juce::Colour(0xff171d22));
-    g.fillRoundedRectangle(bounds, 5.0f);
-    g.setColour(juce::Colour(0xff344149));
-    g.drawRoundedRectangle(bounds.reduced(0.5f), 5.0f, 1.0f);
 
     if (!visualArea.isEmpty())
     {
@@ -177,7 +208,10 @@ void DeviceEditorPanel::paint(juce::Graphics& g)
 
 void DeviceEditorPanel::resized()
 {
-    if (face == Face::ThetaSpace && getWidth() >= 700 && getHeight() >= 100)
+    power.setBounds(3, 2, 20, 19);
+    title.setBounds(27, 1, getWidth() - 32, 21);
+    contentArea = getLocalBounds().withTrimmedTop(24).reduced(4);
+    if (face == Face::ThetaSpace && contentArea.getWidth() >= 350 && contentArea.getHeight() >= 80)
         layoutThetaSpace();
     else
         layoutGeneric();
@@ -187,13 +221,14 @@ void DeviceEditorPanel::layoutGeneric()
 {
     visualArea = {};
     const auto count = visibleParameterCount();
-    const auto columns = std::max(1, std::min(count, getWidth() >= 900 ? 6 : getWidth() >= 560 ? 4 : 3));
+    const auto columns = std::max(1, std::min(count, 6));
     const auto rows = count > 0 ? (count + columns - 1) / columns : 1;
-    const auto cellWidth = getWidth() / columns;
-    const auto cellHeight = getHeight() / rows;
+    const auto cellWidth = contentArea.getWidth() / columns;
+    const auto cellHeight = contentArea.getHeight() / rows;
     for (int i = 0; i < count; ++i)
     {
-        const juce::Rectangle<int> cell((i % columns) * cellWidth, (i / columns) * cellHeight,
+        const juce::Rectangle<int> cell(contentArea.getX() + (i % columns) * cellWidth,
+                                        contentArea.getY() + (i / columns) * cellHeight,
                                         cellWidth, cellHeight);
         const auto knobSize = std::min({64, std::max(34, cell.getWidth() - 28), std::max(34, cell.getHeight() - 36)});
         parameterLabels[i]->setBounds(cell.getX() + 4, cell.getY(), cell.getWidth() - 8, 18);
@@ -205,9 +240,9 @@ void DeviceEditorPanel::layoutGeneric()
 
 void DeviceEditorPanel::layoutThetaSpace()
 {
-    auto bounds = getLocalBounds().reduced(6);
-    visualArea = bounds.removeFromLeft(juce::jlimit(142, 220, getWidth() / 5));
-    bounds.removeFromLeft(8);
+    auto bounds = contentArea;
+    visualArea = bounds.removeFromLeft(108);
+    bounds.removeFromLeft(4);
     const auto count = visibleParameterCount();
     const auto cellWidth = count > 0 ? bounds.getWidth() / count : bounds.getWidth();
     for (int i = 0; i < count; ++i)

@@ -51,6 +51,7 @@ Session::Session() : engine(commandLineTestMode ? "Theta Native Tests" : "Theda 
     patternClip = track->insertMIDIClip("Pattern 1", {{}, end}, nullptr).get();
     if (patternClip != nullptr)
     {
+        prepareMidiClipForPlayback(*patternClip);
         patternClip->setColour(presetColour(PatternPreset::WarmPulse));
         patternClip->state.setProperty(starterPlaceholderID, true, nullptr);
         patternClip->state.setProperty(editorStepsID, defaultSteps, nullptr);
@@ -115,6 +116,7 @@ void Session::ensureEditablePatternClip()
 {
     if (auto* midi = dynamic_cast<te::MidiClip*>(findClip(patternClipID)))
     {
+        prepareMidiClipForPlayback(*midi);
         patternClip = midi;
         return;
     }
@@ -124,6 +126,7 @@ void Session::ensureEditablePatternClip()
         for (auto* clip : tracks[0]->getClips())
             if (auto* midi = dynamic_cast<te::MidiClip*>(clip))
             {
+                prepareMidiClipForPlayback(*midi);
                 patternClip = midi;
                 patternClipID = midi->itemID;
                 return;
@@ -135,6 +138,7 @@ void Session::ensureEditablePatternClip()
         patternClip = tracks[0]->insertMIDIClip("Pattern 1", {{}, end}, nullptr).get();
         if (patternClip != nullptr)
         {
+            prepareMidiClipForPlayback(*patternClip);
             patternClip->setColour(presetColour(PatternPreset::WarmPulse));
             patternClip->state.setProperty(starterPlaceholderID, true, nullptr);
             patternClipID = patternClip->itemID;
@@ -172,8 +176,13 @@ juce::Result Session::restoreProject(const juce::ValueTree& state, const juce::F
     te::FourOscPlugin* nextSynth = nullptr;
     ThetaWaveDevice* nextThetaWave = nullptr;
     DrumDevice* nextDrums = nullptr;
-    for (auto* clip : tracks[0]->getClips())
-        if (auto* midi = dynamic_cast<te::MidiClip*>(clip)) nextPattern = midi;
+    for (auto* track : tracks)
+        for (auto* clip : track->getClips())
+            if (auto* midi = dynamic_cast<te::MidiClip*>(clip))
+            {
+                prepareMidiClipForPlayback(*midi);
+                if (track == tracks[0]) nextPattern = midi;
+            }
     for (auto plugin : tracks[0]->pluginList)
     {
         if (auto* device = dynamic_cast<UtilityDevice*>(plugin)) nextUtility = device;

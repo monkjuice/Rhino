@@ -57,6 +57,7 @@ te::AutomatableParameter* exposedParameterAt(te::Plugin& plugin, int index);
 float exposedParameterMaximum(te::Plugin& plugin, int index, float maximum);
 
 // Engine and model helpers (SessionInternal.cpp)
+void prepareMidiClipForPlayback(te::MidiClip& clip);
 void panicMidiOnTrack(te::ClipTrack* clipTrack);
 juce::Colour presetColour(Session::PatternPreset preset);
 juce::Colour instrumentColour(Session::Instrument instrument);

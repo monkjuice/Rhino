@@ -41,6 +41,64 @@
         reader.reset();
 
         {
+            Session repeatedDrums;
+            require(repeatedDrums.insertPatternPreset(Session::PatternPreset::BreakKit, 1, 2.0).wasOk(),
+                    "Repeated drum regression creates the first clip after silence");
+            auto* drumTrack = te::getAudioTracks(*repeatedDrums.edit)[1];
+            auto* first = drumTrack->getClips().getLast();
+            require(first != nullptr, "Repeated drum regression finds its first clip");
+            for (int i = 0; i < 3; ++i)
+            {
+                auto* previous = drumTrack->getClips().getLast();
+                require(previous != nullptr && repeatedDrums.duplicateClip(previous->itemID).wasOk(),
+                        "Repeated drum regression appends an adjacent clip");
+            }
+            for (auto* clip : drumTrack->getClips())
+            {
+                auto* midi = dynamic_cast<te::MidiClip*>(clip);
+                require(midi != nullptr && !midi->canUseProxy(),
+                        "Adjacent drum clips use real-time MIDI boundary playback");
+            }
+
+            juce::TemporaryFile repeatedOutput(".wav");
+            te::Renderer::Parameters repeatedParameters(*repeatedDrums.edit);
+            repeatedParameters.destFile = repeatedOutput.getFile();
+            repeatedParameters.audioFormat = &wav;
+            repeatedParameters.sampleRateForAudio = 48000;
+            repeatedParameters.bitDepth = 24;
+            repeatedParameters.time = {tracktion::core::TimePosition::fromSeconds(1.5),
+                                       tracktion::core::TimePosition::fromSeconds(10.0)};
+            {
+                te::Renderer::RenderTask task("Adjacent drum clip boundary test", repeatedParameters, nullptr, nullptr);
+                const auto deadline = juce::Time::getMillisecondCounterHiRes() + 15000.0;
+                while (task.runJob() != juce::ThreadPoolJob::jobHasFinished)
+                    require(juce::Time::getMillisecondCounterHiRes() < deadline, "Adjacent drum clip render timed out");
+                require(task.errorMessage.isEmpty(), task.errorMessage.toRawUTF8());
+            }
+            std::unique_ptr<juce::AudioFormatReader> repeatedReader(formats.createReaderFor(repeatedOutput.getFile()));
+            require(repeatedReader != nullptr, "Read adjacent drum clip render");
+            juce::AudioBuffer<float> repeatedAudio(static_cast<int>(repeatedReader->numChannels),
+                                                   static_cast<int>(repeatedReader->lengthInSamples));
+            require(repeatedReader->read(&repeatedAudio, 0, repeatedAudio.getNumSamples(), 0, true, true),
+                    "Read adjacent drum clip samples");
+            const auto transientPeak = [&repeatedAudio](double seconds)
+            {
+                const auto start = juce::roundToInt(seconds * 48000.0);
+                const auto end = std::min(repeatedAudio.getNumSamples(), start + 3840);
+                auto result = 0.0f;
+                for (int channel = 0; channel < repeatedAudio.getNumChannels(); ++channel)
+                    for (int frame = start; frame < end; ++frame)
+                        result = std::max(result, std::abs(repeatedAudio.getSample(channel, frame)));
+                return result;
+            };
+            const auto firstKick = transientPeak(0.5);
+            require(firstKick > 0.001f, "First drum clip retains its opening kick");
+            for (const auto boundary : {2.5, 4.5, 6.5})
+                require(transientPeak(boundary) >= firstKick * 0.8f,
+                        "Every adjacent MIDI clip retains the full opening kick transient");
+        }
+
+        {
             Session waveSession;
             require(waveSession.addInstrument(Session::Instrument::ThetaWave, 0).wasOk(), "Theta Wave can be activated on the pattern track");
             waveSession.setNote(0, 48, true);

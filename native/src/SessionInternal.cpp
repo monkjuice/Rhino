@@ -15,6 +15,14 @@ const juce::Identifier automationEndID {"end"};
 const juce::Identifier automationStartValueID {"startValue"};
 const juce::Identifier automationEndValueID {"endValue"};
 
+void prepareMidiClipForPlayback(te::MidiClip& clip)
+{
+    // Tracktion's legacy proxy sequence can lose or truncate a note-on at the
+    // exact start of a later, flush-adjacent MIDI clip after a transport jump.
+    // The real-time sequence path resolves events against each clip boundary.
+    clip.setUsesProxy(false);
+}
+
 void panicMidiOnTrack(te::ClipTrack* clipTrack)
 {
     auto* track = dynamic_cast<te::AudioTrack*>(clipTrack);

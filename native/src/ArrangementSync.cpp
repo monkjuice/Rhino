@@ -96,7 +96,6 @@ void Arrangement::syncTrackControls()
         mute.pop_back();
         solo.pop_back();
     }
-    removeTrack.setEnabled(selectedTrack > 0 && count > 2);
 }
 
 void Arrangement::updateScroll()

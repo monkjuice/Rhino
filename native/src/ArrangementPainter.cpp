@@ -12,11 +12,9 @@ void Arrangement::paint(juce::Graphics& g)
 {
     g.fillAll(juce::Colour(0xff1d2228));
     g.setFont(juce::FontOptions(12.0f));
-    g.setColour(juce::Colour(0xffbbc4cc));
-    g.drawText("ARRANGEMENT", 10, 0, 138, 30, juce::Justification::centredLeft);
     g.setColour(juce::Colour(0xff8a969f));
     g.drawText("Drop browser items or files / drag clips to move / trim edges",
-               740, 0, getWidth() - 750, 30, juce::Justification::centredLeft);
+               360, 0, getWidth() - 370, 30, juce::Justification::centredLeft);
     for (int track = 0; track < session.trackCount(); ++track)
     {
         const auto row = lane(track);
@@ -26,9 +24,9 @@ void Arrangement::paint(juce::Graphics& g)
         if (track == selectedTrack)
         {
             g.setColour(juce::Colour(0xff343f47));
-            g.fillRect(row.withWidth(headerWidth));
+            g.fillRect(row.withX(0.0f).withWidth(headerWidth));
             g.setColour(juce::Colour(0xffc6d58c));
-            g.fillRect(row.withWidth(3.0f));
+            g.fillRect(row.withX(0.0f).withWidth(3.0f));
         }
         g.setColour(juce::Colour(0xffc4cbd1));
         g.drawText(juce::String(track + 1).paddedLeft('0', 2) + "  " + session.trackName(track),

@@ -16,31 +16,17 @@ Arrangement::Arrangement(Session& s) : session(s), vblank(this, [this] { updateP
     session.listeners.add(this);
     scroll.addListener(this);
     trackScrollBar.addListener(this);
-    fitButton.setButtonText(L"\u26f6");
-    zoomOut.setButtonText(L"\u2212");
-    zoomIn.setButtonText(L"+");
-    splitButton.setButtonText(L"\u2702");
     duplicateButton.setButtonText(L"\u29c9");
     addTrack.setButtonText(L"+");
-    removeTrack.setButtonText(L"\u2212");
     snap.setButtonText(L"\u2317");
     automationButton.setButtonText("A");
-    fitButton.setTooltip("Fit arrangement");
-    zoomOut.setTooltip("Zoom out");
-    zoomIn.setTooltip("Zoom in");
-    splitButton.setTooltip("Split selected clip");
     duplicateButton.setTooltip("Duplicate selected clip");
     addTrack.setTooltip("Add track");
-    removeTrack.setTooltip("Remove selected track");
     snap.setTooltip("Toggle clip snap");
     automationButton.setTooltip("Draw automation for the last moved device knob");
     snap.setClickingTogglesState(true);
     snap.setToggleState(true, juce::dontSendNotification);
     automationButton.setClickingTogglesState(true);
-    fitButton.onClick = [this] { fit(); };
-    zoomIn.onClick = [this] { zoom(0.5, viewStart + viewSpan * 0.5); };
-    zoomOut.onClick = [this] { zoom(2.0, viewStart + viewSpan * 0.5); };
-    splitButton.onClick = [this] { splitSelectedAtPlayhead(); };
     duplicateButton.onClick = [this] { duplicateSelected(); };
     automationButton.onClick = [this]
     {
@@ -54,11 +40,6 @@ Arrangement::Arrangement(Session& s) : session(s), vblank(this, [this] { updateP
         const auto result = session.addAudioTrack();
         if (result.failed() && status) status(result.getErrorMessage());
     };
-    removeTrack.onClick = [this]
-    {
-        const auto result = session.removeAudioTrack(selectedTrack);
-        if (result.failed() && status) status(result.getErrorMessage());
-    };
     snapSize.addItem("1/16", 1);
     snapSize.addItem("1/8", 2);
     snapSize.addItem("1/4", 3);
@@ -66,7 +47,7 @@ Arrangement::Arrangement(Session& s) : session(s), vblank(this, [this] { updateP
     snapSize.setSelectedId(1, juce::dontSendNotification);
     snapSize.setColour(juce::ComboBox::backgroundColourId, juce::Colour(0xff262c32));
     snapSize.setColour(juce::ComboBox::outlineColourId, juce::Colour(0xff46515a));
-    for (auto* control : std::initializer_list<juce::Component*>{&fitButton, &zoomIn, &zoomOut, &splitButton, &duplicateButton, &addTrack, &removeTrack, &snap, &automationButton, &scroll, &trackScrollBar})
+    for (auto* control : std::initializer_list<juce::Component*>{&duplicateButton, &addTrack, &snap, &automationButton, &scroll, &trackScrollBar})
         addAndMakeVisible(control);
     addAndMakeVisible(snapSize);
     sync();
@@ -82,16 +63,11 @@ Arrangement::~Arrangement()
 
 void Arrangement::resized()
 {
-    fitButton.setBounds(152, 3, 32, 26);
-    zoomOut.setBounds(190, 3, 32, 26);
-    zoomIn.setBounds(226, 3, 32, 26);
-    splitButton.setBounds(268, 3, 34, 26);
-    duplicateButton.setBounds(308, 3, 34, 26);
-    addTrack.setBounds(352, 3, 34, 26);
-    removeTrack.setBounds(392, 3, 34, 26);
-    snap.setBounds(436, 3, 34, 26);
-    automationButton.setBounds(476, 3, 34, 26);
-    snapSize.setBounds(516, 3, 74, 26);
+    addTrack.setBounds(10, 3, 34, 26);
+    duplicateButton.setBounds(48, 3, 34, 26);
+    snap.setBounds(86, 3, 34, 26);
+    automationButton.setBounds(124, 3, 34, 26);
+    snapSize.setBounds(164, 3, 74, 26);
     syncTrackControls();
     for (int i = 0; i < session.trackCount(); ++i)
     {
@@ -271,7 +247,6 @@ void Arrangement::selectTrack(int track)
     if (selectedTrack == track) return;
     selectedTrack = track;
     if (trackSelected) trackSelected(track);
-    removeTrack.setEnabled(selectedTrack > 0 && session.trackCount() > 2);
     repaint();
 }
 

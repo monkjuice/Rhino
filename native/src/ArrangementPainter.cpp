@@ -323,7 +323,7 @@ void Arrangement::paint(juce::Graphics& g)
     if (!hasAudio && session.trackCount() > 1)
     {
         g.setColour(juce::Colour(0xff75828e));
-        g.drawText("Drop audio here, or use Add audio", lane(1).reduced(16, 0), juce::Justification::centredLeft);
+        g.drawText("Drop audio here", lane(1).reduced(16, 0), juce::Justification::centredLeft);
     }
     if (marqueeSelecting)
     {

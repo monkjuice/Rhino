@@ -269,7 +269,7 @@ public:
             audioSettings = options.launchAsync();
         };
         for (auto* component : std::initializer_list<juce::Component*>{
-                 &title, &status, &position, &gainLabel, &gain, &audioGainLabel, &audioGain, &play, &stop, &panic, &import, &settings,
+                 &title, &status, &position, &gainLabel, &gain, &audioGainLabel, &audioGain, &play, &stop, &panic, &settings,
                  &browser, &browserToggle, &editorToggle, &rackToggle, &grid, &arrangement, &rack, &tempo, &timeSignature, &undo, &redo, &clear, &metronome, &metronomeMenu, &hint, &fileMenu, &editMenu, &helpMenu,
                  &documentName, &patternLabel, &editorResolution, &editorZoomOut, &editorZoomIn, &scaleHighlight})
             addAndMakeVisible(component);
@@ -340,18 +340,26 @@ public:
         documentName.setBounds(326, 10, getWidth() - 478, 30);
         settings.setBounds(getWidth() - 152, 12, 128, 28);
         status.setBounds(24, 42, getWidth() - 48, 24);
-        play.setBounds(editorX, 82, 38, 34);
-        stop.setBounds(editorX + 46, 82, 38, 34);
-        panic.setBounds(editorX + 92, 82, 38, 34);
-        import.setBounds(editorX + 138, 82, 38, 34);
-        tempo.setBounds(editorX + 198, 84, 122, 30);
-        timeSignature.setBounds(editorX + 326, 84, 72, 30);
-        undo.setBounds(editorX + 408, 84, 34, 30);
-        redo.setBounds(editorX + 448, 84, 34, 30);
-        clear.setBounds(editorX + 492, 84, 34, 30);
-        metronome.setBounds(editorX + 538, 84, 30, 30);
-        metronomeMenu.setBounds(editorX + 568, 84, 18, 30);
-        position.setBounds(getWidth() - 165, 82, 140, 34);
+        play.setBounds(editorX, 80, 38, 36);
+        stop.setBounds(editorX + 46, 80, 38, 36);
+        panic.setBounds(editorX + 92, 80, 38, 36);
+        const auto displayWidth = juce::jlimit(210, 280, getWidth() / 4);
+        const auto displayX = getWidth() / 2 - displayWidth / 2;
+        position.setBounds(displayX, 78, displayWidth, 40);
+        constexpr int rightControlsWidth = 356;
+        auto rightX = std::max(displayX + displayWidth + 8, getWidth() - 24 - rightControlsWidth);
+        tempo.setBounds(rightX, 82, 100, 32);
+        rightX += 108;
+        timeSignature.setBounds(rightX, 82, 70, 32);
+        rightX += 78;
+        undo.setBounds(rightX, 82, 34, 32);
+        rightX += 40;
+        redo.setBounds(rightX, 82, 34, 32);
+        rightX += 40;
+        clear.setBounds(rightX, 82, 34, 32);
+        rightX += 42;
+        metronome.setBounds(rightX, 82, 30, 32);
+        metronomeMenu.setBounds(rightX + 30, 82, 18, 32);
         browser.setVisible(browserOpen);
         browser.setBounds(0, browserTop, browserWidth, getHeight() - browserTop);
         browserToggle.setButtonText(browserOpen ? "<" : "B");

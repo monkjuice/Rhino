@@ -15,7 +15,7 @@ Research deliverables: [open-source DAW and Ableton study](research/DAW-STUDY.md
 - Playback through Tracktion's 4OSC synth and Theta's internal Utility gain device.
 - Drawing and erasing notes, grouped undo/redo, and tempo control from 40-240 BPM.
 - Play, pause, stop, looping, and audio hardware settings.
-- Audio import onto a separate track, with successive files appended.
+- Audio import onto a separate track, with successive files appended. The browser also includes generated Whistle and Siren WAV samples; these are audio clips, not MIDI presets.
 - An arrangement view showing the synth clip and imported audio waveforms, with audio clip selection, moving, non-destructive trimming, and deletion.
 - Mute/solo controls for both tracks, timeline seeking, zoom, scrolling, and optional 1/16-note snapping.
 - Native project save/open, unsaved-change prompts, and background file writing/parsing.

@@ -67,4 +67,11 @@ inline std::optional<Session::MidiEffect> midiEffectFromId(const juce::String& i
     return std::nullopt;
 }
 
+inline std::optional<Session::BuiltInSample> builtInSampleFromId(const juce::String& id)
+{
+    if (id == "Whistle") return Session::BuiltInSample::Whistle;
+    if (id == "Siren")   return Session::BuiltInSample::Siren;
+    return std::nullopt;
+}
+
 }

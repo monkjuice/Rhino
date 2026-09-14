@@ -61,6 +61,16 @@ juce::String midiEffectId(Session::MidiEffect effect)
     }
     return {};
 }
+
+juce::String sampleId(Session::BuiltInSample sample)
+{
+    switch (sample)
+    {
+        case Session::BuiltInSample::Whistle: return "Whistle";
+        case Session::BuiltInSample::Siren:   return "Siren";
+    }
+    return {};
+}
 }
 
 BrowserPanel::BrowserPanel(Session& s) : session(s)
@@ -96,34 +106,36 @@ BrowserPanel::BrowserPanel(Session& s) : session(s)
     categories[0].setToggleState(true, juce::dontSendNotification);
 
     items = {
-        {"Sounds", "Warm pulse", "Soft one-bar 4OSC chord pulse", Session::PatternPreset::WarmPulse, std::nullopt, std::nullopt, std::nullopt},
-        {"Sounds", "Acid steps", "Tight 16-step synth riff", Session::PatternPreset::AcidSteps, std::nullopt, std::nullopt, std::nullopt},
-        {"Sounds", "Arp run", "Held chord made for Theta Arp", Session::PatternPreset::ArpRun, std::nullopt, std::nullopt, std::nullopt},
-        {"Sounds", "Chord pad", "Soft sustaining 4OSC chord synth", Session::PatternPreset::ChordPad, std::nullopt, std::nullopt, std::nullopt},
-        {"Sounds", "Sub bass", "Clean mono low-end bass line", Session::PatternPreset::SubBass, std::nullopt, std::nullopt, std::nullopt},
-        {"Sounds", "Reese bass", "Wide detuned electronic bass", Session::PatternPreset::ReeseBass, std::nullopt, std::nullopt, std::nullopt},
-        {"Sounds", "Siren lead", "Rising and falling emergency lead", Session::PatternPreset::SirenLead, std::nullopt, std::nullopt, std::nullopt},
-        {"Sounds", "Wave pad", "Theta Wave wide glassy chords", Session::PatternPreset::WavePad, std::nullopt, std::nullopt, std::nullopt},
-        {"Sounds", "Wave bass", "Theta Wave rounded low pulse", Session::PatternPreset::WaveBass, std::nullopt, std::nullopt, std::nullopt},
-        {"Sounds", "Wave pluck", "Theta Wave bright moving pluck", Session::PatternPreset::WavePluck, std::nullopt, std::nullopt, std::nullopt},
-        {"Drums", "House kit", "Four-on-floor kick, backbeat, hats", Session::PatternPreset::HouseKit, std::nullopt, std::nullopt, std::nullopt},
-        {"Drums", "Break kit", "Syncopated kick/snare/hats groove", Session::PatternPreset::BreakKit, std::nullopt, std::nullopt, std::nullopt},
-        {"Drums", "Minimal kit", "Sparse kick/snare/hats sketch", Session::PatternPreset::MinimalKit, std::nullopt, std::nullopt, std::nullopt},
-        {"Drums", "Clap kit", "Kick, clap backbeat, tight hats", Session::PatternPreset::ClapKit, std::nullopt, std::nullopt, std::nullopt},
-        {"Instruments", "4OSC synth", "Drop on a track for synth clips", std::nullopt, std::nullopt, Session::Instrument::FourOsc, std::nullopt},
-        {"Instruments", "Theta Wave", "Morphing wavetable-style synth", std::nullopt, std::nullopt, Session::Instrument::ThetaWave, std::nullopt},
-        {"Instruments", "Theta Forge", "Two-oscillator Forge synth", std::nullopt, std::nullopt, Session::Instrument::ThetaForge, std::nullopt},
-        {"Drums", "Theta Drums", "TR-808 analog kit: kick, snare, toms, closed/open hats", std::nullopt, std::nullopt, Session::Instrument::Drums, std::nullopt},
-        {"Instruments", "Utility gain", "Drop on a track for gain", std::nullopt, std::nullopt, Session::Instrument::Utility, std::nullopt},
-        {"Audio FX", "Utility gain", "Drop on a track for gain", std::nullopt, std::nullopt, Session::Instrument::Utility, std::nullopt},
-        {"Audio FX", "EQ", "Insert Tracktion 4-band EQ", std::nullopt, Session::AudioEffect::Equaliser, std::nullopt, std::nullopt},
-        {"Audio FX", "Reverb", "Insert Tracktion reverb", std::nullopt, Session::AudioEffect::Reverb, std::nullopt, std::nullopt},
-        {"Audio FX", "Delay", "Insert Tracktion delay", std::nullopt, Session::AudioEffect::Delay, std::nullopt, std::nullopt},
-        {"Audio FX", "Compressor", "Insert Tracktion compressor", std::nullopt, Session::AudioEffect::Compressor, std::nullopt, std::nullopt},
-        {"Audio FX", "Theta Space", "Floating multi FX: smear, drive, width", std::nullopt, Session::AudioEffect::ThetaSpace, std::nullopt, std::nullopt},
-        {"Audio FX", "Theta Bloom", "Chorus, clouds, plate, colour", std::nullopt, Session::AudioEffect::ThetaBloom, std::nullopt, std::nullopt},
+        {"Sounds", "Whistle", "Built-in audio sample", std::nullopt, std::nullopt, std::nullopt, std::nullopt, Session::BuiltInSample::Whistle},
+        {"Sounds", "Siren", "Built-in audio sample", std::nullopt, std::nullopt, std::nullopt, std::nullopt, Session::BuiltInSample::Siren},
+        {"Sounds", "Warm pulse", "Soft one-bar 4OSC chord pulse", Session::PatternPreset::WarmPulse},
+        {"Sounds", "Acid steps", "Tight 16-step synth riff", Session::PatternPreset::AcidSteps},
+        {"Sounds", "Arp run", "Held chord made for Theta Arp", Session::PatternPreset::ArpRun},
+        {"Sounds", "Chord pad", "Soft sustaining 4OSC chord synth", Session::PatternPreset::ChordPad},
+        {"Sounds", "Sub bass", "Clean mono low-end bass line", Session::PatternPreset::SubBass},
+        {"Sounds", "Reese bass", "Wide detuned electronic bass", Session::PatternPreset::ReeseBass},
+        {"Sounds", "Siren lead", "Rising and falling emergency lead", Session::PatternPreset::SirenLead},
+        {"Sounds", "Wave pad", "Theta Wave wide glassy chords", Session::PatternPreset::WavePad},
+        {"Sounds", "Wave bass", "Theta Wave rounded low pulse", Session::PatternPreset::WaveBass},
+        {"Sounds", "Wave pluck", "Theta Wave bright moving pluck", Session::PatternPreset::WavePluck},
+        {"Drums", "House kit", "Four-on-floor kick, backbeat, hats", Session::PatternPreset::HouseKit},
+        {"Drums", "Break kit", "Syncopated kick/snare/hats groove", Session::PatternPreset::BreakKit},
+        {"Drums", "Minimal kit", "Sparse kick/snare/hats sketch", Session::PatternPreset::MinimalKit},
+        {"Drums", "Clap kit", "Kick, clap backbeat, tight hats", Session::PatternPreset::ClapKit},
+        {"Instruments", "4OSC synth", "Drop on a track for synth clips", std::nullopt, std::nullopt, Session::Instrument::FourOsc},
+        {"Instruments", "Theta Wave", "Morphing wavetable-style synth", std::nullopt, std::nullopt, Session::Instrument::ThetaWave},
+        {"Instruments", "Theta Forge", "Two-oscillator Forge synth", std::nullopt, std::nullopt, Session::Instrument::ThetaForge},
+        {"Drums", "Theta Drums", "TR-808 analog kit: kick, snare, toms, closed/open hats", std::nullopt, std::nullopt, Session::Instrument::Drums},
+        {"Instruments", "Utility gain", "Drop on a track for gain", std::nullopt, std::nullopt, Session::Instrument::Utility},
+        {"Audio FX", "Utility gain", "Drop on a track for gain", std::nullopt, std::nullopt, Session::Instrument::Utility},
+        {"Audio FX", "EQ", "Insert Tracktion 4-band EQ", std::nullopt, Session::AudioEffect::Equaliser},
+        {"Audio FX", "Reverb", "Insert Tracktion reverb", std::nullopt, Session::AudioEffect::Reverb},
+        {"Audio FX", "Delay", "Insert Tracktion delay", std::nullopt, Session::AudioEffect::Delay},
+        {"Audio FX", "Compressor", "Insert Tracktion compressor", std::nullopt, Session::AudioEffect::Compressor},
+        {"Audio FX", "Theta Space", "Floating multi FX: smear, drive, width", std::nullopt, Session::AudioEffect::ThetaSpace},
+        {"Audio FX", "Theta Bloom", "Chorus, clouds, plate, colour", std::nullopt, Session::AudioEffect::ThetaBloom},
         {"MIDI FX", "Theta Arp", "Drop before an instrument to arpeggiate it", std::nullopt, std::nullopt, std::nullopt, Session::MidiEffect::ThetaArp},
-        {"MIDI FX", "Snap 1/16", "Grid quantized note entry", std::nullopt, std::nullopt, std::nullopt, std::nullopt}
+        {"MIDI FX", "Snap 1/16", "Grid quantized note entry"}
     };
 
     list.setRowHeight(38);
@@ -186,7 +198,7 @@ void BrowserPanel::paintListBoxItem(int row, juce::Graphics& g, int width, int h
     if (!juce::isPositiveAndBelow(row, rows.size())) return;
     const auto& item = items[static_cast<size_t>(rows[static_cast<size_t>(row)])];
     g.fillAll(selected ? juce::Colour(0xff34424a) : juce::Colour(row % 2 == 0 ? 0xff20262c : 0xff242a31));
-    g.setColour(item.preset ? juce::Colour(0xffc6d58c) : item.effect ? juce::Colour(0xffffb15f) : item.instrument ? juce::Colour(0xff8cc5d2) : item.midiEffect ? juce::Colour(0xffbda4ff) : juce::Colour(0xff6f7b85));
+    g.setColour(item.sample ? juce::Colour(0xffe09a70) : item.preset ? juce::Colour(0xffc6d58c) : item.effect ? juce::Colour(0xffffb15f) : item.instrument ? juce::Colour(0xff8cc5d2) : item.midiEffect ? juce::Colour(0xffbda4ff) : juce::Colour(0xff6f7b85));
     g.fillRect(8, height / 2 - 4, 8, 8);
     g.setFont(juce::FontOptions(14.0f));
     g.setColour(juce::Colour(0xffe5ebef));
@@ -257,6 +269,8 @@ juce::String BrowserPanel::dragDescriptionFor(const Item& item) const
         return "theta-browser:instrument:" + instrumentId(*item.instrument);
     if (item.midiEffect)
         return "theta-browser:midi-effect:" + midiEffectId(*item.midiEffect);
+    if (item.sample)
+        return "theta-browser:sample:" + sampleId(*item.sample);
     return "theta-browser:info:" + item.name;
 }
 
@@ -284,6 +298,11 @@ void BrowserPanel::applyRow(int row)
     {
         const auto result = session.addMidiEffect(*item.midiEffect, 0);
         if (status) status(result.wasOk() ? "Added " + item.name + " to Pattern synth" : result.getErrorMessage());
+    }
+    else if (item.sample)
+    {
+        const auto result = session.importBuiltInSample(*item.sample);
+        if (status) status(result.wasOk() ? "Added " + item.name + " audio sample to Audio 1" : result.getErrorMessage());
     }
     else if (status)
     {

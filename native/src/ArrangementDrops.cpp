@@ -95,7 +95,7 @@ void Arrangement::itemDropped(const juce::DragAndDropTarget::SourceDetails& deta
                 + juce::String(session.clipPluginCount(clip.id)));
             return;
         }
-    if ((kind == "preset" || kind == "effect" || kind == "instrument" || kind == "midi-effect")
+    if ((kind == "preset" || kind == "effect" || kind == "instrument" || kind == "midi-effect" || kind == "sample")
         && targetTrack < 0
         && session.trackCount() > 0
         && static_cast<float>(details.localPosition.y) > lane(session.trackCount() - 1).getBottom())
@@ -168,6 +168,18 @@ juce::Result Arrangement::applyBrowserDrop(const juce::String& description, int 
         if (result.failed()) return result;
         selectTrack(track);
         if (status) status("Added MIDI FX to " + session.trackName(track) + " Device View");
+        return juce::Result::ok();
+    }
+
+    if (kind == "sample")
+    {
+        const auto sample = builtInSampleFromId(id);
+        if (!sample) return juce::Result::fail("That browser sample cannot be inserted here.");
+        if (track < 1) return juce::Result::fail("Drop audio samples on an audio track.");
+        const auto result = session.importBuiltInSample(*sample, track, startSeconds);
+        if (result.failed()) return result;
+        selectTrack(track);
+        if (status) status("Added " + id + " audio sample to " + session.trackName(track));
         return juce::Result::ok();
     }
 

@@ -54,6 +54,12 @@ public:
     {
         ThetaArp
     };
+    // Rendered into a WAV cache before import, so these remain ordinary audio clips.
+    enum class BuiltInSample
+    {
+        Whistle,
+        Siren
+    };
     enum class DeviceKind
     {
         MidiEffect,
@@ -125,6 +131,7 @@ public:
     juce::ListenerList<Listener> listeners;
     juce::Result importAudio(const juce::File&);
     juce::Result importAudioAt(const juce::File&, int track, double startSeconds);
+    juce::Result importBuiltInSample(BuiltInSample, int track = 1, double startSeconds = -1.0);
     void togglePlayback();
     void stop();
     void releasePlayingNotes();

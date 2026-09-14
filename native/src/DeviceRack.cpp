@@ -566,7 +566,7 @@ void DeviceRack::resized()
     remove.setBounds(getWidth() - 90, 3, 78, 22);
     chainViewport.setBounds(12, 29, getWidth() - 24, std::max(0, getHeight() - 35));
 
-    const auto panelHeight = std::max(0, chainViewport.getHeight() - 9);
+    constexpr auto panelHeight = DeviceEditorPanel::standardHeight;
     int x = 0;
     for (auto* panel : devicePanels)
     {

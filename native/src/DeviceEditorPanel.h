@@ -9,6 +9,8 @@ namespace theta
 class DeviceEditorPanel final : public juce::Component
 {
 public:
+    static constexpr int standardHeight = 176;
+
     explicit DeviceEditorPanel(Session&);
     void setTarget(int track, const Session::DeviceSlot&, bool selected);
     int preferredWidth() const;

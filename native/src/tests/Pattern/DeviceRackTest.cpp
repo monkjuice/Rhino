@@ -40,6 +40,14 @@ void runPatternDeviceRackTest()
     for (auto* panel : deviceView.devicePanels)
         require(panel != nullptr && panel->isVisible() && !panel->getBounds().isEmpty(),
                 "Rebuilt device panels are visible and laid out immediately");
+    require(deviceView.devicePanels.getFirst()->getHeight() == DeviceEditorPanel::standardHeight,
+            "Device panels use the standard fixed control height");
+    deviceView.setSize(900, 520);
+    require(deviceView.devicePanels.getFirst()->getHeight() == DeviceEditorPanel::standardHeight,
+            "Expanding Device View does not stretch device controls");
+    deviceView.setSize(900, 120);
+    require(deviceView.devicePanels.getFirst()->getHeight() == DeviceEditorPanel::standardHeight,
+            "Shrinking Device View does not compress device controls");
     require(session.addAudioEffect(Session::AudioEffect::Equaliser).wasOk(), "Audio FX browser action inserts EQ");
     require(effectTrack->pluginList.size() == initialAudioPluginCount + 1, "Audio FX insert grows the audio track chain");
     auto audioDevices = session.deviceSlots(1);

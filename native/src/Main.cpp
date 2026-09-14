@@ -742,9 +742,7 @@ private:
             }
             else
             {
-                window->setUsingNativeTitleBar(true);
                 window->setContentOwned(new ControlWindow(*session), true);
-                window->setResizable(true, false);
                 window->setResizeLimits(960, 680, 2400, 1600);
                 window->centreWithSize(1120, 760);
                 if (projectToOpen != juce::File{})
@@ -769,8 +767,11 @@ private:
     {
         Window() : DocumentWindow("Theta", juce::Colour(0xff171a1e), allButtons)
         {
-            setUsingNativeTitleBar(false);
-            setResizable(false, false);
+            // Establish the Windows non-client frame before the peer becomes
+            // visible. Replacing a live custom frame during startup can leave
+            // DWM with stale title-bar geometry until the window is moved.
+            setUsingNativeTitleBar(true);
+            setResizable(true, false);
         }
         void closeButtonPressed() override { juce::JUCEApplication::getInstance()->systemRequestedQuit(); }
     };

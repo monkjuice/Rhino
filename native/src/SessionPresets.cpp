@@ -59,38 +59,8 @@ juce::Result Session::insertPatternPreset(PatternPreset preset, int trackIndex, 
     const auto end = edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(startBeat + beatsPerBar()));
     edit->getUndoManager().beginNewTransaction("Add " + data.name);
     auto* track = tracks[trackIndex];
-    if (trackIndex == 0)
-    {
-        if (data.useThetaWave)
-        {
-            bool instrumentChanged = false;
-            const auto result = switchTrackInstrument(*edit, *track, Instrument::ThetaWave, instrumentChanged);
-            if (result.failed())
-                return result;
-            edit->state.setProperty("thetaPatternInstrument", "wave", &edit->getUndoManager());
-        }
-        else
-        {
-            setPatternInstrument(data.useDrums);
-        }
-    }
-    else
-    {
-        bool instrumentChanged = false;
-        const auto result = switchTrackInstrument(*edit, *track,
-                                                  data.useDrums ? Instrument::Drums
-                                                      : data.useThetaWave ? Instrument::ThetaWave
-                                                      : Instrument::FourOsc,
-                                                  instrumentChanged);
-        if (result.failed())
-            return result;
-    }
-    if (data.synthPatch != SynthPatch::Default)
-        if (auto* fourOsc = findFourOsc(*track))
-            applySynthPatch(data.synthPatch, *fourOsc, edit->getUndoManager());
-    if (data.useThetaWave)
-        if (auto* wave = findThetaWave(*track))
-            applyThetaWavePatch(preset, *wave);
+    if (const auto prepared = preparePresetTrack(trackIndex, data, preset); prepared.failed())
+        return prepared;
     auto clip = track->insertMIDIClip(data.name, {start, end}, nullptr);
     if (clip == nullptr)
         return juce::Result::fail("The pattern clip could not be added.");
@@ -171,6 +141,50 @@ bool Session::isPatternDrums() const
     if (auto* drumDevice = findDrumDevice(*audioTrack))
         return drumDevice->isEnabled();
     return false;
+}
+
+// Puts a track into the state a preset expects: the right instrument, its
+// patch, and the pattern-track bookkeeping track 0 carries. Shared by the
+// timeline and clip-slot insertion paths so the two cannot drift apart.
+juce::Result Session::preparePresetTrack(int trackIndex, const PresetPattern& data, PatternPreset preset)
+{
+    const auto tracks = te::getAudioTracks(*edit);
+    if (!juce::isPositiveAndBelow(trackIndex, tracks.size()))
+        return juce::Result::fail("Drop clips on a track lane.");
+    auto* track = tracks[trackIndex];
+    if (trackIndex == 0)
+    {
+        if (data.useThetaWave)
+        {
+            bool instrumentChanged = false;
+            const auto result = switchTrackInstrument(*edit, *track, Instrument::ThetaWave, instrumentChanged);
+            if (result.failed())
+                return result;
+            edit->state.setProperty("thetaPatternInstrument", "wave", &edit->getUndoManager());
+        }
+        else
+        {
+            setPatternInstrument(data.useDrums);
+        }
+    }
+    else
+    {
+        bool instrumentChanged = false;
+        const auto result = switchTrackInstrument(*edit, *track,
+                                                  data.useDrums ? Instrument::Drums
+                                                      : data.useThetaWave ? Instrument::ThetaWave
+                                                      : Instrument::FourOsc,
+                                                  instrumentChanged);
+        if (result.failed())
+            return result;
+    }
+    if (data.synthPatch != SynthPatch::Default)
+        if (auto* fourOsc = findFourOsc(*track))
+            applySynthPatch(data.synthPatch, *fourOsc, edit->getUndoManager());
+    if (data.useThetaWave)
+        if (auto* wave = findThetaWave(*track))
+            applyThetaWavePatch(preset, *wave);
+    return juce::Result::ok();
 }
 
 juce::Result Session::selectPatternClip(te::EditItemID id)

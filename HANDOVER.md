@@ -66,6 +66,8 @@ Pattern geometry lives with note editing rather than in `Session.cpp`, because t
 ## Known issues you are inheriting
 
 **1. Intermittent segfault in `native_arrangement_workflow` (pre-existing, not fixed).**
+*Corrected September 2026:* on the current Windows workspace this fails far more often than the rate below — 6 of 12 runs at HEAD before the session view existed, and 5 of 12 with it, so the two are indistinguishable and the session view did not cause it. The crash is also **not** at teardown: every failing run stops between `scenario("gestures: clip drag and trim")` and `scenario("persistence: track state")` in `scenarios/GesturesAndPersistence.inc`, which is the clip copy/paste and selection block. Start there rather than in destruction order. The original note follows.
+
 Roughly 1 run in 5. It is *not* an assertion failure — every check passes, and the crash happens during teardown, after the last scenario's `session.releaseAudioDevice()`, while the session and engine are being destroyed. A background-thread race at shutdown. It behaves identically before and after the split. If you see this, re-run before assuming you broke something; if you want to fix it, look at destruction order and what is still touching state after `releaseAudioDevice`.
 
 **2. ThetaWave drops on the device rack now work (deliberate behaviour change, untested).**

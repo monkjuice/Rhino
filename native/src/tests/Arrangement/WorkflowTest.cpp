@@ -1,6 +1,7 @@
 #include "../../Arrangement.h"
 #include "../../Theme.h"
 #include "../../StepGrid.h"
+#include "../../SessionView.h"
 #include "../../Playhead.h"
 #include <stdexcept>
 
@@ -64,6 +65,8 @@ int runArrangementTest()
        #include "scenarios/NoteEditor.inc"
         scenario("gestures and persistence");
        #include "scenarios/GesturesAndPersistence.inc"
+        scenario("session view");
+       #include "scenarios/SessionView.inc"
         return 0;
     }
     catch (const std::exception& error)

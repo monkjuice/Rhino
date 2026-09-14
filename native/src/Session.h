@@ -11,6 +11,8 @@
 
 namespace theta
 {
+struct PresetPattern;
+
 // Message-thread facade. The engine owns scheduling, streaming and playback.
 // Member order keeps the engine alive until its edit and devices are released.
 class Session : public juce::ChangeBroadcaster
@@ -231,6 +233,39 @@ public:
     int clipPluginCount(te::EditItemID) const;
     void toggleTrackMute(int track);
     void toggleTrackSolo(int track);
+    // Session view: scenes are rows of clip slots across every track. The engine
+    // owns launch timing; these calls only queue state changes from the message
+    // thread and report back what the launch handles currently hold.
+    static constexpr int defaultScenes = 8;
+    struct SlotClip
+    {
+        bool hasClip = false;
+        bool playing = false;
+        bool playQueued = false;
+        bool stopQueued = false;
+        bool isMidi = false;
+        juce::String name;
+        juce::Colour colour;
+        te::EditItemID clipID;
+    };
+    int sceneCount() const;
+    juce::String sceneName(int scene) const;
+    SlotClip slotClip(int track, int scene) const;
+    bool trackHasActiveSlot(int track) const;
+    juce::Result launchSlot(int track, int scene);
+    juce::Result launchScene(int scene);
+    void stopTrackSlots(int track);
+    void stopAllSlots();
+    juce::Result addScene();
+    juce::Result deleteScene(int scene);
+    juce::Result insertPatternPresetInSlot(PatternPreset, int track, int scene);
+    juce::Result insertInstrumentClipInSlot(Instrument, int track, int scene);
+    juce::Result insertAudioFileInSlot(const juce::File&, int track, int scene);
+    juce::Result insertBuiltInSampleInSlot(BuiltInSample, int track, int scene);
+    juce::Result deleteSlotClip(int track, int scene);
+    te::LaunchQType launchQuantisation() const;
+    void setLaunchQuantisation(te::LaunchQType);
+    te::SceneWatcher* sceneWatcher() const;
     te::Engine engine;
     std::unique_ptr<te::Edit> edit;
     UtilityDevice* utility = nullptr; // owned by edit's plugin list
@@ -239,6 +274,9 @@ public:
     ThetaWaveDevice* thetaWave = nullptr; // owned by edit's plugin list
     DrumDevice* drums = nullptr; // owned by edit's plugin list
 private:
+    // The arrangement workflow test reaches engine-level slot state through
+    // this, the same way it does for StepGrid and Arrangement.
+    friend int runArrangementTest();
     struct AutomationRuntime
     {
         DeviceTarget target;
@@ -248,6 +286,11 @@ private:
         bool active = false;
     };
     void refreshAfterUndoRedo(bool changed);
+    te::ClipSlot* clipSlotAt(int track, int scene) const;
+    void ensureSceneSlots(int minimumScenes = defaultScenes);
+    std::optional<te::MonotonicBeat> nextLaunchBeat() const;
+    void startTransportForLaunch();
+    juce::Result preparePresetTrack(int trackIndex, const PresetPattern&, PatternPreset);
     void initialiseExternalPlugins(bool retry = false);
     void setPatternInstrument(bool useDrums);
     void ensureEditablePatternClip();

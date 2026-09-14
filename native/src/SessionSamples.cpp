@@ -89,4 +89,15 @@ juce::Result Session::importBuiltInSample(BuiltInSample sample, int track, doubl
         return importAudio(file);
     return importAudioAt(file, track, startSeconds);
 }
+
+// Rendered on demand into the same cache the timeline import uses, so a slot
+// clip and an arrangement clip reference one file rather than two copies.
+juce::Result Session::insertBuiltInSampleInSlot(BuiltInSample sample, int track, int scene)
+{
+    jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
+    const auto file = sampleFile(sample);
+    if (const auto result = createSample(sample, file); result.failed())
+        return result;
+    return insertAudioFileInSlot(file, track, scene);
+}
 }

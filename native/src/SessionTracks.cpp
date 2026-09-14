@@ -29,6 +29,7 @@ juce::Result Session::addAudioTrack()
     newTrack->setName("Audio " + juce::String(tracks.size()));
     auto audioDevice = edit->getPluginCache().createNewPlugin(UtilityDevice::xmlTypeName, {});
     newTrack->pluginList.insertPlugin(audioDevice, 0, nullptr);
+    ensureSceneSlots();
     edit->getUndoManager().beginNewTransaction();
     markModified();
     sendSynchronousChangeMessage();

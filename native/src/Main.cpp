@@ -3,6 +3,7 @@
 #include "ProjectFiles.h"
 #include "Theme.h"
 #include "Arrangement.h"
+#include "SessionView.h"
 #include "BrowserPanel.h"
 #include "DeviceRack.h"
 #include "Playhead.h"
@@ -104,13 +105,21 @@ class ControlWindow final : public juce::Component,
                             private juce::Timer
 {
 public:
-    explicit ControlWindow(Session& s) : session(s), browser(s), grid(s), arrangement(s), rack(s), files(s)
+    explicit ControlWindow(Session& s) : session(s), browser(s), grid(s), arrangement(s), sessionView(s), rack(s), files(s)
     {
         setOpaque(true);
         files.status = [this](const juce::String& message) { logStatus(message); };
         files.loadingChanged = [this](bool loading) { setEnabled(!loading); };
         arrangement.status = files.status;
         arrangement.trackSelected = [this](int track) { rack.selectTrack(track); };
+        sessionView.status = files.status;
+        sessionView.trackSelected = [this](int track) { rack.selectTrack(track); };
+        sessionToggle.setButtonText("Session");
+        arrangementToggle.setButtonText("Arrange");
+        sessionToggle.setTooltip("Show the Session view clip launcher");
+        arrangementToggle.setTooltip("Show the Arrangement timeline");
+        sessionToggle.onClick = [this] { setSessionViewOpen(true); };
+        arrangementToggle.onClick = [this] { setSessionViewOpen(false); };
         browser.status = files.status;
         rack.status = files.status;
         browserToggle.onClick = [this] { browserOpen = !browserOpen; resized(); repaint(); };
@@ -157,7 +166,8 @@ public:
         scaleHighlight.setSelectedId(1, juce::dontSendNotification);
         scaleHighlight.setTooltip("Highlight notes in a scale");
         scaleHighlight.onChange = [this] { grid.setScaleHighlight(scaleHighlight.getSelectedId()); };
-        for (auto* toggle : std::initializer_list<juce::TextButton*>{&browserToggle, &editorToggle, &rackToggle})
+        for (auto* toggle : std::initializer_list<juce::TextButton*>{&browserToggle, &editorToggle, &rackToggle,
+                                                                     &sessionToggle, &arrangementToggle})
         {
             toggle->setColour(juce::TextButton::buttonColourId, juce::Colour(0xff252b31));
             toggle->setColour(juce::TextButton::buttonOnColourId, juce::Colour(0xff38505b));
@@ -273,7 +283,8 @@ public:
         panic.setTooltip("Panic reset audio");
         for (auto* component : std::initializer_list<juce::Component*>{
                  &infoView, &position, &gainLabel, &gain, &audioGainLabel, &audioGain, &play, &stop, &panic,
-                 &browser, &browserToggle, &editorToggle, &rackToggle, &grid, &arrangement, &rack, &tempo, &timeSignature, &undo, &redo, &clear, &metronome, &metronomeMenu, &hint,
+                 &browser, &browserToggle, &editorToggle, &rackToggle, &grid, &arrangement, &sessionView,
+                 &sessionToggle, &arrangementToggle, &rack, &tempo, &timeSignature, &undo, &redo, &clear, &metronome, &metronomeMenu, &hint,
                  &patternLabel, &editorResolution, &editorZoomOut, &editorZoomIn, &scaleHighlight})
             addAndMakeVisible(component);
         session.edit->getTransport().addChangeListener(this);
@@ -354,7 +365,11 @@ public:
         // Keep the control bar as one visual cluster. The browser may resize,
         // but transport should remain beside the display rather than drifting
         // to the arrangement's left edge.
-        const auto transportX = std::max(16, displayX - 294);
+        const auto transportX = std::max(152, displayX - 294);
+        sessionToggle.setBounds(48, 34, 50, 30);
+        arrangementToggle.setBounds(98, 34, 50, 30);
+        sessionToggle.setToggleState(sessionViewOpen, juce::dontSendNotification);
+        arrangementToggle.setToggleState(!sessionViewOpen, juce::dontSendNotification);
         play.setBounds(transportX, 34, 38, 30);
         stop.setBounds(transportX + 58, 34, 38, 30);
         panic.setBounds(transportX + 116, 34, 38, 30);
@@ -381,7 +396,10 @@ public:
         browser.setBounds(0, browserTop, browserWidth, (infoVisible ? infoArea.getY() : getHeight()) - browserTop);
         browserToggle.setToggleState(browserOpen, juce::dontSendNotification);
         browserToggle.setBounds(0, 21, 44, 56);
+        arrangement.setVisible(!sessionViewOpen);
+        sessionView.setVisible(sessionViewOpen);
         arrangement.setBounds(editorX, arrangementTop, editorW, arrangementHeight);
+        sessionView.setBounds(editorX, arrangementTop, editorW, arrangementHeight);
         editorToggle.setToggleState(clipEditorOpen, juce::dontSendNotification);
         rackToggle.setToggleState(rackOpen, juce::dontSendNotification);
         editorToggle.setBounds(editorX, arrangementBottom + 10, 48, 22);
@@ -508,6 +526,11 @@ public:
             browser.focusSearch();
             return true;
         }
+        if (key.getKeyCode() == juce::KeyPress::tabKey && !key.getModifiers().isAnyModifierKeyDown())
+        {
+            setSessionViewOpen(!sessionViewOpen);
+            return true;
+        }
         if (key.getKeyCode() == juce::KeyPress::spaceKey)
         {
             session.togglePlayback();
@@ -525,6 +548,16 @@ public:
             return true;
         }
         return false;
+    }
+
+    void setSessionViewOpen(bool open)
+    {
+        if (sessionViewOpen == open) return;
+        sessionViewOpen = open;
+        logStatus(open ? "Session view: click a clip to launch it"
+                       : "Arrangement view");
+        resized();
+        repaint();
     }
 
     void requestClose() { files.confirmUnsaved([] { juce::JUCEApplication::getInstance()->quit(); }); }
@@ -590,7 +623,7 @@ private:
                 if (result == 1)
                     juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon, "Keyboard shortcuts",
                         "Space  Play/Pause\nCtrl+O  Open project\nCtrl+S  Save project\nCtrl+Shift+S  Save as\n"
-                        "Ctrl+Shift+E  Export WAV\nCtrl+Z  Undo\nCtrl+Y / Ctrl+Shift+Z  Redo\nCtrl+F  Search browser\n?  Show/hide Info View");
+                        "Ctrl+Shift+E  Export WAV\nCtrl+Z  Undo\nCtrl+Y / Ctrl+Shift+Z  Redo\nCtrl+F  Search browser\nTab  Session / Arrangement view\n?  Show/hide Info View");
                 else if (result == 2)
                     juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon, "About Theta",
                         "Theta\nA native desktop DAW for patterns, arrangement, and offline WAV export.");
@@ -759,6 +792,7 @@ private:
     BrowserPanel browser;
     StepGrid grid;
     Arrangement arrangement;
+    SessionView sessionView;
     DeviceRack rack;
     juce::Slider tempo;
     juce::ComboBox timeSignature;
@@ -767,6 +801,7 @@ private:
     juce::TextButton play {"Play"}, stop {"Stop"}, panic {"Panic"};
     BrowserToggleButton browserToggle;
     juce::TextButton editorToggle {"Clip"}, rackToggle {"Devices"};
+    juce::TextButton sessionToggle {"Session"}, arrangementToggle {"Arrange"};
     juce::ComboBox editorResolution;
     juce::TextButton editorZoomOut, editorZoomIn;
     juce::ComboBox scaleHighlight;
@@ -779,6 +814,7 @@ private:
     static constexpr int browserTop = 94, collapsedRailWidth = 44;
     static constexpr int infoViewHeight = 132;
     bool browserOpen = true, clipEditorOpen = true, rackOpen = false, infoVisible = true;
+    bool sessionViewOpen = false;
     bool resizingBrowser = false, resizingDeviceView = false, resizingArrangement = false;
     bool updatingEditorResolution = false;
     bool displayPosition = true, displayTempo = true, displayTimeSignature = true;

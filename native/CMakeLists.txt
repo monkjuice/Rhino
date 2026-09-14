@@ -46,6 +46,7 @@ target_sources(ThetaNative PRIVATE
     src/SessionPatches.cpp
     src/SessionDevices.cpp
     src/SessionTracks.cpp
+    src/SessionSlots.cpp
     src/SessionClips.cpp
     src/SessionSamples.cpp
     src/SessionAutomation.cpp
@@ -63,6 +64,9 @@ target_sources(ThetaNative PRIVATE
     src/ArrangementSync.cpp
     src/ArrangementGestures.cpp
     src/ArrangementDrops.cpp
+    src/SessionView.cpp
+    src/SessionViewPainter.cpp
+    src/SessionViewGestures.cpp
     src/BrowserPanel.cpp
     src/DeviceEditorPanel.cpp
     src/DeviceRack.cpp

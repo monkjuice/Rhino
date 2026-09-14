@@ -29,6 +29,8 @@ Application code, `native/src`:
 | Session model and engine ownership | `Session.h` declares everything; `Session.cpp` holds construction, project load/save and undo. Implementation is split across `Session*.cpp` by responsibility — notes, devices, automation, clips, presets, tracks, transport. |
 | Note grid UI | `StepGrid.*` — the 16-step pattern editor |
 | Arrangement UI | `Arrangement.*`, `ArrangementGeometry.cpp`, `ClipGeometry.h` |
+| Session view (clip launcher) UI | `SessionView.h`, `SessionView.cpp`, `SessionViewPainter.cpp`, `SessionViewGestures.cpp` |
+| Scenes, clip slots and launching | `SessionSlots.cpp` |
 | Device rack and editors | `DeviceRack.*` |
 | Browser | `BrowserPanel.*` |
 | App shell and lifecycle | `Main.cpp` |

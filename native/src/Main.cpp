@@ -79,6 +79,24 @@ void registerThetaProjectFileAssociation()
    #endif
 }
 
+class BrowserToggleButton final : public juce::TextButton
+{
+public:
+    BrowserToggleButton() : juce::TextButton("Browser") {}
+
+    void paintButton(juce::Graphics& g, bool highlighted, bool pressed) override
+    {
+        if (highlighted || pressed)
+            g.fillAll(juce::Colour(0x182f3942));
+
+        const auto colour = getToggleState() ? playheadColour : juce::Colour(0xffc7cdd2);
+        const auto icon = getLocalBounds().withSizeKeepingCentre(18, 14);
+        g.setColour(colour);
+        g.fillRect(icon.getX(), icon.getY(), 4, icon.getHeight());
+        g.fillRect(icon.getX() + 7, icon.getY(), 10, icon.getHeight());
+    }
+};
+
 class ControlWindow final : public juce::Component,
                             public juce::DragAndDropContainer,
                             private Session::Listener,
@@ -110,7 +128,7 @@ public:
             resized();
             repaint();
         };
-        browserToggle.setTooltip("Hide browser");
+        browserToggle.setTooltip("Show or hide browser");
         editorToggle.setButtonText("Clip");
         rackToggle.setButtonText("Devices");
         editorToggle.setTooltip("Show or hide the Clip / MIDI Editor");
@@ -139,7 +157,7 @@ public:
         scaleHighlight.setSelectedId(1, juce::dontSendNotification);
         scaleHighlight.setTooltip("Highlight notes in a scale");
         scaleHighlight.onChange = [this] { grid.setScaleHighlight(scaleHighlight.getSelectedId()); };
-        for (auto* toggle : {&browserToggle, &editorToggle, &rackToggle})
+        for (auto* toggle : std::initializer_list<juce::TextButton*>{&browserToggle, &editorToggle, &rackToggle})
         {
             toggle->setColour(juce::TextButton::buttonColourId, juce::Colour(0xff252b31));
             toggle->setColour(juce::TextButton::buttonOnColourId, juce::Colour(0xff38505b));
@@ -149,6 +167,15 @@ public:
         logStatus("PATTERN 1  /  4OSC     Draw notes, then press Play");
         gainLabel.setText("PATTERN TRACK", juce::dontSendNotification);
         audioGainLabel.setText("AUDIO 1 TRACK", juce::dontSendNotification);
+        infoView.setMultiLine(true, true);
+        infoView.setReadOnly(true);
+        infoView.setScrollbarsShown(false);
+        infoView.setCaretVisible(false);
+        infoView.setWantsKeyboardFocus(false);
+        infoView.setColour(juce::TextEditor::backgroundColourId, juce::Colour(0xff1d2228));
+        infoView.setColour(juce::TextEditor::outlineColourId, juce::Colours::transparentBlack);
+        infoView.setColour(juce::TextEditor::textColourId, juce::Colour(0xffc9d1c3));
+        infoView.setFont(juce::FontOptions(13.0f));
         hint.setText({}, juce::dontSendNotification);
         hint.setVisible(false);
         hint.setColour(juce::Label::textColourId, juce::Colour(0xff8d98a3));
@@ -245,7 +272,7 @@ public:
         stop.setTooltip("Stop and return to start");
         panic.setTooltip("Panic reset audio");
         for (auto* component : std::initializer_list<juce::Component*>{
-                 &status, &position, &gainLabel, &gain, &audioGainLabel, &audioGain, &play, &stop, &panic,
+                 &infoView, &position, &gainLabel, &gain, &audioGainLabel, &audioGain, &play, &stop, &panic,
                  &browser, &browserToggle, &editorToggle, &rackToggle, &grid, &arrangement, &rack, &tempo, &timeSignature, &undo, &redo, &clear, &metronome, &metronomeMenu, &hint,
                  &patternLabel, &editorResolution, &editorZoomOut, &editorZoomIn, &scaleHighlight})
             addAndMakeVisible(component);
@@ -288,6 +315,17 @@ public:
             g.setColour(juce::Colour(0xff3a434b));
             g.fillRect(browserWidth, browserTop, 4, getHeight() - browserTop);
         }
+        if (infoVisible)
+        {
+            const auto area = infoViewArea();
+            g.setColour(juce::Colour(0xff1d2228));
+            g.fillRect(area);
+            g.setColour(juce::Colour(0xff3a434b));
+            g.drawRect(area);
+            g.setColour(juce::Colour(0xffb8c4aa));
+            g.setFont(juce::FontOptions(11.0f));
+            g.drawText("INFO VIEW   ?  HIDE", area.withTrimmedLeft(10).withHeight(24), juce::Justification::centredLeft);
+        }
         if (clipEditorOpen && rackOpen)
         {
             g.setColour(juce::Colour(0xff3a434b));
@@ -311,7 +349,6 @@ public:
         const auto lowerTop = arrangementBottom + 34;
         const auto bottomPanelTop = getHeight() - 64;
         const auto lowerH = std::max(112, bottomPanelTop - lowerTop - 14);
-        status.setBounds(24, 4, getWidth() - 48, 20);
         const auto displayWidth = juce::jlimit(240, 320, getWidth() / 4);
         const auto displayX = getWidth() / 2 - displayWidth / 2;
         // Keep the control bar as one visual cluster. The browser may resize,
@@ -338,10 +375,12 @@ public:
         metronome.setBounds(rightX, 34, 30, 30);
         metronomeMenu.setBounds(rightX + 30, 34, 18, 30);
         browser.setVisible(browserOpen);
-        browser.setBounds(0, browserTop, browserWidth, getHeight() - browserTop);
-        browserToggle.setButtonText(browserOpen ? "<" : "B");
-        browserToggle.setTooltip(browserOpen ? "Hide browser" : "Show browser");
-        browserToggle.setBounds(browserOpen ? leftWidth - 28 : 8, browserTop + 14, browserOpen ? 22 : 28, browserOpen ? 22 : 82);
+        const auto infoArea = infoViewArea();
+        infoView.setVisible(infoVisible);
+        infoView.setBounds(infoArea.withTrimmedTop(25).reduced(8, 5));
+        browser.setBounds(0, browserTop, browserWidth, (infoVisible ? infoArea.getY() : getHeight()) - browserTop);
+        browserToggle.setToggleState(browserOpen, juce::dontSendNotification);
+        browserToggle.setBounds(0, 21, 44, 56);
         arrangement.setBounds(editorX, arrangementTop, editorW, arrangementHeight);
         editorToggle.setToggleState(clipEditorOpen, juce::dontSendNotification);
         rackToggle.setToggleState(rackOpen, juce::dontSendNotification);
@@ -442,6 +481,13 @@ public:
 
     bool keyPressed(const juce::KeyPress& key) override
     {
+        if (key.getTextCharacter() == '?')
+        {
+            infoVisible = !infoVisible;
+            resized();
+            repaint();
+            return true;
+        }
         if (key.getModifiers().isCommandDown() && key.getKeyCode() == 'S')
         {
             files.save(key.getModifiers().isShiftDown());
@@ -544,7 +590,7 @@ private:
                 if (result == 1)
                     juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon, "Keyboard shortcuts",
                         "Space  Play/Pause\nCtrl+O  Open project\nCtrl+S  Save project\nCtrl+Shift+S  Save as\n"
-                        "Ctrl+Shift+E  Export WAV\nCtrl+Z  Undo\nCtrl+Y / Ctrl+Shift+Z  Redo\nCtrl+F  Search browser");
+                        "Ctrl+Shift+E  Export WAV\nCtrl+Z  Undo\nCtrl+Y / Ctrl+Shift+Z  Redo\nCtrl+F  Search browser\n?  Show/hide Info View");
                 else if (result == 2)
                     juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon, "About Theta",
                         "Theta\nA native desktop DAW for patterns, arrangement, and offline WAV export.");
@@ -621,7 +667,7 @@ private:
     void logStatus(const juce::String& message)
     {
         if (message.isEmpty()) return;
-        status.setText(message, juce::dontSendNotification);
+        infoView.setText(message, false);
         juce::Logger::writeToLog("Theta: " + message);
     }
 
@@ -681,6 +727,13 @@ private:
         return {arrangement.getX(), arrangement.getBottom() + 3, arrangement.getWidth(), 4};
     }
 
+    juce::Rectangle<int> infoViewArea() const
+    {
+        if (!infoVisible) return {};
+        const auto width = browserOpen ? browserWidth : collapsedRailWidth;
+        return {0, std::max(browserTop + 96, getHeight() - infoViewHeight), width, infoViewHeight};
+    }
+
     bool isOverSplitter(juce::Point<float> point) const
     {
         return browserOpen && std::abs(point.x - static_cast<float>(browserWidth)) <= 5.0f
@@ -699,7 +752,8 @@ private:
     }
 
     Session& session;
-    juce::Label status, gainLabel, audioGainLabel, hint, patternLabel;
+    juce::Label gainLabel, audioGainLabel, hint, patternLabel;
+    juce::TextEditor infoView;
     TransportDisplay position;
     juce::Slider gain, audioGain;
     BrowserPanel browser;
@@ -711,7 +765,8 @@ private:
     juce::TextButton metronome, metronomeMenu;
     juce::TextButton undo {"Undo"}, redo {"Redo"}, clear {"Clear"};
     juce::TextButton play {"Play"}, stop {"Stop"}, panic {"Panic"};
-    juce::TextButton browserToggle {"<"}, editorToggle {"Clip"}, rackToggle {"Devices"};
+    BrowserToggleButton browserToggle;
+    juce::TextButton editorToggle {"Clip"}, rackToggle {"Devices"};
     juce::ComboBox editorResolution;
     juce::TextButton editorZoomOut, editorZoomIn;
     juce::ComboBox scaleHighlight;
@@ -722,7 +777,8 @@ private:
     int resizeStartX = 0, resizeStartY = 0, resizeStartBrowserWidth = 244;
     int resizeStartArrangementHeight = 246, resizeStartDeviceViewHeight = 220;
     static constexpr int browserTop = 94, collapsedRailWidth = 44;
-    bool browserOpen = true, clipEditorOpen = true, rackOpen = false;
+    static constexpr int infoViewHeight = 132;
+    bool browserOpen = true, clipEditorOpen = true, rackOpen = false, infoVisible = true;
     bool resizingBrowser = false, resizingDeviceView = false, resizingArrangement = false;
     bool updatingEditorResolution = false;
     bool displayPosition = true, displayTempo = true, displayTimeSignature = true;

@@ -258,7 +258,9 @@ void Arrangement::paint(juce::Graphics& g)
                 const auto start = (position.offset + std::max(0.0, timeAt(visible.getX()) - position.start)) * clip.speed;
                 const auto end = start + visible.getWidth() / lane(0).getWidth() * viewSpan * clip.speed;
                 g.setColour(juce::Colour(0xff8cc5d2));
-                clip.waveform->thumbnail.drawChannels(g, waveArea, start, end, 0.85f);
+                // A modest display-only lift keeps low-amplitude and steady tones legible
+                // at arrangement zoom without changing the source audio or clip gain.
+                clip.waveform->thumbnail.drawChannels(g, waveArea, start, end, 1.45f);
             }
             else
             {

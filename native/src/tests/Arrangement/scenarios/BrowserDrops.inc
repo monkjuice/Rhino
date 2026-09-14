@@ -37,8 +37,3 @@
         const auto effectSlots = static_cast<int>(session.deviceSlots(1).size());
         require(view.applyBrowserDrop("theta-browser:effect:Delay", 1).wasOk(), "Browser effect drop inserts on the target audio track");
         require(static_cast<int>(session.deviceSlots(1).size()) == effectSlots + 1, "Dropped effect appears in the target audio Device View");
-        const auto audioClipsBeforeSample = te::getAudioTracks(*session.edit)[1]->getClips().size();
-        require(view.applyBrowserDrop("theta-browser:sample:Whistle", 1, 0.5).wasOk(),
-                "Browser audio sample drop imports a whistle WAV");
-        require(te::getAudioTracks(*session.edit)[1]->getClips().size() == audioClipsBeforeSample + 1,
-                "Dropped browser sample creates an audio clip rather than MIDI notes");

@@ -113,5 +113,10 @@
         const auto early = output.getRMSLevel(0, 2400, 4800);
         const auto late = output.getRMSLevel(0, 14400, 4800);
         require(early > 0.01f && late > early * 4.0f, "Rendered source window must match the visible trim");
+        const auto audioClipsBeforeSample = te::getAudioTracks(*session.edit)[1]->getClips().size();
+        require(view.applyBrowserDrop("theta-browser:sample:Whistle", 1, 0.5).wasOk(),
+                "Browser audio sample drop imports a whistle WAV");
+        require(te::getAudioTracks(*session.edit)[1]->getClips().size() == audioClipsBeforeSample + 1,
+                "Dropped browser sample creates an audio clip rather than MIDI notes");
         view.setLookAndFeel(nullptr);
         session.releaseAudioDevice();

@@ -184,6 +184,13 @@ public:
         undo.setTooltip("Undo");
         redo.setTooltip("Redo");
         clear.setTooltip("Clear pattern");
+        metronome.setButtonText(L"\u266b");
+        metronomeMenu.setButtonText("v");
+        metronome.setTooltip("Toggle metronome");
+        metronomeMenu.setTooltip("Metronome settings");
+        metronome.setClickingTogglesState(true);
+        metronome.onClick = [this] { session.setClickTrackEnabled(metronome.getToggleState()); };
+        metronomeMenu.onClick = [this] { showMetronomeMenu(); };
         gain.setSliderStyle(juce::Slider::LinearHorizontal);
         gain.setTextBoxStyle(juce::Slider::TextBoxRight, false, 85, 26);
         gain.setRange(-60.0, 6.0, 0.1);
@@ -261,7 +268,7 @@ public:
         };
         for (auto* component : std::initializer_list<juce::Component*>{
                  &title, &status, &position, &gainLabel, &gain, &audioGainLabel, &audioGain, &play, &stop, &panic, &import, &settings,
-                 &browser, &browserToggle, &editorToggle, &rackToggle, &grid, &arrangement, &rack, &tempo, &timeSignature, &undo, &redo, &clear, &hint, &fileMenu, &editMenu, &helpMenu,
+                 &browser, &browserToggle, &editorToggle, &rackToggle, &grid, &arrangement, &rack, &tempo, &timeSignature, &undo, &redo, &clear, &metronome, &metronomeMenu, &hint, &fileMenu, &editMenu, &helpMenu,
                  &documentName, &patternLabel, &editorResolution, &editorZoomOut, &editorZoomIn, &scaleHighlight})
             addAndMakeVisible(component);
         session.edit->getTransport().addChangeListener(this);
@@ -340,6 +347,8 @@ public:
         undo.setBounds(editorX + 408, 84, 34, 30);
         redo.setBounds(editorX + 448, 84, 34, 30);
         clear.setBounds(editorX + 492, 84, 34, 30);
+        metronome.setBounds(editorX + 538, 84, 30, 30);
+        metronomeMenu.setBounds(editorX + 568, 84, 18, 30);
         position.setBounds(getWidth() - 165, 82, 140, 34);
         browser.setVisible(browserOpen);
         browser.setBounds(0, browserTop, browserWidth, getHeight() - browserTop);
@@ -548,6 +557,25 @@ private:
             });
     }
 
+    void showMetronomeMenu()
+    {
+        juce::PopupMenu menu;
+        menu.addSectionHeader("METRONOME");
+        menu.addItem(1, "Emphasize first beat", true, session.clickTrackEmphasiseBars());
+        menu.addSeparator();
+        menu.addSectionHeader("Level");
+        menu.addItem(10, "-12 dB", true, std::abs(session.clickTrackGain() + 12.0f) < 0.1f);
+        menu.addItem(11, "-6 dB", true, std::abs(session.clickTrackGain() + 6.0f) < 0.1f);
+        menu.addItem(12, "0 dB", true, std::abs(session.clickTrackGain()) < 0.1f);
+        menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(metronomeMenu),
+            [safe = juce::Component::SafePointer<ControlWindow>(this)] (int result)
+            {
+                if (safe == nullptr) return;
+                if (result == 1) safe->session.setClickTrackEmphasiseBars(!safe->session.clickTrackEmphasiseBars());
+                else if (result >= 10 && result <= 12) safe->session.setClickTrackGain(static_cast<float>((result - 12) * 6));
+            });
+    }
+
     void editWillChange() override
     {
         session.edit->getTransport().removeChangeListener(this);
@@ -589,6 +617,7 @@ private:
         tempo.setValue(session.tempo(), juce::dontSendNotification);
         const auto signature = session.timeSignature();
         timeSignature.setSelectedId(signature.numerator * 100 + signature.denominator, juce::dontSendNotification);
+        metronome.setToggleState(session.clickTrackEnabled(), juce::dontSendNotification);
         if (!gain.isMouseButtonDown())
             gain.setValue(session.utility->gain().getCurrentValue(), juce::dontSendNotification);
         if (!audioGain.isMouseButtonDown())
@@ -660,6 +689,7 @@ private:
     DeviceRack rack;
     juce::Slider tempo;
     juce::ComboBox timeSignature;
+    juce::TextButton metronome, metronomeMenu;
     juce::TextButton undo {"Undo"}, redo {"Redo"}, clear {"Clear"};
     juce::TextButton play {"Play"}, stop {"Stop"}, panic {"Panic"}, import {"Add audio"}, settings {"Audio settings"};
     juce::TextButton browserToggle {"<"}, editorToggle {"Clip"}, rackToggle {"Devices"};

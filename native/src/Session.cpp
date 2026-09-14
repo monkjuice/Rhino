@@ -25,6 +25,9 @@ Session::Session() : engine(commandLineTestMode ? "Theta Native Tests" : "Theda 
     initialiseExternalPlugins();
     edit = te::createEmptyEdit(engine, {});
     edit->state.setProperty("thetaFormatVersion", 1, nullptr);
+    edit->clickTrackEnabled = false;
+    edit->clickTrackEmphasiseBars = true;
+    edit->clickTrackGain = -6.0f;
     edit->tempoSequence.getTempo(0)->setBpm(120.0);
     edit->ensureNumberOfAudioTracks(2);
     auto* track = te::getAudioTracks(*edit)[0];

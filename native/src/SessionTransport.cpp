@@ -135,6 +135,35 @@ juce::Result Session::setTimeSignature(int numerator, int denominator)
     return juce::Result::ok();
 }
 
+bool Session::clickTrackEnabled() const { return edit->clickTrackEnabled; }
+bool Session::clickTrackEmphasiseBars() const { return edit->clickTrackEmphasiseBars; }
+float Session::clickTrackGain() const { return edit->clickTrackGain; }
+
+void Session::setClickTrackEnabled(bool enabled)
+{
+    if (clickTrackEnabled() == enabled) return;
+    edit->clickTrackEnabled = enabled;
+    markModified();
+    sendSynchronousChangeMessage();
+}
+
+void Session::setClickTrackEmphasiseBars(bool enabled)
+{
+    if (clickTrackEmphasiseBars() == enabled) return;
+    edit->clickTrackEmphasiseBars = enabled;
+    markModified();
+    sendSynchronousChangeMessage();
+}
+
+void Session::setClickTrackGain(float gainDb)
+{
+    gainDb = juce::jlimit(-60.0f, 6.0f, gainDb);
+    if (std::abs(clickTrackGain() - gainDb) < 0.001f) return;
+    edit->clickTrackGain = gainDb;
+    markModified();
+    sendSynchronousChangeMessage();
+}
+
 void Session::setTempo(double bpm)
 {
     if (!std::isfinite(bpm)) return;

@@ -194,6 +194,12 @@ public:
     TimeSignature timeSignature() const;
     juce::Result setTimeSignature(int numerator, int denominator);
     double beatsPerBar() const;
+    bool clickTrackEnabled() const;
+    bool clickTrackEmphasiseBars() const;
+    float clickTrackGain() const;
+    void setClickTrackEnabled(bool enabled);
+    void setClickTrackEmphasiseBars(bool enabled);
+    void setClickTrackGain(float gainDb);
     void undo();
     void redo();
     juce::Result setLoopRange(double startSeconds, double endSeconds);

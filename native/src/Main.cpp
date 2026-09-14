@@ -7,6 +7,7 @@
 #include "DeviceRack.h"
 #include "Playhead.h"
 #include "StartupScreen.h"
+#include "TransportDisplay.h"
 #include <cmath>
 #include <stdexcept>
 
@@ -175,6 +176,7 @@ public:
             const auto result = session.setTimeSignature(value / 100, value % 100);
             if (result.failed()) logStatus(result.getErrorMessage());
         };
+        position.configurationRequested = [this] { showDisplayMenu(); };
         undo.onClick = [this] { session.undo(); };
         redo.onClick = [this] { session.redo(); };
         clear.onClick = [this] { session.clearPattern(); };
@@ -576,6 +578,24 @@ private:
             });
     }
 
+    void showDisplayMenu()
+    {
+        juce::PopupMenu menu;
+        menu.addSectionHeader("DISPLAY");
+        menu.addItem(1, "Musical position", true, displayPosition);
+        menu.addItem(2, "Tempo", true, displayTempo);
+        menu.addItem(3, "Time signature", true, displayTimeSignature);
+        menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(position),
+            [safe = juce::Component::SafePointer<ControlWindow>(this)] (int result)
+            {
+                if (safe == nullptr) return;
+                if (result == 1) safe->displayPosition = !safe->displayPosition;
+                else if (result == 2) safe->displayTempo = !safe->displayTempo;
+                else if (result == 3) safe->displayTimeSignature = !safe->displayTimeSignature;
+                safe->timerCallback();
+            });
+    }
+
     void editWillChange() override
     {
         session.edit->getTransport().removeChangeListener(this);
@@ -645,11 +665,12 @@ private:
         const auto barLength = session.beatsPerBar();
         const auto bar = static_cast<int>(std::floor(beat / barLength)) + 1;
         const auto beatInBar = static_cast<int>(std::floor(beat - (bar - 1) * barLength)) + 1;
-        const auto text = juce::String(bar).paddedLeft('0', 3) + "  " + juce::String(beatInBar)
-            + "     " + juce::String(session.tempo(), 0) + "     "
-            + juce::String(signature.numerator) + "/" + juce::String(signature.denominator);
-        if (position.getText() != text)
-            position.setText(text, juce::dontSendNotification);
+        juce::StringArray parts;
+        if (displayPosition) parts.add(juce::String(bar).paddedLeft('0', 3) + "  " + juce::String(beatInBar));
+        if (displayTempo) parts.add(juce::String(session.tempo(), 0));
+        if (displayTimeSignature) parts.add(juce::String(signature.numerator) + "/" + juce::String(signature.denominator));
+        const auto text = parts.joinIntoString("     ");
+        position.setDisplayText(text);
     }
 
     juce::Rectangle<int> deviceSplitterBounds() const
@@ -681,7 +702,8 @@ private:
     }
 
     Session& session;
-    juce::Label title, status, position, gainLabel, audioGainLabel, hint, documentName, patternLabel;
+    juce::Label title, status, gainLabel, audioGainLabel, hint, documentName, patternLabel;
+    TransportDisplay position;
     juce::Slider gain, audioGain;
     BrowserPanel browser;
     StepGrid grid;
@@ -707,6 +729,7 @@ private:
     bool browserOpen = true, clipEditorOpen = true, rackOpen = false;
     bool resizingBrowser = false, resizingDeviceView = false, resizingArrangement = false;
     bool updatingEditorResolution = false;
+    bool displayPosition = true, displayTempo = true, displayTimeSignature = true;
 };
 
 class Application final : public juce::JUCEApplication, private juce::Timer

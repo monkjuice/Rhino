@@ -76,6 +76,7 @@ target_sources(ThetaNative PRIVATE
     src/ThetaWaveDevice.cpp
     # App
     src/Main.cpp
+    src/TransportDisplay.cpp
     src/ProjectFiles.cpp
     # Tests
     src/tests/SelfTest.cpp

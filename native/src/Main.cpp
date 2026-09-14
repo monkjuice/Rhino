@@ -767,10 +767,12 @@ private:
     {
         Window() : DocumentWindow("Theta", juce::Colour(0xff171a1e), allButtons)
         {
-            // Establish the Windows non-client frame before the peer becomes
-            // visible. Replacing a live custom frame during startup can leave
-            // DWM with stale title-bar geometry until the window is moved.
-            setUsingNativeTitleBar(true);
+            // Keep the frame and content in JUCE's single client-area layout.
+            // Native Windows non-client bounds can put the title bar above the
+            // display work area when a constrained window is resized/snapped.
+            setUsingNativeTitleBar(false);
+            setTitleBarHeight(28);
+            setDropShadowEnabled(true);
             setResizable(true, false);
         }
         void closeButtonPressed() override { juce::JUCEApplication::getInstance()->systemRequestedQuit(); }

@@ -212,6 +212,25 @@ void Session::stopAllSlots()
     sendSynchronousChangeMessage();
 }
 
+// Launching a slot clip makes that track ignore its timeline clips, which is
+// what Live does. Without a way back, the arrangement would stay silent on
+// those tracks for the rest of the session -- this is Live's Back to
+// Arrangement. Clearing the flag also stops any slot clip still playing.
+bool Session::anyTrackPlayingSlots() const
+{
+    for (auto* track : te::getAudioTracks(*edit))
+        if (track->playSlotClips.get())
+            return true;
+    return false;
+}
+
+void Session::returnToArrangement()
+{
+    for (auto* track : te::getAudioTracks(*edit))
+        track->playSlotClips = false;
+    sendSynchronousChangeMessage();
+}
+
 juce::Result Session::addScene()
 {
     edit->getUndoManager().beginNewTransaction("Add scene");

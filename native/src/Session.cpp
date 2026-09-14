@@ -65,6 +65,7 @@ Session::Session() : engine(commandLineTestMode ? "Theta Native Tests" : "Theda 
     audioUtility = dynamic_cast<UtilityDevice*>(audioDevice.get());
     audioTrack->pluginList.insertPlugin(audioDevice, 0, nullptr);
     ensureSceneSlots();
+    ensureTrackMixers();
     refreshLoop();
     edit->getUndoManager().clearUndoHistory();
     edit->resetChangedStatus();
@@ -242,6 +243,7 @@ juce::Result Session::restoreProject(const juce::ValueTree& state, const juce::F
         setPatternInstrument(patternInstrument == "drums");
     }
     ensureSceneSlots();
+    ensureTrackMixers();
     projectFile = file;
     savedRevision = ++changeRevision;
     edit->getUndoManager().clearUndoHistory();

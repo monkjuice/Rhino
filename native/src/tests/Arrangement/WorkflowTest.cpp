@@ -67,6 +67,8 @@ int runArrangementTest()
        #include "scenarios/GesturesAndPersistence.inc"
         scenario("session view");
        #include "scenarios/SessionView.inc"
+        scenario("shared mixer");
+       #include "scenarios/SharedMixer.inc"
         return 0;
     }
     catch (const std::exception& error)

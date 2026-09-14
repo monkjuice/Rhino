@@ -111,15 +111,24 @@ public:
         files.status = [this](const juce::String& message) { logStatus(message); };
         files.loadingChanged = [this](bool loading) { setEnabled(!loading); };
         arrangement.status = files.status;
-        arrangement.trackSelected = [this](int track) { rack.selectTrack(track); };
+        arrangement.trackSelected = [this](int track) { if (!sessionViewOpen) rack.selectTrack(track); };
         sessionView.status = files.status;
-        sessionView.trackSelected = [this](int track) { rack.selectTrack(track); };
+        sessionView.trackSelected = [this](int track) { if (sessionViewOpen) rack.selectTrack(track); };
         sessionToggle.setButtonText("Session");
         arrangementToggle.setButtonText("Arrange");
         sessionToggle.setTooltip("Show the Session view clip launcher");
         arrangementToggle.setTooltip("Show the Arrangement timeline");
         sessionToggle.onClick = [this] { setSessionViewOpen(true); };
         arrangementToggle.onClick = [this] { setSessionViewOpen(false); };
+        // Launched clips override a track's timeline clips. This hands those
+        // tracks back to the arrangement, as Live's Back to Arrangement does.
+        backToArrangement.setButtonText(juce::String(L"\u21ba") + " Arrangement");
+        backToArrangement.setTooltip("Stop launched clips and play the arrangement again");
+        backToArrangement.onClick = [this]
+        {
+            session.returnToArrangement();
+            logStatus("Tracks returned to the arrangement");
+        };
         browser.status = files.status;
         rack.status = files.status;
         browserToggle.onClick = [this] { browserOpen = !browserOpen; resized(); repaint(); };
@@ -167,7 +176,8 @@ public:
         scaleHighlight.setTooltip("Highlight notes in a scale");
         scaleHighlight.onChange = [this] { grid.setScaleHighlight(scaleHighlight.getSelectedId()); };
         for (auto* toggle : std::initializer_list<juce::TextButton*>{&browserToggle, &editorToggle, &rackToggle,
-                                                                     &sessionToggle, &arrangementToggle})
+                                                                     &sessionToggle, &arrangementToggle,
+                                                                     &backToArrangement})
         {
             toggle->setColour(juce::TextButton::buttonColourId, juce::Colour(0xff252b31));
             toggle->setColour(juce::TextButton::buttonOnColourId, juce::Colour(0xff38505b));
@@ -175,8 +185,7 @@ public:
             toggle->setColour(juce::TextButton::textColourOnId, juce::Colour(0xffdce5ea));
         }
         logStatus("PATTERN 1  /  4OSC     Draw notes, then press Play");
-        gainLabel.setText("PATTERN TRACK", juce::dontSendNotification);
-        audioGainLabel.setText("AUDIO 1 TRACK", juce::dontSendNotification);
+        mainVolumeLabel.setText("MAIN", juce::dontSendNotification);
         infoView.setMultiLine(true, true);
         infoView.setReadOnly(true);
         infoView.setScrollbarsShown(false);
@@ -226,48 +235,18 @@ public:
         metronome.setClickingTogglesState(true);
         metronome.onClick = [this] { session.setClickTrackEnabled(metronome.getToggleState()); };
         metronomeMenu.onClick = [this] { showMetronomeMenu(); };
-        gain.setSliderStyle(juce::Slider::LinearHorizontal);
-        gain.setTextBoxStyle(juce::Slider::TextBoxRight, false, 85, 26);
-        gain.setRange(-60.0, 6.0, 0.1);
-        gain.setValue(session.utility->gain().getCurrentValue(), juce::dontSendNotification);
-        gain.setTextValueSuffix(" dB");
-        gain.setDoubleClickReturnValue(true, 0.0);
-        gain.onDragStart = [this]
-        {
-            session.edit->getUndoManager().beginNewTransaction("Synth gain");
-            session.utility->gain().parameterChangeGestureBegin();
-        };
-        gain.onDragEnd = [this]
-        {
-            session.utility->gain().parameterChangeGestureEnd();
-            session.edit->getUndoManager().beginNewTransaction();
-        };
-        gain.onValueChange = [this]
-        {
-            session.utility->gain().setParameter(static_cast<float>(gain.getValue()), juce::sendNotification);
-            session.markModified();
-        };
-        audioGain.setSliderStyle(juce::Slider::LinearHorizontal);
-        audioGain.setTextBoxStyle(juce::Slider::TextBoxRight, false, 85, 26);
-        audioGain.setRange(-60.0, 6.0, 0.1);
-        audioGain.setValue(session.audioUtility->gain().getCurrentValue(), juce::dontSendNotification);
-        audioGain.setTextValueSuffix(" dB");
-        audioGain.setDoubleClickReturnValue(true, 0.0);
-        audioGain.onDragStart = [this]
-        {
-            session.edit->getUndoManager().beginNewTransaction("Audio gain");
-            session.audioUtility->gain().parameterChangeGestureBegin();
-        };
-        audioGain.onDragEnd = [this]
-        {
-            session.audioUtility->gain().parameterChangeGestureEnd();
-            session.edit->getUndoManager().beginNewTransaction();
-        };
-        audioGain.onValueChange = [this]
-        {
-            session.audioUtility->gain().setParameter(static_cast<float>(audioGain.getValue()), juce::sendNotification);
-            session.markModified();
-        };
+        // Per-track level and pan live in the track headers of both views.
+        // This is the main output, the one level that is not a track's.
+        mainVolume.setSliderStyle(juce::Slider::LinearHorizontal);
+        mainVolume.setTextBoxStyle(juce::Slider::TextBoxRight, false, 85, 26);
+        mainVolume.setRange(Session::minimumVolumeDb, Session::maximumVolumeDb, 0.1);
+        mainVolume.setValue(session.masterVolumeDb(), juce::dontSendNotification);
+        mainVolume.setTextValueSuffix(" dB");
+        mainVolume.setDoubleClickReturnValue(true, 0.0);
+        mainVolume.setTooltip("Main output volume");
+        mainVolume.onDragStart = [this] { session.beginMasterVolumeGesture(); };
+        mainVolume.onDragEnd = [this] { session.endMasterVolumeGesture(); };
+        mainVolume.onValueChange = [this] { session.setMasterVolumeDb(static_cast<float>(mainVolume.getValue())); };
         play.onClick = [this] { session.togglePlayback(); };
         stop.onClick = [this] { session.stop(); };
         panic.onClick = [this]
@@ -282,9 +261,9 @@ public:
         stop.setTooltip("Stop and return to start");
         panic.setTooltip("Panic reset audio");
         for (auto* component : std::initializer_list<juce::Component*>{
-                 &infoView, &position, &gainLabel, &gain, &audioGainLabel, &audioGain, &play, &stop, &panic,
+                 &infoView, &position, &mainVolumeLabel, &mainVolume, &play, &stop, &panic,
                  &browser, &browserToggle, &editorToggle, &rackToggle, &grid, &arrangement, &sessionView,
-                 &sessionToggle, &arrangementToggle, &rack, &tempo, &timeSignature, &undo, &redo, &clear, &metronome, &metronomeMenu, &hint,
+                 &sessionToggle, &arrangementToggle, &backToArrangement, &rack, &tempo, &timeSignature, &undo, &redo, &clear, &metronome, &metronomeMenu, &hint,
                  &patternLabel, &editorResolution, &editorZoomOut, &editorZoomIn, &scaleHighlight})
             addAndMakeVisible(component);
         session.edit->getTransport().addChangeListener(this);
@@ -370,6 +349,7 @@ public:
         arrangementToggle.setBounds(98, 34, 50, 30);
         sessionToggle.setToggleState(sessionViewOpen, juce::dontSendNotification);
         arrangementToggle.setToggleState(!sessionViewOpen, juce::dontSendNotification);
+        backToArrangement.setBounds(48, 66, 124, 22);
         play.setBounds(transportX, 34, 38, 30);
         stop.setBounds(transportX + 58, 34, 38, 30);
         panic.setBounds(transportX + 116, 34, 38, 30);
@@ -439,11 +419,8 @@ public:
         editorToggle.toFront(false);
         rackToggle.toFront(false);
         hint.setBounds(0, 0, 0, 0);
-        const auto half = (editorW - 28) / 2;
-        gainLabel.setBounds(editorX + 16, getHeight() - 54, 100, 26);
-        gain.setBounds(editorX + 112, getHeight() - 54, half - 112, 28);
-        audioGainLabel.setBounds(editorX + half + 28, getHeight() - 54, 100, 26);
-        audioGain.setBounds(editorX + half + 128, getHeight() - 54, editorW - half - 150, 28);
+        mainVolumeLabel.setBounds(editorX + 16, getHeight() - 54, 60, 26);
+        mainVolume.setBounds(editorX + 76, getHeight() - 54, std::max(160, std::min(420, editorW - 100)), 28);
     }
 
     void mouseMove(const juce::MouseEvent& event) override
@@ -550,10 +527,14 @@ public:
         return false;
     }
 
+    // The two views show one project, but each keeps its own selection and
+    // focus, as Live does. Switching views therefore hands the Device View
+    // over to whatever the view being shown already had selected.
     void setSessionViewOpen(bool open)
     {
         if (sessionViewOpen == open) return;
         sessionViewOpen = open;
+        rack.selectTrack(open ? sessionView.selectedTrackIndex() : arrangement.selectedTrackIndex());
         logStatus(open ? "Session view: click a clip to launch it"
                        : "Arrangement view");
         resized();
@@ -713,10 +694,8 @@ private:
         const auto signature = session.timeSignature();
         timeSignature.setSelectedId(signature.numerator * 100 + signature.denominator, juce::dontSendNotification);
         metronome.setToggleState(session.clickTrackEnabled(), juce::dontSendNotification);
-        if (!gain.isMouseButtonDown())
-            gain.setValue(session.utility->gain().getCurrentValue(), juce::dontSendNotification);
-        if (!audioGain.isMouseButtonDown())
-            audioGain.setValue(session.audioUtility->gain().getCurrentValue(), juce::dontSendNotification);
+        if (!mainVolume.isMouseButtonDown())
+            mainVolume.setValue(session.masterVolumeDb(), juce::dontSendNotification);
         undo.setEnabled(session.edit->getUndoManager().canUndo());
         redo.setEnabled(session.edit->getUndoManager().canRedo());
         patternLabel.setText(session.isPatternDrums() ? "PATTERN 1  /  DRUM EDITOR" : "PATTERN 1  /  NOTE EDITOR",
@@ -733,6 +712,13 @@ private:
 
     void timerCallback() override
     {
+        // The engine raises a track's slot-override flag from the audio thread
+        // without broadcasting, so this is polled rather than event-driven.
+        if (const auto overriding = session.anyTrackPlayingSlots(); overriding != backToArrangement.isVisible())
+        {
+            backToArrangement.setVisible(overriding);
+            resized();
+        }
         if (session.edit->getTransport().isPlaying())
             session.applyClipAutomationAt(playheadTime(session.edit->getTransport()));
         const auto seconds = session.edit->getTransport().getPosition().inSeconds();
@@ -785,10 +771,10 @@ private:
     }
 
     Session& session;
-    juce::Label gainLabel, audioGainLabel, hint, patternLabel;
+    juce::Label mainVolumeLabel, hint, patternLabel;
     juce::TextEditor infoView;
     TransportDisplay position;
-    juce::Slider gain, audioGain;
+    juce::Slider mainVolume;
     BrowserPanel browser;
     StepGrid grid;
     Arrangement arrangement;
@@ -802,6 +788,7 @@ private:
     BrowserToggleButton browserToggle;
     juce::TextButton editorToggle {"Clip"}, rackToggle {"Devices"};
     juce::TextButton sessionToggle {"Session"}, arrangementToggle {"Arrange"};
+    juce::TextButton backToArrangement;
     juce::ComboBox editorResolution;
     juce::TextButton editorZoomOut, editorZoomIn;
     juce::ComboBox scaleHighlight;

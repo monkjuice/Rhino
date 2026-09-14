@@ -47,6 +47,7 @@ target_sources(ThetaNative PRIVATE
     src/SessionDevices.cpp
     src/SessionTracks.cpp
     src/SessionSlots.cpp
+    src/SessionMixer.cpp
     src/SessionClips.cpp
     src/SessionSamples.cpp
     src/SessionAutomation.cpp

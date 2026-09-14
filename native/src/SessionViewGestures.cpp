@@ -55,7 +55,8 @@ SessionView::Hit SessionView::hitTest(juce::Point<float> point) const
     const auto track = static_cast<int>((point.x + static_cast<float>(trackScroll)) / columnWidth);
     if (!juce::isPositiveAndBelow(track, trackCount)) return {};
     if (point.y < gridTop) return {Region::trackHeader, track, -1};
-    if (point.y >= gridBottom()) return {Region::trackStop, track, -1};
+    if (point.y >= stopRowTop()) return {Region::trackStop, track, -1};
+    if (point.y >= gridBottom()) return {};
     const auto scene = static_cast<int>((point.y - gridTop + static_cast<float>(sceneScroll)) / slotHeight);
     if (!juce::isPositiveAndBelow(scene, sceneCount)) return {};
     return {Region::slot, track, scene};
@@ -87,6 +88,7 @@ void SessionView::mouseWheelMove(const juce::MouseEvent& event, const juce::Mous
         sceneScroll -= static_cast<double>(wheel.deltaY) * slotHeight * 3.0;
     }
     updateScroll();
+    layOutTrackControls();
     hovered = hitTest(event.position);
     repaint();
 }

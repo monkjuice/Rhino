@@ -131,10 +131,10 @@ void SessionView::paint(juce::Graphics& g)
     // Track stop row.
     {
         juce::Graphics::ScopedSaveState saved(g);
-        g.reduceClipRegion({0, static_cast<int>(gridBottom()), static_cast<int>(rightEdge),
+        g.reduceClipRegion({0, static_cast<int>(stopRowTop()), static_cast<int>(rightEdge),
                             static_cast<int>(stopRowHeight)});
         g.setColour(juce::Colour(toolbarColour));
-        g.fillRect(0.0f, gridBottom(), rightEdge, stopRowHeight);
+        g.fillRect(0.0f, stopRowTop(), rightEdge, stopRowHeight);
         for (int track = 0; track < trackCount; ++track)
         {
             const auto stop = trackStopBounds(track);
@@ -145,6 +145,24 @@ void SessionView::paint(juce::Graphics& g)
             g.fillRect(stop.reduced(2.0f, 3.0f));
             drawSquare(g, stop.reduced(2.0f, 3.0f).withWidth(16.0f).withSizeKeepingCentre(8.0f, 8.0f),
                        juce::Colour(active ? playingColour : 0xff5d6871));
+        }
+    }
+
+    // Mixer strip. The controls themselves are child components; this paints
+    // the surface they sit on so each track reads as one column.
+    if (isMixerVisible())
+    {
+        juce::Graphics::ScopedSaveState saved(g);
+        g.reduceClipRegion({0, static_cast<int>(mixerTop()), static_cast<int>(rightEdge),
+                            static_cast<int>(stopRowTop() - mixerTop())});
+        g.setColour(juce::Colour(0xff20262c));
+        g.fillRect(0.0f, mixerTop(), rightEdge, stopRowTop() - mixerTop());
+        for (int track = 0; track < trackCount; ++track)
+        {
+            const auto column = columnX(track);
+            if (column > rightEdge || column + columnWidth < 0.0f) continue;
+            g.setColour(juce::Colour(track == selectedTrack ? 0xff2b343c : 0xff262d34));
+            g.fillRect(column + 1.0f, mixerTop() + 1.0f, columnWidth - 2.0f, stopRowTop() - mixerTop() - 2.0f);
         }
     }
 
@@ -187,7 +205,9 @@ void SessionView::paint(juce::Graphics& g)
     g.setColour(juce::Colour(gridLineColour));
     g.drawHorizontalLine(static_cast<int>(toolbarHeight), 0.0f, static_cast<float>(getWidth()));
     g.drawHorizontalLine(static_cast<int>(toolbarHeight + trackHeaderHeight), 0.0f, sceneColumnX());
-    g.drawHorizontalLine(static_cast<int>(gridBottom()), 0.0f, static_cast<float>(getWidth()));
+    g.drawHorizontalLine(static_cast<int>(stopRowTop()), 0.0f, static_cast<float>(getWidth()));
+    if (isMixerVisible())
+        g.drawHorizontalLine(static_cast<int>(mixerTop()), 0.0f, static_cast<float>(getWidth()));
 }
 
 }

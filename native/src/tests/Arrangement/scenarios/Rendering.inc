@@ -47,7 +47,7 @@
         auto midiPicture = view.createComponentSnapshot(view.getLocalBounds());
         int midiPixels = 0;
         for (int y = 95; y < 122; ++y)
-            for (int x = 155; x < 620; ++x)
+            for (int x = static_cast<int>(view.lane(0).getX()) + 7; x < 620; ++x)
                 if (isMidiNotePixel(midiPicture.getPixelAt(x, y))) ++midiPixels;
         require(midiPixels >= 25, "Pattern lane must draw visible MIDI notes");
         session.applyPatternPreset(Session::PatternPreset::SubBass);
@@ -55,7 +55,7 @@
         auto bassMidiPicture = view.createComponentSnapshot(view.getLocalBounds());
         int bassMidiPixels = 0;
         for (int y = 95; y < 122; ++y)
-            for (int x = 155; x < 620; ++x)
+            for (int x = static_cast<int>(view.lane(0).getX()) + 7; x < 620; ++x)
                 if (isMidiNotePixel(bassMidiPicture.getPixelAt(x, y))) ++bassMidiPixels;
         require(bassMidiPixels >= 25, "Low bass MIDI clips must draw visible arrangement note bars");
         session.undo();
@@ -71,7 +71,7 @@
         auto dragPreviewPicture = view.createComponentSnapshot(view.getLocalBounds());
         int dragPreviewOldPixels = 0, dragPreviewNewPixels = 0;
         for (int y = 95; y < 122; ++y)
-            for (int x = 155; x < 620; ++x)
+            for (int x = static_cast<int>(view.lane(0).getX()) + 7; x < 620; ++x)
             {
                 if (!isMidiNotePixel(dragPreviewPicture.getPixelAt(x, y))) continue;
                 if (x < view.xFor(0.8)) ++dragPreviewOldPixels;

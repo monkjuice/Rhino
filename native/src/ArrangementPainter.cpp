@@ -30,7 +30,8 @@ void Arrangement::paint(juce::Graphics& g)
         }
         g.setColour(juce::Colour(0xffc4cbd1));
         g.drawText(juce::String(track + 1).paddedLeft('0', 2) + "  " + session.trackName(track),
-                   10, static_cast<int>(row.getY()) + 8, 130, 22, juce::Justification::centredLeft);
+                   10, static_cast<int>(row.getY()) + 4, static_cast<int>(headerWidth) - 20, 20,
+                   juce::Justification::centredLeft);
     }
 
     const auto firstBeat = session.edit->tempoSequence.toBeats(tracktion::core::TimePosition::fromSeconds(viewStart)).inBeats();

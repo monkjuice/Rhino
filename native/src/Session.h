@@ -233,6 +233,29 @@ public:
     int clipPluginCount(te::EditItemID) const;
     void toggleTrackMute(int track);
     void toggleTrackSolo(int track);
+    // The mixer. Session view and the arrangement are two presentations of
+    // these same per-track values, so both read and write them through here.
+    struct TrackMixer
+    {
+        float volumeDb = 0.0f;
+        float pan = 0.0f;
+        bool muted = false;
+        bool soloed = false;
+    };
+    static constexpr float minimumVolumeDb = -60.0f, maximumVolumeDb = 6.0f;
+    TrackMixer trackMixer(int track) const;
+    juce::Result setTrackVolumeDb(int track, float decibels);
+    juce::Result setTrackPan(int track, float pan);
+    void beginTrackVolumeGesture(int track);
+    void endTrackVolumeGesture(int track);
+    void beginTrackPanGesture(int track);
+    void endTrackPanGesture(int track);
+    void setTrackMuted(int track, bool muted);
+    void setTrackSoloed(int track, bool soloed);
+    float masterVolumeDb() const;
+    void setMasterVolumeDb(float decibels);
+    void beginMasterVolumeGesture();
+    void endMasterVolumeGesture();
     // Session view: scenes are rows of clip slots across every track. The engine
     // owns launch timing; these calls only queue state changes from the message
     // thread and report back what the launch handles currently hold.
@@ -263,6 +286,8 @@ public:
     juce::Result insertAudioFileInSlot(const juce::File&, int track, int scene);
     juce::Result insertBuiltInSampleInSlot(BuiltInSample, int track, int scene);
     juce::Result deleteSlotClip(int track, int scene);
+    bool anyTrackPlayingSlots() const;
+    void returnToArrangement();
     te::LaunchQType launchQuantisation() const;
     void setLaunchQuantisation(te::LaunchQType);
     te::SceneWatcher* sceneWatcher() const;
@@ -287,6 +312,8 @@ private:
     };
     void refreshAfterUndoRedo(bool changed);
     te::ClipSlot* clipSlotAt(int track, int scene) const;
+    te::VolumeAndPanPlugin* trackVolumePlugin(int track) const;
+    void ensureTrackMixers();
     void ensureSceneSlots(int minimumScenes = defaultScenes);
     std::optional<te::MonotonicBeat> nextLaunchBeat() const;
     void startTransportForLaunch();

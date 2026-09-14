@@ -90,19 +90,35 @@ void Arrangement::resized()
     gridControl.setBounds(getWidth() - 104, getHeight() - 34, 76, 20);
     updateGridControl();
     syncTrackControls();
+    const auto mixerVisible = showTrackMixer();
     for (int i = 0; i < session.trackCount(); ++i)
     {
         const auto row = lane(i);
+        const auto index = static_cast<size_t>(i);
         const auto visible = row.getBottom() >= lanesTop && row.getY() <= getHeight() - 18.0f;
-        mute[static_cast<size_t>(i)]->setVisible(visible);
-        solo[static_cast<size_t>(i)]->setVisible(visible);
-        mute[static_cast<size_t>(i)]->setBounds(12, static_cast<int>(row.getY()) + 38, 42, 26);
-        solo[static_cast<size_t>(i)]->setBounds(62, static_cast<int>(row.getY()) + 38, 42, 26);
+        // One control row pinned to the bottom of the lane, so short lanes keep
+        // the track name legible rather than overlapping it.
+        const auto controlsY = static_cast<int>(row.getBottom()) - 26;
+        mute[index]->setVisible(visible);
+        solo[index]->setVisible(visible);
+        volume[index]->setVisible(visible && mixerVisible);
+        pan[index]->setVisible(visible && mixerVisible);
+        mute[index]->setBounds(10, controlsY, 26, 22);
+        solo[index]->setBounds(40, controlsY, 26, 22);
+        volume[index]->setBounds(72, controlsY, 76, 22);
+        pan[index]->setBounds(152, controlsY, 38, 22);
     }
     scroll.setBounds(static_cast<int>(headerWidth), getHeight() - 14, getWidth() - static_cast<int>(headerWidth) - 14, 14);
     trackScrollBar.setBounds(getWidth() - 12, static_cast<int>(lanesTop), 12, getHeight() - static_cast<int>(lanesTop) - 18);
     updateScroll();
     updatePlayhead();
+}
+
+// Live shows the mixer in the arrangement too, but only where it fits. Below
+// this lane height the fader and pan would collide with the track name.
+bool Arrangement::showTrackMixer() const
+{
+    return laneHeight() >= 56.0f;
 }
 
 void Arrangement::fit()

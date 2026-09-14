@@ -29,6 +29,8 @@ public:
     bool isInterestedInDragSource(const juce::DragAndDropTarget::SourceDetails&) override;
     void itemDropped(const juce::DragAndDropTarget::SourceDetails&) override;
     void fit();
+    void selectTrack(int track);
+    int selectedTrackIndex() const { return selectedTrack; }
     std::function<void(juce::String)> status;
     std::function<void(int)> trackSelected;
 private:
@@ -64,7 +66,6 @@ private:
     void copySelection();
     void pasteSelection();
     void deleteSelection();
-    void selectTrack(int track);
     void splitSelectedAtPlayhead();
     void duplicateSelected();
     void nudgeSelected(int direction, bool byBar);
@@ -105,6 +106,9 @@ private:
     juce::TextButton duplicateButton, addTrack, snap, automationButton, gridControl;
     juce::ComboBox snapSize;
     std::vector<std::unique_ptr<juce::TextButton>> mute, solo;
+    // The same mixer values the session view shows, laid out horizontally.
+    std::vector<std::unique_ptr<juce::Slider>> volume, pan;
+    bool showTrackMixer() const;
     juce::ScrollBar scroll {false}, trackScrollBar {true};
     juce::VBlankAttachment vblank;
     double viewStart = 0.0, viewSpan = 8.0, songEnd = 2.0, trackScroll = 0.0;
@@ -130,6 +134,6 @@ private:
     double automationStartTime = 0.0, automationEndTime = 0.0;
     float automationStartValue = 0.0f, automationEndValue = 0.0f;
     float playhead = -1.0f;
-    static constexpr float headerWidth = 148.0f, rulerTop = 32.0f, lanesTop = 56.0f;
+    static constexpr float headerWidth = 196.0f, rulerTop = 32.0f, lanesTop = 56.0f;
 };
 }

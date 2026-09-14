@@ -17,13 +17,14 @@ Research deliverables: [open-source DAW and Ableton study](research/DAW-STUDY.md
 - Play, pause, stop, looping, and audio hardware settings.
 - Audio import onto a separate track, with successive files appended. The browser also includes generated Whistle and Siren WAV samples; these are audio clips, not MIDI presets.
 - An arrangement view showing the synth clip and imported audio waveforms, with audio clip selection, moving, non-destructive trimming, and deletion.
-- A session view clip launcher: tracks as columns, scenes as rows, and clip slots you fill from the browser, a right-click menu, or an audio file drop. Clips launch on the chosen quantisation, a track plays one clip at a time, and scene rows launch together. **Session** and **Arrange** in the control bar switch views, as does **Tab**.
-- Mute/solo controls for both tracks, timeline seeking, zoom, scrolling, and optional 1/16-note snapping.
+- A session view clip launcher: tracks as columns, scenes as rows, and clip slots you fill from the browser, a right-click menu, or an audio file drop. Clips launch on the chosen quantisation, a track plays one clip at a time, and scene rows launch together. **Session** and **Arrange** in the control bar switch views, as does **Tab**. Launching a clip makes that track ignore its timeline clips; **Back to Arrangement** appears while that is true and hands the tracks back.
+- One mixer shared by both views: volume, pan, mute and solo per track, plus a main output level. The session view shows it as a vertical strip under each track, the arrangement as a horizontal strip in each track header, and editing either moves the same track.
+- Timeline seeking, zoom, scrolling, and optional 1/16-note snapping.
 - Native project save/open, unsaved-change prompts, and background file writing/parsing.
 - A display-synchronized playhead with narrow repaint regions and cached note display data.
 - VST3 hosting through Tracktion Engine, with the independent Theta Forge synth discoverable from its development build or a standard VST3 installation and shown with its plugin-owned editor.
 
-This is an early composition workflow, not a complete DAW. Recording, media bundling/relinking, and a general plugin browser/scanner are not implemented yet. The session view covers launching clips and scenes; per-track mixer controls, clip follow actions, and recording into slots are not there yet. WAV export renders the complete arrangement offline at 48 kHz/24-bit, peak-normalised to -1 dBFS to preserve headroom. macOS has not been built or tested.
+This is an early composition workflow, not a complete DAW. Recording, media bundling/relinking, and a general plugin browser/scanner are not implemented yet. The session view covers launching clips and scenes; clip follow actions, level meters, sends and returns, and recording into slots are not there yet. WAV export renders the complete arrangement offline at 48 kHz/24-bit, peak-normalised to -1 dBFS to preserve headroom. macOS has not been built or tested.
 
 ## Run On Windows
 

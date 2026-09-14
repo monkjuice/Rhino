@@ -31,6 +31,7 @@ Application code, `native/src`:
 | Arrangement UI | `Arrangement.*`, `ArrangementGeometry.cpp`, `ClipGeometry.h` |
 | Session view (clip launcher) UI | `SessionView.h`, `SessionView.cpp`, `SessionViewPainter.cpp`, `SessionViewGestures.cpp` |
 | Scenes, clip slots and launching | `SessionSlots.cpp` |
+| Mixer: track volume, pan, mute, solo, main output | `SessionMixer.cpp` |
 | Device rack and editors | `DeviceRack.*` |
 | Browser | `BrowserPanel.*` |
 | App shell and lifecycle | `Main.cpp` |
@@ -40,6 +41,8 @@ Application code, `native/src`:
 | Theme | `Theme.h` |
 
 The UI depends on `Session`; `Session` knows nothing about the UI. Keep that direction.
+
+The session view and the arrangement are two presentations of one project, not two documents. Tracks, devices, the mixer and the transport are shared because both views read the same `Session`; never let a view cache a copy of that state. Selection, focus, scroll and zoom are per-view and should stay that way. Clips are the one thing that genuinely differs: slot clips belong to scenes, timeline clips belong to the arrangement, exactly as in Live.
 
 Every source file is listed explicitly in `native/CMakeLists.txt` — nothing is globbed. A new `.cpp` needs a line there or it silently will not compile.
 

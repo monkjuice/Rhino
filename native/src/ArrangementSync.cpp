@@ -18,8 +18,14 @@ void Arrangement::sync()
     songEnd = 0.0;
     for (int track = 0; track < tracks.size(); ++track)
     {
-        mute[static_cast<size_t>(track)]->setToggleState(tracks[track]->isMuted(false), juce::dontSendNotification);
-        solo[static_cast<size_t>(track)]->setToggleState(tracks[track]->isSolo(false), juce::dontSendNotification);
+        const auto mixer = session.trackMixer(track);
+        const auto index = static_cast<size_t>(track);
+        mute[index]->setToggleState(mixer.muted, juce::dontSendNotification);
+        solo[index]->setToggleState(mixer.soloed, juce::dontSendNotification);
+        if (!volume[index]->isMouseButtonDown())
+            volume[index]->setValue(mixer.volumeDb, juce::dontSendNotification);
+        if (!pan[index]->isMouseButtonDown())
+            pan[index]->setValue(mixer.pan, juce::dontSendNotification);
         for (auto* clip : tracks[track]->getClips())
         {
             if (!session.shouldShowClipInArrangement(*clip))
@@ -86,15 +92,44 @@ void Arrangement::syncTrackControls()
         soloButton->onClick = [this, track] { session.toggleTrackSolo(track); };
         muteButton->setColour(juce::TextButton::buttonOnColourId, juce::Colour(0xff97634c));
         soloButton->setColour(juce::TextButton::buttonOnColourId, juce::Colour(0xff657440));
+        auto volumeSlider = std::make_unique<juce::Slider>();
+        volumeSlider->setSliderStyle(juce::Slider::LinearBar);
+        volumeSlider->setRange(Session::minimumVolumeDb, Session::maximumVolumeDb, 0.1);
+        volumeSlider->setTextValueSuffix(" dB");
+        volumeSlider->setDoubleClickReturnValue(true, 0.0);
+        volumeSlider->setTooltip("Track volume");
+        volumeSlider->onDragStart = [this, track] { session.beginTrackVolumeGesture(track); };
+        volumeSlider->onDragEnd = [this, track] { session.endTrackVolumeGesture(track); };
+        volumeSlider->onValueChange = [this, track, slider = volumeSlider.get()]
+        {
+            session.setTrackVolumeDb(track, static_cast<float>(slider->getValue()));
+        };
+        auto panSlider = std::make_unique<juce::Slider>();
+        panSlider->setSliderStyle(juce::Slider::LinearBar);
+        panSlider->setRange(-1.0, 1.0, 0.01);
+        panSlider->setDoubleClickReturnValue(true, 0.0);
+        panSlider->setTooltip("Track pan");
+        panSlider->onDragStart = [this, track] { session.beginTrackPanGesture(track); };
+        panSlider->onDragEnd = [this, track] { session.endTrackPanGesture(track); };
+        panSlider->onValueChange = [this, track, slider = panSlider.get()]
+        {
+            session.setTrackPan(track, static_cast<float>(slider->getValue()));
+        };
         addAndMakeVisible(*muteButton);
         addAndMakeVisible(*soloButton);
+        addAndMakeVisible(*volumeSlider);
+        addAndMakeVisible(*panSlider);
         mute.push_back(std::move(muteButton));
         solo.push_back(std::move(soloButton));
+        volume.push_back(std::move(volumeSlider));
+        pan.push_back(std::move(panSlider));
     }
     while (static_cast<int>(mute.size()) > count)
     {
         mute.pop_back();
         solo.pop_back();
+        volume.pop_back();
+        pan.pop_back();
     }
 }
 

@@ -340,26 +340,31 @@ public:
         documentName.setBounds(326, 10, getWidth() - 478, 30);
         settings.setBounds(getWidth() - 152, 12, 128, 28);
         status.setBounds(24, 42, getWidth() - 48, 24);
-        play.setBounds(editorX, 80, 38, 36);
-        stop.setBounds(editorX + 46, 80, 38, 36);
-        panic.setBounds(editorX + 92, 80, 38, 36);
-        const auto displayWidth = juce::jlimit(210, 280, getWidth() / 4);
+        const auto displayWidth = juce::jlimit(240, 320, getWidth() / 4);
         const auto displayX = getWidth() / 2 - displayWidth / 2;
-        position.setBounds(displayX, 78, displayWidth, 40);
+        // Keep the control bar as one visual cluster. The browser may resize,
+        // but transport should remain beside the display rather than drifting
+        // to the arrangement's left edge.
+        const auto transportX = std::max(editorX, displayX - 294);
+        play.setBounds(transportX, 83, 38, 30);
+        stop.setBounds(transportX + 58, 83, 38, 30);
+        panic.setBounds(transportX + 116, 83, 38, 30);
+        position.setBounds(displayX, 70, displayWidth, 56);
         constexpr int rightControlsWidth = 356;
-        auto rightX = std::max(displayX + displayWidth + 8, getWidth() - 24 - rightControlsWidth);
-        tempo.setBounds(rightX, 82, 100, 32);
+        auto rightX = std::min(displayX + displayWidth + 52, getWidth() - 24 - rightControlsWidth);
+        rightX = std::max(displayX + displayWidth + 8, rightX);
+        tempo.setBounds(rightX, 83, 100, 30);
         rightX += 108;
-        timeSignature.setBounds(rightX, 82, 70, 32);
+        timeSignature.setBounds(rightX, 83, 70, 30);
         rightX += 78;
-        undo.setBounds(rightX, 82, 34, 32);
+        undo.setBounds(rightX, 83, 34, 30);
         rightX += 40;
-        redo.setBounds(rightX, 82, 34, 32);
+        redo.setBounds(rightX, 83, 34, 30);
         rightX += 40;
-        clear.setBounds(rightX, 82, 34, 32);
+        clear.setBounds(rightX, 83, 34, 30);
         rightX += 42;
-        metronome.setBounds(rightX, 82, 30, 32);
-        metronomeMenu.setBounds(rightX + 30, 82, 18, 32);
+        metronome.setBounds(rightX, 83, 30, 30);
+        metronomeMenu.setBounds(rightX + 30, 83, 18, 30);
         browser.setVisible(browserOpen);
         browser.setBounds(0, browserTop, browserWidth, getHeight() - browserTop);
         browserToggle.setButtonText(browserOpen ? "<" : "B");

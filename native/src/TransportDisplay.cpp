@@ -8,6 +8,10 @@ TransportDisplay::TransportDisplay()
     configuration.setTooltip("Customize control bar");
     configuration.setAccessible(true);
     configuration.setButtonText("v");
+    configuration.setColour(juce::TextButton::buttonColourId, juce::Colours::transparentBlack);
+    configuration.setColour(juce::TextButton::buttonOnColourId, juce::Colours::transparentBlack);
+    configuration.setColour(juce::TextButton::textColourOffId, juce::Colour(0xffc7d0bf));
+    configuration.setColour(juce::TextButton::textColourOnId, juce::Colour(0xffe4efc9));
     configuration.onClick = [this]
     {
         if (configurationRequested) configurationRequested();

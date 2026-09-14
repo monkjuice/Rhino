@@ -1,4 +1,5 @@
 #include "Session.h"
+#include <array>
 
 namespace theta
 {
@@ -99,6 +100,41 @@ void Session::releaseAudioDevice()
 
 double Session::tempo() const { return edit->tempoSequence.getTempo(0)->getBpm(); }
 
+Session::TimeSignature Session::timeSignature() const
+{
+    if (auto* signature = edit->tempoSequence.getTimeSig(0))
+        return {static_cast<int>(signature->numerator), static_cast<int>(signature->denominator)};
+    return {};
+}
+
+double Session::beatsPerBar() const
+{
+    const auto signature = timeSignature();
+    return signature.numerator * 4.0 / signature.denominator;
+}
+
+juce::Result Session::setTimeSignature(int numerator, int denominator)
+{
+    constexpr std::array validDenominators {1, 2, 4, 8, 16};
+    if (numerator < 1 || numerator > 99
+        || std::find(validDenominators.begin(), validDenominators.end(), denominator) == validDenominators.end())
+        return juce::Result::fail("Time signature must use a numerator from 1 to 99 and denominator 1, 2, 4, 8, or 16.");
+    auto* signature = edit->tempoSequence.getTimeSig(0);
+    if (signature == nullptr)
+        return juce::Result::fail("The project has no initial time signature.");
+    if (timeSignature().numerator == numerator && timeSignature().denominator == denominator)
+        return juce::Result::ok();
+    edit->getUndoManager().beginNewTransaction("Change time signature");
+    signature->setStringTimeSig(juce::String(numerator) + "/" + juce::String(denominator));
+    edit->tempoSequence.updateTempoData();
+    refreshLoop();
+    markModified();
+    if (edit->getTransport().isPlaying()) edit->restartPlayback();
+    edit->getUndoManager().beginNewTransaction();
+    sendSynchronousChangeMessage();
+    return juce::Result::ok();
+}
+
 void Session::setTempo(double bpm)
 {
     if (!std::isfinite(bpm)) return;
@@ -109,7 +145,7 @@ void Session::setTempo(double bpm)
     markModified();
     edit->tempoSequence.updateTempoData();
     // Keep this initial editor exactly one bar; MIDI positions remain in beats.
-    const auto end = edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(4.0));
+    const auto end = edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(beatsPerBar()));
     pattern().setLength(end - tracktion::core::TimePosition{}, true);
     refreshLoop();
     edit->getUndoManager().beginNewTransaction();
@@ -131,7 +167,7 @@ void Session::refreshLoop()
         for (auto* clip : track->getClips())
             end = std::max(end, clip->getPosition().time.getEnd());
     if (end <= tracktion::core::TimePosition::fromSeconds(0.0))
-        end = edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(4.0));
+        end = edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(beatsPerBar()));
     edit->getTransport().setLoopRange({{}, end});
     edit->getTransport().looping = true;
 }

@@ -33,18 +33,29 @@ void Arrangement::paint(juce::Graphics& g)
                    10, static_cast<int>(row.getY()) + 8, 130, 22, juce::Justification::centredLeft);
     }
 
-    const auto beatSeconds = 60.0 / session.tempo();
-    auto rulerStep = beatSeconds;
-    while (rulerStep / viewSpan * lane(0).getWidth() < 64.0) rulerStep *= 2.0;
-    for (auto time = std::ceil(viewStart / rulerStep) * rulerStep; time <= viewStart + viewSpan; time += rulerStep)
+    const auto firstBeat = session.edit->tempoSequence.toBeats(tracktion::core::TimePosition::fromSeconds(viewStart)).inBeats();
+    const auto lastBeat = session.edit->tempoSequence.toBeats(tracktion::core::TimePosition::fromSeconds(viewStart + viewSpan)).inBeats();
+    const auto gridBeat = resolvedGridBeats();
+    const auto firstGrid = std::floor(firstBeat / gridBeat) * gridBeat;
+    int paintedTicks = 0;
+    for (auto beat = firstGrid; beat <= lastBeat + gridBeat && paintedTicks++ < 2000; beat += gridBeat)
     {
+        const auto time = session.edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(beat)).inSeconds();
         const auto x = xFor(time);
-        g.setColour(juce::Colour(0xff35404a));
-        g.drawVerticalLine(static_cast<int>(x), static_cast<int>(lanesTop), getHeight() - 18.0f);
-        const int beat = juce::roundToInt(time / beatSeconds);
-        g.setColour(juce::Colour(0xff8c99a4));
-        g.drawText(juce::String(beat / 4 + 1) + "." + juce::String(beat % 4 + 1),
-                   static_cast<int>(x) + 4, static_cast<int>(rulerTop), 64, 24, juce::Justification::centredLeft);
+        const auto bar = isGridLine(beat, session.beatsPerBar());
+        const auto wholeBeat = isGridLine(beat, 1.0);
+        if (gridSettings.mode != GridMode::off || bar)
+        {
+            g.setColour(bar ? juce::Colour(0xff42515c) : wholeBeat ? juce::Colour(0xff35404a) : juce::Colour(0xff29323a));
+            g.drawVerticalLine(static_cast<int>(x), static_cast<int>(lanesTop), getHeight() - 18.0f);
+        }
+        if (bar)
+        {
+            const auto barNumber = static_cast<int>(std::floor(beat / session.beatsPerBar())) + 1;
+            g.setColour(juce::Colour(0xff8c99a4));
+            g.drawText(juce::String(barNumber) + ".1", static_cast<int>(x) + 4, static_cast<int>(rulerTop),
+                       64, 24, juce::Justification::centredLeft);
+        }
     }
     {
         const auto loopRange = session.edit->getTransport().getLoopRange();

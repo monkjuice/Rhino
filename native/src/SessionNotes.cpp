@@ -133,8 +133,7 @@ void Session::endNoteGesture() { edit->getUndoManager().beginNewTransaction(); }
 int Session::editorStepCount() const
 {
     const auto resolution = editorStepResolution();
-    const auto bars = std::max(1.0, std::ceil(patternLengthBeats() / 4.0));
-    return juce::jlimit(defaultSteps, steps, static_cast<int>(std::ceil(resolution * bars)));
+    return juce::jlimit(defaultSteps, steps, static_cast<int>(std::ceil(patternLengthBeats() * resolution / 4.0)));
 }
 
 int Session::editorStepResolution() const
@@ -148,7 +147,7 @@ int Session::editorStepResolution() const
 double Session::patternLengthBeats() const
 {
     if (patternClip == nullptr)
-        return 4.0;
+        return beatsPerBar();
     const auto position = patternClip->getPosition();
     const auto startBeat = edit->tempoSequence.toBeats(position.time.getStart()).inBeats();
     const auto endBeat = edit->tempoSequence.toBeats(position.time.getEnd()).inBeats();

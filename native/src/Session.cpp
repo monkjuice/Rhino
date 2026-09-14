@@ -47,7 +47,7 @@ Session::Session() : engine(commandLineTestMode ? "Theta Native Tests" : "Theda 
     utility = dynamic_cast<UtilityDevice*>(device.get());
     track->pluginList.insertPlugin(device, track->pluginList.size(), nullptr);
     utility->gain().setParameter(-12.0f, juce::dontSendNotification);
-    const auto end = edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(4.0));
+    const auto end = edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(beatsPerBar()));
     patternClip = track->insertMIDIClip("Pattern 1", {{}, end}, nullptr).get();
     if (patternClip != nullptr)
     {
@@ -131,7 +131,7 @@ void Session::ensureEditablePatternClip()
 
     if (!tracks.isEmpty())
     {
-        const auto end = edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(4.0));
+        const auto end = edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(beatsPerBar()));
         patternClip = tracks[0]->insertMIDIClip("Pattern 1", {{}, end}, nullptr).get();
         if (patternClip != nullptr)
         {

@@ -23,9 +23,16 @@ Arrangement::Arrangement(Session& s) : session(s), vblank(this, [this] { updateP
     duplicateButton.setTooltip("Duplicate selected clip");
     addTrack.setTooltip("Add track");
     snap.setTooltip("Toggle clip snap");
+    gridControl.setTooltip("Arrangement grid settings");
     automationButton.setTooltip("Draw automation for the last moved device knob");
     snap.setClickingTogglesState(true);
     snap.setToggleState(true, juce::dontSendNotification);
+    gridControl.onClick = [this] { showGridMenu(); };
+    snap.onClick = [this]
+    {
+        gridSettings.mode = snap.getToggleState() ? GridMode::fixed : GridMode::off;
+        repaint();
+    };
     automationButton.setClickingTogglesState(true);
     duplicateButton.onClick = [this] { duplicateSelected(); };
     automationButton.onClick = [this]
@@ -45,9 +52,21 @@ Arrangement::Arrangement(Session& s) : session(s), vblank(this, [this] { updateP
     snapSize.addItem("1/4", 3);
     snapSize.addItem("1 Bar", 4);
     snapSize.setSelectedId(1, juce::dontSendNotification);
+    snapSize.onChange = [this]
+    {
+        gridSettings.mode = snap.getToggleState() ? GridMode::fixed : GridMode::off;
+        switch (snapSize.getSelectedId())
+        {
+            case 2: gridSettings.fixedDivision = GridDivision::eighth; break;
+            case 3: gridSettings.fixedDivision = GridDivision::quarter; break;
+            case 4: gridSettings.fixedDivision = GridDivision::bar; break;
+            default: gridSettings.fixedDivision = GridDivision::sixteenth; break;
+        }
+        repaint();
+    };
     snapSize.setColour(juce::ComboBox::backgroundColourId, juce::Colour(0xff262c32));
     snapSize.setColour(juce::ComboBox::outlineColourId, juce::Colour(0xff46515a));
-    for (auto* control : std::initializer_list<juce::Component*>{&duplicateButton, &addTrack, &snap, &automationButton, &scroll, &trackScrollBar})
+    for (auto* control : std::initializer_list<juce::Component*>{&duplicateButton, &addTrack, &snap, &automationButton, &gridControl, &scroll, &trackScrollBar})
         addAndMakeVisible(control);
     addAndMakeVisible(snapSize);
     sync();
@@ -68,6 +87,8 @@ void Arrangement::resized()
     snap.setBounds(86, 3, 34, 26);
     automationButton.setBounds(124, 3, 34, 26);
     snapSize.setBounds(164, 3, 74, 26);
+    gridControl.setBounds(getWidth() - 104, getHeight() - 34, 76, 20);
+    updateGridControl();
     syncTrackControls();
     for (int i = 0; i < session.trackCount(); ++i)
     {
@@ -89,6 +110,7 @@ void Arrangement::fit()
     cancelDrag();
     viewStart = 0.0;
     viewSpan = std::max(4.0, songEnd * 1.1);
+    updateGridControl();
     updateScroll();
     updatePlayhead();
     repaint();
@@ -100,6 +122,7 @@ void Arrangement::zoom(double factor, double anchor)
     const auto fraction = (anchor - viewStart) / viewSpan;
     viewSpan = std::clamp(viewSpan * factor, 0.25, std::max(60.0, songEnd * 2.0));
     viewStart = std::max(0.0, anchor - viewSpan * fraction);
+    updateGridControl();
     updateScroll();
     updatePlayhead();
     repaint();
@@ -119,6 +142,21 @@ void Arrangement::scrollBarMoved(juce::ScrollBar* bar, double start)
 
 bool Arrangement::keyPressed(const juce::KeyPress& key)
 {
+    if (key.getModifiers().isCommandDown() && key.getKeyCode() >= '1' && key.getKeyCode() <= '5')
+    {
+        switch (key.getKeyCode())
+        {
+            case '1': gridSettings.fixedDivision = narrowerGridDivision(resolvedGridDivision()); gridSettings.mode = GridMode::fixed; break;
+            case '2': gridSettings.fixedDivision = widerGridDivision(resolvedGridDivision()); gridSettings.mode = GridMode::fixed; break;
+            case '3': gridSettings.triplet = !gridSettings.triplet; break;
+            case '4': gridSettings.mode = gridSettings.mode == GridMode::off ? GridMode::adaptive : GridMode::off; break;
+            case '5': gridSettings.mode = gridSettings.mode == GridMode::adaptive ? GridMode::fixed : GridMode::adaptive; break;
+        }
+        snap.setToggleState(gridSettings.mode != GridMode::off, juce::dontSendNotification);
+        resized();
+        repaint();
+        return true;
+    }
     if (key.getModifiers().isCommandDown() && key.getKeyCode() == 'Z')
     {
         if (key.getModifiers().isShiftDown()) session.redo();
@@ -282,7 +320,10 @@ void Arrangement::nudgeSelected(int direction, bool byBar)
     auto* clip = session.findClip(selected);
     if (!clip) return;
     const auto old = clip->getPosition();
-    const auto delta = (byBar ? 60.0 / session.tempo() * 4.0 : snapUnitSeconds()) * (direction < 0 ? -1.0 : 1.0);
+    const auto beats = byBar ? session.beatsPerBar() : resolvedGridBeats();
+    const auto startBeat = session.edit->tempoSequence.toBeats(old.time.getStart()).inBeats();
+    const auto target = session.edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(startBeat + beats * (direction < 0 ? -1.0 : 1.0)));
+    const auto delta = target.inSeconds() - old.time.getStart().inSeconds();
     const auto length = old.time.getLength().inSeconds();
     const auto start = std::max(0.0, old.time.getStart().inSeconds() + delta);
     const auto result = session.editClip(selected, {start, start + length, old.offset.inSeconds()}, ClipGesture::move);
@@ -317,6 +358,66 @@ void Arrangement::updatePlayhead()
     }
     movePlayhead(*this, playhead, next,
                  getLocalBounds().withTrimmedTop(static_cast<int>(rulerTop)).withTrimmedBottom(18));
+}
+
+GridDivision Arrangement::resolvedGridDivision() const
+{
+    if (gridSettings.mode == GridMode::adaptive)
+        return adaptiveGridDivision(lane(0).getWidth() / std::max(0.001, viewSpan) * (60.0 / session.tempo()), session.beatsPerBar(),
+                                    gridSettings.adaptiveWidth);
+    return gridSettings.fixedDivision;
+}
+
+void Arrangement::updateGridControl()
+{
+    gridControl.setButtonText(juce::String(gridDivisionLabel(resolvedGridDivision()))
+                              + (gridSettings.triplet ? "T" : "") + " v");
+}
+
+double Arrangement::resolvedGridBeats() const
+{
+    auto settings = gridSettings;
+    settings.fixedDivision = resolvedGridDivision();
+    return theta::resolvedGridBeats(settings, 1.0, session.beatsPerBar());
+}
+
+void Arrangement::showGridMenu()
+{
+    juce::PopupMenu menu, adaptive, fixed;
+    const std::array<std::pair<AdaptiveGridWidth, const char*>, 5> widths {{{AdaptiveGridWidth::widest, "Widest"},
+        {AdaptiveGridWidth::wide, "Wide"}, {AdaptiveGridWidth::medium, "Medium"},
+        {AdaptiveGridWidth::narrow, "Narrow"}, {AdaptiveGridWidth::narrowest, "Narrowest"}}};
+    for (int i = 0; i < static_cast<int>(widths.size()); ++i)
+        adaptive.addItem(100 + i, widths[static_cast<size_t>(i)].second, true,
+                         gridSettings.mode == GridMode::adaptive && gridSettings.adaptiveWidth == widths[static_cast<size_t>(i)].first);
+    for (int i = 0; i < static_cast<int>(gridDivisions.size()); ++i)
+        fixed.addItem(200 + i, gridDivisionLabel(gridDivisions[static_cast<size_t>(i)]), true,
+                      gridSettings.mode == GridMode::fixed && gridSettings.fixedDivision == gridDivisions[static_cast<size_t>(i)]);
+    menu.addSubMenu("Adaptive", adaptive);
+    menu.addSubMenu("Fixed", fixed);
+    menu.addSeparator();
+    menu.addItem(1, "Triplet Grid", true, gridSettings.triplet);
+    menu.addItem(2, "Show/Snap Grid", true, gridSettings.mode != GridMode::off);
+    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(gridControl),
+        [safe = juce::Component::SafePointer<Arrangement>(this)] (int result)
+        {
+            if (safe == nullptr || result == 0) return;
+            if (result >= 100 && result < 105)
+            {
+                safe->gridSettings.mode = GridMode::adaptive;
+                safe->gridSettings.adaptiveWidth = static_cast<AdaptiveGridWidth>(result - 100);
+            }
+            else if (result >= 200 && result < 210)
+            {
+                safe->gridSettings.mode = GridMode::fixed;
+                safe->gridSettings.fixedDivision = gridDivisions[static_cast<size_t>(result - 200)];
+            }
+            else if (result == 1) safe->gridSettings.triplet = !safe->gridSettings.triplet;
+            else if (result == 2) safe->gridSettings.mode = safe->gridSettings.mode == GridMode::off ? GridMode::adaptive : GridMode::off;
+            safe->snap.setToggleState(safe->gridSettings.mode != GridMode::off, juce::dontSendNotification);
+            safe->resized();
+            safe->repaint();
+        });
 }
 
 }

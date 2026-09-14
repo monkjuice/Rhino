@@ -56,7 +56,7 @@ juce::Result Session::insertPatternPreset(PatternPreset preset, int trackIndex, 
     const auto data = presetPattern(preset);
     const auto start = tracktion::core::TimePosition::fromSeconds(startSeconds);
     const auto end = start + tracktion::core::TimeDuration::fromSeconds(
-        edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(4.0)).inSeconds());
+        edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(beatsPerBar())).inSeconds());
     edit->getUndoManager().beginNewTransaction("Add " + data.name);
     auto* track = tracks[trackIndex];
     if (trackIndex == 0)
@@ -123,7 +123,7 @@ juce::Result Session::insertInstrumentClip(Instrument instrument, int trackIndex
         : juce::String("4OSC synth");
     const auto start = tracktion::core::TimePosition::fromSeconds(startSeconds);
     const auto end = start + tracktion::core::TimeDuration::fromSeconds(
-        edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(4.0)).inSeconds());
+        edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(beatsPerBar())).inSeconds());
     auto* track = tracks[trackIndex];
 
     edit->getUndoManager().beginNewTransaction("Add " + name);

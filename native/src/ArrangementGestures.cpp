@@ -18,6 +18,11 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
         repaint();
         return;
     }
+    if (event.mods.isRightButtonDown() && event.position.x >= headerWidth && event.position.y >= rulerTop)
+    {
+        showGridMenu();
+        return;
+    }
     if (!event.mods.isLeftButtonDown()) return;
     pasteTime = snapped(std::max(0.0, timeAt(event.position.x)), event.mods.isAltDown());
     for (int track = 0; track < session.trackCount(); ++track)

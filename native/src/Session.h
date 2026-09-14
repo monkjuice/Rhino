@@ -114,6 +114,11 @@ public:
         int velocity = 100;
         int colour = 0;
     };
+    struct TimeSignature
+    {
+        int numerator = 4;
+        int denominator = 4;
+    };
     struct Listener
     {
         virtual ~Listener() = default;
@@ -186,6 +191,9 @@ public:
     juce::Result deleteDevice(int track, int slot);
     double tempo() const;
     void setTempo(double bpm);
+    TimeSignature timeSignature() const;
+    juce::Result setTimeSignature(int numerator, int denominator);
+    double beatsPerBar() const;
     void undo();
     void redo();
     juce::Result setLoopRange(double startSeconds, double endSeconds);

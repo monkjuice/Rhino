@@ -161,6 +161,20 @@ public:
         tempo.setValue(session.tempo(), juce::dontSendNotification);
         tempo.setTextValueSuffix(" BPM");
         tempo.onValueChange = [this] { session.setTempo(tempo.getValue()); };
+        timeSignature.addItem("3 / 4", 304);
+        timeSignature.addItem("4 / 4", 404);
+        timeSignature.addItem("5 / 4", 504);
+        timeSignature.addItem("6 / 8", 608);
+        timeSignature.addItem("7 / 8", 708);
+        timeSignature.addItem("9 / 8", 908);
+        timeSignature.addItem("12 / 8", 1208);
+        timeSignature.setTooltip("Project time signature");
+        timeSignature.onChange = [this]
+        {
+            const auto value = timeSignature.getSelectedId();
+            const auto result = session.setTimeSignature(value / 100, value % 100);
+            if (result.failed()) logStatus(result.getErrorMessage());
+        };
         undo.onClick = [this] { session.undo(); };
         redo.onClick = [this] { session.redo(); };
         clear.onClick = [this] { session.clearPattern(); };
@@ -247,7 +261,7 @@ public:
         };
         for (auto* component : std::initializer_list<juce::Component*>{
                  &title, &status, &position, &gainLabel, &gain, &audioGainLabel, &audioGain, &play, &stop, &panic, &import, &settings,
-                 &browser, &browserToggle, &editorToggle, &rackToggle, &grid, &arrangement, &rack, &tempo, &undo, &redo, &clear, &hint, &fileMenu, &editMenu, &helpMenu,
+                 &browser, &browserToggle, &editorToggle, &rackToggle, &grid, &arrangement, &rack, &tempo, &timeSignature, &undo, &redo, &clear, &hint, &fileMenu, &editMenu, &helpMenu,
                  &documentName, &patternLabel, &editorResolution, &editorZoomOut, &editorZoomIn, &scaleHighlight})
             addAndMakeVisible(component);
         session.edit->getTransport().addChangeListener(this);
@@ -322,9 +336,10 @@ public:
         panic.setBounds(editorX + 92, 82, 38, 34);
         import.setBounds(editorX + 138, 82, 38, 34);
         tempo.setBounds(editorX + 198, 84, 122, 30);
-        undo.setBounds(editorX + 340, 84, 34, 30);
-        redo.setBounds(editorX + 380, 84, 34, 30);
-        clear.setBounds(editorX + 424, 84, 34, 30);
+        timeSignature.setBounds(editorX + 326, 84, 72, 30);
+        undo.setBounds(editorX + 408, 84, 34, 30);
+        redo.setBounds(editorX + 448, 84, 34, 30);
+        clear.setBounds(editorX + 492, 84, 34, 30);
         position.setBounds(getWidth() - 165, 82, 140, 34);
         browser.setVisible(browserOpen);
         browser.setBounds(0, browserTop, browserWidth, getHeight() - browserTop);
@@ -572,6 +587,8 @@ private:
         play.setButtonText(playing ? juce::String(L"\u275a\u275a") : juce::String(L"\u25b6"));
         play.setTooltip(playing ? "Pause" : "Play");
         tempo.setValue(session.tempo(), juce::dontSendNotification);
+        const auto signature = session.timeSignature();
+        timeSignature.setSelectedId(signature.numerator * 100 + signature.denominator, juce::dontSendNotification);
         if (!gain.isMouseButtonDown())
             gain.setValue(session.utility->gain().getCurrentValue(), juce::dontSendNotification);
         if (!audioGain.isMouseButtonDown())
@@ -593,7 +610,15 @@ private:
     {
         if (session.edit->getTransport().isPlaying())
             session.applyClipAutomationAt(playheadTime(session.edit->getTransport()));
-        const auto text = juce::String(session.edit->getTransport().getPosition().inSeconds(), 1) + " s";
+        const auto seconds = session.edit->getTransport().getPosition().inSeconds();
+        const auto beat = session.edit->tempoSequence.toBeats(tracktion::core::TimePosition::fromSeconds(seconds)).inBeats();
+        const auto signature = session.timeSignature();
+        const auto barLength = session.beatsPerBar();
+        const auto bar = static_cast<int>(std::floor(beat / barLength)) + 1;
+        const auto beatInBar = static_cast<int>(std::floor(beat - (bar - 1) * barLength)) + 1;
+        const auto text = juce::String(bar).paddedLeft('0', 3) + "  " + juce::String(beatInBar)
+            + "     " + juce::String(session.tempo(), 0) + "     "
+            + juce::String(signature.numerator) + "/" + juce::String(signature.denominator);
         if (position.getText() != text)
             position.setText(text, juce::dontSendNotification);
     }
@@ -634,6 +659,7 @@ private:
     Arrangement arrangement;
     DeviceRack rack;
     juce::Slider tempo;
+    juce::ComboBox timeSignature;
     juce::TextButton undo {"Undo"}, redo {"Redo"}, clear {"Clear"};
     juce::TextButton play {"Play"}, stop {"Stop"}, panic {"Panic"}, import {"Add audio"}, settings {"Audio settings"};
     juce::TextButton browserToggle {"<"}, editorToggle {"Clip"}, rackToggle {"Devices"};

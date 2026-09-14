@@ -55,13 +55,17 @@ juce::Rectangle<float> Arrangement::bounds(const ClipView& clip) const
 
 double Arrangement::snapped(double seconds, bool bypass) const
 {
-    const auto unit = snapUnitSeconds();
-    return snap.getToggleState() && !bypass ? std::round(seconds / unit) * unit : seconds;
+    const auto enabled = gridSettings.mode != GridMode::off;
+    if (enabled == bypass)
+        return seconds;
+    const auto beat = session.edit->tempoSequence.toBeats(tracktion::core::TimePosition::fromSeconds(seconds)).inBeats();
+    const auto snappedBeat = std::round(beat / resolvedGridBeats()) * resolvedGridBeats();
+    return session.edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(snappedBeat)).inSeconds();
 }
 
 double Arrangement::snappedClipMoveStart(double desiredStart, double length, int targetTrack, bool bypass) const
 {
-    if (bypass || !snap.getToggleState())
+    if ((gridSettings.mode != GridMode::off) == bypass)
         return desiredStart;
 
     const auto desiredEnd = desiredStart + length;
@@ -187,14 +191,9 @@ Arrangement::LoopGesture Arrangement::loopGestureAt(juce::Point<float> point) co
 
 double Arrangement::snapUnitSeconds() const
 {
-    const auto beatSeconds = 60.0 / session.tempo();
-    switch (snapSize.getSelectedId())
-    {
-        case 2: return beatSeconds * 0.5;
-        case 3: return beatSeconds;
-        case 4: return beatSeconds * 4.0;
-        default: return beatSeconds * 0.25;
-    }
+    const auto start = session.edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(0.0)).inSeconds();
+    const auto end = session.edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(resolvedGridBeats())).inSeconds();
+    return std::max(0.0001, end - start);
 }
 
 int Arrangement::trackAt(float y) const

@@ -1,5 +1,6 @@
 #pragma once
 #include "Session.h"
+#include "ArrangementGrid.h"
 #include <map>
 #include <memory>
 
@@ -69,6 +70,10 @@ private:
     void nudgeSelected(int direction, bool byBar);
     juce::Result applyBrowserDrop(const juce::String& description, int track, double startSeconds = 0.0, bool insertPreset = false);
     void updatePlayhead();
+    void showGridMenu();
+    void updateGridControl();
+    GridDivision resolvedGridDivision() const;
+    double resolvedGridBeats() const;
     int trackAt(float y) const;
     double snapUnitSeconds() const;
     float xFor(double seconds) const;
@@ -97,12 +102,13 @@ private:
     juce::AudioThumbnailCache thumbnailCache {32};
     std::map<juce::String, std::unique_ptr<Waveform>> waveforms;
     std::vector<ClipView> clips;
-    juce::TextButton duplicateButton, addTrack, snap, automationButton;
+    juce::TextButton duplicateButton, addTrack, snap, automationButton, gridControl;
     juce::ComboBox snapSize;
     std::vector<std::unique_ptr<juce::TextButton>> mute, solo;
     juce::ScrollBar scroll {false}, trackScrollBar {true};
     juce::VBlankAttachment vblank;
     double viewStart = 0.0, viewSpan = 8.0, songEnd = 2.0, trackScroll = 0.0;
+    GridSettings gridSettings;
     te::EditItemID selected;
     std::vector<te::EditItemID> selectedClips, clipboard;
     int selectedTrack = 0;

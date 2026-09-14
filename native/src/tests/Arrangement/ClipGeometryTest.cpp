@@ -1,5 +1,6 @@
 #include "ClipGeometryTest.h"
 #include "../../ClipGeometry.h"
+#include "../../ArrangementGrid.h"
 #include "../../Playhead.h"
 #include <cmath>
 #include <cstdio>
@@ -29,6 +30,21 @@ int runArrangementGeometryTest()
             throw std::runtime_error("Playhead movement covers old and new positions");
         if (playheadDamage(-1.0f, 99.0f, lane) != juce::Rectangle<int>(100, 20, 3, 200))
             throw std::runtime_error("Playhead damage stays inside its lane");
+
+        if (!close(gridDivisionBeats(GridDivision::bar, 3.5), 3.5))
+            throw std::runtime_error("Grid bars use the active meter");
+        if (static_cast<int>(adaptiveGridDivision(160.0, 4.0, AdaptiveGridWidth::medium))
+                <= static_cast<int>(adaptiveGridDivision(16.0, 4.0, AdaptiveGridWidth::medium)))
+            throw std::runtime_error("Adaptive grid follows logical pixel density");
+        if (narrowerGridDivision(GridDivision::sixtyFourth) != GridDivision::sixtyFourth
+            || widerGridDivision(GridDivision::eightBars) != GridDivision::eightBars)
+            throw std::runtime_error("Grid width commands clamp safely");
+        GridSettings fixed {GridMode::fixed, AdaptiveGridWidth::medium, GridDivision::eighth, false};
+        if (!close(resolvedGridBeats(fixed, 1.0, 4.0), resolvedGridBeats(fixed, 1000.0, 4.0)))
+            throw std::runtime_error("Fixed grid ignores zoom");
+        fixed.triplet = true;
+        if (!close(resolvedGridBeats(fixed, 100.0, 4.0), 1.0 / 3.0))
+            throw std::runtime_error("Triplet grid is two thirds of straight duration");
         return 0;
     }
     catch (const std::exception& error)

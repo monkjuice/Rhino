@@ -192,8 +192,8 @@
         const auto longClipStart = session.pattern().getPosition().time.getStart().inSeconds();
         require(session.editClip(session.pattern().itemID, {longClipStart, longClipStart + 4.0, 0.0}, ClipGesture::trimRight).wasOk(),
                 "MIDI clips can be extended to multi-bar parts");
-        require(session.editorStepCount() == 32,
-                "A two-bar MIDI clip exposes two bars of sixteenth-note editor cells");
+        require(session.editorStepCount() == 24,
+                "A one-and-a-half-bar MIDI clip exposes its exact sixteenth-note editor cells");
         session.setNote(3, 55, true);
         require(session.hasNote(3, 55) && !session.hasNote(7, 55),
                 "Drawing into an extended MIDI clip keeps the clicked editor step");

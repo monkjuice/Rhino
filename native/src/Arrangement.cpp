@@ -376,9 +376,8 @@ void Arrangement::updateGridControl()
 
 double Arrangement::resolvedGridBeats() const
 {
-    auto settings = gridSettings;
-    settings.fixedDivision = resolvedGridDivision();
-    return theta::resolvedGridBeats(settings, 1.0, session.beatsPerBar());
+    return gridDivisionBeats(resolvedGridDivision(), session.beatsPerBar())
+        * (gridSettings.triplet ? 2.0 / 3.0 : 1.0);
 }
 
 void Arrangement::showGridMenu()

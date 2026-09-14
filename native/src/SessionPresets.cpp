@@ -55,8 +55,8 @@ juce::Result Session::insertPatternPreset(PatternPreset preset, int trackIndex, 
         return juce::Result::fail("Drop clips on a track lane.");
     const auto data = presetPattern(preset);
     const auto start = tracktion::core::TimePosition::fromSeconds(startSeconds);
-    const auto end = start + tracktion::core::TimeDuration::fromSeconds(
-        edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(beatsPerBar())).inSeconds());
+    const auto startBeat = edit->tempoSequence.toBeats(start).inBeats();
+    const auto end = edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(startBeat + beatsPerBar()));
     edit->getUndoManager().beginNewTransaction("Add " + data.name);
     auto* track = tracks[trackIndex];
     if (trackIndex == 0)
@@ -122,8 +122,8 @@ juce::Result Session::insertInstrumentClip(Instrument instrument, int trackIndex
         : instrument == Instrument::ThetaForge ? juce::String("Theta Forge")
         : juce::String("4OSC synth");
     const auto start = tracktion::core::TimePosition::fromSeconds(startSeconds);
-    const auto end = start + tracktion::core::TimeDuration::fromSeconds(
-        edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(beatsPerBar())).inSeconds());
+    const auto startBeat = edit->tempoSequence.toBeats(start).inBeats();
+    const auto end = edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(startBeat + beatsPerBar()));
     auto* track = tracks[trackIndex];
 
     edit->getUndoManager().beginNewTransaction("Add " + name);

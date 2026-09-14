@@ -1,5 +1,6 @@
         Theme theme;
         Arrangement view(session);
+        require(std::abs(session.beatsPerBar() - 4.0) < 0.0001, "Default meter is four quarter-note beats per bar");
         view.setLookAndFeel(&theme);
         view.setSize(1000, 246);
         view.fit();

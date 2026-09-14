@@ -772,7 +772,14 @@ private:
             // display work area when a constrained window is resized/snapped.
             setUsingNativeTitleBar(false);
             setTitleBarHeight(28);
+            setOpaque(true);
+           #if JUCE_WINDOWS
+            // The separate desktop shadow surface trails the right edge during
+            // live D2D expansion and exposes a bright one-pixel strip.
+            setDropShadowEnabled(false);
+           #else
             setDropShadowEnabled(true);
+           #endif
             setResizable(true, false);
         }
         void closeButtonPressed() override { juce::JUCEApplication::getInstance()->systemRequestedQuit(); }

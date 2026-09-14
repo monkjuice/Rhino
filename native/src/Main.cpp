@@ -648,7 +648,7 @@ private:
     int resizeStartX = 0, resizeStartY = 0, resizeStartBrowserWidth = 244;
     int resizeStartArrangementHeight = 246, resizeStartDeviceViewHeight = 220;
     static constexpr int browserTop = 74, collapsedRailWidth = 44;
-    bool browserOpen = true, clipEditorOpen = true, rackOpen = true;
+    bool browserOpen = true, clipEditorOpen = true, rackOpen = false;
     bool resizingBrowser = false, resizingDeviceView = false, resizingArrangement = false;
     bool updatingEditorResolution = false;
 };

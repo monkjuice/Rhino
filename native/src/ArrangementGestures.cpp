@@ -20,6 +20,13 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
     }
     if (event.mods.isRightButtonDown() && event.position.x >= headerWidth && event.position.y >= rulerTop)
     {
+        // A right-click on a clip acts on that clip; empty lane space still
+        // opens the grid menu.
+        if (const auto index = hit(event.position); index >= 0)
+        {
+            showClipMenu(clips[static_cast<size_t>(index)].id);
+            return;
+        }
         showGridMenu();
         return;
     }

@@ -357,4 +357,129 @@ juce::Result Session::insertAudioFileInSlot(const juce::File& file, int track, i
     return juce::Result::ok();
 }
 
+
+// Crossing between the views.
+//
+// A slot clip and a timeline clip are separate objects, in Theta as in Live, so
+// moving work between the views means copying rather than revealing. These are
+// the only two routes across, and both copy: the original stays where it was.
+
+int Session::firstFreeSlot(int track) const
+{
+    for (int scene = 0; scene < sceneCount(); ++scene)
+        if (auto* slot = clipSlotAt(track, scene))
+            if (slot->getClip() == nullptr)
+                return scene;
+    return -1;
+}
+
+namespace
+{
+// Shared by both directions: rebuild a clip inside a new owner. Wave clips are
+// re-inserted from the same source file rather than copying media, and MIDI
+// clips clone their sequence.
+te::Clip* copyClipInto(te::ClipOwner& destination, te::Clip& source, tracktion::core::TimeRange range,
+                       const juce::String& name)
+{
+    const auto offset = source.getPosition().offset;
+    if (auto* audio = dynamic_cast<te::WaveAudioClip*>(&source))
+    {
+        auto copy = te::insertWaveClip(destination, name, audio->getSourceFileReference().getFile(),
+                                       {range, offset}, te::DeleteExistingClips::no);
+        if (copy != nullptr)
+            copy->setColour(source.getColour());
+        return copy.get();
+    }
+    if (auto* midi = dynamic_cast<te::MidiClip*>(&source))
+    {
+        auto copy = te::insertMIDIClip(destination, name, range);
+        if (copy == nullptr)
+            return nullptr;
+        copy->cloneFrom(midi);
+        copy->setPosition({range, offset});
+        copy->setColour(source.getColour());
+        return copy.get();
+    }
+    return nullptr;
+}
+}
+
+juce::Result Session::copySlotClipToArrangement(int track, int scene, double startSeconds)
+{
+    auto* slot = clipSlotAt(track, scene);
+    if (slot == nullptr)
+        return juce::Result::fail("That clip slot does not exist.");
+    auto* source = slot->getClip();
+    if (source == nullptr)
+        return juce::Result::fail("That slot is empty.");
+    const auto tracks = te::getAudioTracks(*edit);
+    if (!juce::isPositiveAndBelow(track, tracks.size()))
+        return juce::Result::fail("That track does not exist.");
+    const auto start = tracktion::core::TimePosition::fromSeconds(std::max(0.0, startSeconds));
+    const auto range = tracktion::core::TimeRange(start, start + source->getPosition().time.getLength());
+    edit->getUndoManager().beginNewTransaction("Copy clip to arrangement");
+    auto* copy = copyClipInto(*tracks[track], *source, range, source->getName());
+    if (copy == nullptr)
+        return juce::Result::fail("That clip could not be copied to the arrangement.");
+    // On the timeline a clip occupies its own span rather than repeating, so
+    // the slot clip's loop is dropped in the copy.
+    copy->setLoopRangeBeats({});
+    copy->state.removeProperty(starterPlaceholderID, &edit->getUndoManager());
+    refreshLoop();
+    edit->getUndoManager().beginNewTransaction();
+    markModified();
+    if (edit->getTransport().isPlaying())
+        edit->restartPlayback();
+    sendSynchronousChangeMessage();
+    return juce::Result::ok();
+}
+
+juce::Result Session::copyClipToSlot(te::EditItemID id, int scene)
+{
+    auto* source = findClip(id);
+    if (source == nullptr)
+        return juce::Result::fail("Select a clip to copy.");
+    auto* clipTrack = source->getClipTrack();
+    if (clipTrack == nullptr)
+        return juce::Result::fail("That clip is not on a track.");
+    const auto tracks = te::getAudioTracks(*edit);
+    int track = -1;
+    for (int index = 0; index < tracks.size(); ++index)
+        if (tracks[index] == clipTrack)
+            track = index;
+    if (track < 0)
+        return juce::Result::fail("That clip is not on an audio track.");
+    edit->getUndoManager().beginNewTransaction("Copy clip to session slot");
+    // The clip keeps its track, as Live does when pasting into the session.
+    if (scene < 0)
+    {
+        scene = firstFreeSlot(track);
+        if (scene < 0)
+        {
+            scene = sceneCount();
+            ensureSceneSlots(scene + 1);
+        }
+    }
+    auto* slot = clipSlotAt(track, scene);
+    if (slot == nullptr)
+        return juce::Result::fail("That clip slot does not exist.");
+    if (auto* existing = slot->getClip())
+        existing->removeFromParent();
+    const auto length = source->getPosition().time.getLength();
+    auto* copy = copyClipInto(*slot, *source, {tracktion::core::TimePosition(),
+                                               tracktion::core::TimePosition() + length}, source->getName());
+    if (copy == nullptr)
+        return juce::Result::fail("That clip could not be copied to a slot.");
+    // Slot clips repeat until stopped, so the copy loops over its own length.
+    const auto beats = edit->tempoSequence.toBeats(tracktion::core::TimePosition() + length).inBeats();
+    copy->setLoopRangeBeats({tracktion::core::BeatPosition(), tracktion::core::BeatPosition::fromBeats(beats)});
+    copy->state.removeProperty(starterPlaceholderID, &edit->getUndoManager());
+    edit->getUndoManager().beginNewTransaction();
+    markModified();
+    if (edit->getTransport().isPlaying())
+        edit->restartPlayback();
+    sendSynchronousChangeMessage();
+    return juce::Result::ok();
+}
+
 }

@@ -69,6 +69,8 @@ int runArrangementTest()
        #include "scenarios/SessionView.inc"
         scenario("shared mixer");
        #include "scenarios/SharedMixer.inc"
+        scenario("clip round trip");
+       #include "scenarios/ClipRoundTrip.inc"
         return 0;
     }
     catch (const std::exception& error)

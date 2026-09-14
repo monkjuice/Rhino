@@ -72,6 +72,7 @@ private:
     juce::Result applyBrowserDrop(const juce::String& description, int track, double startSeconds = 0.0, bool insertPreset = false);
     void updatePlayhead();
     void showGridMenu();
+    void showClipMenu(te::EditItemID);
     void updateGridControl();
     GridDivision resolvedGridDivision() const;
     double resolvedGridBeats() const;

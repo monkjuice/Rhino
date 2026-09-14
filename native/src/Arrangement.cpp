@@ -396,6 +396,41 @@ double Arrangement::resolvedGridBeats() const
         * (gridSettings.triplet ? 2.0 / 3.0 : 1.0);
 }
 
+// The arrangement's half of the route between the two views. The clip stays
+// here; a copy of it lands in a session slot on the same track.
+void Arrangement::showClipMenu(te::EditItemID id)
+{
+    juce::PopupMenu menu;
+    menu.addSectionHeader("CLIP");
+    menu.addItem(1, "Copy to session slot");
+    menu.addSeparator();
+    menu.addItem(2, "Duplicate");
+    menu.addItem(3, "Delete");
+    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this)
+                           .withMousePosition(),
+        [safe = juce::Component::SafePointer<Arrangement>(this), id](int result)
+        {
+            if (safe == nullptr || result == 0) return;
+            if (result == 1)
+            {
+                const auto outcome = safe->session.copyClipToSlot(id);
+                if (safe->status)
+                    safe->status(outcome.failed() ? outcome.getErrorMessage()
+                                                  : "Copied the clip into a session slot");
+            }
+            else if (result == 2)
+            {
+                safe->selected = id;
+                safe->duplicateSelected();
+            }
+            else if (result == 3)
+            {
+                safe->setSelection({id}, id);
+                safe->deleteSelection();
+            }
+        });
+}
+
 void Arrangement::showGridMenu()
 {
     juce::PopupMenu menu, adaptive, fixed;

@@ -286,6 +286,11 @@ public:
     juce::Result insertAudioFileInSlot(const juce::File&, int track, int scene);
     juce::Result insertBuiltInSampleInSlot(BuiltInSample, int track, int scene);
     juce::Result deleteSlotClip(int track, int scene);
+    // Session clips and arrangement clips are separate, as they are in Live.
+    // These are the two ways across: -1 for scene picks the first free slot.
+    juce::Result copySlotClipToArrangement(int track, int scene, double startSeconds);
+    juce::Result copyClipToSlot(te::EditItemID, int scene = -1);
+    int firstFreeSlot(int track) const;
     bool anyTrackPlayingSlots() const;
     void returnToArrangement();
     te::LaunchQType launchQuantisation() const;

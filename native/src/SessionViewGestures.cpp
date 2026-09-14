@@ -163,6 +163,8 @@ void SessionView::showSlotMenu(int track, int scene)
     menu.addItem(20, "Insert Theta Whistle");
     menu.addItem(21, "Insert Theta Siren");
     menu.addSeparator();
+    menu.addItem(40, "Copy to arrangement at playhead", info.hasClip);
+    menu.addSeparator();
     menu.addItem(30, "Delete clip", info.hasClip);
     menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this)
                            .withTargetScreenArea(localAreaToGlobal(slotBounds(track, scene)).toNearestInt()),
@@ -180,6 +182,13 @@ void SessionView::showSlotMenu(int track, int scene)
             else if (result == 20) outcome = session.insertBuiltInSampleInSlot(Session::BuiltInSample::Whistle, track, scene);
             else if (result == 21) outcome = session.insertBuiltInSampleInSlot(Session::BuiltInSample::Siren, track, scene);
             else if (result == 30) outcome = session.deleteSlotClip(track, scene);
+            else if (result == 40)
+            {
+                const auto at = session.edit->getTransport().getPosition().inSeconds();
+                outcome = session.copySlotClipToArrangement(track, scene, at);
+                if (outcome.wasOk() && safe->status)
+                    safe->status("Copied the clip into the arrangement on " + session.trackName(track));
+            }
             if (outcome.failed() && safe->status) safe->status(outcome.getErrorMessage());
             safe->repaint();
         });

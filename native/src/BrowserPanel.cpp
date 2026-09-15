@@ -203,7 +203,7 @@ BrowserPanel::BrowserPanel(Session& s) : session(s)
 
     tree.setColour(juce::TreeView::backgroundColourId, juce::Colour(0xff20262c));
     tree.setColour(juce::TreeView::linesColourId, juce::Colour(0xff323a42));
-    tree.setDefaultOpenness(true);
+    tree.setDefaultOpenness(false);
     tree.setRootItemVisible(false);
     tree.setIndentSize(13);
     tree.setMultiSelectEnabled(false);
@@ -400,15 +400,14 @@ void BrowserPanel::rebuildTree()
     }
     tree.setRootItem(root.get());
     root->setOpen(true);
+    // Folders start closed, so a section opens as a short list of folders. A
+    // search is the exception: its hits are the point, so they are shown.
     for (const auto& [name, node] : folders)
-        node->setOpen(true);
-    if (openness != nullptr)
+        node->setOpen(searching);
+    if (openness != nullptr && !searching)
         tree.restoreOpennessState(*openness, false);
-    if (restored != nullptr)
+    if (restored != nullptr && restored->getParentItem() != nullptr && restored->getParentItem()->isOpen())
         restored->setSelected(true, true);
-    else if (root->getNumSubItems() > 0)
-        if (auto* first = root->getSubItem(0))
-            (first->getNumSubItems() > 0 ? first->getSubItem(0) : first)->setSelected(true, true);
     apply.setEnabled(selectedItem() != nullptr);
 }
 

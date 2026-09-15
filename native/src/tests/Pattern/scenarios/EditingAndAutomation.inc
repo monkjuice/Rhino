@@ -191,6 +191,21 @@
         require(std::abs(patternSynth()->ampAttack->getCurrentValue()
                          - (attackMinimum + (attackMaximum - attackMinimum) * 0.75f)) < 0.02f,
                 "Re-enabled automation drives the parameter again");
+        const auto sweptAttack = patternSynth()->ampAttack->getCurrentValue();
+        session.beginOfflineAutomation();
+        require(patternSynth()->ampAttack->getCurve().getNumPoints() == 2
+                && patternSynth()->ampDecay->getCurve().getNumPoints() == 2,
+                "An export mirrors every active lane into the engine's own automation curves");
+        require(std::abs(patternSynth()->ampAttack->getCurve().getValueAt(
+                             tracktion::core::TimePosition::fromSeconds(0.75), 0.0f)
+                         - (attackMinimum + (attackMaximum - attackMinimum) * 0.75f)) < 0.02f,
+                "A mirrored curve carries the lane's shape, so the render hears the sweep");
+        session.endOfflineAutomation();
+        require(patternSynth()->ampAttack->getCurve().getNumPoints() == 0
+                && patternSynth()->ampDecay->getCurve().getNumPoints() == 0,
+                "Finishing an export leaves the engine curves as it found them");
+        require(std::abs(patternSynth()->ampAttack->getCurrentValue() - sweptAttack) < 0.0001f,
+                "Finishing an export hands the parameters back to the playback sweep");
         require(session.clearTrackAutomationPoints({0, 0, 1}).wasOk(),
                 "A curve can be deleted without losing its lane");
         require(session.trackAutomations(0).size() == 3 && !session.trackAutomations(0)[1].active()

@@ -435,4 +435,63 @@ void Session::applyTrackAutomationAt(double timelineSeconds)
         sendSynchronousChangeMessage();
 }
 
+
+// Playback drives the lanes from the shell's 30 Hz timer, which only runs while
+// the transport is playing. An offline render has neither: it walks the edit on
+// a worker thread with the transport stopped, so a swept parameter would be
+// written to the file frozen at whatever value the timer last left it holding.
+// Mirroring each lane into the engine's own automation curve is what puts the
+// movement somewhere the render can read, since the node graph pulls those per
+// sub-block whether it is playing live or rendering.
+void Session::beginOfflineAutomation()
+{
+    endOfflineAutomation();
+
+    for (int track = 0; track <= masterTrackIndex(); ++track)
+    {
+        auto* list = pluginListForTrack(track);
+        if (list == nullptr)
+            continue;
+        for (const auto& automation : readTrackAutomations(track, false))
+        {
+            if (!automation.active() || !juce::isPositiveAndBelow(automation.target.slot, list->size()))
+                continue;
+            // A lane the user has taken over by hand drives nothing during
+            // playback, so it must not drive the render either.
+            if (const auto* runtime = findAutomationRuntime(automation.target); runtime != nullptr && runtime->overridden)
+                continue;
+            auto* plugin = (*list)[automation.target.slot];
+            if (plugin == nullptr)
+                continue;
+            auto* parameter = exposedParameterAt(*plugin, automation.target.parameter);
+            if (parameter == nullptr)
+                continue;
+            auto& curve = parameter->getCurve();
+            // An engine curve already on the parameter is somebody else's
+            // automation. Leave it alone and let it render on its own terms.
+            if (curve.getNumPoints() > 0)
+                continue;
+
+            offlineAutomation.push_back({parameter, parameter->getCurrentValue()});
+            const auto range = parameter->getValueRange();
+            const auto ceiling = exposedParameterMaximum(*plugin, automation.target.parameter, range.getEnd());
+            for (const auto& point : automation.points)
+                curve.addPoint(tracktion::core::TimePosition::fromSeconds(point.timeSeconds),
+                               juce::jlimit(range.getStart(), ceiling, point.value), 0.0f, nullptr);
+        }
+    }
+}
+
+void Session::endOfflineAutomation()
+{
+    for (auto& mirrored : offlineAutomation)
+    {
+        if (mirrored.parameter == nullptr)
+            continue;
+        mirrored.parameter->getCurve().clear(nullptr);
+        mirrored.parameter->setParameter(mirrored.restoreValue, juce::dontSendNotification);
+    }
+    offlineAutomation.clear();
+}
+
 }

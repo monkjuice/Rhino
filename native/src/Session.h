@@ -244,6 +244,11 @@ public:
     juce::Result clearTrackAutomationPoints(DeviceTarget);
     juce::Result toggleParameterAutomationOverride(int track, int slot, int parameter);
     void applyTrackAutomationAt(double timelineSeconds);
+    // Playback sweeps the lanes from the UI timer, which an offline render
+    // never runs. These mirror the lanes into the engine's own curves so the
+    // render reads them, and hand the parameters back afterwards.
+    void beginOfflineAutomation();
+    void endOfflineAutomation();
     juce::Result moveNote(int sourceStep, int sourcePitch, int targetStep, int targetPitch);
     juce::Result moveNotes(const std::vector<std::pair<int, int>>&, int stepDelta, int pitchDelta);
     juce::Result moveNotes(const std::vector<juce::ValueTree>&, double stepDelta, int pitchDelta);
@@ -352,6 +357,11 @@ private:
         bool overridden = false;
         bool active = false;
     };
+    struct OfflineAutomation
+    {
+        te::AutomatableParameter::Ptr parameter;
+        float restoreValue = 0.0f;
+    };
     void refreshAfterUndoRedo(bool changed);
     te::PluginList* pluginListForTrack(int track) const;
     te::ClipSlot* clipSlotAt(int track, int scene) const;
@@ -381,6 +391,7 @@ private:
     tracktion::core::TimeRange manualLoopRange;
     DeviceTarget lastTouchedParameter;
     std::vector<AutomationRuntime> automationRuntime;
+    std::vector<OfflineAutomation> offlineAutomation;
     std::optional<juce::PluginDescription> forgeDescription;
 };
 int runSelfTest();

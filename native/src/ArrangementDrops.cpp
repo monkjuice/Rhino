@@ -161,6 +161,19 @@ juce::Result Arrangement::applyBrowserDrop(const juce::String& description, int 
         return juce::Result::ok();
     }
 
+    if (kind == "drumkit")
+    {
+        const auto kit = drumKitFromId(id);
+        if (!kit) return juce::Result::fail("That browser item cannot be inserted here.");
+        if (track < 0) return juce::Result::fail("Drop drum kits on a track.");
+        const auto result = session.addDrumKit(*kit, track);
+        if (result.failed()) return result;
+        selectTrack(track);
+        if (status) status("Track " + juce::String(track + 1) + " now runs " + session.trackName(track)
+                           + ". Double-click the lane to add a clip.");
+        return juce::Result::ok();
+    }
+
     if (kind == "midi-effect")
     {
         const auto effect = midiEffectFromId(id);

@@ -13,6 +13,7 @@ Research deliverables: [open-source DAW and Ableton study](research/DAW-STUDY.md
 - A startup loading screen showing engine, audio-device, and workspace initialization.
 - One-bar, 16-step note grid covering MIDI notes 48-59.
 - Playback through Tracktion's 4OSC synth and Theta's internal Utility gain device.
+- Five drum kits under Instruments / Drum Rack, one matching each drum pattern. A kit is the drum instrument with its pads retuned, shortened and rebalanced, and the Clap kit puts the clap on the backbeat rather than the snare.
 - One instrument per track, as in Live and Logic. Dropping an instrument on a track replaces the one already there and renames the track after it. The track's clips are untouched, so the pattern stays and the sound changes. Audio samples and files are refused on a track that runs an instrument.
 - Clips are created deliberately: double-click an empty part of a lane to add a one-bar clip starting where you clicked, or press **Ctrl+A** to add one to the focused track at the playhead.
 - Drawing and erasing notes, grouped undo/redo, and tempo control from 40-240 BPM.

@@ -4,11 +4,96 @@
 
 namespace theta
 {
-DrumDevice::DrumDevice(te::PluginCreationInfo info) : Plugin(info) {}
+DrumDevice::DrumDevice(te::PluginCreationInfo info) : Plugin(info)
+{
+    kitIndex.referTo(state, "kit", getUndoManager(), 0.0f);
+    kitSelect = addParam("kit", "Kit", {0.0f, static_cast<float>(kitCount - 1)});
+    kitSelect->attachToCurrentValue(kitIndex);
+}
 
 DrumDevice::~DrumDevice()
 {
     notifyListenersOfDeletion();
+    kitSelect->detachFromCurrentValue();
+}
+
+void DrumDevice::restorePluginStateFromValueTree(const juce::ValueTree& source)
+{
+    te::copyPropertiesToCachedValues(source, kitIndex);
+    kitSelect->updateFromAttachedValue();
+}
+
+juce::String DrumDevice::kitName(Kit kit)
+{
+    switch (kit)
+    {
+        case Kit::Theta808: return "Theta 808";
+        case Kit::House:    return "House Kit";
+        case Kit::Break:    return "Break Kit";
+        case Kit::Minimal:  return "Minimal Kit";
+        case Kit::Clap:     return "Clap Kit";
+    }
+    return {};
+}
+
+DrumDevice::Kit DrumDevice::kit() const
+{
+    const auto index = juce::jlimit(0, kitCount - 1, juce::roundToInt(kitSelect->getCurrentValue()));
+    return static_cast<Kit>(index);
+}
+
+void DrumDevice::setKit(Kit kit)
+{
+    kitSelect->setParameter(static_cast<float>(static_cast<int>(kit)), juce::sendNotification);
+}
+
+// Each kit is the same sample set shaped differently: the tuning, how far the
+// sample is allowed to ring, and its level. Read from the audio thread, so this
+// is a pure lookup with no allocation.
+DrumDevice::VoiceShape DrumDevice::shapeFor(VoiceType type) const
+{
+    switch (kit())
+    {
+        case Kit::House:
+            switch (type)
+            {
+                case VoiceType::kick:      return {0.92f, 0.0f, 1.12f};
+                case VoiceType::snare:     return {1.04f, 0.22f, 0.90f};
+                case VoiceType::closedHat: return {1.10f, 0.05f, 0.85f};
+                case VoiceType::openHat:   return {1.02f, 0.30f, 0.80f};
+                default:                   return {1.0f, 0.0f, 0.95f};
+            }
+        case Kit::Break:
+            switch (type)
+            {
+                case VoiceType::kick:      return {1.06f, 0.0f, 1.0f};
+                case VoiceType::snare:     return {0.94f, 0.0f, 1.10f};
+                case VoiceType::closedHat: return {1.18f, 0.035f, 0.9f};
+                case VoiceType::openHat:   return {1.12f, 0.18f, 0.82f};
+                default:                   return {1.04f, 0.0f, 1.0f};
+            }
+        case Kit::Minimal:
+            switch (type)
+            {
+                case VoiceType::kick:      return {1.0f, 0.16f, 0.95f};
+                case VoiceType::snare:     return {1.12f, 0.12f, 0.72f};
+                case VoiceType::closedHat: return {1.25f, 0.025f, 0.68f};
+                case VoiceType::openHat:   return {1.15f, 0.10f, 0.62f};
+                default:                   return {1.0f, 0.12f, 0.8f};
+            }
+        case Kit::Clap:
+            switch (type)
+            {
+                case VoiceType::kick:      return {0.96f, 0.0f, 1.08f};
+                case VoiceType::clap:      return {1.0f, 0.0f, 1.15f};
+                case VoiceType::closedHat: return {1.06f, 0.045f, 0.8f};
+                case VoiceType::openHat:   return {1.0f, 0.22f, 0.75f};
+                default:                   return {1.0f, 0.0f, 0.95f};
+            }
+        case Kit::Theta808:
+            break;
+    }
+    return {};
 }
 
 void DrumDevice::initialise(const te::PluginInitialisationInfo& info)
@@ -52,7 +137,7 @@ void DrumDevice::trigger(int note, float velocity)
         case 48: type = VoiceType::kick; break;
         case 50: type = VoiceType::lowTom; break;
         case 52: type = VoiceType::midTom; break;
-        case 53: type = VoiceType::snare; break;
+        case 53: type = kit() == Kit::Clap ? VoiceType::clap : VoiceType::snare; break;
         case 54: type = VoiceType::highTom; break;
         case 56: type = VoiceType::clap; break;
         case 58: type = VoiceType::closedHat; break;
@@ -105,6 +190,7 @@ float DrumDevice::render(Voice& voice)
     if (sampleForVoice >= 0)
         return renderSample(voice, tr808Samples[static_cast<size_t>(sampleForVoice)],
                             tr808SampleRates[static_cast<size_t>(sampleForVoice)]);
+    juce::ignoreUnused(t, dt);
 
     if (voice.type == VoiceType::clap)
     {
@@ -122,7 +208,8 @@ float DrumDevice::render(Voice& voice)
             for (int channel = 0; channel < clapSample.getNumChannels(); ++channel)
                 sample += clapSample.getSample(channel, index) * (1.0f - frac)
                         + clapSample.getSample(channel, index + 1) * frac;
-            return sample / static_cast<float>(clapSample.getNumChannels()) * voice.velocity * 0.9f;
+            return sample / static_cast<float>(clapSample.getNumChannels()) * voice.velocity * 0.9f
+                 * shapeFor(voice.type).gain;
         }
 
         if (t > 0.26f) { voice.active = false; return 0.0f; }
@@ -131,7 +218,7 @@ float DrumDevice::render(Voice& voice)
         const auto noise = nextNoise(voice);
         const auto highPassed = noise - voice.noise * 0.72f;
         voice.noise = noise;
-        return highPassed * (0.42f * crack + 0.32f * body) * voice.velocity;
+        return highPassed * (0.42f * crack + 0.32f * body) * voice.velocity * shapeFor(voice.type).gain;
     }
 
     return 0.0f;
@@ -208,19 +295,35 @@ float DrumDevice::renderSample(Voice& voice, const juce::AudioBuffer<float>& sam
         voice.active = false;
         return 0.0f;
     }
-    const auto sourcePosition = voice.samplePosition++ * sourceRate / sampleRate;
+    const auto shape = shapeFor(voice.type);
+    // The kit's rate resamples the pad, which is what tunes it.
+    const auto elapsed = static_cast<float>(voice.samplePosition / sampleRate);
+    const auto sourcePosition = voice.samplePosition++ * sourceRate * shape.rate / sampleRate;
     const auto index = static_cast<int>(sourcePosition);
     if (index >= sample.getNumSamples() - 1)
     {
         voice.active = false;
         return 0.0f;
     }
+    auto envelope = 1.0f;
+    if (shape.decay > 0.0f)
+    {
+        if (elapsed >= shape.decay)
+        {
+            voice.active = false;
+            return 0.0f;
+        }
+        // Short linear fade to zero at the decay point, so a shortened pad does
+        // not click when it stops.
+        const auto remaining = 1.0f - elapsed / shape.decay;
+        envelope = remaining * remaining;
+    }
     const auto fraction = static_cast<float>(sourcePosition - index);
     auto value = 0.0f;
     for (int channel = 0; channel < sample.getNumChannels(); ++channel)
         value += sample.getSample(channel, index) * (1.0f - fraction)
                + sample.getSample(channel, index + 1) * fraction;
-    return value / static_cast<float>(sample.getNumChannels()) * voice.velocity * 0.9f;
+    return value / static_cast<float>(sample.getNumChannels()) * voice.velocity * 0.9f * shape.gain * envelope;
 }
 
 void DrumDevice::loadSamples()

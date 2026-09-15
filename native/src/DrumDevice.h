@@ -22,6 +22,16 @@ public:
     bool takesMidiInput() override { return true; }
     bool producesAudioWhenNoAudioInput() override { return true; }
     void initialise(const te::PluginInitialisationInfo&) override;
+    void restorePluginStateFromValueTree(const juce::ValueTree&) override;
+    // The kit reshapes the same sample set: pitch, decay and level per voice,
+    // and which pad the backbeat lands on. Live's drum racks differ the same
+    // way, by what sits on each pad rather than by a different engine.
+    enum class Kit { Theta808, House, Break, Minimal, Clap };
+    static constexpr int kitCount = 5;
+    static juce::String kitName(Kit);
+    te::AutomatableParameter& kitParameter() { return *kitSelect; }
+    Kit kit() const;
+    void setKit(Kit);
     void deinitialise() override {}
     void reset() override;
     void midiPanic() override;
@@ -47,6 +57,16 @@ private:
                     const void* data, int dataSize);
     float renderSample(Voice&, const juce::AudioBuffer<float>&, double sourceRate);
 
+    struct VoiceShape
+    {
+        float rate = 1.0f;   // playback speed, so pitch
+        float decay = 0.0f;  // seconds to silence, 0 plays the sample out
+        float gain = 1.0f;
+    };
+    VoiceShape shapeFor(VoiceType) const;
+
+    juce::CachedValue<float> kitIndex;
+    te::AutomatableParameter::Ptr kitSelect;
     std::array<Voice, 32> voices;
     std::array<juce::AudioBuffer<float>, 7> tr808Samples;
     std::array<double, 7> tr808SampleRates { 44100.0, 44100.0, 44100.0, 44100.0,

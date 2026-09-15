@@ -144,6 +144,13 @@ te::Plugin* Session::patternInstrument() const
     return trackInstrument(*audioTrack);
 }
 
+te::Plugin* Session::patternInstrumentForTrack(int trackIndex) const
+{
+    const auto tracks = te::getAudioTracks(*edit);
+    if (!juce::isPositiveAndBelow(trackIndex, tracks.size())) return nullptr;
+    return trackInstrument(*tracks[trackIndex]);
+}
+
 Session::Instrument Session::patternInstrumentKind() const
 {
     if (auto* plugin = patternInstrument())

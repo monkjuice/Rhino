@@ -180,6 +180,10 @@ public:
     juce::Result addAudioEffect(AudioEffect, int track = 1);
     juce::Result addClipAudioEffect(AudioEffect, te::EditItemID);
     juce::Result addInstrument(Instrument, int track);
+    // A drum kit is the drum instrument plus a kit selection, so these behave
+    // like any other instrument drop: the track switches to Theta Drums and
+    // takes that kit's name.
+    juce::Result addDrumKit(DrumDevice::Kit, int track);
     bool isForgeAvailable() const { return forgeDescription.has_value(); }
     juce::Result addMidiEffect(MidiEffect, int track);
     int trackCount() const;
@@ -306,6 +310,7 @@ public:
     // A track has one instrument, so there is nothing stable to cache: switching
     // removes the previous plugin. Ask the track instead.
     te::Plugin* patternInstrument() const;
+    te::Plugin* patternInstrumentForTrack(int track) const;
     Instrument patternInstrumentKind() const;
 private:
     // The arrangement workflow test reaches engine-level slot state through

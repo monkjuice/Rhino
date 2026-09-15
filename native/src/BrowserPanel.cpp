@@ -53,6 +53,19 @@ juce::String instrumentId(Session::Instrument instrument)
     return {};
 }
 
+juce::String drumKitId(DrumDevice::Kit kit)
+{
+    switch (kit)
+    {
+        case DrumDevice::Kit::Theta808: return "Theta808";
+        case DrumDevice::Kit::House:    return "HouseKit";
+        case DrumDevice::Kit::Break:    return "BreakKit";
+        case DrumDevice::Kit::Minimal:  return "MinimalKit";
+        case DrumDevice::Kit::Clap:     return "ClapKit";
+    }
+    return {};
+}
+
 juce::String midiEffectId(Session::MidiEffect effect)
 {
     switch (effect)
@@ -203,7 +216,11 @@ BrowserPanel::BrowserPanel(Session& s) : session(s)
         {"Instruments", "Synths", "4OSC synth", "Subtractive synth", std::nullopt, std::nullopt, Session::Instrument::FourOsc},
         {"Instruments", "Synths", "Theta Wave", "Morphing wavetable-style synth", std::nullopt, std::nullopt, Session::Instrument::ThetaWave},
         {"Instruments", "Synths", "Theta Forge", "Two-oscillator Forge synth", std::nullopt, std::nullopt, Session::Instrument::ThetaForge},
-        {"Instruments", "Drums", "Theta Drums", "TR-808 kit: kick, snare, toms, hats", std::nullopt, std::nullopt, Session::Instrument::Drums},
+        {"Instruments", "Drum Rack", "Theta 808", "TR-808 kit: kick, snare, toms, hats", std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt, DrumDevice::Kit::Theta808},
+        {"Instruments", "Drum Rack", "House Kit", "Deep kick, tight hats, for the House pattern", std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt, DrumDevice::Kit::House},
+        {"Instruments", "Drum Rack", "Break Kit", "Snappy snare, bright hats, for the Break pattern", std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt, DrumDevice::Kit::Break},
+        {"Instruments", "Drum Rack", "Minimal Kit", "Short, quiet pads, for the Minimal pattern", std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt, DrumDevice::Kit::Minimal},
+        {"Instruments", "Drum Rack", "Clap Kit", "Clap on the backbeat, for the Clap pattern", std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt, DrumDevice::Kit::Clap},
         {"Patterns", "Synth", "Warm pulse", "Soft one-bar 4OSC chord pulse", Session::PatternPreset::WarmPulse},
         {"Patterns", "Synth", "Acid steps", "Tight 16-step synth riff", Session::PatternPreset::AcidSteps},
         {"Patterns", "Synth", "Arp run", "Held chord made for Theta Arp", Session::PatternPreset::ArpRun},
@@ -334,7 +351,7 @@ juce::Colour BrowserPanel::colourFor(const Item& item) const
     if (item.preset) return juce::Colour(0xffc6d58c);
     if (item.effect) return juce::Colour(0xffffb15f);
     if (item.midiEffect) return juce::Colour(0xffbda4ff);
-    if (item.instrument) return juce::Colour(0xff8cc5d2);
+    if (item.instrument || item.drumKit) return juce::Colour(0xff8cc5d2);
     return juce::Colour(0xff6f7b85);
 }
 
@@ -408,6 +425,8 @@ juce::String BrowserPanel::dragDescriptionFor(const Item& item) const
         return "theta-browser:midi-effect:" + midiEffectId(*item.midiEffect);
     if (item.sample)
         return "theta-browser:sample:" + sampleId(*item.sample);
+    if (item.drumKit)
+        return "theta-browser:drumkit:" + drumKitId(*item.drumKit);
     return "theta-browser:info:" + item.name;
 }
 
@@ -433,6 +452,11 @@ void BrowserPanel::applyItem(const Item& item)
     else if (item.midiEffect)
     {
         const auto result = session.addMidiEffect(*item.midiEffect, 0);
+        if (status) status(result.wasOk() ? "Added " + item.name + " to " + session.trackName(0) : result.getErrorMessage());
+    }
+    else if (item.drumKit)
+    {
+        const auto result = session.addDrumKit(*item.drumKit, 0);
         if (status) status(result.wasOk() ? "Added " + item.name + " to " + session.trackName(0) : result.getErrorMessage());
     }
     else if (item.sample)

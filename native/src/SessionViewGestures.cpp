@@ -305,6 +305,14 @@ void SessionView::applyBrowserDrop(const juce::String& description, int track, i
             message = "Added browser effect to " + session.trackName(track) + " Device View";
         }
     }
+    else if (kind == "drumkit")
+    {
+        if (const auto kit = drumKitFromId(id))
+        {
+            result = session.addDrumKit(*kit, track);
+            message = "Track " + juce::String(track + 1) + " now runs " + session.trackName(track);
+        }
+    }
     else if (kind == "midi-effect")
     {
         if (const auto effect = midiEffectFromId(id))

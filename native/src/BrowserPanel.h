@@ -35,6 +35,7 @@ public:
         std::optional<Session::Instrument> instrument;
         std::optional<Session::MidiEffect> midiEffect;
         std::optional<Session::BuiltInSample> sample;
+        std::optional<DrumDevice::Kit> drumKit;
     };
 
 private:

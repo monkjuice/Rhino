@@ -196,6 +196,34 @@ juce::Result Session::addMidiEffect(MidiEffect effect, int trackIndex)
     return juce::Result::ok();
 }
 
+juce::Result Session::addDrumKit(DrumDevice::Kit kit, int trackIndex)
+{
+    const auto tracks = te::getAudioTracks(*edit);
+    if (!juce::isPositiveAndBelow(trackIndex, tracks.size()))
+        return juce::Result::fail("Drop drum kits on a track.");
+    const auto name = DrumDevice::kitName(kit);
+    edit->getUndoManager().beginNewTransaction("Add " + name);
+    bool changed = false;
+    if (const auto result = switchTrackInstrument(*edit, *tracks[trackIndex], Instrument::Drums, changed);
+        result.failed())
+        return result;
+    auto* drums = findDrumDevice(*tracks[trackIndex]);
+    if (drums == nullptr)
+        return juce::Result::fail("The drum instrument could not be created.");
+    drums->setKit(kit);
+    // The track is named after its instrument, and the kit is what the
+    // instrument now is.
+    tracks[trackIndex]->setName(name);
+    if (trackIndex == 0)
+        edit->state.setProperty("thetaPatternInstrument", "drums", &edit->getUndoManager());
+    edit->getUndoManager().beginNewTransaction();
+    markModified();
+    if (edit->getTransport().isPlaying())
+        edit->restartPlayback();
+    sendSynchronousChangeMessage();
+    return juce::Result::ok();
+}
+
 std::vector<Session::DeviceSlot> Session::deviceSlots(int track) const
 {
     std::vector<DeviceSlot> slots;

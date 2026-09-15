@@ -23,6 +23,8 @@ A class may be defined across several translation units. `Session` is implemente
 
 - A track has one instrument, as in Live and Logic. `switchTrackInstrument` is the only thing that changes it: the replacement is inserted at the old instrument's index so MIDI effects stay ahead of it and audio effects behind it, and the instrument it replaces is removed rather than disabled, taking its patch with it. Clips are untouched, so switching an instrument leaves the pattern alone. Projects saved when a track could stack instruments are migrated on load by `collapseStackedInstruments`, which keeps whichever one was enabled. Nothing caches an instrument pointer, because switching invalidates it; ask the track through `trackInstrument` or `Session::patternInstrument`.
 
+- `DrumDevice` has one parameter, `kit`, selecting a table of per-voice shapes: playback rate, an optional decay in seconds, and a level. It is read on the audio thread as a plain lookup with no allocation, and the Clap kit additionally routes the backbeat note to the clap pad. Kits are the same sample set reshaped, which is how a drum rack preset differs from another.
+
 ## Adding a device
 
 Devices derive from `te::Plugin` and follow a fixed shape: a stable `xmlTypeName` (`theta.<name>.v1`), the `getName`/`getPluginType`/`getVendor` overrides, and parameters wired through `referTo` / `addParam` / `attachToCurrentValue`, detached in the destructor and refreshed in `restorePluginStateFromValueTree`.

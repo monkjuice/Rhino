@@ -61,6 +61,16 @@ inline std::optional<Session::Instrument> instrumentFromId(const juce::String& i
     return std::nullopt;
 }
 
+inline std::optional<DrumDevice::Kit> drumKitFromId(const juce::String& id)
+{
+    if (id == "Theta808")   return DrumDevice::Kit::Theta808;
+    if (id == "HouseKit")   return DrumDevice::Kit::House;
+    if (id == "BreakKit")   return DrumDevice::Kit::Break;
+    if (id == "MinimalKit") return DrumDevice::Kit::Minimal;
+    if (id == "ClapKit")    return DrumDevice::Kit::Clap;
+    return std::nullopt;
+}
+
 inline std::optional<Session::MidiEffect> midiEffectFromId(const juce::String& id)
 {
     if (id == "ThetaArp") return Session::MidiEffect::ThetaArp;

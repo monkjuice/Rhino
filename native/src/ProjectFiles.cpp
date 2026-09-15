@@ -150,9 +150,25 @@ void ProjectFiles::renderWav(const juce::File& file)
     busy = true;
     if (loadingChanged) loadingChanged(true);
     session.stop();
-    report("Exporting " + file.getFileName() + "...");
     auto* edit = session.edit.get();
-    workers.addJob([weak = juce::WeakReference<ProjectFiles>(this), edit, file, length]
+
+    // The render drives the very plugin instances the device callback is still
+    // holding. Detaching the edit from the device first is what keeps the export
+    // off the speakers, and stops the live graph from re-entering plugins that
+    // the render has just re-prepared. Released on the message thread below,
+    // which reattaches the device.
+    renderStatus = std::make_unique<te::Edit::ScopedRenderStatus>(*edit, true);
+    te::Renderer::turnOffAllPlugins(*edit);
+
+    // Render at the device's own rate and block size. Anything else asks every
+    // plugin to run at settings it was never auditioned at, and the file stops
+    // being the thing that was heard.
+    auto& devices = session.engine.getDeviceManager();
+    const double sampleRate = devices.getSampleRate() > 7000.0 ? devices.getSampleRate() : 48000.0;
+    const int blockSize = devices.getBlockSize() > 0 ? devices.getBlockSize() : 512;
+
+    report("Exporting " + file.getFileName() + "...");
+    workers.addJob([weak = juce::WeakReference<ProjectFiles>(this), edit, file, length, sampleRate, blockSize]
     {
         juce::TemporaryFile temporary(file);
         juce::WavAudioFormat wav;
@@ -162,14 +178,14 @@ void ProjectFiles::renderWav(const juce::File& file)
             te::Renderer::Parameters parameters(*edit);
             parameters.destFile = temporary.getFile();
             parameters.audioFormat = &wav;
-            parameters.sampleRateForAudio = 48000;
+            parameters.sampleRateForAudio = sampleRate;
             parameters.bitDepth = 24;
-            parameters.blockSizeForAudio = 512;
-            // Arrangement tracks sum at the master bus. Leave a little true
-            // playback headroom instead of letting the PCM writer hard-clip
-            // overlapping clips or effect tails.
-            parameters.shouldNormalise = true;
-            parameters.normaliseToLevelDb = -1.0f;
+            parameters.blockSizeForAudio = blockSize;
+            // The main track is the edit's master chain, so its devices and its
+            // fader only reach the file when master plugins are rendered. Export
+            // at unity otherwise: normalising would re-level the mix against what
+            // the main meter showed.
+            parameters.useMasterPlugins = true;
             parameters.ditheringEnabled = true;
             parameters.time = {{}, tracktion::core::TimePosition{} + length};
             te::Renderer::RenderTask task("Export WAV", parameters, nullptr, nullptr);
@@ -181,6 +197,10 @@ void ProjectFiles::renderWav(const juce::File& file)
         {
             if (!weak) return;
             weak->busy = false;
+            // Leave no plugin prepared for the render's settings before the
+            // device comes back; releasing the status reallocates the context.
+            te::Renderer::turnOffAllPlugins(*weak->session.edit);
+            weak->renderStatus.reset();
             if (weak->loadingChanged) weak->loadingChanged(false);
             weak->report(success ? "Exported " + file.getFileName()
                                  : "Could not export WAV" + (error.isEmpty() ? juce::String{} : ": " + error));

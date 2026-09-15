@@ -23,6 +23,9 @@ private:
     void report(const juce::String& text) { if (status) status(text); }
     Session& session;
     bool busy = false;
+    // Held for the whole of an export: the edit stays detached from the audio
+    // device until this is released back on the message thread.
+    std::unique_ptr<te::Edit::ScopedRenderStatus> renderStatus;
     std::unique_ptr<juce::FileChooser> chooser;
     juce::ThreadPool workers {1};
     JUCE_DECLARE_WEAK_REFERENCEABLE(ProjectFiles)

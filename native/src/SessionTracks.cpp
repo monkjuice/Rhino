@@ -83,5 +83,113 @@ juce::Result Session::removeAudioTrack(int track)
     return juce::Result::ok();
 }
 
+namespace
+{
+const juce::Identifier laneHeightID {"thetaLaneHeight"};
+}
+
+// Zero is "not chosen yet" rather than a height of nothing, which is what lets
+// an untouched project keep fitting its rows to the panel.
+float Session::trackLaneHeight(int track) const
+{
+    const auto tracks = te::getAudioTracks(*edit);
+    if (!juce::isPositiveAndBelow(track, tracks.size()))
+        return 0.0f;
+    return static_cast<float>(static_cast<double>(tracks[track]->state.getProperty(laneHeightID, 0.0)));
+}
+
+juce::Result Session::setTrackLaneHeight(int track, float height)
+{
+    const auto tracks = te::getAudioTracks(*edit);
+    if (!juce::isPositiveAndBelow(track, tracks.size()))
+        return juce::Result::fail("Select a track to resize.");
+    // Row heights are a view setting, so they are written straight to the track
+    // state without an undo transaction: undo belongs to what the track plays.
+    tracks[track]->state.setProperty(laneHeightID, static_cast<double>(std::max(0.0f, height)), nullptr);
+    markModified();
+    sendSynchronousChangeMessage();
+    return juce::Result::ok();
+}
+
+juce::Result Session::setTrackName(int track, const juce::String& name)
+{
+    const auto tracks = te::getAudioTracks(*edit);
+    if (isMasterTrack(track))
+        return juce::Result::fail("The main row keeps its name.");
+    if (!juce::isPositiveAndBelow(track, tracks.size()))
+        return juce::Result::fail("Select a track to rename.");
+    const auto trimmed = name.trim();
+    if (trimmed.isEmpty())
+        return juce::Result::fail("A track needs a name.");
+    edit->getUndoManager().beginNewTransaction("Rename track");
+    tracks[track]->setName(trimmed);
+    edit->getUndoManager().beginNewTransaction();
+    markModified();
+    sendSynchronousChangeMessage();
+    return juce::Result::ok();
+}
+
+juce::Colour Session::trackColour(int track) const
+{
+    const auto tracks = te::getAudioTracks(*edit);
+    if (!juce::isPositiveAndBelow(track, tracks.size()))
+        return {};
+    return tracks[track]->getColour();
+}
+
+juce::Result Session::setTrackColour(int track, juce::Colour colour)
+{
+    const auto tracks = te::getAudioTracks(*edit);
+    if (isMasterTrack(track))
+        return juce::Result::fail("The main row takes no colour.");
+    if (!juce::isPositiveAndBelow(track, tracks.size()))
+        return juce::Result::fail("Select a track to colour.");
+    edit->getUndoManager().beginNewTransaction("Colour track");
+    tracks[track]->setColour(colour);
+    edit->getUndoManager().beginNewTransaction();
+    markModified();
+    sendSynchronousChangeMessage();
+    return juce::Result::ok();
+}
+
+const std::vector<juce::Colour>& Session::trackColourPalette()
+{
+    // Saturated enough to tell apart at a glance and to carry dark text, the
+    // way a track colour does in the DAWs this borrows from. The muted set
+    // these replace read as dirt on the panel rather than as a choice.
+    static const std::vector<juce::Colour> palette {
+        juce::Colour(0xff4aa3df), juce::Colour(0xff5ac8c8), juce::Colour(0xff58c07a), juce::Colour(0xff9bd14f),
+        juce::Colour(0xffd8d24a), juce::Colour(0xffe8a33d), juce::Colour(0xffe8743d), juce::Colour(0xffe05a5a),
+        juce::Colour(0xffe85f9b), juce::Colour(0xffb069d8), juce::Colour(0xff7d7ee0), juce::Colour(0xff8d9aa8),
+        juce::Colour(0xff2f7fb8), juce::Colour(0xff3f9a68), juce::Colour(0xffb8862f), juce::Colour(0xffb04a6a)
+    };
+    return palette;
+}
+
+juce::Result Session::moveTrack(int track, int destination)
+{
+    const auto tracks = te::getAudioTracks(*edit);
+    if (isMasterTrack(track) || isMasterTrack(destination))
+        return juce::Result::fail("The main row keeps its place.");
+    if (!juce::isPositiveAndBelow(track, tracks.size()))
+        return juce::Result::fail("Select a track to move.");
+    destination = juce::jlimit(0, tracks.size() - 1, destination);
+    if (destination == track)
+        return juce::Result::ok();
+    // An insert point names the track the moved one lands behind, so it is read
+    // from the order with the moved track already lifted out of it.
+    std::vector<te::Track*> remaining;
+    for (int i = 0; i < tracks.size(); ++i)
+        if (i != track)
+            remaining.push_back(tracks[i]);
+    auto* preceding = destination > 0 ? remaining[static_cast<size_t>(destination) - 1] : nullptr;
+    edit->getUndoManager().beginNewTransaction("Move track");
+    edit->moveTrack(tracks[track], te::TrackInsertPoint(nullptr, preceding));
+    edit->getUndoManager().beginNewTransaction();
+    refreshUtilityPointers();
+    markModified();
+    sendSynchronousChangeMessage();
+    return juce::Result::ok();
+}
 
 }

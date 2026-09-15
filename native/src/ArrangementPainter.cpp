@@ -25,8 +25,20 @@ void Arrangement::paint(juce::Graphics& g)
             continue;
         }
         const auto track = rows[static_cast<size_t>(index)].track;
-        g.setColour(juce::Colour(track == 0 ? 0xff242b31 : 0xff20272e));
+        g.setColour(juce::Colour(track == 0 ? 0xff262e36 : 0xff222a31));
         g.fillRect(row.withX(0.0f).withWidth(static_cast<float>(getWidth()) - 14.0f));
+        // The card is two columns with the panel grey between them: the
+        // controls keep the panel background, and the name sits on the track
+        // colour. The clips on the track keep whatever colours they were given.
+        const auto nameColumn = juce::Rectangle<float>(cardControlsWidth + cardDividerWidth, row.getY(),
+                                                       headerWidth - cardControlsWidth - cardDividerWidth,
+                                                       row.getHeight());
+        const auto colour = session.trackColour(track);
+        const auto cardColour = colour.isTransparent() ? juce::Colour(0xff41505d) : colour;
+        g.setColour(cardColour);
+        g.fillRect(nameColumn);
+        g.setColour(juce::Colour(0xff39434b));
+        g.fillRect(cardControlsWidth, row.getY(), cardDividerWidth, row.getHeight());
         if (track == selectedTrack)
         {
             // Two different things. The strip marks the track the rest of the
@@ -35,16 +47,40 @@ void Arrangement::paint(juce::Graphics& g)
             // clip and a track card are never selected together.
             if (focus == Focus::track)
             {
-                g.setColour(juce::Colour(0xff343f47));
+                g.setColour(juce::Colour(0x12ffffff));
                 g.fillRect(row.withX(0.0f).withWidth(headerWidth));
             }
             g.setColour(juce::Colour(0xffc6d58c));
             g.fillRect(row.withX(0.0f).withWidth(3.0f));
         }
-        g.setColour(juce::Colour(0xffc4cbd1));
-        g.drawText(juce::String(track + 1).paddedLeft('0', 2) + "  " + session.trackName(track),
-                   10, static_cast<int>(row.getY()) + 4, static_cast<int>(headerWidth) - 20, 20,
-                   juce::Justification::centredLeft);
+        // The name holds the top line of the card whatever height the row is
+        // dragged to, level with the two buttons beside it. Dark text on a
+        // light card, light on a dark one, so every colour stays readable.
+        g.setColour(cardColour.contrasting(0.8f));
+        g.setFont(juce::FontOptions(12.0f, juce::Font::bold));
+        g.drawFittedText(juce::String(track + 1).paddedLeft('0', 2) + "  " + session.trackName(track),
+                         nameColumn.withY(row.getY() + cardControlsTop).withHeight(18.0f).toNearestInt().reduced(6, 0),
+                         juce::Justification::centredLeft, 1, 0.75f);
+        g.setFont(juce::FontOptions(12.0f));
+    }
+
+    // Every row is bounded, header and timeline alike, so a track reads as one
+    // band across the whole panel rather than as a card beside loose lanes.
+    {
+        const auto laneBottom = masterLane().getY();
+        juce::Graphics::ScopedSaveState scope(g);
+        g.reduceClipRegion(juce::Rectangle<int>(0, static_cast<int>(lanesTop), getWidth() - 14,
+                                                std::max(1, static_cast<int>(laneContentHeight()))));
+        for (int index = 0; index < static_cast<int>(rows.size()); ++index)
+        {
+            const auto row = rowBounds(index);
+            if (row.getBottom() < lanesTop || row.getY() > laneBottom) continue;
+            const auto ownRow = rows[static_cast<size_t>(index)].automation < 0;
+            g.setColour(juce::Colour(ownRow ? 0xff39434b : 0xff2c353c));
+            g.drawHorizontalLine(static_cast<int>(row.getBottom()) - 1, 0.0f, static_cast<float>(getWidth()) - 14.0f);
+        }
+        g.setColour(juce::Colour(0xff39434b));
+        g.drawVerticalLine(static_cast<int>(headerWidth) - 1, lanesTop, laneBottom);
     }
 
     // The master row is pinned below the lanes. It takes no clips, so its lane
@@ -64,7 +100,7 @@ void Arrangement::paint(juce::Graphics& g)
         }
         g.setColour(juce::Colour(0xffc4cbd1));
         g.setFont(juce::FontOptions(11.0f));
-        g.drawText("MAIN", 10, static_cast<int>(master.getY()) + 2, 120, 16, juce::Justification::centredLeft);
+        g.drawText("MAIN", 10, static_cast<int>(master.getY()) + 5, 44, 16, juce::Justification::centredLeft);
     }
 
     const auto firstBeat = session.edit->tempoSequence.toBeats(tracktion::core::TimePosition::fromSeconds(viewStart)).inBeats();
@@ -78,10 +114,13 @@ void Arrangement::paint(juce::Graphics& g)
         const auto x = xFor(time);
         const auto bar = isGridLine(beat, session.beatsPerBar());
         const auto wholeBeat = isGridLine(beat, 1.0);
-        if (gridSettings.mode != GridMode::off || bar)
+        // The ruler's divisions carry on through the main row, which is what
+        // ties it to the timeline above it. They start at the lanes rather than
+        // in the track headers, which the row before them has already painted.
+        if ((gridSettings.mode != GridMode::off || bar) && x >= headerWidth)
         {
             g.setColour(bar ? juce::Colour(0xff42515c) : wholeBeat ? juce::Colour(0xff35404a) : juce::Colour(0xff29323a));
-            g.drawVerticalLine(static_cast<int>(x), static_cast<int>(lanesTop), masterLane().getY());
+            g.drawVerticalLine(static_cast<int>(x), static_cast<int>(lanesTop), masterLane().getBottom());
         }
         if (bar)
         {
@@ -126,7 +165,7 @@ void Arrangement::paint(juce::Graphics& g)
         if (visible.isEmpty() || !visible.intersects(dirty)) continue;
         juce::Graphics::ScopedSaveState scope(g);
         g.reduceClipRegion(juce::Rectangle<int>(0, static_cast<int>(lanesTop), getWidth() - 14,
-                                                std::max(1, getHeight() - static_cast<int>(lanesTop) - 18)));
+                                                std::max(1, static_cast<int>(laneContentHeight()))));
         const auto fallback = juce::Colour(clip.track == 0 ? 0xff414c34 : 0xff284b59);
         const auto label = clip.colour.isTransparent() ? fallback : clip.colour;
         g.setColour(label.withAlpha(isSelected(clip.id) ? 0.82f : 0.68f));
@@ -232,6 +271,14 @@ void Arrangement::paint(juce::Graphics& g)
             if (row.getBottom() < lanesTop || row.getY() > lanesTop + laneContentHeight()) continue;
             paintAutomationRow(g, index);
         }
+    }
+    // Where a carried track would land if it were dropped now.
+    if (movingTrack >= 0 && moveStarted && moveDestination >= 0)
+    {
+        const auto target = lane(moveDestination);
+        const auto y = moveDestination > movingTrack ? target.getBottom() : target.getY();
+        g.setColour(juce::Colour(0xffc6d58c));
+        g.fillRect(0.0f, y - 1.0f, static_cast<float>(getWidth()) - 14.0f, 2.0f);
     }
     if (marqueeSelecting)
     {

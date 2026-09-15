@@ -71,6 +71,8 @@ Arrangement::Arrangement(Session& s) : session(s), vblank(this, [this] { updateP
     for (auto* control : std::initializer_list<juce::Component*>{&duplicateButton, &addTrack, &snap, &automationButton, &gridControl, &scroll, &trackScrollBar})
         addAndMakeVisible(control);
     addAndMakeVisible(snapSize);
+    laneHeaders.setInterceptsMouseClicks(false, true);
+    addAndMakeVisible(laneHeaders);
     sync();
 }
 
@@ -86,7 +88,7 @@ void Arrangement::configureMasterControls()
 {
     masterVolume.setSliderStyle(juce::Slider::LinearBar);
     masterVolume.setRange(Session::minimumVolumeDb, Session::maximumVolumeDb, 0.1);
-    masterVolume.setTextValueSuffix(" dB");
+    masterVolume.setTextValueSuffix({});
     masterVolume.setDoubleClickReturnValue(true, 0.0);
     masterVolume.setTooltip("Main output volume");
     masterVolume.onDragStart = [this] { session.beginMasterVolumeGesture(); };
@@ -99,6 +101,16 @@ void Arrangement::configureMasterControls()
     masterPan.onDragStart = [this] { session.beginMasterPanGesture(); };
     masterPan.onDragEnd = [this] { session.endMasterPanGesture(); };
     masterPan.onValueChange = [this] { session.setMasterPan(static_cast<float>(masterPan.getValue())); };
+    masterVolume.setColour(juce::Slider::trackColourId, juce::Colour(0xff45d0d4));
+    masterVolume.setColour(juce::Slider::backgroundColourId, juce::Colour(0xff161c21));
+    masterVolume.setColour(juce::Slider::textBoxTextColourId, juce::Colour(0xff0e1317));
+    masterVolume.setColour(juce::Slider::textBoxOutlineColourId, juce::Colour(0x33000000));
+    masterPan.setColour(juce::Slider::trackColourId, juce::Colour(0xffd4564e));
+    masterPan.setColour(juce::Slider::backgroundColourId, juce::Colour(0xff161c21));
+    masterPan.setColour(juce::Slider::textBoxTextColourId, juce::Colour(0xff0e1317));
+    masterPan.setColour(juce::Slider::textBoxOutlineColourId, juce::Colour(0x33000000));
+    masterVolume.addMouseListener(this, false);
+    masterPan.addMouseListener(this, false);
     addAndMakeVisible(masterVolume);
     addAndMakeVisible(masterPan);
 }
@@ -121,45 +133,41 @@ void Arrangement::resized()
         buildRows();
     else
         layoutRows();
-    const auto mixerVisible = showTrackMixer();
-    // Nothing clips the controls: they are components, so they draw over the
-    // ruler above the lanes and over the pinned main row below it. A control
-    // row that would cross either edge is hidden instead of laid over them.
-    const auto lanesBottom = static_cast<int>(masterLane().getY());
+    const auto lanesBottom = masterLane().getY();
+    laneHeaders.setBounds(0, static_cast<int>(lanesTop), static_cast<int>(headerWidth),
+                          std::max(1, static_cast<int>(lanesBottom - lanesTop)));
     for (int i = 0; i < session.trackCount() && i < static_cast<int>(mute.size()); ++i)
     {
         const auto row = lane(i);
         const auto index = static_cast<size_t>(i);
-        // One control row pinned to the bottom of the lane, so short lanes keep
-        // the track name legible rather than overlapping it.
-        const auto controlsY = static_cast<int>(row.getBottom()) - 26;
-        const auto visible = controlsY >= static_cast<int>(lanesTop) && controlsY + 22 <= lanesBottom;
+        // Mute and solo sit on the name's line; the two faders share the line
+        // under them at matching widths. A row dragged to its shortest gives up
+        // the faders and keeps the buttons. Positions are inside the header
+        // container, which crops whatever leaves the lanes.
+        const auto top = static_cast<int>(row.getY() - lanesTop) + cardControlsTop;
+        const auto right = cardControlLeft + cardControlWidth + cardControlGap;
+        const auto mixerVisible = row.getHeight() >= mixerLaneHeight;
+        const auto visible = row.getBottom() > lanesTop && row.getY() < lanesBottom;
         mute[index]->setVisible(visible);
         solo[index]->setVisible(visible);
         volume[index]->setVisible(visible && mixerVisible);
         pan[index]->setVisible(visible && mixerVisible);
-        mute[index]->setBounds(10, controlsY, 26, 22);
-        solo[index]->setBounds(40, controlsY, 26, 22);
-        volume[index]->setBounds(72, controlsY, 76, 22);
-        pan[index]->setBounds(152, controlsY, 38, 22);
+        mute[index]->setBounds(cardControlLeft, top, cardControlWidth, 18);
+        solo[index]->setBounds(right, top, cardControlWidth, 18);
+        volume[index]->setBounds(cardControlLeft, top + 23, cardControlWidth, 16);
+        pan[index]->setBounds(right, top + 23, cardControlWidth, 16);
     }
     {
-        const auto master = masterLane();
-        const auto controlsY = static_cast<int>(master.getY()) + 18;
-        masterVolume.setBounds(10, controlsY, 100, 20);
-        masterPan.setBounds(116, controlsY, 62, 20);
+        // Everything the main row carries sits on its single line, and its two
+        // faders are the same pair of widths the cards use.
+        const auto controlsY = static_cast<int>(masterLane().getY()) + 5;
+        masterVolume.setBounds(56, controlsY, 62, 16);
+        masterPan.setBounds(122, controlsY, 62, 16);
     }
     scroll.setBounds(static_cast<int>(headerWidth), getHeight() - 14, getWidth() - static_cast<int>(headerWidth) - 14, 14);
     trackScrollBar.setBounds(getWidth() - 12, static_cast<int>(lanesTop), 12, getHeight() - static_cast<int>(lanesTop) - 18);
     updateScroll();
     updatePlayhead();
-}
-
-// Live shows the mixer in the arrangement too, but only where it fits. Below
-// this lane height the fader and pan would collide with the track name.
-bool Arrangement::showTrackMixer() const
-{
-    return laneHeight() >= 56.0f;
 }
 
 void Arrangement::fit()

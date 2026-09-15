@@ -206,6 +206,17 @@ public:
     juce::String trackName(int track) const;
     juce::Result addAudioTrack();
     juce::Result removeAudioTrack(int track);
+    // How tall the track's row is drawn. Zero means the arrangement is still
+    // choosing, so a project that has never been resized keeps following the
+    // panel height; dragging a card's edge pins a height that outlives reopen.
+    float trackLaneHeight(int track) const;
+    juce::Result setTrackLaneHeight(int track, float height);
+    juce::Result setTrackName(int track, const juce::String& name);
+    // The card's own colour. Clips keep the colours they were given.
+    juce::Colour trackColour(int track) const;
+    juce::Result setTrackColour(int track, juce::Colour);
+    static const std::vector<juce::Colour>& trackColourPalette();
+    juce::Result moveTrack(int track, int destination);
     std::vector<DeviceSlot> deviceSlots(int track) const;
     std::vector<DeviceParameter> deviceParameters(int track, int slot) const;
     DeviceTarget lastTouchedDeviceParameter() const { return lastTouchedParameter; }

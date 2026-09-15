@@ -52,7 +52,7 @@ void Arrangement::layoutRows()
     for (auto& row : rows)
     {
         row.top = top;
-        row.height = row.automation < 0 ? laneHeight() : automationRowHeight;
+        row.height = row.automation < 0 ? laneHeightFor(row.track) : automationRowHeight;
         top += row.height;
     }
     rowsHeight = top;

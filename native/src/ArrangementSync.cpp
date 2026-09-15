@@ -70,6 +70,10 @@ void Arrangement::sync()
         if (focus == Focus::automation)
             focus = Focus::none;
     }
+    // A track created just now has controls but no bounds yet, and a component
+    // at nothing by nothing draws nothing. Placing them here means a new card
+    // arrives complete rather than waiting for the next resize to fill in.
+    resized();
     updateScroll();
     repaint();
 }
@@ -91,7 +95,8 @@ void Arrangement::syncTrackControls()
         auto volumeSlider = std::make_unique<juce::Slider>();
         volumeSlider->setSliderStyle(juce::Slider::LinearBar);
         volumeSlider->setRange(Session::minimumVolumeDb, Session::maximumVolumeDb, 0.1);
-        volumeSlider->setTextValueSuffix(" dB");
+        // The bar is small enough that the unit costs more room than it earns.
+        volumeSlider->setTextValueSuffix({});
         volumeSlider->setDoubleClickReturnValue(true, 0.0);
         volumeSlider->setTooltip("Track volume");
         volumeSlider->onDragStart = [this, track] { session.beginTrackVolumeGesture(track); };
@@ -111,10 +116,26 @@ void Arrangement::syncTrackControls()
         {
             session.setTrackPan(track, static_cast<float>(slider->getValue()));
         };
-        addAndMakeVisible(*muteButton);
-        addAndMakeVisible(*soloButton);
-        addAndMakeVisible(*volumeSlider);
-        addAndMakeVisible(*panSlider);
+        // Level and position are different quantities, so they are not the
+        // same colour: the fader keeps the accent green the app uses for
+        // amounts, and pan takes the blue it uses for placement.
+        volumeSlider->setColour(juce::Slider::trackColourId, juce::Colour(0xff45d0d4));
+        volumeSlider->setColour(juce::Slider::backgroundColourId, juce::Colour(0xff1a2026));
+        volumeSlider->setColour(juce::Slider::textBoxTextColourId, juce::Colour(0xff0e1317));
+        volumeSlider->setColour(juce::Slider::textBoxOutlineColourId, juce::Colour(0x33000000));
+        panSlider->setColour(juce::Slider::trackColourId, juce::Colour(0xffd4564e));
+        panSlider->setColour(juce::Slider::backgroundColourId, juce::Colour(0xff1a2026));
+        panSlider->setColour(juce::Slider::textBoxTextColourId, juce::Colour(0xff0e1317));
+        panSlider->setColour(juce::Slider::textBoxOutlineColourId, juce::Colour(0x33000000));
+        // The Info View explains a control while the pointer rests on it, so
+        // every one of them reports its enter and exit to the arrangement.
+        for (auto* control : std::initializer_list<juce::Component*>{muteButton.get(), soloButton.get(),
+                                                                     volumeSlider.get(), panSlider.get()})
+            control->addMouseListener(this, false);
+        laneHeaders.addAndMakeVisible(*muteButton);
+        laneHeaders.addAndMakeVisible(*soloButton);
+        laneHeaders.addAndMakeVisible(*volumeSlider);
+        laneHeaders.addAndMakeVisible(*panSlider);
         mute.push_back(std::move(muteButton));
         solo.push_back(std::move(soloButton));
         volume.push_back(std::move(volumeSlider));

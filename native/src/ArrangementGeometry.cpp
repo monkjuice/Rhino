@@ -20,7 +20,15 @@ bool Arrangement::isMasterSelected() const
 
 float Arrangement::laneHeight() const
 {
-    return std::max(48.0f, std::min(82.0f, laneContentHeight() / 2.0f));
+    return std::max(mixerLaneHeight + 8.0f, std::min(96.0f, laneContentHeight() / 2.0f));
+}
+
+float Arrangement::laneHeightFor(int track) const
+{
+    if (track == resizingTrack)
+        return resizePreview;
+    const auto chosen = session.trackLaneHeight(track);
+    return chosen > 0.0f ? juce::jlimit(minimumLaneHeight, maximumLaneHeight, chosen) : laneHeight();
 }
 
 // Rows are variable height once automation lanes are revealed, so a track's
@@ -31,7 +39,7 @@ juce::Rectangle<float> Arrangement::lane(int track) const
     if (juce::isPositiveAndBelow(track, static_cast<int>(trackRowIndex.size())))
         if (const auto row = trackRowIndex[static_cast<size_t>(track)]; row >= 0)
             return rowBounds(row);
-    const auto height = laneHeight();
+    const auto height = laneHeightFor(track);
     return {headerWidth, lanesTop + track * height - static_cast<float>(trackScroll),
             std::max(1.0f, getWidth() - headerWidth - 14.0f), height};
 }

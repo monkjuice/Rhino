@@ -22,16 +22,18 @@
             require(std::abs(view.lane(1).getY() - view.lane(0).getBottom()) < 0.001f,
                     "Reflowed lane rows stay contiguous");
             // Lanes stop shrinking before the panel does, so a short panel
-            // leaves rows hanging past the pinned main row. Their header
-            // controls are components and would be drawn over it.
+            // leaves rows hanging past the pinned main row. The controls are
+            // cropped at the lane viewport rather than drawn over that row.
+            require(view.laneHeaders.getY() == static_cast<int>(view.lanesTop)
+                        && view.laneHeaders.getBottom() <= static_cast<int>(view.masterLane().getY()),
+                    "The header container spans the lanes and stops at the main row");
             for (size_t track = 0; track < view.mute.size(); ++track)
-            {
-                const auto header = view.mute[track].get();
-                require(!header->isVisible()
-                            || (header->getY() >= static_cast<int>(view.lanesTop)
-                                && header->getBottom() <= static_cast<int>(view.masterLane().getY())),
-                        "Track header controls stay inside the lane viewport");
-            }
+                require(view.mute[track]->getParentComponent() == &view.laneHeaders
+                            && view.volume[track]->getParentComponent() == &view.laneHeaders,
+                        "Track header controls are cropped to the lane viewport");
+            if (view.rowsHeight > static_cast<float>(view.laneHeaders.getHeight()))
+                require(view.mute.back()->getBottom() > view.laneHeaders.getHeight(),
+                        "A row hanging past the lanes keeps its controls, cropped, rather than losing them");
             view.setSize(view.getWidth(), tallHeight);
             view.sync();
             view.fit();

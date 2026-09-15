@@ -27,6 +27,150 @@
             require(reader->read(&output, 0, output.getNumSamples(), 0, true, true), "Read moved render samples");
             return output.getRMSLevel(0, 0, output.getNumSamples());
         };
+        // Cards are the only handle on a track's row: its bottom edge sizes the
+        // row, its body carries the track, and a right-click colours it. The
+        // panel is given a workable height first, because every one of these
+        // reads a lane position back.
+        view.setSize(1000, 620);
+        view.sync();
+        const auto cardEvent = [&view](juce::Point<float> down, juce::Point<float> point, bool dragged,
+                                       juce::ModifierKeys mods = juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier))
+        {
+            return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), point,
+                mods, 1.0f, 0, 0, 0, 0,
+                &view, &view, juce::Time::getCurrentTime(), down, juce::Time::getCurrentTime(), 1, dragged);
+        };
+        const auto dragCard = [&view, &cardEvent](juce::Point<float> down, juce::Point<float> to)
+        {
+            view.mouseDown(cardEvent(down, down, false));
+            view.mouseDrag(cardEvent(down, to, true));
+            view.mouseUp(cardEvent(down, to, true));
+        };
+
+        scenario("track cards: resizing from the bottom edge");
+        require(session.trackLaneHeight(0) == 0.0f, "A track starts with no height of its own");
+        const auto fittedHeight = view.lane(0).getHeight();
+        const auto firstEdge = juce::Point<float>(90.0f, view.lane(0).getBottom());
+        dragCard(firstEdge, firstEdge.translated(0.0f, 40.0f));
+        require(view.lane(0).getHeight() > fittedHeight + 30.0f, "Dragging a card edge down makes that row taller");
+        require(std::abs(session.trackLaneHeight(0) - view.lane(0).getHeight()) < 0.001f,
+                "The dragged height is the one the session keeps");
+        require(view.lane(1).getY() >= view.lane(0).getBottom() - 0.001f,
+                "The rows below are pushed down rather than overlapped");
+        require(std::abs(view.lane(1).getHeight() - fittedHeight) < 0.001f,
+                "A neighbour that was never dragged keeps the fitted height");
+
+        const auto tallEdge = juce::Point<float>(90.0f, view.lane(0).getBottom());
+        dragCard(tallEdge, tallEdge.translated(0.0f, -400.0f));
+        require(std::abs(view.lane(0).getHeight() - view.minimumLaneHeight) < 0.001f,
+                "Dragging far up stops at the minimum row height rather than collapsing the row");
+        require(!view.volume[0]->isVisible() && view.mute[0]->isVisible() && view.solo[0]->isVisible(),
+                "A row at its minimum keeps mute and solo and gives up the mixer line");
+        const auto shortEdge = juce::Point<float>(90.0f, view.lane(0).getBottom());
+        dragCard(shortEdge, shortEdge.translated(0.0f, 60.0f));
+        require(view.volume[0]->isVisible() && view.pan[0]->isVisible(),
+                "Growing the row past the mixer height brings the volume and pan line back");
+
+        scenario("track cards: carrying a track to a new place");
+        const auto movedName = session.trackName(0);
+        const auto displacedName = session.trackName(1);
+        require(movedName != displacedName, "The two tracks are told apart by name");
+        const auto cardBody = juce::Point<float>(90.0f, view.lane(0).getY() + 10.0f);
+        dragCard(cardBody, juce::Point<float>(90.0f, view.lane(1).getCentreY() + 6.0f));
+        require(session.trackName(0) == displacedName && session.trackName(1) == movedName,
+                "Dragging a card body past its neighbour swaps the two tracks");
+        require(view.selectedTrack == 1, "The carried track stays selected where it landed");
+        require(std::abs(session.trackLaneHeight(1) - view.lane(1).getHeight()) < 0.001f,
+                "A moved track carries its row height with it");
+        const auto backBody = juce::Point<float>(90.0f, view.lane(1).getY() + 10.0f);
+        dragCard(backBody, juce::Point<float>(90.0f, view.lane(0).getCentreY() - 6.0f));
+        require(session.trackName(0) == movedName, "The track can be carried back");
+
+        const auto beforeClick = session.trackName(0);
+        const auto restingCard = juce::Point<float>(90.0f, view.lane(0).getY() + 10.0f);
+        view.mouseDown(cardEvent(restingCard, restingCard, false));
+        view.mouseUp(cardEvent(restingCard, restingCard, false));
+        require(session.trackName(0) == beforeClick && view.selectedTrack == 0,
+                "A click on a card selects it without reordering anything");
+
+        scenario("track cards: colour and reset");
+        const auto colour = Session::trackColourPalette().front();
+        require(session.trackColour(0).isTransparent(), "A track starts with no colour of its own");
+        require(session.setTrackColour(0, colour).wasOk(), "A card takes a colour from the palette");
+        require(session.trackColour(0) == colour, "The card keeps the colour it was given");
+        require(session.setTrackColour(session.masterTrackIndex(), colour).failed(),
+                "The main row takes no colour");
+        {
+            // Both settings live on the track, so a saved document carries them
+            // without the edit being swapped out from under the rest of the run.
+            const std::function<juce::ValueTree(const juce::ValueTree&)> findCard =
+                [&findCard](const juce::ValueTree& tree) -> juce::ValueTree
+            {
+                if (tree.hasProperty("thetaLaneHeight")) return tree;
+                for (int i = 0; i < tree.getNumChildren(); ++i)
+                    if (const auto found = findCard(tree.getChild(i)); found.isValid()) return found;
+                return {};
+            };
+            const auto card = findCard(session.projectSnapshot());
+            require(card.isValid(), "The dragged row height is written into the saved project");
+            require(static_cast<double>(card.getProperty("thetaLaneHeight")) > 0.0,
+                    "The saved height is the one the card was dragged to");
+            require(card.getProperty("colour").toString() == colour.toString(),
+                    "The card colour is written into the saved project beside it");
+        }
+        require(session.setTrackColour(0, {}).wasOk(), "A card can be cleared back to no colour");
+        require(session.setTrackLaneHeight(0, 0.0f).wasOk(), "A row can be handed back to the fitted height");
+        view.sync();
+        view.resized();
+        require(std::abs(view.lane(0).getHeight() - view.laneHeight()) < 0.001f,
+                "A reset row follows the panel again");
+
+        scenario("track cards: a new card arrives complete");
+        {
+            const auto before = session.trackCount();
+            require(session.addAudioTrack().wasOk(), "Can add a track while the arrangement is open");
+            const auto card = static_cast<size_t>(before);
+            require(view.mute.size() == card + 1, "The new track brings its own controls");
+            // No resize between adding the track and looking: a card that only
+            // fills in on the next layout pass is the bug this covers.
+            require(!view.mute[card]->getBounds().isEmpty() && !view.volume[card]->getBounds().isEmpty(),
+                    "A new card is placed as soon as its track exists");
+            require(view.mute[card]->getRight() <= static_cast<int>(view.cardControlsWidth)
+                        && view.volume[card]->getRight() <= static_cast<int>(view.cardControlsWidth)
+                        && view.pan[card]->getRight() <= static_cast<int>(view.cardControlsWidth),
+                    "Every control stays in the controls column, clear of the name");
+            require(view.volume[card]->getWidth() == view.pan[card]->getWidth(),
+                    "The two faders are the same width");
+            require(view.mute[card]->getWidth() == view.volume[card]->getWidth()
+                        && view.mute[card]->getX() == view.volume[card]->getX()
+                        && view.solo[card]->getX() == view.pan[card]->getX(),
+                    "The buttons sit squarely over the faders");
+            require(view.mute[card]->getBottom() <= view.volume[card]->getY()
+                        && view.mute[card]->getY() == view.solo[card]->getY(),
+                    "Mute and solo share the line above the faders");
+            require(session.removeAudioTrack(before).wasOk(), "The added card can be removed again");
+            view.sync();
+        }
+
+        scenario("track cards: renaming");
+        {
+            const auto original = session.trackName(0);
+            require(session.setTrackName(0, "Bassline").wasOk(), "A card can be renamed");
+            require(session.trackName(0) == "Bassline", "The card takes the name it was given");
+            require(session.setTrackName(0, "   ").failed(), "A blank name is refused");
+            require(session.setTrackName(session.masterTrackIndex(), "Nope").failed(),
+                    "The main row keeps its name");
+            require(session.setTrackName(0, original).wasOk(), "The card can be named back");
+        }
+
+        scenario("track cards: the main row is one line");
+        require(view.masterLane().getHeight() <= 26.0f, "The main row is a single line tall");
+        require(view.masterVolume.getY() >= view.masterLane().getY()
+                    && view.masterVolume.getBottom() <= view.masterLane().getBottom()
+                    && view.masterPan.getBottom() <= view.masterLane().getBottom(),
+                "The main level and pan sit on that line beside its name");
+        require(view.masterVolume.getX() >= 50, "The main controls start clear of the MAIN label");
+
         scenario("track management: duplicate move");
         view.selected = id;
         view.duplicateSelected();

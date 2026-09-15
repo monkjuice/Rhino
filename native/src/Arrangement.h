@@ -22,6 +22,8 @@ public:
     void mouseDrag(const juce::MouseEvent&) override;
     void mouseUp(const juce::MouseEvent&) override;
     void mouseMove(const juce::MouseEvent&) override;
+    void mouseEnter(const juce::MouseEvent&) override;
+    void mouseExit(const juce::MouseEvent&) override;
     void mouseWheelMove(const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
     bool keyPressed(const juce::KeyPress&) override;
     bool isInterestedInFileDrag(const juce::StringArray&) override;
@@ -125,11 +127,24 @@ private:
     void paintAutomationRow(juce::Graphics&, int row);
     void paintGhostRow(juce::Graphics&, int row);
     void showAutomationMenu(Session::DeviceTarget);
+    // ArrangementGestures.cpp
+    int cardResizeEdgeAt(juce::Point<float>) const;
+    int cardAt(juce::Point<float>) const;
+    bool beginCardGesture(const juce::MouseEvent&);
+    void dragCardGesture(const juce::MouseEvent&);
+    void endCardGesture();
+    void showTrackMenu(int track);
+    void renameTrack(int track);
+    juce::String controlDescription(juce::Component*) const;
     juce::Rectangle<float> lane(int track) const;
     // The master row is pinned under the scrolling lanes and never scrolls.
     juce::Rectangle<float> masterLane() const;
     bool isMasterSelected() const;
     float laneHeight() const;
+    // A track keeps its own row height once its card has been dragged; until
+    // then it follows the fitted height, and a resize in progress previews
+    // ahead of the session so the drag does not rewrite the edit per pixel.
+    float laneHeightFor(int track) const;
     float laneContentHeight() const;
     ClipGeometry displayedPosition(const ClipView&) const;
     int displayedTrack(const ClipView&) const;
@@ -150,11 +165,17 @@ private:
     float rowsHeight = 0.0f;
     juce::TextButton duplicateButton, addTrack, snap, automationButton, gridControl;
     juce::ComboBox snapSize;
+    // The header controls live in a container spanning the scrolling lane
+    // viewport, so JUCE clips them at its edges: a row dragged past the bottom
+    // slides under the pinned main row instead of being drawn over it, and one
+    // scrolled off the top disappears under the ruler. The container itself is
+    // transparent to the mouse, so a click on empty header space still reaches
+    // the arrangement and selects the track.
+    juce::Component laneHeaders;
     std::vector<std::unique_ptr<juce::TextButton>> mute, solo;
     // The same mixer values the session view shows, laid out horizontally.
     std::vector<std::unique_ptr<juce::Slider>> volume, pan;
     juce::Slider masterVolume, masterPan;
-    bool showTrackMixer() const;
     juce::ScrollBar scroll {false}, trackScrollBar {true};
     juce::VBlankAttachment vblank;
     double viewStart = 0.0, viewSpan = 8.0, songEnd = 2.0, trackScroll = 0.0;
@@ -180,7 +201,22 @@ private:
     int automationRow = -1, automationPoint = -1;
     std::vector<Session::AutomationPoint> automationPoints;
     float playhead = -1.0f;
-    static constexpr float headerWidth = 196.0f, rulerTop = 32.0f, lanesTop = 56.0f, masterLaneHeight = 44.0f;
+    // Card gestures. The bottom edge resizes the row it belongs to; the body
+    // of the card carries the track to a new place in the stack. Only one of
+    // them can be running, and both preview before they touch the session.
+    int resizingTrack = -1, movingTrack = -1, moveDestination = -1;
+    float resizePreview = 0.0f, resizeAnchor = 0.0f, resizeStartHeight = 0.0f, moveAnchor = 0.0f;
+    bool moveStarted = false;
+    static constexpr float headerWidth = 196.0f, rulerTop = 32.0f, lanesTop = 56.0f, masterLaneHeight = 26.0f;
     static constexpr float automationRowHeight = 44.0f;
+    // A card is name plus one control line at its shortest; the mixer line is
+    // the next thing that fits, and past that a row only gets roomier.
+    static constexpr float minimumLaneHeight = 32.0f, mixerLaneHeight = 54.0f, maximumLaneHeight = 260.0f;
+    // A card is two columns: the controls, then the name on its colour. The
+    // divider between them is the same grey the row separators use. Both lines
+    // of controls share one left edge and one width, so the buttons sit
+    // squarely over the faders.
+    static constexpr float cardControlsWidth = 116.0f, cardDividerWidth = 4.0f;
+    static constexpr int cardControlsTop = 7, cardControlLeft = 10, cardControlWidth = 48, cardControlGap = 4;
 };
 }

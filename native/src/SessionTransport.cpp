@@ -35,6 +35,10 @@ juce::Result Session::importAudioAt(const juce::File& file, int trackIndex, doub
     jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
     if (!std::isfinite(startSeconds) || startSeconds < 0.0)
         return juce::Result::fail("Invalid audio drop position.");
+    // Audio belongs on a track without an instrument. Dropping a sample onto an
+    // instrument track is the one drop Theta refuses outright.
+    if (trackHasInstrument(trackIndex))
+        return juce::Result::fail("That track runs an instrument. Drop audio on an audio track instead.");
     const auto tracks = te::getAudioTracks(*edit);
     if (!juce::isPositiveAndBelow(trackIndex, tracks.size()))
         return juce::Result::fail("Drop audio on an audio track.");

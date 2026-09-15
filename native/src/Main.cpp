@@ -624,7 +624,7 @@ private:
                 if (result == 1)
                     juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon, "Keyboard shortcuts",
                         "Space  Play/Pause\nCtrl+O  Open project\nCtrl+S  Save project\nCtrl+Shift+S  Save as\n"
-                        "Ctrl+Shift+E  Export WAV\nCtrl+Z  Undo\nCtrl+Y / Ctrl+Shift+Z  Redo\nCtrl+F  Search browser\n?  Show/hide Info View");
+                        "Ctrl+Shift+E  Export WAV\nCtrl+Z  Undo\nCtrl+Y / Ctrl+Shift+Z  Redo\nCtrl+F  Search browser\nCtrl+A  Add a clip to the focused track\nDouble-click a lane  Add a clip there\n?  Show/hide Info View");
                 else if (result == 2)
                     juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon, "About Theta",
                         "Theta\nA native desktop DAW for patterns, arrangement, and offline WAV export.");

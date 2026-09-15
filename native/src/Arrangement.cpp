@@ -173,6 +173,16 @@ bool Arrangement::keyPressed(const juce::KeyPress& key)
         repaint();
         return true;
     }
+    if (key.getModifiers().isCommandDown() && key.getKeyCode() == 'A')
+    {
+        // Adds a clip to the focused track at the playhead, the keyboard
+        // equivalent of double-clicking the lane.
+        const auto start = snapped(std::max(0.0, playheadTime(session.edit->getTransport())), false);
+        const auto result = session.createClip(selectedTrack, start);
+        if (status) status(result.failed() ? result.getErrorMessage()
+                                           : "Added a clip to " + session.trackName(selectedTrack));
+        return true;
+    }
     if (key.getModifiers().isCommandDown() && key.getKeyCode() == 'Z')
     {
         if (key.getModifiers().isShiftDown()) session.redo();

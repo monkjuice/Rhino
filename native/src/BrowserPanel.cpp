@@ -90,7 +90,7 @@ BrowserPanel::BrowserPanel(Session& s) : session(s)
     search.setColour(juce::TextEditor::outlineColourId, juce::Colour(0xff46515a));
     apply.onClick = [this] { applyRow(list.getSelectedRow()); };
 
-    const std::array labels {"Sounds", "Drums", "Instruments", "Audio FX", "MIDI FX"};
+    const std::array labels {"Instruments", "Patterns", "Samples", "Audio FX", "MIDI FX"};
     for (size_t i = 0; i < categories.size(); ++i)
     {
         categories[i].setButtonText(labels[i]);
@@ -105,37 +105,38 @@ BrowserPanel::BrowserPanel(Session& s) : session(s)
     }
     categories[0].setToggleState(true, juce::dontSendNotification);
 
+    // Categories say what a row is, not what it is for: an instrument changes
+    // the track, a pattern fills a clip, a sample is audio. Mixing them was the
+    // reason a drum kit and a drum instrument looked like the same kind of row.
     items = {
-        {"Sounds", "Whistle", "Built-in audio sample", std::nullopt, std::nullopt, std::nullopt, std::nullopt, Session::BuiltInSample::Whistle},
-        {"Sounds", "Siren", "Built-in audio sample", std::nullopt, std::nullopt, std::nullopt, std::nullopt, Session::BuiltInSample::Siren},
-        {"Sounds", "Warm pulse", "Soft one-bar 4OSC chord pulse", Session::PatternPreset::WarmPulse},
-        {"Sounds", "Acid steps", "Tight 16-step synth riff", Session::PatternPreset::AcidSteps},
-        {"Sounds", "Arp run", "Held chord made for Theta Arp", Session::PatternPreset::ArpRun},
-        {"Sounds", "Chord pad", "Soft sustaining 4OSC chord synth", Session::PatternPreset::ChordPad},
-        {"Sounds", "Sub bass", "Clean mono low-end bass line", Session::PatternPreset::SubBass},
-        {"Sounds", "Reese bass", "Wide detuned electronic bass", Session::PatternPreset::ReeseBass},
-        {"Sounds", "Siren lead", "Rising and falling emergency lead", Session::PatternPreset::SirenLead},
-        {"Sounds", "Wave pad", "Theta Wave wide glassy chords", Session::PatternPreset::WavePad},
-        {"Sounds", "Wave bass", "Theta Wave rounded low pulse", Session::PatternPreset::WaveBass},
-        {"Sounds", "Wave pluck", "Theta Wave bright moving pluck", Session::PatternPreset::WavePluck},
-        {"Drums", "House kit", "Four-on-floor kick, backbeat, hats", Session::PatternPreset::HouseKit},
-        {"Drums", "Break kit", "Syncopated kick/snare/hats groove", Session::PatternPreset::BreakKit},
-        {"Drums", "Minimal kit", "Sparse kick/snare/hats sketch", Session::PatternPreset::MinimalKit},
-        {"Drums", "Clap kit", "Kick, clap backbeat, tight hats", Session::PatternPreset::ClapKit},
-        {"Instruments", "4OSC synth", "Drop on a track for synth clips", std::nullopt, std::nullopt, Session::Instrument::FourOsc},
+        {"Instruments", "4OSC synth", "Subtractive synth: drop on a track to play it", std::nullopt, std::nullopt, Session::Instrument::FourOsc},
         {"Instruments", "Theta Wave", "Morphing wavetable-style synth", std::nullopt, std::nullopt, Session::Instrument::ThetaWave},
         {"Instruments", "Theta Forge", "Two-oscillator Forge synth", std::nullopt, std::nullopt, Session::Instrument::ThetaForge},
-        {"Drums", "Theta Drums", "TR-808 analog kit: kick, snare, toms, closed/open hats", std::nullopt, std::nullopt, Session::Instrument::Drums},
-        {"Instruments", "Utility gain", "Drop on a track for gain", std::nullopt, std::nullopt, Session::Instrument::Utility},
-        {"Audio FX", "Utility gain", "Drop on a track for gain", std::nullopt, std::nullopt, Session::Instrument::Utility},
+        {"Instruments", "Theta Drums", "TR-808 analog kit: kick, snare, toms, closed/open hats", std::nullopt, std::nullopt, Session::Instrument::Drums},
+        {"Patterns", "Warm pulse", "Soft one-bar 4OSC chord pulse", Session::PatternPreset::WarmPulse},
+        {"Patterns", "Acid steps", "Tight 16-step synth riff", Session::PatternPreset::AcidSteps},
+        {"Patterns", "Arp run", "Held chord made for Theta Arp", Session::PatternPreset::ArpRun},
+        {"Patterns", "Chord pad", "Soft sustaining 4OSC chord synth", Session::PatternPreset::ChordPad},
+        {"Patterns", "Sub bass", "Clean mono low-end bass line", Session::PatternPreset::SubBass},
+        {"Patterns", "Reese bass", "Wide detuned electronic bass", Session::PatternPreset::ReeseBass},
+        {"Patterns", "Siren lead", "Rising and falling emergency lead", Session::PatternPreset::SirenLead},
+        {"Patterns", "Wave pad", "Theta Wave wide glassy chords", Session::PatternPreset::WavePad},
+        {"Patterns", "Wave bass", "Theta Wave rounded low pulse", Session::PatternPreset::WaveBass},
+        {"Patterns", "Wave pluck", "Theta Wave bright moving pluck", Session::PatternPreset::WavePluck},
+        {"Patterns", "House kit", "Four-on-floor kick, backbeat, hats", Session::PatternPreset::HouseKit},
+        {"Patterns", "Break kit", "Syncopated kick/snare/hats groove", Session::PatternPreset::BreakKit},
+        {"Patterns", "Minimal kit", "Sparse kick/snare/hats sketch", Session::PatternPreset::MinimalKit},
+        {"Patterns", "Clap kit", "Kick, clap backbeat, tight hats", Session::PatternPreset::ClapKit},
+        {"Samples", "Whistle", "Built-in audio sample", std::nullopt, std::nullopt, std::nullopt, std::nullopt, Session::BuiltInSample::Whistle},
+        {"Samples", "Siren", "Built-in audio sample", std::nullopt, std::nullopt, std::nullopt, std::nullopt, Session::BuiltInSample::Siren},
         {"Audio FX", "EQ", "Insert Tracktion 4-band EQ", std::nullopt, Session::AudioEffect::Equaliser},
         {"Audio FX", "Reverb", "Insert Tracktion reverb", std::nullopt, Session::AudioEffect::Reverb},
         {"Audio FX", "Delay", "Insert Tracktion delay", std::nullopt, Session::AudioEffect::Delay},
         {"Audio FX", "Compressor", "Insert Tracktion compressor", std::nullopt, Session::AudioEffect::Compressor},
         {"Audio FX", "Theta Space", "Floating multi FX: smear, drive, width", std::nullopt, Session::AudioEffect::ThetaSpace},
         {"Audio FX", "Theta Bloom", "Chorus, clouds, plate, colour", std::nullopt, Session::AudioEffect::ThetaBloom},
-        {"MIDI FX", "Theta Arp", "Drop before an instrument to arpeggiate it", std::nullopt, std::nullopt, std::nullopt, Session::MidiEffect::ThetaArp},
-        {"MIDI FX", "Snap 1/16", "Grid quantized note entry"}
+        {"Audio FX", "Utility gain", "Drop on a track for gain", std::nullopt, std::nullopt, Session::Instrument::Utility},
+        {"MIDI FX", "Theta Arp", "Drop before an instrument to arpeggiate it", std::nullopt, std::nullopt, std::nullopt, Session::MidiEffect::ThetaArp}
     };
 
     list.setRowHeight(38);

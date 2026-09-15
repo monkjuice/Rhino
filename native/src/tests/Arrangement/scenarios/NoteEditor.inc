@@ -311,10 +311,36 @@
         const auto instrumentClipCount = te::getAudioTracks(*session.edit)[2]->getClips().size();
         view.itemDropped({"theta-browser:instrument:FourOsc", nullptr,
                           {static_cast<int>(view.xFor(1.0)), static_cast<int>(view.lane(2).getCentreY())}});
+        require(te::getAudioTracks(*session.edit)[2]->getClips().size() == instrumentClipCount,
+                "Dragging an instrument changes the track rather than creating a clip");
+        require(session.trackHasInstrument(2) && session.trackName(2) == "4OSC",
+                "A track takes the name of the instrument dropped on it");
+
+        // Clips are created deliberately now: by double-clicking the lane at the
+        // point the clip should start, or with Ctrl+A on the focused track.
+        // Track 2 already carries a clip over bar one, so this lands past it.
+        const auto doubleClickTime = 3.0;
+        const juce::Point<float> addClipAt {view.xFor(doubleClickTime), view.lane(2).getCentreY()};
+        const juce::MouseEvent addClip(juce::Desktop::getInstance().getMainMouseSource(), addClipAt,
+                                       juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier),
+                                       1.0f, 0.0f, 0.0f, 0.0f, 0.0f, &view, &view,
+                                       juce::Time::getCurrentTime(), addClipAt,
+                                       juce::Time::getCurrentTime(), 2, false);
+        view.mouseDown(addClip);
         require(te::getAudioTracks(*session.edit)[2]->getClips().size() == instrumentClipCount + 1,
-                "Dragging an instrument onto the arrangement creates an editable MIDI clip");
-        require(session.pattern().itemID == te::getAudioTracks(*session.edit)[2]->getClips().getLast()->itemID,
-                "Dropped instrument clip becomes the note editor target");
+                "Double-clicking an empty lane creates a clip");
+        {
+            auto* added = te::getAudioTracks(*session.edit)[2]->getClips().getLast();
+            require(std::abs(added->getPosition().time.getStart().inSeconds() - view.snapped(doubleClickTime, false)) < 0.001,
+                    "The new clip starts where the pointer was, snapped to the grid");
+            require(session.pattern().itemID == added->itemID, "The new clip becomes the note editor target");
+        }
+        session.undo();
+        require(session.createClip(2, doubleClickTime).wasOk(), "Ctrl+A creates a clip on the focused track");
+        require(session.createClip(2, doubleClickTime).failed(), "A clip cannot be created on top of another");
+        require(!session.trackHasInstrument(1) && session.createClip(1, 0.0).failed(),
+                "A track without an instrument takes no MIDI clips");
+        session.undo();
         session.undo();
         require(session.removeAudioTrack(2).wasOk(), "Can remove the extra audio track");
         require(session.trackCount() == 2, "Removing extra audio track restores starter track count");

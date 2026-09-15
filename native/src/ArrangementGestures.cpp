@@ -56,6 +56,22 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
         repaint();
         return;
     }
+    // Double-clicking empty lane space creates a clip that starts where the
+    // pointer is, which is the only way to add one now that instrument drops
+    // change the track instead.
+    if (event.getNumberOfClicks() == 2 && event.position.x >= headerWidth && event.position.y >= lanesTop
+        && hit(event.position) < 0)
+    {
+        const auto track = trackAt(event.position.y);
+        if (track >= 0)
+        {
+            selectTrack(track);
+            const auto start = snapped(std::max(0.0, timeAt(event.position.x)), event.mods.isAltDown());
+            const auto result = session.createClip(track, start);
+            if (status) status(result.failed() ? result.getErrorMessage() : "Added a clip to " + session.trackName(track));
+        }
+        return;
+    }
     if (juce::KeyPress::isKeyCurrentlyDown('S') && event.position.x >= headerWidth && event.position.y >= lanesTop)
     {
         marqueeSelecting = true;

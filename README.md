@@ -13,7 +13,8 @@ Research deliverables: [open-source DAW and Ableton study](research/DAW-STUDY.md
 - A startup loading screen showing engine, audio-device, and workspace initialization.
 - One-bar, 16-step note grid covering MIDI notes 48-59.
 - Playback through Tracktion's 4OSC synth and Theta's internal Utility gain device.
-- One instrument per track, as in Live and Logic. Dropping a different instrument on a track replaces the one already there and keeps the track's clips, so the pattern stays and the sound changes.
+- One instrument per track, as in Live and Logic. Dropping an instrument on a track replaces the one already there and renames the track after it. The track's clips are untouched, so the pattern stays and the sound changes. Audio samples and files are refused on a track that runs an instrument.
+- Clips are created deliberately: double-click an empty part of a lane to add a one-bar clip starting where you clicked, or press **Ctrl+A** to add one to the focused track at the playhead.
 - Drawing and erasing notes, grouped undo/redo, and tempo control from 40-240 BPM.
 - Play, pause, stop, looping, and audio hardware settings.
 - Audio import onto a separate track, with successive files appended. The browser also includes generated Whistle and Siren WAV samples; these are audio clips, not MIDI presets.
@@ -58,7 +59,7 @@ In the current workspace, portable CMake tools are also available at `native/.to
 
 Imported audio appears in the arrangement above the note editor, and the timeline fits the imported material automatically. Drag the body of an audio clip to move it; drag its left or right edge to trim it. Trimming preserves the source file, and you can extend the edges back to the available source boundaries. Each completed drag is one undo action. Dragging previews the change; playback adopts it on release.
 
-Use **Snap 1/16** to toggle snapping, or hold Alt during a drag to bypass it. Escape cancels an active drag. Delete/Backspace removes the selected audio clip when the arrangement is focused. **M** and **S** mute and solo each track. Click the timeline ruler to seek; **Fit**, **+**, **-**, the scrollbar, and mouse wheel navigate the timeline. Ctrl+wheel zooms around the pointer. The synth clip is currently displayed at bar one; its notes remain editable in the grid below.
+The browser is grouped by what a row is rather than what it is for: **Instruments** change a track, **Patterns** fill a clip, **Samples** are audio, and **Audio FX** and **MIDI FX** are devices. Use **Snap 1/16** to toggle snapping, or hold Alt during a drag to bypass it. Escape cancels an active drag. Delete/Backspace removes the selected audio clip when the arrangement is focused. **M** and **S** mute and solo each track. Click the timeline ruler to seek; **Fit**, **+**, **-**, the scrollbar, and mouse wheel navigate the timeline. Ctrl+wheel zooms around the pointer. The synth clip is currently displayed at bar one; its notes remain editable in the grid below.
 
 The loop covers both the pattern and imported audio. If audio extends beyond one bar, the synth pattern plays only during its first bar; it does not automatically repeat across the longer arrangement.
 

@@ -75,49 +75,44 @@ juce::Result Session::insertPatternPreset(PatternPreset preset, int trackIndex, 
     return juce::Result::ok();
 }
 
-juce::Result Session::insertInstrumentClip(Instrument instrument, int trackIndex, double startSeconds)
+bool Session::trackHasInstrument(int trackIndex) const
+{
+    const auto tracks = te::getAudioTracks(*edit);
+    if (!juce::isPositiveAndBelow(trackIndex, tracks.size())) return false;
+    return trackInstrument(*tracks[trackIndex]) != nullptr;
+}
+
+// An empty one-bar MIDI clip at the position the user asked for. Only tracks
+// with an instrument can hold one; an audio track takes recordings and files.
+juce::Result Session::createClip(int trackIndex, double startSeconds)
 {
     if (!std::isfinite(startSeconds) || startSeconds < 0.0)
-        return juce::Result::fail("Invalid instrument drop position.");
-    if (instrument == Instrument::Utility)
-        return addInstrument(instrument, trackIndex);
-
+        return juce::Result::fail("Invalid clip position.");
     const auto tracks = te::getAudioTracks(*edit);
     if (!juce::isPositiveAndBelow(trackIndex, tracks.size()))
-        return juce::Result::fail("Drop instruments on a track lane.");
-
-    const auto useDrums = instrument == Instrument::Drums;
-    const auto name = useDrums ? juce::String("Theta Drums")
-        : instrument == Instrument::ThetaWave ? juce::String("Theta Wave")
-        : instrument == Instrument::ThetaForge ? juce::String("Theta Forge")
-        : juce::String("4OSC synth");
+        return juce::Result::fail("Select a track first.");
+    if (!trackHasInstrument(trackIndex))
+        return juce::Result::fail("Drop an instrument on this track before adding clips to it.");
+    auto* track = tracks[trackIndex];
     const auto start = tracktion::core::TimePosition::fromSeconds(startSeconds);
     const auto startBeat = edit->tempoSequence.toBeats(start).inBeats();
     const auto end = edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(startBeat + beatsPerBar()));
-    auto* track = tracks[trackIndex];
-
-    edit->getUndoManager().beginNewTransaction("Add " + name);
-    bool instrumentChanged = false;
-    const auto result = switchTrackInstrument(*edit, *track, instrument, instrumentChanged,
-                                              forgeDescription ? &*forgeDescription : nullptr);
-    if (result.failed())
-        return result;
-    if (trackIndex == 0)
-        edit->state.setProperty("thetaPatternInstrument",
-                                useDrums ? "drums"
-                                    : instrument == Instrument::ThetaWave ? "wave"
-                                    : instrument == Instrument::ThetaForge ? "forge" : "synth",
-                                &edit->getUndoManager());
-
-    auto clip = track->insertMIDIClip(name, {start, end}, nullptr);
+    for (auto* existing : track->getClips())
+    {
+        const auto range = existing->getPosition().time;
+        if (range.getEnd() > start && range.getStart() < end)
+            return juce::Result::fail("There is already a clip here.");
+    }
+    edit->getUndoManager().beginNewTransaction("Add clip");
+    auto clip = track->insertMIDIClip("Clip", {start, end}, nullptr);
     if (clip == nullptr)
-        return juce::Result::fail("The instrument clip could not be added.");
-    clip->setColour(instrumentColour(instrument));
+        return juce::Result::fail("The clip could not be created.");
+    clip->setColour(instrumentColour(activeTrackInstrument(*track)));
     patternClip = clip.get();
     patternClipID = patternClip->itemID;
     refreshLoop();
-    markModified();
     edit->getUndoManager().beginNewTransaction();
+    markModified();
     if (edit->getTransport().isPlaying())
         edit->restartPlayback();
     sendSynchronousChangeMessage();

@@ -150,12 +150,14 @@ juce::Result Arrangement::applyBrowserDrop(const juce::String& description, int 
         const auto instrument = instrumentFromId(id);
         if (!instrument) return juce::Result::fail("That browser item cannot be inserted here.");
         if (track < 0) return juce::Result::fail("Drop instruments on a track or clip.");
-        const auto result = insertPreset ? session.insertInstrumentClip(*instrument, track, startSeconds)
-                                         : session.addInstrument(*instrument, track);
+        // An instrument drop changes what the track is, never its clips. The
+        // track's existing notes stay and play through the new instrument.
+        juce::ignoreUnused(startSeconds, insertPreset);
+        const auto result = session.addInstrument(*instrument, track);
         if (result.failed()) return result;
         selectTrack(track);
-        if (status) status(insertPreset ? "Added instrument clip to " + session.trackName(track)
-                                        : "Activated instrument on " + session.trackName(track));
+        if (status) status("Track " + juce::String(track + 1) + " now runs " + session.trackName(track)
+                           + ". Double-click the lane to add a clip.");
         return juce::Result::ok();
     }
 

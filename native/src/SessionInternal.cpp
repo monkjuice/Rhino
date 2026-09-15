@@ -364,6 +364,14 @@ juce::Result switchTrackInstrument(te::Edit& edit, te::AudioTrack& track, Sessio
         changed = true;
     }
 
+    // A track is named after the instrument it runs, so the arrangement header
+    // says what the track is rather than what it was called when created.
+    if (const auto name = selected->getName(); name.isNotEmpty() && track.getName() != name)
+    {
+        track.setName(name);
+        changed = true;
+    }
+
     return juce::Result::ok();
 }
 

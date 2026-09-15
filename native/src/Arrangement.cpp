@@ -122,14 +122,18 @@ void Arrangement::resized()
     else
         layoutRows();
     const auto mixerVisible = showTrackMixer();
+    // Nothing clips the controls: they are components, so they draw over the
+    // ruler above the lanes and over the pinned main row below it. A control
+    // row that would cross either edge is hidden instead of laid over them.
+    const auto lanesBottom = static_cast<int>(masterLane().getY());
     for (int i = 0; i < session.trackCount() && i < static_cast<int>(mute.size()); ++i)
     {
         const auto row = lane(i);
         const auto index = static_cast<size_t>(i);
-        const auto visible = row.getBottom() >= lanesTop && row.getY() <= getHeight() - 18.0f;
         // One control row pinned to the bottom of the lane, so short lanes keep
         // the track name legible rather than overlapping it.
         const auto controlsY = static_cast<int>(row.getBottom()) - 26;
+        const auto visible = controlsY >= static_cast<int>(lanesTop) && controlsY + 22 <= lanesBottom;
         mute[index]->setVisible(visible);
         solo[index]->setVisible(visible);
         volume[index]->setVisible(visible && mixerVisible);

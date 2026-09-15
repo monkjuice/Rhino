@@ -21,6 +21,17 @@
                     "Shrinking the panel reflows the lane rows rather than keeping stale heights");
             require(std::abs(view.lane(1).getY() - view.lane(0).getBottom()) < 0.001f,
                     "Reflowed lane rows stay contiguous");
+            // Lanes stop shrinking before the panel does, so a short panel
+            // leaves rows hanging past the pinned main row. Their header
+            // controls are components and would be drawn over it.
+            for (size_t track = 0; track < view.mute.size(); ++track)
+            {
+                const auto header = view.mute[track].get();
+                require(!header->isVisible()
+                            || (header->getY() >= static_cast<int>(view.lanesTop)
+                                && header->getBottom() <= static_cast<int>(view.masterLane().getY())),
+                        "Track header controls stay inside the lane viewport");
+            }
             view.setSize(view.getWidth(), tallHeight);
             view.sync();
             view.fit();

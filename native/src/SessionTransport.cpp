@@ -23,11 +23,12 @@ juce::Result Session::importAudio(const juce::File& file)
     if (duration <= 0.0)
         return juce::Result::fail("This file could not be read as audio.");
 
-    auto* track = te::getAudioTracks(*edit)[1];
-    tracktion::core::TimePosition start;
-    for (auto* existing : track->getClips())
-        start = std::max(start, existing->getPosition().time.getEnd());
-    return importAudioAt(file, 1, start.inSeconds());
+    // No track is an audio track by default, so an import with no target gets
+    // one of its own rather than landing on whatever happens to be first.
+    const auto added = addAudioTrack();
+    if (added.failed())
+        return added;
+    return importAudioAt(file, trackCount() - 1, 0.0);
 }
 
 juce::Result Session::importAudioAt(const juce::File& file, int trackIndex, double startSeconds)

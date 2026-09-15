@@ -434,6 +434,14 @@ juce::String BrowserPanel::dragDescriptionFor(const Item& item) const
     return "theta-browser:info:" + item.name;
 }
 
+// A document can hold a single track, so no fixed index is safe: an unanswered
+// or stale target falls back to the first track rather than the main row.
+int BrowserPanel::selectedTargetTrack() const
+{
+    const auto track = targetTrack ? targetTrack() : 0;
+    return juce::isPositiveAndBelow(track, session.trackCount()) ? track : 0;
+}
+
 void BrowserPanel::applyItem(const Item& item)
 {
     if (item.preset)
@@ -443,30 +451,33 @@ void BrowserPanel::applyItem(const Item& item)
     }
     else if (item.effect)
     {
-        const auto result = session.addAudioEffect(*item.effect);
-        if (status) status(result.wasOk() ? "Added " + item.name + " to " + session.trackName(1) : result.getErrorMessage());
+        const auto track = selectedTargetTrack();
+        const auto result = session.addAudioEffect(*item.effect, track);
+        if (status) status(result.wasOk() ? "Added " + item.name + " to " + session.trackName(track) : result.getErrorMessage());
     }
     else if (item.instrument)
     {
-        const auto targetTrack = *item.instrument == Session::Instrument::Utility ? 1 : 0;
-        const auto result = session.addInstrument(*item.instrument, targetTrack);
-        if (status) status(result.wasOk() ? "Added " + item.name + " to " + session.trackName(targetTrack)
+        const auto track = selectedTargetTrack();
+        const auto result = session.addInstrument(*item.instrument, track);
+        if (status) status(result.wasOk() ? "Added " + item.name + " to " + session.trackName(track)
                                           : result.getErrorMessage());
     }
     else if (item.midiEffect)
     {
-        const auto result = session.addMidiEffect(*item.midiEffect, 0);
-        if (status) status(result.wasOk() ? "Added " + item.name + " to " + session.trackName(0) : result.getErrorMessage());
+        const auto track = selectedTargetTrack();
+        const auto result = session.addMidiEffect(*item.midiEffect, track);
+        if (status) status(result.wasOk() ? "Added " + item.name + " to " + session.trackName(track) : result.getErrorMessage());
     }
     else if (item.drumKit)
     {
-        const auto result = session.addDrumKit(*item.drumKit, 0);
-        if (status) status(result.wasOk() ? "Added " + item.name + " to " + session.trackName(0) : result.getErrorMessage());
+        const auto track = selectedTargetTrack();
+        const auto result = session.addDrumKit(*item.drumKit, track);
+        if (status) status(result.wasOk() ? "Added " + item.name + " to " + session.trackName(track) : result.getErrorMessage());
     }
     else if (item.sample)
     {
         const auto result = session.importBuiltInSample(*item.sample);
-        if (status) status(result.wasOk() ? "Added " + item.name + " to " + session.trackName(1) : result.getErrorMessage());
+        if (status) status(result.wasOk() ? "Added " + item.name : result.getErrorMessage());
     }
     else if (status)
     {

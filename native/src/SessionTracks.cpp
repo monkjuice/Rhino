@@ -30,6 +30,10 @@ juce::Result Session::addAudioTrack()
     newTrack->setName("Audio " + juce::String(tracks.size()));
     auto audioDevice = edit->getPluginCache().createNewPlugin(UtilityDevice::xmlTypeName, {});
     newTrack->pluginList.insertPlugin(audioDevice, 0, nullptr);
+    // The starter document has one track, so the second utility only exists
+    // once a track is added. Adopt the first one that appears.
+    if (audioUtility == nullptr)
+        audioUtility = dynamic_cast<UtilityDevice*>(audioDevice.get());
     ensureSceneSlots();
     ensureTrackMixers();
     edit->getUndoManager().beginNewTransaction();
@@ -43,8 +47,8 @@ juce::Result Session::removeAudioTrack(int track)
     const auto tracks = te::getAudioTracks(*edit);
     if (track <= 0 || !juce::isPositiveAndBelow(track, tracks.size()))
         return juce::Result::fail("Select an audio track to remove.");
-    if (tracks.size() <= 2)
-        return juce::Result::fail("Keep at least one audio track.");
+    if (tracks.size() <= 1)
+        return juce::Result::fail("Keep at least one track.");
     const auto removingEditedPatternTrack = patternClip != nullptr && patternClip->getClipTrack() == tracks[track];
     edit->getUndoManager().beginNewTransaction("Remove audio track");
     edit->deleteTrack(tracks[track]);

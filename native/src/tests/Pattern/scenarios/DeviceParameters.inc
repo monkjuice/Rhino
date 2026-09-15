@@ -1,7 +1,8 @@
         {
             Session parameterSession;
+            require(parameterSession.addAudioTrack().wasOk(), "A document adds the audio track these checks need");
             auto* parameterTrack = te::getAudioTracks(*parameterSession.edit)[1];
-            require(parameterSession.addAudioEffect(Session::AudioEffect::Reverb).wasOk(), "Audio FX browser action inserts Reverb");
+            require(parameterSession.addAudioEffect(Session::AudioEffect::Reverb, 1).wasOk(), "Audio FX browser action inserts Reverb");
             const auto reverbDevices = parameterSession.deviceSlots(1);
             const auto reverbSlot = reverbDevices.empty() ? -1 : reverbDevices.back().pluginIndex;
             auto reverbParameters = parameterSession.deviceParameters(1, reverbSlot);
@@ -14,7 +15,7 @@
             require(parameterSession.endDeviceParameterGesture(1, reverbSlot, 0).wasOk(), "Device View ends parameter gestures");
             reverbParameters = parameterSession.deviceParameters(1, reverbSlot);
             require(std::abs(reverbParameters.front().value - newReverbValue) < 0.0001f, "Edited effect parameter value is reflected in Device View");
-            require(parameterSession.addAudioEffect(Session::AudioEffect::ThetaSpace).wasOk(), "Audio FX browser action inserts Theta Space");
+            require(parameterSession.addAudioEffect(Session::AudioEffect::ThetaSpace, 1).wasOk(), "Audio FX browser action inserts Theta Space");
             const auto thetaDevices = parameterSession.deviceSlots(1);
             const auto thetaSlot = thetaDevices.empty() ? -1 : thetaDevices.back().pluginIndex;
             auto thetaParameters = parameterSession.deviceParameters(1, thetaSlot);

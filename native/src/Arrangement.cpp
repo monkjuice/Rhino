@@ -114,6 +114,13 @@ void Arrangement::resized()
     gridControl.setBounds(getWidth() - 104, static_cast<int>(masterLane().getY()) - 26, 76, 20);
     updateGridControl();
     syncTrackControls();
+    // Lane height follows the component height, so the row stack has to reflow
+    // before anything is positioned against it. A track added since the last
+    // sync needs the full rebuild; a plain resize only needs the geometry.
+    if (static_cast<int>(trackRowIndex.size()) != session.trackCount())
+        buildRows();
+    else
+        layoutRows();
     const auto mixerVisible = showTrackMixer();
     for (int i = 0; i < session.trackCount() && i < static_cast<int>(mute.size()); ++i)
     {

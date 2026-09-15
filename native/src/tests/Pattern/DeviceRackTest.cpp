@@ -12,11 +12,18 @@ void runPatternDeviceRackTest()
         if (!valid) throw std::runtime_error(message);
     };
     Session session;
-    require(session.utility != nullptr && session.audioUtility != nullptr,
-            "Session creates the Utility devices on both starter tracks");
+    require(session.utility != nullptr, "Session creates the Utility device on the starter track");
+    require(session.trackCount() == 1 && !session.trackHasInstrument(0),
+            "A new document opens with one empty track and nothing else");
+    require(session.patternInstrument() == nullptr,
+            "The starter track runs no instrument until one is dropped on it");
+    require(session.addInstrument(Session::Instrument::FourOsc, 0).wasOk(),
+            "The starter track takes an instrument");
+    require(session.addAudioTrack().wasOk() && session.audioUtility != nullptr,
+            "An added track brings its own Utility device");
     require(session.patternInstrument() != nullptr
             && session.patternInstrumentKind() == Session::Instrument::FourOsc,
-            "The starter pattern track carries one instrument, 4OSC");
+            "The pattern track carries one instrument, 4OSC");
     auto* effectTrack = te::getAudioTracks(*session.edit)[1];
     const auto initialAudioPluginCount = effectTrack->pluginList.size();
     const auto patternDevices = session.deviceSlots(0);
@@ -50,7 +57,7 @@ void runPatternDeviceRackTest()
     deviceView.setSize(900, 120);
     require(deviceView.devicePanels.getFirst()->getHeight() == DeviceEditorPanel::standardHeight,
             "Shrinking Device View does not compress device controls");
-    require(session.addAudioEffect(Session::AudioEffect::Equaliser).wasOk(), "Audio FX browser action inserts EQ");
+    require(session.addAudioEffect(Session::AudioEffect::Equaliser, 1).wasOk(), "Audio FX browser action inserts EQ");
     require(effectTrack->pluginList.size() == initialAudioPluginCount + 1, "Audio FX insert grows the audio track chain");
     auto audioDevices = session.deviceSlots(1);
     require(audioDevices.size() == 1 && audioDevices.front().kind == Session::DeviceKind::AudioEffect,

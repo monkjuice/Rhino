@@ -25,27 +25,35 @@ void drawDashedLine(juce::Graphics& g, float x1, float y1, float x2, float y2)
 }
 
 // Rows are rebuilt whenever the edit changes, because revealing a lane changes
-// the height of everything below it.
+// what is below it. Their pixel geometry is a separate step: lane height
+// follows the component height, so a resize must reflow the stack without
+// re-reading the edit.
 void Arrangement::buildRows()
 {
     rows.clear();
     trackRowIndex.assign(static_cast<size_t>(std::max(0, session.trackCount())), -1);
     trackLanes.assign(static_cast<size_t>(std::max(0, session.trackCount())), {});
-    auto top = 0.0f;
     for (int track = 0; track < session.trackCount(); ++track)
     {
         trackLanes[static_cast<size_t>(track)] = session.trackAutomations(track);
         trackRowIndex[static_cast<size_t>(track)] = static_cast<int>(rows.size());
-        rows.push_back({track, -1, top, laneHeight()});
-        top += laneHeight();
+        rows.push_back({track, -1, 0.0f, 0.0f});
         const auto& lanes = trackLanes[static_cast<size_t>(track)];
         for (int i = 0; i < static_cast<int>(lanes.size()); ++i)
-        {
-            if (!lanes[static_cast<size_t>(i)].ownLane)
-                continue;
-            rows.push_back({track, i, top, automationRowHeight});
-            top += automationRowHeight;
-        }
+            if (lanes[static_cast<size_t>(i)].ownLane)
+                rows.push_back({track, i, 0.0f, 0.0f});
+    }
+    layoutRows();
+}
+
+void Arrangement::layoutRows()
+{
+    auto top = 0.0f;
+    for (auto& row : rows)
+    {
+        row.top = top;
+        row.height = row.automation < 0 ? laneHeight() : automationRowHeight;
+        top += row.height;
     }
     rowsHeight = top;
 }

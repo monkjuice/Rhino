@@ -9,6 +9,23 @@
         const auto rowsWithoutLanes = view.rows.size();
         const auto secondTrackTop = view.lane(1).getY();
 
+        // Lane height follows the panel height, and a device rack opening below
+        // the arrangement resizes it. The row stack has to reflow then, or the
+        // painted lanes and the header controls drift apart.
+        {
+            const auto tallHeight = view.getHeight();
+            require(std::abs(view.lane(0).getHeight() - view.laneHeight()) < 0.001f,
+                    "Lane rows start at the current lane height");
+            view.setSize(view.getWidth(), tallHeight - 120);
+            require(std::abs(view.lane(0).getHeight() - view.laneHeight()) < 0.001f,
+                    "Shrinking the panel reflows the lane rows rather than keeping stale heights");
+            require(std::abs(view.lane(1).getY() - view.lane(0).getBottom()) < 0.001f,
+                    "Reflowed lane rows stay contiguous");
+            view.setSize(view.getWidth(), tallHeight);
+            view.sync();
+            view.fit();
+        }
+
         require(session.showTrackAutomation(laneTarget, false).wasOk(), "A knob can reveal automation on its track");
         view.sync();
         require(view.rows.size() == rowsWithoutLanes,

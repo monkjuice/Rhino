@@ -29,16 +29,15 @@ Session::Session() : engine(commandLineTestMode ? "Theta Native Tests" : "Theda 
     edit->clickTrackEmphasiseBars = true;
     edit->clickTrackGain = -6.0f;
     edit->tempoSequence.getTempo(0)->setBpm(120.0);
-    edit->ensureNumberOfAudioTracks(2);
+    // One empty track, as a new document should be. It runs no instrument, so
+    // it is neither a MIDI nor an audio track until something is dropped on it:
+    // an instrument makes it one and renames it, a sample makes it the other.
+    edit->ensureNumberOfAudioTracks(1);
     auto* track = te::getAudioTracks(*edit)[0];
-    track->setName("Pattern synth");
-    // The starter track gets one instrument. Dropping another replaces it.
-    auto synthPlugin = edit->getPluginCache().createNewPlugin(te::FourOscPlugin::xmlTypeName, {});
-    track->pluginList.insertPlugin(synthPlugin, 0, nullptr);
+    track->setName("Track 1");
     auto device = edit->getPluginCache().createNewPlugin(UtilityDevice::xmlTypeName, {});
     utility = dynamic_cast<UtilityDevice*>(device.get());
     track->pluginList.insertPlugin(device, track->pluginList.size(), nullptr);
-    utility->gain().setParameter(-12.0f, juce::dontSendNotification);
     const auto end = edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(beatsPerBar()));
     patternClip = track->insertMIDIClip("Pattern 1", {{}, end}, nullptr).get();
     if (patternClip != nullptr)
@@ -48,11 +47,6 @@ Session::Session() : engine(commandLineTestMode ? "Theta Native Tests" : "Theda 
         patternClip->state.setProperty(editorStepsID, defaultSteps, nullptr);
     }
     patternClipID = patternClip->itemID;
-    auto* audioTrack = te::getAudioTracks(*edit)[1];
-    audioTrack->setName("Audio 1");
-    auto audioDevice = edit->getPluginCache().createNewPlugin(UtilityDevice::xmlTypeName, {});
-    audioUtility = dynamic_cast<UtilityDevice*>(audioDevice.get());
-    audioTrack->pluginList.insertPlugin(audioDevice, 0, nullptr);
     ensureSceneSlots();
     ensureTrackMixers();
     refreshLoop();
@@ -158,8 +152,8 @@ juce::Result Session::restoreProject(const juce::ValueTree& state, const juce::F
     if (!candidate) return juce::Result::fail("The project could not be loaded.");
     candidate->editFileRetriever = [file] { return file; };
     const auto tracks = te::getAudioTracks(*candidate);
-    if (tracks.size() < 2)
-        return juce::Result::fail("This editor requires a pattern track and at least one audio track.");
+    if (tracks.isEmpty())
+        return juce::Result::fail("This project has no tracks.");
     te::MidiClip* nextPattern = nullptr;
     UtilityDevice* nextUtility = nullptr;
     UtilityDevice* nextAudioUtility = nullptr;
@@ -171,8 +165,9 @@ juce::Result Session::restoreProject(const juce::ValueTree& state, const juce::F
             }
     for (auto plugin : tracks[0]->pluginList)
         if (auto* device = dynamic_cast<UtilityDevice*>(plugin)) nextUtility = device;
-    for (auto plugin : tracks[1]->pluginList)
-        if (auto* device = dynamic_cast<UtilityDevice*>(plugin)) nextAudioUtility = device;
+    if (tracks.size() > 1)
+        for (auto plugin : tracks[1]->pluginList)
+            if (auto* device = dynamic_cast<UtilityDevice*>(plugin)) nextAudioUtility = device;
     if (!nextPattern || !nextUtility)
         return juce::Result::fail("The project is missing its pattern track devices.");
     // Documents written when a track could stack instruments collapse here.

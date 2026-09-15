@@ -108,10 +108,10 @@ void Arrangement::paint(juce::Graphics& g)
         }
     }
     const auto dirty = g.getClipBounds().toFloat();
-    bool hasAudio = false;
+    std::set<int> tracksWithClips;
     for (const auto& clip : clips)
     {
-        hasAudio |= clip.track == 1;
+        tracksWithClips.insert(clip.track);
         const auto paintTrack = displayedTrack(clip);
         const auto box = bounds(clip);
         const auto visible = box.getIntersection(lane(paintTrack))
@@ -203,11 +203,15 @@ void Arrangement::paint(juce::Graphics& g)
             }
         }
     }
-    if (!hasAudio && session.trackCount() > 1)
-    {
-        g.setColour(juce::Colour(0xff75828e));
-        g.drawText("Drop audio here", lane(1).reduced(16, 0), juce::Justification::centredLeft);
-    }
+    // The hint belongs on the first track that could take audio, which is any
+    // empty track without an instrument rather than a fixed lane index.
+    for (int track = 0; track < session.trackCount(); ++track)
+        if (!tracksWithClips.contains(track) && !session.trackHasInstrument(track))
+        {
+            g.setColour(juce::Colour(0xff75828e));
+            g.drawText("Drop audio here", lane(track).reduced(16, 0), juce::Justification::centredLeft);
+            break;
+        }
     // Curves sit on top of the clips they modulate, and are clipped to the
     // scrolling lane area so a scrolled-off row cannot draw into the ruler.
     {

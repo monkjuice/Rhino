@@ -42,6 +42,7 @@
 
         {
             Session repeatedDrums;
+            require(repeatedDrums.addAudioTrack().wasOk(), "Repeated drum regression adds the track it renders");
             require(repeatedDrums.insertPatternPreset(Session::PatternPreset::BreakKit, 1, 2.0).wasOk(),
                     "Repeated drum regression creates the first clip after silence");
             auto* drumTrack = te::getAudioTracks(*repeatedDrums.edit)[1];
@@ -162,7 +163,7 @@
         {
             Session fxSession;
             require(fxSession.importAudio(output.getFile()).wasOk(), "Theta Space test imports rendered audio");
-            require(fxSession.addAudioEffect(Session::AudioEffect::ThetaSpace).wasOk(), "Theta Space can be inserted for render stability");
+            require(fxSession.addAudioEffect(Session::AudioEffect::ThetaSpace, 1).wasOk(), "Theta Space can be inserted for render stability");
             auto* fxTrack = te::getAudioTracks(*fxSession.edit)[1];
             const auto fxDevices = fxSession.deviceSlots(1);
             const auto thetaSlot = fxDevices.empty() ? -1 : fxDevices.back().pluginIndex;

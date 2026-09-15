@@ -347,7 +347,7 @@
         session.undo();
         session.undo();
         require(session.removeAudioTrack(2).wasOk(), "Can remove the extra audio track");
-        require(session.trackCount() == 2, "Removing extra audio track restores starter track count");
+        require(session.trackCount() == 2, "Removing the extra audio track leaves the pattern and audio tracks");
         view.filesDropped(dropped, static_cast<int>(view.xFor(1.0)), view.getHeight() - 3);
         require(session.trackCount() == 3, "Dropping audio below the lanes creates a new audio track");
         require(te::getAudioTracks(*session.edit)[2]->getClips().size() == 1, "Drop-created track receives the audio clip");

@@ -6,6 +6,14 @@
         view.fit();
         view.sync();
         require(view.clips.empty(), "Fresh startup hides the internal empty Pattern 1 placeholder");
+        // A new document is one empty track and the main row, nothing else.
+        require(session.trackCount() == 1 && session.trackName(0) == "Track 1",
+                "A new document opens with a single track called Track 1");
+        require(!session.trackHasInstrument(0) && session.patternInstrument() == nullptr,
+                "The starter track runs no instrument until one is dropped on it");
+        require(session.deviceSlots(0).empty(), "The starter track shows no devices of its own");
+        require(view.rows.size() == 1, "The arrangement draws one lane for a new document");
+        require(session.removeAudioTrack(0).failed(), "The last remaining track cannot be removed");
         session.setNote(0, 48, true);
         view.sync();
         require(view.clips.size() == 1, "Drawing the first note makes the startup pattern clip visible");

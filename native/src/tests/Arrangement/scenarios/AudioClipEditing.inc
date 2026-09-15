@@ -192,4 +192,4 @@
         require(te::getAudioTracks(*session.edit)[1]->getClips().size() == 2, "Dropping an audio file on the audio lane imports a clip");
         session.undo();
         require(te::getAudioTracks(*session.edit)[1]->getClips().size() == 1, "Undo restores dropped audio import");
-        require(session.trackCount() == 2, "Starter session has pattern and one audio track");
+        require(session.trackCount() == 2, "The starter track plus the one the audio import created");

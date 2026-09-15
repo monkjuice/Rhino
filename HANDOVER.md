@@ -86,6 +86,20 @@ Automation used to be a ramp stored inside a clip's `ValueTree` and drawn only a
 - **New UI file:** `ArrangementAutomation.cpp` holds the lane row stack, the curve painting and the automation pointer gestures. The arrangement's lanes are no longer uniform-height: `Arrangement::rows` is the authority and `lane(track)` looks a track up in it, because a lane sent to "its own row" stacks a dimmed clone of the track underneath and pushes everything below it down.
 - **Not done yet:** the pinned main row has no space to stack a lane, so `showTrackAutomation` refuses a master target rather than silently doing nothing. Lane targets are plugin-list indices, so swapping a track's instrument leaves a lane pointing at whatever now occupies that slot.
 
+## The starter document is one empty track (September 2026)
+
+Theta used to open with `Pattern synth` (a 4OSC plus a hidden placeholder pattern clip) and `Audio 1`. It now opens with **one** track named `Track 1`, running no instrument, plus the pinned main row. The hidden pattern clip is still there, so the note editor works from the first click; it just drives nothing until an instrument is dropped.
+
+If you are updating code or a test that assumed the old layout:
+
+- **No index is "the audio track" any more.** `masterTrackIndex()` is `trackCount()`, so on a fresh document index 1 *is* the main row. Passing 1 to a track-indexed call now silently targets main instead of failing. `Session::addAudioEffect` lost its `= 1` default for exactly this reason — say which track.
+- **`importAudio(file)`** with no target appends a new track and puts the clip there, rather than landing on track 1.
+- **`audioUtility`** is null until a second track exists; `addAudioTrack` adopts the first one it creates. `utility` still belongs to track 0.
+- **`restoreProject`** accepts a one-track project; it used to require two.
+- **`removeAudioTrack`** now refuses only when one track is left, not two.
+- **Browser double-clicks** act on the selected track through `BrowserPanel::targetTrack`, wired in `Main.cpp`. They used to hardcode track 0 or track 1 per item kind.
+- **Test scenarios** that want an audio track must `addAudioTrack()` first. Several already got one for free from `importAudio`.
+
 ## What is deliberately still undone
 
 Two classes are defined entirely inline inside one `.cpp` and are the next things worth separating:

@@ -193,7 +193,7 @@ public:
     bool trackHasInstrument(int track) const;
     juce::Result selectPatternClip(te::EditItemID);
     bool isPatternDrums() const;
-    juce::Result addAudioEffect(AudioEffect, int track = 1);
+    juce::Result addAudioEffect(AudioEffect, int track);
     juce::Result addClipAudioEffect(AudioEffect, te::EditItemID);
     juce::Result addInstrument(Instrument, int track);
     // A drum kit is the drum instrument plus a kit selection, so these behave

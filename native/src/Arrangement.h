@@ -105,6 +105,7 @@ private:
     LoopGesture loopGestureAt(juce::Point<float>) const;
     // ArrangementAutomation.cpp
     void buildRows();
+    void layoutRows();
     juce::Rectangle<float> rowBounds(int row) const;
     int rowAt(float y) const;
     const Session::TrackAutomation* automationFor(const LaneRow&) const;

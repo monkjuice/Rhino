@@ -25,7 +25,7 @@ Arrangement::Arrangement(Session& s) : session(s), vblank(this, [this] { updateP
     addTrack.setTooltip("Add track");
     snap.setTooltip("Toggle clip snap");
     gridControl.setTooltip("Arrangement grid settings");
-    automationButton.setTooltip("Draw automation for the last moved device knob");
+    automationButton.setTooltip("Automation edit mode: drag lanes instead of clips");
     snap.setClickingTogglesState(true);
     snap.setToggleState(true, juce::dontSendNotification);
     gridControl.onClick = [this] { showGridMenu(); };
@@ -38,10 +38,11 @@ Arrangement::Arrangement(Session& s) : session(s), vblank(this, [this] { updateP
     duplicateButton.onClick = [this] { duplicateSelected(); };
     automationButton.onClick = [this]
     {
-        if (automationButton.getToggleState() && status)
-            status(session.lastTouchedDeviceParameter().isValid()
-                ? "Automation draw: drag across a clip to write the last moved knob"
-                : "Move a device knob first, then draw automation");
+        if (status)
+            status(automationButton.getToggleState()
+                ? "Automation edit: drags in a track lane move automation, not clips"
+                : "Clip edit: right-click a device knob to show its automation");
+        repaint();
     };
     addTrack.onClick = [this]
     {
@@ -114,7 +115,7 @@ void Arrangement::resized()
     updateGridControl();
     syncTrackControls();
     const auto mixerVisible = showTrackMixer();
-    for (int i = 0; i < session.trackCount(); ++i)
+    for (int i = 0; i < session.trackCount() && i < static_cast<int>(mute.size()); ++i)
     {
         const auto row = lane(i);
         const auto index = static_cast<size_t>(i);
@@ -263,15 +264,12 @@ bool Arrangement::keyPressed(const juce::KeyPress& key)
     if (key.getKeyCode() == juce::KeyPress::deleteKey || key.getKeyCode() == juce::KeyPress::backspaceKey)
     {
         cancelDrag();
-        if (activeAutomationClip == selected && activeAutomationTarget.isValid())
+        // Delete clears the focused automation curve back to its resting line
+        // rather than removing the lane, which the knob menu still does.
+        if (focusedAutomation.isValid() && session.trackAutomationState(focusedAutomation).active)
         {
-            const auto result = session.deleteClipAutomation(selected, activeAutomationTarget);
-            if (result.wasOk())
-            {
-                activeAutomationClip = {};
-                activeAutomationTarget = {};
-            }
-            if (status) status(result.wasOk() ? "Automation lane deleted" : result.getErrorMessage());
+            const auto result = session.clearTrackAutomationPoints(focusedAutomation);
+            if (status) status(result.wasOk() ? "Automation deleted" : result.getErrorMessage());
             return true;
         }
         deleteSelection();
@@ -285,6 +283,10 @@ void Arrangement::cancelDrag()
     dragging = false;
     marqueeSelecting = false;
     loopGesture = LoopGesture::none;
+    automationGesture = AutomationGesture::none;
+    automationRow = -1;
+    automationPoint = -1;
+    automationPoints.clear();
 }
 
 bool Arrangement::isSelected(te::EditItemID id) const
@@ -389,14 +391,27 @@ void Arrangement::changeListenerCallback(juce::ChangeBroadcaster*)
 {
     // Playback automation can publish parameter changes every block. Keep the
     // gesture snapshot stable until the pointer is released.
-    if (dragging || automationDragging)
+    if (dragging || automationGesture != AutomationGesture::none)
     {
         repaint();
         return;
     }
     sync();
 }
-void Arrangement::editWillChange() { cancelDrag(); clips.clear(); waveforms.clear(); setSelection({}); }
+// The row stack indexes tracks that are about to be replaced, so it goes with
+// the clips rather than surviving into the new edit.
+void Arrangement::editWillChange()
+{
+    cancelDrag();
+    clips.clear();
+    waveforms.clear();
+    rows.clear();
+    trackLanes.clear();
+    trackRowIndex.clear();
+    rowsHeight = 0.0f;
+    focusedAutomation = {};
+    setSelection({});
+}
 void Arrangement::editDidChange() { sync(); fit(); }
 
 void Arrangement::updatePlayhead()

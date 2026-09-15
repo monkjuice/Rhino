@@ -95,17 +95,33 @@ public:
         int parameter = -1;
         bool isValid() const { return track >= 0 && slot >= 0 && parameter >= 0; }
     };
-    struct ClipAutomation
+    // Automation belongs to a track and spans the whole timeline, as it does in
+    // every other DAW. A lane with fewer than two points has never been drawn:
+    // it renders as a dotted line at the knob's resting value and drives
+    // nothing, which is how a revealed-but-unused lane stays out of the way.
+    struct AutomationPoint
     {
-        bool active = false;
+        double timeSeconds = 0.0;
+        float value = 0.0f;
+    };
+    struct TrackAutomation
+    {
         DeviceTarget target;
         juce::String parameterName;
-        double startSeconds = 0.0;
-        double endSeconds = 0.0;
-        float startValue = 0.0f;
-        float endValue = 0.0f;
+        juce::String deviceName;
         float minimum = 0.0f;
         float maximum = 1.0f;
+        float restingValue = 0.0f;
+        bool ownLane = false;
+        std::vector<AutomationPoint> points;
+        bool active() const { return points.size() >= 2; }
+        float valueAt(double seconds) const;
+    };
+    struct AutomationLaneState
+    {
+        bool visible = false;
+        bool ownLane = false;
+        bool active = false;
     };
     struct EditorNote
     {
@@ -218,13 +234,16 @@ public:
     te::Clip* findClip(te::EditItemID) const;
     te::WaveAudioClip* findAudioClip(te::EditItemID) const;
     bool shouldShowClipInArrangement(te::Clip&) const;
-    ClipAutomation clipAutomation(te::EditItemID) const;
-    std::vector<ClipAutomation> clipAutomations(te::EditItemID) const;
-    juce::Result setClipAutomationRamp(te::EditItemID, DeviceTarget, double startSeconds, double endSeconds,
-                                       float startValue, float endValue);
-    juce::Result deleteClipAutomation(te::EditItemID, DeviceTarget);
+    // Lanes are addressed by the device they drive; the lane is displayed on
+    // target.track, so an automation always sits under the track it belongs to.
+    std::vector<TrackAutomation> trackAutomations(int track) const;
+    AutomationLaneState trackAutomationState(DeviceTarget) const;
+    juce::Result showTrackAutomation(DeviceTarget, bool ownLane);
+    juce::Result hideTrackAutomation(DeviceTarget);
+    juce::Result setTrackAutomationPoints(DeviceTarget, std::vector<AutomationPoint>);
+    juce::Result clearTrackAutomationPoints(DeviceTarget);
     juce::Result toggleParameterAutomationOverride(int track, int slot, int parameter);
-    void applyClipAutomationAt(double timelineSeconds);
+    void applyTrackAutomationAt(double timelineSeconds);
     juce::Result moveNote(int sourceStep, int sourcePitch, int targetStep, int targetPitch);
     juce::Result moveNotes(const std::vector<std::pair<int, int>>&, int stepDelta, int pitchDelta);
     juce::Result moveNotes(const std::vector<juce::ValueTree>&, double stepDelta, int pitchDelta);
@@ -345,6 +364,10 @@ private:
     void initialiseExternalPlugins(bool retry = false);
     void setPatternInstrument(bool useDrums);
     void ensureEditablePatternClip();
+    juce::ValueTree automationOwnerState(int track) const;
+    juce::ValueTree findTrackAutomationState(DeviceTarget) const;
+    juce::ValueTree ensureTrackAutomationState(DeviceTarget, bool ownLane, bool keepExistingLane);
+    std::vector<TrackAutomation> readTrackAutomations(int track, bool resolveParameterInfo) const;
     AutomationRuntime& automationRuntimeFor(DeviceTarget);
     AutomationRuntime* findAutomationRuntime(DeviceTarget);
     const AutomationRuntime* findAutomationRuntime(DeviceTarget) const;

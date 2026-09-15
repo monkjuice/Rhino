@@ -2,110 +2,265 @@
 #include <algorithm>
 #include <set>
 
-// Clip automation. Serves Arrangement.
+// Track automation. Serves Arrangement and the device rack.
+//
+// A lane is stored on the track it is displayed under, keyed by the device
+// parameter it drives, and holds an ordered list of points spanning the whole
+// timeline rather than one clip. Fewer than two points means the lane has been
+// revealed but never drawn: it shows the knob's resting value and drives
+// nothing.
 
 namespace theta
 {
-
-Session::ClipAutomation Session::clipAutomation(te::EditItemID id) const
+namespace
 {
-    const auto automations = clipAutomations(id);
-    return automations.empty() ? ClipAutomation{} : automations.front();
+double pointTime(const juce::ValueTree& state)
+{
+    return static_cast<double>(state.getProperty(automationTimeID, 0.0));
 }
 
-std::vector<Session::ClipAutomation> Session::clipAutomations(te::EditItemID id) const
+Session::DeviceTarget targetOf(const juce::ValueTree& state)
 {
-    std::vector<ClipAutomation> automations;
-    ClipAutomation automation;
-    auto* clip = findClip(id);
-    if (clip == nullptr)
+    return {static_cast<int>(state.getProperty(automationTrackID, -1)),
+            static_cast<int>(state.getProperty(automationSlotID, -1)),
+            static_cast<int>(state.getProperty(automationParameterID, -1))};
+}
+}
+
+float Session::TrackAutomation::valueAt(double seconds) const
+{
+    if (points.empty())
+        return restingValue;
+    if (points.size() == 1 || seconds <= points.front().timeSeconds)
+        return points.front().value;
+    if (seconds >= points.back().timeSeconds)
+        return points.back().value;
+    for (size_t i = 1; i < points.size(); ++i)
+    {
+        const auto& previous = points[i - 1];
+        const auto& next = points[i];
+        if (seconds > next.timeSeconds)
+            continue;
+        const auto span = next.timeSeconds - previous.timeSeconds;
+        if (span <= 0.0)
+            return next.value;
+        const auto amount = static_cast<float>((seconds - previous.timeSeconds) / span);
+        return previous.value + (next.value - previous.value) * amount;
+    }
+    return points.back().value;
+}
+
+// The master track keeps its lanes on the edit, every other track on itself.
+// Both are part of the saved document, so persistence needs no extra step.
+juce::ValueTree Session::automationOwnerState(int track) const
+{
+    if (isMasterTrack(track))
+        return edit->state;
+    const auto tracks = te::getAudioTracks(*edit);
+    if (!juce::isPositiveAndBelow(track, tracks.size()))
+        return {};
+    return tracks[track]->state;
+}
+
+juce::ValueTree Session::findTrackAutomationState(DeviceTarget target) const
+{
+    const auto owner = automationOwnerState(target.track);
+    if (!owner.isValid())
+        return {};
+    for (int i = 0; i < owner.getNumChildren(); ++i)
+    {
+        const auto state = owner.getChild(i);
+        if (state.hasType(trackAutomationID) && sameDeviceTarget(targetOf(state), target))
+            return state;
+    }
+    return {};
+}
+
+std::vector<Session::TrackAutomation> Session::readTrackAutomations(int track, bool resolveParameterInfo) const
+{
+    std::vector<TrackAutomation> automations;
+    const auto owner = automationOwnerState(track);
+    if (!owner.isValid())
         return automations;
 
-    for (int i = 0; i < clip->state.getNumChildren(); ++i)
+    std::vector<DeviceSlot> slots;
+    std::vector<DeviceParameter> parameters;
+    int parametersForSlot = -1;
+    for (int i = 0; i < owner.getNumChildren(); ++i)
     {
-        const auto state = clip->state.getChild(i);
-        if (!state.hasType(clipAutomationID))
+        const auto state = owner.getChild(i);
+        if (!state.hasType(trackAutomationID))
             continue;
-
-        automation = {};
-        automation.target.track = static_cast<int>(state.getProperty(automationTrackID, -1));
-        automation.target.slot = static_cast<int>(state.getProperty(automationSlotID, -1));
-        automation.target.parameter = static_cast<int>(state.getProperty(automationParameterID, -1));
-        automation.startSeconds = static_cast<double>(state.getProperty(automationStartID, 0.0));
-        automation.endSeconds = static_cast<double>(state.getProperty(automationEndID, 0.0));
-        automation.startValue = static_cast<float>(state.getProperty(automationStartValueID, 0.0));
-        automation.endValue = static_cast<float>(state.getProperty(automationEndValueID, 0.0));
-        automation.active = automation.target.isValid()
-            && std::isfinite(automation.startSeconds)
-            && std::isfinite(automation.endSeconds)
-            && automation.endSeconds > automation.startSeconds;
-
-        const auto parameters = deviceParameters(automation.target.track, automation.target.slot);
-        if (juce::isPositiveAndBelow(automation.target.parameter, parameters.size()))
+        TrackAutomation automation;
+        automation.target = targetOf(state);
+        if (!automation.target.isValid() || automation.target.track != track)
+            continue;
+        automation.ownLane = static_cast<bool>(state.getProperty(automationOwnLaneID, false));
+        for (int child = 0; child < state.getNumChildren(); ++child)
         {
-            const auto& parameter = parameters[static_cast<size_t>(automation.target.parameter)];
-            automation.parameterName = parameter.name;
-            automation.minimum = parameter.minimum;
-            automation.maximum = parameter.maximum;
+            const auto point = state.getChild(child);
+            if (!point.hasType(automationPointID))
+                continue;
+            const auto time = pointTime(point);
+            const auto value = static_cast<float>(point.getProperty(automationValueID, 0.0));
+            if (std::isfinite(time) && std::isfinite(value))
+                automation.points.push_back({std::max(0.0, time), value});
         }
-        if (automation.active)
-            automations.push_back(automation);
+        std::stable_sort(automation.points.begin(), automation.points.end(),
+                         [] (const auto& a, const auto& b) { return a.timeSeconds < b.timeSeconds; });
+
+        if (resolveParameterInfo)
+        {
+            if (parametersForSlot != automation.target.slot)
+            {
+                parameters = deviceParameters(track, automation.target.slot);
+                parametersForSlot = automation.target.slot;
+            }
+            if (juce::isPositiveAndBelow(automation.target.parameter, parameters.size()))
+            {
+                const auto& parameter = parameters[static_cast<size_t>(automation.target.parameter)];
+                automation.parameterName = parameter.name;
+                automation.minimum = parameter.minimum;
+                automation.maximum = parameter.maximum;
+                automation.restingValue = juce::jlimit(parameter.minimum, parameter.maximum, parameter.value);
+            }
+            if (slots.empty())
+                slots = deviceSlots(track);
+            for (const auto& slot : slots)
+                if (slot.pluginIndex == automation.target.slot)
+                {
+                    automation.deviceName = slot.name;
+                    break;
+                }
+            // A lane whose device or parameter has gone is not displayable.
+            if (automation.parameterName.isEmpty())
+                continue;
+        }
+        automations.push_back(std::move(automation));
     }
     return automations;
 }
 
-juce::Result Session::setClipAutomationRamp(te::EditItemID id, DeviceTarget target, double startSeconds, double endSeconds,
-                                            float startValue, float endValue)
+std::vector<Session::TrackAutomation> Session::trackAutomations(int track) const
 {
-    auto* clip = findClip(id);
-    if (clip == nullptr)
-        return juce::Result::fail("Select a clip first.");
-    if (!target.isValid())
-        return juce::Result::fail("Move a device knob first, then draw automation.");
+    return readTrackAutomations(track, true);
+}
 
-    auto parameters = deviceParameters(target.track, target.slot);
+Session::AutomationLaneState Session::trackAutomationState(DeviceTarget target) const
+{
+    AutomationLaneState lane;
+    const auto state = findTrackAutomationState(target);
+    if (!state.isValid())
+        return lane;
+    lane.visible = true;
+    lane.ownLane = static_cast<bool>(state.getProperty(automationOwnLaneID, false));
+    int points = 0;
+    for (int i = 0; i < state.getNumChildren(); ++i)
+        if (state.getChild(i).hasType(automationPointID))
+            ++points;
+    lane.active = points >= 2;
+    return lane;
+}
+
+// Creates the lane if it is missing, inside whatever transaction the caller has
+// already opened, so revealing and drawing a lane is one undo step either way.
+juce::ValueTree Session::ensureTrackAutomationState(DeviceTarget target, bool ownLane, bool keepExistingLane)
+{
+    auto state = findTrackAutomationState(target);
+    if (state.isValid())
+    {
+        if (!keepExistingLane)
+            state.setProperty(automationOwnLaneID, ownLane, &edit->getUndoManager());
+        return state;
+    }
+    auto owner = automationOwnerState(target.track);
+    if (!owner.isValid())
+        return {};
+    juce::ValueTree lane(trackAutomationID);
+    lane.setProperty(automationTrackID, target.track, nullptr);
+    lane.setProperty(automationSlotID, target.slot, nullptr);
+    lane.setProperty(automationParameterID, target.parameter, nullptr);
+    lane.setProperty(automationOwnLaneID, ownLane, nullptr);
+    owner.addChild(lane, -1, &edit->getUndoManager());
+    return lane;
+}
+
+juce::Result Session::showTrackAutomation(DeviceTarget target, bool ownLane)
+{
+    if (!target.isValid())
+        return juce::Result::fail("Pick a device parameter first.");
+    // The main row is pinned under the arrangement at a fixed height and has
+    // nowhere to stack a lane, so promising one would be a lie.
+    if (isMasterTrack(target.track))
+        return juce::Result::fail("Main track automation lanes are not shown yet.");
+    const auto parameters = deviceParameters(target.track, target.slot);
     if (!juce::isPositiveAndBelow(target.parameter, parameters.size()))
-        return juce::Result::fail("The last touched knob is no longer available.");
+        return juce::Result::fail("That parameter is no longer available.");
+
+    edit->getUndoManager().beginNewTransaction("Show automation");
+    if (!ensureTrackAutomationState(target, ownLane, false).isValid())
+        return juce::Result::fail("That track is no longer available.");
+    markModified();
+    edit->getUndoManager().beginNewTransaction();
+    sendSynchronousChangeMessage();
+    return juce::Result::ok();
+}
+
+juce::Result Session::hideTrackAutomation(DeviceTarget target)
+{
+    auto state = findTrackAutomationState(target);
+    if (!state.isValid())
+        return juce::Result::fail("That parameter has no automation lane.");
+    auto owner = state.getParent();
+
+    edit->getUndoManager().beginNewTransaction("Hide automation");
+    owner.removeChild(state, &edit->getUndoManager());
+    if (auto* runtime = findAutomationRuntime(target))
+    {
+        runtime->active = false;
+        runtime->overridden = false;
+    }
+    markModified();
+    edit->getUndoManager().beginNewTransaction();
+    sendSynchronousChangeMessage();
+    return juce::Result::ok();
+}
+
+juce::Result Session::setTrackAutomationPoints(DeviceTarget target, std::vector<AutomationPoint> points)
+{
+    if (!target.isValid())
+        return juce::Result::fail("Pick a device parameter first.");
+    const auto parameters = deviceParameters(target.track, target.slot);
+    if (!juce::isPositiveAndBelow(target.parameter, parameters.size()))
+        return juce::Result::fail("That parameter is no longer available.");
     const auto& parameter = parameters[static_cast<size_t>(target.parameter)];
 
-    if (endSeconds < startSeconds)
+    std::stable_sort(points.begin(), points.end(),
+                     [] (const auto& a, const auto& b) { return a.timeSeconds < b.timeSeconds; });
+    for (auto& point : points)
     {
-        std::swap(startSeconds, endSeconds);
-        std::swap(startValue, endValue);
+        if (!std::isfinite(point.timeSeconds) || !std::isfinite(point.value))
+            return juce::Result::fail("That automation point is out of range.");
+        point.timeSeconds = std::max(0.0, point.timeSeconds);
+        point.value = juce::jlimit(parameter.minimum, parameter.maximum, point.value);
     }
-    const auto clipStart = clip->getPosition().time.getStart().inSeconds();
-    const auto clipEnd = clip->getPosition().time.getEnd().inSeconds();
-    startSeconds = juce::jlimit(clipStart, clipEnd, startSeconds);
-    endSeconds = juce::jlimit(clipStart, clipEnd, endSeconds);
-    if (endSeconds - startSeconds < 0.02)
-        return juce::Result::fail("Draw a longer automation span.");
 
-    startValue = juce::jlimit(parameter.minimum, parameter.maximum, startValue);
-    endValue = juce::jlimit(parameter.minimum, parameter.maximum, endValue);
-
-    edit->getUndoManager().beginNewTransaction("Draw clip automation");
-    for (int i = clip->state.getNumChildren(); --i >= 0;)
+    edit->getUndoManager().beginNewTransaction("Edit automation");
+    // Drawing a curve on a parameter nobody revealed yet reveals it, so the
+    // result on screen always matches what was just written.
+    auto state = ensureTrackAutomationState(target, false, true);
+    if (!state.isValid())
+        return juce::Result::fail("The automation lane could not be created.");
+    for (int i = state.getNumChildren(); --i >= 0;)
+        if (state.getChild(i).hasType(automationPointID))
+            state.removeChild(i, &edit->getUndoManager());
+    for (const auto& point : points)
     {
-        const auto existing = clip->state.getChild(i);
-        if (!existing.hasType(clipAutomationID))
-            continue;
-        const DeviceTarget existingTarget {
-            static_cast<int>(existing.getProperty(automationTrackID, -1)),
-            static_cast<int>(existing.getProperty(automationSlotID, -1)),
-            static_cast<int>(existing.getProperty(automationParameterID, -1))
-        };
-        if (sameDeviceTarget(existingTarget, target))
-            clip->state.removeChild(existing, &edit->getUndoManager());
+        juce::ValueTree node(automationPointID);
+        node.setProperty(automationTimeID, point.timeSeconds, nullptr);
+        node.setProperty(automationValueID, point.value, nullptr);
+        state.addChild(node, -1, &edit->getUndoManager());
     }
-    juce::ValueTree automation(clipAutomationID);
-    automation.setProperty(automationTrackID, target.track, &edit->getUndoManager());
-    automation.setProperty(automationSlotID, target.slot, &edit->getUndoManager());
-    automation.setProperty(automationParameterID, target.parameter, &edit->getUndoManager());
-    automation.setProperty(automationStartID, startSeconds - clipStart, &edit->getUndoManager());
-    automation.setProperty(automationEndID, endSeconds - clipStart, &edit->getUndoManager());
-    automation.setProperty(automationStartValueID, startValue, &edit->getUndoManager());
-    automation.setProperty(automationEndValueID, endValue, &edit->getUndoManager());
-    clip->state.addChild(automation, -1, &edit->getUndoManager());
     if (auto* runtime = findAutomationRuntime(target))
         runtime->overridden = false;
     markModified();
@@ -114,40 +269,27 @@ juce::Result Session::setClipAutomationRamp(te::EditItemID id, DeviceTarget targ
     return juce::Result::ok();
 }
 
-juce::Result Session::deleteClipAutomation(te::EditItemID id, DeviceTarget target)
+// Clearing keeps the lane on screen, back to the dotted resting line, which is
+// the state "show automation" leaves a fresh parameter in.
+juce::Result Session::clearTrackAutomationPoints(DeviceTarget target)
 {
-    auto* clip = findClip(id);
-    if (clip == nullptr)
-        return juce::Result::fail("Select a clip first.");
-    if (!target.isValid())
-        return juce::Result::fail("Select an automation lane first.");
+    auto state = findTrackAutomationState(target);
+    if (!state.isValid())
+        return juce::Result::fail("That parameter has no automation lane.");
 
-    for (int i = clip->state.getNumChildren(); --i >= 0;)
+    edit->getUndoManager().beginNewTransaction("Delete automation");
+    for (int i = state.getNumChildren(); --i >= 0;)
+        if (state.getChild(i).hasType(automationPointID))
+            state.removeChild(i, &edit->getUndoManager());
+    if (auto* runtime = findAutomationRuntime(target))
     {
-        const auto existing = clip->state.getChild(i);
-        if (!existing.hasType(clipAutomationID))
-            continue;
-        const DeviceTarget existingTarget {
-            static_cast<int>(existing.getProperty(automationTrackID, -1)),
-            static_cast<int>(existing.getProperty(automationSlotID, -1)),
-            static_cast<int>(existing.getProperty(automationParameterID, -1))
-        };
-        if (sameDeviceTarget(existingTarget, target))
-        {
-            edit->getUndoManager().beginNewTransaction("Delete clip automation");
-            clip->state.removeChild(existing, &edit->getUndoManager());
-            if (auto* runtime = findAutomationRuntime(target))
-            {
-                runtime->active = false;
-                runtime->overridden = false;
-            }
-            markModified();
-            edit->getUndoManager().beginNewTransaction();
-            sendSynchronousChangeMessage();
-            return juce::Result::ok();
-        }
+        runtime->active = false;
+        runtime->overridden = false;
     }
-    return juce::Result::fail("Automation lane was not found.");
+    markModified();
+    edit->getUndoManager().beginNewTransaction();
+    sendSynchronousChangeMessage();
+    return juce::Result::ok();
 }
 
 Session::AutomationRuntime& Session::automationRuntimeFor(DeviceTarget target)
@@ -179,8 +321,8 @@ juce::Result Session::toggleParameterAutomationOverride(int track, int slot, int
     const DeviceTarget target {track, slot, parameter};
     if (!target.isValid())
         return juce::Result::fail("Select an automated parameter first.");
-    if (!hasClipAutomationTarget(*edit, target))
-        return juce::Result::fail("This parameter has no clip automation.");
+    if (!hasActiveTrackAutomation(*edit, target))
+        return juce::Result::fail("This parameter has no automation.");
 
     auto* list = pluginListForTrack(track);
     if (list == nullptr || !juce::isPositiveAndBelow(slot, list->size()))
@@ -200,57 +342,57 @@ juce::Result Session::toggleParameterAutomationOverride(int track, int slot, int
     return juce::Result::ok();
 }
 
-void Session::applyClipAutomationAt(double timelineSeconds)
+void Session::applyTrackAutomationAt(double timelineSeconds)
 {
     if (!std::isfinite(timelineSeconds) || timelineSeconds < 0.0)
         return;
 
     bool changed = false;
     std::vector<DeviceTarget> activeTargets;
-    const auto targetTracks = te::getAudioTracks(*edit);
-    for (auto* track : te::getAudioTracks(*edit))
-        for (auto* clip : track->getClips())
+    const auto applyTo = [&] (te::Plugin* plugin, const TrackAutomation& automation)
+    {
+        if (plugin == nullptr)
+            return;
+        auto* parameter = exposedParameterAt(*plugin, automation.target.parameter);
+        if (parameter == nullptr)
+            return;
+        auto& runtime = automationRuntimeFor(automation.target);
+        activeTargets.push_back(automation.target);
+        if (!runtime.hasBaseValue)
         {
-            const auto clipStart = clip->getPosition().time.getStart().inSeconds();
-            const auto local = timelineSeconds - clipStart;
-            for (const auto& automation : clipAutomations(clip->itemID))
-            {
-                if (local < automation.startSeconds || local > automation.endSeconds)
-                    continue;
-
-                const auto amount = (local - automation.startSeconds) / (automation.endSeconds - automation.startSeconds);
-                const auto value = static_cast<float>(automation.startValue + (automation.endValue - automation.startValue) * amount);
-                if (!juce::isPositiveAndBelow(automation.target.track, targetTracks.size())
-                    || !juce::isPositiveAndBelow(automation.target.slot, targetTracks[automation.target.track]->pluginList.size()))
-                    continue;
-                auto* plugin = targetTracks[automation.target.track]->pluginList[automation.target.slot];
-                if (plugin == nullptr)
-                    continue;
-                if (auto* parameter = exposedParameterAt(*plugin, automation.target.parameter))
-                {
-                    const auto range = parameter->getValueRange();
-                    auto& runtime = automationRuntimeFor(automation.target);
-                    activeTargets.push_back(automation.target);
-                    if (!runtime.hasBaseValue)
-                    {
-                        runtime.baseValue = parameter->getCurrentValue();
-                        runtime.hasBaseValue = true;
-                    }
-                    runtime.active = true;
-                    if (runtime.overridden)
-                        continue;
-
-                    const auto next = juce::jlimit(range.getStart(),
-                                                   exposedParameterMaximum(*plugin, automation.target.parameter, range.getEnd()), value);
-                    if (std::abs(parameter->getCurrentValue() - next) > 0.0001f)
-                    {
-                        parameter->setParameter(next, juce::sendNotification);
-                        changed = true;
-                    }
-                }
-            }
+            runtime.baseValue = parameter->getCurrentValue();
+            runtime.hasBaseValue = true;
         }
+        runtime.active = true;
+        if (runtime.overridden)
+            return;
 
+        const auto range = parameter->getValueRange();
+        const auto next = juce::jlimit(range.getStart(),
+                                       exposedParameterMaximum(*plugin, automation.target.parameter, range.getEnd()),
+                                       automation.valueAt(timelineSeconds));
+        if (std::abs(parameter->getCurrentValue() - next) > 0.0001f)
+        {
+            parameter->setParameter(next, juce::sendNotification);
+            changed = true;
+        }
+    };
+
+    for (int track = 0; track <= masterTrackIndex(); ++track)
+    {
+        auto* list = pluginListForTrack(track);
+        if (list == nullptr)
+            continue;
+        for (const auto& automation : readTrackAutomations(track, false))
+        {
+            if (!automation.active() || !juce::isPositiveAndBelow(automation.target.slot, list->size()))
+                continue;
+            applyTo((*list)[automation.target.slot], automation);
+        }
+    }
+
+    // A lane that stopped driving hands the parameter back to the value the
+    // user last set by hand, rather than freezing on its final point.
     for (auto& runtime : automationRuntime)
     {
         if (!runtime.active)
@@ -268,10 +410,10 @@ void Session::applyClipAutomationAt(double timelineSeconds)
         runtime.active = false;
         if (runtime.overridden || !runtime.hasBaseValue)
             continue;
-        if (!juce::isPositiveAndBelow(runtime.target.track, targetTracks.size())
-            || !juce::isPositiveAndBelow(runtime.target.slot, targetTracks[runtime.target.track]->pluginList.size()))
+        auto* list = pluginListForTrack(runtime.target.track);
+        if (list == nullptr || !juce::isPositiveAndBelow(runtime.target.slot, list->size()))
             continue;
-        auto* plugin = targetTracks[runtime.target.track]->pluginList[runtime.target.slot];
+        auto* plugin = (*list)[runtime.target.slot];
         if (plugin == nullptr)
             continue;
         if (auto* parameter = exposedParameterAt(*plugin, runtime.target.parameter))

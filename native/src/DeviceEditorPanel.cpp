@@ -74,9 +74,56 @@ int DeviceEditorPanel::preferredWidth() const
     return juce::jlimit(190, 470, 46 + columns * 66);
 }
 
-void DeviceEditorPanel::mouseDown(const juce::MouseEvent&)
+void DeviceEditorPanel::mouseDown(const juce::MouseEvent& event)
 {
+    // Right-clicking a knob is how automation is revealed, so the panel takes
+    // the event back from the slider rather than letting it fall through.
+    if (event.mods.isPopupMenu())
+        for (int i = 0; i < parameterSliders.size(); ++i)
+            if (parameterSliders[i]->isVisible()
+                && (event.eventComponent == parameterSliders[i] || event.eventComponent == parameterLabels[i]
+                    || event.eventComponent == parameterValues[i]))
+            {
+                if (selected) selected();
+                showParameterMenu(i);
+                return;
+            }
     if (selected) selected();
+}
+
+// "Show automation" reveals the lane over the track itself; "on new lane"
+// stacks a ghost copy of the track under it so one curve can be read alone.
+void DeviceEditorPanel::showParameterMenu(int index)
+{
+    if (!juce::isPositiveAndBelow(index, static_cast<int>(parameters.size())))
+        return;
+    const Session::DeviceTarget target {track, pluginSlot, index};
+    const auto lane = session.trackAutomationState(target);
+    const auto name = parameters[static_cast<size_t>(index)].name;
+
+    juce::PopupMenu menu;
+    menu.addSectionHeader(name.toUpperCase());
+    menu.addItem(1, "Show automation", true, lane.visible && !lane.ownLane);
+    menu.addItem(2, "Show automation on new lane", true, lane.visible && lane.ownLane);
+    menu.addSeparator();
+    menu.addItem(3, "Hide automation", lane.visible);
+    menu.addItem(4, "Delete automation", lane.active);
+    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(parameterSliders[index]),
+        [safe = juce::Component::SafePointer<DeviceEditorPanel>(this), target, name] (int result)
+        {
+            if (safe == nullptr || result == 0) return;
+            const auto outcome = result == 1 ? safe->session.showTrackAutomation(target, false)
+                : result == 2 ? safe->session.showTrackAutomation(target, true)
+                : result == 3 ? safe->session.hideTrackAutomation(target)
+                : safe->session.clearTrackAutomationPoints(target);
+            if (safe->status == nullptr) return;
+            if (outcome.failed())
+                safe->status(outcome.getErrorMessage());
+            else
+                safe->status(result == 3 ? name + ": automation hidden"
+                    : result == 4 ? name + ": automation deleted"
+                    : name + ": automation shown in the arrangement");
+        });
 }
 
 int DeviceEditorPanel::visibleParameterCount() const

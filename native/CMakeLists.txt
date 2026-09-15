@@ -64,6 +64,7 @@ target_sources(ThetaNative PRIVATE
     src/ArrangementPainter.cpp
     src/ArrangementSync.cpp
     src/ArrangementGestures.cpp
+    src/ArrangementAutomation.cpp
     src/ArrangementDrops.cpp
     src/SessionView.cpp
     src/SessionViewPainter.cpp

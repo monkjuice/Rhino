@@ -125,68 +125,80 @@
         const auto previousAttack = patternSynth()->ampAttack->getCurrentValue();
         require(session.setDeviceParameter(0, 0, 0, previousAttack + 0.05f).wasOk(), "4OSC Attack macro can be edited from the rack");
         require(patternSynth()->ampAttack->getCurrentValue() > previousAttack, "4OSC Attack macro writes to the synth envelope");
-        const auto automatedClip = session.pattern().itemID;
         const auto manualAttack = patternSynth()->ampAttack->getCurrentValue();
         const auto attackMinimum = synthMacros[0].minimum;
         const auto attackMaximum = std::min(synthMacros[0].maximum, attackMinimum + 1.0f);
-        require(session.setClipAutomationRamp(automatedClip, {0, 0, 0}, 0.0, 1.0, attackMinimum, attackMaximum).wasOk(),
-                "Clip automation stores a device parameter ramp");
-        const auto storedAutomation = session.clipAutomation(automatedClip);
-        require(storedAutomation.active && storedAutomation.target.track == 0 && storedAutomation.target.slot == 0
-                && storedAutomation.target.parameter == 0,
-                "Clip automation restores its target parameter");
+        require(session.trackAutomations(0).empty(), "A track starts with no automation lanes");
+        require(session.showTrackAutomation({0, 0, 0}, false).wasOk(),
+                "Right-clicking a knob can reveal an automation lane");
+        require(session.trackAutomations(0).size() == 1 && !session.trackAutomations(0).front().active(),
+                "A revealed lane exists but drives nothing until it is drawn");
+        require(session.trackAutomationState({0, 0, 0}).visible && !session.trackAutomationState({0, 0, 0}).ownLane
+                && !session.trackAutomationState({0, 0, 0}).active,
+                "A revealed lane reports itself as shown on the track and inactive");
+        require(std::abs(session.trackAutomations(0).front().restingValue - manualAttack) < 0.02f,
+                "An undrawn lane rests at the knob's current value");
+        require(!session.deviceParameters(0, 0)[0].automated,
+                "Revealing a lane does not make the parameter automated");
+        require(session.setTrackAutomationPoints({0, 0, 0}, {{0.0, attackMinimum}, {1.0, attackMaximum}}).wasOk(),
+                "An automation lane stores a curve spanning the timeline");
+        require(session.trackAutomations(0).front().active() && session.trackAutomations(0).front().points.size() == 2,
+                "A drawn lane becomes active");
         const auto decayMinimum = synthMacros[1].minimum;
         const auto decayMaximum = std::min(synthMacros[1].maximum, decayMinimum + 1.0f);
-        require(session.setClipAutomationRamp(automatedClip, {0, 0, 1}, 0.25, 1.25, decayMinimum, decayMaximum).wasOk(),
-                "A clip can store automation for a second parameter");
-        const auto sustainMinimum = synthMacros[2].minimum;
-        const auto sustainMaximum = synthMacros[2].maximum;
-        require(session.setClipAutomationRamp(automatedClip, {0, 0, 2}, 0.5, 1.5, sustainMinimum, sustainMaximum).wasOk(),
-                "A clip can store automation for a third parameter");
-        const auto storedAutomations = session.clipAutomations(automatedClip);
-        require(storedAutomations.size() == 3,
-                "Clip automation stores multiple parameter lanes");
+        require(session.showTrackAutomation({0, 0, 1}, true).wasOk()
+                && session.setTrackAutomationPoints({0, 0, 1}, {{0.0, decayMinimum}, {4.0, decayMaximum}}).wasOk(),
+                "A track can automate a second parameter on its own lane");
+        require(session.trackAutomationState({0, 0, 1}).ownLane,
+                "\"Show automation on new lane\" is remembered per lane");
+        require(session.setTrackAutomationPoints({0, 0, 2}, {{0.0, synthMacros[2].minimum},
+                                                             {2.0, synthMacros[2].maximum}}).wasOk(),
+                "Drawing a curve reveals a lane that was never shown");
+        require(session.trackAutomations(0).size() == 3, "A track holds several automation lanes at once");
         session.beginNoteGesture("Draw note after automation");
         session.setNote(15, 80, true);
         session.endNoteGesture();
-        require(session.hasNote(15, 80), "Notes can be drawn after clip automation");
+        require(session.hasNote(15, 80), "Notes can be drawn after automation");
         session.undo();
-        require(!session.hasNote(15, 80) && session.clipAutomations(automatedClip).size() == 3,
+        require(!session.hasNote(15, 80) && session.trackAutomations(0).size() == 3,
                 "Undo after automation removes the new note without deleting automation");
         synthMacros = session.deviceParameters(0, 0);
         require(synthMacros[0].automated && synthMacros[1].automated && synthMacros[2].automated
                 && !synthMacros[0].automationOverridden && !synthMacros[1].automationOverridden && !synthMacros[2].automationOverridden,
                 "Automated parameters report following state to device panels");
-        session.applyClipAutomationAt(0.5);
+        session.applyTrackAutomationAt(0.5);
         require(std::abs(patternSynth()->ampAttack->getCurrentValue() - (attackMinimum + attackMaximum) * 0.5f) < 0.02f,
-                "Clip automation applies interpolated parameter values during playback");
+                "Track automation applies interpolated parameter values during playback");
         require(std::abs(patternSynth()->ampDecay->getCurrentValue()
-                         - (decayMinimum + (decayMaximum - decayMinimum) * 0.25f)) < 0.02f,
-                "Multiple clip automation lanes apply together");
-        session.applyClipAutomationAt(1.5);
-        require(std::abs(patternSynth()->ampAttack->getCurrentValue() - manualAttack) < 0.02f,
-                "Clip automation restores the manual value after its lane");
-        session.applyClipAutomationAt(0.5);
+                         - (decayMinimum + (decayMaximum - decayMinimum) * 0.125f)) < 0.02f,
+                "Multiple automation lanes apply together");
+        session.applyTrackAutomationAt(1.5);
+        require(std::abs(patternSynth()->ampAttack->getCurrentValue() - attackMaximum) < 0.02f,
+                "Automation holds its last value past the end of its curve");
+        session.applyTrackAutomationAt(0.5);
         const auto overrideAttack = juce::jlimit(attackMinimum, attackMaximum, attackMinimum + 0.2f);
         require(session.setDeviceParameter(0, 0, 0, overrideAttack).wasOk(),
                 "Manual parameter edits can override active automation");
-        session.applyClipAutomationAt(0.75);
+        session.applyTrackAutomationAt(0.75);
         require(std::abs(patternSynth()->ampAttack->getCurrentValue() - overrideAttack) < 0.02f,
-                "Manual override wins over clip automation until automation is re-enabled");
+                "Manual override wins over automation until automation is re-enabled");
         synthMacros = session.deviceParameters(0, 0);
         require(synthMacros[0].automated && synthMacros[0].automationOverridden,
                 "Device panels can show manual automation override state");
         require(session.toggleParameterAutomationOverride(0, 0, 0).wasOk(),
                 "Automation indicators can return a parameter to automation");
-        session.applyClipAutomationAt(0.75);
+        session.applyTrackAutomationAt(0.75);
         require(std::abs(patternSynth()->ampAttack->getCurrentValue()
                          - (attackMinimum + (attackMaximum - attackMinimum) * 0.75f)) < 0.02f,
                 "Re-enabled automation drives the parameter again");
-        require(session.deleteClipAutomation(automatedClip, {0, 0, 1}).wasOk(),
-                "A single automation lane can be deleted");
-        require(session.clipAutomations(automatedClip).size() == 2
-                && session.deviceParameters(0, 0)[0].automated && session.deviceParameters(0, 0)[2].automated,
-                "Deleting one automation lane preserves other automation lanes");
+        require(session.clearTrackAutomationPoints({0, 0, 1}).wasOk(),
+                "A curve can be deleted without losing its lane");
+        require(session.trackAutomations(0).size() == 3 && !session.trackAutomations(0)[1].active()
+                && session.deviceParameters(0, 0)[0].automated && !session.deviceParameters(0, 0)[1].automated
+                && session.deviceParameters(0, 0)[2].automated,
+                "Deleting one curve leaves its lane shown and the other lanes driving");
+        require(session.hideTrackAutomation({0, 0, 1}).wasOk() && session.trackAutomations(0).size() == 2,
+                "A lane can be hidden again from the knob menu");
         session.applyPatternPreset(Session::PatternPreset::ReeseBass);
         require(!session.isPatternDrums() && session.hasNote(0, 36) && session.hasNote(8, 39) && session.hasNote(12, 41),
                 "Reese bass preset loads sustained electronic bass notes");

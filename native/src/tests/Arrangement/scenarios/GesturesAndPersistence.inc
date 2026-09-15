@@ -1,6 +1,10 @@
         // Fit is four seconds wide here. Exercise actual component hit testing,
         // gesture preview, and commit rather than calling only the model facade.
         scenario("gestures: clip drag and trim");
+        // Undo rebuilds clips from the edit state, so the pointer the earlier
+        // scenarios held no longer addresses this clip. Look it up by id again.
+        clip = session.findAudioClip(id);
+        require(clip != nullptr, "The imported audio clip survives the track-management scenarios");
         view.mouseDown(event({240, audioLaneY}, {240, audioLaneY}, false));
         view.mouseDrag(event({240, audioLaneY}, {346.5f, audioLaneY}, true));
         require(close(clip->getPosition().time.getStart().inSeconds(), 0.0), "Drag must not rebuild live clip before release");

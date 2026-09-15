@@ -70,8 +70,8 @@
         };
         const auto automationParameters = session.deviceParameters(0, 0);
         require(!automationParameters.empty(), "Starter device exposes an automatable parameter");
-        require(session.setClipAutomationRamp(id, {0, 0, 0}, 0.0, 0.75,
-                                              automationParameters.front().minimum, automationParameters.front().maximum).wasOk(),
+        require(session.setTrackAutomationPoints({0, 0, 0}, {{0.0, automationParameters.front().minimum},
+                                                             {0.75, automationParameters.front().maximum}}).wasOk(),
                 "Can add automation before exercising clip gestures");
         view.sync();
         view.fit();

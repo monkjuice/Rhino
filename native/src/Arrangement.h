@@ -53,9 +53,28 @@ private:
         int track = 0;
         juce::Colour colour;
         int clipPlugins = 0;
-        std::vector<Session::ClipAutomation> automations;
     };
     enum class LoopGesture { none, create, move, trimStart, trimEnd };
+    // Automation is edited by dragging a point, or by lifting a lane that has
+    // never been drawn off its resting line, which is what makes it active.
+    enum class AutomationGesture { none, movePoint, moveLine };
+    // Lanes stack: every track owns one row, plus one row for each automation
+    // the user has sent to its own lane. Ghost rows repeat the track's clips
+    // dimmed, so an automation stays visually anchored to what it drives.
+    struct LaneRow
+    {
+        int track = 0;
+        int automation = -1; // -1 is the track's own row
+        float top = 0.0f;
+        float height = 0.0f;
+    };
+    struct AutomationHit
+    {
+        int row = -1;
+        int automation = -1;
+        int point = -1; // -1 is the line itself rather than one of its points
+        bool valid() const { return row >= 0; }
+    };
     void sync();
     void syncTrackControls();
     void configureMasterControls();
@@ -83,12 +102,23 @@ private:
     double timeAt(float x) const;
     double snapped(double seconds, bool bypass) const;
     double snappedClipMoveStart(double desiredStart, double length, int targetTrack, bool bypass) const;
-    juce::Rectangle<float> automationBounds(const ClipView&) const;
-    float automationValueForY(const ClipView&, float y, Session::DeviceTarget) const;
-    int activeAutomationIndex(const ClipView&) const;
-    int displayedAutomationIndex(const ClipView&) const;
-    int automationLaneAt(const ClipView&, juce::Point<float>) const;
     LoopGesture loopGestureAt(juce::Point<float>) const;
+    // ArrangementAutomation.cpp
+    void buildRows();
+    juce::Rectangle<float> rowBounds(int row) const;
+    int rowAt(float y) const;
+    const Session::TrackAutomation* automationFor(const LaneRow&) const;
+    juce::Rectangle<float> automationArea(int row) const;
+    float automationYFor(int row, const Session::TrackAutomation&, float value) const;
+    float automationValueForY(int row, const Session::TrackAutomation&, float y) const;
+    std::vector<Session::AutomationPoint> defaultAutomationPoints(const Session::TrackAutomation&) const;
+    AutomationHit automationHitAt(juce::Point<float>) const;
+    bool beginAutomationGesture(const juce::MouseEvent&);
+    void dragAutomationGesture(const juce::MouseEvent&);
+    void endAutomationGesture(const juce::MouseEvent&);
+    void paintAutomationRow(juce::Graphics&, int row);
+    void paintGhostRow(juce::Graphics&, int row);
+    void showAutomationMenu(Session::DeviceTarget);
     juce::Rectangle<float> lane(int track) const;
     // The master row is pinned under the scrolling lanes and never scrolls.
     juce::Rectangle<float> masterLane() const;
@@ -108,6 +138,10 @@ private:
     juce::AudioThumbnailCache thumbnailCache {32};
     std::map<juce::String, std::unique_ptr<Waveform>> waveforms;
     std::vector<ClipView> clips;
+    std::vector<std::vector<Session::TrackAutomation>> trackLanes;
+    std::vector<LaneRow> rows;
+    std::vector<int> trackRowIndex;
+    float rowsHeight = 0.0f;
     juce::TextButton duplicateButton, addTrack, snap, automationButton, gridControl;
     juce::ComboBox snapSize;
     std::vector<std::unique_ptr<juce::TextButton>> mute, solo;
@@ -133,13 +167,13 @@ private:
     double dragTime = 0.0, sourceDuration = 0.0;
     LoopGesture loopGesture = LoopGesture::none;
     double loopAnchor = 0.0, loopOriginalStart = 0.0, loopOriginalEnd = 0.0, loopPreviewStart = 0.0, loopPreviewEnd = 0.0;
-    bool automationDragging = false;
+    AutomationGesture automationGesture = AutomationGesture::none;
     Session::DeviceTarget automationTarget;
-    te::EditItemID activeAutomationClip;
-    Session::DeviceTarget activeAutomationTarget;
-    double automationStartTime = 0.0, automationEndTime = 0.0;
-    float automationStartValue = 0.0f, automationEndValue = 0.0f;
+    Session::DeviceTarget focusedAutomation;
+    int automationRow = -1, automationPoint = -1;
+    std::vector<Session::AutomationPoint> automationPoints;
     float playhead = -1.0f;
     static constexpr float headerWidth = 196.0f, rulerTop = 32.0f, lanesTop = 56.0f, masterLaneHeight = 44.0f;
+    static constexpr float automationRowHeight = 44.0f;
 };
 }

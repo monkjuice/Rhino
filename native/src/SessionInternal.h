@@ -15,14 +15,14 @@ namespace theta
 // ValueTree property identifiers owned by the session document.
 extern const juce::Identifier starterPlaceholderID;
 extern const juce::Identifier editorStepsID;
-extern const juce::Identifier clipAutomationID;
+extern const juce::Identifier trackAutomationID;
+extern const juce::Identifier automationPointID;
 extern const juce::Identifier automationTrackID;
 extern const juce::Identifier automationSlotID;
 extern const juce::Identifier automationParameterID;
-extern const juce::Identifier automationStartID;
-extern const juce::Identifier automationEndID;
-extern const juce::Identifier automationStartValueID;
-extern const juce::Identifier automationEndValueID;
+extern const juce::Identifier automationOwnLaneID;
+extern const juce::Identifier automationTimeID;
+extern const juce::Identifier automationValueID;
 
 struct PresetNote { int step, pitch, length; };
 
@@ -65,7 +65,7 @@ bool effectTypeAndName(Session::AudioEffect effect, const char*& type, juce::Str
 void resetPluginList(te::PluginList* list);
 double stepDurationBeats(int steps);
 bool sameDeviceTarget(Session::DeviceTarget a, Session::DeviceTarget b);
-bool hasClipAutomationTarget(const te::Edit& edit, Session::DeviceTarget target);
+bool hasActiveTrackAutomation(const te::Edit& edit, Session::DeviceTarget target);
 te::Plugin* findPlugin(te::AudioTrack& track, const juce::String& type);
 te::FourOscPlugin* findFourOsc(te::AudioTrack& track);
 ThetaWaveDevice* findThetaWave(te::AudioTrack& track);

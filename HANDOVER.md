@@ -30,7 +30,7 @@ The mechanism is the one `SessionTransport.cpp` already used: **one class define
 | `SessionDevices.cpp` | `addAudioEffect`, `addClipAudioEffect`, `addInstrument`, `addMidiEffect`, `deviceSlots`, `deviceParameters`, `begin`/`set`/`endDeviceParameterGesture`, `toggleDeviceEnabled`, `deleteDevice` |
 | `SessionTracks.cpp` | `trackCount`, `trackName`, `addAudioTrack`, `removeAudioTrack` |
 | `SessionClips.cpp` | `findClip`, `findAudioClip`, `shouldShowClipInArrangement`, `editClip`, `splitClip`, `duplicateClip`, `deleteClip`, `cycleClipColour`, `clipPluginCount`, `toggleTrackMute`, `toggleTrackSolo` |
-| `SessionAutomation.cpp` | `clipAutomation`, `clipAutomations`, `setClipAutomationRamp`, `deleteClipAutomation`, `automationRuntimeFor`, `findAutomationRuntime`, `toggleParameterAutomationOverride`, `applyClipAutomationAt` |
+| `SessionAutomation.cpp` | Automation. *Rewritten September 2026 — see "Automation moved from clips to tracks" below.* `trackAutomations`, `trackAutomationState`, `showTrackAutomation`, `hideTrackAutomation`, `setTrackAutomationPoints`, `clearTrackAutomationPoints`, `automationRuntimeFor`, `findAutomationRuntime`, `toggleParameterAutomationOverride`, `applyTrackAutomationAt` |
 | `DeviceMacros.cpp` | `activeParameterAt`, `fourOscMacroParameterAt`, `thetaWaveMacroParameterAt`, the macro name/format helpers, `exposedParameterAt`, `exposedParameterMaximum` |
 | `SessionTransport.cpp` | Unchanged — transport, tempo, loop, audio import |
 
@@ -65,15 +65,26 @@ Pattern geometry lives with note editing rather than in `Session.cpp`, because t
 
 ## Known issues you are inheriting
 
-**1. Intermittent segfault in `native_arrangement_workflow` (pre-existing, not fixed).**
-*Corrected September 2026:* on the current Windows workspace this fails far more often than the rate below — 6 of 12 runs at HEAD before the session view existed, and 5 of 12 with it, so the two are indistinguishable and the session view did not cause it. The crash is also **not** at teardown: every failing run stops between `scenario("gestures: clip drag and trim")` and `scenario("persistence: track state")` in `scenarios/GesturesAndPersistence.inc`, which is the clip copy/paste and selection block. Start there rather than in destruction order. The original note follows.
+**1. Intermittent segfault in `native_arrangement_workflow` — FIXED, September 2026.**
+It was never a shutdown race or a threading problem. `scenarios/AudioClipEditing.inc` caches a raw `te::Clip*` in `clip`, and `scenarios/TrackManagement.inc` then moves that clip across tracks and undoes the moves. Undo rebuilds clips from the edit state, so the cached pointer was dangling from that point on; `scenarios/GesturesAndPersistence.inc` dereferenced it in its very first assertion. Whether the freed memory still read as a clip depended on the heap, which is what made it look like a 1-in-5 race that tracked no code change. The fix is one line: `GesturesAndPersistence.inc` looks the clip up by id again before using it.
 
-Roughly 1 run in 5. It is *not* an assertion failure — every check passes, and the crash happens during teardown, after the last scenario's `session.releaseAudioDevice()`, while the session and engine are being destroyed. A background-thread race at shutdown. It behaves identically before and after the split. If you see this, re-run before assuming you broke something; if you want to fix it, look at destruction order and what is still touching state after `releaseAudioDevice`.
+The lesson generalises. **A raw `te::Clip*` does not survive an undo, a cross-track move, or a project restore.** Scenarios share one `Session` and run in order, so a pointer cached several files earlier is almost always stale. Re-fetch with `session.findClip`/`findAudioClip` at the top of any scenario that inherits one.
 
 **2. ThetaWave drops on the device rack now work (deliberate behaviour change, untested).**
 The browser id tables were duplicated between `Arrangement.cpp` and `DeviceRack.cpp`, and had drifted: the arrangement accepted a `ThetaWave` instrument drop and the rack silently ignored it. Both now share `BrowserIds.h`, so the rack accepts it too. No test covers this path — worth exercising by hand.
 
 **3. The 4OSC attack tests in `a9d418c` had never passed.** Fixed in `105cd78`. They asserted a rack minimum of 0 where 4OSC's own range starts at 0.001, and the new 6-second cap left attack pinned at the ceiling so the existing "can be edited" assertion on the next line could not observe an increase.
+
+## Automation moved from clips to tracks (September 2026)
+
+Automation used to be a ramp stored inside a clip's `ValueTree` and drawn only across that clip. It is now a **track** property spanning the whole timeline, which is how every other DAW behaves.
+
+- **Storage.** A `thetaTrackAutomation` child on the owning track's state, keyed by `{track, slot, parameter}`, holding `point` children with `time` and `value`. It rides the project snapshot, so there is no save path of its own. Old projects simply come back without their clip ramps; nothing migrates them.
+- **Two states per lane.** Fewer than two points means "revealed but never drawn": the arrangement shows a dotted line at the knob's current value and the lane drives nothing. `deviceParameters(...).automated` stays false until a curve exists.
+- **Reaching it.** Right-click a knob in `DeviceEditorPanel` for *Show automation* / *Show automation on new lane* / *Hide* / *Delete*. `Session::lastTouchedDeviceParameter()` is no longer how a lane is chosen; it remains only for legacy callers.
+- **Gone:** `clipAutomation`, `clipAutomations`, `setClipAutomationRamp`, `deleteClipAutomation`, `applyClipAutomationAt`, `hasClipAutomationTarget`, `ClipView::automations` and the `Arrangement` clip-automation overlay. `hasClipAutomationTarget` became `hasActiveTrackAutomation`.
+- **New UI file:** `ArrangementAutomation.cpp` holds the lane row stack, the curve painting and the automation pointer gestures. The arrangement's lanes are no longer uniform-height: `Arrangement::rows` is the authority and `lane(track)` looks a track up in it, because a lane sent to "its own row" stacks a dimmed clone of the track underneath and pushes everything below it down.
+- **Not done yet:** the pinned main row has no space to stack a lane, so `showTrackAutomation` refuses a master target rather than silently doing nothing. Lane targets are plugin-list indices, so swapping a track's instrument leaves a lane pointing at whatever now occupies that slot.
 
 ## What is deliberately still undone
 
@@ -98,4 +109,4 @@ ctest --test-dir native/build -C Release --output-on-failure
 
 Five tests, all the same binary with different flags. The workflow scenarios in `native/src/tests/*/scenarios/*.inc` are bare statement blocks included inside a runner function — they share one `Session`, run in order, and may depend on state an earlier scenario left behind. The first failure aborts the whole runner, so you get one message rather than a list. Re-run after each change rather than batching, so a regression is attributable.
 
-Expect the flaky segfault above. Everything else should be green.
+All five should be green, every run. The intermittent arrangement segfault described above is fixed; if it comes back, suspect a stale clip pointer in a scenario rather than a threading race.

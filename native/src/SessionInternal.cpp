@@ -6,14 +6,14 @@ namespace theta
 
 const juce::Identifier starterPlaceholderID {"thetaStarterPlaceholder"};
 const juce::Identifier editorStepsID {"thetaEditorSteps"};
-const juce::Identifier clipAutomationID {"thetaClipAutomation"};
+const juce::Identifier trackAutomationID {"thetaTrackAutomation"};
+const juce::Identifier automationPointID {"point"};
 const juce::Identifier automationTrackID {"track"};
 const juce::Identifier automationSlotID {"slot"};
 const juce::Identifier automationParameterID {"parameter"};
-const juce::Identifier automationStartID {"start"};
-const juce::Identifier automationEndID {"end"};
-const juce::Identifier automationStartValueID {"startValue"};
-const juce::Identifier automationEndValueID {"endValue"};
+const juce::Identifier automationOwnLaneID {"ownLane"};
+const juce::Identifier automationTimeID {"time"};
+const juce::Identifier automationValueID {"value"};
 
 void panicMidiOnTrack(te::ClipTrack* clipTrack)
 {
@@ -112,25 +112,39 @@ bool sameDeviceTarget(Session::DeviceTarget a, Session::DeviceTarget b)
     return a.track == b.track && a.slot == b.slot && a.parameter == b.parameter;
 }
 
-bool hasClipAutomationTarget(const te::Edit& edit, Session::DeviceTarget target)
+// A lane only drives its parameter once it holds a curve. Revealing a lane on
+// its own leaves the knob alone, which is what makes "show automation" safe.
+bool hasActiveTrackAutomation(const te::Edit& edit, Session::DeviceTarget target)
 {
+    const auto matches = [target] (const juce::ValueTree& state)
+    {
+        const Session::DeviceTarget laneTarget {
+            static_cast<int>(state.getProperty(automationTrackID, -1)),
+            static_cast<int>(state.getProperty(automationSlotID, -1)),
+            static_cast<int>(state.getProperty(automationParameterID, -1))
+        };
+        if (!sameDeviceTarget(laneTarget, target))
+            return false;
+        int points = 0;
+        for (int i = 0; i < state.getNumChildren(); ++i)
+            if (state.getChild(i).hasType(automationPointID))
+                ++points;
+        return points >= 2;
+    };
+
+    const auto search = [&matches] (const juce::ValueTree& owner)
+    {
+        for (int i = 0; i < owner.getNumChildren(); ++i)
+            if (const auto state = owner.getChild(i); state.hasType(trackAutomationID) && matches(state))
+                return true;
+        return false;
+    };
+
+    if (search(edit.state))
+        return true;
     for (auto* track : te::getAudioTracks(edit))
-        for (auto* clip : track->getClips())
-        {
-            for (int i = 0; i < clip->state.getNumChildren(); ++i)
-            {
-                const auto state = clip->state.getChild(i);
-                if (!state.hasType(clipAutomationID))
-                    continue;
-                const Session::DeviceTarget clipTarget {
-                    static_cast<int>(state.getProperty(automationTrackID, -1)),
-                    static_cast<int>(state.getProperty(automationSlotID, -1)),
-                    static_cast<int>(state.getProperty(automationParameterID, -1))
-                };
-                if (sameDeviceTarget(clipTarget, target))
-                    return true;
-            }
-        }
+        if (search(track->state))
+            return true;
     return false;
 }
 

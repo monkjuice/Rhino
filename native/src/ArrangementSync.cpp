@@ -32,8 +32,8 @@ void Arrangement::sync()
                 continue;
             const auto p = clip->getPosition();
             ClipView view {clip->itemID, clip->getName(), {p.time.getStart().inSeconds(), p.time.getEnd().inSeconds(), p.offset.inSeconds()}, nullptr, {}, clip->getSpeedRatio(),
-                           p.offset.inSeconds() + p.time.getLength().inSeconds(), track, clip->getColour(), session.clipPluginCount(clip->itemID),
-                           session.clipAutomations(clip->itemID)};
+                           p.offset.inSeconds() + p.time.getLength().inSeconds(), track, clip->getColour(),
+                           session.clipPluginCount(clip->itemID)};
             if (auto* audio = dynamic_cast<te::WaveAudioClip*>(clip))
             {
                 const auto file = clip->getSourceFileReference().getFile();
@@ -63,21 +63,9 @@ void Arrangement::sync()
     if (!masterPan.isMouseButtonDown())
         masterPan.setValue(session.masterPan(), juce::dontSendNotification);
     std::erase_if(waveforms, [&usedFiles](const auto& item) { return !usedFiles.contains(item.first); });
-    if (activeAutomationClip != te::EditItemID())
-    {
-        bool foundActive = false;
-        for (const auto& clip : clips)
-            if (clip.id == activeAutomationClip && activeAutomationIndex(clip) >= 0)
-            {
-                foundActive = true;
-                break;
-            }
-        if (!foundActive)
-        {
-            activeAutomationClip = {};
-            activeAutomationTarget = {};
-        }
-    }
+    buildRows();
+    if (focusedAutomation.isValid() && !session.trackAutomationState(focusedAutomation).visible)
+        focusedAutomation = {};
     updateScroll();
     repaint();
 }
@@ -143,7 +131,7 @@ void Arrangement::updateScroll()
     viewStart = std::clamp(viewStart, 0.0, std::max(0.0, total - viewSpan));
     scroll.setRangeLimits(0.0, total, juce::dontSendNotification);
     scroll.setCurrentRange(viewStart, viewSpan, juce::dontSendNotification);
-    const auto trackTotal = static_cast<double>(session.trackCount()) * laneHeight();
+    const auto trackTotal = static_cast<double>(rowsHeight);
     const auto trackVisible = static_cast<double>(laneContentHeight());
     trackScroll = std::clamp(trackScroll, 0.0, std::max(0.0, trackTotal - trackVisible));
     trackScrollBar.setRangeLimits(0.0, std::max(trackVisible, trackTotal), juce::dontSendNotification);

@@ -23,8 +23,14 @@ float Arrangement::laneHeight() const
     return std::max(48.0f, std::min(82.0f, laneContentHeight() / 2.0f));
 }
 
+// Rows are variable height once automation lanes are revealed, so a track's
+// lane is looked up in the row stack rather than multiplied out. The fallback
+// covers construction, before the first sync has built the stack.
 juce::Rectangle<float> Arrangement::lane(int track) const
 {
+    if (juce::isPositiveAndBelow(track, static_cast<int>(trackRowIndex.size())))
+        if (const auto row = trackRowIndex[static_cast<size_t>(track)]; row >= 0)
+            return rowBounds(row);
     const auto height = laneHeight();
     return {headerWidth, lanesTop + track * height - static_cast<float>(trackScroll),
             std::max(1.0f, getWidth() - headerWidth - 14.0f), height};
@@ -108,68 +114,6 @@ double Arrangement::snappedClipMoveStart(double desiredStart, double length, int
     return std::max(0.0, bestPixels < std::numeric_limits<float>::max() ? bestStart : snapped(desiredStart, false));
 }
 
-juce::Rectangle<float> Arrangement::automationBounds(const ClipView& clip) const
-{
-    // Automation is an overlay on the clip. Give every curve the complete
-    // usable clip height, including while its first drag is still a preview.
-    const auto clipBounds = bounds(clip);
-    return clipBounds.reduced(0.0f, 4.0f);
-}
-
-float Arrangement::automationValueForY(const ClipView& clip, float y, Session::DeviceTarget target) const
-{
-    const auto parameters = session.deviceParameters(target.track, target.slot);
-    if (!juce::isPositiveAndBelow(target.parameter, parameters.size()))
-        return 0.0f;
-    const auto& parameter = parameters[static_cast<size_t>(target.parameter)];
-    const auto stack = automationBounds(clip);
-    // Curves share one editor. Adding a parameter must never reduce the
-    // physical throw used to reach its minimum and maximum.
-    const auto area = stack.reduced(0.0f, 1.0f);
-    const auto amount = 1.0f - std::clamp((y - area.getY()) / std::max(1.0f, area.getHeight()), 0.0f, 1.0f);
-    return parameter.minimum + (parameter.maximum - parameter.minimum) * amount;
-}
-
-int Arrangement::activeAutomationIndex(const ClipView& clip) const
-{
-    if (clip.id != activeAutomationClip || !activeAutomationTarget.isValid())
-        return -1;
-    for (int i = 0; i < static_cast<int>(clip.automations.size()); ++i)
-    {
-        const auto& automation = clip.automations[static_cast<size_t>(i)];
-        if (automation.target.track == activeAutomationTarget.track && automation.target.slot == activeAutomationTarget.slot
-            && automation.target.parameter == activeAutomationTarget.parameter)
-            return i;
-    }
-    return -1;
-}
-
-int Arrangement::displayedAutomationIndex(const ClipView& clip) const
-{
-    // A new parameter has no persisted lane yet. Promote its live preview to
-    // the full editor instead of squeezing it into the overview strip.
-    if (automationDragging && clip.id == selected && automationTarget.isValid())
-    {
-        for (int i = 0; i < static_cast<int>(clip.automations.size()); ++i)
-        {
-            const auto& automation = clip.automations[static_cast<size_t>(i)];
-            if (automation.target.track == automationTarget.track && automation.target.slot == automationTarget.slot
-                && automation.target.parameter == automationTarget.parameter)
-                return i;
-        }
-        return static_cast<int>(clip.automations.size());
-    }
-
-    return activeAutomationIndex(clip);
-}
-
-int Arrangement::automationLaneAt(const ClipView& clip, juce::Point<float> point) const
-{
-    if (clip.automations.empty() || !automationBounds(clip).contains(point))
-        return -1;
-    return std::max(0, activeAutomationIndex(clip));
-}
-
 int Arrangement::hit(juce::Point<float> point) const
 {
     if (point.x < headerWidth) return -1;
@@ -206,11 +150,12 @@ double Arrangement::snapUnitSeconds() const
     return std::max(0.0001, end - start);
 }
 
+// A ghost automation row answers with the track it clones, so dropping or
+// selecting on one behaves exactly as it does on the track itself.
 int Arrangement::trackAt(float y) const
 {
-    for (int track = 0; track < session.trackCount(); ++track)
-        if (lane(track).contains(juce::Point<float>(headerWidth, y)))
-            return track;
+    if (const auto row = rowAt(y); row >= 0)
+        return rows[static_cast<size_t>(row)].track;
     return -1;
 }
 }

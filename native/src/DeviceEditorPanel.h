@@ -26,6 +26,7 @@ private:
     void styleControls();
     void layoutGeneric();
     void layoutThetaSpace();
+    void showParameterMenu(int index);
     int visibleParameterCount() const;
 
     Session& session;

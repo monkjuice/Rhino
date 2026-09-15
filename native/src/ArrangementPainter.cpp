@@ -15,10 +15,16 @@ void Arrangement::paint(juce::Graphics& g)
     g.setColour(juce::Colour(0xff8a969f));
     g.drawText("Drop browser items or files / drag clips to move / trim edges",
                360, 0, getWidth() - 370, 30, juce::Justification::centredLeft);
-    for (int track = 0; track < session.trackCount(); ++track)
+    for (int index = 0; index < static_cast<int>(rows.size()); ++index)
     {
-        const auto row = lane(track);
+        const auto row = rowBounds(index);
         if (row.getBottom() < lanesTop || row.getY() > lanesTop + laneContentHeight()) continue;
+        if (rows[static_cast<size_t>(index)].automation >= 0)
+        {
+            paintGhostRow(g, index);
+            continue;
+        }
+        const auto track = rows[static_cast<size_t>(index)].track;
         g.setColour(juce::Colour(track == 0 ? 0xff242b31 : 0xff20272e));
         g.fillRect(row.withX(0.0f).withWidth(static_cast<float>(getWidth()) - 14.0f));
         if (track == selectedTrack)
@@ -136,150 +142,6 @@ void Arrangement::paint(juce::Graphics& g)
             g.drawText("FX" + juce::String(clip.clipPlugins), badge, juce::Justification::centred, true);
         }
         const auto position = displayedPosition(clip);
-        const auto automationStack = automationBounds(clip);
-        const auto activeLane = displayedAutomationIndex(clip);
-        const auto automationAreaFor = [&] (int laneIndex, int laneCount)
-        {
-            juce::ignoreUnused(laneIndex, laneCount);
-            return automationStack.reduced(0.0f, 1.0f);
-        };
-        const auto drawAutomation = [&] (const Session::ClipAutomation& automation, double startTime,
-                                         double endTime, float startValue, float endValue, bool previewLine,
-                                         int laneIndex, int laneCount)
-        {
-            if (!automation.active && !previewLine) return;
-            const auto minValue = automation.maximum > automation.minimum ? automation.minimum : 0.0f;
-            const auto maxValue = automation.maximum > automation.minimum ? automation.maximum : 1.0f;
-            const auto autoArea = automationAreaFor(laneIndex, laneCount);
-            const auto yFor = [autoArea, minValue, maxValue](float value)
-            {
-                const auto amount = std::clamp((value - minValue) / std::max(0.0001f, maxValue - minValue), 0.0f, 1.0f);
-                return autoArea.getBottom() - amount * autoArea.getHeight();
-            };
-            const auto x1 = xFor(startTime);
-            const auto x2 = xFor(endTime);
-            const auto y1 = yFor(startValue);
-            const auto y2 = yFor(endValue);
-            const auto laneActive = laneIndex == activeLane || previewLine;
-            const auto laneColour = previewLine ? juce::Colour(0xffffbf7a)
-                : laneActive ? juce::Colour(0xffff8eea)
-                : juce::Colour(0xffd9a5ff);
-            const auto startColour = previewLine ? juce::Colour(0xffffd08a) : juce::Colour(0xff75d3e6);
-            const auto endColour = previewLine ? juce::Colour(0xffffa45d) : juce::Colour(0xffffbf7a);
-            if (laneActive && activeLane >= 0 && !previewLine)
-            {
-                g.setColour(juce::Colour(0x552f151f));
-                g.fillRect(autoArea);
-                g.setColour(juce::Colour(0xffffbf7a).withAlpha(0.9f));
-                g.drawRect(autoArea.reduced(0.5f), 2.0f);
-            }
-            if (laneActive)
-            {
-                g.setColour(laneColour.withAlpha(0.34f));
-                g.fillRect(juce::Rectangle<float>(std::min(x1, x2), autoArea.getY(), std::abs(x2 - x1), autoArea.getHeight()));
-            }
-            g.setColour(juce::Colour(0x5511191f));
-            g.drawRect(autoArea.reduced(0.5f), 1.0f);
-            g.setColour(laneColour.withAlpha(laneActive ? 1.0f : 0.38f));
-            g.drawLine(x1, y1, x2, y2, laneActive ? 2.6f : 1.5f);
-            if (laneActive)
-            {
-                const auto startHandle = juce::Rectangle<float>(9.0f, 9.0f).withCentre({x1, y1});
-                const auto endHandle = juce::Rectangle<float>(9.0f, 9.0f).withCentre({x2, y2});
-                g.setColour(startColour);
-                g.fillRect(startHandle);
-                g.setColour(juce::Colour(0xff11161b));
-                g.drawRect(startHandle.reduced(0.5f), 1.0f);
-                g.setColour(endColour);
-                g.fillRect(endHandle);
-                g.setColour(juce::Colour(0xff11161b));
-                g.drawRect(endHandle.reduced(0.5f), 1.0f);
-            }
-            if (!automation.parameterName.isEmpty())
-            {
-                g.setFont(juce::FontOptions(11.0f));
-                const auto labelArea = laneActive && activeLane >= 0 && !previewLine
-                    ? autoArea.withHeight(18.0f).reduced(5.0f, 1.0f)
-                    : !laneActive && activeLane >= 0
-                        ? autoArea.withY(autoArea.getY() + laneIndex * 13.0f).withHeight(12.0f).reduced(4.0f, 0.0f)
-                        : autoArea.withHeight(std::min(16.0f, autoArea.getHeight())).reduced(4.0f, 0.0f);
-                if (laneActive && activeLane >= 0 && !previewLine)
-                {
-                    const auto textWidth = static_cast<float>(automation.parameterName.length()) * 6.5f;
-                    const auto badge = labelArea.withWidth(std::min(96.0f, std::max(46.0f, textWidth + 18.0f)));
-                    g.setColour(juce::Colour(0xee11161b));
-                    g.fillRect(badge);
-                    g.setColour(juce::Colour(0xffffbf7a));
-                    g.drawRect(badge.reduced(0.5f), 1.0f);
-                    g.setColour(juce::Colour(0xfff4e0bb));
-                    g.drawText(automation.parameterName, badge.reduced(5.0f, 0.0f), juce::Justification::centredLeft, true);
-                }
-                else
-                {
-                    g.setColour(laneActive ? juce::Colour(0xffe7c5ff) : juce::Colour(0xffd0a4e8));
-                    g.drawText(automation.parameterName, labelArea, juce::Justification::centredRight, true);
-                }
-            }
-        };
-        auto previewLaneIndex = static_cast<int>(clip.automations.size());
-        auto displayLaneCount = static_cast<int>(clip.automations.size());
-        for (int i = 0; i < static_cast<int>(clip.automations.size()); ++i)
-        {
-            const auto& automation = clip.automations[static_cast<size_t>(i)];
-            if (automationTarget.isValid() && automation.target.track == automationTarget.track
-                && automation.target.slot == automationTarget.slot && automation.target.parameter == automationTarget.parameter)
-            {
-                previewLaneIndex = i;
-                break;
-            }
-        }
-        if (automationDragging && clip.id == selected)
-            displayLaneCount = std::max(displayLaneCount, previewLaneIndex + 1);
-        if (activeLane >= 0 && juce::isPositiveAndBelow(activeLane, clip.automations.size()))
-        {
-            const auto& automation = clip.automations[static_cast<size_t>(activeLane)];
-            drawAutomation(automation,
-                           position.start + automation.startSeconds,
-                           position.start + automation.endSeconds,
-                           automation.startValue,
-                           automation.endValue,
-                           false,
-                           activeLane,
-                           displayLaneCount);
-        }
-        for (int i = 0; i < static_cast<int>(clip.automations.size()); ++i)
-        {
-            if (i == activeLane)
-                continue;
-            const auto& automation = clip.automations[static_cast<size_t>(i)];
-            drawAutomation(automation,
-                           position.start + automation.startSeconds,
-                           position.start + automation.endSeconds,
-                           automation.startValue,
-                           automation.endValue,
-                           false,
-                           i,
-                           displayLaneCount);
-        }
-        if (automationDragging && clip.id == selected)
-        {
-            Session::ClipAutomation previewAutomation;
-            previewAutomation.active = true;
-            previewAutomation.target = automationTarget;
-            previewAutomation.startSeconds = 0.0;
-            previewAutomation.endSeconds = 1.0;
-            const auto parameters = session.deviceParameters(automationTarget.track, automationTarget.slot);
-            if (juce::isPositiveAndBelow(automationTarget.parameter, parameters.size()))
-            {
-                previewAutomation.parameterName = parameters[static_cast<size_t>(automationTarget.parameter)].name;
-                previewAutomation.minimum = parameters[static_cast<size_t>(automationTarget.parameter)].minimum;
-                previewAutomation.maximum = parameters[static_cast<size_t>(automationTarget.parameter)].maximum;
-            }
-            drawAutomation(previewAutomation, automationStartTime, automationEndTime,
-                           automationStartValue, automationEndValue, true,
-                           previewLaneIndex,
-                           displayLaneCount);
-        }
         if (clip.waveform)
         {
             auto waveArea = visible.withTop(box.getY() + 26.0f).reduced(0, 5).getSmallestIntegerContainer();
@@ -345,6 +207,20 @@ void Arrangement::paint(juce::Graphics& g)
     {
         g.setColour(juce::Colour(0xff75828e));
         g.drawText("Drop audio here", lane(1).reduced(16, 0), juce::Justification::centredLeft);
+    }
+    // Curves sit on top of the clips they modulate, and are clipped to the
+    // scrolling lane area so a scrolled-off row cannot draw into the ruler.
+    {
+        juce::Graphics::ScopedSaveState scope(g);
+        g.reduceClipRegion(juce::Rectangle<int>(static_cast<int>(headerWidth), static_cast<int>(lanesTop),
+                                                std::max(1, getWidth() - static_cast<int>(headerWidth) - 14),
+                                                std::max(1, static_cast<int>(laneContentHeight()))));
+        for (int index = 0; index < static_cast<int>(rows.size()); ++index)
+        {
+            const auto row = rowBounds(index);
+            if (row.getBottom() < lanesTop || row.getY() > lanesTop + laneContentHeight()) continue;
+            paintAutomationRow(g, index);
+        }
     }
     if (marqueeSelecting)
     {

@@ -294,7 +294,7 @@ std::vector<Session::DeviceParameter> Session::deviceParameters(int track, int s
                                       range.getStart(),
                                       exposedParameterMaximum(*plugin, i, range.getEnd()),
                                       parameter->isDiscrete(),
-                                      hasClipAutomationTarget(*edit, target),
+                                      hasActiveTrackAutomation(*edit, target),
                                       runtime != nullptr && runtime->overridden});
             }
         return parameters;
@@ -316,7 +316,7 @@ std::vector<Session::DeviceParameter> Session::deviceParameters(int track, int s
                                       range.getStart(),
                                       range.getEnd(),
                                       parameter->isDiscrete(),
-                                      hasClipAutomationTarget(*edit, target),
+                                      hasActiveTrackAutomation(*edit, target),
                                       runtime != nullptr && runtime->overridden});
             }
         return parameters;
@@ -339,7 +339,7 @@ std::vector<Session::DeviceParameter> Session::deviceParameters(int track, int s
                               range.getStart(),
                               range.getEnd(),
                               parameter->isDiscrete(),
-                              hasClipAutomationTarget(*edit, target),
+                              hasActiveTrackAutomation(*edit, target),
                               runtime != nullptr && runtime->overridden});
     }
     return parameters;

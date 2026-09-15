@@ -719,7 +719,7 @@ private:
                 resized();
             }
         if (session.edit->getTransport().isPlaying())
-            session.applyClipAutomationAt(playheadTime(session.edit->getTransport()));
+            session.applyTrackAutomationAt(playheadTime(session.edit->getTransport()));
         const auto seconds = session.edit->getTransport().getPosition().inSeconds();
         const auto beat = session.edit->tempoSequence.toBeats(tracktion::core::TimePosition::fromSeconds(seconds)).inBeats();
         const auto signature = session.timeSignature();

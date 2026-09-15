@@ -178,6 +178,14 @@ Arrangement::AutomationHit Arrangement::automationHitAt(juce::Point<float> point
     return {};
 }
 
+// Only the lane Delete would act on is drawn as focused, so the highlight and
+// the keyboard agree about what is selected.
+bool Arrangement::isFocusedAutomation(Session::DeviceTarget target) const
+{
+    return focus == Focus::automation && focusedAutomation.track == target.track
+        && focusedAutomation.slot == target.slot && focusedAutomation.parameter == target.parameter;
+}
+
 bool Arrangement::beginAutomationGesture(const juce::MouseEvent& event)
 {
     const auto target = automationHitAt(event.position);
@@ -188,7 +196,9 @@ bool Arrangement::beginAutomationGesture(const juce::MouseEvent& event)
 
     automationRow = target.row;
     automationTarget = automation.target;
+    setSelection({});
     focusedAutomation = automation.target;
+    focus = Focus::automation;
     automationPoints = automation.points.empty() ? defaultAutomationPoints(automation) : automation.points;
     if (target.point >= 0)
     {
@@ -295,9 +305,7 @@ void Arrangement::paintAutomationRow(juce::Graphics& g, int row)
             && automation.target.track == automationTarget.track && automation.target.slot == automationTarget.slot
             && automation.target.parameter == automationTarget.parameter;
         const auto points = beingDragged ? automationPoints : automation.points;
-        const auto focused = focusedAutomation.track == automation.target.track
-            && focusedAutomation.slot == automation.target.slot
-            && focusedAutomation.parameter == automation.target.parameter;
+        const auto focused = isFocusedAutomation(automation.target);
 
         if (points.size() < 2)
         {
@@ -361,9 +369,7 @@ void Arrangement::paintGhostRow(juce::Graphics& g, int row)
         g.fillRect(visible);
     }
 
-    const auto focused = focusedAutomation.track == automation->target.track
-        && focusedAutomation.slot == automation->target.slot
-        && focusedAutomation.parameter == automation->target.parameter;
+    const auto focused = isFocusedAutomation(automation->target);
     g.setColour(juce::Colour(focused ? 0xff2e3840 : 0xff222930));
     g.fillRect(area.withX(0.0f).withWidth(headerWidth));
     g.setColour(juce::Colour(0xff9aa6af));
@@ -395,10 +401,16 @@ void Arrangement::showAutomationMenu(Session::DeviceTarget target)
                 : result == 2 ? safe->session.showTrackAutomation(target, true)
                 : result == 3 ? safe->session.hideTrackAutomation(target)
                 : safe->session.clearTrackAutomationPoints(target);
-            if (result != 3)
-                safe->focusedAutomation = target;
-            else
+            if (result == 3)
+            {
                 safe->focusedAutomation = {};
+                safe->focus = Focus::none;
+            }
+            else
+            {
+                safe->focusedAutomation = target;
+                safe->focus = Focus::automation;
+            }
             if (safe->status && outcome.failed())
                 safe->status(outcome.getErrorMessage());
         });

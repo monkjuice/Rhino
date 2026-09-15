@@ -65,7 +65,11 @@ void Arrangement::sync()
     std::erase_if(waveforms, [&usedFiles](const auto& item) { return !usedFiles.contains(item.first); });
     buildRows();
     if (focusedAutomation.isValid() && !session.trackAutomationState(focusedAutomation).visible)
+    {
         focusedAutomation = {};
+        if (focus == Focus::automation)
+            focus = Focus::none;
+    }
     updateScroll();
     repaint();
 }

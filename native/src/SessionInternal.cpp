@@ -8,7 +8,6 @@ const juce::Identifier starterPlaceholderID {"thetaStarterPlaceholder"};
 const juce::Identifier editorStepsID {"thetaEditorSteps"};
 const juce::Identifier trackAutomationID {"thetaTrackAutomation"};
 const juce::Identifier automationPointID {"point"};
-const juce::Identifier automationTrackID {"track"};
 const juce::Identifier automationSlotID {"slot"};
 const juce::Identifier automationParameterID {"parameter"};
 const juce::Identifier automationOwnLaneID {"ownLane"};
@@ -114,37 +113,34 @@ bool sameDeviceTarget(Session::DeviceTarget a, Session::DeviceTarget b)
 
 // A lane only drives its parameter once it holds a curve. Revealing a lane on
 // its own leaves the knob alone, which is what makes "show automation" safe.
+// The lane is looked up where it lives - on its own track - because a lane
+// keeps no copy of its track index for a track deletion to invalidate.
 bool hasActiveTrackAutomation(const te::Edit& edit, Session::DeviceTarget target)
 {
-    const auto matches = [target] (const juce::ValueTree& state)
+    if (target.track < 0 || target.slot < 0 || target.parameter < 0)
+        return false;
+    const auto tracks = te::getAudioTracks(edit);
+    juce::ValueTree owner;
+    if (target.track == tracks.size())
+        owner = edit.state;
+    else if (juce::isPositiveAndBelow(target.track, tracks.size()))
+        owner = tracks[target.track]->state;
+    else
+        return false;
+
+    for (int i = 0; i < owner.getNumChildren(); ++i)
     {
-        const Session::DeviceTarget laneTarget {
-            static_cast<int>(state.getProperty(automationTrackID, -1)),
-            static_cast<int>(state.getProperty(automationSlotID, -1)),
-            static_cast<int>(state.getProperty(automationParameterID, -1))
-        };
-        if (!sameDeviceTarget(laneTarget, target))
-            return false;
+        const auto state = owner.getChild(i);
+        if (!state.hasType(trackAutomationID)
+            || static_cast<int>(state.getProperty(automationSlotID, -1)) != target.slot
+            || static_cast<int>(state.getProperty(automationParameterID, -1)) != target.parameter)
+            continue;
         int points = 0;
-        for (int i = 0; i < state.getNumChildren(); ++i)
-            if (state.getChild(i).hasType(automationPointID))
+        for (int child = 0; child < state.getNumChildren(); ++child)
+            if (state.getChild(child).hasType(automationPointID))
                 ++points;
         return points >= 2;
-    };
-
-    const auto search = [&matches] (const juce::ValueTree& owner)
-    {
-        for (int i = 0; i < owner.getNumChildren(); ++i)
-            if (const auto state = owner.getChild(i); state.hasType(trackAutomationID) && matches(state))
-                return true;
-        return false;
-    };
-
-    if (search(edit.state))
-        return true;
-    for (auto* track : te::getAudioTracks(edit))
-        if (search(track->state))
-            return true;
+    }
     return false;
 }
 

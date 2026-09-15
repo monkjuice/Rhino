@@ -19,11 +19,12 @@ double pointTime(const juce::ValueTree& state)
     return static_cast<double>(state.getProperty(automationTimeID, 0.0));
 }
 
-Session::DeviceTarget targetOf(const juce::ValueTree& state)
+// A lane's track is where it is stored, never a copy of the index: deleting a
+// track renumbers every track below it, and a stored index would go stale.
+bool addressesDevice(const juce::ValueTree& state, Session::DeviceTarget target)
 {
-    return {static_cast<int>(state.getProperty(automationTrackID, -1)),
-            static_cast<int>(state.getProperty(automationSlotID, -1)),
-            static_cast<int>(state.getProperty(automationParameterID, -1))};
+    return static_cast<int>(state.getProperty(automationSlotID, -1)) == target.slot
+        && static_cast<int>(state.getProperty(automationParameterID, -1)) == target.parameter;
 }
 }
 
@@ -70,7 +71,7 @@ juce::ValueTree Session::findTrackAutomationState(DeviceTarget target) const
     for (int i = 0; i < owner.getNumChildren(); ++i)
     {
         const auto state = owner.getChild(i);
-        if (state.hasType(trackAutomationID) && sameDeviceTarget(targetOf(state), target))
+        if (state.hasType(trackAutomationID) && addressesDevice(state, target))
             return state;
     }
     return {};
@@ -92,8 +93,10 @@ std::vector<Session::TrackAutomation> Session::readTrackAutomations(int track, b
         if (!state.hasType(trackAutomationID))
             continue;
         TrackAutomation automation;
-        automation.target = targetOf(state);
-        if (!automation.target.isValid() || automation.target.track != track)
+        automation.target = {track,
+                             static_cast<int>(state.getProperty(automationSlotID, -1)),
+                             static_cast<int>(state.getProperty(automationParameterID, -1))};
+        if (!automation.target.isValid())
             continue;
         automation.ownLane = static_cast<bool>(state.getProperty(automationOwnLaneID, false));
         for (int child = 0; child < state.getNumChildren(); ++child)
@@ -177,7 +180,6 @@ juce::ValueTree Session::ensureTrackAutomationState(DeviceTarget target, bool ow
     if (!owner.isValid())
         return {};
     juce::ValueTree lane(trackAutomationID);
-    lane.setProperty(automationTrackID, target.track, nullptr);
     lane.setProperty(automationSlotID, target.slot, nullptr);
     lane.setProperty(automationParameterID, target.parameter, nullptr);
     lane.setProperty(automationOwnLaneID, ownLane, nullptr);

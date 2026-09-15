@@ -25,7 +25,9 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
         if (const auto row = rowAt(event.position.y); row >= 0 && rows[static_cast<size_t>(row)].automation >= 0)
             if (const auto* automation = automationFor(rows[static_cast<size_t>(row)]))
             {
+                setSelection({});
                 focusedAutomation = automation->target;
+                focus = Focus::automation;
                 showAutomationMenu(automation->target);
                 repaint();
                 return;
@@ -48,6 +50,9 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
     if (masterLane().contains(event.position))
     {
         selectTrack(session.masterTrackIndex());
+        setSelection({});
+        focus = Focus::track;
+        repaint();
         return;
     }
     pasteTime = snapped(std::max(0.0, timeAt(event.position.x)), event.mods.isAltDown());
@@ -86,6 +91,13 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
     if (pointerRow >= 0 && rows[static_cast<size_t>(pointerRow)].automation >= 0)
     {
         selectTrack(rows[static_cast<size_t>(pointerRow)].track);
+        setSelection({});
+        if (const auto* automation = automationFor(rows[static_cast<size_t>(pointerRow)]))
+        {
+            focusedAutomation = automation->target;
+            focus = Focus::automation;
+        }
+        repaint();
         return;
     }
     // Double-clicking empty lane space creates a clip that starts where the
@@ -113,7 +125,15 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
         return;
     }
     const auto index = hit(event.position);
-    if (index < 0) { setSelection({}); repaint(); return; }
+    if (index < 0)
+    {
+        setSelection({});
+        // The header selects the track itself. Empty lane space selects
+        // nothing, so Delete has nothing to reach for.
+        focus = event.position.x < headerWidth ? Focus::track : Focus::none;
+        repaint();
+        return;
+    }
     const auto& clip = clips[static_cast<size_t>(index)];
     if (event.mods.isShiftDown())
     {
@@ -127,7 +147,10 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
     else if (!isSelected(clip.id))
         setSelection({clip.id}, clip.id);
     else
+    {
         selected = clip.id;
+        focus = Focus::clip;
+    }
     selectTrack(clip.track);
     if (clip.waveform == nullptr)
     {

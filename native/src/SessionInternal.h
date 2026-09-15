@@ -17,7 +17,6 @@ extern const juce::Identifier starterPlaceholderID;
 extern const juce::Identifier editorStepsID;
 extern const juce::Identifier trackAutomationID;
 extern const juce::Identifier automationPointID;
-extern const juce::Identifier automationTrackID;
 extern const juce::Identifier automationSlotID;
 extern const juce::Identifier automationParameterID;
 extern const juce::Identifier automationOwnLaneID;

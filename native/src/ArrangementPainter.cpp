@@ -29,8 +29,15 @@ void Arrangement::paint(juce::Graphics& g)
         g.fillRect(row.withX(0.0f).withWidth(static_cast<float>(getWidth()) - 14.0f));
         if (track == selectedTrack)
         {
-            g.setColour(juce::Colour(0xff343f47));
-            g.fillRect(row.withX(0.0f).withWidth(headerWidth));
+            // Two different things. The strip marks the track the rest of the
+            // app is working on, which follows a clip click. The wash marks the
+            // card itself as the selected object, which Delete acts on, and a
+            // clip and a track card are never selected together.
+            if (focus == Focus::track)
+            {
+                g.setColour(juce::Colour(0xff343f47));
+                g.fillRect(row.withX(0.0f).withWidth(headerWidth));
+            }
             g.setColour(juce::Colour(0xffc6d58c));
             g.fillRect(row.withX(0.0f).withWidth(3.0f));
         }
@@ -48,7 +55,7 @@ void Arrangement::paint(juce::Graphics& g)
         g.fillRect(master);
         g.setColour(juce::Colour(0xff3a434b));
         g.drawHorizontalLine(static_cast<int>(master.getY()), 0.0f, master.getRight());
-        g.setColour(juce::Colour(isMasterSelected() ? 0xff343f47 : 0xff222930));
+        g.setColour(juce::Colour(isMasterSelected() && focus == Focus::track ? 0xff343f47 : 0xff222930));
         g.fillRect(master.withWidth(headerWidth));
         if (isMasterSelected())
         {

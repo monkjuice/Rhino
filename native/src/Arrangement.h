@@ -55,6 +55,10 @@ private:
         int clipPlugins = 0;
     };
     enum class LoopGesture { none, create, move, trimStart, trimEnd };
+    // What the last click selected, and therefore what Delete acts on. A track
+    // is always highlighted as the working row, so "a track is selected" cannot
+    // be inferred from selectedTrack - it has to be recorded.
+    enum class Focus { none, clip, track, automation };
     // Automation is edited by dragging a point, or by lifting a lane that has
     // never been drawn off its resting line, which is what makes it active.
     enum class AutomationGesture { none, movePoint, moveLine };
@@ -110,6 +114,7 @@ private:
     int rowAt(float y) const;
     const Session::TrackAutomation* automationFor(const LaneRow&) const;
     juce::Rectangle<float> automationArea(int row) const;
+    bool isFocusedAutomation(Session::DeviceTarget) const;
     float automationYFor(int row, const Session::TrackAutomation&, float value) const;
     float automationValueForY(int row, const Session::TrackAutomation&, float y) const;
     std::vector<Session::AutomationPoint> defaultAutomationPoints(const Session::TrackAutomation&) const;
@@ -171,6 +176,7 @@ private:
     AutomationGesture automationGesture = AutomationGesture::none;
     Session::DeviceTarget automationTarget;
     Session::DeviceTarget focusedAutomation;
+    Focus focus = Focus::none;
     int automationRow = -1, automationPoint = -1;
     std::vector<Session::AutomationPoint> automationPoints;
     float playhead = -1.0f;

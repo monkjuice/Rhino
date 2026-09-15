@@ -271,15 +271,30 @@ bool Arrangement::keyPressed(const juce::KeyPress& key)
     if (key.getKeyCode() == juce::KeyPress::deleteKey || key.getKeyCode() == juce::KeyPress::backspaceKey)
     {
         cancelDrag();
-        // Delete clears the focused automation curve back to its resting line
-        // rather than removing the lane, which the knob menu still does.
-        if (focusedAutomation.isValid() && session.trackAutomationState(focusedAutomation).active)
+        // Delete acts on whatever the last click selected, and nothing when
+        // that was empty space. It never reaches past the current selection.
+        if (focus == Focus::automation && focusedAutomation.isValid())
         {
+            // Deleting a curve leaves its lane on screen, back to the resting
+            // line. Removing the lane itself is the knob menu's "Hide".
+            if (!session.trackAutomationState(focusedAutomation).active)
+            {
+                if (status) status("That automation lane has nothing drawn on it");
+                return true;
+            }
             const auto result = session.clearTrackAutomationPoints(focusedAutomation);
             if (status) status(result.wasOk() ? "Automation deleted" : result.getErrorMessage());
             return true;
         }
-        deleteSelection();
+        if (focus == Focus::track)
+        {
+            const auto name = session.trackName(selectedTrack);
+            const auto result = session.removeAudioTrack(selectedTrack);
+            if (status) status(result.wasOk() ? "Deleted " + name : result.getErrorMessage());
+            return true;
+        }
+        if (focus == Focus::clip)
+            deleteSelection();
         return true;
     }
     return false;
@@ -301,8 +316,11 @@ bool Arrangement::isSelected(te::EditItemID id) const
     return std::find(selectedClips.begin(), selectedClips.end(), id) != selectedClips.end();
 }
 
+// Selecting clips is what makes Delete a clip operation. Callers that select
+// something else set the focus themselves, after this has cleared it.
 void Arrangement::setSelection(std::vector<te::EditItemID> ids, te::EditItemID primary)
 {
+    focus = ids.empty() ? Focus::none : Focus::clip;
     selectedClips.clear();
     for (const auto id : ids)
         if (!isSelected(id)) selectedClips.push_back(id);
@@ -418,6 +436,7 @@ void Arrangement::editWillChange()
     rowsHeight = 0.0f;
     focusedAutomation = {};
     setSelection({});
+    focus = Focus::none;
 }
 void Arrangement::editDidChange() { sync(); fit(); }
 

@@ -79,6 +79,98 @@
                 "A lane on its own row is not also editable over the track");
         view.automationButton.setToggleState(false, juce::dontSendNotification);
 
+        // Delete acts on the last thing selected and nothing else. It used to
+        // reach for the focused automation lane whatever was selected.
+        {
+            const auto savedHeight = view.getHeight();
+            view.setSize(view.getWidth(), 700);
+            require(session.setTrackAutomationPoints(laneTarget, {{0.0, laneParameters.front().minimum},
+                                                                  {4.0, laneParameters.front().maximum}}).wasOk(),
+                    "Redraw a curve for the delete-routing checks");
+            require(session.addAudioTrack().wasOk(), "The delete-routing checks need a track of their own");
+            const auto spareTrack = session.trackCount() - 1;
+            const auto tracksBefore = session.trackCount();
+            view.sync();
+            if (view.clips.empty())
+            {
+                require(session.createClip(0, 6.0).wasOk(), "Create a clip for the delete-routing checks");
+                view.sync();
+            }
+
+            // A clip: Delete removes the clip and leaves the curve alone.
+            require(!view.clips.empty(), "The delete-routing checks need a clip on screen");
+            const auto victim = view.clips.front().id;
+            view.setSelection({victim}, victim);
+            view.keyPressed(juce::KeyPress(juce::KeyPress::deleteKey));
+            require(session.findClip(victim) == nullptr, "Delete removes the selected clip");
+            require(session.trackAutomationState(laneTarget).active,
+                    "Deleting a clip leaves the focused automation curve alone");
+            require(session.trackCount() == tracksBefore, "Deleting a clip leaves the tracks alone");
+            session.undo();
+            view.sync();
+
+            // Empty lane space: Delete has nothing to act on.
+            const auto emptyLane = view.lane(spareTrack);
+            view.mouseDown(laneEvent({emptyLane.getCentreX(), emptyLane.getCentreY()},
+                                     {emptyLane.getCentreX(), emptyLane.getCentreY()}, false));
+            view.keyPressed(juce::KeyPress(juce::KeyPress::deleteKey));
+            require(session.trackCount() == tracksBefore && session.trackAutomationState(laneTarget).active,
+                    "Delete over empty lane space removes nothing");
+
+            // An automation lane: Delete clears its curve, not a clip or track.
+            const auto laneCentreY = view.rowBounds(1).getCentreY();
+            view.mouseDown(laneEvent({40.0f, laneCentreY}, {40.0f, laneCentreY}, false));
+            view.keyPressed(juce::KeyPress(juce::KeyPress::deleteKey));
+            require(!session.trackAutomationState(laneTarget).active,
+                    "Delete clears the selected automation curve");
+            require(session.trackAutomationState(laneTarget).visible,
+                    "Deleting a curve keeps its lane, which only the knob menu hides");
+            require(session.trackCount() == tracksBefore, "Deleting a curve leaves the tracks alone");
+
+            // A track header: Delete removes that track.
+            const auto headerY = view.lane(spareTrack).getCentreY();
+            view.mouseDown(laneEvent({40.0f, headerY}, {40.0f, headerY}, false));
+            require(view.selectedTrackIndex() == spareTrack, "Clicking a track header selects that track");
+            view.keyPressed(juce::KeyPress(juce::KeyPress::deleteKey));
+            require(session.trackCount() == tracksBefore - 1, "Delete removes the selected track");
+            session.undo();
+            view.sync();
+            require(session.trackCount() == tracksBefore, "Undo restores a deleted track");
+            require(session.removeAudioTrack(session.masterTrackIndex()).failed(),
+                    "The main row is not a track that can be deleted");
+            require(session.removeAudioTrack(spareTrack).wasOk(), "Tidy the spare track away");
+
+            // A lane is addressed by where it lives, not by a stored index, so
+            // renumbering the tracks above it must not orphan it.
+            require(session.addAudioTrack().wasOk() && session.addAudioTrack().wasOk(),
+                    "Add two tracks to renumber between");
+            view.sync();
+            const auto lowerTrack = session.trackCount() - 1;
+            const auto upperTrack = lowerTrack - 1;
+            const auto lowerParameters = session.deviceParameters(lowerTrack, 0);
+            require(!lowerParameters.empty(), "A fresh track exposes a parameter to automate");
+            const Session::DeviceTarget lowerTarget {lowerTrack, 0, 0};
+            require(session.setTrackAutomationPoints(lowerTarget,
+                        {{0.0, lowerParameters.front().minimum},
+                         {2.0, lowerParameters.front().maximum}}).wasOk(),
+                    "Draw a curve on the lower of the two");
+            require(session.removeAudioTrack(upperTrack).wasOk(), "Remove the track above it");
+            const Session::DeviceTarget renumbered {upperTrack, 0, 0};
+            require(session.trackAutomationState(renumbered).active,
+                    "A lane follows its track when the tracks above it are renumbered");
+            require(session.trackAutomations(upperTrack).size() == 1,
+                    "The renumbered track still reports its lane");
+            require(session.removeAudioTrack(upperTrack).wasOk(), "Remove the track carrying the lane");
+            require(!session.trackAutomationState(renumbered).visible,
+                    "Deleting a track takes its automation lanes with it");
+            view.sync();
+            require(session.trackCount() == tracksBefore - 1,
+                    "The delete-routing checks leave no tracks of their own behind");
+            view.setSize(view.getWidth(), savedHeight);
+            view.sync();
+            view.fit();
+        }
+
         require(session.clearTrackAutomationPoints(laneTarget).wasOk(), "A curve can be deleted from its lane");
         view.sync();
         require(view.rows.size() == rowsWithoutLanes + 1 && !view.trackLanes[0].front().active(),

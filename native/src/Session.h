@@ -357,6 +357,7 @@ private:
     te::ClipSlot* clipSlotAt(int track, int scene) const;
     te::VolumeAndPanPlugin* trackVolumePlugin(int track) const;
     void ensureTrackMixers();
+    void refreshUtilityPointers();
     void ensureSceneSlots(int minimumScenes = defaultScenes);
     std::optional<te::MonotonicBeat> nextLaunchBeat() const;
     void startTransportForLaunch();

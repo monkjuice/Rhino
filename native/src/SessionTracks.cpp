@@ -14,6 +14,7 @@ int Session::trackCount() const
 
 juce::String Session::trackName(int track) const
 {
+    if (isMasterTrack(track)) return "Main";
     const auto tracks = te::getAudioTracks(*edit);
     if (!juce::isPositiveAndBelow(track, tracks.size())) return {};
     return tracks[track]->getName();

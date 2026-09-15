@@ -8,6 +8,7 @@ namespace theta
 
 Arrangement::Arrangement(Session& s) : session(s), vblank(this, [this] { updatePlayhead(); })
 {
+    configureMasterControls();
     setOpaque(true);
     setWantsKeyboardFocus(true);
     setTitle("Arrangement");
@@ -80,6 +81,27 @@ Arrangement::~Arrangement()
     trackScrollBar.removeListener(this);
 }
 
+void Arrangement::configureMasterControls()
+{
+    masterVolume.setSliderStyle(juce::Slider::LinearBar);
+    masterVolume.setRange(Session::minimumVolumeDb, Session::maximumVolumeDb, 0.1);
+    masterVolume.setTextValueSuffix(" dB");
+    masterVolume.setDoubleClickReturnValue(true, 0.0);
+    masterVolume.setTooltip("Main output volume");
+    masterVolume.onDragStart = [this] { session.beginMasterVolumeGesture(); };
+    masterVolume.onDragEnd = [this] { session.endMasterVolumeGesture(); };
+    masterVolume.onValueChange = [this] { session.setMasterVolumeDb(static_cast<float>(masterVolume.getValue())); };
+    masterPan.setSliderStyle(juce::Slider::LinearBar);
+    masterPan.setRange(-1.0, 1.0, 0.01);
+    masterPan.setDoubleClickReturnValue(true, 0.0);
+    masterPan.setTooltip("Main output pan");
+    masterPan.onDragStart = [this] { session.beginMasterPanGesture(); };
+    masterPan.onDragEnd = [this] { session.endMasterPanGesture(); };
+    masterPan.onValueChange = [this] { session.setMasterPan(static_cast<float>(masterPan.getValue())); };
+    addAndMakeVisible(masterVolume);
+    addAndMakeVisible(masterPan);
+}
+
 void Arrangement::resized()
 {
     addTrack.setBounds(10, 3, 34, 26);
@@ -87,7 +109,8 @@ void Arrangement::resized()
     snap.setBounds(86, 3, 34, 26);
     automationButton.setBounds(124, 3, 34, 26);
     snapSize.setBounds(164, 3, 74, 26);
-    gridControl.setBounds(getWidth() - 104, getHeight() - 34, 76, 20);
+    // Above the main row rather than inside it.
+    gridControl.setBounds(getWidth() - 104, static_cast<int>(masterLane().getY()) - 26, 76, 20);
     updateGridControl();
     syncTrackControls();
     const auto mixerVisible = showTrackMixer();
@@ -107,6 +130,12 @@ void Arrangement::resized()
         solo[index]->setBounds(40, controlsY, 26, 22);
         volume[index]->setBounds(72, controlsY, 76, 22);
         pan[index]->setBounds(152, controlsY, 38, 22);
+    }
+    {
+        const auto master = masterLane();
+        const auto controlsY = static_cast<int>(master.getY()) + 18;
+        masterVolume.setBounds(10, controlsY, 100, 20);
+        masterPan.setBounds(116, controlsY, 62, 20);
     }
     scroll.setBounds(static_cast<int>(headerWidth), getHeight() - 14, getWidth() - static_cast<int>(headerWidth) - 14, 14);
     trackScrollBar.setBounds(getWidth() - 12, static_cast<int>(lanesTop), 12, getHeight() - static_cast<int>(lanesTop) - 18);
@@ -307,7 +336,7 @@ void Arrangement::deleteSelection()
 
 void Arrangement::selectTrack(int track)
 {
-    track = juce::jlimit(0, std::max(0, session.trackCount() - 1), track);
+    track = juce::jlimit(0, session.masterTrackIndex(), track);
     if (selectedTrack == track) return;
     selectedTrack = track;
     if (trackSelected) trackSelected(track);

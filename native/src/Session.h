@@ -259,10 +259,19 @@ public:
     void endTrackPanGesture(int track);
     void setTrackMuted(int track, bool muted);
     void setTrackSoloed(int track, bool soloed);
+    // The master track is addressed as one past the last audio track, so every
+    // track-indexed call reaches it without a second code path or a sentinel
+    // that DeviceTarget would read as invalid.
+    int masterTrackIndex() const { return trackCount(); }
+    bool isMasterTrack(int track) const { return track == trackCount(); }
     float masterVolumeDb() const;
     void setMasterVolumeDb(float decibels);
     void beginMasterVolumeGesture();
     void endMasterVolumeGesture();
+    float masterPan() const;
+    void setMasterPan(float pan);
+    void beginMasterPanGesture();
+    void endMasterPanGesture();
     // Session view: scenes are rows of clip slots across every track. The engine
     // owns launch timing; these calls only queue state changes from the message
     // thread and report back what the launch handles currently hold.
@@ -325,6 +334,7 @@ private:
         bool active = false;
     };
     void refreshAfterUndoRedo(bool changed);
+    te::PluginList* pluginListForTrack(int track) const;
     te::ClipSlot* clipSlotAt(int track, int scene) const;
     te::VolumeAndPanPlugin* trackVolumePlugin(int track) const;
     void ensureTrackMixers();

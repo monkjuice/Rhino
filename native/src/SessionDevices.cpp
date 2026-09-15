@@ -50,6 +50,19 @@ int channelStripInsertIndex(te::AudioTrack& track)
 }
 }
 
+// The master track is one past the last audio track. It wraps the edit's master
+// plugin list rather than a track's, and the engine already refuses anything
+// that cannot be added to the master, which is what keeps instruments off it.
+te::PluginList* Session::pluginListForTrack(int trackIndex) const
+{
+    if (isMasterTrack(trackIndex))
+        return &edit->getMasterPluginList();
+    const auto tracks = te::getAudioTracks(*edit);
+    if (!juce::isPositiveAndBelow(trackIndex, tracks.size()))
+        return nullptr;
+    return &tracks[trackIndex]->pluginList;
+}
+
 juce::Result Session::addAudioEffect(AudioEffect effect, int trackIndex)
 {
     const char* type = nullptr;
@@ -57,16 +70,25 @@ juce::Result Session::addAudioEffect(AudioEffect effect, int trackIndex)
     if (!effectTypeAndName(effect, type, name))
         return juce::Result::fail("That audio effect could not be created.");
 
-    const auto tracks = te::getAudioTracks(*edit);
-    if (!juce::isPositiveAndBelow(trackIndex, tracks.size()))
+    auto* list = pluginListForTrack(trackIndex);
+    if (list == nullptr)
         return juce::Result::fail("Drop audio effects on a track.");
 
-    auto* track = tracks[trackIndex];
     edit->getUndoManager().beginNewTransaction("Add " + name);
     auto plugin = edit->getPluginCache().createNewPlugin(type, {});
     if (plugin == nullptr)
         return juce::Result::fail(name + " could not be created.");
-    track->pluginList.insertPlugin(plugin, channelStripInsertIndex(*track), nullptr);
+    if (isMasterTrack(trackIndex))
+    {
+        if (!plugin->canBeAddedToMaster())
+            return juce::Result::fail(name + " cannot go on the main track.");
+        list->insertPlugin(plugin, list->size(), nullptr);
+    }
+    else
+    {
+        auto* track = te::getAudioTracks(*edit)[trackIndex];
+        list->insertPlugin(plugin, channelStripInsertIndex(*track), nullptr);
+    }
     edit->getUndoManager().beginNewTransaction();
     markModified();
     if (edit->getTransport().isPlaying())
@@ -227,12 +249,12 @@ juce::Result Session::addDrumKit(DrumDevice::Kit kit, int trackIndex)
 std::vector<Session::DeviceSlot> Session::deviceSlots(int track) const
 {
     std::vector<DeviceSlot> slots;
-    const auto tracks = te::getAudioTracks(*edit);
-    if (!juce::isPositiveAndBelow(track, tracks.size())) return slots;
+    auto* list = pluginListForTrack(track);
+    if (list == nullptr) return slots;
     const auto selectedPatternInstrument = edit->state.getProperty("thetaPatternInstrument").toString();
-    for (int pluginIndex = 0; pluginIndex < tracks[track]->pluginList.size(); ++pluginIndex)
+    for (int pluginIndex = 0; pluginIndex < list->size(); ++pluginIndex)
     {
-        auto* plugin = tracks[track]->pluginList[pluginIndex];
+        auto* plugin = (*list)[pluginIndex];
         if (plugin == nullptr) continue;
         const auto type = plugin->getPluginType();
         if (isTrackInfrastructure(type))
@@ -250,10 +272,10 @@ std::vector<Session::DeviceSlot> Session::deviceSlots(int track) const
 std::vector<Session::DeviceParameter> Session::deviceParameters(int track, int slot) const
 {
     std::vector<DeviceParameter> parameters;
-    const auto tracks = te::getAudioTracks(*edit);
-    if (!juce::isPositiveAndBelow(track, tracks.size()) || !juce::isPositiveAndBelow(slot, tracks[track]->pluginList.size()))
+    auto* list = pluginListForTrack(track);
+    if (list == nullptr || !juce::isPositiveAndBelow(slot, list->size()))
         return parameters;
-    auto* plugin = tracks[track]->pluginList[slot];
+    auto* plugin = (*list)[slot];
     if (plugin == nullptr) return parameters;
 
     if (auto* synthPlugin = dynamic_cast<te::FourOscPlugin*>(plugin))
@@ -325,10 +347,10 @@ std::vector<Session::DeviceParameter> Session::deviceParameters(int track, int s
 
 juce::Result Session::beginDeviceParameterGesture(int track, int slot, int parameterIndex)
 {
-    const auto tracks = te::getAudioTracks(*edit);
-    if (!juce::isPositiveAndBelow(track, tracks.size()) || !juce::isPositiveAndBelow(slot, tracks[track]->pluginList.size()))
+    auto* list = pluginListForTrack(track);
+    if (list == nullptr || !juce::isPositiveAndBelow(slot, list->size()))
         return juce::Result::fail("Select a device first.");
-    auto* plugin = tracks[track]->pluginList[slot];
+    auto* plugin = (*list)[slot];
     if (plugin == nullptr) return juce::Result::fail("Select a device first.");
     auto* parameter = exposedParameterAt(*plugin, parameterIndex);
     if (parameter == nullptr) return juce::Result::fail("Select a parameter first.");
@@ -341,10 +363,10 @@ juce::Result Session::beginDeviceParameterGesture(int track, int slot, int param
 
 juce::Result Session::setDeviceParameter(int track, int slot, int parameterIndex, float value)
 {
-    const auto tracks = te::getAudioTracks(*edit);
-    if (!juce::isPositiveAndBelow(track, tracks.size()) || !juce::isPositiveAndBelow(slot, tracks[track]->pluginList.size()))
+    auto* list = pluginListForTrack(track);
+    if (list == nullptr || !juce::isPositiveAndBelow(slot, list->size()))
         return juce::Result::fail("Select a device first.");
-    auto* plugin = tracks[track]->pluginList[slot];
+    auto* plugin = (*list)[slot];
     if (plugin == nullptr) return juce::Result::fail("Select a device first.");
     auto* parameter = exposedParameterAt(*plugin, parameterIndex);
     if (parameter == nullptr) return juce::Result::fail("Select a parameter first.");
@@ -364,10 +386,10 @@ juce::Result Session::setDeviceParameter(int track, int slot, int parameterIndex
 
 juce::Result Session::endDeviceParameterGesture(int track, int slot, int parameterIndex)
 {
-    const auto tracks = te::getAudioTracks(*edit);
-    if (!juce::isPositiveAndBelow(track, tracks.size()) || !juce::isPositiveAndBelow(slot, tracks[track]->pluginList.size()))
+    auto* list = pluginListForTrack(track);
+    if (list == nullptr || !juce::isPositiveAndBelow(slot, list->size()))
         return juce::Result::fail("Select a device first.");
-    auto* plugin = tracks[track]->pluginList[slot];
+    auto* plugin = (*list)[slot];
     if (plugin == nullptr) return juce::Result::fail("Select a device first.");
     auto* parameter = exposedParameterAt(*plugin, parameterIndex);
     if (parameter == nullptr) return juce::Result::fail("Select a parameter first.");
@@ -381,10 +403,10 @@ juce::Result Session::endDeviceParameterGesture(int track, int slot, int paramet
 
 juce::Result Session::toggleDeviceEnabled(int track, int slot)
 {
-    const auto tracks = te::getAudioTracks(*edit);
-    if (!juce::isPositiveAndBelow(track, tracks.size()) || !juce::isPositiveAndBelow(slot, tracks[track]->pluginList.size()))
+    auto* list = pluginListForTrack(track);
+    if (list == nullptr || !juce::isPositiveAndBelow(slot, list->size()))
         return juce::Result::fail("Select a device first.");
-    auto* plugin = tracks[track]->pluginList[slot];
+    auto* plugin = (*list)[slot];
     if (plugin == nullptr) return juce::Result::fail("Select a device first.");
     edit->getUndoManager().beginNewTransaction(plugin->isEnabled() ? "Bypass device" : "Enable device");
     plugin->setEnabled(!plugin->isEnabled());
@@ -398,10 +420,10 @@ juce::Result Session::toggleDeviceEnabled(int track, int slot)
 
 juce::Result Session::deleteDevice(int track, int slot)
 {
-    const auto tracks = te::getAudioTracks(*edit);
-    if (!juce::isPositiveAndBelow(track, tracks.size()) || !juce::isPositiveAndBelow(slot, tracks[track]->pluginList.size()))
+    auto* list = pluginListForTrack(track);
+    if (list == nullptr || !juce::isPositiveAndBelow(slot, list->size()))
         return juce::Result::fail("Select a removable device first.");
-    auto* plugin = tracks[track]->pluginList[slot];
+    auto* plugin = (*list)[slot];
     const auto type = plugin->getPluginType();
     const auto coreStarterDevice = track == 0 && (type == UtilityDevice::xmlTypeName
         || type == te::FourOscPlugin::xmlTypeName || type == DrumDevice::xmlTypeName);

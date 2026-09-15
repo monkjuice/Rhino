@@ -14,7 +14,7 @@ void Arrangement::sync()
     std::set<juce::String> usedFiles;
     const auto tracks = te::getAudioTracks(*session.edit);
     syncTrackControls();
-    selectedTrack = juce::jlimit(0, std::max(0, session.trackCount() - 1), selectedTrack);
+    selectedTrack = juce::jlimit(0, session.masterTrackIndex(), selectedTrack);
     songEnd = 0.0;
     for (int track = 0; track < tracks.size(); ++track)
     {
@@ -58,6 +58,10 @@ void Arrangement::sync()
             clips.push_back(view);
         }
     }
+    if (!masterVolume.isMouseButtonDown())
+        masterVolume.setValue(session.masterVolumeDb(), juce::dontSendNotification);
+    if (!masterPan.isMouseButtonDown())
+        masterPan.setValue(session.masterPan(), juce::dontSendNotification);
     std::erase_if(waveforms, [&usedFiles](const auto& item) { return !usedFiles.contains(item.first); });
     if (activeAutomationClip != te::EditItemID())
     {

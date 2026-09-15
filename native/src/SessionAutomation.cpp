@@ -182,10 +182,10 @@ juce::Result Session::toggleParameterAutomationOverride(int track, int slot, int
     if (!hasClipAutomationTarget(*edit, target))
         return juce::Result::fail("This parameter has no clip automation.");
 
-    const auto tracks = te::getAudioTracks(*edit);
-    if (!juce::isPositiveAndBelow(track, tracks.size()) || !juce::isPositiveAndBelow(slot, tracks[track]->pluginList.size()))
+    auto* list = pluginListForTrack(track);
+    if (list == nullptr || !juce::isPositiveAndBelow(slot, list->size()))
         return juce::Result::fail("Select a device first.");
-    auto* plugin = tracks[track]->pluginList[slot];
+    auto* plugin = (*list)[slot];
     if (plugin == nullptr)
         return juce::Result::fail("Select a device first.");
     auto* pluginParameter = exposedParameterAt(*plugin, parameter);

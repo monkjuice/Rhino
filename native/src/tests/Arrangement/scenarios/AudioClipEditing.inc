@@ -52,6 +52,9 @@
                 "Dropping an audio effect on an audio clip inserts clip-local FX");
         session.undo();
 
+        // Lane heights depend on the panel size, so gestures take their y from
+        // the lane rather than assuming one.
+        const auto audioLaneY = view.lane(1).getCentreY();
         const auto event = [&view](juce::Point<float> down, juce::Point<float> point, bool dragged,
                                    juce::ModifierKeys mods = juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier))
         {
@@ -144,7 +147,7 @@
         require(close(playheadTime(session.edit->getTransport()), 0.25), "Clicking the ruler still seeks the playhead");
         view.mouseDown(event({40, 82}, {40, 82}, false));
         require(view.selectedTrack == 0, "Clicking the pattern lane selects the pattern track");
-        view.mouseDown(event({40, 180}, {40, 180}, false));
+        view.mouseDown(event({40, audioLaneY}, {40, audioLaneY}, false));
         require(view.selectedTrack == 1 && notifiedTrack == 1, "Clicking the audio lane selects and broadcasts the audio track");
         view.selected = patternID;
         drag({240, 82}, {301, 82});
@@ -185,7 +188,7 @@
         view.selected = id;
         juce::StringArray dropped;
         dropped.add(source.getFile().getFullPathName());
-        view.filesDropped(dropped, static_cast<int>(view.xFor(1.0)), 180);
+        view.filesDropped(dropped, static_cast<int>(view.xFor(1.0)), static_cast<int>(audioLaneY));
         require(te::getAudioTracks(*session.edit)[1]->getClips().size() == 2, "Dropping an audio file on the audio lane imports a clip");
         session.undo();
         require(te::getAudioTracks(*session.edit)[1]->getClips().size() == 1, "Undo restores dropped audio import");

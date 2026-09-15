@@ -58,6 +58,7 @@ private:
     enum class LoopGesture { none, create, move, trimStart, trimEnd };
     void sync();
     void syncTrackControls();
+    void configureMasterControls();
     void updateScroll();
     void zoom(double factor, double anchor);
     void cancelDrag();
@@ -89,6 +90,9 @@ private:
     int automationLaneAt(const ClipView&, juce::Point<float>) const;
     LoopGesture loopGestureAt(juce::Point<float>) const;
     juce::Rectangle<float> lane(int track) const;
+    // The master row is pinned under the scrolling lanes and never scrolls.
+    juce::Rectangle<float> masterLane() const;
+    bool isMasterSelected() const;
     float laneHeight() const;
     float laneContentHeight() const;
     ClipGeometry displayedPosition(const ClipView&) const;
@@ -109,6 +113,7 @@ private:
     std::vector<std::unique_ptr<juce::TextButton>> mute, solo;
     // The same mixer values the session view shows, laid out horizontally.
     std::vector<std::unique_ptr<juce::Slider>> volume, pan;
+    juce::Slider masterVolume, masterPan;
     bool showTrackMixer() const;
     juce::ScrollBar scroll {false}, trackScrollBar {true};
     juce::VBlankAttachment vblank;
@@ -135,6 +140,6 @@ private:
     double automationStartTime = 0.0, automationEndTime = 0.0;
     float automationStartValue = 0.0f, automationEndValue = 0.0f;
     float playhead = -1.0f;
-    static constexpr float headerWidth = 196.0f, rulerTop = 32.0f, lanesTop = 56.0f;
+    static constexpr float headerWidth = 196.0f, rulerTop = 32.0f, lanesTop = 56.0f, masterLaneHeight = 44.0f;
 };
 }

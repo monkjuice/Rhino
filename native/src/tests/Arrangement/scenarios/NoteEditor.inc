@@ -319,6 +319,10 @@
         // Clips are created deliberately now: by double-clicking the lane at the
         // point the clip should start, or with Ctrl+A on the focused track.
         // Track 2 already carries a clip over bar one, so this lands past it.
+        // The lanes show two tracks at a time and the main row is pinned under
+        // them, so track 2 has to be scrolled into view before it can be hit.
+        view.trackScroll = view.laneHeight();
+        view.resized();
         const auto doubleClickTime = 3.0;
         const juce::Point<float> addClipAt {view.xFor(doubleClickTime), view.lane(2).getCentreY()};
         const juce::MouseEvent addClip(juce::Desktop::getInstance().getMainMouseSource(), addClipAt,

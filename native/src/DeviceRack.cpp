@@ -709,14 +709,14 @@ void DeviceRack::changeListenerCallback(juce::ChangeBroadcaster*)
 
 void DeviceRack::selectTrack(int track)
 {
-    selectedTrack = juce::jlimit(0, std::max(0, session.trackCount() - 1), track);
+    selectedTrack = juce::jlimit(0, session.masterTrackIndex(), track);
     selectedDevice = 0;
     sync();
 }
 
 void DeviceRack::sync()
 {
-    selectedTrack = juce::jlimit(0, std::max(0, session.trackCount() - 1), selectedTrack);
+    selectedTrack = juce::jlimit(0, session.masterTrackIndex(), selectedTrack);
     const auto previousPluginIndex = selectedPluginIndex();
     auto nextSlots = session.deviceSlots(selectedTrack);
     auto chainChanged = nextSlots.size() != slots.size();

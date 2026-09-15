@@ -191,7 +191,6 @@ public:
             toggle->setColour(juce::TextButton::textColourOnId, juce::Colour(0xffdce5ea));
         }
         logStatus("PATTERN 1  /  4OSC     Draw notes, then press Play");
-        mainVolumeLabel.setText("MAIN", juce::dontSendNotification);
         infoView.setMultiLine(true, true);
         infoView.setReadOnly(true);
         infoView.setScrollbarsShown(false);
@@ -241,18 +240,6 @@ public:
         metronome.setClickingTogglesState(true);
         metronome.onClick = [this] { session.setClickTrackEnabled(metronome.getToggleState()); };
         metronomeMenu.onClick = [this] { showMetronomeMenu(); };
-        // Per-track level and pan live in the track headers of both views.
-        // This is the main output, the one level that is not a track's.
-        mainVolume.setSliderStyle(juce::Slider::LinearHorizontal);
-        mainVolume.setTextBoxStyle(juce::Slider::TextBoxRight, false, 85, 26);
-        mainVolume.setRange(Session::minimumVolumeDb, Session::maximumVolumeDb, 0.1);
-        mainVolume.setValue(session.masterVolumeDb(), juce::dontSendNotification);
-        mainVolume.setTextValueSuffix(" dB");
-        mainVolume.setDoubleClickReturnValue(true, 0.0);
-        mainVolume.setTooltip("Main output volume");
-        mainVolume.onDragStart = [this] { session.beginMasterVolumeGesture(); };
-        mainVolume.onDragEnd = [this] { session.endMasterVolumeGesture(); };
-        mainVolume.onValueChange = [this] { session.setMasterVolumeDb(static_cast<float>(mainVolume.getValue())); };
         play.onClick = [this] { session.togglePlayback(); };
         stop.onClick = [this] { session.stop(); };
         panic.onClick = [this]
@@ -267,7 +254,7 @@ public:
         stop.setTooltip("Stop and return to start");
         panic.setTooltip("Panic reset audio");
         for (auto* component : std::initializer_list<juce::Component*>{
-                 &infoView, &position, &mainVolumeLabel, &mainVolume, &play, &stop, &panic,
+                 &infoView, &position, &play, &stop, &panic,
                  &browser, &browserToggle, &editorToggle, &rackToggle, &grid, &arrangement, &sessionView,
                  &sessionToggle, &arrangementToggle, &backToArrangement, &rack, &tempo, &timeSignature, &undo, &redo, &clear, &metronome, &metronomeMenu, &hint,
                  &patternLabel, &editorResolution, &editorZoomOut, &editorZoomIn, &scaleHighlight})
@@ -298,9 +285,6 @@ public:
     void paint(juce::Graphics& g) override
     {
         g.fillAll(juce::Colour(0xff171a1e));
-        const auto bottomX = (browserOpen ? browserWidth : 0) + 18;
-        g.setColour(juce::Colour(0xff24282d));
-        g.fillRect(bottomX, getHeight() - 64, getWidth() - bottomX - 24, 44);
         if (browserOpen)
         {
             g.setColour(juce::Colour(0xff3a434b));
@@ -338,8 +322,7 @@ public:
         arrangementHeight = juce::jlimit(150, std::max(150, getHeight() - 350), arrangementHeight);
         const auto arrangementBottom = arrangementTop + arrangementHeight;
         const auto lowerTop = arrangementBottom + 34;
-        const auto bottomPanelTop = getHeight() - 64;
-        const auto lowerH = std::max(112, bottomPanelTop - lowerTop - 14);
+        const auto lowerH = std::max(112, getHeight() - lowerTop - 12);
         const auto displayWidth = juce::jlimit(240, 320, getWidth() / 4);
         const auto displayX = getWidth() / 2 - displayWidth / 2;
         // Keep the control bar as one visual cluster. The browser may resize,
@@ -429,8 +412,6 @@ public:
         editorToggle.toFront(false);
         rackToggle.toFront(false);
         hint.setBounds(0, 0, 0, 0);
-        mainVolumeLabel.setBounds(editorX + 16, getHeight() - 54, 60, 26);
-        mainVolume.setBounds(editorX + 76, getHeight() - 54, std::max(160, std::min(420, editorW - 100)), 28);
     }
 
     void mouseMove(const juce::MouseEvent& event) override
@@ -713,8 +694,6 @@ private:
         const auto signature = session.timeSignature();
         timeSignature.setSelectedId(signature.numerator * 100 + signature.denominator, juce::dontSendNotification);
         metronome.setToggleState(session.clickTrackEnabled(), juce::dontSendNotification);
-        if (!mainVolume.isMouseButtonDown())
-            mainVolume.setValue(session.masterVolumeDb(), juce::dontSendNotification);
         undo.setEnabled(session.edit->getUndoManager().canUndo());
         redo.setEnabled(session.edit->getUndoManager().canRedo());
         patternLabel.setText(session.isPatternDrums() ? "PATTERN 1  /  DRUM EDITOR" : "PATTERN 1  /  NOTE EDITOR",
@@ -790,10 +769,9 @@ private:
     }
 
     Session& session;
-    juce::Label mainVolumeLabel, hint, patternLabel;
+    juce::Label hint, patternLabel;
     juce::TextEditor infoView;
     TransportDisplay position;
-    juce::Slider mainVolume;
     BrowserPanel browser;
     StepGrid grid;
     Arrangement arrangement;

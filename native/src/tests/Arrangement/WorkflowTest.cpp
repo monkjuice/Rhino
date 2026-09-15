@@ -71,6 +71,8 @@ int runArrangementTest()
        #include "scenarios/SharedMixer.inc"
         scenario("clip round trip");
        #include "scenarios/ClipRoundTrip.inc"
+        scenario("main track");
+       #include "scenarios/MasterTrack.inc"
         return 0;
     }
     catch (const std::exception& error)

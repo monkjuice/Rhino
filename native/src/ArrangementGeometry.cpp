@@ -5,7 +5,17 @@ namespace theta
 {
 float Arrangement::laneContentHeight() const
 {
-    return std::max(1.0f, getHeight() - lanesTop - 18.0f);
+    return std::max(1.0f, getHeight() - lanesTop - 18.0f - masterLaneHeight);
+}
+
+juce::Rectangle<float> Arrangement::masterLane() const
+{
+    return {0.0f, lanesTop + laneContentHeight(), std::max(1.0f, getWidth() - 14.0f), masterLaneHeight};
+}
+
+bool Arrangement::isMasterSelected() const
+{
+    return selectedTrack == session.masterTrackIndex();
 }
 
 float Arrangement::laneHeight() const

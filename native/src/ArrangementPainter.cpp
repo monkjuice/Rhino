@@ -18,7 +18,7 @@ void Arrangement::paint(juce::Graphics& g)
     for (int track = 0; track < session.trackCount(); ++track)
     {
         const auto row = lane(track);
-        if (row.getBottom() < lanesTop || row.getY() > getHeight() - 18.0f) continue;
+        if (row.getBottom() < lanesTop || row.getY() > lanesTop + laneContentHeight()) continue;
         g.setColour(juce::Colour(track == 0 ? 0xff242b31 : 0xff20272e));
         g.fillRect(row.withX(0.0f).withWidth(static_cast<float>(getWidth()) - 14.0f));
         if (track == selectedTrack)
@@ -32,6 +32,26 @@ void Arrangement::paint(juce::Graphics& g)
         g.drawText(juce::String(track + 1).paddedLeft('0', 2) + "  " + session.trackName(track),
                    10, static_cast<int>(row.getY()) + 4, static_cast<int>(headerWidth) - 20, 20,
                    juce::Justification::centredLeft);
+    }
+
+    // The master row is pinned below the lanes. It takes no clips, so its lane
+    // is empty; only its header carries anything.
+    {
+        const auto master = masterLane();
+        g.setColour(juce::Colour(0xff191f24));
+        g.fillRect(master);
+        g.setColour(juce::Colour(0xff3a434b));
+        g.drawHorizontalLine(static_cast<int>(master.getY()), 0.0f, master.getRight());
+        g.setColour(juce::Colour(isMasterSelected() ? 0xff343f47 : 0xff222930));
+        g.fillRect(master.withWidth(headerWidth));
+        if (isMasterSelected())
+        {
+            g.setColour(juce::Colour(0xffc6d58c));
+            g.fillRect(master.withWidth(3.0f));
+        }
+        g.setColour(juce::Colour(0xffc4cbd1));
+        g.setFont(juce::FontOptions(11.0f));
+        g.drawText("MAIN", 10, static_cast<int>(master.getY()) + 2, 120, 16, juce::Justification::centredLeft);
     }
 
     const auto firstBeat = session.edit->tempoSequence.toBeats(tracktion::core::TimePosition::fromSeconds(viewStart)).inBeats();
@@ -48,7 +68,7 @@ void Arrangement::paint(juce::Graphics& g)
         if (gridSettings.mode != GridMode::off || bar)
         {
             g.setColour(bar ? juce::Colour(0xff42515c) : wholeBeat ? juce::Colour(0xff35404a) : juce::Colour(0xff29323a));
-            g.drawVerticalLine(static_cast<int>(x), static_cast<int>(lanesTop), getHeight() - 18.0f);
+            g.drawVerticalLine(static_cast<int>(x), static_cast<int>(lanesTop), masterLane().getY());
         }
         if (bar)
         {

@@ -1,25 +1,25 @@
         // Fit is four seconds wide here. Exercise actual component hit testing,
         // gesture preview, and commit rather than calling only the model facade.
         scenario("gestures: clip drag and trim");
-        view.mouseDown(event({240, 180}, {240, 180}, false));
-        view.mouseDrag(event({240, 180}, {346.5f, 180}, true));
+        view.mouseDown(event({240, audioLaneY}, {240, audioLaneY}, false));
+        view.mouseDrag(event({240, audioLaneY}, {346.5f, audioLaneY}, true));
         require(close(clip->getPosition().time.getStart().inSeconds(), 0.0), "Drag must not rebuild live clip before release");
-        view.mouseUp(event({240, 180}, {346.5f, 180}, true));
+        view.mouseUp(event({240, audioLaneY}, {346.5f, audioLaneY}, true));
         require(close(clip->getPosition().time.getStart().inSeconds(), 0.5), "Pointer drag moves audio");
         require(close(clip->getPosition().offset.inSeconds(), 0.0), "Move preserves source offset");
         session.undo();
         require(close(clip->getPosition().time.getStart().inSeconds(), 0.0), "One undo restores move");
         session.redo();
 
-        drag({view.xFor(0.5) + 2.0f, 180}, {view.xFor(0.75), 180});
+        drag({view.xFor(0.5) + 2.0f, audioLaneY}, {view.xFor(0.75), audioLaneY});
         require(close(clip->getPosition().time.getStart().inSeconds(), 0.75), "Left handle trims start");
         require(close(clip->getPosition().offset.inSeconds(), 0.25), "Left trim advances source offset");
-        drag({view.xFor(1.5) - 2.0f, 180}, {view.xFor(1.25), 180});
+        drag({view.xFor(1.5) - 2.0f, audioLaneY}, {view.xFor(1.25), audioLaneY});
         require(close(clip->getPosition().time.getEnd().inSeconds(), 1.25), "Right handle trims end");
         require(close(clip->getPosition().offset.inSeconds(), 0.25), "Right trim preserves source offset");
-        drag({view.xFor(1.25) - 2.0f, 180}, {view.xFor(1.5), 180});
+        drag({view.xFor(1.25) - 2.0f, audioLaneY}, {view.xFor(1.5), audioLaneY});
         require(close(clip->getPosition().time.getEnd().inSeconds(), 1.5), "Right handle expands audio to available source end");
-        drag({view.xFor(0.75) + 2.0f, 180}, {view.xFor(0.5), 180});
+        drag({view.xFor(0.75) + 2.0f, audioLaneY}, {view.xFor(0.5), audioLaneY});
         require(close(clip->getPosition().time.getStart().inSeconds(), 0.5), "Left handle expands audio to available source start");
         require(close(clip->getPosition().offset.inSeconds(), 0.0), "Left expansion rewinds source offset");
         session.undo();
@@ -27,10 +27,10 @@
         require(close(clip->getPosition().time.getStart().inSeconds(), 0.75), "Undo restores left expansion");
         require(close(clip->getPosition().time.getEnd().inSeconds(), 1.25), "Undo restores right expansion");
         const auto originalPosition = clip->getPosition();
-        view.mouseDown(event({360, 180}, {360, 180}, false));
-        view.mouseDrag(event({360, 180}, {500, 180}, true));
+        view.mouseDown(event({360, audioLaneY}, {360, audioLaneY}, false));
+        view.mouseDrag(event({360, audioLaneY}, {500, audioLaneY}, true));
         view.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey));
-        view.mouseUp(event({360, 180}, {500, 180}, true));
+        view.mouseUp(event({360, audioLaneY}, {500, audioLaneY}, true));
         require(close(clip->getPosition().time.getStart().inSeconds(), originalPosition.time.getStart().inSeconds()), "Escape cancels preview");
 
         // AudioThumbnail scans asynchronously. Its cache is intentionally

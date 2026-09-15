@@ -31,6 +31,13 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
         return;
     }
     if (!event.mods.isLeftButtonDown()) return;
+    // The master row selects but takes no clips, so it is handled before the
+    // lane hit tests rather than inside them.
+    if (masterLane().contains(event.position))
+    {
+        selectTrack(session.masterTrackIndex());
+        return;
+    }
     pasteTime = snapped(std::max(0.0, timeAt(event.position.x)), event.mods.isAltDown());
     for (int track = 0; track < session.trackCount(); ++track)
         if (lane(track).withX(0.0f).contains(event.position))

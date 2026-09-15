@@ -120,6 +120,10 @@ juce::Result Arrangement::applyBrowserDrop(const juce::String& description, int 
     const auto kind = browserDropKind(description);
     const auto id = browserDropId(description);
 
+    // The main track carries effects and nothing else.
+    if (session.isMasterTrack(track) && kind != "effect" && kind != "info")
+        return juce::Result::fail("The main track takes audio effects only.");
+
     if (kind == "preset")
     {
         const auto preset = patternPresetFromId(id);

@@ -145,6 +145,41 @@ void Session::setMasterVolumeDb(float decibels)
     }
 }
 
+float Session::masterPan() const
+{
+    if (auto master = edit->getMasterVolumePlugin())
+        return master->getPan();
+    return 0.0f;
+}
+
+void Session::setMasterPan(float pan)
+{
+    if (auto master = edit->getMasterVolumePlugin())
+    {
+        master->setPan(juce::jlimit(-1.0f, 1.0f, pan));
+        markModified();
+        sendSynchronousChangeMessage();
+    }
+}
+
+void Session::beginMasterPanGesture()
+{
+    if (auto master = edit->getMasterVolumePlugin())
+    {
+        edit->getUndoManager().beginNewTransaction("Main pan");
+        master->panParam->parameterChangeGestureBegin();
+    }
+}
+
+void Session::endMasterPanGesture()
+{
+    if (auto master = edit->getMasterVolumePlugin())
+    {
+        master->panParam->parameterChangeGestureEnd();
+        edit->getUndoManager().beginNewTransaction();
+    }
+}
+
 void Session::beginMasterVolumeGesture()
 {
     if (auto master = edit->getMasterVolumePlugin())

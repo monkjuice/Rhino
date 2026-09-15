@@ -88,6 +88,8 @@ int runArrangementTest()
        #include "scenarios/ClipRoundTrip.inc"
         scenario("automation lanes");
        #include "scenarios/AutomationLanes.inc"
+        scenario("tempo change");
+       #include "scenarios/TempoChange.inc"
         scenario("main track");
        #include "scenarios/MasterTrack.inc"
         return 0;

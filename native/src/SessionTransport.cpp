@@ -1,4 +1,4 @@
-#include "Session.h"
+#include "SessionInternal.h"
 #include <array>
 
 namespace theta
@@ -12,6 +12,28 @@ void releasePluginList(te::PluginList* list)
     for (auto* plugin : *list)
         if (plugin != nullptr)
             plugin->midiPanic();
+}
+
+// Automation lanes hang off the track they are drawn under, or off the edit for
+// the master, and hold their points in seconds. They sweep alongside the clips,
+// so they follow the same factor rather than drifting out from under them.
+void rescaleAutomationPoints(juce::ValueTree owner, double scale, juce::UndoManager* undoManager)
+{
+    for (int lane = 0; lane < owner.getNumChildren(); ++lane)
+    {
+        auto state = owner.getChild(lane);
+        if (!state.hasType(trackAutomationID))
+            continue;
+        for (int child = 0; child < state.getNumChildren(); ++child)
+        {
+            auto point = state.getChild(child);
+            if (!point.hasType(automationPointID))
+                continue;
+            const auto seconds = static_cast<double>(point.getProperty(automationTimeID, 0.0));
+            if (std::isfinite(seconds))
+                point.setProperty(automationTimeID, std::max(0.0, seconds * scale), undoManager);
+        }
+    }
 }
 }
 
@@ -173,14 +195,26 @@ void Session::setTempo(double bpm)
 {
     if (!std::isfinite(bpm)) return;
     bpm = juce::jlimit(40.0, 240.0, bpm);
-    if (bpm == tempo()) return;
+    const auto previousBpm = tempo();
+    if (bpm == previousBpm) return;
     edit->getUndoManager().beginNewTransaction("Change tempo");
-    edit->tempoSequence.getTempo(0)->setBpm(juce::jlimit(40.0, 240.0, bpm));
+    edit->tempoSequence.getTempo(0)->setBpm(bpm);
     markModified();
     edit->tempoSequence.updateTempoData();
-    // Keep this initial editor exactly one bar; MIDI positions remain in beats.
-    const auto end = edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(beatsPerBar()));
-    pattern().setLength(end - tracktion::core::TimePosition{}, true);
+
+    // Clips are the engine's to move: it anchors them to beats and rewrites
+    // their seconds as the tempo changes, so an edit keeps its musical shape
+    // without help. Theta's own timeline state is not in that snapshot and has
+    // to follow by hand, or it drifts out from under the clips it was drawn
+    // against. A tempo with one entry scales the whole timeline by one factor.
+    const auto scale = previousBpm / bpm;
+    for (auto* track : te::getAudioTracks(*edit))
+        rescaleAutomationPoints(track->state, scale, &edit->getUndoManager());
+    rescaleAutomationPoints(edit->state, scale, &edit->getUndoManager());
+    if (manualLoop)
+        manualLoopRange = {tracktion::core::TimePosition::fromSeconds(manualLoopRange.getStart().inSeconds() * scale),
+                           tracktion::core::TimePosition::fromSeconds(manualLoopRange.getEnd().inSeconds() * scale)};
+
     refreshLoop();
     edit->getUndoManager().beginNewTransaction();
     sendSynchronousChangeMessage();

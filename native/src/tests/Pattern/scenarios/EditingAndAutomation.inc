@@ -63,8 +63,17 @@
         session.undo();
         require(sequence.getNumNotes() == 10, "Undo clear");
 
+        // A clip is written in beats and stored in seconds, so a tempo change
+        // has to rewrite the seconds and leave the beats alone. Whatever the
+        // clip happens to be worth here, it must come out the far side worth
+        // the same: it used to be snapped back to a single bar instead.
+        const auto beatsBeforeTempo = session.patternLengthBeats();
         session.setTempo(90.0);
-        require(std::abs(session.pattern().getPosition().time.getLength().inSeconds() - 8.0 / 3.0) < 0.0001, "One-bar clip follows tempo");
+        require(std::abs(session.patternLengthBeats() - beatsBeforeTempo) < 0.0001,
+                "A tempo change keeps every beat of the clip");
+        require(std::abs(session.pattern().getPosition().time.getLength().inSeconds()
+                             - beatsBeforeTempo * 60.0 / 90.0) < 0.0001,
+                "The clip's seconds follow the new tempo");
         require(session.hasNote(4, 53), "Tempo change preserves note beats");
         session.undo();
         require(std::abs(session.tempo() - 120.0) < 0.001, "Undo tempo");

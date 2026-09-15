@@ -17,7 +17,15 @@ public:
     std::function<void()> configurationRequested;
 
 private:
+    // The chevron paints its glyph only. A plain TextButton would carry the
+    // look-and-feel's rounded background and outline inside the readout.
+    struct GlyphButton final : juce::TextButton
+    {
+        using juce::TextButton::TextButton;
+        void paintButton(juce::Graphics&, bool highlighted, bool pressed) override;
+    };
+
     juce::String text;
-    juce::TextButton configuration {"v"};
+    GlyphButton configuration {"v"};
 };
 }

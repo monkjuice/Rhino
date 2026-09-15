@@ -359,6 +359,9 @@ void BrowserPanel::rebuildTree()
 {
     if (auto* current = selectedItem())
         selectionToRestore = current->name;
+    // Folders open by default, but a folder the user collapsed stays collapsed
+    // through a rebuild, which happens whenever the panel is resized.
+    auto openness = tree.getRootItem() != nullptr ? tree.getOpennessState(false) : nullptr;
     tree.setRootItem(nullptr);
     root = std::make_unique<FolderNode>(*this, juce::String());
     const auto query = search.getText().trim().toLowerCase();
@@ -399,6 +402,8 @@ void BrowserPanel::rebuildTree()
     root->setOpen(true);
     for (const auto& [name, node] : folders)
         node->setOpen(true);
+    if (openness != nullptr)
+        tree.restoreOpennessState(*openness, false);
     if (restored != nullptr)
         restored->setSelected(true, true);
     else if (root->getNumSubItems() > 0)

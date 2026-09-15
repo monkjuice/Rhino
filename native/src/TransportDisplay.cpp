@@ -19,6 +19,15 @@ TransportDisplay::TransportDisplay()
     addAndMakeVisible(configuration);
 }
 
+void TransportDisplay::GlyphButton::paintButton(juce::Graphics& g, bool highlighted, bool pressed)
+{
+    auto colour = findColour(juce::TextButton::textColourOffId);
+    if (highlighted || pressed) colour = colour.brighter(0.3f);
+    g.setColour(colour);
+    g.setFont(juce::FontOptions(11.0f));
+    g.drawFittedText(getButtonText(), getLocalBounds(), juce::Justification::centred, 1);
+}
+
 void TransportDisplay::setDisplayText(const juce::String& next)
 {
     if (text == next) return;

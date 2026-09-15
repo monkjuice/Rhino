@@ -1,4 +1,5 @@
 #pragma once
+#include "BinaryData.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <algorithm>
 #include <cmath>
@@ -8,6 +9,23 @@ namespace theta
 class Theme final : public juce::LookAndFeel_V4
 {
 public:
+    // The app ships its own UI face rather than inheriting the Windows shell
+    // font. JUCE renders text with greyscale antialiasing and no grid fitting,
+    // so at the sizes this interface uses a face drawn for screen - large
+    // x-height, flat terminals, sturdy stems - stays legible where the shell
+    // font goes soft. Glyphs the Latin cut does not carry, such as the
+    // transport symbols, still reach the system fallback.
+    juce::Typeface::Ptr getTypefaceForFont(const juce::Font& font) override
+    {
+        auto& cached = font.isBold() ? semiBold : regular;
+        if (cached == nullptr)
+            cached = juce::Typeface::createSystemTypefaceFor(
+                font.isBold() ? BinaryData::InterSemiBold_ttf : BinaryData::InterRegular_ttf,
+                font.isBold() ? static_cast<size_t>(BinaryData::InterSemiBold_ttfSize)
+                              : static_cast<size_t>(BinaryData::InterRegular_ttfSize));
+        return cached != nullptr ? cached : juce::LookAndFeel_V4::getTypefaceForFont(font);
+    }
+
     void drawRotarySlider(juce::Graphics& g, int x, int y, int width, int height,
                           float sliderPos, float rotaryStartAngle, float rotaryEndAngle,
                           juce::Slider& slider) override
@@ -76,6 +94,44 @@ public:
         g.drawEllipse(juce::Rectangle<float>(6.0f, 6.0f).withCentre(centre), 1.0f);
     }
 
+    // A bar slider draws its value inside the bar, where the default label
+    // font is larger than the bar it sits in. Only bars are touched, so the
+    // rotary and horizontal sliders elsewhere keep their own text.
+    juce::Label* createSliderTextBox(juce::Slider& slider) override
+    {
+        auto* label = juce::LookAndFeel_V4::createSliderTextBox(slider);
+        const auto style = slider.getSliderStyle();
+        if (label != nullptr && (style == juce::Slider::LinearBar || style == juce::Slider::LinearBarVertical))
+            label->setFont(juce::FontOptions(11.0f));
+        return label;
+    }
+
+    // The stock bar keeps its fill a half pixel clear of its own frame and
+    // then outlines it a whole pixel wide, which at this size reads as a box
+    // with a bar inside it. This is the bar: an unfilled trough, the value
+    // filled edge to edge, and a hairline to separate it from the card.
+    void drawLinearSlider(juce::Graphics& g, int x, int y, int width, int height,
+                          float sliderPos, float minSliderPos, float maxSliderPos,
+                          juce::Slider::SliderStyle style, juce::Slider& slider) override
+    {
+        if (!slider.isBar())
+        {
+            juce::LookAndFeel_V4::drawLinearSlider(g, x, y, width, height, sliderPos,
+                                                   minSliderPos, maxSliderPos, style, slider);
+            return;
+        }
+        const auto bounds = juce::Rectangle<float>(static_cast<float>(x), static_cast<float>(y),
+                                                   static_cast<float>(width), static_cast<float>(height));
+        g.setColour(slider.findColour(juce::Slider::backgroundColourId));
+        g.fillRect(bounds);
+        g.setColour(slider.findColour(juce::Slider::trackColourId));
+        g.fillRect(slider.isHorizontal()
+                       ? bounds.withRight(sliderPos)
+                       : bounds.withTop(sliderPos));
+        g.setColour(slider.findColour(juce::Slider::textBoxOutlineColourId));
+        g.drawRect(bounds, 0.6f);
+    }
+
     void drawButtonBackground(juce::Graphics& g, juce::Button& button,
                               const juce::Colour& background, bool highlighted, bool pressed) override
     {
@@ -128,5 +184,8 @@ public:
         g.setColour(colour);
         g.drawRect(0, 0, width, height);
     }
+
+private:
+    juce::Typeface::Ptr regular, semiBold;
 };
 }

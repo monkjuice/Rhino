@@ -34,7 +34,9 @@ juce_add_binary_data(ThetaNativeAssets
         assets/TR808/TR808OpenHat.wav
         assets/TR808/TR808LowTom.wav
         assets/TR808/TR808MidTom.wav
-        assets/TR808/TR808HighTom.wav)
+        assets/TR808/TR808HighTom.wav
+        assets/fonts/InterRegular.ttf
+        assets/fonts/InterSemiBold.ttf)
 # Sources are listed explicitly: a new .cpp must be added here or it will not compile.
 # A class may span several translation units (Session, Arrangement); keep those grouped.
 target_sources(ThetaNative PRIVATE

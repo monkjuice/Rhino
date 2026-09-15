@@ -19,3 +19,4 @@ __pycache__/
 Thumbs.db
 
 instruments/theta-forge/build/
+temp/

@@ -1,5 +1,6 @@
 #include "SessionInternal.h"
 #include <algorithm>
+#include <limits>
 #include <set>
 
 // Note editing and pattern geometry. Serves StepGrid.
@@ -533,39 +534,53 @@ juce::Result Session::moveNotes(const std::vector<juce::ValueTree>& states, doub
         return std::find(states.begin(), states.end(), candidate.state) != states.end();
     };
     constexpr double tolerance = 0.0001;
-    auto resolvedDelta = stepDelta;
-    for (int pass = 0; pass < sequence.getNumNotes() + 1; ++pass)
+    const auto gridSteps = static_cast<double>(editorStepCount());
+
+    // The group travels rigidly, so one shift range covers all of it: how far
+    // it may slide either way before a note leaves the clip or meets a note
+    // that is staying put. Clamping to that range is what keeps a dragged note
+    // under the pointer. Sliding it past an obstacle instead would strand a
+    // long note several steps ahead of the pointer for the rest of the drag.
+    const auto shiftRange = [&](int candidatePitchDelta, double& lowest, double& highest)
     {
-        auto adjusted = false;
+        lowest = std::numeric_limits<double>::lowest();
+        highest = std::numeric_limits<double>::max();
         for (const auto& move : moves)
         {
-            const auto targetPitch = move.pitch + pitchDelta;
-            if (targetPitch < 0 || targetPitch > 127)
-                return juce::Result::fail("Move notes inside the visible pitch grid.");
-            const auto targetStart = move.start + resolvedDelta;
-            const auto targetEnd = targetStart + move.length;
+            lowest = std::max(lowest, -move.start);
+            highest = std::min(highest, gridSteps - move.length - move.start);
+            const auto targetPitch = move.pitch + candidatePitchDelta;
             for (auto* other : sequence.getNotes())
             {
-                if (isMoving(*other) || other->getNoteNumber() != targetPitch)
+                if (other->getNoteNumber() != targetPitch || isMoving(*other))
                     continue;
                 const auto otherStart = other->getStartBeat().inBeats() / stepBeats;
                 const auto otherEnd = other->getEndBeat().inBeats() / stepBeats;
-                if (targetStart < otherEnd - tolerance && otherStart < targetEnd - tolerance)
-                {
-                    resolvedDelta += stepDelta < 0.0 ? otherStart - targetEnd : otherEnd - targetStart;
-                    adjusted = true;
-                    break;
-                }
+                if (otherEnd <= move.start + tolerance)
+                    lowest = std::max(lowest, otherEnd - move.start);
+                else if (otherStart >= move.start + move.length - tolerance)
+                    highest = std::min(highest, otherStart - move.length - move.start);
+                else
+                    return false; // The lane this pitch shift lands on is already taken here.
             }
-            if (adjusted) break;
         }
-        if (!adjusted) break;
-    }
+        return true;
+    };
 
     for (const auto& move : moves)
-        if (move.start + resolvedDelta < 0.0
-            || move.start + resolvedDelta + move.length > editorStepCount() + tolerance)
-            return juce::Result::fail("That note group does not fit here.");
+        pitchDelta = std::clamp(pitchDelta, -move.pitch, 127 - move.pitch);
+    double lowest = 0.0, highest = 0.0;
+    if (!shiftRange(pitchDelta, lowest, highest))
+    {
+        // Drop the pitch change and keep the horizontal one. Notes never
+        // overlap within a lane, so the range always resolves at the old pitch.
+        pitchDelta = 0;
+        if (!shiftRange(0, lowest, highest))
+            return juce::Result::fail("That note cell is already occupied.");
+    }
+    const auto resolvedDelta = std::clamp(stepDelta, std::min(0.0, lowest), std::max(0.0, highest));
+    if (std::abs(resolvedDelta) < tolerance && pitchDelta == 0)
+        return juce::Result::ok();
 
     const auto wasPlaying = edit->getTransport().isPlaying();
     if (wasPlaying) panicMidiOnTrack(pattern().getClipTrack());

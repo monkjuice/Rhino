@@ -195,17 +195,13 @@ void StepGrid::mouseDown(const juce::MouseEvent& event)
         if (movingGroup)
             for (const auto& state : selectedStates())
                 if (const auto* note = noteForState(state))
-                    movingNotes.push_back({state, note->start, note->length, note->pitch});
+                    movingNotes.push_back({state, note->start, note->pitch});
         if (movingNotes.empty())
-            movingNotes.push_back({clicked.state, clicked.start, clicked.length, clicked.pitch});
-        const auto grabbedCell = cellHit(event.position);
-        lastMovePitch = pitchForIndex(grabbedCell);
+            movingNotes.push_back({clicked.state, clicked.start, clicked.pitch});
+        // Where the group began, and where the pointer grabbed it. Every drag
+        // position is measured against these, never against the previous one.
+        moveGrabPitch = pitchForIndex(cellHit(event.position));
         dragStartStep = stepScroll + (event.position.x - labelWidth) / cellWidth();
-        movedStepDelta = 0.0;
-        moveStepQuantum = 1.0;
-        for (const auto& note : movingNotes)
-            moveStepQuantum = std::min(moveStepQuantum, note.length);
-        moveStepQuantum = std::max(0.001, moveStepQuantum);
         dragPosition = event.position;
         verticalAutoScroll = 0.0f;
         noteMoved = false;
@@ -256,14 +252,7 @@ juce::Result StepGrid::moveCurrentNotesBy(double stepDelta, int pitchDelta)
     const auto result = session.moveNotes(sources, stepDelta, pitchDelta);
     if (result.wasOk())
     {
-        std::vector<juce::ValueTree> moved;
-        for (auto& note : movingNotes)
-        {
-            note.step += stepDelta;
-            note.pitch += pitchDelta;
-            moved.push_back(note.state);
-        }
-        if (movingGroup) setSelectedStates(std::move(moved));
+        if (movingGroup) setSelectedStates(std::move(sources));
         else clearSelection();
         noteMoved = true;
     }
@@ -273,16 +262,22 @@ juce::Result StepGrid::moveCurrentNotesBy(double stepDelta, int pitchDelta)
 void StepGrid::moveDraggedNotesAt(juce::Point<float> position)
 {
     const auto index = cellHit(position);
-    if (index < 0 || dragStartStep < 0.0 || lastMovePitch < 0)
+    if (index < 0 || dragStartStep < 0.0 || moveGrabPitch < 0 || movingNotes.empty())
         return;
+    const auto& anchor = movingNotes.front();
+    const auto* placed = noteForState(anchor.state);
+    if (placed == nullptr)
+        return;
+    // Notes follow the pointer freely along the timeline, at the same 1/16 of a
+    // step that a free resize uses: a note is only ever between two columns,
+    // never between two tones, so only the row snaps.
     const auto pointerStep = stepScroll + (position.x - labelWidth) / cellWidth();
-    const auto totalStepDelta = std::round((pointerStep - dragStartStep) / moveStepQuantum) * moveStepQuantum;
-    const auto pitch = pitchForIndex(index);
-    if (moveCurrentNotesBy(totalStepDelta - movedStepDelta, pitch - lastMovePitch).wasOk())
-    {
-        movedStepDelta = totalStepDelta;
-        lastMovePitch = pitch;
-    }
+    const auto travelled = std::round((pointerStep - dragStartStep) * 16.0) / 16.0;
+    // Asking for the distance from where the group actually sits to where the
+    // pointer wants it keeps the two together even when the session clamps a
+    // move short against a neighbouring note or the end of the clip.
+    moveCurrentNotesBy(anchor.step + travelled - placed->start,
+                       anchor.pitch + pitchForIndex(index) - moveGrabPitch - placed->pitch);
 }
 
 void StepGrid::scrollDraggedNotes()
@@ -391,7 +386,10 @@ void StepGrid::mouseDrag(const juce::MouseEvent& event)
     if (gesture == Gesture::move)
     {
         scrollDraggedNotes();
-        moveDraggedNotesAt(event.position);
+        // Notes now travel in fractions of a step, so a click that shakes by a
+        // pixel must not count as a move and cost the click its erase.
+        if (noteMoved || event.getDistanceFromDragStart() >= 3)
+            moveDraggedNotesAt(event.position);
         return;
     }
     if (gesture == Gesture::resize)
@@ -436,10 +434,8 @@ void StepGrid::mouseUp(const juce::MouseEvent& event)
     movingNoteState = {};
     movingNotes.clear();
     movingGroup = false;
-    lastMovePitch = -1;
+    moveGrabPitch = -1;
     dragStartStep = -1.0;
-    movedStepDelta = 0.0;
-    moveStepQuantum = 1.0;
     dragPosition = {-1.0f, -1.0f};
     stopTimer();
     resizingNoteState = {};

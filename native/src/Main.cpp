@@ -140,21 +140,9 @@ public:
         // whichever track the visible arrangement has selected.
         browser.targetTrack = [this] { return sessionViewOpen ? sessionView.selectedTrackIndex() : arrangement.selectedTrackIndex(); };
         rack.status = files.status;
-        browserToggle.onClick = [this] { browserOpen = !browserOpen; resized(); repaint(); };
-        editorToggle.onClick = [this]
-        {
-            clipEditorOpen = !clipEditorOpen;
-            if (!clipEditorOpen && !rackOpen) rackOpen = true;
-            resized();
-            repaint();
-        };
-        rackToggle.onClick = [this]
-        {
-            rackOpen = !rackOpen;
-            if (!rackOpen && !clipEditorOpen) clipEditorOpen = true;
-            resized();
-            repaint();
-        };
+        browserToggle.onClick = [this] { toggleBrowser(); };
+        editorToggle.onClick = [this] { toggleClipEditor(); };
+        rackToggle.onClick = [this] { toggleDeviceView(); };
         browserToggle.setTooltip("Show or hide browser");
         editorToggle.setButtonText("Clip");
         rackToggle.setButtonText("Devices");
@@ -472,10 +460,12 @@ public:
     {
         if (key.getTextCharacter() == '?')
         {
-            if (!browserOpen) return true;
-            infoVisible = !infoVisible;
-            resized();
-            repaint();
+            toggleInfoView();
+            return true;
+        }
+        if (key.getKeyCode() == juce::KeyPress::F12Key)
+        {
+            if (fullScreenToggleRequested) fullScreenToggleRequested();
             return true;
         }
         if (key.getModifiers().isCommandDown() && key.getKeyCode() == 'S')
@@ -544,12 +534,52 @@ public:
         }
     }
 
+    void toggleBrowser()
+    {
+        browserOpen = !browserOpen;
+        resized();
+        repaint();
+    }
+
+    // The clip editor and the device view share one pane, so hiding the last
+    // one open would leave it empty. The other takes the pane over instead.
+    void toggleClipEditor()
+    {
+        clipEditorOpen = !clipEditorOpen;
+        if (!clipEditorOpen && !rackOpen) rackOpen = true;
+        resized();
+        repaint();
+    }
+
+    void toggleDeviceView()
+    {
+        rackOpen = !rackOpen;
+        if (!rackOpen && !clipEditorOpen) clipEditorOpen = true;
+        resized();
+        repaint();
+    }
+
+    // The Info View sits at the foot of the browser column, so it has nowhere
+    // to go while the browser is hidden.
+    void toggleInfoView()
+    {
+        if (!browserOpen) return;
+        infoVisible = !infoVisible;
+        resized();
+        repaint();
+    }
+
     void requestClose() { files.confirmUnsaved([] { juce::JUCEApplication::getInstance()->quit(); }); }
     void openProjectFile(const juce::File& file) { files.openFile(file); }
     void showFileMenuFrom(juce::Component& target) { showFileMenu(&target); }
     void showEditMenuFrom(juce::Component& target) { showEditMenu(&target); }
+    void showViewMenuFrom(juce::Component& target) { showViewMenu(&target); }
     void showHelpMenuFrom(juce::Component& target) { showHelpMenu(&target); }
     std::function<void(const juce::String&)> projectTitleChanged;
+    // Full screen is the window's business, not its content's: the shell wires
+    // these to the document window that owns this component.
+    std::function<void()> fullScreenToggleRequested;
+    std::function<bool()> fullScreenActive;
 
 private:
     juce::TooltipWindow tooltipWindow {this, 700};
@@ -595,6 +625,32 @@ private:
             });
     }
 
+    void showViewMenu(juce::Component* target = nullptr)
+    {
+        juce::PopupMenu menu;
+        menu.addItem(1, "Browser", true, browserOpen);
+        menu.addItem(2, "Clip Editor", true, clipEditorOpen);
+        menu.addItem(3, "Device View", true, rackOpen);
+        menu.addItem(4, "Info View", browserOpen, infoVisible && browserOpen);
+        menu.addSeparator();
+        juce::PopupMenu::Item fullScreen {"Full Screen"};
+        fullScreen.itemID = 5;
+        fullScreen.shortcutKeyDescription = "F12";
+        fullScreen.isEnabled = fullScreenToggleRequested != nullptr;
+        fullScreen.isTicked = fullScreenActive != nullptr && fullScreenActive();
+        menu.addItem(std::move(fullScreen));
+        menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(target != nullptr ? *target : viewMenu),
+            [safe = juce::Component::SafePointer<ControlWindow>(this)](int result)
+            {
+                if (safe == nullptr) return;
+                if (result == 1) safe->toggleBrowser();
+                else if (result == 2) safe->toggleClipEditor();
+                else if (result == 3) safe->toggleDeviceView();
+                else if (result == 4) safe->toggleInfoView();
+                else if (result == 5 && safe->fullScreenToggleRequested) safe->fullScreenToggleRequested();
+            });
+    }
+
     void showHelpMenu(juce::Component* target = nullptr)
     {
         juce::PopupMenu menu;
@@ -607,7 +663,7 @@ private:
                 if (result == 1)
                     juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon, "Keyboard shortcuts",
                         "Space  Play/Pause\nCtrl+O  Open project\nCtrl+S  Save project\nCtrl+Shift+S  Save as\n"
-                        "Ctrl+Shift+E  Export WAV\nCtrl+Z  Undo\nCtrl+Y / Ctrl+Shift+Z  Redo\nCtrl+F  Search browser\nCtrl+A  Add a clip to the focused track\nDouble-click a lane  Add a clip there\n?  Show/hide Info View");
+                        "Ctrl+Shift+E  Export WAV\nCtrl+Z  Undo\nCtrl+Y / Ctrl+Shift+Z  Redo\nCtrl+F  Search browser\nCtrl+A  Add a clip to the focused track\nDouble-click a lane  Add a clip there\n?  Show/hide Info View\nF12  Full screen");
                 else if (result == 2)
                     juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon, "About Theta",
                         "Theta\nA native desktop DAW for patterns, arrangement, and offline WAV export.");
@@ -793,7 +849,7 @@ private:
     juce::TextButton editorZoomOut, editorZoomIn;
     juce::ComboBox scaleHighlight;
     juce::Component::SafePointer<juce::DialogWindow> audioSettings;
-    juce::TextButton fileMenu {"File"}, editMenu {"Edit"}, helpMenu {"Help"};
+    juce::TextButton fileMenu {"File"}, editMenu {"Edit"}, viewMenu {"View"}, helpMenu {"Help"};
     ProjectFiles files;
     int browserWidth = 244, arrangementHeight = 246, deviceViewHeight = 220;
     int resizeStartX = 0, resizeStartY = 0, resizeStartBrowserWidth = 244;
@@ -911,9 +967,21 @@ private:
                     {
                         if (safeControls != nullptr) safeControls->showEditMenuFrom(target);
                     };
+                    window->viewRequested = [safeControls](juce::Component& target)
+                    {
+                        if (safeControls != nullptr) safeControls->showViewMenuFrom(target);
+                    };
                     window->helpRequested = [safeControls](juce::Component& target)
                     {
                         if (safeControls != nullptr) safeControls->showHelpMenuFrom(target);
+                    };
+                    controls->fullScreenToggleRequested = [safeWindow]
+                    {
+                        if (safeWindow != nullptr) safeWindow->setAppFullScreen(!safeWindow->isAppFullScreen());
+                    };
+                    controls->fullScreenActive = [safeWindow]
+                    {
+                        return safeWindow != nullptr && safeWindow->isAppFullScreen();
                     };
                     controls->projectTitleChanged = [safeWindow](const juce::String& title)
                     {
@@ -963,45 +1031,130 @@ private:
             setUsingNativeTitleBar(false);
             setTitleBarHeight(28);
             setOpaque(true);
-           #if JUCE_WINDOWS
-            // The separate desktop shadow surface trails the right edge during
-            // live D2D expansion and exposes a bright one-pixel strip.
-            setDropShadowEnabled(false);
-           #else
+            // On Windows this flag is what decides whether a borderless window
+            // gets the native frame styles. Without it JUCE creates a bare
+            // WS_POPUP: no Aero Snap when the caption is dragged to an edge, no
+            // snap-layouts flyout, and a maximise that covers the taskbar
+            // instead of stopping at the work area. With it JUCE uses the
+            // system shadow rather than the separate shadow surface that used
+            // to trail the right edge during live D2D expansion.
             setDropShadowEnabled(true);
-           #endif
             setResizable(true, false);
             projectTitle.setJustificationType(juce::Justification::centred);
             projectTitle.setColour(juce::Label::textColourId, juce::Colours::white);
             projectTitle.setInterceptsMouseClicks(false, false);
             projectTitle.setText("Untitled", juce::dontSendNotification);
-            for (auto* menu : {&fileMenu, &editMenu, &helpMenu})
+            for (auto* menu : {&fileMenu, &editMenu, &viewMenu, &helpMenu})
                 menu->setColour(juce::TextButton::textColourOffId, juce::Colour(0xffd7dde2));
-            for (auto* component : std::initializer_list<juce::Component*>{&fileMenu, &editMenu, &helpMenu, &projectTitle})
+            for (auto* component : std::initializer_list<juce::Component*>{&fileMenu, &editMenu, &viewMenu, &helpMenu, &projectTitle})
                 addAndMakeVisible(component);
             fileMenu.onClick = [this] { if (fileRequested) fileRequested(fileMenu); };
             editMenu.onClick = [this] { if (editRequested) editRequested(editMenu); };
+            viewMenu.onClick = [this] { if (viewRequested) viewRequested(viewMenu); };
             helpMenu.onClick = [this] { if (helpRequested) helpRequested(helpMenu); };
+        }
+
+        // Theta keeps its title bar in full screen, where JUCE's kiosk mode
+        // would hand the whole window to the content. These three overrides put
+        // the bar back: its strip is painted, its buttons are placed, and the
+        // content starts below it, exactly as in a windowed session.
+        juce::Rectangle<int> titleBarBounds() const
+        {
+            const auto border = getBorderThickness();
+            return {border.getLeft(), border.getTop(), getWidth() - border.getLeftAndRight(), getTitleBarHeight()};
+        }
+
+        juce::BorderSize<int> getContentComponentBorder() const override
+        {
+            auto border = DocumentWindow::getContentComponentBorder();
+            if (isKioskMode()) border.setTop(border.getTop() + getTitleBarHeight());
+            return border;
+        }
+
+        void paint(juce::Graphics& g) override
+        {
+            DocumentWindow::paint(g);
+            if (!isKioskMode()) return;
+            const auto bar = titleBarBounds();
+            g.reduceClipRegion(bar);
+            g.setOrigin(bar.getPosition());
+            getLookAndFeel().drawDocumentWindowTitleBar(*this, g, bar.getWidth(), bar.getHeight(),
+                                                        6, std::max(1, bar.getWidth() - 12), nullptr, false);
         }
 
         void resized() override
         {
             DocumentWindow::resized();
+            if (isKioskMode())
+            {
+                const auto bar = titleBarBounds();
+                getLookAndFeel().positionDocumentWindowButtons(*this, bar.getX(), bar.getY(), bar.getWidth(), bar.getHeight(),
+                                                               getMinimiseButton(), getMaximiseButton(), getCloseButton(), false);
+            }
             const auto h = getTitleBarHeight();
             fileMenu.setBounds(10, 0, 42, h);
             editMenu.setBounds(56, 0, 42, h);
-            helpMenu.setBounds(102, 0, 44, h);
-            projectTitle.setBounds(160, 0, std::max(80, getWidth() - 320), h);
+            viewMenu.setBounds(102, 0, 44, h);
+            helpMenu.setBounds(150, 0, 44, h);
+            projectTitle.setBounds(200, 0, std::max(80, getWidth() - 400), h);
+        }
+
+        // Full screen is kiosk mode, and deliberately not what the maximise
+        // button does: JUCE's setFullScreen is the window's maximise state.
+        bool isAppFullScreen() const { return juce::Desktop::getInstance().getKioskModeComponent() == this; }
+
+        // In full screen the title bar is still there, so its maximise button
+        // has to lead back out rather than maximise a window that already
+        // covers the display.
+        void maximiseButtonPressed() override
+        {
+            if (isAppFullScreen()) setAppFullScreen(false);
+            else DocumentWindow::maximiseButtonPressed();
+        }
+
+        // The content handles F12 whenever something inside it holds keyboard
+        // focus. This catches the case where nothing does, as on a fresh start.
+        bool keyPressed(const juce::KeyPress& key) override
+        {
+            if (key.getKeyCode() == juce::KeyPress::F12Key)
+            {
+                setAppFullScreen(!isAppFullScreen());
+                return true;
+            }
+            return DocumentWindow::keyPressed(key);
+        }
+
+        void setAppFullScreen(bool shouldBeFullScreen)
+        {
+            if (shouldBeFullScreen == isAppFullScreen()) return;
+            auto& desktop = juce::Desktop::getInstance();
+            if (shouldBeFullScreen)
+            {
+                // Kiosk mode restores the bounds it was given, which are the
+                // restored bounds of a maximised window. Maximise again on the
+                // way out so the window comes back as the user left it.
+                maximisedBeforeFullScreen = isFullScreen();
+                if (maximisedBeforeFullScreen) setFullScreen(false);
+                desktop.setKioskModeComponent(this, true);
+            }
+            else
+            {
+                desktop.setKioskModeComponent(nullptr, true);
+                if (maximisedBeforeFullScreen) setFullScreen(true);
+            }
+            resized();
+            repaint();
         }
 
         void setProjectTitle(const juce::String& text) { projectTitle.setText(text, juce::dontSendNotification); }
         void closeButtonPressed() override { juce::JUCEApplication::getInstance()->systemRequestedQuit(); }
 
-        std::function<void(juce::Component&)> fileRequested, editRequested, helpRequested;
+        std::function<void(juce::Component&)> fileRequested, editRequested, viewRequested, helpRequested;
 
     private:
-        TitleMenuButton fileMenu {"File"}, editMenu {"Edit"}, helpMenu {"Help"};
+        TitleMenuButton fileMenu {"File"}, editMenu {"Edit"}, viewMenu {"View"}, helpMenu {"Help"};
         juce::Label projectTitle;
+        bool maximisedBeforeFullScreen = false;
     };
     Theme theme;
     std::unique_ptr<juce::FileLogger> logger;

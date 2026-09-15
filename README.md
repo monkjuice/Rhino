@@ -75,6 +75,7 @@ The loop covers both the pattern and imported audio. If audio extends beyond one
 | Ctrl+O | Open |
 | Ctrl+E, then Ctrl+arrows/wheel | Divide a selected note into retriggers |
 | V+Up/Down or V+wheel | Adjust selected-note velocity |
+| F12 | Full screen, also under View in the title bar |
 
 Command-key handling is included for macOS, but remains unvalidated there.
 

@@ -89,6 +89,46 @@
         selectionGrid.changeListenerCallback(nullptr);
         require(!session.hasNote(1, 49) && session.hasNote(2, 49) && session.noteLengthSteps(2, 49) == 4,
                 "Dragging from the body of a sustained note follows the pointer and preserves its length");
+        juce::ValueTree sustainedState;
+        for (const auto& note : selectionGrid.visibleNotes)
+            if (note.pitch == 49 && close(note.start, 2.0))
+                sustainedState = note.state;
+        require(sustainedState.isValid(), "The sustained note is addressable by state");
+        juce::ValueTree obstacleState;
+        require(session.addNote(8.0, 49, 1.0, &obstacleState).wasOk(),
+                "Can place an obstacle two cells past the sustained note");
+        selectionGrid.changeListenerCallback(nullptr);
+        const auto sustainedGrab = selectionGrid.cell(2, rowForPitch(49)).getCentre();
+        selectionGrid.mouseDown(gridEvent(sustainedGrab, sustainedGrab, false));
+        for (int column = 3; column <= 7; ++column)
+        {
+            const auto to = selectionGrid.cell(column, rowForPitch(49)).getCentre();
+            selectionGrid.mouseDrag(gridEvent(sustainedGrab, to, true));
+            selectionGrid.changeListenerCallback(nullptr);
+            const auto* dragged = selectionGrid.noteForState(sustainedState);
+            require(dragged != nullptr && dragged->start < 4.0 + 0.0001,
+                    "A dragged sustained note stops against the note ahead of it rather than jumping past it");
+        }
+        selectionGrid.mouseUp(gridEvent(sustainedGrab, selectionGrid.cell(7, rowForPitch(49)).getCentre(), true));
+        selectionGrid.changeListenerCallback(nullptr);
+        const auto* blockedNote = selectionGrid.noteForState(sustainedState);
+        require(blockedNote != nullptr && close(blockedNote->start, 4.0) && close(blockedNote->length, 4.0),
+                "A blocked sustained note comes to rest against its neighbour at its full length");
+        const auto fineGrab = selectionGrid.cell(5, rowForPitch(49)).getCentre();
+        const auto fineTarget = fineGrab.translated(-selectionGrid.cellWidth() * 0.5f, 0.0f);
+        selectionGrid.mouseDown(gridEvent(fineGrab, fineGrab, false));
+        selectionGrid.mouseDrag(gridEvent(fineGrab, fineTarget, true));
+        selectionGrid.mouseUp(gridEvent(fineGrab, fineTarget, true));
+        selectionGrid.changeListenerCallback(nullptr);
+        const auto* unsnappedNote = selectionGrid.noteForState(sustainedState);
+        require(unsnappedNote != nullptr && close(unsnappedNote->start, 3.5),
+                "A sustained note settles between two columns instead of snapping to one");
+        require(session.removeNotes({obstacleState}), "Can clear the obstacle again");
+        require(session.moveNotes({sustainedState}, -1.5, 0).wasOk(),
+                "Can return the sustained note to its original column");
+        selectionGrid.changeListenerCallback(nullptr);
+        require(session.hasNote(2, 49) && session.noteLengthSteps(2, 49) == 4,
+                "The sustained note is back where the rest of the scenario expects it");
         juce::ValueTree halfNoteState;
         require(session.addNote(6.0, 49, 0.5, &halfNoteState).wasOk(),
                 "Can create a half-cell note for fractional drag testing");

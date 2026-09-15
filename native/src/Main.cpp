@@ -298,14 +298,9 @@ public:
     void paint(juce::Graphics& g) override
     {
         g.fillAll(juce::Colour(0xff171a1e));
-        const auto bottomX = (browserOpen ? browserWidth : collapsedRailWidth) + 18;
+        const auto bottomX = (browserOpen ? browserWidth : 0) + 18;
         g.setColour(juce::Colour(0xff24282d));
         g.fillRect(bottomX, getHeight() - 64, getWidth() - bottomX - 24, 44);
-        if (!browserOpen)
-        {
-            g.setColour(juce::Colour(0xff11161b));
-            g.fillRect(0, browserTop, collapsedRailWidth, getHeight() - browserTop);
-        }
         if (browserOpen)
         {
             g.setColour(juce::Colour(0xff3a434b));
@@ -334,7 +329,7 @@ public:
     void resized() override
     {
         constexpr int gap = 18;
-        const auto leftWidth = browserOpen ? browserWidth : collapsedRailWidth;
+        const auto leftWidth = browserOpen ? browserWidth : 0;
         const auto editorX = leftWidth + gap;
         const auto editorW = getWidth() - editorX - 24;
         // The transport is a full-width bar. Both the browser and arrangement
@@ -383,11 +378,14 @@ public:
         metronomeMenu.setBounds(rightX + 30, 34, 18, 30);
         browser.setVisible(browserOpen);
         const auto infoArea = infoViewArea();
-        infoView.setVisible(infoVisible);
+        // The Info View lives at the foot of the browser column, so it goes
+        // with it. Only the toggle stays behind.
+        infoView.setVisible(infoVisible && browserOpen);
         infoView.setBounds(infoArea.withTrimmedTop(25).reduced(8, 5));
-        browser.setBounds(0, browserTop, browserWidth, (infoVisible ? infoArea.getY() : getHeight()) - browserTop);
+        browser.setBounds(0, browserTop, browserWidth,
+                          (infoVisible ? infoArea.getY() : getHeight()) - browserTop);
         browserToggle.setToggleState(browserOpen, juce::dontSendNotification);
-        browserToggle.setBounds(0, 21, 44, 56);
+        browserToggle.setBounds(0, 40, 44, 50);
         arrangement.setVisible(!sessionViewOpen);
         sessionView.setVisible(sessionViewOpen);
         arrangement.setBounds(editorX, arrangementTop, editorW, arrangementHeight);
@@ -490,6 +488,7 @@ public:
     {
         if (key.getTextCharacter() == '?')
         {
+            if (!browserOpen) return true;
             infoVisible = !infoVisible;
             resized();
             repaint();
@@ -769,9 +768,8 @@ private:
 
     juce::Rectangle<int> infoViewArea() const
     {
-        if (!infoVisible) return {};
-        const auto width = browserOpen ? browserWidth : collapsedRailWidth;
-        return {0, std::max(browserTop + 96, getHeight() - infoViewHeight), width, infoViewHeight};
+        if (!infoVisible || !browserOpen) return {};
+        return {0, std::max(browserTop + 96, getHeight() - infoViewHeight), browserWidth, infoViewHeight};
     }
 
     bool isOverSplitter(juce::Point<float> point) const
@@ -819,7 +817,7 @@ private:
     int browserWidth = 244, arrangementHeight = 246, deviceViewHeight = 220;
     int resizeStartX = 0, resizeStartY = 0, resizeStartBrowserWidth = 244;
     int resizeStartArrangementHeight = 246, resizeStartDeviceViewHeight = 220;
-    static constexpr int browserTop = 94, collapsedRailWidth = 44;
+    static constexpr int browserTop = 94;
     static constexpr int infoViewHeight = 132;
     bool browserOpen = true, clipEditorOpen = true, rackOpen = false, infoVisible = true;
     bool sessionViewOpen = false;

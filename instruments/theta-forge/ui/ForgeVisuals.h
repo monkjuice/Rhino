@@ -690,22 +690,37 @@ inline void strokePhosphor(juce::Graphics& g, const juce::Path& path,
                                             juce::PathStrokeType::rounded));
 }
 
+inline constexpr float displayCorner = 3.0f;
+
+// The well's own outline, for a trace to be clipped against. A curve is drawn
+// the full width of its display and cut off here, so it reaches both edges and
+// runs behind the frame rather than stopping short of it with a margin of dead
+// space at each end.
+inline juce::Path displayClip(juce::Rectangle<int> area)
+{
+    juce::Path clip;
+    clip.addRoundedRectangle(area.toFloat(), displayCorner);
+    return clip;
+}
+
 inline void drawDisplayWell(juce::Graphics& g, juce::Rectangle<int> area)
 {
     const auto box = area.toFloat();
     g.setColour(juce::Colour(0xff0b0e18));
-    g.fillRoundedRectangle(box, 3.0f);
+    g.fillRoundedRectangle(box, displayCorner);
     g.setColour(line.withAlpha(0.6f));
-    g.drawRoundedRectangle(box, 3.0f, 1.0f);
+    g.drawRoundedRectangle(box, displayCorner, 1.0f);
     g.setColour(line.withAlpha(0.45f));
-    g.drawHorizontalLine(area.getCentreY(), box.getX() + 4.0f, box.getRight() - 4.0f);
+    g.drawHorizontalLine(area.getCentreY(), box.getX(), box.getRight());
 }
 
 inline void drawWaveform(juce::Graphics& g, juce::Rectangle<int> area, float position,
                          juce::Colour colour, float alpha)
 {
     const auto face = crtFace(area);
-    const auto box = face.reduced(6.0f, 5.0f);
+    // Full width of the glass: the trace runs off both edges and is cut by the
+    // tube, the way a scope's is, rather than stopping short inside it.
+    const auto box = face.reduced(0.0f, 5.0f);
     juce::Path path;
     constexpr int points = 180;
     for (int i = 0; i <= points; ++i)
@@ -733,7 +748,13 @@ inline void drawEnvelope(juce::Graphics& g, juce::Rectangle<int> area, float att
                          float sustain, float release, juce::Colour colour, float alpha,
                          Stage stage = Stage::idle, float level = 0.0f)
 {
-    const auto box = area.toFloat().reduced(8.0f, 9.0f);
+    // Clipped to the well and drawn its full width, so the curve starts against
+    // the left edge and the release runs out at the right rather than both
+    // stopping short of the frame.
+    juce::Graphics::ScopedSaveState clip(g);
+    g.reduceClipRegion(displayClip(area));
+
+    const auto box = area.toFloat().reduced(0.0f, 9.0f);
     const auto span = attack + decay + release + 0.001f;
     const auto sustainWidth = box.getWidth() * 0.22f;
     const auto scale = (box.getWidth() - sustainWidth) / span;
@@ -819,7 +840,12 @@ inline const char* stageName(Stage stage)
 inline void drawLfo(juce::Graphics& g, juce::Rectangle<int> area, theta::forge::LfoShape shape,
                     float phase, float held, juce::Colour colour, float alpha)
 {
-    const auto box = area.toFloat().reduced(6.0f, 8.0f);
+    // Clipped to the well and drawn its full width, so one cycle spans edge to
+    // edge and the curve meets both sides instead of floating inside a margin.
+    juce::Graphics::ScopedSaveState clip(g);
+    g.reduceClipRegion(displayClip(area));
+
+    const auto box = area.toFloat().reduced(0.0f, 8.0f);
     const auto plot = [&] (float at) { return box.getCentreY() - at * box.getHeight() * 0.42f; };
 
     juce::Path path;

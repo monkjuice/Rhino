@@ -77,6 +77,16 @@ void ProjectFiles::confirmUnsaved(std::function<void()> action)
         });
 }
 
+void ProjectFiles::newProject()
+{
+    confirmUnsaved([weak = juce::WeakReference<ProjectFiles>(this)]
+    {
+        if (!weak) return;
+        weak->session.newProject();
+        weak->report("New project");
+    });
+}
+
 void ProjectFiles::open()
 {
     confirmUnsaved([weak = juce::WeakReference<ProjectFiles>(this)] { if (weak) weak->chooseOpen(); });

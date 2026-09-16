@@ -146,6 +146,9 @@ public:
     Session();
     static void setCommandLineTestMode(bool enabled);
     juce::ValueTree projectSnapshot();
+    // Discards the open document for an untitled starter one. Callers ask about
+    // unsaved changes first; this does not.
+    void newProject();
     juce::Result restoreProject(const juce::ValueTree&, const juce::File&);
     void projectSaved(const juce::ValueTree&, const juce::File&);
     bool hasUnsavedChanges() const { return changeRevision != savedRevision; }
@@ -373,6 +376,7 @@ private:
         te::AutomatableParameter::Ptr parameter;
         float restoreValue = 0.0f;
     };
+    void buildStarterEdit();
     void refreshAfterUndoRedo(bool changed);
     te::PluginList* pluginListForTrack(int track) const;
     te::ClipSlot* clipSlotAt(int track, int scene) const;

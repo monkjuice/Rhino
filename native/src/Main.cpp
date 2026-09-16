@@ -478,6 +478,11 @@ public:
             files.open();
             return true;
         }
+        if (key.getModifiers().isCommandDown() && key.getKeyCode() == 'N')
+        {
+            files.newProject();
+            return true;
+        }
         if (key.getModifiers().isCommandDown() && key.getModifiers().isShiftDown() && key.getKeyCode() == 'E')
         {
             files.exportWav();
@@ -586,22 +591,24 @@ private:
     void showFileMenu(juce::Component* target = nullptr)
     {
         juce::PopupMenu menu;
-        menu.addItem(1, "Open project...", true, false);
-        menu.addItem(2, "Save", true, false);
-        menu.addItem(3, "Save as...");
+        menu.addItem(1, "New project");
+        menu.addItem(2, "Open project...", true, false);
+        menu.addItem(3, "Save", true, false);
+        menu.addItem(4, "Save as...");
         menu.addSeparator();
-        menu.addItem(4, "Export WAV...", true, false);
+        menu.addItem(5, "Export WAV...", true, false);
         menu.addSeparator();
-        menu.addItem(5, "Quit");
+        menu.addItem(6, "Quit");
         menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(target != nullptr ? *target : fileMenu),
             [safe = juce::Component::SafePointer<ControlWindow>(this)](int result)
             {
                 if (safe == nullptr) return;
-                if (result == 1) safe->files.open();
-                else if (result == 2) safe->files.save();
-                else if (result == 3) safe->files.save(true);
-                else if (result == 4) safe->files.exportWav();
-                else if (result == 5) safe->requestClose();
+                if (result == 1) safe->files.newProject();
+                else if (result == 2) safe->files.open();
+                else if (result == 3) safe->files.save();
+                else if (result == 4) safe->files.save(true);
+                else if (result == 5) safe->files.exportWav();
+                else if (result == 6) safe->requestClose();
             });
     }
 
@@ -662,7 +669,7 @@ private:
                 if (safe == nullptr) return;
                 if (result == 1)
                     juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon, "Keyboard shortcuts",
-                        "Space  Play/Pause\nCtrl+O  Open project\nCtrl+S  Save project\nCtrl+Shift+S  Save as\n"
+                        "Space  Play/Pause\nCtrl+N  New project\nCtrl+O  Open project\nCtrl+S  Save project\nCtrl+Shift+S  Save as\n"
                         "Ctrl+Shift+E  Export WAV\nCtrl+Z  Undo\nCtrl+Y / Ctrl+Shift+Z  Redo\nCtrl+F  Search browser\nCtrl+A  Add a clip to the focused track\nDouble-click a lane  Add a clip there\n?  Show/hide Info View\nF12  Full screen");
                 else if (result == 2)
                     juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon, "About Theta",

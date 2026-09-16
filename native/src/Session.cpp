@@ -23,6 +23,13 @@ Session::Session() : engine(commandLineTestMode ? "Theta Native Tests" : "Theda 
     engine.getPluginManager().createBuiltInType<ThetaArpDevice>();
     engine.getPluginManager().createBuiltInType<ThetaWaveDevice>();
     initialiseExternalPlugins();
+    buildStarterEdit();
+}
+
+// The starter document, built here rather than in the constructor so that File >
+// New project can ask for the very same thing the app opens with.
+void Session::buildStarterEdit()
+{
     edit = te::createEmptyEdit(engine, {});
     edit->state.setProperty("thetaFormatVersion", 1, nullptr);
     edit->clickTrackEnabled = false;
@@ -52,6 +59,27 @@ Session::Session() : engine(commandLineTestMode ? "Theta Native Tests" : "Theda 
     refreshLoop();
     edit->getUndoManager().clearUndoHistory();
     edit->resetChangedStatus();
+}
+
+void Session::newProject()
+{
+    listeners.call(&Listener::editWillChange);
+    stop();
+    // Everything cached from the outgoing edit goes with it: these point at
+    // plugins and parameters the starter edit is about to replace.
+    audioUtility = nullptr;
+    lastTouchedParameter = {};
+    automationRuntime.clear();
+    offlineAutomation.clear();
+    manualLoop = false;
+    buildStarterEdit();
+    projectFile = juce::File{};
+    // A save still running against the old document must not report this one
+    // as saved, so the revision moves on rather than resetting to zero.
+    savedRevision = ++changeRevision;
+    refreshLoop();
+    listeners.call(&Listener::editDidChange);
+    sendSynchronousChangeMessage();
 }
 
 void Session::panicReset(bool restartAudioDevice)

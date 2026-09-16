@@ -19,6 +19,7 @@ int runPatternTest()
        #include "scenarios/EditingAndAutomation.inc"
        #include "scenarios/Rendering.inc"
        #include "scenarios/Persistence.inc"
+       #include "scenarios/NewProject.inc"
         return 0;
     }
     catch (const std::exception& error)

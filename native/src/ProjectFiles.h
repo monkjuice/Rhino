@@ -9,6 +9,7 @@ class ProjectFiles
 public:
     explicit ProjectFiles(Session& s) : session(s) {}
     void save(bool saveAs = false, std::function<void(bool)> completion = {});
+    void newProject();
     void open();
     void openFile(const juce::File&);
     void exportWav();

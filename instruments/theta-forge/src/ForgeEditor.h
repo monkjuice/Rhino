@@ -47,6 +47,12 @@ private:
     Processor& processor;
     ui::LookAndFeel lookAndFeel;
     std::vector<ModuleUi> moduleUis;
+    // Drag handles live outside the modules: a macro's sits beside its knob, a
+    // modulator's in its module header.
+    std::vector<std::unique_ptr<ui::SourceHandle>> handles;
+    ui::SourceHandle* draggingHandle = nullptr;
+    juce::Point<int> dragPosition;
+    juce::MidiKeyboardComponent keyboard;
     juce::TextButton loadPreset {"LOAD"}, savePreset {"SAVE"};
     juce::Label presetName;
     std::unique_ptr<juce::FileChooser> fileChooser;
@@ -55,9 +61,14 @@ private:
     void applyEnableStates();
     float value(const char* id) const;
     void mouseDown(const juce::MouseEvent&) override;
+    void mouseDrag(const juce::MouseEvent&) override;
+    void mouseUp(const juce::MouseEvent&) override;
+    void buildHandles();
     void showModulationMenu(const juce::String& parameterId);
     void assignModulation(int source, int destination);
     void clearSlot(int slot);
+    void refreshModulationRings();
+    Control* controlAt(juce::Point<int> panelPosition);
     void timerCallback() override;
     void choosePresetToLoad();
     void choosePresetToSave();

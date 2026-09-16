@@ -206,6 +206,9 @@ void Processor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
 {
     juce::ScopedNoDenormals noDenormals;
     buffer.clear();
+    // Anything played on the editor's keyboard joins the host's own notes
+    // before a single sample is rendered.
+    keyboardState.processNextMidiBuffer(midi, 0, buffer.getNumSamples(), true);
     const auto values = patch();
     const auto mods = modulation();
     auto event = midi.cbegin();

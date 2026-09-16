@@ -30,6 +30,9 @@ public:
     juce::Result savePreset(const juce::File&, const juce::String& name);
     juce::Result loadPreset(const juce::File&);
     juce::AudioProcessorValueTreeState state;
+    // The editor's keyboard plays through this, so notes struck on screen reach
+    // the voice the same way notes from the host do.
+    juce::MidiKeyboardState keyboardState;
 
     // ENV 1's live position, published once per block for the editor to draw.
     // The audio thread writes, the message thread reads; nothing else crosses.

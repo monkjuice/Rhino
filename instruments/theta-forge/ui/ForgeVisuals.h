@@ -16,6 +16,8 @@ inline const auto line = juce::Colour(0xff34394e);
 inline const auto text = juce::Colour(0xffe8eaff);
 inline const auto mutedText = juce::Colour(0xff8f95ad);
 
+inline constexpr int handleWidth = 46;
+
 inline juce::Colour accentFor(const Module& module)
 {
     return module.violet ? signalViolet : electricBlue;
@@ -92,6 +94,22 @@ public:
         g.strokePath(active, juce::PathStrokeType(2.0f, juce::PathStrokeType::curved,
                                                   juce::PathStrokeType::rounded));
 
+        // A modulated knob carries a ring showing how far its source can move
+        // it, drawn outside the value arc so the two never read as one.
+        const auto depth = static_cast<float>(slider.getProperties().getWithDefault("modDepth", 0.0));
+        if (depth != 0.0f && enabled)
+        {
+            const auto reach = juce::jlimit(startAngle, endAngle,
+                                            juce::jmap(juce::jlimit(0.0f, 1.0f, position + depth),
+                                                       startAngle, endAngle));
+            juce::Path ring;
+            ring.addCentredArc(centre.x, centre.y, radius * 0.88f, radius * 0.88f, 0.0f,
+                               juce::jmin(angle, reach), juce::jmax(angle, reach), true);
+            g.setColour(signalViolet.withAlpha(0.85f));
+            g.strokePath(ring, juce::PathStrokeType(3.0f, juce::PathStrokeType::curved,
+                                                    juce::PathStrokeType::rounded));
+        }
+
         juce::Path pointer;
         pointer.startNewSubPath(centre);
         pointer.lineTo(polar(radius * 0.52f, angle));
@@ -127,6 +145,40 @@ public:
         g.setColour(on ? juce::Colours::white.withAlpha(0.5f)
                        : mutedText.withAlpha(highlighted ? 0.85f : 0.45f));
         g.drawEllipse(area, 1.0f);
+    }
+};
+
+// The tag beside a source that you drag onto a knob. It is deliberately not
+// the knob or the macro dial itself: dragging those has to keep meaning "turn
+// this", so the grab handle is a separate thing sitting next to the control.
+class SourceHandle final : public juce::Component,
+                          public juce::SettableTooltipClient
+{
+public:
+    SourceHandle(int sourceIndex, juce::String label)
+        : source(sourceIndex), caption(std::move(label))
+    {
+        setMouseCursor(juce::MouseCursor::DraggingHandCursor);
+        setRepaintsOnMouseActivity(true);
+    }
+
+    int source = 0;
+    juce::String caption;
+    juce::Colour accent = signalViolet;
+    // Set by the editor while this handle is being dragged.
+    bool dragging = false;
+
+    void paint(juce::Graphics& g) override
+    {
+        const auto area = getLocalBounds().toFloat().reduced(0.6f);
+        const auto lit = dragging || isMouseOver();
+        g.setColour(lit ? accent.withAlpha(0.3f) : juce::Colour(0xff0d1120));
+        g.fillRoundedRectangle(area, 3.0f);
+        g.setColour(accent.withAlpha(lit ? 1.0f : 0.65f));
+        g.drawRoundedRectangle(area, 3.0f, 1.0f);
+        g.setColour(lit ? juce::Colours::white : accent);
+        g.setFont(juce::FontOptions(juce::jmin(10.0f, area.getHeight() * 0.72f), juce::Font::bold));
+        g.drawText(caption, area, juce::Justification::centred);
     }
 };
 
@@ -415,9 +467,14 @@ inline void drawModuleShell(juce::Graphics& g, juce::Rectangle<int> area, const 
     auto header = area.withHeight(headerHeight).reduced(10, 0);
     // The enable LED sits at the far left of the header; leave room for it.
     if (module.enableId != nullptr) header.removeFromLeft(headerHeight);
-    g.setColour(text.withAlpha(alpha));
-    g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
-    g.drawText(module.title, header, juce::Justification::centredLeft);
+    // A source module's drag handle carries the module's name, so the title is
+    // not drawn again beside it.
+    if (module.handleSource == 0)
+    {
+        g.setColour(text.withAlpha(alpha));
+        g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
+        g.drawText(module.title, header, juce::Justification::centredLeft);
+    }
     const auto detail = detailOverride.isNotEmpty() ? detailOverride : juce::String(module.detail);
     if (detail.isNotEmpty())
     {

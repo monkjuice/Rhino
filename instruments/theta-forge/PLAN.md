@@ -231,10 +231,27 @@ Delivered in two parts. **M6a, the engine and the panel, is done.**
   else. `Semitone` became a continuous parameter so pitch can be swept smoothly
   through it, while its field still snaps to whole semitones under the hand.
 
-**M6b — drag to knob**
+**M6b — macros, drag to knob, keyboard** — done
 
-- Drag a source's handle onto any knob to fill the next free slot.
-- A coloured ring around a modulated knob showing depth, draggable to change it.
+- Eight macros, bottom left, smaller than the controls they drive. They are
+  sources only: a macro reaches a control through a slot or not at all. A
+  module can declare its knobs compact so eight small knobs in a corner do not
+  shrink every knob in Forge to match.
+- Every source carries a drag handle that is **not** the control itself —
+  dragging a knob has to keep meaning "turn this", so the grab point is the
+  numbered tag beside a macro, and the named tag in ENV 1's and LFO 1's
+  headers. A line follows the cursor and the knob under it is outlined, so a
+  drop lands where it looks like it will.
+- Right-clicking any knob the matrix can reach lists the sources, and offers to
+  take away anything already pointed there.
+- A modulated knob carries a ring showing how far its slots can move it, drawn
+  outside the value arc so the two never read as one.
+- An eighty-eight key keyboard across the bottom, playing through the same path
+  the host's own notes take.
+
+Still to do here: dragging the ring itself to set depth. Until then a new
+routing lands at half depth — zero would be correct but would look like the
+drop had done nothing — and depth is edited in the matrix.
 
 **Tests:** a slot at zero depth, and a slot pointed at nothing, both render
 bit-identically to no slot at all; two half-depth slots sum exactly to one at
@@ -315,6 +332,7 @@ way to look at a change.
 | M4 Filter routing | **done** — ready to test by ear |
 | M5 ENV 1 | **done** — ready to test by ear |
 | M6a Matrix engine and panel | **done** — ready to test by ear |
-| M6b Drag to knob | not started |
+| M6b Macros, drag to knob, keyboard | **done** — ready to test by ear |
+| M6c Draggable depth rings | not started |
 | M7 LFO 1 | not started |
 | M8 Polish | not started |

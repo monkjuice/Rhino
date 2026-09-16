@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../core/ForgeCore.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <limits>
 #include <vector>
@@ -11,6 +12,8 @@
 // renumbering exercise across three files.
 namespace theta::forge::ui
 {
+using theta::forge::ModSource;
+
 enum class Display { none, oscillator, envelope, lfo };
 
 // A knob is the default. A stepper is the compact field used where reading an
@@ -53,6 +56,10 @@ struct Module
     // smaller than the controls they drive, as Serum's are.
     bool compactKnobs;
     std::vector<Row> rows;
+    // A module that is itself a modulation source carries a drag handle in its
+    // header. Zero means it is not one. Declared last so the modules that are
+    // not sources need not mention it.
+    int handleSource;
 };
 
 inline constexpr int gridColumns = 12;
@@ -110,9 +117,11 @@ inline const std::vector<Module>& modules()
                  {"legato", "LEGATO", Style::rocker}, {"glide", "GLIDE"}, {"output", "OUTPUT"}}}}},
 
         {"env1", "ENV 1", "AMP", nullptr, false, Display::envelope, 2, 0, 6, false,
-         {{100, {{"attack", "ATTACK"}, {"decay", "DECAY"}, {"sustain", "SUSTAIN"}, {"release", "RELEASE"}}}}},
+         {{100, {{"attack", "ATTACK"}, {"decay", "DECAY"}, {"sustain", "SUSTAIN"}, {"release", "RELEASE"}}}},
+         static_cast<int>(ModSource::env1)},
         {"lfo1", "LFO 1", "SOURCE", nullptr, true, Display::lfo, 2, 6, 6, false,
-         {{100, {{"lfoRate", "RATE"}}}}},
+         {{100, {{"lfoRate", "RATE"}}}},
+         static_cast<int>(ModSource::lfo1)},
 
         // The matrix is three rows of eight: every slot's source above its
         // destination above its depth. Compact fields rather than knobs, so a
@@ -138,10 +147,21 @@ inline const std::vector<Module>& modules()
     return declared;
 }
 
-// The area the modules are laid out inside, below the title bar.
+inline constexpr int keyboardHeight = 80;
+
+// The keyboard sits across the bottom, under everything.
+inline juce::Rectangle<int> keyboardBounds(juce::Rectangle<int> bounds)
+{
+    return bounds.reduced(30, 0)
+        .withTop(bounds.getBottom() - 26 - keyboardHeight)
+        .withHeight(keyboardHeight);
+}
+
+// The area the modules are laid out inside: below the title bar, above the
+// keyboard.
 inline juce::Rectangle<int> contentBounds(juce::Rectangle<int> bounds)
 {
-    return bounds.reduced(30).withTrimmedTop(62);
+    return bounds.reduced(30).withTrimmedTop(62).withTrimmedBottom(keyboardHeight + 8);
 }
 
 inline juce::Rectangle<int> moduleBounds(juce::Rectangle<int> bounds, const Module& module)

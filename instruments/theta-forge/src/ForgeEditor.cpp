@@ -51,7 +51,7 @@ juce::String tooltipFor(const juce::String& id)
         {"output", "Forge's final level"},
     };
     if (id.startsWith("macro"))
-        return "A performance macro. Right-click a knob to point this at it";
+        return "A performance macro. Drag its number onto a knob, or right-click the knob";
 
     // Matrix slots: eight of each, all reading the same way.
     if (id.startsWith("mod"))
@@ -65,9 +65,42 @@ juce::String tooltipFor(const juce::String& id)
 }
 }
 
-Editor::Editor(Processor& p) : AudioProcessorEditor(&p), processor(p)
+namespace
+{
+// The destination index a parameter corresponds to, or 0 if the matrix cannot
+// point at it.
+int destinationFor(const juce::String& parameterId)
+{
+    for (int i = 1; i < destinationCount; ++i)
+        if (parameterId == destinations()[static_cast<size_t>(i)].id) return i;
+    return 0;
+}
+
+juce::String slotParameter(int slot, const char* suffix)
+{
+    return "mod" + juce::String(slot + 1) + suffix;
+}
+}
+
+Editor::Editor(Processor& p)
+    : AudioProcessorEditor(&p), processor(p),
+      keyboard(p.keyboardState, juce::MidiKeyboardComponent::horizontalKeyboard)
 {
     buildModules();
+    buildHandles();
+
+    keyboard.setAvailableRange(21, 108);
+    keyboard.setLowestVisibleKey(21);
+    keyboard.setScrollButtonsVisible(false);
+    keyboard.setColour(juce::MidiKeyboardComponent::whiteNoteColourId, juce::Colour(0xffd8dcea));
+    keyboard.setColour(juce::MidiKeyboardComponent::blackNoteColourId, juce::Colour(0xff10131f));
+    keyboard.setColour(juce::MidiKeyboardComponent::keySeparatorLineColourId, juce::Colour(0xff05070e));
+    keyboard.setColour(juce::MidiKeyboardComponent::keyDownOverlayColourId, ui::electricBlue.withAlpha(0.75f));
+    keyboard.setColour(juce::MidiKeyboardComponent::mouseOverKeyOverlayColourId, ui::electricBlue.withAlpha(0.3f));
+    keyboard.setColour(juce::MidiKeyboardComponent::shadowColourId, juce::Colours::black.withAlpha(0.4f));
+    keyboard.setColour(juce::MidiKeyboardComponent::upDownButtonBackgroundColourId, ui::panelRaised);
+    keyboard.setColour(juce::MidiKeyboardComponent::upDownButtonArrowColourId, ui::mutedText);
+    addAndMakeVisible(keyboard);
 
     for (auto* button : {&loadPreset, &savePreset})
     {
@@ -85,8 +118,8 @@ Editor::Editor(Processor& p) : AudioProcessorEditor(&p), processor(p)
     addAndMakeVisible(presetName);
 
     setResizable(true, true);
-    setResizeLimits(1140, 930, 1900, 1400);
-    setSize(1260, 1010);
+    setResizeLimits(1140, 1010, 1900, 1500);
+    setSize(1260, 1100);
     applyEnableStates();
     startTimerHz(24);
 }
@@ -281,6 +314,24 @@ void Editor::paint(juce::Graphics& g)
                 break;
         }
     }
+
+    // The line follows a source handle to the cursor, and the knob under it
+    // lights up, so a drop lands where it looks like it will.
+    if (draggingHandle != nullptr)
+    {
+        const auto from = draggingHandle->getBounds().toFloat().getCentre();
+        const auto to = dragPosition.toFloat();
+        g.setColour(ui::signalViolet.withAlpha(0.55f));
+        g.drawLine({from, to}, 2.0f);
+        g.fillEllipse(juce::Rectangle<float>(9.0f, 9.0f).withCentre(to));
+
+        if (const auto* target = const_cast<Editor*>(this)->controlAt(dragPosition))
+        {
+            const auto reachable = destinationFor(target->id) != 0;
+            g.setColour((reachable ? ui::signalViolet : ui::mutedText).withAlpha(0.9f));
+            g.drawRoundedRectangle(target->slider.getBounds().toFloat().reduced(2.0f), 4.0f, 1.6f);
+        }
+    }
 }
 
 void Editor::resized()
@@ -289,6 +340,21 @@ void Editor::resized()
     savePreset.setBounds(right - 62, 26, 62, 26);
     loadPreset.setBounds(right - 130, 26, 62, 26);
     presetName.setBounds(right - 350, 26, 212, 26);
+
+    const auto keys = ui::keyboardBounds(getLocalBounds());
+    // Sized so the full eighty-eight keys span the panel exactly, rather than
+    // running out partway and leaving a blank stretch.
+    keyboard.setKeyWidth(static_cast<float>(keys.getWidth()) / 52.0f);
+    keyboard.setBounds(keys);
+
+    // Handles are positioned after their modules, because a macro's handle sits
+    // on top of its knob's label.
+    const auto handleFor = [this] (int source) -> ui::SourceHandle*
+    {
+        for (auto& handle : handles)
+            if (handle->source == source) return handle.get();
+        return nullptr;
+    };
 
     const auto diameter = ui::uniformKnobDiameter(getLocalBounds());
     for (auto& module : moduleUis)
@@ -302,11 +368,33 @@ void Editor::resized()
                 .withPosition(area.getX() + 8, area.getY());
             module.enable->setBounds(led);
         }
+        // A module that is itself a source puts its handle where the enable LED
+        // would be, ahead of the title.
+        if (descriptor.handleSource != 0)
+            if (auto* handle = handleFor(descriptor.handleSource))
+                handle->setBounds(area.getX() + (descriptor.enableId != nullptr ? ui::headerHeight + 8 : 10),
+                                  area.getY() + 4, ui::handleWidth, ui::headerHeight - 8);
 
         for (auto& held : module.controls)
         {
             auto& control = *held;
             auto block = ui::controlBlock(area, descriptor, control.row, control.index, diameter);
+
+            // A macro's drag handle replaces its numeric label: the number is
+            // the thing you grab, and the knob keeps its own drag gesture.
+            if (control.id.startsWith("macro"))
+            {
+                const auto macro = control.id.getTrailingIntValue();
+                if (auto* handle = handleFor(static_cast<int>(ModSource::macro1) + macro - 1))
+                {
+                    const auto labelRow = block.removeFromTop(ui::knobLabelHeight);
+                    handle->setBounds(juce::Rectangle<int>(26, ui::knobLabelHeight)
+                                          .withCentre(labelRow.getCentre()));
+                    control.label.setVisible(false);
+                    control.slider.setBounds(block);
+                    continue;
+                }
+            }
             switch (control.style)
             {
                 case ui::Style::chip:
@@ -334,25 +422,44 @@ void Editor::resized()
     }
 }
 
-namespace
+void Editor::buildHandles()
 {
-// The destination index a parameter corresponds to, or 0 if the matrix cannot
-// point at it.
-int destinationFor(const juce::String& parameterId)
-{
-    for (int i = 1; i < destinationCount; ++i)
-        if (parameterId == destinations()[static_cast<size_t>(i)].id) return i;
-    return 0;
+    const auto add = [this] (int source, const juce::String& caption, juce::Colour accent)
+    {
+        auto handle = std::make_unique<ui::SourceHandle>(source, caption);
+        handle->accent = accent;
+        handle->setTooltip("Drag " + juce::String(modSourceName(source)) + " onto a knob");
+        handle->addMouseListener(this, false);
+        addAndMakeVisible(*handle);
+        handles.push_back(std::move(handle));
+    };
+
+    add(static_cast<int>(ModSource::env1), "ENV 1", ui::electricBlue);
+    add(static_cast<int>(ModSource::lfo1), "LFO 1", ui::signalViolet);
+    for (int macro = 0; macro < macroCount; ++macro)
+        add(static_cast<int>(ModSource::macro1) + macro, juce::String(macro + 1), ui::electricBlue);
 }
 
-juce::String slotParameter(int slot, const char* suffix)
+Editor::Control* Editor::controlAt(juce::Point<int> panelPosition)
 {
-    return "mod" + juce::String(slot + 1) + suffix;
-}
+    for (auto& module : moduleUis)
+        for (auto& control : module.controls)
+            if (control->style == ui::Style::knob && control->slider.isVisible()
+                && control->slider.getBounds().contains(panelPosition))
+                return control.get();
+    return nullptr;
 }
 
 void Editor::mouseDown(const juce::MouseEvent& event)
 {
+    if (auto* handle = dynamic_cast<ui::SourceHandle*>(event.eventComponent))
+    {
+        draggingHandle = handle;
+        handle->dragging = true;
+        dragPosition = event.getEventRelativeTo(this).getPosition();
+        repaint();
+        return;
+    }
     if (!event.mods.isPopupMenu()) return;
     for (const auto& module : moduleUis)
         for (const auto& control : module.controls)
@@ -361,6 +468,59 @@ void Editor::mouseDown(const juce::MouseEvent& event)
                 showModulationMenu(control->id);
                 return;
             }
+}
+
+void Editor::mouseDrag(const juce::MouseEvent& event)
+{
+    if (draggingHandle == nullptr) return;
+    dragPosition = event.getEventRelativeTo(this).getPosition();
+    repaint();
+}
+
+void Editor::mouseUp(const juce::MouseEvent& event)
+{
+    if (draggingHandle == nullptr) return;
+    const auto source = draggingHandle->source;
+    draggingHandle->dragging = false;
+    draggingHandle = nullptr;
+
+    if (auto* control = controlAt(event.getEventRelativeTo(this).getPosition()))
+    {
+        const auto destination = destinationFor(control->id);
+        if (destination != 0) assignModulation(source, destination);
+        else
+        {
+            presetName.setText("THAT CONTROL CANNOT BE MODULATED", juce::dontSendNotification);
+            presetName.setColour(juce::Label::textColourId, ui::signalViolet);
+        }
+    }
+    repaint();
+}
+
+// Each modulated knob is told how far its slots can move it, so its look can
+// draw the ring without knowing anything about the matrix.
+void Editor::refreshModulationRings()
+{
+    std::array<float, destinationCount> depths {};
+    for (int slot = 0; slot < modSlotCount; ++slot)
+    {
+        const auto source = juce::roundToInt(value(slotParameter(slot, "Source").toRawUTF8()));
+        const auto destination = juce::roundToInt(value(slotParameter(slot, "Dest").toRawUTF8()));
+        if (source <= 0 || destination <= 0 || destination >= destinationCount) continue;
+        depths[static_cast<size_t>(destination)] += value(slotParameter(slot, "Depth").toRawUTF8());
+    }
+
+    for (auto& module : moduleUis)
+        for (auto& control : module.controls)
+        {
+            if (control->style != ui::Style::knob) continue;
+            const auto destination = destinationFor(control->id);
+            const auto depth = destination == 0 ? 0.0f : depths[static_cast<size_t>(destination)];
+            if (static_cast<float>(control->slider.getProperties().getWithDefault("modDepth", 0.0)) == depth)
+                continue;
+            control->slider.getProperties().set("modDepth", depth);
+            control->slider.repaint();
+        }
 }
 
 void Editor::showModulationMenu(const juce::String& parameterId)
@@ -448,9 +608,10 @@ void Editor::clearSlot(int slot)
 void Editor::timerCallback()
 {
     // Cheap to re-apply every tick, and it catches a dependency changing from
-    // host automation as well as from the panel. setEnabled only repaints when
-    // the value actually changes.
+    // host automation as well as from the panel. Both of these only repaint
+    // when something has actually changed.
     applyEnableStates();
+    refreshModulationRings();
     repaint();
 }
 

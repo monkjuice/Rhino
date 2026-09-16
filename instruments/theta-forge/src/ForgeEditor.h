@@ -68,6 +68,19 @@ private:
     // Which tab is showing. Only the modules that declare a page follow it;
     // everything else stays on screen whichever tab is chosen.
     ui::Page page = ui::Page::oscillators;
+    // How much time ENV 1's display spans, as an index into ui::envelopeZooms.
+    // A view setting, not a parameter: it changes nothing that is heard, so it
+    // belongs neither in the automation state nor in a preset, and it opens on
+    // the default for the same reason `page` does.
+    int envelopeZoom = ui::envelopeDefaultZoom;
+    // Wheel travel not yet spent on a zoom step. One notch of a mouse wheel
+    // measures about 0.2 here, so the threshold sits below that and a notch is
+    // reliably a step — at 0.25 the first notch of a turn did nothing, which
+    // reads as the control being dead rather than as it being careful. A
+    // trackpad sends a drizzle of much smaller deltas instead, and those still
+    // have to add up before anything moves.
+    float envelopeWheel = 0.0f;
+    static constexpr float wheelPerZoomStep = 0.15f;
     std::vector<std::unique_ptr<ui::PageTab>> tabs;
     // Drag handles live outside the modules: a macro's sits beside its knob, a
     // modulator's in its module header.
@@ -118,6 +131,13 @@ private:
     void mouseDown(const juce::MouseEvent&) override;
     void mouseDrag(const juce::MouseEvent&) override;
     void mouseUp(const juce::MouseEvent&) override;
+    void mouseWheelMove(const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
+    // ENV 1's display, for the clicks on the zoom strip down its right and the
+    // wheel over the plot beside it. Null or empty when the envelope is not on
+    // the tab being shown.
+    const ui::Module* envelopeModule() const;
+    juce::Rectangle<int> envelopeDisplayBounds() const;
+    void setEnvelopeZoom(int zoom);
     bool keyStateChanged(bool isKeyDown) override;
     bool keyPressed(const juce::KeyPress&) override;
     void shiftComputerKeyOctave(int delta);

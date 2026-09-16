@@ -508,6 +508,19 @@ void envelopeDisplaySuite()
     };
 
     {
+        // The window the display opens on, which is a fixed three seconds and
+        // not something derived from the patch.
+        requireClose(ui::envelopeAxis(ui::envelopeDefaultZoom).seconds, 3.0f, 0.0001f,
+                     "the display opens on a three second window");
+        requireClose(ui::envelopeAxis(ui::envelopeDefaultZoom).mark, 1.0f, 0.0001f,
+                     "a three second window is marked off in seconds");
+        const auto quiet = ui::envelopeShape(box, 0.05f, 0.1f, 0.5f, 0.2f);
+        const auto busy = ui::envelopeShape(box, 2.0f, 0.5f, 0.5f, 0.4f);
+        requireClose(quiet.axis.seconds, busy.axis.seconds, 0.0001f,
+                     "the window does not move when the envelope does");
+    }
+
+    {
         // The patch from the bug report: a short percussive envelope with
         // sustain wide open. It has to read as short.
         const auto shape = ui::envelopeShape(box, 0.030f, 0.155f, 1.0f, 0.021f);
@@ -515,8 +528,8 @@ void envelopeDisplaySuite()
                      "the peak lands at the attack time");
         requireClose(secondsAt(shape, shape.endX), 0.051f, 0.0005f,
                      "a 51 ms envelope ends 51 ms along the axis");
-        require(shape.endX < box.getX() + box.getWidth() * 0.5f,
-                "a short envelope leaves most of the well empty instead of filling it");
+        require(shape.endX < box.getX() + box.getWidth() * 0.1f,
+                "a short envelope is a sliver against the left edge, not a shape filling the well");
         requireClose(shape.decayX, shape.attackX, 0.001f,
                      "decay takes no time at all when sustain is wide open");
         requireClose(shape.sustainY, shape.peakY, 0.001f,
@@ -528,10 +541,10 @@ void envelopeDisplaySuite()
         // identically; they must now differ.
         const auto brief = ui::envelopeShape(box, 0.030f, 0.155f, 1.0f, 0.021f);
         const auto long_ = ui::envelopeShape(box, 0.300f, 1.550f, 1.0f, 0.210f);
-        require(std::abs(brief.endX - long_.endX) > 1.0f,
-                "envelopes ten times apart in length do not draw the same shape");
+        require(long_.endX > brief.endX * 9.0f,
+                "an envelope ten times longer is drawn about ten times wider");
         requireClose(secondsAt(long_, long_.endX), 0.510f, 0.002f,
-                     "a 510 ms envelope ends 510 ms along its own axis");
+                     "a 510 ms envelope ends 510 ms along the axis");
     }
 
     {
@@ -557,35 +570,100 @@ void envelopeDisplaySuite()
                      "no sustain sits on the floor of the well");
     }
 
-    // Across the whole range the knobs allow, the shape stays in order, stays
-    // inside the well, and never runs off the right-hand edge: the window is
-    // always at least as wide as the envelope it holds.
+    {
+        // Zooming changes the window and nothing else. The same envelope has to
+        // come back at the same times through whichever axis it was drawn
+        // against, and a shorter window has to draw it wider.
+        auto previous = 0.0f;
+        for (int zoom = 0; zoom < ui::envelopeZoomCount; ++zoom)
+        {
+            const auto axis = ui::envelopeAxis(zoom);
+            if (axis.seconds <= previous)
+                require(false, "the zoom ladder runs from the shortest window to the longest");
+            previous = axis.seconds;
+            if (ui::envelopeAxis(zoom).mark > axis.seconds)
+                require(false, "a window is never shorter than the marks dividing it");
+
+            const auto shape = ui::envelopeShape(box, 0.1f, 0.2f, 0.5f, 0.3f, zoom);
+            requireClose(secondsAt(shape, shape.endX), 0.6f, 0.001f,
+                         "an envelope reads back as its own length at every zoom");
+        }
+
+        // Out of range on either side is held at the end of the ladder rather
+        // than wrapping or dividing by a window of nothing.
+        requireClose(ui::envelopeAxis(-5).seconds, ui::envelopeZooms[0].seconds, 0.0001f,
+                     "zooming past the shortest window stops there");
+        requireClose(ui::envelopeAxis(99).seconds,
+                     ui::envelopeZooms[ui::envelopeZoomCount - 1].seconds, 0.0001f,
+                     "zooming past the longest window stops there");
+
+        const auto tight = ui::envelopeShape(box, 0.1f, 0.2f, 0.5f, 0.3f, ui::envelopeDefaultZoom - 1);
+        const auto wide = ui::envelopeShape(box, 0.1f, 0.2f, 0.5f, 0.3f, ui::envelopeDefaultZoom);
+        require(tight.endX > wide.endX,
+                "a shorter window draws the same envelope wider");
+    }
+
+    // Across the whole range the knobs allow, and at every zoom, the corners
+    // stay in order and the sustain level stays between the floor and the peak.
+    // Corners are free to land past the right-hand edge now: an envelope longer
+    // than the window is cut by the frame, and that is the reading.
     for (float attack = 0.001f; attack <= 4.0f; attack += 0.37f)
         for (float decay = 0.001f; decay <= 4.0f; decay += 0.53f)
             for (float release = 0.001f; release <= 8.0f; release += 0.91f)
                 for (float sustain = 0.0f; sustain <= 1.0f; sustain += 0.25f)
+                    for (int zoom = 0; zoom < ui::envelopeZoomCount; ++zoom)
+                    {
+                        const auto shape = ui::envelopeShape(box, attack, decay, sustain, release, zoom);
+                        if (!(box.getX() <= shape.attackX && shape.attackX <= shape.decayX
+                              && shape.decayX <= shape.endX))
+                        {
+                            require(false, "the corners stay in order");
+                            std::cerr << "       a " << attack << " d " << decay << " s " << sustain
+                                      << " r " << release << " zoom " << zoom << '\n';
+                        }
+                        if (!(shape.peakY <= shape.sustainY && shape.sustainY <= shape.floorY))
+                        {
+                            require(false, "the sustain level stays between the floor and the peak");
+                            std::cerr << "       s " << sustain << '\n';
+                        }
+                    }
+
+    // The zoom strip is painted rather than built from components, so the only
+    // thing holding the box that is drawn and the box that is clicked together
+    // is that both ask these functions. Checked at every size the panel allows,
+    // because the display it divides is sized as a share of the module.
+    for (const auto& module : theta::forge::ui::modules())
+    {
+        if (module.display != ui::Display::envelope) continue;
+        for (int width = ui::minPanelWidth; width <= ui::maxPanelWidth; width += 40)
+            for (int height = ui::minPanelHeight; height <= ui::maxPanelHeight; height += 40)
+            {
+                const auto area = ui::moduleBounds({0, 0, width, height}, module);
+                const auto display = ui::displayBounds(area, module);
+                const auto plot = ui::envelopePlotBounds(display);
+                const auto strip = ui::envelopeZoomStrip(display);
+                const auto in = ui::envelopeZoomIn(display);
+                const auto out = ui::envelopeZoomOut(display);
+
+                const auto fault = [&] (const char* what)
                 {
-                    const auto shape = ui::envelopeShape(box, attack, decay, sustain, release);
-                    const auto times = ui::envelopeTimes(attack, decay, sustain, release);
-                    if (times.total() > shape.axis.seconds)
-                    {
-                        require(false, "the window is never shorter than the envelope in it");
-                        std::cerr << "       a " << attack << " d " << decay << " s " << sustain
-                                  << " r " << release << '\n';
-                    }
-                    if (!(box.getX() <= shape.attackX && shape.attackX <= shape.decayX
-                          && shape.decayX <= shape.endX && shape.endX <= box.getRight() + 0.01f))
-                    {
-                        require(false, "the corners stay in order and inside the well");
-                        std::cerr << "       a " << attack << " d " << decay << " s " << sustain
-                                  << " r " << release << '\n';
-                    }
-                    if (!(shape.peakY <= shape.sustainY && shape.sustainY <= shape.floorY))
-                    {
-                        require(false, "the sustain level stays between the floor and the peak");
-                        std::cerr << "       s " << sustain << '\n';
-                    }
-                }
+                    require(false, what);
+                    std::cerr << "       at " << width << "x" << height << '\n';
+                };
+                if (!display.contains(strip) || !display.contains(plot))
+                    fault("the plot and the zoom strip both stay inside the display");
+                if (plot.intersects(strip))
+                    fault("the zoom strip is off the plot, so no curve can run under it");
+                if (plot.getWidth() < display.getWidth() / 2)
+                    fault("the strip takes a sliver of the display, not half of it");
+                if (!strip.contains(in) || !strip.contains(out))
+                    fault("both zoom buttons sit inside the strip");
+                if (in.intersects(out)) fault("the zoom buttons do not overlap");
+                if (in.getBottom() > out.getY()) fault("plus sits above minus");
+                if (in.getWidth() < 16 || in.getHeight() < 16)
+                    fault("a zoom button is big enough to hit");
+            }
+    }
 }
 
 // --------------------------------------------------------------- presets ---

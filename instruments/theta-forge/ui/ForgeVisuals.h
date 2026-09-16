@@ -883,27 +883,30 @@ struct EnvelopeAxis
     float mark = 0.25f;
 };
 
-// The window snaps to one of a fixed set of spans rather than being fitted to
-// the envelope. Fitting is what this display used to do, and it is the bug: a
-// shape stretched to the full width looks identical at 50 ms and at 4 s, so the
-// one thing an envelope display exists to show — how long the stages last — was
-// the one thing it could not show. Against a snapped window a 50 ms envelope is
-// a sliver against the left edge and a 4 s one crosses the well, and the marks
-// behind it say in seconds what the difference is.
+// The windows the display can be set to, shortest first, each with the mark
+// spacing that divides it into something readable.
 //
-// Snapped rather than one fixed window because A, D and R together run from
-// 3 ms to 16 s and no single window holds both ends. Serum spends a zoom
-// control on the same problem; this panel has nowhere to put one, so the window
-// steps up by itself and relabels its marks when it does.
-inline EnvelopeAxis envelopeAxis(float totalSeconds)
+// The window is fixed and chosen by the player, never fitted to the envelope.
+// Fitting is what this display used to do, and it is the bug: a shape stretched
+// to the full width looks identical at 50 ms and at 4 s, so the one thing an
+// envelope display exists to show — how long the stages last — was the one thing
+// it could not show. A fixed window makes the axis a ruler, so turning a knob
+// moves the shape against it instead of rescaling it underneath; and an envelope
+// longer than the window runs off the right-hand edge and is cut by the frame,
+// which is itself the reading that it is longer than three seconds.
+inline constexpr EnvelopeAxis envelopeZooms[] = {
+    {0.05f, 0.01f}, {0.1f, 0.025f}, {0.25f, 0.05f}, {0.5f, 0.1f}, {1.0f, 0.25f},
+    {1.5f, 0.5f},   {3.0f, 1.0f},   {6.0f, 1.0f},   {10.0f, 2.0f}, {16.0f, 4.0f}};
+inline constexpr int envelopeZoomCount = sizeof(envelopeZooms) / sizeof(envelopeZooms[0]);
+
+// Three seconds, which is what Serum opens on. Long enough to hold the
+// envelopes most patches actually use, and short enough that a percussive one
+// still reads as the sliver it is.
+inline constexpr int envelopeDefaultZoom = 6;
+
+inline EnvelopeAxis envelopeAxis(int zoom)
 {
-    static constexpr EnvelopeAxis steps[] = {{0.25f, 0.05f}, {0.5f, 0.1f}, {1.0f, 0.25f},
-                                             {2.0f, 0.5f},   {4.0f, 1.0f}, {8.0f, 2.0f},
-                                             {16.0f, 4.0f}};
-    static constexpr int stepCount = sizeof(steps) / sizeof(steps[0]);
-    for (int i = 0; i < stepCount - 1; ++i)
-        if (totalSeconds <= steps[i].seconds) return steps[i];
-    return steps[stepCount - 1];
+    return envelopeZooms[juce::jlimit(0, envelopeZoomCount - 1, zoom)];
 }
 
 // Where each corner of an envelope lands inside a box. Pure geometry, so what
@@ -929,12 +932,12 @@ struct EnvelopeShape
 };
 
 inline EnvelopeShape envelopeShape(juce::Rectangle<float> box, float attack, float decay,
-                                   float sustain, float release)
+                                   float sustain, float release, int zoom = envelopeDefaultZoom)
 {
     const auto times = envelopeTimes(attack, decay, sustain, release);
     EnvelopeShape shape;
     shape.box = box;
-    shape.axis = envelopeAxis(times.total());
+    shape.axis = envelopeAxis(zoom);
     shape.floorY = box.getBottom();
     shape.peakY = box.getY();
     shape.sustainY = juce::jmap(juce::jlimit(0.0f, 1.0f, sustain), shape.floorY, shape.peakY);
@@ -944,8 +947,90 @@ inline EnvelopeShape envelopeShape(juce::Rectangle<float> box, float attack, flo
     return shape;
 }
 
+// A time written the way the knobs write theirs, so "250 ms" on the axis and
+// "250 ms" under a knob are the same number in the same words.
+inline juce::String envelopeTimeText(float seconds)
+{
+    if (seconds < 1.0f) return juce::String(juce::roundToInt(seconds * 1000.0f)) + " ms";
+    return juce::String(seconds, 2).trimCharactersAtEnd("0").trimCharactersAtEnd(".") + " s";
+}
+
+// --- The zoom control -------------------------------------------------------
+//
+// Geometry first, so the box that is drawn and the box that is clicked cannot
+// drift apart — the same rule the knob's modulation ring follows.
+//
+// A narrow strip of its own down the right-hand side, with the plot shortened
+// to make room. Sitting the control *on* the display was tried first and does
+// not work: there is no corner a curve cannot reach, and a long attack with a
+// short tail peaks under exactly the corner it wants.
+
+inline constexpr int envelopeZoomStripWidth = 22;
+inline constexpr int envelopeZoomStripGap = 5;
+inline constexpr int envelopeZoomButton = 18;
+
+inline juce::Rectangle<int> envelopeZoomStrip(juce::Rectangle<int> display)
+{
+    return display.removeFromRight(envelopeZoomStripWidth);
+}
+
+// What is left of the display once the strip has taken its share: the box the
+// axis is measured across and the curve is drawn in.
+inline juce::Rectangle<int> envelopePlotBounds(juce::Rectangle<int> display)
+{
+    return display.withTrimmedRight(envelopeZoomStripWidth + envelopeZoomStripGap);
+}
+
+// Plus magnifies, as it does on a map or in a page view: it shortens the window
+// so the shape grows. The span between the buttons is a readout of where that
+// has got to, not a number the buttons add to — which is why plus makes it go
+// down. The wheel over the plot runs the same way round, up for in.
+inline juce::Rectangle<int> envelopeZoomIn(juce::Rectangle<int> display)
+{
+    return envelopeZoomStrip(display).removeFromTop(envelopeZoomButton);
+}
+
+inline juce::Rectangle<int> envelopeZoomOut(juce::Rectangle<int> display)
+{
+    return envelopeZoomStrip(display).removeFromBottom(envelopeZoomButton);
+}
+
+inline void drawEnvelopeZoom(juce::Graphics& g, juce::Rectangle<int> display, int zoom, float alpha)
+{
+    const auto strip = envelopeZoomStrip(display);
+    g.setColour(juce::Colour(0xff0b0e18));
+    g.fillRoundedRectangle(strip.toFloat(), displayCorner);
+    g.setColour(line.withAlpha(0.6f));
+    g.drawRoundedRectangle(strip.toFloat(), displayCorner, 1.0f);
+
+    const auto button = [&] (juce::Rectangle<int> box, const char* glyph, bool enabled)
+    {
+        g.setColour(text.withAlpha((enabled ? 0.95f : 0.22f) * alpha));
+        g.setFont(juce::FontOptions(13.0f, juce::Font::bold));
+        g.drawText(glyph, box, juce::Justification::centred);
+    };
+    button(envelopeZoomIn(display), "+", zoom > 0);
+    button(envelopeZoomOut(display), "-", zoom < envelopeZoomCount - 1);
+
+    // The span reads up the strip, because 22px of width holds "250MS" only on
+    // its side. Rotated about the middle of the gap the two buttons leave, with
+    // the box turned on its side to match so the text still centres in it.
+    const auto middle = strip.withTrimmedTop(envelopeZoomButton)
+                            .withTrimmedBottom(envelopeZoomButton)
+                            .toFloat();
+    juce::Graphics::ScopedSaveState rotated(g);
+    g.addTransform(juce::AffineTransform::rotation(-juce::MathConstants<float>::halfPi,
+                                                   middle.getCentreX(), middle.getCentreY()));
+    g.setColour(mutedText.withAlpha(0.9f * alpha));
+    g.setFont(juce::FontOptions(9.0f, juce::Font::bold));
+    g.drawText(envelopeTimeText(envelopeAxis(zoom).seconds).toUpperCase().removeCharacters(" "),
+               juce::Rectangle<float>(middle.getHeight(), middle.getWidth())
+                   .withCentre(middle.getCentre()),
+               juce::Justification::centred);
+}
+
 // The second marks behind an envelope, each labelled with the time it stands
-// for. They are what turns the shape into a measurement: without them a snapped
+// for. They are what turns the shape into a measurement: without them a fixed
 // window is one more arbitrary stretch.
 inline void drawEnvelopeGrid(juce::Graphics& g, juce::Rectangle<float> box, EnvelopeAxis axis)
 {
@@ -958,9 +1043,7 @@ inline void drawEnvelopeGrid(juce::Graphics& g, juce::Rectangle<float> box, Enve
         g.setColour(line.withAlpha(0.5f));
         g.drawVerticalLine(juce::roundToInt(x), box.getY(), box.getBottom());
         g.setColour(mutedText.withAlpha(0.55f));
-        g.drawText(axis.seconds >= 1.0f
-                       ? juce::String(at, 2).trimCharactersAtEnd("0").trimCharactersAtEnd(".") + " s"
-                       : juce::String(juce::roundToInt(at * 1000.0f)) + " ms",
+        g.drawText(envelopeTimeText(at),
                    juce::Rectangle<float>(x + 3.0f, box.getBottom() - 12.0f, 44.0f, 11.0f).toNearestInt(),
                    juce::Justification::centredLeft);
     }
@@ -972,16 +1055,22 @@ inline void drawEnvelopeGrid(juce::Graphics& g, juce::Rectangle<float> box, Enve
 // actually got to rather than from the sustain line.
 inline void drawEnvelope(juce::Graphics& g, juce::Rectangle<int> area, float attack, float decay,
                          float sustain, float release, juce::Colour colour, float alpha,
-                         Stage stage = Stage::idle, float level = 0.0f)
+                         Stage stage = Stage::idle, float level = 0.0f,
+                         int zoom = envelopeDefaultZoom)
 {
+    // Drawn before the plot takes the clip below, because the strip is outside
+    // it: the zoom control is beside the well, not on it.
+    drawEnvelopeZoom(g, area, zoom, alpha);
+
     // Clipped to the well and drawn its full width, so the curve starts against
     // the left edge and anything past the end of the window is cut off by the
     // frame rather than squeezed back inside it.
+    const auto plot = envelopePlotBounds(area);
     juce::Graphics::ScopedSaveState clip(g);
-    g.reduceClipRegion(displayClip(area));
+    g.reduceClipRegion(displayClip(plot));
 
-    const auto box = area.toFloat().reduced(0.0f, 9.0f);
-    const auto shape = envelopeShape(box, attack, decay, sustain, release);
+    const auto box = plot.toFloat().reduced(0.0f, 9.0f);
+    const auto shape = envelopeShape(box, attack, decay, sustain, release, zoom);
     drawEnvelopeGrid(g, box, shape.axis);
 
     // Straight segments, because Core's stages are straight: each one adds or

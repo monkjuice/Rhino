@@ -449,6 +449,10 @@ void Editor::paint(juce::Graphics& g)
         // stay flat wells, which is what keeps the tubes reading as screens.
         if (descriptor.display == ui::Display::oscillator)
             ui::drawCrtScreen(g, display, accent, alpha);
+        else if (descriptor.display == ui::Display::envelope)
+            // Short of the full strip: the zoom control has its own well beside
+            // this one, and draws it with the curve.
+            ui::drawDisplayWell(g, ui::envelopePlotBounds(display));
         else
             ui::drawDisplayWell(g, display);
         switch (descriptor.display)
@@ -466,7 +470,7 @@ void Editor::paint(juce::Graphics& g)
             case ui::Display::envelope:
                 ui::drawEnvelope(g, display, value("attack"), value("decay"),
                                  value("sustain"), value("release"), accent, alpha,
-                                 stage, processor.envelopeLevel());
+                                 stage, processor.envelopeLevel(), envelopeZoom);
                 break;
             case ui::Display::lfo:
             {
@@ -695,6 +699,35 @@ Editor::Control* Editor::controlAt(juce::Point<int> panelPosition)
     return nullptr;
 }
 
+// ENV 1's module is painted straight onto the editor rather than being a
+// component of its own, so the things on it that can be clicked or scrolled are
+// hit-tested here, against the same geometry the painter lays them out with.
+const ui::Module* Editor::envelopeModule() const
+{
+    for (const auto& module : moduleUis)
+    {
+        const auto& descriptor = *module.descriptor;
+        if (descriptor.display != ui::Display::envelope) continue;
+        return ui::onPage(descriptor, page) ? &descriptor : nullptr;
+    }
+    return nullptr;
+}
+
+juce::Rectangle<int> Editor::envelopeDisplayBounds() const
+{
+    const auto* module = envelopeModule();
+    return module == nullptr ? juce::Rectangle<int>()
+                             : ui::displayBounds(ui::moduleBounds(getLocalBounds(), *module), *module);
+}
+
+void Editor::setEnvelopeZoom(int zoom)
+{
+    const auto clamped = juce::jlimit(0, ui::envelopeZoomCount - 1, zoom);
+    if (clamped == envelopeZoom) return;
+    envelopeZoom = clamped;
+    repaint();
+}
+
 void Editor::mouseDown(const juce::MouseEvent& event)
 {
     if (auto* handle = dynamic_cast<ui::SourceHandle*>(event.eventComponent))
@@ -704,6 +737,25 @@ void Editor::mouseDown(const juce::MouseEvent& event)
         dragPosition = event.getEventRelativeTo(this).getPosition();
         repaint();
         return;
+    }
+    // Only for a click that landed on the panel itself: the editor listens to
+    // every knob and handle as well, and those events carry their own component.
+    if (event.eventComponent == this && !event.mods.isPopupMenu())
+    {
+        const auto at = event.getEventRelativeTo(this).getPosition();
+        if (const auto display = envelopeDisplayBounds(); !display.isEmpty())
+        {
+            if (ui::envelopeZoomIn(display).contains(at)) { setEnvelopeZoom(envelopeZoom - 1); return; }
+            if (ui::envelopeZoomOut(display).contains(at)) { setEnvelopeZoom(envelopeZoom + 1); return; }
+            // Double-clicking the plot puts the window back to three seconds,
+            // which is the gesture a knob already uses to go back to the value
+            // it started at.
+            if (event.getNumberOfClicks() >= 2 && ui::envelopePlotBounds(display).contains(at))
+            {
+                setEnvelopeZoom(ui::envelopeDefaultZoom);
+                return;
+            }
+        }
     }
     if (!event.mods.isPopupMenu()) return;
     for (const auto& module : moduleUis)
@@ -789,6 +841,28 @@ void Editor::paintOverChildren(juce::Graphics& g)
     g.fillRect(reach);
     g.setColour(ui::electricBlue.withAlpha(0.3f));
     g.fillRect(reach.withTop(reach.getBottom() - 2.0f));
+}
+
+// The wheel over ENV 1's display changes how much time it spans. Up shortens
+// the window, so the shape grows: up is in, the way round every other zoom
+// works. The notches are accumulated because a trackpad sends a stream of small
+// deltas where a mouse sends one large one, and without this a flick would run
+// through the whole ladder before the hand came off it.
+void Editor::mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel)
+{
+    const auto display = envelopeDisplayBounds();
+    if (display.isEmpty()
+        || !ui::envelopePlotBounds(display).contains(event.getEventRelativeTo(this).getPosition()))
+    {
+        Component::mouseWheelMove(event, wheel);
+        return;
+    }
+
+    envelopeWheel += wheel.isReversed ? -wheel.deltaY : wheel.deltaY;
+    const auto notches = static_cast<int>(envelopeWheel / wheelPerZoomStep);
+    if (notches == 0) return;
+    envelopeWheel -= static_cast<float>(notches) * wheelPerZoomStep;
+    setEnvelopeZoom(envelopeZoom - notches);
 }
 
 void Editor::mouseDrag(const juce::MouseEvent& event)

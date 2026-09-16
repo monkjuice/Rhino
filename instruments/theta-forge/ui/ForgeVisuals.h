@@ -27,23 +27,51 @@ inline juce::Colour accentFor(const Module& module)
 class LookAndFeel final : public juce::LookAndFeel_V4
 {
 public:
-    // Steppers are bar-style sliders, so JUCE routes them here. They are drawn
-    // as a plain numeric field rather than a filled bar: for a tuning value,
-    // the number is the information and a fill proportion is noise.
+    // Steppers and bars are both bar-style sliders, so JUCE routes them here.
+    // A vertical one is a plain numeric field: for a tuning value the number is
+    // the information and a fill proportion would be noise. A horizontal one is
+    // a matrix amount, where the fill is the whole point — it runs out from
+    // wherever zero falls in the range, so the sign of a depth reads across the
+    // table without the number being looked at.
     void drawLinearSlider(juce::Graphics& g, int x, int y, int width, int height,
-                          float, float, float, juce::Slider::SliderStyle, juce::Slider& slider) override
+                          float, float, float, juce::Slider::SliderStyle style, juce::Slider& slider) override
     {
         const auto area = juce::Rectangle<int>(x, y, width, height).toFloat().reduced(1.0f);
         const auto accent = slider.findColour(juce::Slider::rotarySliderFillColourId);
         const auto enabled = slider.isEnabled();
         const auto active = slider.getValue() != slider.getDoubleClickReturnValue();
+        const auto horizontal = style == juce::Slider::LinearBar;
 
         g.setColour(juce::Colour(0xff0b0e18).withAlpha(enabled ? 1.0f : 0.5f));
         g.fillRoundedRectangle(area, 3.0f);
+
+        if (horizontal)
+        {
+            const auto range = slider.getRange();
+            const auto at = [&] (double plain)
+            {
+                const auto span = range.getLength();
+                const auto proportion = span > 0.0 ? (plain - range.getStart()) / span : 0.0;
+                return area.getX() + static_cast<float>(juce::jlimit(0.0, 1.0, proportion)) * area.getWidth();
+            };
+            const auto origin = at(juce::jlimit(range.getStart(), range.getEnd(), 0.0));
+            const auto now = at(slider.getValue());
+
+            g.setColour(line.withAlpha(enabled ? 0.7f : 0.25f));
+            g.fillRect(origin - 0.5f, area.getY() + 2.0f, 1.0f, area.getHeight() - 4.0f);
+            if (std::abs(now - origin) >= 1.0f)
+            {
+                g.setColour(accent.withAlpha(enabled ? 0.5f : 0.15f));
+                g.fillRoundedRectangle({juce::jmin(origin, now), area.getY() + 1.5f,
+                                        std::abs(now - origin), area.getHeight() - 3.0f}, 2.0f);
+            }
+        }
+
         g.setColour((active ? accent : line).withAlpha(enabled ? 1.0f : 0.35f));
         g.drawRoundedRectangle(area, 3.0f, 1.0f);
 
-        g.setColour((active ? accent : text).withAlpha(enabled ? 1.0f : 0.35f));
+        // Over a fill, the value is read against the accent rather than in it.
+        g.setColour((horizontal || !active ? text : accent).withAlpha(enabled ? 1.0f : 0.35f));
         g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
         g.drawText(slider.getTextFromValue(slider.getValue()), area, juce::Justification::centred);
     }
@@ -298,6 +326,79 @@ public:
         g.drawText(getName(), area, juce::Justification::centred);
     }
 };
+
+// A tab in the title bar. Only the top row of the panel follows it, so it is
+// drawn as a chip that lights along its bottom edge rather than as a folder tab
+// joined to the whole window: the edge points down at the one row that changes.
+class PageTab final : public juce::Button
+{
+public:
+    explicit PageTab(const juce::String& label) : juce::Button(label) {}
+
+    juce::Colour accent = electricBlue;
+
+    void paintButton(juce::Graphics& g, bool highlighted, bool) override
+    {
+        const auto area = getLocalBounds().toFloat().reduced(0.5f);
+        const auto on = getToggleState();
+
+        g.setColour(on ? panelRaised : juce::Colour(0xff0d1120));
+        g.fillRoundedRectangle(area, 4.0f);
+        g.setColour((on ? accent : line).withAlpha(on ? 1.0f : (highlighted ? 0.9f : 0.6f)));
+        g.drawRoundedRectangle(area, 4.0f, 1.0f);
+        if (on)
+        {
+            g.setColour(accent.withAlpha(0.25f));
+            g.fillRoundedRectangle(area.reduced(1.0f), 3.5f);
+            g.setColour(accent);
+            g.fillRoundedRectangle(area.withTop(area.getBottom() - 2.5f).reduced(3.0f, 0.0f), 1.25f);
+        }
+        // Qualified: Button has a private `text` member of its own that would
+        // otherwise win the lookup here.
+        g.setColour(on ? theta::forge::ui::text : mutedText.withAlpha(highlighted ? 1.0f : 0.8f));
+        g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
+        g.drawText(getName(), getLocalBounds(), juce::Justification::centred);
+    }
+};
+
+// --- Tables -----------------------------------------------------------------
+//
+// The matrix is eight slots read as rows. What makes that a table rather than a
+// field of controls is the furniture around the controls: titles once at the
+// top, a number against every row, and a band under alternate rows so the eye
+// tracks across one slot without sliding into the next.
+
+inline void drawColumnTitle(juce::Graphics& g, juce::Rectangle<int> area, const juce::String& title)
+{
+    if (title.isEmpty()) return;
+    g.setColour(mutedText.withAlpha(0.8f));
+    g.setFont(juce::FontOptions(9.0f, juce::Font::bold));
+    g.drawText(title, area, juce::Justification::centred);
+}
+
+inline void drawColumnTitleRule(juce::Graphics& g, juce::Rectangle<int> titles)
+{
+    g.setColour(line.withAlpha(0.7f));
+    g.drawHorizontalLine(titles.getBottom() - 1, static_cast<float>(titles.getX()),
+                         static_cast<float>(titles.getRight()));
+}
+
+// `number` is the slot as a player counts them, from one. A live slot's number
+// is lit, so the rows actually doing something are countable at a glance.
+inline void drawTableRow(juce::Graphics& g, juce::Rectangle<int> row, juce::Rectangle<int> gutter,
+                         int number, bool live, juce::Colour accent)
+{
+    if (number % 2 == 0)
+    {
+        g.setColour(juce::Colour(0xff0d1120).withAlpha(0.55f));
+        g.fillRoundedRectangle(row.toFloat()
+                                   .withLeft(static_cast<float>(gutter.getX()))
+                                   .reduced(0.0f, 2.0f), 3.0f);
+    }
+    g.setColour(live ? accent : mutedText.withAlpha(0.45f));
+    g.setFont(juce::FontOptions(10.0f, juce::Font::bold));
+    g.drawText(juce::String(number), gutter, juce::Justification::centred);
+}
 
 inline float waveform(float phase, float position)
 {

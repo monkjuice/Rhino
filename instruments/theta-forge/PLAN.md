@@ -33,21 +33,33 @@ place, and its own knobs contained inside it. Nothing is laid out by index
 arithmetic; modules declare their contents.
 
 ```
-+- FORGE --------------------------------------- preset -- LOAD SAVE -+
-| +-- OSC A ---------------------+ +-- OSC B ---------------------+   |
-| | [ waveform ]                 | | [ waveform ]                 |   |
-| |   OCT    SEMI    FINE        | |   OCT    SEMI    FINE        |   |
-| | POS UNI DET BLEND PAN LEVEL  | | POS UNI DET BLEND PAN LEVEL  |   |
-| +------------------------------+ +------------------------------+   |
-| +- SUB -+ +NOISE+ +-- FILTER ---------+ +-- GLOBAL ------------+     |
-| | LEVEL | | LVL | | TYPE [A][B][S][N] | | POLY MONO LEGATO     |     |
-| |  (o)  | | (o) | | CUTOFF  RES DRIVE | | GLIDE  OUTPUT        |     |
-| +-------+ +-----+ +-------------------+ +----------------------+     |
-| +-- ENV 1 ---------------------+ +-- LFO 1 ---------------------+   |
-| | [ ADSR curve ]               | | [ shape + phase ]            |   |
-| | ATTACK DECAY SUSTAIN RELEASE | | RATE >CUTOFF >POSITION >PITCH|   |
-| +------------------------------+ +------------------------------+   |
-+---------------------------------------------------------------------+
++- FORGE -- [ OSC ][ MATRIX ] ------------------ preset -- LOAD SAVE --+
+| +-- OSC A ---------------------+ +-- OSC B ---------------------+    |
+| | [ waveform ]                 | | [ waveform ]                 |    |
+| |   OCT    SEMI    FINE        | |   OCT    SEMI    FINE        |    |
+| | POS UNI DET BLEND PAN LEVEL  | | POS UNI DET BLEND PAN LEVEL  |    |
+| +------------------------------+ +------------------------------+    |
+| +- SUB -+ +NOISE+ +- FILTER --------+ +- GLOBAL ---------+ +MACROS+  |
+| | LEVEL | | LVL | | TYPE [A][B][S][N]| | POLY MONO LEGATO | | 1  2 |  |
+| |  (o)  | | (o) | | CUTOFF RES DRIVE | | GLIDE  OUTPUT    | | 3  4 |  |
+| +-------+ +-----+ +------------------+ +------------------+ | 5  6 |  |
+| +-- ENV 1 -------------------+ +-- LFO 1 ----------------+ | 7  8 |  |
+| | [ ADSR curve ]             | | [ shape + phase ]       | |      |  |
+| | ATTACK DECAY SUSTAIN RELEA | | RATE                    | |      |  |
+| +----------------------------+ +-------------------------+ +------+  |
++----------------------------------------------------------------------+
+
+The MATRIX tab puts the matrix in the top row in place of the two oscillators.
+Nothing below that row moves.
+
++- FORGE -- [ OSC ][ MATRIX ] ------------------ preset -- LOAD SAVE --+
+| +-- MATRIX ------------------------------------------- 8 SLOTS ---+  |
+| |  #   SOURCE        AMOUNT              DESTINATION              |  |
+| |  1  [ MACRO 2 ]   [-----|======  ]    [ A LEVEL ]               |  |
+| |  2  [ ENV 1   ]   [  ===|------  ]    [ A POS   ]               |  |
+| |  3  [ OFF     ]   [-----|------  ]    [ OFF     ]   ... eight   |  |
+| +-----------------------------------------------------------------+  |
++----------------------------------------------------------------------+
 ```
 
 ### Decisions locked in
@@ -233,10 +245,12 @@ Delivered in two parts. **M6a, the engine and the panel, is done.**
 
 **M6b — macros, drag to knob, keyboard** — done
 
-- Eight macros, bottom left, smaller than the controls they drive. They are
-  sources only: a macro reaches a control through a slot or not at all. A
-  module can declare its knobs compact so eight small knobs in a corner do not
-  shrink every knob in Forge to match.
+- Eight macros, two across and four down in a column at the right-hand edge,
+  standing beside GLOBAL and LFO 1 rather than under them. They are smaller
+  than the controls they drive, and sources only: a macro reaches a control
+  through a slot or not at all. A module can declare its knobs compact, which
+  both keeps eight small knobs from shrinking every knob in Forge to match and
+  holds them below the diameter the rest of the panel shares.
 - Every source carries a drag handle that is **not** the control itself —
   dragging a knob has to keep meaning "turn this", so the grab point is the
   numbered tag beside a macro, and the named tag in ENV 1's and LFO 1's
@@ -252,6 +266,22 @@ Delivered in two parts. **M6a, the engine and the panel, is done.**
 Still to do here: dragging the ring itself to set depth. Until then a new
 routing lands at half depth — zero would be correct but would look like the
 drop had done nothing — and depth is edited in the matrix.
+
+**M6d — the matrix tab** — done
+
+- The matrix moved out of the bottom of the panel and onto a tab of its own,
+  which it shares with the oscillators. Tabs switch that one row and nothing
+  else, so the filter, the envelope, the LFO and the macros stay reachable
+  while a routing is being made. Losing the fourth grid row is what paid for
+  the macro column and for a shorter window at every resize limit.
+- The matrix reads as a table rather than as a grid of fields: one row per
+  slot, numbered down the side, with the amount between the source driving it
+  and the control it moves. Column titles are drawn once above the rows, so no
+  field carries a label of its own.
+- Amount became a horizontal bar that fills out from zero, so the sign and the
+  size of a depth read across the row without the number being looked at.
+- A slot's number lights once the slot has both ends, which makes the routings
+  in use countable at a glance.
 
 **Tests:** a slot at zero depth, and a slot pointed at nothing, both render
 bit-identically to no slot at all; two half-depth slots sum exactly to one at
@@ -334,5 +364,6 @@ way to look at a change.
 | M6a Matrix engine and panel | **done** — ready to test by ear |
 | M6b Macros, drag to knob, keyboard | **done** — ready to test by ear |
 | M6c Draggable depth rings | not started |
+| M6d Matrix tab | **done** — ready to test by eye |
 | M7 LFO 1 | not started |
 | M8 Polish | not started |

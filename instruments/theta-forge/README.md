@@ -5,9 +5,17 @@ standalone JUCE application that deliberately owns no Tracktion or Theta-DAW
 types.
 
 Forge is a synthesiser and nothing else. The panel is a set of modules — two
-oscillators, sub, noise, a filter, one amp envelope, one LFO, and global
-voicing — each in its own box with its own enable. Effects are deliberately
-absent until the synth is finished.
+oscillators, sub, noise, a filter, one amp envelope, one LFO, global voicing,
+eight macros and the modulation matrix — each in its own box with its own
+enable. Effects are deliberately absent until the synth is finished.
+
+Two tabs in the title bar, `OSC` and `MATRIX`, switch **only the top row** of
+the panel: the oscillators and the matrix take turns in that one row, and
+everything below it stays on screen either way. A module says which tab it
+belongs to by declaring a `Page`; a module that declares nothing is always
+shown. Switching tabs hides and shows components rather than rebuilding them,
+so a knob the matrix is covering is still driven by the host and by its own
+modulation slots while it is out of sight.
 
 The editor saves and loads versioned `.forgepreset` files; host project state
 remains independent and continues to use the VST3 state API.

@@ -88,6 +88,7 @@ Editor::Editor(Processor& p)
 {
     buildModules();
     buildHandles();
+    buildTabs();
 
     keyboard.setAvailableRange(21, 108);
     keyboard.setLowestVisibleKey(21);
@@ -118,10 +119,62 @@ Editor::Editor(Processor& p)
     addAndMakeVisible(presetName);
 
     setResizable(true, true);
-    setResizeLimits(1140, 1010, 1900, 1500);
-    setSize(1260, 1100);
+    // The matrix moving into the tabbed row took a whole grid row off the
+    // bottom of the panel, so the window is shorter than it was at every limit.
+    setResizeLimits(1140, 980, 1900, 1500);
+    setSize(1260, 1060);
     applyEnableStates();
+    applyPage();
     startTimerHz(24);
+}
+
+void Editor::buildTabs()
+{
+    for (int i = 0; i < ui::tabCount; ++i)
+    {
+        const auto target = ui::tabPages[i];
+        auto tab = std::make_unique<ui::PageTab>(ui::pageName(target));
+        tab->accent = target == ui::Page::matrix ? ui::signalViolet : ui::electricBlue;
+        tab->setTooltip(target == ui::Page::matrix
+                            ? "Show the modulation matrix in place of the oscillators"
+                            : "Show the oscillators");
+        tab->setToggleState(target == page, juce::dontSendNotification);
+        tab->onClick = [this, target] { showPage(target); };
+        addAndMakeVisible(*tab);
+        tabs.push_back(std::move(tab));
+    }
+}
+
+void Editor::showPage(ui::Page target)
+{
+    if (page == target) return;
+    page = target;
+    for (int i = 0; i < ui::tabCount; ++i)
+        tabs[static_cast<size_t>(i)]->setToggleState(ui::tabPages[i] == page, juce::dontSendNotification);
+    applyPage();
+}
+
+// A module either declares a page or stays put. Hiding rather than rebuilding
+// keeps every attachment alive, so a knob the tab is covering is still driven
+// by the host and by the matrix while it is out of sight.
+void Editor::applyPage()
+{
+    for (auto& module : moduleUis)
+    {
+        const auto shown = ui::onPage(*module.descriptor, page);
+        if (module.enable != nullptr) module.enable->setVisible(shown);
+        for (auto& control : module.controls)
+        {
+            control->label.setVisible(shown);
+            control->slider.setVisible(shown);
+            if (control->chip != nullptr) control->chip->setVisible(shown);
+            if (control->rocker != nullptr) control->rocker->setVisible(shown);
+        }
+    }
+    // Last, because a macro's handle takes the place of its label and the
+    // layout pass is what decides that.
+    resized();
+    repaint();
 }
 
 void Editor::buildModules()
@@ -198,9 +251,12 @@ void Editor::buildModules()
                 }
                 else
                 {
-                    // A bar style drags vertically and routes to
-                    // drawLinearSlider, where it is painted as a numeric field.
-                    control->slider.setSliderStyle(juce::Slider::LinearBarVertical);
+                    // Both bar styles route to drawLinearSlider. A stepper is
+                    // vertical and painted as a numeric field; a matrix amount
+                    // is horizontal, and drags along the fill it draws.
+                    control->slider.setSliderStyle(declared.style == ui::Style::bar
+                                                       ? juce::Slider::LinearBar
+                                                       : juce::Slider::LinearBarVertical);
                     control->slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
                 }
                 control->slider.setLookAndFeel(&lookAndFeel);
@@ -231,7 +287,9 @@ void Editor::buildModules()
                 // The editor handles right-click so a knob can offer its
                 // modulation menu without each slider knowing about the matrix.
                 control->slider.addMouseListener(this, false);
-                addAndMakeVisible(control->label);
+                // A table names its columns once, in the strip above its rows,
+                // so its controls carry no label of their own.
+                if (descriptor.columnHeaderHeight == 0) addAndMakeVisible(control->label);
                 addAndMakeVisible(control->slider);
                 module.controls.push_back(std::move(control));
             }
@@ -282,12 +340,15 @@ void Editor::paint(juce::Graphics& g)
     for (const auto& module : moduleUis)
     {
         const auto& descriptor = *module.descriptor;
+        if (!ui::onPage(descriptor, page)) continue;
         const auto area = ui::moduleBounds(getLocalBounds(), descriptor);
         const auto on = module.on();
         const auto alpha = on ? 1.0f : 0.35f;
         const auto stage = static_cast<ui::Stage>(juce::jlimit(0, 4, processor.envelopeStage()));
         ui::drawModuleShell(g, area, descriptor, on,
                             descriptor.display == ui::Display::envelope ? ui::stageName(stage) : juce::String());
+
+        if (descriptor.columnHeaderHeight > 0) paintTable(g, area, descriptor);
 
         const auto display = ui::displayBounds(area, descriptor);
         if (display.isEmpty()) continue;
@@ -339,12 +400,48 @@ void Editor::paint(juce::Graphics& g)
     }
 }
 
+// A slot counts as live once it has both ends: something driving it and
+// somewhere to go. Depth is left out deliberately, so a slot parked at zero
+// still reads as a routing you set up rather than as an empty row.
+bool Editor::slotIsLive(int slot) const
+{
+    return juce::roundToInt(value(slotParameter(slot, "Source").toRawUTF8())) > 0
+        && juce::roundToInt(value(slotParameter(slot, "Dest").toRawUTF8())) > 0;
+}
+
+// The furniture that makes eight rows of fields read as a table: the column
+// titles, once, above the rows; a rule under them; and every row numbered in
+// the gutter, against a band on alternate rows.
+void Editor::paintTable(juce::Graphics& g, juce::Rectangle<int> area, const ui::Module& descriptor)
+{
+    const auto accent = ui::accentFor(descriptor);
+    const auto titles = ui::columnTitleBounds(area, descriptor);
+
+    ui::drawColumnTitle(g, titles.withWidth(descriptor.rowGutter), "#");
+    const auto& first = descriptor.rows.front().controls;
+    for (int i = 0; i < static_cast<int>(first.size()); ++i)
+    {
+        const auto cell = ui::cellBounds(area, descriptor, 0, i);
+        ui::drawColumnTitle(g, titles.withX(cell.getX()).withWidth(cell.getWidth()),
+                            first[static_cast<size_t>(i)].label);
+    }
+    ui::drawColumnTitleRule(g, titles);
+
+    for (int row = 0; row < static_cast<int>(descriptor.rows.size()); ++row)
+        ui::drawTableRow(g, ui::rowBounds(area, descriptor, row),
+                         ui::rowGutterBounds(area, descriptor, row),
+                         row + 1, slotIsLive(row), accent);
+}
+
 void Editor::resized()
 {
     const auto right = getWidth() - ui::windowMargin;
     savePreset.setBounds(right - 62, 26, 62, 26);
     loadPreset.setBounds(right - 130, 26, 62, 26);
     presetName.setBounds(right - 350, 26, 212, 26);
+
+    for (int i = 0; i < ui::tabCount && i < static_cast<int>(tabs.size()); ++i)
+        tabs[static_cast<size_t>(i)]->setBounds(ui::tabBounds(i));
 
     const auto keys = ui::keyboardBounds(getLocalBounds());
     // Sized so the full eighty-eight keys span the panel exactly, rather than
@@ -405,8 +502,15 @@ void Editor::resized()
                 case ui::Style::chip:
                     control.chip->setBounds(block);
                     break;
+                case ui::Style::bar:
+                    control.slider.setBounds(block);
+                    break;
                 case ui::Style::stepper:
-                    control.label.setBounds(block.removeFromTop(ui::stepperLabelHeight));
+                    // Inside a table the column title is the label, so the
+                    // field takes the whole block rather than the half of it
+                    // left under a label strip.
+                    if (descriptor.columnHeaderHeight == 0)
+                        control.label.setBounds(block.removeFromTop(ui::stepperLabelHeight));
                     control.slider.setBounds(block);
                     break;
                 case ui::Style::rocker:

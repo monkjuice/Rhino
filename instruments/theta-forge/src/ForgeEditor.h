@@ -47,6 +47,10 @@ private:
     Processor& processor;
     ui::LookAndFeel lookAndFeel;
     std::vector<ModuleUi> moduleUis;
+    // Which tab is showing. Only the modules that declare a page follow it;
+    // everything else stays on screen whichever tab is chosen.
+    ui::Page page = ui::Page::oscillators;
+    std::vector<std::unique_ptr<ui::PageTab>> tabs;
     // Drag handles live outside the modules: a macro's sits beside its knob, a
     // modulator's in its module header.
     std::vector<std::unique_ptr<ui::SourceHandle>> handles;
@@ -58,6 +62,11 @@ private:
     std::unique_ptr<juce::FileChooser> fileChooser;
 
     void buildModules();
+    void buildTabs();
+    void showPage(ui::Page);
+    void applyPage();
+    void paintTable(juce::Graphics&, juce::Rectangle<int> area, const ui::Module&);
+    bool slotIsLive(int slot) const;
     void applyEnableStates();
     float value(const char* id) const;
     void mouseDown(const juce::MouseEvent&) override;

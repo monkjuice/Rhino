@@ -119,7 +119,7 @@ bool allSamplesFinite(const juce::AudioBuffer<float>& buffer)
 void layoutSuite()
 {
     theta::forge::Processor processor;
-    const auto bounds = juce::Rectangle<int>(0, 0, 1260, 1010);
+    const auto bounds = juce::Rectangle<int>(0, 0, 1260, 1060);
     const auto content = theta::forge::ui::contentBounds(bounds);
     const auto& modules = theta::forge::ui::modules();
     require(!modules.empty(), "the panel declares at least one module");
@@ -202,9 +202,49 @@ void layoutSuite()
                         "no two control rows in a module overlap");
         }
 
+        // Two modules may share a rectangle as long as no tab shows them both:
+        // that is exactly what the oscillators and the matrix do.
         for (size_t j = i + 1; j < modules.size(); ++j)
-            require(!area.intersects(theta::forge::ui::moduleBounds(bounds, modules[j])),
-                    "no two modules overlap");
+            if (theta::forge::ui::sharePage(modules[i], modules[j]))
+                require(!area.intersects(theta::forge::ui::moduleBounds(bounds, modules[j])),
+                        "no two modules shown together overlap");
+    }
+
+    // Every tab has to put something on screen, and the tabs themselves have to
+    // stay clear of each other in the title bar.
+    for (const auto page : theta::forge::ui::tabPages)
+    {
+        auto shown = 0;
+        for (const auto& module : modules)
+            if (module.page == page) ++shown;
+        require(shown > 0, "every tab shows at least one module of its own");
+    }
+    for (int i = 1; i < theta::forge::ui::tabCount; ++i)
+        require(!theta::forge::ui::tabBounds(i - 1).intersects(theta::forge::ui::tabBounds(i)),
+                "no two tabs overlap");
+
+    // A table names its columns once, above its rows, so every row has to have
+    // the same controls in the same order as the first or the titles lie.
+    for (const auto& module : modules)
+    {
+        if (module.columnHeaderHeight <= 0) continue;
+        const auto area = theta::forge::ui::moduleBounds(bounds, module);
+        const auto titles = theta::forge::ui::columnTitleBounds(area, module);
+        require(!titles.isEmpty(), "a table reserves a strip for its column titles");
+        require(!titles.intersects(theta::forge::ui::controlArea(area, module)),
+                "a table's column titles sit clear of its rows");
+        for (int r = 0; r < static_cast<int>(module.rows.size()); ++r)
+            require(!theta::forge::ui::rowGutterBounds(area, module, r)
+                         .intersects(theta::forge::ui::rowBounds(area, module, r)),
+                    "a table's row numbers sit clear of its controls");
+        const auto& first = module.rows.front().controls;
+        for (const auto& row : module.rows)
+        {
+            require(row.controls.size() == first.size(), "every table row has the same columns");
+            for (size_t c = 0; c < row.controls.size() && c < first.size(); ++c)
+                require(row.controls[c].style == first[c].style && row.controls[c].weight == first[c].weight,
+                        "a table column keeps its style and its width down every row");
+        }
     }
 
     // Every knob on the panel is the same size, whichever module it sits in.
@@ -241,7 +281,7 @@ void layoutSuite()
 
     // The proportions have to survive the whole resize range, not just the
     // default size.
-    for (const auto size : {juce::Point<int>(1140, 930), juce::Point<int>(1900, 1400)})
+    for (const auto size : {juce::Point<int>(1140, 980), juce::Point<int>(1900, 1500)})
     {
         const auto resized = juce::Rectangle<int>(0, 0, size.x, size.y);
         for (const auto& module : modules)

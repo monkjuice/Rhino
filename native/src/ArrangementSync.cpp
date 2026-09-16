@@ -94,6 +94,9 @@ void Arrangement::syncTrackControls()
         soloButton->setColour(juce::TextButton::buttonOnColourId, juce::Colour(0xff657440));
         auto volumeSlider = std::make_unique<juce::Slider>();
         volumeSlider->setSliderStyle(juce::Slider::LinearBar);
+        // The bar paints the value itself, in a colour picked for whichever of
+        // the fill and the trough each half of it lands on.
+        volumeSlider->setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
         volumeSlider->setRange(Session::minimumVolumeDb, Session::maximumVolumeDb, 0.1);
         // The bar is small enough that the unit costs more room than it earns.
         volumeSlider->setTextValueSuffix({});
@@ -107,6 +110,7 @@ void Arrangement::syncTrackControls()
         };
         auto panSlider = std::make_unique<juce::Slider>();
         panSlider->setSliderStyle(juce::Slider::LinearBar);
+        panSlider->setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
         panSlider->setRange(-1.0, 1.0, 0.01);
         panSlider->setDoubleClickReturnValue(true, 0.0);
         panSlider->setTooltip("Track pan");

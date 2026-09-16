@@ -87,6 +87,7 @@ Arrangement::~Arrangement()
 void Arrangement::configureMasterControls()
 {
     masterVolume.setSliderStyle(juce::Slider::LinearBar);
+    masterVolume.setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
     masterVolume.setRange(Session::minimumVolumeDb, Session::maximumVolumeDb, 0.1);
     masterVolume.setTextValueSuffix({});
     masterVolume.setDoubleClickReturnValue(true, 0.0);
@@ -95,6 +96,7 @@ void Arrangement::configureMasterControls()
     masterVolume.onDragEnd = [this] { session.endMasterVolumeGesture(); };
     masterVolume.onValueChange = [this] { session.setMasterVolumeDb(static_cast<float>(masterVolume.getValue())); };
     masterPan.setSliderStyle(juce::Slider::LinearBar);
+    masterPan.setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
     masterPan.setRange(-1.0, 1.0, 0.01);
     masterPan.setDoubleClickReturnValue(true, 0.0);
     masterPan.setTooltip("Main output pan");

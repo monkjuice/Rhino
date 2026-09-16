@@ -68,6 +68,7 @@ SessionView::SessionView(Session& s) : session(s)
     mainLabel.setColour(juce::Label::textColourId, juce::Colour(0xff8a969f));
     mainLabel.setFont(juce::FontOptions(11.0f));
     mainVolume.setSliderStyle(juce::Slider::LinearBar);
+    mainVolume.setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
     mainVolume.setRange(Session::minimumVolumeDb, Session::maximumVolumeDb, 0.1);
     mainVolume.setTextValueSuffix(" dB");
     mainVolume.setDoubleClickReturnValue(true, 0.0);
@@ -166,6 +167,7 @@ void SessionView::syncTrackControls()
         soloButton->setColour(juce::TextButton::buttonOnColourId, juce::Colour(0xff657440));
         auto volumeSlider = std::make_unique<juce::Slider>();
         volumeSlider->setSliderStyle(juce::Slider::LinearBar);
+        volumeSlider->setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
         volumeSlider->setRange(Session::minimumVolumeDb, Session::maximumVolumeDb, 0.1);
         volumeSlider->setTextValueSuffix(" dB");
         volumeSlider->setDoubleClickReturnValue(true, 0.0);
@@ -178,6 +180,7 @@ void SessionView::syncTrackControls()
         };
         auto panSlider = std::make_unique<juce::Slider>();
         panSlider->setSliderStyle(juce::Slider::LinearBar);
+        panSlider->setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
         panSlider->setRange(-1.0, 1.0, 0.01);
         panSlider->setDoubleClickReturnValue(true, 0.0);
         panSlider->setTooltip("Track pan");

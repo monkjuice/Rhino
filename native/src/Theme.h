@@ -3,9 +3,42 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 namespace theta
 {
+// A JUCE font height is ascent plus descent, which the face then divides down
+// to an em size: ask for a height of 12 and Inter is rasterised at 9.9 pixels
+// per em. A fractional em is what puts stems between pixel columns, and with
+// greyscale antialiasing and no grid fitting there is nothing to pull them
+// back onto it. These ask for the em size directly, in whole pixels.
+inline juce::Font uiFont(float pixelsPerEm)
+{
+    return juce::Font(juce::FontOptions().withPointHeight(pixelsPerEm));
+}
+
+inline juce::Font uiFontBold(float pixelsPerEm)
+{
+    return juce::Font(juce::FontOptions().withPointHeight(pixelsPerEm).withStyle("SemiBold"));
+}
+
+// The other half of it: JUCE centres a line by computing its baseline in
+// floats, so text centred in a box of the wrong height is drawn half a pixel
+// low however whole the em size is. This rounds the baseline to a pixel row.
+inline void drawSnappedText(juce::Graphics& g, const juce::String& text, juce::Rectangle<int> area,
+                            juce::Justification justification = juce::Justification::centredLeft)
+{
+    const auto font = g.getCurrentFont();
+    const auto baseline = area.getY()
+        + juce::roundToInt((static_cast<float>(area.getHeight()) + font.getAscent() - font.getDescent()) * 0.5f);
+    auto x = area.getX();
+    if (justification.testFlags(juce::Justification::horizontallyCentred))
+        x = area.getCentreX() - juce::roundToInt(juce::GlyphArrangement::getStringWidth(font, text) * 0.5f);
+    else if (justification.testFlags(juce::Justification::right))
+        x = area.getRight() - juce::GlyphArrangement::getStringWidthInt(font, text);
+    g.drawSingleLineText(text, x, baseline);
+}
+
 class Theme final : public juce::LookAndFeel_V4
 {
 public:
@@ -102,9 +135,10 @@ public:
         auto* label = juce::LookAndFeel_V4::createSliderTextBox(slider);
         const auto style = slider.getSliderStyle();
         if (label != nullptr && (style == juce::Slider::LinearBar || style == juce::Slider::LinearBarVertical))
-            label->setFont(juce::FontOptions(11.0f));
+            label->setFont(uiFont(9.0f));
         return label;
     }
+
 
     // The stock bar keeps its fill a half pixel clear of its own frame and
     // then outlines it a whole pixel wide, which at this size reads as a box
@@ -122,14 +156,36 @@ public:
         }
         const auto bounds = juce::Rectangle<float>(static_cast<float>(x), static_cast<float>(y),
                                                    static_cast<float>(width), static_cast<float>(height));
-        g.setColour(slider.findColour(juce::Slider::backgroundColourId));
+        const auto trough = slider.findColour(juce::Slider::backgroundColourId);
+        const auto fill = slider.findColour(juce::Slider::trackColourId);
+        const auto filled = slider.isHorizontal() ? bounds.withRight(sliderPos) : bounds.withTop(sliderPos);
+        const auto unfilled = slider.isHorizontal() ? bounds.withLeft(sliderPos) : bounds.withBottom(sliderPos);
+        g.setColour(trough);
         g.fillRect(bounds);
-        g.setColour(slider.findColour(juce::Slider::trackColourId));
-        g.fillRect(slider.isHorizontal()
-                       ? bounds.withRight(sliderPos)
-                       : bounds.withTop(sliderPos));
+        g.setColour(fill);
+        g.fillRect(filled);
         g.setColour(slider.findColour(juce::Slider::textBoxOutlineColourId));
         g.drawRect(bounds, 0.6f);
+
+        // A value that crosses the end of the fill would be half legible in
+        // either single colour, so it is drawn once per ground with each half
+        // clipped to the ground it sits on. The colours come from the grounds
+        // themselves, so any fader colour stays readable without a second set
+        // of constants to keep in step. A bar that kept its own text box is
+        // left alone, or the two would be drawn over each other.
+        if (slider.getTextBoxPosition() != juce::Slider::NoTextBox) return;
+        const auto text = slider.getTextFromValue(slider.getValue());
+        if (text.isEmpty()) return;
+        const auto area = bounds.toNearestInt();
+        g.setFont(uiFont(9.0f));
+        for (const auto& ground : {std::make_pair(filled, fill), std::make_pair(unfilled, trough)})
+        {
+            if (ground.first.isEmpty()) continue;
+            juce::Graphics::ScopedSaveState scope(g);
+            g.reduceClipRegion(ground.first.toNearestInt());
+            g.setColour(ground.second.contrasting(0.92f));
+            drawSnappedText(g, text, area, juce::Justification::centred);
+        }
     }
 
     void drawButtonBackground(juce::Graphics& g, juce::Button& button,

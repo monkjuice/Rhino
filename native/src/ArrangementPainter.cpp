@@ -1,5 +1,6 @@
 #include "ArrangementInternal.h"
 #include "Playhead.h"
+#include "Theme.h"
 #include <optional>
 #include <set>
 
@@ -11,10 +12,10 @@ namespace theta
 void Arrangement::paint(juce::Graphics& g)
 {
     g.fillAll(juce::Colour(0xff1d2228));
-    g.setFont(juce::FontOptions(12.0f));
+    g.setFont(uiFont(10.0f));
     g.setColour(juce::Colour(0xff8a969f));
-    g.drawText("Drop browser items or files / drag clips to move / trim edges",
-               360, 0, getWidth() - 370, 30, juce::Justification::centredLeft);
+    drawSnappedText(g, "Drop browser items or files / drag clips to move / trim edges",
+                    {360, 0, getWidth() - 370, 30});
     for (int index = 0; index < static_cast<int>(rows.size()); ++index)
     {
         const auto row = rowBounds(index);
@@ -57,11 +58,17 @@ void Arrangement::paint(juce::Graphics& g)
         // dragged to, level with the two buttons beside it. Dark text on a
         // light card, light on a dark one, so every colour stays readable.
         g.setColour(cardColour.contrasting(0.8f));
-        g.setFont(juce::FontOptions(12.0f, juce::Font::bold));
-        g.drawFittedText(juce::String(track + 1).paddedLeft('0', 2) + "  " + session.trackName(track),
-                         nameColumn.withY(row.getY() + cardControlsTop).withHeight(18.0f).toNearestInt().reduced(6, 0),
-                         juce::Justification::centredLeft, 1, 0.75f);
-        g.setFont(juce::FontOptions(12.0f));
+        g.setFont(uiFontBold(10.0f));
+        {
+            // Clipped rather than shrunk to fit: a scaled-down line lands on a
+            // fractional em again, which is the blur this is avoiding.
+            const auto nameArea = nameColumn.withY(row.getY() + cardControlsTop)
+                                            .withHeight(18.0f).toNearestInt().reduced(6, 0);
+            juce::Graphics::ScopedSaveState scope(g);
+            g.reduceClipRegion(nameArea);
+            drawSnappedText(g, juce::String(track + 1).paddedLeft('0', 2) + "  " + session.trackName(track), nameArea);
+        }
+        g.setFont(uiFont(10.0f));
     }
 
     // Every row is bounded, header and timeline alike, so a track reads as one
@@ -99,8 +106,8 @@ void Arrangement::paint(juce::Graphics& g)
             g.fillRect(master.withWidth(3.0f));
         }
         g.setColour(juce::Colour(0xffc4cbd1));
-        g.setFont(juce::FontOptions(11.0f));
-        g.drawText("MAIN", 10, static_cast<int>(master.getY()) + 5, 44, 16, juce::Justification::centredLeft);
+        g.setFont(uiFontBold(9.0f));
+        drawSnappedText(g, "MAIN", {10, static_cast<int>(master.getY()) + 5, 44, 16});
     }
 
     const auto firstBeat = session.edit->tempoSequence.toBeats(tracktion::core::TimePosition::fromSeconds(viewStart)).inBeats();
@@ -126,8 +133,9 @@ void Arrangement::paint(juce::Graphics& g)
         {
             const auto barNumber = static_cast<int>(std::floor(beat / session.beatsPerBar())) + 1;
             g.setColour(juce::Colour(0xff8c99a4));
-            g.drawText(juce::String(barNumber) + ".1", static_cast<int>(x) + 4, static_cast<int>(rulerTop),
-                       64, 24, juce::Justification::centredLeft);
+            g.setFont(uiFont(10.0f));
+            drawSnappedText(g, juce::String(barNumber) + ".1",
+                            {static_cast<int>(x) + 4, static_cast<int>(rulerTop), 64, 24});
         }
     }
     {

@@ -1,5 +1,6 @@
 #include "../src/ForgeProcessor.h"
 #include "../ui/ForgeLayout.h"
+#include "../ui/ForgeTooltips.h"
 #include <iostream>
 
 // One binary, three CTest cases selected by argv, matching Theta's own test
@@ -162,6 +163,26 @@ void layoutSuite()
                         "a control is gated one way or the other, not both");
             }
 
+    // A control with no tooltip is a control nobody explained. Held to the same
+    // standard as a control whose parameter does not exist, because a panel this
+    // dense is unusable without them and a silent gap is easy to miss by eye.
+    for (const auto& module : modules)
+    {
+        if (module.enableId != nullptr)
+            require(theta::forge::ui::tooltipFor(module.enableId).isNotEmpty(),
+                    "a module's enable has a tooltip");
+        for (const auto& row : module.rows)
+            for (const auto& control : row.controls)
+            {
+                const auto tip = theta::forge::ui::tooltipFor(control.id);
+                require(tip.isNotEmpty(), "every control has a tooltip");
+                if (tip.isEmpty()) std::cerr << "       no tooltip: " << control.id << '\n';
+                // A leftover placeholder would pass the emptiness check while
+                // saying nothing, so tooltips have to be sentences.
+                require(tip.length() > 8, "a tooltip says something");
+            }
+    }
+
     // Polyphony means nothing in mono, and the panel has to say so.
     auto polyIsGated = false;
     for (const auto& module : modules)
@@ -290,20 +311,62 @@ void layoutSuite()
 
     // The proportions have to survive the whole resize range, not just the
     // default size.
-    for (const auto size : {juce::Point<int>(1140, 980), juce::Point<int>(1900, 1500)})
-    {
-        const auto resized = juce::Rectangle<int>(0, 0, size.x, size.y);
-        for (const auto& module : modules)
+    // Swept rather than sampled at the corners. Integer division means the
+    // geometry can go wrong at one awkward size while both extremes are fine,
+    // and a module clipping at some width nobody happened to try is exactly the
+    // kind of thing an eye test misses.
+    for (int width = 1140; width <= 1900; width += 20)
+        for (int height = 980; height <= 1500; height += 20)
         {
-            const auto area = theta::forge::ui::moduleBounds(resized, module);
-            require(theta::forge::ui::contentBounds(resized).contains(area),
-                    "a module stays inside the content area at every allowed size");
-            require(theta::forge::ui::controlArea(area, module).getHeight() > 24,
-                    "controls stay usable at every allowed size");
+            const auto resized = juce::Rectangle<int>(0, 0, width, height);
+            const auto area = theta::forge::ui::contentBounds(resized);
+            const auto diameter = theta::forge::ui::uniformKnobDiameter(resized);
+            if (diameter < 40)
+            {
+                require(false, "knobs stay usable at every allowed size");
+                std::cerr << "       at " << width << "x" << height << '\n';
+            }
+
+            for (size_t i = 0; i < modules.size(); ++i)
+            {
+                const auto box = theta::forge::ui::moduleBounds(resized, modules[i]);
+                if (!area.contains(box))
+                {
+                    require(false, "a module stays inside the content area at every allowed size");
+                    std::cerr << "       " << modules[i].id << " at " << width << "x" << height << '\n';
+                }
+                if (theta::forge::ui::controlArea(box, modules[i]).getHeight() <= 24)
+                {
+                    require(false, "controls stay usable at every allowed size");
+                    std::cerr << "       " << modules[i].id << " at " << width << "x" << height << '\n';
+                }
+                // Overlap has to hold at every size too, not only at the one the
+                // panel was designed against.
+                for (size_t j = i + 1; j < modules.size(); ++j)
+                {
+                    if (!theta::forge::ui::sharePage(modules[i], modules[j])) continue;
+                    if (box.intersects(theta::forge::ui::moduleBounds(resized, modules[j])))
+                    {
+                        require(false, "no two modules shown together overlap at any allowed size");
+                        std::cerr << "       " << modules[i].id << " and " << modules[j].id
+                                  << " at " << width << "x" << height << '\n';
+                    }
+                }
+
+                // And every control still lands inside the module that owns it.
+                for (int r = 0; r < static_cast<int>(modules[i].rows.size()); ++r)
+                    for (int c = 0; c < static_cast<int>(modules[i].rows[static_cast<size_t>(r)].controls.size()); ++c)
+                    {
+                        const auto block = theta::forge::ui::controlBlock(box, modules[i], r, c, diameter);
+                        if (block.isEmpty() || !box.contains(block))
+                        {
+                            require(false, "every control stays inside its module at any allowed size");
+                            std::cerr << "       " << modules[i].id << " control " << c
+                                      << " at " << width << "x" << height << '\n';
+                        }
+                    }
+            }
         }
-        require(theta::forge::ui::uniformKnobDiameter(resized) >= 40,
-                "knobs stay usable at every allowed size");
-    }
 }
 
 // --------------------------------------------------------------- presets ---

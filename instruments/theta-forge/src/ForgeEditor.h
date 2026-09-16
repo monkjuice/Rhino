@@ -62,6 +62,11 @@ private:
     ui::SourceHandle* draggingHandle = nullptr;
     juce::Point<int> dragPosition;
     juce::MidiKeyboardComponent keyboard;
+    // Every control has carried a tooltip since M2, but without one of these
+    // nothing ever showed them. Parented to the editor rather than given a
+    // desktop window of its own, which is what a plugin in a host needs.
+    // Declared last of the components so it is added on top of them.
+    juce::TooltipWindow tooltips {this, 700};
     juce::TextButton loadPreset {"LOAD"}, savePreset {"SAVE"};
     juce::Label presetName;
     std::unique_ptr<juce::FileChooser> fileChooser;

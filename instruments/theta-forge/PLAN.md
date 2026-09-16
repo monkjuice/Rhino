@@ -390,13 +390,36 @@ unsynced LFO runs at its knob; a synced one divides the host tempo, tracks a
 tempo change rather than latching the first one it saw, and a whole-bar division
 is four beats long; the published phase stays inside one cycle and advances.
 
-### M8 — Interaction and preset polish
+### M8 — Interaction and preset polish — interaction done, presets outstanding
 
-- Resize behaviour at every supported size, with no module clipping.
-- Knob interaction: scroll, fine drag, double-click to default, right-click menu.
-- Tooltips on every control.
-- Refresh both bundled presets against the new parameter set and add a small
-  set of init variants that show each module off.
+- **Resize behaviour at every supported size, with no module clipping.** The
+  layout test now sweeps the whole allowed range in twenty-pixel steps rather
+  than sampling the two corners — a thousand-odd sizes — and checks at each one
+  that no module escapes the content area, that no two modules shown together
+  overlap, that every control lands inside its own module, and that knobs stay
+  usable. Integer division means the geometry can go wrong at one awkward size
+  while both extremes are fine, which is exactly what an eye test misses. Every
+  failure names the module and the size.
+- **Knob interaction.** Scroll works, double-click returns a control to its
+  default, and right-click offers the modulation menu; all three were already
+  there and are now confirmed by hand rather than assumed. Fine drag is new:
+  holding Shift or Ctrl stretches a whole range from 250 pixels of travel to
+  1400, and stretches a modulation ring's drag the same way. Measured — the same
+  sixty-pixel gesture on the cutoff moves it to 18.00 kHz plain and to 9.58 kHz
+  fine.
+- **Tooltips on every control.** Every control had carried one since M2, but
+  there was no `TooltipWindow` anywhere in the editor, so not one of them had
+  ever been shown. Adding it is the whole fix. The table moved out of the editor
+  into `ui/ForgeTooltips.h` so the layout test can hold it to the same standard
+  it holds parameter ids to: every declared control and every module enable must
+  have a tooltip, and it must be a sentence rather than a placeholder. That
+  caught the gaps — the module enables, and everything LFO 1 gained in M7.
+  Tooltips are drawn dark enough to read against the panel.
+
+**Still outstanding:** the bundled presets. There are none in the repository to
+refresh — the line above was written when there were — so this is now "author a
+small factory set that shows each module off", which wants an ear rather than a
+build, and is left for whoever has one.
 
 ## Out of scope for now
 
@@ -457,4 +480,4 @@ way to look at a change.
 | M6d Matrix tab | **done** — ready to test by eye |
 | M6e Modulation shown on the knob | **done** — ready to test by eye |
 | M7 LFO 1 | **done** — ready to test by ear |
-| M8 Polish | not started |
+| M8 Polish | interaction **done**; a factory preset set still to author |

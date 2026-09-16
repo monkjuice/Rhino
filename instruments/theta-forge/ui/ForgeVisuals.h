@@ -227,6 +227,17 @@ public:
     // belongs to; this component knows only the gesture.
     std::function<void(float)> onRingDrag;
 
+    // Pixels of travel for a whole range, ordinarily and while a modifier asks
+    // for a slower hand. Shift or Ctrl, because different hosts have trained
+    // people on different ones and there is no cost to taking both.
+    static constexpr int normalDragPixels = 250;
+    static constexpr int fineDragPixels = 1400;
+
+    static bool fineDrag(const juce::MouseEvent& event)
+    {
+        return event.mods.isShiftDown() || event.mods.isCommandDown();
+    }
+
     bool overRing(juce::Point<int> position)
     {
         return ringDraggable && onModRing(ringArea(), position);
@@ -240,6 +251,9 @@ public:
             depthAtDragStart = ringDepth;
             return;
         }
+        // Set per gesture rather than once, so the modifier is read at the
+        // moment the hand goes down on the control.
+        setMouseDragSensitivity(fineDrag(event) ? fineDragPixels : normalDragPixels);
         juce::Slider::mouseDown(event);
     }
 
@@ -248,8 +262,10 @@ public:
         if (!draggingRing) { juce::Slider::mouseDrag(event); return; }
         // Up is more, down is less, and the whole bipolar range is 200 pixels
         // of travel, so a depth can be crossed from one sign to the other
-        // without letting go.
-        const auto moved = -static_cast<float>(event.getDistanceFromDragStartY()) / 100.0f;
+        // without letting go. A modifier stretches that the same way it
+        // stretches a knob's own travel.
+        const auto pixels = fineDrag(event) ? 560.0f : 100.0f;
+        const auto moved = -static_cast<float>(event.getDistanceFromDragStartY()) / pixels;
         if (onRingDrag) onRingDrag(juce::jlimit(-1.0f, 1.0f, depthAtDragStart + moved));
     }
 

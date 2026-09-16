@@ -1,70 +1,8 @@
 #include "ForgeEditor.h"
+#include "../ui/ForgeTooltips.h"
 
 namespace theta::forge
 {
-namespace
-{
-// Tooltips are keyed by parameter id so a module can be reordered, renamed or
-// moved to another row without disturbing them.
-juce::String tooltipFor(const juce::String& id)
-{
-    // Both oscillators expose the same controls, so their tooltips are keyed by
-    // the suffix and the oscillator's letter is filled in below.
-    static const std::map<juce::String, juce::String> perOscillator {
-        {"Position", "Scan oscillator %'s harmonic shape"},
-        {"Octave", "Transpose oscillator % in octaves"},
-        {"Semitone", "Transpose oscillator % in semitones"},
-        {"Fine", "Detune oscillator % in cents"},
-        {"Unison", "Stack detuned copies of oscillator %"},
-        {"Detune", "Spread oscillator %'s stack in pitch and across the stereo field"},
-        {"Blend", "Balance the centre of oscillator %'s stack against its edges"},
-        {"Pan", "Place oscillator % in the stereo field"},
-        {"Level", "Set oscillator %'s level"},
-    };
-    for (const auto& letter : {"A", "B"})
-        if (id.startsWith("osc" + juce::String(letter)))
-        {
-            const auto found = perOscillator.find(id.fromFirstOccurrenceOf("osc" + juce::String(letter), false, false));
-            if (found != perOscillator.end()) return found->second.replace("%", letter);
-        }
-
-    static const std::map<juce::String, juce::String> tips {
-        {"subLevel", "Blend in a sine one octave below the note"},
-        {"noiseLevel", "Blend in broadband noise"},
-        {"cutoff", "Open or close the filter"},
-        {"resonance", "Emphasise the filter edge"},
-        {"drive", "Saturate what is routed into the filter"},
-        {"filterType", "Low pass, high pass or band pass"},
-        {"routeA", "Send oscillator A through the filter"},
-        {"routeB", "Send oscillator B through the filter"},
-        {"routeSub", "Send the sub through the filter"},
-        {"routeNoise", "Send the noise through the filter"},
-        {"attack", "How the note begins"},
-        {"decay", "The fall from the attack peak"},
-        {"sustain", "The level a held note settles at"},
-        {"release", "How the note fades once released"},
-        {"lfoRate", "Free-running LFO speed. Point it somewhere in the matrix"},
-        {"polyphony", "Limit simultaneous notes"},
-        {"mono", "Collapse to one voice for basses and leads"},
-        {"legato", "Keep the envelope running across overlapping mono notes"},
-        {"glide", "Slide between monophonic notes"},
-        {"output", "Forge's final level"},
-    };
-    if (id.startsWith("macro"))
-        return "A performance macro. Drag its number onto a knob, or right-click the knob";
-
-    // Matrix slots: eight of each, all reading the same way.
-    if (id.startsWith("mod"))
-    {
-        if (id.endsWith("Source")) return "What drives this slot";
-        if (id.endsWith("Dest")) return "Which control this slot moves";
-        if (id.endsWith("Depth")) return "How far, and in which direction, the source moves the target";
-    }
-    const auto found = tips.find(id);
-    return found == tips.end() ? juce::String() : found->second;
-}
-}
-
 namespace
 {
 // The destination index a parameter corresponds to, or 0 if the matrix cannot
@@ -117,6 +55,13 @@ Editor::Editor(Processor& p)
     presetName.setFont(juce::FontOptions(10.0f));
     presetName.setColour(juce::Label::textColourId, ui::mutedText);
     addAndMakeVisible(presetName);
+
+    // The default tooltip is dark text furniture on a dark panel, which leaves
+    // the words floating with no edge to read them against. Given the same
+    // well-and-hairline treatment the rest of the panel uses.
+    tooltips.setColour(juce::TooltipWindow::backgroundColourId, juce::Colour(0xff05070e));
+    tooltips.setColour(juce::TooltipWindow::textColourId, ui::text);
+    tooltips.setColour(juce::TooltipWindow::outlineColourId, ui::electricBlue.withAlpha(0.6f));
 
     // So the panel itself can hold focus when nothing in it does, and the keys
     // still have somewhere to arrive from.
@@ -192,7 +137,7 @@ void Editor::buildModules()
         {
             module.enable = std::make_unique<ui::EnableLed>();
             module.enable->accent = accent;
-            module.enable->setTooltip("Switch " + juce::String(descriptor.title) + " on or off");
+            module.enable->setTooltip(ui::tooltipFor(descriptor.enableId));
             // Repaint the whole panel: switching a module off dims its shell,
             // its display and every knob inside it, not just the dot.
             module.enable->onClick = [this] { applyEnableStates(); repaint(); };
@@ -219,7 +164,7 @@ void Editor::buildModules()
                 {
                     control->chip = std::make_unique<ui::ToggleChip>(declared.label);
                     control->chip->accent = accent;
-                    control->chip->setTooltip(tooltipFor(declared.id));
+                    control->chip->setTooltip(ui::tooltipFor(declared.id));
                     control->buttonAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
                         processor.state, declared.id, *control->chip);
                     addAndMakeVisible(*control->chip);
@@ -238,7 +183,7 @@ void Editor::buildModules()
                     // moving as well as lighting up.
                     control->rocker = std::make_unique<ui::RockerSwitch>(declared.label);
                     control->rocker->accent = accent;
-                    control->rocker->setTooltip(tooltipFor(declared.id));
+                    control->rocker->setTooltip(ui::tooltipFor(declared.id));
                     control->buttonAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
                         processor.state, declared.id, *control->rocker);
 
@@ -269,7 +214,7 @@ void Editor::buildModules()
                 control->slider.setColour(juce::Slider::thumbColourId, accent);
                 control->slider.setColour(juce::Slider::textBoxTextColourId, ui::text);
                 control->slider.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
-                control->slider.setTooltip(tooltipFor(declared.id));
+                control->slider.setTooltip(ui::tooltipFor(declared.id));
                 // The attachment installs the parameter's own text formatting,
                 // so it must be created before anything reads the slider's text.
                 control->attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(

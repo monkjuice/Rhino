@@ -48,6 +48,10 @@ struct Module
     // Position in a twelve-column grid. Rows are weighted, not fixed height,
     // so the panel keeps its proportions at every allowed window size.
     int row, column, columnSpan;
+    // Knobs sized to their own cell instead of the panel's shared diameter,
+    // and left out of working that diameter out. The macros are deliberately
+    // smaller than the controls they drive, as Serum's are.
+    bool compactKnobs;
     std::vector<Row> rows;
 };
 
@@ -60,7 +64,7 @@ inline constexpr int headerHeight = 22;
 // because each carries a display, a tuning strip and six knobs.
 inline const std::vector<int>& rowWeights()
 {
-    static const std::vector<int> weights {34, 21, 26, 19};
+    static const std::vector<int> weights {32, 20, 24, 24};
     return weights;
 }
 
@@ -80,40 +84,44 @@ inline constexpr int maxChipWidth = 44;
 inline const std::vector<Module>& modules()
 {
     static const std::vector<Module> declared {
-        {"oscA", "OSC A", "MORPH", "oscAEnable", false, Display::oscillator, 0, 0, 6,
+        {"oscA", "OSC A", "MORPH", "oscAEnable", false, Display::oscillator, 0, 0, 6, false,
          {{26, {{"oscAOctave", "OCT", Style::stepper}, {"oscASemitone", "SEMI", Style::stepper},
                 {"oscAFine", "FINE", Style::stepper}}},
           {74, {{"oscAPosition", "POSITION"}, {"oscAUnison", "UNISON"}, {"oscADetune", "DETUNE"},
                 {"oscABlend", "BLEND"}, {"oscAPan", "PAN"}, {"oscALevel", "LEVEL"}}}}},
-        {"oscB", "OSC B", "MORPH", "oscBEnable", true, Display::oscillator, 0, 6, 6,
+        {"oscB", "OSC B", "MORPH", "oscBEnable", true, Display::oscillator, 0, 6, 6, false,
          {{26, {{"oscBOctave", "OCT", Style::stepper}, {"oscBSemitone", "SEMI", Style::stepper},
                 {"oscBFine", "FINE", Style::stepper}}},
           {74, {{"oscBPosition", "POSITION"}, {"oscBUnison", "UNISON"}, {"oscBDetune", "DETUNE"},
                 {"oscBBlend", "BLEND"}, {"oscBPan", "PAN"}, {"oscBLevel", "LEVEL"}}}}},
 
-        {"sub", "SUB", "", "subEnable", false, Display::none, 1, 0, 1,
+        {"sub", "SUB", "", "subEnable", false, Display::none, 1, 0, 1, false,
          {{100, {{"subLevel", "LEVEL"}}}}},
-        {"noise", "NOISE", "", "noiseEnable", true, Display::none, 1, 1, 1,
+        {"noise", "NOISE", "", "noiseEnable", true, Display::none, 1, 1, 1, false,
          {{100, {{"noiseLevel", "LEVEL"}}}}},
         // The routing chips name their source the way Serum's do: A, B, S, N.
-        {"filter", "FILTER", "", "filterEnable", false, Display::none, 1, 2, 5,
+        {"filter", "FILTER", "", "filterEnable", false, Display::none, 1, 2, 5, false,
          {{30, {{"filterType", "TYPE", Style::stepper}, {"routeA", "A", Style::chip},
                 {"routeB", "B", Style::chip}, {"routeSub", "S", Style::chip},
                 {"routeNoise", "N", Style::chip}}},
           {70, {{"cutoff", "CUTOFF"}, {"resonance", "RES"}, {"drive", "DRIVE"}}}}},
-        {"global", "GLOBAL", "VOICING", nullptr, false, Display::none, 1, 7, 5,
+        {"global", "GLOBAL", "VOICING", nullptr, false, Display::none, 1, 7, 5, false,
          {{100, {{"polyphony", "POLY", Style::knob, "mono"}, {"mono", "MONO", Style::rocker},
                  {"legato", "LEGATO", Style::rocker}, {"glide", "GLIDE"}, {"output", "OUTPUT"}}}}},
 
-        {"env1", "ENV 1", "AMP", nullptr, false, Display::envelope, 2, 0, 6,
+        {"env1", "ENV 1", "AMP", nullptr, false, Display::envelope, 2, 0, 6, false,
          {{100, {{"attack", "ATTACK"}, {"decay", "DECAY"}, {"sustain", "SUSTAIN"}, {"release", "RELEASE"}}}}},
-        {"lfo1", "LFO 1", "SOURCE", nullptr, true, Display::lfo, 2, 6, 6,
+        {"lfo1", "LFO 1", "SOURCE", nullptr, true, Display::lfo, 2, 6, 6, false,
          {{100, {{"lfoRate", "RATE"}}}}},
 
         // The matrix is three rows of eight: every slot's source above its
         // destination above its depth. Compact fields rather than knobs, so a
         // row of eight does not drag every knob on the panel down to its size.
-        {"matrix", "MATRIX", "8 SLOTS", nullptr, true, Display::none, 3, 0, 12,
+        // Macros sit bottom left, two rows of four, and are sources only.
+        {"macros", "MACROS", "SOURCES", nullptr, false, Display::none, 3, 0, 3, true,
+         {{50, {{"macro1", "1"}, {"macro2", "2"}, {"macro3", "3"}, {"macro4", "4"}}},
+          {50, {{"macro5", "5"}, {"macro6", "6"}, {"macro7", "7"}, {"macro8", "8"}}}}},
+        {"matrix", "MATRIX", "8 SLOTS", nullptr, true, Display::none, 3, 3, 9, false,
          {{34, {{"mod1Source", "SOURCE", Style::stepper}, {"mod2Source", "", Style::stepper},
                 {"mod3Source", "", Style::stepper}, {"mod4Source", "", Style::stepper},
                 {"mod5Source", "", Style::stepper}, {"mod6Source", "", Style::stepper},
@@ -225,6 +233,7 @@ inline int uniformKnobDiameter(juce::Rectangle<int> bounds)
         for (int r = 0; r < static_cast<int>(module.rows.size()); ++r)
         {
             const auto& row = module.rows[static_cast<size_t>(r)];
+            if (module.compactKnobs) continue;
             for (int i = 0; i < static_cast<int>(row.controls.size()); ++i)
             {
                 if (row.controls[static_cast<size_t>(i)].style != Style::knob) continue;
@@ -270,6 +279,17 @@ inline juce::Rectangle<int> chipBlock(juce::Rectangle<int> moduleArea, const Mod
         .withCentre(cell.getCentre());
 }
 
+// A compact module's knobs are sized to their own cell; every other knob on
+// the panel shares one diameter.
+inline int knobDiameterFor(const Module& module, juce::Rectangle<int> moduleArea,
+                           int rowIndex, int index, int shared)
+{
+    if (!module.compactKnobs) return shared;
+    const auto cell = cellBounds(moduleArea, module, rowIndex, index);
+    return juce::jmax(24, juce::jmin(cell.getWidth() - 6,
+                                     cell.getHeight() - knobLabelHeight - readoutHeight));
+}
+
 inline juce::Rectangle<int> controlBlock(juce::Rectangle<int> moduleArea, const Module& module,
                                          int rowIndex, int index, int diameter)
 {
@@ -282,7 +302,8 @@ inline juce::Rectangle<int> controlBlock(juce::Rectangle<int> moduleArea, const 
         case Style::rocker:
         case Style::knob: break;
     }
-    return knobBlock(moduleArea, module, rowIndex, index, diameter);
+    return knobBlock(moduleArea, module, rowIndex, index,
+                     knobDiameterFor(module, moduleArea, rowIndex, index, diameter));
 }
 
 // The rocker inside that block: narrow and tall, centred, and sitting exactly

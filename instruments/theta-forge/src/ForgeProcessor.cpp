@@ -151,6 +151,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout Processor::parameterLayout()
     result.push_back(parameter("glide", "Glide", {0.0f, 2.0f, 0.0f, 0.35f}, 0.08f, asSeconds));
     result.push_back(parameter("output", "Output", {0.0f, 1.25f}, 0.75f, asGain));
 
+    for (int macro = 1; macro <= macroCount; ++macro)
+        result.push_back(parameter("macro" + juce::String(macro), "Macro " + juce::String(macro),
+                                   {0.0f, 1.0f}, 0.0f, asPercent));
+
     // Eight modulation slots. Each is three parameters so a host can automate a
     // routing as readily as a knob, and so the whole matrix saves with a preset
     // without a separate serialisation path.
@@ -280,6 +284,8 @@ Patch Processor::patch() const
     result.legato = value("legato");
     result.glide = value("glide");
     result.output = value("output");
+    for (int macro = 0; macro < macroCount; ++macro)
+        result.macros[static_cast<size_t>(macro)] = value("macro" + juce::String(macro + 1));
     return result;
 }
 

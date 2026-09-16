@@ -54,6 +54,10 @@ private:
     void buildModules();
     void applyEnableStates();
     float value(const char* id) const;
+    void mouseDown(const juce::MouseEvent&) override;
+    void showModulationMenu(const juce::String& parameterId);
+    void assignModulation(int source, int destination);
+    void clearSlot(int slot);
     void timerCallback() override;
     void choosePresetToLoad();
     void choosePresetToSave();

@@ -30,8 +30,16 @@ enum class FilterType { lowPass, highPass, bandPass };
 
 // Modulation sources. ENV 1 and velocity are unipolar (0..1); LFO 1 is bipolar
 // (-1..1); note is unipolar across the keyboard.
-enum class ModSource { off, env1, lfo1, velocity, note };
-inline constexpr int modSourceCount = 5;
+enum class ModSource { off, env1, lfo1, velocity, note, macro1 };
+inline constexpr int macroCount = 8;
+// Everything up to the macros, then one entry per macro.
+inline constexpr int modSourceCount = static_cast<int>(ModSource::macro1) + macroCount;
+
+inline int macroIndexOf(int source)
+{
+    const auto first = static_cast<int>(ModSource::macro1);
+    return source >= first && source < first + macroCount ? source - first : -1;
+}
 
 inline const char* modSourceName(int source)
 {
@@ -43,7 +51,11 @@ inline const char* modSourceName(int source)
         case 4: return "NOTE";
         default: break;
     }
-    return "OFF";
+    static const std::array<const char*, macroCount> macros {
+        "MACRO 1", "MACRO 2", "MACRO 3", "MACRO 4",
+        "MACRO 5", "MACRO 6", "MACRO 7", "MACRO 8"};
+    const auto macro = macroIndexOf(source);
+    return macro >= 0 ? macros[static_cast<size_t>(macro)] : "OFF";
 }
 
 // Everything a slot may be pointed at. Index 0 is "nothing". The id is the
@@ -113,6 +125,9 @@ struct Patch
     float lfoRate = 0.5f;
     float polyphony = 8.0f, mono = 0.0f, legato = 1.0f, glide = 0.08f;
     float output = 0.75f;
+    // Performance macros. Sources only: a macro is a hand on a knob, and what
+    // it reaches is a matter for the matrix.
+    std::array<float, macroCount> macros {};
 };
 
 inline bool on(float enable) { return enable >= 0.5f; }
@@ -394,6 +409,13 @@ private:
                 case ModSource::velocity: amount = voice.velocity; break;
                 case ModSource::note:     amount = static_cast<float>(voice.note) / 127.0f; break;
                 case ModSource::off:      continue;
+                default:
+                {
+                    const auto macro = macroIndexOf(source);
+                    if (macro < 0) continue;
+                    amount = target.macros[static_cast<size_t>(macro)];
+                    break;
+                }
             }
 
             offsets[static_cast<size_t>(destination)] += slot.depth * amount;

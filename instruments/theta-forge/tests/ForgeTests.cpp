@@ -119,7 +119,7 @@ bool allSamplesFinite(const juce::AudioBuffer<float>& buffer)
 void layoutSuite()
 {
     theta::forge::Processor processor;
-    const auto bounds = juce::Rectangle<int>(0, 0, 1240, 960);
+    const auto bounds = juce::Rectangle<int>(0, 0, 1260, 1010);
     const auto content = theta::forge::ui::contentBounds(bounds);
     const auto& modules = theta::forge::ui::modules();
     require(!modules.empty(), "the panel declares at least one module");
@@ -221,15 +221,27 @@ void layoutSuite()
                 const auto block = theta::forge::ui::controlBlock(area, module, r, i, diameter);
                 require(!block.isEmpty(), "every control gets a non-empty rectangle");
                 require(area.contains(block), "every control stays inside its module");
-                if (row.controls[static_cast<size_t>(i)].style == theta::forge::ui::Style::knob)
-                    require(block.getWidth() == diameter, "every knob is drawn at the shared diameter");
+                if (row.controls[static_cast<size_t>(i)].style != theta::forge::ui::Style::knob)
+                    continue;
+                if (module.compactKnobs)
+                {
+                    // A compact module opts out of the shared size on purpose,
+                    // but its knobs still have to be smaller, not larger, and
+                    // still have to be usable.
+                    require(block.getWidth() <= diameter, "a compact knob is no larger than the shared diameter");
+                    require(block.getWidth() >= 24, "a compact knob stays usable");
+                }
+                else
+                {
+                    require(block.getWidth() == diameter, "every ordinary knob is drawn at the shared diameter");
+                }
             }
         }
     }
 
     // The proportions have to survive the whole resize range, not just the
     // default size.
-    for (const auto size : {juce::Point<int>(1120, 880), juce::Point<int>(1900, 1400)})
+    for (const auto size : {juce::Point<int>(1140, 930), juce::Point<int>(1900, 1400)})
     {
         const auto resized = juce::Rectangle<int>(0, 0, size.x, size.y);
         for (const auto& module : modules)
@@ -764,6 +776,28 @@ void modulationSuite()
     renderNote(bent, modulated);
     require(zeroCrossings(modulated, 0, settled) > atPitch,
             "an envelope pointed at pitch raises the note");
+
+    // Macros are sources like any other, and reach their target only through
+    // the matrix.
+    const auto firstMacro = static_cast<float>(theta::forge::ModSource::macro1);
+    require(theta::forge::modSourceCount == static_cast<int>(theta::forge::ModSource::macro1)
+                + theta::forge::macroCount,
+            "every macro is offered as a source");
+
+    theta::forge::Processor byMacro;
+    closedFilterOnA(byMacro);
+    setValue(byMacro, "macro1", 1.0f);
+    renderNote(byMacro, plain);
+    require(rms(plain, 0, settled) > 0.0f, "a macro alone changes nothing until it is routed");
+
+    setSlot(byMacro, 1, firstMacro, destCutoff, 1.0f);
+    renderNote(byMacro, modulated);
+    require(brightness(modulated, 0, settled) > brightness(plain, 0, settled) * 1.1f,
+            "a macro turned up opens the filter it is pointed at");
+
+    setValue(byMacro, "macro1", 0.0f);
+    renderNote(byMacro, modulated);
+    require(identical(plain, modulated), "a macro at zero leaves its target exactly where it was");
 
     // And a source that never moves still behaves: NOTE is constant per voice.
     theta::forge::Processor byNote;

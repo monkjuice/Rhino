@@ -50,6 +50,8 @@ juce::String tooltipFor(const juce::String& id)
         {"glide", "Slide between monophonic notes"},
         {"output", "Forge's final level"},
     };
+    if (id.startsWith("macro"))
+        return "A performance macro. Right-click a knob to point this at it";
 
     // Matrix slots: eight of each, all reading the same way.
     if (id.startsWith("mod"))
@@ -83,8 +85,8 @@ Editor::Editor(Processor& p) : AudioProcessorEditor(&p), processor(p)
     addAndMakeVisible(presetName);
 
     setResizable(true, true);
-    setResizeLimits(1120, 880, 1900, 1400);
-    setSize(1240, 960);
+    setResizeLimits(1140, 930, 1900, 1400);
+    setSize(1260, 1010);
     applyEnableStates();
     startTimerHz(24);
 }
@@ -193,6 +195,9 @@ void Editor::buildModules()
                         control->slider.setRange(-12.0, 12.0, 1.0);
                 }
 
+                // The editor handles right-click so a knob can offer its
+                // modulation menu without each slider knowing about the matrix.
+                control->slider.addMouseListener(this, false);
                 addAndMakeVisible(control->label);
                 addAndMakeVisible(control->slider);
                 module.controls.push_back(std::move(control));
@@ -327,6 +332,117 @@ void Editor::resized()
             }
         }
     }
+}
+
+namespace
+{
+// The destination index a parameter corresponds to, or 0 if the matrix cannot
+// point at it.
+int destinationFor(const juce::String& parameterId)
+{
+    for (int i = 1; i < destinationCount; ++i)
+        if (parameterId == destinations()[static_cast<size_t>(i)].id) return i;
+    return 0;
+}
+
+juce::String slotParameter(int slot, const char* suffix)
+{
+    return "mod" + juce::String(slot + 1) + suffix;
+}
+}
+
+void Editor::mouseDown(const juce::MouseEvent& event)
+{
+    if (!event.mods.isPopupMenu()) return;
+    for (const auto& module : moduleUis)
+        for (const auto& control : module.controls)
+            if (event.eventComponent == &control->slider)
+            {
+                showModulationMenu(control->id);
+                return;
+            }
+}
+
+void Editor::showModulationMenu(const juce::String& parameterId)
+{
+    const auto destination = destinationFor(parameterId);
+    if (destination == 0) return;
+    const auto label = juce::String(destinations()[static_cast<size_t>(destination)].label);
+
+    juce::PopupMenu menu;
+    menu.addSectionHeader("Modulate " + label);
+
+    // Anything already pointed here can be taken away from the same menu, so a
+    // routing can be undone where it was made rather than only in the matrix.
+    juce::PopupMenu existing;
+    auto found = 0;
+    for (int slot = 0; slot < modSlotCount; ++slot)
+    {
+        const auto source = juce::roundToInt(value(slotParameter(slot, "Source").toRawUTF8()));
+        if (source <= 0 || juce::roundToInt(value(slotParameter(slot, "Dest").toRawUTF8())) != destination)
+            continue;
+        existing.addItem(1000 + slot, juce::String(modSourceName(source)));
+        ++found;
+    }
+
+    juce::PopupMenu sources;
+    for (int source = 1; source < modSourceCount; ++source)
+        sources.addItem(source, modSourceName(source));
+    menu.addSubMenu("Add source", sources);
+    if (found > 0) menu.addSubMenu("Remove", existing);
+
+    const auto safe = juce::Component::SafePointer<Editor>(this);
+    menu.showMenuAsync(juce::PopupMenu::Options {}, [safe, destination] (int choice)
+    {
+        if (safe == nullptr || choice == 0) return;
+        if (choice >= 1000) safe->clearSlot(choice - 1000);
+        else safe->assignModulation(choice, destination);
+    });
+}
+
+void Editor::assignModulation(int source, int destination)
+{
+    // Reuse a slot already joining this pair rather than spending a second one
+    // on the same routing.
+    auto target = -1;
+    for (int slot = 0; slot < modSlotCount && target < 0; ++slot)
+        if (juce::roundToInt(value(slotParameter(slot, "Source").toRawUTF8())) == source
+            && juce::roundToInt(value(slotParameter(slot, "Dest").toRawUTF8())) == destination)
+            target = slot;
+    for (int slot = 0; slot < modSlotCount && target < 0; ++slot)
+        if (juce::roundToInt(value(slotParameter(slot, "Source").toRawUTF8())) <= 0) target = slot;
+
+    if (target < 0)
+    {
+        presetName.setText("ALL " + juce::String(modSlotCount) + " MOD SLOTS ARE IN USE",
+                           juce::dontSendNotification);
+        presetName.setColour(juce::Label::textColourId, ui::signalViolet);
+        return;
+    }
+
+    const auto set = [this] (const juce::String& id, float plain)
+    {
+        if (auto* parameter = processor.state.getParameter(id))
+            parameter->setValueNotifyingHost(parameter->convertTo0to1(plain));
+    };
+    set(slotParameter(target, "Source"), static_cast<float>(source));
+    set(slotParameter(target, "Dest"), static_cast<float>(destination));
+    // A depth of zero would look like nothing happened. Half is audible and
+    // easy to walk back; the ring that makes this draggable arrives next.
+    if (value(slotParameter(target, "Depth").toRawUTF8()) == 0.0f)
+        set(slotParameter(target, "Depth"), 0.5f);
+}
+
+void Editor::clearSlot(int slot)
+{
+    const auto set = [this] (const juce::String& id, float plain)
+    {
+        if (auto* parameter = processor.state.getParameter(id))
+            parameter->setValueNotifyingHost(parameter->convertTo0to1(plain));
+    };
+    set(slotParameter(slot, "Source"), 0.0f);
+    set(slotParameter(slot, "Dest"), 0.0f);
+    set(slotParameter(slot, "Depth"), 0.0f);
 }
 
 void Editor::timerCallback()

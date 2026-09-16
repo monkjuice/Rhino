@@ -179,7 +179,15 @@ juce::Result Session::restoreProject(const juce::ValueTree& state, const juce::F
             return juce::Result::fail("The pattern track instrument could not be created.");
         tracks[0]->pluginList.insertPlugin(device, 0, nullptr);
     }
-    if (!nextAudioUtility)
+    // Positional, exactly like the pointer it fills: the audio utility belongs to
+    // track 1, so a project saved with nothing but the pattern track has nowhere
+    // to put one. The read above already asks whether that track exists; without
+    // the same question here, a single-track project asks a one-element array for
+    // tracks[1], gets the null juce::Array hands back for an index it does not
+    // have, and dereferences it. refreshUtilityPointers() leaves this pointer
+    // null for precisely the same reason, so null is the supported state for a
+    // project this shape rather than a device that failed to be created.
+    if (!nextAudioUtility && tracks.size() > 1)
     {
         auto device = candidate->getPluginCache().createNewPlugin(UtilityDevice::xmlTypeName, {});
         nextAudioUtility = dynamic_cast<UtilityDevice*>(device.get());

@@ -75,6 +75,32 @@ Workflow scenarios live in `native/src/tests/*/scenarios/*.inc`. They are bare s
 
 Prefer a unit test over a scenario whenever the code under test needs no `Session`, render, or pointer sequence.
 
+## Debugging a crash that only one project file triggers
+
+`Theta.exe` opens a `.thetaedit` passed as its first argument (see `Application::initialise`), which turns "it crashes when I open my project" into a headless repro that runs in about ten seconds. Everything below follows from having that loop.
+
+**Name the faulting module before blaming anything.** Windows records it, and it is the difference between debugging Theta and debugging a plugin:
+
+```powershell
+Get-WinEvent -FilterHashtable @{LogName='Application'; ProviderName='Application Error'; StartTime=(Get-Date).AddHours(-6)}
+```
+
+A project that loads a VST invites the assumption that the VST is at fault. The log said `Theta.exe` faulting in `Theta.exe`, which ruled that out in one step. The same entry gives a fault offset, and an identical offset across attempts means the crash is deterministic and worth bisecting rather than a race.
+
+**Bracket it with `theta.log`** (`%APPDATA%\Theta\theta.log`). `ProjectFiles.cpp` writes `Opening <name>...` before the load and `Opened <name>` after it, so a session with the first and not the second puts the fault inside that call. A different project opening successfully in the same session is the strongest possible hint that the data, not the build, is the trigger.
+
+**Bisect the XML, and always run a known-good control.** Strip one structure at a time — notes, plugin nodes, plugin state — and re-run. Keep a project that opens in the rotation every time: a harness that silently stops reproducing is worse than no harness. In the case this was written for, removing every `<NOTE>`, the whole VST node, and switching `thetaPatternInstrument` changed nothing, which is what pointed at track *count* — one audio track against the demo's four, and an unguarded `tracks[1]`.
+
+**Re-run before believing a non-crash.** A single clean run is noise: a launch can sit on a dialog or lose a race and look like success. Two orders and a repeat of the same file cost a minute and prevent a wrong conclusion. One such false pass nearly sent this investigation at the wrong file.
+
+`juce::Array::operator[]` returns a default-constructed value for an out-of-range index rather than asserting in Release, so an out-of-bounds track or plugin lookup surfaces as a null dereference somewhere later. When a guard like `if (tracks.size() > 1)` protects one access, check every other access to the same index — the bug here was a read that was guarded and a write that was not.
+
+## Verifying pitch, level or timbre
+
+Claims about what the synth *sounds* like get settled by measuring rendered audio, never by reading the DSP. `tuningSuite()` in `ForgeTests.cpp` is the pattern: render through `Core`, FFT it, find the fundamental by peak interpolation, compare against the note's nominal frequency. It cannot agree with the oscillator by construction because it never reads the phase accumulator, which is exactly what makes it worth having.
+
+The same method works on files. A `.wav` decodes with `wave` plus `numpy`, and `ffmpeg` for anything else is bundled with software already installed here — search for `ffmpeg.exe` under `%LOCALAPPDATA%\Programs` before concluding it is unavailable. To tell a played note from a harmonic, compare a partial's amplitude against the ratio its position in the series predicts: a saw's second harmonic sits at 0.50 of the fundamental, so a measured 0.46 is a harmonic and a measured 0.99 is a note sitting on top of one.
+
 ## Commit and push workflow
 
 - The user explicitly wants regular pushes and good Git practices. At meaningful completed milestones, make focused commits and push to the current branch's upstream. Routine commits and pushes are authorized without repeated confirmation.

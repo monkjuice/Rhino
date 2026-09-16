@@ -13,10 +13,23 @@ namespace theta::forge::ui
 {
 enum class Display { none, oscillator, envelope, lfo };
 
-struct Knob
+// A knob is the default. A stepper is the compact numeric field used for
+// tuning, where reading and typing an exact number matters more than sweeping
+// a range: octave, semitone, fine.
+enum class Style { knob, stepper };
+
+struct Control
 {
     const char* id;
     const char* label;
+};
+
+struct Row
+{
+    Style style;
+    // Share of the module's control area, against the module's other rows.
+    int weight;
+    std::vector<Control> controls;
 };
 
 struct Module
@@ -31,19 +44,19 @@ struct Module
     // Position in a twelve-column grid. Rows are weighted, not fixed height,
     // so the panel keeps its proportions at every allowed window size.
     int row, column, columnSpan;
-    std::vector<Knob> knobs;
+    std::vector<Row> rows;
 };
 
 inline constexpr int gridColumns = 12;
 inline constexpr int moduleGap = 8;
 inline constexpr int headerHeight = 22;
 
-// Row weights, top to bottom: oscillators, sources and filter, modulation,
-// global voicing. The two display-carrying rows are tallest; the rest are
-// balanced so that no row ends up with knobs noticeably smaller than another.
+// Row weights, top to bottom: oscillators, sources and filter and voicing,
+// modulation. The oscillators are tallest because each now carries a display,
+// a tuning strip and six knobs.
 inline const std::vector<int>& rowWeights()
 {
-    static const std::vector<int> weights {29, 21, 29, 21};
+    static const std::vector<int> weights {42, 26, 32};
     return weights;
 }
 
@@ -52,29 +65,39 @@ inline constexpr int displayPercent = 36;
 // A knob never grows wider than this, however much room its module has.
 inline constexpr int maxKnobWidth = 108;
 inline constexpr int knobLabelHeight = 14;
+// The value readout under every knob.
+inline constexpr int readoutHeight = 16;
+inline constexpr int stepperLabelHeight = 11;
+inline constexpr int stepperHeight = 21;
+inline constexpr int maxStepperWidth = 78;
 
 inline const std::vector<Module>& modules()
 {
     static const std::vector<Module> declared {
         {"oscA", "OSC A", "MORPH", "oscAEnable", false, Display::oscillator, 0, 0, 6,
-         {{"oscAPosition", "POSITION"}, {"unison", "UNISON"}, {"detune", "DETUNE"}}},
+         {{Style::stepper, 26, {{"oscAOctave", "OCT"}, {"oscASemitone", "SEMI"}, {"oscAFine", "FINE"}}},
+          {Style::knob, 74, {{"oscAPosition", "POSITION"}, {"oscAUnison", "UNISON"}, {"oscADetune", "DETUNE"},
+                             {"oscABlend", "BLEND"}, {"oscAPan", "PAN"}, {"oscALevel", "LEVEL"}}}}},
         {"oscB", "OSC B", "MORPH", "oscBEnable", true, Display::oscillator, 0, 6, 6,
-         {{"oscBPosition", "POSITION"}, {"oscBLevel", "LEVEL"}, {"oscBTune", "TUNE"}}},
+         {{Style::stepper, 26, {{"oscBOctave", "OCT"}, {"oscBSemitone", "SEMI"}, {"oscBFine", "FINE"}}},
+          {Style::knob, 74, {{"oscBPosition", "POSITION"}, {"oscBUnison", "UNISON"}, {"oscBDetune", "DETUNE"},
+                             {"oscBBlend", "BLEND"}, {"oscBPan", "PAN"}, {"oscBLevel", "LEVEL"}}}}},
 
         {"sub", "SUB", "", "subEnable", false, Display::none, 1, 0, 2,
-         {{"subLevel", "LEVEL"}}},
+         {{Style::knob, 100, {{"subLevel", "LEVEL"}}}}},
         {"noise", "NOISE", "", "noiseEnable", true, Display::none, 1, 2, 2,
-         {{"noiseLevel", "LEVEL"}}},
-        {"filter", "FILTER", "LOW PASS", "filterEnable", false, Display::none, 1, 4, 8,
-         {{"cutoff", "CUTOFF"}, {"resonance", "RES"}, {"drive", "DRIVE"}}},
+         {{Style::knob, 100, {{"noiseLevel", "LEVEL"}}}}},
+        {"filter", "FILTER", "LOW PASS", "filterEnable", false, Display::none, 1, 4, 3,
+         {{Style::knob, 100, {{"cutoff", "CUTOFF"}, {"resonance", "RES"}, {"drive", "DRIVE"}}}}},
+        {"global", "GLOBAL", "VOICING", nullptr, false, Display::none, 1, 7, 5,
+         {{Style::knob, 100, {{"polyphony", "POLY"}, {"mono", "MONO"}, {"legato", "LEGATO"},
+                              {"glide", "GLIDE"}, {"output", "OUTPUT"}}}}},
 
         {"env1", "ENV 1", "AMP", nullptr, false, Display::envelope, 2, 0, 6,
-         {{"attack", "ATTACK"}, {"decay", "DECAY"}, {"sustain", "SUSTAIN"}, {"release", "RELEASE"}}},
+         {{Style::knob, 100, {{"attack", "ATTACK"}, {"decay", "DECAY"}, {"sustain", "SUSTAIN"}, {"release", "RELEASE"}}}}},
         {"lfo1", "LFO 1", "FREE RUNNING", nullptr, true, Display::lfo, 2, 6, 6,
-         {{"lfoRate", "RATE"}, {"lfoCutoff", "> CUTOFF"}, {"lfoPosition", "> POSITION"}, {"lfoPitch", "> PITCH"}}},
-
-        {"global", "GLOBAL", "VOICING", nullptr, false, Display::none, 3, 0, 12,
-         {{"polyphony", "POLY"}, {"mono", "MONO"}, {"legato", "LEGATO"}, {"glide", "GLIDE"}, {"output", "OUTPUT"}}},
+         {{Style::knob, 100, {{"lfoRate", "RATE"}, {"lfoCutoff", "> CUTOFF"},
+                              {"lfoPosition", "> POSITION"}, {"lfoPitch", "> PITCH"}}}}},
     };
     return declared;
 }
@@ -116,7 +139,18 @@ inline juce::Rectangle<int> displayBounds(juce::Rectangle<int> moduleArea, const
     return body.removeFromTop(body.getHeight() * displayPercent / 100);
 }
 
-inline juce::Rectangle<int> knobRowBounds(juce::Rectangle<int> moduleArea, const Module& module)
+// The parameter an oscillator's display draws: the first knob of the module,
+// which is POSITION by declaration in both oscillators.
+inline const char* displaySourceId(const Module& module)
+{
+    for (const auto& row : module.rows)
+        if (row.style == Style::knob && !row.controls.empty())
+            return row.controls.front().id;
+    return nullptr;
+}
+
+// Everything below the header and the display: the area the control rows share.
+inline juce::Rectangle<int> controlArea(juce::Rectangle<int> moduleArea, const Module& module)
 {
     auto body = moduleArea.withTrimmedTop(headerHeight).reduced(10, 6);
     if (module.display != Display::none)
@@ -127,34 +161,72 @@ inline juce::Rectangle<int> knobRowBounds(juce::Rectangle<int> moduleArea, const
     return body;
 }
 
-inline juce::Rectangle<int> knobBounds(juce::Rectangle<int> moduleArea, const Module& module, int index)
+inline juce::Rectangle<int> rowBounds(juce::Rectangle<int> moduleArea, const Module& module, int rowIndex)
 {
-    const auto row = knobRowBounds(moduleArea, module);
-    const auto count = juce::jmax(1, static_cast<int>(module.knobs.size()));
+    const auto area = controlArea(moduleArea, module);
+    auto total = 0;
+    for (const auto& row : module.rows) total += row.weight;
+    if (total <= 0) return area;
+
+    auto y = area.getY();
+    for (int i = 0; i < rowIndex; ++i)
+        y += area.getHeight() * module.rows[static_cast<size_t>(i)].weight / total;
+    const auto height = area.getHeight() * module.rows[static_cast<size_t>(rowIndex)].weight / total;
+    return {area.getX(), y, area.getWidth(), height};
+}
+
+inline juce::Rectangle<int> cellBounds(juce::Rectangle<int> moduleArea, const Module& module,
+                                       int rowIndex, int index)
+{
+    const auto row = rowBounds(moduleArea, module, rowIndex);
+    const auto count = juce::jmax(1, static_cast<int>(module.rows[static_cast<size_t>(rowIndex)].controls.size()));
     const auto width = row.getWidth() / count;
     return {row.getX() + index * width, row.getY(), width, row.getHeight()};
 }
 
-// Every knob on the panel is drawn at one size, taken from whichever module
-// has the least room. Sizing each knob to its own module instead makes SUB's
-// single knob several times the diameter of one in GLOBAL, which reads as a
-// mistake rather than as emphasis.
-inline int uniformKnobHeight(juce::Rectangle<int> bounds)
+// Every knob on the panel is drawn at one diameter, taken from whichever cell
+// on the panel is tightest in either direction. Sizing each knob to its own
+// module instead makes SUB's single knob several times the diameter of one in
+// GLOBAL, which reads as a mistake rather than as emphasis.
+inline int uniformKnobDiameter(juce::Rectangle<int> bounds)
 {
-    auto smallest = std::numeric_limits<int>::max();
+    auto smallest = static_cast<int>(maxKnobWidth);
     for (const auto& module : modules())
-        smallest = juce::jmin(smallest, knobRowBounds(moduleBounds(bounds, module), module).getHeight());
-    return juce::jmax(48, smallest);
+    {
+        const auto area = moduleBounds(bounds, module);
+        for (int r = 0; r < static_cast<int>(module.rows.size()); ++r)
+        {
+            if (module.rows[static_cast<size_t>(r)].style != Style::knob) continue;
+            for (int i = 0; i < static_cast<int>(module.rows[static_cast<size_t>(r)].controls.size()); ++i)
+            {
+                const auto cell = cellBounds(area, module, r, i);
+                // The cell also has to hold the label above and the readout below.
+                smallest = juce::jmin(smallest, cell.getWidth() - 6,
+                                      cell.getHeight() - knobLabelHeight - readoutHeight);
+            }
+        }
+    }
+    return juce::jmax(40, smallest);
 }
 
 // The label-plus-knob-plus-readout block, centred in its cell at the one size
 // the whole panel shares.
 inline juce::Rectangle<int> knobBlock(juce::Rectangle<int> moduleArea, const Module& module,
-                                      int index, int uniformHeight)
+                                      int rowIndex, int index, int diameter)
 {
-    const auto cell = knobBounds(moduleArea, module, index);
-    return juce::Rectangle<int>(juce::jmin(cell.getWidth() - 6, maxKnobWidth),
-                                juce::jmin(cell.getHeight(), uniformHeight))
+    const auto cell = cellBounds(moduleArea, module, rowIndex, index);
+    return juce::Rectangle<int>(diameter, knobLabelHeight + diameter + readoutHeight)
+        .withCentre(cell.getCentre());
+}
+
+// A stepper is a fixed-height numeric field, so it does not scale with the
+// window the way a knob does.
+inline juce::Rectangle<int> stepperBlock(juce::Rectangle<int> moduleArea, const Module& module,
+                                         int rowIndex, int index)
+{
+    const auto cell = cellBounds(moduleArea, module, rowIndex, index);
+    return juce::Rectangle<int>(juce::jmin(cell.getWidth() - 8, maxStepperWidth),
+                                juce::jmin(cell.getHeight(), stepperLabelHeight + stepperHeight))
         .withCentre(cell.getCentre());
 }
 }

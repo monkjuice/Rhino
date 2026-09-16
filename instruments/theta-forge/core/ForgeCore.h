@@ -13,14 +13,23 @@
 // FX rack milestone, do not exist at all. See PLAN.md.
 namespace theta::forge
 {
-// Field order is the order Processor::patch() builds them in; that initialiser
-// is positional, so keep the two in step.
+// Everything one oscillator owns. Both oscillators are the same shape: neither
+// is defined in terms of the other, so switching one off or changing its level
+// cannot move the other.
+struct Oscillator
+{
+    float enable = 1.0f;
+    float position = 0.55f;
+    float octave = 0.0f, semitone = 0.0f, fine = 0.0f;
+    float unison = 2.0f, detune = 0.18f, blend = 0.5f;
+    float pan = 0.0f, level = 0.75f;
+};
+
 struct Patch
 {
-    float oscAEnable = 1.0f, oscAPosition = 0.55f, unison = 2.0f, detune = 0.18f;
-    float oscBEnable = 1.0f, oscBPosition = 0.18f, oscBLevel = 0.25f, oscBTune = 7.0f;
+    Oscillator a, b;
     float subEnable = 1.0f, subLevel = 0.12f;
-    float noiseEnable = 0.0f, noiseLevel = 0.0f;
+    float noiseEnable = 0.0f, noiseLevel = 0.25f;
     float filterEnable = 1.0f, cutoff = 7800.0f, resonance = 0.12f, drive = 0.08f;
     float attack = 0.01f, decay = 0.24f, sustain = 0.75f, release = 0.35f;
     float lfoRate = 0.5f, lfoCutoff = 0.0f, lfoPosition = 0.0f, lfoPitch = 0.0f;
@@ -29,6 +38,24 @@ struct Patch
 };
 
 inline bool on(float enable) { return enable >= 0.5f; }
+
+// Exactly linear below the knee, asymptotic to full scale above it. A quiet
+// patch passes through untouched — which a plain tanh does not do — while a
+// loud one still cannot leave full scale.
+inline float softClip(float x)
+{
+    constexpr float knee = 0.8f;
+    const auto magnitude = std::abs(x);
+    if (magnitude <= knee) return x;
+    const auto limited = knee + (1.0f - knee) * std::tanh((magnitude - knee) / (1.0f - knee));
+    return x < 0.0f ? -limited : limited;
+}
+
+// Octave, semitone and fine are one frequency multiplier. Fine is in cents.
+inline float tuningRatio(const Oscillator& osc)
+{
+    return std::pow(2.0f, osc.octave + osc.semitone / 12.0f + osc.fine / 1200.0f);
+}
 
 class Core final
 {
@@ -143,11 +170,20 @@ public:
             }
         }
 
-        const auto driveGain = 1.0f + juce::jlimit(0.0f, 1.0f, patch.drive) * 12.0f;
-        const auto compensation = 1.0f / std::tanh(driveGain);
+        // Drive at zero is genuinely clean: the saturation is skipped rather
+        // than run at unity, which would still compress the peaks.
+        const auto amount = juce::jlimit(0.0f, 1.0f, patch.drive);
+        if (amount > 0.0f)
+        {
+            const auto driveGain = 1.0f + amount * 12.0f;
+            const auto compensation = 1.0f / std::tanh(driveGain);
+            left = std::tanh(left * driveGain) * compensation;
+            right = std::tanh(right * driveGain) * compensation;
+        }
+
         const auto gain = juce::jlimit(0.0f, 1.25f, patch.output) * 0.28f;
-        left = std::tanh(left * driveGain) * compensation * gain;
-        right = std::tanh(right * driveGain) * compensation * gain;
+        left = softClip(left * gain);
+        right = softClip(right * gain);
     }
 
 private:
@@ -246,6 +282,45 @@ private:
         return static_cast<float>(noiseState & 0xffffu) / 32767.5f - 1.0f;
     }
 
+    // One oscillator's whole contribution: its own tuning, its own unison
+    // stack, its own pan and its own level, summed into the voice.
+    void renderOscillator(std::array<float, 8>& phases, const Oscillator& osc, float baseHz,
+                          float lfo, float lfoPosition, float dt, float& left, float& right) const
+    {
+        if (!on(osc.enable)) return;
+        const auto count = juce::jlimit(1, static_cast<int>(phases.size()), juce::roundToInt(osc.unison));
+        const auto position = juce::jlimit(0.0f, 1.0f, osc.position + lfo * lfoPosition * 0.5f);
+        const auto hz = baseHz * tuningRatio(osc);
+        const auto detune = juce::jlimit(0.0f, 1.0f, osc.detune);
+        const auto blend = juce::jlimit(0.0f, 1.0f, osc.blend);
+
+        auto stackLeft = 0.0f, stackRight = 0.0f, power = 0.0f;
+        for (int i = 0; i < count; ++i)
+        {
+            const auto spread = count == 1 ? 0.0f
+                : static_cast<float>(i) / static_cast<float>(count - 1) - 0.5f;
+            // Blend balances the centre of the stack against its edges: at 0
+            // only the centre voices are heard, at 1 the whole stack is level.
+            const auto centreWeight = 1.0f - juce::jmin(1.0f, std::abs(spread) * 2.0f);
+            const auto gain = juce::jmap(blend, centreWeight, 1.0f);
+            power += gain * gain;
+
+            const auto sample = morph(phases[static_cast<size_t>(i)], position) * gain;
+            const auto pan = juce::jlimit(-1.0f, 1.0f, osc.pan + spread * detune * 1.6f);
+            stackLeft += sample * std::sqrt(0.5f * (1.0f - pan));
+            stackRight += sample * std::sqrt(0.5f * (1.0f + pan));
+
+            const auto ratio = std::pow(2.0f, spread * detune * 0.7f / 12.0f);
+            phases[static_cast<size_t>(i)] = wrap(phases[static_cast<size_t>(i)] + hz * ratio * dt);
+        }
+
+        // Power normalisation, so widening the stack changes the sound without
+        // changing how loud the oscillator is.
+        const auto scale = juce::jlimit(0.0f, 1.0f, osc.level) / std::sqrt(std::max(0.0001f, power));
+        left += stackLeft * scale;
+        right += stackRight * scale;
+    }
+
     void renderOscillators(Voice& voice, const Patch& patch, float lfo, float& left, float& right)
     {
         const auto dt = static_cast<float>(1.0 / sampleRate);
@@ -253,42 +328,22 @@ private:
         if (glide <= 0.0001f) voice.currentHz = voice.targetHz;
         else voice.currentHz += (voice.targetHz - voice.currentHz)
             * (1.0f - std::exp(-1.0f / (static_cast<float>(sampleRate) * glide)));
-        const auto hz = voice.currentHz;
         const auto pitchRatio = std::pow(2.0f, juce::jlimit(-12.0f, 12.0f, patch.lfoPitch) * lfo / 12.0f);
-        const auto hzB = hz * std::pow(2.0f, patch.oscBTune / 12.0f);
-        const auto positionA = juce::jlimit(0.0f, 1.0f, patch.oscAPosition + lfo * patch.lfoPosition * 0.5f);
-        const auto positionB = juce::jlimit(0.0f, 1.0f, patch.oscBPosition + lfo * patch.lfoPosition * 0.5f);
-        const auto count = juce::jlimit(1, 8, juce::roundToInt(patch.unison));
-        const auto oscA = on(patch.oscAEnable), oscB = on(patch.oscBEnable);
-        // With both oscillators live, B's level crossfades against A, as it
-        // always has. Switching one off gives the survivor the whole voice
-        // rather than leaving a hole where the crossfade partner was. The
-        // per-oscillator levels that make this unnecessary arrive with M3.
-        const auto levelA = oscA ? (oscB ? 1.0f - patch.oscBLevel : 1.0f) : 0.0f;
-        const auto levelB = oscB ? (oscA ? patch.oscBLevel : 1.0f) : 0.0f;
+        const auto hz = voice.currentHz * pitchRatio;
+
         left = right = 0.0f;
-        for (int i = 0; i < count; ++i)
-        {
-            const auto spread = count == 1 ? 0.0f : static_cast<float>(i) / static_cast<float>(count - 1) - 0.5f;
-            const auto detuneSemitones = spread * juce::jlimit(0.0f, 1.0f, patch.detune) * 0.7f;
-            const auto ratio = std::pow(2.0f, detuneSemitones / 12.0f);
-            const auto oscillator = morph(voice.phaseA[static_cast<size_t>(i)], positionA) * levelA
-                + morph(voice.phaseB[static_cast<size_t>(i)], positionB) * levelB;
-            const auto pan = spread * juce::jlimit(0.0f, 1.0f, patch.detune) * 1.6f;
-            left += oscillator * std::sqrt(0.5f * (1.0f - pan));
-            right += oscillator * std::sqrt(0.5f * (1.0f + pan));
-            voice.phaseA[static_cast<size_t>(i)] = wrap(voice.phaseA[static_cast<size_t>(i)] + hz * pitchRatio * ratio * dt);
-            voice.phaseB[static_cast<size_t>(i)] = wrap(voice.phaseB[static_cast<size_t>(i)] + hzB * pitchRatio * ratio * dt);
-        }
+        renderOscillator(voice.phaseA, patch.a, hz, lfo, patch.lfoPosition, dt, left, right);
+        renderOscillator(voice.phaseB, patch.b, hz, lfo, patch.lfoPosition, dt, left, right);
+
         // The sub and the noise generator are their own sources: each is silent
         // unless its own module is on, whatever its level knob reads.
         const auto sub = on(patch.subEnable) ? std::sin(voice.phaseSub * juce::MathConstants<float>::twoPi) * patch.subLevel : 0.0f;
         const auto hiss = on(patch.noiseEnable) ? noise() * patch.noiseLevel : 0.0f;
         const auto centre = sub + hiss;
-        const auto level = voice.ampEnvelope * voice.velocity / std::sqrt(static_cast<float>(count));
+        const auto level = voice.ampEnvelope * voice.velocity;
         left = (left + centre) * level;
         right = (right + centre) * level;
-        voice.phaseSub = wrap(voice.phaseSub + hz * pitchRatio * 0.5f * dt);
+        voice.phaseSub = wrap(voice.phaseSub + hz * 0.5f * dt);
     }
 
     float filter(float input, float& low, float& band, float cutoff, float resonance) const

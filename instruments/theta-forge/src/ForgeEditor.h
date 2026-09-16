@@ -18,6 +18,8 @@ public:
 private:
     struct Control
     {
+        ui::Style style = ui::Style::knob;
+        int row = 0, index = 0;
         juce::Label label;
         juce::Slider slider;
         std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachment;

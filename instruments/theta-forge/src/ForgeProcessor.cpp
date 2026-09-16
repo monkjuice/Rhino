@@ -44,6 +44,25 @@ juce::String asToggle(float value) { return value >= 0.5f ? "ON" : "OFF"; }
 
 juce::String asGain(float value) { return juce::String(value, 2); }
 
+juce::String asOctaves(float value)
+{
+    const auto octaves = juce::roundToInt(value);
+    return octaves == 0 ? juce::String("0") : (octaves > 0 ? "+" : "") + juce::String(octaves) + " oct";
+}
+
+juce::String asCents(float value)
+{
+    const auto cents = juce::roundToInt(value);
+    return cents == 0 ? juce::String("0") : (cents > 0 ? "+" : "") + juce::String(cents) + " ct";
+}
+
+juce::String asPan(float value)
+{
+    const auto amount = juce::roundToInt(std::abs(value) * 100.0f);
+    if (amount == 0) return "C";
+    return (value < 0.0f ? "L" : "R") + juce::String(amount);
+}
+
 // Format 2 dropped the effects, the macros and the filter envelope. Format 1
 // files are not accepted; they described a synth that no longer exists.
 //
@@ -61,7 +80,7 @@ juce::ValueTree parameterEntry(const juce::ValueTree& tree, const juce::String& 
     return {};
 }
 
-std::unique_ptr<juce::RangedAudioParameter> parameter(const char* id, const char* name,
+std::unique_ptr<juce::RangedAudioParameter> parameter(const juce::String& id, const juce::String& name,
                                                       juce::NormalisableRange<float> range,
                                                       float initial, Format format)
 {
@@ -76,7 +95,7 @@ std::unique_ptr<juce::RangedAudioParameter> parameter(const char* id, const char
 // Module enables are genuine switches, so they are declared as bools and show
 // up in a host's automation lane as on/off rather than as a float that happens
 // to be stepped.
-std::unique_ptr<juce::RangedAudioParameter> toggle(const char* id, const char* name, bool initial)
+std::unique_ptr<juce::RangedAudioParameter> toggle(const juce::String& id, const juce::String& name, bool initial)
 {
     return std::make_unique<juce::AudioParameterBool>(juce::ParameterID {id, 1}, name, initial);
 }
@@ -84,17 +103,30 @@ std::unique_ptr<juce::RangedAudioParameter> toggle(const char* id, const char* n
 
 juce::AudioProcessorValueTreeState::ParameterLayout Processor::parameterLayout()
 {
-    // Declaration order is Patch's field order. Processor::patch() initialises
-    // that aggregate positionally, so the two lists move together.
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> result;
-    result.push_back(toggle("oscAEnable", "Osc A Enable", true));
-    result.push_back(parameter("oscAPosition", "Osc A Position", {0.0f, 1.0f}, 0.55f, asPercent));
-    result.push_back(parameter("unison", "Unison", {1.0f, 8.0f, 1.0f}, 2.0f, asCount));
-    result.push_back(parameter("detune", "Detune", {0.0f, 1.0f}, 0.18f, asPercent));
-    result.push_back(toggle("oscBEnable", "Osc B Enable", true));
-    result.push_back(parameter("oscBPosition", "Osc B Position", {0.0f, 1.0f}, 0.18f, asPercent));
-    result.push_back(parameter("oscBLevel", "Osc B Level", {0.0f, 1.0f}, 0.25f, asPercent));
-    result.push_back(parameter("oscBTune", "Osc B Tune", {-24.0f, 24.0f, 1.0f}, 7.0f, asSemitones));
+
+    // The two oscillators are declared identically. Neither is expressed in
+    // terms of the other, so each owns its tuning, its stack, its pan and its
+    // level outright.
+    const auto oscillator = [&result] (const char* prefix, const char* label, bool enabled,
+                                       float position, float semitone, float level)
+    {
+        const auto id = [prefix] (const char* suffix) { return juce::String(prefix) + suffix; };
+        const auto name = [label] (const char* suffix) { return juce::String(label) + " " + suffix; };
+        result.push_back(toggle(id("Enable"), name("Enable"), enabled));
+        result.push_back(parameter(id("Position"), name("Position"), {0.0f, 1.0f}, position, asPercent));
+        result.push_back(parameter(id("Octave"), name("Octave"), {-4.0f, 4.0f, 1.0f}, 0.0f, asOctaves));
+        result.push_back(parameter(id("Semitone"), name("Semitone"), {-12.0f, 12.0f, 1.0f}, semitone, asSemitones));
+        result.push_back(parameter(id("Fine"), name("Fine"), {-100.0f, 100.0f, 1.0f}, 0.0f, asCents));
+        result.push_back(parameter(id("Unison"), name("Unison"), {1.0f, 8.0f, 1.0f}, 2.0f, asCount));
+        result.push_back(parameter(id("Detune"), name("Detune"), {0.0f, 1.0f}, 0.18f, asPercent));
+        result.push_back(parameter(id("Blend"), name("Blend"), {0.0f, 1.0f}, 0.5f, asPercent));
+        result.push_back(parameter(id("Pan"), name("Pan"), {-1.0f, 1.0f}, 0.0f, asPan));
+        result.push_back(parameter(id("Level"), name("Level"), {0.0f, 1.0f}, level, asPercent));
+    };
+    oscillator("oscA", "Osc A", true, 0.55f, 0.0f, 0.75f);
+    oscillator("oscB", "Osc B", true, 0.18f, 7.0f, 0.25f);
+
     result.push_back(toggle("subEnable", "Sub Enable", true));
     result.push_back(parameter("subLevel", "Sub Level", {0.0f, 1.0f}, 0.12f, asPercent));
     result.push_back(toggle("noiseEnable", "Noise Enable", false));
@@ -162,19 +194,54 @@ void Processor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
 
 Patch Processor::patch() const
 {
-    // Positional, matching Patch's field order. Nothing is remapped on the way
-    // through: the macros that used to bend these values were hardwired offsets
-    // and come back as real assignable sources with the modulation matrix.
-    const auto value = [this] (const char* id) { return state.getRawParameterValue(id)->load(); };
-    return {value("oscAEnable"), value("oscAPosition"), value("unison"), value("detune"),
-            value("oscBEnable"), value("oscBPosition"), value("oscBLevel"), value("oscBTune"),
-            value("subEnable"), value("subLevel"),
-            value("noiseEnable"), value("noiseLevel"),
-            value("filterEnable"), value("cutoff"), value("resonance"), value("drive"),
-            value("attack"), value("decay"), value("sustain"), value("release"),
-            value("lfoRate"), value("lfoCutoff"), value("lfoPosition"), value("lfoPitch"),
-            value("polyphony"), value("mono"), value("legato"), value("glide"),
-            value("output")};
+    // Assigned by name, not positionally: the parameter list and the Patch
+    // layout no longer have to be kept in the same order to stay correct.
+    // Nothing is remapped on the way through — the macros that used to bend
+    // these values were hardwired offsets, and return as real assignable
+    // sources with the modulation matrix.
+    const auto value = [this] (const juce::String& id) { return state.getRawParameterValue(id)->load(); };
+    const auto readOscillator = [&value] (const char* prefix)
+    {
+        const auto id = [prefix] (const char* suffix) { return juce::String(prefix) + suffix; };
+        Oscillator osc;
+        osc.enable = value(id("Enable"));
+        osc.position = value(id("Position"));
+        osc.octave = value(id("Octave"));
+        osc.semitone = value(id("Semitone"));
+        osc.fine = value(id("Fine"));
+        osc.unison = value(id("Unison"));
+        osc.detune = value(id("Detune"));
+        osc.blend = value(id("Blend"));
+        osc.pan = value(id("Pan"));
+        osc.level = value(id("Level"));
+        return osc;
+    };
+
+    Patch result;
+    result.a = readOscillator("oscA");
+    result.b = readOscillator("oscB");
+    result.subEnable = value("subEnable");
+    result.subLevel = value("subLevel");
+    result.noiseEnable = value("noiseEnable");
+    result.noiseLevel = value("noiseLevel");
+    result.filterEnable = value("filterEnable");
+    result.cutoff = value("cutoff");
+    result.resonance = value("resonance");
+    result.drive = value("drive");
+    result.attack = value("attack");
+    result.decay = value("decay");
+    result.sustain = value("sustain");
+    result.release = value("release");
+    result.lfoRate = value("lfoRate");
+    result.lfoCutoff = value("lfoCutoff");
+    result.lfoPosition = value("lfoPosition");
+    result.lfoPitch = value("lfoPitch");
+    result.polyphony = value("polyphony");
+    result.mono = value("mono");
+    result.legato = value("legato");
+    result.glide = value("glide");
+    result.output = value("output");
+    return result;
 }
 
 juce::AudioProcessorEditor* Processor::createEditor() { return new Editor(*this); }

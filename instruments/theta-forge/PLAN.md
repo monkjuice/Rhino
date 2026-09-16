@@ -137,9 +137,18 @@ real parameter and every parameter appears somewhere on the panel.
   single `oscBTune`.
 - Add `Blend` per oscillator (unison centre-versus-spread balance).
 - Each oscillator draws its own display from its own position.
+- The layout gains control **rows** with styles, so the tuning strip can sit
+  above the knob row as a set of compact numeric fields rather than three more
+  knobs. `GLOBAL` moves up beside `FILTER`, which the extra oscillator height
+  pays for.
+- `Patch` gains an `Oscillator` sub-struct and is built by name rather than
+  positionally, so the parameter list and the patch layout no longer have to be
+  kept in the same order to stay correct.
 
-**Tests:** per-oscillator tuning produces the expected frequency ratio; unison
-count changes voice sum without changing perceived level; pan law holds.
+**Tests:** tuning arithmetic and the frequency the voice actually produces;
+equal-power pan law, and hard-left leaving the right channel empty; level
+scaling linearly; stacking voices not changing the oscillator's level; one
+oscillator's controls never reaching the other.
 
 ### M4 — One filter, with source routing
 
@@ -147,7 +156,11 @@ count changes voice sum without changing perceived level; pan law holds.
   the filter header, the way Serum's `S A B C N` buttons work.
 - Routed sources pass through the filter; unrouted sources bypass it straight to
   the voice sum.
-- `Drive` moves out of the global path and into the filter module.
+- `Drive` moves out of the global path and into the filter module. It is
+  already drawn there; M3 made it honest at zero (the output stage no longer
+  saturates when drive is off, and a soft clipper that is linear below its knee
+  does the bounds-keeping the old unconditional `tanh` was doing), but the
+  saturation still applies to the summed voice rather than inside the filter.
 - Filter type selection (low-pass / high-pass / band-pass) if it stays cheap.
 
 **Tests:** an unrouted source is unaffected by cutoff; a routed source is; all
@@ -233,7 +246,7 @@ way to look at a change.
 | --- | --- |
 | M1 Strip back to a synth | **done** |
 | M2 Module framework and enables | **done** — ready to test by eye |
-| M3 Per-oscillator architecture | not started |
+| M3 Per-oscillator architecture | **done** — ready to test by ear |
 | M4 Filter routing | not started |
 | M5 ENV 1 | not started |
 | M6 LFO 1 | not started |

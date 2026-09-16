@@ -8,13 +8,27 @@ namespace
 // moved to another row without disturbing them.
 juce::String tooltipFor(const juce::String& id)
 {
+    // Both oscillators expose the same controls, so their tooltips are keyed by
+    // the suffix and the oscillator's letter is filled in below.
+    static const std::map<juce::String, juce::String> perOscillator {
+        {"Position", "Scan oscillator %'s harmonic shape"},
+        {"Octave", "Transpose oscillator % in octaves"},
+        {"Semitone", "Transpose oscillator % in semitones"},
+        {"Fine", "Detune oscillator % in cents"},
+        {"Unison", "Stack detuned copies of oscillator %"},
+        {"Detune", "Spread oscillator %'s stack in pitch and across the stereo field"},
+        {"Blend", "Balance the centre of oscillator %'s stack against its edges"},
+        {"Pan", "Place oscillator % in the stereo field"},
+        {"Level", "Set oscillator %'s level"},
+    };
+    for (const auto& letter : {"A", "B"})
+        if (id.startsWith("osc" + juce::String(letter)))
+        {
+            const auto found = perOscillator.find(id.fromFirstOccurrenceOf("osc" + juce::String(letter), false, false));
+            if (found != perOscillator.end()) return found->second.replace("%", letter);
+        }
+
     static const std::map<juce::String, juce::String> tips {
-        {"oscAPosition", "Scan oscillator A's harmonic shape"},
-        {"oscBPosition", "Scan oscillator B's harmonic shape"},
-        {"oscBLevel", "Set oscillator B's level against oscillator A"},
-        {"oscBTune", "Tune oscillator B in semitones"},
-        {"unison", "Stack detuned copies of the oscillators for width"},
-        {"detune", "Spread the stacked copies in pitch and across the stereo field"},
         {"subLevel", "Blend in a sine one octave below the note"},
         {"noiseLevel", "Blend in broadband noise"},
         {"cutoff", "Open or close the low-pass filter"},
@@ -86,31 +100,56 @@ void Editor::buildModules()
                 processor.state, descriptor.enableId, *module.enable);
         }
 
-        for (const auto& knob : descriptor.knobs)
+        for (int r = 0; r < static_cast<int>(descriptor.rows.size()); ++r)
         {
-            auto control = std::make_unique<Control>();
-            control->label.setText(knob.label, juce::dontSendNotification);
-            control->label.setJustificationType(juce::Justification::centred);
-            control->label.setColour(juce::Label::textColourId, ui::mutedText);
-            control->label.setFont(juce::FontOptions(10.0f));
+            const auto& row = descriptor.rows[static_cast<size_t>(r)];
+            for (int i = 0; i < static_cast<int>(row.controls.size()); ++i)
+            {
+                const auto& declared = row.controls[static_cast<size_t>(i)];
+                auto control = std::make_unique<Control>();
+                control->style = row.style;
+                control->row = r;
+                control->index = i;
 
-            control->slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-            control->slider.setLookAndFeel(&lookAndFeel);
-            control->slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 78, 16);
-            control->slider.setColour(juce::Slider::rotarySliderFillColourId, accent);
-            control->slider.setColour(juce::Slider::rotarySliderOutlineColourId, ui::line);
-            control->slider.setColour(juce::Slider::thumbColourId, accent);
-            control->slider.setColour(juce::Slider::textBoxTextColourId, ui::text);
-            control->slider.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
-            control->slider.setTooltip(tooltipFor(knob.id));
-            // The attachment installs the parameter's own text formatting, so
-            // it must be created before anything reads the slider's text.
-            control->attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
-                processor.state, knob.id, control->slider);
+                control->label.setText(declared.label, juce::dontSendNotification);
+                control->label.setJustificationType(juce::Justification::centred);
+                control->label.setColour(juce::Label::textColourId, ui::mutedText);
+                control->label.setFont(juce::FontOptions(row.style == ui::Style::knob ? 10.0f : 9.0f));
 
-            addAndMakeVisible(control->label);
-            addAndMakeVisible(control->slider);
-            module.controls.push_back(std::move(control));
+                if (row.style == ui::Style::knob)
+                {
+                    control->slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
+                    control->slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 78, ui::readoutHeight);
+                }
+                else
+                {
+                    // A bar style drags vertically and routes to
+                    // drawLinearSlider, where it is painted as a numeric field.
+                    control->slider.setSliderStyle(juce::Slider::LinearBarVertical);
+                    control->slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+                }
+                control->slider.setLookAndFeel(&lookAndFeel);
+                control->slider.setColour(juce::Slider::rotarySliderFillColourId, accent);
+                control->slider.setColour(juce::Slider::rotarySliderOutlineColourId, ui::line);
+                control->slider.setColour(juce::Slider::thumbColourId, accent);
+                control->slider.setColour(juce::Slider::textBoxTextColourId, ui::text);
+                control->slider.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
+                control->slider.setTooltip(tooltipFor(declared.id));
+                // The attachment installs the parameter's own text formatting,
+                // so it must be created before anything reads the slider's text.
+                control->attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+                    processor.state, declared.id, control->slider);
+                // Double-click returns a control to its default. The attachment
+                // has already applied the parameter's range, so the default can
+                // be read back from it here.
+                if (auto* parameter = processor.state.getParameter(declared.id))
+                    control->slider.setDoubleClickReturnValue(
+                        true, parameter->convertFrom0to1(parameter->getDefaultValue()));
+
+                addAndMakeVisible(control->label);
+                addAndMakeVisible(control->slider);
+                module.controls.push_back(std::move(control));
+            }
         }
 
         moduleUis.push_back(std::move(module));
@@ -158,7 +197,8 @@ void Editor::paint(juce::Graphics& g)
         switch (descriptor.display)
         {
             case ui::Display::oscillator:
-                ui::drawWaveform(g, display, value(descriptor.knobs.front().id), accent, alpha);
+                if (const auto* source = ui::displaySourceId(descriptor))
+                    ui::drawWaveform(g, display, value(source), accent, alpha);
                 break;
             case ui::Display::envelope:
                 ui::drawEnvelope(g, display, value("attack"), value("decay"),
@@ -183,7 +223,7 @@ void Editor::resized()
     loadPreset.setBounds(right - 130, 26, 62, 26);
     presetName.setBounds(right - 350, 26, 212, 26);
 
-    const auto knobHeight = ui::uniformKnobHeight(getLocalBounds());
+    const auto diameter = ui::uniformKnobDiameter(getLocalBounds());
     for (auto& module : moduleUis)
     {
         const auto& descriptor = *module.descriptor;
@@ -196,12 +236,21 @@ void Editor::resized()
             module.enable->setBounds(led);
         }
 
-        for (int i = 0; i < static_cast<int>(module.controls.size()); ++i)
+        for (auto& held : module.controls)
         {
-            auto block = ui::knobBlock(area, descriptor, i, knobHeight);
-            auto& control = *module.controls[static_cast<size_t>(i)];
-            control.label.setBounds(block.removeFromTop(ui::knobLabelHeight));
-            control.slider.setBounds(block);
+            auto& control = *held;
+            if (control.style == ui::Style::knob)
+            {
+                auto block = ui::knobBlock(area, descriptor, control.row, control.index, diameter);
+                control.label.setBounds(block.removeFromTop(ui::knobLabelHeight));
+                control.slider.setBounds(block);
+            }
+            else
+            {
+                auto block = ui::stepperBlock(area, descriptor, control.row, control.index);
+                control.label.setBounds(block.removeFromTop(ui::stepperLabelHeight));
+                control.slider.setBounds(block);
+            }
         }
     }
 }

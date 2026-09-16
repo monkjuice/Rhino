@@ -62,6 +62,35 @@ float peakForNote(theta::forge::Processor& processor, int samples = 4096)
     return buffer.getMagnitude(0, samples);
 }
 
+// Render a held note into a caller-owned buffer, for checks that need to look
+// at the waveform rather than only its peak.
+void renderNote(theta::forge::Processor& processor, juce::AudioBuffer<float>& buffer, int note = 57)
+{
+    processor.prepareToPlay(48000.0, buffer.getNumSamples());
+    juce::MidiBuffer midi;
+    midi.addEvent(juce::MidiMessage::noteOn(1, note, 1.0f), 0);
+    processor.processBlock(buffer, midi);
+}
+
+// Counted on the settled part of the render, past the envelope attack.
+int zeroCrossings(const juce::AudioBuffer<float>& buffer, int channel, int from)
+{
+    auto crossings = 0;
+    for (int i = from + 1; i < buffer.getNumSamples(); ++i)
+        if ((buffer.getSample(channel, i - 1) < 0.0f) != (buffer.getSample(channel, i) < 0.0f))
+            ++crossings;
+    return crossings;
+}
+
+float rms(const juce::AudioBuffer<float>& buffer, int channel, int from)
+{
+    auto sum = 0.0;
+    const auto count = buffer.getNumSamples() - from;
+    for (int i = from; i < buffer.getNumSamples(); ++i)
+        sum += static_cast<double>(buffer.getSample(channel, i)) * buffer.getSample(channel, i);
+    return count > 0 ? static_cast<float>(std::sqrt(sum / count)) : 0.0f;
+}
+
 bool allSamplesFinite(const juce::AudioBuffer<float>& buffer)
 {
     for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
@@ -88,9 +117,16 @@ void layoutSuite()
         if (module.enableId != nullptr)
             require(processor.state.getParameter(module.enableId) != nullptr,
                     "a module's enable id names a real parameter");
-        for (const auto& knob : module.knobs)
-            require(processor.state.getParameter(knob.id) != nullptr,
-                    "a module's knob id names a real parameter");
+        for (const auto& row : module.rows)
+            for (const auto& control : row.controls)
+                require(processor.state.getParameter(control.id) != nullptr,
+                        "a module's control id names a real parameter");
+        if (module.display == theta::forge::ui::Display::oscillator)
+        {
+            const auto* source = theta::forge::ui::displaySourceId(module);
+            require(source != nullptr && processor.state.getParameter(source) != nullptr,
+                    "an oscillator display reads a real parameter");
+        }
     }
 
     // Conversely, every parameter should be reachable from the panel. A
@@ -103,8 +139,9 @@ void layoutSuite()
         for (const auto& module : modules)
         {
             if (module.enableId != nullptr && withId->paramID == module.enableId) found = true;
-            for (const auto& knob : module.knobs)
-                if (withId->paramID == knob.id) found = true;
+            for (const auto& row : module.rows)
+                for (const auto& control : row.controls)
+                    if (withId->paramID == control.id) found = true;
         }
         require(found, "every parameter appears somewhere on the panel");
         if (!found) std::cerr << "       orphan parameter: " << withId->paramID << '\n';
@@ -116,19 +153,51 @@ void layoutSuite()
         require(!area.isEmpty(), "a module occupies a non-empty rectangle");
         require(content.contains(area), "a module stays inside the content area");
 
-        const auto knobRow = theta::forge::ui::knobRowBounds(area, modules[i]);
-        require(knobRow.getHeight() > 30, "a module leaves usable height for its knobs");
-        require(area.withTrimmedTop(theta::forge::ui::headerHeight).contains(knobRow),
-                "knobs stay clear of the module header, so labels cannot collide with the title");
+        const auto controls = theta::forge::ui::controlArea(area, modules[i]);
+        require(controls.getHeight() > 30, "a module leaves usable height for its controls");
+        require(area.withTrimmedTop(theta::forge::ui::headerHeight).contains(controls),
+                "controls stay clear of the module header, so labels cannot collide with the title");
+
+        // Rows within a module must tile their area without overlapping either.
+        for (int r = 0; r < static_cast<int>(modules[i].rows.size()); ++r)
+        {
+            const auto row = theta::forge::ui::rowBounds(area, modules[i], r);
+            require(controls.contains(row), "a control row stays inside its module");
+            for (int s = r + 1; s < static_cast<int>(modules[i].rows.size()); ++s)
+                require(!row.intersects(theta::forge::ui::rowBounds(area, modules[i], s)),
+                        "no two control rows in a module overlap");
+        }
 
         for (size_t j = i + 1; j < modules.size(); ++j)
             require(!area.intersects(theta::forge::ui::moduleBounds(bounds, modules[j])),
                     "no two modules overlap");
     }
 
+    // Every knob on the panel is the same size, whichever module it sits in.
+    const auto diameter = theta::forge::ui::uniformKnobDiameter(bounds);
+    require(diameter >= 48, "the shared knob diameter stays usable");
+    for (const auto& module : modules)
+    {
+        const auto area = theta::forge::ui::moduleBounds(bounds, module);
+        for (int r = 0; r < static_cast<int>(module.rows.size()); ++r)
+        {
+            const auto& row = module.rows[static_cast<size_t>(r)];
+            for (int i = 0; i < static_cast<int>(row.controls.size()); ++i)
+            {
+                const auto block = row.style == theta::forge::ui::Style::knob
+                    ? theta::forge::ui::knobBlock(area, module, r, i, diameter)
+                    : theta::forge::ui::stepperBlock(area, module, r, i);
+                require(!block.isEmpty(), "every control gets a non-empty rectangle");
+                require(area.contains(block), "every control stays inside its module");
+                if (row.style == theta::forge::ui::Style::knob)
+                    require(block.getWidth() == diameter, "every knob is drawn at the shared diameter");
+            }
+        }
+    }
+
     // The proportions have to survive the whole resize range, not just the
     // default size.
-    for (const auto size : {juce::Point<int>(1060, 760), juce::Point<int>(1800, 1200)})
+    for (const auto size : {juce::Point<int>(1100, 840), juce::Point<int>(1800, 1200)})
     {
         const auto resized = juce::Rectangle<int>(0, 0, size.x, size.y);
         for (const auto& module : modules)
@@ -136,9 +205,11 @@ void layoutSuite()
             const auto area = theta::forge::ui::moduleBounds(resized, module);
             require(theta::forge::ui::contentBounds(resized).contains(area),
                     "a module stays inside the content area at every allowed size");
-            require(theta::forge::ui::knobRowBounds(area, module).getHeight() > 24,
-                    "knobs stay usable at every allowed size");
+            require(theta::forge::ui::controlArea(area, module).getHeight() > 24,
+                    "controls stay usable at every allowed size");
         }
+        require(theta::forge::ui::uniformKnobDiameter(resized) >= 40,
+                "knobs stay usable at every allowed size");
     }
 }
 
@@ -222,8 +293,8 @@ void presetSuite()
     requireText(textFor(processor, "sustain", 0.75f), "75 %", "sustain reads as a percentage");
     requireText(textFor(processor, "attack", 0.01f), "10 ms", "a short attack reads in milliseconds");
     requireText(textFor(processor, "release", 2.5f), "2.50 s", "a long release reads in seconds");
-    requireText(textFor(processor, "oscBTune", 7.0f), "+7 st", "tune reads as signed semitones");
-    requireText(textFor(processor, "unison", 4.0f), "4", "unison reads as a plain count");
+    requireText(textFor(processor, "oscBSemitone", 7.0f), "+7 st", "tune reads as signed semitones");
+    requireText(textFor(processor, "oscAUnison", 4.0f), "4", "unison reads as a plain count");
     requireText(textFor(processor, "lfoCutoff", -0.5f), "-50 %", "a bipolar depth keeps its sign");
     require(!textFor(processor, "cutoff", 7800.0f).contains("7800.0004"),
             "no knob falls back to a raw float readout");
@@ -232,6 +303,117 @@ void presetSuite()
 }
 
 // ---------------------------------------------------------------- engine ---
+
+// Reduce a processor to one clean sine from oscillator A, so the waveform can
+// be measured directly.
+void soloSineOnA(theta::forge::Processor& processor)
+{
+    for (const auto* id : {"oscBEnable", "subEnable", "noiseEnable", "filterEnable"})
+        setValue(processor, id, 0.0f);
+    setValue(processor, "oscAEnable", 1.0f);
+    setValue(processor, "oscAPosition", 0.0f);
+    setValue(processor, "oscAUnison", 1.0f);
+    setValue(processor, "oscADetune", 0.0f);
+    setValue(processor, "oscAPan", 0.0f);
+    setValue(processor, "oscALevel", 1.0f);
+    setValue(processor, "oscAOctave", 0.0f);
+    setValue(processor, "oscASemitone", 0.0f);
+    setValue(processor, "oscAFine", 0.0f);
+    setValue(processor, "drive", 0.0f);
+    setValue(processor, "attack", 0.001f);
+}
+
+void oscillatorSuite()
+{
+    // Tuning is one multiplier built from three controls. Check the arithmetic
+    // directly before checking that the voice honours it.
+    theta::forge::Oscillator osc;
+    requireClose(theta::forge::tuningRatio(osc), 1.0f, 0.0001f, "an untuned oscillator plays at pitch");
+    osc.octave = 1.0f;
+    requireClose(theta::forge::tuningRatio(osc), 2.0f, 0.0001f, "one octave doubles the frequency");
+    osc.octave = 0.0f; osc.semitone = 12.0f;
+    requireClose(theta::forge::tuningRatio(osc), 2.0f, 0.0001f, "twelve semitones doubles the frequency");
+    osc.semitone = 0.0f; osc.fine = 100.0f;
+    requireClose(theta::forge::tuningRatio(osc), std::pow(2.0f, 1.0f / 12.0f), 0.0001f,
+                 "one hundred cents is one semitone");
+    osc.octave = -1.0f; osc.semitone = 12.0f; osc.fine = 0.0f;
+    requireClose(theta::forge::tuningRatio(osc), 1.0f, 0.0001f, "octave and semitone cancel");
+
+    // And the voice honours it: an octave up doubles the zero-crossing rate.
+    constexpr int samples = 8192;
+    constexpr int settled = 1024;
+    juce::AudioBuffer<float> buffer(2, samples);
+
+    theta::forge::Processor atPitch;
+    soloSineOnA(atPitch);
+    renderNote(atPitch, buffer);
+    const auto baseCrossings = zeroCrossings(buffer, 0, settled);
+    require(baseCrossings > 0, "a solo sine crosses zero");
+
+    theta::forge::Processor anOctaveUp;
+    soloSineOnA(anOctaveUp);
+    setValue(anOctaveUp, "oscAOctave", 1.0f);
+    renderNote(anOctaveUp, buffer);
+    requireClose(static_cast<float>(zeroCrossings(buffer, 0, settled)),
+                 static_cast<float>(baseCrossings * 2), static_cast<float>(baseCrossings) * 0.05f,
+                 "an octave up doubles the oscillator's frequency");
+
+    theta::forge::Processor sevenSemis;
+    soloSineOnA(sevenSemis);
+    setValue(sevenSemis, "oscASemitone", 7.0f);
+    renderNote(sevenSemis, buffer);
+    requireClose(static_cast<float>(zeroCrossings(buffer, 0, settled)),
+                 baseCrossings * std::pow(2.0f, 7.0f / 12.0f), static_cast<float>(baseCrossings) * 0.05f,
+                 "seven semitones is a fifth");
+
+    // Pan law: hard left puts nothing in the right channel.
+    theta::forge::Processor panned;
+    soloSineOnA(panned);
+    setValue(panned, "oscAPan", -1.0f);
+    renderNote(panned, buffer);
+    const auto left = rms(buffer, 0, settled);
+    const auto right = rms(buffer, 1, settled);
+    require(left > 0.0f, "a hard-left oscillator still feeds the left channel");
+    require(right < left * 0.01f, "a hard-left oscillator is absent from the right channel");
+
+    // Centred, an equal-power pan puts the same energy in both channels.
+    theta::forge::Processor centred;
+    soloSineOnA(centred);
+    renderNote(centred, buffer);
+    requireClose(rms(buffer, 0, settled), rms(buffer, 1, settled), 0.0001f,
+                 "a centred oscillator is equal in both channels");
+
+    // Level scales the oscillator directly, now that it owns one.
+    const auto fullLevel = rms(buffer, 0, settled);
+    theta::forge::Processor halfLevel;
+    soloSineOnA(halfLevel);
+    setValue(halfLevel, "oscALevel", 0.5f);
+    renderNote(halfLevel, buffer);
+    requireClose(rms(buffer, 0, settled), fullLevel * 0.5f, fullLevel * 0.02f,
+                 "halving an oscillator's level halves its output");
+
+    // Widening the stack changes the sound without changing the level. Power
+    // normalisation cannot be exact against a detuned stack, so this allows a
+    // few dB rather than asserting equality.
+    theta::forge::Processor single;
+    soloSineOnA(single);
+    setValue(single, "oscADetune", 0.3f);
+    setValue(single, "oscAUnison", 1.0f);
+    renderNote(single, buffer);
+    const auto oneVoice = rms(buffer, 0, settled);
+
+    theta::forge::Processor stacked;
+    soloSineOnA(stacked);
+    setValue(stacked, "oscADetune", 0.3f);
+    setValue(stacked, "oscAUnison", 8.0f);
+    renderNote(stacked, buffer);
+    const auto eightVoices = rms(buffer, 0, settled);
+    require(oneVoice > 0.0f && eightVoices > 0.0f, "both stack sizes make sound");
+    const auto decibels = juce::Decibels::gainToDecibels(eightVoices / oneVoice);
+    require(std::abs(decibels) < 4.0f, "stacking voices does not change the oscillator's level");
+    if (std::abs(decibels) >= 4.0f)
+        std::cerr << "       unison level shift: " << decibels << " dB\n";
+}
 
 void engineSuite()
 {
@@ -259,11 +441,12 @@ void engineSuite()
     const auto oscAOnly = peakForNote(processor);
     require(oscAOnly > 0.0f, "oscillator A alone makes sound");
 
-    // With B switched off, A takes the whole voice instead of being scaled down
-    // by B's level, so muting B must not make A quieter.
+    // Each oscillator owns its level outright. Nothing about B may reach A.
     setValue(processor, "oscBLevel", 0.9f);
+    setValue(processor, "oscBDetune", 1.0f);
+    setValue(processor, "oscBUnison", 8.0f);
     requireClose(peakForNote(processor), oscAOnly, 0.0001f,
-                 "oscillator B's level does not affect A while B is switched off");
+                 "oscillator B's controls do not affect A while B is switched off");
 
     setValue(processor, "oscBEnable", 1.0f);
     require(peakForNote(processor) > 0.0f, "both oscillators together make sound");
@@ -277,12 +460,16 @@ void engineSuite()
     const auto bypassed = peakForNote(processor);
     require(bypassed > filtered * 2.0f, "switching the filter off bypasses it");
 
+    oscillatorSuite();
+
     // Output stays finite and bounded across an extreme patch.
     theta::forge::Processor extreme;
     for (const auto* id : {"oscAEnable", "oscBEnable", "subEnable", "noiseEnable", "filterEnable"})
         setValue(extreme, id, 1.0f);
-    setValue(extreme, "unison", 8.0f);
-    setValue(extreme, "detune", 1.0f);
+    setValue(extreme, "oscAUnison", 8.0f);
+    setValue(extreme, "oscBUnison", 8.0f);
+    setValue(extreme, "oscADetune", 1.0f);
+    setValue(extreme, "oscBDetune", 1.0f);
     setValue(extreme, "resonance", 1.0f);
     setValue(extreme, "drive", 1.0f);
     setValue(extreme, "output", 1.25f);

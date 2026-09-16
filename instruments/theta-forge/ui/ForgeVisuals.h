@@ -24,6 +24,27 @@ inline juce::Colour accentFor(const Module& module)
 class LookAndFeel final : public juce::LookAndFeel_V4
 {
 public:
+    // Steppers are bar-style sliders, so JUCE routes them here. They are drawn
+    // as a plain numeric field rather than a filled bar: for a tuning value,
+    // the number is the information and a fill proportion is noise.
+    void drawLinearSlider(juce::Graphics& g, int x, int y, int width, int height,
+                          float, float, float, juce::Slider::SliderStyle, juce::Slider& slider) override
+    {
+        const auto area = juce::Rectangle<int>(x, y, width, height).toFloat().reduced(1.0f);
+        const auto accent = slider.findColour(juce::Slider::rotarySliderFillColourId);
+        const auto enabled = slider.isEnabled();
+        const auto active = slider.getValue() != slider.getDoubleClickReturnValue();
+
+        g.setColour(juce::Colour(0xff0b0e18).withAlpha(enabled ? 1.0f : 0.5f));
+        g.fillRoundedRectangle(area, 3.0f);
+        g.setColour((active ? accent : line).withAlpha(enabled ? 1.0f : 0.35f));
+        g.drawRoundedRectangle(area, 3.0f, 1.0f);
+
+        g.setColour((active ? accent : text).withAlpha(enabled ? 1.0f : 0.35f));
+        g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
+        g.drawText(slider.getTextFromValue(slider.getValue()), area, juce::Justification::centred);
+    }
+
     void drawRotarySlider(juce::Graphics& g, int x, int y, int width, int height,
                           float position, float startAngle, float endAngle, juce::Slider& slider) override
     {

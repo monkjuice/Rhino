@@ -677,12 +677,20 @@ inline void fillWaveArea(juce::Graphics& g, juce::Rectangle<float> box, const ju
     g.fillPath(area);
 }
 
+// Rounded joins rather than the default mitre: an envelope whose decay is a
+// millisecond turns two of its corners into near-spikes, and a mitre there
+// shoots a splinter of the fat halo stroke well clear of the shape.
 inline void strokeGlow(juce::Graphics& g, const juce::Path& path, juce::Colour colour, float alpha)
 {
+    const auto joined = [] (float width)
+    {
+        return juce::PathStrokeType(width, juce::PathStrokeType::curved,
+                                    juce::PathStrokeType::rounded);
+    };
     g.setColour(colour.withAlpha(0.16f * alpha));
-    g.strokePath(path, juce::PathStrokeType(7.0f));
+    g.strokePath(path, joined(7.0f));
     g.setColour(colour.withAlpha(alpha));
-    g.strokePath(path, juce::PathStrokeType(1.8f));
+    g.strokePath(path, joined(1.8f));
 }
 
 // --- The picture tube -------------------------------------------------------
@@ -844,77 +852,201 @@ inline void drawWaveform(juce::Graphics& g, juce::Rectangle<int> area, const the
     strokePhosphor(g, path, colour, alpha);
 }
 
+// --- The envelope -----------------------------------------------------------
+
 // Envelope stages, matching Core's ordering.
 enum class Stage { idle, attack, decay, sustain, release };
 
-// The current ADSR, with a playhead showing where a sounding note has reached.
-// The playhead's height is the envelope's real value, so a note released
-// during its attack visibly falls from the level it actually got to rather
-// than from the sustain line.
+// How long each stage actually lasts, which is not always what its knob says.
+// Core's decay ends the instant it begins when sustain is full — there is
+// nothing to fall to — and its release ends at once when sustain is nothing.
+// The picture has to agree, or a patch holding a flat note draws a decay and a
+// release it will never play.
+struct EnvelopeTimes
+{
+    float attack = 0.0f, decay = 0.0f, release = 0.0f;
+    float total() const { return attack + decay + release; }
+};
+
+inline EnvelopeTimes envelopeTimes(float attack, float decay, float sustain, float release)
+{
+    const auto held = juce::jlimit(0.0f, 1.0f, sustain);
+    return {juce::jmax(0.0f, attack),
+            held < 1.0f ? juce::jmax(0.0f, decay) : 0.0f,
+            held > 0.0f ? juce::jmax(0.0f, release) : 0.0f};
+}
+
+// The time the display's width spans, and the spacing of the marks across it.
+struct EnvelopeAxis
+{
+    float seconds = 1.0f;
+    float mark = 0.25f;
+};
+
+// The window snaps to one of a fixed set of spans rather than being fitted to
+// the envelope. Fitting is what this display used to do, and it is the bug: a
+// shape stretched to the full width looks identical at 50 ms and at 4 s, so the
+// one thing an envelope display exists to show — how long the stages last — was
+// the one thing it could not show. Against a snapped window a 50 ms envelope is
+// a sliver against the left edge and a 4 s one crosses the well, and the marks
+// behind it say in seconds what the difference is.
+//
+// Snapped rather than one fixed window because A, D and R together run from
+// 3 ms to 16 s and no single window holds both ends. Serum spends a zoom
+// control on the same problem; this panel has nowhere to put one, so the window
+// steps up by itself and relabels its marks when it does.
+inline EnvelopeAxis envelopeAxis(float totalSeconds)
+{
+    static constexpr EnvelopeAxis steps[] = {{0.25f, 0.05f}, {0.5f, 0.1f}, {1.0f, 0.25f},
+                                             {2.0f, 0.5f},   {4.0f, 1.0f}, {8.0f, 2.0f},
+                                             {16.0f, 4.0f}};
+    static constexpr int stepCount = sizeof(steps) / sizeof(steps[0]);
+    for (int i = 0; i < stepCount - 1; ++i)
+        if (totalSeconds <= steps[i].seconds) return steps[i];
+    return steps[stepCount - 1];
+}
+
+// Where each corner of an envelope lands inside a box. Pure geometry, so what
+// the picture claims about time can be checked without a Graphics.
+//
+// There is no sustain plateau. Sustain is a level held for as long as the key
+// is, not a duration, so giving it a slice of the width tore a gap in the time
+// axis and left every stage after it sitting somewhere it does not belong.
+// Decay ends on the sustain level and release starts from it, as Serum draws it.
+struct EnvelopeShape
+{
+    juce::Rectangle<float> box;
+    EnvelopeAxis axis;
+    float attackX = 0.0f;  // the peak
+    float decayX = 0.0f;   // the sustain level, and where release begins
+    float endX = 0.0f;     // silence
+    float floorY = 0.0f, peakY = 0.0f, sustainY = 0.0f;
+
+    float xFor(float seconds) const
+    {
+        return box.getX() + seconds / axis.seconds * box.getWidth();
+    }
+};
+
+inline EnvelopeShape envelopeShape(juce::Rectangle<float> box, float attack, float decay,
+                                   float sustain, float release)
+{
+    const auto times = envelopeTimes(attack, decay, sustain, release);
+    EnvelopeShape shape;
+    shape.box = box;
+    shape.axis = envelopeAxis(times.total());
+    shape.floorY = box.getBottom();
+    shape.peakY = box.getY();
+    shape.sustainY = juce::jmap(juce::jlimit(0.0f, 1.0f, sustain), shape.floorY, shape.peakY);
+    shape.attackX = shape.xFor(times.attack);
+    shape.decayX = shape.xFor(times.attack + times.decay);
+    shape.endX = shape.xFor(times.total());
+    return shape;
+}
+
+// The second marks behind an envelope, each labelled with the time it stands
+// for. They are what turns the shape into a measurement: without them a snapped
+// window is one more arbitrary stretch.
+inline void drawEnvelopeGrid(juce::Graphics& g, juce::Rectangle<float> box, EnvelopeAxis axis)
+{
+    const auto marks = juce::roundToInt(axis.seconds / axis.mark);
+    g.setFont(juce::FontOptions(9.0f));
+    for (int i = 1; i < marks; ++i)
+    {
+        const auto at = axis.mark * static_cast<float>(i);
+        const auto x = box.getX() + at / axis.seconds * box.getWidth();
+        g.setColour(line.withAlpha(0.5f));
+        g.drawVerticalLine(juce::roundToInt(x), box.getY(), box.getBottom());
+        g.setColour(mutedText.withAlpha(0.55f));
+        g.drawText(axis.seconds >= 1.0f
+                       ? juce::String(at, 2).trimCharactersAtEnd("0").trimCharactersAtEnd(".") + " s"
+                       : juce::String(juce::roundToInt(at * 1000.0f)) + " ms",
+                   juce::Rectangle<float>(x + 3.0f, box.getBottom() - 12.0f, 44.0f, 11.0f).toNearestInt(),
+                   juce::Justification::centredLeft);
+    }
+}
+
+// The current ADSR against a time axis, with a playhead showing where a
+// sounding note has reached. The playhead's height is the envelope's real
+// value, so a note released during its attack visibly falls from the level it
+// actually got to rather than from the sustain line.
 inline void drawEnvelope(juce::Graphics& g, juce::Rectangle<int> area, float attack, float decay,
                          float sustain, float release, juce::Colour colour, float alpha,
                          Stage stage = Stage::idle, float level = 0.0f)
 {
     // Clipped to the well and drawn its full width, so the curve starts against
-    // the left edge and the release runs out at the right rather than both
-    // stopping short of the frame.
+    // the left edge and anything past the end of the window is cut off by the
+    // frame rather than squeezed back inside it.
     juce::Graphics::ScopedSaveState clip(g);
     g.reduceClipRegion(displayClip(area));
 
     const auto box = area.toFloat().reduced(0.0f, 9.0f);
-    const auto span = attack + decay + release + 0.001f;
-    const auto sustainWidth = box.getWidth() * 0.22f;
-    const auto scale = (box.getWidth() - sustainWidth) / span;
-    const auto floorY = box.getBottom();
-    const auto peakY = box.getY();
-    const auto held = juce::jlimit(0.0f, 1.0f, sustain);
-    const auto sustainY = juce::jmap(held, floorY, peakY);
+    const auto shape = envelopeShape(box, attack, decay, sustain, release);
+    drawEnvelopeGrid(g, box, shape.axis);
 
-    const auto attackX = box.getX() + attack * scale;
-    const auto decayX = attackX + decay * scale;
-    const auto sustainX = decayX + sustainWidth;
-    const auto endX = sustainX + release * scale;
-
+    // Straight segments, because Core's stages are straight: each one adds or
+    // subtracts a fixed amount per sample. A drawn curve would be a shape the
+    // engine never plays.
     juce::Path path;
-    path.startNewSubPath(box.getX(), floorY);
-    path.lineTo(attackX, peakY);
-    path.quadraticTo(attackX + (decayX - attackX) * 0.4f, sustainY, decayX, sustainY);
-    path.lineTo(sustainX, sustainY);
-    path.quadraticTo(sustainX + release * scale * 0.4f, floorY, endX, floorY);
+    path.startNewSubPath(box.getX(), shape.floorY);
+    path.lineTo(shape.attackX, shape.peakY);
+    path.lineTo(shape.decayX, shape.sustainY);
+    path.lineTo(shape.endX, shape.floorY);
+
+    // Filled down to silence rather than to the middle of the well: an envelope
+    // runs from nothing to full, so its baseline is the floor, not the centre.
+    auto under = path;
+    under.lineTo(box.getX(), shape.floorY);
+    under.closeSubPath();
+    g.setGradientFill({colour.withAlpha(0.30f * alpha), box.getCentreX(), shape.peakY,
+                       colour.withAlpha(0.04f * alpha), box.getCentreX(), shape.floorY, false});
+    g.fillPath(under);
+
     strokeGlow(g, path, colour, alpha);
 
-    g.setColour(colour.withAlpha(0.25f * alpha));
-    g.drawVerticalLine(juce::roundToInt(sustainX), sustainY, floorY);
+    // A handle on every corner, so the three stages stay tellable apart where
+    // one of them is short enough to leave almost no segment to see.
+    for (const auto& node : {juce::Point<float>(shape.attackX, shape.peakY),
+                             juce::Point<float>(shape.decayX, shape.sustainY),
+                             juce::Point<float>(shape.endX, shape.floorY)})
+    {
+        const auto dot = juce::Rectangle<float>(6.5f, 6.5f).withCentre(node);
+        g.setColour(panel.withAlpha(alpha));
+        g.fillEllipse(dot);
+        g.setColour(colour.withAlpha(alpha));
+        g.drawEllipse(dot, 1.6f);
+    }
 
     if (stage == Stage::idle) return;
 
     // Where along the drawn shape the note has reached. Each stage maps its own
-    // progress onto its own segment; the plateau is held time, so sustain sits
-    // at its end and release carries on from there without a jump.
+    // progress onto its own segment; sustain is the corner decay ends on, so a
+    // held note parks there and release carries on from it without a jump.
+    const auto held = juce::jlimit(0.0f, 1.0f, sustain);
     auto x = box.getX();
     switch (stage)
     {
         case Stage::attack:
-            x = juce::jmap(juce::jlimit(0.0f, 1.0f, level), box.getX(), attackX);
+            x = juce::jmap(juce::jlimit(0.0f, 1.0f, level), box.getX(), shape.attackX);
             break;
         case Stage::decay:
             x = juce::jmap(juce::jlimit(0.0f, 1.0f, held < 1.0f ? (1.0f - level) / (1.0f - held) : 1.0f),
-                           attackX, decayX);
+                           shape.attackX, shape.decayX);
             break;
         case Stage::sustain:
-            x = sustainX;
+            x = shape.decayX;
             break;
         case Stage::release:
             x = juce::jmap(juce::jlimit(0.0f, 1.0f, held > 0.0f ? 1.0f - level / held : 1.0f),
-                           sustainX, endX);
+                           shape.decayX, shape.endX);
             break;
         case Stage::idle:
             break;
     }
-    const auto y = juce::jmap(juce::jlimit(0.0f, 1.0f, level), floorY, peakY);
+    const auto y = juce::jmap(juce::jlimit(0.0f, 1.0f, level), shape.floorY, shape.peakY);
 
     g.setColour(colour.withAlpha(0.35f * alpha));
-    g.drawVerticalLine(juce::roundToInt(x), y, floorY);
+    g.drawVerticalLine(juce::roundToInt(x), y, shape.floorY);
     g.setColour(juce::Colours::white.withAlpha(0.9f * alpha));
     g.fillEllipse(juce::Rectangle<float>(7.0f, 7.0f).withCentre({x, y}));
     g.setColour(colour);

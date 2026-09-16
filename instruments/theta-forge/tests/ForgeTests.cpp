@@ -1,6 +1,7 @@
 #include "../src/ForgeProcessor.h"
 #include "../ui/ForgeLayout.h"
 #include "../ui/ForgeTooltips.h"
+#include "../ui/ForgeVisuals.h"
 #include <algorithm>
 #include <iostream>
 #include <vector>
@@ -485,6 +486,106 @@ void layoutSuite()
                     }
             }
         }
+}
+
+// ------------------------------------------------------- envelope display ---
+
+// The envelope display used to stretch whatever A/D/S/R it was given across the
+// full width of its well, so a 51 ms envelope and a 5.1 s one drew the same
+// picture and the only display in the panel whose job is to show duration
+// showed none. These check the geometry rather than the pixels: what the shape
+// claims about time, read back through the axis it is drawn against.
+void envelopeDisplaySuite()
+{
+    namespace ui = theta::forge::ui;
+    const auto box = juce::Rectangle<float>(0.0f, 0.0f, 400.0f, 100.0f);
+
+    // Read a corner back as the time it stands for. The whole point of the
+    // display is that this round-trip holds.
+    const auto secondsAt = [&box] (const ui::EnvelopeShape& shape, float x)
+    {
+        return (x - box.getX()) / box.getWidth() * shape.axis.seconds;
+    };
+
+    {
+        // The patch from the bug report: a short percussive envelope with
+        // sustain wide open. It has to read as short.
+        const auto shape = ui::envelopeShape(box, 0.030f, 0.155f, 1.0f, 0.021f);
+        requireClose(secondsAt(shape, shape.attackX), 0.030f, 0.0005f,
+                     "the peak lands at the attack time");
+        requireClose(secondsAt(shape, shape.endX), 0.051f, 0.0005f,
+                     "a 51 ms envelope ends 51 ms along the axis");
+        require(shape.endX < box.getX() + box.getWidth() * 0.5f,
+                "a short envelope leaves most of the well empty instead of filling it");
+        requireClose(shape.decayX, shape.attackX, 0.001f,
+                     "decay takes no time at all when sustain is wide open");
+        requireClose(shape.sustainY, shape.peakY, 0.001f,
+                     "full sustain sits at the top of the well");
+    }
+
+    {
+        // The same envelope ten times over. The old display drew these two
+        // identically; they must now differ.
+        const auto brief = ui::envelopeShape(box, 0.030f, 0.155f, 1.0f, 0.021f);
+        const auto long_ = ui::envelopeShape(box, 0.300f, 1.550f, 1.0f, 0.210f);
+        require(std::abs(brief.endX - long_.endX) > 1.0f,
+                "envelopes ten times apart in length do not draw the same shape");
+        requireClose(secondsAt(long_, long_.endX), 0.510f, 0.002f,
+                     "a 510 ms envelope ends 510 ms along its own axis");
+    }
+
+    {
+        // Stages keep their proportions to each other: decay twice the attack
+        // is drawn twice as wide.
+        const auto shape = ui::envelopeShape(box, 0.05f, 0.10f, 0.5f, 0.05f);
+        const auto attackWidth = shape.attackX - box.getX();
+        requireClose(shape.decayX - shape.attackX, attackWidth * 2.0f, 0.01f,
+                     "a decay twice the attack is drawn twice as wide");
+        requireClose(shape.endX - shape.decayX, attackWidth, 0.01f,
+                     "a release equal to the attack is drawn the same width");
+        requireClose(shape.sustainY, (shape.floorY + shape.peakY) * 0.5f, 0.01f,
+                     "half sustain sits halfway up the well");
+    }
+
+    {
+        // Nothing to release from, so release draws nothing — which is what the
+        // engine does.
+        const auto shape = ui::envelopeShape(box, 0.05f, 0.10f, 0.0f, 2.0f);
+        requireClose(shape.endX, shape.decayX, 0.001f,
+                     "release takes no time at all when sustain is nothing");
+        requireClose(shape.sustainY, shape.floorY, 0.001f,
+                     "no sustain sits on the floor of the well");
+    }
+
+    // Across the whole range the knobs allow, the shape stays in order, stays
+    // inside the well, and never runs off the right-hand edge: the window is
+    // always at least as wide as the envelope it holds.
+    for (float attack = 0.001f; attack <= 4.0f; attack += 0.37f)
+        for (float decay = 0.001f; decay <= 4.0f; decay += 0.53f)
+            for (float release = 0.001f; release <= 8.0f; release += 0.91f)
+                for (float sustain = 0.0f; sustain <= 1.0f; sustain += 0.25f)
+                {
+                    const auto shape = ui::envelopeShape(box, attack, decay, sustain, release);
+                    const auto times = ui::envelopeTimes(attack, decay, sustain, release);
+                    if (times.total() > shape.axis.seconds)
+                    {
+                        require(false, "the window is never shorter than the envelope in it");
+                        std::cerr << "       a " << attack << " d " << decay << " s " << sustain
+                                  << " r " << release << '\n';
+                    }
+                    if (!(box.getX() <= shape.attackX && shape.attackX <= shape.decayX
+                          && shape.decayX <= shape.endX && shape.endX <= box.getRight() + 0.01f))
+                    {
+                        require(false, "the corners stay in order and inside the well");
+                        std::cerr << "       a " << attack << " d " << decay << " s " << sustain
+                                  << " r " << release << '\n';
+                    }
+                    if (!(shape.peakY <= shape.sustainY && shape.sustainY <= shape.floorY))
+                    {
+                        require(false, "the sustain level stays between the floor and the peak");
+                        std::cerr << "       s " << sustain << '\n';
+                    }
+                }
 }
 
 // --------------------------------------------------------------- presets ---
@@ -2465,7 +2566,7 @@ int main(int argc, char** argv)
     juce::ScopedJuceInitialiser_GUI initialiseJuce;
     const juce::String suite = argc > 1 ? argv[1] : "";
 
-    if (suite.isEmpty() || suite == "--layout") layoutSuite();
+    if (suite.isEmpty() || suite == "--layout") { layoutSuite(); envelopeDisplaySuite(); }
     if (suite.isEmpty() || suite == "--presets") { presetSuite(); legacyStateSuite(); }
     if (suite.isEmpty() || suite == "--engine") engineSuite();
 

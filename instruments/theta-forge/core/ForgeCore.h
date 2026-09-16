@@ -96,6 +96,8 @@ public:
         noiseState = 0x9e3779b9u;
         heldCount = 0;
         monoMode = false;
+        meterEnvelope = 0.0f;
+        meterStage = EnvelopeStage::idle;
     }
 
     void noteOn(int note, float velocity)
@@ -151,6 +153,13 @@ public:
 
     void allNotesOff() { reset(); }
 
+    // What ENV 1 is doing, for the display to draw. Taken from the loudest
+    // sounding voice, which is the one a player is listening to. Plain members
+    // rather than atomics: Core stays a pure DSP class and the processor owns
+    // the hand-off to the message thread.
+    float envelopeLevel() const { return meterEnvelope; }
+    int envelopeStage() const { return static_cast<int>(meterStage); }
+
     void renderSample(const Patch& patch, float& left, float& right)
     {
         left = right = 0.0f;
@@ -163,6 +172,9 @@ public:
         const auto lfoOctaves = juce::jlimit(-1.0f, 1.0f, patch.lfoCutoff) * lfo * 3.0f;
         const auto cutoff = patch.cutoff * std::pow(2.0f, lfoOctaves);
 
+        meterEnvelope = 0.0f;
+        meterStage = EnvelopeStage::idle;
+
         for (auto& voice : voices)
         {
             if (!voice.active) continue;
@@ -172,6 +184,11 @@ public:
             {
                 voice.active = false;
                 continue;
+            }
+            if (voice.ampEnvelope >= meterEnvelope)
+            {
+                meterEnvelope = voice.ampEnvelope;
+                meterStage = voice.ampStage;
             }
 
             Buses buses;
@@ -417,5 +434,7 @@ private:
     std::array<int, 16> heldNotes {};
     int heldCount = 0;
     bool monoMode = false;
+    float meterEnvelope = 0.0f;
+    EnvelopeStage meterStage = EnvelopeStage::idle;
 };
 }

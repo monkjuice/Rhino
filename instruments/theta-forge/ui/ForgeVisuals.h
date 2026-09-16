@@ -130,6 +130,84 @@ public:
     }
 };
 
+// A physical rocker, for the switches that are genuinely two-state. A knob
+// whose only readout is ON or OFF asks the hand to do the wrong gesture.
+//
+// Drawn rather than blitted, so it scales with the window and picks up the
+// panel's accent the way everything else does.
+class RockerSwitch final : public juce::Button
+{
+public:
+    explicit RockerSwitch(const juce::String& name) : juce::Button(name) { setClickingTogglesState(true); }
+
+    juce::Colour accent = electricBlue;
+
+    void paintButton(juce::Graphics& g, bool highlighted, bool held) override
+    {
+        const auto on = getToggleState();
+        const auto enabled = isEnabled();
+        const auto alpha = enabled ? 1.0f : 0.35f;
+        const auto bezel = getLocalBounds().toFloat();
+        const auto radius = bezel.getWidth() * 0.2f;
+
+        // A dark bezel with a thin rim that picks up both accents, the way the
+        // panel's own frame does. The rim is a stroke, not a fill: filled, it
+        // reads as a pale outline rather than an edge catching the light.
+        g.setColour(juce::Colour(0xff0a0c14));
+        g.fillRoundedRectangle(bezel, radius);
+        juce::ColourGradient rim(signalViolet.withAlpha(alpha * (highlighted ? 1.0f : 0.8f)),
+                                 bezel.getX(), bezel.getY(),
+                                 accent.withAlpha(alpha * (highlighted ? 1.0f : 0.8f)),
+                                 bezel.getRight(), bezel.getBottom(), false);
+        g.setGradientFill(rim);
+        g.drawRoundedRectangle(bezel.reduced(0.7f), radius, 1.4f);
+
+        const auto well = bezel.reduced(bezel.getWidth() * 0.13f);
+        g.setColour(juce::Colour(0xff05070e));
+        g.fillRoundedRectangle(well, radius * 0.7f);
+
+        const auto body = well.reduced(well.getWidth() * 0.08f);
+        // The rocker tilts: pressed in at the bottom when on, at the top when
+        // off, so the state reads even with the indicator unlit.
+        const auto split = body.getY() + body.getHeight() * (on ? 0.4f : 0.58f)
+            + (held ? body.getHeight() * 0.03f : 0.0f);
+
+        const juce::Rectangle<float> upper(body.getX(), body.getY(), body.getWidth(), split - body.getY());
+        juce::ColourGradient shade(juce::Colour(0xff202434), upper.getX(), upper.getY(),
+                                   juce::Colour(0xff090c15), upper.getX(), upper.getBottom(), false);
+        g.setGradientFill(shade);
+        g.fillRoundedRectangle(upper, radius * 0.5f);
+
+        const juce::Rectangle<float> lower(body.getX(), split, body.getWidth(), body.getBottom() - split);
+        juce::ColourGradient metal(juce::Colour(0xffa9b1c6).withAlpha(alpha), lower.getX(), lower.getY(),
+                                   juce::Colour(0xff525a70).withAlpha(alpha), lower.getX(), lower.getBottom(), false);
+        g.setGradientFill(metal);
+        g.fillRoundedRectangle(lower, radius * 0.5f);
+        // The lit edge where the pressed face meets the recess.
+        g.setColour(juce::Colours::white.withAlpha(0.28f * alpha));
+        g.drawLine(lower.getX() + 1.0f, lower.getY() + 0.5f, lower.getRight() - 1.0f, lower.getY() + 0.5f, 1.0f);
+
+        // The indicator on the pressed face: lit when on, a dark slot when off.
+        const auto barWidth = juce::jmax(2.0f, body.getWidth() * 0.16f);
+        const auto bar = juce::Rectangle<float>(barWidth, lower.getHeight() * 0.56f)
+            .withCentre(lower.getCentre());
+        if (on && enabled)
+        {
+            for (auto spread = 5.0f; spread >= 1.0f; spread -= 2.0f)
+            {
+                g.setColour(accent.withAlpha(0.16f));
+                g.fillRoundedRectangle(bar.expanded(spread), barWidth);
+            }
+            g.setColour(accent);
+        }
+        else
+        {
+            g.setColour(juce::Colour(0xff2b3044).withAlpha(alpha));
+        }
+        g.fillRoundedRectangle(bar, barWidth * 0.5f);
+    }
+};
+
 // A small labelled on/off button. Used for the filter's per-source routing,
 // where the label is the whole control and a knob would be absurd.
 class ToggleChip final : public juce::Button
@@ -201,10 +279,16 @@ inline void drawWaveform(juce::Graphics& g, juce::Rectangle<int> area, float pos
     strokeGlow(g, path, colour, alpha);
 }
 
-// A static read of the current ADSR. The live stage indicator arrives with the
-// ENV 1 milestone; the shape itself is already worth seeing while dialling.
+// Envelope stages, matching Core's ordering.
+enum class Stage { idle, attack, decay, sustain, release };
+
+// The current ADSR, with a playhead showing where a sounding note has reached.
+// The playhead's height is the envelope's real value, so a note released
+// during its attack visibly falls from the level it actually got to rather
+// than from the sustain line.
 inline void drawEnvelope(juce::Graphics& g, juce::Rectangle<int> area, float attack, float decay,
-                         float sustain, float release, juce::Colour colour, float alpha)
+                         float sustain, float release, juce::Colour colour, float alpha,
+                         Stage stage = Stage::idle, float level = 0.0f)
 {
     const auto box = area.toFloat().reduced(8.0f, 9.0f);
     const auto span = attack + decay + release + 0.001f;
@@ -212,21 +296,71 @@ inline void drawEnvelope(juce::Graphics& g, juce::Rectangle<int> area, float att
     const auto scale = (box.getWidth() - sustainWidth) / span;
     const auto floorY = box.getBottom();
     const auto peakY = box.getY();
-    const auto sustainY = juce::jmap(juce::jlimit(0.0f, 1.0f, sustain), floorY, peakY);
+    const auto held = juce::jlimit(0.0f, 1.0f, sustain);
+    const auto sustainY = juce::jmap(held, floorY, peakY);
+
+    const auto attackX = box.getX() + attack * scale;
+    const auto decayX = attackX + decay * scale;
+    const auto sustainX = decayX + sustainWidth;
+    const auto endX = sustainX + release * scale;
 
     juce::Path path;
     path.startNewSubPath(box.getX(), floorY);
-    const auto attackX = box.getX() + attack * scale;
     path.lineTo(attackX, peakY);
-    const auto decayX = attackX + decay * scale;
     path.quadraticTo(attackX + (decayX - attackX) * 0.4f, sustainY, decayX, sustainY);
-    const auto sustainX = decayX + sustainWidth;
     path.lineTo(sustainX, sustainY);
-    path.quadraticTo(sustainX + release * scale * 0.4f, floorY, sustainX + release * scale, floorY);
+    path.quadraticTo(sustainX + release * scale * 0.4f, floorY, endX, floorY);
     strokeGlow(g, path, colour, alpha);
 
     g.setColour(colour.withAlpha(0.25f * alpha));
     g.drawVerticalLine(juce::roundToInt(sustainX), sustainY, floorY);
+
+    if (stage == Stage::idle) return;
+
+    // Where along the drawn shape the note has reached. Each stage maps its own
+    // progress onto its own segment; the plateau is held time, so sustain sits
+    // at its end and release carries on from there without a jump.
+    auto x = box.getX();
+    switch (stage)
+    {
+        case Stage::attack:
+            x = juce::jmap(juce::jlimit(0.0f, 1.0f, level), box.getX(), attackX);
+            break;
+        case Stage::decay:
+            x = juce::jmap(juce::jlimit(0.0f, 1.0f, held < 1.0f ? (1.0f - level) / (1.0f - held) : 1.0f),
+                           attackX, decayX);
+            break;
+        case Stage::sustain:
+            x = sustainX;
+            break;
+        case Stage::release:
+            x = juce::jmap(juce::jlimit(0.0f, 1.0f, held > 0.0f ? 1.0f - level / held : 1.0f),
+                           sustainX, endX);
+            break;
+        case Stage::idle:
+            break;
+    }
+    const auto y = juce::jmap(juce::jlimit(0.0f, 1.0f, level), floorY, peakY);
+
+    g.setColour(colour.withAlpha(0.35f * alpha));
+    g.drawVerticalLine(juce::roundToInt(x), y, floorY);
+    g.setColour(juce::Colours::white.withAlpha(0.9f * alpha));
+    g.fillEllipse(juce::Rectangle<float>(7.0f, 7.0f).withCentre({x, y}));
+    g.setColour(colour);
+    g.fillEllipse(juce::Rectangle<float>(4.0f, 4.0f).withCentre({x, y}));
+}
+
+inline const char* stageName(Stage stage)
+{
+    switch (stage)
+    {
+        case Stage::attack: return "ATTACK";
+        case Stage::decay: return "DECAY";
+        case Stage::sustain: return "SUSTAIN";
+        case Stage::release: return "RELEASE";
+        case Stage::idle: break;
+    }
+    return "AMP";
 }
 
 // A static read of the LFO shape. Shape selection and the running phase dot
@@ -251,7 +385,8 @@ inline void drawLfo(juce::Graphics& g, juce::Rectangle<int> area, float cycles,
 // The pedal shell: a raised body, an accent cap, and a header strip reserved
 // for the title. Knob labels are laid out below that strip, which is why they
 // no longer collide with it.
-inline void drawModuleShell(juce::Graphics& g, juce::Rectangle<int> area, const Module& module, bool on)
+inline void drawModuleShell(juce::Graphics& g, juce::Rectangle<int> area, const Module& module, bool on,
+                            const juce::String& detailOverride = {})
 {
     const auto box = area.toFloat();
     const auto accent = accentFor(module);
@@ -270,11 +405,12 @@ inline void drawModuleShell(juce::Graphics& g, juce::Rectangle<int> area, const 
     g.setColour(text.withAlpha(alpha));
     g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
     g.drawText(module.title, header, juce::Justification::centredLeft);
-    if (*module.detail != 0)
+    const auto detail = detailOverride.isNotEmpty() ? detailOverride : juce::String(module.detail);
+    if (detail.isNotEmpty())
     {
         g.setColour(mutedText.withAlpha(alpha));
         g.setFont(juce::FontOptions(9.0f));
-        g.drawText(module.detail, header, juce::Justification::centredRight);
+        g.drawText(detail, header, juce::Justification::centredRight);
     }
 }
 

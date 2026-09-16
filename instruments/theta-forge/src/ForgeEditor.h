@@ -22,12 +22,18 @@ private:
     struct Control
     {
         ui::Style style = ui::Style::knob;
+        juce::String id;
+        const char* disabledBy = nullptr;
         int row = 0, index = 0;
         juce::Label label;
         juce::Slider slider;
         std::unique_ptr<ui::ToggleChip> chip;
+        // A rocker brings its own readout, because it has no slider text box to
+        // borrow one from.
+        std::unique_ptr<ui::RockerSwitch> rocker;
+        std::unique_ptr<juce::Label> readout;
         std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachment;
-        std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> chipAttachment;
+        std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> buttonAttachment;
     };
 
     // One of these per declared module. Controls are held by pointer because

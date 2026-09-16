@@ -113,6 +113,8 @@ void Editor::buildModules()
                 const auto& declared = row.controls[static_cast<size_t>(i)];
                 auto control = std::make_unique<Control>();
                 control->style = declared.style;
+                control->id = declared.id;
+                control->disabledBy = declared.disabledBy;
                 control->row = r;
                 control->index = i;
 
@@ -121,7 +123,7 @@ void Editor::buildModules()
                     control->chip = std::make_unique<ui::ToggleChip>(declared.label);
                     control->chip->accent = accent;
                     control->chip->setTooltip(tooltipFor(declared.id));
-                    control->chipAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+                    control->buttonAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
                         processor.state, declared.id, *control->chip);
                     addAndMakeVisible(*control->chip);
                     module.controls.push_back(std::move(control));
@@ -131,7 +133,35 @@ void Editor::buildModules()
                 control->label.setText(declared.label, juce::dontSendNotification);
                 control->label.setJustificationType(juce::Justification::centred);
                 control->label.setColour(juce::Label::textColourId, ui::mutedText);
-                control->label.setFont(juce::FontOptions(declared.style == ui::Style::knob ? 10.0f : 9.0f));
+                control->label.setFont(juce::FontOptions(declared.style == ui::Style::stepper ? 9.0f : 10.0f));
+
+                if (declared.style == ui::Style::rocker)
+                {
+                    control->rocker = std::make_unique<ui::RockerSwitch>(declared.label);
+                    control->rocker->accent = accent;
+                    control->rocker->setTooltip(tooltipFor(declared.id));
+
+                    control->readout = std::make_unique<juce::Label>();
+                    control->readout->setJustificationType(juce::Justification::centred);
+                    control->readout->setFont(juce::FontOptions(11.0f));
+                    control->readout->setColour(juce::Label::textColourId, ui::text);
+
+                    const auto refresh = [readout = control->readout.get(),
+                                          rocker = control->rocker.get()]
+                    {
+                        readout->setText(rocker->getToggleState() ? "ON" : "OFF", juce::dontSendNotification);
+                    };
+                    control->rocker->onStateChange = refresh;
+                    control->buttonAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+                        processor.state, declared.id, *control->rocker);
+                    refresh();
+
+                    addAndMakeVisible(*control->rocker);
+                    addAndMakeVisible(*control->readout);
+                    addAndMakeVisible(control->label);
+                    module.controls.push_back(std::move(control));
+                    continue;
+                }
 
                 if (declared.style == ui::Style::knob)
                 {
@@ -177,15 +207,27 @@ void Editor::applyEnableStates()
 {
     for (auto& module : moduleUis)
     {
-        const auto on = module.on();
         for (auto& control : module.controls)
         {
+            // A control is live when its module is on and nothing else has
+            // taken it over — polyphony means nothing once mono is switched on.
+            const auto on = module.on()
+                && (control->disabledBy == nullptr || value(control->disabledBy) < 0.5f);
+
             if (control->chip != nullptr) { control->chip->setEnabled(on); continue; }
-            control->slider.setEnabled(on);
+            if (control->rocker != nullptr)
+            {
+                control->rocker->setEnabled(on);
+                control->readout->setColour(juce::Label::textColourId, ui::text.withAlpha(on ? 1.0f : 0.4f));
+            }
+            else
+            {
+                control->slider.setEnabled(on);
+                control->slider.setColour(juce::Slider::textBoxTextColourId,
+                                          ui::text.withAlpha(on ? 1.0f : 0.4f));
+            }
             control->label.setColour(juce::Label::textColourId,
                                      ui::mutedText.withAlpha(on ? 1.0f : 0.4f));
-            control->slider.setColour(juce::Slider::textBoxTextColourId,
-                                      ui::text.withAlpha(on ? 1.0f : 0.4f));
         }
     }
 }
@@ -206,7 +248,9 @@ void Editor::paint(juce::Graphics& g)
         const auto area = ui::moduleBounds(getLocalBounds(), descriptor);
         const auto on = module.on();
         const auto alpha = on ? 1.0f : 0.35f;
-        ui::drawModuleShell(g, area, descriptor, on);
+        const auto stage = static_cast<ui::Stage>(juce::jlimit(0, 4, processor.envelopeStage()));
+        ui::drawModuleShell(g, area, descriptor, on,
+                            descriptor.display == ui::Display::envelope ? ui::stageName(stage) : juce::String());
 
         const auto display = ui::displayBounds(area, descriptor);
         if (display.isEmpty()) continue;
@@ -220,7 +264,8 @@ void Editor::paint(juce::Graphics& g)
                 break;
             case ui::Display::envelope:
                 ui::drawEnvelope(g, display, value("attack"), value("decay"),
-                                 value("sustain"), value("release"), accent, alpha);
+                                 value("sustain"), value("release"), accent, alpha,
+                                 stage, processor.envelopeLevel());
                 break;
             case ui::Display::lfo:
                 // Two cycles at the slowest rate through eight at the fastest,
@@ -267,6 +312,13 @@ void Editor::resized()
                     control.label.setBounds(block.removeFromTop(ui::stepperLabelHeight));
                     control.slider.setBounds(block);
                     break;
+                case ui::Style::rocker:
+                    // Same label line and same readout line as the knobs on
+                    // either side; only the control between them differs.
+                    control.label.setBounds(block.removeFromTop(ui::knobLabelHeight));
+                    control.readout->setBounds(block.removeFromBottom(ui::readoutHeight));
+                    control.rocker->setBounds(ui::rockerBounds(block));
+                    break;
                 case ui::Style::knob:
                     control.label.setBounds(block.removeFromTop(ui::knobLabelHeight));
                     control.slider.setBounds(block);
@@ -278,6 +330,10 @@ void Editor::resized()
 
 void Editor::timerCallback()
 {
+    // Cheap to re-apply every tick, and it catches a dependency changing from
+    // host automation as well as from the panel. setEnabled only repaints when
+    // the value actually changes.
+    applyEnableStates();
     repaint();
 }
 

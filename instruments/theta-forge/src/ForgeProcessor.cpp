@@ -151,7 +151,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout Processor::parameterLayout()
     result.push_back(parameter("lfoPosition", "LFO to Position", {-1.0f, 1.0f}, 0.0f, asSignedPercent));
     result.push_back(parameter("lfoPitch", "LFO to Pitch", {-12.0f, 12.0f}, 0.0f, asSemitones));
     result.push_back(parameter("polyphony", "Polyphony", {1.0f, 16.0f, 1.0f}, 8.0f, asCount));
-    result.push_back(parameter("mono", "Mono", {0.0f, 1.0f, 1.0f}, 0.0f, asToggle));
+    result.push_back(toggle("mono", "Mono", false));
     result.push_back(parameter("legato", "Legato", {0.0f, 1.0f, 1.0f}, 1.0f, asToggle));
     result.push_back(parameter("glide", "Glide", {0.0f, 2.0f, 0.0f, 0.35f}, 0.08f, asSeconds));
     result.push_back(parameter("output", "Output", {0.0f, 1.25f}, 0.75f, asGain));
@@ -197,6 +197,11 @@ void Processor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
         buffer.addSample(0, i, left);
         if (buffer.getNumChannels() > 1) buffer.addSample(1, i, right);
     }
+
+    // Published once per block rather than per sample: the display redraws at
+    // 24 Hz, so a per-sample store would be pure contention for no extra detail.
+    meterLevel.store(core.envelopeLevel(), std::memory_order_relaxed);
+    meterStage.store(core.envelopeStage(), std::memory_order_relaxed);
 }
 
 Patch Processor::patch() const

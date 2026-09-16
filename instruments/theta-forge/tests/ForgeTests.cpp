@@ -129,6 +129,25 @@ void layoutSuite()
         }
     }
 
+    // A control that greys out under another must name a parameter that exists,
+    // or the dependency silently never fires.
+    for (const auto& module : modules)
+        for (const auto& row : module.rows)
+            for (const auto& control : row.controls)
+                if (control.disabledBy != nullptr)
+                    require(processor.state.getParameter(control.disabledBy) != nullptr,
+                            "a control's disabling parameter exists");
+
+    // Polyphony means nothing in mono, and the panel has to say so.
+    auto polyIsGated = false;
+    for (const auto& module : modules)
+        for (const auto& row : module.rows)
+            for (const auto& control : row.controls)
+                if (juce::String(control.id) == "polyphony")
+                    polyIsGated = control.disabledBy != nullptr
+                        && juce::String(control.disabledBy) == "mono";
+    require(polyIsGated, "the polyphony knob greys out while mono is on");
+
     // Conversely, every parameter should be reachable from the panel. A
     // parameter nothing displays is either a bug or dead weight.
     for (const auto* raw : processor.getParameters())
@@ -506,6 +525,142 @@ void filterRoutingSuite()
                  "drive does nothing while the filter module is off");
 }
 
+void envelopeSuite()
+{
+    // ENV 1 is hardwired to amplitude and is the one envelope Forge has, so its
+    // timing is the timing of every note.
+    constexpr double rate = 48000.0;
+    constexpr int block = 64;
+    enum Stage { idle, attack, decay, sustain, release };
+
+    theta::forge::Processor processor;
+    soloSineOnA(processor);
+    setValue(processor, "attack", 0.1f);
+    setValue(processor, "decay", 0.1f);
+    setValue(processor, "sustain", 0.5f);
+    setValue(processor, "release", 0.2f);
+    processor.prepareToPlay(rate, block);
+
+    juce::AudioBuffer<float> buffer(2, block);
+    const auto advance = [&] (int samples, const juce::MidiBuffer& midi = {})
+    {
+        auto events = midi;
+        for (auto rendered = 0; rendered < samples; rendered += block)
+        {
+            processor.processBlock(buffer, events);
+            events.clear();
+        }
+    };
+
+    juce::MidiBuffer noteOn;
+    noteOn.addEvent(juce::MidiMessage::noteOn(1, 57, 1.0f), 0);
+
+    // A tenth of the way into a 100 ms attack, the envelope is a tenth up.
+    advance(static_cast<int>(rate * 0.01), noteOn);
+    require(processor.envelopeStage() == attack, "a new note starts in attack");
+    requireClose(processor.envelopeLevel(), 0.1f, 0.03f, "the attack climbs linearly");
+
+    // Past the attack, into decay, and on to the sustain level.
+    // 110 ms in: the 100 ms attack has finished and 10 ms of a 100 ms decay has
+    // run, so the level has fallen a tenth of the way from 1.0 towards 0.5.
+    advance(static_cast<int>(rate * 0.1));
+    require(processor.envelopeStage() == decay, "the envelope reaches decay after the attack time");
+    requireClose(processor.envelopeLevel(), 0.95f, 0.02f, "decay falls from the peak towards sustain");
+
+    advance(static_cast<int>(rate * 0.12));
+    require(processor.envelopeStage() == sustain, "the envelope settles into sustain after the decay time");
+    requireClose(processor.envelopeLevel(), 0.5f, 0.02f, "sustain holds at the sustain level");
+
+    advance(static_cast<int>(rate * 0.2));
+    require(processor.envelopeStage() == sustain, "sustain holds for as long as the note is held");
+    requireClose(processor.envelopeLevel(), 0.5f, 0.02f, "sustain does not drift");
+
+    juce::MidiBuffer noteOff;
+    noteOff.addEvent(juce::MidiMessage::noteOff(1, 57), 0);
+    advance(static_cast<int>(rate * 0.1), noteOff);
+    require(processor.envelopeStage() == release, "releasing the note enters release");
+    requireClose(processor.envelopeLevel(), 0.25f, 0.03f, "release falls from the held level");
+
+    advance(static_cast<int>(rate * 0.15));
+    require(processor.envelopeStage() == idle, "the envelope reaches idle after the release time");
+    requireClose(processor.envelopeLevel(), 0.0f, 0.001f, "an idle envelope is silent");
+
+    // Released mid-attack, the fall starts from the level actually reached,
+    // not from the sustain level the note never got to.
+    theta::forge::Processor early;
+    soloSineOnA(early);
+    setValue(early, "attack", 1.0f);
+    setValue(early, "decay", 0.1f);
+    setValue(early, "sustain", 0.9f);
+    setValue(early, "release", 0.2f);
+    early.prepareToPlay(rate, block);
+
+    const auto advanceEarly = [&] (int samples, const juce::MidiBuffer& midi = {})
+    {
+        auto events = midi;
+        for (auto rendered = 0; rendered < samples; rendered += block)
+        {
+            early.processBlock(buffer, events);
+            events.clear();
+        }
+    };
+
+    advanceEarly(static_cast<int>(rate * 0.2), noteOn);
+    const auto reached = early.envelopeLevel();
+    require(early.envelopeStage() == attack, "a long attack is still climbing after 200 ms");
+    requireClose(reached, 0.2f, 0.03f, "a fifth of the way up a one-second attack");
+
+    advanceEarly(static_cast<int>(rate * 0.1), noteOff);
+    require(early.envelopeStage() == release, "a note released mid-attack enters release");
+    require(early.envelopeLevel() < reached,
+            "a note released mid-attack falls rather than continuing to climb");
+    requireClose(early.envelopeLevel(), reached * 0.5f, 0.03f,
+                 "the fall starts from the level actually reached, not from sustain");
+
+    advanceEarly(static_cast<int>(rate * 0.15));
+    require(early.envelopeStage() == idle,
+            "a release from a partial attack still takes the full release time");
+}
+
+void voicingSuite()
+{
+    // Mono collapses to a single voice, so polyphony stops meaning anything.
+    // The panel greys the POLY knob out to say so; this checks the engine
+    // agrees rather than the two drifting apart.
+    constexpr int samples = 8192;
+    constexpr int settled = 1024;
+    juce::AudioBuffer<float> buffer(2, samples);
+
+    const auto chordLevel = [&buffer] (bool mono, float polyphony)
+    {
+        theta::forge::Processor processor;
+        soloSineOnA(processor);
+        setValue(processor, "mono", mono ? 1.0f : 0.0f);
+        setValue(processor, "polyphony", polyphony);
+        setValue(processor, "glide", 0.0f);
+        processor.prepareToPlay(48000.0, samples);
+        juce::MidiBuffer midi;
+        for (const auto note : {52, 57, 61})
+            midi.addEvent(juce::MidiMessage::noteOn(1, note, 1.0f), 0);
+        processor.processBlock(buffer, midi);
+        return rms(buffer, 0, settled);
+    };
+
+    const auto polyThree = chordLevel(false, 8.0f);
+    const auto monoThree = chordLevel(true, 8.0f);
+    require(polyThree > 0.0f && monoThree > 0.0f, "both voicings make sound");
+    require(monoThree < polyThree * 0.8f, "mono plays one note where poly plays three");
+
+    // And polyphony genuinely does nothing while mono is on.
+    requireClose(chordLevel(true, 1.0f), monoThree, monoThree * 0.001f,
+                 "polyphony does not affect a mono patch");
+    requireClose(chordLevel(true, 16.0f), monoThree, monoThree * 0.001f,
+                 "raising polyphony does not affect a mono patch either");
+
+    // While in poly it very much does.
+    require(chordLevel(false, 1.0f) < polyThree * 0.8f, "polyphony limits a polyphonic patch");
+}
+
 void engineSuite()
 {
     theta::forge::Processor processor;
@@ -552,6 +707,8 @@ void engineSuite()
     require(bypassed > filtered * 2.0f, "switching the filter off bypasses it");
 
     filterRoutingSuite();
+    envelopeSuite();
+    voicingSuite();
 
     oscillatorSuite();
 

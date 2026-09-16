@@ -15,14 +15,18 @@ enum class Display { none, oscillator, envelope, lfo };
 
 // A knob is the default. A stepper is the compact field used where reading an
 // exact value matters more than sweeping a range: tuning, filter type. A chip
-// is a small on/off button, used for the filter's per-source routing.
-enum class Style { knob, stepper, chip };
+// is a small on/off button, used for the filter's per-source routing. A rocker
+// is a two-state switch that occupies a knob's footprint, so it lines up with
+// the knobs beside it.
+enum class Style { knob, stepper, chip, rocker };
 
 struct Control
 {
     const char* id;
     const char* label;
     Style style = Style::knob;
+    // Greyed out while this parameter is on. Polyphony means nothing in mono.
+    const char* disabledBy = nullptr;
 };
 
 struct Row
@@ -98,8 +102,8 @@ inline const std::vector<Module>& modules()
                 {"routeNoise", "N", Style::chip}}},
           {70, {{"cutoff", "CUTOFF"}, {"resonance", "RES"}, {"drive", "DRIVE"}}}}},
         {"global", "GLOBAL", "VOICING", nullptr, false, Display::none, 1, 7, 5,
-         {{100, {{"polyphony", "POLY"}, {"mono", "MONO"}, {"legato", "LEGATO"},
-                 {"glide", "GLIDE"}, {"output", "OUTPUT"}}}}},
+         {{100, {{"polyphony", "POLY", Style::knob, "mono"}, {"mono", "MONO", Style::rocker},
+                 {"legato", "LEGATO"}, {"glide", "GLIDE"}, {"output", "OUTPUT"}}}}},
 
         {"env1", "ENV 1", "AMP", nullptr, false, Display::envelope, 2, 0, 6,
          {{100, {{"attack", "ATTACK"}, {"decay", "DECAY"}, {"sustain", "SUSTAIN"}, {"release", "RELEASE"}}}}},
@@ -257,8 +261,18 @@ inline juce::Rectangle<int> controlBlock(juce::Rectangle<int> moduleArea, const 
     {
         case Style::stepper: return stepperBlock(moduleArea, module, rowIndex, index);
         case Style::chip: return chipBlock(moduleArea, module, rowIndex, index);
+        // A rocker takes a knob's whole block so its label and readout sit on
+        // the same lines as the knobs either side of it.
+        case Style::rocker:
         case Style::knob: break;
     }
     return knobBlock(moduleArea, module, rowIndex, index, diameter);
+}
+
+// The rocker itself inside that block: narrow and tall, centred.
+inline juce::Rectangle<int> rockerBounds(juce::Rectangle<int> knobArea)
+{
+    const auto width = juce::jmax(14, juce::roundToInt(knobArea.getHeight() * 0.44f));
+    return juce::Rectangle<int>(width, knobArea.getHeight()).withCentre(knobArea.getCentre());
 }
 }

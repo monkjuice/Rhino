@@ -67,7 +67,7 @@ Until the modulation matrix lands, the only thing that can move the cutoff is
 LFO 1's `> CUTOFF` depth. Plucks and filter sweeps that relied on the filter
 envelope will sound flatter in the interim. This is accepted deliberately: a
 hardwired second envelope is the thing being replaced, and rebuilding it now
-would be thrown away by M8.
+would be thrown away by M6.
 
 ## Milestones
 
@@ -174,23 +174,56 @@ low note more than the high pass does.
 
 - One ADSR, hardwired to amplitude.
 - The display draws the actual curve from the current A/D/S/R values and marks
-  the live stage while a note sounds.
+  the live stage while a note sounds, with the header naming the stage.
+- The engine publishes ENV 1's level and stage once per block; the audio thread
+  writes two atomics, the message thread reads them, and nothing else crosses.
+- `MONO` becomes a rocker switch rather than a knob whose only readout is ON or
+  OFF, and `POLY` greys out while mono is on, because the engine already
+  ignores polyphony there.
 
-**Tests:** envelope stage transitions at the expected sample offsets; release
-from a partial attack starts from the value actually reached.
+**Tests:** stage transitions at the expected sample offsets and the expected
+levels between them; a note released mid-attack falls from the level actually
+reached rather than from sustain, and still takes the full release time; mono
+plays one note where poly plays three, and polyphony does nothing at all while
+mono is on.
 
-### M6 — LFO 1 module with a live display
+### M6 — Modulation matrix
+
+**Moved ahead of LFO 1.** In Serum an LFO has no destinations of its own at
+all: it is a source you drag onto a knob, and the same LFO can drive many knobs
+at different depths. Forge's `> CUTOFF`, `> POSITION` and `> PITCH` knobs are a
+placeholder for that, not a design — they exist only so the synth has some
+modulation while the filter envelope is gone. Building LFO shapes and sync
+against three hardwired destinations would mean designing the LFO module twice,
+and ENV 2–4 cannot exist at all until this lands.
+
+- A modulation slot: source, destination parameter, depth, and whether the
+  depth is bipolar.
+- Drag a source's handle onto any knob to create a slot; a coloured ring around
+  the knob shows the depth and can be dragged to change it.
+- A matrix panel listing every slot, for editing and removing them without
+  hunting across the panel.
+- Sources at this point: ENV 1, LFO 1, velocity, note. ENV 2–4, LFO 2–6 and
+  macros 1–8 follow once the mechanism exists.
+- The three `>` depth knobs are removed; their behaviour becomes three ordinary
+  slots so existing sounds survive the change.
+
+**Tests:** a slot with zero depth renders bit-identically to no slot at all; a
+slot's depth is applied to the destination in the right range and clamps at the
+parameter's limits; two slots on one destination sum; removing a slot restores
+the unmodulated render exactly.
+
+### M7 — LFO 1 module with a live display
+
+Built once, as a real source, after the matrix exists.
 
 - Shape selection: sine, triangle, saw, square, sample-and-hold.
 - Rate, with tempo sync against the host.
-- The three depth knobs (`> CUTOFF`, `> POSITION`, `> PITCH`) stay until the
-  modulation matrix replaces them with drag-to-knob routing.
 - The display draws the shape with a running phase indicator.
 
-**Tests:** each shape is bounded and periodic; tempo sync tracks a BPM change;
-depth of zero is bit-identical to the unmodulated render.
+**Tests:** each shape is bounded and periodic; tempo sync tracks a BPM change.
 
-### M7 — Interaction and preset polish
+### M8 — Interaction and preset polish
 
 - Resize behaviour at every supported size, with no module clipping.
 - Knob interaction: scroll, fine drag, double-click to default, right-click menu.
@@ -202,15 +235,13 @@ depth of zero is bit-identical to the unmodulated render.
 
 These are the north star, not this plan. They come after the synth is finished.
 
-- **M8 — Modulation matrix.** Drag any modulator onto any knob, with visible
-  depth rings. Brings back ENV 2–4, LFO 2–6, velocity, note, and macros 1–8 as
-  real assignable sources.
 - **M9 — Real wavetables.** Loadable tables, a table editor, and frame
   interpolation replacing today's four-frame analytic morph.
-- **M10 — FX rack.** Chorus, distortion, delay, reverb, compressor, EQ, in a
+- **M10 — ENV 2–4, LFO 2–6 and macros 1–8** as further matrix sources.
+- **M11 — FX rack.** Chorus, distortion, delay, reverb, compressor, EQ, in a
   reorderable chain.
-- **M11 — Second filter,** with the serial/parallel routing Serum exposes.
-- **M12 — Preset browser** with tags and search.
+- **M12 — Second filter,** with the serial/parallel routing Serum exposes.
+- **M13 — Preset browser** with tags and search.
 - **Later still:** MPE, sample and granular sources, spectral oscillators.
 
 ## Building and testing
@@ -252,6 +283,7 @@ way to look at a change.
 | M2 Module framework and enables | **done** — ready to test by eye |
 | M3 Per-oscillator architecture | **done** — ready to test by ear |
 | M4 Filter routing | **done** — ready to test by ear |
-| M5 ENV 1 | not started |
-| M6 LFO 1 | not started |
-| M7 Polish | not started |
+| M5 ENV 1 | **done** — ready to test by ear |
+| M6 Modulation matrix | not started |
+| M7 LFO 1 | not started |
+| M8 Polish | not started |

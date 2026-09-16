@@ -31,9 +31,16 @@ public:
     juce::Result loadPreset(const juce::File&);
     juce::AudioProcessorValueTreeState state;
 
+    // ENV 1's live position, published once per block for the editor to draw.
+    // The audio thread writes, the message thread reads; nothing else crosses.
+    float envelopeLevel() const { return meterLevel.load(std::memory_order_relaxed); }
+    int envelopeStage() const { return meterStage.load(std::memory_order_relaxed); }
+
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout parameterLayout();
     Core core;
+    std::atomic<float> meterLevel {0.0f};
+    std::atomic<int> meterStage {0};
     Patch patch() const;
     juce::ValueTree migrated(const juce::ValueTree& savedState) const;
 };

@@ -9,6 +9,59 @@
 namespace theta
 {
 
+// The lanes are one row per semitone, so the keys are drawn the way a piano
+// looks from directly above rather than in true piano geometry: a black key
+// keeps its own full-height row and is only narrower than its neighbours.
+void StepGrid::paintKeyboard(juce::Graphics& g)
+{
+    const auto rows = visiblePitchRows();
+    const auto height = rowHeight();
+    const auto width = labelWidth - 4.0f;
+    const auto drums = session.isPatternDrums();
+    const auto blackKeyWidth = std::floor(width * 0.6f);
+    // A name needs a row tall enough to hold it. Once the lanes are squeezed
+    // past that only the octaves stay named, and past that nothing does.
+    const auto labelEvery = height >= 15.0f ? 1 : height >= 8.0f ? 12 : 0;
+    g.setFont(juce::FontOptions(std::clamp(height - 3.0f, 7.5f, 11.0f)));
+    for (int row = 0; row < rows; ++row)
+    {
+        const auto pitch = lowestVisiblePitch + rows - 1 - row;
+        const auto key = cell(0, row).withX(0.0f).withWidth(width);
+        const bool black = juce::MidiMessage::isMidiNoteBlack(pitch);
+        if (drums)
+        {
+            const bool namedDrum = pitch == 48 || pitch == 50 || pitch == 52 || pitch == 53
+                                || pitch == 54 || pitch == 56 || pitch == 58 || pitch == 59;
+            g.setColour(juce::Colour(namedDrum ? 0xff3a3325 : black ? 0xff15191e : 0xff30373e));
+            g.fillRect(key.reduced(0.0f, 1.0f));
+            if (labelEvery > 0)
+            {
+                g.setColour(juce::Colour(namedDrum ? 0xffffc16a : 0xffbac2ca));
+                g.drawText(drumLaneName(pitch), key, juce::Justification::centred);
+            }
+            continue;
+        }
+        // A black key is laid over the white surface rather than replacing it:
+        // what shows to its right is the white key it sits between.
+        g.setColour(juce::Colour(0xffcdd3c8));
+        g.fillRect(key);
+        if (black)
+        {
+            g.setColour(juce::Colour(0xff15191e));
+            g.fillRect(key.withWidth(blackKeyWidth));
+        }
+        // The seam between two keys: it reads on a white key and disappears
+        // into a black one, which is what the eye expects from above.
+        g.setColour(juce::Colour(0xff2b3138));
+        g.fillRect(key.withTop(key.getBottom() - 1.0f));
+        if (labelEvery == 0 || black || (labelEvery == 12 && pitchClassOf(pitch) != 0))
+            continue;
+        g.setColour(juce::Colour(pitchClassOf(pitch) == 0 ? 0xff2f353c : 0xff70767d));
+        g.drawText(juce::MidiMessage::getMidiNoteName(pitch, true, true, 4),
+                   key.reduced(3.0f, 0.0f), juce::Justification::centredRight);
+    }
+}
+
 void StepGrid::paint(juce::Graphics& g)
 {
     g.fillAll(juce::Colour(0xff1d2228));
@@ -30,28 +83,20 @@ void StepGrid::paint(juce::Graphics& g)
         g.setColour(juce::Colour(step % 4 == 0 ? 0xffd4dacd : 0xff78818a));
         g.drawText(juce::String(step + 1), headerCell, juce::Justification::centred);
     }
-    for (int row = 0; row < Session::pitches; ++row)
+    paintKeyboard(g);
+    const auto rows = visiblePitchRows();
+    const auto scaleIndex = scaleHighlight - 2;
+    const bool scaleEnabled = !session.isPatternDrums() && scaleIndex >= 0;
+    const auto root = scaleEnabled ? scaleIndex % 12 : 0;
+    const bool minor = scaleEnabled && scaleIndex >= 12;
+    static constexpr std::array<int, 7> major {0, 2, 4, 5, 7, 9, 11};
+    static constexpr std::array<int, 7> naturalMinor {0, 2, 3, 5, 7, 8, 10};
+    const auto& scale = minor ? naturalMinor : major;
+    for (int row = 0; row < rows; ++row)
     {
-        const auto pitch = lowestVisiblePitch + Session::pitches - 1 - row;
-        const bool black = juce::MidiMessage::isMidiNoteBlack(pitch);
-        const auto scaleIndex = scaleHighlight - 2;
-        const bool scaleEnabled = !session.isPatternDrums() && scaleIndex >= 0;
-        const auto root = scaleEnabled ? scaleIndex % 12 : 0;
-        const bool minor = scaleEnabled && scaleIndex >= 12;
-        static constexpr std::array<int, 7> major {0, 2, 4, 5, 7, 9, 11};
-        static constexpr std::array<int, 7> naturalMinor {0, 2, 3, 5, 7, 8, 10};
-        const auto& scale = minor ? naturalMinor : major;
-        const auto pitchClass = (pitch % 12 + 12) % 12;
+        const auto pitch = lowestVisiblePitch + rows - 1 - row;
+        const auto pitchClass = pitchClassOf(pitch);
         const bool inScale = !scaleEnabled || std::find(scale.begin(), scale.end(), (pitchClass - root + 12) % 12) != scale.end();
-        const bool namedDrum = session.isPatternDrums()
-                            && (pitch == 48 || pitch == 50 || pitch == 52 || pitch == 53 || pitch == 54
-                                || pitch == 56 || pitch == 58 || pitch == 59);
-        auto key = cell(0, row).withX(0).withWidth(labelWidth - 4);
-        g.setColour(juce::Colour(namedDrum ? 0xff3a3325 : black ? 0xff15191e : 0xff30373e));
-        g.fillRect(key.reduced(0, 1));
-        g.setColour(juce::Colour(namedDrum ? 0xffffc16a : 0xffbac2ca));
-        g.drawText(session.isPatternDrums() ? drumLaneName(pitch) : juce::MidiMessage::getMidiNoteName(pitch, true, true, 4),
-                   key, juce::Justification::centred);
         for (int step = firstVisibleStep; step <= lastVisibleStep; ++step)
         {
             const auto bounds = cell(step, row);
@@ -90,12 +135,12 @@ void StepGrid::paint(juce::Graphics& g)
     // Draw the grid after all cells. This avoids the next row's fractional
     // fill covering the preceding row separator on high-DPI displays.
     g.setColour(juce::Colour(0xff202930));
-    for (int row = 0; row <= Session::pitches; ++row)
+    for (int row = 0; row <= rows; ++row)
     {
-        const auto y = headerHeight + row * rowAreaHeight() / Session::pitches;
+        const auto y = headerHeight + row * rowHeight();
         g.fillRect(juce::Rectangle<float>(labelWidth, std::floor(y), gridWidth(), 1.0f));
     }
-    for (int row = 0; row < Session::pitches; ++row)
+    for (int row = 0; row < rows; ++row)
     {
         std::array<int, Session::steps + 2> sustainedBoundaryDeltas {};
         for (const auto& note : visibleNotes)
@@ -117,8 +162,8 @@ void StepGrid::paint(juce::Graphics& g)
         }
 
         int sustainedNotes = 0;
-        const auto rowTop = headerHeight + row * rowAreaHeight() / Session::pitches;
-        const auto rowBottom = headerHeight + (row + 1) * rowAreaHeight() / Session::pitches;
+        const auto rowTop = headerHeight + row * rowHeight();
+        const auto rowBottom = headerHeight + (row + 1) * rowHeight();
         for (int step = 0; step <= lastVisibleStep + 1; ++step)
         {
             sustainedNotes += sustainedBoundaryDeltas[static_cast<size_t>(step)];
@@ -159,8 +204,8 @@ void StepGrid::paint(juce::Graphics& g)
     }
     if (!session.isPatternDrums())
     {
-        const auto maxLowest = 127 - Session::pitches + 1;
-        const auto thumbHeight = std::max(18.0f, rowAreaHeight() * (static_cast<float>(Session::pitches) / 128.0f));
+        const auto maxLowest = 127 - rows + 1;
+        const auto thumbHeight = std::max(18.0f, rowAreaHeight() * (static_cast<float>(rows) / 128.0f));
         const auto thumbTravel = std::max(1.0f, rowAreaHeight() - thumbHeight);
         const auto thumbY = headerHeight + (maxLowest - lowestVisiblePitch) / static_cast<float>(maxLowest) * thumbTravel;
         const auto right = gridRight();

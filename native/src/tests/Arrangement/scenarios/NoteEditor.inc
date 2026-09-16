@@ -66,7 +66,7 @@
         require(!session.hasManualLoopRange(), "Right-clicking the note-editor ruler clears its manual loop");
         const auto rowForPitch = [&selectionGrid](int pitch)
         {
-            return selectionGrid.lowestVisiblePitch + Session::pitches - 1 - pitch;
+            return selectionGrid.lowestVisiblePitch + selectionGrid.visiblePitchRows() - 1 - pitch;
         };
         const auto resizeCell = selectionGrid.cell(1, rowForPitch(48));
         const juce::Point<float> resizeHandle(resizeCell.getRight() - 3.0f, resizeCell.getCentreY());
@@ -323,6 +323,31 @@
         session.undo();
         require(session.hasNote(1, 48), "Undo restores notes erased by a grid stroke");
         session.undo();
+        // Ableton's piano strip: dragging it sideways resizes the lanes and
+        // dragging it up or down carries the keyboard along under the pointer.
+        const auto defaultRows = selectionGrid.visiblePitchRows();
+        const auto defaultRowHeight = selectionGrid.rowHeight();
+        const auto stripPoint = juce::Point<float>(20.0f, 126.0f);
+        const auto stripLeft = stripPoint.translated(-35.0f, 0.0f);
+        selectionGrid.mouseDown(gridEvent(stripPoint, stripPoint, false));
+        selectionGrid.mouseDrag(gridEvent(stripPoint, stripLeft, true));
+        require(selectionGrid.visiblePitchRows() > defaultRows
+                && selectionGrid.rowHeight() < defaultRowHeight
+                && close(selectionGrid.cell(0, 0).getHeight(), selectionGrid.rowHeight()),
+                "Dragging the piano strip left thins the note editor lanes");
+        selectionGrid.mouseDrag(gridEvent(stripPoint, stripPoint, true));
+        selectionGrid.mouseUp(gridEvent(stripPoint, stripPoint, true));
+        require(selectionGrid.visiblePitchRows() == defaultRows,
+                "Dragging the piano strip back right restores the lane height");
+        const auto pitchBeforeStripScroll = selectionGrid.lowestVisiblePitch;
+        const auto stripBelow = stripPoint.translated(0.0f, selectionGrid.rowHeight() * 3.0f);
+        selectionGrid.mouseDown(gridEvent(stripPoint, stripPoint, false));
+        selectionGrid.mouseDrag(gridEvent(stripPoint, stripBelow, true));
+        selectionGrid.mouseUp(gridEvent(stripPoint, stripBelow, true));
+        require(selectionGrid.lowestVisiblePitch == pitchBeforeStripScroll + 3,
+                "Dragging the piano strip down scrolls three lanes of pitch");
+        require(selectionGrid.cellHit(stripPoint) < 0,
+                "The piano strip never draws a note into the grid");
         const auto audio2DevicesAfterSound = session.deviceSlots(2).size();
         require(view.applyBrowserDrop("theta-browser:effect:ThetaBloom", 2).wasOk(), "Theta Bloom browser row creates an audio effect");
         require(session.deviceSlots(2).size() == audio2DevicesAfterSound + 1, "Dropped Theta Bloom appears on the target track");

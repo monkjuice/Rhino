@@ -168,7 +168,7 @@ bool StepGrid::beginSubdivision()
         }
     if (pitch < 0 || end <= start + 0.0001) return false;
     subdivisionCount = juce::jlimit(2, 32, juce::roundToInt(end - start));
-    const auto row = lowestVisiblePitch + Session::pitches - 1 - pitch;
+    const auto row = lowestVisiblePitch + visiblePitchRows() - 1 - pitch;
     subdivisionSourceBounds = cell(static_cast<int>(std::floor(start)), row);
     subdivisionSourceBounds.translate(static_cast<float>(start - std::floor(start)) * cellWidth(), 0.0f);
     subdivisionSourceBounds.setWidth(static_cast<float>(end - start) * cellWidth());

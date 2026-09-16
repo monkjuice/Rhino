@@ -12,7 +12,8 @@ StepGrid::StepGrid(Session& s) : session(s), vblank(this, [this] { updatePlayhea
     setOpaque(true);
     setWantsKeyboardFocus(true);
     setTitle("Pattern notes");
-    setDescription("One bar step editor. Drag to draw or erase notes.");
+    setDescription("One bar step editor. Drag to draw or erase notes. "
+                   "Drag the piano keys sideways to resize the lanes, up and down to scroll them.");
     loopButton.setButtonText(juce::String::charToString(0x27f3));
     loopButton.setTooltip("Loop the entire edited clip (Ctrl+L). Drag on the ruler to draw a loop; right-click to clear it.");
     loopButton.setWantsKeyboardFocus(false);
@@ -32,7 +33,7 @@ StepGrid::~StepGrid()
 {
     finishSubdivision();
     finishVelocityAdjustment();
-    if (gesture != Gesture::none) session.endNoteGesture();
+    if (gesture != Gesture::none && gesture != Gesture::keyboard) session.endNoteGesture();
     horizontalScroll.removeListener(this);
     session.removeChangeListener(this);
 }
@@ -40,7 +41,7 @@ StepGrid::~StepGrid()
 juce::Rectangle<float> StepGrid::cell(int step, int row) const
 {
     const auto width = cellWidth();
-    const auto height = rowAreaHeight() / Session::pitches;
+    const auto height = rowHeight();
     return {labelWidth + static_cast<float>(step - stepScroll) * width, headerHeight + row * height, width, height};
 }
 
@@ -70,7 +71,7 @@ bool StepGrid::isSelected(const juce::ValueTree& state) const
 std::vector<juce::ValueTree> StepGrid::selectedStates() const
 {
     std::vector<juce::ValueTree> result;
-    std::bitset<Session::steps * Session::pitches> representedCells;
+    std::bitset<Session::steps * maxPitchRows> representedCells;
     for (const auto& state : selectedNoteStates)
         if (const auto* note = noteForState(state))
         {
@@ -130,6 +131,40 @@ void StepGrid::zoomAt(double factor, float pointerX)
     repaint();
 }
 
+void StepGrid::zoomPitchAt(double factor, float pointerY)
+{
+    const auto anchor = std::clamp((pointerY - headerHeight) / rowAreaHeight(), 0.0f, 1.0f);
+    const auto before = visiblePitchRows();
+    // The pitch under the pointer, as a continuous position in the row area.
+    // Holding it still is what makes the lanes grow out from the pointer
+    // rather than from the top of the grid.
+    const auto held = lowestVisiblePitch + before * (1.0 - anchor) - 1.0;
+    pitchZoom = std::clamp(pitchZoom * factor,
+                           static_cast<double>(minPitchRows) / Session::pitches,
+                           static_cast<double>(maxPitchRows) / Session::pitches);
+    const auto after = computePitchRowCount();
+    if (after == before)
+        return;
+    pitchRowCount = after;
+    lowestVisiblePitch = juce::jlimit(0, 127 - after + 1,
+                                      juce::roundToInt(held - after * (1.0 - anchor) + 1.0));
+    manualPitchScroll = !session.isPatternDrums();
+    rebuildVisibleNotes();
+    repaint();
+}
+
+void StepGrid::scrollPitchBy(int semitones)
+{
+    if (semitones == 0 || session.isPatternDrums())
+        return;
+    const auto next = juce::jlimit(0, 127 - visiblePitchRows() + 1, lowestVisiblePitch + semitones);
+    if (next == lowestVisiblePitch)
+        return;
+    lowestVisiblePitch = next;
+    manualPitchScroll = true;
+    rebuildVisibleNotes();
+}
+
 void StepGrid::setScaleHighlight(int selection)
 {
     if (scaleHighlight != selection)
@@ -143,6 +178,22 @@ float StepGrid::rowAreaHeight() const
 {
     return std::max(1.0f, getHeight() - headerHeight - footerHeight
                               - (horizontalScroll.isVisible() ? scrollHeight : 0.0f));
+}
+
+float StepGrid::rowHeight() const
+{
+    return rowAreaHeight() / static_cast<float>(visiblePitchRows());
+}
+
+int StepGrid::computePitchRowCount() const
+{
+    // Zoom asks for a row count; the panel's height caps how thin a row is
+    // allowed to get. The default range always fits, however short the panel,
+    // so a small editor shows the same sixteen lanes it always did.
+    const auto ceiling = std::max(Session::pitches,
+                                  std::clamp(static_cast<int>(rowAreaHeight() / minimumRowHeight),
+                                             minPitchRows, maxPitchRows));
+    return std::clamp(juce::roundToInt(Session::pitches * pitchZoom), minPitchRows, ceiling);
 }
 
 juce::Rectangle<float> StepGrid::footerBounds() const
@@ -279,10 +330,11 @@ int StepGrid::automaticLowestPitch() const
     if (minPitch > maxPitch)
         return Session::lowestNote;
 
+    const auto rows = visiblePitchRows();
     auto base = std::min(Session::lowestNote, minPitch);
-    if (maxPitch >= base + Session::pitches)
-        base = maxPitch - Session::pitches + 1;
-    return juce::jlimit(0, 127 - Session::pitches + 1, base);
+    if (maxPitch >= base + rows)
+        base = maxPitch - rows + 1;
+    return juce::jlimit(0, 127 - rows + 1, base);
 }
 
 void StepGrid::changeListenerCallback(juce::ChangeBroadcaster*)
@@ -307,16 +359,23 @@ void StepGrid::changeListenerCallback(juce::ChangeBroadcaster*)
 
 void StepGrid::rebuildVisibleNotes()
 {
-    std::bitset<Session::steps * Session::pitches> next;
-    std::array<float, Session::steps * Session::pitches> nextLengths {}, nextStartOffsets {};
+    // The scrollbar decides how tall the row area is, and the row area decides
+    // how many rows fit, so both settle before any note is placed on one.
+    syncHorizontalScroll();
+    const auto previousRows = pitchRowCount;
+    pitchRowCount = computePitchRowCount();
+    const auto rows = pitchRowCount;
+    lowestVisiblePitch = juce::jlimit(0, 127 - rows + 1, lowestVisiblePitch);
+    std::bitset<Session::steps * maxPitchRows> next;
+    std::array<float, Session::steps * maxPitchRows> nextLengths {}, nextStartOffsets {};
     const auto nextDrumLabels = session.isPatternDrums();
     const auto steps = session.editorStepCount();
     std::vector<VisibleNote> nextVisible;
     for (const auto& note : session.editorNotes())
     {
-        const auto row = lowestVisiblePitch + Session::pitches - 1 - note.pitch;
+        const auto row = lowestVisiblePitch + rows - 1 - note.pitch;
         const auto step = static_cast<int>(std::floor(note.startSteps));
-        if (row >= 0 && row < Session::pitches && step >= 0 && step < steps)
+        if (row >= 0 && row < rows && step >= 0 && step < steps)
         {
             nextVisible.push_back({note.state, note.startSteps, note.lengthSteps, note.pitch, row, note.velocity});
             next.set(static_cast<size_t>(row * Session::steps + step));
@@ -340,7 +399,8 @@ void StepGrid::rebuildVisibleNotes()
     visibleNotes = std::move(nextVisible);
     std::erase_if(selectedNoteStates, [this](const auto& state) { return noteForState(state) == nullptr; });
     setSelectedStates(selectedNoteStates);
-    if (stepCountChanged || lengthsChanged || offsetsChanged || showingDrumLabels != nextDrumLabels)
+    if (stepCountChanged || rows != previousRows || lengthsChanged || offsetsChanged
+        || showingDrumLabels != nextDrumLabels)
     {
         showingDrumLabels = nextDrumLabels;
         repaint();
@@ -351,7 +411,7 @@ void StepGrid::rebuildVisibleNotes()
         repaint();
         return;
     }
-    for (int row = 0; row < Session::pitches; ++row)
+    for (int row = 0; row < rows; ++row)
     for (int step = 0; step < steps; ++step)
     {
         const auto index = row * Session::steps + step;
@@ -418,6 +478,10 @@ void StepGrid::resized()
     horizontalScroll.setBounds(static_cast<int>(labelWidth),
                                getHeight() - static_cast<int>(footerHeight + scrollHeight),
                                std::max(1, static_cast<int>(gridRight() - labelWidth)), static_cast<int>(scrollHeight));
+    // A new height can lift or lower the cap on how thin a row may be, which
+    // changes which pitches are on screen and so where every note sits.
+    if (computePitchRowCount() != pitchRowCount)
+        changeListenerCallback(nullptr);
     updatePlayhead();
     repaint();
 }

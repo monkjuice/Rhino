@@ -13,6 +13,11 @@ inline bool isShortcutDown(const juce::ModifierKeys& mods)
     return mods.isCommandDown() || mods.isCtrlDown();
 }
 
+inline int pitchClassOf(int pitch)
+{
+    return (pitch % 12 + 12) % 12;
+}
+
 inline juce::String drumLaneName(int pitch)
 {
     if (pitch == 48) return "Kick";

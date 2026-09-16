@@ -26,7 +26,12 @@ public:
     void resized() override;
 private:
     friend int runArrangementTest();
-    enum class Gesture { none, draw, move, resize, select };
+    enum class Gesture { none, draw, move, resize, select, keyboard };
+    // The visible pitch range is a zoom, not a constant: Session::pitches is
+    // only where it starts. These bound how far the lanes may be squeezed, and
+    // maxPitchRows is the stride the row-addressed caches below are built for.
+    static constexpr int minPitchRows = 8, maxPitchRows = 48;
+    static constexpr float minimumRowHeight = 7.0f;
     struct CopiedNote { double step = 0.0; int pitch = 0; double length = 1.0; int velocity = 100; };
     struct MovingNote { juce::ValueTree state; double step = 0.0; int pitch = 0; };
     struct VisibleNote
@@ -37,6 +42,13 @@ private:
     };
     juce::Rectangle<float> cell(int step, int row) const;
     float rowAreaHeight() const;
+    float rowHeight() const;
+    int visiblePitchRows() const { return pitchRowCount; }
+    int computePitchRowCount() const;
+    bool isOverKeyboard(juce::Point<float>) const;
+    void zoomPitchAt(double factor, float pointerY);
+    void scrollPitchBy(int semitones);
+    void paintKeyboard(juce::Graphics&);
     juce::Rectangle<float> footerBounds() const;
     float cellWidth() const;
     float gridRight() const;
@@ -89,8 +101,8 @@ private:
     void timerCallback() override;
     void updatePlayhead();
     Session& session;
-    std::bitset<Session::steps * Session::pitches> notes, visited, selectedNotes;
-    std::array<float, Session::steps * Session::pitches> noteLengths {}, noteStartOffsets {};
+    std::bitset<Session::steps * maxPitchRows> notes, visited, selectedNotes;
+    std::array<float, Session::steps * maxPitchRows> noteLengths {}, noteStartOffsets {};
     std::vector<VisibleNote> visibleNotes;
     std::vector<juce::ValueTree> selectedNoteStates;
     std::vector<CopiedNote> noteClipboard;
@@ -101,7 +113,10 @@ private:
     int moveGrabPitch = -1;
     int visibleStepCount = Session::defaultSteps;
     int lowestVisiblePitch = Session::lowestNote;
-    double stepScroll = 0.0, stepZoom = 1.0;
+    double stepScroll = 0.0, stepZoom = 1.0, pitchZoom = 1.0;
+    int pitchRowCount = Session::pitches;
+    juce::Point<float> keyboardDragPosition {-1.0f, -1.0f};
+    double keyboardScrollRemainder = 0.0;
     double dragStartStep = -1.0;
     double resizingStartStep = 0.0;
     juce::ValueTree movingNoteState, resizingNoteState;

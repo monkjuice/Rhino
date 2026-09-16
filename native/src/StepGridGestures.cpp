@@ -42,6 +42,12 @@ float StepGrid::loopXForTimelineTime(double seconds) const
     return labelWidth + static_cast<float>(step - stepScroll) * cellWidth();
 }
 
+bool StepGrid::isOverKeyboard(juce::Point<float> point) const
+{
+    return point.x >= 0.0f && point.x < labelWidth
+        && point.y >= headerHeight && point.y < headerHeight + rowAreaHeight();
+}
+
 int StepGrid::cellHit(juce::Point<float> point) const
 {
     if (point.x < labelWidth || point.y < headerHeight || point.x >= gridRight() || point.y >= headerHeight + rowAreaHeight())
@@ -50,7 +56,8 @@ int StepGrid::cellHit(juce::Point<float> point) const
     const auto step = static_cast<int>(stepScroll + (point.x - labelWidth) / cellWidth());
     if (step < 0 || step >= steps)
         return -1;
-    const auto row = static_cast<int>((point.y - headerHeight) / rowAreaHeight() * Session::pitches);
+    const auto rows = visiblePitchRows();
+    const auto row = std::clamp(static_cast<int>((point.y - headerHeight) / rowAreaHeight() * rows), 0, rows - 1);
     return row * Session::steps + step;
 }
 
@@ -97,6 +104,11 @@ void StepGrid::updatePointer(juce::Point<float> position, const juce::ModifierKe
         setMouseCursor(juce::MouseCursor::CrosshairCursor);
         return;
     }
+    if (isOverKeyboard(position))
+    {
+        setMouseCursor(juce::MouseCursor::UpDownLeftRightResizeCursor);
+        return;
+    }
     const auto note = hit(position);
     if (isShortcutDown(modifiers) && note >= 0)
         setMouseCursor(juce::MouseCursor::NormalCursor);
@@ -127,6 +139,14 @@ void StepGrid::mouseDown(const juce::MouseEvent& event)
         selectedNotes.reset();
         selectedNoteStates.clear();
         repaint();
+        return;
+    }
+    if (!event.mods.isRightButtonDown() && isOverKeyboard(event.position))
+    {
+        grabKeyboardFocus();
+        gesture = Gesture::keyboard;
+        keyboardDragPosition = event.position;
+        keyboardScrollRemainder = 0.0;
         return;
     }
     if (event.position.y >= 0.0f && event.position.y < headerHeight
@@ -230,13 +250,13 @@ void StepGrid::apply(int index)
 
 int StepGrid::pitchForIndex(int index) const
 {
-    return lowestVisiblePitch + Session::pitches - 1 - index / Session::steps;
+    return lowestVisiblePitch + visiblePitchRows() - 1 - index / Session::steps;
 }
 
 int StepGrid::indexForCell(int step, int pitch) const
 {
-    const auto row = lowestVisiblePitch + Session::pitches - 1 - pitch;
-    if (step < 0 || step >= session.editorStepCount() || row < 0 || row >= Session::pitches)
+    const auto row = lowestVisiblePitch + visiblePitchRows() - 1 - pitch;
+    if (step < 0 || step >= session.editorStepCount() || row < 0 || row >= visiblePitchRows())
         return -1;
     return row * Session::steps + step;
 }
@@ -300,7 +320,7 @@ void StepGrid::scrollDraggedNotes()
         const auto pitchSteps = static_cast<int>(verticalAutoScroll);
         if (pitchSteps != 0)
         {
-            const auto nextLowest = juce::jlimit(0, 127 - Session::pitches + 1, lowestVisiblePitch + pitchSteps);
+            const auto nextLowest = juce::jlimit(0, 127 - visiblePitchRows() + 1, lowestVisiblePitch + pitchSteps);
             changed = changed || nextLowest != lowestVisiblePitch;
             lowestVisiblePitch = nextLowest;
             verticalAutoScroll -= static_cast<float>(pitchSteps);
@@ -374,6 +394,20 @@ void StepGrid::mouseDrag(const juce::MouseEvent& event)
     }
     if (gesture == Gesture::none) return;
     dragPosition = event.position;
+    if (gesture == Gesture::keyboard)
+    {
+        // Ableton's piano strip: sideways resizes the lanes, up and down drags
+        // the keyboard itself along under the pointer.
+        const auto delta = event.position - keyboardDragPosition;
+        keyboardDragPosition = event.position;
+        if (std::abs(delta.x) > 0.0f)
+            zoomPitchAt(std::exp(-delta.x * 0.02f), event.position.y);
+        keyboardScrollRemainder += delta.y / rowHeight();
+        const auto semitones = static_cast<int>(keyboardScrollRemainder);
+        keyboardScrollRemainder -= semitones;
+        scrollPitchBy(semitones);
+        return;
+    }
     if (gesture == Gesture::select)
     {
         selectionBox = juce::Rectangle<float>(selectionAnchor, event.position).getIntersection(
@@ -426,7 +460,7 @@ void StepGrid::mouseUp(const juce::MouseEvent& event)
     }
     if (gesture == Gesture::move && !movingGroup && !noteMoved && movingNoteState.isValid())
         session.removeNotes({movingNoteState});
-    if (gesture != Gesture::none) session.endNoteGesture();
+    if (gesture != Gesture::none && gesture != Gesture::keyboard) session.endNoteGesture();
     gesture = Gesture::none;
     selectionAnchor = {-1.0f, -1.0f};
     selectionBox = {};
@@ -435,6 +469,8 @@ void StepGrid::mouseUp(const juce::MouseEvent& event)
     movingNotes.clear();
     movingGroup = false;
     moveGrabPitch = -1;
+    keyboardDragPosition = {-1.0f, -1.0f};
+    keyboardScrollRemainder = 0.0;
     dragStartStep = -1.0;
     dragPosition = {-1.0f, -1.0f};
     stopTimer();
@@ -479,17 +515,16 @@ void StepGrid::mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWh
     finishSubdivision();
     if (event.mods.isShiftDown())
     {
-        // Keep the step below the pointer stable while the visible range changes.
-        zoomAt(std::exp(wheelDelta * 2.0f), event.position.x);
+        // Keep whatever is below the pointer stable while the visible range
+        // changes. Over the keys there is no timeline to zoom, only lanes.
+        if (isOverKeyboard(event.position))
+            zoomPitchAt(std::exp(wheelDelta * 2.0f), event.position.y);
+        else
+            zoomAt(std::exp(wheelDelta * 2.0f), event.position.x);
         return;
     }
-    if (session.isPatternDrums())
-        return;
     const auto semitones = std::max(1, juce::roundToInt(std::abs(wheelDelta) * 8.0f));
-    lowestVisiblePitch = juce::jlimit(0, 127 - Session::pitches + 1,
-                                      lowestVisiblePitch + (wheelDelta > 0.0f ? semitones : -semitones));
-    manualPitchScroll = true;
-    rebuildVisibleNotes();
+    scrollPitchBy(wheelDelta > 0.0f ? semitones : -semitones);
 }
 
 }

@@ -85,18 +85,19 @@ public:
         g.setColour(juce::Colour(0xff050711));
         g.drawEllipse(body, 2.0f);
 
-        juce::Path active;
-        active.addCentredArc(centre.x, centre.y, radius * 0.71f, radius * 0.71f, 0.0f,
-                             startAngle, angle, true);
-        g.setColour(accent.withAlpha(enabled ? 0.18f : 0.06f));
-        g.strokePath(active, juce::PathStrokeType(6.0f, juce::PathStrokeType::curved,
-                                                  juce::PathStrokeType::rounded));
+        // One lit LED where the pointer aims, rather than a strip filled from the
+        // start of the travel. The eye then reads the position itself, which is
+        // what the value is, and a centred parameter like PAN no longer looks
+        // like it is holding a large amount of something.
+        const auto led = polar(radius * 0.71f, angle);
+        g.setColour(accent.withAlpha(enabled ? 0.22f : 0.06f));
+        g.fillEllipse(juce::Rectangle<float>(9.0f, 9.0f).withCentre(led));
         g.setColour(accent.withAlpha(enabled ? 1.0f : 0.3f));
-        g.strokePath(active, juce::PathStrokeType(2.0f, juce::PathStrokeType::curved,
-                                                  juce::PathStrokeType::rounded));
+        g.fillEllipse(juce::Rectangle<float>(4.0f, 4.0f).withCentre(led));
 
         // A modulated knob carries a ring showing how far its source can move
-        // it, drawn outside the value arc so the two never read as one.
+        // it. It stays an arc, because a reach is a distance rather than a
+        // position, and sits outside the LED so the two never read as one.
         const auto depth = static_cast<float>(slider.getProperties().getWithDefault("modDepth", 0.0));
         if (depth != 0.0f && enabled)
         {

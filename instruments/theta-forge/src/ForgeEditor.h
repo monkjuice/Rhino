@@ -16,13 +16,18 @@ public:
     void resized() override;
 
 private:
+    // A control is a knob or a stepper (a slider with a label above) or a chip
+    // (a button that carries its own label). Only the members its style needs
+    // are made visible.
     struct Control
     {
         ui::Style style = ui::Style::knob;
         int row = 0, index = 0;
         juce::Label label;
         juce::Slider slider;
+        std::unique_ptr<ui::ToggleChip> chip;
         std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachment;
+        std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> chipAttachment;
     };
 
     // One of these per declared module. Controls are held by pointer because

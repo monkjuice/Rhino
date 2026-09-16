@@ -130,6 +130,30 @@ public:
     }
 };
 
+// A small labelled on/off button. Used for the filter's per-source routing,
+// where the label is the whole control and a knob would be absurd.
+class ToggleChip final : public juce::Button
+{
+public:
+    explicit ToggleChip(const juce::String& label) : juce::Button(label) { setClickingTogglesState(true); }
+
+    juce::Colour accent = electricBlue;
+
+    void paintButton(juce::Graphics& g, bool highlighted, bool) override
+    {
+        const auto area = getLocalBounds().toFloat().reduced(1.0f);
+        const auto on = getToggleState();
+        const auto enabled = isEnabled();
+        g.setColour(on ? accent.withAlpha(enabled ? 0.24f : 0.08f) : juce::Colour(0xff0b0e18));
+        g.fillRoundedRectangle(area, 3.0f);
+        g.setColour((on ? accent : line).withAlpha(enabled ? (highlighted ? 1.0f : 0.85f) : 0.3f));
+        g.drawRoundedRectangle(area, 3.0f, 1.0f);
+        g.setColour((on ? accent : mutedText).withAlpha(enabled ? 1.0f : 0.35f));
+        g.setFont(juce::FontOptions(10.0f, juce::Font::bold));
+        g.drawText(getName(), area, juce::Justification::centred);
+    }
+};
+
 inline float waveform(float phase, float position)
 {
     const auto sine = std::sin(phase * juce::MathConstants<float>::twoPi);

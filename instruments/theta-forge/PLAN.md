@@ -33,22 +33,21 @@ place, and its own knobs contained inside it. Nothing is laid out by index
 arithmetic; modules declare their contents.
 
 ```
-+- FORGE ------------------------------------- preset -- LOAD SAVE -+
-| +-- OSC A -----------+ +-- OSC B -----------+ +- SUB -+ +- NOISE -+|
-| | [ waveform ]       | | [ waveform ]       | | (o)   | | (o)     ||
-| | OCT SEM FIN        | | OCT SEM FIN        | +-------+ +---------+|
-| | POS UNI DET BLD    | | POS UNI DET BLD    |                      |
-| | PAN LEVEL          | | PAN LEVEL          |                      |
-| +--------------------+ +--------------------+                      |
-| +-- FILTER ----------------+ +-- ENV 1 -------------------------+   |
-| | source  [A][B][S][N]     | | [ ADSR curve ]                   |   |
-| | CUTOFF RES DRIVE MIX     | | ATTACK DECAY SUSTAIN RELEASE     |   |
-| +--------------------------+ +----------------------------------+   |
-| +-- LFO 1 ---------------------------------------------------------+|
-| | [ shape + phase ]   RATE   >CUTOFF   >POSITION   >PITCH          ||
-| +------------------------------------------------------------------+|
-| +-- GLOBAL -- POLY MONO LEGATO GLIDE ------------------- OUTPUT ----+|
-+--------------------------------------------------------------------+
++- FORGE --------------------------------------- preset -- LOAD SAVE -+
+| +-- OSC A ---------------------+ +-- OSC B ---------------------+   |
+| | [ waveform ]                 | | [ waveform ]                 |   |
+| |   OCT    SEMI    FINE        | |   OCT    SEMI    FINE        |   |
+| | POS UNI DET BLEND PAN LEVEL  | | POS UNI DET BLEND PAN LEVEL  |   |
+| +------------------------------+ +------------------------------+   |
+| +- SUB -+ +NOISE+ +-- FILTER ---------+ +-- GLOBAL ------------+     |
+| | LEVEL | | LVL | | TYPE [A][B][S][N] | | POLY MONO LEGATO     |     |
+| |  (o)  | | (o) | | CUTOFF  RES DRIVE | | GLIDE  OUTPUT        |     |
+| +-------+ +-----+ +-------------------+ +----------------------+     |
+| +-- ENV 1 ---------------------+ +-- LFO 1 ---------------------+   |
+| | [ ADSR curve ]               | | [ shape + phase ]            |   |
+| | ATTACK DECAY SUSTAIN RELEASE | | RATE >CUTOFF >POSITION >PITCH|   |
+| +------------------------------+ +------------------------------+   |
++---------------------------------------------------------------------+
 ```
 
 ### Decisions locked in
@@ -123,9 +122,6 @@ real parameter and every parameter appears somewhere on the panel.
 
 **You can test this one by eye.**
 
-> `DRIVE` already sits in the `FILTER` module, but the DSP still applies it to
-> the summed output. M4 moves it into the filter path so the grouping becomes
-> true. Nothing else on the panel is placed somewhere its signal does not go.
 
 ### M3 — Per-oscillator architecture
 
@@ -152,19 +148,27 @@ oscillator's controls never reaching the other.
 
 ### M4 — One filter, with source routing
 
-- `filterRouteA`, `filterRouteB`, `filterRouteSub`, `filterRouteNoise` toggles in
-  the filter header, the way Serum's `S A B C N` buttons work.
-- Routed sources pass through the filter; unrouted sources bypass it straight to
-  the voice sum.
-- `Drive` moves out of the global path and into the filter module. It is
-  already drawn there; M3 made it honest at zero (the output stage no longer
-  saturates when drive is off, and a soft clipper that is linear below its knee
-  does the bounds-keeping the old unconditional `tanh` was doing), but the
-  saturation still applies to the summed voice rather than inside the filter.
-- Filter type selection (low-pass / high-pass / band-pass) if it stays cheap.
+- `routeA`, `routeB`, `routeSub`, `routeNoise` chips in the filter module,
+  labelled the way Serum's `S A B C N` buttons are.
+- The voice accumulates two buses: sources routed through the filter, and
+  sources that bypass it straight to the voice sum.
+- `Drive` moves out of the global path and into the filter path, so it only
+  touches what is routed there, and switching the filter module off bypasses
+  the drive with it. M3 had already made drive honest at zero — the output
+  stage no longer saturates when drive is off, and a soft clipper that is
+  linear below its knee does the bounds-keeping the old unconditional `tanh`
+  was doing.
+- Filter type: low-pass, high-pass, band-pass. A state-variable filter computes
+  all three responses anyway, so this is a choice of tap rather than a second
+  filter.
+- Controls carry their own style, so one row can mix the type field with the
+  routing chips.
 
-**Tests:** an unrouted source is unaffected by cutoff; a routed source is; all
-four routes off equals filter bypassed.
+**Tests:** cutoff attenuates a routed source and leaves an unrouted one
+bit-for-bit alone; routing is per source, so closing the filter on one leaves
+another; drive does nothing to a bypassed source, and nothing at all while the
+module is off; every filter type renders finite audio and the low pass passes a
+low note more than the high pass does.
 
 ### M5 — ENV 1 module with a live display
 
@@ -247,7 +251,7 @@ way to look at a change.
 | M1 Strip back to a synth | **done** |
 | M2 Module framework and enables | **done** — ready to test by eye |
 | M3 Per-oscillator architecture | **done** — ready to test by ear |
-| M4 Filter routing | not started |
+| M4 Filter routing | **done** — ready to test by ear |
 | M5 ENV 1 | not started |
 | M6 LFO 1 | not started |
 | M7 Polish | not started |

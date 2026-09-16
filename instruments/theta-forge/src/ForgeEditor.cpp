@@ -31,9 +31,14 @@ juce::String tooltipFor(const juce::String& id)
     static const std::map<juce::String, juce::String> tips {
         {"subLevel", "Blend in a sine one octave below the note"},
         {"noiseLevel", "Blend in broadband noise"},
-        {"cutoff", "Open or close the low-pass filter"},
+        {"cutoff", "Open or close the filter"},
         {"resonance", "Emphasise the filter edge"},
-        {"drive", "Saturate the filter output"},
+        {"drive", "Saturate what is routed into the filter"},
+        {"filterType", "Low pass, high pass or band pass"},
+        {"routeA", "Send oscillator A through the filter"},
+        {"routeB", "Send oscillator B through the filter"},
+        {"routeSub", "Send the sub through the filter"},
+        {"routeNoise", "Send the noise through the filter"},
         {"attack", "How the note begins"},
         {"decay", "The fall from the attack peak"},
         {"sustain", "The level a held note settles at"},
@@ -107,16 +112,28 @@ void Editor::buildModules()
             {
                 const auto& declared = row.controls[static_cast<size_t>(i)];
                 auto control = std::make_unique<Control>();
-                control->style = row.style;
+                control->style = declared.style;
                 control->row = r;
                 control->index = i;
+
+                if (declared.style == ui::Style::chip)
+                {
+                    control->chip = std::make_unique<ui::ToggleChip>(declared.label);
+                    control->chip->accent = accent;
+                    control->chip->setTooltip(tooltipFor(declared.id));
+                    control->chipAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
+                        processor.state, declared.id, *control->chip);
+                    addAndMakeVisible(*control->chip);
+                    module.controls.push_back(std::move(control));
+                    continue;
+                }
 
                 control->label.setText(declared.label, juce::dontSendNotification);
                 control->label.setJustificationType(juce::Justification::centred);
                 control->label.setColour(juce::Label::textColourId, ui::mutedText);
-                control->label.setFont(juce::FontOptions(row.style == ui::Style::knob ? 10.0f : 9.0f));
+                control->label.setFont(juce::FontOptions(declared.style == ui::Style::knob ? 10.0f : 9.0f));
 
-                if (row.style == ui::Style::knob)
+                if (declared.style == ui::Style::knob)
                 {
                     control->slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
                     control->slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 78, ui::readoutHeight);
@@ -163,6 +180,7 @@ void Editor::applyEnableStates()
         const auto on = module.on();
         for (auto& control : module.controls)
         {
+            if (control->chip != nullptr) { control->chip->setEnabled(on); continue; }
             control->slider.setEnabled(on);
             control->label.setColour(juce::Label::textColourId,
                                      ui::mutedText.withAlpha(on ? 1.0f : 0.4f));
@@ -239,17 +257,20 @@ void Editor::resized()
         for (auto& held : module.controls)
         {
             auto& control = *held;
-            if (control.style == ui::Style::knob)
+            auto block = ui::controlBlock(area, descriptor, control.row, control.index, diameter);
+            switch (control.style)
             {
-                auto block = ui::knobBlock(area, descriptor, control.row, control.index, diameter);
-                control.label.setBounds(block.removeFromTop(ui::knobLabelHeight));
-                control.slider.setBounds(block);
-            }
-            else
-            {
-                auto block = ui::stepperBlock(area, descriptor, control.row, control.index);
-                control.label.setBounds(block.removeFromTop(ui::stepperLabelHeight));
-                control.slider.setBounds(block);
+                case ui::Style::chip:
+                    control.chip->setBounds(block);
+                    break;
+                case ui::Style::stepper:
+                    control.label.setBounds(block.removeFromTop(ui::stepperLabelHeight));
+                    control.slider.setBounds(block);
+                    break;
+                case ui::Style::knob:
+                    control.label.setBounds(block.removeFromTop(ui::knobLabelHeight));
+                    control.slider.setBounds(block);
+                    break;
             }
         }
     }

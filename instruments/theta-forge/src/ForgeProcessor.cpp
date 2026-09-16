@@ -132,6 +132,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout Processor::parameterLayout()
     result.push_back(toggle("noiseEnable", "Noise Enable", false));
     result.push_back(parameter("noiseLevel", "Noise Level", {0.0f, 1.0f}, 0.25f, asPercent));
     result.push_back(toggle("filterEnable", "Filter Enable", true));
+    result.push_back(std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID {"filterType", 1}, "Filter Type",
+        juce::StringArray {"LP", "HP", "BP"}, 0));
+    result.push_back(toggle("routeA", "Filter Route Osc A", true));
+    result.push_back(toggle("routeB", "Filter Route Osc B", true));
+    result.push_back(toggle("routeSub", "Filter Route Sub", true));
+    result.push_back(toggle("routeNoise", "Filter Route Noise", true));
     result.push_back(parameter("cutoff", "Cutoff", {30.0f, 18000.0f, 0.0f, 0.25f}, 7800.0f, asHertz));
     result.push_back(parameter("resonance", "Resonance", {0.0f, 1.0f}, 0.12f, asPercent));
     result.push_back(parameter("drive", "Drive", {0.0f, 1.0f}, 0.08f, asPercent));
@@ -225,6 +232,11 @@ Patch Processor::patch() const
     result.noiseEnable = value("noiseEnable");
     result.noiseLevel = value("noiseLevel");
     result.filterEnable = value("filterEnable");
+    result.filterType = value("filterType");
+    result.routeA = value("routeA");
+    result.routeB = value("routeB");
+    result.routeSub = value("routeSub");
+    result.routeNoise = value("routeNoise");
     result.cutoff = value("cutoff");
     result.resonance = value("resonance");
     result.drive = value("drive");

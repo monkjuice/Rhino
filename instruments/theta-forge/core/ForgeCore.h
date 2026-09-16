@@ -25,12 +25,19 @@ struct Oscillator
     float pan = 0.0f, level = 0.75f;
 };
 
+// Which of the filter's three taps reaches the output.
+enum class FilterType { lowPass, highPass, bandPass };
+
 struct Patch
 {
     Oscillator a, b;
     float subEnable = 1.0f, subLevel = 0.12f;
     float noiseEnable = 0.0f, noiseLevel = 0.25f;
-    float filterEnable = 1.0f, cutoff = 7800.0f, resonance = 0.12f, drive = 0.08f;
+    float filterEnable = 1.0f, filterType = 0.0f;
+    // Each source either passes through the filter or bypasses it straight to
+    // the voice sum, exactly as Serum's per-source routing buttons work.
+    float routeA = 1.0f, routeB = 1.0f, routeSub = 1.0f, routeNoise = 1.0f;
+    float cutoff = 7800.0f, resonance = 0.12f, drive = 0.08f;
     float attack = 0.01f, decay = 0.24f, sustain = 0.75f, release = 0.35f;
     float lfoRate = 0.5f, lfoCutoff = 0.0f, lfoPosition = 0.0f, lfoPitch = 0.0f;
     float polyphony = 8.0f, mono = 0.0f, legato = 1.0f, glide = 0.08f;
@@ -38,6 +45,21 @@ struct Patch
 };
 
 inline bool on(float enable) { return enable >= 0.5f; }
+
+inline FilterType filterTypeOf(const Patch& patch)
+{
+    return static_cast<FilterType>(juce::jlimit(0, 2, juce::roundToInt(patch.filterType)));
+}
+
+// Drive at zero is genuinely clean: the saturation is skipped rather than run
+// at unity, which would still compress the peaks.
+inline float saturate(float x, float drive)
+{
+    const auto amount = juce::jlimit(0.0f, 1.0f, drive);
+    if (amount <= 0.0f) return x;
+    const auto gain = 1.0f + amount * 12.0f;
+    return std::tanh(x * gain) / std::tanh(gain);
+}
 
 // Exactly linear below the knee, asymptotic to full scale above it. A quiet
 // patch passes through untouched — which a plain tanh does not do — while a
@@ -152,33 +174,30 @@ public:
                 continue;
             }
 
-            float dryLeft = 0.0f, dryRight = 0.0f;
-            renderOscillators(voice, patch, lfo, dryLeft, dryRight);
+            Buses buses;
+            renderOscillators(voice, patch, lfo, buses);
+
+            // Drive belongs to the filter, so only what is routed into it is
+            // driven, and switching the module off bypasses the drive with it.
+            // The filter state keeps running either way, so switching the
+            // module or a route back on does not click.
+            auto routedLeft = buses.wetLeft, routedRight = buses.wetRight;
+            const auto type = filterTypeOf(patch);
             if (on(patch.filterEnable))
             {
-                // Keep running the filter state even when nothing reaches it,
-                // so switching the filter back on does not click.
-                left += filter(dryLeft, voice.lowLeft, voice.bandLeft, cutoff, patch.resonance);
-                right += filter(dryRight, voice.lowRight, voice.bandRight, cutoff, patch.resonance);
+                routedLeft = filter(saturate(routedLeft, patch.drive),
+                                    voice.lowLeft, voice.bandLeft, cutoff, patch.resonance, type);
+                routedRight = filter(saturate(routedRight, patch.drive),
+                                     voice.lowRight, voice.bandRight, cutoff, patch.resonance, type);
             }
             else
             {
-                filter(dryLeft, voice.lowLeft, voice.bandLeft, cutoff, patch.resonance);
-                filter(dryRight, voice.lowRight, voice.bandRight, cutoff, patch.resonance);
-                left += dryLeft;
-                right += dryRight;
+                filter(routedLeft, voice.lowLeft, voice.bandLeft, cutoff, patch.resonance, type);
+                filter(routedRight, voice.lowRight, voice.bandRight, cutoff, patch.resonance, type);
             }
-        }
 
-        // Drive at zero is genuinely clean: the saturation is skipped rather
-        // than run at unity, which would still compress the peaks.
-        const auto amount = juce::jlimit(0.0f, 1.0f, patch.drive);
-        if (amount > 0.0f)
-        {
-            const auto driveGain = 1.0f + amount * 12.0f;
-            const auto compensation = 1.0f / std::tanh(driveGain);
-            left = std::tanh(left * driveGain) * compensation;
-            right = std::tanh(right * driveGain) * compensation;
+            left += routedLeft + buses.dryLeft;
+            right += routedRight + buses.dryRight;
         }
 
         const auto gain = juce::jlimit(0.0f, 1.25f, patch.output) * 0.28f;
@@ -188,6 +207,13 @@ public:
 
 private:
     enum class EnvelopeStage { idle, attack, decay, sustain, release };
+
+    // What a voice accumulates into: the sources routed through the filter,
+    // and the sources that bypass it.
+    struct Buses
+    {
+        float wetLeft = 0.0f, wetRight = 0.0f, dryLeft = 0.0f, dryRight = 0.0f;
+    };
 
     struct Voice
     {
@@ -321,7 +347,7 @@ private:
         right += stackRight * scale;
     }
 
-    void renderOscillators(Voice& voice, const Patch& patch, float lfo, float& left, float& right)
+    void renderOscillators(Voice& voice, const Patch& patch, float lfo, Buses& buses)
     {
         const auto dt = static_cast<float>(1.0 / sampleRate);
         const auto glide = juce::jlimit(0.0f, 2.0f, patch.glide);
@@ -331,22 +357,42 @@ private:
         const auto pitchRatio = std::pow(2.0f, juce::jlimit(-12.0f, 12.0f, patch.lfoPitch) * lfo / 12.0f);
         const auto hz = voice.currentHz * pitchRatio;
 
-        left = right = 0.0f;
-        renderOscillator(voice.phaseA, patch.a, hz, lfo, patch.lfoPosition, dt, left, right);
-        renderOscillator(voice.phaseB, patch.b, hz, lfo, patch.lfoPosition, dt, left, right);
+        // Each source is handed whichever pair of accumulators its routing
+        // selects, so the routing decision is made once, here, rather than
+        // being threaded through everything downstream.
+        renderOscillator(voice.phaseA, patch.a, hz, lfo, patch.lfoPosition, dt,
+                         on(patch.routeA) ? buses.wetLeft : buses.dryLeft,
+                         on(patch.routeA) ? buses.wetRight : buses.dryRight);
+        renderOscillator(voice.phaseB, patch.b, hz, lfo, patch.lfoPosition, dt,
+                         on(patch.routeB) ? buses.wetLeft : buses.dryLeft,
+                         on(patch.routeB) ? buses.wetRight : buses.dryRight);
 
         // The sub and the noise generator are their own sources: each is silent
         // unless its own module is on, whatever its level knob reads.
-        const auto sub = on(patch.subEnable) ? std::sin(voice.phaseSub * juce::MathConstants<float>::twoPi) * patch.subLevel : 0.0f;
-        const auto hiss = on(patch.noiseEnable) ? noise() * patch.noiseLevel : 0.0f;
-        const auto centre = sub + hiss;
+        if (on(patch.subEnable))
+        {
+            const auto sub = std::sin(voice.phaseSub * juce::MathConstants<float>::twoPi) * patch.subLevel;
+            (on(patch.routeSub) ? buses.wetLeft : buses.dryLeft) += sub;
+            (on(patch.routeSub) ? buses.wetRight : buses.dryRight) += sub;
+        }
+        if (on(patch.noiseEnable))
+        {
+            const auto hiss = noise() * patch.noiseLevel;
+            (on(patch.routeNoise) ? buses.wetLeft : buses.dryLeft) += hiss;
+            (on(patch.routeNoise) ? buses.wetRight : buses.dryRight) += hiss;
+        }
+
         const auto level = voice.ampEnvelope * voice.velocity;
-        left = (left + centre) * level;
-        right = (right + centre) * level;
+        buses.wetLeft *= level;
+        buses.wetRight *= level;
+        buses.dryLeft *= level;
+        buses.dryRight *= level;
         voice.phaseSub = wrap(voice.phaseSub + hz * 0.5f * dt);
     }
 
-    float filter(float input, float& low, float& band, float cutoff, float resonance) const
+    // A state-variable filter computes all three responses anyway, so the type
+    // is a choice of which tap to return rather than a second filter.
+    float filter(float input, float& low, float& band, float cutoff, float resonance, FilterType type) const
     {
         const auto limitedCutoff = juce::jlimit(25.0f, static_cast<float>(sampleRate * 0.3), cutoff);
         const auto g = std::tan(juce::MathConstants<float>::pi * limitedCutoff / static_cast<float>(sampleRate));
@@ -354,6 +400,12 @@ private:
         const auto high = (input - 2.0f * damping * band - low) / (1.0f + 2.0f * damping * g + g * g);
         band += g * high;
         low += g * band;
+        switch (type)
+        {
+            case FilterType::highPass: return high;
+            case FilterType::bandPass: return band;
+            case FilterType::lowPass: break;
+        }
         return low;
     }
 

@@ -13,20 +13,20 @@ namespace theta::forge::ui
 {
 enum class Display { none, oscillator, envelope, lfo };
 
-// A knob is the default. A stepper is the compact numeric field used for
-// tuning, where reading and typing an exact number matters more than sweeping
-// a range: octave, semitone, fine.
-enum class Style { knob, stepper };
+// A knob is the default. A stepper is the compact field used where reading an
+// exact value matters more than sweeping a range: tuning, filter type. A chip
+// is a small on/off button, used for the filter's per-source routing.
+enum class Style { knob, stepper, chip };
 
 struct Control
 {
     const char* id;
     const char* label;
+    Style style = Style::knob;
 };
 
 struct Row
 {
-    Style style;
     // Share of the module's control area, against the module's other rows.
     int weight;
     std::vector<Control> controls;
@@ -70,34 +70,42 @@ inline constexpr int readoutHeight = 16;
 inline constexpr int stepperLabelHeight = 11;
 inline constexpr int stepperHeight = 21;
 inline constexpr int maxStepperWidth = 78;
+inline constexpr int chipHeight = 20;
+inline constexpr int maxChipWidth = 44;
 
 inline const std::vector<Module>& modules()
 {
     static const std::vector<Module> declared {
         {"oscA", "OSC A", "MORPH", "oscAEnable", false, Display::oscillator, 0, 0, 6,
-         {{Style::stepper, 26, {{"oscAOctave", "OCT"}, {"oscASemitone", "SEMI"}, {"oscAFine", "FINE"}}},
-          {Style::knob, 74, {{"oscAPosition", "POSITION"}, {"oscAUnison", "UNISON"}, {"oscADetune", "DETUNE"},
-                             {"oscABlend", "BLEND"}, {"oscAPan", "PAN"}, {"oscALevel", "LEVEL"}}}}},
+         {{26, {{"oscAOctave", "OCT", Style::stepper}, {"oscASemitone", "SEMI", Style::stepper},
+                {"oscAFine", "FINE", Style::stepper}}},
+          {74, {{"oscAPosition", "POSITION"}, {"oscAUnison", "UNISON"}, {"oscADetune", "DETUNE"},
+                {"oscABlend", "BLEND"}, {"oscAPan", "PAN"}, {"oscALevel", "LEVEL"}}}}},
         {"oscB", "OSC B", "MORPH", "oscBEnable", true, Display::oscillator, 0, 6, 6,
-         {{Style::stepper, 26, {{"oscBOctave", "OCT"}, {"oscBSemitone", "SEMI"}, {"oscBFine", "FINE"}}},
-          {Style::knob, 74, {{"oscBPosition", "POSITION"}, {"oscBUnison", "UNISON"}, {"oscBDetune", "DETUNE"},
-                             {"oscBBlend", "BLEND"}, {"oscBPan", "PAN"}, {"oscBLevel", "LEVEL"}}}}},
+         {{26, {{"oscBOctave", "OCT", Style::stepper}, {"oscBSemitone", "SEMI", Style::stepper},
+                {"oscBFine", "FINE", Style::stepper}}},
+          {74, {{"oscBPosition", "POSITION"}, {"oscBUnison", "UNISON"}, {"oscBDetune", "DETUNE"},
+                {"oscBBlend", "BLEND"}, {"oscBPan", "PAN"}, {"oscBLevel", "LEVEL"}}}}},
 
-        {"sub", "SUB", "", "subEnable", false, Display::none, 1, 0, 2,
-         {{Style::knob, 100, {{"subLevel", "LEVEL"}}}}},
-        {"noise", "NOISE", "", "noiseEnable", true, Display::none, 1, 2, 2,
-         {{Style::knob, 100, {{"noiseLevel", "LEVEL"}}}}},
-        {"filter", "FILTER", "LOW PASS", "filterEnable", false, Display::none, 1, 4, 3,
-         {{Style::knob, 100, {{"cutoff", "CUTOFF"}, {"resonance", "RES"}, {"drive", "DRIVE"}}}}},
+        {"sub", "SUB", "", "subEnable", false, Display::none, 1, 0, 1,
+         {{100, {{"subLevel", "LEVEL"}}}}},
+        {"noise", "NOISE", "", "noiseEnable", true, Display::none, 1, 1, 1,
+         {{100, {{"noiseLevel", "LEVEL"}}}}},
+        // The routing chips name their source the way Serum's do: A, B, S, N.
+        {"filter", "FILTER", "", "filterEnable", false, Display::none, 1, 2, 5,
+         {{30, {{"filterType", "TYPE", Style::stepper}, {"routeA", "A", Style::chip},
+                {"routeB", "B", Style::chip}, {"routeSub", "S", Style::chip},
+                {"routeNoise", "N", Style::chip}}},
+          {70, {{"cutoff", "CUTOFF"}, {"resonance", "RES"}, {"drive", "DRIVE"}}}}},
         {"global", "GLOBAL", "VOICING", nullptr, false, Display::none, 1, 7, 5,
-         {{Style::knob, 100, {{"polyphony", "POLY"}, {"mono", "MONO"}, {"legato", "LEGATO"},
-                              {"glide", "GLIDE"}, {"output", "OUTPUT"}}}}},
+         {{100, {{"polyphony", "POLY"}, {"mono", "MONO"}, {"legato", "LEGATO"},
+                 {"glide", "GLIDE"}, {"output", "OUTPUT"}}}}},
 
         {"env1", "ENV 1", "AMP", nullptr, false, Display::envelope, 2, 0, 6,
-         {{Style::knob, 100, {{"attack", "ATTACK"}, {"decay", "DECAY"}, {"sustain", "SUSTAIN"}, {"release", "RELEASE"}}}}},
+         {{100, {{"attack", "ATTACK"}, {"decay", "DECAY"}, {"sustain", "SUSTAIN"}, {"release", "RELEASE"}}}}},
         {"lfo1", "LFO 1", "FREE RUNNING", nullptr, true, Display::lfo, 2, 6, 6,
-         {{Style::knob, 100, {{"lfoRate", "RATE"}, {"lfoCutoff", "> CUTOFF"},
-                              {"lfoPosition", "> POSITION"}, {"lfoPitch", "> PITCH"}}}}},
+         {{100, {{"lfoRate", "RATE"}, {"lfoCutoff", "> CUTOFF"},
+                 {"lfoPosition", "> POSITION"}, {"lfoPitch", "> PITCH"}}}}},
     };
     return declared;
 }
@@ -144,8 +152,8 @@ inline juce::Rectangle<int> displayBounds(juce::Rectangle<int> moduleArea, const
 inline const char* displaySourceId(const Module& module)
 {
     for (const auto& row : module.rows)
-        if (row.style == Style::knob && !row.controls.empty())
-            return row.controls.front().id;
+        for (const auto& control : row.controls)
+            if (control.style == Style::knob) return control.id;
     return nullptr;
 }
 
@@ -196,9 +204,10 @@ inline int uniformKnobDiameter(juce::Rectangle<int> bounds)
         const auto area = moduleBounds(bounds, module);
         for (int r = 0; r < static_cast<int>(module.rows.size()); ++r)
         {
-            if (module.rows[static_cast<size_t>(r)].style != Style::knob) continue;
-            for (int i = 0; i < static_cast<int>(module.rows[static_cast<size_t>(r)].controls.size()); ++i)
+            const auto& row = module.rows[static_cast<size_t>(r)];
+            for (int i = 0; i < static_cast<int>(row.controls.size()); ++i)
             {
+                if (row.controls[static_cast<size_t>(i)].style != Style::knob) continue;
                 const auto cell = cellBounds(area, module, r, i);
                 // The cell also has to hold the label above and the readout below.
                 smallest = juce::jmin(smallest, cell.getWidth() - 6,
@@ -228,5 +237,28 @@ inline juce::Rectangle<int> stepperBlock(juce::Rectangle<int> moduleArea, const 
     return juce::Rectangle<int>(juce::jmin(cell.getWidth() - 8, maxStepperWidth),
                                 juce::jmin(cell.getHeight(), stepperLabelHeight + stepperHeight))
         .withCentre(cell.getCentre());
+}
+
+// A chip carries its own label, so unlike a knob or a stepper it needs no
+// separate label strip above it.
+inline juce::Rectangle<int> chipBlock(juce::Rectangle<int> moduleArea, const Module& module,
+                                      int rowIndex, int index)
+{
+    const auto cell = cellBounds(moduleArea, module, rowIndex, index);
+    return juce::Rectangle<int>(juce::jmin(cell.getWidth() - 8, maxChipWidth),
+                                juce::jmin(cell.getHeight(), chipHeight))
+        .withCentre(cell.getCentre());
+}
+
+inline juce::Rectangle<int> controlBlock(juce::Rectangle<int> moduleArea, const Module& module,
+                                         int rowIndex, int index, int diameter)
+{
+    switch (module.rows[static_cast<size_t>(rowIndex)].controls[static_cast<size_t>(index)].style)
+    {
+        case Style::stepper: return stepperBlock(moduleArea, module, rowIndex, index);
+        case Style::chip: return chipBlock(moduleArea, module, rowIndex, index);
+        case Style::knob: break;
+    }
+    return knobBlock(moduleArea, module, rowIndex, index, diameter);
 }
 }

@@ -40,6 +40,7 @@ juce_add_binary_data(ThetaForgeAssets SOURCES ui/assets/forge_logo.png)
 
 target_sources(ThetaForge PRIVATE
     core/ForgeCore.h
+    core/ForgeWavetable.h
     ui/ForgeLayout.h
     ui/ForgeVisuals.h
     src/ForgeProcessor.cpp
@@ -49,6 +50,7 @@ target_sources(ThetaForge PRIVATE
 target_link_libraries(ThetaForge PRIVATE
     ThetaForgeAssets
     juce::juce_audio_utils
+    juce::juce_dsp
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags)
 target_compile_definitions(ThetaForge PRIVATE
@@ -66,6 +68,7 @@ if (BUILD_TESTING)
     target_sources(ThetaForgeTests PRIVATE
         tests/ForgeTests.cpp
         core/ForgeCore.h
+        core/ForgeWavetable.h
         ui/ForgeLayout.h
         ui/ForgeVisuals.h
         src/ForgeProcessor.cpp
@@ -75,6 +78,7 @@ if (BUILD_TESTING)
     target_link_libraries(ThetaForgeTests PRIVATE
         ThetaForgeAssets
         juce::juce_audio_utils
+        juce::juce_dsp
         juce::juce_recommended_config_flags
         juce::juce_recommended_warning_flags)
     target_compile_definitions(ThetaForgeTests PRIVATE

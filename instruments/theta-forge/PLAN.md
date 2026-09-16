@@ -471,15 +471,89 @@ rather than only its neighbour; a position on a frame reads that frame exactly
 and is named after it; a position between two names both; and morphing is
 continuous in position, so modulating POSITION cannot click.
 
+### M9b — Real wavetables
+
+Picking this up cold? [HANDOVER-M9B.md](HANDOVER-M9B.md) is the working note
+that goes with this milestone: what the code now looks like, and what will bite.
+
+M9a gave the oscillator ten frames to choose between, but they were still
+formulas evaluated per sample. A formula cannot be read from a file and cannot
+be drawn on, so this is where a table stops being computed and starts being
+data. Three parts; the first is done.
+
+#### M9b-1 — a real table behind the oscillator — done
+
+- **`core/ForgeWavetable.h` is new.** A `Wavetable` holds frames of 2048 samples
+  and the band-limited copies of each. `Oscillator` carries a `const Wavetable*`
+  and the voice reads it; null means the built-in ten, so a `Core` still needs no
+  setting up to make a sound and every existing call site still compiles.
+- **The ten are now generated, not evaluated.** `waveShape` is still the same
+  ten formulas and is still where a frame is authored, but it runs once at
+  startup to fill `builtInWavetable()`. Nothing calls it from the render any
+  more. `waveAt`, `waveLabel` and `waveFrameAt` keep their signatures and read
+  that table, so the panel, the knob readout and the tests were untouched.
+- **Band-limiting, which Forge has never had.** A frame with an edge in it is a
+  harmonic series running past Nyquist, and everything above it folds back down
+  as a whistle moving the wrong way. Every frame is now stored eleven times,
+  each copy with half the harmonics of the one before and half the points to
+  match, and a note reads whichever copy has the most harmonics that still fit.
+  The copies are cut with a transform rather than a filter, so the cut is exact
+  and leaves no ripple. Measured on a saw at 4186 Hz: the worst fold-back falls
+  from 0.089 to 0.0008, about 41 dB. The whole set of levels costs a little over
+  twice the table itself, not eleven times it.
+- **Level 0 is the frame exactly as authored**, and it is what the panel draws.
+  So M9a's guarantee holds in the form that matters — the tube draws the table,
+  not a formula that might drift from it — but it is no longer literally the
+  same samples the voice reads, because which copy the voice reads depends on
+  the note. That is the price of not aliasing, and it is the right trade.
+- **Reading between points is Catmull-Rom, not linear.** A straight line between
+  two points of a 64-point frame is a different curve from the frame, and that
+  difference is broadband noise. The frames are powers of two long, so the wrap
+  is a mask rather than a branch.
+- **The saw's jump moved to the middle of its frame.** It was `phase * 2 - 1`,
+  which puts the single discontinuity exactly at the frame boundary where no
+  display can show it — so the panel drew one diagonal, which is not what a saw
+  looks like. It is now a rising saw that crosses zero at each end and takes its
+  full swing across the centre, which is how Serum stores its own saw. Same
+  harmonics, same sound, rotated half a cycle. The visible consequence is that
+  SAW and its neighbours morph through different in-between shapes than before.
+  LFO 1's saw is deliberately left alone: an LFO's ramp has to reset at the
+  cycle boundary, because that is the point a synced LFO restarts on.
+- `juce_dsp` is now linked, for the transform the band-limited copies need.
+
+**Tests:** a band-limited sine is the same sine at the same amplitude at every
+level, which is what catches a scaling mistake in the transform; each level
+keeps the harmonics below its limit and has thrown away the ones above it;
+level 0 is bit-for-bit what `waveShape` authored; the level a note is given
+keeps its harmonics under Nyquist at all 128 notes; a high note folds back at
+least four times less than the raw frame does; and the saw starts and ends its
+frame at zero while swinging the full range across the centre.
+
+#### M9b-2 — where a table comes from — not started
+
+Reading a wavetable file. A wavetable file is an ordinary `.wav` holding
+single-cycle frames end to end — 2048 samples each by convention, with Serum's
+`clm ` chunk naming the size when it is present — which is the format the tables
+people already own are written in. Import from a file chooser and by dropping a
+file on the oscillator display; the table's name in the module header; the
+samples embedded in the preset so a patch stays self-contained when it moves
+between machines. Chopping arbitrary recorded audio into frames is deliberately
+not part of this: it has to guess where cycles begin, and that is its own
+problem.
+
+#### M9b-3 — the table editor — not started
+
+A third tab beside OSC and MATRIX: the selected frame large, a strip of frames
+below it, freehand and line drawing, add, duplicate and remove a frame, init and
+normalise, import and export. The brush palette, the harmonic bars and the
+formula bar that Serum's editor also carries are explicitly not in the first
+cut.
+
+
 ## Out of scope for now
 
 These are the north star, not this plan. They come after the synth is finished.
 
-- **M9b — Real wavetables.** Loadable tables and a table editor. The frames
-  themselves are no longer the gap — M9a, above, replaced the four-frame morph
-  with a real table of ten — so what is left here is where a table comes *from*:
-  reading a file, holding many more frames than ten, and editing them. Serum's
-  editor is the reference for what that looks like.
 - **M10 — ENV 2–4, LFO 2–6 and macros 1–8** as further matrix sources.
 - **M11 — FX rack.** Chorus, distortion, delay, reverb, compressor, EQ, in a
   reorderable chain.
@@ -535,3 +609,6 @@ way to look at a change.
 | M7 LFO 1 | **done** — ready to test by ear |
 | M8 Polish | interaction **done**; a factory preset set still to author |
 | M9a Ten shapes in the oscillator table | **done** — ready to test by ear |
+| M9b-1 A real table, band-limited | **done** — ready to test by ear and by eye |
+| M9b-2 Loading a table from a file | not started |
+| M9b-3 The table editor | not started |

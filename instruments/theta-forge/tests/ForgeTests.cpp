@@ -1098,6 +1098,127 @@ void lfoSuite()
     synced.setPlayHead(nullptr);
 }
 
+// How much energy a signal carries at a given harmonic of its fundamental. A
+// plain correlation rather than a transform: the checks below ask about a
+// handful of named harmonics, not a whole spectrum.
+float harmonicEnergy(const std::vector<float>& cycle, int harmonic)
+{
+    auto real = 0.0, imaginary = 0.0;
+    const auto points = static_cast<double>(cycle.size());
+    for (size_t i = 0; i < cycle.size(); ++i)
+    {
+        const auto angle = 2.0 * juce::MathConstants<double>::pi * harmonic * static_cast<double>(i) / points;
+        real += cycle[i] * std::cos(angle);
+        imaginary += cycle[i] * std::sin(angle);
+    }
+    return static_cast<float>(2.0 * std::sqrt(real * real + imaginary * imaginary) / points);
+}
+
+// One cycle of a table's frame at a level, read the way the voice reads it.
+std::vector<float> readFrame(const theta::forge::Wavetable& table, int level, int frame, int points)
+{
+    std::vector<float> cycle(static_cast<size_t>(points));
+    for (int i = 0; i < points; ++i)
+        cycle[static_cast<size_t>(i)] = table.frameSample(level, frame,
+                                                          static_cast<float>(i) / static_cast<float>(points));
+    return cycle;
+}
+
+// Band-limiting is the whole reason a frame is stored more than once. These
+// check the extra copies really are the same wave with harmonics taken off the
+// top, rather than something the transform has scaled, shifted or mangled.
+void bandLimitSuite()
+{
+    using theta::forge::wavetableFrameSize;
+    const auto& table = theta::forge::builtInWavetable();
+
+    require(table.frameCount() == theta::forge::waveShapeCount,
+            "the built-in table holds every declared frame");
+    require(table.levelCount() > 1, "a table carries band-limited copies of its frames");
+
+    // The one that catches a scaling mistake in the transform. A sine is a
+    // single harmonic, so every level that keeps any harmonic at all has to
+    // hand back that same sine at that same amplitude: not half of it, not
+    // 2048 times it, not inverted.
+    for (int level = 0; level < table.levelCount(); ++level)
+        for (int i = 0; i < 64; ++i)
+        {
+            const auto phase = static_cast<float>(i) / 64.0f;
+            requireClose(table.frameSample(level, 0, phase),
+                         std::sin(phase * juce::MathConstants<float>::twoPi), 0.02f,
+                         "a band-limited sine is the same sine at every level");
+        }
+
+    // A saw carries every harmonic, so it is what shows whether the levels are
+    // cut where they say they are: each must keep what is below its limit and
+    // have thrown away what is above it.
+    constexpr auto saw = 6;
+    for (int level = 1; level < table.levelCount(); ++level)
+    {
+        const auto limit = (wavetableFrameSize / 2) >> level;
+        if (limit < 8) continue;
+        const auto cycle = readFrame(table, level, saw, 8192);
+        const auto kept = limit / 2;
+        require(harmonicEnergy(cycle, kept) > 0.3f / static_cast<float>(kept),
+                "a band-limited frame keeps the harmonics below its limit");
+        require(harmonicEnergy(cycle, limit * 2) < 0.02f / static_cast<float>(limit),
+                "a band-limited frame has thrown away the harmonics above its limit");
+    }
+
+    // Level 0 is the frame exactly as authored, because it is what the panel
+    // draws. If the transform touched it, the display and the table would
+    // disagree and M9a's guarantee would be gone.
+    for (int shape = 0; shape < theta::forge::waveShapeCount; ++shape)
+        for (int i = 0; i < wavetableFrameSize; i += 37)
+        {
+            const auto phase = static_cast<float>(i) / static_cast<float>(wavetableFrameSize);
+            requireClose(table.frameSample(0, shape, phase), theta::forge::waveShape(shape, phase), 0.0005f,
+                         "level 0 is the frame exactly as it was authored");
+        }
+
+    // The level a note is given has to be one whose harmonics all fit under
+    // Nyquist, at every note Forge can be asked to play.
+    constexpr double sampleRate = 48000.0;
+    for (int note = 0; note <= 127; ++note)
+    {
+        const auto hz = static_cast<float>(440.0 * std::pow(2.0, (note - 69) / 12.0));
+        const auto level = table.levelFor(hz, sampleRate);
+        const auto harmonics = (wavetableFrameSize / 2) >> level;
+        require(level == 0 || static_cast<double>(harmonics) * hz <= sampleRate * 0.5 + 1.0,
+                "the level a note reads keeps its harmonics under Nyquist");
+    }
+
+    // And the point of the whole exercise: a high note aliases far less than
+    // the raw frame does. Read straight from the table rather than through the
+    // synth, so nothing but the band-limiting is being measured. Aliasing lands
+    // between the note's harmonics, never on them, so the bins halfway between
+    // are where a clean saw has nothing and a folded one does not.
+    const auto hz = 4186.0f;
+    constexpr int steps = 8192;
+    std::vector<float> raw(steps), limited(steps);
+    const auto level = table.levelFor(hz, sampleRate);
+    for (int i = 0; i < steps; ++i)
+    {
+        const auto phase = static_cast<float>(std::fmod(static_cast<double>(i) * hz / sampleRate, 1.0));
+        raw[static_cast<size_t>(i)] = table.frameSample(0, saw, phase);
+        limited[static_cast<size_t>(i)] = table.frameSample(level, saw, phase);
+    }
+    auto rawFold = 0.0f, limitedFold = 0.0f;
+    for (int bin = 40; bin < 3900; ++bin)
+    {
+        const auto binHz = static_cast<float>(bin) * static_cast<float>(sampleRate) / static_cast<float>(steps);
+        const auto ofFundamental = binHz / hz;
+        if (std::abs(ofFundamental - std::round(ofFundamental)) < 0.35f) continue;
+        rawFold = std::max(rawFold, harmonicEnergy(raw, bin));
+        limitedFold = std::max(limitedFold, harmonicEnergy(limited, bin));
+    }
+    if (limitedFold >= rawFold * 0.25f)
+    {
+        require(false, "band-limiting takes the aliasing off a high note");
+        std::cerr << "       raw folded " << rawFold << ", band-limited folded " << limitedFold << '\n';
+    }
+}
+
 void waveTableSuite()
 {
     using theta::forge::waveShape;
@@ -1156,6 +1277,22 @@ void waveTableSuite()
         }
         requireText(theta::forge::waveLabel(position), theta::forge::waveShapeName(shape),
                     "a position on a frame is named after it");
+    }
+
+    // The saw's jump belongs in the middle of its frame, not at the edge of it
+    // where nothing can see it. Both halves climb, it crosses zero where the
+    // frame begins and ends, and the whole swing happens in one step across the
+    // centre. That is the difference between a display that reads as a saw and
+    // one that reads as a single diagonal.
+    {
+        constexpr auto saw = 6;
+        constexpr auto step = 1.0f / 2048.0f;
+        requireClose(waveShape(saw, 0.0f), 0.0f, 0.001f, "the saw starts its frame at zero");
+        requireClose(waveShape(saw, 0.5f - step), 1.0f, 0.005f, "the saw climbs to the top by the centre");
+        requireClose(waveShape(saw, 0.5f), -1.0f, 0.001f, "the saw drops to the bottom at the centre");
+        requireClose(waveShape(saw, 1.0f - step), 0.0f, 0.005f, "the saw returns to zero by the end");
+        require(std::abs(waveShape(saw, 1.0f - step) - waveShape(saw, 0.0f)) < 0.01f,
+                "the saw joins up across the cycle boundary");
     }
 
     // And between two frames it names both, so a blend never masquerades as a
@@ -1272,6 +1409,7 @@ void engineSuite()
     envelopeSuite();
     lfoSuite();
     waveTableSuite();
+    bandLimitSuite();
     voicingSuite();
     modulationSuite();
 

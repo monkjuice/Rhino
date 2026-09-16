@@ -1,5 +1,7 @@
 #pragma once
 
+#include "ForgeWavetable.h"
+
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <algorithm>
 #include <array>
@@ -23,6 +25,11 @@ struct Oscillator
     float octave = 0.0f, semitone = 0.0f, fine = 0.0f;
     float unison = 2.0f, detune = 0.18f, blend = 0.5f;
     float pan = 0.0f, level = 0.75f;
+    // The table this oscillator reads. Null means the built-in frames, which is
+    // what every oscillator starts on and what a Core needs no setting up to
+    // sound. The Processor owns whatever this points at and outlives the voice
+    // reading it; nothing here allocates or frees it.
+    const Wavetable* table = nullptr;
 };
 
 // Which of the filter's three taps reaches the output.
@@ -30,11 +37,14 @@ enum class FilterType { lowPass, highPass, bandPass };
 
 // --- The oscillator's table ---------------------------------------------------
 //
-// Ten single-cycle shapes that POSITION morphs through. This is Forge's one
-// fixed table — its "default shapes" — until loadable wavetables arrive in M9.
-// The frames are analytic rather than sampled, so a frame costs a few operations
-// and no memory at all, and the panel can draw the identical curve the voice is
-// reading.
+// Ten single-cycle shapes that POSITION morphs through: the table an oscillator
+// reads until one is loaded over it.
+//
+// These formulas are a generator, not the render path. Since M9b-1 they are
+// rendered into a real Wavetable once, at startup, and the voice reads that
+// table — see ForgeWavetable.h. Writing them as formulas is still the right way
+// to author them, but a frame is now sampled data by the time anything plays
+// it, which is what lets a frame come from a file or a brush instead.
 //
 // The order matters as much as the contents: POSITION crossfades whichever two
 // frames it falls between, so what sits next to what is what the in-between
@@ -75,7 +85,12 @@ inline float waveShape(int shape, float phase)
         case 3: return phase < 0.5f ? 1.0f : -1.0f;
         case 4: return phase < 0.25f ? 1.0f : -1.0f;
         case 5: return phase < 0.1f ? 1.0f : -1.0f;
-        case 6: return phase * 2.0f - 1.0f;
+        // A rising saw with its jump in the middle of the frame rather than at
+        // the edge of it. Rotating a saw by half a cycle changes nothing about
+        // what it is — same harmonics, same sound — but it is the difference
+        // between a display that shows one diagonal and one that shows the edge
+        // that makes a saw a saw. Serum stores its own saw the same way round.
+        case 6: return phase < 0.5f ? phase * 2.0f : phase * 2.0f - 2.0f;
         // A rectified sine: two humps a cycle, so the even harmonics arrive and
         // it reads an octave up without being one.
         case 7: return 2.0f * std::abs(std::sin(cycle)) - 1.0f;
@@ -92,24 +107,43 @@ inline float waveShape(int shape, float phase)
     return std::sin(cycle);
 }
 
-// Where a position falls in the table: the frame at or below it, and how far
-// past that frame it has travelled. A position of one lands on the last frame
-// with nothing beyond it to blend toward.
-inline void waveFrameAt(float position, int& frame, float& blend)
+// The built-in ten, rendered into a real table once and read from then on.
+// The formulas above are now a generator rather than the thing the voice calls:
+// every oscillator reads a Wavetable, and this is the one it reads until a
+// table is loaded over it. Built on first use, which the Processor and Core
+// force to happen at construction so that no audio thread is ever the first
+// caller — building it allocates and runs a transform per frame.
+inline const Wavetable& builtInWavetable()
 {
-    const auto scaled = juce::jlimit(0.0f, 1.0f, position) * static_cast<float>(waveShapeCount - 1);
-    frame = std::min(waveShapeCount - 2, static_cast<int>(scaled));
-    blend = scaled - static_cast<float>(frame);
+    static const Wavetable table = []
+    {
+        std::vector<float> samples(static_cast<size_t>(waveShapeCount) * wavetableFrameSize);
+        std::vector<juce::String> names;
+        names.reserve(static_cast<size_t>(waveShapeCount));
+        for (int shape = 0; shape < waveShapeCount; ++shape)
+        {
+            names.push_back(waveShapeName(shape));
+            for (int i = 0; i < wavetableFrameSize; ++i)
+                samples[static_cast<size_t>(shape) * wavetableFrameSize + static_cast<size_t>(i)]
+                    = waveShape(shape, static_cast<float>(i) / static_cast<float>(wavetableFrameSize));
+        }
+        return Wavetable(samples.data(), waveShapeCount, "BASIC SHAPES", std::move(names));
+    }();
+    return table;
 }
 
-// One sample of the table at a position. Only the two frames either side of it
-// are worked out, so what this costs does not grow with the size of the table.
+// Where a position falls in the built-in table: the frame at or below it, and
+// how far past that frame it has travelled.
+inline void waveFrameAt(float position, int& frame, float& blend)
+{
+    wavetableFrameAt(builtInWavetable().frameCount(), position, frame, blend);
+}
+
+// One sample of the built-in table at a position, as authored — no band
+// limiting, because this is what the panel draws rather than what a note reads.
 inline float waveAt(float position, float phase)
 {
-    int frame = 0;
-    auto blend = 0.0f;
-    waveFrameAt(position, frame, blend);
-    return juce::jmap(blend, waveShape(frame, phase), waveShape(frame + 1, phase));
+    return builtInWavetable().sample(position, phase);
 }
 
 // What a position is called, for a knob to read out. Exactly on a frame it is
@@ -117,12 +151,13 @@ inline float waveAt(float position, float phase)
 // honestly what it is. Never called from the render.
 inline juce::String waveLabel(float position)
 {
+    const auto& table = builtInWavetable();
     int frame = 0;
     auto blend = 0.0f;
-    waveFrameAt(position, frame, blend);
-    if (blend <= 0.01f) return waveShapeName(frame);
-    if (blend >= 0.99f) return waveShapeName(frame + 1);
-    return juce::String(waveShapeName(frame)) + ">" + waveShapeName(frame + 1);
+    wavetableFrameAt(table.frameCount(), position, frame, blend);
+    if (blend <= 0.01f) return table.frameTitle(frame);
+    if (blend >= 0.99f) return table.frameTitle(frame + 1);
+    return table.frameTitle(frame) + ">" + table.frameTitle(frame + 1);
 }
 
 // LFO 1's shapes. It is a modulation source, so every shape is bipolar and runs
@@ -354,6 +389,9 @@ public:
     void initialise(double newSampleRate)
     {
         sampleRate = std::max(1.0, newSampleRate);
+        // Touched here so the table is built on whichever thread prepares the
+        // synth, never lazily on the first note from the audio thread.
+        builtInWavetable();
         reset();
     }
 
@@ -668,8 +706,6 @@ private:
             }
     }
 
-    static float morph(float phase, float position) { return waveAt(position, wrap(phase)); }
-
     void updateEnvelope(float& value, EnvelopeStage& stage, float releaseStart,
                         float attack, float decay, float sustain, float release) const
     {
@@ -713,6 +749,14 @@ private:
         const auto detune = juce::jlimit(0.0f, 1.0f, osc.detune);
         const auto blend = juce::jlimit(0.0f, 1.0f, osc.blend);
 
+        // Which band-limited copy of the table this note may read. Chosen from
+        // the top of the unison stack rather than its centre, so the sharpest
+        // voice in the stack decides and no member of it aliases: detune
+        // spreads the stack by at most a third of a semitone, and 3% of
+        // headroom covers that with room to spare.
+        const auto& table = osc.table != nullptr ? *osc.table : builtInWavetable();
+        const auto level = table.levelFor(hz * 1.03f, sampleRate);
+
         auto stackLeft = 0.0f, stackRight = 0.0f, power = 0.0f;
         for (int i = 0; i < count; ++i)
         {
@@ -724,7 +768,7 @@ private:
             const auto gain = juce::jmap(blend, centreWeight, 1.0f);
             power += gain * gain;
 
-            const auto sample = morph(phases[static_cast<size_t>(i)], position) * gain;
+            const auto sample = table.sample(level, position, phases[static_cast<size_t>(i)]) * gain;
             const auto pan = juce::jlimit(-1.0f, 1.0f, osc.pan + spread * detune * 1.6f);
             stackLeft += sample * std::sqrt(0.5f * (1.0f - pan));
             stackRight += sample * std::sqrt(0.5f * (1.0f + pan));

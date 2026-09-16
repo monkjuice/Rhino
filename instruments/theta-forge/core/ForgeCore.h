@@ -5,24 +5,30 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
-#include <vector>
 
 // The reusable sound engine. It deliberately owns no AudioProcessor, UI,
 // Tracktion, state tree, filesystem, or allocation in renderSample().
+//
+// Forge is a synthesiser only. Effects live outside this file and, until the
+// FX rack milestone, do not exist at all. See PLAN.md.
 namespace theta::forge
 {
+// Field order is the order Processor::patch() builds them in; that initialiser
+// is positional, so keep the two in step.
 struct Patch
 {
-    float oscAPosition = 0.55f, oscBPosition = 0.18f, oscBLevel = 0.25f, oscBTune = 7.0f;
-    float subLevel = 0.12f, noiseLevel = 0.0f, unison = 2.0f, detune = 0.18f;
-    float cutoff = 7800.0f, resonance = 0.12f, attack = 0.01f, decay = 0.24f, sustain = 0.75f, release = 0.35f;
-    float filterEnvAmount = 0.25f, filterAttack = 0.005f, filterDecay = 0.3f, filterSustain = 0.35f, filterRelease = 0.3f;
-    float lfoRate = 0.5f, lfoCutoff = 0.0f, drive = 0.08f, output = 0.75f;
-    float lfoPosition = 0.0f, lfoPitch = 0.0f;
-    float chorusMix = 0.0f, chorusRate = 0.35f, chorusDepth = 0.4f;
-    float delayMix = 0.0f, delayTime = 0.375f, delayFeedback = 0.3f;
+    float oscAEnable = 1.0f, oscAPosition = 0.55f, unison = 2.0f, detune = 0.18f;
+    float oscBEnable = 1.0f, oscBPosition = 0.18f, oscBLevel = 0.25f, oscBTune = 7.0f;
+    float subEnable = 1.0f, subLevel = 0.12f;
+    float noiseEnable = 0.0f, noiseLevel = 0.0f;
+    float filterEnable = 1.0f, cutoff = 7800.0f, resonance = 0.12f, drive = 0.08f;
+    float attack = 0.01f, decay = 0.24f, sustain = 0.75f, release = 0.35f;
+    float lfoRate = 0.5f, lfoCutoff = 0.0f, lfoPosition = 0.0f, lfoPitch = 0.0f;
     float polyphony = 8.0f, mono = 0.0f, legato = 1.0f, glide = 0.08f;
+    float output = 0.75f;
 };
+
+inline bool on(float enable) { return enable >= 0.5f; }
 
 class Core final
 {
@@ -30,12 +36,6 @@ public:
     void initialise(double newSampleRate)
     {
         sampleRate = std::max(1.0, newSampleRate);
-        const auto chorusSamples = static_cast<size_t>(std::ceil(sampleRate * 0.05)) + 2;
-        const auto delaySamples = static_cast<size_t>(std::ceil(sampleRate * 2.0)) + 2;
-        chorusLeft.resize(chorusSamples);
-        chorusRight.resize(chorusSamples);
-        delayLeft.resize(delaySamples);
-        delayRight.resize(delaySamples);
         reset();
     }
 
@@ -44,12 +44,6 @@ public:
         voices = {};
         nextVoice = 0;
         lfoPhase = 0.0f;
-        chorusPhase = 0.0f;
-        chorusWrite = delayWrite = 0;
-        std::fill(chorusLeft.begin(), chorusLeft.end(), 0.0f);
-        std::fill(chorusRight.begin(), chorusRight.end(), 0.0f);
-        std::fill(delayLeft.begin(), delayLeft.end(), 0.0f);
-        std::fill(delayRight.begin(), delayRight.end(), 0.0f);
         noiseState = 0x9e3779b9u;
         heldCount = 0;
         monoMode = false;
@@ -101,9 +95,8 @@ public:
         for (auto& voice : voices)
             if (voice.active && voice.note == note && voice.ampStage != EnvelopeStage::release)
             {
-                voice.ampStage = voice.filterStage = EnvelopeStage::release;
+                voice.ampStage = EnvelopeStage::release;
                 voice.ampReleaseStart = voice.ampEnvelope;
-                voice.filterReleaseStart = voice.filterEnvelope;
             }
     }
 
@@ -115,13 +108,17 @@ public:
         const auto lfo = std::sin(lfoPhase * juce::MathConstants<float>::twoPi);
         lfoPhase = wrap(lfoPhase + juce::jlimit(0.01f, 40.0f, patch.lfoRate) / static_cast<float>(sampleRate));
 
+        // LFO 1 is the only thing that moves the cutoff, by design: Forge has a
+        // single envelope and it is hardwired to amplitude. Everything else
+        // reaches the cutoff once the modulation matrix exists.
+        const auto lfoOctaves = juce::jlimit(-1.0f, 1.0f, patch.lfoCutoff) * lfo * 3.0f;
+        const auto cutoff = patch.cutoff * std::pow(2.0f, lfoOctaves);
+
         for (auto& voice : voices)
         {
             if (!voice.active) continue;
             updateEnvelope(voice.ampEnvelope, voice.ampStage, voice.ampReleaseStart,
                            patch.attack, patch.decay, patch.sustain, patch.release);
-            updateEnvelope(voice.filterEnvelope, voice.filterStage, voice.filterReleaseStart,
-                           patch.filterAttack, patch.filterDecay, patch.filterSustain, patch.filterRelease);
             if (voice.ampStage == EnvelopeStage::idle)
             {
                 voice.active = false;
@@ -130,20 +127,27 @@ public:
 
             float dryLeft = 0.0f, dryRight = 0.0f;
             renderOscillators(voice, patch, lfo, dryLeft, dryRight);
-            const auto envelopeOctaves = juce::jlimit(-1.0f, 1.0f, patch.filterEnvAmount) * voice.filterEnvelope * 5.0f;
-            const auto lfoOctaves = juce::jlimit(-1.0f, 1.0f, patch.lfoCutoff) * lfo * 3.0f;
-            const auto cutoff = patch.cutoff * std::pow(2.0f, envelopeOctaves + lfoOctaves);
-            left += filter(dryLeft, voice.lowLeft, voice.bandLeft, cutoff, patch.resonance);
-            right += filter(dryRight, voice.lowRight, voice.bandRight, cutoff, patch.resonance);
+            if (on(patch.filterEnable))
+            {
+                // Keep running the filter state even when nothing reaches it,
+                // so switching the filter back on does not click.
+                left += filter(dryLeft, voice.lowLeft, voice.bandLeft, cutoff, patch.resonance);
+                right += filter(dryRight, voice.lowRight, voice.bandRight, cutoff, patch.resonance);
+            }
+            else
+            {
+                filter(dryLeft, voice.lowLeft, voice.bandLeft, cutoff, patch.resonance);
+                filter(dryRight, voice.lowRight, voice.bandRight, cutoff, patch.resonance);
+                left += dryLeft;
+                right += dryRight;
+            }
         }
 
-        applyChorus(left, right, patch);
         const auto driveGain = 1.0f + juce::jlimit(0.0f, 1.0f, patch.drive) * 12.0f;
         const auto compensation = 1.0f / std::tanh(driveGain);
         const auto gain = juce::jlimit(0.0f, 1.25f, patch.output) * 0.28f;
         left = std::tanh(left * driveGain) * compensation * gain;
         right = std::tanh(right * driveGain) * compensation * gain;
-        applyDelay(left, right, patch);
     }
 
 private:
@@ -157,10 +161,9 @@ private:
         std::array<float, 8> phaseA {}, phaseB {};
         float phaseSub = 0.0f;
         float currentHz = 0.0f, targetHz = 0.0f;
-        float ampEnvelope = 0.0f, filterEnvelope = 0.0f;
-        float ampReleaseStart = 0.0f, filterReleaseStart = 0.0f;
+        float ampEnvelope = 0.0f, ampReleaseStart = 0.0f;
         float lowLeft = 0.0f, bandLeft = 0.0f, lowRight = 0.0f, bandRight = 0.0f;
-        EnvelopeStage ampStage = EnvelopeStage::idle, filterStage = EnvelopeStage::idle;
+        EnvelopeStage ampStage = EnvelopeStage::idle;
     };
 
     static float wrap(float phase) { return phase - std::floor(phase); }
@@ -173,7 +176,7 @@ private:
         voice.note = note;
         voice.velocity = juce::jlimit(0.0f, 1.0f, velocity);
         voice.currentHz = voice.targetHz = noteFrequency(note);
-        voice.ampStage = voice.filterStage = EnvelopeStage::attack;
+        voice.ampStage = EnvelopeStage::attack;
         for (size_t i = 0; i < voice.phaseA.size(); ++i)
         {
             const auto offset = static_cast<float>(i) / static_cast<float>(voice.phaseA.size());
@@ -256,69 +259,36 @@ private:
         const auto positionA = juce::jlimit(0.0f, 1.0f, patch.oscAPosition + lfo * patch.lfoPosition * 0.5f);
         const auto positionB = juce::jlimit(0.0f, 1.0f, patch.oscBPosition + lfo * patch.lfoPosition * 0.5f);
         const auto count = juce::jlimit(1, 8, juce::roundToInt(patch.unison));
+        const auto oscA = on(patch.oscAEnable), oscB = on(patch.oscBEnable);
+        // With both oscillators live, B's level crossfades against A, as it
+        // always has. Switching one off gives the survivor the whole voice
+        // rather than leaving a hole where the crossfade partner was. The
+        // per-oscillator levels that make this unnecessary arrive with M3.
+        const auto levelA = oscA ? (oscB ? 1.0f - patch.oscBLevel : 1.0f) : 0.0f;
+        const auto levelB = oscB ? (oscA ? patch.oscBLevel : 1.0f) : 0.0f;
         left = right = 0.0f;
         for (int i = 0; i < count; ++i)
         {
             const auto spread = count == 1 ? 0.0f : static_cast<float>(i) / static_cast<float>(count - 1) - 0.5f;
             const auto detuneSemitones = spread * juce::jlimit(0.0f, 1.0f, patch.detune) * 0.7f;
             const auto ratio = std::pow(2.0f, detuneSemitones / 12.0f);
-            const auto oscillator = morph(voice.phaseA[static_cast<size_t>(i)], positionA) * (1.0f - patch.oscBLevel)
-                + morph(voice.phaseB[static_cast<size_t>(i)], positionB) * patch.oscBLevel;
+            const auto oscillator = morph(voice.phaseA[static_cast<size_t>(i)], positionA) * levelA
+                + morph(voice.phaseB[static_cast<size_t>(i)], positionB) * levelB;
             const auto pan = spread * juce::jlimit(0.0f, 1.0f, patch.detune) * 1.6f;
             left += oscillator * std::sqrt(0.5f * (1.0f - pan));
             right += oscillator * std::sqrt(0.5f * (1.0f + pan));
             voice.phaseA[static_cast<size_t>(i)] = wrap(voice.phaseA[static_cast<size_t>(i)] + hz * pitchRatio * ratio * dt);
             voice.phaseB[static_cast<size_t>(i)] = wrap(voice.phaseB[static_cast<size_t>(i)] + hzB * pitchRatio * ratio * dt);
         }
-        const auto centre = std::sin(voice.phaseSub * juce::MathConstants<float>::twoPi) * patch.subLevel + noise() * patch.noiseLevel;
+        // The sub and the noise generator are their own sources: each is silent
+        // unless its own module is on, whatever its level knob reads.
+        const auto sub = on(patch.subEnable) ? std::sin(voice.phaseSub * juce::MathConstants<float>::twoPi) * patch.subLevel : 0.0f;
+        const auto hiss = on(patch.noiseEnable) ? noise() * patch.noiseLevel : 0.0f;
+        const auto centre = sub + hiss;
         const auto level = voice.ampEnvelope * voice.velocity / std::sqrt(static_cast<float>(count));
         left = (left + centre) * level;
         right = (right + centre) * level;
         voice.phaseSub = wrap(voice.phaseSub + hz * pitchRatio * 0.5f * dt);
-    }
-
-    static float readFractional(const std::vector<float>& buffer, size_t write, float delaySamples)
-    {
-        if (buffer.empty()) return 0.0f;
-        auto position = static_cast<float>(write) - delaySamples;
-        while (position < 0.0f) position += static_cast<float>(buffer.size());
-        const auto first = static_cast<size_t>(position) % buffer.size();
-        const auto second = (first + 1) % buffer.size();
-        return juce::jmap(position - std::floor(position), buffer[first], buffer[second]);
-    }
-
-    void applyChorus(float& left, float& right, const Patch& patch)
-    {
-        if (chorusLeft.empty()) return;
-        chorusLeft[chorusWrite] = left;
-        chorusRight[chorusWrite] = right;
-        const auto depth = juce::jlimit(0.0f, 1.0f, patch.chorusDepth);
-        const auto centre = static_cast<float>(sampleRate) * 0.012f;
-        const auto sweep = static_cast<float>(sampleRate) * 0.008f * depth;
-        const auto phase = chorusPhase * juce::MathConstants<float>::twoPi;
-        const auto wetLeft = readFractional(chorusLeft, chorusWrite, centre + std::sin(phase) * sweep);
-        const auto wetRight = readFractional(chorusRight, chorusWrite, centre + std::sin(phase + juce::MathConstants<float>::halfPi) * sweep);
-        const auto mix = juce::jlimit(0.0f, 1.0f, patch.chorusMix);
-        left = juce::jmap(mix, left, wetLeft);
-        right = juce::jmap(mix, right, wetRight);
-        chorusWrite = (chorusWrite + 1) % chorusLeft.size();
-        chorusPhase = wrap(chorusPhase + juce::jlimit(0.02f, 8.0f, patch.chorusRate) / static_cast<float>(sampleRate));
-    }
-
-    void applyDelay(float& left, float& right, const Patch& patch)
-    {
-        if (delayLeft.empty()) return;
-        const auto samples = juce::jlimit(1.0f, static_cast<float>(delayLeft.size() - 2),
-                                         juce::jlimit(0.02f, 2.0f, patch.delayTime) * static_cast<float>(sampleRate));
-        const auto delayedLeft = readFractional(delayLeft, delayWrite, samples);
-        const auto delayedRight = readFractional(delayRight, delayWrite, samples);
-        const auto feedback = juce::jlimit(0.0f, 0.92f, patch.delayFeedback);
-        delayLeft[delayWrite] = left + delayedRight * feedback;
-        delayRight[delayWrite] = right + delayedLeft * feedback;
-        delayWrite = (delayWrite + 1) % delayLeft.size();
-        const auto mix = juce::jlimit(0.0f, 1.0f, patch.delayMix);
-        left = juce::jmap(mix, left, delayedLeft);
-        right = juce::jmap(mix, right, delayedRight);
     }
 
     float filter(float input, float& low, float& band, float cutoff, float resonance) const
@@ -336,10 +306,7 @@ private:
     double sampleRate = 48000.0;
     size_t nextVoice = 0;
     float lfoPhase = 0.0f;
-    float chorusPhase = 0.0f;
     std::uint32_t noiseState = 0x9e3779b9u;
-    std::vector<float> chorusLeft, chorusRight, delayLeft, delayRight;
-    size_t chorusWrite = 0, delayWrite = 0;
     std::array<int, 16> heldNotes {};
     int heldCount = 0;
     bool monoMode = false;

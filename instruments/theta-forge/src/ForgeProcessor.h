@@ -35,5 +35,6 @@ private:
     static juce::AudioProcessorValueTreeState::ParameterLayout parameterLayout();
     Core core;
     Patch patch() const;
+    juce::ValueTree migrated(const juce::ValueTree& savedState) const;
 };
 }

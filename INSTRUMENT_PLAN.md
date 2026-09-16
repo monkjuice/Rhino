@@ -36,6 +36,10 @@ design workflow, not its code, assets, branding, or a feature-for-feature clone.
    import/editor, effects rack, MPE, preset browser, then sample/granular and
    spectral sources only when the core is mature.
 
+> Item 4 is superseded by [instruments/theta-forge/PLAN.md](instruments/theta-forge/PLAN.md),
+> which breaks the synth build-out into milestones and records the decisions
+> already settled. Read that file before changing Forge.
+
 ## Compatibility and quality gates
 
 - No allocations, locks, filesystem work, or UI work in an audio callback.

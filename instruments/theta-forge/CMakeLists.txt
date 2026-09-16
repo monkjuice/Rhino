@@ -33,6 +33,7 @@ juce_add_plugin(ThetaForge
 
 target_sources(ThetaForge PRIVATE
     core/ForgeCore.h
+    ui/ForgeLayout.h
     ui/ForgeVisuals.h
     src/ForgeProcessor.cpp
     src/ForgeProcessor.h
@@ -55,8 +56,9 @@ if (BUILD_TESTING)
     juce_add_console_app(ThetaForgeTests PRODUCT_NAME "Theta Forge Tests")
     set_target_properties(ThetaForgeTests PROPERTIES EXCLUDE_FROM_ALL FALSE)
     target_sources(ThetaForgeTests PRIVATE
-        tests/ForgePresetTests.cpp
+        tests/ForgeTests.cpp
         core/ForgeCore.h
+        ui/ForgeLayout.h
         ui/ForgeVisuals.h
         src/ForgeProcessor.cpp
         src/ForgeProcessor.h
@@ -71,5 +73,8 @@ if (BUILD_TESTING)
         JUCE_USE_CURL=0
         THETA_FORGE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
         JUCE_IGNORE_VST3_MISMATCHED_PARAMETER_ID_WARNING=1)
-    add_test(NAME forge_preset_round_trip COMMAND ThetaForgeTests)
+    # One binary, three cases selected by argument, as Theta's own tests do.
+    add_test(NAME forge_layout COMMAND ThetaForgeTests --layout)
+    add_test(NAME forge_presets COMMAND ThetaForgeTests --presets)
+    add_test(NAME forge_engine COMMAND ThetaForgeTests --engine)
 endif()

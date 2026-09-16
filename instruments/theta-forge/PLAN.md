@@ -177,9 +177,15 @@ low note more than the high pass does.
   the live stage while a note sounds, with the header naming the stage.
 - The engine publishes ENV 1's level and stage once per block; the audio thread
   writes two atomics, the message thread reads them, and nothing else crosses.
-- `MONO` becomes a rocker switch rather than a knob whose only readout is ON or
-  OFF, and `POLY` greys out while mono is on, because the engine already
-  ignores polyphony there.
+- `MONO` and `LEGATO` become rocker switches rather than knobs whose only
+  readout is ON or OFF. The rocker actually rocks — the raised face swaps from
+  top to bottom and the indicator travels with it — so the state reads from the
+  shape as well as the light, and it carries no text of its own. It sits where
+  a knob's circle sits, so the gap under its label matches the knobs' either
+  side.
+- `POLY` greys out while mono is on, because the engine already ignores
+  polyphony there. Controls declare what disables them, which the modulation
+  matrix will want again.
 
 **Tests:** stage transitions at the expected sample offsets and the expected
 levels between them; a note released mid-attack falls from the level actually

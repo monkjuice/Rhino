@@ -40,8 +40,6 @@ juce::String asSeconds(float value)
 
 juce::String asCount(float value) { return juce::String(juce::roundToInt(value)); }
 
-juce::String asToggle(float value) { return value >= 0.5f ? "ON" : "OFF"; }
-
 juce::String asGain(float value) { return juce::String(value, 2); }
 
 juce::String asOctaves(float value)
@@ -152,7 +150,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout Processor::parameterLayout()
     result.push_back(parameter("lfoPitch", "LFO to Pitch", {-12.0f, 12.0f}, 0.0f, asSemitones));
     result.push_back(parameter("polyphony", "Polyphony", {1.0f, 16.0f, 1.0f}, 8.0f, asCount));
     result.push_back(toggle("mono", "Mono", false));
-    result.push_back(parameter("legato", "Legato", {0.0f, 1.0f, 1.0f}, 1.0f, asToggle));
+    result.push_back(toggle("legato", "Legato", true));
     result.push_back(parameter("glide", "Glide", {0.0f, 2.0f, 0.0f, 0.35f}, 0.08f, asSeconds));
     result.push_back(parameter("output", "Output", {0.0f, 1.25f}, 0.75f, asGain));
     return {result.begin(), result.end()};

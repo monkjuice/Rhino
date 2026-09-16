@@ -167,30 +167,43 @@ public:
         g.fillRoundedRectangle(well, radius * 0.7f);
 
         const auto body = well.reduced(well.getWidth() * 0.08f);
-        // The rocker tilts: pressed in at the bottom when on, at the top when
-        // off, so the state reads even with the indicator unlit.
-        const auto split = body.getY() + body.getHeight() * (on ? 0.4f : 0.58f)
-            + (held ? body.getHeight() * 0.03f : 0.0f);
 
-        const juce::Rectangle<float> upper(body.getX(), body.getY(), body.getWidth(), split - body.getY());
-        juce::ColourGradient shade(juce::Colour(0xff202434), upper.getX(), upper.getY(),
-                                   juce::Colour(0xff090c15), upper.getX(), upper.getBottom(), false);
+        // The rocker actually rocks: the raised face is at the bottom when on
+        // and at the top when off, and the indicator travels with it. Keeping
+        // the raised face on one side and only changing the light would leave
+        // the switch looking stuck.
+        const auto travel = held ? 0.04f : 0.0f;
+        const auto pivot = body.getY() + body.getHeight() * (on ? 0.38f + travel : 0.62f - travel);
+        const juce::Rectangle<float> top(body.getX(), body.getY(), body.getWidth(), pivot - body.getY());
+        const juce::Rectangle<float> bottom(body.getX(), pivot, body.getWidth(), body.getBottom() - pivot);
+        const auto raised = on ? bottom : top;
+        // The far side is angled away from the eye, so it is both darker and
+        // narrower than the face pointing at you.
+        const auto sunken = (on ? top : bottom).reduced(body.getWidth() * 0.07f, 0.0f);
+
+        juce::ColourGradient shade(juce::Colour(0xff161a26), sunken.getX(), sunken.getY(),
+                                   juce::Colour(0xff070a12), sunken.getX(), sunken.getBottom(), false);
         g.setGradientFill(shade);
-        g.fillRoundedRectangle(upper, radius * 0.5f);
+        g.fillRoundedRectangle(sunken, radius * 0.4f);
 
-        const juce::Rectangle<float> lower(body.getX(), split, body.getWidth(), body.getBottom() - split);
-        juce::ColourGradient metal(juce::Colour(0xffa9b1c6).withAlpha(alpha), lower.getX(), lower.getY(),
-                                   juce::Colour(0xff525a70).withAlpha(alpha), lower.getX(), lower.getBottom(), false);
+        // Light falls from above, so the raised face is brightest at whichever
+        // edge is tipped towards it.
+        juce::ColourGradient metal(juce::Colour(0xffb4bccf).withAlpha(alpha), raised.getX(), raised.getY(),
+                                   juce::Colour(0xff4e5568).withAlpha(alpha), raised.getX(), raised.getBottom(), false);
+        if (!on) metal = juce::ColourGradient(juce::Colour(0xff98a0b4).withAlpha(alpha), raised.getX(), raised.getY(),
+                                              juce::Colour(0xff6a7186).withAlpha(alpha), raised.getX(), raised.getBottom(), false);
         g.setGradientFill(metal);
-        g.fillRoundedRectangle(lower, radius * 0.5f);
-        // The lit edge where the pressed face meets the recess.
-        g.setColour(juce::Colours::white.withAlpha(0.28f * alpha));
-        g.drawLine(lower.getX() + 1.0f, lower.getY() + 0.5f, lower.getRight() - 1.0f, lower.getY() + 0.5f, 1.0f);
+        g.fillRoundedRectangle(raised, radius * 0.5f);
 
-        // The indicator on the pressed face: lit when on, a dark slot when off.
+        // The lit lip where the raised face breaks the plane of the recess.
+        g.setColour(juce::Colours::white.withAlpha(0.3f * alpha));
+        const auto lipY = on ? raised.getY() + 0.5f : raised.getBottom() - 0.5f;
+        g.drawLine(raised.getX() + 1.0f, lipY, raised.getRight() - 1.0f, lipY, 1.0f);
+
+        // The indicator rides the raised face: lit when on, a dark slot when off.
         const auto barWidth = juce::jmax(2.0f, body.getWidth() * 0.16f);
-        const auto bar = juce::Rectangle<float>(barWidth, lower.getHeight() * 0.56f)
-            .withCentre(lower.getCentre());
+        const auto bar = juce::Rectangle<float>(barWidth, raised.getHeight() * 0.5f)
+            .withCentre(raised.getCentre());
         if (on && enabled)
         {
             for (auto spread = 5.0f; spread >= 1.0f; spread -= 2.0f)

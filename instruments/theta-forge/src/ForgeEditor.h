@@ -28,10 +28,7 @@ private:
         juce::Label label;
         juce::Slider slider;
         std::unique_ptr<ui::ToggleChip> chip;
-        // A rocker brings its own readout, because it has no slider text box to
-        // borrow one from.
         std::unique_ptr<ui::RockerSwitch> rocker;
-        std::unique_ptr<juce::Label> readout;
         std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachment;
         std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> buttonAttachment;
     };

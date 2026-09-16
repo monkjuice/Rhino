@@ -103,7 +103,7 @@ inline const std::vector<Module>& modules()
           {70, {{"cutoff", "CUTOFF"}, {"resonance", "RES"}, {"drive", "DRIVE"}}}}},
         {"global", "GLOBAL", "VOICING", nullptr, false, Display::none, 1, 7, 5,
          {{100, {{"polyphony", "POLY", Style::knob, "mono"}, {"mono", "MONO", Style::rocker},
-                 {"legato", "LEGATO"}, {"glide", "GLIDE"}, {"output", "OUTPUT"}}}}},
+                 {"legato", "LEGATO", Style::rocker}, {"glide", "GLIDE"}, {"output", "OUTPUT"}}}}},
 
         {"env1", "ENV 1", "AMP", nullptr, false, Display::envelope, 2, 0, 6,
          {{100, {{"attack", "ATTACK"}, {"decay", "DECAY"}, {"sustain", "SUSTAIN"}, {"release", "RELEASE"}}}}},
@@ -269,10 +269,15 @@ inline juce::Rectangle<int> controlBlock(juce::Rectangle<int> moduleArea, const 
     return knobBlock(moduleArea, module, rowIndex, index, diameter);
 }
 
-// The rocker itself inside that block: narrow and tall, centred.
+// The rocker inside that block: narrow and tall, centred, and sitting exactly
+// where a knob's circle sits. The 4px inset is the same one the knob's look
+// applies, so the gap under the label is identical for both.
+inline constexpr int knobOpticalInset = 4;
+
 inline juce::Rectangle<int> rockerBounds(juce::Rectangle<int> knobArea)
 {
-    const auto width = juce::jmax(14, juce::roundToInt(knobArea.getHeight() * 0.44f));
-    return juce::Rectangle<int>(width, knobArea.getHeight()).withCentre(knobArea.getCentre());
+    const auto area = knobArea.reduced(0, knobOpticalInset);
+    const auto width = juce::jmax(14, juce::roundToInt(area.getHeight() * 0.46f));
+    return juce::Rectangle<int>(width, area.getHeight()).withCentre(area.getCentre());
 }
 }

@@ -137,27 +137,15 @@ void Editor::buildModules()
 
                 if (declared.style == ui::Style::rocker)
                 {
+                    // No ON/OFF readout: the switch shows its own state, by
+                    // moving as well as lighting up.
                     control->rocker = std::make_unique<ui::RockerSwitch>(declared.label);
                     control->rocker->accent = accent;
                     control->rocker->setTooltip(tooltipFor(declared.id));
-
-                    control->readout = std::make_unique<juce::Label>();
-                    control->readout->setJustificationType(juce::Justification::centred);
-                    control->readout->setFont(juce::FontOptions(11.0f));
-                    control->readout->setColour(juce::Label::textColourId, ui::text);
-
-                    const auto refresh = [readout = control->readout.get(),
-                                          rocker = control->rocker.get()]
-                    {
-                        readout->setText(rocker->getToggleState() ? "ON" : "OFF", juce::dontSendNotification);
-                    };
-                    control->rocker->onStateChange = refresh;
                     control->buttonAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
                         processor.state, declared.id, *control->rocker);
-                    refresh();
 
                     addAndMakeVisible(*control->rocker);
-                    addAndMakeVisible(*control->readout);
                     addAndMakeVisible(control->label);
                     module.controls.push_back(std::move(control));
                     continue;
@@ -218,7 +206,6 @@ void Editor::applyEnableStates()
             if (control->rocker != nullptr)
             {
                 control->rocker->setEnabled(on);
-                control->readout->setColour(juce::Label::textColourId, ui::text.withAlpha(on ? 1.0f : 0.4f));
             }
             else
             {
@@ -313,10 +300,12 @@ void Editor::resized()
                     control.slider.setBounds(block);
                     break;
                 case ui::Style::rocker:
-                    // Same label line and same readout line as the knobs on
-                    // either side; only the control between them differs.
+                    // Same label line as the knobs either side, and the same
+                    // gap beneath it, so the switch sits exactly where their
+                    // circles do. The readout line is left empty rather than
+                    // reclaimed, which is what keeps the row aligned.
                     control.label.setBounds(block.removeFromTop(ui::knobLabelHeight));
-                    control.readout->setBounds(block.removeFromBottom(ui::readoutHeight));
+                    block.removeFromBottom(ui::readoutHeight);
                     control.rocker->setBounds(ui::rockerBounds(block));
                     break;
                 case ui::Style::knob:

@@ -72,6 +72,8 @@ private:
     void mouseDown(const juce::MouseEvent&) override;
     void mouseDrag(const juce::MouseEvent&) override;
     void mouseUp(const juce::MouseEvent&) override;
+    bool keyStateChanged(bool isKeyDown) override;
+    bool keyPressed(const juce::KeyPress&) override;
     void buildHandles();
     void showModulationMenu(const juce::String& parameterId);
     void assignModulation(int source, int destination);

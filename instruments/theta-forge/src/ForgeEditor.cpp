@@ -118,6 +118,9 @@ Editor::Editor(Processor& p)
     presetName.setColour(juce::Label::textColourId, ui::mutedText);
     addAndMakeVisible(presetName);
 
+    // So the panel itself can hold focus when nothing in it does, and the keys
+    // still have somewhere to arrive from.
+    setWantsKeyboardFocus(true);
     setResizable(true, true);
     // The matrix moving into the tabbed row took a whole grid row off the
     // bottom of the panel, so the window is shorter than it was at every limit.
@@ -577,6 +580,26 @@ void Editor::mouseDown(const juce::MouseEvent& event)
                 showModulationMenu(control->id);
                 return;
             }
+}
+
+// The computer keys play Forge wherever the focus happens to be. A key event is
+// walked up from whatever holds focus to its parents, so the letter keys reach
+// here once a knob has taken focus under the hand, and are handed on to the
+// keyboard from here. Without this, touching any control silenced the keys until
+// the keyboard itself was clicked back into focus — which is the wrong trade for
+// a synth, where turning something while playing it is the whole point.
+//
+// Forwarding is safe when the keyboard already has focus and has handled the
+// event itself: it tracks which notes its keys are holding down, so a second
+// pass over the same key state starts and stops nothing.
+bool Editor::keyStateChanged(bool isKeyDown)
+{
+    return keyboard.keyStateChanged(isKeyDown);
+}
+
+bool Editor::keyPressed(const juce::KeyPress& key)
+{
+    return keyboard.keyPressed(key);
 }
 
 void Editor::mouseDrag(const juce::MouseEvent& event)

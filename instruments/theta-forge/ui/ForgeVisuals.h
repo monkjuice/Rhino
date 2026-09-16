@@ -19,6 +19,36 @@ inline const auto mutedText = juce::Colour(0xff8f95ad);
 
 inline constexpr int handleWidth = 46;
 
+// --- Knob geometry ----------------------------------------------------------
+//
+// Shared by the look that draws a knob and by the component that has to know
+// what the mouse is over, so the ring you can see and the ring you can grab
+// cannot drift apart.
+
+// The 4px inset is the optical one every knob's circle sits inside.
+inline juce::Rectangle<float> knobCircle(juce::Rectangle<int> rotaryArea)
+{
+    const auto area = rotaryArea.toFloat().reduced(4.0f);
+    const auto diameter = juce::jmin(area.getWidth(), area.getHeight());
+    return juce::Rectangle<float>(diameter, diameter).withCentre(area.getCentre());
+}
+
+// Where the modulation ring is drawn, as a share of the knob's radius. The
+// knob's body stops at 0.81, so the ring sits in clear air outside it.
+inline constexpr float modRingRadius = 0.88f;
+
+// The band the ring can be grabbed in: everything outside the body out to a
+// little past the rim. Keeping it clear of the body is what lets the knob keep
+// its own gesture — inside the circle still means "turn this".
+inline bool onModRing(juce::Rectangle<int> rotaryArea, juce::Point<int> position)
+{
+    const auto knob = knobCircle(rotaryArea);
+    const auto radius = knob.getWidth() * 0.5f;
+    if (radius <= 0.0f) return false;
+    const auto distance = position.toFloat().getDistanceFrom(knob.getCentre());
+    return distance >= radius * 0.82f && distance <= radius * 1.06f;
+}
+
 inline juce::Colour accentFor(const Module& module)
 {
     return module.violet ? signalViolet : electricBlue;
@@ -79,12 +109,9 @@ public:
     void drawRotarySlider(juce::Graphics& g, int x, int y, int width, int height,
                           float position, float startAngle, float endAngle, juce::Slider& slider) override
     {
-        auto area = juce::Rectangle<float>(static_cast<float>(x), static_cast<float>(y),
-                                            static_cast<float>(width), static_cast<float>(height)).reduced(4.0f);
-        const auto diameter = juce::jmin(area.getWidth(), area.getHeight());
-        auto knob = juce::Rectangle<float>(diameter, diameter).withCentre(area.getCentre());
+        const auto knob = knobCircle({x, y, width, height});
         const auto centre = knob.getCentre();
-        const auto radius = diameter * 0.5f;
+        const auto radius = knob.getWidth() * 0.5f;
         const auto angle = juce::jmap(position, startAngle, endAngle);
         const auto accent = slider.findColour(juce::Slider::rotarySliderFillColourId);
         const auto enabled = slider.isEnabled();
@@ -141,7 +168,7 @@ public:
         const auto live = static_cast<bool>(properties.getWithDefault("modLive", false));
         if ((depth != 0.0f || offset != 0.0f) && enabled)
         {
-            const auto ring = radius * 0.88f;
+            const auto ring = radius * modRingRadius;
             const auto angleAt = [&] (float amount)
             {
                 return juce::jmap(juce::jlimit(0.0f, 1.0f, position + amount), startAngle, endAngle);
@@ -157,7 +184,10 @@ public:
                                                         juce::PathStrokeType::rounded));
             };
 
-            arc(angleAt(depth), signalViolet.withAlpha(0.32f), 3.0f);
+            // The reach lifts under the cursor, which is the only thing telling
+            // you the ring is a control and not just a reading.
+            const auto hovered = static_cast<bool>(properties.getWithDefault("modHover", false));
+            arc(angleAt(depth), signalViolet.withAlpha(hovered ? 0.75f : 0.32f), hovered ? 4.0f : 3.0f);
             if (live)
             {
                 const auto now = angleAt(offset);
@@ -178,6 +208,102 @@ public:
                                                    juce::PathStrokeType::rounded));
         g.setColour(accent.withAlpha(enabled ? 1.0f : 0.3f));
         g.fillEllipse(juce::Rectangle<float>(5.0f, 5.0f).withCentre(centre));
+    }
+};
+
+// A knob whose modulation ring can be taken hold of. A press that lands on the
+// ring sets the depth of the slot pointed here; a press anywhere inside the
+// body is an ordinary knob. Splitting them by where the press lands is what
+// lets the ring become a control without the knob losing the gesture a hand
+// already knows.
+class ModKnob final : public juce::Slider
+{
+public:
+    // Set by the editor each refresh: the depth the ring is showing, and
+    // whether there is a single slot for a drag to mean something to.
+    float ringDepth = 0.0f;
+    bool ringDraggable = false;
+    // Given the depth the drag has reached. The editor decides which slot that
+    // belongs to; this component knows only the gesture.
+    std::function<void(float)> onRingDrag;
+
+    bool overRing(juce::Point<int> position)
+    {
+        return ringDraggable && onModRing(ringArea(), position);
+    }
+
+    void mouseDown(const juce::MouseEvent& event) override
+    {
+        if (!event.mods.isPopupMenu() && overRing(event.getPosition()))
+        {
+            draggingRing = true;
+            depthAtDragStart = ringDepth;
+            return;
+        }
+        juce::Slider::mouseDown(event);
+    }
+
+    void mouseDrag(const juce::MouseEvent& event) override
+    {
+        if (!draggingRing) { juce::Slider::mouseDrag(event); return; }
+        // Up is more, down is less, and the whole bipolar range is 200 pixels
+        // of travel, so a depth can be crossed from one sign to the other
+        // without letting go.
+        const auto moved = -static_cast<float>(event.getDistanceFromDragStartY()) / 100.0f;
+        if (onRingDrag) onRingDrag(juce::jlimit(-1.0f, 1.0f, depthAtDragStart + moved));
+    }
+
+    void mouseUp(const juce::MouseEvent& event) override
+    {
+        if (draggingRing) { draggingRing = false; return; }
+        juce::Slider::mouseUp(event);
+    }
+
+    // Double-clicking the ring takes the routing back to no depth, the same way
+    // double-clicking a knob takes it back to its default.
+    void mouseDoubleClick(const juce::MouseEvent& event) override
+    {
+        if (overRing(event.getPosition()))
+        {
+            if (onRingDrag) onRingDrag(0.0f);
+            return;
+        }
+        juce::Slider::mouseDoubleClick(event);
+    }
+
+    void mouseMove(const juce::MouseEvent& event) override
+    {
+        setRingHover(overRing(event.getPosition()));
+        juce::Slider::mouseMove(event);
+    }
+
+    void mouseExit(const juce::MouseEvent& event) override
+    {
+        setRingHover(false);
+        juce::Slider::mouseExit(event);
+    }
+
+private:
+    bool draggingRing = false;
+    float depthAtDragStart = 0.0f;
+
+    // The rotary itself, which is not the whole component: a knob keeps its
+    // readout below, and the look is handed only the part it draws the circle
+    // in.
+    juce::Rectangle<int> ringArea()
+    {
+        if (auto* look = dynamic_cast<juce::Slider::LookAndFeelMethods*>(&getLookAndFeel()))
+            return look->getSliderLayout(*this).sliderBounds;
+        return getLocalBounds();
+    }
+
+    void setRingHover(bool hovered)
+    {
+        if (static_cast<bool>(getProperties().getWithDefault("modHover", false)) == hovered) return;
+        getProperties().set("modHover", hovered);
+        setMouseCursor(hovered ? juce::MouseCursor::UpDownResizeCursor
+                               : juce::MouseCursor::NormalCursor);
+        repaint();
     }
 };
 

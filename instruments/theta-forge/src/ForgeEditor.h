@@ -25,8 +25,12 @@ private:
         juce::String id;
         const char* disabledBy = nullptr;
         int row = 0, index = 0;
+        // The slot whose depth this knob's ring sets, or -1 when the ring is
+        // not draggable: nothing is pointed here, or more than one thing is and
+        // the ring is a sum with no single slot behind it.
+        int ringSlot = -1;
         juce::Label label;
-        juce::Slider slider;
+        ui::ModKnob slider;
         std::unique_ptr<ui::ToggleChip> chip;
         std::unique_ptr<ui::RockerSwitch> rocker;
         std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachment;
@@ -77,6 +81,7 @@ private:
     void buildHandles();
     void showModulationMenu(const juce::String& parameterId);
     void assignModulation(int source, int destination);
+    void setSlotDepth(int slot, float depth);
     void clearSlot(int slot);
     void refreshModulationRings();
     Control* controlAt(juce::Point<int> panelPosition);

@@ -264,9 +264,31 @@ Delivered in two parts. **M6a, the engine and the panel, is done.**
 - An eighty-eight key keyboard across the bottom, playing through the same path
   the host's own notes take.
 
-Still to do here: dragging the ring itself to set depth. Until then a new
-routing lands at half depth — zero would be correct but would look like the
-drop had done nothing — and depth is edited in the matrix.
+A new routing lands at half depth rather than at zero, which would be the
+correct value but would look like the drop had done nothing. M6c, below, is how
+it gets moved off that.
+
+**M6c — draggable depth rings** — done
+
+- A press that lands on a knob's ring sets the depth of the slot pointed there;
+  a press inside the body still turns the knob. Splitting them by where the
+  press lands is what lets the ring become a control without the knob losing the
+  gesture a hand already knows. The ring band is the clear air outside the body,
+  so the two never overlap.
+- Dragging up is more and down is less, with the whole bipolar range in 200
+  pixels, so a depth can be taken from one sign to the other without letting go.
+  Double-clicking the ring returns it to no depth, mirroring what a double-click
+  on the knob does to its value.
+- The ring lifts under the cursor. Without that, nothing tells you it is a
+  control rather than a reading.
+- Depth is written through the parameter, so a dragged ring reaches the host's
+  automation lane and the matrix field by the same path a depth typed into the
+  matrix does. The matrix updates as the ring moves.
+- **Known limit:** a ring is only draggable while exactly one slot points at
+  that knob. Pointed at by two, the ring is their sum, and there is nothing a
+  single drag could honestly mean. Those are edited in the matrix, or taken
+  apart from the knob's own right-click menu. A slot sitting at zero depth still
+  counts, so a routing can be dialled up from nothing by its ring.
 
 **M6d — the matrix tab** — done
 
@@ -400,7 +422,7 @@ way to look at a change.
 | M5 ENV 1 | **done** — ready to test by ear |
 | M6a Matrix engine and panel | **done** — ready to test by ear |
 | M6b Macros, drag to knob, keyboard | **done** — ready to test by ear |
-| M6c Draggable depth rings | not started |
+| M6c Draggable depth rings | **done** — ready to test by hand |
 | M6d Matrix tab | **done** — ready to test by eye |
 | M6e Modulation shown on the knob | **done** — ready to test by eye |
 | M7 LFO 1 | not started |

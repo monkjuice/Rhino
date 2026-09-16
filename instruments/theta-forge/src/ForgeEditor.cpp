@@ -290,6 +290,12 @@ void Editor::buildModules()
                 // The editor handles right-click so a knob can offer its
                 // modulation menu without each slider knowing about the matrix.
                 control->slider.addMouseListener(this, false);
+                // The ring knows the gesture; the editor knows which slot it
+                // belongs to, and that is settled afresh on every refresh.
+                control->slider.onRingDrag = [this, knob = control.get()] (float depth)
+                {
+                    if (knob->ringSlot >= 0) setSlotDepth(knob->ringSlot, depth);
+                };
                 // A table names its columns once, in the strip above its rows,
                 // so its controls carry no label of their own.
                 if (descriptor.columnHeaderHeight == 0) addAndMakeVisible(control->label);
@@ -639,12 +645,21 @@ void Editor::refreshModulationRings()
     // same moment ENV 1's playhead does, and for the same reason.
     const auto live = processor.envelopeStage() != 0;
     std::array<float, destinationCount> depths {};
+    // A ring can only be dragged when one slot is behind it. Pointed at by two,
+    // it is a sum, and there is nothing a single drag could honestly mean.
+    std::array<int, destinationCount> slots {};
+    std::array<int, destinationCount> only {};
+    only.fill(-1);
     for (int slot = 0; slot < modSlotCount; ++slot)
     {
         const auto source = juce::roundToInt(value(slotParameter(slot, "Source").toRawUTF8()));
         const auto destination = juce::roundToInt(value(slotParameter(slot, "Dest").toRawUTF8()));
         if (source <= 0 || destination <= 0 || destination >= destinationCount) continue;
         depths[static_cast<size_t>(destination)] += value(slotParameter(slot, "Depth").toRawUTF8());
+        // Counted whatever its depth, so a routing sitting at zero can still be
+        // dialled up by its ring rather than only in the matrix.
+        ++slots[static_cast<size_t>(destination)];
+        only[static_cast<size_t>(destination)] = slot;
     }
 
     for (auto& module : moduleUis)
@@ -654,6 +669,11 @@ void Editor::refreshModulationRings()
             const auto destination = destinationFor(control->id);
             const auto depth = destination == 0 ? 0.0f : depths[static_cast<size_t>(destination)];
             const auto offset = destination == 0 ? 0.0f : processor.modulationOffset(destination);
+
+            control->ringSlot = destination != 0 && slots[static_cast<size_t>(destination)] == 1
+                ? only[static_cast<size_t>(destination)] : -1;
+            control->slider.ringDraggable = control->ringSlot >= 0;
+            control->slider.ringDepth = depth;
             auto& properties = control->slider.getProperties();
             if (static_cast<float>(properties.getWithDefault("modDepth", 0.0)) == depth
                 && static_cast<float>(properties.getWithDefault("modOffset", 0.0)) == offset
@@ -730,10 +750,20 @@ void Editor::assignModulation(int source, int destination)
     };
     set(slotParameter(target, "Source"), static_cast<float>(source));
     set(slotParameter(target, "Dest"), static_cast<float>(destination));
-    // A depth of zero would look like nothing happened. Half is audible and
-    // easy to walk back; the ring that makes this draggable arrives next.
+    // A depth of zero would look like nothing happened. Half is audible, and
+    // the ring it lands on is now the way to take it anywhere else.
     if (value(slotParameter(target, "Depth").toRawUTF8()) == 0.0f)
-        set(slotParameter(target, "Depth"), 0.5f);
+        setSlotDepth(target, 0.5f);
+}
+
+// Written through the parameter rather than into the slot, so a depth dragged
+// on a ring reaches the host's automation lane and the matrix field by the same
+// path a depth typed into the matrix does.
+void Editor::setSlotDepth(int slot, float depth)
+{
+    if (slot < 0 || slot >= modSlotCount) return;
+    if (auto* parameter = processor.state.getParameter(slotParameter(slot, "Depth")))
+        parameter->setValueNotifyingHost(parameter->convertTo0to1(juce::jlimit(-1.0f, 1.0f, depth)));
 }
 
 void Editor::clearSlot(int slot)

@@ -71,7 +71,7 @@ Editor::Editor(Processor& p)
     // The matrix moving into the tabbed row took a whole grid row off the
     // bottom of the panel, so the window is shorter than it was at every limit.
     setResizeLimits(1140, 980, 1900, 1500);
-    setSize(1260, 1060);
+    setSize(1350, 1020);
     applyEnableStates();
     applyTableCounts();
     applyPage();

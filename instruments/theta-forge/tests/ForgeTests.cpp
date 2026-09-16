@@ -120,7 +120,10 @@ bool allSamplesFinite(const juce::AudioBuffer<float>& buffer)
 void layoutSuite()
 {
     theta::forge::Processor processor;
-    const auto bounds = juce::Rectangle<int>(0, 0, 1260, 1060);
+    // The size the editor actually opens at, so the detailed checks below run
+    // against the panel people see. The sweep further down covers the rest of
+    // the allowed range.
+    const auto bounds = juce::Rectangle<int>(0, 0, 1350, 1020);
     const auto content = theta::forge::ui::contentBounds(bounds);
     const auto& modules = theta::forge::ui::modules();
     require(!modules.empty(), "the panel declares at least one module");

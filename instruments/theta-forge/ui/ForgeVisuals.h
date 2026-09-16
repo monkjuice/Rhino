@@ -125,14 +125,20 @@ public:
 
         // A modulated knob carries a ring outside the LED, so the two never read
         // as one. Two things are drawn on it: how far this knob's slots could
-        // move it, faint, because a reach is potential rather than a value; and
-        // where the modulation actually has it this instant, bright, with a
-        // marker at the end. That second arc fills and empties as the source
-        // plays, which is what makes an envelope or an LFO visible on the knob
-        // it is driving rather than only in the module it comes from.
+        // move it, faint, because a reach is potential rather than a value; and,
+        // while a note is sounding, where the modulation actually has it this
+        // instant, bright, with a marker at the end. That second arc fills and
+        // empties as the source plays, which is what makes an envelope or an LFO
+        // visible on the knob it is driving rather than only in the module it
+        // comes from.
+        //
+        // Live is asked of the panel rather than inferred from the offset: an
+        // LFO passes through zero twice a cycle, and a marker that blinked out
+        // each time it did would read as a fault rather than as a crossing.
         const auto& properties = slider.getProperties();
         const auto depth = static_cast<float>(properties.getWithDefault("modDepth", 0.0));
         const auto offset = static_cast<float>(properties.getWithDefault("modOffset", 0.0));
+        const auto live = static_cast<bool>(properties.getWithDefault("modLive", false));
         if ((depth != 0.0f || offset != 0.0f) && enabled)
         {
             const auto ring = radius * 0.88f;
@@ -152,7 +158,7 @@ public:
             };
 
             arc(angleAt(depth), signalViolet.withAlpha(0.32f), 3.0f);
-            if (offset != 0.0f)
+            if (live)
             {
                 const auto now = angleAt(offset);
                 arc(now, signalViolet.withAlpha(0.95f), 3.0f);

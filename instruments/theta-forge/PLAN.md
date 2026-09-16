@@ -300,17 +300,25 @@ drop had done nothing — and depth is edited in the matrix.
   the audio thread stores it once per block, and the message thread reads it.
   Nothing new crosses between the threads and nothing is computed twice — the
   voice renders with the offsets that get published.
-- With nothing sounding there is no voice to read, but a macro turned by hand
-  and a free-running LFO are still pointing somewhere, so the offsets are then
-  taken against a silent voice. A macro therefore moves the ring on its target
-  before a note is played, rather than the knob going blank between notes.
+- The animation runs only while something is sounding, exactly as ENV 1's
+  playhead does. A source reaches a destination through a voice, so with no
+  voice there is no modulated value to draw, and a patch making no sound does
+  not animate. This holds for a macro too, which is the case that looks most
+  like it should be an exception: the hand is on the macro, but until a note is
+  played the macro is moving nothing. The faint reach stays drawn throughout, so
+  a knob still shows that it is wired to something.
+- Whether the panel is live is asked of the panel rather than inferred from the
+  offset being non-zero. An LFO passes through zero twice a cycle, and a marker
+  that blinked out each time it did would read as a fault rather than as a
+  crossing.
 
 **Tests:** an idle matrix publishes nothing; a destination nothing points at
 publishes nothing, and one a slot has left goes back to publishing nothing; at
 full depth from ENV 1 the published offset is bit-for-bit the same reading ENV
 1's own display draws, so the ring and the curve cannot disagree; a unipolar
-source at full depth never publishes past full travel; and a macro publishes its
-offset with nothing sounding.
+source at full depth never publishes past full travel; and a patch with nothing
+sounding publishes nothing at all, while the same patch under a note does, so
+that check is measuring silence rather than a routing that was never live.
 
 **Tests:** a slot at zero depth, and a slot pointed at nothing, both render
 bit-identically to no slot at all; two half-depth slots sum exactly to one at

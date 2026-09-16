@@ -606,11 +606,15 @@ void Editor::mouseUp(const juce::MouseEvent& event)
     repaint();
 }
 
-// Each modulated knob is told two things: how far its slots can move it, and
-// how far they are moving it right now. Its look draws both without knowing
-// anything about the matrix.
+// Each modulated knob is told three things: how far its slots can move it, how
+// far they are moving it right now, and whether anything is sounding at all. Its
+// look draws them without knowing anything about the matrix.
 void Editor::refreshModulationRings()
 {
+    // A source only reaches a destination through a voice, so with nothing
+    // sounding there is no modulated value to show. The knobs go quiet at the
+    // same moment ENV 1's playhead does, and for the same reason.
+    const auto live = processor.envelopeStage() != 0;
     std::array<float, destinationCount> depths {};
     for (int slot = 0; slot < modSlotCount; ++slot)
     {
@@ -629,10 +633,12 @@ void Editor::refreshModulationRings()
             const auto offset = destination == 0 ? 0.0f : processor.modulationOffset(destination);
             auto& properties = control->slider.getProperties();
             if (static_cast<float>(properties.getWithDefault("modDepth", 0.0)) == depth
-                && static_cast<float>(properties.getWithDefault("modOffset", 0.0)) == offset)
+                && static_cast<float>(properties.getWithDefault("modOffset", 0.0)) == offset
+                && static_cast<bool>(properties.getWithDefault("modLive", false)) == live)
                 continue;
             properties.set("modDepth", depth);
             properties.set("modOffset", offset);
+            properties.set("modLive", live);
             control->slider.repaint();
         }
 }

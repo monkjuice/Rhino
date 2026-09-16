@@ -798,8 +798,11 @@ void modulationSuite()
     require(watched.modulationOffset(destCutoff) == 0.0f,
             "a destination a slot has left goes back to publishing nothing");
 
-    // A macro is a hand on a knob, so its reach has to show before a note is
-    // played rather than only under one.
+    // A source only reaches a destination through a voice, so with nothing
+    // sounding there is no modulated value and the knobs have nothing to
+    // animate. This holds for a macro too, which is the case that looks most
+    // like it ought to be an exception: the hand is on the macro, but until a
+    // note is played the macro is moving nothing.
     theta::forge::Processor idle;
     closedFilterOnA(idle);
     setSlot(idle, 1, static_cast<float>(theta::forge::ModSource::macro1), destCutoff, 1.0f);
@@ -809,8 +812,14 @@ void modulationSuite()
     juce::MidiBuffer noNotes;
     silence.clear();
     idle.processBlock(silence, noNotes);
+    require(idle.modulationOffset(destCutoff) == 0.0f,
+            "nothing sounding publishes no offset, so the rings stay still");
+
+    // And the same patch under a note does publish, so the check above is
+    // measuring silence rather than a routing that was never live.
+    renderNote(idle, modulated);
     requireClose(idle.modulationOffset(destCutoff), 0.5f, 0.001f,
-                 "a macro publishes its offset with nothing sounding");
+                 "the same macro publishes its offset once a note is sounding");
 
     // Depth clamps at the destination's own limits instead of running past them.
     theta::forge::Processor slammed;

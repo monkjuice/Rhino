@@ -277,6 +277,11 @@ public:
     // destination's normalised space, so a knob can draw where its value
     // actually is while a source plays it. Same reading the loudest voice is
     // rendering with, for the same reason ENV 1's display follows that voice.
+    //
+    // Zero with nothing sounding, because with no voice there is no modulated
+    // value: a source only reaches a destination through a voice. That is the
+    // same rule ENV 1's display follows, and it is what stops the panel
+    // animating a patch that is making no sound.
     float modulationOffset(int destination) const
     {
         return destination > 0 && destination < destinationCount
@@ -365,13 +370,6 @@ public:
             right += routedRight + buses.dryRight;
         }
 
-        // With nothing sounding there is no voice to take a reading from, but a
-        // macro turned by hand and a free-running LFO are still pointing
-        // somewhere. Read them against a silent voice so a knob shows where the
-        // next note will start it rather than going blank between notes.
-        if (modulated && meterStage == EnvelopeStage::idle)
-            accumulateOffsets(patch, modulation, Voice {}, lfo, meterOffsets);
-
         const auto gain = juce::jlimit(0.0f, 1.25f, patch.output) * 0.28f;
         left = softClip(left * gain);
         right = softClip(right * gain);
@@ -400,16 +398,25 @@ private:
         EnvelopeStage ampStage = EnvelopeStage::idle;
     };
 
-    // How far every live slot is pushing each destination, in that
-    // destination's own normalised space. Separate from applying it because the
-    // knobs want to draw the same reading the voice is rendering with, and
-    // because with nothing sounding there is a reading to take but no voice to
-    // apply it to. Returns false when nothing is pointed anywhere, so a caller
-    // can skip the work of applying a set of zeroes.
-    bool accumulateOffsets(const Patch& patch, const Modulation& modulation, const Voice& voice,
-                           float lfo, std::array<float, destinationCount>& offsets) const
+    // Each live slot nudges its destination in normalised space and the result
+    // is converted back to the destination's own units, so one depth control
+    // behaves the same whether it points at a percentage, a frequency with a
+    // skewed range, or a pan position.
+    //
+    // `publish` marks the one voice whose reading the knobs draw, so the panel
+    // shows what is happening to the voice a player is listening to rather than
+    // to whichever voice happened to be rendered last. The offsets are handed
+    // over as the voice renders with them, so the ring on a knob and the sound
+    // cannot come from two different readings.
+    void applyModulation(Patch& target, const Modulation& modulation, const Voice& voice,
+                         float lfo, bool publish = false)
     {
-        offsets = {};
+        // Offsets are accumulated per destination first and applied once.
+        // Applying each slot in turn would round-trip through the destination's
+        // range between slots, so two half-depth slots would not add up to one
+        // at full depth, and an early slot hitting a limit would swallow a
+        // later one pulling the other way.
+        std::array<float, destinationCount> offsets {};
         auto touched = false;
 
         for (const auto& slot : modulation.slots)
@@ -431,7 +438,7 @@ private:
                 {
                     const auto macro = macroIndexOf(source);
                     if (macro < 0) continue;
-                    amount = patch.macros[static_cast<size_t>(macro)];
+                    amount = target.macros[static_cast<size_t>(macro)];
                     break;
                 }
             }
@@ -439,27 +446,6 @@ private:
             offsets[static_cast<size_t>(destination)] += slot.depth * amount;
             touched = true;
         }
-        return touched;
-    }
-
-    // Each live slot nudges its destination in normalised space and the result
-    // is converted back to the destination's own units, so one depth control
-    // behaves the same whether it points at a percentage, a frequency with a
-    // skewed range, or a pan position.
-    //
-    // `publish` marks the one voice whose reading the knobs draw, so the panel
-    // shows what is happening to the voice a player is listening to rather than
-    // to whichever voice happened to be rendered last.
-    void applyModulation(Patch& target, const Modulation& modulation, const Voice& voice,
-                         float lfo, bool publish = false)
-    {
-        // Offsets are accumulated per destination first and applied once.
-        // Applying each slot in turn would round-trip through the destination's
-        // range between slots, so two half-depth slots would not add up to one
-        // at full depth, and an early slot hitting a limit would swallow a
-        // later one pulling the other way.
-        std::array<float, destinationCount> offsets {};
-        const auto touched = accumulateOffsets(target, modulation, voice, lfo, offsets);
         if (publish) meterOffsets = offsets;
         if (!touched) return;
 

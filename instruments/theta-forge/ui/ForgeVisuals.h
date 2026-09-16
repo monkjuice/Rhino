@@ -367,9 +367,9 @@ inline void drawCrtScreen(juce::Graphics& g, juce::Rectangle<int> well,
     const auto tube = crtPath(face);
     const auto cx = face.getCentreX(), cy = face.getCentreY();
 
-    // The cabinet the tube is set into.
-    g.setColour(juce::Colour(0xff02030a));
-    g.fillRoundedRectangle(well.toFloat(), 4.0f);
+    // Nothing is painted around the tube. The corners the bowed glass leaves
+    // behind would otherwise be a darker patch sitting on the panel, so the
+    // tube is left to float on whatever is already there and they disappear.
 
     {
         juce::Graphics::ScopedSaveState clip(g);

@@ -27,14 +27,33 @@ void StepGrid::toggleSelection(int index)
     repaint(bounds.getSmallestIntegerContainer().expanded(3));
 }
 
+// Every note in the clip, not every note on screen. The pitch window shows
+// sixteen rows by default and a pattern is routinely taller than that, so
+// selecting what happens to be visible would quietly select a fragment.
 bool StepGrid::selectAllNotes()
 {
+    const auto allNotes = session.editorNotes();
     std::vector<juce::ValueTree> all;
-    all.reserve(visibleNotes.size());
-    for (const auto& note : visibleNotes) all.push_back(note.state);
+    all.reserve(allNotes.size());
+    for (const auto& note : allNotes) all.push_back(note.state);
     setSelectedStates(std::move(all));
     repaint();
     return !selectedNoteStates.empty();
+}
+
+// Session::moveNotes clamps the shift so no note leaves 0-127 and refuses a
+// lane that is already taken, so both edges are its business rather than ours.
+bool StepGrid::transposeSelection(int semitones)
+{
+    const auto states = selectedStates();
+    if (states.empty() || semitones == 0)
+        return false;
+    session.beginNoteGesture(std::abs(semitones) == 12 ? "Transpose octave" : "Transpose notes");
+    juce::ignoreUnused(session.moveNotes(states, 0.0, semitones));
+    session.endNoteGesture();
+    // The key is consumed either way: a transpose that lands on an occupied
+    // lane is a refusal, not an unhandled keystroke to pass further up.
+    return true;
 }
 
 void StepGrid::clearSelection()

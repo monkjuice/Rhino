@@ -92,6 +92,10 @@ int runArrangementTest()
        #include "scenarios/TempoChange.inc"
         scenario("main track");
        #include "scenarios/MasterTrack.inc"
+        // Last: it clears the pattern to control the whole clip, so nothing
+        // downstream should be relying on the notes it replaces.
+        scenario("note selection");
+       #include "scenarios/NoteSelection.inc"
         return 0;
     }
     catch (const std::exception& error)

@@ -73,15 +73,23 @@ std::vector<juce::ValueTree> StepGrid::selectedStates() const
     std::vector<juce::ValueTree> result;
     std::bitset<Session::steps * maxPitchRows> representedCells;
     for (const auto& state : selectedNoteStates)
-        if (const auto* note = noteForState(state))
+    {
+        const auto* note = noteForState(state);
+        if (note == nullptr)
         {
-            const auto index = note->row * Session::steps + static_cast<int>(std::floor(note->start));
-            if (index >= 0 && selectedNotes.test(static_cast<size_t>(index)))
-            {
-                result.push_back(state);
-                representedCells.set(static_cast<size_t>(index));
-            }
+            // Selected, but scrolled out of the pitch window. The cell bitset is
+            // addressed by visible row and so has nowhere to record it; the
+            // explicit list is the only account of it, and it is the true one.
+            result.push_back(state);
+            continue;
         }
+        const auto index = note->row * Session::steps + static_cast<int>(std::floor(note->start));
+        if (index >= 0 && selectedNotes.test(static_cast<size_t>(index)))
+        {
+            result.push_back(state);
+            representedCells.set(static_cast<size_t>(index));
+        }
+    }
 
     // Keep cell-addressed selection commands meaningful. If a selected cell
     // has no explicit instance selection, it represents every retrigger that
@@ -291,6 +299,12 @@ bool StepGrid::keyPressed(const juce::KeyPress& key)
         session.endNoteGesture();
         return true;
     }
+    if (!command
+        && (key.getKeyCode() == juce::KeyPress::upKey || key.getKeyCode() == juce::KeyPress::downKey))
+    {
+        const auto direction = key.getKeyCode() == juce::KeyPress::upKey ? 1 : -1;
+        return transposeSelection(direction * (key.getModifiers().isShiftDown() ? 12 : 1));
+    }
     if (key.getKeyCode() == 'F')
         return fillSelectionToClipEnd();
     if (key.getKeyCode() == juce::KeyPress::deleteKey || key.getKeyCode() == juce::KeyPress::backspaceKey)
@@ -371,7 +385,8 @@ void StepGrid::rebuildVisibleNotes()
     const auto nextDrumLabels = session.isPatternDrums();
     const auto steps = session.editorStepCount();
     std::vector<VisibleNote> nextVisible;
-    for (const auto& note : session.editorNotes())
+    const auto allNotes = session.editorNotes();
+    for (const auto& note : allNotes)
     {
         const auto row = lowestVisiblePitch + rows - 1 - note.pitch;
         const auto step = static_cast<int>(std::floor(note.startSteps));
@@ -397,7 +412,14 @@ void StepGrid::rebuildVisibleNotes()
     noteLengths = nextLengths;
     noteStartOffsets = nextStartOffsets;
     visibleNotes = std::move(nextVisible);
-    std::erase_if(selectedNoteStates, [this](const auto& state) { return noteForState(state) == nullptr; });
+    // Drop notes that have left the clip, never notes that have merely left the
+    // pitch window. Selection outlives scrolling, so a pattern taller than the
+    // window can still be selected and transposed whole.
+    std::erase_if(selectedNoteStates, [&allNotes](const auto& state)
+    {
+        return std::none_of(allNotes.begin(), allNotes.end(),
+                            [&state](const auto& note) { return note.state == state; });
+    });
     setSelectedStates(selectedNoteStates);
     if (stepCountChanged || rows != previousRows || lengthsChanged || offsetsChanged
         || showingDrumLabels != nextDrumLabels)

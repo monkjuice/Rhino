@@ -76,6 +76,7 @@ private:
     void apply(int index);
     void toggleSelection(int index);
     bool selectAllNotes();
+    bool transposeSelection(int semitones);
     bool canPasteAt(int step) const;
     void clearSelection();
     bool copySelection();

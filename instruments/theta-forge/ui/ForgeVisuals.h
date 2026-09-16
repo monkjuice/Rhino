@@ -857,23 +857,29 @@ inline void drawWaveform(juce::Graphics& g, juce::Rectangle<int> area, const the
 // Envelope stages, matching Core's ordering.
 enum class Stage { idle, attack, decay, sustain, release };
 
-// How long each stage actually lasts, which is not always what its knob says.
-// Core's decay ends the instant it begins when sustain is full — there is
-// nothing to fall to — and its release ends at once when sustain is nothing.
-// The picture has to agree, or a patch holding a flat note draws a decay and a
-// release it will never play.
+// How long each stage lasts: what its knob says, at every sustain level.
+//
+// Sustain sets the level a stage arrives at, never how long one runs for, so it
+// is deliberately not consulted here. An earlier version did consult it, on the
+// grounds that Core leaves the decay stage the instant it enters it when there
+// is nothing to fall to, and leaves release at once when sustain is nothing —
+// and it collapsed those segments to no width at all. That was the wrong thing
+// to model. This draws amplitude against time, not which stage the state
+// machine is in, and the amplitude is perfectly well defined in both cases: full
+// for the length of the decay when sustain is full, and nothing for the length
+// of the release when sustain is nothing. Drawing them flat is truthful, keeps
+// the DECAY and RELEASE knobs live at the ends of the sustain range instead of
+// leaving them apparently dead, and closes a jump the engine does not have —
+// decay took its whole time at 99.9% sustain and none at all at 100%.
 struct EnvelopeTimes
 {
     float attack = 0.0f, decay = 0.0f, release = 0.0f;
     float total() const { return attack + decay + release; }
 };
 
-inline EnvelopeTimes envelopeTimes(float attack, float decay, float sustain, float release)
+inline EnvelopeTimes envelopeTimes(float attack, float decay, float release)
 {
-    const auto held = juce::jlimit(0.0f, 1.0f, sustain);
-    return {juce::jmax(0.0f, attack),
-            held < 1.0f ? juce::jmax(0.0f, decay) : 0.0f,
-            held > 0.0f ? juce::jmax(0.0f, release) : 0.0f};
+    return {juce::jmax(0.0f, attack), juce::jmax(0.0f, decay), juce::jmax(0.0f, release)};
 }
 
 // The time the display's width spans, and the spacing of the marks across it.
@@ -934,7 +940,7 @@ struct EnvelopeShape
 inline EnvelopeShape envelopeShape(juce::Rectangle<float> box, float attack, float decay,
                                    float sustain, float release, int zoom = envelopeDefaultZoom)
 {
-    const auto times = envelopeTimes(attack, decay, sustain, release);
+    const auto times = envelopeTimes(attack, decay, release);
     EnvelopeShape shape;
     shape.box = box;
     shape.axis = envelopeAxis(zoom);

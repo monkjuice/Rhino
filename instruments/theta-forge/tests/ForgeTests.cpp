@@ -526,12 +526,12 @@ void envelopeDisplaySuite()
         const auto shape = ui::envelopeShape(box, 0.030f, 0.155f, 1.0f, 0.021f);
         requireClose(secondsAt(shape, shape.attackX), 0.030f, 0.0005f,
                      "the peak lands at the attack time");
-        requireClose(secondsAt(shape, shape.endX), 0.051f, 0.0005f,
-                     "a 51 ms envelope ends 51 ms along the axis");
+        requireClose(secondsAt(shape, shape.decayX), 0.185f, 0.0005f,
+                     "the sustain corner lands at the attack plus the decay");
+        requireClose(secondsAt(shape, shape.endX), 0.206f, 0.0005f,
+                     "a 206 ms envelope ends 206 ms along the axis");
         require(shape.endX < box.getX() + box.getWidth() * 0.1f,
                 "a short envelope is a sliver against the left edge, not a shape filling the well");
-        requireClose(shape.decayX, shape.attackX, 0.001f,
-                     "decay takes no time at all when sustain is wide open");
         requireClose(shape.sustainY, shape.peakY, 0.001f,
                      "full sustain sits at the top of the well");
     }
@@ -543,8 +543,8 @@ void envelopeDisplaySuite()
         const auto long_ = ui::envelopeShape(box, 0.300f, 1.550f, 1.0f, 0.210f);
         require(long_.endX > brief.endX * 9.0f,
                 "an envelope ten times longer is drawn about ten times wider");
-        requireClose(secondsAt(long_, long_.endX), 0.510f, 0.002f,
-                     "a 510 ms envelope ends 510 ms along the axis");
+        requireClose(secondsAt(long_, long_.endX), 2.060f, 0.002f,
+                     "a 2.06 s envelope ends 2.06 s along the axis");
     }
 
     {
@@ -561,13 +561,38 @@ void envelopeDisplaySuite()
     }
 
     {
-        // Nothing to release from, so release draws nothing — which is what the
-        // engine does.
-        const auto shape = ui::envelopeShape(box, 0.05f, 0.10f, 0.0f, 2.0f);
-        requireClose(shape.endX, shape.decayX, 0.001f,
-                     "release takes no time at all when sustain is nothing");
-        requireClose(shape.sustainY, shape.floorY, 0.001f,
+        // The two ends of the sustain range, which used to collapse a segment to
+        // nothing and leave the knob behind it apparently dead. Sustain sets a
+        // level, so it must change the height of the sustain corner and nothing
+        // whatever about where the corners sit along the axis.
+        const auto full = ui::envelopeShape(box, 0.2f, 0.4f, 1.0f, 0.6f);
+        const auto none = ui::envelopeShape(box, 0.2f, 0.4f, 0.0f, 0.6f);
+        const auto half = ui::envelopeShape(box, 0.2f, 0.4f, 0.5f, 0.6f);
+
+        for (const auto& shape : {full, none, half})
+        {
+            requireClose(secondsAt(shape, shape.attackX), 0.2f, 0.001f,
+                         "the peak is at the attack time whatever sustain is");
+            requireClose(secondsAt(shape, shape.decayX), 0.6f, 0.001f,
+                         "the decay is drawn its full width whatever sustain is");
+            requireClose(secondsAt(shape, shape.endX), 1.2f, 0.001f,
+                         "the release is drawn its full width whatever sustain is");
+        }
+        requireClose(full.sustainY, full.peakY, 0.001f,
+                     "full sustain sits at the top of the well");
+        requireClose(none.sustainY, none.floorY, 0.001f,
                      "no sustain sits on the floor of the well");
+        requireClose(half.sustainY, (half.floorY + half.peakY) * 0.5f, 0.01f,
+                     "half sustain sits halfway up the well");
+
+        // And the height has to arrive there continuously: turning sustain up to
+        // the stop used to snap the decay from its whole width to none.
+        const auto nearlyFull = ui::envelopeShape(box, 0.2f, 0.4f, 0.999f, 0.6f);
+        const auto nearlyNone = ui::envelopeShape(box, 0.2f, 0.4f, 0.001f, 0.6f);
+        requireClose(nearlyFull.decayX, full.decayX, 0.001f,
+                     "the last thousandth of sustain does not move the decay corner");
+        requireClose(nearlyNone.endX, none.endX, 0.001f,
+                     "the first thousandth of sustain does not move the end of the release");
     }
 
     {

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ForgeLayout.h"
+#include <BinaryData.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <cmath>
 
@@ -484,6 +485,29 @@ inline void drawModuleShell(juce::Graphics& g, juce::Rectangle<int> area, const 
     }
 }
 
+// The FORGE wordmark, drawn at its own aspect ratio against the left edge of
+// the area given. ImageCache keeps the decoded PNG, so a repaint is a blit.
+inline void drawWordmark(juce::Graphics& g, juce::Rectangle<float> area)
+{
+    const auto logo = juce::ImageCache::getFromMemory(BinaryData::forge_logo_png,
+                                                      BinaryData::forge_logo_pngSize);
+    if (logo.isNull())
+    {
+        // Binary data missing is a build fault, not a runtime state, but the
+        // panel should still name itself rather than show a gap.
+        g.setColour(text);
+        g.setFont(juce::FontOptions(30.0f, juce::Font::bold));
+        g.drawText("FORGE", area.toNearestInt(), juce::Justification::centredLeft);
+        return;
+    }
+
+    const auto width = area.getHeight() * (float) logo.getWidth() / (float) logo.getHeight();
+    juce::Graphics::ScopedSaveState state(g);
+    g.setImageResamplingQuality(juce::Graphics::highResamplingQuality);
+    g.drawImage(logo, area.withWidth(juce::jmin(width, area.getWidth())),
+                juce::RectanglePlacement::stretchToFit);
+}
+
 inline void drawBackdrop(juce::Graphics& g, juce::Rectangle<int> componentBounds)
 {
     const auto bounds = componentBounds.toFloat();
@@ -499,9 +523,7 @@ inline void drawBackdrop(juce::Graphics& g, juce::Rectangle<int> componentBounds
     g.setColour(signalViolet.withAlpha(0.7f));
     g.fillRect(frame.getRight() - 2.0f, frame.getY(), 2.0f, frame.getHeight());
 
-    g.setColour(text);
-    g.setFont(juce::FontOptions(30.0f, juce::Font::bold));
-    g.drawText("FORGE", 30, 20, 220, 36, juce::Justification::centredLeft);
+    drawWordmark(g, {30.0f, 20.0f, 220.0f, 36.0f});
     g.setColour(signalViolet);
     g.setFont(juce::FontOptions(10.0f));
     g.drawText("SYNTHETIC SIGNAL FORGE // UNIT 01", 32, 54, 280, 14, juce::Justification::centredLeft);

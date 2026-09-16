@@ -22,6 +22,8 @@ juce_add_plugin(ThetaForge
     FORMATS VST3 Standalone
     PRODUCT_NAME "Theta Forge"
     IS_SYNTH TRUE
+    ICON_BIG ui/assets/forge_app_icon_512.png
+    ICON_SMALL ui/assets/forge_app_icon_256.png
     NEEDS_MIDI_INPUT TRUE
     NEEDS_MIDI_OUTPUT FALSE
     # The pinned JUCE/CMake Visual Studio generator's manifest-helper project
@@ -30,6 +32,11 @@ juce_add_plugin(ThetaForge
     # that upstream generator issue is resolved.
     VST3_AUTO_MANIFEST FALSE
     EDITOR_WANTS_KEYBOARD_FOCUS FALSE)
+
+# The panel's wordmark. forge_logo.png is stored at the size the panel draws it
+# so paint() blits rather than rescaling a master on every repaint; the
+# full-resolution originals sit beside it for packaging and store art.
+juce_add_binary_data(ThetaForgeAssets SOURCES ui/assets/forge_logo.png)
 
 target_sources(ThetaForge PRIVATE
     core/ForgeCore.h
@@ -40,6 +47,7 @@ target_sources(ThetaForge PRIVATE
     src/ForgeEditor.cpp
     src/ForgeEditor.h)
 target_link_libraries(ThetaForge PRIVATE
+    ThetaForgeAssets
     juce::juce_audio_utils
     juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags)
@@ -65,6 +73,7 @@ if (BUILD_TESTING)
         src/ForgeEditor.cpp
         src/ForgeEditor.h)
     target_link_libraries(ThetaForgeTests PRIVATE
+        ThetaForgeAssets
         juce::juce_audio_utils
         juce::juce_recommended_config_flags
         juce::juce_recommended_warning_flags)

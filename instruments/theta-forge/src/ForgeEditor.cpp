@@ -291,8 +291,13 @@ void Editor::paint(juce::Graphics& g)
 
         const auto display = ui::displayBounds(area, descriptor);
         if (display.isEmpty()) continue;
-        ui::drawDisplayWell(g, display);
         const auto accent = ui::accentFor(descriptor);
+        // An oscillator shows its wave on a picture tube; the other displays
+        // stay flat wells, which is what keeps the tubes reading as screens.
+        if (descriptor.display == ui::Display::oscillator)
+            ui::drawCrtScreen(g, display, accent, alpha);
+        else
+            ui::drawDisplayWell(g, display);
         switch (descriptor.display)
         {
             case ui::Display::oscillator:

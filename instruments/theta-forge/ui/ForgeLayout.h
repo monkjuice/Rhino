@@ -96,7 +96,7 @@ inline const std::vector<Module>& modules()
                 {"oscAFine", "FINE", Style::stepper}}},
           {74, {{"oscAPosition", "POSITION"}, {"oscAUnison", "UNISON"}, {"oscADetune", "DETUNE"},
                 {"oscABlend", "BLEND"}, {"oscAPan", "PAN"}, {"oscALevel", "LEVEL"}}}}},
-        {"oscB", "OSC B", "MORPH", "oscBEnable", true, Display::oscillator, 0, 6, 6, false,
+        {"oscB", "OSC B", "MORPH", "oscBEnable", false, Display::oscillator, 0, 6, 6, false,
          {{26, {{"oscBOctave", "OCT", Style::stepper}, {"oscBSemitone", "SEMI", Style::stepper},
                 {"oscBFine", "FINE", Style::stepper}}},
           {74, {{"oscBPosition", "POSITION"}, {"oscBUnison", "UNISON"}, {"oscBDetune", "DETUNE"},

@@ -319,6 +319,120 @@ inline void strokeGlow(juce::Graphics& g, const juce::Path& path, juce::Colour c
     g.strokePath(path, juce::PathStrokeType(1.8f));
 }
 
+// --- The picture tube -------------------------------------------------------
+//
+// An oscillator draws its wave on a small CRT: a black surround, a bowed glass
+// face lit from the middle, scanlines, and a bezel that glows where the tube's
+// edge catches its own light.
+
+inline constexpr float crtBezel = 6.0f;
+
+// The glass face, inset from the well so the bezel glow has somewhere to sit.
+inline juce::Rectangle<float> crtFace(juce::Rectangle<int> well)
+{
+    return well.toFloat().reduced(crtBezel);
+}
+
+// The silhouette of a picture tube: corners pulled well in, edges bowed gently
+// outward. It is a path rather than a rounded rectangle because the bow is what
+// makes it read as glass instead of a box.
+inline juce::Path crtPath(juce::Rectangle<float> face)
+{
+    const auto corner = juce::jmin(face.getHeight() * 0.34f, face.getWidth() * 0.06f, 18.0f);
+    // A quadratic's control point pulls the curve half way toward it, so the
+    // glass bulges by half of this.
+    const auto bow = 4.0f;
+    const auto l = face.getX(), t = face.getY(), r = face.getRight(), b = face.getBottom();
+    const auto cx = face.getCentreX(), cy = face.getCentreY();
+
+    juce::Path tube;
+    tube.startNewSubPath(l + corner, t);
+    tube.quadraticTo(cx, t - bow, r - corner, t);
+    tube.quadraticTo(r, t, r, t + corner);
+    tube.quadraticTo(r + bow, cy, r, b - corner);
+    tube.quadraticTo(r, b, r - corner, b);
+    tube.quadraticTo(cx, b + bow, l + corner, b);
+    tube.quadraticTo(l, b, l, b - corner);
+    tube.quadraticTo(l - bow, cy, l, t + corner);
+    tube.quadraticTo(l, t, l + corner, t);
+    tube.closeSubPath();
+    return tube;
+}
+
+inline void drawCrtScreen(juce::Graphics& g, juce::Rectangle<int> well,
+                          juce::Colour phosphor, float alpha)
+{
+    const auto face = crtFace(well);
+    if (face.getWidth() <= 1.0f || face.getHeight() <= 1.0f) return;
+    const auto tube = crtPath(face);
+    const auto cx = face.getCentreX(), cy = face.getCentreY();
+
+    // The cabinet the tube is set into.
+    g.setColour(juce::Colour(0xff02030a));
+    g.fillRoundedRectangle(well.toFloat(), 4.0f);
+
+    {
+        juce::Graphics::ScopedSaveState clip(g);
+        g.reduceClipRegion(tube);
+
+        g.setColour(juce::Colour(0xff01030c));
+        g.fillPath(tube);
+
+        // The tube's own light, brightest at the middle of the face and falling
+        // away toward the corners the way a phosphor screen does.
+        const auto radius = juce::jmax(face.getWidth(), face.getHeight()) * 0.60f;
+        juce::ColourGradient bloom(phosphor.withAlpha(0.34f * alpha), cx, cy,
+                                   phosphor.withAlpha(0.0f), cx + radius, cy, true);
+        bloom.addColour(0.45, phosphor.withAlpha(0.14f * alpha));
+        g.setGradientFill(bloom);
+        g.fillPath(tube);
+
+        // The face is much wider than it is tall, so the bloom alone leaves the
+        // top and bottom lit. Darken them back down for a vignette on all sides.
+        const auto shade = juce::Colour(0xdd000208);
+        juce::ColourGradient top(shade, cx, face.getY(), juce::Colours::transparentBlack, cx, cy, false);
+        g.setGradientFill(top);
+        g.fillPath(tube);
+        juce::ColourGradient bottom(shade, cx, face.getBottom(), juce::Colours::transparentBlack, cx, cy, false);
+        g.setGradientFill(bottom);
+        g.fillPath(tube);
+
+        // Scanlines. Three pixels apart is close enough to read as a raster
+        // without turning into a moire against the trace.
+        g.setColour(juce::Colour(0xff000000).withAlpha(0.22f));
+        for (auto y = face.getY(); y < face.getBottom(); y += 3.0f)
+            g.fillRect(face.getX(), y, face.getWidth(), 1.0f);
+
+        // The zero axis, as faint as a graticule etched on the glass.
+        g.setColour(phosphor.withAlpha(0.16f * alpha));
+        g.fillRect(face.getX() + 4.0f, cy, face.getWidth() - 8.0f, 1.0f);
+    }
+
+    // The bezel: widest and faintest first, so the edge blooms outward.
+    g.setColour(phosphor.withAlpha(0.10f * alpha));
+    g.strokePath(tube, juce::PathStrokeType(7.0f));
+    g.setColour(phosphor.withAlpha(0.22f * alpha));
+    g.strokePath(tube, juce::PathStrokeType(3.5f));
+    g.setColour(phosphor.withAlpha(0.80f * alpha));
+    g.strokePath(tube, juce::PathStrokeType(1.4f));
+}
+
+// A phosphor trace: a wide halo, a soft body, and a core hot enough to have
+// burnt toward white, which is what makes a CRT line look lit rather than drawn.
+inline void strokePhosphor(juce::Graphics& g, const juce::Path& path,
+                           juce::Colour phosphor, float alpha)
+{
+    g.setColour(phosphor.withAlpha(0.16f * alpha));
+    g.strokePath(path, juce::PathStrokeType(9.0f, juce::PathStrokeType::curved,
+                                            juce::PathStrokeType::rounded));
+    g.setColour(phosphor.withAlpha(0.55f * alpha));
+    g.strokePath(path, juce::PathStrokeType(3.4f, juce::PathStrokeType::curved,
+                                            juce::PathStrokeType::rounded));
+    g.setColour(phosphor.interpolatedWith(juce::Colours::white, 0.7f).withAlpha(alpha));
+    g.strokePath(path, juce::PathStrokeType(1.4f, juce::PathStrokeType::curved,
+                                            juce::PathStrokeType::rounded));
+}
+
 inline void drawDisplayWell(juce::Graphics& g, juce::Rectangle<int> area)
 {
     const auto box = area.toFloat();
@@ -333,7 +447,8 @@ inline void drawDisplayWell(juce::Graphics& g, juce::Rectangle<int> area)
 inline void drawWaveform(juce::Graphics& g, juce::Rectangle<int> area, float position,
                          juce::Colour colour, float alpha)
 {
-    const auto box = area.toFloat().reduced(6.0f, 8.0f);
+    const auto face = crtFace(area);
+    const auto box = face.reduced(6.0f, 5.0f);
     juce::Path path;
     constexpr int points = 180;
     for (int i = 0; i <= points; ++i)
@@ -343,7 +458,11 @@ inline void drawWaveform(juce::Graphics& g, juce::Rectangle<int> area, float pos
         const auto y = box.getCentreY() - waveform(phase, position) * box.getHeight() * 0.44f;
         if (i == 0) path.startNewSubPath(x, y); else path.lineTo(x, y);
     }
-    strokeGlow(g, path, colour, alpha);
+    // Clipped to the glass, so the halo stops at the bezel rather than spilling
+    // over the tube's edge.
+    juce::Graphics::ScopedSaveState clip(g);
+    g.reduceClipRegion(crtPath(face));
+    strokePhosphor(g, path, colour, alpha);
 }
 
 // Envelope stages, matching Core's ordering.

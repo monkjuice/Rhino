@@ -606,8 +606,9 @@ void Editor::mouseUp(const juce::MouseEvent& event)
     repaint();
 }
 
-// Each modulated knob is told how far its slots can move it, so its look can
-// draw the ring without knowing anything about the matrix.
+// Each modulated knob is told two things: how far its slots can move it, and
+// how far they are moving it right now. Its look draws both without knowing
+// anything about the matrix.
 void Editor::refreshModulationRings()
 {
     std::array<float, destinationCount> depths {};
@@ -625,9 +626,13 @@ void Editor::refreshModulationRings()
             if (control->style != ui::Style::knob) continue;
             const auto destination = destinationFor(control->id);
             const auto depth = destination == 0 ? 0.0f : depths[static_cast<size_t>(destination)];
-            if (static_cast<float>(control->slider.getProperties().getWithDefault("modDepth", 0.0)) == depth)
+            const auto offset = destination == 0 ? 0.0f : processor.modulationOffset(destination);
+            auto& properties = control->slider.getProperties();
+            if (static_cast<float>(properties.getWithDefault("modDepth", 0.0)) == depth
+                && static_cast<float>(properties.getWithDefault("modOffset", 0.0)) == offset)
                 continue;
-            control->slider.getProperties().set("modDepth", depth);
+            properties.set("modDepth", depth);
+            properties.set("modOffset", offset);
             control->slider.repaint();
         }
 }

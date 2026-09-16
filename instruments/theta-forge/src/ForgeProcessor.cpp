@@ -234,6 +234,9 @@ void Processor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
     // 24 Hz, so a per-sample store would be pure contention for no extra detail.
     meterLevel.store(core.envelopeLevel(), std::memory_order_relaxed);
     meterStage.store(core.envelopeStage(), std::memory_order_relaxed);
+    for (int destination = 1; destination < destinationCount; ++destination)
+        meterOffsets[static_cast<size_t>(destination)]
+            .store(core.modulationOffset(destination), std::memory_order_relaxed);
 }
 
 Patch Processor::patch() const

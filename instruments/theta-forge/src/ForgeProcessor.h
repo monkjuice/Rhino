@@ -39,11 +39,22 @@ public:
     float envelopeLevel() const { return meterLevel.load(std::memory_order_relaxed); }
     int envelopeStage() const { return meterStage.load(std::memory_order_relaxed); }
 
+    // How far the matrix is moving a destination right now, in that
+    // destination's normalised space, so the knob pointed at it can draw where
+    // its value actually is while a source plays it. Published the same way.
+    float modulationOffset(int destination) const
+    {
+        return destination > 0 && destination < destinationCount
+            ? meterOffsets[static_cast<size_t>(destination)].load(std::memory_order_relaxed)
+            : 0.0f;
+    }
+
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout parameterLayout();
     Core core;
     std::atomic<float> meterLevel {0.0f};
     std::atomic<int> meterStage {0};
+    std::array<std::atomic<float>, destinationCount> meterOffsets {};
     Patch patch() const;
     Modulation modulation() const;
     juce::ValueTree migrated(const juce::ValueTree& savedState) const;

@@ -259,7 +259,8 @@ Delivered in two parts. **M6a, the engine and the panel, is done.**
 - Right-clicking any knob the matrix can reach lists the sources, and offers to
   take away anything already pointed there.
 - A modulated knob carries a ring showing how far its slots can move it, drawn
-  outside the value arc so the two never read as one.
+  outside the value arc so the two never read as one. What that ring shows grew
+  in M6e, below.
 - An eighty-eight key keyboard across the bottom, playing through the same path
   the host's own notes take.
 
@@ -282,6 +283,34 @@ drop had done nothing — and depth is edited in the matrix.
   size of a depth read across the row without the number being looked at.
 - A slot's number lights once the slot has both ends, which makes the routings
   in use countable at a glance.
+
+**M6e — modulation shown on the knob it is driving** — done
+
+- A modulated knob now draws two things on its ring: the reach, faint, because
+  how far a slot *could* move the knob is potential rather than a value; and
+  where the modulation actually has it this instant, bright, with a marker at
+  the end. The second arc fills and empties as the source plays, so an envelope
+  or an LFO is visible on the knob it is driving and not only in the module it
+  comes from.
+- The pointer stays where the parameter is set. Moving it would make the knob
+  argue with its own readout and with the host's automation lane; the ring is
+  what moves, exactly as Serum does it.
+- The engine publishes the offset per destination the same way it already
+  publishes ENV 1's level: the reading is taken from the loudest sounding voice,
+  the audio thread stores it once per block, and the message thread reads it.
+  Nothing new crosses between the threads and nothing is computed twice — the
+  voice renders with the offsets that get published.
+- With nothing sounding there is no voice to read, but a macro turned by hand
+  and a free-running LFO are still pointing somewhere, so the offsets are then
+  taken against a silent voice. A macro therefore moves the ring on its target
+  before a note is played, rather than the knob going blank between notes.
+
+**Tests:** an idle matrix publishes nothing; a destination nothing points at
+publishes nothing, and one a slot has left goes back to publishing nothing; at
+full depth from ENV 1 the published offset is bit-for-bit the same reading ENV
+1's own display draws, so the ring and the curve cannot disagree; a unipolar
+source at full depth never publishes past full travel; and a macro publishes its
+offset with nothing sounding.
 
 **Tests:** a slot at zero depth, and a slot pointed at nothing, both render
 bit-identically to no slot at all; two half-depth slots sum exactly to one at
@@ -365,5 +394,6 @@ way to look at a change.
 | M6b Macros, drag to knob, keyboard | **done** — ready to test by ear |
 | M6c Draggable depth rings | not started |
 | M6d Matrix tab | **done** — ready to test by eye |
+| M6e Modulation shown on the knob | **done** — ready to test by eye |
 | M7 LFO 1 | not started |
 | M8 Polish | not started |

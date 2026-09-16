@@ -772,6 +772,46 @@ void modulationSuite()
     renderNote(swept, modulated);
     require(identical(plain, modulated), "switching a slot's source off restores the plain render");
 
+    // What the knobs draw is published from the same reading the voice renders
+    // with, so a ring that moves is proof the engine moved the value, not a
+    // second guess at it from the UI.
+    theta::forge::Processor watched;
+    closedFilterOnA(watched);
+    require(watched.modulationOffset(destCutoff) == 0.0f,
+            "an idle matrix publishes no offset for a knob to draw");
+
+    setSlot(watched, 1, srcEnv1, destCutoff, 1.0f);
+    renderNote(watched, modulated);
+    const auto published = watched.modulationOffset(destCutoff);
+    require(published > 0.0f, "an envelope pointed at the cutoff publishes an offset to draw");
+    require(published <= 1.0f, "a unipolar source at full depth cannot publish past full travel");
+    // At full depth from ENV 1 the offset is the envelope itself, so the ring on
+    // the cutoff knob and the curve on ENV 1's display cannot disagree.
+    require(published == watched.envelopeLevel(),
+            "the offset drawn on a knob is the same reading ENV 1's own display draws");
+    require(watched.modulationOffset(destSub) == 0.0f,
+            "a destination nothing points at publishes nothing");
+
+    // Pointing the same slot somewhere else has to release the knob it left.
+    setSlot(watched, 1, srcEnv1, destSub, 1.0f);
+    renderNote(watched, modulated);
+    require(watched.modulationOffset(destCutoff) == 0.0f,
+            "a destination a slot has left goes back to publishing nothing");
+
+    // A macro is a hand on a knob, so its reach has to show before a note is
+    // played rather than only under one.
+    theta::forge::Processor idle;
+    closedFilterOnA(idle);
+    setSlot(idle, 1, static_cast<float>(theta::forge::ModSource::macro1), destCutoff, 1.0f);
+    setValue(idle, "macro1", 0.5f);
+    idle.prepareToPlay(48000.0, samples);
+    juce::AudioBuffer<float> silence(2, samples);
+    juce::MidiBuffer noNotes;
+    silence.clear();
+    idle.processBlock(silence, noNotes);
+    requireClose(idle.modulationOffset(destCutoff), 0.5f, 0.001f,
+                 "a macro publishes its offset with nothing sounding");
+
     // Depth clamps at the destination's own limits instead of running past them.
     theta::forge::Processor slammed;
     closedFilterOnA(slammed);

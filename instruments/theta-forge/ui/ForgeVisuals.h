@@ -123,21 +123,45 @@ public:
         g.setColour(accent.withAlpha(enabled ? 1.0f : 0.3f));
         g.fillEllipse(juce::Rectangle<float>(4.0f, 4.0f).withCentre(led));
 
-        // A modulated knob carries a ring showing how far its source can move
-        // it. It stays an arc, because a reach is a distance rather than a
-        // position, and sits outside the LED so the two never read as one.
-        const auto depth = static_cast<float>(slider.getProperties().getWithDefault("modDepth", 0.0));
-        if (depth != 0.0f && enabled)
+        // A modulated knob carries a ring outside the LED, so the two never read
+        // as one. Two things are drawn on it: how far this knob's slots could
+        // move it, faint, because a reach is potential rather than a value; and
+        // where the modulation actually has it this instant, bright, with a
+        // marker at the end. That second arc fills and empties as the source
+        // plays, which is what makes an envelope or an LFO visible on the knob
+        // it is driving rather than only in the module it comes from.
+        const auto& properties = slider.getProperties();
+        const auto depth = static_cast<float>(properties.getWithDefault("modDepth", 0.0));
+        const auto offset = static_cast<float>(properties.getWithDefault("modOffset", 0.0));
+        if ((depth != 0.0f || offset != 0.0f) && enabled)
         {
-            const auto reach = juce::jlimit(startAngle, endAngle,
-                                            juce::jmap(juce::jlimit(0.0f, 1.0f, position + depth),
-                                                       startAngle, endAngle));
-            juce::Path ring;
-            ring.addCentredArc(centre.x, centre.y, radius * 0.88f, radius * 0.88f, 0.0f,
-                               juce::jmin(angle, reach), juce::jmax(angle, reach), true);
-            g.setColour(signalViolet.withAlpha(0.85f));
-            g.strokePath(ring, juce::PathStrokeType(3.0f, juce::PathStrokeType::curved,
-                                                    juce::PathStrokeType::rounded));
+            const auto ring = radius * 0.88f;
+            const auto angleAt = [&] (float amount)
+            {
+                return juce::jmap(juce::jlimit(0.0f, 1.0f, position + amount), startAngle, endAngle);
+            };
+            const auto arc = [&] (float to, juce::Colour colour, float thickness)
+            {
+                if (std::abs(to - angle) < 0.002f) return;
+                juce::Path path;
+                path.addCentredArc(centre.x, centre.y, ring, ring, 0.0f,
+                                   juce::jmin(angle, to), juce::jmax(angle, to), true);
+                g.setColour(colour);
+                g.strokePath(path, juce::PathStrokeType(thickness, juce::PathStrokeType::curved,
+                                                        juce::PathStrokeType::rounded));
+            };
+
+            arc(angleAt(depth), signalViolet.withAlpha(0.32f), 3.0f);
+            if (offset != 0.0f)
+            {
+                const auto now = angleAt(offset);
+                arc(now, signalViolet.withAlpha(0.95f), 3.0f);
+                const auto marker = polar(ring, now);
+                g.setColour(signalViolet.withAlpha(0.3f));
+                g.fillEllipse(juce::Rectangle<float>(11.0f, 11.0f).withCentre(marker));
+                g.setColour(signalViolet.interpolatedWith(juce::Colours::white, 0.75f));
+                g.fillEllipse(juce::Rectangle<float>(4.5f, 4.5f).withCentre(marker));
+            }
         }
 
         juce::Path pointer;

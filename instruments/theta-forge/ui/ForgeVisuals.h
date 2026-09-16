@@ -516,17 +516,17 @@ inline void drawBackdrop(juce::Graphics& g, juce::Rectangle<int> componentBounds
                                     juce::Colour(0xff17182a), bounds.getRight(), bounds.getBottom(), false);
     g.setGradientFill(background);
     g.fillRect(bounds);
-    const auto frame = bounds.reduced(14.0f);
+    // A hairline just inside the window edge. The lit strips that used to run
+    // down both sides are gone: they cost the modules most of the margin, and
+    // the panel already has plenty of light in it.
     g.setColour(line);
-    g.drawRoundedRectangle(frame, 3.0f, 1.0f);
-    g.setColour(electricBlue);
-    g.fillRect(frame.getX(), frame.getY(), 4.0f, frame.getHeight());
-    g.setColour(signalViolet.withAlpha(0.7f));
-    g.fillRect(frame.getRight() - 2.0f, frame.getY(), 2.0f, frame.getHeight());
+    g.drawRoundedRectangle(bounds.reduced(windowMargin * 0.5f), 3.0f, 1.0f);
 
-    drawWordmark(g, {30.0f, 20.0f, 220.0f, 36.0f});
+    const auto margin = static_cast<float>(windowMargin);
+    drawWordmark(g, {margin, 20.0f, 220.0f, 36.0f});
     g.setColour(signalViolet);
     g.setFont(juce::FontOptions(10.0f));
-    g.drawText("SYNTHETIC SIGNAL FORGE // UNIT 01", 32, 54, 280, 14, juce::Justification::centredLeft);
+    g.drawText("SYNTHETIC SIGNAL FORGE // UNIT 01", windowMargin + 2, 54, 280, 14,
+               juce::Justification::centredLeft);
 }
 }

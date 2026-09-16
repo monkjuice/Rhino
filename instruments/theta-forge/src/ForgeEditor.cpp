@@ -336,7 +336,7 @@ void Editor::paint(juce::Graphics& g)
 
 void Editor::resized()
 {
-    const auto right = getWidth() - 30;
+    const auto right = getWidth() - ui::windowMargin;
     savePreset.setBounds(right - 62, 26, 62, 26);
     loadPreset.setBounds(right - 130, 26, 62, 26);
     presetName.setBounds(right - 350, 26, 212, 26);

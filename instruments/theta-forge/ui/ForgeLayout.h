@@ -149,11 +149,21 @@ inline const std::vector<Module>& modules()
 
 inline constexpr int keyboardHeight = 80;
 
+// The inset every edge of the panel shares: the wordmark, the preset controls,
+// the modules and the keyboard all start here, so they line up down both sides.
+// It is deliberately small, so the modules get the width instead of the frame.
+inline constexpr int windowMargin = 12;
+
+// Measured from the top of the window rather than from the margin, so the
+// header keeps its own spacing when the margin changes.
+inline constexpr int titleBarHeight = 92;
+inline constexpr int keyboardGap = 26;
+
 // The keyboard sits across the bottom, under everything.
 inline juce::Rectangle<int> keyboardBounds(juce::Rectangle<int> bounds)
 {
-    return bounds.reduced(30, 0)
-        .withTop(bounds.getBottom() - 26 - keyboardHeight)
+    return bounds.reduced(windowMargin, 0)
+        .withTop(bounds.getBottom() - keyboardGap - keyboardHeight)
         .withHeight(keyboardHeight);
 }
 
@@ -161,7 +171,9 @@ inline juce::Rectangle<int> keyboardBounds(juce::Rectangle<int> bounds)
 // keyboard.
 inline juce::Rectangle<int> contentBounds(juce::Rectangle<int> bounds)
 {
-    return bounds.reduced(30).withTrimmedTop(62).withTrimmedBottom(keyboardHeight + 8);
+    return bounds.reduced(windowMargin)
+        .withTrimmedTop(titleBarHeight - windowMargin)
+        .withBottom(bounds.getBottom() - keyboardGap - keyboardHeight - 12);
 }
 
 inline juce::Rectangle<int> moduleBounds(juce::Rectangle<int> bounds, const Module& module)

@@ -42,6 +42,7 @@ private:
     std::atomic<float> meterLevel {0.0f};
     std::atomic<int> meterStage {0};
     Patch patch() const;
+    Modulation modulation() const;
     juce::ValueTree migrated(const juce::ValueTree& savedState) const;
 };
 }

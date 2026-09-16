@@ -203,21 +203,45 @@ modulation while the filter envelope is gone. Building LFO shapes and sync
 against three hardwired destinations would mean designing the LFO module twice,
 and ENV 2–4 cannot exist at all until this lands.
 
-- A modulation slot: source, destination parameter, depth, and whether the
-  depth is bipolar.
-- Drag a source's handle onto any knob to create a slot; a coloured ring around
-  the knob shows the depth and can be dragged to change it.
-- A matrix panel listing every slot, for editing and removing them without
-  hunting across the panel.
-- Sources at this point: ENV 1, LFO 1, velocity, note. ENV 2–4, LFO 2–6 and
-  macros 1–8 follow once the mechanism exists.
-- The three `>` depth knobs are removed; their behaviour becomes three ordinary
-  slots so existing sounds survive the change.
+Delivered in two parts. **M6a, the engine and the panel, is done.**
 
-**Tests:** a slot with zero depth renders bit-identically to no slot at all; a
-slot's depth is applied to the destination in the right range and clamps at the
-parameter's limits; two slots on one destination sum; removing a slot restores
-the unmodulated render exactly.
+**M6a — slots, engine, matrix panel**
+
+- Eight slots, each three parameters (source, target, depth), so a host can
+  automate a routing as readily as a knob and the whole matrix saves with a
+  preset without a separate serialisation path.
+- Sources: ENV 1, LFO 1, velocity, note. ENV 2–4, LFO 2–6 and macros follow
+  once the mechanism exists.
+- Fifteen destinations, covering both oscillators' position, level, pan, detune
+  and pitch, the sub and noise levels, and the filter's cutoff, resonance and
+  drive. `Output` is deliberately not one: it is applied once after the voices
+  are summed, so a per-voice modulation of it would not mean anything.
+- Modulation happens in the destination's own normalised space, so one depth
+  control behaves the same whether it points at a percentage, a frequency with
+  a skewed range, or a pan position. The Processor hands the Core each
+  destination's range at prepare time, so no range is defined twice.
+- Offsets accumulate per destination and are applied once, not slot by slot.
+  Applying them in turn would round-trip through the range between slots, so
+  two half-depth slots would not add up to one at full depth, and an early slot
+  hitting a limit would swallow a later one pulling the other way.
+- It is per voice and per sample, because every source except the LFO is per
+  voice and every destination is read inside the voice. With no live slot the
+  patch is used as it stands and nothing is copied.
+- The three `>` depth knobs are gone. LFO 1 is a source with a rate and nothing
+  else. `Semitone` became a continuous parameter so pitch can be swept smoothly
+  through it, while its field still snaps to whole semitones under the hand.
+
+**M6b — drag to knob**
+
+- Drag a source's handle onto any knob to fill the next free slot.
+- A coloured ring around a modulated knob showing depth, draggable to change it.
+
+**Tests:** a slot at zero depth, and a slot pointed at nothing, both render
+bit-identically to no slot at all; two half-depth slots sum exactly to one at
+full depth; switching a source off restores the plain render exactly;
+modulating a parameter already at its maximum changes nothing and stays finite;
+a harder note opens a velocity-driven filter further, measured as brightness so
+it cannot be satisfied by a hard note merely being louder.
 
 ### M7 — LFO 1 module with a live display
 
@@ -290,6 +314,7 @@ way to look at a change.
 | M3 Per-oscillator architecture | **done** — ready to test by ear |
 | M4 Filter routing | **done** — ready to test by ear |
 | M5 ENV 1 | **done** — ready to test by ear |
-| M6 Modulation matrix | not started |
+| M6a Matrix engine and panel | **done** — ready to test by ear |
+| M6b Drag to knob | not started |
 | M7 LFO 1 | not started |
 | M8 Polish | not started |

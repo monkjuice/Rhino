@@ -114,7 +114,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout Processor::parameterLayout()
         result.push_back(toggle(id("Enable"), name("Enable"), enabled));
         result.push_back(parameter(id("Position"), name("Position"), {0.0f, 1.0f}, position, asPercent));
         result.push_back(parameter(id("Octave"), name("Octave"), {-4.0f, 4.0f, 1.0f}, 0.0f, asOctaves));
-        result.push_back(parameter(id("Semitone"), name("Semitone"), {-12.0f, 12.0f, 1.0f}, semitone, asSemitones));
+        result.push_back(parameter(id("Semitone"), name("Semitone"), {-12.0f, 12.0f}, semitone, asSemitones));
         result.push_back(parameter(id("Fine"), name("Fine"), {-100.0f, 100.0f, 1.0f}, 0.0f, asCents));
         result.push_back(parameter(id("Unison"), name("Unison"), {1.0f, 8.0f, 1.0f}, 2.0f, asCount));
         result.push_back(parameter(id("Detune"), name("Detune"), {0.0f, 1.0f}, 0.18f, asPercent));
@@ -145,14 +145,34 @@ juce::AudioProcessorValueTreeState::ParameterLayout Processor::parameterLayout()
     result.push_back(parameter("sustain", "Sustain", {0.0f, 1.0f}, 0.75f, asPercent));
     result.push_back(parameter("release", "Release", {0.001f, 8.0f, 0.0f, 0.35f}, 0.35f, asSeconds));
     result.push_back(parameter("lfoRate", "LFO Rate", {0.05f, 20.0f, 0.0f, 0.35f}, 0.5f, asRate));
-    result.push_back(parameter("lfoCutoff", "LFO to Cutoff", {-1.0f, 1.0f}, 0.0f, asSignedPercent));
-    result.push_back(parameter("lfoPosition", "LFO to Position", {-1.0f, 1.0f}, 0.0f, asSignedPercent));
-    result.push_back(parameter("lfoPitch", "LFO to Pitch", {-12.0f, 12.0f}, 0.0f, asSemitones));
     result.push_back(parameter("polyphony", "Polyphony", {1.0f, 16.0f, 1.0f}, 8.0f, asCount));
     result.push_back(toggle("mono", "Mono", false));
     result.push_back(toggle("legato", "Legato", true));
     result.push_back(parameter("glide", "Glide", {0.0f, 2.0f, 0.0f, 0.35f}, 0.08f, asSeconds));
     result.push_back(parameter("output", "Output", {0.0f, 1.25f}, 0.75f, asGain));
+
+    // Eight modulation slots. Each is three parameters so a host can automate a
+    // routing as readily as a knob, and so the whole matrix saves with a preset
+    // without a separate serialisation path.
+    juce::StringArray sourceNames;
+    for (int i = 0; i < modSourceCount; ++i) sourceNames.add(modSourceName(i));
+    juce::StringArray destinationNames;
+    for (const auto& destination : destinations()) destinationNames.add(destination.label);
+
+    for (int slot = 1; slot <= modSlotCount; ++slot)
+    {
+        const auto id = [slot] (const char* suffix) { return "mod" + juce::String(slot) + suffix; };
+        const auto name = [slot] (const char* suffix) { return "Mod " + juce::String(slot) + " " + suffix; };
+        // Slot 1 is pre-wired to LFO 1 into the cutoff at zero depth, so the
+        // most common first move is one knob rather than three.
+        result.push_back(std::make_unique<juce::AudioParameterChoice>(
+            juce::ParameterID {id("Source"), 1}, name("Source"), sourceNames,
+            slot == 1 ? static_cast<int>(ModSource::lfo1) : 0));
+        result.push_back(std::make_unique<juce::AudioParameterChoice>(
+            juce::ParameterID {id("Dest"), 1}, name("Destination"), destinationNames,
+            slot == 1 ? 13 : 0));
+        result.push_back(parameter(id("Depth"), name("Depth"), {-1.0f, 1.0f}, 0.0f, asSignedPercent));
+    }
     return {result.begin(), result.end()};
 }
 
@@ -165,6 +185,12 @@ Processor::Processor()
 void Processor::prepareToPlay(double sampleRate, int)
 {
     core.initialise(sampleRate);
+    // Hand the engine each destination's range so modulation happens in the
+    // same normalised space the knob moves in. Taken from the parameters
+    // themselves, so there is only ever one definition of a range.
+    for (int i = 1; i < destinationCount; ++i)
+        if (const auto* parameter = state.getParameter(destinations()[static_cast<size_t>(i)].id))
+            core.setDestinationRange(i, parameter->getNormalisableRange());
 }
 
 bool Processor::isBusesLayoutSupported(const BusesLayout& layouts) const
@@ -177,6 +203,7 @@ void Processor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
     juce::ScopedNoDenormals noDenormals;
     buffer.clear();
     const auto values = patch();
+    const auto mods = modulation();
     auto event = midi.cbegin();
     const auto end = midi.cend();
     for (int i = 0; i < buffer.getNumSamples(); ++i)
@@ -191,7 +218,7 @@ void Processor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
             else if (message.isAllNotesOff()) core.allNotesOff();
             ++event;
         }
-        float left, right; core.renderSample(values, left, right);
+        float left, right; core.renderSample(values, mods, left, right);
         buffer.addSample(0, i, left);
         if (buffer.getNumChannels() > 1) buffer.addSample(1, i, right);
     }
@@ -248,14 +275,23 @@ Patch Processor::patch() const
     result.sustain = value("sustain");
     result.release = value("release");
     result.lfoRate = value("lfoRate");
-    result.lfoCutoff = value("lfoCutoff");
-    result.lfoPosition = value("lfoPosition");
-    result.lfoPitch = value("lfoPitch");
     result.polyphony = value("polyphony");
     result.mono = value("mono");
     result.legato = value("legato");
     result.glide = value("glide");
     result.output = value("output");
+    return result;
+}
+
+Modulation Processor::modulation() const
+{
+    const auto value = [this] (const juce::String& id) { return state.getRawParameterValue(id)->load(); };
+    Modulation result;
+    for (int slot = 0; slot < modSlotCount; ++slot)
+    {
+        const auto id = [slot] (const char* suffix) { return "mod" + juce::String(slot + 1) + suffix; };
+        result.slots[static_cast<size_t>(slot)] = {value(id("Source")), value(id("Dest")), value(id("Depth"))};
+    }
     return result;
 }
 

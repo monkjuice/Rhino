@@ -56,11 +56,11 @@ inline constexpr int moduleGap = 8;
 inline constexpr int headerHeight = 22;
 
 // Row weights, top to bottom: oscillators, sources and filter and voicing,
-// modulation. The oscillators are tallest because each now carries a display,
-// a tuning strip and six knobs.
+// envelope and LFO, then the modulation matrix. The oscillators are tallest
+// because each carries a display, a tuning strip and six knobs.
 inline const std::vector<int>& rowWeights()
 {
-    static const std::vector<int> weights {42, 26, 32};
+    static const std::vector<int> weights {34, 21, 26, 19};
     return weights;
 }
 
@@ -73,7 +73,7 @@ inline constexpr int knobLabelHeight = 14;
 inline constexpr int readoutHeight = 16;
 inline constexpr int stepperLabelHeight = 11;
 inline constexpr int stepperHeight = 21;
-inline constexpr int maxStepperWidth = 78;
+inline constexpr int maxStepperWidth = 122;
 inline constexpr int chipHeight = 20;
 inline constexpr int maxChipWidth = 44;
 
@@ -107,9 +107,25 @@ inline const std::vector<Module>& modules()
 
         {"env1", "ENV 1", "AMP", nullptr, false, Display::envelope, 2, 0, 6,
          {{100, {{"attack", "ATTACK"}, {"decay", "DECAY"}, {"sustain", "SUSTAIN"}, {"release", "RELEASE"}}}}},
-        {"lfo1", "LFO 1", "FREE RUNNING", nullptr, true, Display::lfo, 2, 6, 6,
-         {{100, {{"lfoRate", "RATE"}, {"lfoCutoff", "> CUTOFF"},
-                 {"lfoPosition", "> POSITION"}, {"lfoPitch", "> PITCH"}}}}},
+        {"lfo1", "LFO 1", "SOURCE", nullptr, true, Display::lfo, 2, 6, 6,
+         {{100, {{"lfoRate", "RATE"}}}}},
+
+        // The matrix is three rows of eight: every slot's source above its
+        // destination above its depth. Compact fields rather than knobs, so a
+        // row of eight does not drag every knob on the panel down to its size.
+        {"matrix", "MATRIX", "8 SLOTS", nullptr, true, Display::none, 3, 0, 12,
+         {{34, {{"mod1Source", "SOURCE", Style::stepper}, {"mod2Source", "", Style::stepper},
+                {"mod3Source", "", Style::stepper}, {"mod4Source", "", Style::stepper},
+                {"mod5Source", "", Style::stepper}, {"mod6Source", "", Style::stepper},
+                {"mod7Source", "", Style::stepper}, {"mod8Source", "", Style::stepper}}},
+          {33, {{"mod1Dest", "TARGET", Style::stepper}, {"mod2Dest", "", Style::stepper},
+                {"mod3Dest", "", Style::stepper}, {"mod4Dest", "", Style::stepper},
+                {"mod5Dest", "", Style::stepper}, {"mod6Dest", "", Style::stepper},
+                {"mod7Dest", "", Style::stepper}, {"mod8Dest", "", Style::stepper}}},
+          {33, {{"mod1Depth", "DEPTH", Style::stepper}, {"mod2Depth", "", Style::stepper},
+                {"mod3Depth", "", Style::stepper}, {"mod4Depth", "", Style::stepper},
+                {"mod5Depth", "", Style::stepper}, {"mod6Depth", "", Style::stepper},
+                {"mod7Depth", "", Style::stepper}, {"mod8Depth", "", Style::stepper}}}}},
     };
     return declared;
 }

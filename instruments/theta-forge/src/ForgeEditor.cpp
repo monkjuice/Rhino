@@ -43,16 +43,21 @@ juce::String tooltipFor(const juce::String& id)
         {"decay", "The fall from the attack peak"},
         {"sustain", "The level a held note settles at"},
         {"release", "How the note fades once released"},
-        {"lfoRate", "Free-running LFO speed"},
-        {"lfoCutoff", "How far the LFO moves the cutoff"},
-        {"lfoPosition", "How far the LFO scans both oscillator shapes"},
-        {"lfoPitch", "How far the LFO bends pitch"},
+        {"lfoRate", "Free-running LFO speed. Point it somewhere in the matrix"},
         {"polyphony", "Limit simultaneous notes"},
         {"mono", "Collapse to one voice for basses and leads"},
         {"legato", "Keep the envelope running across overlapping mono notes"},
         {"glide", "Slide between monophonic notes"},
         {"output", "Forge's final level"},
     };
+
+    // Matrix slots: eight of each, all reading the same way.
+    if (id.startsWith("mod"))
+    {
+        if (id.endsWith("Source")) return "What drives this slot";
+        if (id.endsWith("Dest")) return "Which control this slot moves";
+        if (id.endsWith("Depth")) return "How far, and in which direction, the source moves the target";
+    }
     const auto found = tips.find(id);
     return found == tips.end() ? juce::String() : found->second;
 }
@@ -78,8 +83,8 @@ Editor::Editor(Processor& p) : AudioProcessorEditor(&p), processor(p)
     addAndMakeVisible(presetName);
 
     setResizable(true, true);
-    setResizeLimits(1060, 760, 1800, 1200);
-    setSize(1180, 820);
+    setResizeLimits(1120, 880, 1900, 1400);
+    setSize(1240, 960);
     applyEnableStates();
     startTimerHz(24);
 }
@@ -178,8 +183,15 @@ void Editor::buildModules()
                 // has already applied the parameter's range, so the default can
                 // be read back from it here.
                 if (auto* parameter = processor.state.getParameter(declared.id))
+                {
                     control->slider.setDoubleClickReturnValue(
                         true, parameter->convertFrom0to1(parameter->getDefaultValue()));
+                    // Semitone is a continuous parameter so the matrix can
+                    // sweep pitch smoothly through it, but a tuning field
+                    // should still land on whole semitones under the hand.
+                    if (juce::String(declared.id).endsWith("Semitone"))
+                        control->slider.setRange(-12.0, 12.0, 1.0);
+                }
 
                 addAndMakeVisible(control->label);
                 addAndMakeVisible(control->slider);

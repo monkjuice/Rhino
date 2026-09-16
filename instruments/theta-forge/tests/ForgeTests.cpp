@@ -91,6 +91,21 @@ float rms(const juce::AudioBuffer<float>& buffer, int channel, int from)
     return count > 0 ? static_cast<float>(std::sqrt(sum / count)) : 0.0f;
 }
 
+// High-frequency content relative to overall level. Amplitude-independent, so
+// it measures how open a filter is without being fooled by a quieter note.
+float brightness(const juce::AudioBuffer<float>& buffer, int channel, int from)
+{
+    auto edges = 0.0, total = 0.0;
+    for (int i = from + 1; i < buffer.getNumSamples(); ++i)
+    {
+        const auto sample = static_cast<double>(buffer.getSample(channel, i));
+        const auto step = sample - buffer.getSample(channel, i - 1);
+        edges += step * step;
+        total += sample * sample;
+    }
+    return total > 0.0 ? static_cast<float>(std::sqrt(edges / total)) : 0.0f;
+}
+
 bool allSamplesFinite(const juce::AudioBuffer<float>& buffer)
 {
     for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
@@ -104,7 +119,7 @@ bool allSamplesFinite(const juce::AudioBuffer<float>& buffer)
 void layoutSuite()
 {
     theta::forge::Processor processor;
-    const auto bounds = juce::Rectangle<int>(0, 0, 1180, 780);
+    const auto bounds = juce::Rectangle<int>(0, 0, 1240, 960);
     const auto content = theta::forge::ui::contentBounds(bounds);
     const auto& modules = theta::forge::ui::modules();
     require(!modules.empty(), "the panel declares at least one module");
@@ -214,7 +229,7 @@ void layoutSuite()
 
     // The proportions have to survive the whole resize range, not just the
     // default size.
-    for (const auto size : {juce::Point<int>(1100, 840), juce::Point<int>(1800, 1200)})
+    for (const auto size : {juce::Point<int>(1120, 880), juce::Point<int>(1900, 1400)})
     {
         const auto resized = juce::Rectangle<int>(0, 0, size.x, size.y);
         for (const auto& module : modules)
@@ -312,7 +327,7 @@ void presetSuite()
     requireText(textFor(processor, "release", 2.5f), "2.50 s", "a long release reads in seconds");
     requireText(textFor(processor, "oscBSemitone", 7.0f), "+7 st", "tune reads as signed semitones");
     requireText(textFor(processor, "oscAUnison", 4.0f), "4", "unison reads as a plain count");
-    requireText(textFor(processor, "lfoCutoff", -0.5f), "-50 %", "a bipolar depth keeps its sign");
+    requireText(textFor(processor, "mod1Depth", -0.5f), "-50 %", "a bipolar depth keeps its sign");
     require(!textFor(processor, "cutoff", 7800.0f).contains("7800.0004"),
             "no knob falls back to a raw float readout");
 
@@ -622,6 +637,147 @@ void envelopeSuite()
             "a release from a partial attack still takes the full release time");
 }
 
+bool identical(const juce::AudioBuffer<float>& a, const juce::AudioBuffer<float>& b)
+{
+    if (a.getNumChannels() != b.getNumChannels() || a.getNumSamples() != b.getNumSamples()) return false;
+    for (int channel = 0; channel < a.getNumChannels(); ++channel)
+        for (int i = 0; i < a.getNumSamples(); ++i)
+            if (a.getSample(channel, i) != b.getSample(channel, i)) return false;
+    return true;
+}
+
+// Destination indices, matching theta::forge::destinations().
+enum Destination { destOff = 0, destAPitch = 5, destSub = 11, destCutoff = 13 };
+enum Source { srcOff = 0, srcEnv1 = 1, srcLfo1 = 2, srcVelocity = 3 };
+
+void setSlot(theta::forge::Processor& processor, int slot, float source, float destination, float depth)
+{
+    const auto id = [slot] (const char* suffix) { return "mod" + juce::String(slot) + suffix; };
+    setValue(processor, id("Source").toRawUTF8(), source);
+    setValue(processor, id("Dest").toRawUTF8(), destination);
+    setValue(processor, id("Depth").toRawUTF8(), depth);
+}
+
+// A patch with a filter that is closed enough for cutoff modulation to be
+// plainly audible, and no other slot interfering.
+void closedFilterOnA(theta::forge::Processor& processor)
+{
+    soloSineOnA(processor);
+    setValue(processor, "oscAPosition", 1.0f);   // square: harmonics for the filter to remove
+    setValue(processor, "filterEnable", 1.0f);
+    setValue(processor, "routeA", 1.0f);
+    setValue(processor, "cutoff", 300.0f);
+    setValue(processor, "resonance", 0.0f);
+    for (int slot = 1; slot <= theta::forge::modSlotCount; ++slot)
+        setSlot(processor, slot, srcOff, destOff, 0.0f);
+}
+
+void modulationSuite()
+{
+    constexpr int samples = 8192;
+    constexpr int settled = 1024;
+    juce::AudioBuffer<float> plain(2, samples), modulated(2, samples);
+
+    // A slot at zero depth must cost nothing at all, not merely almost nothing:
+    // an idle matrix may not colour the sound.
+    theta::forge::Processor bare;
+    closedFilterOnA(bare);
+    renderNote(bare, plain);
+
+    theta::forge::Processor wired;
+    closedFilterOnA(wired);
+    setSlot(wired, 1, srcLfo1, destCutoff, 0.0f);
+    renderNote(wired, modulated);
+    require(identical(plain, modulated), "a slot at zero depth renders bit-identically to no slot");
+
+    // Pointed at nothing, a slot with depth is equally inert.
+    theta::forge::Processor unpointed;
+    closedFilterOnA(unpointed);
+    setSlot(unpointed, 1, srcLfo1, destOff, 1.0f);
+    renderNote(unpointed, modulated);
+    require(identical(plain, modulated), "a slot with no destination renders bit-identically");
+
+    // With depth, the envelope opens the filter and more gets through.
+    theta::forge::Processor swept;
+    closedFilterOnA(swept);
+    setSlot(swept, 1, srcEnv1, destCutoff, 1.0f);
+    renderNote(swept, modulated);
+    const auto closed = rms(plain, 0, settled);
+    const auto opened = rms(modulated, 0, settled);
+    require(opened > closed * 1.2f, "an envelope pointed at the cutoff opens the filter");
+
+    // Two slots on one destination sum, rather than one winning.
+    theta::forge::Processor halves;
+    closedFilterOnA(halves);
+    setSlot(halves, 1, srcEnv1, destCutoff, 0.5f);
+    setSlot(halves, 2, srcEnv1, destCutoff, 0.5f);
+    juce::AudioBuffer<float> summed(2, samples);
+    renderNote(halves, summed);
+    require(identical(modulated, summed), "two half-depth slots sum to one full-depth slot");
+
+    // Switching a slot's source off restores the unmodulated render exactly.
+    setSlot(swept, 1, srcOff, destCutoff, 1.0f);
+    renderNote(swept, modulated);
+    require(identical(plain, modulated), "switching a slot's source off restores the plain render");
+
+    // Depth clamps at the destination's own limits instead of running past them.
+    theta::forge::Processor slammed;
+    closedFilterOnA(slammed);
+    setValue(slammed, "cutoff", 18000.0f);
+    setSlot(slammed, 1, srcEnv1, destCutoff, 1.0f);
+    renderNote(slammed, modulated);
+    require(allSamplesFinite(modulated), "modulation past a parameter's top stays finite");
+    theta::forge::Processor atTop;
+    closedFilterOnA(atTop);
+    setValue(atTop, "cutoff", 18000.0f);
+    renderNote(atTop, plain);
+    require(identical(plain, modulated),
+            "modulating a parameter already at its maximum changes nothing");
+
+    // Velocity is a source like any other, and a softer note modulates less.
+    const auto atVelocity = [&] (float velocity)
+    {
+        theta::forge::Processor processor;
+        closedFilterOnA(processor);
+        setSlot(processor, 1, srcVelocity, destCutoff, 1.0f);
+        processor.prepareToPlay(48000.0, samples);
+        juce::AudioBuffer<float> buffer(2, samples);
+        juce::MidiBuffer midi;
+        midi.addEvent(juce::MidiMessage::noteOn(1, 57, velocity), 0);
+        processor.processBlock(buffer, midi);
+        // Measured as brightness rather than level, so this cannot be
+        // satisfied merely by a hard note being louder than a soft one.
+        return brightness(buffer, 0, settled);
+    };
+    require(atVelocity(1.0f) > atVelocity(0.25f) * 1.1f,
+            "a harder note opens a velocity-driven filter further");
+
+    // Pitch is reachable now that Semitone is continuous, which is what
+    // replaced the old hardwired LFO-to-pitch knob.
+    theta::forge::Processor bent;
+    soloSineOnA(bent);
+    for (int slot = 1; slot <= theta::forge::modSlotCount; ++slot)
+        setSlot(bent, slot, srcOff, destOff, 0.0f);
+    renderNote(bent, plain);
+    const auto atPitch = zeroCrossings(plain, 0, settled);
+    setSlot(bent, 1, srcEnv1, destAPitch, 1.0f);
+    renderNote(bent, modulated);
+    require(zeroCrossings(modulated, 0, settled) > atPitch,
+            "an envelope pointed at pitch raises the note");
+
+    // And a source that never moves still behaves: NOTE is constant per voice.
+    theta::forge::Processor byNote;
+    closedFilterOnA(byNote);
+    setValue(byNote, "subEnable", 1.0f);
+    setValue(byNote, "subLevel", 0.0f);
+    renderNote(byNote, plain, 36);
+    setSlot(byNote, 1, 4.0f, destSub, 1.0f);
+    renderNote(byNote, modulated, 36);
+    require(!identical(plain, modulated), "the note source reaches its destination");
+    require(rms(modulated, 0, settled) > rms(plain, 0, settled),
+            "note-driven modulation adds the sub it was pointed at");
+}
+
 void voicingSuite()
 {
     // Mono collapses to a single voice, so polyphony stops meaning anything.
@@ -709,6 +865,7 @@ void engineSuite()
     filterRoutingSuite();
     envelopeSuite();
     voicingSuite();
+    modulationSuite();
 
     oscillatorSuite();
 
@@ -726,8 +883,14 @@ void engineSuite()
     setValue(extreme, "subLevel", 1.0f);
     setValue(extreme, "noiseLevel", 1.0f);
     setValue(extreme, "lfoRate", 20.0f);
-    setValue(extreme, "lfoCutoff", 1.0f);
-    setValue(extreme, "lfoPitch", 12.0f);
+    // Drive the matrix hard too: LFO 1 into the cutoff and into oscillator A's
+    // pitch, both at full depth.
+    setValue(extreme, "mod1Source", 2.0f);
+    setValue(extreme, "mod1Dest", 13.0f);
+    setValue(extreme, "mod1Depth", 1.0f);
+    setValue(extreme, "mod2Source", 2.0f);
+    setValue(extreme, "mod2Dest", 5.0f);
+    setValue(extreme, "mod2Depth", 1.0f);
 
     constexpr int blockSize = 512;
     extreme.prepareToPlay(48000.0, blockSize);

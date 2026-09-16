@@ -211,6 +211,7 @@ void Editor::buildModules()
                 control->style = declared.style;
                 control->id = declared.id;
                 control->disabledBy = declared.disabledBy;
+                control->enabledBy = declared.enabledBy;
                 control->row = r;
                 control->index = i;
 
@@ -315,9 +316,11 @@ void Editor::applyEnableStates()
         for (auto& control : module.controls)
         {
             // A control is live when its module is on and nothing else has
-            // taken it over — polyphony means nothing once mono is switched on.
+            // taken it over — polyphony means nothing once mono is switched on,
+            // and a tempo division means nothing until the LFO is synced.
             const auto on = module.on()
-                && (control->disabledBy == nullptr || value(control->disabledBy) < 0.5f);
+                && (control->disabledBy == nullptr || value(control->disabledBy) < 0.5f)
+                && (control->enabledBy == nullptr || value(control->enabledBy) >= 0.5f);
 
             if (control->chip != nullptr) { control->chip->setEnabled(on); continue; }
             if (control->rocker != nullptr)
@@ -354,8 +357,15 @@ void Editor::paint(juce::Graphics& g)
         const auto on = module.on();
         const auto alpha = on ? 1.0f : 0.35f;
         const auto stage = static_cast<ui::Stage>(juce::jlimit(0, 4, processor.envelopeStage()));
+        // A module's header carries what it is doing rather than what it is:
+        // the envelope names its stage, and the LFO names the rate it is
+        // actually running at, which in sync is a tempo division and so cannot
+        // be read off the greyed-out rate knob.
         ui::drawModuleShell(g, area, descriptor, on,
-                            descriptor.display == ui::Display::envelope ? ui::stageName(stage) : juce::String());
+                            descriptor.display == ui::Display::envelope ? ui::stageName(stage)
+                            : descriptor.display == ui::Display::lfo
+                                ? juce::String(processor.lfoRateHz(), 2) + " HZ"
+                                : juce::String());
 
         if (descriptor.columnHeaderHeight > 0) paintTable(g, area, descriptor);
 
@@ -380,10 +390,10 @@ void Editor::paint(juce::Graphics& g)
                                  stage, processor.envelopeLevel());
                 break;
             case ui::Display::lfo:
-                // Two cycles at the slowest rate through eight at the fastest,
-                // so the drawing reads as "faster" without ever becoming a blur.
-                ui::drawLfo(g, display, juce::jmap(std::sqrt(juce::jlimit(0.0f, 1.0f, value("lfoRate") / 20.0f)),
-                                                   1.5f, 8.0f), accent, alpha);
+                ui::drawLfo(g, display,
+                            static_cast<LfoShape>(juce::jlimit(0, lfoShapeCount - 1,
+                                                               juce::roundToInt(value("lfoShape")))),
+                            processor.lfoPhase(), processor.lfoValue(), accent, alpha);
                 break;
             case ui::Display::none:
                 break;

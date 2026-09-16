@@ -28,6 +28,63 @@ struct Oscillator
 // Which of the filter's three taps reaches the output.
 enum class FilterType { lowPass, highPass, bandPass };
 
+// LFO 1's shapes. It is a modulation source, so every shape is bipolar and runs
+// the full -1..1: a slot's depth decides how much of that reaches anything.
+enum class LfoShape { sine, triangle, saw, square, sampleHold };
+inline constexpr int lfoShapeCount = 5;
+
+inline const char* lfoShapeName(int shape)
+{
+    switch (shape)
+    {
+        case 1: return "TRI";
+        case 2: return "SAW";
+        case 3: return "SQR";
+        case 4: return "S&H";
+        default: break;
+    }
+    return "SINE";
+}
+
+// The shape at a point in its cycle. `held` is the sample-and-hold's current
+// step, the one shape that cannot be worked out from the phase alone. A free
+// function so the panel draws the very curve the voice is reading, the way the
+// oscillator display and the oscillator share morph().
+inline float lfoWave(LfoShape shape, float phase, float held)
+{
+    switch (shape)
+    {
+        case LfoShape::triangle:   return 1.0f - 4.0f * std::abs(phase - 0.5f);
+        case LfoShape::saw:        return phase * 2.0f - 1.0f;
+        case LfoShape::square:     return phase < 0.5f ? 1.0f : -1.0f;
+        case LfoShape::sampleHold: return held;
+        case LfoShape::sine:       break;
+    }
+    return std::sin(phase * juce::MathConstants<float>::twoPi);
+}
+
+// Tempo-synced rates, as the length of one LFO cycle in beats. A beat is a
+// quarter note, so 1/4 is one beat and 1/1 is a bar of four. Musical data
+// rather than host data, which is why it sits here beside the shapes: the Core
+// never sees a tempo, the Processor turns one of these into a rate in Hz.
+struct LfoDivision
+{
+    const char* label;
+    float beats;
+};
+
+inline const std::array<LfoDivision, 7>& lfoDivisions()
+{
+    static const std::array<LfoDivision, 7> table {{
+        {"1/1", 4.0f},        {"1/2", 2.0f},        {"1/4", 1.0f},
+        {"1/4T", 2.0f / 3.0f}, {"1/8", 0.5f},       {"1/8T", 1.0f / 3.0f},
+        {"1/16", 0.25f},
+    }};
+    return table;
+}
+
+inline constexpr int lfoDivisionCount = 7;
+
 // Modulation sources. ENV 1 and velocity are unipolar (0..1); LFO 1 is bipolar
 // (-1..1); note is unipolar across the keyboard.
 enum class ModSource { off, env1, lfo1, velocity, note, macro1 };
@@ -120,9 +177,12 @@ struct Patch
     float routeA = 1.0f, routeB = 1.0f, routeSub = 1.0f, routeNoise = 1.0f;
     float cutoff = 7800.0f, resonance = 0.12f, drive = 0.08f;
     float attack = 0.01f, decay = 0.24f, sustain = 0.75f, release = 0.35f;
-    // LFO 1 has a rate and nothing else. It is a source, not a router: where it
-    // goes is a matter for the modulation slots.
+    // LFO 1 has a shape and a rate. It is a source, not a router: where it goes
+    // is a matter for the modulation slots. The rate is always in Hz — tempo
+    // sync is resolved to one before the patch is built, so the Core never sees
+    // a tempo.
     float lfoRate = 0.5f;
+    float lfoShape = 0.0f;
     float polyphony = 8.0f, mono = 0.0f, legato = 1.0f, glide = 0.08f;
     float output = 0.75f;
     // Performance macros. Sources only: a macro is a hand on a knob, and what
@@ -205,6 +265,8 @@ public:
         voices = {};
         nextVoice = 0;
         lfoPhase = 0.0f;
+        lfoHeld = 0.0f;
+        meterLfo = 0.0f;
         noiseState = 0x9e3779b9u;
         heldCount = 0;
         monoMode = false;
@@ -273,6 +335,12 @@ public:
     float envelopeLevel() const { return meterEnvelope; }
     int envelopeStage() const { return static_cast<int>(meterStage); }
 
+    // Where LFO 1 is in its cycle and what it last put out. The phase draws the
+    // running indicator; the value is published as well because a
+    // sample-and-hold's step cannot be worked back out of the phase.
+    float lfoPosition() const { return lfoPhase; }
+    float lfoOutput() const { return meterLfo; }
+
     // How far the matrix is moving each destination right now, in that
     // destination's normalised space, so a knob can draw where its value
     // actually is while a source plays it. Same reading the loudest voice is
@@ -306,8 +374,15 @@ public:
     void renderSample(const Patch& patch, const Modulation& modulation, float& left, float& right)
     {
         left = right = 0.0f;
-        const auto lfo = std::sin(lfoPhase * juce::MathConstants<float>::twoPi);
-        lfoPhase = wrap(lfoPhase + juce::jlimit(0.01f, 40.0f, patch.lfoRate) / static_cast<float>(sampleRate));
+        const auto shape = static_cast<LfoShape>(
+            juce::jlimit(0, lfoShapeCount - 1, juce::roundToInt(patch.lfoShape)));
+        const auto lfo = lfoWave(shape, lfoPhase, lfoHeld);
+        meterLfo = lfo;
+        const auto advanced = lfoPhase + juce::jlimit(0.01f, 40.0f, patch.lfoRate) / static_cast<float>(sampleRate);
+        // One new step per cycle, taken as the cycle turns over, so a
+        // sample-and-hold changes exactly where the other shapes restart.
+        if (advanced >= 1.0f) lfoHeld = noise();
+        lfoPhase = wrap(advanced);
         const auto modulated = modulation.anyActive();
 
         meterEnvelope = 0.0f;
@@ -644,6 +719,10 @@ private:
     double sampleRate = 48000.0;
     size_t nextVoice = 0;
     float lfoPhase = 0.0f;
+    // The sample-and-hold's current step, and what LFO 1 last put out, for the
+    // display to draw.
+    float lfoHeld = 0.0f;
+    float meterLfo = 0.0f;
     std::uint32_t noiseState = 0x9e3779b9u;
     std::array<juce::NormalisableRange<float>, destinationCount> destinationRanges {};
     // Reused every voice and every sample so a modulated render allocates

@@ -149,9 +149,18 @@ void layoutSuite()
     for (const auto& module : modules)
         for (const auto& row : module.rows)
             for (const auto& control : row.controls)
+            {
                 if (control.disabledBy != nullptr)
                     require(processor.state.getParameter(control.disabledBy) != nullptr,
                             "a control's disabling parameter exists");
+                if (control.enabledBy != nullptr)
+                    require(processor.state.getParameter(control.enabledBy) != nullptr,
+                            "a control's enabling parameter exists");
+                // Both at once would be a control that is never live under one
+                // setting and never live under the other.
+                require(control.disabledBy == nullptr || control.enabledBy == nullptr,
+                        "a control is gated one way or the other, not both");
+            }
 
     // Polyphony means nothing in mono, and the panel has to say so.
     auto polyIsGated = false;
@@ -901,6 +910,127 @@ void modulationSuite()
             "note-driven modulation adds the sub it was pointed at");
 }
 
+// A host that reports one fixed tempo and nothing else, so a synced LFO can be
+// checked against a BPM the test controls.
+class FixedTempo final : public juce::AudioPlayHead
+{
+public:
+    explicit FixedTempo(double beatsPerMinute) : bpm(beatsPerMinute) {}
+
+    juce::Optional<juce::AudioPlayHead::PositionInfo> getPosition() const override
+    {
+        juce::AudioPlayHead::PositionInfo info;
+        info.setBpm(bpm);
+        return info;
+    }
+
+    double bpm = 120.0;
+};
+
+void lfoSuite()
+{
+    using theta::forge::LfoShape;
+    constexpr int samples = 8192;
+
+    // Every shape has to stay inside the bounds a source promises, and has to
+    // come back to where it started after exactly one cycle. A source that ran
+    // past one would push a destination further than its depth allows.
+    for (int shape = 0; shape < theta::forge::lfoShapeCount; ++shape)
+    {
+        const auto which = static_cast<LfoShape>(shape);
+        auto extreme = 0.0f;
+        for (int i = 0; i <= 512; ++i)
+        {
+            const auto phase = static_cast<float>(i) / 512.0f;
+            const auto at = theta::forge::lfoWave(which, phase, 1.0f);
+            require(std::isfinite(at), "an LFO shape is finite everywhere");
+            extreme = std::max(extreme, std::abs(at));
+        }
+        require(extreme <= 1.0f, "an LFO shape stays inside plus or minus one");
+        require(extreme > 0.9f, "an LFO shape uses the range it is given");
+    }
+
+    // Sine and triangle join up at the cycle boundary. A saw and a square jump
+    // a full swing there instead, and that jump is the shape rather than a
+    // fault — checked so neither can be quietly smoothed away.
+    for (const auto continuous : {LfoShape::sine, LfoShape::triangle})
+        requireClose(theta::forge::lfoWave(continuous, 0.0f, 0.0f),
+                     theta::forge::lfoWave(continuous, 1.0f, 0.0f), 0.0001f,
+                     "a continuous LFO shape joins up across the cycle");
+    for (const auto stepped : {LfoShape::saw, LfoShape::square})
+        require(std::abs(theta::forge::lfoWave(stepped, 0.0f, 0.0f)
+                         - theta::forge::lfoWave(stepped, 0.999f, 0.0f)) > 1.5f,
+                "a saw and a square jump a full swing at the cycle boundary");
+
+    // Sample and hold is its held step and nothing else: it does not move
+    // within a cycle, which is what makes it a step rather than a ramp.
+    for (const auto phase : {0.0f, 0.2f, 0.75f, 0.99f})
+        requireClose(theta::forge::lfoWave(LfoShape::sampleHold, phase, -0.4f), -0.4f, 0.0001f,
+                     "sample and hold holds its step for the whole cycle");
+
+    // Shape is a real choice, not a relabelled sine: the four continuous shapes
+    // have to differ from each other somewhere.
+    for (int a = 0; a < 4; ++a)
+        for (int b = a + 1; b < 4; ++b)
+        {
+            auto differs = false;
+            for (int i = 0; i < 64; ++i)
+            {
+                const auto phase = static_cast<float>(i) / 64.0f;
+                if (std::abs(theta::forge::lfoWave(static_cast<LfoShape>(a), phase, 0.0f)
+                             - theta::forge::lfoWave(static_cast<LfoShape>(b), phase, 0.0f)) > 0.01f)
+                    differs = true;
+            }
+            require(differs, "no two LFO shapes are the same curve");
+        }
+
+    // Free-running, the rate is the knob.
+    theta::forge::Processor free;
+    setValue(free, "lfoSync", 0.0f);
+    setValue(free, "lfoRate", 3.0f);
+    requireClose(free.lfoRateHz(), 3.0f, 0.001f, "an unsynced LFO runs at its rate knob");
+
+    // Synced, the rate is a division of the host's tempo and the knob stops
+    // mattering. 1/4 at 120 BPM is two beats a second, so two cycles a second.
+    theta::forge::Processor synced;
+    setValue(synced, "lfoSync", 1.0f);
+    setValue(synced, "lfoRate", 3.0f);
+    setValue(synced, "lfoDivision", 2.0f);
+    FixedTempo tempo(120.0);
+    synced.setPlayHead(&tempo);
+    juce::AudioBuffer<float> buffer(2, samples);
+    juce::MidiBuffer midi;
+    synced.prepareToPlay(48000.0, samples);
+    synced.processBlock(buffer, midi);
+    requireClose(synced.lfoRateHz(), 2.0f, 0.001f, "a synced LFO divides the host tempo");
+
+    // And it follows the tempo rather than latching the first one it saw.
+    tempo.bpm = 60.0;
+    synced.processBlock(buffer, midi);
+    requireClose(synced.lfoRateHz(), 1.0f, 0.001f, "a synced LFO tracks a tempo change");
+
+    // A longer division is a slower cycle, in proportion.
+    setValue(synced, "lfoDivision", 0.0f);   // 1/1, a bar of four beats
+    requireClose(synced.lfoRateHz(), 0.25f, 0.001f, "a whole-bar division is four beats long");
+
+    // The phase the display draws has to be the one the voice is reading, and
+    // it has to move.
+    theta::forge::Processor running;
+    setValue(running, "lfoSync", 0.0f);
+    setValue(running, "lfoRate", 1.0f);
+    running.prepareToPlay(48000.0, samples);
+    juce::MidiBuffer none;
+    buffer.clear();
+    running.processBlock(buffer, none);
+    const auto first = running.lfoPhase();
+    running.processBlock(buffer, none);
+    const auto second = running.lfoPhase();
+    require(first >= 0.0f && first < 1.0f, "the published LFO phase stays inside one cycle");
+    require(second != first, "the published LFO phase advances with the blocks");
+
+    synced.setPlayHead(nullptr);
+}
+
 void voicingSuite()
 {
     // Mono collapses to a single voice, so polyphony stops meaning anything.
@@ -987,6 +1117,7 @@ void engineSuite()
 
     filterRoutingSuite();
     envelopeSuite();
+    lfoSuite();
     voicingSuite();
     modulationSuite();
 

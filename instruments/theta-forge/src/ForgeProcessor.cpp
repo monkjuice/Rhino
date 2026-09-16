@@ -144,7 +144,18 @@ juce::AudioProcessorValueTreeState::ParameterLayout Processor::parameterLayout()
     result.push_back(parameter("decay", "Decay", {0.001f, 4.0f, 0.0f, 0.35f}, 0.24f, asSeconds));
     result.push_back(parameter("sustain", "Sustain", {0.0f, 1.0f}, 0.75f, asPercent));
     result.push_back(parameter("release", "Release", {0.001f, 8.0f, 0.0f, 0.35f}, 0.35f, asSeconds));
+    juce::StringArray lfoShapeNames;
+    for (int i = 0; i < lfoShapeCount; ++i) lfoShapeNames.add(lfoShapeName(i));
+    result.push_back(std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID {"lfoShape", 1}, "LFO Shape", lfoShapeNames, 0));
     result.push_back(parameter("lfoRate", "LFO Rate", {0.05f, 20.0f, 0.0f, 0.35f}, 0.5f, asRate));
+    result.push_back(toggle("lfoSync", "LFO Sync", false));
+    juce::StringArray lfoDivisionNames;
+    for (const auto& division : lfoDivisions()) lfoDivisionNames.add(division.label);
+    // 1/4 by default: one cycle per beat is the rate a sync is usually reached
+    // for in the first place.
+    result.push_back(std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID {"lfoDivision", 1}, "LFO Division", lfoDivisionNames, 2));
     result.push_back(parameter("polyphony", "Polyphony", {1.0f, 16.0f, 1.0f}, 8.0f, asCount));
     result.push_back(toggle("mono", "Mono", false));
     result.push_back(toggle("legato", "Legato", true));
@@ -202,10 +213,35 @@ bool Processor::isBusesLayoutSupported(const BusesLayout& layouts) const
     return layouts.getMainOutputChannelSet() == juce::AudioChannelSet::stereo();
 }
 
+// The rate LFO 1 actually runs at: the rate knob in free mode, and a division of
+// the host's tempo in sync. Worked out rather than published, because it depends
+// only on parameters and the tempo, both of which the message thread can read
+// for itself — so the panel and the voice cannot end up quoting different rates.
+float Processor::lfoRateHz() const
+{
+    const auto value = [this] (const juce::String& id) { return state.getRawParameterValue(id)->load(); };
+    if (value("lfoSync") < 0.5f) return value("lfoRate");
+
+    const auto beats = lfoDivisions()[static_cast<size_t>(
+        juce::jlimit(0, lfoDivisionCount - 1, juce::roundToInt(value("lfoDivision"))))].beats;
+    const auto bpm = hostBpm.load(std::memory_order_relaxed);
+    // Standing in for a host that reports no tempo, so a synced LFO still runs
+    // at a musical rate in a standalone rather than stopping dead.
+    const auto tempo = bpm > 0.0 ? bpm : 120.0;
+    return static_cast<float>(tempo / 60.0) / juce::jmax(0.0001f, beats);
+}
+
 void Processor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
     juce::ScopedNoDenormals noDenormals;
     buffer.clear();
+    // Read before the patch is built, because the patch resolves a synced LFO
+    // against it.
+    if (auto* playHead = getPlayHead())
+        if (const auto position = playHead->getPosition())
+            if (const auto bpm = position->getBpm())
+                hostBpm.store(*bpm, std::memory_order_relaxed);
+
     // Anything played on the editor's keyboard joins the host's own notes
     // before a single sample is rendered.
     keyboardState.processNextMidiBuffer(midi, 0, buffer.getNumSamples(), true);
@@ -234,6 +270,8 @@ void Processor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
     // 24 Hz, so a per-sample store would be pure contention for no extra detail.
     meterLevel.store(core.envelopeLevel(), std::memory_order_relaxed);
     meterStage.store(core.envelopeStage(), std::memory_order_relaxed);
+    meterLfoPhase.store(core.lfoPosition(), std::memory_order_relaxed);
+    meterLfoValue.store(core.lfoOutput(), std::memory_order_relaxed);
     for (int destination = 1; destination < destinationCount; ++destination)
         meterOffsets[static_cast<size_t>(destination)]
             .store(core.modulationOffset(destination), std::memory_order_relaxed);
@@ -284,7 +322,8 @@ Patch Processor::patch() const
     result.decay = value("decay");
     result.sustain = value("sustain");
     result.release = value("release");
-    result.lfoRate = value("lfoRate");
+    result.lfoRate = lfoRateHz();
+    result.lfoShape = value("lfoShape");
     result.polyphony = value("polyphony");
     result.mono = value("mono");
     result.legato = value("legato");

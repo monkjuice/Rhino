@@ -806,23 +806,61 @@ inline const char* stageName(Stage stage)
     return "AMP";
 }
 
-// A static read of the LFO shape. Shape selection and the running phase dot
-// arrive with the LFO 1 milestone.
-inline void drawLfo(juce::Graphics& g, juce::Rectangle<int> area, float cycles,
-                    juce::Colour colour, float alpha)
+// LFO 1's shape, drawn as exactly one cycle with an indicator riding it. One
+// cycle rather than several, and rather than a count that grows with the rate,
+// so the width of the display is the length of the cycle: the indicator then
+// sweeps the whole thing and its position is the phase, read directly. Drawing
+// two cycles left the indicator stuck in the left-hand half, because a phase
+// only ever covers one of them. The rate is written in the module header, so the
+// picture does not have to carry it too.
+//
+// The indicator is the engine's own running phase, not an animation timed in the
+// editor, so it cannot drift away from what is being heard.
+inline void drawLfo(juce::Graphics& g, juce::Rectangle<int> area, theta::forge::LfoShape shape,
+                    float phase, float held, juce::Colour colour, float alpha)
 {
     const auto box = area.toFloat().reduced(6.0f, 8.0f);
+    const auto plot = [&] (float at) { return box.getCentreY() - at * box.getHeight() * 0.42f; };
+
     juce::Path path;
-    constexpr int points = 220;
-    for (int i = 0; i <= points; ++i)
+    if (shape == theta::forge::LfoShape::sampleHold)
     {
-        const auto phase = static_cast<float>(i) / static_cast<float>(points);
-        const auto x = box.getX() + phase * box.getWidth();
-        const auto y = box.getCentreY()
-            - std::sin(phase * cycles * juce::MathConstants<float>::twoPi) * box.getHeight() * 0.42f;
-        if (i == 0) path.startNewSubPath(x, y); else path.lineTo(x, y);
+        // The step being held, flat across the whole display, because that is
+        // genuinely what this shape is putting out right now: one value, held.
+        // The jump is seen rather than drawn — the line lifts to a new height
+        // each time the cycle turns over, which is what sample and hold looks
+        // like when you watch it. Drawing a row of invented steps instead would
+        // put the indicator on a curve the voice is not reading.
+        const auto y = plot(juce::jlimit(-1.0f, 1.0f, held));
+        path.startNewSubPath(box.getX(), y);
+        path.lineTo(box.getRight(), y);
+    }
+    else
+    {
+        constexpr int points = 240;
+        for (int i = 0; i <= points; ++i)
+        {
+            // The full closed interval, so a saw reaches the top of its ramp and
+            // a square its second half before the cycle ends.
+            const auto along = static_cast<float>(i) / static_cast<float>(points);
+            const auto at = theta::forge::lfoWave(shape, along, held);
+            const auto x = box.getX() + along * box.getWidth();
+            if (i == 0) path.startNewSubPath(x, plot(at)); else path.lineTo(x, plot(at));
+        }
     }
     strokeGlow(g, path, colour, alpha);
+
+    // One cycle wide, so the phase is the position along it directly and the
+    // indicator always sits on the curve it is drawn over.
+    const auto at = juce::jlimit(0.0f, 1.0f, phase);
+    const auto x = box.getX() + at * box.getWidth();
+    const auto y = plot(juce::jlimit(-1.0f, 1.0f, theta::forge::lfoWave(shape, phase, held)));
+    g.setColour(colour.withAlpha(0.3f * alpha));
+    g.drawVerticalLine(juce::roundToInt(x), box.getY(), box.getBottom());
+    g.setColour(juce::Colours::white.withAlpha(0.9f * alpha));
+    g.fillEllipse(juce::Rectangle<float>(7.0f, 7.0f).withCentre({x, y}));
+    g.setColour(colour);
+    g.fillEllipse(juce::Rectangle<float>(4.0f, 4.0f).withCentre({x, y}));
 }
 
 // The pedal shell: a raised body, an accent cap, and a header strip reserved

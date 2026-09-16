@@ -349,15 +349,46 @@ modulating a parameter already at its maximum changes nothing and stays finite;
 a harder note opens a velocity-driven filter further, measured as brightness so
 it cannot be satisfied by a hard note merely being louder.
 
-### M7 — LFO 1 module with a live display
+### M7 — LFO 1 module with a live display — done
 
 Built once, as a real source, after the matrix exists.
 
-- Shape selection: sine, triangle, saw, square, sample-and-hold.
-- Rate, with tempo sync against the host.
-- The display draws the shape with a running phase indicator.
+- Shape selection: sine, triangle, saw, square, sample-and-hold. Every shape is
+  bipolar and uses the full swing, because a slot's depth is what decides how
+  much of it reaches anything.
+- `lfoWave` is a free function beside the shapes rather than a method on the
+  engine, so the panel draws the very curve the voice is reading — the same
+  arrangement `morph()` already has with the oscillator display.
+- Rate, with tempo sync against the host. `SYNC` switches the module between a
+  free rate in Hertz and a division of the host's tempo, and whichever one is
+  not in charge greys out. Sync is resolved to a rate in Hertz before the patch
+  is built, so the Core still never sees a tempo. A host reporting no tempo is
+  stood in for at 120, so a synced LFO in a standalone runs at a musical rate
+  rather than stopping dead.
+- The module header carries the rate the LFO is **actually** running at. In sync
+  that is a tempo division, which cannot be read off the greyed-out rate knob.
+- The display draws one cycle across its width with the engine's own running
+  phase riding it. One cycle rather than several, so the width of the display is
+  the length of the cycle and the indicator's position is the phase, read
+  directly. Two cycles left the indicator stuck in the left-hand half, because a
+  phase only ever covers one of them.
+- Sample-and-hold draws its held step as a flat line across the display rather
+  than a row of invented steps. The jump is seen rather than drawn: the line
+  lifts to a new height as each cycle turns over, which is what sample and hold
+  looks like when watched. Drawing invented steps put the indicator on a curve
+  the voice was not reading.
+- A control can now declare `enabledBy` as well as `disabledBy`, since the rate
+  and the division each need to grey out under the opposite setting of the same
+  switch. A stepper sitting in a row with knobs now lines its label up with
+  theirs instead of floating in the middle of its cell.
 
-**Tests:** each shape is bounded and periodic; tempo sync tracks a BPM change.
+**Tests:** every shape is finite, stays inside plus or minus one, and uses the
+range it is given; no two shapes are the same curve; sine and triangle join up
+across the cycle while a saw and a square jump a full swing there, so neither can
+be quietly smoothed away; sample and hold holds its step for a whole cycle; an
+unsynced LFO runs at its knob; a synced one divides the host tempo, tracks a
+tempo change rather than latching the first one it saw, and a whole-bar division
+is four beats long; the published phase stays inside one cycle and advances.
 
 ### M8 — Interaction and preset polish
 
@@ -425,5 +456,5 @@ way to look at a change.
 | M6c Draggable depth rings | **done** — ready to test by hand |
 | M6d Matrix tab | **done** — ready to test by eye |
 | M6e Modulation shown on the knob | **done** — ready to test by eye |
-| M7 LFO 1 | not started |
+| M7 LFO 1 | **done** — ready to test by ear |
 | M8 Polish | not started |

@@ -24,6 +24,7 @@ private:
         ui::Style style = ui::Style::knob;
         juce::String id;
         const char* disabledBy = nullptr;
+        const char* enabledBy = nullptr;
         int row = 0, index = 0;
         // The slot whose depth this knob's ring sets, or -1 when the ring is
         // not draggable: nothing is pointed here, or more than one thing is and

@@ -55,6 +55,10 @@ struct Control
     // like controls leaves this alone; a table row gives its amount bar more
     // room than the fields either side of it.
     int weight = 1;
+    // Greyed out while this parameter is OFF, the mirror of disabledBy. A
+    // division means nothing until the LFO is synced, and the free rate means
+    // nothing once it is, so the pair of them need the rule both ways round.
+    const char* enabledBy = nullptr;
 };
 
 struct Row
@@ -223,8 +227,13 @@ inline const std::vector<Module>& modules()
         {"env1", "ENV 1", "AMP", nullptr, false, Display::envelope, 2, 0, 5, false,
          {{100, {{"attack", "ATTACK"}, {"decay", "DECAY"}, {"sustain", "SUSTAIN"}, {"release", "RELEASE"}}}},
          static_cast<int>(ModSource::env1)},
+        // RATE and DIV are the same control read two ways, so each is greyed out
+        // while the other is the one in charge.
         {"lfo1", "LFO 1", "SOURCE", nullptr, true, Display::lfo, 2, 5, 5, false,
-         {{100, {{"lfoRate", "RATE"}}}},
+         {{100, {{"lfoShape", "SHAPE", Style::stepper},
+                 {"lfoSync", "SYNC", Style::rocker},
+                 {"lfoRate", "RATE", Style::knob, "lfoSync"},
+                 {"lfoDivision", "DIV", Style::stepper, nullptr, 1, "lfoSync"}}}},
          static_cast<int>(ModSource::lfo1)},
     };
     return declared;
@@ -482,12 +491,33 @@ inline int knobDiameterFor(const Module& module, juce::Rectangle<int> moduleArea
                                      shared * compactKnobPercent / 100));
 }
 
+// Whether a row mixes short controls in among full-height knobs. A row of like
+// controls centres them all; a mixed row has a label line to line up with.
+inline bool rowHasKnobs(const Module& module, int rowIndex)
+{
+    for (const auto& control : module.rows[static_cast<size_t>(rowIndex)].controls)
+        if (control.style == Style::knob || control.style == Style::rocker) return true;
+    return false;
+}
+
 inline juce::Rectangle<int> controlBlock(juce::Rectangle<int> moduleArea, const Module& module,
                                          int rowIndex, int index, int diameter)
 {
     switch (module.rows[static_cast<size_t>(rowIndex)].controls[static_cast<size_t>(index)].style)
     {
-        case Style::stepper: return stepperBlock(moduleArea, module, rowIndex, index);
+        case Style::stepper:
+        {
+            auto block = stepperBlock(moduleArea, module, rowIndex, index);
+            // Beside knobs, a stepper puts its label on their label line rather
+            // than floating in the middle of its cell, which is what made LFO
+            // 1's SHAPE and DIV sit lower than the SYNC and RATE beside them.
+            if (module.columnHeaderHeight == 0 && rowHasKnobs(module, rowIndex))
+            {
+                const auto knob = knobBlock(moduleArea, module, rowIndex, index, diameter);
+                block.setY(knob.getY() + knobLabelHeight - stepperLabelHeight);
+            }
+            return block;
+        }
         case Style::bar:     return barBlock(moduleArea, module, rowIndex, index);
         case Style::chip:    return chipBlock(moduleArea, module, rowIndex, index);
         // A rocker takes a knob's whole block so its label and readout sit on

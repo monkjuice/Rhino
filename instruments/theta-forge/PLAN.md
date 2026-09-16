@@ -33,7 +33,7 @@ place, and its own knobs contained inside it. Nothing is laid out by index
 arithmetic; modules declare their contents.
 
 ```
-+- FORGE -- [ OSC ][ MATRIX ] ------------------ preset -- LOAD SAVE --+
++- FORGE -- [ OSC ][ TABLE ][ MATRIX ] --------- preset -- LOAD SAVE --+
 | +-- OSC A ---------------------+ +-- OSC B ---------------------+    |
 | | [ waveform ]                 | | [ waveform ]                 |    |
 | |   OCT    SEMI    FINE        | |   OCT    SEMI    FINE        |    |
@@ -49,10 +49,10 @@ arithmetic; modules declare their contents.
 | +----------------------------+ +-------------------------+ +------+  |
 +----------------------------------------------------------------------+
 
-The MATRIX tab puts the matrix in the top row in place of the two oscillators.
-Nothing below that row moves.
+The MATRIX tab puts the matrix in the top row in place of the two oscillators,
+and the TABLE tab puts the wavetable editor there. Nothing below that row moves.
 
-+- FORGE -- [ OSC ][ MATRIX ] ------------------ preset -- LOAD SAVE --+
++- FORGE -- [ OSC ][ TABLE ][ MATRIX ] --------- preset -- LOAD SAVE --+
 | +-- MATRIX ------------------------------------------- 8 SLOTS ---+  |
 | |  #   SOURCE        AMOUNT              DESTINATION              |  |
 | |  1  [ MACRO 2 ]   [-----|======  ]    [ A LEVEL ]               |  |
@@ -529,25 +529,61 @@ keeps its harmonics under Nyquist at all 128 notes; a high note folds back at
 least four times less than the raw frame does; and the saw starts and ends its
 frame at zero while swinging the full range across the centre.
 
-#### M9b-2 — where a table comes from — not started
+#### M9b-2 — where a table comes from — done
 
-Reading a wavetable file. A wavetable file is an ordinary `.wav` holding
-single-cycle frames end to end — 2048 samples each by convention, with Serum's
-`clm ` chunk naming the size when it is present — which is the format the tables
-people already own are written in. Import from a file chooser and by dropping a
-file on the oscillator display; the table's name in the module header; the
-samples embedded in the preset so a patch stays self-contained when it moves
-between machines. Chopping arbitrary recorded audio into frames is deliberately
-not part of this: it has to guess where cycles begin, and that is its own
-problem.
+- **The table's ownership and its hand-off.** `core/ForgeTableStore.h` is new
+  and holds the whole of it. The Processor owns a `WavetableStore`; the audio
+  thread picks up a table pointer once per block and uses it for the whole
+  block; the message thread publishes a new one and only frees the old one once
+  it can prove nothing is reading it. The proof is a counter the audio thread
+  increments on the way into a block and again on the way out, so it is odd
+  exactly while a block is running: even after a publish means the old table is
+  unreachable and is freed on the spot, and odd means it is parked until the
+  block that may hold it has finished. Both sides are sequentially consistent,
+  because the argument rests on there being one total order over the publish and
+  the counter read. Nothing on the audio thread allocates, waits or locks.
+- **Reading a wavetable file.** An ordinary `.wav` of single-cycle frames end to
+  end, from a file chooser or dropped on the editor. The frame size comes from
+  Serum's `clm ` chunk when the file carries one — JUCE's wav reader does not
+  surface it, so the RIFF is walked for it — and is 2048 otherwise. A file
+  stored at another frame size is resampled onto Forge's with the same spline
+  the oscillator reads a frame with. Chopping arbitrary recorded audio into
+  frames is deliberately still not part of this.
+- **Ten factory tables**, in [tables/](tables/), written by a script that lives
+  beside them. They are the format everyone else uses, so they open in Serum and
+  Vital too.
+- **Presets and host state carry the table**, as a child node beside the
+  parameter state rather than inside it: the frames deflated and base64'd, and
+  written only when an oscillator's table has actually been drawn on or loaded
+  over. A preset that names no table puts that oscillator back on the built-in
+  ten, which is the rule an omitted parameter already follows. **The format
+  version stays at 2** — deliberately, and against the letter of the M9b-1 note:
+  the node is purely additive, every existing format-2 preset still opens
+  unchanged, and bumping the version would refuse all of them to guard against
+  an older build that nothing has shipped.
+- **POSITION reads out against the table under it.** On the built-in ten it
+  still names the shape, or the two it sits between. On a table somebody drew or
+  loaded there are no shape names left to give, so it counts frames — `7 / 10` —
+  and its detents follow that table's frame count.
 
-#### M9b-3 — the table editor — not started
+#### M9b-3 — the table editor — done
 
-A third tab beside OSC and MATRIX: the selected frame large, a strip of frames
-below it, freehand and line drawing, add, duplicate and remove a frame, init and
-normalise, import and export. The brush palette, the harmonic bars and the
-formula bar that Serum's editor also carries are explicitly not in the first
-cut.
+A third tab beside OSC and MATRIX. The selected frame drawn large enough to draw
+on, with the grid behind it and the area between the curve and the zero line
+filled the way Serum and Vital both fill it; the table's frames in a strip
+beneath it, each drawn the same way; freehand and line drawing; add, duplicate
+and remove a frame; init and normalise; undo. Which oscillator is being edited
+is a switch in the toolbar, so both tables are reachable from one tab.
+
+The editor works on the frames as authored and asks the store to publish
+afterwards, so what is drawn and what is played cannot come apart. A stroke
+rebuilds only the frame it touched — the same table with one frame
+re-transformed and the rest copied — which is what makes a stroke audible while
+the hand is still moving. A test holds that cheap path to what rebuilding the
+whole table gives.
+
+The brush palette, the harmonic bars and the formula bar that Serum's editor
+also carries are still explicitly not here.
 
 
 ## Out of scope for now
@@ -610,5 +646,5 @@ way to look at a change.
 | M8 Polish | interaction **done**; a factory preset set still to author |
 | M9a Ten shapes in the oscillator table | **done** — ready to test by ear |
 | M9b-1 A real table, band-limited | **done** — ready to test by ear and by eye |
-| M9b-2 Loading a table from a file | not started |
-| M9b-3 The table editor | not started |
+| M9b-2 Loading a table from a file | **done** — ready to test by ear and by eye |
+| M9b-3 The table editor | **done** — ready to test by hand |

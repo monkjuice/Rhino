@@ -28,10 +28,10 @@ enum class Style { knob, stepper, chip, rocker, bar };
 // declares as "always" stays put whichever tab is showing, which is what keeps
 // the filter, the envelope, the LFO and the macros reachable while the matrix
 // is open.
-enum class Page { always, oscillators, matrix };
+enum class Page { always, oscillators, matrix, table };
 
-inline constexpr Page tabPages[] {Page::oscillators, Page::matrix};
-inline constexpr int tabCount = 2;
+inline constexpr Page tabPages[] {Page::oscillators, Page::table, Page::matrix};
+inline constexpr int tabCount = 3;
 
 inline const char* pageName(Page page)
 {
@@ -39,6 +39,7 @@ inline const char* pageName(Page page)
     {
         case Page::matrix:      return "MATRIX";
         case Page::oscillators: return "OSC";
+        case Page::table:       return "TABLE";
         case Page::always:      break;
     }
     return "";
@@ -198,6 +199,15 @@ inline const std::vector<Module>& modules()
                {"mod8Depth", "", Style::bar, nullptr, 3},
                {"mod8Dest", "", Style::stepper, nullptr, 2}}}},
          0, Page::matrix, 1, columnTitleHeight, rowNumberGutter},
+
+        // The wavetable editor takes the whole tabbed row, as the matrix does,
+        // and declares no controls at all. Nothing on it is a parameter: a table
+        // is data, not a value a host can automate, so the panel is one
+        // component the editor drops into this box rather than a row of knobs
+        // the framework lays out. The framework needs no special case for that
+        // — a module with no rows simply has nothing to place.
+        {"table", "WAVETABLE", "EDITOR", nullptr, true, Display::none, 0, 0, 12, false, {},
+         0, Page::table},
 
         {"sub", "SUB", "", "subEnable", false, Display::none, 1, 0, 1, false,
          {{100, {{"subLevel", "LEVEL"}}}}},

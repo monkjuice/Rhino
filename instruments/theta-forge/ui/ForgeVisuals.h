@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ForgeLayout.h"
+#include <functional>
 #include <BinaryData.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <cmath>
@@ -619,10 +620,62 @@ inline void drawTableRow(juce::Graphics& g, juce::Rectangle<int> row, juce::Rect
     g.drawText(juce::String(number), gutter, juce::Justification::centred);
 }
 
-// The oscillator's own table, so the tube shows the curve the voice is reading.
-// This used to be a second copy of the morph, which meant the two could drift
-// apart and only an ear would notice.
-using theta::forge::waveAt;
+// --- Drawing a wave ----------------------------------------------------------
+//
+// One shape, used by the small tube on the oscillator and by the big canvas in
+// the table editor, so the two cannot drift apart.
+
+// The trace of a wave across a box: phase runs left to right, +1 sits at the
+// top. The curve is sampled rather than handed in, because the small tube reads
+// a morph between two frames and the canvas reads one frame exactly.
+inline juce::Path wavePath(juce::Rectangle<float> box, const std::function<float(float)>& at, int points)
+{
+    juce::Path path;
+    for (int i = 0; i <= points; ++i)
+    {
+        const auto phase = static_cast<float>(i) / static_cast<float>(points);
+        const auto x = box.getX() + phase * box.getWidth();
+        const auto y = box.getCentreY() - juce::jlimit(-1.0f, 1.0f, at(phase)) * box.getHeight() * 0.5f;
+        if (i == 0) path.startNewSubPath(x, y); else path.lineTo(x, y);
+    }
+    return path;
+}
+
+// The area a wave encloses against its zero line, which is how Serum and Vital
+// both draw one and what gives a wave its weight on screen instead of leaving
+// it a hairline.
+//
+// It is one path, not two. The trace already ends on the right-hand edge, so
+// running it back along the zero line and closing it makes a figure that
+// crosses itself wherever the wave crosses zero: the humps above the line and
+// the humps below it wind in opposite directions. Under the non-zero rule both
+// are filled and the space outside them is not, which is exactly the region
+// between the curve and the line, however many times it changes sides. Filling
+// each half separately would need the crossings found first, and this needs
+// none of them.
+inline void fillWaveArea(juce::Graphics& g, juce::Rectangle<float> box, const juce::Path& trace,
+                         juce::Colour colour, float alpha)
+{
+    auto area = trace;
+    area.lineTo(box.getRight(), box.getCentreY());
+    area.lineTo(box.getX(), box.getCentreY());
+    area.closeSubPath();
+
+    // Brightest against the curve and falling away toward the line, so a tall
+    // excursion reads as further from zero rather than merely as more ink.
+    //
+    // Painted twice, once from each edge toward the line, because one gradient
+    // cannot be bright at the top and at the bottom of the same box. The two
+    // overlap only where the fill is faintest.
+    juce::ColourGradient above(colour.withAlpha(0.34f * alpha), box.getCentreX(), box.getY(),
+                               colour.withAlpha(0.06f * alpha), box.getCentreX(), box.getCentreY(), false);
+    g.setGradientFill(above);
+    g.fillPath(area);
+    juce::ColourGradient below(colour.withAlpha(0.34f * alpha), box.getCentreX(), box.getBottom(),
+                               colour.withAlpha(0.06f * alpha), box.getCentreX(), box.getCentreY(), false);
+    g.setGradientFill(below);
+    g.fillPath(area);
+}
 
 inline void strokeGlow(juce::Graphics& g, const juce::Path& path, juce::Colour colour, float alpha)
 {
@@ -770,26 +823,24 @@ inline void drawDisplayWell(juce::Graphics& g, juce::Rectangle<int> area)
     g.drawHorizontalLine(area.getCentreY(), box.getX(), box.getRight());
 }
 
-inline void drawWaveform(juce::Graphics& g, juce::Rectangle<int> area, float position,
-                         juce::Colour colour, float alpha)
+// The oscillator's own table on its tube. The table is handed in rather than
+// looked up, because each oscillator now has one of its own and the panel has
+// to draw the one that oscillator is actually reading.
+inline void drawWaveform(juce::Graphics& g, juce::Rectangle<int> area, const theta::forge::WavetableEdit& table,
+                         float position, juce::Colour colour, float alpha)
 {
     const auto face = crtFace(area);
     // Full width of the glass: the trace runs off both edges and is cut by the
     // tube, the way a scope's is, rather than stopping short inside it.
-    const auto box = face.reduced(0.0f, 5.0f);
-    juce::Path path;
-    constexpr int points = 180;
-    for (int i = 0; i <= points; ++i)
-    {
-        const auto phase = static_cast<float>(i) / static_cast<float>(points);
-        const auto x = box.getX() + phase * box.getWidth();
-        const auto y = box.getCentreY() - waveAt(position, phase) * box.getHeight() * 0.44f;
-        if (i == 0) path.startNewSubPath(x, y); else path.lineTo(x, y);
-    }
+    const auto box = face.reduced(0.0f, 5.0f).withSizeKeepingCentre(face.getWidth(),
+                                                                    face.getHeight() * 0.88f);
+    const auto path = wavePath(box, [&table, position] (float phase)
+                               { return table.sample(position, phase); }, 220);
     // Clipped to the glass, so the halo stops at the bezel rather than spilling
     // over the tube's edge.
     juce::Graphics::ScopedSaveState clip(g);
     g.reduceClipRegion(crtPath(face));
+    fillWaveArea(g, box, path, colour, alpha);
     strokePhosphor(g, path, colour, alpha);
 }
 

@@ -9,13 +9,21 @@ oscillators, sub, noise, a filter, one amp envelope, one LFO, global voicing,
 eight macros and the modulation matrix — each in its own box with its own
 enable. Effects are deliberately absent until the synth is finished.
 
-Two tabs in the title bar, `OSC` and `MATRIX`, switch **only the top row** of
-the panel: the oscillators and the matrix take turns in that one row, and
-everything below it stays on screen either way. A module says which tab it
-belongs to by declaring a `Page`; a module that declares nothing is always
-shown. Switching tabs hides and shows components rather than rebuilding them,
-so a knob the matrix is covering is still driven by the host and by its own
-modulation slots while it is out of sight.
+Three tabs in the title bar, `OSC`, `TABLE` and `MATRIX`, switch **only the top
+row** of the panel: the oscillators, the wavetable editor and the matrix take
+turns in that one row, and everything below it stays on screen either way. A
+module says which tab it belongs to by declaring a `Page`; a module that
+declares nothing is always shown. Switching tabs hides and shows components
+rather than rebuilding them, so a knob the matrix is covering is still driven by
+the host and by its own modulation slots while it is out of sight.
+
+Each oscillator reads a wavetable of its own. `TABLE` draws on it: freehand or
+straight lines on the selected frame, a strip of every frame below it, and add,
+duplicate, remove, init, normalise and undo. A table can also be loaded from an
+ordinary `.wav` of single-cycle frames — ten factory tables ship in
+[tables/](tables/) — or dropped on the editor. A table that has been drawn on or
+loaded travels inside the preset and inside host state, so a patch stays
+self-contained when it moves between machines.
 
 The editor saves and loads versioned `.forgepreset` files; host project state
 remains independent and continues to use the VST3 state API.

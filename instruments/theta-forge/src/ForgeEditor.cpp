@@ -27,6 +27,7 @@ Editor::Editor(Processor& p)
     buildModules();
     buildHandles();
     buildTabs();
+    buildTablePanel();
 
     keyboard.setAvailableRange(21, 108);
     keyboard.setLowestVisibleKey(21);
@@ -72,8 +73,49 @@ Editor::Editor(Processor& p)
     setResizeLimits(1140, 980, 1900, 1500);
     setSize(1260, 1060);
     applyEnableStates();
+    applyTableCounts();
     applyPage();
     startTimerHz(24);
+}
+
+void Editor::buildTablePanel()
+{
+    tablePanel = std::make_unique<ui::TablePanel>(processor.tableStore());
+    tablePanel->importer = [this] (int oscillator, const juce::File& file)
+    {
+        return processor.importTable(oscillator, file);
+    };
+    tablePanel->onTableChanged = [this]
+    {
+        // A table with a different number of frames changes what POSITION steps
+        // through and what its readout says, on both tabs.
+        applyTableCounts();
+        if (tablePanel->status.isNotEmpty())
+        {
+            presetName.setText(tablePanel->status, juce::dontSendNotification);
+            presetName.setColour(juce::Label::textColourId, ui::signalViolet);
+            tablePanel->status.clear();
+        }
+        repaint();
+    };
+    addChildComponent(*tablePanel);
+}
+
+// POSITION picks a frame out of a table, so a hand on it should land on one
+// rather than a hair short of it — which means its detents follow whatever
+// table that oscillator is now reading. The readout is pushed too: a slider
+// only re-reads its parameter's text when its value moves, and here the value
+// has stayed put while the text it should show has changed.
+void Editor::applyTableCounts()
+{
+    for (auto& module : moduleUis)
+        for (auto& control : module.controls)
+        {
+            if (!control->id.endsWith("Position")) continue;
+            const auto oscillator = control->id.startsWith("oscB") ? 1 : 0;
+            control->slider.gestureSteps = processor.tableStore().frameCount(oscillator);
+            control->slider.updateText();
+        }
 }
 
 void Editor::buildTabs()
@@ -119,6 +161,7 @@ void Editor::applyPage()
             if (control->rocker != nullptr) control->rocker->setVisible(shown);
         }
     }
+    if (tablePanel != nullptr) tablePanel->setVisible(page == ui::Page::table);
     // Last, because a macro's handle takes the place of its label and the
     // layout pass is what decides that.
     resized();
@@ -237,7 +280,7 @@ void Editor::buildModules()
                     // the matrix still sweeps the whole table smoothly. Hold the
                     // fine modifier to stop between two frames on purpose.
                     if (juce::String(declared.id).endsWith("Position"))
-                        control->slider.gestureSteps = waveShapeCount;
+                        control->slider.gestureSteps = waveShapeCount;  // refined in applyTableCounts
                 }
 
                 // The editor handles right-click so a knob can offer its
@@ -313,10 +356,12 @@ void Editor::paint(juce::Graphics& g)
         // the envelope names its stage, and the LFO names the rate it is
         // actually running at, which in sync is a tempo division and so cannot
         // be read off the greyed-out rate knob.
+        const auto tableModule = juce::String(descriptor.id) == "table";
         ui::drawModuleShell(g, area, descriptor, on,
                             descriptor.display == ui::Display::envelope ? ui::stageName(stage)
                             : descriptor.display == ui::Display::lfo
                                 ? juce::String(processor.lfoRateHz(), 2) + " HZ"
+                            : tableModule && tablePanel != nullptr ? tablePanel->headerDetail()
                                 : juce::String());
 
         if (descriptor.columnHeaderHeight > 0) paintTable(g, area, descriptor);
@@ -333,8 +378,14 @@ void Editor::paint(juce::Graphics& g)
         switch (descriptor.display)
         {
             case ui::Display::oscillator:
+                // Each oscillator draws the table it is actually reading, taken
+                // from the frames as authored rather than from a band-limited
+                // copy — so the tube shows the table and not a formula, and not
+                // whichever copy the note being held happens to want.
                 if (const auto* source = ui::displaySourceId(descriptor))
-                    ui::drawWaveform(g, display, value(source), accent, alpha);
+                    ui::drawWaveform(g, display,
+                                     processor.tableStore().edit(juce::String(descriptor.id) == "oscB" ? 1 : 0),
+                                     value(source), accent, alpha);
                 break;
             case ui::Display::envelope:
                 ui::drawEnvelope(g, display, value("attack"), value("decay"),
@@ -428,6 +479,12 @@ void Editor::resized()
             if (handle->source == source) return handle.get();
         return nullptr;
     };
+
+    if (tablePanel != nullptr)
+        for (const auto& descriptor : ui::modules())
+            if (juce::String(descriptor.id) == "table")
+                tablePanel->setBounds(ui::controlArea(ui::moduleBounds(getLocalBounds(), descriptor),
+                                                      descriptor));
 
     const auto diameter = ui::uniformKnobDiameter(getLocalBounds());
     for (auto& module : moduleUis)
@@ -567,6 +624,18 @@ bool Editor::keyStateChanged(bool isKeyDown)
 
 bool Editor::keyPressed(const juce::KeyPress& key)
 {
+    // Undo belongs to the editor rather than to the panel because a plugin
+    // window gives its keyboard focus to whichever child last took it, and the
+    // panel is often not that child. Scoped to the tab that has something to
+    // undo, so Ctrl+Z is not swallowed anywhere else.
+    if (page == ui::Page::table && tablePanel != nullptr
+        && key == juce::KeyPress('z', juce::ModifierKeys::commandModifier, 0))
+    {
+        tablePanel->undo();
+        applyTableCounts();
+        repaint();
+        return true;
+    }
     return keyboard.keyPressed(key);
 }
 
@@ -747,6 +816,27 @@ void Editor::timerCallback()
     // when something has actually changed.
     applyEnableStates();
     refreshModulationRings();
+
+    // A table replaced from outside the panel — a preset loaded, a project
+    // opened, a second editor on the same plugin — bumps its revision, and this
+    // is where the panel notices and redraws.
+    auto moved = false;
+    for (int oscillator = 0; oscillator < oscillatorCount; ++oscillator)
+    {
+        const auto revision = processor.tableStore().revision(oscillator);
+        if (revision == tableRevisions[static_cast<size_t>(oscillator)]) continue;
+        tableRevisions[static_cast<size_t>(oscillator)] = revision;
+        moved = true;
+    }
+    if (moved)
+    {
+        if (tablePanel != nullptr) tablePanel->refresh();
+        applyTableCounts();
+    }
+    // Frees whatever the audio thread has demonstrably moved past. Publishing
+    // does this too; here it catches the table retired by the last edit of a
+    // session, which would otherwise sit there until the next one.
+    processor.tableStore().collect();
     repaint();
 }
 

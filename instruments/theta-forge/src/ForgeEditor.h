@@ -2,6 +2,7 @@
 
 #include "ForgeProcessor.h"
 #include "../ui/ForgeLayout.h"
+#include "../ui/ForgeTablePanel.h"
 #include "../ui/ForgeVisuals.h"
 #include <memory>
 #include <vector>
@@ -67,11 +68,23 @@ private:
     // desktop window of its own, which is what a plugin in a host needs.
     // Declared last of the components so it is added on top of them.
     juce::TooltipWindow tooltips {this, 700};
+    // The whole of the TABLE tab. It owns its own canvas, strip and buttons
+    // rather than declaring parameter controls, because nothing on it is a
+    // parameter.
+    std::unique_ptr<ui::TablePanel> tablePanel;
+    // The revision each oscillator's table was last seen at, so a table changed
+    // by a preset load or by the host is noticed rather than only one changed
+    // by the panel itself.
+    std::array<int, oscillatorCount> tableRevisions {-1, -1};
     juce::TextButton loadPreset {"LOAD"}, savePreset {"SAVE"};
     juce::Label presetName;
     std::unique_ptr<juce::FileChooser> fileChooser;
 
     void buildModules();
+    void buildTablePanel();
+    // POSITION steps through frames, and how many there are depends on the
+    // table. Re-applied whenever a table changes.
+    void applyTableCounts();
     void buildTabs();
     void showPage(ui::Page);
     void applyPage();

@@ -10,7 +10,7 @@ namespace
 // formatter installed there never runs and every knob reads "0.5500000".
 // Declaring it here means the host's automation lane and Forge's own knobs
 // show the same text.
-using Format = juce::String (*)(float);
+using Format = std::function<juce::String (float)>;
 
 juce::String asPercent(float value) { return juce::String(juce::roundToInt(value * 100.0f)) + " %"; }
 
@@ -31,11 +31,6 @@ juce::String asHertz(float value)
 }
 
 juce::String asRate(float value) { return juce::String(value, 2) + " Hz"; }
-
-// A wavetable position reads as the shape it is on, or as the two it sits
-// between. A percentage said nothing about what the oscillator was doing, and
-// it is the readout under the hand that has to answer "where is the saw?".
-juce::String asShape(float value) { return theta::forge::waveLabel(value); }
 
 juce::String asSeconds(float value)
 {
@@ -75,6 +70,89 @@ juce::String asPan(float value)
 // are still moving.
 constexpr int presetFormatVersion = 2;
 
+// A table travels as one child node holding every frame end to end. The
+// samples are deflated and then base64'd, because a ValueTree is written out as
+// XML and eighty kilobytes of raw float is not text.
+constexpr const char* tableNodeType = "TABLE";
+
+juce::ValueTree tableNode(const WavetableEdit& edit, int oscillator)
+{
+    juce::ValueTree node(tableNodeType);
+    node.setProperty("osc", oscillator, nullptr);
+    node.setProperty("frames", edit.frameCount(), nullptr);
+    node.setProperty("name", edit.title(), nullptr);
+
+    // Written a float at a time rather than as a block of memory: JUCE's streams
+    // are explicitly little-endian, so a preset written on one machine reads the
+    // same on another whatever the native order is.
+    juce::MemoryOutputStream raw;
+    for (const auto sample : edit.samples()) raw.writeFloat(sample);
+    juce::MemoryOutputStream packed;
+    {
+        juce::GZIPCompressorOutputStream deflate(packed, 9);
+        deflate.write(raw.getData(), raw.getDataSize());
+    }
+    node.setProperty("data", packed.getMemoryBlock().toBase64Encoding(), nullptr);
+    return node;
+}
+
+// Refuses anything it cannot account for exactly. A table whose data does not
+// match the frame count it declares is a damaged preset, and loading the part
+// of it that parsed would leave an oscillator on a table nobody authored.
+bool readTableNode(const juce::ValueTree& node, WavetableEdit& edit)
+{
+    const auto frames = static_cast<int>(node.getProperty("frames", 0));
+    if (frames < 1 || frames > maxEditableFrames) return false;
+
+    juce::MemoryBlock packed;
+    if (!packed.fromBase64Encoding(node.getProperty("data").toString())) return false;
+    juce::MemoryInputStream source(packed, false);
+    juce::GZIPDecompressorInputStream inflate(source);
+    juce::MemoryOutputStream raw;
+    raw.writeFromInputStream(inflate, -1);
+
+    const auto count = static_cast<size_t>(frames) * wavetableFrameSize;
+    if (raw.getDataSize() != count * sizeof(float)) return false;
+    std::vector<float> samples(count);
+    juce::MemoryInputStream floats(raw.getData(), raw.getDataSize(), false);
+    for (auto& sample : samples) sample = floats.readFloat();
+    return edit.setFrames(samples.data(), frames, node.getProperty("name", "CUSTOM").toString());
+}
+
+// Serum names a wavetable file's frame size in a `clm ` chunk, which JUCE's wav
+// reader does not surface, so the RIFF is walked for it directly. Zero means the
+// file did not say, and 2048 is then assumed — which is the convention every
+// wavetable file that carries no chunk is written to anyway.
+int declaredFrameSize(const juce::File& file)
+{
+    juce::FileInputStream stream(file);
+    char header[12] = {};
+    if (!stream.openedOk() || stream.read(header, 12) != 12) return 0;
+    if (juce::String(header, 4) != "RIFF" || juce::String(header + 8, 4) != "WAVE") return 0;
+
+    while (!stream.isExhausted())
+    {
+        char id[4] = {};
+        if (stream.read(id, 4) != 4) return 0;
+        const auto size = stream.readInt();
+        if (size < 0) return 0;
+        if (juce::String(id, 4) == "clm ")
+        {
+            juce::MemoryBlock block;
+            stream.readIntoMemoryBlock(block, size);
+            // "<!>2048 00000000 wavetable" — the size is the digits after the
+            // marker, and getIntValue stops at the first character that is not
+            // one of them.
+            return block.toString().fromFirstOccurrenceOf("<!>", false, false).getIntValue();
+        }
+        // Chunks are padded to an even length, and the pad byte is not counted
+        // in the size, so skipping by the size alone drifts one byte per odd
+        // chunk and every chunk after it is read as garbage.
+        stream.setPosition(stream.getPosition() + size + (size & 1));
+    }
+    return 0;
+}
+
 juce::ValueTree parameterEntry(const juce::ValueTree& tree, const juce::String& id)
 {
     for (const auto child : tree)
@@ -111,13 +189,28 @@ juce::AudioProcessorValueTreeState::ParameterLayout Processor::parameterLayout()
     // The two oscillators are declared identically. Neither is expressed in
     // terms of the other, so each owns its tuning, its stack, its pan and its
     // level outright.
-    const auto oscillator = [&result] (const char* prefix, const char* label, bool enabled,
-                                       float position, float semitone, float level)
+    const auto oscillator = [this, &result] (int which, const char* prefix, const char* label, bool enabled,
+                                             float position, float semitone, float level)
     {
         const auto id = [prefix] (const char* suffix) { return juce::String(prefix) + suffix; };
         const auto name = [label] (const char* suffix) { return juce::String(label) + " " + suffix; };
         result.push_back(toggle(id("Enable"), name("Enable"), enabled));
-        result.push_back(parameter(id("Position"), name("Position"), {0.0f, 1.0f}, position, asShape));
+        // POSITION reads as the shape it is on, or as the two it sits between —
+        // "where is the saw?" is the question a wavetable knob is asked, and a
+        // percentage answers none of it. On a table somebody drew there are no
+        // shape names left to give, so it counts frames instead. Either way the
+        // answer depends on the table this oscillator is reading, which is why
+        // this one formatter closes over the processor and the rest do not.
+        //
+        // A host can call this from its own thread while the message thread is
+        // publishing a new table; what it reads is published as atomics for
+        // exactly that reason.
+        result.push_back(parameter(id("Position"), name("Position"), {0.0f, 1.0f}, position,
+                                   [this, which] (float value)
+                                   {
+                                       return positionLabel(tables.frameCount(which),
+                                                            tables.isBuiltIn(which), value);
+                                   }));
         result.push_back(parameter(id("Octave"), name("Octave"), {-4.0f, 4.0f, 1.0f}, 0.0f, asOctaves));
         result.push_back(parameter(id("Semitone"), name("Semitone"), {-12.0f, 12.0f}, semitone, asSemitones));
         result.push_back(parameter(id("Fine"), name("Fine"), {-100.0f, 100.0f, 1.0f}, 0.0f, asCents));
@@ -129,8 +222,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout Processor::parameterLayout()
     };
     // 6/9 is SAW and 1/9 is TRI: a fresh patch starts on shapes with names
     // rather than part-way between two of them.
-    oscillator("oscA", "Osc A", true, 6.0f / 9.0f, 0.0f, 0.75f);
-    oscillator("oscB", "Osc B", true, 1.0f / 9.0f, 7.0f, 0.25f);
+    oscillator(0, "oscA", "Osc A", true, 6.0f / 9.0f, 0.0f, 0.75f);
+    oscillator(1, "oscB", "Osc B", true, 1.0f / 9.0f, 7.0f, 0.25f);
 
     result.push_back(toggle("subEnable", "Sub Enable", true));
     result.push_back(parameter("subLevel", "Sub Level", {0.0f, 1.0f}, 0.12f, asPercent));
@@ -241,6 +334,10 @@ float Processor::lfoRateHz() const
 void Processor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
     juce::ScopedNoDenormals noDenormals;
+    // Everything that reads a published table happens inside this bracket, which
+    // is what lets the message thread tell when a replaced table has stopped
+    // being read. See ForgeTableStore.h.
+    const WavetableStore::ScopedBlock block(tables);
     buffer.clear();
     // Read before the patch is built, because the patch resolves a synced LFO
     // against it.
@@ -312,6 +409,10 @@ Patch Processor::patch() const
     Patch result;
     result.a = readOscillator("oscA");
     result.b = readOscillator("oscB");
+    // Picked up once per block and used for the whole of it, never re-read
+    // mid-block: that is the property the hand-over rule depends on.
+    result.a.table = tables.table(0);
+    result.b.table = tables.table(1);
     result.subEnable = value("subEnable");
     result.subLevel = value("subLevel");
     result.noiseEnable = value("noiseEnable");
@@ -357,7 +458,9 @@ juce::AudioProcessorEditor* Processor::createEditor() { return new Editor(*this)
 
 void Processor::getStateInformation(juce::MemoryBlock& destination)
 {
-    if (const auto xml = state.copyState().createXml())
+    auto tree = state.copyState();
+    appendTables(tree);
+    if (const auto xml = tree.createXml())
         copyXmlToBinary(*xml, destination);
 }
 
@@ -368,7 +471,13 @@ void Processor::setStateInformation(const void* data, int size)
     // or leaving newer ones unset.
     if (const auto xml = getXmlFromBinary(data, size))
         if (xml->hasTagName(state.state.getType()))
-            state.replaceState(migrated(juce::ValueTree::fromXml(*xml)));
+        {
+            const auto saved = juce::ValueTree::fromXml(*xml);
+            // Read before migrated() strips the table nodes back out, so the
+            // live parameter state stays parameters only.
+            applyTables(saved);
+            state.replaceState(migrated(saved));
+        }
 }
 
 juce::Result Processor::savePreset(const juce::File& destination, const juce::String& name)
@@ -378,7 +487,9 @@ juce::Result Processor::savePreset(const juce::File& destination, const juce::St
     preset.setProperty("formatVersion", presetFormatVersion, nullptr);
     preset.setProperty("name", name.trim().isNotEmpty() ? name.trim()
                                                         : destination.getFileNameWithoutExtension(), nullptr);
-    preset.addChild(state.copyState(), -1, nullptr);
+    auto tree = state.copyState();
+    appendTables(tree);
+    preset.addChild(tree, -1, nullptr);
     const auto xml = preset.createXml();
     if (xml == nullptr) return juce::Result::fail("Forge could not create the preset data.");
 
@@ -403,6 +514,7 @@ juce::Result Processor::loadPreset(const juce::File& source)
     const auto savedState = preset.getChildWithName(state.state.getType());
     if (!savedState.isValid())
         return juce::Result::fail("The preset does not contain Forge parameter state.");
+    applyTables(savedState);
     state.replaceState(migrated(savedState));
     return juce::Result::ok();
 }
@@ -417,6 +529,9 @@ juce::ValueTree Processor::migrated(const juce::ValueTree& savedState) const
     auto result = savedState.createCopy();
     for (int i = result.getNumChildren(); --i >= 0;)
     {
+        // A table is data rather than a parameter and is applied separately, so
+        // it is taken out here and never reaches the parameter state.
+        if (result.getChild(i).hasType(tableNodeType)) { result.removeChild(i, nullptr); continue; }
         const auto id = result.getChild(i).getProperty("id").toString();
         if (id.isNotEmpty() && state.getParameter(id) == nullptr)
             result.removeChild(i, nullptr);
@@ -431,6 +546,91 @@ juce::ValueTree Processor::migrated(const juce::ValueTree& savedState) const
         result.addChild(entry, -1, nullptr);
     }
     return result;
+}
+
+void Processor::appendTables(juce::ValueTree& tree) const
+{
+    for (int osc = 0; osc < oscillatorCount; ++osc)
+    {
+        // A table nobody has touched is the built-in ten, which every copy of
+        // Forge already has. Writing it out would put eighty kilobytes of
+        // base64 into a preset to say "unchanged".
+        if (tables.edit(osc).isUntouched()) continue;
+        tree.addChild(tableNode(tables.edit(osc), osc), -1, nullptr);
+    }
+}
+
+void Processor::applyTables(const juce::ValueTree& tree)
+{
+    for (int osc = 0; osc < oscillatorCount; ++osc)
+    {
+        juce::ValueTree found;
+        for (const auto child : tree)
+            if (child.hasType(tableNodeType) && static_cast<int>(child.getProperty("osc", -1)) == osc)
+                found = child;
+        if (found.isValid() && readTableNode(found, tables.edit(osc))) tables.publish(osc);
+        else tables.resetToBuiltIn(osc);
+    }
+}
+
+// A wavetable file is an ordinary audio file holding single-cycle frames end to
+// end. Nothing here tries to find cycles in arbitrary recorded audio: that is a
+// guess, it is wrong often, and it is its own problem.
+juce::Result Processor::importTable(int oscillator, const juce::File& file)
+{
+    if (!file.existsAsFile()) return juce::Result::fail("that file is not there.");
+
+    juce::AudioFormatManager formats;
+    formats.registerBasicFormats();
+    const std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(file));
+    if (reader == nullptr) return juce::Result::fail("Forge cannot read that kind of file.");
+
+    auto sourceFrameSize = declaredFrameSize(file);
+    if (sourceFrameSize < 4) sourceFrameSize = wavetableFrameSize;
+    const auto available = static_cast<int>(juce::jmin<juce::int64>(reader->lengthInSamples, 1 << 22));
+    const auto sourceFrames = available / sourceFrameSize;
+    if (sourceFrames < 1)
+        return juce::Result::fail("that file is shorter than one " + juce::String(sourceFrameSize)
+                                  + "-sample frame.");
+
+    // Channel 0 only. A wavetable file is mono by convention, and averaging the
+    // channels of one that is not would blur two different tables together.
+    juce::AudioBuffer<float> source(1, sourceFrames * sourceFrameSize);
+    source.clear();
+    if (!reader->read(&source, 0, source.getNumSamples(), 0, true, false))
+        return juce::Result::fail("Forge could not read that file's samples.");
+
+    // A table larger than the ceiling is thinned evenly rather than cut short,
+    // so a 256-frame table still sweeps from its first shape to its last.
+    const auto frames = juce::jmin(sourceFrames, maxEditableFrames);
+    std::vector<float> samples(static_cast<size_t>(frames) * wavetableFrameSize);
+    const auto* read = source.getReadPointer(0);
+    for (int frame = 0; frame < frames; ++frame)
+    {
+        const auto pick = frames == 1 ? 0
+            : juce::jlimit(0, sourceFrames - 1,
+                           juce::roundToInt(static_cast<double>(frame) * (sourceFrames - 1)
+                                            / static_cast<double>(frames - 1)));
+        const auto* from = read + static_cast<size_t>(pick) * sourceFrameSize;
+        auto* into = samples.data() + static_cast<size_t>(frame) * wavetableFrameSize;
+        if (sourceFrameSize == wavetableFrameSize)
+        {
+            std::copy_n(from, wavetableFrameSize, into);
+            continue;
+        }
+        // A frame written at some other size is resampled onto Forge's, with the
+        // same spline the oscillator reads a frame with, so a table stored at
+        // 256 points sits beside a built-in one without a step in it.
+        for (int i = 0; i < wavetableFrameSize; ++i)
+            into[i] = wavetableInterpolate(from, sourceFrameSize,
+                                           static_cast<float>(i) / static_cast<float>(wavetableFrameSize));
+    }
+
+    if (!tables.edit(oscillator).setFrames(samples.data(), frames,
+                                           file.getFileNameWithoutExtension().toUpperCase()))
+        return juce::Result::fail("Forge could not build a table from that file.");
+    tables.publish(oscillator);
+    return juce::Result::ok();
 }
 }
 

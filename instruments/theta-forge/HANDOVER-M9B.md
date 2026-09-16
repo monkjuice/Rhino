@@ -5,10 +5,9 @@ work.** It covers one milestone in one instrument. The repository-wide handover
 about the September 2026 file split is [../../HANDOVER.md](../../HANDOVER.md) and
 is unrelated to this.
 
-M9b-1 is done, committed and pushed. M9b-2 and M9b-3 are not started. The plan
-for all three is in [PLAN.md](PLAN.md); this document is the part that does not
-belong in a plan — what the code now looks like, why it is shaped that way, and
-what will bite you.
+All three parts are done. The plan for them is in [PLAN.md](PLAN.md); this
+document is the part that does not belong in a plan — what the code now looks
+like, why it is shaped that way, and what will bite you.
 
 ## Start here
 
@@ -20,86 +19,149 @@ ctest --test-dir instruments/theta-forge/build -C Release --output-on-failure
 
 Three cases, all green as of this handover. The standalone at
 `build/ThetaForge_artefacts/Release/Standalone/Theta Forge.exe` is the quickest
-way to look at anything.
+way to look at anything. On this machine CMake is not on `PATH`; it is at
+`C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin`.
 
 Read [../../AGENTS.md](../../AGENTS.md) before touching Theta itself. Two rules
 bind this work in particular: **never read `native/.deps/` or
 `research/sources/`**, and **no allocation, locking or filesystem work in
 `renderSample`**.
 
-## What M9b-1 changed
+## What is where
 
-One new file, three edited.
-
-| File | What happened |
+| File | What it holds |
 | --- | --- |
-| `core/ForgeWavetable.h` | **New.** The `Wavetable` type, its band-limited levels, and the interpolator. |
-| `core/ForgeCore.h` | The ten shapes became a generator rather than the render path; `Oscillator` gained a table pointer; the saw's jump moved; `renderOscillator` reads the table. |
-| `tests/ForgeTests.cpp` | New `bandLimitSuite`, plus saw-shape checks inside `waveTableSuite`. |
-| `CMakeLists.txt` | `juce_dsp` linked, the new header listed. |
+| `core/ForgeWavetable.h` | `Wavetable` — immutable, band-limited, what the voice reads. And `WavetableEdit` — the frames as a person changes them. |
+| `core/ForgeTableStore.h` | **New in M9b-2.** `WavetableStore`: who owns a table and how one is handed to the audio thread. |
+| `ui/ForgeTablePanel.h` | **New in M9b-3.** The canvas, the frame strip and the editor's buttons. |
+| `ui/ForgeVisuals.h` | `wavePath` and `fillWaveArea`, shared by the small tube and the big canvas. |
+| `src/ForgeProcessor.*` | Owns the store. Reads a `.wav`. Writes the table into presets and host state. |
+| `src/ForgeEditor.*` | Places the panel, keeps it in step with the store, owns undo's keystroke. |
+| `tables/` | Ten factory tables and the script that writes them. |
 
-Nothing in `ui/` changed at all. That is worth knowing: the panel draws the new
-table through the same `waveAt(position, phase)` it always called.
+## The things that will bite you
 
-## The five things that will bite you
-
-**1. `waveShape` is no longer on the render path.** It looks like the oscillator,
-and it is still where a frame is *authored*, but it now runs ten times at startup
-to fill `builtInWavetable()` and never again. If you change a formula and nothing
-sounds different, you are listening to a table built before your change — restart
-rather than reloading the plugin.
+**1. `waveShape` is not on the render path.** It looks like the oscillator, and
+it is still where a built-in frame is *authored*, but it runs ten times at
+startup to fill `builtInWavetable()` and never again. If you change a formula and
+nothing sounds different, you are listening to a table built before your change —
+restart rather than reloading the plugin.
 
 **2. Level 0 is sacred.** It is the frame exactly as authored, untouched by the
-transform, and it is what the panel draws. A test asserts it matches `waveShape`
-to 0.0005. When frames start coming from files and brushes, keep this property:
-what the display shows has to be what the table holds, or the editor lies to the
-person using it.
+transform. `WavetableEdit` holds the same samples, and the panel draws *those* —
+so what you see is what the table holds, on the tube and on the canvas alike. A
+test asserts the two agree with `waveAt` while a table is untouched.
 
 **3. The voice does not read level 0.** It reads whichever band-limited copy the
-note allows, chosen in `Wavetable::levelFor`. So the panel and the voice now read
-*different data* — deliberately, and it is the one M9a guarantee that M9b-1
-loosened. Do not "fix" this by drawing the level the voice reads: it would change
-with every note played.
+note allows, chosen in `Wavetable::levelFor`. So the panel and the voice read
+*different data*, deliberately. Do not "fix" this by drawing the level the voice
+reads: it would change with every note played.
 
-**4. The table pointer's lifetime is not yet managed.** `Oscillator::table` is a
-raw `const Wavetable*`, null everywhere today, so nothing can dangle yet. **M9b-2
-is where this becomes real and it is the dangerous part of that milestone.** The
-audio thread will be reading a table while the message thread wants to replace
-it. Do not reach for a mutex and do not free the old table on the spot. The
-shape that fits what is already here: the Processor owns the tables, publishes a
-pointer the audio thread picks up once per block, and keeps the replaced table
-alive until the audio thread has demonstrably moved past it — `Processor` already
-publishes per-block state through `std::atomic` for the meters, so the mechanism
-is familiar. Whatever you choose, write down why it is safe.
+**4. A published table is freed the moment nothing can reach it — usually
+immediately.** This caught the test that was written to check it. If you hold a
+`const Wavetable*` across a `publish()` you are holding a dangling pointer, and
+with no audio block in flight it will already have been freed. Sample what you
+need into a vector instead. The only thing allowed to hold one across a publish
+is a `processBlock` that is running, and that is the whole point of the design
+below.
 
 **5. The saw is rotated half a cycle from where you expect.** `waveShape(6, 0)`
-is `0`, not `-1`. This was the point of the change — see below — and the LFO's
-saw in `lfoWave` was deliberately **not** changed to match. Do not "make them
-consistent".
+is `0`, not `-1`. This was the point of the M9b-1 change — see below — and the
+LFO's saw in `lfoWave` was deliberately **not** changed to match. Do not "make
+them consistent".
 
-## Why the saw moved
+**6. The preset format version is still 2, on purpose.** See below.
 
-The user asked for this directly, comparing Forge against Serum: *"the saw in
-forge is a single triangle, the saw in serum is one triangle and right next to it
-an inverted triangle."*
+## How the hand-over is made safe
 
-A saw has one discontinuity per cycle. Forge's `phase * 2 - 1` puts it exactly at
-the frame boundary, so a display drawing phase 0 to 1 never shows it and the saw
-reads as a plain diagonal. Serum stores its saw with the jump in the middle
-instead — visible in their own editor's formula bar as `x<0?-1-x:1-x`, which runs
-0 → −1, jumps, +1 → 0.
+This was M9b-1's open question and it is now `WavetableStore` in
+`core/ForgeTableStore.h`. The reasoning is written out in full at the top of that
+file; the shape of it:
 
-Forge now does the same, rising rather than falling: zero at each end, full swing
-across the centre. Same harmonics, same sound, and the panel finally draws
-something that looks like a saw.
+- One atomic per oscillator carries the table the audio thread should read. The
+  audio thread loads it **once per block**, into the `Patch`, and uses that one
+  pointer for the whole block. So a pointer it loaded during a block can only be
+  in use until that block ends.
+- `processBlock` brackets itself with `WavetableStore::ScopedBlock`, which
+  increments a counter on the way in and again on the way out. The counter is
+  therefore **odd exactly while a block is running**.
+- After publishing, the message thread reads that counter once. Even means no
+  block is running, and any block starting from here on must load the pointer
+  *after* the store that has already happened — so the old table is unreachable
+  and is freed on the spot. Odd means one block may be holding it, and it is
+  parked until the counter reaches the next value.
+- Everything in that argument is `memory_order_seq_cst`, on both sides. It rests
+  on there being a single total order over the publish and the counter read; a
+  weaker ordering permits exactly the interleaving that would free a table out
+  from under a running block. Do not relax these to `acquire`/`release` because
+  they look expensive. They run once per block and once per edit.
 
-This does change what the neighbouring morph positions sound like, since POSITION
-crossfades SAW against THIN and HUMP either side of it. That was accepted.
+No mutex, no reference count on the audio thread, no deferred-delete thread. The
+audio thread does two increments and a load.
+
+**Where this is thin:** a suspended plugin frees immediately, which is the common
+case while editing, so the parked list stays at zero or one entry. But nothing
+bounds it if a host somehow stalls mid-block forever. `collect()` is called on
+every publish and from the editor's timer.
+
+## Drawing, and why a stroke is cheap
+
+`WavetableEdit::draw` is the only thing that ever writes a sample. Freehand calls
+it once per mouse move, so a fast drag leaves no gaps; the line tool calls it
+once over a whole gesture. They are the same operation.
+
+After a stroke the panel calls `publishFrame`, not `publish`. `publish` rebuilds
+every frame — a forward transform and ten inverse transforms each. `publishFrame`
+copies the live table and re-transforms **one** frame, which for a ten-frame
+table is about a 170 KB copy and eleven transforms, and that is what makes a
+stroke audible while the hand is still moving.
+
+`tableEditSuite` holds the cheap path to what the exact path gives, at several
+levels and phases. **If you change either one, that test is what catches you** —
+without it, drawing would sound different from loading the same table back, and
+only an ear would notice.
+
+## What a table costs, and the ceiling
+
+A frame is 8 KB at level 0 and about 17 KB with its band-limited copies. The
+editor caps a table at `maxEditableFrames`, which is **64**. That is the number
+to raise first if this gets more use:
+
+- A 256-frame Serum table is thinned evenly on import rather than cut short, so
+  it still sweeps from its first shape to its last — but it is not the table the
+  author wrote. Raising the cap to 256 costs 4.3 MB per oscillator in memory,
+  which is fine, and about 3.7 MB of base64 in a preset, which is not obviously
+  fine.
+- The frame strip divides its width evenly, so past about thirty frames the
+  cells stop being wide enough to number and past sixty-four they would stop
+  being wide enough to tell apart. A strip that scrolls or zooms is the other
+  half of raising the cap.
+
+## Why the preset format version stayed at 2
+
+M9b-1's note said to decide this deliberately, and M1's rule is that a wrong
+version is refused rather than migrated. The decision is **2**, and the reasoning
+is that the rule is about incompatible changes and this is not one:
+
+- The table is an additive child node beside the parameter state. Every existing
+  format-2 preset still opens, unchanged, and loads correctly — it simply names
+  no table, and an oscillator that is named no table goes back to the built-in
+  ten, which is exactly what it already did.
+- Bumping to 3 would refuse every preset written before this change, to guard
+  against an older build reading a newer preset. No older build has shipped.
+
+The asymmetry that remains: a build predating M9b-2 opening a preset written
+after it would load the patch and ignore the table, so it would sound wrong
+rather than refuse. That is the accepted cost.
+
+Host state travels by the same path and the same node, so a project reopens on
+the table it was saved with. `migrated()` strips the node, so the live parameter
+state stays parameters only — a test asserts that.
 
 ## Band-limiting, in enough detail to change it safely
 
-Eleven levels per frame. Level 0 is the frame as authored with all 1024
-harmonics. Level *k* keeps `1024 >> k` harmonics and is stored at
+Unchanged since M9b-1. Eleven levels per frame. Level 0 is the frame as authored
+with all 1024 harmonics. Level *k* keeps `1024 >> k` harmonics and is stored at
 `max(2048 >> k, 64)` points — so roughly two points per harmonic all the way
 down, and the whole set costs about 2.1× the table rather than 11×.
 
@@ -122,35 +184,65 @@ sine is the same sine at every level". A sine is one harmonic, so every level ha
 to return it unchanged and at the same amplitude. Scaling, sign and mirror
 mistakes all fail it immediately.
 
-## Where M9b-2 starts
+## Why the saw moved
 
-Nothing has been written toward it. In rough order:
+The user asked for this directly, comparing Forge against Serum: *"the saw in
+forge is a single triangle, the saw in serum is one triangle and right next to it
+an inverted triangle."*
 
-1. Decide the table's ownership and hand-off, per point 4 above. Do this first —
-   everything else in M9b-2 is downstream of it.
-2. Read a `.wav` into a `Wavetable`. JUCE's `AudioFormatManager` does the file;
-   the frame size is the `clm ` chunk when present and 2048 otherwise. Building
-   the levels is already done for you by the constructor.
-3. Per-oscillator tables: `oscAPosition`'s readout and the POSITION knob's
-   `gestureSteps` (`src/ForgeEditor.cpp:240`) are both still wired to the
-   built-in ten via `waveShapeCount`. They will need to ask the oscillator's own
-   table how many frames it has.
-4. Preset storage. `Processor::savePreset` writes a `ValueTree` of parameters
-   only; a table is not a parameter. It wants a child node holding the samples,
-   and `migrated()` needs to keep working when that node is absent. Preset format
-   version is currently 2 — decide deliberately whether embedding a table makes
-   it 3, and remember M1's rule that a wrong version is refused rather than
-   migrated.
+A saw has one discontinuity per cycle. Forge's `phase * 2 - 1` puts it exactly at
+the frame boundary, so a display drawing phase 0 to 1 never shows it and the saw
+reads as a plain diagonal. Serum stores its saw with the jump in the middle
+instead — visible in their own editor's formula bar as `x<0?-1-x:1-x`, which runs
+0 → −1, jumps, +1 → 0.
 
-A caution on size: a 256-frame table is 2 MB of level 0 and about 4.3 MB with its
-levels, per oscillator. Embedding that in a preset as XML text is not free.
-Measure before assuming base64 in a `ValueTree` is acceptable.
+Forge now does the same, rising rather than falling: zero at each end, full swing
+across the centre. Same harmonics, same sound, and the panel finally draws
+something that looks like a saw.
+
+## Filling a wave against its zero line
+
+Serum and Vital both do it, and the user asked how. `fillWaveArea` in
+`ui/ForgeVisuals.h` does it with **one path and the non-zero winding rule**,
+which is the part worth knowing:
+
+The trace already ends on the right-hand edge. Running it back along the zero
+line and closing it makes a figure that crosses itself wherever the wave crosses
+zero — and the humps above the line wind in the opposite direction to the humps
+below it. Under the non-zero rule both are filled and the space outside them is
+not, which is exactly the region between the curve and the line, however many
+times it changes sides. Filling each half separately would need every crossing
+found first; this needs none of them.
+
+The gradient is deliberately gentle. The user has seen it and likes it as it is.
+
+## Where the next work starts
+
+Nothing has been written toward any of this.
+
+1. **Export.** The editor can load a table and cannot write one out. The format
+   is already understood from both ends; `tables/make-tables.py` is the RIFF, and
+   `declaredFrameSize` is the `clm ` reader.
+2. **Raise the frame ceiling**, with the strip that a larger table needs. See
+   "What a table costs" above.
+3. **The brush palette.** Serum's second column of shapes is the thing most
+   obviously missing next to a bare pen and line.
+4. **Morph and process across frames** — Serum's `SINGLE / ALL / MORPH` — which
+   is what turns a set of drawn frames into a table that sweeps.
+5. **Undo is the panel's, not the plugin's.** It is a stack of whole tables in
+   `TablePanel`, bounded by weight, and it is lost when the editor closes.
+   Nothing else in Forge has undo; if that changes, this should join it rather
+   than stay separate.
 
 ## State of the work
 
-- Committed and pushed to `origin/main`.
 - All three CTest cases pass; the plugin and standalone both build in Release.
-- No known defects introduced. The one accepted regression in fidelity is point 3
-  above, and the one accepted change in sound is the saw's rotation.
-- Not verified by ear or by eye on this machine. The user tests these milestones
-  by hand — assume nothing has been listened to yet.
+- The editor has been driven by hand on this machine: both tools draw, the frame
+  strip follows, the tube on the OSC tab follows, and POSITION switches from
+  naming shapes to counting frames when a table is drawn on.
+- **Not verified by ear.** No note has been listened to through an edited table
+  on this machine. The tests assert that a flattened frame silences the
+  oscillator, which proves the table reaches the voice, but not that it sounds
+  right.
+- The factory tables have not been listened to either. Every one of them is
+  checked by test for frame count, finiteness and full scale, and that is all.

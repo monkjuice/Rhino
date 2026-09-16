@@ -40,8 +40,10 @@ juce_add_binary_data(ThetaForgeAssets SOURCES ui/assets/forge_logo.png)
 
 target_sources(ThetaForge PRIVATE
     core/ForgeCore.h
+    core/ForgeTableStore.h
     core/ForgeWavetable.h
     ui/ForgeLayout.h
+    ui/ForgeTablePanel.h
     ui/ForgeVisuals.h
     src/ForgeProcessor.cpp
     src/ForgeProcessor.h
@@ -68,8 +70,10 @@ if (BUILD_TESTING)
     target_sources(ThetaForgeTests PRIVATE
         tests/ForgeTests.cpp
         core/ForgeCore.h
+        core/ForgeTableStore.h
         core/ForgeWavetable.h
         ui/ForgeLayout.h
+        ui/ForgeTablePanel.h
         ui/ForgeVisuals.h
         src/ForgeProcessor.cpp
         src/ForgeProcessor.h

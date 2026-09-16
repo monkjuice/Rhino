@@ -1,12 +1,20 @@
 #pragma once
 
 #include "../core/ForgeCore.h"
+#include "../core/ForgeTableStore.h"
 #include <juce_audio_utils/juce_audio_utils.h>
 
 namespace theta::forge
 {
 class Processor final : public juce::AudioProcessor
 {
+    // Declared before `state`, and deliberately first in the class. Members are
+    // initialised in declaration order, and POSITION's value formatter reads the
+    // table's frame count to say which frame it has landed on — so the store has
+    // to exist before parameterLayout() runs, which happens while `state` is
+    // being constructed.
+    WavetableStore tables;
+
 public:
     Processor();
     void prepareToPlay(double sampleRate, int maximumExpectedSamplesPerBlock) override;
@@ -29,6 +37,15 @@ public:
     void setStateInformation(const void*, int) override;
     juce::Result savePreset(const juce::File&, const juce::String& name);
     juce::Result loadPreset(const juce::File&);
+
+    // The tables the oscillators read, and the frames behind them. The editor
+    // draws on these directly; nothing else outside this class should.
+    WavetableStore& tableStore() noexcept { return tables; }
+
+    // Read a wavetable file into one oscillator's table: an ordinary .wav of
+    // single-cycle frames laid end to end. Message thread only — it opens a
+    // file and builds a table.
+    juce::Result importTable(int oscillator, const juce::File&);
     juce::AudioProcessorValueTreeState state;
     // The editor's keyboard plays through this, so notes struck on screen reach
     // the voice the same way notes from the host do.
@@ -60,7 +77,9 @@ public:
     }
 
 private:
-    static juce::AudioProcessorValueTreeState::ParameterLayout parameterLayout();
+    // Not static: POSITION's readout closes over this Processor so it can name
+    // the frame it is on in whichever table the oscillator is reading.
+    juce::AudioProcessorValueTreeState::ParameterLayout parameterLayout();
     Core core;
     std::atomic<float> meterLevel {0.0f};
     std::atomic<int> meterStage {0};
@@ -72,5 +91,13 @@ private:
     Patch patch() const;
     Modulation modulation() const;
     juce::ValueTree migrated(const juce::ValueTree& savedState) const;
+    // A table is not a parameter, so it travels beside the parameter state
+    // rather than inside it: written as a child node when an oscillator's table
+    // has been drawn on or loaded over, and read back before the parameters are
+    // applied. A saved state that names no table resets that oscillator to the
+    // built-in ten, for the same reason an omitted parameter returns to its
+    // default rather than keeping the previous patch's value.
+    void appendTables(juce::ValueTree& tree) const;
+    void applyTables(const juce::ValueTree& tree);
 };
 }

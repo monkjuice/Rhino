@@ -32,6 +32,11 @@ juce::String asHertz(float value)
 
 juce::String asRate(float value) { return juce::String(value, 2) + " Hz"; }
 
+// A wavetable position reads as the shape it is on, or as the two it sits
+// between. A percentage said nothing about what the oscillator was doing, and
+// it is the readout under the hand that has to answer "where is the saw?".
+juce::String asShape(float value) { return theta::forge::waveLabel(value); }
+
 juce::String asSeconds(float value)
 {
     return value < 1.0f ? juce::String(juce::roundToInt(value * 1000.0f)) + " ms"
@@ -112,7 +117,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout Processor::parameterLayout()
         const auto id = [prefix] (const char* suffix) { return juce::String(prefix) + suffix; };
         const auto name = [label] (const char* suffix) { return juce::String(label) + " " + suffix; };
         result.push_back(toggle(id("Enable"), name("Enable"), enabled));
-        result.push_back(parameter(id("Position"), name("Position"), {0.0f, 1.0f}, position, asPercent));
+        result.push_back(parameter(id("Position"), name("Position"), {0.0f, 1.0f}, position, asShape));
         result.push_back(parameter(id("Octave"), name("Octave"), {-4.0f, 4.0f, 1.0f}, 0.0f, asOctaves));
         result.push_back(parameter(id("Semitone"), name("Semitone"), {-12.0f, 12.0f}, semitone, asSemitones));
         result.push_back(parameter(id("Fine"), name("Fine"), {-100.0f, 100.0f, 1.0f}, 0.0f, asCents));
@@ -122,8 +127,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout Processor::parameterLayout()
         result.push_back(parameter(id("Pan"), name("Pan"), {-1.0f, 1.0f}, 0.0f, asPan));
         result.push_back(parameter(id("Level"), name("Level"), {0.0f, 1.0f}, level, asPercent));
     };
-    oscillator("oscA", "Osc A", true, 0.55f, 0.0f, 0.75f);
-    oscillator("oscB", "Osc B", true, 0.18f, 7.0f, 0.25f);
+    // 6/9 is SAW and 1/9 is TRI: a fresh patch starts on shapes with names
+    // rather than part-way between two of them.
+    oscillator("oscA", "Osc A", true, 6.0f / 9.0f, 0.0f, 0.75f);
+    oscillator("oscB", "Osc B", true, 1.0f / 9.0f, 7.0f, 0.25f);
 
     result.push_back(toggle("subEnable", "Sub Enable", true));
     result.push_back(parameter("subLevel", "Sub Level", {0.0f, 1.0f}, 0.12f, asPercent));

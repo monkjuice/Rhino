@@ -787,7 +787,11 @@ void setSlot(theta::forge::Processor& processor, int slot, float source, float d
 void closedFilterOnA(theta::forge::Processor& processor)
 {
     soloSineOnA(processor);
-    setValue(processor, "oscAPosition", 1.0f);   // square: harmonics for the filter to remove
+    // A saw, for the harmonics the filter is there to remove. Named through the
+    // table rather than written as a bare number: the position a shape sits at
+    // moves whenever the table gains a frame, and a test that hard-codes one is
+    // silently measuring a different sound afterwards.
+    setValue(processor, "oscAPosition", 6.0f / 9.0f);
     setValue(processor, "filterEnable", 1.0f);
     setValue(processor, "routeA", 1.0f);
     setValue(processor, "cutoff", 300.0f);
@@ -1094,6 +1098,92 @@ void lfoSuite()
     synced.setPlayHead(nullptr);
 }
 
+void waveTableSuite()
+{
+    using theta::forge::waveShape;
+    using theta::forge::waveShapeCount;
+
+    // Every frame has to be finite, stay inside plus or minus one, and reach
+    // full scale. The last of those is what keeps morphing level: if one frame
+    // were quiet, sweeping POSITION across it would dip the oscillator.
+    for (int shape = 0; shape < waveShapeCount; ++shape)
+    {
+        auto extreme = 0.0f;
+        for (int i = 0; i < 2048; ++i)
+        {
+            const auto at = waveShape(shape, static_cast<float>(i) / 2048.0f);
+            require(std::isfinite(at), "a wavetable frame is finite everywhere");
+            extreme = std::max(extreme, std::abs(at));
+        }
+        if (extreme > 1.0f || extreme < 0.9f)
+        {
+            require(false, "a wavetable frame fills the range without leaving it");
+            std::cerr << "       " << theta::forge::waveShapeName(shape)
+                      << " peaks at " << extreme << '\n';
+        }
+    }
+
+    // Ten shapes, not one shape ten times. Checked against every other frame
+    // rather than only its neighbour, so a duplicate anywhere in the table is
+    // caught.
+    for (int a = 0; a < waveShapeCount; ++a)
+        for (int b = a + 1; b < waveShapeCount; ++b)
+        {
+            auto apart = 0.0f;
+            for (int i = 0; i < 512; ++i)
+            {
+                const auto phase = static_cast<float>(i) / 512.0f;
+                apart = std::max(apart, std::abs(waveShape(a, phase) - waveShape(b, phase)));
+            }
+            if (apart <= 0.05f)
+            {
+                require(false, "no two wavetable frames are the same shape");
+                std::cerr << "       " << theta::forge::waveShapeName(a) << " and "
+                          << theta::forge::waveShapeName(b) << '\n';
+            }
+        }
+
+    // Landing on a frame's own position has to give that frame exactly, or the
+    // names the knob reads out would be pointing at the wrong thing.
+    for (int shape = 0; shape < waveShapeCount; ++shape)
+    {
+        const auto position = static_cast<float>(shape) / static_cast<float>(waveShapeCount - 1);
+        for (int i = 0; i < 128; ++i)
+        {
+            const auto phase = static_cast<float>(i) / 128.0f;
+            requireClose(theta::forge::waveAt(position, phase), waveShape(shape, phase), 0.0005f,
+                         "a position on a frame reads that frame exactly");
+        }
+        requireText(theta::forge::waveLabel(position), theta::forge::waveShapeName(shape),
+                    "a position on a frame is named after it");
+    }
+
+    // And between two frames it names both, so a blend never masquerades as a
+    // shape you could have chosen.
+    requireText(theta::forge::waveLabel(0.5f / 9.0f), "SINE>TRI",
+                "a position between two frames names both");
+
+    // Morphing has to be continuous in position: a small move must not jump the
+    // output, or modulating POSITION would click.
+    for (int i = 1; i < 900; ++i)
+    {
+        const auto before = static_cast<float>(i) / 900.0f;
+        const auto after = before + 0.001f;
+        for (int k = 0; k < 32; ++k)
+        {
+            const auto phase = static_cast<float>(k) / 32.0f;
+            const auto step = std::abs(theta::forge::waveAt(after, phase)
+                                       - theta::forge::waveAt(before, phase));
+            if (step > 0.05f)
+            {
+                require(false, "morphing POSITION moves the wave smoothly");
+                std::cerr << "       " << before << " -> " << after
+                          << " at phase " << phase << " jumped " << step << '\n';
+            }
+        }
+    }
+}
+
 void voicingSuite()
 {
     // Mono collapses to a single voice, so polyphony stops meaning anything.
@@ -1181,6 +1271,7 @@ void engineSuite()
     filterRoutingSuite();
     envelopeSuite();
     lfoSuite();
+    waveTableSuite();
     voicingSuite();
     modulationSuite();
 

@@ -238,6 +238,39 @@ public:
         return event.mods.isShiftDown() || event.mods.isCommandDown();
     }
 
+    // When set, a gesture lands on one of this many evenly spaced steps across
+    // the range, so a knob that picks from a list of things can actually pick
+    // one instead of stopping a hair short of it. The fine modifier turns it
+    // off, which is how you reach the places in between on purpose.
+    //
+    // Only a gesture is affected. JUCE asks snapValue about a value the hand
+    // arrived at, never about one set by the host, an attachment or the matrix,
+    // so a modulated position still sweeps the table smoothly.
+    int gestureSteps = 0;
+
+    double snapValue(double attempted, juce::Slider::DragMode) override
+    {
+        if (!stepping()) return attempted;
+        const auto step = gestureStep();
+        return getMinimum() + std::round((attempted - getMinimum()) / step) * step;
+    }
+
+    // One notch, one step. Left to itself the wheel moves a knob by less than a
+    // step is wide, so snapping rounded every notch straight back to where it
+    // started and the wheel did nothing at all.
+    void mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel) override
+    {
+        if (!stepping() || wheel.deltaY == 0.0f)
+        {
+            juce::Slider::mouseWheelMove(event, wheel);
+            return;
+        }
+        const auto step = gestureStep();
+        const auto direction = wheel.deltaY > 0.0f ? 1.0 : -1.0;
+        const auto now = std::round((getValue() - getMinimum()) / step);
+        setValue(getMinimum() + (now + direction) * step, juce::sendNotificationSync);
+    }
+
     bool overRing(juce::Point<int> position)
     {
         return ringDraggable && onModRing(ringArea(), position);
@@ -302,6 +335,20 @@ public:
 private:
     bool draggingRing = false;
     float depthAtDragStart = 0.0f;
+
+    // Stepping is off while the fine modifier is held, which is how the places
+    // between two steps are reached deliberately rather than by accident.
+    bool stepping() const
+    {
+        const auto mods = juce::ModifierKeys::getCurrentModifiers();
+        return gestureSteps >= 2 && getMaximum() > getMinimum()
+            && !mods.isShiftDown() && !mods.isCommandDown();
+    }
+
+    double gestureStep() const
+    {
+        return (getMaximum() - getMinimum()) / static_cast<double>(gestureSteps - 1);
+    }
 
     // The rotary itself, which is not the whole component: a knob keeps its
     // readout below, and the look is handed only the part it draws the circle
@@ -572,17 +619,10 @@ inline void drawTableRow(juce::Graphics& g, juce::Rectangle<int> row, juce::Rect
     g.drawText(juce::String(number), gutter, juce::Justification::centred);
 }
 
-inline float waveform(float phase, float position)
-{
-    const auto sine = std::sin(phase * juce::MathConstants<float>::twoPi);
-    const auto triangle = 1.0f - 4.0f * std::abs(phase - 0.5f);
-    const auto saw = phase * 2.0f - 1.0f;
-    const auto square = phase < 0.5f ? 1.0f : -1.0f;
-    const float frames[] {sine, triangle, saw, square};
-    const auto scaled = juce::jlimit(0.0f, 1.0f, position) * 3.0f;
-    const auto index = std::min(2, static_cast<int>(scaled));
-    return juce::jmap(scaled - static_cast<float>(index), frames[index], frames[index + 1]);
-}
+// The oscillator's own table, so the tube shows the curve the voice is reading.
+// This used to be a second copy of the morph, which meant the two could drift
+// apart and only an ear would notice.
+using theta::forge::waveAt;
 
 inline void strokeGlow(juce::Graphics& g, const juce::Path& path, juce::Colour colour, float alpha)
 {
@@ -743,7 +783,7 @@ inline void drawWaveform(juce::Graphics& g, juce::Rectangle<int> area, float pos
     {
         const auto phase = static_cast<float>(i) / static_cast<float>(points);
         const auto x = box.getX() + phase * box.getWidth();
-        const auto y = box.getCentreY() - waveform(phase, position) * box.getHeight() * 0.44f;
+        const auto y = box.getCentreY() - waveAt(position, phase) * box.getHeight() * 0.44f;
         if (i == 0) path.startNewSubPath(x, y); else path.lineTo(x, y);
     }
     // Clipped to the glass, so the halo stops at the bezel rather than spilling

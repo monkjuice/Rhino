@@ -28,6 +28,103 @@ struct Oscillator
 // Which of the filter's three taps reaches the output.
 enum class FilterType { lowPass, highPass, bandPass };
 
+// --- The oscillator's table ---------------------------------------------------
+//
+// Ten single-cycle shapes that POSITION morphs through. This is Forge's one
+// fixed table — its "default shapes" — until loadable wavetables arrive in M9.
+// The frames are analytic rather than sampled, so a frame costs a few operations
+// and no memory at all, and the panel can draw the identical curve the voice is
+// reading.
+//
+// The order matters as much as the contents: POSITION crossfades whichever two
+// frames it falls between, so what sits next to what is what the in-between
+// positions sound like. They run from the softest through the pulse family to
+// the brightest, with each frame a relative of the one before it.
+inline constexpr int waveShapeCount = 10;
+
+inline const char* waveShapeName(int shape)
+{
+    switch (shape)
+    {
+        case 1: return "TRI";
+        case 2: return "TRAP";
+        case 3: return "SQR";
+        case 4: return "PULSE";
+        case 5: return "THIN";
+        case 6: return "SAW";
+        case 7: return "HUMP";
+        case 8: return "ORGAN";
+        case 9: return "VOX";
+        default: break;
+    }
+    return "SINE";
+}
+
+// One frame, at a point in its cycle. Every frame is bipolar and reaches full
+// scale, so morphing between any two never changes the oscillator's level.
+inline float waveShape(int shape, float phase)
+{
+    const auto cycle = phase * juce::MathConstants<float>::twoPi;
+    const auto triangle = 1.0f - 4.0f * std::abs(phase - 0.5f);
+    switch (shape)
+    {
+        case 1: return triangle;
+        // A triangle driven past full scale and clipped: flat tops with sloped
+        // sides, which is what sits between a triangle and a square.
+        case 2: return juce::jlimit(-1.0f, 1.0f, triangle * 3.0f);
+        case 3: return phase < 0.5f ? 1.0f : -1.0f;
+        case 4: return phase < 0.25f ? 1.0f : -1.0f;
+        case 5: return phase < 0.1f ? 1.0f : -1.0f;
+        case 6: return phase * 2.0f - 1.0f;
+        // A rectified sine: two humps a cycle, so the even harmonics arrive and
+        // it reads an octave up without being one.
+        case 7: return 2.0f * std::abs(std::sin(cycle)) - 1.0f;
+        // Drawbars: a fundamental with an octave and a twelfth over it. The
+        // scaling is the measured peak of that sum, so it fills the range
+        // without being clipped into a different shape.
+        case 8: return 0.694224f * (std::sin(cycle) + 0.5f * std::sin(2.0f * cycle)
+                                                    + 0.33f * std::sin(3.0f * cycle));
+        // A formant: a burst of the third harmonic under a raised cosine, which
+        // is the shape a vowel makes and sounds like one.
+        case 9: return 1.067774f * std::sin(3.0f * cycle) * (0.5f - 0.5f * std::cos(cycle));
+        default: break;
+    }
+    return std::sin(cycle);
+}
+
+// Where a position falls in the table: the frame at or below it, and how far
+// past that frame it has travelled. A position of one lands on the last frame
+// with nothing beyond it to blend toward.
+inline void waveFrameAt(float position, int& frame, float& blend)
+{
+    const auto scaled = juce::jlimit(0.0f, 1.0f, position) * static_cast<float>(waveShapeCount - 1);
+    frame = std::min(waveShapeCount - 2, static_cast<int>(scaled));
+    blend = scaled - static_cast<float>(frame);
+}
+
+// One sample of the table at a position. Only the two frames either side of it
+// are worked out, so what this costs does not grow with the size of the table.
+inline float waveAt(float position, float phase)
+{
+    int frame = 0;
+    auto blend = 0.0f;
+    waveFrameAt(position, frame, blend);
+    return juce::jmap(blend, waveShape(frame, phase), waveShape(frame + 1, phase));
+}
+
+// What a position is called, for a knob to read out. Exactly on a frame it is
+// that frame's name; between two it names both, because a blend of two shapes is
+// honestly what it is. Never called from the render.
+inline juce::String waveLabel(float position)
+{
+    int frame = 0;
+    auto blend = 0.0f;
+    waveFrameAt(position, frame, blend);
+    if (blend <= 0.01f) return waveShapeName(frame);
+    if (blend >= 0.99f) return waveShapeName(frame + 1);
+    return juce::String(waveShapeName(frame)) + ">" + waveShapeName(frame + 1);
+}
+
 // LFO 1's shapes. It is a modulation source, so every shape is bipolar and runs
 // the full -1..1: a slot's depth decides how much of that reaches anything.
 enum class LfoShape { sine, triangle, saw, square, sampleHold };
@@ -571,18 +668,7 @@ private:
             }
     }
 
-    static float morph(float phase, float position)
-    {
-        phase = wrap(phase);
-        const auto sine = std::sin(phase * juce::MathConstants<float>::twoPi);
-        const auto triangle = 1.0f - 4.0f * std::abs(phase - 0.5f);
-        const auto saw = phase * 2.0f - 1.0f;
-        const auto square = phase < 0.5f ? 1.0f : -1.0f;
-        const float frames[] {sine, triangle, saw, square};
-        const auto scaled = juce::jlimit(0.0f, 1.0f, position) * 3.0f;
-        const auto index = std::min(2, static_cast<int>(scaled));
-        return juce::jmap(scaled - static_cast<float>(index), frames[index], frames[index + 1]);
-    }
+    static float morph(float phase, float position) { return waveAt(position, wrap(phase)); }
 
     void updateEnvelope(float& value, EnvelopeStage& stage, float releaseStart,
                         float attack, float decay, float sustain, float release) const

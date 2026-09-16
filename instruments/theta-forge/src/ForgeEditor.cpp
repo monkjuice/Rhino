@@ -231,6 +231,13 @@ void Editor::buildModules()
                     // should still land on whole semitones under the hand.
                     if (juce::String(declared.id).endsWith("Semitone"))
                         control->slider.setRange(-12.0, 12.0, 1.0);
+                    // Position is the same bargain one step further on. It picks
+                    // a frame out of the oscillator's table, so a hand on it
+                    // lands on a shape rather than a hair short of one, while
+                    // the matrix still sweeps the whole table smoothly. Hold the
+                    // fine modifier to stop between two frames on purpose.
+                    if (juce::String(declared.id).endsWith("Position"))
+                        control->slider.gestureSteps = waveShapeCount;
                 }
 
                 // The editor handles right-click so a knob can offer its

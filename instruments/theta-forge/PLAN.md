@@ -421,12 +421,65 @@ refresh — the line above was written when there were — so this is now "autho
 small factory set that shows each module off", which wants an ear rather than a
 build, and is left for whoever has one.
 
+### M9a — ten shapes in the oscillator's table — done
+
+The oscillator had four frames — sine, triangle, saw, square — and POSITION
+crossfaded between them. That is a morph, not a table. It now holds ten, and
+they can be chosen rather than approached.
+
+- **The ten, in order:** `SINE`, `TRI`, `TRAP`, `SQR`, `PULSE` (quarter),
+  `THIN` (tenth), `SAW`, `HUMP`, `ORGAN`, `VOX`. The order is as much of the
+  design as the contents: POSITION crossfades whichever two frames it falls
+  between, so what sits next to what is what the in-between positions sound
+  like. Each frame is a relative of the one before it — a triangle flattens into
+  a trapezoid into a square, a square narrows into a pulse and then into a
+  sliver — rather than the list being sorted by name or by when it was thought
+  of.
+- The frames are analytic, so one costs a few operations and no memory. Only the
+  two either side of the position are worked out, so the cost does not grow with
+  the size of the table — which is the property that has to hold before a table
+  can sensibly get bigger.
+- Every frame is bipolar and reaches full scale. If one were quieter than the
+  rest, sweeping POSITION across it would dip the oscillator's level, and a
+  morph would have a hole in it.
+- `waveAt` is a free function, so the tube draws the very curve the voice is
+  reading. It was two separate copies of the same maths before, one in the
+  engine and one in the panel, which could drift apart with only an ear to
+  notice.
+- **POSITION now reads out the shape** — `SAW`, or `SAW>HUMP` between two —
+  instead of a percentage. A percentage never answered the only question anybody
+  asks a wavetable knob, which is "where is the saw?".
+- **A gesture lands on a frame.** Dragging or scrolling POSITION snaps to the
+  ten; holding the fine modifier goes between them on purpose. Only the hand is
+  affected — JUCE asks `snapValue` about a value a gesture arrived at, never
+  about one from the host or the matrix, so a modulated position still sweeps
+  the table smoothly. The mouse wheel needed its own handling: a notch moves a
+  knob by less than a frame is wide, so snapping rounded every notch straight
+  back and the wheel did nothing at all. One notch is now one frame.
+
+**Consequences, all deliberate:** a POSITION saved before this names a different
+shape now, because the table it indexes into has changed underneath it — the saw
+is the exception, and only by luck, since it sat at two thirds with four frames
+and sits at two thirds again with ten. The oscillator defaults moved onto real
+frames, `SAW` and `TRI`, rather than part-way between two. And the aliasing is
+untouched and now has more shapes to spoil: `PULSE` and `THIN` are the worst of
+them, being nothing but edges.
+
+**Tests:** every frame is finite, stays inside plus or minus one and reaches full
+scale; no two frames are the same shape, checked against every other frame
+rather than only its neighbour; a position on a frame reads that frame exactly
+and is named after it; a position between two names both; and morphing is
+continuous in position, so modulating POSITION cannot click.
+
 ## Out of scope for now
 
 These are the north star, not this plan. They come after the synth is finished.
 
-- **M9 — Real wavetables.** Loadable tables, a table editor, and frame
-  interpolation replacing today's four-frame analytic morph.
+- **M9b — Real wavetables.** Loadable tables and a table editor. The frames
+  themselves are no longer the gap — M9a, above, replaced the four-frame morph
+  with a real table of ten — so what is left here is where a table comes *from*:
+  reading a file, holding many more frames than ten, and editing them. Serum's
+  editor is the reference for what that looks like.
 - **M10 — ENV 2–4, LFO 2–6 and macros 1–8** as further matrix sources.
 - **M11 — FX rack.** Chorus, distortion, delay, reverb, compressor, EQ, in a
   reorderable chain.
@@ -481,3 +534,4 @@ way to look at a change.
 | M6e Modulation shown on the knob | **done** — ready to test by eye |
 | M7 LFO 1 | **done** — ready to test by ear |
 | M8 Polish | interaction **done**; a factory preset set still to author |
+| M9a Ten shapes in the oscillator table | **done** — ready to test by ear |

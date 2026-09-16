@@ -261,6 +261,24 @@ inline bool sharePage(const Module& a, const Module& b)
     return a.page == Page::always || b.page == Page::always || a.page == b.page;
 }
 
+// --- What the window may be ---------------------------------------------------
+//
+// The panel is laid out by weight rather than at fixed sizes, so these are the
+// range over which that has been checked rather than sizes anything is designed
+// against. The layout test sweeps the whole of it.
+inline constexpr int minPanelWidth = 1140;
+inline constexpr int minPanelHeight = 980;
+inline constexpr int maxPanelWidth = 1900;
+inline constexpr int maxPanelHeight = 1500;
+
+// What it opens at: wide enough for the tabbed row to carry a wavetable editor
+// as well as two oscillators, and as short as the panel is allowed to be.
+// Height is what a plugin window inside a host has least of, so the default
+// spends none of it that the layout does not need — and taking it from the
+// limit rather than repeating the number means the two cannot drift apart.
+inline constexpr int defaultPanelWidth = 1350;
+inline constexpr int defaultPanelHeight = minPanelHeight;
+
 inline constexpr int keyboardHeight = 80;
 
 // The inset every edge of the panel shares: the wordmark, the preset controls,

@@ -123,10 +123,18 @@ void layoutSuite()
     // The size the editor actually opens at, so the detailed checks below run
     // against the panel people see. The sweep further down covers the rest of
     // the allowed range.
-    const auto bounds = juce::Rectangle<int>(0, 0, 1350, 1020);
+    const auto bounds = juce::Rectangle<int>(0, 0, theta::forge::ui::defaultPanelWidth,
+                                             theta::forge::ui::defaultPanelHeight);
     const auto content = theta::forge::ui::contentBounds(bounds);
     const auto& modules = theta::forge::ui::modules();
     require(!modules.empty(), "the panel declares at least one module");
+    // The default has to be a size the window can actually be put at, or the
+    // editor opens somewhere the resize limits would not let you return to.
+    require(theta::forge::ui::defaultPanelWidth >= theta::forge::ui::minPanelWidth
+                && theta::forge::ui::defaultPanelWidth <= theta::forge::ui::maxPanelWidth
+                && theta::forge::ui::defaultPanelHeight >= theta::forge::ui::minPanelHeight
+                && theta::forge::ui::defaultPanelHeight <= theta::forge::ui::maxPanelHeight,
+            "the size the panel opens at is inside its own resize limits");
 
     // Every id the layout names must resolve. This is the guard that keeps a
     // declarative layout honest: a typo here would otherwise be a silent
@@ -318,8 +326,8 @@ void layoutSuite()
     // geometry can go wrong at one awkward size while both extremes are fine,
     // and a module clipping at some width nobody happened to try is exactly the
     // kind of thing an eye test misses.
-    for (int width = 1140; width <= 1900; width += 20)
-        for (int height = 980; height <= 1500; height += 20)
+    for (int width = theta::forge::ui::minPanelWidth; width <= theta::forge::ui::maxPanelWidth; width += 20)
+        for (int height = theta::forge::ui::minPanelHeight; height <= theta::forge::ui::maxPanelHeight; height += 20)
         {
             const auto resized = juce::Rectangle<int>(0, 0, width, height);
             const auto area = theta::forge::ui::contentBounds(resized);

@@ -43,9 +43,10 @@ arithmetic; modules declare their contents.
 | | LEVEL | | LVL | | TYPE [A][B][S][N]| | POLY MONO LEGATO | | 1  2 |  |
 | |  (o)  | | (o) | | CUTOFF RES DRIVE | | GLIDE  OUTPUT    | | 3  4 |  |
 | +-------+ +-----+ +------------------+ +------------------+ | 5  6 |  |
-| +-- ENV 1 -------------------+ +-- LFO 1 ----------------+ | 7  8 |  |
+| +-- ENV 1 -------------------+ +-- LFO ------------------+ | 7  8 |  |
 | | [ ADSR curve ]             | | [ shape + phase ]       | |      |  |
-| | ATTACK DECAY SUSTAIN RELEA | | RATE                    | |      |  |
+| | ATTACK DECAY SUSTAIN RELEA | | [1][2][3][4][5][6]      | |      |  |
+| |                            | | SHAPE MODE UNIT  RATE   | |      |  |
 | +----------------------------+ +-------------------------+ +------+  |
 +----------------------------------------------------------------------+
 
@@ -585,12 +586,197 @@ whole table gives.
 The brush palette, the harmonic bars and the formula bar that Serum's editor
 also carries are still explicitly not here.
 
+### M9c — LFO 1 answers the keyboard — done
+
+M7 built LFO 1 as a source with a shape and a rate. It free-ran and nothing
+else: it never noticed a note, and the only way to set its rate in beats was a
+switch called SYNC that read as an afterthought rather than as a unit.
+
+- **MODE: TRIG, ENV or OFF.** TRIG restarts the shape on every new note and
+  loops for as long as one is held. ENV restarts it too but stops on the last
+  point of the shape and holds it, which turns any of the five shapes into a
+  one-shot envelope of its own — a saw ends at the top, a triangle at the
+  bottom, and whatever it drives stays there until the next note. OFF is what
+  M7 had: it free-runs across notes, so a rate set in beats stays in step with
+  the host from one phrase to the next.
+- **TRIG is the default**, not OFF. An LFO that answers the keyboard is what a
+  player expects of one, and it is the mode the other two are heard against.
+  Presets written before this milestone therefore start retriggering, by the
+  same rule every other omitted parameter follows.
+- **A legato note in mono does not retrigger.** No key was lifted, so the LFO
+  restarts exactly when the amp envelope does and not otherwise. One rule,
+  expressed once, in `noteOn`.
+- **A key-synced LFO only runs while something is sounding.** With no voice
+  alive, TRIG and ENV wait at the start of the shape rather than free-running
+  in the background — which is what makes the indicator mean anything: it sits
+  where the next key press will start the shape from. A free-running LFO that
+  the panel animated with nothing playing was showing a cycle no note had
+  started and no note would join. OFF is unaffected; running with nothing
+  playing is its whole job.
+- **The release tail still counts as sounding.** A voice in release is audible,
+  so the shape runs on through it. Cutting it dead the moment a key came up
+  would jump whatever it drives while the tail is still there.
+- **Stopping is the Core's business, not the panel's.** The Processor still
+  resolves everything to a rate in Hertz and the Core still never sees a tempo;
+  the mode is one more float on the patch, read through `lfoModeOf`. Taking the
+  mode off ENV lets a stopped shape run on from where it stopped rather than
+  leaving the panel showing a dead indicator.
+- **RATE is one knob, and UNIT says what it counts in.** `lfoSync` is gone. HZ
+  and BPM are two readings of one setting, so the two parameters behind them
+  share a cell and only the one in charge is on screen — the knob does not move,
+  the number under it changes from `0.50 Hz` to `1/4`. A switch called SYNC left
+  a greyed-out knob sitting beside a live one and made the tempo reading look
+  like a mode of the free one.
+- **A control may now declare `sharesCell`.** It is the general form of that:
+  the row is divided between its cells rather than between its controls, and a
+  shared control hides rather than greys, because a greyed control would be
+  sitting on top of the live one. `enabledBy` and `disabledBy` still decide
+  which of the two it is.
+- **The header names the division.** In beats the rate is a division of the
+  host's tempo, which is the one reading the knob cannot give on its own, so
+  the header reads `1/4 // 2.00 HZ`.
+
+**Tests:** a key-synced LFO waits at the start until a note arrives, runs once
+one is playing, and restarts on the next one; a note does not restart a
+free-running LFO; TRIG keeps running through the release tail and comes back to
+the start once the last voice has gone, and the panel is shown that same parked
+phase; TRIG comes round again at the end of the cycle and keeps running; ENV
+stops at the end of its shape, holds the value the shape ended on, stays stopped
+however long it is left, and restarts on the next note; a legato note in mono does not
+restart it while a mono note without legato does; every mode has a name of its
+own. On the panel: the two controls in a shared cell are gated by one parameter
+one each way round, and land on the same rectangle.
+
+
+### M9d — voice stealing without a click — done
+
+A run of notes longer than the polyphony left a tick on every note past the
+limit, loudest with both oscillators on because both were cut at once. Two
+things were wrong, and both had to be fixed to make it silent.
+
+- **A new note took whichever voice a rotation had reached**, busy or not. So a
+  third note in a two-voice patch silenced the note still under the player's
+  finger while a finished voice sat beside it. It now takes a silent voice if
+  there is one — still moving through them in turn, so successive notes do not
+  all start from the same phases — and only when every voice is busy does it
+  take one, choosing the quietest voice already in its release, or, if every key
+  is still down, the quietest of those.
+- **Taking a voice wiped it.** `voice = {}` reset the oscillator phases, the
+  filter state and the envelope together, which stepped that voice's output
+  straight to zero in a single sample. A voice that is still audible is now
+  retuned instead of rebuilt: it keeps its phases, its filter state and the
+  level its envelope has reached, and the attack starts again from that level.
+  Amplitude, waveform and filter are continuous across the steal. The pitch
+  jumps, which is the new note arriving rather than a click.
+- A silent voice is still built from scratch, phase offsets and all, because
+  there is nothing there to be continuous with.
+
+**Tests:** the largest step from one sample to the next — which is what a click
+is — measured over ten notes through four voices, against the same ten notes
+through sixteen, where nothing is ever taken. On sine frames, so every
+legitimate step is bounded by the pitch and anything larger came from the engine
+cutting something off. Before: six times the reference. And the allocation
+itself, as an invariant rather than an index check — while no more notes sound
+at once than the patch has voices, raising the polyphony cannot change a sample.
+
+
+### M9e — a voice is let go of, not cut off — done
+
+With M9d's click at the start of a note gone, a second one was audible at the
+end of one — loudest with the sub on, and on a patch with the cutoff near the
+bottom of its range.
+
+- **The amp envelope reaching zero is not the end of a voice.** Everything a
+  voice makes is multiplied by that envelope and then passes through the
+  filter, and a filter holds energy. At a low cutoff the voice is still ringing
+  milliseconds after the envelope that fed it stopped — and the sub is what
+  makes that ring loudest, a sine an octave down being exactly what a low
+  cutoff passes. Dropping the voice at the envelope's zero truncated the ring,
+  and a truncated ring is a click.
+- **A finished voice is now faded out over 15 ms instead**, and the ring decays
+  into the fade. Measured on the patch this was reported against: what was left
+  at the cut went from 39 dB below the note's peak to 100 dB below it.
+- **The fade is also what guarantees the voice comes back.** Waiting for the
+  filter to fall quiet on its own would be at the mercy of the resonance; a
+  fixed fade bounds it whatever the filter is doing.
+- 15 ms because it covers half a cycle of the lowest cutoff the filter offers,
+  which is the slowest thing it can be left ringing with.
+
+**Tests:** on a patch with the cutoff near the bottom of its range and the sub
+at full level, what is left of a voice at the moment it stops has to be more
+than 66 dB below the peak of the note it came from. Cutting at the envelope's
+zero leaves it 39 dB below, so the check fails against the old behaviour rather
+than merely describing the new one.
+
+Not the cause, though both were measured while looking for it: LFO 1 retriggering
+under a note that is already sounding steps that note by about -75 dBFS, and the
+corner it puts in the waveform is the largest in a run — but it is a corner, not
+a step, because a cutoff change moves the filter's coefficient and not its state.
+A per-voice LFO would remove it and is the right shape for M10's LFO 2–6; it is
+not what was being heard here.
+
+
+### M10a — six LFOs, each inside the voice — done
+
+M7 built one LFO as a source. This makes six of them, and moves the ones that
+answer the keyboard inside the voice, which is where the last of the clicks was.
+
+- **An LFO in TRIG or ENV now runs inside each voice.** That is what those modes
+  were always supposed to mean: a new note restarts *its own* copy of the shape
+  and leaves the notes already sounding where they were. One shared cycle meant
+  every key press jerked whatever the held notes were being driven by, part-way
+  through them — measured at about -75 dBFS as a step, but a visible corner in
+  the waveform, and the largest one in a run.
+- **An LFO in OFF is still a single free-running cycle**, shared by every voice
+  and by the panel. That is the whole of what OFF is for: it stays in step with
+  the host across a phrase, so it cannot belong to a voice.
+- **The "only runs while something is sounding" rule is gone**, because it is
+  now simply what happens. A voice's LFO exists while the voice does; with
+  nothing playing there is nothing to advance, and the panel is shown the start
+  of the shape — where the next key press will begin it.
+- **The panel follows the loudest voice**, exactly as ENV 1's display does and
+  for the same reason: that is the note a player is listening to.
+- **Six LFOs share one module, shown one at a time.** Six boxes side by side
+  would not fit, and six that did would each be too small to read; Serum shows
+  its eight the same way. Numbered buttons in the header choose which, the
+  module's drag handle carries whichever is showing, and the banks that are not
+  showing stay built and stay attached — so an LFO out of sight is still driven
+  by the host and still running.
+- **A row of controls may now be declared in banks.** The row is divided between
+  one bank's cells and the rest stand on them, which is the same idea
+  `sharesCell` already expressed for two controls and now generalised to six
+  sets of five. Which bank is showing is the panel's business, not the host's:
+  it says which LFO you are looking at, not what the synth is doing, so it is no
+  more a parameter than which tab is open.
+- **Only the LFOs anything reads are worked out per voice.** Six of them
+  stepping through a sine for every voice would be five sixths of that work
+  thrown away when one is routed. The phases still move either way, so an LFO
+  nothing is pointed at yet is still one the panel draws running.
+- **Two things moved, and old state is put right rather than left.** `lfoShape`
+  and its four companions were named for the only LFO there was and are now
+  `lfo1Shape` and so on; and five LFOs were inserted into the middle of the
+  source list, so every saved slot source past LFO 1 moved up by five. A dropped
+  parameter loads at its default and no harm is done, but a source index that
+  quietly means something else is a slot pointed somewhere nobody asked for.
+  `Processor::migrated` handles both, and keys off the presence of the old
+  `lfoShape` so that running it twice does nothing the second time.
+
+**Tests:** a second note leaves the first note's LFO running and does not jump
+it; no two LFOs are the same cycle; each reports its own rate; each reaches the
+matrix as a source of its own, checked by ear-equivalent — pointing it at the
+sub and hearing the difference — for all six. On the panel: every bank declares
+the same controls in the same order, no two banks name the same parameter, a
+shared cell is shared inside one bank, and every bank of a source module names a
+real source. And a state written before any of this: its LFO parameters come
+back as LFO 1's, a slot on LFO 1 stays there while velocity, note and the macros
+all land where they now live, and saving and reopening does not move them again.
+
 
 ## Out of scope for now
 
 These are the north star, not this plan. They come after the synth is finished.
 
-- **M10 — ENV 2–4, LFO 2–6 and macros 1–8** as further matrix sources.
+- **M10 — ENV 2–4** as further matrix sources. LFO 2–6 and macros 1–8 are done.
 - **M11 — FX rack.** Chorus, distortion, delay, reverb, compressor, EQ, in a
   reorderable chain.
 - **M12 — Second filter,** with the serial/parallel routing Serum exposes.
@@ -648,3 +834,7 @@ way to look at a change.
 | M9b-1 A real table, band-limited | **done** — ready to test by ear and by eye |
 | M9b-2 Loading a table from a file | **done** — ready to test by ear and by eye |
 | M9b-3 The table editor | **done** — ready to test by hand |
+| M9c LFO modes and rate unit | **done** — ready to test by ear |
+| M9d Voice stealing without a click | **done** — ready to test by ear |
+| M9e Voice tail, not a truncated filter | **done** — ready to test by ear |
+| M10a Six LFOs, per voice | **done** — ready to test by ear |

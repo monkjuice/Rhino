@@ -2,6 +2,7 @@
 
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_dsp/juce_dsp.h>
+#include <algorithm>
 #include <cmath>
 #include <memory>
 #include <vector>
@@ -28,6 +29,22 @@ inline constexpr int wavetableFrameSize = 2048;
 // already carrying so few harmonics that the extra points cost nothing.
 inline constexpr int wavetableMinLevelSize = 64;
 
+// How closely the band-limited copies are spaced.
+//
+// Halving the harmonics from one level to the next — an octave apart — is the
+// cheapest thing to build and the wrong thing to hear. A level is chosen by
+// taking the first copy whose top harmonic fits under Nyquist, so a note that
+// has just missed the brighter copy reads one with half the harmonics it was
+// entitled to, while a note a tone below it reads nearly all of them. At 48 kHz
+// that puts F#3 and G#3 — two notes of the same line — an octave apart in
+// brightness, and the line stops sounding like one instrument.
+//
+// Three copies to the octave keeps every note within about a fifth of the
+// harmonics it could have had, which moves the top end smoothly with the pitch
+// instead of in steps. It costs roughly three times the band-limited store,
+// which is still small beside the frames themselves.
+inline constexpr int wavetableLevelsPerOctave = 3;
+
 // --- Band-limiting -----------------------------------------------------------
 //
 // A frame drawn as a square has a vertical edge in it, which is a harmonic
@@ -40,9 +57,11 @@ inline constexpr int wavetableMinLevelSize = 64;
 // different number of harmonics left in it, and read whichever copy has the
 // most harmonics that still fit. Level 0 is the frame exactly as it was
 // authored — it is what the panel draws and what a low note reads. Each level
-// after it halves the harmonics, and halves the points it is stored at to
-// match, so the whole set of levels costs about twice the table itself rather
-// than eleven times it.
+// after it takes a fixed fraction of the harmonics away — see
+// wavetableLevelsPerOctave for why that fraction is not a half — and is stored
+// at the smallest power of two that still holds what is left of it, so the
+// whole set of levels costs a few times the table itself rather than once per
+// level.
 struct WavetableLevel
 {
     int size = 0;       // points per frame at this level, always a power of two
@@ -121,17 +140,33 @@ public:
         return store.data() + static_cast<size_t>(juce::jlimit(0, frames - 1, frame)) * wavetableFrameSize;
     }
 
+    // The top harmonic a level still carries, and how many points it is stored
+    // at, for anything that needs to know what it was handed rather than just
+    // which copy it was.
+    int harmonicsAt(int level) const noexcept
+    {
+        return levels[static_cast<size_t>(juce::jlimit(0, levelCount() - 1, level))].harmonics;
+    }
+
+    int sizeAt(int level) const noexcept
+    {
+        return levels[static_cast<size_t>(juce::jlimit(0, levelCount() - 1, level))].size;
+    }
+
     // Which level a note may read without aliasing: the first one whose top
-    // harmonic still fits under Nyquist. Cheap enough to ask per sample —
-    // integer compares over a list that is eleven long and usually settles in
-    // two or three.
+    // harmonic still fits under Nyquist. Asked per sample, and the list is no
+    // longer short enough to walk, so it is bisected instead — the levels are
+    // in descending order of harmonics, which is exactly the partition the
+    // search needs.
     int levelFor(float hz, double sampleRate) const noexcept
     {
         const auto allowed = hz > 1.0e-3f ? static_cast<float>(sampleRate * 0.5) / hz
                                           : static_cast<float>(wavetableFrameSize);
-        for (int level = 0; level < static_cast<int>(levels.size()); ++level)
-            if (static_cast<float>(levels[static_cast<size_t>(level)].harmonics) <= allowed) return level;
-        return static_cast<int>(levels.size()) - 1;
+        const auto first = std::partition_point(levels.begin(), levels.end(),
+                                                [allowed] (const WavetableLevel& level)
+                                                { return static_cast<float>(level.harmonics) > allowed; });
+        if (first == levels.end()) return levelCount() - 1;
+        return static_cast<int>(std::distance(levels.begin(), first));
     }
 
     // One sample of one frame. Phase is assumed already inside its cycle; the
@@ -178,17 +213,30 @@ private:
         return last.offset + last.size * frames;
     }
 
+    // The smallest power of two that can still hold this many harmonics: twice
+    // the top harmonic is the level's own Nyquist, and the decimation in
+    // fillFrame needs the size to divide the frame, which powers of two do.
+    static int levelSize(int harmonics)
+    {
+        auto size = wavetableMinLevelSize;
+        while (size < 2 * harmonics && size < wavetableFrameSize) size *= 2;
+        return size;
+    }
+
     void buildLevels()
     {
+        const auto ratio = std::pow(0.5, 1.0 / static_cast<double>(wavetableLevelsPerOctave));
         auto harmonics = wavetableFrameSize / 2;
-        auto size = wavetableFrameSize;
         auto offset = 0;
         while (harmonics >= 1)
         {
+            const auto size = levelSize(harmonics);
             levels.push_back({size, harmonics, offset});
             offset += size * frames;
-            harmonics /= 2;
-            size = std::max(wavetableMinLevelSize, size / 2);
+            // Down by the ratio, but always by at least one harmonic, so the
+            // list still terminates once the steps are smaller than a harmonic.
+            const auto next = static_cast<int>(std::floor(static_cast<double>(harmonics) * ratio));
+            harmonics = std::min(next, harmonics - 1);
         }
     }
 
@@ -259,7 +307,7 @@ private:
 // what can be done to one.
 
 // The ceiling on a hand-edited table. Every frame costs 8 KB of level 0 and
-// about 17 KB with its band-limited copies, and a preset carries the lot, so a
+// about 50 KB with its band-limited copies, and a preset carries level 0, so a
 // table you drew is allowed to be large but not unbounded.
 inline constexpr int maxEditableFrames = 64;
 

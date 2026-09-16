@@ -14,6 +14,9 @@ class Editor final : public juce::AudioProcessorEditor, private juce::Timer
 public:
     explicit Editor(Processor&);
     void paint(juce::Graphics&) override;
+    // The piano is a child, so the reach marking has to go on after it rather
+    // than in paint().
+    void paintOverChildren(juce::Graphics&) override;
     void resized() override;
 
 private:
@@ -27,6 +30,9 @@ private:
         const char* disabledBy = nullptr;
         const char* enabledBy = nullptr;
         int row = 0, index = 0;
+        // Which bank of its module this control belongs to. Zero in a module
+        // that declares none, which is all of them but the LFOs.
+        int bank = 0;
         // The slot whose depth this knob's ring sets, or -1 when the ring is
         // not draggable: nothing is pointed here, or more than one thing is and
         // the ring is a sum with no single slot behind it.
@@ -47,6 +53,12 @@ private:
         std::vector<std::unique_ptr<Control>> controls;
         std::unique_ptr<ui::EnableLed> enable;
         std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> enableAttachment;
+        // A module whose controls are declared in banks shows one bank at a
+        // time, and carries a numbered button per bank in its header. The other
+        // banks stay built and stay attached, so an LFO that is not on screen is
+        // still driven by the host and still runs.
+        std::vector<std::unique_ptr<ui::ToggleChip>> bankButtons;
+        int bank = 0;
         bool on() const { return enable == nullptr || enable->getToggleState(); }
     };
 
@@ -63,6 +75,11 @@ private:
     ui::SourceHandle* draggingHandle = nullptr;
     juce::Point<int> dragPosition;
     juce::MidiKeyboardComponent keyboard;
+    // Which octave the computer keys play. The keyboard's own mapping is 17
+    // notes wide starting at the C of this octave; z and x walk it, and the
+    // keys it can reach are washed in on the piano so you can see where you
+    // are without having to play a note to find out.
+    int computerKeyOctave = 6;
     // Every control has carried a tooltip since M2, but without one of these
     // nothing ever showed them. Parented to the editor rather than given a
     // desktop window of its own, which is what a plugin in a host needs.
@@ -90,13 +107,20 @@ private:
     void applyPage();
     void paintTable(juce::Graphics&, juce::Rectangle<int> area, const ui::Module&);
     bool slotIsLive(int slot) const;
+    juce::String lfoHeaderDetail() const;
+    // Which LFO the panel is showing: the LFO module's chosen bank, and so also
+    // the one its display draws, its header reports and its handle drags.
+    int shownLfo() const;
+    void buildBankButtons();
+    void showBank(ModuleUi&, int bank);
     void applyEnableStates();
-    float value(const char* id) const;
+    float value(const juce::String& id) const;
     void mouseDown(const juce::MouseEvent&) override;
     void mouseDrag(const juce::MouseEvent&) override;
     void mouseUp(const juce::MouseEvent&) override;
     bool keyStateChanged(bool isKeyDown) override;
     bool keyPressed(const juce::KeyPress&) override;
+    void shiftComputerKeyOctave(int delta);
     void buildHandles();
     void showModulationMenu(const juce::String& parameterId);
     void assignModulation(int source, int destination);

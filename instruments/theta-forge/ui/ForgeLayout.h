@@ -57,9 +57,17 @@ struct Control
     // room than the fields either side of it.
     int weight = 1;
     // Greyed out while this parameter is OFF, the mirror of disabledBy. A
-    // division means nothing until the LFO is synced, and the free rate means
-    // nothing once it is, so the pair of them need the rule both ways round.
+    // division means nothing while the rate is set in Hertz, and the free rate
+    // means nothing once it is set in beats, so the pair of them need the rule
+    // both ways round.
     const char* enabledBy = nullptr;
+    // Takes the cell of the control before it instead of a cell of its own.
+    // Two controls in one cell are two readings of a single setting, never two
+    // settings: LFO 1's rate is a knob in Hertz or a knob in beats, and exactly
+    // one of the pair is live. A control in a shared cell is hidden while it is
+    // not the one in charge rather than greyed out, because a greyed control
+    // would be sitting on top of the live one.
+    bool sharesCell = false;
 };
 
 struct Row
@@ -67,6 +75,16 @@ struct Row
     // Share of the module's control area, against the module's other rows.
     int weight;
     std::vector<Control> controls;
+    // How many identical sets of controls this row holds, one behind another in
+    // the same cells. Six LFOs will not fit on the panel side by side, so the
+    // module shows one at a time and a numbered selector in its header says
+    // which — the same arrangement Serum uses for its own eight.
+    //
+    // Every bank has to declare the same controls in the same order, so the
+    // controls vector is banks × the controls of one bank, laid out bank after
+    // bank. The geometry divides the row between one bank's cells; the others
+    // land on top and are hidden.
+    int banks = 1;
 };
 
 struct Module
@@ -103,6 +121,13 @@ struct Module
     int columnHeaderHeight = 0;
     int rowGutter = 0;
 };
+
+// The numbered buttons that choose which bank a module is showing, laid along
+// its header after the title or the drag handle. Small, because they are a
+// selector rather than a control: what they switch is the whole module below.
+inline constexpr int bankButtonWidth = 20;
+inline constexpr int bankButtonGap = 3;
+inline constexpr int bankButtonHeight = 15;
 
 inline constexpr int gridColumns = 12;
 inline constexpr int moduleGap = 8;
@@ -237,16 +262,81 @@ inline const std::vector<Module>& modules()
         {"env1", "ENV 1", "AMP", nullptr, false, Display::envelope, 2, 0, 5, false,
          {{100, {{"attack", "ATTACK"}, {"decay", "DECAY"}, {"sustain", "SUSTAIN"}, {"release", "RELEASE"}}}},
          static_cast<int>(ModSource::env1)},
-        // RATE and DIV are the same control read two ways, so each is greyed out
-        // while the other is the one in charge.
-        {"lfo1", "LFO 1", "SOURCE", nullptr, true, Display::lfo, 2, 5, 5, false,
-         {{100, {{"lfoShape", "SHAPE", Style::stepper},
-                 {"lfoSync", "SYNC", Style::rocker},
-                 {"lfoRate", "RATE", Style::knob, "lfoSync"},
-                 {"lfoDivision", "DIV", Style::stepper, nullptr, 1, "lfoSync"}}}},
+        // Six LFOs in one module, one shown at a time, chosen by the numbered
+        // buttons in the header. Six boxes side by side would not fit, and six
+        // that did would each be too small to read — Serum shows its eight the
+        // same way for the same reason.
+        //
+        // Within a bank: RATE is one knob in one place, and UNIT decides what it
+        // counts in. The two parameters behind it share a cell, so only the
+        // reading in charge is on screen — Hertz free-running, or a division of
+        // the host's beat. MODE is the other half of the same question, whether
+        // the shape answers the keyboard at all.
+        //
+        // Written out rather than generated: this file is read to find out what
+        // the panel is, and a loop would mean reading the loop instead. The
+        // layout test holds every bank to the same shape.
+        {"lfo", "LFO", "SOURCE", nullptr, true, Display::lfo, 2, 5, 5, false,
+         {{100, {{"lfo1Shape", "SHAPE", Style::stepper},
+                 {"lfo1Mode", "MODE", Style::stepper},
+                 {"lfo1RateUnit", "UNIT", Style::stepper},
+                 {"lfo1Rate", "RATE", Style::knob, "lfo1RateUnit"},
+                 {"lfo1Division", "RATE", Style::knob, nullptr, 1, "lfo1RateUnit", true},
+
+                 {"lfo2Shape", "SHAPE", Style::stepper},
+                 {"lfo2Mode", "MODE", Style::stepper},
+                 {"lfo2RateUnit", "UNIT", Style::stepper},
+                 {"lfo2Rate", "RATE", Style::knob, "lfo2RateUnit"},
+                 {"lfo2Division", "RATE", Style::knob, nullptr, 1, "lfo2RateUnit", true},
+
+                 {"lfo3Shape", "SHAPE", Style::stepper},
+                 {"lfo3Mode", "MODE", Style::stepper},
+                 {"lfo3RateUnit", "UNIT", Style::stepper},
+                 {"lfo3Rate", "RATE", Style::knob, "lfo3RateUnit"},
+                 {"lfo3Division", "RATE", Style::knob, nullptr, 1, "lfo3RateUnit", true},
+
+                 {"lfo4Shape", "SHAPE", Style::stepper},
+                 {"lfo4Mode", "MODE", Style::stepper},
+                 {"lfo4RateUnit", "UNIT", Style::stepper},
+                 {"lfo4Rate", "RATE", Style::knob, "lfo4RateUnit"},
+                 {"lfo4Division", "RATE", Style::knob, nullptr, 1, "lfo4RateUnit", true},
+
+                 {"lfo5Shape", "SHAPE", Style::stepper},
+                 {"lfo5Mode", "MODE", Style::stepper},
+                 {"lfo5RateUnit", "UNIT", Style::stepper},
+                 {"lfo5Rate", "RATE", Style::knob, "lfo5RateUnit"},
+                 {"lfo5Division", "RATE", Style::knob, nullptr, 1, "lfo5RateUnit", true},
+
+                 {"lfo6Shape", "SHAPE", Style::stepper},
+                 {"lfo6Mode", "MODE", Style::stepper},
+                 {"lfo6RateUnit", "UNIT", Style::stepper},
+                 {"lfo6Rate", "RATE", Style::knob, "lfo6RateUnit"},
+                 {"lfo6Division", "RATE", Style::knob, nullptr, 1, "lfo6RateUnit", true}},
+           lfoCount}},
          static_cast<int>(ModSource::lfo1)},
     };
     return declared;
+}
+
+// How many banks a module's controls are declared in. One unless it says
+// otherwise, and the rows all have to agree — the layout test holds them to it.
+inline int bankCount(const Module& module)
+{
+    return module.rows.empty() ? 1 : juce::jmax(1, module.rows.front().banks);
+}
+
+// One bank button in a module's header. They start after whatever the header
+// already carries on the left: the enable LED, and the drag handle of a module
+// that is itself a source.
+inline juce::Rectangle<int> bankButtonBounds(juce::Rectangle<int> moduleArea, const Module& module,
+                                             int bank, int handleWidth)
+{
+    auto left = moduleArea.getX() + 10;
+    if (module.enableId != nullptr) left += headerHeight;
+    if (module.handleSource != 0) left += handleWidth + 8;
+    return {left + bank * (bankButtonWidth + bankButtonGap),
+            moduleArea.getY() + (headerHeight - bankButtonHeight) / 2,
+            bankButtonWidth, bankButtonHeight};
 }
 
 // Whether a module is shown while the given tab is chosen.
@@ -411,19 +501,74 @@ inline juce::Rectangle<int> rowGutterBounds(juce::Rectangle<int> moduleArea, con
     return {row.getX() - module.rowGutter, row.getY(), module.rowGutter, row.getHeight()};
 }
 
+// How many controls one bank of a row declares. Every bank declares the same
+// ones, so this is the length of the row divided between them.
+inline int controlsPerBank(const Row& row)
+{
+    const auto banks = juce::jmax(1, row.banks);
+    return juce::jmax(1, static_cast<int>(row.controls.size()) / banks);
+}
+
+// Which bank a control belongs to, counting from zero. Always zero in a row
+// that declares none.
+inline int bankOf(const Module& module, int rowIndex, int index)
+{
+    return index / controlsPerBank(module.rows[static_cast<size_t>(rowIndex)]);
+}
+
+// The control whose cell this one occupies: itself, unless it shares the cell
+// of the control before it, or it belongs to a bank behind the first — in which
+// case it stands exactly where its opposite number in the first bank does.
+inline int cellOwner(const Module& module, int rowIndex, int index)
+{
+    const auto& row = module.rows[static_cast<size_t>(rowIndex)];
+    const auto& controls = row.controls;
+    // A control never shares a cell across a bank boundary: the control before
+    // the first of a bank belongs to the bank in front of it.
+    const auto first = (index / controlsPerBank(row)) * controlsPerBank(row);
+    while (index > first && controls[static_cast<size_t>(index)].sharesCell) --index;
+    return index;
+}
+
+// Whether this control's cell holds more than one control — either because it
+// says it shares the one before it, or because the one after it shares this.
+inline bool inSharedCell(const Module& module, int rowIndex, int index)
+{
+    const auto& row = module.rows[static_cast<size_t>(rowIndex)];
+    const auto& controls = row.controls;
+    if (controls[static_cast<size_t>(index)].sharesCell) return true;
+    const auto next = index + 1;
+    // The control after the last of a bank belongs to the next bank, so it
+    // cannot be sharing this one's cell.
+    if (next % controlsPerBank(row) == 0) return false;
+    return next < static_cast<int>(controls.size()) && controls[static_cast<size_t>(next)].sharesCell;
+}
+
+// A row is divided between its cells, not between its controls: a control that
+// shares the cell before it takes no width of its own and lands exactly on top
+// of the one it shares with.
 inline juce::Rectangle<int> cellBounds(juce::Rectangle<int> moduleArea, const Module& module,
                                        int rowIndex, int index)
 {
     const auto row = rowBounds(moduleArea, module, rowIndex);
-    const auto& controls = module.rows[static_cast<size_t>(rowIndex)].controls;
+    const auto& declared = module.rows[static_cast<size_t>(rowIndex)];
+    const auto& controls = declared.controls;
+    // Divided between one bank's cells. The banks behind it declare the same
+    // cells and land on top of them.
+    const auto perBank = controlsPerBank(declared);
     auto total = 0;
-    for (const auto& control : controls) total += juce::jmax(1, control.weight);
+    for (int i = 0; i < perBank; ++i)
+        if (!controls[static_cast<size_t>(i)].sharesCell)
+            total += juce::jmax(1, controls[static_cast<size_t>(i)].weight);
     if (total <= 0) return row;
 
+    // Reduced to its own bank, because every bank stands on the same cells.
+    const auto owner = cellOwner(module, rowIndex, index) % perBank;
     auto x = row.getX();
-    for (int i = 0; i < index; ++i)
-        x += row.getWidth() * juce::jmax(1, controls[static_cast<size_t>(i)].weight) / total;
-    const auto width = row.getWidth() * juce::jmax(1, controls[static_cast<size_t>(index)].weight) / total;
+    for (int i = 0; i < owner; ++i)
+        if (!controls[static_cast<size_t>(i)].sharesCell)
+            x += row.getWidth() * juce::jmax(1, controls[static_cast<size_t>(i)].weight) / total;
+    const auto width = row.getWidth() * juce::jmax(1, controls[static_cast<size_t>(owner)].weight) / total;
     return {x, row.getY(), width, row.getHeight()};
 }
 
@@ -523,8 +668,13 @@ inline int knobDiameterFor(const Module& module, juce::Rectangle<int> moduleArea
 // controls centres them all; a mixed row has a label line to line up with.
 inline bool rowHasKnobs(const Module& module, int rowIndex)
 {
-    for (const auto& control : module.rows[static_cast<size_t>(rowIndex)].controls)
-        if (control.style == Style::knob || control.style == Style::rocker) return true;
+    const auto& row = module.rows[static_cast<size_t>(rowIndex)];
+    const auto perBank = controlsPerBank(row);
+    for (int i = 0; i < perBank; ++i)
+    {
+        const auto style = row.controls[static_cast<size_t>(i)].style;
+        if (style == Style::knob || style == Style::rocker) return true;
+    }
     return false;
 }
 

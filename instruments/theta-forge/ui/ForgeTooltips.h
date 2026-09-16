@@ -54,16 +54,32 @@ inline juce::String tooltipFor(const juce::String& id)
         {"decay", "The fall from the attack peak"},
         {"sustain", "The level a held note settles at"},
         {"release", "How the note fades once released"},
-        {"lfoShape", "The curve LFO 1 runs: sine, triangle, saw, square or sample and hold"},
-        {"lfoSync", "Lock LFO 1 to the host tempo instead of a free rate in Hertz"},
-        {"lfoRate", "LFO 1's free-running speed. Point it somewhere in the matrix"},
-        {"lfoDivision", "How long one LFO cycle lasts, in beats, while it is synced"},
+
         {"polyphony", "Limit simultaneous notes"},
         {"mono", "Collapse to one voice for basses and leads"},
         {"legato", "Keep the envelope running across overlapping mono notes"},
         {"glide", "Slide between monophonic notes"},
         {"output", "Forge's final level"},
     };
+    // Six LFOs expose the same controls, so their tooltips are keyed by the
+    // suffix and the LFO's number is filled in, the same way the oscillators'
+    // are keyed by their letter.
+    static const std::map<juce::String, juce::String> perLfo {
+        {"Shape", "The curve LFO % runs: sine, triangle, saw, square or sample and hold"},
+        {"Mode", "TRIG restarts LFO % on every new note and loops for as long as one is held; "
+                 "ENV restarts it and stops at the end of the shape, as a one-shot envelope; "
+                 "OFF free-runs across notes and never resets"},
+        {"RateUnit", "Set LFO %'s rate in Hertz, or in divisions of the host's tempo"},
+        {"Rate", "LFO %'s speed in Hertz. Point it somewhere in the matrix"},
+        {"Division", "LFO %'s speed as the length of one cycle in beats, against the host's tempo"},
+    };
+    if (id.startsWith("lfo") && id.length() > 4 && juce::CharacterFunctions::isDigit(id[3]))
+    {
+        const auto found = perLfo.find(id.substring(4));
+        if (found != perLfo.end())
+            return found->second.replace("%", id.substring(3, 4));
+    }
+
     if (id.startsWith("macro"))
         return "A performance macro. Drag its number onto a knob, or right-click the knob";
 

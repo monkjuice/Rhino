@@ -15,6 +15,62 @@
 // FX rack milestone, do not exist at all. See PLAN.md.
 namespace theta::forge
 {
+// How many detuned copies one oscillator's unison stack may hold. The per-voice
+// phase arrays are this long, and the Unison parameter's range stops here, so
+// the two cannot drift apart.
+inline constexpr int unisonMax = 12;
+
+// How far apart detune spreads the stack, in semitones, at the top of the knob.
+// Wide enough that a full stack still beats several times a second: the gap
+// between neighbours is this divided by the voice count, and a gap that beats
+// slower than about once a second stops sounding like chorus and starts
+// sounding like a throb.
+inline constexpr float unisonSpreadSemitones = 1.4f;
+
+// How far off its even position each member of the stack is pushed, as a share
+// of the gap between neighbours.
+inline constexpr float unisonJitter = 0.35f;
+
+// A deterministic 32-bit mix. Used where a value has to be spread out but must
+// also be identical on every run and every machine, because the tests measure
+// what comes out: the stack's detune jitter and its starting phases both come
+// from here rather than from a random number generator.
+inline juce::uint32 mix32(juce::uint32 x)
+{
+    x *= 2654435761u;
+    x ^= x >> 15;
+    x *= 2246822519u;
+    x ^= x >> 13;
+    return x;
+}
+
+inline float unitFromHash(juce::uint32 x)
+{
+    return static_cast<float>(mix32(x) & 0xffffu) / 65536.0f;
+}
+
+// Where one member of the stack sits within the detune span, from -0.5 to 0.5.
+//
+// The members are deliberately not evenly spaced. Even spacing gives every
+// neighbouring pair the same beat rate, so every beat in the stack is a
+// multiple of the slowest one and the whole stack swings in and out of phase
+// together on a single slow period — heard as a throb rather than as chorus,
+// and worse the more voices there are, because the gap and therefore the beat
+// gets slower with each one added. Pushing each member off the grid by a fixed
+// amount leaves the beat rates sharing no common period, so the movement stays
+// continuous. The two ends are pinned, so the stack still spans exactly what
+// detune asks for, and the push is small enough that members never reorder.
+inline float unisonOffset(int slot, int count)
+{
+    if (count < 2) return 0.0f;
+    const auto last = count - 1;
+    if (slot <= 0) return -0.5f;
+    if (slot >= last) return 0.5f;
+    const auto jitter = unitFromHash(static_cast<juce::uint32>(slot)) * 2.0f - 1.0f;
+    return static_cast<float>(slot) / static_cast<float>(last) - 0.5f
+         + jitter * unisonJitter / static_cast<float>(last);
+}
+
 // Everything one oscillator owns. Both oscillators are the same shape: neither
 // is defined in terms of the other, so switching one off or changing its level
 // cannot move the other.
@@ -160,8 +216,12 @@ inline juce::String waveLabel(float position)
     return table.frameTitle(frame) + ">" + table.frameTitle(frame + 1);
 }
 
-// LFO 1's shapes. It is a modulation source, so every shape is bipolar and runs
-// the full -1..1: a slot's depth decides how much of that reaches anything.
+// How many LFOs there are. They are identical: none is defined in terms of
+// another, and the panel shows one at a time rather than six at once.
+inline constexpr int lfoCount = 6;
+
+// The LFO shapes. An LFO is a modulation source, so every shape is bipolar and
+// runs the full -1..1: a slot's depth decides how much of that reaches anything.
 enum class LfoShape { sine, triangle, saw, square, sampleHold };
 inline constexpr int lfoShapeCount = 5;
 
@@ -195,6 +255,64 @@ inline float lfoWave(LfoShape shape, float phase, float held)
     return std::sin(phase * juce::MathConstants<float>::twoPi);
 }
 
+// How LFO 1 answers the keyboard. TRIG starts the shape again on every new
+// note and then loops for as long as one is held. ENV starts it again too but
+// stops on the last point of one cycle and holds it, which turns any shape into
+// a one-shot envelope of its own. OFF never restarts: it free-runs across
+// notes, so a tempo-synced setting stays in step with the host from one phrase
+// to the next rather than jumping every time a key goes down.
+enum class LfoMode { trigger, envelope, free };
+inline constexpr int lfoModeCount = 3;
+
+inline const char* lfoModeName(int mode)
+{
+    switch (mode)
+    {
+        case 1: return "ENV";
+        case 2: return "OFF";
+        default: break;
+    }
+    return "TRIG";
+}
+
+// Which unit the rate is set in. The two are not a toggle with an implied
+// default: HZ and BPM are equal readings of one setting, and the panel shows
+// whichever is in charge in place of the other rather than beside it.
+inline const char* lfoRateUnitName(int unit) { return unit >= 1 ? "BPM" : "HZ"; }
+inline constexpr int lfoRateUnitCount = 2;
+
+// Everything one LFO owns. The rate is always in Hertz — a unit of beats is
+// resolved to one before the patch is built, so the Core never sees a tempo.
+// Held as floats because that is what a parameter read gives back.
+struct LfoSetting
+{
+    float rate = 0.5f;
+    float shape = 0.0f;
+    float mode = 0.0f;
+};
+
+// The mode and the shape a setting names, clamped, so one reading serves the
+// voice, the panel and the tests.
+inline LfoMode lfoModeOf(const LfoSetting& lfo)
+{
+    return static_cast<LfoMode>(juce::jlimit(0, lfoModeCount - 1, juce::roundToInt(lfo.mode)));
+}
+
+// A parameter id belonging to one LFO: lfoParameterId(0, "Shape") is
+// "lfo1Shape". One spelling of the pattern, shared by the parameters, the
+// panel and the tests, so a bank of six cannot drift apart from the ids it
+// names. The panel's own declaration writes them out in full instead, because
+// that file is deliberately read rather than computed.
+inline juce::String lfoParameterId(int lfo, const char* suffix)
+{
+    return "lfo" + juce::String(lfo + 1) + suffix;
+}
+
+inline LfoShape lfoShapeOf(const LfoSetting& lfo)
+{
+    return static_cast<LfoShape>(juce::jlimit(0, lfoShapeCount - 1, juce::roundToInt(lfo.shape)));
+}
+
 // Tempo-synced rates, as the length of one LFO cycle in beats. A beat is a
 // quarter note, so 1/4 is one beat and 1/1 is a bar of four. Musical data
 // rather than host data, which is why it sits here beside the shapes: the Core
@@ -217,11 +335,27 @@ inline const std::array<LfoDivision, 7>& lfoDivisions()
 
 inline constexpr int lfoDivisionCount = 7;
 
-// Modulation sources. ENV 1 and velocity are unipolar (0..1); LFO 1 is bipolar
-// (-1..1); note is unipolar across the keyboard.
-enum class ModSource { off, env1, lfo1, velocity, note, macro1 };
 inline constexpr int macroCount = 8;
-// Everything up to the macros, then one entry per macro.
+
+// Modulation sources. ENV 1 and velocity are unipolar (0..1); the LFOs are
+// bipolar (-1..1); note is unipolar across the keyboard.
+//
+// The values are written out rather than left to the compiler because they are
+// what a slot's Source parameter stores, so the order of this list is saved
+// inside every preset. The six LFOs are one run, and the run's length is what
+// everything after it is placed past — which is why the ones after it moved
+// when LFO 2-6 arrived, and why a preset written before that is remapped on the
+// way in. See Processor::migrated.
+enum class ModSource
+{
+    off = 0,
+    env1 = 1,
+    lfo1 = 2,                        // lfo2..lfo6 follow, up to 7
+    velocity = lfo1 + lfoCount,      // 8
+    note,                            // 9
+    macro1                           // 10, and one per macro after it
+};
+
 inline constexpr int modSourceCount = static_cast<int>(ModSource::macro1) + macroCount;
 
 inline int macroIndexOf(int source)
@@ -230,19 +364,26 @@ inline int macroIndexOf(int source)
     return source >= first && source < first + macroCount ? source - first : -1;
 }
 
+// Which LFO a source names, or -1 for a source that is not one.
+inline int lfoIndexOf(int source)
+{
+    const auto first = static_cast<int>(ModSource::lfo1);
+    return source >= first && source < first + lfoCount ? source - first : -1;
+}
+
 inline const char* modSourceName(int source)
 {
-    switch (source)
-    {
-        case 1: return "ENV 1";
-        case 2: return "LFO 1";
-        case 3: return "VELOCITY";
-        case 4: return "NOTE";
-        default: break;
-    }
+    if (source == static_cast<int>(ModSource::env1)) return "ENV 1";
+    if (source == static_cast<int>(ModSource::velocity)) return "VELOCITY";
+    if (source == static_cast<int>(ModSource::note)) return "NOTE";
+
+    static const std::array<const char*, lfoCount> lfos {
+        "LFO 1", "LFO 2", "LFO 3", "LFO 4", "LFO 5", "LFO 6"};
     static const std::array<const char*, macroCount> macros {
         "MACRO 1", "MACRO 2", "MACRO 3", "MACRO 4",
         "MACRO 5", "MACRO 6", "MACRO 7", "MACRO 8"};
+    const auto lfo = lfoIndexOf(source);
+    if (lfo >= 0) return lfos[static_cast<size_t>(lfo)];
     const auto macro = macroIndexOf(source);
     return macro >= 0 ? macros[static_cast<size_t>(macro)] : "OFF";
 }
@@ -309,12 +450,9 @@ struct Patch
     float routeA = 1.0f, routeB = 1.0f, routeSub = 1.0f, routeNoise = 1.0f;
     float cutoff = 7800.0f, resonance = 0.12f, drive = 0.08f;
     float attack = 0.01f, decay = 0.24f, sustain = 0.75f, release = 0.35f;
-    // LFO 1 has a shape and a rate. It is a source, not a router: where it goes
-    // is a matter for the modulation slots. The rate is always in Hz — tempo
-    // sync is resolved to one before the patch is built, so the Core never sees
-    // a tempo.
-    float lfoRate = 0.5f;
-    float lfoShape = 0.0f;
+    // The six LFOs. They are sources, not routers: where one goes is a matter
+    // for the modulation slots.
+    std::array<LfoSetting, lfoCount> lfos {};
     float polyphony = 8.0f, mono = 0.0f, legato = 1.0f, glide = 0.08f;
     float output = 0.75f;
     // Performance macros. Sources only: a macro is a hand on a knob, and what
@@ -323,6 +461,15 @@ struct Patch
 };
 
 inline bool on(float enable) { return enable >= 0.5f; }
+
+// How long a finished voice takes to fade out. The amp envelope reaching zero
+// is not the end of a voice: everything it feeds goes through the filter, and a
+// filter holds energy, so at a low cutoff the voice is still sounding
+// milliseconds after the envelope that fed it stopped. Long enough to cover
+// half a cycle of the lowest cutoff the filter offers, so cutting the ring off
+// is never a step.
+inline constexpr float voiceTailSeconds = 0.015f;
+
 
 // The field a destination index names, inside a patch that is about to be
 // modulated. Null for "nothing", which is also what an out-of-range index gets.
@@ -389,6 +536,7 @@ public:
     void initialise(double newSampleRate)
     {
         sampleRate = std::max(1.0, newSampleRate);
+        tailStep = static_cast<float>(1.0 / (sampleRate * voiceTailSeconds));
         // Touched here so the table is built on whichever thread prepares the
         // synth, never lazily on the first note from the audio thread.
         builtInWavetable();
@@ -399,9 +547,11 @@ public:
     {
         voices = {};
         nextVoice = 0;
-        lfoPhase = 0.0f;
-        lfoHeld = 0.0f;
-        meterLfo = 0.0f;
+        freePhase = {};
+        freeHeld = {};
+        meterLfoPhase = {};
+        meterLfoHeld = {};
+        meterLfoValue = {};
         noiseState = 0x9e3779b9u;
         heldCount = 0;
         monoMode = false;
@@ -424,7 +574,10 @@ public:
             auto& voice = voices[0];
             const auto continueEnvelope = voice.active && patch.legato >= 0.5f;
             if (!continueEnvelope)
+            {
                 startVoice(voice, note, velocity);
+                retriggerLfo(voice, patch);
+            }
             else
             {
                 voice.note = note;
@@ -436,8 +589,9 @@ public:
         }
 
         const auto voiceCount = static_cast<size_t>(juce::jlimit(1, static_cast<int>(voices.size()), juce::roundToInt(patch.polyphony)));
-        auto& voice = voices[nextVoice++ % voiceCount];
+        auto& voice = voices[allocate(voiceCount)];
         startVoice(voice, note, velocity);
+        retriggerLfo(voice, patch);
     }
 
     void noteOff(int note)
@@ -473,8 +627,15 @@ public:
     // Where LFO 1 is in its cycle and what it last put out. The phase draws the
     // running indicator; the value is published as well because a
     // sample-and-hold's step cannot be worked back out of the phase.
-    float lfoPosition() const { return lfoPhase; }
-    float lfoOutput() const { return meterLfo; }
+    float lfoPosition(int lfo) const
+    {
+        return lfo >= 0 && lfo < lfoCount ? meterLfoPhase[static_cast<size_t>(lfo)] : 0.0f;
+    }
+
+    float lfoOutput(int lfo) const
+    {
+        return lfo >= 0 && lfo < lfoCount ? meterLfoValue[static_cast<size_t>(lfo)] : 0.0f;
+    }
 
     // How far the matrix is moving each destination right now, in that
     // destination's normalised space, so a knob can draw where its value
@@ -509,15 +670,46 @@ public:
     void renderSample(const Patch& patch, const Modulation& modulation, float& left, float& right)
     {
         left = right = 0.0f;
-        const auto shape = static_cast<LfoShape>(
-            juce::jlimit(0, lfoShapeCount - 1, juce::roundToInt(patch.lfoShape)));
-        const auto lfo = lfoWave(shape, lfoPhase, lfoHeld);
-        meterLfo = lfo;
-        const auto advanced = lfoPhase + juce::jlimit(0.01f, 40.0f, patch.lfoRate) / static_cast<float>(sampleRate);
-        // One new step per cycle, taken as the cycle turns over, so a
-        // sample-and-hold changes exactly where the other shapes restart.
-        if (advanced >= 1.0f) lfoHeld = noise();
-        lfoPhase = wrap(advanced);
+
+        // Which LFOs anything actually reads. Six of them stepping through a
+        // sine for every voice would be five sixths of that work thrown away
+        // when one is routed, so the values are only worked out where they are
+        // wanted. The phases still move either way — an LFO nothing is pointed
+        // at yet is still one the panel draws running.
+        std::array<bool, lfoCount> used {};
+        for (const auto& slot : modulation.slots)
+        {
+            if (slot.destination < 0.5f || slot.depth == 0.0f) continue;
+            const auto lfo = lfoIndexOf(juce::roundToInt(slot.source));
+            if (lfo >= 0) used[static_cast<size_t>(lfo)] = true;
+        }
+
+        // The free-running cycles. An LFO in OFF reads these, and they run
+        // whether or not a note is playing, which is the whole of what OFF
+        // means. One cycle shared by every voice, so a rate set in beats stays
+        // in step with the host across a phrase.
+        std::array<float, lfoCount> freeValue {};
+        for (int i = 0; i < lfoCount; ++i)
+        {
+            const auto index = static_cast<size_t>(i);
+            const auto& setting = patch.lfos[index];
+            const auto free = lfoModeOf(setting) == LfoMode::free;
+            if (free && used[index])
+                freeValue[index] = lfoWave(lfoShapeOf(setting), freePhase[index], freeHeld[index]);
+
+            // What the panel is shown, before any voice has had its say: the
+            // free-running phase for an LFO in OFF, and the start of the shape
+            // for one that answers the keyboard — which is exactly where it is
+            // with nothing playing, and where the next key press will begin it.
+            meterLfoPhase[index] = free ? freePhase[index] : 0.0f;
+            meterLfoHeld[index] = free ? freeHeld[index] : 0.0f;
+
+            const auto advanced = freePhase[index]
+                + juce::jlimit(0.01f, 40.0f, setting.rate) / static_cast<float>(sampleRate);
+            if (advanced >= 1.0f) freeHeld[index] = noise();
+            freePhase[index] = wrap(advanced);
+        }
+
         const auto modulated = modulation.anyActive();
 
         meterEnvelope = 0.0f;
@@ -529,10 +721,21 @@ public:
             if (!voice.active) continue;
             updateEnvelope(voice.ampEnvelope, voice.ampStage, voice.ampReleaseStart,
                            patch.attack, patch.decay, patch.sustain, patch.release);
+            // A voice whose envelope has run out is not finished: the filter
+            // it fed is still ringing, and at a low cutoff that ring is loud
+            // enough to hear. Dropping the voice here truncates it, and a
+            // truncated ring is the click at the end of a note — loudest with
+            // the sub on, because a sine an octave down is exactly what a low
+            // cutoff passes. So it is faded out instead, and the ring decays
+            // into the fade.
             if (voice.ampStage == EnvelopeStage::idle)
             {
-                voice.active = false;
-                continue;
+                voice.tail -= tailStep;
+                if (voice.tail <= 0.0f)
+                {
+                    voice.active = false;
+                    continue;
+                }
             }
             const auto loudest = voice.ampEnvelope >= meterEnvelope;
             if (loudest)
@@ -541,15 +744,44 @@ public:
                 meterStage = voice.ampStage;
             }
 
-            // Modulation is per voice and per sample, because every source
-            // except the LFO is per voice and every destination is read inside
-            // the voice. With no live slot the patch is used as it stands and
+            // Every LFO that answers the keyboard runs inside the voice, so a
+            // new note restarts its own shape and leaves the notes already
+            // sounding where they were. An LFO in OFF is the one cycle
+            // everything shares, and the voice simply reads it.
+            std::array<float, lfoCount> lfoValues {};
+            for (int i = 0; i < lfoCount; ++i)
+            {
+                const auto index = static_cast<size_t>(i);
+                const auto& setting = patch.lfos[index];
+                const auto mode = lfoModeOf(setting);
+                if (mode == LfoMode::free)
+                {
+                    lfoValues[index] = freeValue[index];
+                    continue;
+                }
+                if (used[index])
+                    lfoValues[index] = lfoWave(lfoShapeOf(setting),
+                                               voice.lfoPhase[index], voice.lfoHeld[index]);
+                // The panel follows the loudest voice, exactly as ENV 1's
+                // display does and for the same reason: that is the note a
+                // player is listening to.
+                if (loudest)
+                {
+                    meterLfoPhase[index] = voice.lfoPhase[index];
+                    meterLfoHeld[index] = voice.lfoHeld[index];
+                }
+                advanceVoiceLfo(voice, i, setting, mode);
+            }
+
+            // Modulation is per voice and per sample: every source is per voice
+            // now that the LFOs are, and every destination is read inside the
+            // voice. With no live slot the patch is used as it stands and
             // nothing is copied.
             const Patch* voicePatch = &patch;
             if (modulated)
             {
                 scratch = patch;
-                applyModulation(scratch, modulation, voice, lfo, loudest);
+                applyModulation(scratch, modulation, voice, lfoValues, loudest);
                 voicePatch = &scratch;
             }
             const auto& active = *voicePatch;
@@ -576,9 +808,17 @@ public:
                 filter(routedRight, voice.lowRight, voice.bandRight, active.cutoff, active.resonance, type);
             }
 
-            left += routedLeft + buses.dryLeft;
-            right += routedRight + buses.dryRight;
+            left += (routedLeft + buses.dryLeft) * voice.tail;
+            right += (routedRight + buses.dryRight) * voice.tail;
         }
+
+        // The values the panel draws, worked out once from the phases the loop
+        // settled on rather than per voice: a sample and hold's step cannot be
+        // read back out of its phase, so it has to be carried this far.
+        for (int i = 0; i < lfoCount; ++i)
+            meterLfoValue[static_cast<size_t>(i)] =
+                lfoWave(lfoShapeOf(patch.lfos[static_cast<size_t>(i)]),
+                        meterLfoPhase[static_cast<size_t>(i)], meterLfoHeld[static_cast<size_t>(i)]);
 
         const auto gain = juce::jlimit(0.0f, 1.25f, patch.output) * 0.28f;
         left = softClip(left * gain);
@@ -600,12 +840,24 @@ private:
         bool active = false;
         int note = 0;
         float velocity = 0.0f;
-        std::array<float, 8> phaseA {}, phaseB {};
+        std::array<float, unisonMax> phaseA {}, phaseB {};
         float phaseSub = 0.0f;
         float currentHz = 0.0f, targetHz = 0.0f;
         float ampEnvelope = 0.0f, ampReleaseStart = 0.0f;
+        // Full until the envelope has finished, then run down to nothing so
+        // whatever the filter is still ringing with is let go of rather than
+        // cut off. It is also what guarantees the voice comes back: a filter
+        // pushed hard would otherwise ring for a long time.
+        float tail = 1.0f;
         float lowLeft = 0.0f, bandLeft = 0.0f, lowRight = 0.0f, bandRight = 0.0f;
         EnvelopeStage ampStage = EnvelopeStage::idle;
+        // Every LFO that answers the keyboard runs a copy of itself inside each
+        // voice, which is what makes TRIG and ENV mean anything: a new note
+        // restarts its own shape and leaves the notes already sounding alone.
+        // An LFO in OFF ignores these and reads the free-running phase instead.
+        std::array<float, lfoCount> lfoPhase {};
+        std::array<float, lfoCount> lfoHeld {};
+        std::array<bool, lfoCount> lfoStopped {};
     };
 
     // Each live slot nudges its destination in normalised space and the result
@@ -619,7 +871,7 @@ private:
     // over as the voice renders with them, so the ring on a knob and the sound
     // cannot come from two different readings.
     void applyModulation(Patch& target, const Modulation& modulation, const Voice& voice,
-                         float lfo, bool publish = false)
+                         const std::array<float, lfoCount>& lfos, bool publish = false)
     {
         // Offsets are accumulated per destination first and applied once.
         // Applying each slot in turn would round-trip through the destination's
@@ -640,12 +892,16 @@ private:
             switch (static_cast<ModSource>(source))
             {
                 case ModSource::env1:     amount = voice.ampEnvelope; break;
-                case ModSource::lfo1:     amount = lfo; break;
                 case ModSource::velocity: amount = voice.velocity; break;
                 case ModSource::note:     amount = static_cast<float>(voice.note) / 127.0f; break;
                 case ModSource::off:      continue;
                 default:
                 {
+                    if (const auto lfo = lfoIndexOf(source); lfo >= 0)
+                    {
+                        amount = lfos[static_cast<size_t>(lfo)];
+                        break;
+                    }
                     const auto macro = macroIndexOf(source);
                     if (macro < 0) continue;
                     amount = target.macros[static_cast<size_t>(macro)];
@@ -673,20 +929,136 @@ private:
     static float wrap(float phase) { return phase - std::floor(phase); }
     static float noteFrequency(int note) { return static_cast<float>(juce::MidiMessage::getMidiNoteInHertz(note)); }
 
+    // Which voice a new note takes. A silent one if there is one, and the
+    // rotation keeps moving through them so that successive notes do not all
+    // land on the same slot and start from the same phases.
+    //
+    // Past that, the cheapest voice to interrupt. A voice already in its
+    // release is the one to take: the key is up and the player has moved on, so
+    // the quietest of those is the one least likely still to be heard. Only
+    // when every voice is still held does a note that is still being played have
+    // to give way, and then the quietest of those. Strict rotation took
+    // whichever voice was next whether or not it was busy, so a run of notes
+    // longer than the polyphony cut off whatever it landed on.
+    size_t allocate(size_t voiceCount)
+    {
+        for (size_t i = 0; i < voiceCount; ++i)
+        {
+            const auto index = (nextVoice + i) % voiceCount;
+            if (!voices[index].active) return took(index);
+        }
+
+        const auto quietest = [this, voiceCount] (bool releasing)
+        {
+            auto best = voiceCount;
+            for (size_t i = 0; i < voiceCount; ++i)
+            {
+                if ((voices[i].ampStage == EnvelopeStage::release) != releasing) continue;
+                if (best == voiceCount || voices[i].ampEnvelope < voices[best].ampEnvelope) best = i;
+            }
+            return best;
+        };
+        const auto releasing = quietest(true);
+        const auto chosen = releasing < voiceCount ? releasing : quietest(false);
+        // Every voice was active to have reached this far, so one of the two
+        // searches found one; the fallback is there to keep the index in range
+        // rather than because it can be taken.
+        return took(chosen < voiceCount ? chosen : 0);
+    }
+
+    size_t took(size_t index)
+    {
+        nextVoice = index + 1;
+        return index;
+    }
+
+    // A new note starts every keyboard LFO again from the top — this voice's
+    // copies of them, so the notes already sounding are untouched. OFF
+    // deliberately does not restart, which is the whole point of it: a
+    // free-running LFO keeps its place across a phrase.
+    //
+    // A legato note in mono is not a new note here, for exactly the reason it
+    // does not restart the amp envelope — no key was lifted — so an LFO
+    // retriggers precisely when that envelope does.
+    void retriggerLfo(Voice& voice, const Patch& patch)
+    {
+        for (int i = 0; i < lfoCount; ++i)
+        {
+            if (lfoModeOf(patch.lfos[static_cast<size_t>(i)]) == LfoMode::free) continue;
+            voice.lfoPhase[static_cast<size_t>(i)] = 0.0f;
+            // A fresh step with it: phase zero is where sample and hold takes one.
+            voice.lfoHeld[static_cast<size_t>(i)] = noise();
+            voice.lfoStopped[static_cast<size_t>(i)] = false;
+        }
+    }
+
+    // One LFO's cycle moved on by a sample, inside one voice.
+    void advanceVoiceLfo(Voice& voice, int index, const LfoSetting& setting, LfoMode mode)
+    {
+        const auto i = static_cast<size_t>(index);
+        // Parked at the end of a one-shot until a note restarts it — or until
+        // the mode is taken off ENV, which lets the shape run on from where it
+        // stopped rather than leaving the panel showing a dead indicator.
+        if (voice.lfoStopped[i] && mode != LfoMode::envelope) voice.lfoStopped[i] = false;
+        if (voice.lfoStopped[i]) return;
+
+        const auto advanced = voice.lfoPhase[i]
+            + juce::jlimit(0.01f, 40.0f, setting.rate) / static_cast<float>(sampleRate);
+        if (advanced >= 1.0f && mode == LfoMode::envelope)
+        {
+            // A one-shot stops on the last point of the shape and holds it,
+            // rather than wrapping round to the first. That hold is what makes
+            // it an envelope instead of a cycle that ran once: a saw finishes at
+            // the top, a triangle at the bottom, and whatever it is driving
+            // stays there until the next note.
+            voice.lfoPhase[i] = 1.0f;
+            voice.lfoStopped[i] = true;
+            return;
+        }
+        // One new step per cycle, taken as the cycle turns over, so a
+        // sample-and-hold changes exactly where the other shapes restart.
+        if (advanced >= 1.0f) voice.lfoHeld[i] = noise();
+        voice.lfoPhase[i] = wrap(advanced);
+    }
+
+    // Taking a voice that is still sounding must not be audible as anything but
+    // the new note arriving. Wiping it — phases, filter state and envelope all
+    // back to zero — steps the output straight down to silence in one sample,
+    // and that step is the click a player hears when a run of notes is longer
+    // than the polyphony.
+    //
+    // So a voice that is still audible is retuned rather than rebuilt. It keeps
+    // its oscillator phases, its filter state and the level its envelope has
+    // reached, and the attack simply starts again from that level. Amplitude,
+    // waveform and filter are all continuous across the steal; the pitch jumps,
+    // and a pitch jump is a new note rather than a click.
     void startVoice(Voice& voice, int note, float velocity)
     {
-        voice = {};
+        const auto sounding = voice.active;
+        if (!sounding)
+        {
+            voice = {};
+            // A silent voice starts its unison stack at offsets of its own, so
+            // two notes struck together do not begin life as one louder note.
+            // The offsets are hashed rather than stepped along by a constant:
+            // a constant step is a comb, and a harmonic high enough to see the
+            // teeth line up on it, which leaves the stack correlated exactly
+            // where it should sound widest. A hash has no such structure, and
+            // being a hash rather than a random number it is still the same on
+            // every run, which is what lets the tests measure it.
+            for (juce::uint32 i = 0; i < voice.phaseA.size(); ++i)
+            {
+                const auto seed = i * 2654435761u + static_cast<juce::uint32>(note) * 40503u;
+                voice.phaseA[i] = unitFromHash(seed);
+                voice.phaseB[i] = unitFromHash(seed + 2654435741u);
+            }
+        }
         voice.active = true;
+        voice.tail = 1.0f;
         voice.note = note;
         voice.velocity = juce::jlimit(0.0f, 1.0f, velocity);
         voice.currentHz = voice.targetHz = noteFrequency(note);
         voice.ampStage = EnvelopeStage::attack;
-        for (size_t i = 0; i < voice.phaseA.size(); ++i)
-        {
-            const auto offset = static_cast<float>(i) / static_cast<float>(voice.phaseA.size());
-            voice.phaseA[i] = std::fmod(offset * 0.37f + static_cast<float>(note) * 0.013f, 1.0f);
-            voice.phaseB[i] = std::fmod(offset * 0.61f + static_cast<float>(note) * 0.019f, 1.0f);
-        }
     }
 
     void hold(int note)
@@ -739,7 +1111,7 @@ private:
 
     // One oscillator's whole contribution: its own tuning, its own unison
     // stack, its own pan and its own level, summed into the voice.
-    void renderOscillator(std::array<float, 8>& phases, const Oscillator& osc, float baseHz,
+    void renderOscillator(std::array<float, unisonMax>& phases, const Oscillator& osc, float baseHz,
                           float dt, float& left, float& right) const
     {
         if (!on(osc.enable)) return;
@@ -751,17 +1123,23 @@ private:
 
         // Which band-limited copy of the table this note may read. Chosen from
         // the top of the unison stack rather than its centre, so the sharpest
-        // voice in the stack decides and no member of it aliases: detune
-        // spreads the stack by at most a third of a semitone, and 3% of
-        // headroom covers that with room to spare.
+        // voice in the stack decides and no member of it aliases: detune lifts
+        // the top of the stack by at most half of unisonSpreadSemitones, which
+        // is a ratio of 1.0413, and 5% of headroom covers that with room to
+        // spare. Widening the spread without widening this would let the
+        // sharpest voice read a copy that is not band-limited far enough.
         const auto& table = osc.table != nullptr ? *osc.table : builtInWavetable();
-        const auto level = table.levelFor(hz * 1.03f, sampleRate);
+        const auto level = table.levelFor(hz * 1.05f, sampleRate);
 
         auto stackLeft = 0.0f, stackRight = 0.0f, power = 0.0f;
         for (int i = 0; i < count; ++i)
         {
             const auto spread = count == 1 ? 0.0f
                 : static_cast<float>(i) / static_cast<float>(count - 1) - 0.5f;
+            // Blend and pan read the even position, so the shape of the stack
+            // across the gain curve and across the image stays smooth. Only the
+            // tuning reads the uneven one, because that is what beats.
+            const auto offset = unisonOffset(i, count);
             // Blend balances the centre of the stack against its edges: at 0
             // only the centre voices are heard, at 1 the whole stack is level.
             const auto centreWeight = 1.0f - juce::jmin(1.0f, std::abs(spread) * 2.0f);
@@ -773,7 +1151,8 @@ private:
             stackLeft += sample * std::sqrt(0.5f * (1.0f - pan));
             stackRight += sample * std::sqrt(0.5f * (1.0f + pan));
 
-            const auto ratio = std::pow(2.0f, spread * detune * 0.7f / 12.0f);
+            const auto ratio = std::pow(2.0f, offset * detune
+                                              * unisonSpreadSemitones / 12.0f);
             phases[static_cast<size_t>(i)] = wrap(phases[static_cast<size_t>(i)] + hz * ratio * dt);
         }
 
@@ -830,7 +1209,15 @@ private:
     // is a choice of which tap to return rather than a second filter.
     float filter(float input, float& low, float& band, float cutoff, float resonance, FilterType type) const
     {
-        const auto limitedCutoff = juce::jlimit(25.0f, static_cast<float>(sampleRate * 0.3), cutoff);
+        // The ceiling is here because the prewarp runs away as the cutoff
+        // approaches Nyquist, not because the topology is fragile — a
+        // zero-delay state variable filter is stable whatever g is. At 0.3 it
+        // was landing at 13.2 kHz on a 44.1 kHz stream, so the top quarter of a
+        // knob that goes to 18 kHz did nothing and a patch with the filter
+        // wide open was still being darkened by it. 0.45 leaves tan() well
+        // behaved and puts the whole of the knob's range in reach at both of
+        // the rates Forge is ever asked to run at.
+        const auto limitedCutoff = juce::jlimit(25.0f, static_cast<float>(sampleRate * 0.45), cutoff);
         const auto g = std::tan(juce::MathConstants<float>::pi * limitedCutoff / static_cast<float>(sampleRate));
         const auto damping = 1.0f / (1.0f + juce::jlimit(0.0f, 1.0f, resonance) * 15.0f);
         const auto high = (input - 2.0f * damping * band - low) / (1.0f + 2.0f * damping * g + g * g);
@@ -848,11 +1235,21 @@ private:
     std::array<Voice, 16> voices {};
     double sampleRate = 48000.0;
     size_t nextVoice = 0;
-    float lfoPhase = 0.0f;
-    // The sample-and-hold's current step, and what LFO 1 last put out, for the
-    // display to draw.
-    float lfoHeld = 0.0f;
-    float meterLfo = 0.0f;
+    // One over the length of the tail fade in samples, worked out when the
+    // sample rate is known rather than per sample.
+    float tailStep = 1.0f / (44100.0f * voiceTailSeconds);
+    // The free-running cycles, one per LFO. An LFO in OFF reads these: the same
+    // cycle for every voice and for the panel, running whether or not anything
+    // is playing, which is the whole of what OFF means. The keyboard modes
+    // ignore them and read the copy inside the voice instead.
+    std::array<float, lfoCount> freePhase {};
+    std::array<float, lfoCount> freeHeld {};
+    // What the panel is shown for each LFO. The held step is carried as well as
+    // the phase because a sample and hold's step cannot be worked back out of
+    // its phase.
+    std::array<float, lfoCount> meterLfoPhase {};
+    std::array<float, lfoCount> meterLfoHeld {};
+    std::array<float, lfoCount> meterLfoValue {};
     std::uint32_t noiseState = 0x9e3779b9u;
     std::array<juce::NormalisableRange<float>, destinationCount> destinationRanges {};
     // Reused every voice and every sample so a modulated render allocates

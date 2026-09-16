@@ -56,15 +56,17 @@ public:
     float envelopeLevel() const { return meterLevel.load(std::memory_order_relaxed); }
     int envelopeStage() const { return meterStage.load(std::memory_order_relaxed); }
 
-    // Where LFO 1 is in its cycle, and what it last put out. The phase moves the
-    // indicator across its display; the value is published too because a
-    // sample-and-hold's step cannot be worked back out of the phase.
-    float lfoPhase() const { return meterLfoPhase.load(std::memory_order_relaxed); }
-    float lfoValue() const { return meterLfoValue.load(std::memory_order_relaxed); }
+    // Where an LFO is in its cycle, and what it last put out. The phase moves
+    // the indicator across its display; the value is published too because a
+    // sample-and-hold's step cannot be worked back out of the phase. An LFO
+    // that answers the keyboard reports the loudest voice's copy of itself,
+    // exactly as ENV 1's display follows that voice.
+    float lfoPhase(int lfo) const { return meter(meterLfoPhase, lfo); }
+    float lfoValue(int lfo) const { return meter(meterLfoValue, lfo); }
 
-    // The rate LFO 1 actually runs at: the rate knob in free mode, a division of
-    // the host's tempo in sync.
-    float lfoRateHz() const;
+    // The rate an LFO actually runs at: the rate knob when it is set in Hertz,
+    // a division of the host's tempo when it is set in beats.
+    float lfoRateHz(int lfo) const;
 
     // How far the matrix is moving a destination right now, in that
     // destination's normalised space, so the knob pointed at it can draw where
@@ -83,8 +85,13 @@ private:
     Core core;
     std::atomic<float> meterLevel {0.0f};
     std::atomic<int> meterStage {0};
-    std::atomic<float> meterLfoPhase {0.0f};
-    std::atomic<float> meterLfoValue {0.0f};
+    std::array<std::atomic<float>, lfoCount> meterLfoPhase {};
+    std::array<std::atomic<float>, lfoCount> meterLfoValue {};
+    static float meter(const std::array<std::atomic<float>, lfoCount>& from, int lfo)
+    {
+        return lfo >= 0 && lfo < lfoCount
+            ? from[static_cast<size_t>(lfo)].load(std::memory_order_relaxed) : 0.0f;
+    }
     // The host's tempo as of the last block, for a synced LFO to divide.
     std::atomic<double> hostBpm {0.0};
     std::array<std::atomic<float>, destinationCount> meterOffsets {};

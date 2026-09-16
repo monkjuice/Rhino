@@ -214,7 +214,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout Processor::parameterLayout()
         result.push_back(parameter(id("Octave"), name("Octave"), {-4.0f, 4.0f, 1.0f}, 0.0f, asOctaves));
         result.push_back(parameter(id("Semitone"), name("Semitone"), {-12.0f, 12.0f}, semitone, asSemitones));
         result.push_back(parameter(id("Fine"), name("Fine"), {-100.0f, 100.0f, 1.0f}, 0.0f, asCents));
-        result.push_back(parameter(id("Unison"), name("Unison"), {1.0f, 8.0f, 1.0f}, 2.0f, asCount));
+        result.push_back(parameter(id("Unison"), name("Unison"), {1.0f, static_cast<float>(unisonMax), 1.0f}, 2.0f, asCount));
         result.push_back(parameter(id("Detune"), name("Detune"), {0.0f, 1.0f}, 0.18f, asPercent));
         result.push_back(parameter(id("Blend"), name("Blend"), {0.0f, 1.0f}, 0.5f, asPercent));
         result.push_back(parameter(id("Pan"), name("Pan"), {-1.0f, 1.0f}, 0.0f, asPan));
@@ -244,18 +244,46 @@ juce::AudioProcessorValueTreeState::ParameterLayout Processor::parameterLayout()
     result.push_back(parameter("decay", "Decay", {0.001f, 4.0f, 0.0f, 0.35f}, 0.24f, asSeconds));
     result.push_back(parameter("sustain", "Sustain", {0.0f, 1.0f}, 0.75f, asPercent));
     result.push_back(parameter("release", "Release", {0.001f, 8.0f, 0.0f, 0.35f}, 0.35f, asSeconds));
+    // Six LFOs, declared identically. None is expressed in terms of another:
+    // each owns its shape, its mode and its rate outright, exactly as the two
+    // oscillators do, and the panel shows one at a time.
     juce::StringArray lfoShapeNames;
     for (int i = 0; i < lfoShapeCount; ++i) lfoShapeNames.add(lfoShapeName(i));
-    result.push_back(std::make_unique<juce::AudioParameterChoice>(
-        juce::ParameterID {"lfoShape", 1}, "LFO Shape", lfoShapeNames, 0));
-    result.push_back(parameter("lfoRate", "LFO Rate", {0.05f, 20.0f, 0.0f, 0.35f}, 0.5f, asRate));
-    result.push_back(toggle("lfoSync", "LFO Sync", false));
+    juce::StringArray lfoModeNames;
+    for (int i = 0; i < lfoModeCount; ++i) lfoModeNames.add(lfoModeName(i));
+    juce::StringArray lfoRateUnitNames;
+    for (int i = 0; i < lfoRateUnitCount; ++i) lfoRateUnitNames.add(lfoRateUnitName(i));
     juce::StringArray lfoDivisionNames;
     for (const auto& division : lfoDivisions()) lfoDivisionNames.add(division.label);
-    // 1/4 by default: one cycle per beat is the rate a sync is usually reached
-    // for in the first place.
-    result.push_back(std::make_unique<juce::AudioParameterChoice>(
-        juce::ParameterID {"lfoDivision", 1}, "LFO Division", lfoDivisionNames, 2));
+
+    for (int lfo = 1; lfo <= lfoCount; ++lfo)
+    {
+        const auto id = [lfo] (const char* suffix) { return lfoParameterId(lfo - 1, suffix); };
+        const auto name = [lfo] (const char* suffix)
+        {
+            return "LFO " + juce::String(lfo) + " " + suffix;
+        };
+        result.push_back(std::make_unique<juce::AudioParameterChoice>(
+            juce::ParameterID {id("Shape"), 1}, name("Shape"), lfoShapeNames, 0));
+        // TRIG by default: an LFO that answers the keyboard is what a player
+        // expects of one, and it is the mode the other two are heard against.
+        result.push_back(std::make_unique<juce::AudioParameterChoice>(
+            juce::ParameterID {id("Mode"), 1}, name("Mode"), lfoModeNames, 0));
+        // Each LFO starts at a rate of its own, so six of them pointed at six
+        // destinations do not all move as one until they are set apart by hand.
+        const auto defaultRate = 0.5f * static_cast<float>(lfo);
+        result.push_back(parameter(id("Rate"), name("Rate"), {0.05f, 20.0f, 0.0f, 0.35f},
+                                   defaultRate, asRate));
+        // The unit the rate is set in, rather than a sync switch with an implied
+        // "off". HZ and BPM are two readings of one setting, and the panel puts
+        // whichever is in charge in the same place on the row.
+        result.push_back(std::make_unique<juce::AudioParameterChoice>(
+            juce::ParameterID {id("RateUnit"), 1}, name("Rate Unit"), lfoRateUnitNames, 0));
+        // 1/4 by default: one cycle per beat is the rate a sync is usually
+        // reached for in the first place.
+        result.push_back(std::make_unique<juce::AudioParameterChoice>(
+            juce::ParameterID {id("Division"), 1}, name("Division"), lfoDivisionNames, 2));
+    }
     result.push_back(parameter("polyphony", "Polyphony", {1.0f, 16.0f, 1.0f}, 8.0f, asCount));
     result.push_back(toggle("mono", "Mono", false));
     result.push_back(toggle("legato", "Legato", true));
@@ -313,17 +341,19 @@ bool Processor::isBusesLayoutSupported(const BusesLayout& layouts) const
     return layouts.getMainOutputChannelSet() == juce::AudioChannelSet::stereo();
 }
 
-// The rate LFO 1 actually runs at: the rate knob in free mode, and a division of
-// the host's tempo in sync. Worked out rather than published, because it depends
-// only on parameters and the tempo, both of which the message thread can read
-// for itself — so the panel and the voice cannot end up quoting different rates.
-float Processor::lfoRateHz() const
+// The rate an LFO actually runs at: the rate knob when it is set in Hertz, and a
+// division of the host's tempo when it is set in beats. Worked out rather than
+// published, because it depends only on parameters and the tempo, both of which
+// the message thread can read for itself — so the panel and the voice cannot end
+// up quoting different rates.
+float Processor::lfoRateHz(int lfo) const
 {
     const auto value = [this] (const juce::String& id) { return state.getRawParameterValue(id)->load(); };
-    if (value("lfoSync") < 0.5f) return value("lfoRate");
+    const auto id = [lfo] (const char* suffix) { return lfoParameterId(lfo, suffix); };
+    if (value(id("RateUnit")) < 0.5f) return value(id("Rate"));
 
     const auto beats = lfoDivisions()[static_cast<size_t>(
-        juce::jlimit(0, lfoDivisionCount - 1, juce::roundToInt(value("lfoDivision"))))].beats;
+        juce::jlimit(0, lfoDivisionCount - 1, juce::roundToInt(value(id("Division")))))].beats;
     const auto bpm = hostBpm.load(std::memory_order_relaxed);
     // Standing in for a host that reports no tempo, so a synced LFO still runs
     // at a musical rate in a standalone rather than stopping dead.
@@ -374,8 +404,11 @@ void Processor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
     // 24 Hz, so a per-sample store would be pure contention for no extra detail.
     meterLevel.store(core.envelopeLevel(), std::memory_order_relaxed);
     meterStage.store(core.envelopeStage(), std::memory_order_relaxed);
-    meterLfoPhase.store(core.lfoPosition(), std::memory_order_relaxed);
-    meterLfoValue.store(core.lfoOutput(), std::memory_order_relaxed);
+    for (int lfo = 0; lfo < lfoCount; ++lfo)
+    {
+        meterLfoPhase[static_cast<size_t>(lfo)].store(core.lfoPosition(lfo), std::memory_order_relaxed);
+        meterLfoValue[static_cast<size_t>(lfo)].store(core.lfoOutput(lfo), std::memory_order_relaxed);
+    }
     for (int destination = 1; destination < destinationCount; ++destination)
         meterOffsets[static_cast<size_t>(destination)]
             .store(core.modulationOffset(destination), std::memory_order_relaxed);
@@ -430,8 +463,13 @@ Patch Processor::patch() const
     result.decay = value("decay");
     result.sustain = value("sustain");
     result.release = value("release");
-    result.lfoRate = lfoRateHz();
-    result.lfoShape = value("lfoShape");
+    for (int lfo = 0; lfo < lfoCount; ++lfo)
+    {
+        auto& setting = result.lfos[static_cast<size_t>(lfo)];
+        setting.rate = lfoRateHz(lfo);
+        setting.shape = value(lfoParameterId(lfo, "Shape"));
+        setting.mode = value(lfoParameterId(lfo, "Mode"));
+    }
     result.polyphony = value("polyphony");
     result.mono = value("mono");
     result.legato = value("legato");
@@ -527,6 +565,43 @@ juce::Result Processor::loadPreset(const juce::File& source)
 juce::ValueTree Processor::migrated(const juce::ValueTree& savedState) const
 {
     auto result = savedState.createCopy();
+
+    // LFO 2-6 arrived after some of these were written, and two things moved
+    // with them. A dropped parameter loads at its default, which is harmless; a
+    // parameter that quietly means something different is not, so both are put
+    // right here rather than left to the reconciliation below.
+    //
+    // The one LFO's parameters were named for the only LFO there was, so the
+    // presence of `lfoShape` is what says a state predates the other five. It
+    // is also what makes this safe to run twice: a state that has been through
+    // it once no longer carries that id.
+    if (parameterEntry(result, "lfoShape").isValid())
+    {
+        static const std::array<std::pair<const char*, const char*>, 5> renamed {{
+            {"lfoShape", "lfo1Shape"}, {"lfoMode", "lfo1Mode"}, {"lfoRate", "lfo1Rate"},
+            {"lfoRateUnit", "lfo1RateUnit"}, {"lfoDivision", "lfo1Division"}}};
+        for (auto child : result)
+        {
+            const auto id = child.getProperty("id").toString();
+            for (const auto& [was, now] : renamed)
+                if (id == was) child.setProperty("id", now, nullptr);
+        }
+
+        // A slot's Source is an index into the list of sources, and five LFOs
+        // were inserted into the middle of that list. Everything that sat past
+        // LFO 1 moved up by five, so a saved index has to move with it or the
+        // slot comes back silently pointed at something else.
+        const auto firstLfo = static_cast<int>(ModSource::lfo1);
+        for (int slot = 1; slot <= modSlotCount; ++slot)
+        {
+            auto entry = parameterEntry(result, "mod" + juce::String(slot) + "Source");
+            if (!entry.isValid()) continue;
+            const auto was = juce::roundToInt(static_cast<float>(entry.getProperty("value")));
+            if (was > firstLfo)
+                entry.setProperty("value", static_cast<float>(was + lfoCount - 1), nullptr);
+        }
+    }
+
     for (int i = result.getNumChildren(); --i >= 0;)
     {
         // A table is data rather than a parameter and is applied separately, so

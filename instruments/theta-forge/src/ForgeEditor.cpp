@@ -18,6 +18,12 @@ juce::String slotParameter(int slot, const char* suffix)
 {
     return "mod" + juce::String(slot + 1) + suffix;
 }
+
+// How many semitones of the piano the computer keys can reach at once. JUCE's
+// default qwerty mapping is "awsedftgyhujkolp;" laid on the note offsets 0..16
+// from the C of the mapping octave, so the reach is a C to the E an octave and
+// a third above it.
+constexpr int computerKeySpan = 17;
 }
 
 Editor::Editor(Processor& p)
@@ -31,7 +37,14 @@ Editor::Editor(Processor& p)
 
     keyboard.setAvailableRange(21, 108);
     keyboard.setLowestVisibleKey(21);
+    // Middle C is C4 here because middle C is C4 in Theta's own grid, which
+    // names its rows with the same octave number — see StepGridPainter. JUCE's
+    // keyboard defaults to 3 instead, so without this the same key reads C3 on
+    // the panel and C4 on the grid that is driving it, and a player comparing
+    // the two concludes the synth is an octave out when only the label is.
+    keyboard.setOctaveForMiddleC(4);
     keyboard.setScrollButtonsVisible(false);
+    keyboard.setKeyPressBaseOctave(computerKeyOctave);
     keyboard.setColour(juce::MidiKeyboardComponent::whiteNoteColourId, juce::Colour(0xffd8dcea));
     keyboard.setColour(juce::MidiKeyboardComponent::blackNoteColourId, juce::Colour(0xff10131f));
     keyboard.setColour(juce::MidiKeyboardComponent::keySeparatorLineColourId, juce::Colour(0xff05070e));
@@ -147,20 +160,13 @@ void Editor::showPage(ui::Page target)
 // A module either declares a page or stays put. Hiding rather than rebuilding
 // keeps every attachment alive, so a knob the tab is covering is still driven
 // by the host and by the matrix while it is out of sight.
+//
+// What is on screen is worked out in one place, because the tab is not the only
+// thing that decides it: a control sharing a cell is also hidden while it is
+// not the reading in charge.
 void Editor::applyPage()
 {
-    for (auto& module : moduleUis)
-    {
-        const auto shown = ui::onPage(*module.descriptor, page);
-        if (module.enable != nullptr) module.enable->setVisible(shown);
-        for (auto& control : module.controls)
-        {
-            control->label.setVisible(shown);
-            control->slider.setVisible(shown);
-            if (control->chip != nullptr) control->chip->setVisible(shown);
-            if (control->rocker != nullptr) control->rocker->setVisible(shown);
-        }
-    }
+    applyEnableStates();
     if (tablePanel != nullptr) tablePanel->setVisible(page == ui::Page::table);
     // Last, because a macro's handle takes the place of its label and the
     // layout pass is what decides that.
@@ -202,6 +208,7 @@ void Editor::buildModules()
                 control->enabledBy = declared.enabledBy;
                 control->row = r;
                 control->index = i;
+                control->bank = ui::bankOf(descriptor, r, i);
 
                 if (declared.style == ui::Style::chip)
                 {
@@ -302,29 +309,99 @@ void Editor::buildModules()
 
         moduleUis.push_back(std::move(module));
     }
+    buildBankButtons();
+}
+
+// A module declared in banks carries one numbered button per bank in its
+// header. Which bank is showing is the panel's business and not the host's: it
+// says which LFO you are looking at, not what the synth is doing, so it is no
+// more a parameter than which tab is open.
+void Editor::buildBankButtons()
+{
+    for (auto& module : moduleUis)
+    {
+        const auto banks = ui::bankCount(*module.descriptor);
+        if (banks <= 1) continue;
+        const auto accent = ui::accentFor(*module.descriptor);
+        for (int bank = 0; bank < banks; ++bank)
+        {
+            auto button = std::make_unique<ui::ToggleChip>(juce::String(bank + 1));
+            button->accent = accent;
+            button->setClickingTogglesState(false);
+            button->setToggleState(bank == module.bank, juce::dontSendNotification);
+            button->setTooltip("Show " + juce::String(module.descriptor->title) + " "
+                               + juce::String(bank + 1));
+            button->onClick = [this, which = &module, bank] { showBank(*which, bank); };
+            addAndMakeVisible(*button);
+            module.bankButtons.push_back(std::move(button));
+        }
+    }
+}
+
+void Editor::showBank(ModuleUi& module, int bank)
+{
+    if (module.bank == bank) return;
+    module.bank = bank;
+    for (int i = 0; i < static_cast<int>(module.bankButtons.size()); ++i)
+        module.bankButtons[static_cast<size_t>(i)]->setToggleState(i == bank, juce::dontSendNotification);
+    // The handle in the header drags whichever LFO is showing, so the layout
+    // has to run again to put the right one there.
+    applyEnableStates();
+    refreshModulationRings();
+    resized();
+    repaint();
+}
+
+// Which LFO the panel is showing. The module is the one that declares the LFO
+// display, so nothing here has to know its id.
+int Editor::shownLfo() const
+{
+    for (const auto& module : moduleUis)
+        if (module.descriptor->display == ui::Display::lfo)
+            return juce::jlimit(0, lfoCount - 1, module.bank);
+    return 0;
 }
 
 void Editor::applyEnableStates()
 {
     for (auto& module : moduleUis)
     {
+        const auto onPage = ui::onPage(*module.descriptor, page);
+        if (module.enable != nullptr) module.enable->setVisible(onPage);
+        for (auto& button : module.bankButtons) button->setVisible(onPage);
+
         for (auto& control : module.controls)
         {
             // A control is live when its module is on and nothing else has
             // taken it over — polyphony means nothing once mono is switched on,
-            // and a tempo division means nothing until the LFO is synced.
+            // and a tempo division means nothing while the rate is in Hertz.
             const auto on = module.on()
                 && (control->disabledBy == nullptr || value(control->disabledBy) < 0.5f)
                 && (control->enabledBy == nullptr || value(control->enabledBy) >= 0.5f);
+            // A control that shares its cell leaves rather than greys out: the
+            // other reading of the same setting is standing in the same place,
+            // and a greyed control would be sitting on top of the live one.
+            const auto shown = onPage
+                // A module declared in banks has only one of them on screen.
+                && control->bank == module.bank
+                && (on || !ui::inSharedCell(*module.descriptor, control->row, control->index));
 
-            if (control->chip != nullptr) { control->chip->setEnabled(on); continue; }
+            control->label.setVisible(shown);
+            if (control->chip != nullptr)
+            {
+                control->chip->setEnabled(on);
+                control->chip->setVisible(shown);
+                continue;
+            }
             if (control->rocker != nullptr)
             {
                 control->rocker->setEnabled(on);
+                control->rocker->setVisible(shown);
             }
             else
             {
                 control->slider.setEnabled(on);
+                control->slider.setVisible(shown);
                 control->slider.setColour(juce::Slider::textBoxTextColourId,
                                           ui::text.withAlpha(on ? 1.0f : 0.4f));
             }
@@ -334,7 +411,7 @@ void Editor::applyEnableStates()
     }
 }
 
-float Editor::value(const char* id) const
+float Editor::value(const juce::String& id) const
 {
     const auto* raw = processor.state.getRawParameterValue(id);
     return raw == nullptr ? 0.0f : raw->load();
@@ -359,8 +436,7 @@ void Editor::paint(juce::Graphics& g)
         const auto tableModule = juce::String(descriptor.id) == "table";
         ui::drawModuleShell(g, area, descriptor, on,
                             descriptor.display == ui::Display::envelope ? ui::stageName(stage)
-                            : descriptor.display == ui::Display::lfo
-                                ? juce::String(processor.lfoRateHz(), 2) + " HZ"
+                            : descriptor.display == ui::Display::lfo ? lfoHeaderDetail()
                             : tableModule && tablePanel != nullptr ? tablePanel->headerDetail()
                                 : juce::String());
 
@@ -393,11 +469,14 @@ void Editor::paint(juce::Graphics& g)
                                  stage, processor.envelopeLevel());
                 break;
             case ui::Display::lfo:
+            {
+                const auto lfo = shownLfo();
                 ui::drawLfo(g, display,
                             static_cast<LfoShape>(juce::jlimit(0, lfoShapeCount - 1,
-                                                               juce::roundToInt(value("lfoShape")))),
-                            processor.lfoPhase(), processor.lfoValue(), accent, alpha);
+                                                               juce::roundToInt(value(lfoParameterId(lfo, "Shape"))))),
+                            processor.lfoPhase(lfo), processor.lfoValue(lfo), accent, alpha);
                 break;
+            }
             case ui::Display::none:
                 break;
         }
@@ -420,6 +499,22 @@ void Editor::paint(juce::Graphics& g)
             g.drawRoundedRectangle(target->slider.getBounds().toFloat().reduced(2.0f), 4.0f, 1.6f);
         }
     }
+}
+
+// The rate LFO 1 is actually running at, for its header. Set in beats that is a
+// division of the host's tempo, which is the one reading the knob cannot give
+// on its own — so the division is named and the Hertz it works out to is put
+// beside it.
+juce::String Editor::lfoHeaderDetail() const
+{
+    const auto lfo = shownLfo();
+    const auto hertz = juce::String(processor.lfoRateHz(lfo), 2) + " HZ";
+    if (value(lfoParameterId(lfo, "RateUnit")) < 0.5f) return hertz;
+
+    const auto division = lfoDivisions()[static_cast<size_t>(
+        juce::jlimit(0, lfoDivisionCount - 1,
+                     juce::roundToInt(value(lfoParameterId(lfo, "Division")))))].label;
+    return juce::String(division) + " // " + hertz;
 }
 
 // A slot counts as live once it has both ends: something driving it and
@@ -499,11 +594,21 @@ void Editor::resized()
             module.enable->setBounds(led);
         }
         // A module that is itself a source puts its handle where the enable LED
-        // would be, ahead of the title.
+        // would be, ahead of the title. A module showing one of several sources
+        // puts the one it is showing there, and leaves the rest off the panel.
         if (descriptor.handleSource != 0)
-            if (auto* handle = handleFor(descriptor.handleSource))
+        {
+            const auto showing = descriptor.handleSource + module.bank;
+            for (int bank = 0; bank < ui::bankCount(descriptor); ++bank)
+                if (auto* other = handleFor(descriptor.handleSource + bank))
+                    other->setVisible(descriptor.handleSource + bank == showing);
+            if (auto* handle = handleFor(showing))
                 handle->setBounds(area.getX() + (descriptor.enableId != nullptr ? ui::headerHeight + 8 : 10),
                                   area.getY() + 4, ui::handleWidth, ui::headerHeight - 8);
+        }
+        for (int bank = 0; bank < static_cast<int>(module.bankButtons.size()); ++bank)
+            module.bankButtons[static_cast<size_t>(bank)]
+                ->setBounds(ui::bankButtonBounds(area, descriptor, bank, ui::handleWidth));
 
         for (auto& held : module.controls)
         {
@@ -572,7 +677,10 @@ void Editor::buildHandles()
     };
 
     add(static_cast<int>(ModSource::env1), "ENV 1", ui::electricBlue);
-    add(static_cast<int>(ModSource::lfo1), "LFO 1", ui::signalViolet);
+    // One per LFO, though only the one on screen is ever placed: the handle is
+    // the module's own title, and the module is showing one LFO at a time.
+    for (int lfo = 0; lfo < lfoCount; ++lfo)
+        add(static_cast<int>(ModSource::lfo1) + lfo, "LFO " + juce::String(lfo + 1), ui::signalViolet);
     for (int macro = 0; macro < macroCount; ++macro)
         add(static_cast<int>(ModSource::macro1) + macro, juce::String(macro + 1), ui::electricBlue);
 }
@@ -636,7 +744,51 @@ bool Editor::keyPressed(const juce::KeyPress& key)
         repaint();
         return true;
     }
+    // z and x walk the computer keys up and down the piano. Neither letter is
+    // in the keyboard's own mapping, so playing loses nothing by lending them.
+    if (key == juce::KeyPress('z')) { shiftComputerKeyOctave(-1); return true; }
+    if (key == juce::KeyPress('x')) { shiftComputerKeyOctave(1); return true; }
     return keyboard.keyPressed(key);
+}
+
+void Editor::shiftComputerKeyOctave(int delta)
+{
+    // The reach has to land inside the keys that exist, so the lowest octave is
+    // the first whose C is on the piano and the highest is the last whose whole
+    // reach still fits.
+    const auto lowest = (keyboard.getRangeStart() + 11) / 12;
+    const auto highest = (keyboard.getRangeEnd() - (computerKeySpan - 1)) / 12;
+    const auto shifted = juce::jlimit(lowest, highest, computerKeyOctave + delta);
+    if (shifted == computerKeyOctave) return;
+
+    // Notes are tracked by number, so a key held across the shift would be
+    // asked to stop on a number nothing started — the note hangs. This is the
+    // keyboard's own way of letting everything go, and it is what it does when
+    // the focus leaves it mid-chord.
+    keyboard.focusLost(juce::Component::focusChangedDirectly);
+    computerKeyOctave = shifted;
+    keyboard.setKeyPressBaseOctave(computerKeyOctave);
+    repaint();
+}
+
+// A wash across the keys the letters can reach, with a brighter line under
+// them. Faint enough to read as a shadow on the piano rather than as another
+// lit thing competing with the notes actually being held.
+void Editor::paintOverChildren(juce::Graphics& g)
+{
+    const auto first = computerKeyOctave * 12;
+    const auto last = first + computerKeySpan - 1;
+    if (first < keyboard.getRangeStart() || last > keyboard.getRangeEnd()) return;
+
+    const auto reach = (keyboard.getRectangleForKey(first)
+                            .getUnion(keyboard.getRectangleForKey(last)))
+                           .translated(static_cast<float>(keyboard.getX()),
+                                       static_cast<float>(keyboard.getY()));
+
+    g.setColour(ui::electricBlue.withAlpha(0.07f));
+    g.fillRect(reach);
+    g.setColour(ui::electricBlue.withAlpha(0.3f));
+    g.fillRect(reach.withTop(reach.getBottom() - 2.0f));
 }
 
 void Editor::mouseDrag(const juce::MouseEvent& event)

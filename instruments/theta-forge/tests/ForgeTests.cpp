@@ -1,7 +1,9 @@
 #include "../src/ForgeProcessor.h"
 #include "../ui/ForgeLayout.h"
 #include "../ui/ForgeTooltips.h"
+#include <algorithm>
 #include <iostream>
+#include <vector>
 
 // One binary, three CTest cases selected by argv, matching Theta's own test
 // convention. Run with no argument to execute all three.
@@ -65,6 +67,16 @@ float peakForNote(theta::forge::Processor& processor, int samples = 4096)
 
 // Render a held note into a caller-owned buffer, for checks that need to look
 // at the waveform rather than only its peak.
+// Source indices, taken from the enum rather than written out: they are what a
+// slot's Source parameter stores, and they moved when LFO 2-6 were inserted
+// into the middle of the list. Reading them from the one declaration is what
+// stops these checks quietly testing the wrong source after the next such move.
+constexpr int srcOff = static_cast<int>(theta::forge::ModSource::off);
+constexpr int srcEnv1 = static_cast<int>(theta::forge::ModSource::env1);
+constexpr int srcLfo1 = static_cast<int>(theta::forge::ModSource::lfo1);
+constexpr int srcVelocity = static_cast<int>(theta::forge::ModSource::velocity);
+constexpr int srcNote = static_cast<int>(theta::forge::ModSource::note);
+
 void renderNote(theta::forge::Processor& processor, juce::AudioBuffer<float>& buffer, int note = 57)
 {
     processor.prepareToPlay(48000.0, buffer.getNumSamples());
@@ -81,6 +93,34 @@ int zeroCrossings(const juce::AudioBuffer<float>& buffer, int channel, int from)
         if ((buffer.getSample(channel, i - 1) < 0.0f) != (buffer.getSample(channel, i) < 0.0f))
             ++crossings;
     return crossings;
+}
+
+// How far the level swings over the course of a render, in dB, measured on the
+// short-term RMS rather than on single samples. A detuned stack is supposed to
+// move - that movement is the chorus - but it is supposed to move continuously.
+// A stack whose members are evenly spaced instead swings in and out of phase
+// all together on one slow period, and that reads as a throb rather than as
+// chorus. The depth of the swing is what tells the two apart.
+float envelopeDepthDb(const juce::AudioBuffer<float>& buffer, int channel, int from,
+                      int window = 2048)
+{
+    std::vector<float> levels;
+    for (auto start = from; start + window <= buffer.getNumSamples(); start += window)
+    {
+        auto sum = 0.0;
+        for (auto i = start; i < start + window; ++i)
+        {
+            const auto value = static_cast<double>(buffer.getSample(channel, i));
+            sum += value * value;
+        }
+        levels.push_back(static_cast<float>(std::sqrt(sum / window)));
+    }
+    if (levels.size() < 8) return 0.0f;
+    std::sort(levels.begin(), levels.end());
+    // Trimmed, so one stray window cannot stand for the whole render.
+    const auto low = levels[levels.size() / 20];
+    const auto high = levels[levels.size() - 1 - levels.size() / 20];
+    return juce::Decibels::gainToDecibels(high / juce::jmax(low, 1.0e-9f));
 }
 
 float rms(const juce::AudioBuffer<float>& buffer, int channel, int from)
@@ -173,6 +213,73 @@ void layoutSuite()
                 require(control.disabledBy == nullptr || control.enabledBy == nullptr,
                         "a control is gated one way or the other, not both");
             }
+
+    // Two controls in one cell are two readings of one setting, and only one of
+    // them may ever be on screen. That holds only if they are gated against each
+    // other by the same parameter, one each way round â€” otherwise they would be
+    // drawn on top of one another.
+    for (const auto& module : modules)
+    {
+        const auto area = theta::forge::ui::moduleBounds(bounds, module);
+        for (int r = 0; r < static_cast<int>(module.rows.size()); ++r)
+        {
+            const auto& controls = module.rows[static_cast<size_t>(r)].controls;
+            for (int c = 0; c < static_cast<int>(controls.size()); ++c)
+            {
+                if (!controls[static_cast<size_t>(c)].sharesCell) continue;
+                require(c > 0, "a shared cell has a control in front of it to share");
+                if (c == 0) continue;
+                const auto owner = theta::forge::ui::cellOwner(module, r, c);
+                require(theta::forge::ui::bankOf(module, r, owner)
+                            == theta::forge::ui::bankOf(module, r, c),
+                        "a shared cell is shared inside one bank");
+                const auto& first = controls[static_cast<size_t>(owner)];
+                const auto& second = controls[static_cast<size_t>(c)];
+                require(first.disabledBy != nullptr && second.enabledBy != nullptr
+                            && juce::String(first.disabledBy) == second.enabledBy,
+                        "the two controls in a shared cell are gated by one parameter, one each way");
+                require(theta::forge::ui::cellBounds(area, module, r, c)
+                            == theta::forge::ui::cellBounds(area, module, r, owner),
+                        "a shared control lands on the cell it shares");
+                require(theta::forge::ui::inSharedCell(module, r, c)
+                            && theta::forge::ui::inSharedCell(module, r, owner),
+                        "both controls in a shared cell know they are sharing one");
+            }
+        }
+    }
+
+    // A module declared in banks shows one at a time, in the same cells, so
+    // every bank has to declare the same controls in the same order — otherwise
+    // which cell a control lands in would depend on which bank was showing.
+    for (const auto& module : modules)
+    {
+        const auto banks = theta::forge::ui::bankCount(module);
+        for (const auto& row : module.rows)
+        {
+            require(juce::jmax(1, row.banks) == banks,
+                    "every row of a module declares the same number of banks");
+            const auto perBank = theta::forge::ui::controlsPerBank(row);
+            require(static_cast<int>(row.controls.size()) == perBank * banks,
+                    "a banked row declares a whole number of identical banks");
+            for (int bank = 1; bank < banks; ++bank)
+                for (int i = 0; i < perBank; ++i)
+                {
+                    const auto& first = row.controls[static_cast<size_t>(i)];
+                    const auto& other = row.controls[static_cast<size_t>(bank * perBank + i)];
+                    require(first.style == other.style && first.weight == other.weight
+                                && first.sharesCell == other.sharesCell
+                                && juce::String(first.label) == other.label,
+                            "every bank matches the first in style, width, label and cell sharing");
+                    require(juce::String(first.id) != other.id,
+                            "no two banks name the same parameter");
+                }
+        }
+        // A module that is a source and shows several banks drags a different
+        // source per bank, so all of them have to be real sources.
+        if (module.handleSource != 0)
+            require(module.handleSource + banks - 1 < theta::forge::modSourceCount,
+                    "every bank of a source module names a real modulation source");
+    }
 
     // A control with no tooltip is a control nobody explained. Held to the same
     // standard as a control whose parameter does not exist, because a panel this
@@ -382,6 +489,76 @@ void layoutSuite()
 
 // --------------------------------------------------------------- presets ---
 
+// A state written before LFO 2-6 existed. Its LFO parameters were named for the
+// only LFO there was, and its matrix sources were indices into a list that five
+// LFOs have since been inserted into the middle of. A dropped parameter loads at
+// its default and no harm is done; a source index that quietly means something
+// else is a slot silently pointed somewhere nobody asked for, so it is remapped
+// rather than left.
+void legacyStateSuite()
+{
+    theta::forge::Processor processor;
+
+    juce::ValueTree saved(processor.state.state.getType());
+    const auto add = [&saved] (const char* id, float value)
+    {
+        juce::ValueTree entry("PARAM");
+        entry.setProperty("id", id, nullptr);
+        entry.setProperty("value", value, nullptr);
+        saved.addChild(entry, -1, nullptr);
+    };
+    add("lfoShape", 2.0f);                      // SAW
+    add("lfoMode", 1.0f);                       // ENV
+    add("lfoRate", 3.0f);
+    add("lfoRateUnit", 0.0f);
+    add("lfoDivision", 4.0f);
+    add("cutoff", 900.0f);
+    // As the sources were numbered then: LFO 1 at 2, VELOCITY straight after it
+    // at 3, NOTE at 4, and the macros from 5.
+    add("mod1Source", 2.0f);
+    add("mod2Source", 3.0f);
+    add("mod3Source", 4.0f);
+    add("mod4Source", 5.0f);
+
+    juce::MemoryBlock block;
+    const auto xml = saved.createXml();
+    require(xml != nullptr, "the legacy state serialises");
+    if (xml == nullptr) return;
+    juce::AudioProcessor::copyXmlToBinary(*xml, block);
+    processor.setStateInformation(block.getData(), static_cast<int>(block.getSize()));
+
+    const auto value = [&processor] (const juce::String& id)
+    {
+        const auto* raw = processor.state.getRawParameterValue(id);
+        return raw == nullptr ? std::numeric_limits<float>::quiet_NaN() : raw->load();
+    };
+
+    requireClose(value("lfo1Shape"), 2.0f, 0.001f, "the one LFO's shape becomes LFO 1's");
+    requireClose(value("lfo1Mode"), 1.0f, 0.001f, "the one LFO's mode becomes LFO 1's");
+    requireClose(value("lfo1Rate"), 3.0f, 0.001f, "the one LFO's rate becomes LFO 1's");
+    requireClose(value("lfo1Division"), 4.0f, 0.001f, "the one LFO's division becomes LFO 1's");
+    requireClose(value("cutoff"), 900.0f, 0.5f, "everything else is left alone");
+
+    requireClose(value("mod1Source"), static_cast<float>(srcLfo1), 0.001f,
+                 "a slot on LFO 1 stays on LFO 1");
+    requireClose(value("mod2Source"), static_cast<float>(srcVelocity), 0.001f,
+                 "a slot on velocity is still on velocity");
+    requireClose(value("mod3Source"), static_cast<float>(srcNote), 0.001f,
+                 "a slot on note is still on note");
+    requireClose(value("mod4Source"), static_cast<float>(static_cast<int>(theta::forge::ModSource::macro1)),
+                 0.001f, "a slot on the first macro is still on it");
+
+    // Running it again must change nothing: state already migrated no longer
+    // carries the old ids, which is what the migration keys off.
+    juce::MemoryBlock again;
+    processor.getStateInformation(again);
+    processor.setStateInformation(again.getData(), static_cast<int>(again.getSize()));
+    requireClose(value("mod2Source"), static_cast<float>(srcVelocity), 0.001f,
+                 "saving and reopening migrated state does not move the sources again");
+    requireClose(value("lfo1Rate"), 3.0f, 0.001f,
+                 "saving and reopening migrated state keeps LFO 1's rate");
+}
+
 void presetSuite()
 {
     theta::forge::Processor processor;
@@ -410,7 +587,7 @@ void presetSuite()
     // parameter state. A preset that carries one has to give back the frames
     // that were drawn, and a preset that carries none has to put the oscillator
     // back on the built-in ten rather than leave the previous patch's table
-    // behind — the same rule an omitted parameter follows.
+    // behind â€” the same rule an omitted parameter follows.
     {
         theta::forge::Processor drawn;
         drawn.tableStore().edit(0).draw(0, 0.0f, -1.0f, 1.0f, 1.0f);
@@ -605,27 +782,76 @@ void oscillatorSuite()
     requireClose(rms(buffer, 0, settled), fullLevel * 0.5f, fullLevel * 0.02f,
                  "halving an oscillator's level halves its output");
 
-    // Widening the stack changes the sound without changing the level. Power
-    // normalisation cannot be exact against a detuned stack, so this allows a
-    // few dB rather than asserting equality.
+    // Widening the stack changes the sound without changing the level. This has
+    // to be measured over a window longer than the slowest beat in the stack -
+    // at A3 with twelve voices that is nearly five seconds - because a shorter
+    // one reports wherever the stack happens to sit rather than its level.
+    constexpr int longSamples = 48000 * 13 / 2;
+    constexpr int longSettled = 24000;
+    juce::AudioBuffer<float> longBuffer(2, longSamples);
+
     theta::forge::Processor single;
     soloSineOnA(single);
     setValue(single, "oscADetune", 0.3f);
     setValue(single, "oscAUnison", 1.0f);
-    renderNote(single, buffer);
-    const auto oneVoice = rms(buffer, 0, settled);
+    renderNote(single, longBuffer);
+    const auto oneVoice = rms(longBuffer, 0, longSettled);
+    require(oneVoice > 0.0f, "a single voice makes sound");
 
-    theta::forge::Processor stacked;
-    soloSineOnA(stacked);
-    setValue(stacked, "oscADetune", 0.3f);
-    setValue(stacked, "oscAUnison", 8.0f);
-    renderNote(stacked, buffer);
-    const auto eightVoices = rms(buffer, 0, settled);
-    require(oneVoice > 0.0f && eightVoices > 0.0f, "both stack sizes make sound");
-    const auto decibels = juce::Decibels::gainToDecibels(eightVoices / oneVoice);
-    require(std::abs(decibels) < 4.0f, "stacking voices does not change the oscillator's level");
-    if (std::abs(decibels) >= 4.0f)
-        std::cerr << "       unison level shift: " << decibels << " dB\n";
+    // Every stack size, not just one, so the widest the parameter allows cannot
+    // quietly be the loudest.
+    for (int count = 2; count <= theta::forge::unisonMax; ++count)
+    {
+        theta::forge::Processor stacked;
+        soloSineOnA(stacked);
+        setValue(stacked, "oscADetune", 0.3f);
+        setValue(stacked, "oscAUnison", static_cast<float>(count));
+        renderNote(stacked, longBuffer);
+        const auto stackedVoices = rms(longBuffer, 0, longSettled);
+        require(stackedVoices > 0.0f, "every stack size makes sound");
+        const auto decibels = juce::Decibels::gainToDecibels(stackedVoices / oneVoice);
+        require(std::abs(decibels) < 4.0f, "stacking voices does not change the oscillator's level");
+        if (std::abs(decibels) >= 4.0f)
+            std::cerr << "       unison " << count << " level shift: " << decibels
+                      << " dB\n";
+    }
+
+    // The parameter stops exactly where the phase arrays do, so the widest
+    // stack the panel can ask for is one the voice can actually render.
+    requireText(textFor(single, "oscAUnison", 99.0f),
+                juce::String(theta::forge::unisonMax),
+                "unison stops at the width the voice can render");
+
+    // A full stack has to chorus, not throb. Evenly spaced members give every
+    // neighbouring pair the same beat rate, which makes the whole stack swing
+    // together on one slow period; unisonOffset exists to prevent exactly that,
+    // and this is the check that it still does.
+    theta::forge::Processor wide;
+    soloSineOnA(wide);
+    setValue(wide, "oscAPosition", 6.0f / 9.0f);
+    setValue(wide, "oscADetune", 0.5f);
+    setValue(wide, "oscAUnison", static_cast<float>(theta::forge::unisonMax));
+    renderNote(wide, longBuffer);
+    const auto depth = envelopeDepthDb(longBuffer, 0, longSettled);
+    require(depth < 12.0f, "a full unison stack choruses rather than throbs");
+    if (depth >= 12.0f)
+        std::cerr << "       full stack envelope depth: " << depth << " dB\n";
+
+    // The members must be unevenly spaced for that to hold. Checked directly so
+    // a failure says which of the two things broke.
+    auto smallest = 1.0e9f, largest = 0.0f;
+    for (int i = 1; i < theta::forge::unisonMax; ++i)
+    {
+        const auto gap = theta::forge::unisonOffset(i, theta::forge::unisonMax)
+                       - theta::forge::unisonOffset(i - 1, theta::forge::unisonMax);
+        require(gap > 0.0f, "the stack stays in order");
+        smallest = juce::jmin(smallest, gap);
+        largest = juce::jmax(largest, gap);
+    }
+    require(largest > smallest * 2.0f, "the stack is not evenly spaced");
+    requireClose(theta::forge::unisonOffset(theta::forge::unisonMax - 1, theta::forge::unisonMax)
+                 - theta::forge::unisonOffset(0, theta::forge::unisonMax),
+                 1.0f, 0.0001f, "the stack still spans exactly what detune asks for");
 }
 
 void filterRoutingSuite()
@@ -829,7 +1055,6 @@ bool identical(const juce::AudioBuffer<float>& a, const juce::AudioBuffer<float>
 
 // Destination indices, matching theta::forge::destinations().
 enum Destination { destOff = 0, destAPitch = 5, destSub = 11, destCutoff = 13 };
-enum Source { srcOff = 0, srcEnv1 = 1, srcLfo1 = 2, srcVelocity = 3 };
 
 void setSlot(theta::forge::Processor& processor, int slot, float source, float destination, float depth)
 {
@@ -1027,7 +1252,7 @@ void modulationSuite()
     setValue(byNote, "subEnable", 1.0f);
     setValue(byNote, "subLevel", 0.0f);
     renderNote(byNote, plain, 36);
-    setSlot(byNote, 1, 4.0f, destSub, 1.0f);
+    setSlot(byNote, 1, srcNote, destSub, 1.0f);
     renderNote(byNote, modulated, 36);
     require(!identical(plain, modulated), "the note source reaches its destination");
     require(rms(modulated, 0, settled) > rms(plain, 0, settled),
@@ -1076,7 +1301,7 @@ void lfoSuite()
 
     // Sine and triangle join up at the cycle boundary. A saw and a square jump
     // a full swing there instead, and that jump is the shape rather than a
-    // fault — checked so neither can be quietly smoothed away.
+    // fault â€” checked so neither can be quietly smoothed away.
     for (const auto continuous : {LfoShape::sine, LfoShape::triangle})
         requireClose(theta::forge::lfoWave(continuous, 0.0f, 0.0f),
                      theta::forge::lfoWave(continuous, 1.0f, 0.0f), 0.0001f,
@@ -1108,49 +1333,307 @@ void lfoSuite()
             require(differs, "no two LFO shapes are the same curve");
         }
 
+    // --- The three modes ------------------------------------------------------
+    //
+    // Driven through the Core rather than the Processor: the question is what
+    // the phase does across a note, which is exactly what the Core owns and
+    // what a block of audio would only let us infer.
+    const auto runCore = [] (theta::forge::Core& core, const theta::forge::Patch& patch, int count)
+    {
+        float left = 0.0f, right = 0.0f;
+        for (int i = 0; i < count; ++i) core.renderSample(patch, left, right);
+    };
+    // One cycle a second at 48 kHz, so a count of samples is a share of a cycle
+    // and every check below reads as a fraction of one.
+    constexpr int cycle = 48000;
+    const auto patchFor = [] (theta::forge::LfoMode mode)
+    {
+        theta::forge::Patch patch;
+        auto& first = patch.lfos.front();
+        first.rate = 1.0f;
+        first.shape = static_cast<float>(theta::forge::LfoShape::saw);
+        first.mode = static_cast<float>(mode);
+        // One voice, so the phase the Core publishes is that voice's own. An
+        // LFO that answers the keyboard lives inside the voice now, and what
+        // reaches the panel is the loudest voice's copy of it — which is the
+        // point of the per-voice check further down, but here it would only get
+        // in the way of asking what one note does.
+        patch.polyphony = 1.0f;
+        return patch;
+    };
+    // The phase is published while rendering, so a note has to be given a
+    // sample before what it did to its LFO can be read back.
+    const auto phaseAfterNote = [&] (theta::forge::Core& core, const theta::forge::Patch& patch,
+                                     int note)
+    {
+        core.noteOn(note, 1.0f, patch);
+        runCore(core, patch, 1);
+        return core.lfoPosition(0);
+    };
+
+    for (const auto keyed : {theta::forge::LfoMode::trigger, theta::forge::LfoMode::envelope})
+    {
+        theta::forge::Core core;
+        core.initialise(48000.0);
+        const auto patch = patchFor(keyed);
+        // Nothing is sounding, so the shape waits at the start rather than
+        // running on where nobody can hear it. The indicator is then sitting
+        // exactly where the next key press will start it from.
+        runCore(core, patch, cycle / 4);
+        requireClose(core.lfoPosition(0), 0.0f, 0.0001f,
+                     "a key-synced LFO waits at the start until a note arrives");
+        core.noteOn(57, 1.0f, patch);
+        runCore(core, patch, cycle / 4);
+        require(core.lfoPosition(0) > 0.2f, "a key-synced LFO runs once a note is playing");
+        requireClose(phaseAfterNote(core, patch, 60), 0.0f, 0.0001f,
+                     "a new note restarts a key-synced LFO");
+    }
+
+    // And it comes back to the start when the last voice has gone, having run
+    // on through the release tail rather than being cut dead at note-off.
+    {
+        theta::forge::Core core;
+        core.initialise(48000.0);
+        auto patch = patchFor(theta::forge::LfoMode::trigger);
+        patch.attack = 0.001f;
+        patch.decay = 0.001f;
+        patch.sustain = 1.0f;
+        patch.release = 0.005f;
+        core.noteOn(57, 1.0f, patch);
+        runCore(core, patch, cycle / 4);
+        require(core.lfoPosition(0) > 0.2f, "TRIG runs while the note is held");
+
+        core.noteOff(57);
+        const auto atRelease = core.lfoPosition(0);
+        runCore(core, patch, 100);
+        require(core.lfoPosition(0) > atRelease, "TRIG keeps running through the release tail");
+        runCore(core, patch, cycle / 2);
+        requireClose(core.lfoPosition(0), 0.0f, 0.0001f,
+                     "TRIG returns to the start once nothing is sounding");
+    }
+
+    // OFF is the mode that keeps its place, which is the whole reason to have
+    // it: a free-running LFO does not jump every time a key goes down.
+    {
+        theta::forge::Core core;
+        core.initialise(48000.0);
+        const auto patch = patchFor(theta::forge::LfoMode::free);
+        runCore(core, patch, cycle / 4);
+        const auto before = core.lfoPosition(0);
+        require(before > 0.2f, "a free-running LFO runs before a note arrives");
+        requireClose(phaseAfterNote(core, patch, 57), before, 0.001f,
+                     "a note does not restart a free-running LFO");
+    }
+
+    // TRIG loops for as long as the note is held: past the end of the cycle it
+    // comes round again rather than stopping.
+    {
+        theta::forge::Core core;
+        core.initialise(48000.0);
+        const auto patch = patchFor(theta::forge::LfoMode::trigger);
+        core.noteOn(57, 1.0f, patch);
+        runCore(core, patch, cycle + cycle / 4);
+        const auto wrapped = core.lfoPosition(0);
+        require(wrapped > 0.1f && wrapped < 0.5f, "TRIG comes round again at the end of the cycle");
+        runCore(core, patch, cycle / 4);
+        require(core.lfoPosition(0) > wrapped, "TRIG keeps running after it has wrapped");
+    }
+
+    // ENV is the same restart followed by a full stop on the last point of the
+    // shape. A saw ends at the top, so the held value is the one thing a
+    // one-shot envelope is for: it stays where the shape left it.
+    {
+        theta::forge::Core core;
+        core.initialise(48000.0);
+        const auto patch = patchFor(theta::forge::LfoMode::envelope);
+        core.noteOn(57, 1.0f, patch);
+        runCore(core, patch, cycle + cycle / 4);
+        requireClose(core.lfoPosition(0), 1.0f, 0.0001f, "ENV stops at the end of its shape");
+        requireClose(core.lfoOutput(0), 1.0f, 0.001f, "ENV holds the value the shape ended on");
+        runCore(core, patch, 4 * cycle);
+        requireClose(core.lfoPosition(0), 1.0f, 0.0001f, "ENV stays stopped however long it is left");
+
+        // And the next note starts it over, or it would be a one-shot that only
+        // ever fired once.
+        requireClose(phaseAfterNote(core, patch, 60), 0.0f, 0.0001f,
+                     "a new note restarts a stopped ENV");
+        runCore(core, patch, cycle / 4);
+        require(core.lfoPosition(0) > 0.2f, "a restarted ENV runs again");
+    }
+
+    // A legato note in mono did not lift a key, so it does not restart the
+    // shape â€” the same rule the amp envelope already follows.
+    {
+        theta::forge::Core core;
+        core.initialise(48000.0);
+        auto patch = patchFor(theta::forge::LfoMode::trigger);
+        patch.mono = 1.0f;
+        patch.legato = 1.0f;
+        core.noteOn(57, 1.0f, patch);
+        runCore(core, patch, cycle / 4);
+        const auto before = core.lfoPosition(0);
+        requireClose(phaseAfterNote(core, patch, 60), before, 0.001f,
+                     "a legato note does not restart the LFO");
+
+        // Without legato it is a new note again, and it does.
+        patch.legato = 0.0f;
+        requireClose(phaseAfterNote(core, patch, 62), 0.0f, 0.0001f,
+                     "a mono note without legato restarts the LFO");
+    }
+
+    // --- Six of them, and each one per voice -----------------------------------
+    //
+    // An LFO that answers the keyboard lives inside the voice, so a new note
+    // restarts its own copy and leaves a note already sounding alone. One LFO
+    // shared by every voice meant a second key jerked whatever the first was
+    // driving, part-way through a note.
+    {
+        theta::forge::Core core;
+        core.initialise(48000.0);
+        auto patch = patchFor(theta::forge::LfoMode::trigger);
+        patch.polyphony = 8.0f;
+        core.noteOn(45, 1.0f, patch);
+        runCore(core, patch, cycle / 4);
+        const auto before = core.lfoPosition(0);
+        require(before > 0.2f, "the first note's LFO is running");
+
+        core.noteOn(57, 1.0f, patch);
+        runCore(core, patch, 64);
+        // What reaches the panel is the loudest voice's copy, and that is still
+        // the note that has been sounding — so its own cycle carried straight on
+        // across the new one.
+        const auto after = core.lfoPosition(0);
+        require(after > before, "a second note leaves the first note's LFO running");
+        requireClose(after, before, 0.01f, "a second note does not jump the first note's LFO");
+    }
+
+    // The six are independent: each runs at its own rate rather than six views
+    // of one cycle.
+    {
+        theta::forge::Core core;
+        core.initialise(48000.0);
+        theta::forge::Patch patch;
+        for (int i = 0; i < theta::forge::lfoCount; ++i)
+        {
+            patch.lfos[static_cast<size_t>(i)].rate = 1.0f + static_cast<float>(i);
+            patch.lfos[static_cast<size_t>(i)].mode = static_cast<float>(theta::forge::LfoMode::free);
+        }
+        runCore(core, patch, cycle / 8);
+        for (int i = 0; i < theta::forge::lfoCount; ++i)
+            for (int j = i + 1; j < theta::forge::lfoCount; ++j)
+                require(std::abs(core.lfoPosition(i) - core.lfoPosition(j)) > 0.01f,
+                        "no two LFOs are the same cycle");
+    }
+
+    // And each is a source in its own right, reachable from the matrix. Square
+    // and free-running, so the source holds a steady +1 across the render
+    // rather than sweeping through it.
+    for (int lfo = 0; lfo < theta::forge::lfoCount; ++lfo)
+    {
+        const auto level = [lfo] (float depth)
+        {
+            theta::forge::Processor processor;
+            soloSineOnA(processor);
+            setValue(processor, "subEnable", 1.0f);
+            setValue(processor, "subLevel", 0.0f);
+            setValue(processor, theta::forge::lfoParameterId(lfo, "Shape").toRawUTF8(),
+                     static_cast<float>(theta::forge::LfoShape::square));
+            setValue(processor, theta::forge::lfoParameterId(lfo, "Mode").toRawUTF8(),
+                     static_cast<float>(theta::forge::LfoMode::free));
+            setValue(processor, theta::forge::lfoParameterId(lfo, "RateUnit").toRawUTF8(), 0.0f);
+            setValue(processor, theta::forge::lfoParameterId(lfo, "Rate").toRawUTF8(), 0.05f);
+            setSlot(processor, 1, static_cast<float>(srcLfo1 + lfo), destSub, depth);
+            juce::AudioBuffer<float> rendered(2, samples);
+            rendered.clear();
+            renderNote(processor, rendered);
+            return rms(rendered, 0, 1024);
+        };
+        require(level(1.0f) > level(0.0f) * 1.2f,
+                "every LFO reaches the matrix as a source of its own");
+    }
+
+    // Every mode has a name of its own, or the stepper would show two the same.
+    for (int a = 0; a < theta::forge::lfoModeCount; ++a)
+    {
+        require(juce::String(theta::forge::lfoModeName(a)).isNotEmpty(), "every LFO mode is named");
+        for (int b = a + 1; b < theta::forge::lfoModeCount; ++b)
+            require(juce::String(theta::forge::lfoModeName(a)) != theta::forge::lfoModeName(b),
+                    "no two LFO modes share a name");
+    }
+
+    // Each LFO's rate is resolved from its own parameters, not LFO 1's.
+    {
+        theta::forge::Processor six;
+        for (int lfo = 0; lfo < theta::forge::lfoCount; ++lfo)
+        {
+            setValue(six, theta::forge::lfoParameterId(lfo, "RateUnit").toRawUTF8(), 0.0f);
+            setValue(six, theta::forge::lfoParameterId(lfo, "Rate").toRawUTF8(), 1.0f + static_cast<float>(lfo));
+        }
+        for (int lfo = 0; lfo < theta::forge::lfoCount; ++lfo)
+            requireClose(six.lfoRateHz(lfo), 1.0f + static_cast<float>(lfo), 0.001f,
+                         "each LFO reports its own rate");
+    }
+
     // Free-running, the rate is the knob.
     theta::forge::Processor free;
-    setValue(free, "lfoSync", 0.0f);
-    setValue(free, "lfoRate", 3.0f);
-    requireClose(free.lfoRateHz(), 3.0f, 0.001f, "an unsynced LFO runs at its rate knob");
+    setValue(free, "lfo1RateUnit", 0.0f);
+    setValue(free, "lfo1Rate", 3.0f);
+    requireClose(free.lfoRateHz(0), 3.0f, 0.001f, "an unsynced LFO runs at its rate knob");
 
     // Synced, the rate is a division of the host's tempo and the knob stops
     // mattering. 1/4 at 120 BPM is two beats a second, so two cycles a second.
     theta::forge::Processor synced;
-    setValue(synced, "lfoSync", 1.0f);
-    setValue(synced, "lfoRate", 3.0f);
-    setValue(synced, "lfoDivision", 2.0f);
+    setValue(synced, "lfo1RateUnit", 1.0f);
+    setValue(synced, "lfo1Rate", 3.0f);
+    setValue(synced, "lfo1Division", 2.0f);
     FixedTempo tempo(120.0);
     synced.setPlayHead(&tempo);
     juce::AudioBuffer<float> buffer(2, samples);
     juce::MidiBuffer midi;
     synced.prepareToPlay(48000.0, samples);
     synced.processBlock(buffer, midi);
-    requireClose(synced.lfoRateHz(), 2.0f, 0.001f, "a synced LFO divides the host tempo");
+    requireClose(synced.lfoRateHz(0), 2.0f, 0.001f, "a synced LFO divides the host tempo");
 
     // And it follows the tempo rather than latching the first one it saw.
     tempo.bpm = 60.0;
     synced.processBlock(buffer, midi);
-    requireClose(synced.lfoRateHz(), 1.0f, 0.001f, "a synced LFO tracks a tempo change");
+    requireClose(synced.lfoRateHz(0), 1.0f, 0.001f, "a synced LFO tracks a tempo change");
 
     // A longer division is a slower cycle, in proportion.
-    setValue(synced, "lfoDivision", 0.0f);   // 1/1, a bar of four beats
-    requireClose(synced.lfoRateHz(), 0.25f, 0.001f, "a whole-bar division is four beats long");
+    setValue(synced, "lfo1Division", 0.0f);   // 1/1, a bar of four beats
+    requireClose(synced.lfoRateHz(0), 0.25f, 0.001f, "a whole-bar division is four beats long");
 
     // The phase the display draws has to be the one the voice is reading, and
     // it has to move.
+    // In OFF, because that is the mode that runs with nothing playing — which
+    // is the case this check is about: the phase reaching the panel is the one
+    // the voice is reading, and it moves.
     theta::forge::Processor running;
-    setValue(running, "lfoSync", 0.0f);
-    setValue(running, "lfoRate", 1.0f);
+    setValue(running, "lfo1RateUnit", 0.0f);
+    setValue(running, "lfo1Rate", 1.0f);
+    setValue(running, "lfo1Mode", static_cast<float>(theta::forge::LfoMode::free));
     running.prepareToPlay(48000.0, samples);
     juce::MidiBuffer none;
     buffer.clear();
     running.processBlock(buffer, none);
-    const auto first = running.lfoPhase();
+    const auto first = running.lfoPhase(0);
     running.processBlock(buffer, none);
-    const auto second = running.lfoPhase();
+    const auto second = running.lfoPhase(0);
     require(first >= 0.0f && first < 1.0f, "the published LFO phase stays inside one cycle");
     require(second != first, "the published LFO phase advances with the blocks");
+
+    // The same panel reading, in TRIG with nothing playing: parked at the start
+    // rather than sweeping a display for a shape that is not running.
+    theta::forge::Processor idle;
+    setValue(idle, "lfo1RateUnit", 0.0f);
+    setValue(idle, "lfo1Rate", 1.0f);
+    setValue(idle, "lfo1Mode", static_cast<float>(theta::forge::LfoMode::trigger));
+    idle.prepareToPlay(48000.0, samples);
+    buffer.clear();
+    idle.processBlock(buffer, none);
+    idle.processBlock(buffer, none);
+    requireClose(idle.lfoPhase(0), 0.0f, 0.0001f,
+                 "the panel shows a key-synced LFO parked at the start with nothing playing");
 
     synced.setPlayHead(nullptr);
 }
@@ -1212,13 +1695,24 @@ void bandLimitSuite()
     constexpr auto saw = 6;
     for (int level = 1; level < table.levelCount(); ++level)
     {
-        const auto limit = (wavetableFrameSize / 2) >> level;
-        if (limit < 8) continue;
+        const auto limit = table.harmonicsAt(level);
+        if (limit < 8 || limit >= wavetableFrameSize / 2) continue;
         const auto cycle = readFrame(table, level, saw, 8192);
         const auto kept = limit / 2;
         require(harmonicEnergy(cycle, kept) > 0.3f / static_cast<float>(kept),
                 "a band-limited frame keeps the harmonics below its limit");
-        require(harmonicEnergy(cycle, limit * 2) < 0.02f / static_cast<float>(limit),
+        // Everything above the cut, swept up to the stored Nyquist rather than
+        // sampled at one harmonic. Past the stored Nyquist a probe measures the
+        // interpolator's images and not the band-limiting, so it stops there —
+        // and a single probe at twice the limit, which is what this used to be,
+        // sat on the stored frame's DC image and so read near zero whatever the
+        // transform had done.
+        const auto top = table.sizeAt(level) / 2;
+        const auto stride = std::max(1, (top - limit) / 32);
+        auto leaked = 0.0f;
+        for (int harmonic = limit + 1; harmonic <= top; harmonic += stride)
+            leaked = std::max(leaked, harmonicEnergy(cycle, harmonic));
+        require(leaked < 0.02f / static_cast<float>(limit),
                 "a band-limited frame has thrown away the harmonics above its limit");
     }
 
@@ -1240,9 +1734,17 @@ void bandLimitSuite()
     {
         const auto hz = static_cast<float>(440.0 * std::pow(2.0, (note - 69) / 12.0));
         const auto level = table.levelFor(hz, sampleRate);
-        const auto harmonics = (wavetableFrameSize / 2) >> level;
+        const auto harmonics = table.harmonicsAt(level);
         require(level == 0 || static_cast<double>(harmonics) * hz <= sampleRate * 0.5 + 1.0,
                 "the level a note reads keeps its harmonics under Nyquist");
+        // And the point of the finer spacing: it keeps most of what it could
+        // have had, rather than as little as half of it. Only asked where a
+        // note is entitled to enough harmonics for the spacing to be the thing
+        // deciding; at the very top of the keyboard the counts are so small
+        // that rounding them to whole harmonics is.
+        const auto allowed = sampleRate * 0.5 / hz;
+        require(level == 0 || allowed < 8.0 || static_cast<double>(harmonics) >= allowed * 0.7,
+                "the level a note reads keeps most of the harmonics it was entitled to");
     }
 
     // And the point of the whole exercise: a high note aliases far less than
@@ -1378,6 +1880,147 @@ void waveTableSuite()
     }
 }
 
+// The largest step from one sample to the next. A click is exactly that: a
+// discontinuity the ear hears as a tick over the top of the note. Read on a
+// signal made only of sines, so every legitimate step is bounded by the
+// frequency and anything larger came from the engine cutting something off.
+float largestStep(const juce::AudioBuffer<float>& buffer)
+{
+    auto worst = 0.0f;
+    for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
+    {
+        const auto* data = buffer.getReadPointer(channel);
+        for (int i = 1; i < buffer.getNumSamples(); ++i)
+            worst = std::max(worst, std::abs(data[i] - data[i - 1]));
+    }
+    return worst;
+}
+
+// Taking a voice away from a note that is still sounding must not be audible as
+// anything but the new note arriving. A run of notes longer than the polyphony
+// is the ordinary way to reach that, and it used to leave a tick on every note
+// past the fourth.
+void voiceStealSuite()
+{
+    constexpr int samples = 32768;
+    constexpr int spacing = 3000;
+    const int notes[] = {45, 52, 57, 61, 64, 68, 71, 76, 78, 81};
+
+    const auto worstStep = [&] (float polyphony)
+    {
+        theta::forge::Processor processor;
+        soloSineOnA(processor);
+        // Both oscillators, which is where the user hears it: two of them make
+        // the step twice the size.
+        setValue(processor, "oscBEnable", 1.0f);
+        setValue(processor, "oscBPosition", 0.0f);
+        setValue(processor, "oscBUnison", 1.0f);
+        setValue(processor, "oscBDetune", 0.0f);
+        setValue(processor, "oscBSemitone", 0.0f);
+        setValue(processor, "oscBLevel", 1.0f);
+        setValue(processor, "polyphony", polyphony);
+        // Long tails, so every voice is still sounding when the next note wants
+        // one and the run really does have to take them.
+        setValue(processor, "release", 4.0f);
+        setValue(processor, "sustain", 1.0f);
+        setValue(processor, "attack", 0.01f);
+
+        juce::AudioBuffer<float> buffer(2, samples);
+        buffer.clear();
+        processor.prepareToPlay(48000.0, samples);
+        juce::MidiBuffer midi;
+        for (int i = 0; i < static_cast<int>(std::size(notes)); ++i)
+            midi.addEvent(juce::MidiMessage::noteOn(1, notes[i], 1.0f), i * spacing);
+        processor.processBlock(buffer, midi);
+        return largestStep(buffer);
+    };
+
+    // Four voices for ten notes: six of them have to take a voice that is still
+    // sounding. Sixteen voices for the same ten notes never steals at all, so
+    // it is the same music with the steals taken out — which makes it the
+    // reference for how large a step this material legitimately contains.
+    const auto stealing = worstStep(4.0f);
+    const auto roomy = worstStep(16.0f);
+    require(roomy > 0.0f, "the reference run makes sound");
+    require(stealing < roomy * 1.5f,
+            "taking a voice from a sounding note is no louder a step than the notes themselves");
+    if (stealing >= roomy * 1.5f)
+        std::cerr << "       worst step " << stealing << " stealing, " << roomy << " with room" << std::endl;
+
+    // And a voice is only ever taken when one genuinely has to be. A note that
+    // has finished leaves a voice free, and the next note has to take that one
+    // rather than whichever slot a rotation had reached — strict rotation would
+    // silence a note still under the player's finger while a dead voice sat
+    // beside it. The invariant that says so: while no more notes sound at once
+    // than the patch has voices, raising the polyphony cannot change a sample.
+    const auto sequence = [] (float polyphony, juce::AudioBuffer<float>& buffer)
+    {
+        theta::forge::Processor processor;
+        soloSineOnA(processor);
+        setValue(processor, "polyphony", polyphony);
+        setValue(processor, "sustain", 1.0f);
+        setValue(processor, "release", 0.01f);
+        buffer.clear();
+        processor.prepareToPlay(48000.0, buffer.getNumSamples());
+        juce::MidiBuffer midi;
+        // One note held throughout, a second struck and let go, and a third
+        // arriving long after the second has died away. Never more than two at
+        // once, so two voices are enough and nothing need ever be taken.
+        midi.addEvent(juce::MidiMessage::noteOn(1, 45, 1.0f), 0);
+        midi.addEvent(juce::MidiMessage::noteOn(1, 57, 1.0f), 1000);
+        midi.addEvent(juce::MidiMessage::noteOff(1, 57), 2000);
+        midi.addEvent(juce::MidiMessage::noteOn(1, 64, 1.0f), 12000);
+        processor.processBlock(buffer, midi);
+    };
+
+    juce::AudioBuffer<float> tight(2, samples), spare(2, samples);
+    sequence(2.0f, tight);
+    sequence(8.0f, spare);
+    require(rms(tight, 0, samples / 2) > 0.0f, "the two-voice run makes sound");
+    require(identical(tight, spare),
+            "a free voice is taken before a sounding one, so more polyphony than the music needs changes nothing");
+}
+
+// A voice is let go of, not cut off. Everything a voice makes passes through
+// its filter, and a filter holds energy: at a low cutoff it is still ringing
+// after the envelope that fed it has reached zero. Dropping the voice at that
+// point truncates the ring, and the truncation is a click at the end of a note.
+void voiceTailSuite()
+{
+    theta::forge::Processor processor;
+    // The setting that leaves the most in the filter to be cut off: a cutoff
+    // near the bottom of its range with the sub at full level, a sine an octave
+    // down being exactly what a low cutoff passes.
+    setValue(processor, "cutoff", 54.0f);
+    setValue(processor, "subEnable", 1.0f);
+    setValue(processor, "subLevel", 1.0f);
+    setValue(processor, "release", 0.35f);
+
+    constexpr int total = 96000;
+    juce::AudioBuffer<float> buffer(2, total);
+    buffer.clear();
+    processor.prepareToPlay(48000.0, total);
+    juce::MidiBuffer midi;
+    midi.addEvent(juce::MidiMessage::noteOn(1, 45, 1.0f), 0);
+    midi.addEvent(juce::MidiMessage::noteOff(1, 45), total / 4);
+    processor.processBlock(buffer, midi);
+
+    const auto* data = buffer.getReadPointer(0);
+    auto peak = 0.0f;
+    for (int i = 0; i < total; ++i) peak = std::max(peak, std::abs(data[i]));
+    auto last = total - 1;
+    while (last > 0 && data[last] == 0.0f) --last;
+
+    require(peak > 0.01f, "the note sounds");
+    require(last < total - 1, "the note has finished well inside the render");
+    // Cutting the voice at the envelope's zero left this 39 dB below the peak
+    // of the note, which against the silence after a note is plainly audible.
+    require(std::abs(data[last]) < peak * 0.0005f,
+            "a finished voice is faded out rather than cut off, so the filter's ring is not truncated");
+    if (std::abs(data[last]) >= peak * 0.0005f)
+        std::cerr << "       left " << std::abs(data[last]) << " against a peak of " << peak << std::endl;
+}
+
 void voicingSuite()
 {
     // Mono collapses to a single voice, so polyphony stops meaning anything.
@@ -1440,7 +2083,7 @@ void tableEditSuite()
     WavetableStore store;
 
     // A fresh store is the built-in ten, and what the editor draws is exactly
-    // what the oscillator has been playing — the M9a guarantee, now that the
+    // what the oscillator has been playing â€” the M9a guarantee, now that the
     // display reads the editable frames rather than the formulas.
     require(store.edit(0).frameCount() == theta::forge::waveShapeCount,
             "a fresh table holds the built-in frames");
@@ -1535,7 +2178,7 @@ void tableEditSuite()
     require(agreed, "rebuilding one frame gives what rebuilding the whole table gives");
 
     // The hand-over. A block that has already picked up a table goes on reading
-    // it while the message thread publishes over the top — which is the case
+    // it while the message thread publishes over the top â€” which is the case
     // that would be a use-after-free if a replaced table were freed on the spot.
     // Reading it afterwards is a canary rather than a proof: it is what a debug
     // allocator or a sanitiser has to be given something to catch.
@@ -1624,7 +2267,7 @@ void tableFileSuite()
 
     // And the table reaches the voice. With everything else switched off and
     // POSITION parked on the first frame, flattening that frame has to silence
-    // the oscillator — which it can only do if the voice is reading the frames
+    // the oscillator â€” which it can only do if the voice is reading the frames
     // the editor changed.
     theta::forge::Processor voice;
     for (const auto* id : {"oscBEnable", "subEnable", "noiseEnable"}) setValue(voice, id, 0.0f);
@@ -1634,6 +2277,8 @@ void tableFileSuite()
     voice.tableStore().publishFrame(0, 0);
     require(peakForNote(voice) < 0.001f, "flattening the frame POSITION is on silences the oscillator");
 }
+
+void tuningSuite();
 
 void engineSuite()
 {
@@ -1688,9 +2333,12 @@ void engineSuite()
     tableEditSuite();
     tableFileSuite();
     voicingSuite();
+    voiceStealSuite();
+    voiceTailSuite();
     modulationSuite();
 
     oscillatorSuite();
+    tuningSuite();
 
     // Output stays finite and bounded across an extreme patch.
     theta::forge::Processor extreme;
@@ -1705,7 +2353,7 @@ void engineSuite()
     setValue(extreme, "output", 1.25f);
     setValue(extreme, "subLevel", 1.0f);
     setValue(extreme, "noiseLevel", 1.0f);
-    setValue(extreme, "lfoRate", 20.0f);
+    setValue(extreme, "lfo1Rate", 20.0f);
     // Drive the matrix hard too: LFO 1 into the cutoff and into oscillator A's
     // pitch, both at full depth.
     setValue(extreme, "mod1Source", 2.0f);
@@ -1732,6 +2380,84 @@ void engineSuite()
     require(peak > 0.0f, "an extreme patch still produces signal");
     require(peak <= 1.0f, "an extreme patch stays within full scale");
 }
+
+// --- Tuning -------------------------------------------------------------------
+//
+// The first question a player asks and the one the panel cannot answer for
+// itself: does a note come out at the pitch it names? Measured off the rendered
+// signal rather than off the phase accumulator, so nothing here can agree with
+// the oscillator by construction — a transposed table, a mis-scaled frame or a
+// phase increment that is off by a ratio all show up as cents.
+double renderedFundamental(int note, double sampleRate)
+{
+    constexpr int order = 15, size = 1 << order;
+
+    theta::forge::Patch patch;
+    patch.a.enable = 1.0f;
+    patch.a.position = 6.0f / 9.0f;   // the SAW frame, landed on exactly
+    patch.a.unison = 1.0f;
+    patch.a.level = 0.75f;
+    patch.b.enable = 0.0f;
+    patch.subEnable = 0.0f;
+    patch.noiseEnable = 0.0f;
+    patch.filterEnable = 0.0f;
+    patch.attack = 0.001f;
+    patch.sustain = 1.0f;
+
+    theta::forge::Core core;
+    core.initialise(sampleRate);
+    core.noteOn(note, 1.0f, patch);
+
+    // Past the attack before anything is measured, so the window holds steady
+    // state and not the envelope's edge.
+    for (int i = 0; i < 4096; ++i) { auto l = 0.0f, r = 0.0f; core.renderSample(patch, l, r); }
+
+    std::vector<float> data(2 * size, 0.0f);
+    for (int i = 0; i < size; ++i)
+    {
+        auto l = 0.0f, r = 0.0f;
+        core.renderSample(patch, l, r);
+        const auto w = 0.5 - 0.5 * std::cos(2.0 * juce::MathConstants<double>::pi
+                                            * static_cast<double>(i) / static_cast<double>(size));
+        data[static_cast<size_t>(i)] = static_cast<float>(0.5 * (l + r) * w);
+    }
+
+    juce::dsp::FFT fft(order);
+    fft.performRealOnlyForwardTransform(data.data());
+    const auto magnitude = [&data] (int bin)
+    {
+        const auto re = static_cast<double>(data[static_cast<size_t>(2 * bin)]);
+        const auto im = static_cast<double>(data[static_cast<size_t>(2 * bin + 1)]);
+        return std::sqrt(re * re + im * im);
+    };
+
+    // A saw's fundamental is its loudest partial, so the tallest bin names it.
+    auto best = 2;
+    for (int bin = 3; bin < size / 2 - 1; ++bin)
+        if (magnitude(bin) > magnitude(best)) best = bin;
+
+    // Where a Hann window actually puts the peak between two bins.
+    const auto a = std::log(std::max(1.0e-20, magnitude(best - 1)));
+    const auto b = std::log(std::max(1.0e-20, magnitude(best)));
+    const auto c = std::log(std::max(1.0e-20, magnitude(best + 1)));
+    const auto denominator = a - 2.0 * b + c;
+    const auto shift = std::abs(denominator) > 1.0e-12 ? 0.5 * (a - c) / denominator : 0.0;
+    return (static_cast<double>(best) + shift) * sampleRate / static_cast<double>(size);
+}
+
+void tuningSuite()
+{
+    for (const double sampleRate : {44100.0, 48000.0})
+        for (const int note : {27, 33, 45, 52, 54, 56, 57, 69, 81})
+        {
+            const auto expected = 440.0 * std::pow(2.0, (note - 69) / 12.0);
+            const auto measured = renderedFundamental(note, sampleRate);
+            const auto cents = 1200.0 * std::log2(measured / expected);
+            // Two cents is under what anyone hears and well over the peak
+            // interpolation's own error, which measures at about half of one.
+            require(std::abs(cents) < 2.0, "a note sounds at the pitch it names");
+        }
+}
 }
 
 int main(int argc, char** argv)
@@ -1740,7 +2466,7 @@ int main(int argc, char** argv)
     const juce::String suite = argc > 1 ? argv[1] : "";
 
     if (suite.isEmpty() || suite == "--layout") layoutSuite();
-    if (suite.isEmpty() || suite == "--presets") presetSuite();
+    if (suite.isEmpty() || suite == "--presets") { presetSuite(); legacyStateSuite(); }
     if (suite.isEmpty() || suite == "--engine") engineSuite();
 
     if (failures > 0)

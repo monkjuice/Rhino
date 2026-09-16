@@ -5,9 +5,15 @@ standalone JUCE application that deliberately owns no Tracktion or Theta-DAW
 types.
 
 Forge is a synthesiser and nothing else. The panel is a set of modules — two
-oscillators, sub, noise, a filter, one amp envelope, one LFO, global voicing,
+oscillators, sub, noise, a filter, one amp envelope, six LFOs, global voicing,
 eight macros and the modulation matrix — each in its own box with its own
 enable. Effects are deliberately absent until the synth is finished.
+
+The six LFOs share one module, which shows one at a time: numbered buttons in
+its header say which, and the module's drag handle carries whichever is
+showing. An LFO set to TRIG or ENV runs inside each voice, so a new note starts
+its own copy and leaves the notes already sounding alone; one set to OFF is a
+single free-running cycle shared by every voice and by the panel.
 
 Three tabs in the title bar, `OSC`, `TABLE` and `MATRIX`, switch **only the top
 row** of the panel: the oscillators, the wavetable editor and the matrix take

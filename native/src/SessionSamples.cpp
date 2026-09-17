@@ -1,7 +1,7 @@
 #include "Session.h"
 #include <cmath>
 
-namespace theta
+namespace rhino
 {
 namespace
 {
@@ -11,8 +11,8 @@ juce::String sampleName(Session::BuiltInSample sample)
 {
     switch (sample)
     {
-        case Session::BuiltInSample::Whistle: return "Theta Whistle";
-        case Session::BuiltInSample::Siren:   return "Theta Siren";
+        case Session::BuiltInSample::Whistle: return "Rhino Whistle";
+        case Session::BuiltInSample::Siren:   return "Rhino Siren";
     }
     return {};
 }
@@ -20,7 +20,7 @@ juce::String sampleName(Session::BuiltInSample sample)
 juce::File sampleFile(Session::BuiltInSample sample)
 {
     const auto directory = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-        .getChildFile("Theta").getChildFile("Built-in audio");
+        .getChildFile("Rhino").getChildFile("Built-in audio");
     return directory.getChildFile(sampleName(sample) + ".wav");
 }
 
@@ -39,7 +39,7 @@ juce::Result createSample(Session::BuiltInSample sample, const juce::File& file)
     if (file.existsAsFile() && file.getSize() > 44)
         return juce::Result::ok();
     if (!file.getParentDirectory().createDirectory())
-        return juce::Result::fail("Theta could not create its built-in audio folder.");
+        return juce::Result::fail("Rhino could not create its built-in audio folder.");
 
     const auto length = sample == Session::BuiltInSample::Whistle ? 1.5 : 4.0;
     const auto frames = static_cast<int>(length * sampleRate);
@@ -70,11 +70,11 @@ juce::Result createSample(Session::BuiltInSample sample, const juce::File& file)
     juce::WavAudioFormat format;
     std::unique_ptr<juce::OutputStream> stream(file.createOutputStream());
     if (stream == nullptr)
-        return juce::Result::fail("Theta could not write its built-in audio sample.");
+        return juce::Result::fail("Rhino could not write its built-in audio sample.");
     auto writer = format.createWriterFor(stream, juce::AudioFormatWriterOptions()
         .withSampleRate(sampleRate).withNumChannels(2).withBitsPerSample(24));
     if (writer == nullptr || !writer->writeFromAudioSampleBuffer(audio, 0, frames))
-        return juce::Result::fail("Theta could not write its built-in audio sample.");
+        return juce::Result::fail("Rhino could not write its built-in audio sample.");
     return juce::Result::ok();
 }
 }

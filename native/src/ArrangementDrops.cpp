@@ -5,7 +5,7 @@
 
 // File drops from the OS and item drops from the browser.
 
-namespace theta
+namespace rhino
 {
 namespace
 {
@@ -56,7 +56,7 @@ void Arrangement::filesDropped(const juce::StringArray& files, int x, int y)
 
 bool Arrangement::isInterestedInDragSource(const juce::DragAndDropTarget::SourceDetails& details)
 {
-    return details.description.toString().startsWith("theta-browser:");
+    return details.description.toString().startsWith("rhino-browser:");
 }
 
 void Arrangement::itemDropped(const juce::DragAndDropTarget::SourceDetails& details)

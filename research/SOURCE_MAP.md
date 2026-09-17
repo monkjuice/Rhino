@@ -1,6 +1,6 @@
 # DAW study source map
 
-Read-only upstream snapshots fetched on 2026-09-08. Original notices are retained in the text files. These files are study material and are not compiled or imported by Theta. Repository branches can move; the links below use the exact inspected commits.
+Read-only upstream snapshots fetched on 2026-09-08. Original notices are retained in the text files. These files are study material and are not compiled or imported by Rhino. Repository branches can move; the links below use the exact inspected commits.
 
 The study uses focused declarations and processing paths, not a full audit of every downloaded line. SHA-256 hashes and repository paths are recorded in [the manifest](sources/manifest.json).
 

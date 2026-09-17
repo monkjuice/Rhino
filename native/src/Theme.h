@@ -5,7 +5,7 @@
 #include <cmath>
 #include <utility>
 
-namespace theta
+namespace rhino
 {
 // A JUCE font height is ascent plus descent, which the face then divides down
 // to an em size: ask for a height of 12 and Inter is rasterised at 9.9 pixels

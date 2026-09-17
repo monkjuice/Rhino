@@ -9,7 +9,7 @@
 // gets a dimmed clone of the track stacked underneath, so a busy track can be
 // read one parameter at a time.
 
-namespace theta
+namespace rhino
 {
 namespace
 {

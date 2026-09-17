@@ -1,6 +1,6 @@
-# Theta project memory
+# Rhino project memory
 
-Theta is a native desktop DAW: C++20, Tracktion Engine, JUCE. The application lives entirely in `native/src`. See [the root README](README.md) for what it does, [ARCHITECTURE.md](ARCHITECTURE.md) for direction, and [native/README.md](native/README.md) for implementation contracts.
+Rhino is a native desktop DAW: C++20, Tracktion Engine, JUCE. The application lives entirely in `native/src`. See [the root README](README.md) for what it does, [ARCHITECTURE.md](ARCHITECTURE.md) for direction, and [native/README.md](native/README.md) for implementation contracts.
 
 > **Read [HANDOVER.md](HANDOVER.md) first if you last worked on this before commit `105cd78`.** `Session.cpp`, `StepGrid.cpp` and `Arrangement.cpp` were split into focused files in September 2026. No header, signature or call site changed, but the file you remember editing has probably moved. HANDOVER.md maps every move and lists the issues currently being inherited.
 
@@ -9,11 +9,11 @@ Theta is a native desktop DAW: C++20, Tracktion Engine, JUCE. The application li
 - Build a polished native desktop DAW. Prioritize Windows while preserving macOS portability.
 - Treat UI frame pacing and immediate pointer response as core requirements.
 - Preserve existing native work. Avoid large mock projects or benchmark scaffolding unless requested.
-- The product is Theta and the repository is https://github.com/monkjuice/THETA.git. The local workspace may still be named `theda`.
+- The product is Rhino and the repository is https://github.com/monkjuice/Rhino.git.
 
 ## Do not read these directories
 
-Two large trees in this workspace are not Theta's code. Reading or searching them wastes context and returns misleading results.
+Two large trees in this workspace are not Rhino's code. Reading or searching them wastes context and returns misleading results.
 
 - **`native/.deps/`** — pinned JUCE and Tracktion checkouts, 400,000+ lines, fetched by a script and ignored by git. Never grep or glob here. To understand engine behaviour, read `native/README.md` first, then the curated snapshots below.
 - **`research/sources/`** — read-only snapshots of Ardour, LMMS, Zrythm and Tracktion source, about 30,000 lines, kept as study material. It is tracked by git and therefore **is** searched by default, so exclude it deliberately. Reach it only through the index in [research/SOURCE_MAP.md](research/SOURCE_MAP.md), and only when prior art is explicitly wanted.
@@ -37,7 +37,7 @@ Application code, `native/src`:
 | App shell and lifecycle | `Main.cpp` |
 | Project files | `ProjectFiles.*` |
 | Playhead rendering | `Playhead.*` |
-| Built-in devices | `UtilityDevice`, `DrumDevice`, `ThetaArpDevice`, `ThetaBloomDevice`, `ThetaSpaceDevice`, `ThetaWaveDevice` |
+| Built-in devices | `UtilityDevice`, `DrumDevice`, `RhinoArpDevice`, `RhinoBloomDevice`, `RhinoSpaceDevice`, `RhinoWaveDevice` |
 | Theme | `Theme.h` |
 
 The UI depends on `Session`; `Session` knows nothing about the UI. Keep that direction.
@@ -77,19 +77,19 @@ Prefer a unit test over a scenario whenever the code under test needs no `Sessio
 
 ## Debugging a crash that only one project file triggers
 
-`Theta.exe` opens a `.thetaedit` passed as its first argument (see `Application::initialise`), which turns "it crashes when I open my project" into a headless repro that runs in about ten seconds. Everything below follows from having that loop.
+`Rhino.exe` opens a `.rhinoedit` passed as its first argument (see `Application::initialise`), which turns "it crashes when I open my project" into a headless repro that runs in about ten seconds. Everything below follows from having that loop.
 
-**Name the faulting module before blaming anything.** Windows records it, and it is the difference between debugging Theta and debugging a plugin:
+**Name the faulting module before blaming anything.** Windows records it, and it is the difference between debugging Rhino and debugging a plugin:
 
 ```powershell
 Get-WinEvent -FilterHashtable @{LogName='Application'; ProviderName='Application Error'; StartTime=(Get-Date).AddHours(-6)}
 ```
 
-A project that loads a VST invites the assumption that the VST is at fault. The log said `Theta.exe` faulting in `Theta.exe`, which ruled that out in one step. The same entry gives a fault offset, and an identical offset across attempts means the crash is deterministic and worth bisecting rather than a race.
+A project that loads a VST invites the assumption that the VST is at fault. The log said `Rhino.exe` faulting in `Rhino.exe`, which ruled that out in one step. The same entry gives a fault offset, and an identical offset across attempts means the crash is deterministic and worth bisecting rather than a race.
 
-**Bracket it with `theta.log`** (`%APPDATA%\Theta\theta.log`). `ProjectFiles.cpp` writes `Opening <name>...` before the load and `Opened <name>` after it, so a session with the first and not the second puts the fault inside that call. A different project opening successfully in the same session is the strongest possible hint that the data, not the build, is the trigger.
+**Bracket it with `rhino.log`** (`%APPDATA%\Rhino\rhino.log`). `ProjectFiles.cpp` writes `Opening <name>...` before the load and `Opened <name>` after it, so a session with the first and not the second puts the fault inside that call. A different project opening successfully in the same session is the strongest possible hint that the data, not the build, is the trigger.
 
-**Bisect the XML, and always run a known-good control.** Strip one structure at a time — notes, plugin nodes, plugin state — and re-run. Keep a project that opens in the rotation every time: a harness that silently stops reproducing is worse than no harness. In the case this was written for, removing every `<NOTE>`, the whole VST node, and switching `thetaPatternInstrument` changed nothing, which is what pointed at track *count* — one audio track against the demo's four, and an unguarded `tracks[1]`.
+**Bisect the XML, and always run a known-good control.** Strip one structure at a time — notes, plugin nodes, plugin state — and re-run. Keep a project that opens in the rotation every time: a harness that silently stops reproducing is worse than no harness. In the case this was written for, removing every `<NOTE>`, the whole VST node, and switching `rhinoPatternInstrument` changed nothing, which is what pointed at track *count* — one audio track against the demo's four, and an unguarded `tracks[1]`.
 
 **Re-run before believing a non-crash.** A single clean run is noise: a launch can sit on a dialog or lose a race and look like success. Two orders and a repeat of the same file cost a minute and prevent a wrong conclusion. One such false pass nearly sent this investigation at the wrong file.
 

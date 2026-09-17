@@ -1,7 +1,7 @@
 #include "SessionInternal.h"
 #include <array>
 
-namespace theta
+namespace rhino
 {
 namespace
 {
@@ -59,7 +59,7 @@ juce::Result Session::importAudioAt(const juce::File& file, int trackIndex, doub
     if (!std::isfinite(startSeconds) || startSeconds < 0.0)
         return juce::Result::fail("Invalid audio drop position.");
     // Audio belongs on a track without an instrument. Dropping a sample onto an
-    // instrument track is the one drop Theta refuses outright.
+    // instrument track is the one drop Rhino refuses outright.
     if (trackHasInstrument(trackIndex))
         return juce::Result::fail("That track runs an instrument. Drop audio on an audio track instead.");
     const auto tracks = te::getAudioTracks(*edit);
@@ -204,7 +204,7 @@ void Session::setTempo(double bpm)
 
     // Clips are the engine's to move: it anchors them to beats and rewrites
     // their seconds as the tempo changes, so an edit keeps its musical shape
-    // without help. Theta's own timeline state is not in that snapshot and has
+    // without help. Rhino's own timeline state is not in that snapshot and has
     // to follow by hand, or it drifts out from under the clips it was drawn
     // against. A tempo with one entry scales the whole timeline by one factor.
     const auto scale = previousBpm / bpm;

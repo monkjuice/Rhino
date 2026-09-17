@@ -24,18 +24,18 @@
                 "The effect appears in the main track's chain");
         require(session.addInstrument(Session::Instrument::FourOsc, mainTrack).failed(),
                 "The main track refuses instruments");
-        require(session.addMidiEffect(Session::MidiEffect::ThetaArp, mainTrack).failed(),
+        require(session.addMidiEffect(Session::MidiEffect::RhinoArp, mainTrack).failed(),
                 "The main track refuses MIDI effects");
         require(session.createClip(mainTrack, 0.0).failed(), "The main track takes no clips");
         require(session.importBuiltInSample(Session::BuiltInSample::Whistle, mainTrack, 0.0).failed(),
                 "The main track takes no audio");
-        require(view.applyBrowserDrop("theta-browser:preset:HouseKit", mainTrack).failed(),
+        require(view.applyBrowserDrop("rhino-browser:preset:HouseKit", mainTrack).failed(),
                 "A pattern cannot be dropped on the main track");
-        require(view.applyBrowserDrop("theta-browser:instrument:ThetaWave", mainTrack).failed(),
+        require(view.applyBrowserDrop("rhino-browser:instrument:RhinoWave", mainTrack).failed(),
                 "An instrument cannot be dropped on the main track");
-        require(view.applyBrowserDrop("theta-browser:drumkit:HouseKit", mainTrack).failed(),
+        require(view.applyBrowserDrop("rhino-browser:drumkit:HouseKit", mainTrack).failed(),
                 "A drum kit cannot be dropped on the main track");
-        require(view.applyBrowserDrop("theta-browser:effect:Delay", mainTrack).wasOk(),
+        require(view.applyBrowserDrop("rhino-browser:effect:Delay", mainTrack).wasOk(),
                 "An effect can be dropped on the main track");
 
         scenario("main track: selection and persistence");
@@ -45,7 +45,7 @@
                 "The main row sits below the first lane");
         {
             const auto savedMain = session.projectSnapshot();
-            juce::TemporaryFile mainProject(".thetaedit");
+            juce::TemporaryFile mainProject(".rhinoedit");
             require(session.restoreProject(savedMain, mainProject.getFile()).wasOk(), "Reopen a project with main effects");
             require(std::abs(session.masterVolumeDb() + 2.0f) < 0.05f, "The main level survives reopen");
             require(session.deviceSlots(session.masterTrackIndex()).size() == mainDevices + 2,

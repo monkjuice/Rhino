@@ -1,7 +1,7 @@
 #include "Arrangement.h"
 #include <limits>
 
-namespace theta
+namespace rhino
 {
 float Arrangement::laneContentHeight() const
 {

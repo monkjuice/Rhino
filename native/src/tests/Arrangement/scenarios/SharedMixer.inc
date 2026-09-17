@@ -55,7 +55,7 @@
         require(session.setTrackVolumeDb(addedTrack, -5.0f).wasOk(), "The new track's fader works");
         {
             const auto savedMix = session.projectSnapshot();
-            juce::TemporaryFile mixProject(".thetaedit");
+            juce::TemporaryFile mixProject(".rhinoedit");
             require(session.restoreProject(savedMix, mixProject.getFile()).wasOk(), "Reopen a mixed project");
             require(std::abs(session.trackMixer(addedTrack).volumeDb + 5.0f) < 0.05f, "Track volume survives reopen");
             require(std::abs(session.trackMixer(1).pan + 0.5f) < 0.02f, "Track pan survives reopen");

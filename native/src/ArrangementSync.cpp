@@ -5,7 +5,7 @@
 
 // Rebuilding the clip view models and waveform caches from the edit.
 
-namespace theta
+namespace rhino
 {
 
 void Arrangement::sync()

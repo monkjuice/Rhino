@@ -7,7 +7,7 @@
 // Pointer gestures: loop range and clip move/trim. Automation gestures live in
 // ArrangementAutomation.cpp and are offered the pointer first.
 
-namespace theta
+namespace rhino
 {
 
 void Arrangement::mouseDown(const juce::MouseEvent& event)

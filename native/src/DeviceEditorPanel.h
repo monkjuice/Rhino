@@ -2,9 +2,9 @@
 #include "Session.h"
 #include <vector>
 
-namespace theta
+namespace rhino
 {
-// Hosts Theta's native device faces. Unknown and third-party devices retain a
+// Hosts Rhino's native device faces. Unknown and third-party devices retain a
 // generic parameter surface; plug-in-owned editors remain available via Edit.
 class DeviceEditorPanel final : public juce::Component
 {
@@ -21,11 +21,11 @@ public:
     std::function<void()> selected;
 
 private:
-    enum class Face { Generic, ThetaSpace };
+    enum class Face { Generic, RhinoSpace };
     void ensureControls();
     void styleControls();
     void layoutGeneric();
-    void layoutThetaSpace();
+    void layoutRhinoSpace();
     void showParameterMenu(int index);
     int visibleParameterCount() const;
 

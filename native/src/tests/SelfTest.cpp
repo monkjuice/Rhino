@@ -3,7 +3,7 @@
 #include <source_location>
 #include <stdexcept>
 
-namespace theta
+namespace rhino
 {
 int runSelfTest()
 {
@@ -95,8 +95,8 @@ int runSelfTest()
         require(offsetKickPeak > 0.0001f);
         drums->deinitialise();
 
-        auto bloomPlugin = session.edit->getPluginCache().createNewPlugin(ThetaBloomDevice::xmlTypeName, {});
-        auto* bloom = dynamic_cast<ThetaBloomDevice*>(bloomPlugin.get());
+        auto bloomPlugin = session.edit->getPluginCache().createNewPlugin(RhinoBloomDevice::xmlTypeName, {});
+        auto* bloom = dynamic_cast<RhinoBloomDevice*>(bloomPlugin.get());
         require(bloom != nullptr);
         require(bloom->getAutomatableParameters().size() == 6);
         bloom->getAutomatableParameterByID("bloom")->setParameter(0.7f, juce::dontSendNotification);
@@ -127,8 +127,8 @@ int runSelfTest()
         require(std::abs(bloom->getAutomatableParameterByID("chorus")->getCurrentValue() - 0.25f) < 1.0e-5f);
         bloom->deinitialise();
 
-        auto wavePlugin = session.edit->getPluginCache().createNewPlugin(ThetaWaveDevice::xmlTypeName, {});
-        auto* wave = dynamic_cast<ThetaWaveDevice*>(wavePlugin.get());
+        auto wavePlugin = session.edit->getPluginCache().createNewPlugin(RhinoWaveDevice::xmlTypeName, {});
+        auto* wave = dynamic_cast<RhinoWaveDevice*>(wavePlugin.get());
         require(wave != nullptr);
         wave->initialise({{}, 48000.0, 512});
         juce::AudioBuffer<float> waveBuffer(2, 4096);

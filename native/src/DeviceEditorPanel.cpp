@@ -1,9 +1,9 @@
 #include "DeviceEditorPanel.h"
-#include "ThetaSpaceDevice.h"
+#include "RhinoSpaceDevice.h"
 #include <algorithm>
 #include <cmath>
 
-namespace theta
+namespace rhino
 {
 namespace
 {
@@ -54,7 +54,7 @@ void DeviceEditorPanel::setTarget(int nextTrack, const Session::DeviceSlot& devi
     pluginSlot = device.pluginIndex;
     deviceName = device.name;
     isSelected = nextSelected;
-    face = device.type == ThetaSpaceDevice::xmlTypeName ? Face::ThetaSpace : Face::Generic;
+    face = device.type == RhinoSpaceDevice::xmlTypeName ? Face::RhinoSpace : Face::Generic;
     parameters = session.deviceParameters(track, pluginSlot);
     title.setText(deviceName, juce::dontSendNotification);
     power.setButtonText(device.enabled ? juce::String::fromUTF8("\xe2\x97\x8f") : juce::String::fromUTF8("\xe2\x97\x8b"));
@@ -68,7 +68,7 @@ void DeviceEditorPanel::setTarget(int nextTrack, const Session::DeviceSlot& devi
 
 int DeviceEditorPanel::preferredWidth() const
 {
-    if (face == Face::ThetaSpace)
+    if (face == Face::RhinoSpace)
         return 460;
     const auto columns = std::max(2, std::min(6, visibleParameterCount()));
     return juce::jlimit(190, 470, 46 + columns * 66);
@@ -188,7 +188,7 @@ void DeviceEditorPanel::styleControls()
         if (!visible) continue;
 
         const auto& parameter = parameters[static_cast<size_t>(i)];
-        const auto accent = face == Face::ThetaSpace ? juce::Colour(0xff75b9cc) : juce::Colour(0xffc6d58c);
+        const auto accent = face == Face::RhinoSpace ? juce::Colour(0xff75b9cc) : juce::Colour(0xffc6d58c);
         parameterLabels[i]->setText(parameter.name, juce::dontSendNotification);
         parameterLabels[i]->setColour(juce::Label::textColourId, juce::Colour(0xffdfe6ea));
         parameterValues[i]->setText(parameter.valueText, juce::dontSendNotification);
@@ -224,7 +224,7 @@ void DeviceEditorPanel::paint(juce::Graphics& g)
         return;
     }
 
-    if (face != Face::ThetaSpace)
+    if (face != Face::RhinoSpace)
         return;
 
     if (!visualArea.isEmpty())
@@ -258,8 +258,8 @@ void DeviceEditorPanel::resized()
     power.setBounds(3, 2, 20, 19);
     title.setBounds(27, 1, getWidth() - 32, 21);
     contentArea = getLocalBounds().withTrimmedTop(24).reduced(4);
-    if (face == Face::ThetaSpace && contentArea.getWidth() >= 350 && contentArea.getHeight() >= 80)
-        layoutThetaSpace();
+    if (face == Face::RhinoSpace && contentArea.getWidth() >= 350 && contentArea.getHeight() >= 80)
+        layoutRhinoSpace();
     else
         layoutGeneric();
 }
@@ -285,7 +285,7 @@ void DeviceEditorPanel::layoutGeneric()
     }
 }
 
-void DeviceEditorPanel::layoutThetaSpace()
+void DeviceEditorPanel::layoutRhinoSpace()
 {
     auto bounds = contentArea;
     visualArea = bounds.removeFromLeft(108);

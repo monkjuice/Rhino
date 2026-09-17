@@ -2,7 +2,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
-namespace theta
+namespace rhino
 {
 // Visualization-only transport readout. Its arrow is the sole interactive
 // surface so the display cannot accidentally seek or take editor focus.

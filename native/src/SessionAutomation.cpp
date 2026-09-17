@@ -10,7 +10,7 @@
 // revealed but never drawn: it shows the knob's resting value and drives
 // nothing.
 
-namespace theta
+namespace rhino
 {
 namespace
 {

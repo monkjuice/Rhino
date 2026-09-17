@@ -2,20 +2,20 @@
 #include <tracktion_engine/tracktion_engine.h>
 #include <array>
 
-namespace theta
+namespace rhino
 {
 namespace te = tracktion::engine;
 
 class DrumDevice final : public te::Plugin
 {
 public:
-    inline static const char* xmlTypeName = "theta.drums.v1";
-    static const char* getPluginName() { return "Theta Drums"; }
+    inline static const char* xmlTypeName = "rhino.drums.v1";
+    static const char* getPluginName() { return "Rhino Drums"; }
     explicit DrumDevice(te::PluginCreationInfo);
     ~DrumDevice() override;
     juce::String getName() const override { return getPluginName(); }
     juce::String getPluginType() override { return xmlTypeName; }
-    juce::String getVendor() override { return "Theta"; }
+    juce::String getVendor() override { return "Rhino"; }
     juce::String getSelectableDescription() override { return getName(); }
     BusLayout getBusses() const override { return BusLayout::singleStereoInOut(); }
     bool isSynth() override { return true; }
@@ -26,7 +26,7 @@ public:
     // The kit reshapes the same sample set: pitch, decay and level per voice,
     // and which pad the backbeat lands on. Live's drum racks differ the same
     // way, by what sits on each pad rather than by a different engine.
-    enum class Kit { Theta808, House, Break, Minimal, Clap };
+    enum class Kit { Rhino808, House, Break, Minimal, Clap };
     static constexpr int kitCount = 5;
     static juce::String kitName(Kit);
     te::AutomatableParameter& kitParameter() { return *kitSelect; }

@@ -2,7 +2,7 @@
 #include "DeviceRackTest.h"
 #include <stdexcept>
 
-namespace theta
+namespace rhino
 {
 int runPatternTest()
 {

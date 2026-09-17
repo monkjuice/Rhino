@@ -4,7 +4,7 @@
 #include <cmath>
 #include <limits>
 
-namespace theta
+namespace rhino
 {
 
 StepGrid::StepGrid(Session& s) : session(s), vblank(this, [this] { updatePlayhead(); })

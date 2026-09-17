@@ -1,8 +1,8 @@
         // Changing the tempo must not edit the music. The engine anchors clips
         // to beats and rewrites their seconds itself, so what is checked here is
-        // that nothing on Theta's side fights it: the open clip used to be
+        // that nothing on Rhino's side fights it: the open clip used to be
         // snapped back to a single bar afterwards, with the rest of it cut off,
-        // and the automation lanes are Theta's own and still have to be moved.
+        // and the automation lanes are Rhino's own and still have to be moved.
         view.sync();
         {
             const auto beatsOf = [&session](double seconds)

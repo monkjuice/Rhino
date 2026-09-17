@@ -1,6 +1,6 @@
 # Handover: the September 2026 file split
 
-If you worked on Theta before commit `105cd78`, your map of this codebase is out of date. The code itself is not. This document tells you where things moved.
+If you worked on Rhino before commit `105cd78`, your map of this codebase is out of date. The code itself is not. This document tells you where things moved.
 
 ## What happened, in one paragraph
 
@@ -26,12 +26,12 @@ The mechanism is the one `SessionTransport.cpp` already used: **one class define
 | `Session.cpp` | `Session()`, `restoreProject`, `projectSnapshot`, `projectSaved`, `markModified`, `undo`, `redo`, `refreshAfterUndoRedo`, `ensureEditablePatternClip`, `panicReset`, `setCommandLineTestMode` |
 | `SessionNotes.cpp` | All note editing **and pattern geometry**: `hasNote`, `editorNotes`, `addNote`, `removeNotes`, `adjustNoteVelocities`, `setNote`, `noteLengthSteps`, `resizeNote`, `resizeNoteFromLeft`, `fillNoteToClipEnd`, `moveNote`, `moveNotes`, `redistributeNotes`, `begin`/`endNoteGesture`, `editorStepCount`, `editorStepResolution`, `patternLengthBeats`, `setEditorStepCount`, `ensurePatternLengthSteps` |
 | `SessionPresets.cpp` | `clearPattern`, `applyPatternPreset`, `insertPatternPreset`, `insertInstrumentClip`, `selectPatternClip`, `setPatternInstrument`, `isPatternDrums` |
-| `SessionPatches.cpp` | The 14 preset note tables, `presetPattern`, `fillMidiClip`, and the 4OSC/ThetaWave patch application |
+| `SessionPatches.cpp` | The 14 preset note tables, `presetPattern`, `fillMidiClip`, and the 4OSC/RhinoWave patch application |
 | `SessionDevices.cpp` | `addAudioEffect`, `addClipAudioEffect`, `addInstrument`, `addMidiEffect`, `deviceSlots`, `deviceParameters`, `begin`/`set`/`endDeviceParameterGesture`, `toggleDeviceEnabled`, `deleteDevice` |
 | `SessionTracks.cpp` | `trackCount`, `trackName`, `addAudioTrack`, `removeAudioTrack` |
 | `SessionClips.cpp` | `findClip`, `findAudioClip`, `shouldShowClipInArrangement`, `editClip`, `splitClip`, `duplicateClip`, `deleteClip`, `cycleClipColour`, `clipPluginCount`, `toggleTrackMute`, `toggleTrackSolo` |
 | `SessionAutomation.cpp` | Automation. *Rewritten September 2026 — see "Automation moved from clips to tracks" below.* `trackAutomations`, `trackAutomationState`, `showTrackAutomation`, `hideTrackAutomation`, `setTrackAutomationPoints`, `clearTrackAutomationPoints`, `automationRuntimeFor`, `findAutomationRuntime`, `toggleParameterAutomationOverride`, `applyTrackAutomationAt` |
-| `DeviceMacros.cpp` | `activeParameterAt`, `fourOscMacroParameterAt`, `thetaWaveMacroParameterAt`, the macro name/format helpers, `exposedParameterAt`, `exposedParameterMaximum` |
+| `DeviceMacros.cpp` | `activeParameterAt`, `fourOscMacroParameterAt`, `rhinoWaveMacroParameterAt`, the macro name/format helpers, `exposedParameterAt`, `exposedParameterMaximum` |
 | `SessionTransport.cpp` | Unchanged — transport, tempo, loop, audio import |
 
 Pattern geometry lives with note editing rather than in `Session.cpp`, because the two were interleaved in the original and serve the same consumer.
@@ -61,7 +61,7 @@ Pattern geometry lives with note editing rather than in `Session.cpp`, because t
 - **Every source file is listed explicitly in `native/CMakeLists.txt`.** Nothing is globbed. A new `.cpp` that is not added there will not compile, and you will get a confusing link error rather than a clear one.
 - **Split a `.cpp` when it passes ~600 lines or gains a second responsibility.** Prefer a second translation unit for the same class over inventing a new type. No header change, no call-site change.
 - **Shared helpers between a class's own translation units go in `*Internal.h`** — `SessionInternal.h`, `StepGridInternal.h`, `ArrangementInternal.h`. These are private to that class's files; do not include them elsewhere. Helpers shared between *different* classes get a normal header, as `BrowserIds.h` does.
-- **Do not search `native/.deps/` or `research/sources/`.** They hold roughly 430,000 lines that are not Theta's code — vendored JUCE/Tracktion, and read-only study snapshots of other DAWs. Neither is ever the answer to "where is this implemented".
+- **Do not search `native/.deps/` or `research/sources/`.** They hold roughly 430,000 lines that are not Rhino's code — vendored JUCE/Tracktion, and read-only study snapshots of other DAWs. Neither is ever the answer to "where is this implemented".
 
 ## Known issues you are inheriting
 
@@ -70,8 +70,8 @@ It was never a shutdown race or a threading problem. `scenarios/AudioClipEditing
 
 The lesson generalises. **A raw `te::Clip*` does not survive an undo, a cross-track move, or a project restore.** Scenarios share one `Session` and run in order, so a pointer cached several files earlier is almost always stale. Re-fetch with `session.findClip`/`findAudioClip` at the top of any scenario that inherits one.
 
-**2. ThetaWave drops on the device rack now work (deliberate behaviour change, untested).**
-The browser id tables were duplicated between `Arrangement.cpp` and `DeviceRack.cpp`, and had drifted: the arrangement accepted a `ThetaWave` instrument drop and the rack silently ignored it. Both now share `BrowserIds.h`, so the rack accepts it too. No test covers this path — worth exercising by hand.
+**2. RhinoWave drops on the device rack now work (deliberate behaviour change, untested).**
+The browser id tables were duplicated between `Arrangement.cpp` and `DeviceRack.cpp`, and had drifted: the arrangement accepted a `RhinoWave` instrument drop and the rack silently ignored it. Both now share `BrowserIds.h`, so the rack accepts it too. No test covers this path — worth exercising by hand.
 
 **3. The 4OSC attack tests in `a9d418c` had never passed.** Fixed in `105cd78`. They asserted a rack minimum of 0 where 4OSC's own range starts at 0.001, and the new 6-second cap left attack pinned at the ceiling so the existing "can be edited" assertion on the next line could not observe an increase.
 
@@ -79,7 +79,7 @@ The browser id tables were duplicated between `Arrangement.cpp` and `DeviceRack.
 
 Automation used to be a ramp stored inside a clip's `ValueTree` and drawn only across that clip. It is now a **track** property spanning the whole timeline, which is how every other DAW behaves.
 
-- **Storage.** A `thetaTrackAutomation` child on the owning track's state, keyed by `{track, slot, parameter}`, holding `point` children with `time` and `value`. It rides the project snapshot, so there is no save path of its own. Old projects simply come back without their clip ramps; nothing migrates them.
+- **Storage.** A `rhinoTrackAutomation` child on the owning track's state, keyed by `{track, slot, parameter}`, holding `point` children with `time` and `value`. It rides the project snapshot, so there is no save path of its own. Old projects simply come back without their clip ramps; nothing migrates them.
 - **Two states per lane.** Fewer than two points means "revealed but never drawn": the arrangement shows a dotted line at the knob's current value and the lane drives nothing. `deviceParameters(...).automated` stays false until a curve exists.
 - **Reaching it.** Right-click a knob in `DeviceEditorPanel` for *Show automation* / *Show automation on new lane* / *Hide* / *Delete*. `Session::lastTouchedDeviceParameter()` is no longer how a lane is chosen; it remains only for legacy callers.
 - **Gone:** `clipAutomation`, `clipAutomations`, `setClipAutomationRamp`, `deleteClipAutomation`, `applyClipAutomationAt`, `hasClipAutomationTarget`, `ClipView::automations` and the `Arrangement` clip-automation overlay. `hasClipAutomationTarget` became `hasActiveTrackAutomation`.
@@ -90,7 +90,7 @@ Automation used to be a ramp stored inside a clip's `ValueTree` and drawn only a
 
 ## The starter document is one empty track (September 2026)
 
-Theta used to open with `Pattern synth` (a 4OSC plus a hidden placeholder pattern clip) and `Audio 1`. It now opens with **one** track named `Track 1`, running no instrument, plus the pinned main row. The hidden pattern clip is still there, so the note editor works from the first click; it just drives nothing until an instrument is dropped.
+Rhino used to open with `Pattern synth` (a 4OSC plus a hidden placeholder pattern clip) and `Audio 1`. It now opens with **one** track named `Track 1`, running no instrument, plus the pinned main row. The hidden pattern clip is still there, so the note editor works from the first click; it just drives nothing until an instrument is dropped.
 
 If you are updating code or a test that assumed the old layout:
 
@@ -107,13 +107,13 @@ If you are updating code or a test that assumed the old layout:
 Two classes are defined entirely inline inside one `.cpp` and are the next things worth separating:
 
 - `ControlWindow` — 473 lines inside `Main.cpp` (684 total)
-- `FloatingDeviceWindow` — 423 lines inside `DeviceRack.cpp` (747 total), which also has a ThetaWave-specific editor hardcoded inside a generic device window, and a `rebuildParameterControls` that near-duplicates the window's own `refresh`
+- `FloatingDeviceWindow` — 423 lines inside `DeviceRack.cpp` (747 total), which also has a RhinoWave-specific editor hardcoded inside a generic device window, and a `rebuildParameterControls` that near-duplicates the window's own `refresh`
 
 Splitting either means converting inline method bodies to declaration plus definition. That is real restructuring, not a file move, so it carries different risk from everything described above. Do it deliberately.
 
 Beyond that, two changes would most reduce the cost of adding features:
 
-- **Device parameter helper.** Every device parameter is currently mentioned about 8 times (`referTo`, `addParam`, `attachToCurrentValue`, `valueToStringFunction`, `detachFromCurrentValue`, `updateFromAttachedValue`, the `copyPropertiesToCachedValues` list, and two header members). `ThetaWaveDevice` spends 90 of its 298 lines on this. A helper would remove 200–250 lines across the six devices.
+- **Device parameter helper.** Every device parameter is currently mentioned about 8 times (`referTo`, `addParam`, `attachToCurrentValue`, `valueToStringFunction`, `detachFromCurrentValue`, `updateFromAttachedValue`, the `copyPropertiesToCachedValues` list, and two header members). `RhinoWaveDevice` spends 90 of its 298 lines on this. A helper would remove 200–250 lines across the six devices.
 - **`DeviceCatalog.h`.** Adding a device today needs edits in at least six places: `createBuiltInType`, the `AudioEffect`/`Instrument`/`MidiEffect` mappings, ad-hoc type-string comparisons, `BrowserIds.h`, and the editor selection in `DeviceRack.cpp`. One table of `{xmlTypeName, displayName, browserId, category, factory}` would collapse all of it.
 
 ## Verifying your work

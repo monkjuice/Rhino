@@ -2,7 +2,7 @@
 #include "Session.h"
 #include <functional>
 
-namespace theta
+namespace rhino
 {
 // The clip launcher: tracks are columns, scenes are rows, and every cell is a
 // clip slot. Cells are painted rather than built from child components so the

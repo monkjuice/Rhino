@@ -2,7 +2,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace theta
+namespace rhino
 {
 struct ClipGeometry
 {

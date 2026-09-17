@@ -15,51 +15,51 @@
             require(parameterSession.endDeviceParameterGesture(1, reverbSlot, 0).wasOk(), "Device View ends parameter gestures");
             reverbParameters = parameterSession.deviceParameters(1, reverbSlot);
             require(std::abs(reverbParameters.front().value - newReverbValue) < 0.0001f, "Edited effect parameter value is reflected in Device View");
-            require(parameterSession.addAudioEffect(Session::AudioEffect::ThetaSpace, 1).wasOk(), "Audio FX browser action inserts Theta Space");
-            const auto thetaDevices = parameterSession.deviceSlots(1);
-            const auto thetaSlot = thetaDevices.empty() ? -1 : thetaDevices.back().pluginIndex;
-            auto thetaParameters = parameterSession.deviceParameters(1, thetaSlot);
-            require(thetaParameters.size() >= 6, "Theta Space exposes its macro controls");
-            require(parameterSession.setDeviceParameter(1, thetaSlot, 0, thetaParameters.front().maximum).wasOk(),
-                    "Theta Space macro controls are editable");
+            require(parameterSession.addAudioEffect(Session::AudioEffect::RhinoSpace, 1).wasOk(), "Audio FX browser action inserts Rhino Space");
+            const auto rhinoDevices = parameterSession.deviceSlots(1);
+            const auto rhinoSlot = rhinoDevices.empty() ? -1 : rhinoDevices.back().pluginIndex;
+            auto rhinoParameters = parameterSession.deviceParameters(1, rhinoSlot);
+            require(rhinoParameters.size() >= 6, "Rhino Space exposes its macro controls");
+            require(parameterSession.setDeviceParameter(1, rhinoSlot, 0, rhinoParameters.front().maximum).wasOk(),
+                    "Rhino Space macro controls are editable");
             require(parameterSession.addInstrument(Session::Instrument::FourOsc, 1).wasOk(), "Audio track can host a synth instrument");
-            require(parameterSession.addMidiEffect(Session::MidiEffect::ThetaArp, 1).wasOk(), "MIDI FX browser action inserts Theta Arp");
+            require(parameterSession.addMidiEffect(Session::MidiEffect::RhinoArp, 1).wasOk(), "MIDI FX browser action inserts Rhino Arp");
             int arpSlot = -1, synthSlot = -1;
             for (int i = 0; i < parameterTrack->pluginList.size(); ++i)
             {
                 auto* plugin = parameterTrack->pluginList[i];
                 if (plugin == nullptr) continue;
-                if (plugin->getPluginType() == ThetaArpDevice::xmlTypeName) arpSlot = i;
+                if (plugin->getPluginType() == RhinoArpDevice::xmlTypeName) arpSlot = i;
                 if (plugin->getPluginType() == te::FourOscPlugin::xmlTypeName) synthSlot = i;
             }
             require(arpSlot >= 0 && synthSlot >= 0 && arpSlot < synthSlot,
-                    "Theta Arp is inserted before the target instrument");
+                    "Rhino Arp is inserted before the target instrument");
             auto arpParameters = parameterSession.deviceParameters(1, arpSlot);
-            require(arpParameters.size() == 3, "Theta Arp exposes rate, octaves, and gate controls");
-            require(parameterSession.addInstrument(Session::Instrument::ThetaWave, 1).wasOk(), "Audio track can host Theta Wave");
+            require(arpParameters.size() == 3, "Rhino Arp exposes rate, octaves, and gate controls");
+            require(parameterSession.addInstrument(Session::Instrument::RhinoWave, 1).wasOk(), "Audio track can host Rhino Wave");
             int waveSlot = -1;
             for (int i = 0; i < parameterTrack->pluginList.size(); ++i)
             {
                 auto* plugin = parameterTrack->pluginList[i];
-                if (plugin != nullptr && plugin->getPluginType() == ThetaWaveDevice::xmlTypeName)
+                if (plugin != nullptr && plugin->getPluginType() == RhinoWaveDevice::xmlTypeName)
                     waveSlot = i;
             }
-            require(waveSlot >= 0, "Theta Wave is inserted in the target track chain");
+            require(waveSlot >= 0, "Rhino Wave is inserted in the target track chain");
             auto waveParameters = parameterSession.deviceParameters(1, waveSlot);
             require(waveParameters.size() >= 23 && waveParameters[0].name == "Position"
                     && waveParameters[2].name == "Motion" && waveParameters[3].name == "Osc 2"
                     && waveParameters[4].name == "Tune 2" && waveParameters[5].name == "Cutoff"
                     && waveParameters[10].name == "Attack" && waveParameters[17].name == "Output"
                     && waveParameters[18].name == "LFO Rate" && waveParameters[22].name == "LFO Motion",
-                    "Theta Wave exposes a full synth panel surface after the Device View macros");
-            const auto developmentForge = juce::File(juce::String(THETA_SOURCE_DIR))
-                .getChildFile("../instruments/theta-forge/build/ThetaForge_artefacts/Release/VST3/Theta Forge.vst3");
+                    "Rhino Wave exposes a full synth panel surface after the Device View macros");
+            const auto developmentForge = juce::File(juce::String(RHINO_SOURCE_DIR))
+                .getChildFile("../instruments/rhino-forge/build/RhinoForge_artefacts/Release/VST3/Rhino Forge.vst3");
             if (developmentForge.exists())
-                require(parameterSession.isForgeAvailable(), "Theta discovers the development Forge VST3 bundle");
+                require(parameterSession.isForgeAvailable(), "Rhino discovers the development Forge VST3 bundle");
             if (parameterSession.isForgeAvailable())
             {
-                require(parameterSession.addInstrument(Session::Instrument::ThetaForge, 1).wasOk(),
-                        "An arrangement drop can put the independent Theta Forge VST3 on a track");
+                require(parameterSession.addInstrument(Session::Instrument::RhinoForge, 1).wasOk(),
+                        "An arrangement drop can put the independent Rhino Forge VST3 on a track");
                 require(parameterSession.createClip(1, 0.0).wasOk(),
                         "A clip can then be created on the track routed to Forge");
                 int forgeSlot = -1;
@@ -71,7 +71,7 @@
                         forgeSlot = i;
                 require(forgeSlot >= 0, "Forge is represented by Tracktion's external-plugin wrapper");
                 require(parameterTrack->pluginList[forgeSlot]->createEditor() != nullptr,
-                        "Tracktion creates Forge's plugin-owned editor for Theta");
+                        "Tracktion creates Forge's plugin-owned editor for Rhino");
                 auto* forgeProcessor = parameterTrack->pluginList[forgeSlot]->getWrappedAudioProcessor();
                 require(forgeProcessor != nullptr && forgeProcessor->hasEditor(),
                         "Forge exposes its custom editor through the wrapped VST3 processor");
@@ -85,9 +85,9 @@
                 reopenedForgeEditor.reset();
                 const auto forgeParameters = parameterSession.deviceParameters(1, forgeSlot);
                 require(forgeParameters.size() >= 35,
-                        "Tracktion exposes Forge VST3 parameters to Theta");
-                require(parameterSession.addInstrument(Session::Instrument::ThetaForge, 0).wasOk(),
+                        "Tracktion exposes Forge VST3 parameters to Rhino");
+                require(parameterSession.addInstrument(Session::Instrument::RhinoForge, 0).wasOk(),
                         "The Forge VST3 can replace the Pattern synth");
-                require(parameterSession.projectSnapshot().getProperty("thetaPatternInstrument").toString() == "forge",
+                require(parameterSession.projectSnapshot().getProperty("rhinoPatternInstrument").toString() == "forge",
                         "Pattern-grid Forge selection persists in the project state");
             }

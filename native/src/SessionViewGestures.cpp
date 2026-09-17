@@ -4,7 +4,7 @@
 
 // Session view pointer handling, slot menus and drops.
 
-namespace theta
+namespace rhino
 {
 namespace
 {
@@ -152,16 +152,16 @@ void SessionView::showSlotMenu(int track, int scene)
         presets.addItem(100 + i, presetMenu[i].name);
     juce::PopupMenu instruments;
     instruments.addItem(10, "4OSC synth");
-    instruments.addItem(11, "Theta Wave");
-    instruments.addItem(12, "Theta Drums");
-    instruments.addItem(13, "Theta Forge", session.isForgeAvailable());
+    instruments.addItem(11, "Rhino Wave");
+    instruments.addItem(12, "Rhino Drums");
+    instruments.addItem(13, "Rhino Forge", session.isForgeAvailable());
     juce::PopupMenu menu;
     menu.addSectionHeader(session.trackName(track) + "  /  " + session.sceneName(scene));
     menu.addSubMenu("Insert pattern", presets);
     menu.addSubMenu("Insert empty instrument clip", instruments);
     menu.addSeparator();
-    menu.addItem(20, "Insert Theta Whistle");
-    menu.addItem(21, "Insert Theta Siren");
+    menu.addItem(20, "Insert Rhino Whistle");
+    menu.addItem(21, "Insert Rhino Siren");
     menu.addSeparator();
     menu.addItem(40, "Copy to arrangement at playhead", info.hasClip);
     menu.addSeparator();
@@ -176,9 +176,9 @@ void SessionView::showSlotMenu(int track, int scene)
             if (result >= 100 && result < 100 + presetMenuCount)
                 outcome = session.insertPatternPresetInSlot(presetMenu[result - 100].preset, track, scene);
             else if (result == 10) outcome = session.insertInstrumentClipInSlot(Session::Instrument::FourOsc, track, scene);
-            else if (result == 11) outcome = session.insertInstrumentClipInSlot(Session::Instrument::ThetaWave, track, scene);
+            else if (result == 11) outcome = session.insertInstrumentClipInSlot(Session::Instrument::RhinoWave, track, scene);
             else if (result == 12) outcome = session.insertInstrumentClipInSlot(Session::Instrument::Drums, track, scene);
-            else if (result == 13) outcome = session.insertInstrumentClipInSlot(Session::Instrument::ThetaForge, track, scene);
+            else if (result == 13) outcome = session.insertInstrumentClipInSlot(Session::Instrument::RhinoForge, track, scene);
             else if (result == 20) outcome = session.insertBuiltInSampleInSlot(Session::BuiltInSample::Whistle, track, scene);
             else if (result == 21) outcome = session.insertBuiltInSampleInSlot(Session::BuiltInSample::Siren, track, scene);
             else if (result == 30) outcome = session.deleteSlotClip(track, scene);
@@ -231,7 +231,7 @@ void SessionView::filesDropped(const juce::StringArray& files, int x, int y)
 
 bool SessionView::isInterestedInDragSource(const juce::DragAndDropTarget::SourceDetails& details)
 {
-    return details.description.toString().startsWith("theta-browser:");
+    return details.description.toString().startsWith("rhino-browser:");
 }
 
 void SessionView::itemDragMove(const juce::DragAndDropTarget::SourceDetails& details)

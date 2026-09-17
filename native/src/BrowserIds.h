@@ -2,17 +2,17 @@
 #include "Session.h"
 #include <optional>
 
-// Browser drag-and-drop descriptions have the form "theta-browser:<kind>:<id>".
+// Browser drag-and-drop descriptions have the form "rhino-browser:<kind>:<id>".
 // Both the arrangement and Device View accept these drops, so the id tables
 // live here rather than once per drop target.
 
-namespace theta
+namespace rhino
 {
 
 inline juce::String browserDropKind(const juce::String& description)
 {
-    if (!description.startsWith("theta-browser:")) return {};
-    return description.fromFirstOccurrenceOf("theta-browser:", false, false)
+    if (!description.startsWith("rhino-browser:")) return {};
+    return description.fromFirstOccurrenceOf("rhino-browser:", false, false)
         .upToFirstOccurrenceOf(":", false, false);
 }
 
@@ -46,16 +46,16 @@ inline std::optional<Session::AudioEffect> audioEffectFromId(const juce::String&
     if (id == "Reverb")     return Session::AudioEffect::Reverb;
     if (id == "Delay")      return Session::AudioEffect::Delay;
     if (id == "Compressor") return Session::AudioEffect::Compressor;
-    if (id == "ThetaSpace") return Session::AudioEffect::ThetaSpace;
-    if (id == "ThetaBloom") return Session::AudioEffect::ThetaBloom;
+    if (id == "RhinoSpace") return Session::AudioEffect::RhinoSpace;
+    if (id == "RhinoBloom") return Session::AudioEffect::RhinoBloom;
     return std::nullopt;
 }
 
 inline std::optional<Session::Instrument> instrumentFromId(const juce::String& id)
 {
     if (id == "FourOsc")   return Session::Instrument::FourOsc;
-    if (id == "ThetaWave") return Session::Instrument::ThetaWave;
-    if (id == "ThetaForge") return Session::Instrument::ThetaForge;
+    if (id == "RhinoWave") return Session::Instrument::RhinoWave;
+    if (id == "RhinoForge") return Session::Instrument::RhinoForge;
     if (id == "Drums")     return Session::Instrument::Drums;
     if (id == "Utility")   return Session::Instrument::Utility;
     return std::nullopt;
@@ -63,7 +63,7 @@ inline std::optional<Session::Instrument> instrumentFromId(const juce::String& i
 
 inline std::optional<DrumDevice::Kit> drumKitFromId(const juce::String& id)
 {
-    if (id == "Theta808")   return DrumDevice::Kit::Theta808;
+    if (id == "Rhino808")   return DrumDevice::Kit::Rhino808;
     if (id == "HouseKit")   return DrumDevice::Kit::House;
     if (id == "BreakKit")   return DrumDevice::Kit::Break;
     if (id == "MinimalKit") return DrumDevice::Kit::Minimal;
@@ -73,7 +73,7 @@ inline std::optional<DrumDevice::Kit> drumKitFromId(const juce::String& id)
 
 inline std::optional<Session::MidiEffect> midiEffectFromId(const juce::String& id)
 {
-    if (id == "ThetaArp") return Session::MidiEffect::ThetaArp;
+    if (id == "RhinoArp") return Session::MidiEffect::RhinoArp;
     return std::nullopt;
 }
 

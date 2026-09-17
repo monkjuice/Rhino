@@ -3,7 +3,7 @@
 #include <optional>
 #include <set>
 
-namespace theta
+namespace rhino
 {
 
 Arrangement::Arrangement(Session& s) : session(s), vblank(this, [this] { updatePlayhead(); })

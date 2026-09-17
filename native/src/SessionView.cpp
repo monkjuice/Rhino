@@ -3,7 +3,7 @@
 
 // Session view lifecycle, layout and geometry.
 
-namespace theta
+namespace rhino
 {
 namespace
 {

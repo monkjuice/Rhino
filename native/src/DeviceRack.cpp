@@ -3,25 +3,25 @@
 #include <cmath>
 #include <optional>
 
-namespace theta
+namespace rhino
 {
 namespace
 {
 std::optional<Session::AudioEffect> effectFromBrowserDrop(const juce::String& description)
 {
-    if (!description.startsWith("theta-browser:effect:")) return std::nullopt;
+    if (!description.startsWith("rhino-browser:effect:")) return std::nullopt;
     return audioEffectFromId(browserDropId(description));
 }
 
 std::optional<Session::Instrument> instrumentFromBrowserDrop(const juce::String& description)
 {
-    if (!description.startsWith("theta-browser:instrument:")) return std::nullopt;
+    if (!description.startsWith("rhino-browser:instrument:")) return std::nullopt;
     return instrumentFromId(browserDropId(description));
 }
 
 std::optional<Session::MidiEffect> midiEffectFromBrowserDrop(const juce::String& description)
 {
-    if (!description.startsWith("theta-browser:midi-effect:")) return std::nullopt;
+    if (!description.startsWith("rhino-browser:midi-effect:")) return std::nullopt;
     return midiEffectFromId(browserDropId(description));
 }
 
@@ -55,16 +55,16 @@ public:
         {
             setOpaque(true);
             refresh();
-            setSize(isThetaWave ? 920 : 680, isThetaWave ? 800 : 430);
+            setSize(isRhinoWave ? 920 : 680, isRhinoWave ? 800 : 430);
             startTimerHz(30);
         }
 
         void paint(juce::Graphics& g) override
         {
             g.fillAll(juce::Colour(0xff111316));
-            if (isThetaWave)
+            if (isRhinoWave)
             {
-                paintThetaWave(g);
+                paintRhinoWave(g);
                 return;
             }
             const auto bounds = getLocalBounds().toFloat();
@@ -97,9 +97,9 @@ public:
 
         void resized() override
         {
-            if (isThetaWave)
+            if (isRhinoWave)
             {
-                layoutThetaWave();
+                layoutRhinoWave();
                 return;
             }
             const auto count = static_cast<int>(sliders.size());
@@ -124,7 +124,7 @@ public:
         {
             animationPhase += 0.12f;
             refreshParameterValues();
-            repaint(isThetaWave ? getLocalBounds().reduced(28, 74).withHeight(154)
+            repaint(isRhinoWave ? getLocalBounds().reduced(28, 74).withHeight(154)
                                 : juce::Rectangle<int>(210, 88, 260, 126).expanded(2));
         }
 
@@ -135,10 +135,10 @@ public:
                                                   [this](const auto& candidate) { return candidate.pluginIndex == slot; });
             deviceName = visibleSlot != deviceSlots.end() ? visibleSlot->name : "Device";
             const auto deviceType = visibleSlot != deviceSlots.end() ? visibleSlot->type : juce::String();
-            isThetaWave = deviceType == ThetaWaveDevice::xmlTypeName;
-            deviceTypeLabel = deviceType == ThetaWaveDevice::xmlTypeName ? "THETA SYNTH"
-                : deviceType == DrumDevice::xmlTypeName || deviceType == te::FourOscPlugin::xmlTypeName ? "THETA INSTRUMENT"
-                : "THETA FX";
+            isRhinoWave = deviceType == RhinoWaveDevice::xmlTypeName;
+            deviceTypeLabel = deviceType == RhinoWaveDevice::xmlTypeName ? "RHINO SYNTH"
+                : deviceType == DrumDevice::xmlTypeName || deviceType == te::FourOscPlugin::xmlTypeName ? "RHINO INSTRUMENT"
+                : "RHINO FX";
             parameters = session.deviceParameters(track, slot);
             while (labels.size() < static_cast<int>(parameters.size()))
             {
@@ -173,7 +173,7 @@ public:
                             values[index]->setText(parameters[static_cast<size_t>(index)].valueText, juce::dontSendNotification);
                             slider->setTooltip(parameters[static_cast<size_t>(index)].name + ": "
                                                + parameters[static_cast<size_t>(index)].valueText);
-                            if (isThetaWave)
+                            if (isRhinoWave)
                                 repaint(oscillatorArea.getUnion(envelopeArea).expanded(2));
                         }
                     }
@@ -198,22 +198,22 @@ public:
             syncing = true;
             for (int i = 0; i < labels.size(); ++i)
             {
-                const auto visible = i < static_cast<int>(parameters.size()) && (isThetaWave || i < 6);
+                const auto visible = i < static_cast<int>(parameters.size()) && (isRhinoWave || i < 6);
                 labels[i]->setVisible(visible);
                 values[i]->setVisible(visible);
                 sliders[i]->setVisible(visible);
                 automationButtons[i]->setVisible(visible);
                 if (!visible) continue;
                 const auto& parameter = parameters[static_cast<size_t>(i)];
-                const auto accent = thetaWaveAccent(i);
+                const auto accent = rhinoWaveAccent(i);
                 labels[i]->setText(parameter.name, juce::dontSendNotification);
                 values[i]->setText(parameter.valueText, juce::dontSendNotification);
                 sliders[i]->setRange(parameter.minimum, parameter.maximum, parameter.discrete ? 1.0 : 0.0);
                 sliders[i]->setValue(parameter.value, juce::dontSendNotification);
-                sliders[i]->setColour(juce::Slider::trackColourId, isThetaWave ? accent : juce::Colour(0xff8cc5d2));
-                sliders[i]->setColour(juce::Slider::rotarySliderFillColourId, isThetaWave ? accent : juce::Colour(0xff8cc5d2));
+                sliders[i]->setColour(juce::Slider::trackColourId, isRhinoWave ? accent : juce::Colour(0xff8cc5d2));
+                sliders[i]->setColour(juce::Slider::rotarySliderFillColourId, isRhinoWave ? accent : juce::Colour(0xff8cc5d2));
                 sliders[i]->setColour(juce::Slider::rotarySliderOutlineColourId, juce::Colour(0xff30414b));
-                sliders[i]->setColour(juce::Slider::thumbColourId, isThetaWave ? accent.brighter(0.25f) : juce::Colour(0xffc6d58c));
+                sliders[i]->setColour(juce::Slider::thumbColourId, isRhinoWave ? accent.brighter(0.25f) : juce::Colour(0xffc6d58c));
                 sliders[i]->setTooltip(parameter.name + ": " + parameter.valueText);
                 styleAutomationButton(*automationButtons[i], parameter);
             }
@@ -252,7 +252,7 @@ public:
             return std::clamp((parameter.value - parameter.minimum) / length, 0.0f, 1.0f);
         }
 
-        juce::Colour thetaWaveAccent(int index) const
+        juce::Colour rhinoWaveAccent(int index) const
         {
             if (index <= 4) return juce::Colour(0xff75d3e6);
             if (index <= 9) return juce::Colour(0xffc8de8f);
@@ -345,7 +345,7 @@ public:
             g.strokePath(envelope, juce::PathStrokeType(2.2f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
         }
 
-        void paintThetaWave(juce::Graphics& g)
+        void paintRhinoWave(juce::Graphics& g)
         {
             const auto bounds = getLocalBounds();
             g.setGradientFill(juce::ColourGradient(juce::Colour(0xff11161b), 0.0f, 0.0f,
@@ -356,7 +356,7 @@ public:
 
             g.setColour(juce::Colour(0xfff3f7fa));
             g.setFont(juce::FontOptions(30.0f));
-            g.drawText("Theta Wave", 30, 24, 240, 36, juce::Justification::centredLeft, true);
+            g.drawText("Rhino Wave", 30, 24, 240, 36, juce::Justification::centredLeft, true);
             g.setColour(juce::Colour(0xff75d3e6));
             g.setFont(juce::FontOptions(11.0f));
             g.drawText("MORPHING WAVETABLE SYNTH", 33, 58, 220, 18, juce::Justification::centredLeft, true);
@@ -390,7 +390,7 @@ public:
             automationButtons[index]->setBounds(sliders[index]->getRight() - 12, sliders[index]->getY() - 2, 20, 18);
         }
 
-        void layoutThetaWave()
+        void layoutRhinoWave()
         {
             const auto bounds = getLocalBounds().reduced(28);
             const auto top = bounds.getY() + 60;
@@ -446,7 +446,7 @@ public:
         Session& session;
         int track = 0, slot = 0;
         bool syncing = false;
-        bool isThetaWave = false;
+        bool isRhinoWave = false;
         float animationPhase = 0.0f;
         juce::String deviceName, deviceTypeLabel;
         juce::Rectangle<int> oscillatorArea, filterArea, envelopeArea, voiceArea;
@@ -457,7 +457,7 @@ public:
     };
 
     FloatingDeviceWindow(Session& session, int track, int slot)
-        : DocumentWindow("Theta Device", juce::Colour(0xff0f1114), DocumentWindow::closeButton)
+        : DocumentWindow("Rhino Device", juce::Colour(0xff0f1114), DocumentWindow::closeButton)
     {
         setUsingNativeTitleBar(true);
         const auto tracks = te::getAudioTracks(*session.edit);
@@ -629,13 +629,13 @@ void DeviceRack::showAddMenu()
     audioEffects.addItem(102, "Reverb");
     audioEffects.addItem(103, "Delay");
     audioEffects.addItem(104, "Compressor");
-    audioEffects.addItem(105, "Theta Space");
-    audioEffects.addItem(106, "Theta Bloom");
+    audioEffects.addItem(105, "Rhino Space");
+    audioEffects.addItem(106, "Rhino Bloom");
     instruments.addItem(201, "4OSC");
-    instruments.addItem(202, "Theta Wave");
-    instruments.addItem(203, "Theta Forge", session.isForgeAvailable());
-    instruments.addItem(204, "Theta Drums");
-    midiEffects.addItem(301, "Theta Arp");
+    instruments.addItem(202, "Rhino Wave");
+    instruments.addItem(203, "Rhino Forge", session.isForgeAvailable());
+    instruments.addItem(204, "Rhino Drums");
+    midiEffects.addItem(301, "Rhino Arp");
     menu.addSubMenu("Audio Effects", audioEffects);
     menu.addSubMenu("Instruments", instruments);
     menu.addSubMenu("MIDI Effects", midiEffects);
@@ -649,7 +649,7 @@ void DeviceRack::showAddMenu()
             else if (result >= 201 && result <= 204)
                 added = safe->session.addInstrument(static_cast<Session::Instrument>(result - 201), safe->selectedTrack);
             else if (result == 301)
-                added = safe->session.addMidiEffect(Session::MidiEffect::ThetaArp, safe->selectedTrack);
+                added = safe->session.addMidiEffect(Session::MidiEffect::RhinoArp, safe->selectedTrack);
 
             if (safe->status)
                 safe->status(added.wasOk() ? "Added device to " + safe->session.trackName(safe->selectedTrack)

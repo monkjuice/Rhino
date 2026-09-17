@@ -2,7 +2,7 @@
 #include "BinaryData.h"
 #include <cmath>
 
-namespace theta
+namespace rhino
 {
 DrumDevice::DrumDevice(te::PluginCreationInfo info) : Plugin(info)
 {
@@ -27,7 +27,7 @@ juce::String DrumDevice::kitName(Kit kit)
 {
     switch (kit)
     {
-        case Kit::Theta808: return "Theta 808";
+        case Kit::Rhino808: return "Rhino 808";
         case Kit::House:    return "House Kit";
         case Kit::Break:    return "Break Kit";
         case Kit::Minimal:  return "Minimal Kit";
@@ -90,7 +90,7 @@ DrumDevice::VoiceShape DrumDevice::shapeFor(VoiceType type) const
                 case VoiceType::openHat:   return {1.0f, 0.22f, 0.75f};
                 default:                   return {1.0f, 0.0f, 0.95f};
             }
-        case Kit::Theta808:
+        case Kit::Rhino808:
             break;
     }
     return {};

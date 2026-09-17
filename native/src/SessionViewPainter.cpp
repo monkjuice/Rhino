@@ -3,7 +3,7 @@
 
 // Session view rendering.
 
-namespace theta
+namespace rhino
 {
 namespace
 {

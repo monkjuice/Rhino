@@ -12,7 +12,7 @@
                                                              {2.0, persistedParameters.front().maximum}}).wasOk(),
                 "Draw an automation curve before saving");
 
-        juce::TemporaryFile project(".thetaedit");
+        juce::TemporaryFile project(".rhinoedit");
         const auto snapshot = session.projectSnapshot();
         auto projectXml = snapshot.createXml();
         require(projectXml->writeTo(project.getFile()), "Write project snapshot");

@@ -6,7 +6,7 @@
 
 // Arrangement rendering.
 
-namespace theta
+namespace rhino
 {
 
 void Arrangement::paint(juce::Graphics& g)

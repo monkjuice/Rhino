@@ -5,7 +5,7 @@
 
 // Note editing and pattern geometry. Serves StepGrid.
 
-namespace theta
+namespace rhino
 {
 
 bool Session::hasNote(int step, int pitch) const

@@ -1,6 +1,6 @@
-# Theta
+# Rhino
 
-[GitHub repository](https://github.com/monkjuice/THETA)
+[GitHub repository](https://github.com/monkjuice/Rhino)
 
 A desktop DAW for creating electronic music, with arrangement and live clip workflows as the longer-term direction. Development currently prioritizes **Windows**, while keeping the native architecture portable to macOS.
 
@@ -12,7 +12,7 @@ Research deliverables: [open-source DAW and Ableton study](research/DAW-STUDY.md
 
 - A startup loading screen showing engine, audio-device, and workspace initialization.
 - One-bar, 16-step note grid covering MIDI notes 48-59.
-- Playback through Tracktion's 4OSC synth and Theta's internal Utility gain device.
+- Playback through Tracktion's 4OSC synth and Rhino's internal Utility gain device.
 - Five drum kits under Instruments / Drum Rack, one matching each drum pattern. A kit is the drum instrument with its pads retuned, shortened and rebalanced, and the Clap kit puts the clap on the backbeat rather than the snare.
 - One instrument per track, as in Live and Logic. Dropping an instrument on a track replaces the one already there and renames the track after it. The track's clips are untouched, so the pattern stays and the sound changes. Audio samples and files are refused on a track that runs an instrument.
 - Clips are created deliberately: double-click an empty part of a lane to add a one-bar clip starting where you clicked, or press **Ctrl+A** to add one to the focused track at the playhead.
@@ -27,7 +27,7 @@ Research deliverables: [open-source DAW and Ableton study](research/DAW-STUDY.md
 - Timeline seeking, zoom, scrolling, and optional 1/16-note snapping.
 - Native project save/open, unsaved-change prompts, and background file writing/parsing.
 - A display-synchronized playhead with narrow repaint regions and cached note display data.
-- VST3 hosting through Tracktion Engine, with the independent Theta Forge synth discoverable from its development build or a standard VST3 installation and shown with its plugin-owned editor.
+- VST3 hosting through Tracktion Engine, with the independent Rhino Forge synth discoverable from its development build or a standard VST3 installation and shown with its plugin-owned editor.
 - The interface is drawn with Inter, bundled under the SIL Open Font License (`native/assets/fonts/OFL.txt`), rather than whichever font the desktop happens to use.
 
 This is an early composition workflow, not a complete DAW. Recording, media bundling/relinking, and a general plugin browser/scanner are not implemented yet. The session view is paused rather than finished: the note editor cannot open a session clip, and follow actions, level meters, sends and returns, and recording into slots are missing. [SESSION-VIEW.md](SESSION-VIEW.md) records where it stopped and how to resume. WAV export renders the complete arrangement offline at 48 kHz/24-bit, peak-normalised to -1 dBFS to preserve headroom. macOS has not been built or tested.
@@ -37,7 +37,7 @@ This is an early composition workflow, not a complete DAW. Recording, media bund
 If the Release build already exists, run this from the repository root:
 
 ```powershell
-& ".\native\build\ThetaNative_artefacts\Release\Theta.exe"
+& ".\native\build\RhinoNative_artefacts\Release\Rhino.exe"
 ```
 
 To build it, install Python 3.12+, CMake 3.24+, and Visual Studio 2022 with the **Desktop development with C++** workload and Windows SDK. Run from the repository root:
@@ -47,7 +47,7 @@ python native/scripts/fetch-dependencies.py
 cmake -S native -B native/build -G "Visual Studio 17 2022" -A x64
 cmake --build native/build --config Release --parallel 2
 ctest --test-dir native/build -C Release --output-on-failure
-& ".\native\build\ThetaNative_artefacts\Release\Theta.exe"
+& ".\native\build\RhinoNative_artefacts\Release\Rhino.exe"
 ```
 
 The fetch script downloads pinned Tracktion and JUCE revisions into `native/.deps`. Dependencies and build outputs are ignored by version control.
@@ -85,7 +85,7 @@ Command-key handling is included for macOS, but remains unvalidated there.
 
 ## Native Project Files
 
-Native projects use `.thetaedit` and preserve notes, tempo, device state, and audio references. Imported audio stays at its original path: keep those files in place. Projects do not yet collect media into a portable folder.
+Native projects use `.rhinoedit` and preserve notes, tempo, device state, and audio references. Imported audio stays at its original path: keep those files in place. Projects do not yet collect media into a portable folder.
 
 Save writes a detached project snapshot on a worker thread to a temporary file before replacing the destination. Edits made during saving remain marked unsaved. Open validates the project before replacing the current edit; engine reconstruction still runs on the message thread, with editing disabled during that operation.
 

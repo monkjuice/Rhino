@@ -4,7 +4,7 @@
 
 // Arrangement clip lookup and editing, and track mute/solo. Serves Arrangement.
 
-namespace theta
+namespace rhino
 {
 
 te::Clip* Session::findClip(te::EditItemID id) const
@@ -79,10 +79,10 @@ juce::Result Session::editClip(te::EditItemID id, ClipGeometry next, ClipGesture
             if (result.failed())
                 return result;
             if (targetTrack == 0)
-                edit->state.setProperty("thetaPatternInstrument",
+                edit->state.setProperty("rhinoPatternInstrument",
                                         sourceInstrument == Instrument::Drums ? "drums"
-                                            : sourceInstrument == Instrument::ThetaWave ? "wave"
-                                            : sourceInstrument == Instrument::ThetaForge ? "forge" : "synth",
+                                            : sourceInstrument == Instrument::RhinoWave ? "wave"
+                                            : sourceInstrument == Instrument::RhinoForge ? "forge" : "synth",
                                         &edit->getUndoManager());
         }
         if (!clip->moveTo(*target))

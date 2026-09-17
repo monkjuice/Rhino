@@ -3,7 +3,7 @@
 
 namespace tracktion { inline namespace engine { class TransportControl; } }
 
-namespace theta
+namespace rhino
 {
 inline const juce::Colour playheadColour {0xff57a7ff};
 double playheadTime(const tracktion::engine::TransportControl&);

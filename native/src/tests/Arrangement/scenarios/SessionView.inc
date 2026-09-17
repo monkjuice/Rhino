@@ -22,9 +22,9 @@
             auto* midi = dynamic_cast<te::MidiClip*>(slot->getClip());
             require(midi != nullptr && midi->getSequence().getNumNotes() > 0, "The preset wrote notes into the slot clip");
         }
-        require(launcher.isInterestedInDragSource({"theta-browser:preset:HouseKit", nullptr, {10, 70}}),
+        require(launcher.isInterestedInDragSource({"rhino-browser:preset:HouseKit", nullptr, {10, 70}}),
                 "The session view accepts browser drag payloads");
-        launcher.applyBrowserDrop("theta-browser:preset:HouseKit", 1, 1);
+        launcher.applyBrowserDrop("rhino-browser:preset:HouseKit", 1, 1);
         require(session.slotClip(1, 1).hasClip, "A browser preset dropped on a slot fills it");
 
         scenario("session view: cell geometry");
@@ -66,7 +66,7 @@
         scenario("session view: persistence");
         {
             const auto savedSession = session.projectSnapshot();
-            juce::TemporaryFile sessionProject(".thetaedit");
+            juce::TemporaryFile sessionProject(".rhinoedit");
             require(session.restoreProject(savedSession, sessionProject.getFile()).wasOk(), "Reopen a project with slot clips");
             require(session.sceneCount() == sceneTotal, "Scene count survives reopen");
             const auto restored = session.slotClip(0, 0);

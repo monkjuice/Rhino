@@ -9,7 +9,7 @@
 // anonymous namespace. This header is internal: nothing outside the Session
 // implementation should include it.
 
-namespace theta
+namespace rhino
 {
 
 // ValueTree property identifiers owned by the session document.
@@ -33,7 +33,7 @@ struct PresetPattern
     int count = 0;
     juce::String name;
     bool useDrums = false;
-    bool useThetaWave = false;
+    bool useRhinoWave = false;
     SynthPatch synthPatch = SynthPatch::Default;
 };
 
@@ -42,16 +42,16 @@ PresetPattern presetPattern(Session::PatternPreset preset);
 void fillMidiClip(te::MidiClip& clip, const PresetPattern& preset, juce::UndoManager& undoManager);
 void setPluginParameter(te::AutomatableParameter::Ptr parameter, float value);
 void applySynthPatch(SynthPatch patch, te::FourOscPlugin& synth, juce::UndoManager& undoManager);
-void applyThetaWavePatch(Session::PatternPreset preset, ThetaWaveDevice& wave);
+void applyRhinoWavePatch(Session::PatternPreset preset, RhinoWaveDevice& wave);
 
 // Device parameter and macro mapping (DeviceMacros.cpp)
 te::AutomatableParameter* activeParameterAt(te::Plugin& plugin, int index);
 te::AutomatableParameter* fourOscMacroParameterAt(te::FourOscPlugin& synth, int index);
-te::AutomatableParameter* thetaWaveMacroParameterAt(ThetaWaveDevice& wave, int index);
+te::AutomatableParameter* rhinoWaveMacroParameterAt(RhinoWaveDevice& wave, int index);
 juce::String fourOscMacroName(int index);
-juce::String thetaWaveMacroName(int index);
+juce::String rhinoWaveMacroName(int index);
 juce::String formatFourOscMacroValue(int index, float value, te::AutomatableParameter& parameter);
-juce::String formatThetaWaveMacroValue(int index, float value, te::AutomatableParameter& parameter);
+juce::String formatRhinoWaveMacroValue(int index, float value, te::AutomatableParameter& parameter);
 te::AutomatableParameter* exposedParameterAt(te::Plugin& plugin, int index);
 float exposedParameterMaximum(te::Plugin& plugin, int index, float maximum);
 
@@ -67,7 +67,7 @@ bool sameDeviceTarget(Session::DeviceTarget a, Session::DeviceTarget b);
 bool hasActiveTrackAutomation(const te::Edit& edit, Session::DeviceTarget target);
 te::Plugin* findPlugin(te::AudioTrack& track, const juce::String& type);
 te::FourOscPlugin* findFourOsc(te::AudioTrack& track);
-ThetaWaveDevice* findThetaWave(te::AudioTrack& track);
+RhinoWaveDevice* findRhinoWave(te::AudioTrack& track);
 DrumDevice* findDrumDevice(te::AudioTrack& track);
 Session::Instrument activeTrackInstrument(te::AudioTrack& track);
 bool isForgePlugin(const te::Plugin& plugin);

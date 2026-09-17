@@ -4,7 +4,7 @@
 #include <bitset>
 #include <vector>
 
-namespace theta
+namespace rhino
 {
 class StepGrid final : public juce::Component, private juce::ChangeListener, private juce::ScrollBar::Listener, private juce::Timer
 {

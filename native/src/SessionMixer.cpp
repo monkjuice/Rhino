@@ -8,10 +8,10 @@
 // horizontal strip in each track header, but both read and write the same
 // VolumeAndPanPlugin, so neither view can hold a stale copy of a level.
 //
-// Theta's UtilityDevice is a device in a chain, like Live's Utility. It is not
+// Rhino's UtilityDevice is a device in a chain, like Live's Utility. It is not
 // the track fader, and the two are deliberately separate.
 
-namespace theta
+namespace rhino
 {
 
 te::VolumeAndPanPlugin* Session::trackVolumePlugin(int track) const

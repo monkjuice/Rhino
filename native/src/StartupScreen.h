@@ -1,7 +1,7 @@
 #pragma once
 #include <juce_gui_basics/juce_gui_basics.h>
 
-namespace theta
+namespace rhino
 {
 class StartupScreen final : public juce::Component
 {
@@ -18,7 +18,7 @@ public:
         g.fillRect(centre - 14.0f, 55.5f, 28.0f, 3.0f);
         g.setFont(juce::FontOptions(32.0f));
         g.setColour(juce::Colour(0xffe7ebdf));
-        g.drawText("THETA", 0, 94, getWidth(), 42, juce::Justification::centred);
+        g.drawText("RHINO", 0, 94, getWidth(), 42, juce::Justification::centred);
         g.setFont(juce::FontOptions(14.0f));
         g.setColour(juce::Colour(0xffa4afb8));
         const juce::String messages[] {"Starting audio engine...", "Connecting audio devices...", "Preparing your workspace..."};

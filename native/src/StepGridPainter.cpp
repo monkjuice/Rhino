@@ -6,7 +6,7 @@
 
 // Grid rendering.
 
-namespace theta
+namespace rhino
 {
 
 // The lanes are one row per semitone, so the keys are drawn the way a piano

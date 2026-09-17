@@ -4,7 +4,7 @@
 #include <utility>
 #include <vector>
 
-namespace theta
+namespace rhino
 {
 class DeviceRack final : public juce::Component,
                          public juce::DragAndDropTarget,

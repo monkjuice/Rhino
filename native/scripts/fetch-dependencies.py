@@ -12,7 +12,7 @@ DEPENDENCIES = (
 
 for name, repository, revision in DEPENDENCIES:
     destination = ROOT / name
-    marker = destination / '.theta-revision'
+    marker = destination / '.rhino-revision'
     legacy_marker = destination / '.theda-revision'
     if legacy_marker.exists() and not marker.exists():
         legacy_marker.rename(marker)
@@ -24,7 +24,7 @@ for name, repository, revision in DEPENDENCIES:
     print(f'Fetching {repository} at {revision}', flush=True)
     request = urllib.request.Request(
         f'https://api.github.com/repos/{repository}/tarball/{revision}',
-        headers={'User-Agent': 'Theta-native-build'},
+        headers={'User-Agent': 'Rhino-native-build'},
     )
     with urllib.request.urlopen(request, timeout=120) as response:
         archive = response.read()

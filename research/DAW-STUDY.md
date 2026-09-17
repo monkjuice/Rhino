@@ -1,10 +1,10 @@
-# Theta: lessons from existing DAWs
+# Rhino: lessons from existing DAWs
 
 Research date: 2026-09-08. Scope: focused source-code and primary-documentation analysis, not a runtime benchmark or a full audit of these applications.
 
 ## Recommendation
 
-Theta should have a native C++ audio engine, an extensible internal device system, and an interface designed around composing complete songs. Evaluate Tracktion Engine before constructing our own scheduler, recording pipeline, automation system, and routing graph. Compare native JUCE and Qt Quick for the production interface using the same representative editing workload.
+Rhino should have a native C++ audio engine, an extensible internal device system, and an interface designed around composing complete songs. Evaluate Tracktion Engine before constructing our own scheduler, recording pipeline, automation system, and routing graph. Compare native JUCE and Qt Quick for the production interface using the same representative editing workload.
 
 This recommendation addresses the clarified requirements: Windows and macOS from the start; personal use; electronic composition plus recording; large projects; instruments and effects implemented as replaceable modules. Third-party VST hosting is an optional future adapter, not the definition of modularity.
 
@@ -16,12 +16,12 @@ These are development-branch snapshots, not a claim about every released version
 
 ## Open-source comparison
 
-| Project | What the evidence shows | What Theta should learn | Suitability as our starting point |
+| Project | What the evidence shows | What Rhino should learn | Suitability as our starting point |
 | --- | --- | --- | --- |
 | Ardour | Separate audio backend, session processing, processor abstraction, region/source model, disk readers, and dependency-based graph processing | Native device access, non-destructive media editing, background disk work, explicit latency and routing | Strong implementation reference; extracting its whole application engine would require integration work |
 | LMMS | Distinct instrument/effect interfaces, automatable models, staged note/instrument/effect/mix processing | Musical modules need shared parameter and lifecycle contracts | Strong electronic-composition reference; its scheduling choices should not be adopted without measuring our workload |
 | Zrythm | Current source combines C++23, Qt/QML, JUCE, DSP graph scheduling, and separate UI adapters | Declarative native UI can coexist with C++ audio; distinguish base, automated, and modulated parameter values | Useful modern UI/engine reference; current migration status makes feature completeness an explicit evaluation question |
-| Tracktion Engine | An embeddable sequenced-audio engine with session objects, device registration, graph nodes, automation, media facilities, and launcher integration | Reuse engine infrastructure while owning Theta's interaction design | Leading engine candidate; validate a pinned release against our use cases before committing |
+| Tracktion Engine | An embeddable sequenced-audio engine with session objects, device registration, graph nodes, automation, media facilities, and launcher integration | Reuse engine infrastructure while owning Rhino's interaction design | Leading engine candidate; validate a pinned release against our use cases before committing |
 
 The following sections connect these conclusions to actual files.
 
@@ -31,7 +31,7 @@ The following sections connect these conclusions to actual files.
 
 Its `Processor` abstraction includes buffer processing, channel configuration, activation, automation, and latency. The `Graph` exposes route processing and a queue of nodes ready for execution. `DiskReader` uses playback buffers, reports underruns, and requests background refill work. [Sources A2, A4, A6](SOURCE_MAP.md#a2)
 
-**For Theta:** keep immutable media separate from editable clip instances; make routing and latency explicit; budget streaming buffers; report disk underruns separately from DSP overload. A “track” must not be a UI row that also owns all decoded samples.
+**For Rhino:** keep immutable media separate from editable clip instances; make routing and latency explicit; budget streaming buffers; report disk underruns separately from DSP overload. A “track” must not be a UI row that also owns all decoded samples.
 
 Ardour's older transport-design page describes UI requests being split between real-time work and background transport/disk work. Its JACK-specific wording should not be mistaken for a complete description of current backend support; the current `AudioEngine` header is the relevant source for that boundary. [Transport design](https://ardour.org/transport_threading.html), [Source A1](SOURCE_MAP.md#a1).
 
@@ -41,7 +41,7 @@ LMMS separates instruments from effects, with note/MIDI handling and release beh
 
 The engine's rendering path has distinct note-setup, instrument, effect, and mixing stages. The inspected `renderNextPeriod` acquires `m_changeMutex`: existing C++ software is not automatically free of lock-related real-time tradeoffs. This observation is not a claim that LMMS always glitches; it identifies a design choice requiring context and measurement. [Source L5](SOURCE_MAP.md#l5)
 
-**For Theta:** define devices and automatable parameters centrally. Avoid adding a special track type and new engine conditionals for every synth. Do not confuse use of C++ with proof of predictable execution.
+**For Rhino:** define devices and automatable parameters centrally. Avoid adding a special track type and new engine conditionals for every synth. Do not confuse use of C++ with proof of predictable execution.
 
 ### Zrythm: modern interfaces do not require a browser
 
@@ -51,7 +51,7 @@ The DSP source has a graph scheduler and processor abstraction. The playhead has
 
 An `engine-process` directory exists, but the inspected application file contains disabled IPC code and unfinished setup. We must not cite the directory name as proof of a finished process-isolated engine. [Source Z9](SOURCE_MAP.md#z9)
 
-**For Theta:** include Qt Quick in the UI shortlist, publish model changes through deliberate adapters, and preserve the distinction between a knob's base position and its effective modulated value. Its code is a reference, not a reason to inherit its entire application or assume completed migration features.
+**For Rhino:** include Qt Quick in the UI shortlist, publish model changes through deliberate adapters, and preserve the distinction between a knob's base position and its effective modulated value. Its code is a reference, not a reason to inherit its entire application or assume completed migration features.
 
 ### Tracktion Engine: the strongest reuse candidate
 
@@ -61,7 +61,7 @@ At the processing level, nodes expose input dependencies, readiness, sample-rang
 
 Its audio-file cache offers readers with timeout parameters. That is a useful facility, but safe use still requires inspecting the selected backend and ensuring the callback never waits on disk. [Source T10](SOURCE_MAP.md#t10)
 
-**For Theta:** adapt our device and editor model around a proven engine where practical. Do not build a second competing session model merely to claim independence. Establish thin application services that expose editing operations and stable IDs; use the engine's existing undo and automation mechanisms when they meet requirements.
+**For Rhino:** adapt our device and editor model around a proven engine where practical. Do not build a second competing session model merely to claim independence. Establish thin application services that expose editing operations and stable IDs; use the engine's existing undo and automation mechanisms when they meet requirements.
 
 The repository documents separate engine/JUCE licensing. For this personal project it is a dependency-selection detail to record, rather than an assumption that commercial licensing is required now. No upstream code has been incorporated into the app. [Repository licensing](https://github.com/Tracktion/tracktion_engine#license).
 
@@ -71,31 +71,31 @@ The repository documents separate engine/JUCE licensing. For this personal proje
 
 Ableton's Session View supports launching clips and scenes; those actions can be recorded into Arrangement View. The views therefore participate in one musical project rather than creating independent songs. [Session View manual](https://www.ableton.com/en/manual/session-view/).
 
-**Theta design implication:** keep a single set of tracks, devices, and media. Give each track explicit arrangement-versus-launcher playback ownership. Display queued, playing, stopped, and overridden states. Recording a performance should produce editable arrangement events. Switching views must preserve selection and playback.
+**Rhino design implication:** keep a single set of tracks, devices, and media. Give each track explicit arrangement-versus-launcher playback ownership. Display queued, playing, stopped, and overridden states. Recording a performance should produce editable arrangement events. Switching views must preserve selection and playback.
 
 ### Sound design is compositional
 
 Ableton racks combine serial/parallel device chains, playable zones, and macro mappings. Bitwig documents a unified modulation system that can expose the effective parameter value while allowing control of the underlying setting. [Ableton racks](https://www.ableton.com/en/live-manual/12/instrument-drum-and-effect-racks/), [Bitwig modulation](https://www.bitwig.com/userguide/latest/the_unified_modulation_system/).
 
-**Theta design implication:** a “sound” is a preset for a device or rack, not another class of track. Support stable parameter identities and consistent mapping behavior first. Introduce simple serial chains, then parallel racks and macros. A modulator should be a reusable module rather than an LFO hard-coded into every control.
+**Rhino design implication:** a “sound” is a preset for a device or rack, not another class of track. Support stable parameter identities and consistent mapping behavior first. Introduce simple serial chains, then parallel racks and macros. A modulator should be a reusable module rather than an LFO hard-coded into every control.
 
 ### Audio has musical time as well as source time
 
 Ableton's warp controls let users change audio timing, including tempo synchronization and independent pitch behavior depending on mode. [Warping manual](https://www.ableton.com/en/live-manual/12/audio-clips-tempo-and-warping/).
 
-**Theta design implication:** store clip placement in musical time separately from sample offsets and source tempo. Distinguish “original speed,” “follow tempo,” and repitch behavior in the model and UI. Avoid promising every stretch algorithm initially; evaluate a maintained implementation using drums, vocals, sustained tones, and full mixes.
+**Rhino design implication:** store clip placement in musical time separately from sample offsets and source tempo. Distinguish “original speed,” “follow tempo,” and repitch behavior in the model and UI. Avoid promising every stretch algorithm initially; evaluate a maintained implementation using drums, vocals, sustained tones, and full mixes.
 
 ### Performance is constrained by the longest dependent path
 
 Ableton documents parallel processing of independent signal-path segments and serial processing where data dependencies require it. Its CPU meter measures proximity to the audio deadline rather than the operating system's overall CPU percentage. It also describes a responsiveness-versus-throughput tradeoff. [Ableton multicore explanation](https://help.ableton.com/hc/en-us/articles/209067649-Multi-core-performance-in-Ableton-Live-FAQ).
 
-**Theta design implication:** benchmark routing shapes, not just track totals. Test many independent tracks, deep instrument/effect chains, groups, and sidechains. Keep low-latency playing/recording responsive; use freeze and offline render for heavy arrangements. Show audio load and disk pressure meaningfully.
+**Rhino design implication:** benchmark routing shapes, not just track totals. Test many independent tracks, deep instrument/effect chains, groups, and sidechains. Keep low-latency playing/recording responsive; use freeze and offline render for heavy arrangements. Show audio load and disk pressure meaningfully.
 
 ### Audio quality needs executable evidence
 
 Ableton publishes cancellation-based checks for operations intended to preserve audio, and distinguishes those from processing that deliberately changes it. [Audio Fact Sheet](https://www.ableton.com/en/live-manual/12/audio-fact-sheet/).
 
-**Theta design implication:** write reference tests for unity-gain playback, splitting, routing, bypass, render equivalence, and latency alignment. Use impulses, sine waves, sweeps, noise, and musical fixtures. A pleasing demo is not proof of correctness; language choice does not establish sound quality.
+**Rhino design implication:** write reference tests for unity-gain playback, splitting, routing, bypass, render equivalence, and latency alignment. Use impulses, sine waves, sweeps, noise, and musical fixtures. A pleasing demo is not proof of correctness; language choice does not establish sound quality.
 
 ## Interface architecture: a measured shortlist
 

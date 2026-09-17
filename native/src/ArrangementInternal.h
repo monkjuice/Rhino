@@ -7,7 +7,7 @@
 // Waveform lives here because sync() creates them and Arrangement destroys
 // them, so both translation units need the complete type.
 
-namespace theta
+namespace rhino
 {
 
 struct Arrangement::Waveform final : juce::ChangeListener

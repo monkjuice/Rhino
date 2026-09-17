@@ -11,7 +11,7 @@
 // one slot clip at a time. The engine mixes every playing slot on a track, so
 // launching a clip explicitly stops that track's other clips at the same beat.
 
-namespace theta
+namespace rhino
 {
 namespace
 {
@@ -307,9 +307,9 @@ juce::Result Session::insertInstrumentClipInSlot(Instrument instrument, int trac
     if (slot == nullptr)
         return juce::Result::fail("Drop instruments on a session slot.");
     const auto useDrums = instrument == Instrument::Drums;
-    const auto name = useDrums ? juce::String("Theta Drums")
-        : instrument == Instrument::ThetaWave ? juce::String("Theta Wave")
-        : instrument == Instrument::ThetaForge ? juce::String("Theta Forge")
+    const auto name = useDrums ? juce::String("Rhino Drums")
+        : instrument == Instrument::RhinoWave ? juce::String("Rhino Wave")
+        : instrument == Instrument::RhinoForge ? juce::String("Rhino Forge")
         : juce::String("4OSC synth");
     edit->getUndoManager().beginNewTransaction("Add " + name + " to slot");
     bool instrumentChanged = false;
@@ -341,7 +341,7 @@ juce::Result Session::insertAudioFileInSlot(const juce::File& file, int track, i
         return juce::Result::fail("That audio file could not be found.");
     const te::AudioFile audioFile(engine, file);
     if (!audioFile.isValid())
-        return juce::Result::fail("Theta could not read " + file.getFileName() + ".");
+        return juce::Result::fail("Rhino could not read " + file.getFileName() + ".");
     edit->getUndoManager().beginNewTransaction("Add audio to slot");
     auto clip = te::insertWaveClip(*slot, file.getFileNameWithoutExtension(), file,
                                    {{tracktion::core::TimePosition(),
@@ -360,7 +360,7 @@ juce::Result Session::insertAudioFileInSlot(const juce::File& file, int track, i
 
 // Crossing between the views.
 //
-// A slot clip and a timeline clip are separate objects, in Theta as in Live, so
+// A slot clip and a timeline clip are separate objects, in Rhino as in Live, so
 // moving work between the views means copying rather than revealing. These are
 // the only two routes across, and both copy: the original stays where it was.
 

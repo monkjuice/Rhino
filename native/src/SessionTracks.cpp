@@ -4,7 +4,7 @@
 
 // Track creation and removal.
 
-namespace theta
+namespace rhino
 {
 
 int Session::trackCount() const
@@ -85,7 +85,7 @@ juce::Result Session::removeAudioTrack(int track)
 
 namespace
 {
-const juce::Identifier laneHeightID {"thetaLaneHeight"};
+const juce::Identifier laneHeightID {"rhinoLaneHeight"};
 }
 
 // Zero is "not chosen yet" rather than a height of nothing, which is what lets

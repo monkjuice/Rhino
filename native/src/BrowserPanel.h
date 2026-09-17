@@ -5,7 +5,7 @@
 #include <optional>
 #include <vector>
 
-namespace theta
+namespace rhino
 {
 // The browser is a category rail over a folder tree, the shape Live uses. The
 // rail picks a library section; the tree below shows that section's folders and

@@ -1,6 +1,6 @@
 #include "TransportDisplay.h"
 
-namespace theta
+namespace rhino
 {
 TransportDisplay::TransportDisplay()
 {

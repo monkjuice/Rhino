@@ -11,7 +11,7 @@
  #include <windows.h>
 #endif
 
-namespace theta
+namespace rhino
 {
 double playheadTime(const tracktion::engine::TransportControl& transport)
 {

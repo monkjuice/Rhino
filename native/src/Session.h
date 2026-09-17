@@ -1,15 +1,15 @@
 #pragma once
 #include "UtilityDevice.h"
 #include "DrumDevice.h"
-#include "ThetaSpaceDevice.h"
-#include "ThetaBloomDevice.h"
-#include "ThetaArpDevice.h"
-#include "ThetaWaveDevice.h"
+#include "RhinoSpaceDevice.h"
+#include "RhinoBloomDevice.h"
+#include "RhinoArpDevice.h"
+#include "RhinoWaveDevice.h"
 #include "ClipGeometry.h"
 #include <optional>
 #include <vector>
 
-namespace theta
+namespace rhino
 {
 struct PresetPattern;
 
@@ -41,20 +41,20 @@ public:
         Reverb,
         Delay,
         Compressor,
-        ThetaSpace,
-        ThetaBloom
+        RhinoSpace,
+        RhinoBloom
     };
     enum class Instrument
     {
         FourOsc,
-        ThetaWave,
-        ThetaForge,
+        RhinoWave,
+        RhinoForge,
         Drums,
         Utility
     };
     enum class MidiEffect
     {
-        ThetaArp
+        RhinoArp
     };
     // Rendered into a WAV cache before import, so these remain ordinary audio clips.
     enum class BuiltInSample
@@ -200,7 +200,7 @@ public:
     juce::Result addClipAudioEffect(AudioEffect, te::EditItemID);
     juce::Result addInstrument(Instrument, int track);
     // A drum kit is the drum instrument plus a kit selection, so these behave
-    // like any other instrument drop: the track switches to Theta Drums and
+    // like any other instrument drop: the track switches to Rhino Drums and
     // takes that kit's name.
     juce::Result addDrumKit(DrumDevice::Kit, int track);
     bool isForgeAvailable() const { return forgeDescription.has_value(); }

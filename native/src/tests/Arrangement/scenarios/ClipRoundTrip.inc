@@ -50,7 +50,7 @@
         scenario("clip round trip: the copy survives a reopen");
         {
             const auto savedRoundTrip = session.projectSnapshot();
-            juce::TemporaryFile roundTripProject(".thetaedit");
+            juce::TemporaryFile roundTripProject(".rhinoedit");
             require(session.restoreProject(savedRoundTrip, roundTripProject.getFile()).wasOk(), "Reopen the project");
             require(session.slotClip(0, freeSlot).hasClip, "The slot copy survives reopen");
             require(session.findClip(roundTripID) != nullptr, "The arrangement clip survives reopen");
@@ -59,8 +59,8 @@
         scenario("drum kits: instruments matching the drum patterns");
         {
             // Each drum pattern has an instrument beside it. Dropping one sets
-            // the track's instrument to Theta Drums and selects that kit.
-            require(view.applyBrowserDrop("theta-browser:drumkit:BreakKit", 2).wasOk(),
+            // the track's instrument to Rhino Drums and selects that kit.
+            require(view.applyBrowserDrop("rhino-browser:drumkit:BreakKit", 2).wasOk(),
                     "A drum kit can be dropped on a track");
             require(session.trackHasInstrument(2), "The kit puts an instrument on the track");
             require(session.trackName(2) == "Break Kit", "The track takes the kit's name");
@@ -77,11 +77,11 @@
             auto* kitDevice = dynamic_cast<DrumDevice*>(session.patternInstrumentForTrack(2));
             require(kitDevice != nullptr, "The track runs the drum device");
             require(kitDevice->kit() == DrumDevice::Kit::Break, "The dropped kit is the one selected");
-            require(view.applyBrowserDrop("theta-browser:drumkit:ClapKit", 2).wasOk(), "Kits can be swapped");
+            require(view.applyBrowserDrop("rhino-browser:drumkit:ClapKit", 2).wasOk(), "Kits can be swapped");
             require(kitDevice->kit() == DrumDevice::Kit::Clap, "Swapping a kit reuses the same drum device");
             require(session.trackName(2) == "Clap Kit", "The track is renamed to the new kit");
             const auto savedKit = session.projectSnapshot();
-            juce::TemporaryFile kitProject(".thetaedit");
+            juce::TemporaryFile kitProject(".rhinoedit");
             require(session.restoreProject(savedKit, kitProject.getFile()).wasOk(), "Reopen a project using a kit");
             auto* restoredKit = dynamic_cast<DrumDevice*>(session.patternInstrumentForTrack(2));
             require(restoredKit != nullptr && restoredKit->kit() == DrumDevice::Kit::Clap,

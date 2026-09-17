@@ -24,12 +24,12 @@
  #include <shlobj.h>
 #endif
 
-namespace theta
+namespace rhino
 {
-juce::File thetaLogFile()
+juce::File rhinoLogFile()
 {
     return juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-        .getChildFile("Theta").getChildFile("theta.log");
+        .getChildFile("Rhino").getChildFile("rhino.log");
 }
 
 void avoidLegacyDirectSound(te::Engine& engine)
@@ -43,7 +43,7 @@ void avoidLegacyDirectSound(te::Engine& engine)
     for (auto* type : manager.getAvailableDeviceTypes())
         if (type != nullptr && type->getTypeName() == "Windows Audio")
         {
-            juce::Logger::writeToLog("Theta: using Windows Audio instead of legacy DirectSound");
+            juce::Logger::writeToLog("Rhino: using Windows Audio instead of legacy DirectSound");
             manager.setCurrentAudioDeviceType("Windows Audio", true);
             return;
         }
@@ -55,28 +55,28 @@ void avoidLegacyDirectSound(te::Engine& engine)
 void prepareCommandLineAudio()
 {
    #if JUCE_WINDOWS
-    te::Engine testEngine {"Theta Native Tests"};
+    te::Engine testEngine {"Rhino Native Tests"};
     avoidLegacyDirectSound(testEngine);
     testEngine.getDeviceManager().deviceManager.closeAudioDevice();
    #endif
 }
 
-void registerThetaProjectFileAssociation()
+void registerRhinoProjectFileAssociation()
 {
    #if JUCE_WINDOWS
     constexpr auto registryRoot = "HKEY_CURRENT_USER\\Software\\Classes\\";
-    constexpr auto projectType = "Theta.Project";
+    constexpr auto projectType = "Rhino.Project";
     const auto executable = juce::File::getSpecialLocation(juce::File::currentExecutableFile).getFullPathName().quoted();
     const auto typeKey = juce::String(registryRoot) + projectType;
-    const auto extensionKey = juce::String(registryRoot) + ".thetaedit\\";
+    const auto extensionKey = juce::String(registryRoot) + ".rhinoedit\\";
     const auto associated = juce::WindowsRegistry::setValue(extensionKey, projectType)
-                         && juce::WindowsRegistry::setValue(typeKey + "\\", "Theta project")
+                         && juce::WindowsRegistry::setValue(typeKey + "\\", "Rhino project")
                          && juce::WindowsRegistry::setValue(typeKey + "\\DefaultIcon\\", executable + ",0")
                          && juce::WindowsRegistry::setValue(typeKey + "\\shell\\open\\command\\", executable + " \"%1\"");
     if (associated)
         SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
     else
-        juce::Logger::writeToLog("Theta: could not register .thetaedit file association");
+        juce::Logger::writeToLog("Rhino: could not register .rhinoedit file association");
    #endif
 }
 
@@ -662,7 +662,7 @@ private:
     {
         juce::PopupMenu menu;
         menu.addItem(1, "Keyboard shortcuts");
-        menu.addItem(2, "About Theta");
+        menu.addItem(2, "About Rhino");
         menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(target != nullptr ? *target : helpMenu),
             [safe = juce::Component::SafePointer<ControlWindow>(this)](int result)
             {
@@ -672,8 +672,8 @@ private:
                         "Space  Play/Pause\nCtrl+N  New project\nCtrl+O  Open project\nCtrl+S  Save project\nCtrl+Shift+S  Save as\n"
                         "Ctrl+Shift+E  Export WAV\nCtrl+Z  Undo\nCtrl+Y / Ctrl+Shift+Z  Redo\nCtrl+F  Search browser\nCtrl+A  Add a clip to the focused track\nDouble-click a lane  Add a clip there\n?  Show/hide Info View\nF12  Full screen");
                 else if (result == 2)
-                    juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon, "About Theta",
-                        "Theta\nA native desktop DAW for patterns, arrangement, and offline WAV export.");
+                    juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon, "About Rhino",
+                        "Rhino\nA native desktop DAW for patterns, arrangement, and offline WAV export.");
             });
     }
 
@@ -748,7 +748,7 @@ private:
     {
         if (message.isEmpty()) return;
         infoView.setText(message, false);
-        juce::Logger::writeToLog("Theta: " + message);
+        juce::Logger::writeToLog("Rhino: " + message);
     }
 
     void changeListenerCallback(juce::ChangeBroadcaster*) override
@@ -873,15 +873,15 @@ private:
 class Application final : public juce::JUCEApplication, private juce::Timer
 {
 public:
-    const juce::String getApplicationName() override { return "Theta"; }
+    const juce::String getApplicationName() override { return "Rhino"; }
     const juce::String getApplicationVersion() override { return "0.1.0"; }
     void initialise(const juce::String& args) override
     {
-        const auto logFile = thetaLogFile();
+        const auto logFile = rhinoLogFile();
         logFile.getParentDirectory().createDirectory();
-        logger = std::make_unique<juce::FileLogger>(logFile, "Theta debug log", 512 * 1024);
+        logger = std::make_unique<juce::FileLogger>(logFile, "Rhino debug log", 512 * 1024);
         juce::Logger::setCurrentLogger(logger.get());
-        juce::Logger::writeToLog("Theta: log started at " + logFile.getFullPathName());
+        juce::Logger::writeToLog("Rhino: log started at " + logFile.getFullPathName());
         if (args == "--self-test" || args == "--pattern-test" || args == "--arrangement-test"
             || args == "--arrangement-geometry-test")
         {
@@ -895,9 +895,9 @@ public:
         }
         startupTest = args == "--startup-test";
         if (!startupTest)
-            registerThetaProjectFileAssociation();
+            registerRhinoProjectFileAssociation();
         const auto requestedProject = juce::File(args.trim().unquoted());
-        if (requestedProject.existsAsFile() && requestedProject.hasFileExtension("thetaedit"))
+        if (requestedProject.existsAsFile() && requestedProject.hasFileExtension("rhinoedit"))
             projectToOpen = requestedProject;
         theme.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff343a40));
         theme.setColour(juce::Slider::trackColourId, juce::Colour(0xffc6d58c));
@@ -908,7 +908,7 @@ public:
         window->setContentOwned(loading.getComponent(), true);
         window->centreWithSize(560, 320);
         window->setVisible(!startupTest);
-        const auto screenshot = juce::SystemStats::getEnvironmentVariable("THETA_STARTUP_SNAPSHOT", {});
+        const auto screenshot = juce::SystemStats::getEnvironmentVariable("RHINO_STARTUP_SNAPSHOT", {});
         if (startupTest && screenshot.isNotEmpty())
         {
             if (auto stream = juce::File(screenshot).createOutputStream())
@@ -1009,7 +1009,7 @@ private:
         {
             setApplicationReturnValue(1);
             if (loading) loading->showError(error.what());
-            std::fprintf(stderr, "Theta startup failed: %s\n", error.what());
+            std::fprintf(stderr, "Rhino startup failed: %s\n", error.what());
             if (startupTest) quit();
         }
     }
@@ -1061,7 +1061,7 @@ private:
             helpMenu.onClick = [this] { if (helpRequested) helpRequested(helpMenu); };
         }
 
-        // Theta keeps its title bar in full screen, where JUCE's kiosk mode
+        // Rhino keeps its title bar in full screen, where JUCE's kiosk mode
         // would hand the whole window to the content. These three overrides put
         // the bar back: its strip is painted, its buttons are placed, and the
         // content starts below it, exactly as in a windowed session.
@@ -1173,4 +1173,4 @@ private:
     juce::File projectToOpen;
 };
 }
-START_JUCE_APPLICATION(theta::Application)
+START_JUCE_APPLICATION(rhino::Application)

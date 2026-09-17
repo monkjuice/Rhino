@@ -4,7 +4,7 @@
 
 // Device creation, inspection and parameter gestures. Serves Device View.
 
-namespace theta
+namespace rhino
 {
 namespace
 {
@@ -18,13 +18,13 @@ bool isTrackInfrastructure(const juce::String& type)
 bool isBuiltInInstrument(const juce::String& type)
 {
     return type == te::FourOscPlugin::xmlTypeName || type == DrumDevice::xmlTypeName
-        || type == ThetaWaveDevice::xmlTypeName;
+        || type == RhinoWaveDevice::xmlTypeName;
 }
 
 Session::DeviceKind deviceKind(te::Plugin& plugin)
 {
     const auto type = plugin.getPluginType();
-    if (type == ThetaArpDevice::xmlTypeName)
+    if (type == RhinoArpDevice::xmlTypeName)
         return Session::DeviceKind::MidiEffect;
     if (isBuiltInInstrument(type) || isForgePlugin(plugin))
         return Session::DeviceKind::Instrument;
@@ -36,7 +36,7 @@ bool isSelectedPatternInstrument(te::Plugin& plugin, const juce::String& selecte
     const auto type = plugin.getPluginType();
     if (type == te::FourOscPlugin::xmlTypeName) return selected.isEmpty() || selected == "synth";
     if (type == DrumDevice::xmlTypeName) return selected == "drums";
-    if (type == ThetaWaveDevice::xmlTypeName) return selected == "wave";
+    if (type == RhinoWaveDevice::xmlTypeName) return selected == "wave";
     if (isForgePlugin(plugin)) return selected == "forge";
     return true;
 }
@@ -128,7 +128,7 @@ juce::Result Session::addClipAudioEffect(AudioEffect effect, te::EditItemID clip
 
 juce::Result Session::addInstrument(Instrument instrument, int trackIndex)
 {
-    if (instrument == Instrument::ThetaForge && !forgeDescription)
+    if (instrument == Instrument::RhinoForge && !forgeDescription)
         initialiseExternalPlugins(true);
 
     const auto tracks = te::getAudioTracks(*edit);
@@ -141,9 +141,9 @@ juce::Result Session::addInstrument(Instrument instrument, int trackIndex)
     switch (instrument)
     {
         case Instrument::FourOsc: type = te::FourOscPlugin::xmlTypeName; name = "4OSC"; break;
-        case Instrument::ThetaWave: type = ThetaWaveDevice::xmlTypeName; name = "Theta Wave"; break;
-        case Instrument::ThetaForge: name = "Theta Forge"; break;
-        case Instrument::Drums:   type = DrumDevice::xmlTypeName;        name = "Theta Drums"; break;
+        case Instrument::RhinoWave: type = RhinoWaveDevice::xmlTypeName; name = "Rhino Wave"; break;
+        case Instrument::RhinoForge: name = "Rhino Forge"; break;
+        case Instrument::Drums:   type = DrumDevice::xmlTypeName;        name = "Rhino Drums"; break;
         case Instrument::Utility: type = UtilityDevice::xmlTypeName;     name = "Utility"; break;
     }
 
@@ -164,10 +164,10 @@ juce::Result Session::addInstrument(Instrument instrument, int trackIndex)
             return result;
     }
     if (trackIndex == 0 && instrument != Instrument::Utility)
-        edit->state.setProperty("thetaPatternInstrument",
+        edit->state.setProperty("rhinoPatternInstrument",
                                 instrument == Instrument::Drums ? "drums"
-                                    : instrument == Instrument::ThetaWave ? "wave"
-                                    : instrument == Instrument::ThetaForge ? "forge" : "synth",
+                                    : instrument == Instrument::RhinoWave ? "wave"
+                                    : instrument == Instrument::RhinoForge ? "forge" : "synth",
                                 &edit->getUndoManager());
     edit->getUndoManager().beginNewTransaction();
     if (changed)
@@ -188,7 +188,7 @@ juce::Result Session::addMidiEffect(MidiEffect effect, int trackIndex)
     juce::String name;
     switch (effect)
     {
-        case MidiEffect::ThetaArp: type = ThetaArpDevice::xmlTypeName; name = "Theta Arp"; break;
+        case MidiEffect::RhinoArp: type = RhinoArpDevice::xmlTypeName; name = "Rhino Arp"; break;
     }
 
     auto* track = tracks[trackIndex];
@@ -237,7 +237,7 @@ juce::Result Session::addDrumKit(DrumDevice::Kit kit, int trackIndex)
     // instrument now is.
     tracks[trackIndex]->setName(name);
     if (trackIndex == 0)
-        edit->state.setProperty("thetaPatternInstrument", "drums", &edit->getUndoManager());
+        edit->state.setProperty("rhinoPatternInstrument", "drums", &edit->getUndoManager());
     edit->getUndoManager().beginNewTransaction();
     markModified();
     if (edit->getTransport().isPlaying())
@@ -251,7 +251,7 @@ std::vector<Session::DeviceSlot> Session::deviceSlots(int track) const
     std::vector<DeviceSlot> slots;
     auto* list = pluginListForTrack(track);
     if (list == nullptr) return slots;
-    const auto selectedPatternInstrument = edit->state.getProperty("thetaPatternInstrument").toString();
+    const auto selectedPatternInstrument = edit->state.getProperty("rhinoPatternInstrument").toString();
     for (int pluginIndex = 0; pluginIndex < list->size(); ++pluginIndex)
     {
         auto* plugin = (*list)[pluginIndex];
@@ -300,18 +300,18 @@ std::vector<Session::DeviceParameter> Session::deviceParameters(int track, int s
         return parameters;
     }
 
-    if (auto* wavePlugin = dynamic_cast<ThetaWaveDevice*>(plugin))
+    if (auto* wavePlugin = dynamic_cast<RhinoWaveDevice*>(plugin))
     {
         for (int i = 0; i < 23; ++i)
-            if (auto* parameter = thetaWaveMacroParameterAt(*wavePlugin, i))
+            if (auto* parameter = rhinoWaveMacroParameterAt(*wavePlugin, i))
             {
                 const auto range = parameter->getValueRange();
                 if (!std::isfinite(range.getStart()) || !std::isfinite(range.getEnd()) || range.getLength() <= 0.0f)
                     continue;
                 const DeviceTarget target {track, slot, i};
                 const auto* runtime = findAutomationRuntime(target);
-                parameters.push_back({thetaWaveMacroName(i),
-                                      formatThetaWaveMacroValue(i, parameter->getCurrentValue(), *parameter),
+                parameters.push_back({rhinoWaveMacroName(i),
+                                      formatRhinoWaveMacroValue(i, parameter->getCurrentValue(), *parameter),
                                       parameter->getCurrentValue(),
                                       range.getStart(),
                                       range.getEnd(),

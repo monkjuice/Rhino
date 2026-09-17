@@ -55,7 +55,7 @@ Working today:
 
 ## The model, in one paragraph
 
-Launching is Tracktion's, not Theta's. `ClipSlot` holds at most one clip,
+Launching is Tracktion's, not Rhino's. `ClipSlot` holds at most one clip,
 `SceneList` keeps the slot lists aligned across tracks, and each clip exposes a
 `LaunchHandle` whose `play`/`stop` the message thread queues and the audio thread
 acts on. The engine raises a track's `playSlotClips` flag itself once a slot is
@@ -64,7 +64,7 @@ positions come from the playback context's sync point; before that context exist
 the first launch is immediate. `SceneWatcher` notifies the UI only when a slot's
 play or queue state genuinely changes, which is what the view repaints from.
 
-Two rules are Theta's rather than the engine's, and both live in `SessionSlots.cpp`:
+Two rules are Rhino's rather than the engine's, and both live in `SessionSlots.cpp`:
 a track plays at most one slot clip, so launching stops that track's others at the
 same quantised beat; and launching a scene stops tracks whose slot in that row is
 empty.
@@ -107,7 +107,7 @@ instruments on one. That rule is what makes a clip launcher coherent, because th
 instrument belongs to the track, a slot clip is only note data, and clips on a
 track are therefore interchangeable.
 
-Theta used to keep every instrument on a track at once and toggle `setEnabled`
+Rhino used to keep every instrument on a track at once and toggle `setEnabled`
 so one was audible. `switchTrackInstrument` now replaces instead: the new
 instrument goes in at the old one's index, keeping MIDI effects before it and
 audio effects after it, and the previous instrument is removed along with its
@@ -164,7 +164,7 @@ overriding the timeline, in addition to the global one, with the tooltip:
 to indicate that the current state differs from the state which is stored in the
 Arrangement."
 
-Theta only has the global version. The model is already per-track — the flag is
+Rhino only has the global version. The model is already per-track — the flag is
 `AudioTrack::playSlotClips`, and `Session::anyTrackPlayingSlots` just folds it
 across tracks. A per-track button needs a per-track getter, a per-track clear,
 and a spot in the arrangement's track header. That header is already crowded at
@@ -174,7 +174,7 @@ below 56px; the same treatment likely applies.
 ### 4. No drag between views, and no Arrangement Record
 
 Live offers three routes across: copy and paste, dragging over the view
-selectors, and recording a session performance into the arrangement. Theta has
+selectors, and recording a session performance into the arrangement. Rhino has
 the first only, as menu items. Arrangement Record is the big one and the reason
 people build arrangements from session jams: it logs launched clips onto the
 timeline at the positions they played. That needs a recording mode, a write path
@@ -191,7 +191,7 @@ to existing arrangement material underneath.
 - **Track rename and colour.** Neither view can rename a track or recolour one,
   so tracks are stuck with `Audio 1`, `Audio 2` and so on.
 - **Follow actions.** The engine supports them (`tracktion_FollowActions.h`) and
-  the node builder already reads them; nothing in Theta sets them.
+  the node builder already reads them; nothing in Rhino sets them.
 - **Recording into slots.** No arm, no input monitoring per slot.
 - **Scene rename.** `Scene::name` exists and `sceneName` falls back to
   "Scene N"; nothing writes it.

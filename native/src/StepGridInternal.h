@@ -5,7 +5,7 @@
 // StepGrid.cpp, StepGridPainter.cpp, StepGridGestures.cpp and
 // StepGridEditing.cpp. Internal: nothing outside those files should include it.
 
-namespace theta
+namespace rhino
 {
 
 inline bool isShortcutDown(const juce::ModifierKeys& mods)

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(ThetaNative VERSION 0.1.0 LANGUAGES C CXX)
+project(RhinoNative VERSION 0.1.0 LANGUAGES C CXX)
 
 # Every application source is explicitly listed below, so Visual Studio does
 # not need CMake's generated ZERO_CHECK target to discover new files.  Recent
@@ -16,16 +16,16 @@ endif()
 add_subdirectory(.deps/juce EXCLUDE_FROM_ALL)
 add_subdirectory(.deps/tracktion EXCLUDE_FROM_ALL)
 
-juce_add_gui_app(ThetaNative
-    PRODUCT_NAME "Theta"
-    BUNDLE_ID "com.theta.native"
-    ICON_BIG assets/theta_app_icon_1024.png
-    ICON_SMALL assets/theta_app_icon_256.png
+juce_add_gui_app(RhinoNative
+    PRODUCT_NAME "Rhino"
+    BUNDLE_ID "com.rhino.native"
+    ICON_BIG assets/rhino_app_icon_1024.png
+    ICON_SMALL assets/rhino_app_icon_256.png
     MICROPHONE_PERMISSION_ENABLED TRUE
     MICROPHONE_PERMISSION_TEXT "Record audio into your songs"
     NEEDS_CURL FALSE
     NEEDS_WEB_BROWSER FALSE)
-juce_add_binary_data(ThetaNativeAssets
+juce_add_binary_data(RhinoNativeAssets
     SOURCES
         assets/HandClap-01_09.flac
         assets/TR808/TR808Kick.wav
@@ -39,7 +39,7 @@ juce_add_binary_data(ThetaNativeAssets
         assets/fonts/InterSemiBold.ttf)
 # Sources are listed explicitly: a new .cpp must be added here or it will not compile.
 # A class may span several translation units (Session, Arrangement); keep those grouped.
-target_sources(ThetaNative PRIVATE
+target_sources(RhinoNative PRIVATE
     # Session
     src/Session.cpp
     src/SessionInternal.cpp
@@ -78,10 +78,10 @@ target_sources(ThetaNative PRIVATE
     # Devices
     src/UtilityDevice.cpp
     src/DrumDevice.cpp
-    src/ThetaArpDevice.cpp
-    src/ThetaBloomDevice.cpp
-    src/ThetaSpaceDevice.cpp
-    src/ThetaWaveDevice.cpp
+    src/RhinoArpDevice.cpp
+    src/RhinoBloomDevice.cpp
+    src/RhinoSpaceDevice.cpp
+    src/RhinoWaveDevice.cpp
     # App
     src/Main.cpp
     src/TransportDisplay.cpp
@@ -92,29 +92,29 @@ target_sources(ThetaNative PRIVATE
     src/tests/Pattern/WorkflowTest.cpp
     src/tests/Arrangement/ClipGeometryTest.cpp
     src/tests/Arrangement/WorkflowTest.cpp)
-target_include_directories(ThetaNative PRIVATE src)
-target_compile_definitions(ThetaNative PRIVATE
+target_include_directories(RhinoNative PRIVATE src)
+target_compile_definitions(RhinoNative PRIVATE
     JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
     JUCE_PLUGINHOST_VST3=1 JUCE_PLUGINHOST_AU=0
-    THETA_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+    RHINO_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
     JUCE_MODAL_LOOPS_PERMITTED=0
     TRACKTION_ENABLE_TIMESTRETCH_SOUNDTOUCH=1)
-target_link_libraries(ThetaNative PRIVATE
-    ThetaNativeAssets
+target_link_libraries(RhinoNative PRIVATE
+    RhinoNativeAssets
     tracktion::tracktion_engine tracktion::tracktion_graph tracktion::tracktion_core
     juce::juce_audio_utils juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags)
 if(MSVC)
-    target_compile_options(ThetaNative PRIVATE /bigobj)
+    target_compile_options(RhinoNative PRIVATE /bigobj)
 endif()
 enable_testing()
-add_test(NAME native_arrangement_geometry COMMAND ThetaNative --arrangement-geometry-test)
+add_test(NAME native_arrangement_geometry COMMAND RhinoNative --arrangement-geometry-test)
 set_tests_properties(native_arrangement_geometry PROPERTIES TIMEOUT 10)
-add_test(NAME native_device_correctness COMMAND ThetaNative --self-test)
+add_test(NAME native_device_correctness COMMAND RhinoNative --self-test)
 set_tests_properties(native_device_correctness PROPERTIES TIMEOUT 30)
-add_test(NAME native_pattern_workflow COMMAND ThetaNative --pattern-test)
+add_test(NAME native_pattern_workflow COMMAND RhinoNative --pattern-test)
 set_tests_properties(native_pattern_workflow PROPERTIES TIMEOUT 30)
-add_test(NAME native_arrangement_workflow COMMAND ThetaNative --arrangement-test)
+add_test(NAME native_arrangement_workflow COMMAND RhinoNative --arrangement-test)
 set_tests_properties(native_arrangement_workflow PROPERTIES TIMEOUT 30)
-add_test(NAME native_startup_lifecycle COMMAND ThetaNative --startup-test)
+add_test(NAME native_startup_lifecycle COMMAND RhinoNative --startup-test)
 set_tests_properties(native_startup_lifecycle PROPERTIES TIMEOUT 30)

@@ -97,7 +97,7 @@
         session.undo();
         require(te::getAudioTracks(*session.edit)[0]->getClips().size() == 1, "Undo duplicate restores one MIDI pattern clip");
 
-        const auto runNativeRenderPeerTest = juce::SystemStats::getEnvironmentVariable("THETA_NATIVE_RENDER_TEST", {}) == "1";
+        const auto runNativeRenderPeerTest = juce::SystemStats::getEnvironmentVariable("RHINO_NATIVE_RENDER_TEST", {}) == "1";
         if (runNativeRenderPeerTest)
         {
             // isShowing() requires a visible desktop peer. Keep this tiny navigation

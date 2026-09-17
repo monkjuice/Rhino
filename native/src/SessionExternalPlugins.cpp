@@ -1,14 +1,14 @@
 #include "SessionInternal.h"
 
-namespace theta
+namespace rhino
 {
 namespace
 {
 bool looksLikeForge(const juce::PluginDescription& description)
 {
-    return description.name.containsIgnoreCase("Theta Forge")
+    return description.name.containsIgnoreCase("Rhino Forge")
         || (description.name.containsIgnoreCase("Forge")
-            && description.manufacturerName.containsIgnoreCase("Theta"));
+            && description.manufacturerName.containsIgnoreCase("Rhino"));
 }
 }
 
@@ -25,7 +25,7 @@ void Session::initialiseExternalPlugins(bool retry)
             && juce::File(description.fileOrIdentifier).exists())
         {
             forgeDescription = description;
-            juce::Logger::writeToLog("Theta: using registered Forge VST3 at " + description.fileOrIdentifier);
+            juce::Logger::writeToLog("Rhino: using registered Forge VST3 at " + description.fileOrIdentifier);
             return;
         }
 
@@ -38,14 +38,14 @@ void Session::initialiseExternalPlugins(bool retry)
         return;
 
     juce::Array<juce::File> candidates;
-    const auto sourceRoot = juce::File(juce::String(THETA_SOURCE_DIR));
+    const auto sourceRoot = juce::File(juce::String(RHINO_SOURCE_DIR));
     for (const auto& configuration : {juce::String("Release"), juce::String("Debug")})
-        candidates.add(sourceRoot.getChildFile("../instruments/theta-forge/build/ThetaForge_artefacts")
-                                  .getChildFile(configuration).getChildFile("VST3").getChildFile("Theta Forge.vst3"));
+        candidates.add(sourceRoot.getChildFile("../instruments/rhino-forge/build/RhinoForge_artefacts")
+                                  .getChildFile(configuration).getChildFile("VST3").getChildFile("Rhino Forge.vst3"));
 
     const auto defaultLocations = vst3->getDefaultLocationsToSearch();
     for (int i = 0; i < defaultLocations.getNumPaths(); ++i)
-        candidates.add(defaultLocations[i].getChildFile("Theta Forge.vst3"));
+        candidates.add(defaultLocations[i].getChildFile("Rhino Forge.vst3"));
 
     for (const auto& candidate : candidates)
     {
@@ -54,13 +54,13 @@ void Session::initialiseExternalPlugins(bool retry)
 
         juce::OwnedArray<juce::PluginDescription> found;
         vst3->findAllTypesForFile(found, candidate.getFullPathName());
-        juce::Logger::writeToLog("Theta: Forge VST3 scan " + candidate.getFullPathName()
+        juce::Logger::writeToLog("Rhino: Forge VST3 scan " + candidate.getFullPathName()
                                  + " found " + juce::String(found.size()) + " type(s)"
                                  + (retry ? " on retry" : ""));
         for (auto* description : found)
             if (description != nullptr && looksLikeForge(*description))
             {
-                juce::Logger::writeToLog("Theta: discovered " + description->name + " by "
+                juce::Logger::writeToLog("Rhino: discovered " + description->name + " by "
                                          + description->manufacturerName + " (UID "
                                          + juce::String(description->uniqueId) + ")");
                 forgeDescription = *description;

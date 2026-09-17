@@ -3,7 +3,7 @@
 
 // Maps the rack UI parameter indices onto the parameters each device exposes.
 
-namespace theta
+namespace rhino
 {
 
 te::AutomatableParameter* activeParameterAt(te::Plugin& plugin, int index)
@@ -33,7 +33,7 @@ te::AutomatableParameter* fourOscMacroParameterAt(te::FourOscPlugin& synth, int 
     return nullptr;
 }
 
-te::AutomatableParameter* thetaWaveMacroParameterAt(ThetaWaveDevice& wave, int index)
+te::AutomatableParameter* rhinoWaveMacroParameterAt(RhinoWaveDevice& wave, int index)
 {
     const auto id = [index]() -> const char*
     {
@@ -82,7 +82,7 @@ juce::String fourOscMacroName(int index)
     return {};
 }
 
-juce::String thetaWaveMacroName(int index)
+juce::String rhinoWaveMacroName(int index)
 {
     switch (index)
     {
@@ -126,7 +126,7 @@ juce::String formatFourOscMacroValue(int index, float value, te::AutomatablePara
     }
 }
 
-juce::String formatThetaWaveMacroValue(int index, float value, te::AutomatableParameter& parameter)
+juce::String formatRhinoWaveMacroValue(int index, float value, te::AutomatableParameter& parameter)
 {
     switch (index)
     {
@@ -141,15 +141,15 @@ te::AutomatableParameter* exposedParameterAt(te::Plugin& plugin, int index)
 {
     if (auto* synthPlugin = dynamic_cast<te::FourOscPlugin*>(&plugin))
         return fourOscMacroParameterAt(*synthPlugin, index);
-    if (auto* wavePlugin = dynamic_cast<ThetaWaveDevice*>(&plugin))
-        return thetaWaveMacroParameterAt(*wavePlugin, index);
+    if (auto* wavePlugin = dynamic_cast<RhinoWaveDevice*>(&plugin))
+        return rhinoWaveMacroParameterAt(*wavePlugin, index);
     return activeParameterAt(plugin, index);
 }
 
 float exposedParameterMaximum(te::Plugin& plugin, int index, float maximum)
 {
     // 4OSC exposes a 60-second amp attack internally.  That makes the rack
-    // control impractical, so Theta presents the musically useful first 6 s.
+    // control impractical, so Rhino presents the musically useful first 6 s.
     if (dynamic_cast<te::FourOscPlugin*>(&plugin) != nullptr && index == 0)
         return std::min(maximum, 6.0f);
     return maximum;

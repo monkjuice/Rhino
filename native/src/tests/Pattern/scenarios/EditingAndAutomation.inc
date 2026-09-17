@@ -97,7 +97,7 @@
         {
             if (slot.type == DrumDevice::xmlTypeName) movedDrumsEnabled = slot.enabled;
             if (slot.type == te::FourOscPlugin::xmlTypeName) movedSynthDisabled = !slot.enabled;
-            if (slot.type == ThetaWaveDevice::xmlTypeName) movedWaveDisabled = !slot.enabled;
+            if (slot.type == RhinoWaveDevice::xmlTypeName) movedWaveDisabled = !slot.enabled;
         }
         require(movedDrumsEnabled && movedSynthDisabled && movedWaveDisabled,
                 "Moving duplicated drum MIDI to another track enables the drum instrument there");
@@ -261,16 +261,16 @@
         require(!session.isPatternDrums() && session.hasNote(4, 72) && session.hasNote(10, 48),
                 "Siren lead preset loads a rising and falling synth line");
         session.applyPatternPreset(Session::PatternPreset::WavePad);
-        require(session.patternInstrumentKind() == Session::Instrument::ThetaWave,
-                "Wave pad preset enables Theta Wave");
+        require(session.patternInstrumentKind() == Session::Instrument::RhinoWave,
+                "Wave pad preset enables Rhino Wave");
         require(!session.isPatternDrums() && session.hasNote(0, 48) && session.hasNote(8, 62),
                 "Wave pad preset loads sustained wavetable chords");
         session.applyPatternPreset(Session::PatternPreset::WaveBass);
-        require(session.patternInstrumentKind() == Session::Instrument::ThetaWave && session.hasNote(0, 36) && session.hasNote(12, 39),
-                "Wave bass preset keeps Theta Wave active with low notes");
+        require(session.patternInstrumentKind() == Session::Instrument::RhinoWave && session.hasNote(0, 36) && session.hasNote(12, 39),
+                "Wave bass preset keeps Rhino Wave active with low notes");
         session.applyPatternPreset(Session::PatternPreset::WavePluck);
-        require(session.patternInstrumentKind() == Session::Instrument::ThetaWave && session.hasNote(0, 60) && session.hasNote(12, 74),
-                "Wave pluck preset keeps Theta Wave active with bright notes");
+        require(session.patternInstrumentKind() == Session::Instrument::RhinoWave && session.hasNote(0, 60) && session.hasNote(12, 74),
+                "Wave pluck preset keeps Rhino Wave active with bright notes");
 
         // Swapping a track's instrument is a device change, not a clip change:
         // the pattern stays put and the instrument under it is replaced. This
@@ -293,10 +293,10 @@
                     "The instrument it replaced is gone rather than left dormant");
             require(session.pattern().getSequence().getNumNotes() == notesBeforeSwap,
                     "Switching instrument leaves the pattern notes untouched");
-            require(session.addInstrument(Session::Instrument::ThetaWave, 0).wasOk(),
+            require(session.addInstrument(Session::Instrument::RhinoWave, 0).wasOk(),
                     "The track accepts the previous instrument back");
-            require(session.patternInstrumentKind() == Session::Instrument::ThetaWave,
-                    "Switching back restores Theta Wave");
+            require(session.patternInstrumentKind() == Session::Instrument::RhinoWave,
+                    "Switching back restores Rhino Wave");
             require(session.pattern().getSequence().getNumNotes() == notesBeforeSwap,
                     "Notes survive switching back as well");
         }

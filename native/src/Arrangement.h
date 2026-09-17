@@ -4,7 +4,7 @@
 #include <map>
 #include <memory>
 
-namespace theta
+namespace rhino
 {
 class Arrangement final : public juce::Component,
                           public juce::FileDragAndDropTarget,

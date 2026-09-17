@@ -4,7 +4,7 @@
 #include <array>
 #include <cmath>
 
-namespace theta
+namespace rhino
 {
 enum class GridMode { off, adaptive, fixed };
 enum class AdaptiveGridWidth { widest, wide, medium, narrow, narrowest };

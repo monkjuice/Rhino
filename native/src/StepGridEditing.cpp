@@ -6,7 +6,7 @@
 
 // Selection commands, clipboard, and the subdivision and velocity tools.
 
-namespace theta
+namespace rhino
 {
 
 void StepGrid::toggleSelection(int index)

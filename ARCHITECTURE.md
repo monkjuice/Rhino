@@ -1,4 +1,4 @@
-# Theta: production architecture proposal
+# Rhino: production architecture proposal
 
 Status: research-backed direction, 2026-09-08. A small [native engine evaluation](native/README.md) has started; production frontend selection and macOS validation remain pending. See [the DAW source study](research/DAW-STUDY.md), [device contract](research/DEVICE-SYSTEM.md), [interaction specification](research/UX-SPEC.md), and [staged plan](research/ROADMAP.md).
 
@@ -6,7 +6,7 @@ Status: research-backed direction, 2026-09-08. A small [native engine evaluation
 
 Build a desktop DAW for complete songs, with electronic composition first and audio recording alongside it. Large projects and predictable playback matter.
 
-Confirmed: prioritize Windows development now while keeping macOS in the architecture; personal use; internal modular instruments/effects and VST3 hosting are required. Forge is developed as an independent VST3 and loaded through Tracktion rather than duplicated as a built-in Theta device. Both arrangement and live clip workflows matter, starting with electronic music. Target hardware, project sizes, and the initial sound palette remain to be established.
+Confirmed: prioritize Windows development now while keeping macOS in the architecture; personal use; internal modular instruments/effects and VST3 hosting are required. Forge is developed as an independent VST3 and loaded through Tracktion rather than duplicated as a built-in Rhino device. Both arrangement and live clip workflows matter, starting with electronic music. Target hardware, project sizes, and the initial sound palette remain to be established.
 
 UI performance, consistent frame pacing/FPS, and immediate pointer response are confirmed priorities alongside visual quality. These are frontend acceptance criteria under real audio and editing load, not optional polish.
 
@@ -44,7 +44,7 @@ Built-in device processing is native and uses a registry with stable device/para
 
 ## Interface decision
 
-| Candidate | Advantages for Theta | Costs and questions |
+| Candidate | Advantages for Rhino | Costs and questions |
 | --- | --- | --- |
 | Native JUCE UI | Direct native/plugin-window integration; control over painting, allocations, and event handling; one primary language | Reimplement current controls and interactions; custom timeline rendering and accessibility still require work |
 | Qt Quick/QML with C++ rendering | Declarative native layout and custom scene-graph rendering; demonstrated by current Zrythm source | Qt/JUCE event-loop integration, deployment, thread ownership, and dense editor behavior need testing |

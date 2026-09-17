@@ -4,7 +4,7 @@
 
 // Pattern presets and instrument selection.
 
-namespace theta
+namespace rhino
 {
 
 void Session::clearPattern()
@@ -22,11 +22,11 @@ void Session::applyPatternPreset(PatternPreset preset)
 {
     const auto data = presetPattern(preset);
     edit->getUndoManager().beginNewTransaction("Load " + data.name);
-    if (data.useThetaWave)
+    if (data.useRhinoWave)
     {
         bool instrumentChanged = false;
-        juce::ignoreUnused(switchTrackInstrument(*edit, *te::getAudioTracks(*edit)[0], Instrument::ThetaWave, instrumentChanged));
-        edit->state.setProperty("thetaPatternInstrument", "wave", &edit->getUndoManager());
+        juce::ignoreUnused(switchTrackInstrument(*edit, *te::getAudioTracks(*edit)[0], Instrument::RhinoWave, instrumentChanged));
+        edit->state.setProperty("rhinoPatternInstrument", "wave", &edit->getUndoManager());
     }
     else
     {
@@ -35,9 +35,9 @@ void Session::applyPatternPreset(PatternPreset preset)
     if (data.synthPatch != SynthPatch::Default)
         if (auto* fourOsc = findFourOsc(*te::getAudioTracks(*edit)[0]))
             applySynthPatch(data.synthPatch, *fourOsc, edit->getUndoManager());
-    if (data.useThetaWave)
-        if (auto* wave = findThetaWave(*te::getAudioTracks(*edit)[0]))
-            applyThetaWavePatch(preset, *wave);
+    if (data.useRhinoWave)
+        if (auto* wave = findRhinoWave(*te::getAudioTracks(*edit)[0]))
+            applyRhinoWavePatch(preset, *wave);
     fillMidiClip(pattern(), data, edit->getUndoManager());
     markModified();
     edit->getUndoManager().beginNewTransaction();
@@ -126,7 +126,7 @@ void Session::setPatternInstrument(bool useDrums)
     bool changed = false;
     juce::ignoreUnused(switchTrackInstrument(*edit, *tracks[0],
                                              useDrums ? Instrument::Drums : Instrument::FourOsc, changed));
-    edit->state.setProperty("thetaPatternInstrument", useDrums ? "drums" : "synth", &edit->getUndoManager());
+    edit->state.setProperty("rhinoPatternInstrument", useDrums ? "drums" : "synth", &edit->getUndoManager());
 }
 
 // The instrument belongs to the track the edited pattern sits on, so this is a
@@ -157,8 +157,8 @@ Session::Instrument Session::patternInstrumentKind() const
     {
         const auto type = plugin->getPluginType();
         if (type == DrumDevice::xmlTypeName) return Instrument::Drums;
-        if (type == ThetaWaveDevice::xmlTypeName) return Instrument::ThetaWave;
-        if (isForgePlugin(*plugin)) return Instrument::ThetaForge;
+        if (type == RhinoWaveDevice::xmlTypeName) return Instrument::RhinoWave;
+        if (isForgePlugin(*plugin)) return Instrument::RhinoForge;
     }
     return Instrument::FourOsc;
 }
@@ -179,13 +179,13 @@ juce::Result Session::preparePresetTrack(int trackIndex, const PresetPattern& da
     auto* track = tracks[trackIndex];
     if (trackIndex == 0)
     {
-        if (data.useThetaWave)
+        if (data.useRhinoWave)
         {
             bool instrumentChanged = false;
-            const auto result = switchTrackInstrument(*edit, *track, Instrument::ThetaWave, instrumentChanged);
+            const auto result = switchTrackInstrument(*edit, *track, Instrument::RhinoWave, instrumentChanged);
             if (result.failed())
                 return result;
-            edit->state.setProperty("thetaPatternInstrument", "wave", &edit->getUndoManager());
+            edit->state.setProperty("rhinoPatternInstrument", "wave", &edit->getUndoManager());
         }
         else
         {
@@ -197,7 +197,7 @@ juce::Result Session::preparePresetTrack(int trackIndex, const PresetPattern& da
         bool instrumentChanged = false;
         const auto result = switchTrackInstrument(*edit, *track,
                                                   data.useDrums ? Instrument::Drums
-                                                      : data.useThetaWave ? Instrument::ThetaWave
+                                                      : data.useRhinoWave ? Instrument::RhinoWave
                                                       : Instrument::FourOsc,
                                                   instrumentChanged);
         if (result.failed())
@@ -206,9 +206,9 @@ juce::Result Session::preparePresetTrack(int trackIndex, const PresetPattern& da
     if (data.synthPatch != SynthPatch::Default)
         if (auto* fourOsc = findFourOsc(*track))
             applySynthPatch(data.synthPatch, *fourOsc, edit->getUndoManager());
-    if (data.useThetaWave)
-        if (auto* wave = findThetaWave(*track))
-            applyThetaWavePatch(preset, *wave);
+    if (data.useRhinoWave)
+        if (auto* wave = findRhinoWave(*track))
+            applyRhinoWavePatch(preset, *wave);
     return juce::Result::ok();
 }
 

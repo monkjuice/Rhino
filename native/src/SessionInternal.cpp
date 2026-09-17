@@ -1,12 +1,12 @@
 #include "SessionInternal.h"
 #include <algorithm>
 
-namespace theta
+namespace rhino
 {
 
-const juce::Identifier starterPlaceholderID {"thetaStarterPlaceholder"};
-const juce::Identifier editorStepsID {"thetaEditorSteps"};
-const juce::Identifier trackAutomationID {"thetaTrackAutomation"};
+const juce::Identifier starterPlaceholderID {"rhinoStarterPlaceholder"};
+const juce::Identifier editorStepsID {"rhinoEditorSteps"};
+const juce::Identifier trackAutomationID {"rhinoTrackAutomation"};
 const juce::Identifier automationPointID {"point"};
 const juce::Identifier automationSlotID {"slot"};
 const juce::Identifier automationParameterID {"parameter"};
@@ -51,8 +51,8 @@ juce::Colour instrumentColour(Session::Instrument instrument)
     switch (instrument)
     {
         case Session::Instrument::FourOsc:    return juce::Colour(0xff3d6f8b);
-        case Session::Instrument::ThetaWave:  return juce::Colour(0xff574ec8);
-        case Session::Instrument::ThetaForge: return juce::Colour(0xff3a9aa9);
+        case Session::Instrument::RhinoWave:  return juce::Colour(0xff574ec8);
+        case Session::Instrument::RhinoForge: return juce::Colour(0xff3a9aa9);
         case Session::Instrument::Drums:      return juce::Colour(0xff738044);
         case Session::Instrument::Utility:    return juce::Colour(0xff56636c);
     }
@@ -83,8 +83,8 @@ bool effectTypeAndName(Session::AudioEffect effect, const char*& type, juce::Str
         case Session::AudioEffect::Reverb:     type = te::ReverbPlugin::xmlTypeName;     name = "Reverb"; break;
         case Session::AudioEffect::Delay:      type = te::DelayPlugin::xmlTypeName;      name = "Delay"; break;
         case Session::AudioEffect::Compressor: type = te::CompressorPlugin::xmlTypeName; name = "Compressor"; break;
-        case Session::AudioEffect::ThetaSpace: type = ThetaSpaceDevice::xmlTypeName;     name = "Theta Space"; break;
-        case Session::AudioEffect::ThetaBloom: type = ThetaBloomDevice::xmlTypeName;     name = "Theta Bloom"; break;
+        case Session::AudioEffect::RhinoSpace: type = RhinoSpaceDevice::xmlTypeName;     name = "Rhino Space"; break;
+        case Session::AudioEffect::RhinoBloom: type = RhinoBloomDevice::xmlTypeName;     name = "Rhino Bloom"; break;
     }
     return type != nullptr;
 }
@@ -157,9 +157,9 @@ te::FourOscPlugin* findFourOsc(te::AudioTrack& track)
     return dynamic_cast<te::FourOscPlugin*>(findPlugin(track, te::FourOscPlugin::xmlTypeName));
 }
 
-ThetaWaveDevice* findThetaWave(te::AudioTrack& track)
+RhinoWaveDevice* findRhinoWave(te::AudioTrack& track)
 {
-    return dynamic_cast<ThetaWaveDevice*>(findPlugin(track, ThetaWaveDevice::xmlTypeName));
+    return dynamic_cast<RhinoWaveDevice*>(findPlugin(track, RhinoWaveDevice::xmlTypeName));
 }
 
 DrumDevice* findDrumDevice(te::AudioTrack& track)
@@ -175,19 +175,19 @@ Session::Instrument activeTrackInstrument(te::AudioTrack& track)
     if (auto* drums = findDrumDevice(track))
         if (drums->isEnabled())
             return Session::Instrument::Drums;
-    if (auto* wave = findThetaWave(track))
+    if (auto* wave = findRhinoWave(track))
         if (wave->isEnabled())
-            return Session::Instrument::ThetaWave;
+            return Session::Instrument::RhinoWave;
     for (auto* plugin : track.pluginList)
         if (plugin != nullptr && plugin->isEnabled() && isForgePlugin(*plugin))
-            return Session::Instrument::ThetaForge;
+            return Session::Instrument::RhinoForge;
     return Session::Instrument::FourOsc;
 }
 
 bool isForgePlugin(const te::Plugin& plugin)
 {
     if (auto* processor = plugin.getWrappedAudioProcessor())
-        return processor->getName().containsIgnoreCase("Theta Forge")
+        return processor->getName().containsIgnoreCase("Rhino Forge")
             || processor->getName().equalsIgnoreCase("Forge");
     return false;
 }
@@ -231,7 +231,7 @@ bool isInstrumentPlugin(te::Plugin& plugin)
 {
     const auto type = plugin.getPluginType();
     return type == te::FourOscPlugin::xmlTypeName || type == DrumDevice::xmlTypeName
-        || type == ThetaWaveDevice::xmlTypeName || isForgePlugin(plugin);
+        || type == RhinoWaveDevice::xmlTypeName || isForgePlugin(plugin);
 }
 
 te::Plugin* trackInstrument(te::AudioTrack& track)
@@ -295,7 +295,7 @@ juce::Result switchTrackInstrument(te::Edit& edit, te::AudioTrack& track, Sessio
     while (instrumentInsertIndex < track.pluginList.size())
     {
         auto* plugin = track.pluginList[instrumentInsertIndex];
-        if (plugin == nullptr || plugin->getPluginType() != ThetaArpDevice::xmlTypeName)
+        if (plugin == nullptr || plugin->getPluginType() != RhinoArpDevice::xmlTypeName)
             break;
         ++instrumentInsertIndex;
     }
@@ -311,9 +311,9 @@ juce::Result switchTrackInstrument(te::Edit& edit, te::AudioTrack& track, Sessio
         switch (instrument)
         {
             case Session::Instrument::FourOsc:    return type == te::FourOscPlugin::xmlTypeName;
-            case Session::Instrument::ThetaWave:  return type == ThetaWaveDevice::xmlTypeName;
+            case Session::Instrument::RhinoWave:  return type == RhinoWaveDevice::xmlTypeName;
             case Session::Instrument::Drums:      return type == DrumDevice::xmlTypeName;
-            case Session::Instrument::ThetaForge: return isForgePlugin(plugin);
+            case Session::Instrument::RhinoForge: return isForgePlugin(plugin);
             case Session::Instrument::Utility:    break;
         }
         return false;
@@ -333,13 +333,13 @@ juce::Result switchTrackInstrument(te::Edit& edit, te::AudioTrack& track, Sessio
         // before it and audio effects after it keep their order.
         if (auto* current = existingInstruments.getFirst())
             instrumentInsertIndex = track.pluginList.indexOf(current);
-        if (instrument == Session::Instrument::ThetaForge)
+        if (instrument == Session::Instrument::RhinoForge)
         {
             if (forgeDescription == nullptr)
-                return juce::Result::fail("Theta Forge.vst3 was not found. Build or install the Forge VST3 first.");
+                return juce::Result::fail("Rhino Forge.vst3 was not found. Build or install the Forge VST3 first.");
             auto created = edit.getPluginCache().createNewPlugin(te::ExternalPlugin::xmlTypeName, *forgeDescription);
             if (created == nullptr)
-                return juce::Result::fail("Theta Forge.vst3 could not be loaded.");
+                return juce::Result::fail("Rhino Forge.vst3 could not be loaded.");
             selected = created.get();
             track.pluginList.insertPlugin(created, juce::jlimit(0, track.pluginList.size(), instrumentInsertIndex), nullptr);
             changed = true;
@@ -347,7 +347,7 @@ juce::Result switchTrackInstrument(te::Edit& edit, te::AudioTrack& track, Sessio
         else
         {
             const auto type = instrument == Session::Instrument::Drums ? juce::String(DrumDevice::xmlTypeName)
-                : instrument == Session::Instrument::ThetaWave ? juce::String(ThetaWaveDevice::xmlTypeName)
+                : instrument == Session::Instrument::RhinoWave ? juce::String(RhinoWaveDevice::xmlTypeName)
                 : juce::String(te::FourOscPlugin::xmlTypeName);
             auto created = edit.getPluginCache().createNewPlugin(type, {});
             if (created == nullptr)

@@ -94,7 +94,7 @@
 
         {
             Session waveSession;
-            require(waveSession.addInstrument(Session::Instrument::ThetaWave, 0).wasOk(), "Theta Wave can be activated on the pattern track");
+            require(waveSession.addInstrument(Session::Instrument::RhinoWave, 0).wasOk(), "Rhino Wave can be activated on the pattern track");
             waveSession.setNote(0, 48, true);
             waveSession.setNote(4, 55, true);
             juce::TemporaryFile waveOutput(".wav");
@@ -105,30 +105,30 @@
             waveParameters.bitDepth = 24;
             waveParameters.time = waveSession.pattern().getPosition().time;
             {
-                te::Renderer::RenderTask task("Theta Wave render test", waveParameters, nullptr, nullptr);
+                te::Renderer::RenderTask task("Rhino Wave render test", waveParameters, nullptr, nullptr);
                 const auto deadline = juce::Time::getMillisecondCounterHiRes() + 15000.0;
                 while (task.runJob() != juce::ThreadPoolJob::jobHasFinished)
-                    require(juce::Time::getMillisecondCounterHiRes() < deadline, "Theta Wave render timed out");
+                    require(juce::Time::getMillisecondCounterHiRes() < deadline, "Rhino Wave render timed out");
                 require(task.errorMessage.isEmpty(), task.errorMessage.toRawUTF8());
             }
             std::unique_ptr<juce::AudioFormatReader> waveReader(formats.createReaderFor(waveOutput.getFile()));
-            require(waveReader != nullptr, "Read Theta Wave render");
+            require(waveReader != nullptr, "Read Rhino Wave render");
             juce::AudioBuffer<float> waveAudio(static_cast<int>(waveReader->numChannels), static_cast<int>(waveReader->lengthInSamples));
-            require(waveReader->read(&waveAudio, 0, waveAudio.getNumSamples(), 0, true, true), "Read Theta Wave samples");
+            require(waveReader->read(&waveAudio, 0, waveAudio.getNumSamples(), 0, true, true), "Read Rhino Wave samples");
             float wavePeak = 0.0f;
             for (int c = 0; c < waveAudio.getNumChannels(); ++c)
                 for (int frame = 0; frame < waveAudio.getNumSamples(); ++frame)
                 {
                     const auto sample = waveAudio.getSample(c, frame);
-                    require(std::isfinite(sample), "Theta Wave render must stay finite");
+                    require(std::isfinite(sample), "Rhino Wave render must stay finite");
                     wavePeak = std::max(wavePeak, std::abs(sample));
                 }
-            require(wavePeak > 0.0001f && wavePeak < 1.0f, "Theta Wave output must be audible and below clipping");
+            require(wavePeak > 0.0001f && wavePeak < 1.0f, "Rhino Wave output must be audible and below clipping");
         }
         {
             Session arpSession;
             arpSession.applyPatternPreset(Session::PatternPreset::ArpRun);
-            require(arpSession.addMidiEffect(Session::MidiEffect::ThetaArp, 0).wasOk(), "Theta Arp can be inserted on the pattern synth");
+            require(arpSession.addMidiEffect(Session::MidiEffect::RhinoArp, 0).wasOk(), "Rhino Arp can be inserted on the pattern synth");
             juce::TemporaryFile arpOutput(".wav");
             te::Renderer::Parameters arpParameters(*arpSession.edit);
             arpParameters.destFile = arpOutput.getFile();
@@ -137,42 +137,42 @@
             arpParameters.bitDepth = 24;
             arpParameters.time = arpSession.pattern().getPosition().time;
             {
-                te::Renderer::RenderTask task("Theta Arp render test", arpParameters, nullptr, nullptr);
+                te::Renderer::RenderTask task("Rhino Arp render test", arpParameters, nullptr, nullptr);
                 const auto deadline = juce::Time::getMillisecondCounterHiRes() + 15000.0;
                 while (task.runJob() != juce::ThreadPoolJob::jobHasFinished)
-                    require(juce::Time::getMillisecondCounterHiRes() < deadline, "Theta Arp render timed out");
+                    require(juce::Time::getMillisecondCounterHiRes() < deadline, "Rhino Arp render timed out");
                 require(task.errorMessage.isEmpty(), task.errorMessage.toRawUTF8());
             }
             std::unique_ptr<juce::AudioFormatReader> arpReader(formats.createReaderFor(arpOutput.getFile()));
-            require(arpReader != nullptr, "Read Theta Arp render");
+            require(arpReader != nullptr, "Read Rhino Arp render");
             juce::AudioBuffer<float> arpAudio(static_cast<int>(arpReader->numChannels), static_cast<int>(arpReader->lengthInSamples));
-            require(arpReader->read(&arpAudio, 0, arpAudio.getNumSamples(), 0, true, true), "Read Theta Arp samples");
+            require(arpReader->read(&arpAudio, 0, arpAudio.getNumSamples(), 0, true, true), "Read Rhino Arp samples");
             float arpPeak = 0.0f;
             for (int c = 0; c < arpAudio.getNumChannels(); ++c)
                 for (int frame = 0; frame < arpAudio.getNumSamples(); ++frame)
                 {
                     const auto sample = arpAudio.getSample(c, frame);
-                    require(std::isfinite(sample), "Theta Arp render must stay finite");
+                    require(std::isfinite(sample), "Rhino Arp render must stay finite");
                     arpPeak = std::max(arpPeak, std::abs(sample));
                 }
-            require(arpPeak > 0.0001f && arpPeak < 1.0f, "Theta Arp render must be audible and below clipping");
+            require(arpPeak > 0.0001f && arpPeak < 1.0f, "Rhino Arp render must be audible and below clipping");
             arpSession.stop();
             arpSession.panicReset(false);
         }
 
         {
             Session fxSession;
-            require(fxSession.importAudio(output.getFile()).wasOk(), "Theta Space test imports rendered audio");
-            require(fxSession.addAudioEffect(Session::AudioEffect::ThetaSpace, 1).wasOk(), "Theta Space can be inserted for render stability");
+            require(fxSession.importAudio(output.getFile()).wasOk(), "Rhino Space test imports rendered audio");
+            require(fxSession.addAudioEffect(Session::AudioEffect::RhinoSpace, 1).wasOk(), "Rhino Space can be inserted for render stability");
             auto* fxTrack = te::getAudioTracks(*fxSession.edit)[1];
             const auto fxDevices = fxSession.deviceSlots(1);
-            const auto thetaSlot = fxDevices.empty() ? -1 : fxDevices.back().pluginIndex;
-            auto* thetaSpace = dynamic_cast<ThetaSpaceDevice*>(fxTrack->pluginList[thetaSlot]);
-            require(thetaSpace != nullptr, "Inserted effect is Theta Space");
-            require(fxSession.setDeviceParameter(1, thetaSlot, 0, 1.0f).wasOk(), "Theta Space test sets wet mix");
-            require(fxSession.setDeviceParameter(1, thetaSlot, 2, 0.9f).wasOk(), "Theta Space test sets feedback");
-            auto params = thetaSpace->getAutomatableParameters();
-            require(params.size() >= 2 && params[1] != nullptr, "Theta Space size parameter is automatable");
+            const auto rhinoSlot = fxDevices.empty() ? -1 : fxDevices.back().pluginIndex;
+            auto* rhinoSpace = dynamic_cast<RhinoSpaceDevice*>(fxTrack->pluginList[rhinoSlot]);
+            require(rhinoSpace != nullptr, "Inserted effect is Rhino Space");
+            require(fxSession.setDeviceParameter(1, rhinoSlot, 0, 1.0f).wasOk(), "Rhino Space test sets wet mix");
+            require(fxSession.setDeviceParameter(1, rhinoSlot, 2, 0.9f).wasOk(), "Rhino Space test sets feedback");
+            auto params = rhinoSpace->getAutomatableParameters();
+            require(params.size() >= 2 && params[1] != nullptr, "Rhino Space size parameter is automatable");
             auto& sizeCurve = params[1]->getCurve();
             sizeCurve.addPoint(tracktion::core::TimePosition::fromSeconds(0.0), 0.0f, 0.0f, nullptr);
             sizeCurve.addPoint(tracktion::core::TimePosition::fromSeconds(1.0), 1.0f, 0.0f, nullptr);
@@ -185,25 +185,25 @@
             fxParameters.bitDepth = 24;
             fxParameters.time = fxTrack->getClips()[0]->getPosition().time;
             {
-                te::Renderer::RenderTask task("Theta Space size automation test", fxParameters, nullptr, nullptr);
+                te::Renderer::RenderTask task("Rhino Space size automation test", fxParameters, nullptr, nullptr);
                 const auto deadline = juce::Time::getMillisecondCounterHiRes() + 15000.0;
                 while (task.runJob() != juce::ThreadPoolJob::jobHasFinished)
-                    require(juce::Time::getMillisecondCounterHiRes() < deadline, "Theta Space render timed out");
+                    require(juce::Time::getMillisecondCounterHiRes() < deadline, "Rhino Space render timed out");
                 require(task.errorMessage.isEmpty(), task.errorMessage.toRawUTF8());
             }
             std::unique_ptr<juce::AudioFormatReader> fxReader(formats.createReaderFor(fxOutput.getFile()));
-            require(fxReader != nullptr, "Read Theta Space render");
+            require(fxReader != nullptr, "Read Rhino Space render");
             juce::AudioBuffer<float> fxAudio(static_cast<int>(fxReader->numChannels), static_cast<int>(fxReader->lengthInSamples));
-            require(fxReader->read(&fxAudio, 0, fxAudio.getNumSamples(), 0, true, true), "Read Theta Space samples");
+            require(fxReader->read(&fxAudio, 0, fxAudio.getNumSamples(), 0, true, true), "Read Rhino Space samples");
             float fxPeak = 0.0f;
             for (int c = 0; c < fxAudio.getNumChannels(); ++c)
                 for (int frame = 0; frame < fxAudio.getNumSamples(); ++frame)
                 {
                     const auto sample = fxAudio.getSample(c, frame);
-                    require(std::isfinite(sample), "Theta Space size automation must stay finite");
+                    require(std::isfinite(sample), "Rhino Space size automation must stay finite");
                     fxPeak = std::max(fxPeak, std::abs(sample));
                 }
-            require(fxPeak > 0.0001f && fxPeak <= 1.0f, "Theta Space size automation remains bounded and audible");
+            require(fxPeak > 0.0001f && fxPeak <= 1.0f, "Rhino Space size automation remains bounded and audible");
             fxSession.stop();
             fxSession.panicReset(false);
         }

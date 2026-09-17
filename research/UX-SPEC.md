@@ -1,4 +1,4 @@
-# Theta interaction and visual direction
+# Rhino interaction and visual direction
 
 Status: proposed design requirements informed by the [DAW study](DAW-STUDY.md). These are not implemented product guarantees.
 
@@ -20,7 +20,7 @@ Use three views over one project. Their initial names are descriptive working la
 | Arrange | Shape sections, edit audio/MIDI, record and draw automation | Same tracks, sounds, media, selection, and command vocabulary |
 | Mix | Balance tracks, inspect routing, sends, effects, and levels | Same device instances and parameter state |
 
-Ableton documents performance flowing from its launcher into its arrangement; Bitwig documents context-aware browsing and unified modulation. Theta should learn those relationships rather than merely reproducing a toolbar layout. [Ableton Session View](https://www.ableton.com/en/manual/session-view/), [Bitwig browsers](https://www.bitwig.com/userguide/latest/browsers/), [Bitwig modulation](https://www.bitwig.com/userguide/latest/the_unified_modulation_system/).
+Ableton documents performance flowing from its launcher into its arrangement; Bitwig documents context-aware browsing and unified modulation. Rhino should learn those relationships rather than merely reproducing a toolbar layout. [Ableton Session View](https://www.ableton.com/en/manual/session-view/), [Bitwig browsers](https://www.bitwig.com/userguide/latest/browsers/), [Bitwig modulation](https://www.bitwig.com/userguide/latest/the_unified_modulation_system/).
 
 Proposed layout:
 
@@ -50,7 +50,7 @@ The overview and panel splitters are functional navigation controls. Remember pa
 - Animation communicates transport, pending launches, modulation, or transitions. Do not animate every panel or let decoration compete with waveforms and notes.
 - Empty areas explain the next useful action briefly. Remove promotional copy from space needed for editing.
 
-These are Theta design choices. Their final appearance should be tested with realistic sessions and both dark/light viewing conditions, not only a sparse demo screenshot.
+These are Rhino design choices. Their final appearance should be tested with realistic sessions and both dark/light viewing conditions, not only a sparse demo screenshot.
 
 ## Editing behavior
 

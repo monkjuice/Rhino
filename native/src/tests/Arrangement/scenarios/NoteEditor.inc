@@ -349,8 +349,8 @@
         require(selectionGrid.cellHit(stripPoint) < 0,
                 "The piano strip never draws a note into the grid");
         const auto audio2DevicesAfterSound = session.deviceSlots(2).size();
-        require(view.applyBrowserDrop("theta-browser:effect:ThetaBloom", 2).wasOk(), "Theta Bloom browser row creates an audio effect");
-        require(session.deviceSlots(2).size() == audio2DevicesAfterSound + 1, "Dropped Theta Bloom appears on the target track");
+        require(view.applyBrowserDrop("rhino-browser:effect:RhinoBloom", 2).wasOk(), "Rhino Bloom browser row creates an audio effect");
+        require(session.deviceSlots(2).size() == audio2DevicesAfterSound + 1, "Dropped Rhino Bloom appears on the target track");
         session.undo();
         const auto instrumentsOnAudio2 = [&session]
         {
@@ -364,7 +364,7 @@
                 }
             return std::make_pair(count, type);
         };
-        require(view.applyBrowserDrop("theta-browser:instrument:Drums", 2).wasOk(), "Instrument browser rows can be dropped onto non-first tracks");
+        require(view.applyBrowserDrop("rhino-browser:instrument:Drums", 2).wasOk(), "Instrument browser rows can be dropped onto non-first tracks");
         {
             const auto [count, type] = instrumentsOnAudio2();
             require(count == 1, "A track holds one instrument, so dropping another replaces it rather than stacking");
@@ -374,7 +374,7 @@
                 "Replacing an instrument leaves the rest of the device chain alone");
         session.undo();
         const auto instrumentClipCount = te::getAudioTracks(*session.edit)[2]->getClips().size();
-        view.itemDropped({"theta-browser:instrument:FourOsc", nullptr,
+        view.itemDropped({"rhino-browser:instrument:FourOsc", nullptr,
                           {static_cast<int>(view.xFor(1.0)), static_cast<int>(view.lane(2).getCentreY())}});
         require(te::getAudioTracks(*session.edit)[2]->getClips().size() == instrumentClipCount,
                 "Dragging an instrument changes the track rather than creating a clip");

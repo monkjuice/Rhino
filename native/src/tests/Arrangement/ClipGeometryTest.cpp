@@ -6,7 +6,7 @@
 #include <cstdio>
 #include <stdexcept>
 
-namespace theta
+namespace rhino
 {
 int runArrangementGeometryTest()
 {

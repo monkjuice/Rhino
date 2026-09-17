@@ -2,7 +2,7 @@
 #include <algorithm>
 #include <set>
 
-namespace theta
+namespace rhino
 {
 namespace
 {
@@ -14,14 +14,14 @@ void Session::setCommandLineTestMode(bool enabled)
     commandLineTestMode = enabled;
 }
 
-Session::Session() : engine(commandLineTestMode ? "Theta Native Tests" : "Theda Native")
+Session::Session() : engine(commandLineTestMode ? "Rhino Native Tests" : "Theda Native")
 {
     engine.getPluginManager().createBuiltInType<UtilityDevice>();
     engine.getPluginManager().createBuiltInType<DrumDevice>();
-    engine.getPluginManager().createBuiltInType<ThetaSpaceDevice>();
-    engine.getPluginManager().createBuiltInType<ThetaBloomDevice>();
-    engine.getPluginManager().createBuiltInType<ThetaArpDevice>();
-    engine.getPluginManager().createBuiltInType<ThetaWaveDevice>();
+    engine.getPluginManager().createBuiltInType<RhinoSpaceDevice>();
+    engine.getPluginManager().createBuiltInType<RhinoBloomDevice>();
+    engine.getPluginManager().createBuiltInType<RhinoArpDevice>();
+    engine.getPluginManager().createBuiltInType<RhinoWaveDevice>();
     initialiseExternalPlugins();
     buildStarterEdit();
 }
@@ -31,7 +31,7 @@ Session::Session() : engine(commandLineTestMode ? "Theta Native Tests" : "Theda 
 void Session::buildStarterEdit()
 {
     edit = te::createEmptyEdit(engine, {});
-    edit->state.setProperty("thetaFormatVersion", 1, nullptr);
+    edit->state.setProperty("rhinoFormatVersion", 1, nullptr);
     edit->clickTrackEnabled = false;
     edit->clickTrackEmphasiseBars = true;
     edit->clickTrackGain = -6.0f;
@@ -162,7 +162,7 @@ juce::ValueTree Session::projectSnapshot()
 {
     edit->flushState();
     auto snapshot = edit->state.createCopy();
-    snapshot.setProperty("thetaSnapshotRevision", changeRevision, nullptr);
+    snapshot.setProperty("rhinoSnapshotRevision", changeRevision, nullptr);
     return snapshot;
 }
 
@@ -174,8 +174,8 @@ void Session::markModified()
 
 juce::Result Session::restoreProject(const juce::ValueTree& state, const juce::File& file)
 {
-    if (!state.hasType(te::IDs::EDIT) || static_cast<int>(state.getProperty("thetaFormatVersion")) != 1)
-        return juce::Result::fail("This is not a supported Theta native project.");
+    if (!state.hasType(te::IDs::EDIT) || static_cast<int>(state.getProperty("rhinoFormatVersion")) != 1)
+        return juce::Result::fail("This is not a supported Rhino native project.");
     auto candidate = te::loadEditFromState(engine, state.createCopy());
     if (!candidate) return juce::Result::fail("The project could not be loaded.");
     candidate->editFileRetriever = [file] { return file; };
@@ -228,16 +228,16 @@ juce::Result Session::restoreProject(const juce::ValueTree& state, const juce::F
     patternClipID = patternClip->itemID;
     utility = nextUtility;
     audioUtility = nextAudioUtility;
-    const auto patternInstrument = edit->state.getProperty("thetaPatternInstrument").toString();
+    const auto patternInstrument = edit->state.getProperty("rhinoPatternInstrument").toString();
     if (patternInstrument == "wave")
     {
         bool instrumentChanged = false;
-        juce::ignoreUnused(switchTrackInstrument(*edit, *tracks[0], Instrument::ThetaWave, instrumentChanged));
+        juce::ignoreUnused(switchTrackInstrument(*edit, *tracks[0], Instrument::RhinoWave, instrumentChanged));
     }
     else if (patternInstrument == "forge")
     {
         bool instrumentChanged = false;
-        juce::ignoreUnused(switchTrackInstrument(*edit, *tracks[0], Instrument::ThetaForge, instrumentChanged,
+        juce::ignoreUnused(switchTrackInstrument(*edit, *tracks[0], Instrument::RhinoForge, instrumentChanged,
                                                  forgeDescription ? &*forgeDescription : nullptr));
     }
     else
@@ -260,7 +260,7 @@ void Session::projectSaved(const juce::ValueTree& snapshot, const juce::File& fi
 {
     projectFile = file;
     // Edits made while the worker wrote the snapshot must remain unsaved.
-    if (static_cast<juce::int64>(snapshot.getProperty("thetaSnapshotRevision")) == changeRevision)
+    if (static_cast<juce::int64>(snapshot.getProperty("rhinoSnapshotRevision")) == changeRevision)
     {
         savedRevision = changeRevision;
         edit->resetChangedStatus();

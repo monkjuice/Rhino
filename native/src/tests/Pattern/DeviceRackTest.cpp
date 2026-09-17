@@ -3,7 +3,7 @@
 #include "../../Session.h"
 #include <stdexcept>
 
-namespace theta
+namespace rhino
 {
 void runPatternDeviceRackTest()
 {
@@ -31,7 +31,7 @@ void runPatternDeviceRackTest()
             "Device View shows the active pattern instrument, not dormant alternatives");
     require(session.deviceSlots(1).empty(), "Device View hides permanent audio-track channel infrastructure");
     require(session.addAudioEffect(Session::AudioEffect::Compressor, 0).wasOk()
-            && session.addMidiEffect(Session::MidiEffect::ThetaArp, 0).wasOk(),
+            && session.addMidiEffect(Session::MidiEffect::RhinoArp, 0).wasOk(),
             "Pattern track accepts MIDI and audio processors around its instrument");
     const auto signalChain = session.deviceSlots(0);
     require(signalChain.size() == 3

@@ -1,4 +1,4 @@
-# Theta: staged production plan
+# Rhino: staged production plan
 
 Status: proposed sequence after source research. No duration or capacity estimate is presented as a measured result.
 
@@ -78,13 +78,13 @@ Do not promise “unlimited tracks.” Report workload and hardware. A deep seri
 
 The web source has been removed from the active tree. A small native engine evaluation now lives in `native/`; no production migration or packaged release is complete.
 
-## Long-Term Instrument Plan: Theta Wave
+## Long-Term Instrument Plan: Rhino Wave
 
-Theta Wave is the long-running path toward a built-in wavetable instrument in the spirit of Ableton Wavetable, adapted to Theta's simpler native workflow. The goal is not to clone every feature at once; it is to grow a musical instrument in stable layers.
+Rhino Wave is the long-running path toward a built-in wavetable instrument in the spirit of Ableton Wavetable, adapted to Rhino's simpler native workflow. The goal is not to clone every feature at once; it is to grow a musical instrument in stable layers.
 
 ### Phase 1: Playable Wavetable Core
 
-- Add `Theta Wave` as a native synth device and browser instrument.
+- Add `Rhino Wave` as a native synth device and browser instrument.
 - Implement a small polyphonic voice engine with MIDI note on/off, velocity, amp envelope, output gain, and panic/reset behavior.
 - Start with a morphing oscillator that blends basic table shapes: sine, triangle, saw, square, and bright folded/harmonic shapes.
 - Expose compact rack macros: Position, Shape, Sub, Cutoff, Resonance, Attack, Decay, Sustain, Release, Unison, Detune, Width, Output.
@@ -92,13 +92,13 @@ Theta Wave is the long-running path toward a built-in wavetable instrument in th
 
 ### Phase 2: Musical Presets
 
-- Add browser sounds that use Theta Wave for pads, plucks, basses, sirens, bells, and soft chords.
+- Add browser sounds that use Rhino Wave for pads, plucks, basses, sirens, bells, and soft chords.
 - Make presets set the track instrument plus the MIDI clip content, like current 4OSC presets.
 - Keep track-device knobs global, Ableton-style. Per-clip variation should come later through clip envelopes/automation, not duplicated hidden device state.
 
 ### Phase 3: Visual Device Panel
 
-- Add a dedicated Theta Wave editor window with waveform display, wavetable position feedback, oscillator controls, filter controls, and envelope curves.
+- Add a dedicated Rhino Wave editor window with waveform display, wavetable position feedback, oscillator controls, filter controls, and envelope curves.
 - Keep the inline Device Rack view macro-focused and compact.
 - Add preset names and visual state that stay readable at small rack sizes.
 

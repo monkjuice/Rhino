@@ -1,6 +1,6 @@
 #include "UtilityDevice.h"
 
-namespace theta
+namespace rhino
 {
 UtilityDevice::UtilityDevice(te::PluginCreationInfo info) : Plugin(info)
 {

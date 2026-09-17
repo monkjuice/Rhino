@@ -1,4 +1,4 @@
-# Theta device system
+# Rhino device system
 
 Status: proposed application contract. This is a design specification, not an implemented SDK or an ABI promise.
 
@@ -32,7 +32,7 @@ If Tracktion is selected, its Plugin, AutomatableParameter, and state mechanisms
 
 | Area | Required behavior |
 | --- | --- |
-| Identity | Stable type ID such as `org.theta.analog-bass`; separate stable instance ID; schema version; human-readable name and tags |
+| Identity | Stable type ID such as `org.rhino.analog-bass`; separate stable instance ID; schema version; human-readable name and tags |
 | Ports | Explicit audio input/output buses, channel capabilities, note/event ports, and optional sidechain inputs |
 | Parameters | Stable IDs, range and units, default, linear/logarithmic mapping, quantization, automation capability, modulation capability, and smoothing policy |
 | Lifecycle | Create and load assets off the audio thread; prepare for sample rate and maximum block; process bounded blocks; reset/flush; release off the audio thread |

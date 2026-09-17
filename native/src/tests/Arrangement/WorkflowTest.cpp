@@ -16,7 +16,7 @@
  #include <windows.h>
 #endif
 
-namespace theta
+namespace rhino
 {
 int runArrangementTest()
 {

@@ -5,4 +5,4 @@ research/sources/** -text
 
 # Wavetable files are sample data. `text=auto` detects them as binary anyway,
 # but saying so explicitly means no future setting can mangle a frame.
-instruments/theta-forge/tables/*.wav -text
+instruments/rhino-forge/tables/*.wav -text

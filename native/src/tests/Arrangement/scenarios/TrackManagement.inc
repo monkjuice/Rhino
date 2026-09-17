@@ -106,14 +106,14 @@
             const std::function<juce::ValueTree(const juce::ValueTree&)> findCard =
                 [&findCard](const juce::ValueTree& tree) -> juce::ValueTree
             {
-                if (tree.hasProperty("thetaLaneHeight")) return tree;
+                if (tree.hasProperty("rhinoLaneHeight")) return tree;
                 for (int i = 0; i < tree.getNumChildren(); ++i)
                     if (const auto found = findCard(tree.getChild(i)); found.isValid()) return found;
                 return {};
             };
             const auto card = findCard(session.projectSnapshot());
             require(card.isValid(), "The dragged row height is written into the saved project");
-            require(static_cast<double>(card.getProperty("thetaLaneHeight")) > 0.0,
+            require(static_cast<double>(card.getProperty("rhinoLaneHeight")) > 0.0,
                     "The saved height is the one the card was dragged to");
             require(card.getProperty("colour").toString() == colour.toString(),
                     "The card colour is written into the saved project beside it");
@@ -208,7 +208,7 @@
         require(te::getAudioTracks(*session.edit)[0]->findClipForID(id) != nullptr,
                 "Dragging an audio clip onto an instrument lane moves it there");
         require(renderClipRms(*session.findAudioClip(id)) > 0.01f,
-                "Audio moved onto a Theta Wave instrument lane still renders audible audio");
+                "Audio moved onto a Rhino Wave instrument lane still renders audible audio");
         session.undo();
         session.undo();
         require(te::getAudioTracks(*session.edit)[1]->findClipForID(id) != nullptr,
@@ -232,25 +232,25 @@
         require(te::getAudioTracks(*session.edit)[1]->findClipForID(id) != nullptr, "Undo restores the clip after a drag-created track");
         view.sync();
         scenario("track management: preset drops");
-        require(view.applyBrowserDrop("theta-browser:preset:SirenLead", 2, 0.0, true).wasOk(), "Siren lead browser row creates a synth clip");
+        require(view.applyBrowserDrop("rhino-browser:preset:SirenLead", 2, 0.0, true).wasOk(), "Siren lead browser row creates a synth clip");
         auto* droppedPreset = te::getAudioTracks(*session.edit)[2]->getClips().getLast();
         require(droppedPreset != nullptr && droppedPreset->getName() == "Siren lead",
                 "Dropped siren preset names the new clip");
         session.undo();
         scenario("track management: chord preset");
-        require(view.applyBrowserDrop("theta-browser:preset:ChordPad", 2, 0.0, true).wasOk(), "Chord pad browser row creates a synth clip");
+        require(view.applyBrowserDrop("rhino-browser:preset:ChordPad", 2, 0.0, true).wasOk(), "Chord pad browser row creates a synth clip");
         droppedPreset = te::getAudioTracks(*session.edit)[2]->getClips().getLast();
         require(droppedPreset != nullptr && droppedPreset->getName() == "Chord pad",
                 "Dropped chord pad preset names the new clip");
         session.undo();
         scenario("track management: reese preset");
-        require(view.applyBrowserDrop("theta-browser:preset:ReeseBass", 2, 0.0, true).wasOk(), "Reese bass browser row creates a synth clip");
+        require(view.applyBrowserDrop("rhino-browser:preset:ReeseBass", 2, 0.0, true).wasOk(), "Reese bass browser row creates a synth clip");
         droppedPreset = te::getAudioTracks(*session.edit)[2]->getClips().getLast();
         require(droppedPreset != nullptr && droppedPreset->getName() == "Reese bass",
                 "Dropped Reese bass preset names the new clip");
         session.undo();
         scenario("track management: clap preset");
-        require(view.applyBrowserDrop("theta-browser:preset:ClapKit", 2, 0.0, true).wasOk(), "Clap kit browser row creates a drum clip");
+        require(view.applyBrowserDrop("rhino-browser:preset:ClapKit", 2, 0.0, true).wasOk(), "Clap kit browser row creates a drum clip");
         droppedPreset = te::getAudioTracks(*session.edit)[2]->getClips().getLast();
         require(droppedPreset != nullptr && session.selectPatternClip(droppedPreset->itemID).wasOk(),
                 "Dropped clap preset can be selected for note editing");
@@ -259,7 +259,7 @@
         scenario("track management: warm pulse drop");
         const auto audio2Clips = te::getAudioTracks(*session.edit)[2]->getClips().size();
         const auto audio2Devices = session.deviceSlots(2).size();
-        view.itemDropped({"theta-browser:preset:WarmPulse", nullptr,
+        view.itemDropped({"rhino-browser:preset:WarmPulse", nullptr,
                           {static_cast<int>(view.xFor(0.5)), static_cast<int>(view.lane(2).getCentreY())}});
         require(te::getAudioTracks(*session.edit)[2]->getClips().size() == audio2Clips + 1,
                 "Dragging a browser sound onto Audio 2 creates the clip on Audio 2");

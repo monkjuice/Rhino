@@ -1,6 +1,6 @@
 #include "ProjectFiles.h"
 
-namespace theta
+namespace rhino
 {
 void ProjectFiles::save(bool saveAs, std::function<void(bool)> completion)
 {
@@ -17,9 +17,9 @@ void ProjectFiles::save(bool saveAs, std::function<void(bool)> completion)
     }
     busy = true;
     const auto suggested = session.projectFile == juce::File{}
-        ? juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("Untitled.thetaedit")
-        : session.projectFile.withFileExtension("thetaedit");
-    chooser = std::make_unique<juce::FileChooser>("Save project", suggested, "*.thetaedit");
+        ? juce::File::getSpecialLocation(juce::File::userDocumentsDirectory).getChildFile("Untitled.rhinoedit")
+        : session.projectFile.withFileExtension("rhinoedit");
+    chooser = std::make_unique<juce::FileChooser>("Save project", suggested, "*.rhinoedit");
     chooser->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles
                         | juce::FileBrowserComponent::warnAboutOverwriting,
         [weak = juce::WeakReference<ProjectFiles>(this), completion](const juce::FileChooser& selected)
@@ -95,7 +95,7 @@ void ProjectFiles::open()
 void ProjectFiles::chooseOpen()
 {
     busy = true;
-    chooser = std::make_unique<juce::FileChooser>("Open project", session.projectFile, "*.thetaedit");
+    chooser = std::make_unique<juce::FileChooser>("Open project", session.projectFile, "*.rhinoedit");
     chooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
         [weak = juce::WeakReference<ProjectFiles>(this)](const juce::FileChooser& selected)
         {
@@ -109,9 +109,9 @@ void ProjectFiles::chooseOpen()
 
 void ProjectFiles::openFile(const juce::File& file)
 {
-    if (!file.existsAsFile() || !file.hasFileExtension("thetaedit"))
+    if (!file.existsAsFile() || !file.hasFileExtension("rhinoedit"))
     {
-        report("Could not open the selected Theta project.");
+        report("Could not open the selected Rhino project.");
         return;
     }
     confirmUnsaved([weak = juce::WeakReference<ProjectFiles>(this), file] { if (weak) weak->load(file); });

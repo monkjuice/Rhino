@@ -1,6 +1,6 @@
 #include "BrowserPanel.h"
 
-namespace theta
+namespace rhino
 {
 namespace
 {
@@ -34,8 +34,8 @@ juce::String effectId(Session::AudioEffect effect)
         case Session::AudioEffect::Reverb:     return "Reverb";
         case Session::AudioEffect::Delay:      return "Delay";
         case Session::AudioEffect::Compressor: return "Compressor";
-        case Session::AudioEffect::ThetaSpace: return "ThetaSpace";
-        case Session::AudioEffect::ThetaBloom: return "ThetaBloom";
+        case Session::AudioEffect::RhinoSpace: return "RhinoSpace";
+        case Session::AudioEffect::RhinoBloom: return "RhinoBloom";
     }
     return {};
 }
@@ -45,8 +45,8 @@ juce::String instrumentId(Session::Instrument instrument)
     switch (instrument)
     {
         case Session::Instrument::FourOsc:   return "FourOsc";
-        case Session::Instrument::ThetaWave: return "ThetaWave";
-        case Session::Instrument::ThetaForge: return "ThetaForge";
+        case Session::Instrument::RhinoWave: return "RhinoWave";
+        case Session::Instrument::RhinoForge: return "RhinoForge";
         case Session::Instrument::Drums:     return "Drums";
         case Session::Instrument::Utility:   return "Utility";
     }
@@ -57,7 +57,7 @@ juce::String drumKitId(DrumDevice::Kit kit)
 {
     switch (kit)
     {
-        case DrumDevice::Kit::Theta808: return "Theta808";
+        case DrumDevice::Kit::Rhino808: return "Rhino808";
         case DrumDevice::Kit::House:    return "HouseKit";
         case DrumDevice::Kit::Break:    return "BreakKit";
         case DrumDevice::Kit::Minimal:  return "MinimalKit";
@@ -70,7 +70,7 @@ juce::String midiEffectId(Session::MidiEffect effect)
 {
     switch (effect)
     {
-        case Session::MidiEffect::ThetaArp: return "ThetaArp";
+        case Session::MidiEffect::RhinoArp: return "RhinoArp";
     }
     return {};
 }
@@ -214,23 +214,23 @@ BrowserPanel::BrowserPanel(Session& s) : session(s)
     // library separates Drums from Instruments and both from Clips.
     items = {
         {"Instruments", "Synths", "4OSC synth", "Subtractive synth", std::nullopt, std::nullopt, Session::Instrument::FourOsc},
-        {"Instruments", "Synths", "Theta Wave", "Morphing wavetable-style synth", std::nullopt, std::nullopt, Session::Instrument::ThetaWave},
-        {"Instruments", "Synths", "Theta Forge", "Two-oscillator Forge synth", std::nullopt, std::nullopt, Session::Instrument::ThetaForge},
-        {"Instruments", "Drum Rack", "Theta 808", "TR-808 kit: kick, snare, toms, hats", std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt, DrumDevice::Kit::Theta808},
+        {"Instruments", "Synths", "Rhino Wave", "Morphing wavetable-style synth", std::nullopt, std::nullopt, Session::Instrument::RhinoWave},
+        {"Instruments", "Synths", "Rhino Forge", "Two-oscillator Forge synth", std::nullopt, std::nullopt, Session::Instrument::RhinoForge},
+        {"Instruments", "Drum Rack", "Rhino 808", "TR-808 kit: kick, snare, toms, hats", std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt, DrumDevice::Kit::Rhino808},
         {"Instruments", "Drum Rack", "House Kit", "Deep kick, tight hats, for the House pattern", std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt, DrumDevice::Kit::House},
         {"Instruments", "Drum Rack", "Break Kit", "Snappy snare, bright hats, for the Break pattern", std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt, DrumDevice::Kit::Break},
         {"Instruments", "Drum Rack", "Minimal Kit", "Short, quiet pads, for the Minimal pattern", std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt, DrumDevice::Kit::Minimal},
         {"Instruments", "Drum Rack", "Clap Kit", "Clap on the backbeat, for the Clap pattern", std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt, DrumDevice::Kit::Clap},
         {"Patterns", "Synth", "Warm pulse", "Soft one-bar 4OSC chord pulse", Session::PatternPreset::WarmPulse},
         {"Patterns", "Synth", "Acid steps", "Tight 16-step synth riff", Session::PatternPreset::AcidSteps},
-        {"Patterns", "Synth", "Arp run", "Held chord made for Theta Arp", Session::PatternPreset::ArpRun},
+        {"Patterns", "Synth", "Arp run", "Held chord made for Rhino Arp", Session::PatternPreset::ArpRun},
         {"Patterns", "Synth", "Chord pad", "Soft sustaining 4OSC chord synth", Session::PatternPreset::ChordPad},
         {"Patterns", "Bass", "Sub bass", "Clean mono low-end bass line", Session::PatternPreset::SubBass},
         {"Patterns", "Bass", "Reese bass", "Wide detuned electronic bass", Session::PatternPreset::ReeseBass},
-        {"Patterns", "Bass", "Wave bass", "Theta Wave rounded low pulse", Session::PatternPreset::WaveBass},
+        {"Patterns", "Bass", "Wave bass", "Rhino Wave rounded low pulse", Session::PatternPreset::WaveBass},
         {"Patterns", "Lead", "Siren lead", "Rising and falling emergency lead", Session::PatternPreset::SirenLead},
-        {"Patterns", "Lead", "Wave pluck", "Theta Wave bright moving pluck", Session::PatternPreset::WavePluck},
-        {"Patterns", "Pad", "Wave pad", "Theta Wave wide glassy chords", Session::PatternPreset::WavePad},
+        {"Patterns", "Lead", "Wave pluck", "Rhino Wave bright moving pluck", Session::PatternPreset::WavePluck},
+        {"Patterns", "Pad", "Wave pad", "Rhino Wave wide glassy chords", Session::PatternPreset::WavePad},
         {"Patterns", "Drums", "House kit", "Four-on-floor kick, backbeat, hats", Session::PatternPreset::HouseKit},
         {"Patterns", "Drums", "Break kit", "Syncopated kick/snare/hats groove", Session::PatternPreset::BreakKit},
         {"Patterns", "Drums", "Minimal kit", "Sparse kick/snare/hats sketch", Session::PatternPreset::MinimalKit},
@@ -242,9 +242,9 @@ BrowserPanel::BrowserPanel(Session& s) : session(s)
         {"Audio FX", "Dynamics", "Utility gain", "Level trim inside a chain", std::nullopt, std::nullopt, Session::Instrument::Utility},
         {"Audio FX", "Delay and Reverb", "Reverb", "Tracktion reverb", std::nullopt, Session::AudioEffect::Reverb},
         {"Audio FX", "Delay and Reverb", "Delay", "Tracktion delay", std::nullopt, Session::AudioEffect::Delay},
-        {"Audio FX", "Theta", "Theta Space", "Floating multi FX: smear, drive, width", std::nullopt, Session::AudioEffect::ThetaSpace},
-        {"Audio FX", "Theta", "Theta Bloom", "Chorus, clouds, plate, colour", std::nullopt, Session::AudioEffect::ThetaBloom},
-        {"MIDI FX", "", "Theta Arp", "Drop before an instrument to arpeggiate it", std::nullopt, std::nullopt, std::nullopt, Session::MidiEffect::ThetaArp}
+        {"Audio FX", "Rhino", "Rhino Space", "Floating multi FX: smear, drive, width", std::nullopt, Session::AudioEffect::RhinoSpace},
+        {"Audio FX", "Rhino", "Rhino Bloom", "Chorus, clouds, plate, colour", std::nullopt, Session::AudioEffect::RhinoBloom},
+        {"MIDI FX", "", "Rhino Arp", "Drop before an instrument to arpeggiate it", std::nullopt, std::nullopt, std::nullopt, Session::MidiEffect::RhinoArp}
     };
 
     for (auto* component : std::initializer_list<juce::Component*>{&title, &search, &apply, &categoryList, &tree})
@@ -420,18 +420,18 @@ void BrowserPanel::reportSelection(const Item& item)
 juce::String BrowserPanel::dragDescriptionFor(const Item& item) const
 {
     if (item.preset)
-        return "theta-browser:preset:" + presetId(*item.preset);
+        return "rhino-browser:preset:" + presetId(*item.preset);
     if (item.effect)
-        return "theta-browser:effect:" + effectId(*item.effect);
+        return "rhino-browser:effect:" + effectId(*item.effect);
     if (item.instrument)
-        return "theta-browser:instrument:" + instrumentId(*item.instrument);
+        return "rhino-browser:instrument:" + instrumentId(*item.instrument);
     if (item.midiEffect)
-        return "theta-browser:midi-effect:" + midiEffectId(*item.midiEffect);
+        return "rhino-browser:midi-effect:" + midiEffectId(*item.midiEffect);
     if (item.sample)
-        return "theta-browser:sample:" + sampleId(*item.sample);
+        return "rhino-browser:sample:" + sampleId(*item.sample);
     if (item.drumKit)
-        return "theta-browser:drumkit:" + drumKitId(*item.drumKit);
-    return "theta-browser:info:" + item.name;
+        return "rhino-browser:drumkit:" + drumKitId(*item.drumKit);
+    return "rhino-browser:info:" + item.name;
 }
 
 // A document can hold a single track, so no fixed index is safe: an unanswered

@@ -13,7 +13,7 @@ REPOS = {'ardour': ('Ardour/ardour', 'master'), 'lmms': ('LMMS/lmms', 'master'),
          'zrythm': ('zrythm/zrythm', 'master'), 'tracktion': ('Tracktion/tracktion_engine', 'develop')}
 
 def fetch(url):
-    request = urllib.request.Request(url, headers={'User-Agent': 'Theta-architecture-research'})
+    request = urllib.request.Request(url, headers={'User-Agent': 'Rhino-architecture-research'})
     with urllib.request.urlopen(request, timeout=30) as response:
         return response.read()
 

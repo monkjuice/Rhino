@@ -6,7 +6,7 @@
 
 // Hit testing, pointer gestures, note drag/resize and the wheel.
 
-namespace theta
+namespace rhino
 {
 
 juce::Result StepGrid::loopEditedClip()

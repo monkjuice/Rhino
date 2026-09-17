@@ -18,5 +18,5 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
-instruments/theta-forge/build/
+instruments/rhino-forge/build/
 temp/

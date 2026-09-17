@@ -44,7 +44,7 @@
         const auto clipSlots = session.clipPluginCount(id);
         view.sync();
         view.fit();
-        view.itemDropped({"theta-browser:effect:ThetaSpace", nullptr,
+        view.itemDropped({"rhino-browser:effect:RhinoSpace", nullptr,
                           {static_cast<int>(view.xFor(0.25)), static_cast<int>(view.lane(1).getCentreY())}});
         require(static_cast<int>(session.deviceSlots(1).size()) == audioTrackSlots,
                 "Dropping an audio effect on an audio clip leaves the track Device View unchanged");
@@ -166,7 +166,7 @@
         require(close(session.pattern().getPosition().time.getEnd().inSeconds(), patternEnd), "Right trim can expand a previously shrunken MIDI clip");
         session.undo();
         session.undo();
-        view.itemDropped({"theta-browser:preset:MinimalKit", nullptr, {static_cast<int>(view.xFor(2.0)), 82}});
+        view.itemDropped({"rhino-browser:preset:MinimalKit", nullptr, {static_cast<int>(view.xFor(2.0)), 82}});
         auto* patternTrack = te::getAudioTracks(*session.edit)[0];
         const auto blockedClipCount = patternTrack->getClips().size();
         view.selected = patternID;

@@ -2,7 +2,7 @@
 
 // Preset pattern data and the synth patches each preset applies.
 
-namespace theta
+namespace rhino
 {
 
 PresetPattern presetPattern(Session::PatternPreset preset)
@@ -217,7 +217,7 @@ void applySynthPatch(SynthPatch patch, te::FourOscPlugin& synth, juce::UndoManag
     }
 }
 
-void applyThetaWavePatch(Session::PatternPreset preset, ThetaWaveDevice& wave)
+void applyRhinoWavePatch(Session::PatternPreset preset, RhinoWaveDevice& wave)
 {
     const auto set = [&wave] (int parameterIndex, float value)
     {

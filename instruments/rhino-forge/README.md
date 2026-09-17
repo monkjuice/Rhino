@@ -9,17 +9,40 @@ oscillators, sub, noise, a filter, one amp envelope, six LFOs, global voicing,
 eight macros and the modulation matrix — each in its own box with its own
 enable. Effects are deliberately absent until the synth is finished.
 
-The six LFOs share one module, which shows one at a time: numbered buttons in
-its header say which, and the module's drag handle carries whichever is
-showing. An LFO set to TRIG or ENV runs inside each voice, so a new note starts
+The six LFOs share one module, which shows one at a time: numbered cards
+hanging from the module's top edge say which, and the module's drag handle —
+another such card, carrying the module's name — drags whichever is showing. An LFO set to TRIG or ENV runs inside each voice, so a new note starts
 its own copy and leaves the notes already sounding alone; one set to OFF is a
 single free-running cycle shared by every voice and by the panel.
 
-Three tabs in the title bar, `OSC`, `TABLE` and `MATRIX`, switch **only the top
-row** of the panel: the oscillators, the wavetable editor and the matrix take
-turns in that one row, and everything below it stays on screen either way. A
-module says which tab it belongs to by declaring a `Page`; a module that
-declares nothing is always shown. Switching tabs hides and shows components
+The panel is two rows of modules, the same height as each other, over an
+eighty-eight key keyboard, and it is wider than it is tall at every size it
+allows. The top row is the signal path read left to right — sub and noise, the
+two oscillators, the filter. The bottom row is what shapes it, in the same
+order: global voicing as a narrow column, then the envelope, the LFOs and the
+macros.
+
+The filter shows its own response: the band it is passing filled under the
+curve, the band it is taking out washed in above it, decade lines across the
+audible range and the corner frequency marked and named. It is drawn from the
+transfer functions of Core's own state-variable filter rather than from a
+generic curve, so what the display claims is being removed is what is being
+removed — including the peak resonance puts back at the corner.
+
+No knob prints its value. A readout under every knob costs the panel a line of
+height each, whether or not anyone is reading it, and it was the readout rather
+than the knob that decided how small a macro could be drawn. The value appears
+instead where the hand already is: a bubble beside the knob being turned,
+naming the control and what it now reads, which stays for a moment after the
+gesture so a wheel notch shows something too. The steppers and the matrix's
+amount bars are unaffected — a field whose whole purpose is to be read exactly
+still shows what it holds.
+
+Three tabs in the title bar, `OSC`, `TABLE` and `MATRIX`, switch **only the two
+oscillators**: the wavetable editor and the matrix take turns in their columns,
+while sub, noise and the filter hold their places either side and the whole
+lower row stays put. A module says which tab it belongs to by declaring a
+`Page`; a module that declares nothing is always shown. Switching tabs hides and shows components
 rather than rebuilding them, so a knob the matrix is covering is still driven by
 the host and by its own modulation slots while it is out of sight.
 

@@ -33,33 +33,33 @@ place, and its own knobs contained inside it. Nothing is laid out by index
 arithmetic; modules declare their contents.
 
 ```
-+- FORGE -- [ OSC ][ TABLE ][ MATRIX ] --------- preset -- LOAD SAVE --+
-| +-- OSC A ---------------------+ +-- OSC B ---------------------+    |
-| | [ waveform ]                 | | [ waveform ]                 |    |
-| |   OCT    SEMI    FINE        | |   OCT    SEMI    FINE        |    |
-| | POS UNI DET BLEND PAN LEVEL  | | POS UNI DET BLEND PAN LEVEL  |    |
-| +------------------------------+ +------------------------------+    |
-| +- SUB -+ +NOISE+ +- FILTER --------+ +- GLOBAL ---------+ +MACROS+  |
-| | LEVEL | | LVL | | TYPE [A][B][S][N]| | POLY MONO LEGATO | | 1  2 |  |
-| |  (o)  | | (o) | | CUTOFF RES DRIVE | | GLIDE  OUTPUT    | | 3  4 |  |
-| +-------+ +-----+ +------------------+ +------------------+ | 5  6 |  |
-| +-- ENV 1 -------------------+ +-- LFO ------------------+ | 7  8 |  |
-| | [ ADSR curve ]             | | [ shape + phase ]       | |      |  |
-| | ATTACK DECAY SUSTAIN RELEA | | [1][2][3][4][5][6]      | |      |  |
-| |                            | | SHAPE MODE UNIT  RATE   | |      |  |
-| +----------------------------+ +-------------------------+ +------+  |
++- FORGE -- [ OSC ][ TABLE ][ MATRIX ] ---------- preset -- LOAD SAVE --+
+| +-SUB-+ +NOISE+ +-- OSC A ---------+ +-- OSC B ---------+ +-FILTER----+ |
+| |LEVEL| | LVL | | [ waveform     ] | | [ waveform     ] | |[ response ]| |
+| | (o) | | (o) | |  OCT SEMI FINE   | |  OCT SEMI FINE   | | TYPE ABSN  | |
+| |     | |     | | POS UNI DET ...  | | POS UNI DET ...  | | CUT RES DR | |
+| +-----+ +-----+ +------------------+ +------------------+ +-----------+ |
+| +GLOBAL+ +-- ENV 1 ----------+ +-- LFO -------------+ +-MACROS-+      |
+| |POLY GL| | [ ADSR curve    ] | | [ shape + phase ]  | | 1    2 |      |
+| |MO LEG | |                   | | [1][2][3][4][5][6] | | 3    4 |      |
+| |OUTPUT | | ATK DEC SUS REL   | | SHAPE MODE UNIT RT | | 5    6 |      |
+| |       | |                   | |                    | | 7    8 |      |
+| +-------+ +-------------------+ +--------------------+ +--------+      |
+| [==================== eighty-eight keys ============================ ] |
 +----------------------------------------------------------------------+
 
-The MATRIX tab puts the matrix in the top row in place of the two oscillators,
-and the TABLE tab puts the wavetable editor there. Nothing below that row moves.
+Both rows are the same height. The MATRIX tab puts the matrix in the
+oscillators' columns, and the TABLE tab puts the wavetable editor there. SUB,
+NOISE and FILTER hold their places either side of it, and nothing in the lower
+row moves.
 
-+- FORGE -- [ OSC ][ TABLE ][ MATRIX ] --------- preset -- LOAD SAVE --+
-| +-- MATRIX ------------------------------------------- 8 SLOTS ---+  |
-| |  #   SOURCE        AMOUNT              DESTINATION              |  |
-| |  1  [ MACRO 2 ]   [-----|======  ]    [ A LEVEL ]               |  |
-| |  2  [ ENV 1   ]   [  ===|------  ]    [ A POS   ]               |  |
-| |  3  [ OFF     ]   [-----|------  ]    [ OFF     ]   ... eight   |  |
-| +-----------------------------------------------------------------+  |
++- FORGE -- [ OSC ][ TABLE ][ MATRIX ] ---------- preset -- LOAD SAVE --+
+| +-SUB-+ +NOISE+ +--- MATRIX ----------------- 8 SLOTS --+ +-FILTER----+ |
+| |LEVEL| | LVL | |  #   SOURCE      AMOUNT    DESTINATION| |[ response ]| |
+| | (o) | | (o) | |  1 [ MACRO 2 ] [--|===  ]  [ A LEVEL ]| | TYPE ABSN  | |
+| |     | |     | |  2 [ ENV 1   ] [ =|---  ]  [ A POS   ]| | CUT RES DR | |
+| |     | |     | |  3 [ OFF     ] [--|---  ]  [ OFF     ]| |            | |
+| +-----+ +-----+ +---------------------------------------+ +-----------+ |
 +----------------------------------------------------------------------+
 ```
 
@@ -294,7 +294,7 @@ it gets moved off that.
 **M6d — the matrix tab** — done
 
 - The matrix moved out of the bottom of the panel and onto a tab of its own,
-  which it shares with the oscillators. Tabs switch that one row and nothing
+  which it shares with the oscillators. Tabs switch those columns and nothing
   else, so the filter, the envelope, the LFO and the macros stay reachable
   while a routing is being made. Losing the fourth grid row is what paid for
   the macro column and for a shorter window at every resize limit.

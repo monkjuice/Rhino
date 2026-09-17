@@ -416,9 +416,14 @@ void layoutSuite()
                 {
                     // A compact module opts out of the shared size on purpose,
                     // but its knobs still have to be smaller, not larger, and
-                    // still have to be usable.
-                    require(block.getWidth() <= diameter, "a compact knob is no larger than the shared diameter");
-                    require(block.getWidth() >= 24, "a compact knob stays usable");
+                    // still have to be usable. Its block is wider than the
+                    // circle in it — the readout needs the room — so the circle
+                    // is read back from the block's height, not its width.
+                    const auto circle = rhino::forge::ui::knobDiameterOf(block);
+                    require(circle <= diameter, "a compact knob is no larger than the shared diameter");
+                    require(circle >= 24, "a compact knob stays usable");
+                    require(block.getWidth() >= circle,
+                            "a compact knob's readout is at least as wide as its circle");
                 }
                 else
                 {
@@ -486,6 +491,114 @@ void layoutSuite()
                     }
             }
         }
+}
+
+// ---------------------------------------------------------- filter display ---
+
+// The filter display claims to say which frequencies are being taken out, so
+// what it draws has to be the response Core actually has rather than a picture
+// of a filter in general. These check the curve through the geometry it is
+// drawn from: gain read back at a frequency, and frequency read back off the
+// axis it is plotted against.
+void filterDisplaySuite()
+{
+    namespace ui = rhino::forge::ui;
+    using rhino::forge::FilterType;
+    const auto box = juce::Rectangle<float>(0.0f, 0.0f, 300.0f, 120.0f);
+
+    // The axis is logarithmic, so a frequency put on it and read back off it
+    // has to come back unchanged. Everything else here depends on that holding.
+    for (const auto hz : {20.0f, 55.0f, 440.0f, 1000.0f, 7800.0f, 20000.0f})
+        requireClose(ui::filterXToHz(box, ui::filterHzToX(box, hz)), hz, hz * 0.001f,
+                     "a frequency read back off the axis is the one that was plotted");
+
+    // Log, not linear: an octave takes the same width wherever it sits.
+    const auto octaveLow = ui::filterHzToX(box, 200.0f) - ui::filterHzToX(box, 100.0f);
+    const auto octaveHigh = ui::filterHzToX(box, 8000.0f) - ui::filterHzToX(box, 4000.0f);
+    requireClose(octaveLow, octaveHigh, 0.01f, "every octave is the same width on the axis");
+
+    // The panel and the engine have to agree about what the resonance knob
+    // does, or the curve is of some other filter.
+    requireClose(ui::filterDamping(0.0f), 1.0f, 0.0001f, "no resonance is full damping");
+    requireClose(ui::filterDamping(1.0f), 1.0f / 16.0f, 0.0001f, "full resonance is Core's least damping");
+
+    const auto cutoff = 1000.0f;
+    const auto quiet = 0.0f;
+
+    // Each tap passes its own end of the band and stops the other. Two decades
+    // either side of the corner, which is well clear of the knee.
+    require(ui::filterMagnitudeDb(FilterType::lowPass, cutoff, quiet, 10.0f) > -3.0f,
+            "a low pass leaves the bottom of the band alone");
+    require(ui::filterMagnitudeDb(FilterType::lowPass, cutoff, quiet, 100000.0f) < -40.0f,
+            "a low pass takes the top of the band out");
+    require(ui::filterMagnitudeDb(FilterType::highPass, cutoff, quiet, 100000.0f) > -3.0f,
+            "a high pass leaves the top of the band alone");
+    require(ui::filterMagnitudeDb(FilterType::highPass, cutoff, quiet, 10.0f) < -40.0f,
+            "a high pass takes the bottom of the band out");
+    require(ui::filterMagnitudeDb(FilterType::bandPass, cutoff, quiet, 10.0f) < -20.0f
+                && ui::filterMagnitudeDb(FilterType::bandPass, cutoff, quiet, 100000.0f) < -20.0f,
+            "a band pass takes both ends out");
+
+    // A second-order response, so it falls twelve decibels an octave away from
+    // the corner. Measured two octaves out, where the knee is long behind it.
+    const auto atFour = ui::filterMagnitudeDb(FilterType::lowPass, cutoff, quiet, cutoff * 4.0f);
+    const auto atEight = ui::filterMagnitudeDb(FilterType::lowPass, cutoff, quiet, cutoff * 8.0f);
+    requireClose(atFour - atEight, 12.0f, 0.6f, "the skirt falls twelve decibels an octave");
+
+    // Resonance is a peak at the corner, and it only ever adds.
+    for (const auto type : {FilterType::lowPass, FilterType::highPass, FilterType::bandPass})
+    {
+        const auto flat = ui::filterMagnitudeDb(type, cutoff, 0.0f, cutoff);
+        const auto peaked = ui::filterMagnitudeDb(type, cutoff, 0.9f, cutoff);
+        require(peaked > flat + 6.0f, "resonance lifts the corner");
+        require(peaked <= ui::filterTopDb, "a resonant peak stays inside the window it is drawn in");
+    }
+    // And the peak of a band pass is the corner itself, not somewhere else.
+    const auto atCorner = ui::filterMagnitudeDb(FilterType::bandPass, cutoff, 0.5f, cutoff);
+    require(atCorner > ui::filterMagnitudeDb(FilterType::bandPass, cutoff, 0.5f, cutoff * 1.5f)
+                && atCorner > ui::filterMagnitudeDb(FilterType::bandPass, cutoff, 0.5f, cutoff / 1.5f),
+            "a band pass peaks at the frequency the knob is holding");
+
+    // Nothing the knobs can reach may draw outside the well, at any size the
+    // panel allows. The curve is clipped to the display when it is painted, but
+    // a curve that needed clipping to stay inside would be one the window is
+    // the wrong shape for.
+    for (const auto& module : ui::modules())
+    {
+        if (module.display != ui::Display::filter) continue;
+        for (int width = ui::minPanelWidth; width <= ui::maxPanelWidth; width += 40)
+            for (int height = ui::minPanelHeight; height <= ui::maxPanelHeight; height += 40)
+            {
+                const auto area = ui::moduleBounds({0, 0, width, height}, module);
+                const auto display = ui::displayBounds(area, module);
+                const auto plot = display.toFloat().reduced(0.0f, 6.0f);
+                if (plot.getWidth() <= 0.0f || plot.getHeight() <= 0.0f)
+                {
+                    require(false, "the filter display has room to draw in at every allowed size");
+                    std::cerr << "       at " << width << "x" << height << '\n';
+                    continue;
+                }
+                for (const auto type : {FilterType::lowPass, FilterType::highPass, FilterType::bandPass})
+                    for (const auto corner : {30.0f, 1000.0f, 18000.0f})
+                        for (const auto resonance : {0.0f, 0.5f, 1.0f})
+                        {
+                            const auto bounds = ui::filterResponsePath(plot, type, corner, resonance)
+                                                    .getBounds();
+                            if (!plot.expanded(0.5f).contains(bounds))
+                            {
+                                require(false, "the response stays inside the well it is drawn in");
+                                std::cerr << "       " << corner << " Hz res " << resonance
+                                          << " at " << width << "x" << height << '\n';
+                            }
+                        }
+            }
+    }
+
+    // The reading beside the corner marker is the frequency the knob holds, in
+    // the units it is read in.
+    require(ui::filterHzText(440.0f) == "440 Hz", "a corner under a kilohertz is named in hertz");
+    require(ui::filterHzText(7800.0f) == "7.80 kHz", "a corner over a kilohertz is named in kilohertz");
+    require(ui::filterHzText(18000.0f) == "18.0 kHz", "a corner over ten kilohertz drops a decimal");
 }
 
 // ------------------------------------------------------- envelope display ---
@@ -2669,7 +2782,7 @@ int main(int argc, char** argv)
     juce::ScopedJuceInitialiser_GUI initialiseJuce;
     const juce::String suite = argc > 1 ? argv[1] : "";
 
-    if (suite.isEmpty() || suite == "--layout") { layoutSuite(); envelopeDisplaySuite(); }
+    if (suite.isEmpty() || suite == "--layout") { layoutSuite(); envelopeDisplaySuite(); filterDisplaySuite(); }
     if (suite.isEmpty() || suite == "--presets") { presetSuite(); legacyStateSuite(); }
     if (suite.isEmpty() || suite == "--engine") engineSuite();
 

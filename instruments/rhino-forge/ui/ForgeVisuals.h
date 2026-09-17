@@ -18,7 +18,22 @@ inline const auto line = juce::Colour(0xff34394e);
 inline const auto text = juce::Colour(0xffe8eaff);
 inline const auto mutedText = juce::Colour(0xff8f95ad);
 
-inline constexpr int handleWidth = 46;
+inline constexpr int handleWidth = 70;
+
+// The lit strip along a module's top edge. Named because the cards that hang
+// from that edge redraw it across themselves, and a card that continued a strip
+// of a different thickness would read as sitting in front of the module rather
+// than as part of it.
+inline constexpr float moduleEdgeHeight = 3.0f;
+
+// A card is square where it meets the module's top edge and round at its foot.
+inline juce::Path cardOutline(juce::Rectangle<float> area)
+{
+    juce::Path path;
+    path.addRoundedRectangle(area.getX(), area.getY(), area.getWidth(), area.getHeight(),
+                             4.0f, 4.0f, false, false, true, true);
+    return path;
+}
 
 // --- Knob geometry ----------------------------------------------------------
 //
@@ -417,18 +432,43 @@ public:
     juce::Colour accent = signalViolet;
     // Set by the editor while this handle is being dragged.
     bool dragging = false;
+    // A handle in a module header is drawn as a card hanging from the module's
+    // top edge, carrying the lit strip across itself: it is the module's name,
+    // so it should look like part of the module. A macro's handle is not — it
+    // sits over a knob's label, where there is no edge to hang from.
+    bool card = false;
 
     void paint(juce::Graphics& g) override
     {
-        const auto area = getLocalBounds().toFloat().reduced(0.6f);
         const auto lit = dragging || isMouseOver();
-        g.setColour(lit ? accent.withAlpha(0.3f) : juce::Colour(0xff0d1120));
-        g.fillRoundedRectangle(area, 3.0f);
-        g.setColour(accent.withAlpha(lit ? 1.0f : 0.65f));
-        g.drawRoundedRectangle(area, 3.0f, 1.0f);
+        const auto fill = lit ? accent.withAlpha(0.3f) : juce::Colour(0xff0d1120);
+        auto text = getLocalBounds().toFloat();
+
+        if (card)
+        {
+            const auto area = getLocalBounds().toFloat().reduced(0.6f, 0.0f);
+            const auto outline = cardOutline(area);
+            g.setColour(fill);
+            g.fillPath(outline);
+            g.setColour(accent.withAlpha(lit ? 1.0f : 0.65f));
+            g.strokePath(outline, juce::PathStrokeType(1.0f));
+            g.setColour(accent.withAlpha(lit ? 1.0f : 0.85f));
+            g.fillRect(area.withHeight(moduleEdgeHeight));
+            text = area.withTrimmedTop(moduleEdgeHeight);
+        }
+        else
+        {
+            const auto area = getLocalBounds().toFloat().reduced(0.6f);
+            g.setColour(fill);
+            g.fillRoundedRectangle(area, 3.0f);
+            g.setColour(accent.withAlpha(lit ? 1.0f : 0.65f));
+            g.drawRoundedRectangle(area, 3.0f, 1.0f);
+            text = area;
+        }
+
         g.setColour(lit ? juce::Colours::white : accent);
-        g.setFont(juce::FontOptions(juce::jmin(10.0f, area.getHeight() * 0.72f), juce::Font::bold));
-        g.drawText(caption, area, juce::Justification::centred);
+        g.setFont(juce::FontOptions(juce::jmin(13.0f, text.getHeight() * 0.72f), juce::Font::bold));
+        g.drawText(caption, text, juce::Justification::centred);
     }
 };
 
@@ -544,6 +584,95 @@ public:
         g.setColour((on ? accent : mutedText).withAlpha(enabled ? 1.0f : 0.35f));
         g.setFont(juce::FontOptions(10.0f, juce::Font::bold));
         g.drawText(getName(), area, juce::Justification::centred);
+    }
+};
+
+// The numbered card that picks which bank a module is showing. It hangs from
+// the module's top edge and carries the lit strip across itself, so the six
+// LFOs read as six tabs of one module rather than as six buttons parked in its
+// header. A routing chip is still a ToggleChip: that one sits inside a control
+// row, where there is no edge for a card to hang from.
+class BankCard final : public juce::Button
+{
+public:
+    explicit BankCard(const juce::String& label) : juce::Button(label) { setClickingTogglesState(true); }
+
+    juce::Colour accent = signalViolet;
+
+    void paintButton(juce::Graphics& g, bool highlighted, bool) override
+    {
+        const auto area = getLocalBounds().toFloat().reduced(0.6f, 0.0f);
+        const auto on = getToggleState();
+        const auto outline = cardOutline(area);
+        g.setColour(on ? accent.withAlpha(0.26f) : juce::Colour(0xff0b0e18));
+        g.fillPath(outline);
+        g.setColour((on ? accent : line).withAlpha(highlighted ? 1.0f : 0.8f));
+        g.strokePath(outline, juce::PathStrokeType(1.0f));
+        // The module's own lit edge, continued across the card. A bank that is
+        // not showing keeps a dimmed length of it, so the row of cards still
+        // reads as one strip.
+        g.setColour(accent.withAlpha(on ? 1.0f : 0.3f));
+        g.fillRect(area.withHeight(moduleEdgeHeight));
+        g.setColour(on ? juce::Colours::white : mutedText);
+        g.setFont(juce::FontOptions(12.0f, juce::Font::bold));
+        g.drawText(getName(), area.withTrimmedTop(moduleEdgeHeight), juce::Justification::centred);
+    }
+};
+
+// What a knob says while it is being turned. Nothing on the panel prints a
+// value at rest — a readout under every knob costs the panel a line of height
+// each and is read perhaps once a session — so the value comes to the hand
+// instead: the control's name, the value under it, beside the knob for as long
+// as it is moving and a moment after.
+class ValueBubble final : public juce::Component
+{
+public:
+    ValueBubble()
+    {
+        setInterceptsMouseClicks(false, false);
+        setVisible(false);
+    }
+
+    juce::Colour accent = electricBlue;
+    juce::String caption, reading;
+
+    static constexpr int captionHeight = 13;
+    static constexpr int readingHeight = 21;
+    static constexpr int padding = 9;
+
+    // Wide enough for the longer of the two lines, at the size each is drawn,
+    // with a few pixels over the measurement: a box sized to exactly the width
+    // a string measures still comes out ellipsised once it is drawn into it.
+    static constexpr int slack = 10;
+
+    int widthFor() const
+    {
+        const juce::Font captionFont(juce::FontOptions(10.0f, juce::Font::bold));
+        const juce::Font readingFont(juce::FontOptions(16.0f, juce::Font::bold));
+        return juce::jmax(64, juce::roundToInt(juce::jmax(juce::GlyphArrangement::getStringWidth(captionFont, caption),
+                                                          juce::GlyphArrangement::getStringWidth(readingFont, reading)))
+                                  + padding * 2 + slack);
+    }
+
+    static constexpr int heightFor() { return captionHeight + readingHeight + padding; }
+
+    void paint(juce::Graphics& g) override
+    {
+        const auto area = getLocalBounds().toFloat().reduced(1.0f);
+        g.setColour(juce::Colour(0xf205070e));
+        g.fillRoundedRectangle(area, 5.0f);
+        g.setColour(accent.withAlpha(0.85f));
+        g.drawRoundedRectangle(area, 5.0f, 1.0f);
+        g.setColour(accent.withAlpha(0.9f));
+        g.fillRoundedRectangle(area.withHeight(moduleEdgeHeight).reduced(2.0f, 0.0f), 1.5f);
+
+        auto body = getLocalBounds().reduced(padding, 0).withTrimmedTop(padding / 2);
+        g.setColour(mutedText);
+        g.setFont(juce::FontOptions(10.0f, juce::Font::bold));
+        g.drawText(caption, body.removeFromTop(captionHeight), juce::Justification::centred);
+        g.setColour(text);
+        g.setFont(juce::FontOptions(16.0f, juce::Font::bold));
+        g.drawText(reading, body.removeFromTop(readingHeight), juce::Justification::centred);
     }
 };
 
@@ -1221,6 +1350,190 @@ inline void drawLfo(juce::Graphics& g, juce::Rectangle<int> area, rhino::forge::
     g.fillEllipse(juce::Rectangle<float>(7.0f, 7.0f).withCentre({x, y}));
     g.setColour(colour);
     g.fillEllipse(juce::Rectangle<float>(4.0f, 4.0f).withCentre({x, y}));
+}
+
+// --- The filter ---------------------------------------------------------------
+//
+// What the filter is taking out, drawn as the response it actually has. Core's
+// filter is a zero-delay state variable, so all three taps come off one
+// topology and the curves below are that topology's own transfer functions
+// rather than a picture of a filter in general. With x the frequency in units
+// of the cutoff and R Core's own damping term:
+//
+//     D  = (1 - x^2) + j 2R x
+//     LP = 1 / D      BP = x / D      HP = x^2 / D
+//
+// The prototype is the analogue one. Core prewarps its cutoff, so the knee sits
+// at the frequency the knob says whatever the sample rate is, and carrying the
+// warp through the rest of the curve would move it by less than a pixel across
+// the band the panel draws.
+
+// The window every filter display is drawn against: the audible band, and a
+// decibel range with room above unity for a resonant peak to rise into.
+inline constexpr float filterLowHz = 20.0f;
+inline constexpr float filterHighHz = 20000.0f;
+inline constexpr float filterTopDb = 18.0f;
+inline constexpr float filterBottomDb = -48.0f;
+
+// Frequency is read across a log axis, because that is how pitch is heard: an
+// octave takes the same width wherever it sits.
+inline float filterHzToX(juce::Rectangle<float> box, float hz)
+{
+    const auto at = std::log(juce::jlimit(filterLowHz, filterHighHz, hz) / filterLowHz)
+                    / std::log(filterHighHz / filterLowHz);
+    return box.getX() + at * box.getWidth();
+}
+
+inline float filterXToHz(juce::Rectangle<float> box, float x)
+{
+    if (box.getWidth() <= 0.0f) return filterLowHz;
+    const auto at = juce::jlimit(0.0f, 1.0f, (x - box.getX()) / box.getWidth());
+    return filterLowHz * std::exp(at * std::log(filterHighHz / filterLowHz));
+}
+
+inline float filterDbToY(juce::Rectangle<float> box, float db)
+{
+    const auto at = (filterTopDb - juce::jlimit(filterBottomDb, filterTopDb, db))
+                    / (filterTopDb - filterBottomDb);
+    return box.getY() + at * box.getHeight();
+}
+
+// Core's own damping term, named here so the two cannot drift apart.
+inline float filterDamping(float resonance)
+{
+    return 1.0f / (1.0f + juce::jlimit(0.0f, 1.0f, resonance) * 15.0f);
+}
+
+// The gain this filter has at one frequency, in decibels.
+inline float filterMagnitudeDb(rhino::forge::FilterType type, float cutoff, float resonance, float hz)
+{
+    const auto x = juce::jmax(1.0e-4f, hz) / juce::jmax(1.0e-4f, cutoff);
+    const auto damping = filterDamping(resonance);
+    const auto real = 1.0f - x * x;
+    const auto imaginary = 2.0f * damping * x;
+    const auto denominator = std::sqrt(real * real + imaginary * imaginary);
+    if (denominator <= 0.0f) return filterTopDb;
+
+    auto numerator = 1.0f;
+    switch (type)
+    {
+        case rhino::forge::FilterType::highPass: numerator = x * x; break;
+        case rhino::forge::FilterType::bandPass: numerator = x; break;
+        case rhino::forge::FilterType::lowPass: break;
+    }
+    const auto gain = numerator / denominator;
+    if (gain <= 1.0e-6f) return filterBottomDb;
+    return juce::jlimit(filterBottomDb, filterTopDb, 20.0f * std::log10(gain));
+}
+
+// The response across the whole window. Sampled per pixel of width rather than
+// at a fixed count, so a resonant spike is not stepped over on a wide panel and
+// no time is spent oversampling a narrow one.
+inline juce::Path filterResponsePath(juce::Rectangle<float> box, rhino::forge::FilterType type,
+                                     float cutoff, float resonance)
+{
+    juce::Path path;
+    const auto points = juce::jlimit(48, 512, juce::roundToInt(box.getWidth()));
+    for (int i = 0; i <= points; ++i)
+    {
+        const auto x = box.getX() + box.getWidth() * static_cast<float>(i) / static_cast<float>(points);
+        const auto y = filterDbToY(box, filterMagnitudeDb(type, cutoff, resonance, filterXToHz(box, x)));
+        if (i == 0) path.startNewSubPath(x, y);
+        else path.lineTo(x, y);
+    }
+    return path;
+}
+
+inline juce::String filterHzText(float hz)
+{
+    if (hz >= 1000.0f) return juce::String(hz / 1000.0f, hz >= 10000.0f ? 1 : 2) + " kHz";
+    return juce::String(juce::roundToInt(hz)) + " Hz";
+}
+
+// A short label for a decade line, which has no room for a unit.
+inline juce::String filterDecadeText(float hz)
+{
+    if (hz >= 1000.0f) return juce::String(juce::roundToInt(hz / 1000.0f)) + "k";
+    return juce::String(juce::roundToInt(hz));
+}
+
+// Decade lines across the band, and unity across it. Without them the curve is
+// a shape; with them it is a reading.
+inline void drawFilterGrid(juce::Graphics& g, juce::Rectangle<float> box, float alpha)
+{
+    g.setFont(juce::FontOptions(9.0f));
+    for (const auto hz : {100.0f, 1000.0f, 10000.0f})
+    {
+        const auto x = filterHzToX(box, hz);
+        g.setColour(line.withAlpha(0.5f * alpha));
+        g.drawVerticalLine(juce::roundToInt(x), box.getY(), box.getBottom());
+        g.setColour(mutedText.withAlpha(0.55f * alpha));
+        g.drawText(filterDecadeText(hz),
+                   juce::Rectangle<float>(x + 3.0f, box.getBottom() - 12.0f, 30.0f, 11.0f).toNearestInt(),
+                   juce::Justification::centredLeft);
+    }
+    g.setColour(line.withAlpha(0.35f * alpha));
+    g.drawHorizontalLine(juce::roundToInt(filterDbToY(box, 0.0f)), box.getX(), box.getRight());
+}
+
+// The response, with what passes filled under the curve and what is being taken
+// out washed in above it. The two regions meet along the curve, so the band the
+// filter is removing is a shape on the display rather than something to be
+// inferred from where the line happens to fall.
+inline void drawFilterResponse(juce::Graphics& g, juce::Rectangle<int> area, rhino::forge::FilterType type,
+                               float cutoff, float resonance, juce::Colour colour, float alpha)
+{
+    juce::Graphics::ScopedSaveState clip(g);
+    g.reduceClipRegion(displayClip(area));
+
+    const auto box = area.toFloat().reduced(0.0f, 6.0f);
+    drawFilterGrid(g, box, alpha);
+
+    const auto path = filterResponsePath(box, type, cutoff, resonance);
+    const auto unity = filterDbToY(box, 0.0f);
+
+    // Everything under the curve: the part of the band that is getting through.
+    auto passing = path;
+    passing.lineTo(box.getRight(), box.getBottom());
+    passing.lineTo(box.getX(), box.getBottom());
+    passing.closeSubPath();
+    g.setGradientFill({colour.withAlpha(0.30f * alpha), box.getCentreX(), box.getY(),
+                       colour.withAlpha(0.05f * alpha), box.getCentreX(), box.getBottom(), false});
+    g.fillPath(passing);
+
+    // Everything between the curve and unity: the part being taken out. Clipped
+    // below the unity line so a resonant peak, which is gain rather than loss,
+    // is not shaded as though it were being removed.
+    {
+        juce::Graphics::ScopedSaveState cut(g);
+        g.reduceClipRegion(juce::Rectangle<float>(box.getX(), unity, box.getWidth(),
+                                                  box.getBottom() - unity).toNearestInt());
+        auto removed = path;
+        removed.lineTo(box.getRight(), box.getY());
+        removed.lineTo(box.getX(), box.getY());
+        removed.closeSubPath();
+        g.setColour(mutedText.withAlpha(0.12f * alpha));
+        g.fillPath(removed);
+    }
+
+    strokeGlow(g, path, colour, alpha);
+
+    // The corner itself, marked and named: the display is here to say which
+    // frequencies are going, and this is the one the knob is holding.
+    const auto x = filterHzToX(box, cutoff);
+    g.setColour(colour.withAlpha(0.45f * alpha));
+    g.drawVerticalLine(juce::roundToInt(x), box.getY(), box.getBottom());
+    g.setColour(colour.withAlpha(alpha));
+    const juce::Font readingFont(juce::FontOptions(10.0f, juce::Font::bold));
+    g.setFont(readingFont);
+    const auto reading = filterHzText(cutoff);
+    const auto width = juce::jmax(46.0f, juce::GlyphArrangement::getStringWidth(readingFont, reading) + 8.0f);
+    // Beside the marker, on whichever side of it there is room for.
+    const auto right = x + 4.0f + width <= box.getRight();
+    g.drawText(reading,
+               juce::Rectangle<float>(right ? x + 4.0f : x - 4.0f - width, box.getY() + 2.0f, width, 12.0f)
+                   .toNearestInt(),
+               right ? juce::Justification::centredLeft : juce::Justification::centredRight);
 }
 
 // The pedal shell: a raised body, an accent cap, and a header strip reserved

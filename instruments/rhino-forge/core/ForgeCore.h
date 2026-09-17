@@ -497,10 +497,15 @@ inline float* destinationField(Patch& patch, int destination)
     return nullptr;
 }
 
-inline FilterType filterTypeOf(const Patch& patch)
+// Taken as a bare value as well as from a patch, because the panel draws the
+// filter's response from the parameter and has to land on the same tap the
+// engine will run.
+inline FilterType filterTypeOf(float filterType)
 {
-    return static_cast<FilterType>(juce::jlimit(0, 2, juce::roundToInt(patch.filterType)));
+    return static_cast<FilterType>(juce::jlimit(0, 2, juce::roundToInt(filterType)));
 }
+
+inline FilterType filterTypeOf(const Patch& patch) { return filterTypeOf(patch.filterType); }
 
 // Drive at zero is genuinely clean: the saturation is skipped rather than run
 // at unity, which would still compress the peaks.

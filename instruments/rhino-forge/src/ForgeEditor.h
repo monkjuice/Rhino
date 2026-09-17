@@ -57,7 +57,7 @@ private:
         // time, and carries a numbered button per bank in its header. The other
         // banks stay built and stay attached, so an LFO that is not on screen is
         // still driven by the host and still runs.
-        std::vector<std::unique_ptr<ui::ToggleChip>> bankButtons;
+        std::vector<std::unique_ptr<ui::BankCard>> bankButtons;
         int bank = 0;
         bool on() const { return enable == nullptr || enable->getToggleState(); }
     };
@@ -98,6 +98,20 @@ private:
     // desktop window of its own, which is what a plugin in a host needs.
     // Declared last of the components so it is added on top of them.
     juce::TooltipWindow tooltips {this, 700};
+    // What a knob says while it is being turned. One bubble serves the whole
+    // panel: only one knob is ever in hand. Declared after the tooltip window
+    // so a value the hand is asking for is drawn over a description it is not.
+    ui::ValueBubble valueBubble;
+    // The knob the bubble is showing, so a value arriving from the host or the
+    // matrix does not redirect a bubble the hand opened on something else.
+    Control* bubbleControl = nullptr;
+    // True between a drag starting and ending. While it is false the bubble is
+    // living out the tail below, which is what lets a wheel notch — a change
+    // with no drag around it — put a reading on screen at all.
+    bool bubbleHeld = false;
+    juce::uint32 bubbleUntil = 0;
+    // How long a reading outlives the gesture that set it.
+    static constexpr juce::uint32 bubbleTailMs = 700;
     // The whole of the TABLE tab. It owns its own canvas, strip and buttons
     // rather than declaring parameter controls, because nothing on it is a
     // parameter.
@@ -148,6 +162,9 @@ private:
     void clearSlot(int slot);
     void refreshModulationRings();
     Control* controlAt(juce::Point<int> panelPosition);
+    // Puts the bubble beside this knob, showing what it now reads.
+    void showValueBubble(Control&);
+    void fadeValueBubble();
     void timerCallback() override;
     void choosePresetToLoad();
     void choosePresetToSave();

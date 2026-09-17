@@ -14,7 +14,7 @@ namespace rhino::forge::ui
 {
 using rhino::forge::ModSource;
 
-enum class Display { none, oscillator, envelope, lfo };
+enum class Display { none, oscillator, envelope, lfo, filter };
 
 // A knob is the default. A stepper is the compact field used where reading an
 // exact value matters more than sweeping a range: tuning, filter type. A chip
@@ -120,35 +120,60 @@ struct Module
     // row numbers.
     int columnHeaderHeight = 0;
     int rowGutter = 0;
+    // A larger share of the body than displayPercent, for a module whose
+    // display is the thing being read rather than a picture of it. Zero means
+    // the panel's shared share.
+    int displayShare = 0;
 };
 
-// The numbered buttons that choose which bank a module is showing, laid along
-// its header after the title or the drag handle. Small, because they are a
-// selector rather than a control: what they switch is the whole module below.
-inline constexpr int bankButtonWidth = 20;
-inline constexpr int bankButtonGap = 3;
-inline constexpr int bankButtonHeight = 15;
+// The numbered cards that choose which bank a module is showing, laid along its
+// header after the title or the drag handle. They hang from the module's top
+// edge and take the whole height of the header, so the lit strip along that
+// edge runs across them and the bank you are looking at reads as a tab of the
+// module rather than as a button sitting on it.
+inline constexpr int bankButtonWidth = 32;
+inline constexpr int bankButtonGap = 4;
 
-inline constexpr int gridColumns = 12;
+// Twenty-four rather than twelve. The panel is two rows of five and four
+// modules, and twelve columns cannot cut either of those into the widths the
+// modules actually want — a half-column of error is an eighth of SUB.
+inline constexpr int gridColumns = 24;
 inline constexpr int moduleGap = 8;
-inline constexpr int headerHeight = 22;
+inline constexpr int headerHeight = 28;
 
-// Row weights, top to bottom: the tabbed row, sources and filter and voicing,
-// then envelope and LFO. The tabbed row is much the tallest because it carries
-// either two oscillators with a display each or the whole modulation matrix.
+// Row weights, top to bottom. Two rows, not three: the signal path across the
+// top — sources, the two oscillators, the filter — and everything that moves it
+// along the bottom. The tabs swap the oscillator pair for the matrix or the
+// wavetable editor without disturbing either end of the row, which is what lets
+// SUB, NOISE and FILTER stay put whichever tab is open.
+//
+// The two rows are the same height. Nothing in either of them wants the other's
+// room more than its own does, and a panel cut in half across the middle is
+// read as one thing where two unequal bands are read as a main part and a
+// remainder.
 inline const std::vector<int>& rowWeights()
 {
-    static const std::vector<int> weights {38, 26, 28};
+    static const std::vector<int> weights {50, 50};
     return weights;
 }
 
-// Share of a module's body given over to its display.
-inline constexpr int displayPercent = 36;
+// Share of a module's body given over to its display, unless the module asks
+// for more. Set by the oscillators, which are the only modules taking it: their
+// waveform is the largest thing on the panel and the one a patch is judged by.
+// A knob is a label and a circle now that no value is printed under it, so a
+// control row needs less of the body than it did and the display takes what it
+// no longer needs.
+inline constexpr int displayPercent = 55;
+
+// The share of its body a module actually gives its display.
+inline int displayShareOf(const Module& module)
+{
+    return module.displayShare > 0 ? module.displayShare : displayPercent;
+}
+
 // A knob never grows wider than this, however much room its module has.
 inline constexpr int maxKnobWidth = 108;
 inline constexpr int knobLabelHeight = 14;
-// The value readout under every knob.
-inline constexpr int readoutHeight = 16;
 inline constexpr int stepperLabelHeight = 11;
 inline constexpr int stepperHeight = 21;
 inline constexpr int maxStepperWidth = 122;
@@ -180,25 +205,27 @@ inline juce::Rectangle<int> tabBounds(int index)
 inline const std::vector<Module>& modules()
 {
     static const std::vector<Module> declared {
-        {"oscA", "OSC A", "MORPH", "oscAEnable", false, Display::oscillator, 0, 0, 6, false,
+        {"oscA", "OSC A", "MORPH", "oscAEnable", false, Display::oscillator, 0, 4, 8, false,
          {{26, {{"oscAOctave", "OCT", Style::stepper}, {"oscASemitone", "SEMI", Style::stepper},
                 {"oscAFine", "FINE", Style::stepper}}},
           {74, {{"oscAPosition", "POSITION"}, {"oscAUnison", "UNISON"}, {"oscADetune", "DETUNE"},
                 {"oscABlend", "BLEND"}, {"oscAPan", "PAN"}, {"oscALevel", "LEVEL"}}}},
          0, Page::oscillators},
-        {"oscB", "OSC B", "MORPH", "oscBEnable", false, Display::oscillator, 0, 6, 6, false,
+        {"oscB", "OSC B", "MORPH", "oscBEnable", false, Display::oscillator, 0, 12, 8, false,
          {{26, {{"oscBOctave", "OCT", Style::stepper}, {"oscBSemitone", "SEMI", Style::stepper},
                 {"oscBFine", "FINE", Style::stepper}}},
           {74, {{"oscBPosition", "POSITION"}, {"oscBUnison", "UNISON"}, {"oscBDetune", "DETUNE"},
                 {"oscBBlend", "BLEND"}, {"oscBPan", "PAN"}, {"oscBLevel", "LEVEL"}}}},
          0, Page::oscillators},
 
-        // The matrix takes the whole of the tabbed row, and reads as a table:
-        // one row per slot, numbered down the side, the amount between the
-        // source driving it and the control it moves. Only the first slot
-        // names its columns, because those names are drawn once in the title
-        // strip rather than above all eight rows.
-        {"matrix", "MATRIX", "8 SLOTS", nullptr, true, Display::none, 0, 0, 12, false,
+        // The matrix takes the two oscillators' columns — not the whole row,
+        // because SUB, NOISE and FILTER sit either side of them and stay on
+        // screen whichever tab is open. It reads as a table: one row per slot,
+        // numbered down the side, the amount between the source driving it and
+        // the control it moves. Only the first slot names its columns, because
+        // those names are drawn once in the title strip rather than above all
+        // eight rows.
+        {"matrix", "MATRIX", "8 SLOTS", nullptr, true, Display::none, 0, 4, 16, false,
          {{1, {{"mod1Source", "SOURCE", Style::stepper, nullptr, 2},
                {"mod1Depth", "AMOUNT", Style::bar, nullptr, 3},
                {"mod1Dest", "DESTINATION", Style::stepper, nullptr, 2}}},
@@ -225,43 +252,60 @@ inline const std::vector<Module>& modules()
                {"mod8Dest", "", Style::stepper, nullptr, 2}}}},
          0, Page::matrix, 1, columnTitleHeight, rowNumberGutter},
 
-        // The wavetable editor takes the whole tabbed row, as the matrix does,
+        // The wavetable editor takes the same columns as the matrix does,
         // and declares no controls at all. Nothing on it is a parameter: a table
         // is data, not a value a host can automate, so the panel is one
         // component the editor drops into this box rather than a row of knobs
         // the framework lays out. The framework needs no special case for that
         // — a module with no rows simply has nothing to place.
-        {"table", "WAVETABLE", "EDITOR", nullptr, true, Display::none, 0, 0, 12, false, {},
+        {"table", "WAVETABLE", "EDITOR", nullptr, true, Display::none, 0, 4, 16, false, {},
          0, Page::table},
 
-        {"sub", "SUB", "", "subEnable", false, Display::none, 1, 0, 1, false,
+        // SUB and NOISE stand at the left-hand end of the signal row, beside the
+        // oscillators they are mixed with, and FILTER at the right-hand end,
+        // where everything above it arrives.
+        {"sub", "SUB", "", "subEnable", false, Display::none, 0, 0, 2, false,
          {{100, {{"subLevel", "LEVEL"}}}}},
-        {"noise", "NOISE", "", "noiseEnable", true, Display::none, 1, 1, 1, false,
+        {"noise", "NOISE", "", "noiseEnable", true, Display::none, 0, 2, 2, false,
          {{100, {{"noiseLevel", "LEVEL"}}}}},
+        // Four columns for three knobs, against the oscillators' eight for six:
+        // the same width per knob, so nothing in the row is drawn at a size its
+        // neighbours are not.
+        //
+        // Built like an oscillator, and for the same reason: a display of what
+        // it is doing, a row of short controls under it, then its knobs. The
+        // weights below are the oscillators' own, so the two kinds of module
+        // line up down the whole of the top row instead of each being centred
+        // in its own height.
+        //
         // The routing chips name their source the way Serum's do: A, B, S, N.
-        {"filter", "FILTER", "", "filterEnable", false, Display::none, 1, 2, 3, false,
-         {{30, {{"filterType", "TYPE", Style::stepper}, {"routeA", "A", Style::chip},
+        // TYPE is given twice a chip's width, because it is the one field here
+        // that spells a word out.
+        {"filter", "FILTER", "", "filterEnable", false, Display::filter, 0, 20, 4, false,
+         {{26, {{"filterType", "TYPE", Style::stepper, nullptr, 2}, {"routeA", "A", Style::chip},
                 {"routeB", "B", Style::chip}, {"routeSub", "S", Style::chip},
                 {"routeNoise", "N", Style::chip}}},
-          {70, {{"cutoff", "CUTOFF"}, {"resonance", "RES"}, {"drive", "DRIVE"}}}}},
-        {"global", "GLOBAL", "VOICING", nullptr, false, Display::none, 1, 5, 5, false,
-         {{100, {{"polyphony", "POLY", Style::knob, "mono"}, {"mono", "MONO", Style::rocker},
-                 {"legato", "LEGATO", Style::rocker}, {"glide", "GLIDE"}, {"output", "OUTPUT"}}}}},
+          {74, {{"cutoff", "CUTOFF"}, {"resonance", "RES"}, {"drive", "DRIVE"}}}}},
+        // GLOBAL is a narrow column rather than a wide box, and it opens the
+        // lower row: what the voice is, before anything that shapes it. Five
+        // controls in a row want more width than this panel has to give beside
+        // the envelope and the LFO, so they stack — the two numeric ones, then
+        // the two switches, then OUTPUT on its own at the foot, which is where
+        // it belongs anyway. Output is applied once after the voices are
+        // summed; everything above it is per-voice.
+        {"global", "GLOBAL", "VOICING", nullptr, false, Display::none, 1, 0, 3, false,
+         {{33, {{"polyphony", "POLY", Style::knob, "mono"}, {"glide", "GLIDE"}}},
+          {33, {{"mono", "MONO", Style::rocker}, {"legato", "LEGATO", Style::rocker}}},
+          {34, {{"output", "OUTPUT"}}}}},
 
-        // The macros are a column down the right-hand edge, two across and four
-        // down, standing beside GLOBAL and LFO 1 rather than under them. They
-        // are sources only: a macro reaches a control through a slot or not at
-        // all.
-        {"macros", "MACROS", "SOURCES", nullptr, false, Display::none, 1, 10, 2, true,
-         {{25, {{"macro1", "1"}, {"macro2", "2"}}},
-          {25, {{"macro3", "3"}, {"macro4", "4"}}},
-          {25, {{"macro5", "5"}, {"macro6", "6"}}},
-          {25, {{"macro7", "7"}, {"macro8", "8"}}}},
-         0, Page::always, 2},
-
-        {"env1", "ENV 1", "AMP", nullptr, false, Display::envelope, 2, 0, 5, false,
+        // Nearly two thirds of the body each for the envelope's and the LFO's
+        // display, against the oscillators' rather smaller share. Both of these are drawings of something
+        // happening over time, and a shape read at a glance is what the module
+        // is for; four knobs under it are how you change the shape, not how you
+        // read it.
+        {"env1", "ENV 1", "AMP", nullptr, false, Display::envelope, 1, 3, 9, false,
          {{100, {{"attack", "ATTACK"}, {"decay", "DECAY"}, {"sustain", "SUSTAIN"}, {"release", "RELEASE"}}}},
-         static_cast<int>(ModSource::env1)},
+         static_cast<int>(ModSource::env1), Page::always, 1, 0, 0, 62},
         // Six LFOs in one module, one shown at a time, chosen by the numbered
         // buttons in the header. Six boxes side by side would not fit, and six
         // that did would each be too small to read — Serum shows its eight the
@@ -276,7 +320,7 @@ inline const std::vector<Module>& modules()
         // Written out rather than generated: this file is read to find out what
         // the panel is, and a loop would mean reading the loop instead. The
         // layout test holds every bank to the same shape.
-        {"lfo", "LFO", "SOURCE", nullptr, true, Display::lfo, 2, 5, 5, false,
+        {"lfo", "LFO", "SOURCE", nullptr, true, Display::lfo, 1, 12, 9, false,
          {{100, {{"lfo1Shape", "SHAPE", Style::stepper},
                  {"lfo1Mode", "MODE", Style::stepper},
                  {"lfo1RateUnit", "UNIT", Style::stepper},
@@ -313,7 +357,17 @@ inline const std::vector<Module>& modules()
                  {"lfo6Rate", "RATE", Style::knob, "lfo6RateUnit"},
                  {"lfo6Division", "RATE", Style::knob, nullptr, 1, "lfo6RateUnit", true}},
            lfoCount}},
-         static_cast<int>(ModSource::lfo1)},
+         static_cast<int>(ModSource::lfo1), Page::always, 1, 0, 0, 62},
+
+        // The macros close the lower row, two across and four down in the
+        // narrowest column the panel has: they are deliberately smaller than
+        // the controls they drive, as Serum's are. They are sources only — a
+        // macro reaches a control through a slot or not at all.
+        {"macros", "MACROS", "SOURCES", nullptr, false, Display::none, 1, 21, 3, true,
+         {{25, {{"macro1", "1"}, {"macro2", "2"}}},
+          {25, {{"macro3", "3"}, {"macro4", "4"}}},
+          {25, {{"macro5", "5"}, {"macro6", "6"}}},
+          {25, {{"macro7", "7"}, {"macro8", "8"}}}}},
     };
     return declared;
 }
@@ -334,9 +388,8 @@ inline juce::Rectangle<int> bankButtonBounds(juce::Rectangle<int> moduleArea, co
     auto left = moduleArea.getX() + 10;
     if (module.enableId != nullptr) left += headerHeight;
     if (module.handleSource != 0) left += handleWidth + 8;
-    return {left + bank * (bankButtonWidth + bankButtonGap),
-            moduleArea.getY() + (headerHeight - bankButtonHeight) / 2,
-            bankButtonWidth, bankButtonHeight};
+    return {left + bank * (bankButtonWidth + bankButtonGap), moduleArea.getY(),
+            bankButtonWidth, headerHeight};
 }
 
 // Whether a module is shown while the given tab is chosen.
@@ -356,18 +409,16 @@ inline bool sharePage(const Module& a, const Module& b)
 // The panel is laid out by weight rather than at fixed sizes, so these are the
 // range over which that has been checked rather than sizes anything is designed
 // against. The layout test sweeps the whole of it.
-inline constexpr int minPanelWidth = 1140;
-inline constexpr int minPanelHeight = 980;
-inline constexpr int maxPanelWidth = 1900;
-inline constexpr int maxPanelHeight = 1500;
+inline constexpr int minPanelWidth = 1180;
+inline constexpr int minPanelHeight = 820;
+inline constexpr int maxPanelWidth = 2000;
+inline constexpr int maxPanelHeight = 1180;
 
-// What it opens at: wide enough for the tabbed row to carry a wavetable editor
-// as well as two oscillators, and as short as the panel is allowed to be.
-// Height is what a plugin window inside a host has least of, so the default
-// spends none of it that the layout does not need — and taking it from the
-// limit rather than repeating the number means the two cannot drift apart.
-inline constexpr int defaultPanelWidth = 1350;
-inline constexpr int defaultPanelHeight = minPanelHeight;
+// Forge is a wide panel, and the limits say so: at every size it allows it is
+// broader than it is tall. Two rows of modules over a keyboard is a shape that
+// wants width, and height is what a plugin window inside a host has least of.
+inline constexpr int defaultPanelWidth = 1440;
+inline constexpr int defaultPanelHeight = 900;
 
 inline constexpr int keyboardHeight = 80;
 
@@ -435,7 +486,7 @@ inline juce::Rectangle<int> moduleBody(juce::Rectangle<int> moduleArea, const Mo
     auto body = moduleArea.withTrimmedTop(headerHeight).reduced(10, 6);
     if (module.display != Display::none)
     {
-        body.removeFromTop(body.getHeight() * displayPercent / 100);
+        body.removeFromTop(body.getHeight() * displayShareOf(module) / 100);
         body.removeFromTop(4);
     }
     return body;
@@ -446,7 +497,7 @@ inline juce::Rectangle<int> displayBounds(juce::Rectangle<int> moduleArea, const
 {
     if (module.display == Display::none) return {};
     auto body = moduleArea.withTrimmedTop(headerHeight).reduced(10, 6);
-    return body.removeFromTop(body.getHeight() * displayPercent / 100);
+    return body.removeFromTop(body.getHeight() * displayShareOf(module) / 100);
 }
 
 // The parameter an oscillator's display draws: the first knob of the module,
@@ -592,21 +643,33 @@ inline int uniformKnobDiameter(juce::Rectangle<int> bounds)
                 const auto cell = cellBounds(area, module, r, i);
                 // The cell also has to hold the label above and the readout below.
                 smallest = juce::jmin(smallest, cell.getWidth() - 6,
-                                      cell.getHeight() - knobLabelHeight - readoutHeight);
+                                      cell.getHeight() - knobLabelHeight);
             }
         }
     }
     return juce::jmax(40, smallest);
 }
 
-// The label-plus-knob-plus-readout block, centred in its cell at the one size
-// the whole panel shares.
+// The label-plus-knob block, centred in its cell at the one size the whole panel
+// shares.
+//
+// No value is printed under a knob. A readout costs every knob on the panel a
+// line of height whether or not anyone is reading it, and it was the readout
+// rather than the knob that set how small a macro could be drawn. The value is
+// shown instead where the hand already is, in a bubble beside the knob being
+// turned.
 inline juce::Rectangle<int> knobBlock(juce::Rectangle<int> moduleArea, const Module& module,
                                       int rowIndex, int index, int diameter)
 {
     const auto cell = cellBounds(moduleArea, module, rowIndex, index);
-    return juce::Rectangle<int>(diameter, knobLabelHeight + diameter + readoutHeight)
-        .withCentre(cell.getCentre());
+    juce::ignoreUnused(module);
+    return juce::Rectangle<int>(diameter, knobLabelHeight + diameter).withCentre(cell.getCentre());
+}
+
+// The circle inside a knob's block, which is everything below its label.
+inline int knobDiameterOf(juce::Rectangle<int> block)
+{
+    return block.getHeight() - knobLabelHeight;
 }
 
 // A stepper is a fixed-height numeric field, so it does not scale with the
@@ -654,13 +717,19 @@ inline juce::Rectangle<int> chipBlock(juce::Rectangle<int> moduleArea, const Mod
 // which is backwards: they drive the other controls, they do not outrank them.
 inline constexpr int compactKnobPercent = 80;
 
+// A compact module is the only one that stacks knobs several deep, so it is the
+// only one that needs a gap between one block and the next: a knob sized to
+// exactly its cell puts its readout against the label of the row below, which
+// reads as a collision rather than as a column.
+inline constexpr int compactKnobGap = 8;
+
 inline int knobDiameterFor(const Module& module, juce::Rectangle<int> moduleArea,
                            int rowIndex, int index, int shared)
 {
     if (!module.compactKnobs) return shared;
     const auto cell = cellBounds(moduleArea, module, rowIndex, index);
     return juce::jmax(24, juce::jmin(cell.getWidth() - 6,
-                                     cell.getHeight() - knobLabelHeight - readoutHeight,
+                                     cell.getHeight() - knobLabelHeight - compactKnobGap,
                                      shared * compactKnobPercent / 100));
 }
 

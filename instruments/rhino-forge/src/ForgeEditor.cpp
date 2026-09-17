@@ -85,6 +85,7 @@ Editor::Editor(Processor& p)
     // bottom of the panel, so the window is shorter than it was at every limit.
     setResizeLimits(ui::minPanelWidth, ui::minPanelHeight, ui::maxPanelWidth, ui::maxPanelHeight);
     setSize(ui::defaultPanelWidth, ui::defaultPanelHeight);
+    addChildComponent(valueBubble);
     applyEnableStates();
     applyTableCounts();
     applyPage();
@@ -246,7 +247,10 @@ void Editor::buildModules()
                 if (declared.style == ui::Style::knob)
                 {
                     control->slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-                    control->slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 78, ui::readoutHeight);
+                    // No printed value. The reading appears in the bubble while
+                    // the knob is being turned, which is the only time anyone
+                    // was reading it.
+                    control->slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
                 }
                 else
                 {
@@ -265,6 +269,24 @@ void Editor::buildModules()
                 control->slider.setColour(juce::Slider::textBoxTextColourId, ui::text);
                 control->slider.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
                 control->slider.setTooltip(ui::tooltipFor(declared.id));
+                if (declared.style == ui::Style::knob)
+                {
+                    // onDragStart/onDragEnd/onValueChange are the editor's to
+                    // use: the parameter attachment listens as a Slider
+                    // ::Listener and leaves these alone.
+                    auto* held = control.get();
+                    control->slider.onDragStart = [this, held] { bubbleHeld = true; showValueBubble(*held); };
+                    control->slider.onDragEnd = [this] { bubbleHeld = false; };
+                    // Fires for a wheel notch and a double-click as well as for
+                    // a drag, and for host automation, which is why it only
+                    // refreshes a bubble the hand has already opened — or opens
+                    // one for a gesture that never started a drag.
+                    control->slider.onValueChange = [this, held]
+                    {
+                        if (bubbleHeld || held->slider.isMouseOverOrDragging()) showValueBubble(*held);
+                        else if (bubbleControl == held) showValueBubble(*held);
+                    };
+                }
                 // The attachment installs the parameter's own text formatting,
                 // so it must be created before anything reads the slider's text.
                 control->attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
@@ -325,7 +347,7 @@ void Editor::buildBankButtons()
         const auto accent = ui::accentFor(*module.descriptor);
         for (int bank = 0; bank < banks; ++bank)
         {
-            auto button = std::make_unique<ui::ToggleChip>(juce::String(bank + 1));
+            auto button = std::make_unique<ui::BankCard>(juce::String(bank + 1));
             button->accent = accent;
             button->setClickingTogglesState(false);
             button->setToggleState(bank == module.bank, juce::dontSendNotification);
@@ -481,6 +503,10 @@ void Editor::paint(juce::Graphics& g)
                             processor.lfoPhase(lfo), processor.lfoValue(lfo), accent, alpha);
                 break;
             }
+            case ui::Display::filter:
+                ui::drawFilterResponse(g, display, filterTypeOf(value("filterType")),
+                                       value("cutoff"), value("resonance"), accent, alpha);
+                break;
             case ui::Display::none:
                 break;
         }
@@ -606,9 +632,12 @@ void Editor::resized()
             for (int bank = 0; bank < ui::bankCount(descriptor); ++bank)
                 if (auto* other = handleFor(descriptor.handleSource + bank))
                     other->setVisible(descriptor.handleSource + bank == showing);
+            // Flush with the module's top edge and the full height of the
+            // header: the handle is a card hanging off that edge, not a button
+            // floating inside it.
             if (auto* handle = handleFor(showing))
                 handle->setBounds(area.getX() + (descriptor.enableId != nullptr ? ui::headerHeight + 8 : 10),
-                                  area.getY() + 4, ui::handleWidth, ui::headerHeight - 8);
+                                  area.getY(), ui::handleWidth, ui::headerHeight);
         }
         for (int bank = 0; bank < static_cast<int>(module.bankButtons.size()); ++bank)
             module.bankButtons[static_cast<size_t>(bank)]
@@ -651,12 +680,9 @@ void Editor::resized()
                     control.slider.setBounds(block);
                     break;
                 case ui::Style::rocker:
-                    // Same label line as the knobs either side, and the same
-                    // gap beneath it, so the switch sits exactly where their
-                    // circles do. The readout line is left empty rather than
-                    // reclaimed, which is what keeps the row aligned.
+                    // Same label line as the knobs either side, so the switch
+                    // sits exactly where their circles do.
                     control.label.setBounds(block.removeFromTop(ui::knobLabelHeight));
-                    block.removeFromBottom(ui::readoutHeight);
                     control.rocker->setBounds(ui::rockerBounds(block));
                     break;
                 case ui::Style::knob:
@@ -670,21 +696,23 @@ void Editor::resized()
 
 void Editor::buildHandles()
 {
-    const auto add = [this] (int source, const juce::String& caption, juce::Colour accent)
+    const auto add = [this] (int source, const juce::String& caption, juce::Colour accent,
+                             bool card = false)
     {
         auto handle = std::make_unique<ui::SourceHandle>(source, caption);
         handle->accent = accent;
+        handle->card = card;
         handle->setTooltip("Drag " + juce::String(modSourceName(source)) + " onto a knob");
         handle->addMouseListener(this, false);
         addAndMakeVisible(*handle);
         handles.push_back(std::move(handle));
     };
 
-    add(static_cast<int>(ModSource::env1), "ENV 1", ui::electricBlue);
+    add(static_cast<int>(ModSource::env1), "ENV 1", ui::electricBlue, true);
     // One per LFO, though only the one on screen is ever placed: the handle is
     // the module's own title, and the module is showing one LFO at a time.
     for (int lfo = 0; lfo < lfoCount; ++lfo)
-        add(static_cast<int>(ModSource::lfo1) + lfo, "LFO " + juce::String(lfo + 1), ui::signalViolet);
+        add(static_cast<int>(ModSource::lfo1) + lfo, "LFO " + juce::String(lfo + 1), ui::signalViolet, true);
     for (int macro = 0; macro < macroCount; ++macro)
         add(static_cast<int>(ModSource::macro1) + macro, juce::String(macro + 1), ui::electricBlue);
 }
@@ -1035,8 +1063,44 @@ void Editor::clearSlot(int slot)
     set(slotParameter(slot, "Depth"), 0.0f);
 }
 
+void Editor::showValueBubble(Control& control)
+{
+    bubbleControl = &control;
+    // A macro's label is its bare number, and it is hidden anyway — the drag
+    // handle stands in its place — so the bubble spells the name out. Same
+    // test as the one that puts the handle there in the first place.
+    valueBubble.caption = control.id.startsWith("macro")
+                              ? "MACRO " + juce::String(control.id.getTrailingIntValue())
+                              : control.label.getText();
+    valueBubble.reading = control.slider.getTextFromValue(control.slider.getValue());
+    valueBubble.accent = control.slider.findColour(juce::Slider::rotarySliderFillColourId);
+
+    const auto knob = control.slider.getBounds();
+    const auto size = juce::Rectangle<int>(valueBubble.widthFor(), ui::ValueBubble::heightFor());
+    // Above the knob by preference, below it when the knob is near the top of
+    // the panel, and never off either side.
+    auto placed = size.withCentre({knob.getCentreX(), knob.getY() - size.getHeight() / 2 - 6});
+    if (placed.getY() < 4) placed.setY(knob.getBottom() + 6);
+    placed.setX(juce::jlimit(4, juce::jmax(4, getWidth() - size.getWidth() - 4), placed.getX()));
+    valueBubble.setBounds(placed);
+
+    valueBubble.setVisible(true);
+    valueBubble.toFront(false);
+    valueBubble.repaint();
+    bubbleUntil = juce::Time::getMillisecondCounter() + bubbleTailMs;
+}
+
+void Editor::fadeValueBubble()
+{
+    if (!valueBubble.isVisible() || bubbleHeld) return;
+    if (juce::Time::getMillisecondCounter() < bubbleUntil) return;
+    valueBubble.setVisible(false);
+    bubbleControl = nullptr;
+}
+
 void Editor::timerCallback()
 {
+    fadeValueBubble();
     // Cheap to re-apply every tick, and it catches a dependency changing from
     // host automation as well as from the panel. Both of these only repaint
     // when something has actually changed.

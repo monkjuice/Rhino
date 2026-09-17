@@ -51,10 +51,16 @@ public:
     // the voice the same way notes from the host do.
     juce::MidiKeyboardState keyboardState;
 
-    // ENV 1's live position, published once per block for the editor to draw.
-    // The audio thread writes, the message thread reads; nothing else crosses.
-    float envelopeLevel() const { return meterLevel.load(std::memory_order_relaxed); }
-    int envelopeStage() const { return meterStage.load(std::memory_order_relaxed); }
+    // An envelope's live position, published once per block for the editor to
+    // draw. The audio thread writes, the message thread reads; nothing else
+    // crosses. All four report the loudest voice's copy of themselves, so the
+    // panel shows one voice rather than four unrelated readings.
+    float envelopeLevel(int env = ampEnv) const { return meter(meterLevel, env); }
+    int envelopeStage(int env = ampEnv) const
+    {
+        return env >= 0 && env < envCount
+            ? meterStage[static_cast<size_t>(env)].load(std::memory_order_relaxed) : 0;
+    }
 
     // Where an LFO is in its cycle, and what it last put out. The phase moves
     // the indicator across its display; the value is published too because a
@@ -83,14 +89,17 @@ private:
     // the frame it is on in whichever table the oscillator is reading.
     juce::AudioProcessorValueTreeState::ParameterLayout parameterLayout();
     Core core;
-    std::atomic<float> meterLevel {0.0f};
-    std::atomic<int> meterStage {0};
+    std::array<std::atomic<float>, envCount> meterLevel {};
+    std::array<std::atomic<int>, envCount> meterStage {};
     std::array<std::atomic<float>, lfoCount> meterLfoPhase {};
     std::array<std::atomic<float>, lfoCount> meterLfoValue {};
-    static float meter(const std::array<std::atomic<float>, lfoCount>& from, int lfo)
+    // One reader for every bank of published meters, whatever it is a bank of:
+    // an index outside the bank reads as nothing rather than off the end.
+    template <size_t count>
+    static float meter(const std::array<std::atomic<float>, count>& from, int index)
     {
-        return lfo >= 0 && lfo < lfoCount
-            ? from[static_cast<size_t>(lfo)].load(std::memory_order_relaxed) : 0.0f;
+        return index >= 0 && index < static_cast<int>(count)
+            ? from[static_cast<size_t>(index)].load(std::memory_order_relaxed) : 0.0f;
     }
     // The host's tempo as of the last block, for a synced LFO to divide.
     std::atomic<double> hostBpm {0.0};

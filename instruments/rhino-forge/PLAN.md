@@ -39,9 +39,9 @@ arithmetic; modules declare their contents.
 | | (o) | | (o) | |  OCT SEMI FINE   | |  OCT SEMI FINE   | | TYPE ABSN  | |
 | |     | |     | | POS UNI DET ...  | | POS UNI DET ...  | | CUT RES DR | |
 | +-----+ +-----+ +------------------+ +------------------+ +-----------+ |
-| +GLOBAL+ +-- ENV 1 ----------+ +-- LFO -------------+ +-MACROS-+      |
+| +GLOBAL+ +-- ENV -------------+ +-- LFO -------------+ +-MACROS-+      |
 | |POLY GL| | [ ADSR curve    ] | | [ shape + phase ]  | | 1    2 |      |
-| |MO LEG | |                   | | [1][2][3][4][5][6] | | 3    4 |      |
+| |MO LEG | | [1][2][3][4]      | | [1][2][3][4][5][6] | | 3    4 |      |
 | |OUTPUT | | ATK DEC SUS REL   | | SHAPE MODE UNIT RT | | 5    6 |      |
 | |       | |                   | |                    | | 7    8 |      |
 | +-------+ +-------------------+ +--------------------+ +--------+      |
@@ -67,7 +67,7 @@ row moves.
 
 | Question | Decision |
 | --- | --- |
-| How many envelopes | One. It is hardwired to the voice amplitude, exactly as Serum's ENV 1 is. ENV 2–4 are auxiliary modulators you drag onto knobs, and arrive with the modulation matrix, not before. |
+| How many envelopes | Four, as of M10b. ENV 1 is hardwired to the voice amplitude, exactly as Serum's ENV 1 is; ENV 2–4 are auxiliary modulators you drag onto knobs. They deliberately arrived after the modulation matrix rather than before it, because there was nothing for them to reach until it existed. |
 | Filter envelope | Removed. The filter is its own module and owns no envelope. |
 | Macros | Removed. They are hardwired parameter offsets today, which is the wrong shape. They return as real assignable macros with the modulation matrix. |
 | Effects | Removed from the synth path. Chorus, delay, distortion and the rest return as a proper FX rack after the synth is done. |
@@ -81,6 +81,12 @@ LFO 1's `> CUTOFF` depth. Plucks and filter sweeps that relied on the filter
 envelope will sound flatter in the interim. This is accepted deliberately: a
 hardwired second envelope is the thing being replaced, and rebuilding it now
 would be thrown away by M6.
+
+**Closed at M10b.** A filter envelope is now an ordinary patch: point ENV 2 at
+`CUTOFF` in a slot. It is better than the one that was removed, because the same
+envelope also reaches the drive, either oscillator's position or anything else
+the matrix carries, and because a patch that wants no filter envelope does not
+pay for one.
 
 ## Milestones
 
@@ -772,11 +778,66 @@ back as LFO 1's, a slot on LFO 1 stays there while velocity, note and the macros
 all land where they now live, and saving and reopening does not move them again.
 
 
+### M10b — ENV 2–4, sources like any other — done
+
+M5 built one envelope, hardwired to the voice's amplitude, and the decision
+table above said the other three would arrive as auxiliary modulators once there
+was a matrix to carry them. There is, and this is them.
+
+- **Four envelopes, identical in every way but what reads them.** ENV 1 is still
+  the amplitude and is still what says a voice is finished; ENV 2–4 reach a
+  control through a slot or not at all. They are not a lesser kind of envelope
+  with fewer stages or a coarser range: the same four knobs, the same ranges,
+  the same defaults, because the difference between them is a matter of routing
+  rather than of what an envelope is.
+- **All four run in every voice, and all four answer the same key.** The note
+  that starts ENV 1 starts them, the key lifting releases them, and a stolen
+  voice carries all four across the steal from the levels they had reached — the
+  same rule that already kept ENV 1 continuous. An auxiliary envelope that fell
+  only when the amplitude did would be a shape with no release of its own.
+- **They are updated whether or not anything reads them.** The LFOs are worked
+  out only where they are wanted, because a phase moves on by itself and the
+  wave can be evaluated on demand. An envelope's value *is* its state, so one
+  skipped while nothing points at it would come back wrong the moment something
+  did. Four of them is three extra additions per voice per sample.
+- **The panel's ENV module became a bank of four**, exactly as the LFO module is
+  a bank of six: numbered cards in the header, the drag handle carrying whichever
+  is showing, the banks that are not showing still built, still attached and
+  still running. The display, the stage in the header and the four knobs all
+  follow the bank.
+- **The zoom is per envelope.** The window is how long a shape is read against,
+  and four envelopes are not the same length: a percussive ENV 3 read against the
+  three-second window ENV 1 wants is a sliver, and one shared setting would hand
+  you a display to re-zoom on every switch. Still a view setting, still absent
+  from the state and from presets.
+- **The header says what the envelope is when there is no stage to name.** Idle
+  is not a stage — it is the envelope not running — so `stageName` now returns
+  nothing for it and the panel answers instead: `AMP` for ENV 1, `SOURCE` for the
+  three that go nowhere on their own.
+- **Two things moved, and old state is put right rather than left.** `attack` and
+  its three companions were named for the only envelope there was and are now
+  `env1Attack` and so on; and three envelopes were inserted into the middle of
+  the source list, so every saved slot source past ENV 1 moved up by three. This
+  is the second such move — LFO 2–6 was the first — so `Processor::migrated` now
+  says it once, as a rename and an insertion point, and runs the two oldest
+  first. A state old enough to predate the LFO banks predates the envelopes too,
+  whether or not it happens to name one, so the older mark implies the newer.
+
+**Tests:** an envelope nothing points at renders bit-identically however its
+knobs are set, which is the whole of "sources only"; each of the four opens a
+filter it is pointed at; under one note ENV 1 sits in sustain while ENV 2 is
+still climbing and ENV 3 has already fallen to nothing, which no single shared
+shape could do; lifting the key releases ENV 2 from the level it had reached;
+every envelope reads nothing once the voice has gone; and the offset published
+for a knob's ring is the same reading ENV 2's own display draws. On migration,
+both eras: a state from before either bank lands its slots where the two shifts
+leave them, a state from between them has only the envelope shift applied, and
+neither moves again when it is saved and reopened.
+
 ## Out of scope for now
 
 These are the north star, not this plan. They come after the synth is finished.
 
-- **M10 — ENV 2–4** as further matrix sources. LFO 2–6 and macros 1–8 are done.
 - **M11 — FX rack.** Chorus, distortion, delay, reverb, compressor, EQ, in a
   reorderable chain.
 - **M12 — Second filter,** with the serial/parallel routing Serum exposes.
@@ -838,3 +899,4 @@ way to look at a change.
 | M9d Voice stealing without a click | **done** — ready to test by ear |
 | M9e Voice tail, not a truncated filter | **done** — ready to test by ear |
 | M10a Six LFOs, per voice | **done** — ready to test by ear |
+| M10b ENV 2–4 | **done** — ready to test by ear |

@@ -240,10 +240,25 @@ juce::AudioProcessorValueTreeState::ParameterLayout Processor::parameterLayout()
     result.push_back(parameter("cutoff", "Cutoff", {30.0f, 18000.0f, 0.0f, 0.25f}, 7800.0f, asHertz));
     result.push_back(parameter("resonance", "Resonance", {0.0f, 1.0f}, 0.12f, asPercent));
     result.push_back(parameter("drive", "Drive", {0.0f, 1.0f}, 0.08f, asPercent));
-    result.push_back(parameter("attack", "Attack", {0.001f, 4.0f, 0.0f, 0.35f}, 0.01f, asSeconds));
-    result.push_back(parameter("decay", "Decay", {0.001f, 4.0f, 0.0f, 0.35f}, 0.24f, asSeconds));
-    result.push_back(parameter("sustain", "Sustain", {0.0f, 1.0f}, 0.75f, asPercent));
-    result.push_back(parameter("release", "Release", {0.001f, 8.0f, 0.0f, 0.35f}, 0.35f, asSeconds));
+    // Four envelopes, declared identically and with the same defaults. ENV 1 is
+    // the amplitude and ENV 2-4 are sources, but that is a matter of what reads
+    // them, not of what they are: the LFOs were given a rate each so six of them
+    // would not move as one, and there is no such thing to avoid here — four
+    // envelopes are started by the same note whatever their times, and a source
+    // that opens exactly as the amplitude does is the useful place to start
+    // from rather than one to be nudged off.
+    for (int env = 1; env <= envCount; ++env)
+    {
+        const auto id = [env] (const char* suffix) { return envParameterId(env - 1, suffix); };
+        const auto name = [env] (const char* suffix)
+        {
+            return "Env " + juce::String(env) + " " + suffix;
+        };
+        result.push_back(parameter(id("Attack"), name("Attack"), {0.001f, 4.0f, 0.0f, 0.35f}, 0.01f, asSeconds));
+        result.push_back(parameter(id("Decay"), name("Decay"), {0.001f, 4.0f, 0.0f, 0.35f}, 0.24f, asSeconds));
+        result.push_back(parameter(id("Sustain"), name("Sustain"), {0.0f, 1.0f}, 0.75f, asPercent));
+        result.push_back(parameter(id("Release"), name("Release"), {0.001f, 8.0f, 0.0f, 0.35f}, 0.35f, asSeconds));
+    }
     // Six LFOs, declared identically. None is expressed in terms of another:
     // each owns its shape, its mode and its rate outright, exactly as the two
     // oscillators do, and the panel shows one at a time.
@@ -402,8 +417,11 @@ void Processor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
 
     // Published once per block rather than per sample: the display redraws at
     // 24 Hz, so a per-sample store would be pure contention for no extra detail.
-    meterLevel.store(core.envelopeLevel(), std::memory_order_relaxed);
-    meterStage.store(core.envelopeStage(), std::memory_order_relaxed);
+    for (int env = 0; env < envCount; ++env)
+    {
+        meterLevel[static_cast<size_t>(env)].store(core.envelopeLevel(env), std::memory_order_relaxed);
+        meterStage[static_cast<size_t>(env)].store(core.envelopeStage(env), std::memory_order_relaxed);
+    }
     for (int lfo = 0; lfo < lfoCount; ++lfo)
     {
         meterLfoPhase[static_cast<size_t>(lfo)].store(core.lfoPosition(lfo), std::memory_order_relaxed);
@@ -459,10 +477,14 @@ Patch Processor::patch() const
     result.cutoff = value("cutoff");
     result.resonance = value("resonance");
     result.drive = value("drive");
-    result.attack = value("attack");
-    result.decay = value("decay");
-    result.sustain = value("sustain");
-    result.release = value("release");
+    for (int env = 0; env < envCount; ++env)
+    {
+        auto& shape = result.envs[static_cast<size_t>(env)];
+        shape.attack = value(envParameterId(env, "Attack"));
+        shape.decay = value(envParameterId(env, "Decay"));
+        shape.sustain = value(envParameterId(env, "Sustain"));
+        shape.release = value(envParameterId(env, "Release"));
+    }
     for (int lfo = 0; lfo < lfoCount; ++lfo)
     {
         auto& setting = result.lfos[static_cast<size_t>(lfo)];
@@ -566,40 +588,73 @@ juce::ValueTree Processor::migrated(const juce::ValueTree& savedState) const
 {
     auto result = savedState.createCopy();
 
-    // LFO 2-6 arrived after some of these were written, and two things moved
-    // with them. A dropped parameter loads at its default, which is harmless; a
-    // parameter that quietly means something different is not, so both are put
-    // right here rather than left to the reconciliation below.
+    // Each modulator that arrived as a bank did the same two things to a state
+    // written before it: the one that already existed was renamed for its place
+    // in the bank, and the rest were inserted into the middle of the source
+    // list, moving everything past them. A dropped parameter loads at its
+    // default, which is harmless; a parameter or a source index that quietly
+    // means something different is not, so both are put right here rather than
+    // left to the reconciliation below.
     //
-    // The one LFO's parameters were named for the only LFO there was, so the
-    // presence of `lfoShape` is what says a state predates the other five. It
-    // is also what makes this safe to run twice: a state that has been through
-    // it once no longer carries that id.
-    if (parameterEntry(result, "lfoShape").isValid())
+    // Everything a slot's Source sat past a run moved up by the rest of that
+    // run. `inserted` is that shift, in the numbering the state is in when it is
+    // applied — so these run oldest first, each handing the next a state written
+    // as if its own change had always been there.
+    const auto inserted = [&result] (int after, int howMany)
     {
-        static const std::array<std::pair<const char*, const char*>, 5> renamed {{
-            {"lfoShape", "lfo1Shape"}, {"lfoMode", "lfo1Mode"}, {"lfoRate", "lfo1Rate"},
-            {"lfoRateUnit", "lfo1RateUnit"}, {"lfoDivision", "lfo1Division"}}};
-        for (auto child : result)
-        {
-            const auto id = child.getProperty("id").toString();
-            for (const auto& [was, now] : renamed)
-                if (id == was) child.setProperty("id", now, nullptr);
-        }
-
-        // A slot's Source is an index into the list of sources, and five LFOs
-        // were inserted into the middle of that list. Everything that sat past
-        // LFO 1 moved up by five, so a saved index has to move with it or the
-        // slot comes back silently pointed at something else.
-        const auto firstLfo = static_cast<int>(ModSource::lfo1);
         for (int slot = 1; slot <= modSlotCount; ++slot)
         {
             auto entry = parameterEntry(result, "mod" + juce::String(slot) + "Source");
             if (!entry.isValid()) continue;
             const auto was = juce::roundToInt(static_cast<float>(entry.getProperty("value")));
-            if (was > firstLfo)
-                entry.setProperty("value", static_cast<float>(was + lfoCount - 1), nullptr);
+            if (was > after) entry.setProperty("value", static_cast<float>(was + howMany), nullptr);
         }
+    };
+    const auto renamed = [&result] (const std::vector<std::pair<const char*, const char*>>& pairs)
+    {
+        for (auto child : result)
+        {
+            const auto id = child.getProperty("id").toString();
+            for (const auto& [was, now] : pairs)
+                if (id == was) child.setProperty("id", now, nullptr);
+        }
+    };
+
+    // What a state is old enough to predate, read before anything is renamed,
+    // because renaming is what clears these marks — which is also what makes
+    // the whole of this safe to run twice.
+    //
+    // The one LFO's parameters were named for the only LFO there was, so
+    // `lfoShape` says a state predates the other five; the amp envelope's
+    // carried no number for the same reason, so `attack` says one predates
+    // ENV 2-4. Either mark is enough on its own, and the older one implies the
+    // newer: a state from before the LFOs came in banks is from before the
+    // envelopes did too, whether or not it happens to name an envelope at all.
+    const auto predatesLfoBanks = parameterEntry(result, "lfoShape").isValid();
+    const auto predatesEnvBanks = predatesLfoBanks || parameterEntry(result, "attack").isValid();
+
+    // LFO 2-6.
+    if (predatesLfoBanks)
+    {
+        renamed({{"lfoShape", "lfo1Shape"}, {"lfoMode", "lfo1Mode"}, {"lfoRate", "lfo1Rate"},
+                 {"lfoRateUnit", "lfo1RateUnit"}, {"lfoDivision", "lfo1Division"}});
+        // LFO 1 sat at 2 in the list as it was numbered then, straight after
+        // ENV 1, and five LFOs went in behind it. Written out rather than taken
+        // from ModSource::lfo1, because that constant says where LFO 1 is now —
+        // it has itself moved since, and reading it here would silently shift
+        // this by however far the list has travelled afterwards.
+        inserted(2, lfoCount - 1);
+    }
+
+    // ENV 2-4, which moved everything past ENV 1 again.
+    if (predatesEnvBanks)
+    {
+        renamed({{"attack", "env1Attack"}, {"decay", "env1Decay"},
+                 {"sustain", "env1Sustain"}, {"release", "env1Release"}});
+        // ENV 1 has always been 1 and does not move; the three behind it push
+        // everything else along. Anything already remapped by the LFO step is in
+        // the numbering this step expects, which is why that one runs first.
+        inserted(static_cast<int>(ModSource::env1), envCount - 1);
     }
 
     for (int i = result.getNumChildren(); --i >= 0;)

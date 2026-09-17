@@ -31,7 +31,8 @@ private:
         const char* enabledBy = nullptr;
         int row = 0, index = 0;
         // Which bank of its module this control belongs to. Zero in a module
-        // that declares none, which is all of them but the LFOs.
+        // that declares none, which is all of them but the envelopes and the
+        // LFOs.
         int bank = 0;
         // The slot whose depth this knob's ring sets, or -1 when the ring is
         // not draggable: nothing is pointed here, or more than one thing is and
@@ -55,8 +56,8 @@ private:
         std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> enableAttachment;
         // A module whose controls are declared in banks shows one bank at a
         // time, and carries a numbered button per bank in its header. The other
-        // banks stay built and stay attached, so an LFO that is not on screen is
-        // still driven by the host and still runs.
+        // banks stay built and stay attached, so an envelope or an LFO that is
+        // not on screen is still driven by the host and still runs.
         std::vector<std::unique_ptr<ui::BankCard>> bankButtons;
         int bank = 0;
         bool on() const { return enable == nullptr || enable->getToggleState(); }
@@ -68,11 +69,16 @@ private:
     // Which tab is showing. Only the modules that declare a page follow it;
     // everything else stays on screen whichever tab is chosen.
     ui::Page page = ui::Page::oscillators;
-    // How much time ENV 1's display spans, as an index into ui::envelopeZooms.
-    // A view setting, not a parameter: it changes nothing that is heard, so it
-    // belongs neither in the automation state nor in a preset, and it opens on
-    // the default for the same reason `page` does.
-    int envelopeZoom = ui::envelopeDefaultZoom;
+    // How much time the envelope display spans, as an index into
+    // ui::envelopeZooms. A view setting, not a parameter: it changes nothing
+    // that is heard, so it belongs neither in the automation state nor in a
+    // preset, and it opens on the default for the same reason `page` does.
+    //
+    // One per envelope, because the window is how long a shape is read against
+    // and four envelopes are not the same length: a percussive ENV 3 under the
+    // three-second window ENV 1 wants is a sliver, and switching to it would
+    // hand you a display you had to re-zoom every time.
+    std::array<int, envCount> envelopeZoom = ui::envelopeZoomDefaults();
     // Wheel travel not yet spent on a zoom step. One notch of a mouse wheel
     // measures about 0.2 here, so the threshold sits below that and a notch is
     // reliably a step — at 0.25 the first notch of a turn did nothing, which
@@ -135,9 +141,15 @@ private:
     void paintTable(juce::Graphics&, juce::Rectangle<int> area, const ui::Module&);
     bool slotIsLive(int slot) const;
     juce::String lfoHeaderDetail() const;
+    // What the envelope module's header says: the stage the envelope showing is
+    // in, or, at rest, what that envelope is there for.
+    juce::String envHeaderDetail() const;
     // Which LFO the panel is showing: the LFO module's chosen bank, and so also
     // the one its display draws, its header reports and its handle drags.
     int shownLfo() const;
+    // Which envelope the panel is showing: the ENV module's chosen bank, and so
+    // also the one its display draws, its knobs drive and its handle drags.
+    int shownEnv() const;
     void buildBankButtons();
     void showBank(ModuleUi&, int bank);
     void applyEnableStates();
@@ -146,9 +158,9 @@ private:
     void mouseDrag(const juce::MouseEvent&) override;
     void mouseUp(const juce::MouseEvent&) override;
     void mouseWheelMove(const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
-    // ENV 1's display, for the clicks on the zoom strip down its right and the
-    // wheel over the plot beside it. Null or empty when the envelope is not on
-    // the tab being shown.
+    // The envelope display, for the clicks on the zoom strip down its right and
+    // the wheel over the plot beside it. Null or empty when the envelope is not
+    // on the tab being shown.
     const ui::Module* envelopeModule() const;
     juce::Rectangle<int> envelopeDisplayBounds() const;
     void setEnvelopeZoom(int zoom);

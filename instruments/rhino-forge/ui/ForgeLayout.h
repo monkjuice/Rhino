@@ -303,8 +303,30 @@ inline const std::vector<Module>& modules()
         // happening over time, and a shape read at a glance is what the module
         // is for; four knobs under it are how you change the shape, not how you
         // read it.
-        {"env1", "ENV 1", "AMP", nullptr, false, Display::envelope, 1, 3, 9, false,
-         {{100, {{"attack", "ATTACK"}, {"decay", "DECAY"}, {"sustain", "SUSTAIN"}, {"release", "RELEASE"}}}},
+        //
+        // Four envelopes in one module, one shown at a time, the same
+        // arrangement the LFOs use and for the same reason: four boxes of this
+        // size would not fit, and the display is the point of the module. ENV 1
+        // is the amplitude and the rest are sources, but they are the same
+        // control set, so they are the same bank repeated.
+        //
+        // No detail is declared: the header says which stage the envelope
+        // showing is in, and at rest what that envelope is for — which is not
+        // the same answer for ENV 1 as for the three behind it. The editor
+        // supplies it.
+        {"env", "ENV", "", nullptr, false, Display::envelope, 1, 3, 9, false,
+         {{100, {{"env1Attack", "ATTACK"}, {"env1Decay", "DECAY"},
+                 {"env1Sustain", "SUSTAIN"}, {"env1Release", "RELEASE"},
+
+                 {"env2Attack", "ATTACK"}, {"env2Decay", "DECAY"},
+                 {"env2Sustain", "SUSTAIN"}, {"env2Release", "RELEASE"},
+
+                 {"env3Attack", "ATTACK"}, {"env3Decay", "DECAY"},
+                 {"env3Sustain", "SUSTAIN"}, {"env3Release", "RELEASE"},
+
+                 {"env4Attack", "ATTACK"}, {"env4Decay", "DECAY"},
+                 {"env4Sustain", "SUSTAIN"}, {"env4Release", "RELEASE"}},
+           envCount}},
          static_cast<int>(ModSource::env1), Page::always, 1, 0, 0, 62},
         // Six LFOs in one module, one shown at a time, chosen by the numbered
         // buttons in the header. Six boxes side by side would not fit, and six

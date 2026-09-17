@@ -1039,6 +1039,15 @@ inline constexpr int envelopeZoomCount = sizeof(envelopeZooms) / sizeof(envelope
 // still reads as the sliver it is.
 inline constexpr int envelopeDefaultZoom = 6;
 
+// The window every envelope opens on, one per envelope. Written as a function
+// so the panel's array of them cannot be one short of the envelopes there are.
+inline constexpr std::array<int, envCount> envelopeZoomDefaults()
+{
+    std::array<int, envCount> zooms {};
+    for (auto& zoom : zooms) zoom = envelopeDefaultZoom;
+    return zooms;
+}
+
 inline EnvelopeAxis envelopeAxis(int zoom)
 {
     return envelopeZooms[juce::jlimit(0, envelopeZoomCount - 1, zoom)];
@@ -1277,6 +1286,10 @@ inline void drawEnvelope(juce::Graphics& g, juce::Rectangle<int> area, float att
     g.fillEllipse(juce::Rectangle<float>(4.0f, 4.0f).withCentre({x, y}));
 }
 
+// Idle names nothing, because idle is not a stage the envelope is in — it is
+// the envelope not running. What the header says instead is whatever that
+// particular envelope is for, which is a question about ENV 1 against ENV 2-4
+// rather than about the state machine, so the panel answers it.
 inline const char* stageName(Stage stage)
 {
     switch (stage)
@@ -1287,7 +1300,7 @@ inline const char* stageName(Stage stage)
         case Stage::release: return "RELEASE";
         case Stage::idle: break;
     }
-    return "AMP";
+    return "";
 }
 
 // LFO 1's shape, drawn as exactly one cycle with an indicator riding it. One

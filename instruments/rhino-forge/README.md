@@ -5,21 +5,25 @@ standalone JUCE application that deliberately owns no Tracktion or Rhino-DAW
 types.
 
 Forge is a synthesiser and nothing else. The panel is a set of modules — two
-oscillators, sub, noise, a filter, one amp envelope, six LFOs, global voicing,
+oscillators, sub, noise, a filter, four envelopes, six LFOs, global voicing,
 eight macros and the modulation matrix — each in its own box with its own
 enable. Effects are deliberately absent until the synth is finished.
 
-The six LFOs share one module, which shows one at a time: numbered cards
-hanging from the module's top edge say which, and the module's drag handle —
-another such card, carrying the module's name — drags whichever is showing. An LFO set to TRIG or ENV runs inside each voice, so a new note starts
-its own copy and leaves the notes already sounding alone; one set to OFF is a
-single free-running cycle shared by every voice and by the panel.
+The four envelopes share one module and the six LFOs share another, each showing
+one at a time: numbered cards hanging from the module's top edge say which, and
+the module's drag handle — another such card, carrying the name of whichever is
+showing — drags it onto a knob. ENV 1 is the voice's amplitude; ENV 2–4 are
+sources and nothing else, so one reaches a control through a modulation slot or
+not at all. All four run in every voice, started by the same note and released by
+the same key. An LFO set to TRIG or ENV runs inside each voice too, so a new note
+starts its own copy and leaves the notes already sounding alone; one set to OFF
+is a single free-running cycle shared by every voice and by the panel.
 
 The panel is two rows of modules, the same height as each other, over an
 eighty-eight key keyboard, and it is wider than it is tall at every size it
 allows. The top row is the signal path read left to right — sub and noise, the
 two oscillators, the filter. The bottom row is what shapes it, in the same
-order: global voicing as a narrow column, then the envelope, the LFOs and the
+order: global voicing as a narrow column, then the envelopes, the LFOs and the
 macros.
 
 The filter shows its own response: the band it is passing filled under the

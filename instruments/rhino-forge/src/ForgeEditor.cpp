@@ -336,8 +336,8 @@ void Editor::buildModules()
 
 // A module declared in banks carries one numbered button per bank in its
 // header. Which bank is showing is the panel's business and not the host's: it
-// says which LFO you are looking at, not what the synth is doing, so it is no
-// more a parameter than which tab is open.
+// says which envelope or which LFO you are looking at, not what the synth is
+// doing, so it is no more a parameter than which tab is open.
 void Editor::buildBankButtons()
 {
     for (auto& module : moduleUis)
@@ -366,8 +366,8 @@ void Editor::showBank(ModuleUi& module, int bank)
     module.bank = bank;
     for (int i = 0; i < static_cast<int>(module.bankButtons.size()); ++i)
         module.bankButtons[static_cast<size_t>(i)]->setToggleState(i == bank, juce::dontSendNotification);
-    // The handle in the header drags whichever LFO is showing, so the layout
-    // has to run again to put the right one there.
+    // The handle in the header drags whichever of them is showing, so the
+    // layout has to run again to put the right one there.
     applyEnableStates();
     refreshModulationRings();
     resized();
@@ -382,6 +382,31 @@ int Editor::shownLfo() const
         if (module.descriptor->display == ui::Display::lfo)
             return juce::jlimit(0, lfoCount - 1, module.bank);
     return 0;
+}
+
+// Which envelope the panel is showing. The module is the one that declares the
+// envelope display, so nothing here has to know its id.
+int Editor::shownEnv() const
+{
+    for (const auto& module : moduleUis)
+        if (module.descriptor->display == ui::Display::envelope)
+            return juce::jlimit(0, envCount - 1, module.bank);
+    return ampEnv;
+}
+
+// What the envelope module's header says. While a note is sounding that is the
+// stage the envelope showing has reached — the reading the knobs cannot give,
+// because it is a position in a shape rather than the shape. At rest there is
+// no stage to name, so it says what that envelope is for instead: ENV 1 is
+// wired to the amplitude, and the other three go nowhere until a slot sends
+// them.
+juce::String Editor::envHeaderDetail() const
+{
+    const auto env = shownEnv();
+    const juce::String stage = ui::stageName(static_cast<ui::Stage>(
+        juce::jlimit(0, 4, processor.envelopeStage(env))));
+    if (stage.isNotEmpty()) return stage;
+    return env == ampEnv ? "AMP" : "SOURCE";
 }
 
 void Editor::applyEnableStates()
@@ -450,14 +475,13 @@ void Editor::paint(juce::Graphics& g)
         const auto area = ui::moduleBounds(getLocalBounds(), descriptor);
         const auto on = module.on();
         const auto alpha = on ? 1.0f : 0.35f;
-        const auto stage = static_cast<ui::Stage>(juce::jlimit(0, 4, processor.envelopeStage()));
         // A module's header carries what it is doing rather than what it is:
-        // the envelope names its stage, and the LFO names the rate it is
-        // actually running at, which in sync is a tempo division and so cannot
-        // be read off the greyed-out rate knob.
+        // the envelope names the stage it is in, and the LFO names the rate it
+        // is actually running at, which in sync is a tempo division and so
+        // cannot be read off the greyed-out rate knob.
         const auto tableModule = juce::String(descriptor.id) == "table";
         ui::drawModuleShell(g, area, descriptor, on,
-                            descriptor.display == ui::Display::envelope ? ui::stageName(stage)
+                            descriptor.display == ui::Display::envelope ? envHeaderDetail()
                             : descriptor.display == ui::Display::lfo ? lfoHeaderDetail()
                             : tableModule && tablePanel != nullptr ? tablePanel->headerDetail()
                                 : juce::String());
@@ -490,10 +514,20 @@ void Editor::paint(juce::Graphics& g)
                                      value(source), accent, alpha);
                 break;
             case ui::Display::envelope:
-                ui::drawEnvelope(g, display, value("attack"), value("decay"),
-                                 value("sustain"), value("release"), accent, alpha,
-                                 stage, processor.envelopeLevel(), envelopeZoom);
+            {
+                // Whichever envelope the module is showing, drawn from its own
+                // knobs, its own window and its own live reading.
+                const auto env = shownEnv();
+                const auto stage = static_cast<ui::Stage>(
+                    juce::jlimit(0, 4, processor.envelopeStage(env)));
+                ui::drawEnvelope(g, display, value(envParameterId(env, "Attack")),
+                                 value(envParameterId(env, "Decay")),
+                                 value(envParameterId(env, "Sustain")),
+                                 value(envParameterId(env, "Release")), accent, alpha,
+                                 stage, processor.envelopeLevel(env),
+                                 envelopeZoom[static_cast<size_t>(env)]);
                 break;
+            }
             case ui::Display::lfo:
             {
                 const auto lfo = shownLfo();
@@ -708,9 +742,12 @@ void Editor::buildHandles()
         handles.push_back(std::move(handle));
     };
 
-    add(static_cast<int>(ModSource::env1), "ENV 1", ui::electricBlue, true);
-    // One per LFO, though only the one on screen is ever placed: the handle is
-    // the module's own title, and the module is showing one LFO at a time.
+    // One per envelope and one per LFO, though only the one on screen is ever
+    // placed: the handle is the module's own title, and each module is showing
+    // one of them at a time.
+    for (int env = 0; env < envCount; ++env)
+        add(static_cast<int>(ModSource::env1) + env, "ENV " + juce::String(env + 1),
+            ui::electricBlue, true);
     for (int lfo = 0; lfo < lfoCount; ++lfo)
         add(static_cast<int>(ModSource::lfo1) + lfo, "LFO " + juce::String(lfo + 1), ui::signalViolet, true);
     for (int macro = 0; macro < macroCount; ++macro)
@@ -727,7 +764,7 @@ Editor::Control* Editor::controlAt(juce::Point<int> panelPosition)
     return nullptr;
 }
 
-// ENV 1's module is painted straight onto the editor rather than being a
+// The envelope module is painted straight onto the editor rather than being a
 // component of its own, so the things on it that can be clicked or scrolled are
 // hit-tested here, against the same geometry the painter lays them out with.
 const ui::Module* Editor::envelopeModule() const
@@ -748,11 +785,15 @@ juce::Rectangle<int> Editor::envelopeDisplayBounds() const
                              : ui::displayBounds(ui::moduleBounds(getLocalBounds(), *module), *module);
 }
 
+// The window belongs to the envelope showing, not to the module: four
+// envelopes are not the same length, so a window set on one is no reading of
+// another.
 void Editor::setEnvelopeZoom(int zoom)
 {
+    auto& current = envelopeZoom[static_cast<size_t>(shownEnv())];
     const auto clamped = juce::jlimit(0, ui::envelopeZoomCount - 1, zoom);
-    if (clamped == envelopeZoom) return;
-    envelopeZoom = clamped;
+    if (clamped == current) return;
+    current = clamped;
     repaint();
 }
 
@@ -773,8 +814,9 @@ void Editor::mouseDown(const juce::MouseEvent& event)
         const auto at = event.getEventRelativeTo(this).getPosition();
         if (const auto display = envelopeDisplayBounds(); !display.isEmpty())
         {
-            if (ui::envelopeZoomIn(display).contains(at)) { setEnvelopeZoom(envelopeZoom - 1); return; }
-            if (ui::envelopeZoomOut(display).contains(at)) { setEnvelopeZoom(envelopeZoom + 1); return; }
+            const auto zoom = envelopeZoom[static_cast<size_t>(shownEnv())];
+            if (ui::envelopeZoomIn(display).contains(at)) { setEnvelopeZoom(zoom - 1); return; }
+            if (ui::envelopeZoomOut(display).contains(at)) { setEnvelopeZoom(zoom + 1); return; }
             // Double-clicking the plot puts the window back to three seconds,
             // which is the gesture a knob already uses to go back to the value
             // it started at.
@@ -871,9 +913,9 @@ void Editor::paintOverChildren(juce::Graphics& g)
     g.fillRect(reach.withTop(reach.getBottom() - 2.0f));
 }
 
-// The wheel over ENV 1's display changes how much time it spans. Up shortens
-// the window, so the shape grows: up is in, the way round every other zoom
-// works. The notches are accumulated because a trackpad sends a stream of small
+// The wheel over the envelope display changes how much time it spans. Up
+// shortens the window, so the shape grows: up is in, the way round every other
+// zoom works. The notches are accumulated because a trackpad sends a stream of small
 // deltas where a mouse sends one large one, and without this a flick would run
 // through the whole ladder before the hand came off it.
 void Editor::mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel)
@@ -890,7 +932,7 @@ void Editor::mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWhee
     const auto notches = static_cast<int>(envelopeWheel / wheelPerZoomStep);
     if (notches == 0) return;
     envelopeWheel -= static_cast<float>(notches) * wheelPerZoomStep;
-    setEnvelopeZoom(envelopeZoom - notches);
+    setEnvelopeZoom(envelopeZoom[static_cast<size_t>(shownEnv())] - notches);
 }
 
 void Editor::mouseDrag(const juce::MouseEvent& event)

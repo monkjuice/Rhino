@@ -50,10 +50,6 @@ inline juce::String tooltipFor(const juce::String& id)
         {"routeB", "Send oscillator B through the filter"},
         {"routeSub", "Send the sub through the filter"},
         {"routeNoise", "Send the noise through the filter"},
-        {"attack", "How the note begins"},
-        {"decay", "The fall from the attack peak"},
-        {"sustain", "The level a held note settles at"},
-        {"release", "How the note fades once released"},
 
         {"polyphony", "Limit simultaneous notes"},
         {"mono", "Collapse to one voice for basses and leads"},
@@ -61,6 +57,30 @@ inline juce::String tooltipFor(const juce::String& id)
         {"glide", "Slide between monophonic notes"},
         {"output", "Forge's final level"},
     };
+    // Four envelopes expose the same controls, keyed by the suffix with the
+    // envelope's number filled in, the same way the oscillators' are keyed by
+    // their letter. ENV 1 is the amplitude and ENV 2-4 reach a control only
+    // through the matrix, so what each one does is said once, in the number.
+    static const std::map<juce::String, juce::String> perEnv {
+        {"Attack", "How ENV % begins"},
+        {"Decay", "ENV %'s fall from the attack peak"},
+        {"Sustain", "The level ENV % settles at while a note is held"},
+        {"Release", "How ENV % falls once the note is released"},
+    };
+    if (id.startsWith("env") && id.length() > 4 && juce::CharacterFunctions::isDigit(id[3]))
+    {
+        const auto found = perEnv.find(id.substring(4));
+        if (found != perEnv.end())
+        {
+            const auto number = id.substring(3, 4);
+            // ENV 1 is wired to the amplitude and needs no telling where it
+            // goes; the others go nowhere until a slot sends them.
+            return found->second.replace("%", number)
+                 + (number == "1" ? ", the voice's amplitude"
+                                  : ". Point it somewhere in the matrix");
+        }
+    }
+
     // Six LFOs expose the same controls, so their tooltips are keyed by the
     // suffix and the LFO's number is filled in, the same way the oscillators'
     // are keyed by their letter.

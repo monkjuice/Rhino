@@ -335,25 +335,54 @@ inline const std::array<LfoDivision, 7>& lfoDivisions()
 
 inline constexpr int lfoDivisionCount = 7;
 
+// Four envelopes. ENV 1 is hardwired to the voice amplitude, exactly as Serum's
+// is, and is also what says when a voice is finished; ENV 2-4 are sources and
+// nothing else, so one reaches a control through a modulation slot or not at
+// all. All four are shaped identically and all four run in every voice, which
+// is what makes an auxiliary envelope answer the keyboard the same way the amp
+// one does — the same note starts it and the same key lifting releases it.
+inline constexpr int envCount = 4;
+
+// ENV 1's place in everything indexed by envelope. Written as a name because
+// "the amp envelope" is what the voice lifecycle, the metering and the level a
+// voice is rendered at all mean by index zero.
+inline constexpr int ampEnv = 0;
+
+// Everything one envelope owns. Held as floats because that is what a parameter
+// read gives back.
+struct EnvSetting
+{
+    float attack = 0.01f, decay = 0.24f, sustain = 0.75f, release = 0.35f;
+};
+
+// A parameter id belonging to one envelope: envParameterId(0, "Attack") is
+// "env1Attack". The same spelling of the pattern the LFOs use, and for the same
+// reason: a bank of four cannot drift apart from the ids it names.
+inline juce::String envParameterId(int env, const char* suffix)
+{
+    return "env" + juce::String(env + 1) + suffix;
+}
+
 inline constexpr int macroCount = 8;
 
-// Modulation sources. ENV 1 and velocity are unipolar (0..1); the LFOs are
-// bipolar (-1..1); note is unipolar across the keyboard.
+// Modulation sources. The envelopes and velocity are unipolar (0..1); the LFOs
+// are bipolar (-1..1); note is unipolar across the keyboard.
 //
 // The values are written out rather than left to the compiler because they are
 // what a slot's Source parameter stores, so the order of this list is saved
-// inside every preset. The six LFOs are one run, and the run's length is what
-// everything after it is placed past — which is why the ones after it moved
-// when LFO 2-6 arrived, and why a preset written before that is remapped on the
-// way in. See Processor::migrated.
+// inside every preset. The four envelopes are one run and the six LFOs are
+// another, and a run's length is what everything after it is placed past —
+// which is why the sources after the LFOs moved when LFO 2-6 arrived, and why
+// everything after ENV 1 moved again when ENV 2-4 did. A preset written before
+// either is remapped on the way in; see Processor::migrated.
 enum class ModSource
 {
     off = 0,
-    env1 = 1,
-    lfo1 = 2,                        // lfo2..lfo6 follow, up to 7
-    velocity = lfo1 + lfoCount,      // 8
-    note,                            // 9
-    macro1                           // 10, and one per macro after it
+    env1 = 1,                        // env2..env4 follow, up to 4
+    lfo1 = env1 + envCount,          // 5, and lfo2..lfo6 up to 10
+    velocity = lfo1 + lfoCount,      // 11
+    note,                            // 12
+    macro1                           // 13, and one per macro after it
 };
 
 inline constexpr int modSourceCount = static_cast<int>(ModSource::macro1) + macroCount;
@@ -371,17 +400,27 @@ inline int lfoIndexOf(int source)
     return source >= first && source < first + lfoCount ? source - first : -1;
 }
 
+// Which envelope a source names, or -1 for a source that is not one.
+inline int envIndexOf(int source)
+{
+    const auto first = static_cast<int>(ModSource::env1);
+    return source >= first && source < first + envCount ? source - first : -1;
+}
+
 inline const char* modSourceName(int source)
 {
-    if (source == static_cast<int>(ModSource::env1)) return "ENV 1";
     if (source == static_cast<int>(ModSource::velocity)) return "VELOCITY";
     if (source == static_cast<int>(ModSource::note)) return "NOTE";
 
+    static const std::array<const char*, envCount> envs {
+        "ENV 1", "ENV 2", "ENV 3", "ENV 4"};
     static const std::array<const char*, lfoCount> lfos {
         "LFO 1", "LFO 2", "LFO 3", "LFO 4", "LFO 5", "LFO 6"};
     static const std::array<const char*, macroCount> macros {
         "MACRO 1", "MACRO 2", "MACRO 3", "MACRO 4",
         "MACRO 5", "MACRO 6", "MACRO 7", "MACRO 8"};
+    const auto env = envIndexOf(source);
+    if (env >= 0) return envs[static_cast<size_t>(env)];
     const auto lfo = lfoIndexOf(source);
     if (lfo >= 0) return lfos[static_cast<size_t>(lfo)];
     const auto macro = macroIndexOf(source);
@@ -449,7 +488,9 @@ struct Patch
     // the voice sum, exactly as Serum's per-source routing buttons work.
     float routeA = 1.0f, routeB = 1.0f, routeSub = 1.0f, routeNoise = 1.0f;
     float cutoff = 7800.0f, resonance = 0.12f, drive = 0.08f;
-    float attack = 0.01f, decay = 0.24f, sustain = 0.75f, release = 0.35f;
+    // The four envelopes. ENV 1 is the voice's amplitude and every voice is
+    // rendered through it; ENV 2-4 reach anything at all through the matrix.
+    std::array<EnvSetting, envCount> envs {};
     // The six LFOs. They are sources, not routers: where one goes is a matter
     // for the modulation slots.
     std::array<LfoSetting, lfoCount> lfos {};
@@ -560,8 +601,8 @@ public:
         noiseState = 0x9e3779b9u;
         heldCount = 0;
         monoMode = false;
-        meterEnvelope = 0.0f;
-        meterStage = EnvelopeStage::idle;
+        meterEnvelope = {};
+        meterStage = {};
         meterOffsets = {};
     }
 
@@ -612,22 +653,37 @@ public:
                 return;
             }
         }
+        // Every envelope is released by the key that started it, the auxiliary
+        // ones included: an envelope that only fell when the amp did would be a
+        // second shape with no release of its own.
         for (auto& voice : voices)
-            if (voice.active && voice.note == note && voice.ampStage != EnvelopeStage::release)
-            {
-                voice.ampStage = EnvelopeStage::release;
-                voice.ampReleaseStart = voice.ampEnvelope;
-            }
+            if (voice.active && voice.note == note && voice.envStage[ampEnv] != EnvelopeStage::release)
+                for (int env = 0; env < envCount; ++env)
+                {
+                    const auto i = static_cast<size_t>(env);
+                    voice.envStage[i] = EnvelopeStage::release;
+                    voice.envReleaseStart[i] = voice.envelope[i];
+                }
     }
 
     void allNotesOff() { reset(); }
 
-    // What ENV 1 is doing, for the display to draw. Taken from the loudest
-    // sounding voice, which is the one a player is listening to. Plain members
-    // rather than atomics: Core stays a pure DSP class and the processor owns
-    // the hand-off to the message thread.
-    float envelopeLevel() const { return meterEnvelope; }
-    int envelopeStage() const { return static_cast<int>(meterStage); }
+    // What an envelope is doing, for the display to draw. Taken from the
+    // loudest sounding voice, which is the one a player is listening to — the
+    // loudest by ENV 1, so all four readings come from one voice rather than
+    // each from whichever voice happens to have that envelope highest. Plain
+    // members rather than atomics: Core stays a pure DSP class and the
+    // processor owns the hand-off to the message thread.
+    float envelopeLevel(int env = ampEnv) const
+    {
+        return env >= 0 && env < envCount ? meterEnvelope[static_cast<size_t>(env)] : 0.0f;
+    }
+
+    int envelopeStage(int env = ampEnv) const
+    {
+        return env >= 0 && env < envCount
+            ? static_cast<int>(meterStage[static_cast<size_t>(env)]) : 0;
+    }
 
     // Where LFO 1 is in its cycle and what it last put out. The phase draws the
     // running indicator; the value is published as well because a
@@ -717,15 +773,24 @@ public:
 
         const auto modulated = modulation.anyActive();
 
-        meterEnvelope = 0.0f;
-        meterStage = EnvelopeStage::idle;
+        meterEnvelope = {};
+        meterStage = {};
         meterOffsets = {};
 
         for (auto& voice : voices)
         {
             if (!voice.active) continue;
-            updateEnvelope(voice.ampEnvelope, voice.ampStage, voice.ampReleaseStart,
-                           patch.attack, patch.decay, patch.sustain, patch.release);
+            // All four, whether or not anything reads them. An envelope's value
+            // is its state rather than something worked out from a phase, so
+            // one skipped while nothing points at it would come back wrong the
+            // moment something did.
+            for (int env = 0; env < envCount; ++env)
+            {
+                const auto i = static_cast<size_t>(env);
+                const auto& shape = patch.envs[i];
+                updateEnvelope(voice.envelope[i], voice.envStage[i], voice.envReleaseStart[i],
+                               shape.attack, shape.decay, shape.sustain, shape.release);
+            }
             // A voice whose envelope has run out is not finished: the filter
             // it fed is still ringing, and at a low cutoff that ring is loud
             // enough to hear. Dropping the voice here truncates it, and a
@@ -733,7 +798,7 @@ public:
             // the sub on, because a sine an octave down is exactly what a low
             // cutoff passes. So it is faded out instead, and the ring decays
             // into the fade.
-            if (voice.ampStage == EnvelopeStage::idle)
+            if (voice.envStage[ampEnv] == EnvelopeStage::idle)
             {
                 voice.tail -= tailStep;
                 if (voice.tail <= 0.0f)
@@ -742,11 +807,11 @@ public:
                     continue;
                 }
             }
-            const auto loudest = voice.ampEnvelope >= meterEnvelope;
+            const auto loudest = voice.envelope[ampEnv] >= meterEnvelope[ampEnv];
             if (loudest)
             {
-                meterEnvelope = voice.ampEnvelope;
-                meterStage = voice.ampStage;
+                meterEnvelope = voice.envelope;
+                meterStage = voice.envStage;
             }
 
             // Every LFO that answers the keyboard runs inside the voice, so a
@@ -848,14 +913,17 @@ private:
         std::array<float, unisonMax> phaseA {}, phaseB {};
         float phaseSub = 0.0f;
         float currentHz = 0.0f, targetHz = 0.0f;
-        float ampEnvelope = 0.0f, ampReleaseStart = 0.0f;
+        // ENV 1 at index zero is the amplitude this voice is rendered at and
+        // the one that says when it is finished; ENV 2-4 are carried for the
+        // matrix to read and affect nothing on their own.
+        std::array<float, envCount> envelope {}, envReleaseStart {};
         // Full until the envelope has finished, then run down to nothing so
         // whatever the filter is still ringing with is let go of rather than
         // cut off. It is also what guarantees the voice comes back: a filter
         // pushed hard would otherwise ring for a long time.
         float tail = 1.0f;
         float lowLeft = 0.0f, bandLeft = 0.0f, lowRight = 0.0f, bandRight = 0.0f;
-        EnvelopeStage ampStage = EnvelopeStage::idle;
+        std::array<EnvelopeStage, envCount> envStage {};
         // Every LFO that answers the keyboard runs a copy of itself inside each
         // voice, which is what makes TRIG and ENV mean anything: a new note
         // restarts its own shape and leaves the notes already sounding alone.
@@ -896,12 +964,16 @@ private:
             auto amount = 0.0f;
             switch (static_cast<ModSource>(source))
             {
-                case ModSource::env1:     amount = voice.ampEnvelope; break;
                 case ModSource::velocity: amount = voice.velocity; break;
                 case ModSource::note:     amount = static_cast<float>(voice.note) / 127.0f; break;
                 case ModSource::off:      continue;
                 default:
                 {
+                    if (const auto env = envIndexOf(source); env >= 0)
+                    {
+                        amount = voice.envelope[static_cast<size_t>(env)];
+                        break;
+                    }
                     if (const auto lfo = lfoIndexOf(source); lfo >= 0)
                     {
                         amount = lfos[static_cast<size_t>(lfo)];
@@ -958,8 +1030,9 @@ private:
             auto best = voiceCount;
             for (size_t i = 0; i < voiceCount; ++i)
             {
-                if ((voices[i].ampStage == EnvelopeStage::release) != releasing) continue;
-                if (best == voiceCount || voices[i].ampEnvelope < voices[best].ampEnvelope) best = i;
+                if ((voices[i].envStage[ampEnv] == EnvelopeStage::release) != releasing) continue;
+                if (best == voiceCount
+                    || voices[i].envelope[ampEnv] < voices[best].envelope[ampEnv]) best = i;
             }
             return best;
         };
@@ -1063,7 +1136,10 @@ private:
         voice.note = note;
         voice.velocity = juce::jlimit(0.0f, 1.0f, velocity);
         voice.currentHz = voice.targetHz = noteFrequency(note);
-        voice.ampStage = EnvelopeStage::attack;
+        // Every envelope starts again, from wherever it had reached: a stolen
+        // voice keeps the levels it was at and climbs from them, so all four
+        // are continuous across the steal exactly as ENV 1 is.
+        for (auto& stage : voice.envStage) stage = EnvelopeStage::attack;
     }
 
     void hold(int note)
@@ -1202,7 +1278,7 @@ private:
             (on(patch.routeNoise) ? buses.wetRight : buses.dryRight) += hiss;
         }
 
-        const auto level = voice.ampEnvelope * voice.velocity;
+        const auto level = voice.envelope[ampEnv] * voice.velocity;
         buses.wetLeft *= level;
         buses.wetRight *= level;
         buses.dryLeft *= level;
@@ -1263,8 +1339,8 @@ private:
     std::array<int, 16> heldNotes {};
     int heldCount = 0;
     bool monoMode = false;
-    float meterEnvelope = 0.0f;
-    EnvelopeStage meterStage = EnvelopeStage::idle;
+    std::array<float, envCount> meterEnvelope {};
+    std::array<EnvelopeStage, envCount> meterStage {};
     std::array<float, destinationCount> meterOffsets {};
 };
 }

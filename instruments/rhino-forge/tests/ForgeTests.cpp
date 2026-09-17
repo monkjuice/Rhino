@@ -806,74 +806,141 @@ void envelopeDisplaySuite()
 
 // --------------------------------------------------------------- presets ---
 
-// A state written before LFO 2-6 existed. Its LFO parameters were named for the
-// only LFO there was, and its matrix sources were indices into a list that five
-// LFOs have since been inserted into the middle of. A dropped parameter loads at
+// States written before a modulator arrived as a bank. Each time one did, the
+// one that already existed was renamed for its place in the bank and the rest
+// were inserted into the middle of the source list. A dropped parameter loads at
 // its default and no harm is done; a source index that quietly means something
 // else is a slot silently pointed somewhere nobody asked for, so it is remapped
 // rather than left.
+//
+// Two eras are checked, because a state can predate either both changes or only
+// the later one, and the shifts have to compose in the first case without being
+// applied twice in the second.
 void legacyStateSuite()
 {
-    rhino::forge::Processor processor;
-
-    juce::ValueTree saved(processor.state.state.getType());
-    const auto add = [&saved] (const char* id, float value)
+    // Whatever `saved` holds, put through the processor and read back out.
+    const auto reopened = [] (rhino::forge::Processor& processor, const juce::ValueTree& saved)
     {
-        juce::ValueTree entry("PARAM");
-        entry.setProperty("id", id, nullptr);
-        entry.setProperty("value", value, nullptr);
-        saved.addChild(entry, -1, nullptr);
+        juce::MemoryBlock block;
+        const auto xml = saved.createXml();
+        require(xml != nullptr, "the legacy state serialises");
+        if (xml == nullptr) return;
+        juce::AudioProcessor::copyXmlToBinary(*xml, block);
+        processor.setStateInformation(block.getData(), static_cast<int>(block.getSize()));
     };
-    add("lfoShape", 2.0f);                      // SAW
-    add("lfoMode", 1.0f);                       // ENV
-    add("lfoRate", 3.0f);
-    add("lfoRateUnit", 0.0f);
-    add("lfoDivision", 4.0f);
-    add("cutoff", 900.0f);
-    // As the sources were numbered then: LFO 1 at 2, VELOCITY straight after it
-    // at 3, NOTE at 4, and the macros from 5.
-    add("mod1Source", 2.0f);
-    add("mod2Source", 3.0f);
-    add("mod3Source", 4.0f);
-    add("mod4Source", 5.0f);
-
-    juce::MemoryBlock block;
-    const auto xml = saved.createXml();
-    require(xml != nullptr, "the legacy state serialises");
-    if (xml == nullptr) return;
-    juce::AudioProcessor::copyXmlToBinary(*xml, block);
-    processor.setStateInformation(block.getData(), static_cast<int>(block.getSize()));
-
-    const auto value = [&processor] (const juce::String& id)
+    const auto value = [] (rhino::forge::Processor& processor, const juce::String& id)
     {
         const auto* raw = processor.state.getRawParameterValue(id);
         return raw == nullptr ? std::numeric_limits<float>::quiet_NaN() : raw->load();
     };
 
-    requireClose(value("lfo1Shape"), 2.0f, 0.001f, "the one LFO's shape becomes LFO 1's");
-    requireClose(value("lfo1Mode"), 1.0f, 0.001f, "the one LFO's mode becomes LFO 1's");
-    requireClose(value("lfo1Rate"), 3.0f, 0.001f, "the one LFO's rate becomes LFO 1's");
-    requireClose(value("lfo1Division"), 4.0f, 0.001f, "the one LFO's division becomes LFO 1's");
-    requireClose(value("cutoff"), 900.0f, 0.5f, "everything else is left alone");
+    // Before LFO 2-6, and so before ENV 2-4 as well: both shifts apply, one
+    // after the other, and a slot has to land where the second one leaves it.
+    {
+        rhino::forge::Processor processor;
+        juce::ValueTree saved(processor.state.state.getType());
+        const auto add = [&saved] (const char* id, float value)
+        {
+            juce::ValueTree entry("PARAM");
+            entry.setProperty("id", id, nullptr);
+            entry.setProperty("value", value, nullptr);
+            saved.addChild(entry, -1, nullptr);
+        };
+        add("lfoShape", 2.0f);                      // SAW
+        add("lfoMode", 1.0f);                       // ENV
+        add("lfoRate", 3.0f);
+        add("lfoRateUnit", 0.0f);
+        add("lfoDivision", 4.0f);
+        add("cutoff", 900.0f);
+        // As the sources were numbered then: ENV 1 at 1, LFO 1 at 2, VELOCITY
+        // straight after it at 3, NOTE at 4, and the macros from 5.
+        add("mod1Source", 2.0f);
+        add("mod2Source", 3.0f);
+        add("mod3Source", 4.0f);
+        add("mod4Source", 5.0f);
+        add("mod5Source", 1.0f);
+        reopened(processor, saved);
 
-    requireClose(value("mod1Source"), static_cast<float>(srcLfo1), 0.001f,
-                 "a slot on LFO 1 stays on LFO 1");
-    requireClose(value("mod2Source"), static_cast<float>(srcVelocity), 0.001f,
-                 "a slot on velocity is still on velocity");
-    requireClose(value("mod3Source"), static_cast<float>(srcNote), 0.001f,
-                 "a slot on note is still on note");
-    requireClose(value("mod4Source"), static_cast<float>(static_cast<int>(rhino::forge::ModSource::macro1)),
-                 0.001f, "a slot on the first macro is still on it");
+        const auto read = [&] (const juce::String& id) { return value(processor, id); };
+        requireClose(read("lfo1Shape"), 2.0f, 0.001f, "the one LFO's shape becomes LFO 1's");
+        requireClose(read("lfo1Mode"), 1.0f, 0.001f, "the one LFO's mode becomes LFO 1's");
+        requireClose(read("lfo1Rate"), 3.0f, 0.001f, "the one LFO's rate becomes LFO 1's");
+        requireClose(read("lfo1Division"), 4.0f, 0.001f, "the one LFO's division becomes LFO 1's");
+        requireClose(read("cutoff"), 900.0f, 0.5f, "everything else is left alone");
 
-    // Running it again must change nothing: state already migrated no longer
-    // carries the old ids, which is what the migration keys off.
-    juce::MemoryBlock again;
-    processor.getStateInformation(again);
-    processor.setStateInformation(again.getData(), static_cast<int>(again.getSize()));
-    requireClose(value("mod2Source"), static_cast<float>(srcVelocity), 0.001f,
-                 "saving and reopening migrated state does not move the sources again");
-    requireClose(value("lfo1Rate"), 3.0f, 0.001f,
-                 "saving and reopening migrated state keeps LFO 1's rate");
+        requireClose(read("mod1Source"), static_cast<float>(srcLfo1), 0.001f,
+                     "a slot on LFO 1 stays on LFO 1 across both shifts");
+        requireClose(read("mod2Source"), static_cast<float>(srcVelocity), 0.001f,
+                     "a slot on velocity is still on velocity");
+        requireClose(read("mod3Source"), static_cast<float>(srcNote), 0.001f,
+                     "a slot on note is still on note");
+        requireClose(read("mod4Source"), static_cast<float>(static_cast<int>(rhino::forge::ModSource::macro1)),
+                     0.001f, "a slot on the first macro is still on it");
+        requireClose(read("mod5Source"), static_cast<float>(srcEnv1), 0.001f,
+                     "ENV 1 has never moved, so a slot on it stays put");
+
+        // Running it again must change nothing: state already migrated no longer
+        // carries the old ids, which is what the migration keys off.
+        juce::MemoryBlock again;
+        processor.getStateInformation(again);
+        processor.setStateInformation(again.getData(), static_cast<int>(again.getSize()));
+        requireClose(read("mod2Source"), static_cast<float>(srcVelocity), 0.001f,
+                     "saving and reopening migrated state does not move the sources again");
+        requireClose(read("lfo1Rate"), 3.0f, 0.001f,
+                     "saving and reopening migrated state keeps LFO 1's rate");
+    }
+
+    // After the LFOs came in banks but before the envelopes did: the LFO names
+    // are already current, so only the envelope shift may fire.
+    {
+        rhino::forge::Processor processor;
+        juce::ValueTree saved(processor.state.state.getType());
+        const auto add = [&saved] (const char* id, float value)
+        {
+            juce::ValueTree entry("PARAM");
+            entry.setProperty("id", id, nullptr);
+            entry.setProperty("value", value, nullptr);
+            saved.addChild(entry, -1, nullptr);
+        };
+        add("attack", 0.5f);
+        add("decay", 0.4f);
+        add("sustain", 0.3f);
+        add("release", 1.5f);
+        add("lfo3Rate", 2.0f);
+        // As the sources were numbered then: ENV 1 at 1, the six LFOs from 2,
+        // VELOCITY at 8, NOTE at 9, and the macros from 10.
+        add("mod1Source", 1.0f);
+        add("mod2Source", 2.0f);
+        add("mod3Source", 8.0f);
+        add("mod4Source", 10.0f);
+        reopened(processor, saved);
+
+        const auto read = [&] (const juce::String& id) { return value(processor, id); };
+        requireClose(read("env1Attack"), 0.5f, 0.001f, "the one envelope's attack becomes ENV 1's");
+        requireClose(read("env1Decay"), 0.4f, 0.001f, "the one envelope's decay becomes ENV 1's");
+        requireClose(read("env1Sustain"), 0.3f, 0.001f, "the one envelope's sustain becomes ENV 1's");
+        requireClose(read("env1Release"), 1.5f, 0.001f, "the one envelope's release becomes ENV 1's");
+        requireClose(read("env2Attack"), 0.01f, 0.001f,
+                     "an envelope the state predates opens at its default");
+        requireClose(read("lfo3Rate"), 2.0f, 0.001f, "an LFO already in a bank is left alone");
+
+        requireClose(read("mod1Source"), static_cast<float>(srcEnv1), 0.001f,
+                     "a slot on ENV 1 stays on ENV 1");
+        requireClose(read("mod2Source"), static_cast<float>(srcLfo1), 0.001f,
+                     "a slot on LFO 1 follows the three envelopes inserted ahead of it");
+        requireClose(read("mod3Source"), static_cast<float>(srcVelocity), 0.001f,
+                     "a slot on velocity is still on velocity");
+        requireClose(read("mod4Source"), static_cast<float>(static_cast<int>(rhino::forge::ModSource::macro1)),
+                     0.001f, "a slot on the first macro is still on it");
+
+        juce::MemoryBlock again;
+        processor.getStateInformation(again);
+        processor.setStateInformation(again.getData(), static_cast<int>(again.getSize()));
+        requireClose(read("mod2Source"), static_cast<float>(srcLfo1), 0.001f,
+                     "saving and reopening does not move the sources again");
+        requireClose(read("env1Release"), 1.5f, 0.001f,
+                     "saving and reopening keeps ENV 1's release");
+    }
 }
 
 void presetSuite()
@@ -885,18 +952,18 @@ void presetSuite()
     const auto preset = directory.getChildFile("Round Trip.forgepreset");
 
     setValue(processor, "cutoff", 1320.0f);
-    setValue(processor, "release", 2.5f);
+    setValue(processor, "env1Release", 2.5f);
     setValue(processor, "noiseEnable", 1.0f);
     setValue(processor, "oscBEnable", 0.0f);
     require(processor.savePreset(preset, "Round Trip").wasOk(), "preset saves");
 
     setValue(processor, "cutoff", 9000.0f);
-    setValue(processor, "release", 0.1f);
+    setValue(processor, "env1Release", 0.1f);
     setValue(processor, "noiseEnable", 0.0f);
     setValue(processor, "oscBEnable", 1.0f);
     require(processor.loadPreset(preset).wasOk(), "preset loads");
     requireClose(value(processor, "cutoff"), 1320.0f, 1.0f, "preset restores cutoff");
-    requireClose(value(processor, "release"), 2.5f, 0.001f, "preset restores release");
+    requireClose(value(processor, "env1Release"), 2.5f, 0.001f, "preset restores release");
     requireClose(value(processor, "noiseEnable"), 1.0f, 0.001f, "preset restores an enabled module");
     requireClose(value(processor, "oscBEnable"), 0.0f, 0.001f, "preset restores a disabled module");
 
@@ -976,7 +1043,7 @@ void presetSuite()
     requireClose(value(processor, "cutoff"), 5000.0f, 1.0f, "a partial preset restores what it names");
     requireClose(value(processor, "noiseEnable"), 0.0f, 0.001f,
                  "a parameter the preset omits returns to its default, not the previous patch's value");
-    requireClose(value(processor, "release"), 0.35f, 0.001f,
+    requireClose(value(processor, "env1Release"), 0.35f, 0.001f,
                  "an omitted float parameter returns to its default");
 
     const auto resaved = directory.getChildFile("Resaved.forgepreset");
@@ -985,7 +1052,7 @@ void presetSuite()
     require(text.contains("formatVersion=\"2\""), "a saved preset declares format 2");
     require(!text.contains("retiredKnob"), "an unknown entry is dropped, not carried as ballast");
     require(text.contains("oscAEnable"), "the module enables are saved");
-    require(text.contains("release"), "an omitted parameter is written back out at its default");
+    require(text.contains("env1Release"), "an omitted parameter is written back out at its default");
 
     const auto invalid = directory.getChildFile("Invalid.forgepreset");
     require(invalid.replaceWithText("<NotForge />"), "invalid fixture writes");
@@ -997,9 +1064,9 @@ void presetSuite()
     // installs, so the formatting has to belong to the parameter itself.
     requireText(textFor(processor, "cutoff", 7800.0f), "7.80 kHz", "cutoff reads as kHz");
     requireText(textFor(processor, "cutoff", 440.0f), "440 Hz", "a low cutoff reads as Hz");
-    requireText(textFor(processor, "sustain", 0.75f), "75 %", "sustain reads as a percentage");
-    requireText(textFor(processor, "attack", 0.01f), "10 ms", "a short attack reads in milliseconds");
-    requireText(textFor(processor, "release", 2.5f), "2.50 s", "a long release reads in seconds");
+    requireText(textFor(processor, "env1Sustain", 0.75f), "75 %", "sustain reads as a percentage");
+    requireText(textFor(processor, "env1Attack", 0.01f), "10 ms", "a short attack reads in milliseconds");
+    requireText(textFor(processor, "env1Release", 2.5f), "2.50 s", "a long release reads in seconds");
     requireText(textFor(processor, "oscBSemitone", 7.0f), "+7 st", "tune reads as signed semitones");
     requireText(textFor(processor, "oscAUnison", 4.0f), "4", "unison reads as a plain count");
     requireText(textFor(processor, "mod1Depth", -0.5f), "-50 %", "a bipolar depth keeps its sign");
@@ -1027,7 +1094,7 @@ void soloSineOnA(rhino::forge::Processor& processor)
     setValue(processor, "oscASemitone", 0.0f);
     setValue(processor, "oscAFine", 0.0f);
     setValue(processor, "drive", 0.0f);
-    setValue(processor, "attack", 0.001f);
+    setValue(processor, "env1Attack", 0.001f);
 }
 
 void oscillatorSuite()
@@ -1274,10 +1341,10 @@ void envelopeSuite()
 
     rhino::forge::Processor processor;
     soloSineOnA(processor);
-    setValue(processor, "attack", 0.1f);
-    setValue(processor, "decay", 0.1f);
-    setValue(processor, "sustain", 0.5f);
-    setValue(processor, "release", 0.2f);
+    setValue(processor, "env1Attack", 0.1f);
+    setValue(processor, "env1Decay", 0.1f);
+    setValue(processor, "env1Sustain", 0.5f);
+    setValue(processor, "env1Release", 0.2f);
     processor.prepareToPlay(rate, block);
 
     juce::AudioBuffer<float> buffer(2, block);
@@ -1328,10 +1395,10 @@ void envelopeSuite()
     // not from the sustain level the note never got to.
     rhino::forge::Processor early;
     soloSineOnA(early);
-    setValue(early, "attack", 1.0f);
-    setValue(early, "decay", 0.1f);
-    setValue(early, "sustain", 0.9f);
-    setValue(early, "release", 0.2f);
+    setValue(early, "env1Attack", 1.0f);
+    setValue(early, "env1Decay", 0.1f);
+    setValue(early, "env1Sustain", 0.9f);
+    setValue(early, "env1Release", 0.2f);
     early.prepareToPlay(rate, block);
 
     const auto advanceEarly = [&] (int samples, const juce::MidiBuffer& midi = {})
@@ -1593,6 +1660,126 @@ public:
     double bpm = 120.0;
 };
 
+// ENV 2-4: the same shape as ENV 1, wired to nothing. What has to be true of an
+// auxiliary envelope is that it is silent until something points at it, that it
+// then reaches whatever that is, and that it keeps times of its own rather than
+// following the amplitude's.
+void auxEnvelopeSuite()
+{
+    constexpr double rate = 48000.0;
+    constexpr int block = 64;
+    constexpr int samples = 8192;
+    constexpr int settled = 1024;
+    enum Stage { idle, attack, decay, sustain, release };
+
+    // Nothing routed: an auxiliary envelope may not colour the sound at all,
+    // whatever its knobs are set to. Bit-identical rather than nearly so — a
+    // second envelope leaking into the signal path is exactly the hardwired
+    // filter envelope this design set out to remove.
+    juce::AudioBuffer<float> plain(2, samples), moved(2, samples);
+    rhino::forge::Processor quiet;
+    closedFilterOnA(quiet);
+    renderNote(quiet, plain);
+    for (int env = 1; env < rhino::forge::envCount; ++env)
+    {
+        setValue(quiet, rhino::forge::envParameterId(env, "Attack").toRawUTF8(), 2.0f);
+        setValue(quiet, rhino::forge::envParameterId(env, "Decay").toRawUTF8(), 0.01f);
+        setValue(quiet, rhino::forge::envParameterId(env, "Sustain").toRawUTF8(), 0.0f);
+        setValue(quiet, rhino::forge::envParameterId(env, "Release").toRawUTF8(), 4.0f);
+    }
+    renderNote(quiet, moved);
+    require(identical(plain, moved),
+            "an envelope nothing points at changes nothing, however it is set");
+
+    // Each one reaches the matrix as a source of its own, checked the way the
+    // six LFOs were: point it at a closed filter and hear the filter open.
+    const auto closed = rms(plain, 0, settled);
+    for (int env = 0; env < rhino::forge::envCount; ++env)
+    {
+        rhino::forge::Processor swept;
+        closedFilterOnA(swept);
+        setSlot(swept, 1, static_cast<float>(srcEnv1 + env), destCutoff, 1.0f);
+        renderNote(swept, moved);
+        require(rms(moved, 0, settled) > closed * 1.2f,
+                "every envelope opens a filter it is pointed at");
+        if (!(rms(moved, 0, settled) > closed * 1.2f))
+            std::cerr << "       envelope " << env + 1 << " reaches nothing\n";
+    }
+
+    // Four envelopes under one note, each running its own shape. ENV 1 is long
+    // since settled while ENV 2 is still climbing and ENV 3 has already fallen
+    // to nothing, which no single shared shape could do.
+    rhino::forge::Processor apart;
+    soloSineOnA(apart);
+    setValue(apart, "env1Attack", 0.01f);
+    setValue(apart, "env1Decay", 0.01f);
+    setValue(apart, "env1Sustain", 0.75f);
+    setValue(apart, "env2Attack", 1.0f);
+    setValue(apart, "env3Attack", 0.001f);
+    setValue(apart, "env3Decay", 0.02f);
+    setValue(apart, "env3Sustain", 0.0f);
+    apart.prepareToPlay(rate, block);
+
+    juce::AudioBuffer<float> buffer(2, block);
+    const auto advance = [&] (int count, const juce::MidiBuffer& midi = {})
+    {
+        auto events = midi;
+        for (auto rendered = 0; rendered < count; rendered += block)
+        {
+            apart.processBlock(buffer, events);
+            events.clear();
+        }
+    };
+
+    juce::MidiBuffer noteOn;
+    noteOn.addEvent(juce::MidiMessage::noteOn(1, 57, 1.0f), 0);
+    advance(static_cast<int>(rate * 0.2), noteOn);
+
+    require(apart.envelopeStage(0) == sustain, "ENV 1 has settled 200 ms into the note");
+    requireClose(apart.envelopeLevel(0), 0.75f, 0.02f, "ENV 1 holds its own sustain");
+    require(apart.envelopeStage(1) == attack, "ENV 2 is still climbing an attack of its own");
+    requireClose(apart.envelopeLevel(1), 0.2f, 0.03f,
+                 "a fifth of the way up ENV 2's one-second attack");
+    require(apart.envelopeStage(2) == sustain, "ENV 3 has reached its own sustain");
+    requireClose(apart.envelopeLevel(2), 0.0f, 0.001f, "ENV 3 sustains at nothing");
+    // ENV 4 is untouched, so it is still running the defaults every envelope
+    // opens on: a 10 ms attack long past, and 190 ms of a 240 ms decay from the
+    // peak towards a sustain of 0.75.
+    require(apart.envelopeStage(3) == decay, "an envelope left alone runs the default shape");
+    requireClose(apart.envelopeLevel(3), 0.80f, 0.02f,
+                 "and is most of the way down that decay 200 ms in");
+
+    // The key that started them releases them all. An auxiliary envelope that
+    // only fell when the amplitude did would be a shape with no release of its
+    // own, which is half a control.
+    const auto reached = apart.envelopeLevel(1);
+    juce::MidiBuffer noteOff;
+    noteOff.addEvent(juce::MidiMessage::noteOff(1, 57), 0);
+    advance(static_cast<int>(rate * 0.05), noteOff);
+    require(apart.envelopeStage(1) == release, "lifting the key releases ENV 2 as well as ENV 1");
+    require(apart.envelopeLevel(1) < reached,
+            "ENV 2 falls from the level it had reached rather than climbing on");
+
+    // And once the voice has gone there is no reading at all, for the same
+    // reason a knob's ring stops moving: a source reaches anything only through
+    // a voice, so with no voice there is nothing to report.
+    advance(static_cast<int>(rate * 1.0));
+    for (int env = 0; env < rhino::forge::envCount; ++env)
+    {
+        require(apart.envelopeStage(env) == idle, "every envelope is idle once the voice has gone");
+        requireClose(apart.envelopeLevel(env), 0.0f, 0.001f, "an idle envelope reads nothing");
+    }
+
+    // The ring on a knob and the curve on the display are one reading, for an
+    // auxiliary envelope exactly as for ENV 1.
+    rhino::forge::Processor watched;
+    closedFilterOnA(watched);
+    setSlot(watched, 1, static_cast<float>(srcEnv1 + 1), destCutoff, 1.0f);
+    renderNote(watched, moved);
+    require(watched.modulationOffset(destCutoff) == watched.envelopeLevel(1),
+            "the offset drawn on a knob is the same reading ENV 2's own display draws");
+}
+
 void lfoSuite()
 {
     using rhino::forge::LfoShape;
@@ -1712,10 +1899,10 @@ void lfoSuite()
         rhino::forge::Core core;
         core.initialise(48000.0);
         auto patch = patchFor(rhino::forge::LfoMode::trigger);
-        patch.attack = 0.001f;
-        patch.decay = 0.001f;
-        patch.sustain = 1.0f;
-        patch.release = 0.005f;
+        patch.envs[rhino::forge::ampEnv].attack = 0.001f;
+        patch.envs[rhino::forge::ampEnv].decay = 0.001f;
+        patch.envs[rhino::forge::ampEnv].sustain = 1.0f;
+        patch.envs[rhino::forge::ampEnv].release = 0.005f;
         core.noteOn(57, 1.0f, patch);
         runCore(core, patch, cycle / 4);
         require(core.lfoPosition(0) > 0.2f, "TRIG runs while the note is held");
@@ -2238,9 +2425,9 @@ void voiceStealSuite()
         setValue(processor, "polyphony", polyphony);
         // Long tails, so every voice is still sounding when the next note wants
         // one and the run really does have to take them.
-        setValue(processor, "release", 4.0f);
-        setValue(processor, "sustain", 1.0f);
-        setValue(processor, "attack", 0.01f);
+        setValue(processor, "env1Release", 4.0f);
+        setValue(processor, "env1Sustain", 1.0f);
+        setValue(processor, "env1Attack", 0.01f);
 
         juce::AudioBuffer<float> buffer(2, samples);
         buffer.clear();
@@ -2275,8 +2462,8 @@ void voiceStealSuite()
         rhino::forge::Processor processor;
         soloSineOnA(processor);
         setValue(processor, "polyphony", polyphony);
-        setValue(processor, "sustain", 1.0f);
-        setValue(processor, "release", 0.01f);
+        setValue(processor, "env1Sustain", 1.0f);
+        setValue(processor, "env1Release", 0.01f);
         buffer.clear();
         processor.prepareToPlay(48000.0, buffer.getNumSamples());
         juce::MidiBuffer midi;
@@ -2311,7 +2498,7 @@ void voiceTailSuite()
     setValue(processor, "cutoff", 54.0f);
     setValue(processor, "subEnable", 1.0f);
     setValue(processor, "subLevel", 1.0f);
-    setValue(processor, "release", 0.35f);
+    setValue(processor, "env1Release", 0.35f);
 
     constexpr int total = 96000;
     juce::AudioBuffer<float> buffer(2, total);
@@ -2644,6 +2831,7 @@ void engineSuite()
 
     filterRoutingSuite();
     envelopeSuite();
+    auxEnvelopeSuite();
     lfoSuite();
     waveTableSuite();
     bandLimitSuite();
@@ -2718,8 +2906,8 @@ double renderedFundamental(int note, double sampleRate)
     patch.subEnable = 0.0f;
     patch.noiseEnable = 0.0f;
     patch.filterEnable = 0.0f;
-    patch.attack = 0.001f;
-    patch.sustain = 1.0f;
+    patch.envs[rhino::forge::ampEnv].attack = 0.001f;
+    patch.envs[rhino::forge::ampEnv].sustain = 1.0f;
 
     rhino::forge::Core core;
     core.initialise(sampleRate);

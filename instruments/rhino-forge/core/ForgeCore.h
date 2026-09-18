@@ -2,6 +2,7 @@
 
 #include "ForgeWavetable.h"
 #include "ForgeFxDsp.h"
+#include "ForgeWarp.h"
 
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <algorithm>
@@ -19,6 +20,11 @@
 // filter state, and hands each of them the patch that describes it.
 namespace rhino::forge
 {
+// How many oscillators a voice has. They are identical and neither is defined
+// in terms of the other, which is what lets everything indexed by oscillator —
+// a table, a warp destination — be a pair rather than two special cases.
+inline constexpr int oscillatorCount = 2;
+
 // How many detuned copies one oscillator's unison stack may hold. The per-voice
 // phase arrays are this long, and the Unison parameter's range stops here, so
 // the two cannot drift apart.
@@ -85,6 +91,11 @@ struct Oscillator
     float octave = 0.0f, semitone = 0.0f, fine = 0.0f;
     float unison = 2.0f, detune = 0.18f, blend = 0.5f;
     float pan = 0.0f, level = 0.75f;
+    // The two warp stages, in the order they are applied. A mode is held as a
+    // float for the same reason everything else here is: that is what a
+    // parameter read gives back. See ForgeWarp.h for what each one does.
+    std::array<float, warpSlots> warpMode {};
+    std::array<float, warpSlots> warpAmount {};
     // The table this oscillator reads. Null means the built-in frames, which is
     // what every oscillator starts on and what a Core needs no setting up to
     // sound. The Processor owns whatever this points at and outlives the voice
@@ -492,7 +503,29 @@ inline constexpr int fxDestinationCount = rackCount * fxSlotCount * fxDestinatio
 // which is the voice every other display already follows. Serum allows the same
 // thing and warns about the same consequence: a per-voice envelope on an FX
 // knob retriggers on every note.
-inline constexpr int destinationCount = fxDestinationBase + fxDestinationCount;
+
+// Where the racks stop and the warp depths begin. They sit past eighty-four
+// generated entries rather than beside the oscillator controls they belong
+// with, because this list is appended to and never inserted into: a slot stores
+// its destination as an index, and moving one is moving it inside every preset
+// already saved.
+inline constexpr int warpDestinationBase = fxDestinationBase + fxDestinationCount;
+inline constexpr int warpDestinationCount = oscillatorCount * warpSlots;
+
+inline const std::array<DestinationInfo, warpDestinationCount>& warpDestinations()
+{
+    static const std::array<DestinationInfo, warpDestinationCount> table {{
+        {"oscAWarp1", "A WARP 1"}, {"oscAWarp2", "A WARP 2"},
+        {"oscBWarp1", "B WARP 1"}, {"oscBWarp2", "B WARP 2"},
+    }};
+    return table;
+}
+
+// The mode a warp stage is set to is deliberately absent. A source sweeping a
+// list of twenty-six unrelated modes is a stutter rather than a modulation, and
+// nothing about it would be continuous; the depth beside it is the thing worth
+// playing, and it is here.
+inline constexpr int destinationCount = warpDestinationBase + warpDestinationCount;
 inline constexpr int modSlotCount = 8;
 
 // A parameter id belonging to one rack slot: fxParameterId(0, 1, "Mix") is
@@ -548,6 +581,8 @@ inline const std::vector<DestinationInfo>& destinations()
                                    + (knob ? "K" + juce::String(control + 1) : juce::String("MIX")));
                     built.push_back({pool[pool.size() - 2].toRawUTF8(), pool.back().toRawUTF8()});
                 }
+
+        for (const auto& named : warpDestinations()) built.push_back(named);
         return built;
     }();
     return table;
@@ -680,6 +715,15 @@ inline float* destinationField(Patch& patch, int destination)
         case 20: return &patch.filterLevel;
         default: break;
     }
+    // Past the racks are the four warp depths, which are named rather than
+    // generated and so are read back the same way.
+    const auto warp = destination - warpDestinationBase;
+    if (warp >= 0 && warp < warpDestinationCount)
+    {
+        auto& osc = warp < warpSlots ? patch.a : patch.b;
+        return &osc.warpAmount[static_cast<size_t>(warp % warpSlots)];
+    }
+
     // Past the named list, a destination is a rack slot's knob or its mix,
     // found by dividing the index rather than by twelve dozen switch cases.
     const auto fx = destination - fxDestinationBase;
@@ -770,6 +814,7 @@ public:
     {
         sampleRate = std::max(1.0, newSampleRate);
         tailStep = static_cast<float>(1.0 / (sampleRate * voiceTailSeconds));
+        dcBlock = warpDcCoefficient(sampleRate);
         // Touched here so the table is built on whichever thread prepares the
         // synth, never lazily on the first note from the audio thread.
         builtInWavetable();
@@ -1248,6 +1293,17 @@ private:
         int note = 0;
         float velocity = 0.0f;
         std::array<float, unisonMax> phaseA {}, phaseB {};
+        // What each oscillator's warp stages are holding on to, one set per
+        // member of the stack: the filter modes' state and FM SELF's last
+        // output. Per member rather than per oscillator because every member is
+        // reading the table at a phase of its own — one filter shared by twelve
+        // detuned copies would be a filter fed twelve different signals.
+        std::array<std::array<WarpState, warpSlots>, unisonMax> warpA {}, warpB {};
+        // What an asymmetric warp leaves behind, taken off each oscillator's
+        // output rather than off every member of its stack: the offset is the
+        // same in all of them, so blocking it once after the sum is the same
+        // answer for a twelfth of the work.
+        std::array<WarpDcBlocker, 2> dcA {}, dcB {};
         float phaseSub = 0.0f;
         float currentHz = 0.0f, targetHz = 0.0f;
         // ENV 1 at index zero is the amplitude this voice is rendered at and
@@ -1529,8 +1585,11 @@ private:
 
     // One oscillator's whole contribution: its own tuning, its own unison
     // stack, its own pan and its own level, summed into the voice.
-    void renderOscillator(std::array<float, unisonMax>& phases, const Oscillator& osc, float baseHz,
-                          float dt, float& left, float& right) const
+    void renderOscillator(std::array<float, unisonMax>& phases,
+                          std::array<std::array<WarpState, warpSlots>, unisonMax>& warpStates,
+                          std::array<WarpDcBlocker, 2>& dc, const Oscillator& osc, float baseHz,
+                          float dt, const std::array<WarpStage, warpSlots>& warp,
+                          float& left, float& right) const
     {
         if (!on(osc.enable)) return;
         const auto count = juce::jlimit(1, static_cast<int>(phases.size()), juce::roundToInt(osc.unison));
@@ -1546,8 +1605,18 @@ private:
         // is a ratio of 1.0413, and 5% of headroom covers that with room to
         // spare. Widening the spread without widening this would let the
         // sharpest voice read a copy that is not band-limited far enough.
+        //
+        // A warp reads the table somewhere other than where the phase says, or
+        // shapes what it finds there, and either makes harmonics the table did
+        // not hold. So the copy is chosen for a note that much higher than the
+        // one being played: every mode declares how much extra bandwidth it is
+        // about to ask for, and the two stages multiply. See ForgeWarp.h.
         const auto& table = osc.table != nullptr ? *osc.table : builtInWavetable();
-        const auto level = table.levelFor(hz * 1.05f, sampleRate);
+        const auto warped = warp[0].mode != WarpMode::off || warp[1].mode != WarpMode::off;
+        const auto headroom = warped
+            ? juce::jlimit(1.0f, warpHeadroomCeiling, warpHeadroom(warp[0]) * warpHeadroom(warp[1]))
+            : 1.0f;
+        const auto level = table.levelFor(hz * 1.05f * headroom, sampleRate);
 
         auto stackLeft = 0.0f, stackRight = 0.0f, power = 0.0f;
         for (int i = 0; i < count; ++i)
@@ -1564,7 +1633,18 @@ private:
             const auto gain = juce::jmap(blend, centreWeight, 1.0f);
             power += gain * gain;
 
-            const auto sample = table.sample(level, position, phases[static_cast<size_t>(i)]) * gain;
+            // The table read, and the two warp stages standing between it and
+            // the voice. They chain by one calling the other rather than
+            // through a buffer, so a stage that moves the phase moves what the
+            // stage in front of it is reading rather than what it already read.
+            const auto readTable = [&table, level, position] (float p)
+            { return table.sample(level, position, p); };
+            auto& states = warpStates[static_cast<size_t>(i)];
+            const auto phase = phases[static_cast<size_t>(i)];
+            const auto sample = (warped
+                ? warpRead(warp[1], phase, states[1], [&] (float p)
+                           { return warpRead(warp[0], p, states[0], readTable); })
+                : readTable(phase)) * gain;
             const auto pan = juce::jlimit(-1.0f, 1.0f, osc.pan + spread * detune * 1.6f);
             stackLeft += sample * sourcePanLeft(pan);
             stackRight += sample * sourcePanRight(pan);
@@ -1577,8 +1657,18 @@ private:
         // Power normalisation, so widening the stack changes the sound without
         // changing how loud the oscillator is.
         const auto scale = juce::jlimit(0.0f, 1.0f, osc.level) / std::sqrt(std::max(0.0001f, power));
-        left += stackLeft * scale;
-        right += stackRight * scale;
+        auto outLeft = stackLeft * scale, outRight = stackRight * scale;
+        // An asymmetric warp puts a constant offset into the signal, which is a
+        // thump on every note and a bias the filter would then have to carry.
+        // Only while something is warping: an oscillator reading its table
+        // straight has no offset to take off.
+        if (warped)
+        {
+            outLeft = dc[0].process(outLeft, dcBlock);
+            outRight = dc[1].process(outRight, dcBlock);
+        }
+        left += outLeft;
+        right += outRight;
     }
 
     void renderOscillators(Voice& voice, const Patch& patch, Buses& buses)
@@ -1595,12 +1685,76 @@ private:
         // from the sum it lands in: an oscillator can reach the filter and both
         // busses at once, and it cannot do that while it is being written
         // straight into somebody else's accumulator.
+        // Each oscillator's two warp stages, resolved for this sample before
+        // either stack is touched: which mode, how deep, the coefficients a
+        // filter mode needs, and whatever an FM mode is reading. Worked out
+        // once here rather than once per member of a stack, which is what keeps
+        // the exponentials out of the inner loop.
+        const auto hzA = hz * tuningRatio(patch.a), hzB = hz * tuningRatio(patch.b);
+        std::array<WarpStage, warpSlots> warpA {}, warpB {};
+        for (int i = 0; i < warpSlots; ++i)
+        {
+            const auto slot = static_cast<size_t>(i);
+            warpA[slot] = warpStageFor(patch.a.warpMode[slot], patch.a.warpAmount[slot], hzA, sampleRate);
+            warpB[slot] = warpStageFor(patch.b.warpMode[slot], patch.b.warpAmount[slot], hzB, sampleRate);
+        }
+
+        // What FM reads, worked out only where something is actually asking for
+        // it. The two oscillators read each other at the phases they both stand
+        // at now, before either has advanced, so neither is a sample ahead of
+        // the other and swapping which one is rendered first changes nothing.
+        const auto asks = [] (const std::array<WarpStage, warpSlots>& warp, bool (*test)(WarpMode))
+        {
+            for (const auto& stage : warp) if (test(stage.mode)) return true;
+            return false;
+        };
+        const auto wantsOther = asks(warpA, warpReadsOtherOscillator) || asks(warpB, warpReadsOtherOscillator);
+        const auto wantsSub = asks(warpA, warpReadsSub) || asks(warpB, warpReadsSub);
+        const auto wantsNoise = asks(warpA, warpReadsNoise) || asks(warpB, warpReadsNoise);
+        const auto fromSub = wantsSub
+            ? std::sin(voice.phaseSub * juce::MathConstants<float>::twoPi) : 0.0f;
+        const auto fromNoise = wantsNoise ? noise() : 0.0f;
+        // The centre of the other oscillator's stack, not the whole of it: a
+        // modulator is one signal, and twelve detuned copies of one would cost
+        // twelve table reads to say the same thing.
+        const auto centre = [this] (const Oscillator& osc, const std::array<float, unisonMax>& phases,
+                                    float oscHz)
+        {
+            if (!on(osc.enable)) return 0.0f;
+            const auto& table = osc.table != nullptr ? *osc.table : builtInWavetable();
+            return table.sample(table.levelFor(oscHz, sampleRate),
+                                juce::jlimit(0.0f, 1.0f, osc.position), phases[0]);
+        };
+        const auto fromB = wantsOther ? centre(patch.b, voice.phaseB, hzB) : 0.0f;
+        const auto fromA = wantsOther ? centre(patch.a, voice.phaseA, hzA) : 0.0f;
+        // A stage pointed at a source that is switched off is not a stage. The
+        // manual says as much -- the other oscillator has to be enabled for FM
+        // to work, though its level may be all the way down -- and saying it
+        // here rather than letting the modulator come out at zero matters,
+        // because a live stage also asks the table for bandwidth it is not
+        // going to use, and the carrier would quietly go dull for nothing.
+        const auto pointAt = [&] (std::array<WarpStage, warpSlots>& warp, float other, bool otherOn)
+        {
+            for (auto& stage : warp)
+            {
+                const auto missing = (warpReadsOtherOscillator(stage.mode) && !otherOn)
+                                  || (warpReadsSub(stage.mode) && !on(patch.subEnable));
+                if (missing) { stage = {}; continue; }
+                stage.modulator = warpReadsOtherOscillator(stage.mode) ? other
+                                : warpReadsSub(stage.mode)             ? fromSub
+                                : warpReadsNoise(stage.mode)           ? fromNoise
+                                                                       : 0.0f;
+            }
+        };
+        pointAt(warpA, fromB, on(patch.b.enable));
+        pointAt(warpB, fromA, on(patch.a.enable));
+
         auto left = 0.0f, right = 0.0f;
-        renderOscillator(voice.phaseA, patch.a, hz, dt, left, right);
+        renderOscillator(voice.phaseA, voice.warpA, voice.dcA, patch.a, hz, dt, warpA, left, right);
         distribute(left, right, on(patch.routeA), patch.sendA, buses);
 
         left = right = 0.0f;
-        renderOscillator(voice.phaseB, patch.b, hz, dt, left, right);
+        renderOscillator(voice.phaseB, voice.warpB, voice.dcB, patch.b, hz, dt, warpB, left, right);
         distribute(left, right, on(patch.routeB), patch.sendB, buses);
 
         // The sub and the noise generator are their own sources: each is silent
@@ -1670,6 +1824,9 @@ private:
     // One over the length of the tail fade in samples, worked out when the
     // sample rate is known rather than per sample.
     float tailStep = 1.0f / (44100.0f * voiceTailSeconds);
+    // The pole of the offset blocker a warped oscillator runs, worked out when
+    // the sample rate is known rather than per sample.
+    float dcBlock = warpDcCoefficient(48000.0);
     // The free-running cycles, one per LFO. An LFO in OFF reads these: the same
     // cycle for every voice and for the panel, running whether or not anything
     // is playing, which is the whole of what OFF means. The keyboard modes

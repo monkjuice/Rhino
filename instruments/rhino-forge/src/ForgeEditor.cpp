@@ -86,6 +86,7 @@ Editor::Editor(Processor& p)
     setResizeLimits(ui::minPanelWidth, ui::minPanelHeight, ui::maxPanelWidth, ui::maxPanelHeight);
     setSize(ui::defaultPanelWidth, ui::defaultPanelHeight);
     addChildComponent(valueBubble);
+    refreshWarpFields();
     applyEnableStates();
     applyTableCounts();
     applyPage();
@@ -266,8 +267,8 @@ void Editor::refreshFxSlots()
                     // type in this slot changes underneath the selector, and a
                     // pointer to the old type's choices is a dangling read on
                     // the next repaint.
-                    control.selector->choices = mode.choices;
-                    control.selector->count = mode.count;
+                    control.selector->choices.assign(mode.choices.begin(),
+                                                     mode.choices.begin() + juce::jmax(0, mode.count));
                     control.selector->chosen = fxModeOf(mode, value(control.id));
                     control.selector->accent = colour;
                     control.selector->setTooltip(
@@ -300,8 +301,8 @@ void Editor::setFxMode(const juce::String& id, int count, int choice)
 // distortion's eight shapes are the only one so far.
 void Editor::showFxModeMenu(Control& control)
 {
-    if (control.selector == nullptr || control.selector->count <= 0) return;
-    const auto count = control.selector->count;
+    if (control.selector == nullptr || control.selector->count() <= 0) return;
+    const auto count = control.selector->count();
 
     juce::PopupMenu menu;
     for (int i = 0; i < count; ++i)
@@ -320,6 +321,137 @@ void Editor::showFxModeMenu(Control& control)
         if (safe == nullptr || choice == 0) return;
         safe->setFxMode(id, count, choice - 1);
     });
+}
+
+// --- Warp ---------------------------------------------------------------------
+//
+// An oscillator's two warp fields wear the same component a rack slot's modes
+// do and behave differently behind it. A rack mode is a plain 0..1 because what
+// it steps through depends on what is in the slot; a warp mode is a fixed list
+// of twenty-six, so it is a real choice parameter and the value *is* the index.
+// That is the whole of the difference, and it is why these methods sit beside
+// the rack's rather than inside them.
+bool Editor::isWarpControl(const juce::String& id)
+{
+    return id.startsWith("osc") && id.contains("Warp");
+}
+
+void Editor::setWarpMode(const juce::String& id, int choice)
+{
+    auto* parameter = processor.state.getParameter(id);
+    if (parameter == nullptr) return;
+    parameter->setValueNotifyingHost(
+        parameter->convertTo0to1(static_cast<float>(juce::jlimit(0, warpModeCount - 1, choice))));
+}
+
+// What the two fields on each oscillator are showing. Called on the way in, on
+// every tab change and on every tick, because a mode can move without the panel
+// being touched -- a preset loaded, a host automating it, a second editor on
+// the same plugin -- and the field has to say what the engine is running.
+//
+// Only a field that has actually moved is rebuilt, which is what makes this
+// cheap enough to run on a timer.
+void Editor::refreshWarpFields()
+{
+    for (auto& module : moduleUis)
+        for (auto& held : module.controls)
+        {
+            auto& control = *held;
+            if (!isWarpControl(control.id)) continue;
+
+            // The depth knob beside a field. Most modes do nothing at nothing,
+            // but four of them do nothing at twelve o'clock instead, so a
+            // double-click returns the knob to whichever of the two its mode
+            // actually means -- which is the only way the middle of a bipolar
+            // warp is somewhere the hand can get back to.
+            if (control.selector == nullptr)
+            {
+                const auto mode = warpModeOf(value(control.id + "Mode"));
+                control.slider.setDoubleClickReturnValue(true, warpNeutralDepth(mode));
+                continue;
+            }
+
+            const auto chosen = juce::jlimit(0, warpModeCount - 1, juce::roundToInt(value(control.id)));
+            const auto listed = control.selector->count() == warpModeCount;
+            if (listed && control.selector->chosen == chosen) continue;
+            if (!listed)
+            {
+                control.selector->choices.clear();
+                for (int mode = 0; mode < warpModeCount; ++mode)
+                    control.selector->choices.push_back(warpModeName(mode));
+            }
+            control.selector->chosen = chosen;
+            // The field says what it is set to; the tooltip says what that
+            // setting does, read out of the same table the engine renders from.
+            control.selector->setTooltip(ui::warpTooltipFor(chosen));
+            control.selector->repaint();
+        }
+}
+
+// The list, grouped the way the manual groups it: OFF and SYNC are one item
+// each because they are one mode each, and the four families holding more than
+// one open a submenu. Twenty-six items in a single column would be a list to
+// read rather than a menu to use.
+void Editor::showWarpMenu(Control& control)
+{
+    if (control.selector == nullptr) return;
+    const auto current = juce::jlimit(0, warpModeCount - 1, juce::roundToInt(value(control.id)));
+
+    juce::PopupMenu menu;
+    for (int category = 0; category < warpCategoryCount; ++category)
+    {
+        const auto group = static_cast<WarpCategory>(category);
+        juce::PopupMenu submenu;
+        auto held = 0;
+        auto only = 0;
+        for (int mode = 0; mode < warpModeCount; ++mode)
+        {
+            if (warpCategoryOf(static_cast<WarpMode>(mode)) != group) continue;
+            ++held;
+            only = mode;
+            juce::PopupMenu::Item item(warpModeName(mode));
+            item.itemID = mode + 1;
+            item.isTicked = mode == current;
+            submenu.addItem(item);
+        }
+        if (held == 0) continue;
+        if (held == 1)
+        {
+            juce::PopupMenu::Item item(warpModeName(only));
+            item.itemID = only + 1;
+            item.isTicked = only == current;
+            menu.addItem(item);
+            continue;
+        }
+        // The family the current mode belongs to is ticked as well as the mode
+        // inside it, so a closed menu still says where the setting lives.
+        menu.addSubMenu(warpCategoryName(group), submenu, true, nullptr,
+                        warpCategoryOf(warpModeOf(static_cast<float>(current))) == group);
+    }
+
+    const auto safe = juce::Component::SafePointer<Editor>(this);
+    const auto id = control.id;
+    menu.showMenuAsync(juce::PopupMenu::Options {}.withTargetComponent(control.selector.get()),
+                       [safe, id] (int choice)
+    {
+        if (safe == nullptr || choice == 0) return;
+        safe->setWarpMode(id, choice - 1);
+    });
+}
+
+// One oscillator's two stages, resolved the way the engine resolves them, so
+// the tube draws the very warp the voice is rendering. The note and the rate
+// are the filter modes' business and the display draws none of those, so what
+// is handed in for them does not matter.
+std::array<WarpStage, warpSlots> Editor::warpStagesOf(const char* prefix) const
+{
+    std::array<WarpStage, warpSlots> stages {};
+    for (int slot = 0; slot < warpSlots; ++slot)
+    {
+        const auto id = juce::String(prefix) + "Warp" + juce::String(slot + 1);
+        stages[static_cast<size_t>(slot)] = warpStageFor(value(id + "Mode"), value(id), 0.0f, 48000.0);
+    }
+    return stages;
 }
 
 // One slot set to what its type opens on. The values live beside the type in
@@ -487,6 +619,7 @@ void Editor::applyPage()
     // Before the layout pass below, because which of a slot's knobs are on
     // screen is what that pass is placing.
     refreshFxSlots();
+    refreshWarpFields();
     if (tablePanel != nullptr) tablePanel->setVisible(page == ui::Page::table);
     // Last, because a macro's handle takes the place of its label and the
     // layout pass is what decides that.
@@ -534,17 +667,37 @@ void Editor::buildModules()
                 {
                     control->selector = std::make_unique<ui::FxSelector>();
                     auto* held = control.get();
-                    control->selector->onChoose = [this, held] (int choice)
+                    // Two fields wear the same component. A rack slot's mode
+                    // means whatever the type in that slot says it means, so it
+                    // is stored as a plain 0..1 and spread across the choices;
+                    // an oscillator's warp mode is a fixed list, so it is a
+                    // genuine choice parameter and the index is the value.
+                    if (isWarpControl(declared.id))
                     {
-                        setFxMode(held->id, held->selector->count, choice);
-                    };
-                    control->selector->onOpenList = [this, held] { showFxModeMenu(*held); };
+                        control->selector->accent = accent;
+                        control->selector->onChoose = [this, held] (int choice)
+                        {
+                            setWarpMode(held->id, choice);
+                        };
+                        control->selector->onOpenList = [this, held] { showWarpMenu(*held); };
+                    }
+                    else
+                    {
+                        control->selector->onChoose = [this, held] (int choice)
+                        {
+                            setFxMode(held->id, held->selector->count(), choice);
+                        };
+                        control->selector->onOpenList = [this, held] { showFxModeMenu(*held); };
+                    }
                     // As with the plate: the slider is here for its attachment,
                     // never shown and never added as a child. The attachment is
                     // what a host reads and writes the mode through.
                     control->slider.setSliderStyle(juce::Slider::LinearBarVertical);
                     control->slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-                    control->slider.onValueChange = [this] { refreshFxSlots(); repaintFxDisplays(); };
+                    if (isWarpControl(declared.id))
+                        control->slider.onValueChange = [this] { refreshWarpFields(); repaint(); };
+                    else
+                        control->slider.onValueChange = [this] { refreshFxSlots(); repaintFxDisplays(); };
                     control->attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
                         processor.state, declared.id, control->slider);
 
@@ -939,9 +1092,16 @@ void Editor::paint(juce::Graphics& g)
                 // copy — so the tube shows the table and not a formula, and not
                 // whichever copy the note being held happens to want.
                 if (const auto* source = ui::displaySourceId(descriptor))
-                    ui::drawWaveform(g, display,
-                                     processor.tableStore().edit(juce::String(descriptor.id) == "oscB" ? 1 : 0),
-                                     value(source), accent, alpha);
+                {
+                    // Warped as the voice warps it, which is what the manual
+                    // means when it says the 2D view shows what the mode is
+                    // doing. The modes it cannot honestly draw take themselves
+                    // off the picture -- see drawWaveform.
+                    const auto second = juce::String(descriptor.id) == "oscB";
+                    ui::drawWaveform(g, display, processor.tableStore().edit(second ? 1 : 0),
+                                     value(source), warpStagesOf(second ? "oscB" : "oscA"),
+                                     accent, alpha);
+                }
                 break;
             case ui::Display::envelope:
             {
@@ -1624,6 +1784,9 @@ void Editor::timerCallback()
             }
 
     applyEnableStates();
+    // A warp mode moves the same way a slot's type does, and from the same
+    // places, so the field that reports it is refreshed on the same tick.
+    refreshWarpFields();
     refreshModulationRings();
 
     // A table replaced from outside the panel — a preset loaded, a project

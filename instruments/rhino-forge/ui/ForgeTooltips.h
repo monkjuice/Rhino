@@ -1,5 +1,7 @@
 #pragma once
 
+#include "../core/ForgeWarp.h"
+
 #include <juce_core/juce_core.h>
 #include <map>
 
@@ -13,6 +15,85 @@
 // another tab without disturbing any of this.
 namespace rhino::forge::ui
 {
+// What one warp mode does, in the words the manual uses for it. Keyed by the
+// mode rather than by the parameter, because the field it is shown on is
+// twenty-six things depending on where it is set -- so the explanation follows
+// the setting, the way a rack slot's does.
+inline juce::String warpTooltipFor(int mode)
+{
+    switch (warpModeOf(static_cast<float>(mode)))
+    {
+        case WarpMode::sync:
+            return "Restart a second read of the table inside every cycle of the note. "
+                   "The knob sets how much faster that read runs, which lifts the harmonics "
+                   "without moving the pitch";
+        case WarpMode::bendUp:
+            return "Pinch both halves of the cycle inwards, towards the middle of each";
+        case WarpMode::bendDown:
+            return "Pull both halves of the cycle outwards, towards their edges";
+        case WarpMode::bendBoth:
+            return "Pinch or pull both halves of the cycle. Twelve o'clock is no change";
+        case WarpMode::pwm:
+            return "Give the first half of the wave more or less of the cycle than the second: "
+                   "pulse width, and the classic sound of it on a square";
+        case WarpMode::asym:
+            return "Lean the whole cycle one way rather than bending each half of it. "
+                   "Twelve o'clock is no change";
+        case WarpMode::flip:
+            return "Invert the wave part-way through the cycle. The knob says where the flip happens";
+        case WarpMode::mirror:
+            return "Play the second half of the cycle as the first half backwards, which doubles "
+                   "the wave into the cycle and always has an audible effect";
+        case WarpMode::quantize:
+            return "Hold the read at steps rather than sweeping it, like a sample and hold on the "
+                   "waveform. The grit follows the pitch rather than sitting at one frequency";
+        case WarpMode::oddEven:
+            return "Scale the odd and even harmonics against each other. Nothing is odd only, "
+                   "the top is even only, and twelve o'clock is the wave as it was";
+        case WarpMode::lowPass:
+            return "Take the top off the waveform itself, at a corner that follows the note";
+        case WarpMode::highPass:
+            return "Take the bottom off the waveform itself, at a corner that follows the note";
+        case WarpMode::bandPass:
+            return "Keep a band of the waveform and drop what is either side of it, "
+                   "at corners that follow the note";
+        case WarpMode::tube:
+            return "Valve saturation: a soft knee that is not the same either side of zero, "
+                   "which is where its warmth comes from";
+        case WarpMode::softClip:
+            return "Round the peaks off rather than cutting them: quiet parts pass untouched";
+        case WarpMode::hardClip:
+            return "Cut the peaks off flat once they pass the threshold. The harsh one";
+        case WarpMode::diode:
+            return "Diode clipping, asymmetric the way the circuit it comes from is";
+        case WarpMode::linearFold:
+            return "Fold the wave back on itself every time it leaves full scale: metallic, "
+                   "and busier the harder it is driven";
+        case WarpMode::sineFold:
+            return "The same folding through a sine, which rounds every corner the linear "
+                   "fold leaves square";
+        case WarpMode::rectify:
+            return "Flip one half of the wave into the other. Harmonically rich, and often harsh";
+        case WarpMode::tapeSat:
+            return "The gentlest of the saturations: warmth and a little compression rather "
+                   "than an edge";
+        case WarpMode::fmOsc:
+            return "Modulate this oscillator with the other one. The other oscillator has to be "
+                   "on, though its level can be down if it is only wanted as a modulator";
+        case WarpMode::fmSub:
+            return "Modulate this oscillator with the sub, an octave below the note. "
+                   "The SUB module has to be on, though its level can be down";
+        case WarpMode::fmNoise:
+            return "Modulate this oscillator with noise, which reads as grain rather than pitch";
+        case WarpMode::fmSelf:
+            return "Modulate this oscillator with its own last output. A little is a saw, "
+                   "a lot is chaos";
+        case WarpMode::off:
+            break;
+    }
+    return "No warp. Click to choose one; the arrows step through the list without opening it";
+}
+
 inline juce::String tooltipFor(const juce::String& id)
 {
     // Both oscillators expose the same controls, so their tooltips are keyed by
@@ -28,6 +109,11 @@ inline juce::String tooltipFor(const juce::String& id)
         {"Blend", "Balance the centre of oscillator %'s stack against its edges"},
         {"Pan", "Place oscillator % in the stereo field"},
         {"Level", "Set oscillator %'s level"},
+        {"Warp1Mode", "How oscillator % plays its table back, before WARP 2. "
+                      "Click for the list, or step through it with the arrows"},
+        {"Warp1", "How far oscillator %'s first warp goes"},
+        {"Warp2Mode", "A second warp on oscillator %, applied to what the first one left"},
+        {"Warp2", "How far oscillator %'s second warp goes"},
         {"Send1", "How much of oscillator % is sent to BUS 1, on top of where it already goes"},
         {"Send2", "How much of oscillator % is sent to BUS 2, on top of where it already goes"},
     };

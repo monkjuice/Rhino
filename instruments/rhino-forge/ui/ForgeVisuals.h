@@ -2,6 +2,7 @@
 
 #include "ForgeLayout.h"
 #include <functional>
+#include <vector>
 #include <BinaryData.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <cmath>
@@ -861,8 +862,12 @@ public:
     // Copied rather than pointed at: the type in the slot changes underneath
     // this, and a pointer into the table for the type that *was* there is a
     // dangling read waiting for the next repaint.
-    std::array<const char*, 8> choices {};
-    int count = 0;
+    //
+    // A vector rather than a fixed array because the fields this serves are not
+    // all the same size: a reverb offers two choices and an oscillator's warp
+    // offers twenty-six. How many there are is the vector's own length, so a
+    // field cannot be told it has more choices than it was given.
+    std::vector<const char*> choices;
     int chosen = 0;
     juce::Colour accent = electricBlue;
     std::function<void(int)> onChoose;
@@ -878,17 +883,19 @@ public:
     // A field with this many or fewer shows them all; past it, a list.
     static constexpr int inlineLimit = 3;
 
-    bool inlineChoices() const { return count > 0 && count <= inlineLimit; }
+    int count() const { return static_cast<int>(choices.size()); }
+
+    bool inlineChoices() const { return count() > 0 && count() <= inlineLimit; }
 
     juce::Rectangle<int> segmentBounds(int index) const
     {
         const auto area = getLocalBounds();
-        if (count <= 0) return area;
-        const auto height = area.getHeight() / count;
+        if (count() <= 0) return area;
+        const auto height = area.getHeight() / count();
         // The last one takes the remainder, so the column ends exactly where
         // the field does rather than a pixel or two short.
         return {area.getX(), area.getY() + index * height, area.getWidth(),
-                index == count - 1 ? area.getBottom() - (area.getY() + index * height) : height};
+                index == count() - 1 ? area.getBottom() - (area.getY() + index * height) : height};
     }
 
     // The list style is one line whatever the box is, centred in it, so a field
@@ -903,7 +910,7 @@ public:
     {
         const auto enabled = isEnabled();
         const auto alpha = enabled ? 1.0f : 0.35f;
-        if (count <= 0)
+        if (count() <= 0)
         {
             g.setColour(juce::Colour(0xff0b0e18).withAlpha(alpha * 0.6f));
             g.fillRoundedRectangle(getLocalBounds().toFloat().reduced(1.0f), 3.0f);
@@ -912,7 +919,7 @@ public:
 
         if (inlineChoices())
         {
-            for (int i = 0; i < count; ++i)
+            for (int i = 0; i < count(); ++i)
             {
                 const auto box = segmentBounds(i).toFloat().reduced(1.0f);
                 const auto live = i == chosen;
@@ -934,7 +941,7 @@ public:
         g.setColour(accent.withAlpha(alpha));
         g.drawRoundedRectangle(area, 3.0f, 1.0f);
         g.setFont(juce::FontOptions(10.0f, juce::Font::bold));
-        g.drawText(choices[static_cast<size_t>(juce::jlimit(0, count - 1, chosen))],
+        g.drawText(choices[static_cast<size_t>(juce::jlimit(0, count() - 1, chosen))],
                    area.reduced(static_cast<float>(arrowWidth), 0.0f), juce::Justification::centred);
 
         // The two arrows, greyed at the end they cannot go past — a list that
@@ -952,15 +959,15 @@ public:
             g.strokePath(path, juce::PathStrokeType(1.4f));
         };
         arrow(area.withWidth(static_cast<float>(arrowWidth)), true, chosen > 0);
-        arrow(area.withLeft(area.getRight() - arrowWidth), false, chosen < count - 1);
+        arrow(area.withLeft(area.getRight() - arrowWidth), false, chosen < count() - 1);
     }
 
     void mouseDown(const juce::MouseEvent& event) override
     {
-        if (!isEnabled() || count <= 0) return;
+        if (!isEnabled() || count() <= 0) return;
         if (inlineChoices())
         {
-            for (int i = 0; i < count; ++i)
+            for (int i = 0; i < count(); ++i)
                 if (segmentBounds(i).contains(event.getPosition()))
                 {
                     if (i != chosen && onChoose) onChoose(i);
@@ -972,7 +979,7 @@ public:
         if (event.x < arrowWidth) { if (chosen > 0 && onChoose) onChoose(chosen - 1); return; }
         if (event.x > getWidth() - arrowWidth)
         {
-            if (chosen < count - 1 && onChoose) onChoose(chosen + 1);
+            if (chosen < count() - 1 && onChoose) onChoose(chosen + 1);
             return;
         }
         if (onOpenList) onOpenList();
@@ -1420,16 +1427,41 @@ inline void drawDisplayWell(juce::Graphics& g, juce::Rectangle<int> area)
 // The oscillator's own table on its tube. The table is handed in rather than
 // looked up, because each oscillator now has one of its own and the panel has
 // to draw the one that oscillator is actually reading.
+// The warp stages are handed in as well, because what an oscillator sounds like
+// and what it draws are the same thing: the trace is the table read through the
+// very warps the voice is reading it through.
+//
+// Not all of them, though. A filter mode runs against time and an FM mode reads
+// another source in the voice, so neither is a picture of a table and both take
+// themselves off the trace rather than drawing something untrue. That is the
+// same line the Serum manual draws when it says the 2D view shows what Sync,
+// Alt Warp and Distortion are doing and says nothing about the rest.
 inline void drawWaveform(juce::Graphics& g, juce::Rectangle<int> area, const rhino::forge::WavetableEdit& table,
-                         float position, juce::Colour colour, float alpha)
+                         float position,
+                         const std::array<rhino::forge::WarpStage, rhino::forge::warpSlots>& warp,
+                         juce::Colour colour, float alpha)
 {
     const auto face = crtFace(area);
     // Full width of the glass: the trace runs off both edges and is cut by the
     // tube, the way a scope's is, rather than stopping short inside it.
     const auto box = face.reduced(0.0f, 5.0f).withSizeKeepingCentre(face.getWidth(),
                                                                     face.getHeight() * 0.88f);
-    const auto path = wavePath(box, [&table, position] (float phase)
-                               { return table.sample(position, phase); }, 220);
+    std::array<rhino::forge::WarpStage, rhino::forge::warpSlots> drawn {};
+    for (int slot = 0; slot < rhino::forge::warpSlots; ++slot)
+    {
+        const auto& stage = warp[static_cast<size_t>(slot)];
+        if (rhino::forge::warpShapesWaveform(stage.mode)) drawn[static_cast<size_t>(slot)] = stage;
+    }
+    // None of the modes that reach the trace keep any, so a fresh pair of these
+    // per point would do; they are hoisted out so the reader beside them is the
+    // same expression the voice uses.
+    rhino::forge::WarpState first, second;
+    const auto path = wavePath(box, [&] (float phase)
+    {
+        const auto read = [&table, position] (float p) { return table.sample(position, p); };
+        return rhino::forge::warpRead(drawn[1], phase, second, [&] (float p)
+                                      { return rhino::forge::warpRead(drawn[0], p, first, read); });
+    }, 220);
     // Clipped to the glass, so the halo stops at the bezel rather than spilling
     // over the tube's edge.
     juce::Graphics::ScopedSaveState clip(g);

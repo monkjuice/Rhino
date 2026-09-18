@@ -190,6 +190,20 @@ private:
     void setFxMode(const juce::String& id, int count, int choice);
     // The list a mode field with too many choices to show at once opens.
     void showFxModeMenu(Control&);
+    // An oscillator's warp fields wear the rack's mode component and are driven
+    // differently behind it: a warp mode is a fixed list of twenty-six, so the
+    // parameter is a real choice and its value is the index, where a rack
+    // slot's mode is a plain 0..1 spread across whatever its type offers.
+    static bool isWarpControl(const juce::String& id);
+    void setWarpMode(const juce::String& id, int choice);
+    // What each oscillator's two fields are showing, refreshed when one has
+    // moved — from the panel, from a preset or from a host.
+    void refreshWarpFields();
+    // The warp list, grouped by category the way the manual groups it.
+    void showWarpMenu(Control&);
+    // One oscillator's two warp stages, resolved as the engine resolves them,
+    // so the display draws the warp the voice is rendering.
+    std::array<WarpStage, warpSlots> warpStagesOf(const char* prefix) const;
     // The shelves the slots sit on, drawn behind their controls.
     void paintFxShelves(juce::Graphics&, juce::Rectangle<int> area, const ui::Module&);
     // The rack's box alone, for a knob that is being turned inside it.

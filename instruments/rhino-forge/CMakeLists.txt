@@ -44,6 +44,7 @@ target_sources(RhinoForge PRIVATE
     core/ForgeWavetable.h
     core/ForgeFx.h
     core/ForgeFxDsp.h
+    core/ForgeWarp.h
     ui/ForgeLayout.h
     ui/ForgeTablePanel.h
     ui/ForgeVisuals.h
@@ -77,6 +78,7 @@ if (BUILD_TESTING)
         core/ForgeWavetable.h
     core/ForgeFx.h
     core/ForgeFxDsp.h
+    core/ForgeWarp.h
         ui/ForgeLayout.h
         ui/ForgeTablePanel.h
         ui/ForgeVisuals.h

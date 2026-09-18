@@ -40,6 +40,7 @@ arithmetic; modules declare their contents.
 | |LEVEL| | LVL | | [ waveform     ] | | [ waveform     ] | |[ response ]| |
 | | (o) | | (o) | |  OCT SEMI FINE   | |  OCT SEMI FINE   | | TYPE ABSN  | |
 | |     | |     | | POS UNI DET ...  | | POS UNI DET ...  | | CUT RES DR | |
+| |     | |     | | (o)[MOD][MOD](o) | | (o)[MOD][MOD](o) | |            | |
 | +-----+ +-----+ +------------------+ +------------------+ +-----------+ |
 | +GLOBAL+ +-- ENV -------------+ +-- LFO -------------+ +-MACROS-+      |
 | |POLY GL| | [ ADSR curve    ] | | [ shape + phase ]  | | 1    2 |      |
@@ -1159,6 +1160,125 @@ happened to be masked by the extra refreshes those paths trigger.
   `FxSelector` is general enough to take them; it was kept to the rack because
   that is what was asked for.
 
+### M12 — warp on both oscillators — done
+
+The oscillators read their tables straight. Everything that makes a wavetable
+synth sound like more than a sample player — the sync, the bends, the folds —
+was missing, and the manual gives it a chapter of its own (pp. 49–54).
+
+**Two stages per oscillator, a mode and a depth each,** in a row under the knobs
+they belong to: a depth knob at each end with the two mode fields between them,
+which is the arrangement the manual's warp figure has and the order the stages
+are applied in. The row weighs the same as the knob row above it and divides
+into the same six cells, so WARP 1 stands under POSITION and WARP 2 under LEVEL.
+
+**Twenty-six modes in six families**, grouped in the menu the way the manual
+groups them — OFF and SYNC are one item each because they are one mode each, and
+ALT WARP, FILTER, DISTORTION and FM open submenus. A field of twenty-six draws
+as a name between two arrows, which is the presentation `FxSelector` already had
+for a list too long to stack; the arrows step without opening anything.
+
+The FM family is where Forge and Serum part company. Serum names two filters as
+FM sources; Forge has one, and it sits downstream of the oscillators, so
+pointing an oscillator at it would be a loop. FM SELF stands in its place —
+a stage reading its own last output, which is the other classic FM source and
+one the manual's list happens not to carry.
+
+**One implementation, two readers.** A warp is handed a `read` that turns a
+phase into a sample, so the same function serves the voice — reading a
+band-limited table — and the panel, reading the table as authored. That is also
+how the two stages chain: the second is handed the first rather than a buffer
+between them, which is what lets a stage that moves the phase move what the
+stage in front of it is reading. One consequence falls out of it: a phase-domain
+mode and a sample-domain mode commute, because a stage passes on a way to read
+rather than something already read.
+
+**A depth of nothing means nothing.** The phase-domain modes are neutral at the
+bottom of the knob by their own mapping; the filters and the waveshapers get
+there by crossfading from the wave as it was, which costs half a filter reading
+as a shelf rather than as a corner and buys a knob that never does anything at
+zero. Four modes go both ways instead and are neutral at twelve o'clock, exactly
+as the manual says; `warpNeutralDepth` names which, and the panel returns the
+knob there on a double-click so the middle of a bipolar warp is somewhere the
+hand can actually get back to. MIRROR is the one mode that is never neutral,
+which is what the manual says of it too.
+
+**Aliasing is traded, not solved.** Forge does not oversample. Each mode instead
+declares how much extra bandwidth it is about to ask for at the depth it is set
+to, and the oscillator picks a band-limited copy of the table for a note that
+much higher — the same trade Serum makes before it oversamples. It is why a deep
+SYNC sounds softer than its ratio suggests. SYNC also crossfades across the last
+two percent of the master cycle rather than jumping, which is what the manual
+describes as the WARP Var fader and what turns a step into a join.
+
+**What the panel draws.** The tube draws the warp the voice is running, for the
+modes that are honestly a picture of a table. The three filters run against time
+and the four FM modes read something outside the oscillator, so both families
+take themselves off the trace instead of drawing something untrue — the same
+line the manual draws when it says the 2D view shows Sync, Alt Warp and
+Distortion.
+
+**Where the four new destinations went.** Past the eighty-four generated rack
+entries rather than beside the oscillator controls they belong with. A slot
+stores its destination as an index, so moving one moves it inside every preset
+already saved; the list is appended to and never inserted into, and that rule
+does not bend for tidiness. The modes are deliberately not destinations.
+
+**What the oscillator row paid for the third row.** The display, not the knobs.
+The oscillators' share of their own body drops from 55% to 44%, which is what
+keeps the waveform the largest thing on the panel while the knobs come down from
+63 pixels to 52 at the size Forge opens at.
+
+**What is checked**
+
+Every mode is rendered at full depth on both stages, at the bottom, middle and
+top of the keyboard, and held to producing finite, audible signal inside full
+scale. Every mode is held to leaving the wave untouched at the depth it calls
+neutral, measured against the mode's own `warpNeutralDepth` rather than against
+zero, so a mode that moved its neutral would fail rather than quietly change.
+
+The pitch is measured as the period the render repeats over, not as its tallest
+partial: SYNC deliberately makes its own harmonic the loudest thing in the
+signal, so the method `tuningSuite` uses would report the mode working as the
+note moving. Thirteen modes are held to repeating at the note and to nothing
+shorter repeating at all — the check that would catch a warp applied to the
+phase increment instead of to the phase, which is the easy way to write one and
+the wrong way, because it would make the depth knob a tuning control.
+
+RECTIFY is held to leaving no constant offset behind, which is the check on the
+blocker the asymmetric modes need. The two stages are held to running in the
+order they are declared, measured on two modes that genuinely do not commute.
+FM OSC is held to doing nothing while the other oscillator is off and to working
+with its level all the way down, which is what the manual says of it. And the
+four new destinations are held to landing where their indices say while the
+racks stay exactly where they were.
+
+**The two things the tests changed**
+
+FM SELF at any useful depth was chaotic rather than periodic. The feedback index
+now runs to a quarter of a cycle rather than four, which is the range a feedback
+control is actually reached for, and the average of the last two outputs goes
+back round rather than the last one alone — the standard zero at half the sample
+rate. It is still chaotic at the top of the knob on a saw, and that is what the
+knob is for; the test measures it on a sine, which is the shape feedback turns
+into a saw.
+
+A stage pointed at a source that is switched off is now turned off rather than
+handed a modulator of zero. The difference is not the silence — that was already
+right — it is that a live stage also asks the table for bandwidth it is not
+going to use, so choosing FM OSC with the other oscillator off quietly went dull
+for nothing.
+
+**Still open**
+
+- The unison spread the manual lists beside RANGE — spreading each warp depth
+  across the stack — belongs with the unison panel rather than here.
+- PD, AM and RM appear in the manual's own menu figure and nowhere in its table,
+  so there is nothing to build them from but a guess. Left out deliberately.
+- FLIP and QUANTIZE put a step in the waveform, and reading a duller copy of the
+  table only takes the edge off it. They are the two modes that would most
+  repay oversampling the oscillator, which nothing in Forge does yet.
+
 ## Out of scope for now
 
 These are the north star, not this plan. They come after the synth is finished.
@@ -1167,8 +1287,8 @@ These are the north star, not this plan. They come after the synth is finished.
   copy and paste between racks, and the seven Serum types M11a left out. Plus
   the `DIRECT` output, which needed effects to bypass before it could mean
   anything.
-- **M12 — Second filter,** with the serial/parallel routing Serum exposes.
-- **M13 — Preset browser** with tags and search.
+- **M13 — Second filter,** with the serial/parallel routing Serum exposes.
+- **M14 — Preset browser** with tags and search.
 - **Later still:** MPE, sample and granular sources, spectral oscillators.
 
 ## Building and testing

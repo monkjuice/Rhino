@@ -129,6 +129,30 @@ resolve to a single value, and Core takes the loudest voice's — the voice the
 envelope and LFO displays already follow. An LFO in OFF, which free-runs and is
 shared by every voice, is the source that drives a rack cleanly.
 
+Each oscillator carries two **warp** stages under its knobs, applied in the
+order they are drawn: a mode chosen from a menu grouped the way the Serum
+manual groups it, and a knob setting how deep that mode goes. Twenty-six modes
+across six families — a window sync, nine ways of bending where in the cycle the
+table is read, three pitch-tracked filters on the waveform itself, eight
+waveshapers, and four kinds of phase modulation from elsewhere in the voice. The
+arrows beside a field step through the list without opening it.
+
+Every mode leaves the wave exactly as it was at the depth it calls neutral, so a
+mode can be chosen and then opened up rather than the other way round; four of
+them go both ways and are neutral at twelve o'clock, and a double-click on the
+depth returns it to whichever of the two its mode means. The oscillator's own
+display draws the warp it is running — but only the modes that are honestly a
+picture of a table, which is the same line the manual draws when it says the 2D
+view shows Sync, Alt Warp and Distortion. Both depths are modulation
+destinations; the modes are not, because sweeping a list of twenty-six unrelated
+modes is a stutter rather than a modulation.
+
+Forge does not oversample, so a warp that brightens a wave instead reads a
+duller band-limited copy of the table: each mode declares how much extra
+bandwidth it is about to ask for, and the oscillator picks its copy for a note
+that much higher. That reduces aliasing rather than removing it, and the modes
+that put a step in the waveform — FLIP and QUANTIZE — are where it still shows.
+
 Each oscillator reads a wavetable of its own. `TABLE` draws on it: freehand or
 straight lines on the selected frame, a strip of every frame below it, and add,
 duplicate, remove, init, normalise and undo. A table can also be loaded from an

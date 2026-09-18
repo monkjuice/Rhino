@@ -15,8 +15,6 @@
 // while a note may be sounding through the old one.
 namespace rhino::forge
 {
-inline constexpr int oscillatorCount = 2;
-
 // --- Why the hand-over is safe -----------------------------------------------
 //
 // One atomic per oscillator carries the table the audio thread should read. The

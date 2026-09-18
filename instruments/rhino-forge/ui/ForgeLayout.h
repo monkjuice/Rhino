@@ -215,6 +215,14 @@ inline const std::vector<int>& rowWeights()
 // no longer needs.
 inline constexpr int displayPercent = 55;
 
+// What an oscillator gives its own display, which is less than the share it
+// used to take. The warp row had to come from somewhere, and the choice was
+// between a smaller picture and smaller knobs: the picture is still the
+// largest thing on the panel at this share, and the knobs still come down from
+// 63 pixels to 52 at the size the panel opens at, which is where the third row
+// is actually paid for.
+inline constexpr int oscillatorDisplayPercent = 44;
+
 // The share of its body a module actually gives its display.
 inline int displayShareOf(const Module& module)
 {
@@ -293,18 +301,41 @@ inline juce::Rectangle<int> tabBounds(int index)
 inline const std::vector<Module>& modules()
 {
     static const std::vector<Module> declared {
+        // Three rows now that each oscillator warps: the tuning, the stack, and
+        // the pair of warp stages under it — a depth knob at each end with the
+        // two mode fields between them, which is the arrangement the Serum
+        // manual's warp figure has and the order the stages are applied in.
+        //
+        // The warp row weighs the same as the knob row above it and is divided
+        // into the same six cells, so WARP 1 stands under POSITION and WARP 2
+        // under LEVEL rather than the row drifting out of column with the one
+        // it belongs to. A mode field takes two of those cells because it
+        // spells a word out where a knob draws a circle.
+        //
+        // Paying for the third row out of the display rather than out of the
+        // knobs is deliberate: the waveform is still the largest thing on the
+        // panel, and a knob small enough to be hard to hit would have cost more
+        // than the picture does. The knobs do come down — see displayShare.
         {"oscA", "OSC A", "MORPH", "oscAEnable", false, Display::oscillator, 0, 4, 8, false,
-         {{26, {{"oscAOctave", "OCT", Style::stepper}, {"oscASemitone", "SEMI", Style::stepper},
+         {{20, {{"oscAOctave", "OCT", Style::stepper}, {"oscASemitone", "SEMI", Style::stepper},
                 {"oscAFine", "FINE", Style::stepper}}},
-          {74, {{"oscAPosition", "POSITION"}, {"oscAUnison", "UNISON"}, {"oscADetune", "DETUNE"},
-                {"oscABlend", "BLEND"}, {"oscAPan", "PAN"}, {"oscALevel", "LEVEL"}}}},
-         0, only(Page::oscillators)},
+          {40, {{"oscAPosition", "POSITION"}, {"oscAUnison", "UNISON"}, {"oscADetune", "DETUNE"},
+                {"oscABlend", "BLEND"}, {"oscAPan", "PAN"}, {"oscALevel", "LEVEL"}}},
+          {40, {{"oscAWarp1", "WARP 1", Style::knob, nullptr, 1, "oscAWarp1Mode"},
+                {"oscAWarp1Mode", "MODE 1", Style::selector, nullptr, 2},
+                {"oscAWarp2Mode", "MODE 2", Style::selector, nullptr, 2},
+                {"oscAWarp2", "WARP 2", Style::knob, nullptr, 1, "oscAWarp2Mode"}}}},
+         0, only(Page::oscillators), 1, 0, 0, oscillatorDisplayPercent},
         {"oscB", "OSC B", "MORPH", "oscBEnable", false, Display::oscillator, 0, 12, 8, false,
-         {{26, {{"oscBOctave", "OCT", Style::stepper}, {"oscBSemitone", "SEMI", Style::stepper},
+         {{20, {{"oscBOctave", "OCT", Style::stepper}, {"oscBSemitone", "SEMI", Style::stepper},
                 {"oscBFine", "FINE", Style::stepper}}},
-          {74, {{"oscBPosition", "POSITION"}, {"oscBUnison", "UNISON"}, {"oscBDetune", "DETUNE"},
-                {"oscBBlend", "BLEND"}, {"oscBPan", "PAN"}, {"oscBLevel", "LEVEL"}}}},
-         0, only(Page::oscillators)},
+          {40, {{"oscBPosition", "POSITION"}, {"oscBUnison", "UNISON"}, {"oscBDetune", "DETUNE"},
+                {"oscBBlend", "BLEND"}, {"oscBPan", "PAN"}, {"oscBLevel", "LEVEL"}}},
+          {40, {{"oscBWarp1", "WARP 1", Style::knob, nullptr, 1, "oscBWarp1Mode"},
+                {"oscBWarp1Mode", "MODE 1", Style::selector, nullptr, 2},
+                {"oscBWarp2Mode", "MODE 2", Style::selector, nullptr, 2},
+                {"oscBWarp2", "WARP 2", Style::knob, nullptr, 1, "oscBWarp2Mode"}}}},
+         0, only(Page::oscillators), 1, 0, 0, oscillatorDisplayPercent},
 
         // The matrix takes the two oscillators' columns — not the whole row,
         // because SUB, NOISE and FILTER sit either side of them and stay on

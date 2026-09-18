@@ -209,11 +209,17 @@ juce::AudioProcessorValueTreeState::ParameterLayout Processor::parameterLayout()
 {
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> result;
 
+    // The warp modes, in the order ForgeWarp.h declares them, so a host's
+    // automation lane names the very mode the engine will run.
+    juce::StringArray warpModeNames;
+    for (int i = 0; i < warpModeCount; ++i) warpModeNames.add(warpModeName(i));
+
     // The two oscillators are declared identically. Neither is expressed in
     // terms of the other, so each owns its tuning, its stack, its pan and its
     // level outright.
-    const auto oscillator = [this, &result] (int which, const char* prefix, const char* label, bool enabled,
-                                             float position, float semitone, float level)
+    const auto oscillator = [this, &result, &warpModeNames] (int which, const char* prefix,
+                                                             const char* label, bool enabled,
+                                                             float position, float semitone, float level)
     {
         const auto id = [prefix] (const char* suffix) { return juce::String(prefix) + suffix; };
         const auto name = [label] (const char* suffix) { return juce::String(label) + " " + suffix; };
@@ -242,6 +248,24 @@ juce::AudioProcessorValueTreeState::ParameterLayout Processor::parameterLayout()
         result.push_back(parameter(id("Blend"), name("Blend"), {0.0f, 1.0f}, 0.5f, asPercent));
         result.push_back(parameter(id("Pan"), name("Pan"), {-1.0f, 1.0f}, 0.0f, asPan));
         result.push_back(parameter(id("Level"), name("Level"), {0.0f, 1.0f}, level, asDecibels));
+        // Two warp stages, applied in the order they are declared. The mode is
+        // a choice rather than a stepped float, so a host's lane reads "BEND +"
+        // instead of 0.16; the depth beside it is a plain 0..1, because what it
+        // means is the mode's business and every mode uses the whole of it.
+        //
+        // Both open at nothing: a fresh patch has no warp on it, exactly as the
+        // manual says Serum's does, so every preset written before warp existed
+        // still sounds as it did.
+        for (int slot = 1; slot <= warpSlots; ++slot)
+        {
+            const auto suffix = "Warp" + juce::String(slot);
+            result.push_back(std::make_unique<juce::AudioParameterChoice>(
+                juce::ParameterID {juce::String(prefix) + suffix + "Mode", 1},
+                juce::String(label) + " " + suffix + " Mode", warpModeNames, 0));
+            result.push_back(parameter(juce::String(prefix) + suffix,
+                                       juce::String(label) + " " + suffix,
+                                       {0.0f, 1.0f}, 0.0f, asPercent));
+        }
     };
     // 6/9 is SAW and 1/9 is TRI: a fresh patch starts on shapes with names
     // rather than part-way between two of them.
@@ -716,6 +740,12 @@ Patch Processor::patch() const
         osc.blend = value(id("Blend"));
         osc.pan = value(id("Pan"));
         osc.level = value(id("Level"));
+        for (int slot = 0; slot < warpSlots; ++slot)
+        {
+            const auto stage = juce::String(prefix) + "Warp" + juce::String(slot + 1);
+            osc.warpMode[static_cast<size_t>(slot)] = value(stage + "Mode");
+            osc.warpAmount[static_cast<size_t>(slot)] = value(stage);
+        }
         return osc;
     };
 

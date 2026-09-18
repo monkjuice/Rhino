@@ -330,21 +330,50 @@ void Editor::showFxTypeMenu(Control& control)
     });
 }
 
+FxSlot Editor::fxSlotOf(int rack, int slot) const
+{
+    const auto id = [rack, slot] (const char* suffix) { return fxParameterId(rack, slot, suffix); };
+    FxSlot held;
+    held.type = value(id("Type"));
+    held.modeA = value(id("ModeA"));
+    held.modeB = value(id("ModeB"));
+    held.bypass = value(id("Bypass"));
+    for (int knob = 0; knob < fxKnobCount; ++knob)
+        held.knobs[static_cast<size_t>(knob)] = value(id("Knob") + juce::String(knob + 1));
+    held.mix = value(id("Mix"));
+    held.level = value(id("Level"));
+    return held;
+}
+
 // A shelf behind each slot, lit down its left edge in the type's colour. Drawn
 // here rather than by the module shell because there are four of them inside
 // one module, and which colour each takes is a parameter rather than a
 // declaration.
+// Only the rack's own box, rather than the whole panel: this runs for every
+// step of a knob being turned.
+void Editor::repaintFxDisplays()
+{
+    for (const auto& module : ui::modules())
+        if (juce::String(module.id) == "fx")
+            repaint(ui::moduleBounds(getLocalBounds(), module));
+}
+
 void Editor::paintFxShelves(juce::Graphics& g, juce::Rectangle<int> area, const ui::Module& module)
 {
     const auto rack = shownRack();
     for (int slot = 0; slot < static_cast<int>(module.rows.size()) && slot < fxSlotCount; ++slot)
     {
         const auto row = ui::rowBounds(area, module, slot);
-        const auto type = juce::roundToInt(value(fxParameterId(rack, slot, "Type")));
+        const auto held = fxSlotOf(rack, slot);
         // Widened past the controls by the module's own padding, so the shelves
         // read as the full width of the rack rather than as a box around the
         // knobs.
-        ui::drawFxShelf(g, row.expanded(6, 1), type, true);
+        ui::drawFxShelf(g, row.expanded(6, 1), juce::roundToInt(held.type), true);
+        // A slot that is bypassed still says what is in it, dimmed — the point
+        // of a bypass is to hear a rack without it and put it straight back.
+        ui::drawFxDisplay(g, ui::rowDisplayBounds(area, module, slot).reduced(4, 6), held,
+                          processor.getSampleRate() > 0.0 ? processor.getSampleRate() : 48000.0,
+                          processor.hostTempo(), fxOn(held.bypass) ? 0.3f : 1.0f);
     }
 }
 
@@ -539,10 +568,15 @@ void Editor::buildModules()
                     // a drag, and for host automation, which is why it only
                     // refreshes a bubble the hand has already opened — or opens
                     // one for a gesture that never started a drag.
-                    control->slider.onValueChange = [this, held]
+                    const auto rackControl = control->id.startsWith("fx");
+                    control->slider.onValueChange = [this, held, rackControl]
                     {
                         if (bubbleHeld || held->slider.isMouseOverOrDragging()) showValueBubble(*held);
                         else if (bubbleControl == held) showValueBubble(*held);
+                        // A knob repaints itself, not the panel around it, so a
+                        // slot's display would sit still while its own knob was
+                        // being turned.
+                        if (rackControl) repaintFxDisplays();
                     };
                 }
                 // A mode field changes what the knobs beside it read — a
@@ -550,7 +584,7 @@ void Editor::buildModules()
                 // so the readouts are pushed when it moves.
                 if (control->id.startsWith("fx")
                     && (control->id.endsWith("ModeA") || control->id.endsWith("ModeB")))
-                    control->slider.onValueChange = [this] { refreshFxSlots(); };
+                    control->slider.onValueChange = [this] { refreshFxSlots(); repaintFxDisplays(); };
                 // The attachment installs the parameter's own text formatting,
                 // so it must be created before anything reads the slider's text.
                 control->attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(

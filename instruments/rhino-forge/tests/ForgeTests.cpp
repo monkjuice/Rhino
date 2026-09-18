@@ -2,6 +2,7 @@
 #include "../ui/ForgeLayout.h"
 #include "../ui/ForgeTooltips.h"
 #include "../ui/ForgeVisuals.h"
+#include "../ui/ForgeFxDisplay.h"
 #include <algorithm>
 #include <iostream>
 #include <vector>
@@ -349,6 +350,25 @@ void layoutSuite()
         require(area.withTrimmedTop(rhino::forge::ui::headerHeight).contains(controls),
                 "controls stay clear of the module header, so labels cannot collide with the title");
 
+        // A row that has reserved a strip for a display must not have put a
+        // control on top of it. The strip and the cells are worked out from
+        // one total, so this is what holds that arithmetic honest — and it is
+        // checked at every size further down as well, because integer division
+        // is exactly where the two would drift apart.
+        for (int r = 0; r < static_cast<int>(modules[i].rows.size()); ++r)
+        {
+            const auto strip = rhino::forge::ui::rowDisplayBounds(area, modules[i], r);
+            if (strip.isEmpty()) continue;
+            require(rhino::forge::ui::rowBounds(area, modules[i], r).contains(strip),
+                    "a row's display strip stays inside that row");
+            const auto shared = rhino::forge::ui::uniformKnobDiameter(bounds);
+            const auto& controls = modules[i].rows[static_cast<size_t>(r)].controls;
+            for (int c = 0; c < static_cast<int>(controls.size()); ++c)
+                require(!strip.intersects(
+                            rhino::forge::ui::controlBlock(area, modules[i], r, c, shared)),
+                        "no control sits on top of its row's display strip");
+        }
+
         // Rows within a module must tile their area without overlapping either.
         for (int r = 0; r < static_cast<int>(modules[i].rows.size()); ++r)
         {
@@ -511,6 +531,160 @@ void layoutSuite()
                     }
             }
         }
+}
+
+// ------------------------------------------------------------- fx displays ---
+
+// A slot's display claims to be drawn from the arithmetic the slot actually
+// runs. These check that claim where it can be checked exactly: a curve is
+// compared against the very function the engine calls, not against a picture of
+// what the effect usually looks like.
+//
+// It is the same standard the filter module's display is held to below, and for
+// the same reason — a display that is merely plausible is worse than none,
+// because it is believed.
+void fxDisplaySuite()
+{
+    namespace ui = rhino::forge::ui;
+    using rhino::forge::FxType;
+
+    // --- The equaliser ---------------------------------------------------------
+    //
+    // A band's magnitude is read off the coefficients setBand built, so a band
+    // asked for no gain at all has to measure as no gain at all — at every
+    // frequency, not only at its corner. This is what would catch a shelf built
+    // from the wrong cookbook formula: it would still look like a shelf.
+    {
+        constexpr auto rate = 48000.0;
+        const auto& info = rhino::forge::fxTypes()[static_cast<size_t>(FxType::equaliser)];
+        rhino::forge::FxSlot flat;
+        flat.type = static_cast<float>(FxType::equaliser);
+        flat.knobs = info.init;
+        requireClose(rhino::forge::fxScaled(flat.knobs[2], -18.0f, 18.0f), 0.0f, 0.01f,
+                     "the equaliser this checks really is asking for no gain");
+
+        rhino::forge::Biquad low, high;
+        rhino::forge::setBand(low, rhino::forge::BandShape::lowShelf,
+                              rhino::forge::fxHertz(flat.knobs[0], 20.0f, 2000.0f),
+                              rhino::forge::fxScaled(flat.knobs[1], 0.2f, 6.0f),
+                              rhino::forge::fxScaled(flat.knobs[2], -18.0f, 18.0f), rate);
+        rhino::forge::setBand(high, rhino::forge::BandShape::highShelf,
+                              rhino::forge::fxHertz(flat.knobs[3], 500.0f, 18000.0f),
+                              rhino::forge::fxScaled(flat.knobs[4], 0.2f, 6.0f),
+                              rhino::forge::fxScaled(flat.knobs[5], -18.0f, 18.0f), rate);
+        for (const auto hz : {30.0f, 120.0f, 440.0f, 2000.0f, 9000.0f, 17000.0f})
+        {
+            const auto gain = ui::biquadMagnitude(low, hz, rate) * ui::biquadMagnitude(high, hz, rate);
+            requireClose(gain, 1.0f, 0.01f, "an equaliser opening flat measures flat at every frequency");
+        }
+
+        // A shelf asked for a boost has to measure as one below its corner and
+        // as nothing well above it, or the display is drawing the wrong band.
+        rhino::forge::Biquad boosted;
+        rhino::forge::setBand(boosted, rhino::forge::BandShape::lowShelf, 200.0f, 0.7f, 12.0f, rate);
+        require(ui::biquadMagnitude(boosted, 30.0f, rate) > 3.0f,
+                "a low shelf asked for +12 dB lifts what is under it");
+        requireClose(ui::biquadMagnitude(boosted, 12000.0f, rate), 1.0f, 0.05f,
+                     "a low shelf leaves what is well above it alone");
+    }
+
+    // --- The distortion --------------------------------------------------------
+    //
+    // The transfer curve is fxShape called per pixel, so the two cannot disagree
+    // by construction — what is worth checking is that the shapes behave the way
+    // a curve drawn from them would be read: passing through the origin, odd
+    // about it where they claim to be, and never leaving the box.
+    {
+        for (int shape = 0; shape < 8; ++shape)
+        {
+            if (shape == 7) continue;   // downsampling is a rate, not a curve
+            for (const auto drive : {0.0f, 0.4f, 1.0f})
+            {
+                requireClose(rhino::forge::fxShape(shape, 0.0f, drive), 0.0f, 0.001f,
+                             "a distortion shape leaves silence silent");
+                for (const auto in : {-1.0f, -0.6f, -0.2f, 0.2f, 0.6f, 1.0f})
+                {
+                    const auto out = rhino::forge::fxShape(shape, in, drive);
+                    if (!std::isfinite(out) || std::abs(out) > 1.001f)
+                    {
+                        require(false, "a distortion shape stays inside the box its curve is drawn in");
+                        std::cerr << "       shape " << shape << " drive " << drive
+                                  << " in " << in << " out " << out << '\n';
+                    }
+                }
+            }
+        }
+        // Hard clipping at no drive is the one shape that is exactly the
+        // diagonal the display draws behind every curve, which makes it the
+        // check that the diagonal means what it claims.
+        for (const auto in : {-0.9f, -0.3f, 0.3f, 0.9f})
+            requireClose(rhino::forge::fxShape(2, in, 0.0f), in, 0.001f,
+                         "hard clipping at no drive is the identity the faint diagonal stands for");
+    }
+
+    // --- The delay -------------------------------------------------------------
+    //
+    // The repeats are placed by the same fxDelaySeconds the line is read at, so
+    // what is checked is that a synced delay lands on the beat it names.
+    {
+        rhino::forge::FxSlot synced;
+        synced.type = static_cast<float>(FxType::delay);
+        synced.modeB = 1.0f;   // BPM rather than milliseconds
+        // The division a knob lands on, and the time that division is at 120.
+        for (int step = 0; step < rhino::forge::fxDivisionCount; ++step)
+        {
+            const auto at = static_cast<float>(step) / (rhino::forge::fxDivisionCount - 1);
+            synced.knobs[0] = at;
+            const auto& division = rhino::forge::fxDivisionAt(at);
+            const auto expected = juce::jlimit(0.001f, rhino::forge::fxMaxDelayTime,
+                                               0.5f * division.beats);
+            requireClose(rhino::forge::fxDelaySeconds(synced, 120.0), expected, 0.0005f,
+                         "a synced delay lands on the division its readout names");
+        }
+    }
+
+    // --- The reverb ------------------------------------------------------------
+    //
+    // The envelope is decay raised to the number of comb round trips. A longer
+    // decay setting therefore has to give a longer tail, and a hall a longer one
+    // than a plate at the same setting — which is the whole of what the two
+    // types differ by in renderReverb.
+    {
+        const auto& info = rhino::forge::fxTypes()[static_cast<size_t>(FxType::reverb)];
+        const auto plate = rhino::forge::fxScaled(0.5f, 0.62f, 0.9f);
+        const auto hall = rhino::forge::fxScaled(0.5f, 0.62f, 0.96f);
+        require(hall > plate, "a hall holds its energy longer than a plate at the same setting");
+        require(rhino::forge::fxScaled(1.0f, 0.62f, 0.9f) > rhino::forge::fxScaled(0.0f, 0.62f, 0.9f),
+                "turning the decay up lengthens the tail");
+        require(info.init[1] > 0.0f && info.init[1] < 1.0f,
+                "a reverb opens somewhere a decay can be read from");
+    }
+
+    // --- The strip they are drawn in -------------------------------------------
+    //
+    // Every rack row reserves one, and nothing else on the panel does. A module
+    // that grew a display strip without meaning to would be caught here.
+    {
+        const auto bounds = juce::Rectangle<int>(0, 0, rhino::forge::ui::defaultPanelWidth,
+                                                 rhino::forge::ui::defaultPanelHeight);
+        auto strips = 0;
+        for (const auto& module : rhino::forge::ui::modules())
+        {
+            const auto area = rhino::forge::ui::moduleBounds(bounds, module);
+            for (int r = 0; r < static_cast<int>(module.rows.size()); ++r)
+            {
+                const auto strip = rhino::forge::ui::rowDisplayBounds(area, module, r);
+                if (strip.isEmpty()) continue;
+                ++strips;
+                require(strip.getWidth() > 40 && strip.getHeight() > 20,
+                        "a display strip is big enough to draw a curve in");
+                require(juce::String(module.id) == "fx",
+                        "only the rack reserves a strip of a row for a display");
+            }
+        }
+        require(strips == rhino::forge::fxSlotCount,
+                "every slot of the rack has a display strip and no row has two");
+    }
 }
 
 // ---------------------------------------------------------- filter display ---
@@ -3515,7 +3689,13 @@ int main(int argc, char** argv)
     juce::ScopedJuceInitialiser_GUI initialiseJuce;
     const juce::String suite = argc > 1 ? argv[1] : "";
 
-    if (suite.isEmpty() || suite == "--layout") { layoutSuite(); envelopeDisplaySuite(); filterDisplaySuite(); }
+    if (suite.isEmpty() || suite == "--layout")
+    {
+        layoutSuite();
+        envelopeDisplaySuite();
+        filterDisplaySuite();
+        fxDisplaySuite();
+    }
     if (suite.isEmpty() || suite == "--presets") { presetSuite(); legacyStateSuite(); }
     if (suite.isEmpty() || suite == "--engine") engineSuite();
 

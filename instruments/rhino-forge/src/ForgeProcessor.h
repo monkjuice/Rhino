@@ -74,6 +74,10 @@ public:
     // a division of the host's tempo when it is set in beats.
     float lfoRateHz(int lfo) const;
 
+    // The tempo as of the last block. A synced delay draws its repeats where
+    // they will actually land, which needs the same tempo the engine divides.
+    double hostTempo() const { return hostBpm.load(std::memory_order_relaxed); }
+
     // How far the matrix is moving a destination right now, in that
     // destination's normalised space, so the knob pointed at it can draw where
     // its value actually is while a source plays it. Published the same way.

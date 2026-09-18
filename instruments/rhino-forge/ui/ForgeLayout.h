@@ -111,6 +111,15 @@ struct Row
     // bank. The geometry divides the row between one bank's cells; the others
     // land on top and are hidden.
     int banks = 1;
+    // A strip of the row given over to a display, measured in the same weights
+    // the cells are divided by, and how many cells stand in front of it.
+    //
+    // A module's own display sits above its controls and there is one of it;
+    // a rack has four slots in one module and each wants its own, so this is
+    // per row rather than per module. Zero means the row is all controls,
+    // which every row but the rack's is.
+    int displayWeight = 0;
+    int displayAfter = 0;
 };
 
 struct Module
@@ -235,6 +244,11 @@ inline constexpr int maxPlateHeight = 56;
 // panel merely because the matrix has that width to spend.
 // Wide enough for "BUS 1" rather than for a digit.
 inline constexpr int fxBankWidth = 56;
+
+// The share of a rack row given over to that slot's display. Three cells stand
+// in front of it — the name plate and the two mode fields — so it lands in the
+// same column down all four slots, with the knobs to its right.
+inline constexpr int fxDisplayWeight = 3;
 
 inline constexpr int rowNumberGutter = 34;
 inline constexpr int columnTitleHeight = 18;
@@ -492,7 +506,7 @@ inline const std::vector<Module>& modules()
                 {"fx3s1Knob4", "KNOB 4"}, {"fx3s1Knob5", "KNOB 5"}, {"fx3s1Knob6", "KNOB 6"},
                 {"fx3s1Mix", "MIX"}, {"fx3s1Level", "LEVEL"},
                 {"fx3s1Bypass", "BYP", Style::chip}},
-           rackCount},
+           rackCount, fxDisplayWeight, 3},
           {25, {{"fx1s2Type", "TYPE", Style::plate, nullptr, 2},
                 {"fx1s2ModeA", "MODE", Style::stepper, nullptr, 2},
                 {"fx1s2ModeB", "MODE", Style::stepper, nullptr, 2},
@@ -516,7 +530,7 @@ inline const std::vector<Module>& modules()
                 {"fx3s2Knob4", "KNOB 4"}, {"fx3s2Knob5", "KNOB 5"}, {"fx3s2Knob6", "KNOB 6"},
                 {"fx3s2Mix", "MIX"}, {"fx3s2Level", "LEVEL"},
                 {"fx3s2Bypass", "BYP", Style::chip}},
-           rackCount},
+           rackCount, fxDisplayWeight, 3},
           {25, {{"fx1s3Type", "TYPE", Style::plate, nullptr, 2},
                 {"fx1s3ModeA", "MODE", Style::stepper, nullptr, 2},
                 {"fx1s3ModeB", "MODE", Style::stepper, nullptr, 2},
@@ -540,7 +554,7 @@ inline const std::vector<Module>& modules()
                 {"fx3s3Knob4", "KNOB 4"}, {"fx3s3Knob5", "KNOB 5"}, {"fx3s3Knob6", "KNOB 6"},
                 {"fx3s3Mix", "MIX"}, {"fx3s3Level", "LEVEL"},
                 {"fx3s3Bypass", "BYP", Style::chip}},
-           rackCount},
+           rackCount, fxDisplayWeight, 3},
           {25, {{"fx1s4Type", "TYPE", Style::plate, nullptr, 2},
                 {"fx1s4ModeA", "MODE", Style::stepper, nullptr, 2},
                 {"fx1s4ModeB", "MODE", Style::stepper, nullptr, 2},
@@ -564,7 +578,7 @@ inline const std::vector<Module>& modules()
                 {"fx3s4Knob4", "KNOB 4"}, {"fx3s4Knob5", "KNOB 5"}, {"fx3s4Knob6", "KNOB 6"},
                 {"fx3s4Mix", "MIX"}, {"fx3s4Level", "LEVEL"},
                 {"fx3s4Bypass", "BYP", Style::chip}},
-           rackCount}
+           rackCount, fxDisplayWeight, 3}
          },
          0, only(Page::fx), 1, 0, 0, 0, fxBankWidth},
 
@@ -916,7 +930,9 @@ inline juce::Rectangle<int> cellBounds(juce::Rectangle<int> moduleArea, const Mo
     // Divided between one bank's cells. The banks behind it declare the same
     // cells and land on top of them.
     const auto perBank = controlsPerBank(declared);
-    auto total = 0;
+    // The display takes its share of the row before the cells divide what is
+    // left, so it is counted in the same total they are.
+    auto total = juce::jmax(0, declared.displayWeight);
     for (int i = 0; i < perBank; ++i)
         if (!controls[static_cast<size_t>(i)].sharesCell)
             total += juce::jmax(1, controls[static_cast<size_t>(i)].weight);
@@ -928,8 +944,37 @@ inline juce::Rectangle<int> cellBounds(juce::Rectangle<int> moduleArea, const Mo
     for (int i = 0; i < owner; ++i)
         if (!controls[static_cast<size_t>(i)].sharesCell)
             x += row.getWidth() * juce::jmax(1, controls[static_cast<size_t>(i)].weight) / total;
+    // Everything past the display is pushed along by it.
+    if (declared.displayWeight > 0 && owner >= declared.displayAfter)
+        x += row.getWidth() * declared.displayWeight / total;
     const auto width = row.getWidth() * juce::jmax(1, controls[static_cast<size_t>(owner)].weight) / total;
     return {x, row.getY(), width, row.getHeight()};
+}
+
+// The strip a row has reserved for a display, or an empty rectangle when it has
+// reserved none. Worked out the same way the cells are, so the two cannot
+// disagree about where one ends and the other begins — which the layout test
+// checks by intersecting them.
+inline juce::Rectangle<int> rowDisplayBounds(juce::Rectangle<int> moduleArea, const Module& module,
+                                             int rowIndex)
+{
+    const auto& declared = module.rows[static_cast<size_t>(rowIndex)];
+    if (declared.displayWeight <= 0) return {};
+    const auto row = rowBounds(moduleArea, module, rowIndex);
+    const auto& controls = declared.controls;
+    const auto perBank = controlsPerBank(declared);
+
+    auto total = declared.displayWeight;
+    for (int i = 0; i < perBank; ++i)
+        if (!controls[static_cast<size_t>(i)].sharesCell)
+            total += juce::jmax(1, controls[static_cast<size_t>(i)].weight);
+    if (total <= 0) return {};
+
+    auto x = row.getX();
+    for (int i = 0; i < declared.displayAfter && i < perBank; ++i)
+        if (!controls[static_cast<size_t>(i)].sharesCell)
+            x += row.getWidth() * juce::jmax(1, controls[static_cast<size_t>(i)].weight) / total;
+    return {x, row.getY(), row.getWidth() * declared.displayWeight / total, row.getHeight()};
 }
 
 // Every knob on the panel is drawn at one diameter, taken from whichever cell

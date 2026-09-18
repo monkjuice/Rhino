@@ -88,6 +88,15 @@ repeats, a distortion's flattened peaks — and the slot wears both: on the plat
 on every knob in the row, and lit down the left edge of the shelf it sits on. A
 rack is meant to be read by colour down its four rows before a word on it is.
 
+Each slot draws itself in a strip beside its mode fields: a reverb's decay
+envelope, a delay's repeats falling away across the two channels, a chorus's two
+taps swinging across one cycle, a distortion's transfer curve against the
+diagonal that no distortion would be, an equaliser's response, a filter's
+corner. Every one is computed from the arithmetic the engine actually runs — the
+distortion curve is `fxShape` called per pixel, the equaliser's is the magnitude
+of the very biquads `setBand` builds — so a display cannot claim one thing while
+the slot does another.
+
 Choosing a type also sets that type up, the way adding a module in Serum loads
 its default preset. One parameter default cannot serve seven types — 100% wet is
 right for an equaliser and wrong for a reverb on the main output — so what a
@@ -129,6 +138,7 @@ which decisions are already settled. Read it before changing the synth.
 | `core/ForgeCore.h` | The voice engine. No AudioProcessor, UI, state tree, filesystem, or allocation in `renderSample`. |
 | `core/ForgeFx.h` | What an effects rack is: the types, what each one's controls are called, and what a normalised knob means in each. No DSP. |
 | `core/ForgeFxDsp.h` | The racks, rendered. A slot carries every type's state, sized once at `prepare`, because a type changes while audio is running. |
+| `ui/ForgeFxDisplay.h` | What each effect draws of itself, from the same functions that render it. |
 | `src/ForgeProcessor.*` | Parameters, host automation, state, preset files. |
 | `ui/ForgeLayout.h` | What modules exist, what each contains, and where it sits. Pure geometry and declaration. |
 | `ui/ForgeVisuals.h` | The knob look and the drawing primitives. Decides nothing about placement. |

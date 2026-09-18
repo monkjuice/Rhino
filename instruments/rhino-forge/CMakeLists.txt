@@ -47,6 +47,7 @@ target_sources(RhinoForge PRIVATE
     ui/ForgeLayout.h
     ui/ForgeTablePanel.h
     ui/ForgeVisuals.h
+    ui/ForgeFxDisplay.h
     src/ForgeProcessor.cpp
     src/ForgeProcessor.h
     src/ForgeEditor.cpp
@@ -79,6 +80,7 @@ if (BUILD_TESTING)
         ui/ForgeLayout.h
         ui/ForgeTablePanel.h
         ui/ForgeVisuals.h
+    ui/ForgeFxDisplay.h
         src/ForgeProcessor.cpp
         src/ForgeProcessor.h
         src/ForgeEditor.cpp

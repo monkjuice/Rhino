@@ -4,6 +4,7 @@
 #include "../ui/ForgeLayout.h"
 #include "../ui/ForgeTablePanel.h"
 #include "../ui/ForgeVisuals.h"
+#include "../ui/ForgeFxDisplay.h"
 #include <memory>
 #include <vector>
 
@@ -173,8 +174,13 @@ private:
     // Sets one slot's knobs and its wet/dry to what its type opens on. Called
     // only when a type is chosen on the panel.
     void initialiseFxSlot(int rack, int slot);
+    // One slot's settings, read back out of the parameters so a display can be
+    // drawn from the same values the engine is rendering from.
+    FxSlot fxSlotOf(int rack, int slot) const;
     // The shelves the slots sit on, drawn behind their controls.
     void paintFxShelves(juce::Graphics&, juce::Rectangle<int> area, const ui::Module&);
+    // The rack's box alone, for a knob that is being turned inside it.
+    void repaintFxDisplays();
     // The type each slot last showed, so a type arriving from a preset or from
     // host automation re-labels its slot rather than only one chosen by hand.
     std::array<int, rackCount * fxSlotCount> fxTypesShown {};

@@ -1044,22 +1044,68 @@ the same reason: they are the two usually placed on MAIN.
 
 **Still open**
 
-- No slot has a display of its own. Serum's delay draws its filter, its
-  distortion draws the transfer curve, its compressor draws gain reduction. The
-  FILTER module's own response display is the model for what those should be,
-  and it is the obvious next piece of polish.
 - The mode fields are still steppers you drag. A two-choice field would read
   better as a click-to-cycle, but that is a change to every stepper on the
   panel rather than to the rack.
+
+### M11c — a display per slot — done
+
+Every slot now draws itself in a strip between its mode fields and its knobs:
+a reverb's decay envelope, a delay's repeats falling away across the two
+channels, a chorus's two taps swinging across one cycle, a distortion's transfer
+curve, an equaliser's response, a filter's corner.
+
+**The rule they are all built on** is the one the FILTER module's display was
+built on: a display is drawn from the arithmetic the engine runs, never from a
+picture of the effect in general. The distortion curve is `fxShape` called per
+pixel. The equaliser's response is the magnitude of the very biquads `setBand`
+builds, evaluated on the unit circle. The delay's repeats are placed by
+`fxDelaySeconds` and fall away by the same feedback the line is fed with. So a
+display cannot claim one thing while the slot does another, and when a display
+disagrees with what is heard, the display is not what is wrong.
+
+The rack filter had to compute its own curve rather than borrow the filter
+module's: Core damps at `1/(1+res*15)` and the rack at `2-res*1.96`, and a curve
+drawn with the wrong one is exactly the lie this is meant to prevent.
+
+**What the layout needed**
+
+`Row` gained `displayWeight` and `displayAfter`. A module's own display sits
+above its controls and there is one of it; a rack has four slots in one module
+and each wants its own, so this is per row. The strip takes its share of the row
+in the same weights the cells divide by, and `cellBounds` pushes everything past
+it along — one total, two readers, and the layout test intersects the strip with
+every control block in its row at every allowed size, because integer division
+is precisely where the two would drift apart.
+
+**What is checked, and how**
+
+Where a curve can be compared against the function it claims to come from, it
+is: an equaliser opening flat measures flat at six frequencies rather than
+merely looking flat, a low shelf asked for +12 dB lifts what is under it and
+leaves what is above it alone, every distortion shape leaves silence silent and
+stays inside the box its curve is drawn in, hard clipping at no drive *is* the
+faint diagonal the display draws behind every curve, and a synced delay lands on
+the division its own readout names.
+
+**Still open**
+
+- A knob turned inside the rack repaints the whole rack box rather than the one
+  slot. It is one `repaint` of a rectangle per step of a drag and has not been
+  worth narrowing, but it is the obvious thing to narrow if the rack ever gets
+  slower.
+- Nothing meters. A slot's display says what the effect is set to, not what is
+  going through it — no gain reduction, no live level. That wants per-channel
+  levels published the way the envelopes are, which the mixer wants too.
 
 ## Out of scope for now
 
 These are the north star, not this plan. They come after the synth is finished.
 
-- **M11c — the rest of the rack.** Rack and module presets, reordering by drag,
-  copy and paste between racks, a display per slot, and the seven Serum types
-  M11a left out. Plus the `DIRECT` output, which needed effects to bypass
-  before it could mean anything.
+- **M11d — the rest of the rack.** Rack and module presets, reordering by drag,
+  copy and paste between racks, and the seven Serum types M11a left out. Plus
+  the `DIRECT` output, which needed effects to bypass before it could mean
+  anything.
 - **M12 — Second filter,** with the serial/parallel routing Serum exposes.
 - **M13 — Preset browser** with tags and search.
 - **Later still:** MPE, sample and granular sources, spectral oscillators.
@@ -1123,3 +1169,4 @@ way to look at a change.
 | M10c The mixer, and two busses | **done** — ready to test by ear and by eye |
 | M11a The effects racks | **done** — ready to test by ear |
 | M11b The rack, by eye | **done** — ready to test by eye |
+| M11c A display per slot | **done** — ready to test by eye |

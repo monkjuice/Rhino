@@ -844,8 +844,14 @@ inline void drawFxMark(juce::Graphics& g, juce::Rectangle<float> box, int type, 
 // them: two or three named states are a switch, and eight are a list. So this
 // draws itself either way, from the count the type declares.
 //
-//   two or three  every choice on screen, the live one lit, click one to take it
+//   two or three  every choice stacked, the live one lit, click one to take it
 //   more than that  a name between two arrows: the arrows step, the name opens
+//
+// Stacked rather than side by side: the names are words of very different
+// lengths — OFF against PING-PONG — and a row of them either crops the long
+// ones or gives the short ones room they do not need. A column gives every
+// choice the same width, which is the field's width, and reads down the way a
+// list of alternatives is read.
 //
 // A stepper you drag served both badly. Dragging to reach "PING-PONG" from
 // "NORMAL" is a gesture for a continuous value, and neither of these is one.
@@ -865,6 +871,10 @@ public:
 
     static constexpr int arrowWidth = 20;
 
+    // The height a single row of the list style wants, centred in a box that is
+    // tall enough to stack three.
+    static constexpr int listHeight = 24;
+
     // A field with this many or fewer shows them all; past it, a list.
     static constexpr int inlineLimit = 3;
 
@@ -874,12 +884,19 @@ public:
     {
         const auto area = getLocalBounds();
         if (count <= 0) return area;
-        const auto width = area.getWidth() / count;
-        // The last one takes the remainder, so the row of them ends exactly
-        // where the field does rather than a pixel or two short.
-        return {area.getX() + index * width, area.getY(),
-                index == count - 1 ? area.getRight() - (area.getX() + index * width) : width,
-                area.getHeight()};
+        const auto height = area.getHeight() / count;
+        // The last one takes the remainder, so the column ends exactly where
+        // the field does rather than a pixel or two short.
+        return {area.getX(), area.getY() + index * height, area.getWidth(),
+                index == count - 1 ? area.getBottom() - (area.getY() + index * height) : height};
+    }
+
+    // The list style is one line whatever the box is, centred in it, so a field
+    // of eight choices sits on the same line as a field of two.
+    juce::Rectangle<int> listBounds() const
+    {
+        return juce::Rectangle<int>(getWidth(), juce::jmin(getHeight(), listHeight))
+            .withCentre(getLocalBounds().getCentre());
     }
 
     void paint(juce::Graphics& g) override
@@ -905,13 +922,13 @@ public:
                 g.setColour((live ? accent : line).withAlpha(alpha * (live ? 1.0f : 0.7f)));
                 g.drawRoundedRectangle(box, 3.0f, 1.0f);
                 g.setColour((live ? accent : mutedText).withAlpha(alpha));
-                g.setFont(juce::FontOptions(9.0f, juce::Font::bold));
+                g.setFont(juce::FontOptions(10.0f, juce::Font::bold));
                 g.drawText(choices[static_cast<size_t>(i)], box, juce::Justification::centred);
             }
             return;
         }
 
-        const auto area = getLocalBounds().toFloat().reduced(1.0f);
+        const auto area = listBounds().toFloat().reduced(1.0f);
         g.setColour(juce::Colour(0xff0b0e18).withAlpha(alpha));
         g.fillRoundedRectangle(area, 3.0f);
         g.setColour(accent.withAlpha(alpha));
@@ -951,6 +968,7 @@ public:
                 }
             return;
         }
+        if (!listBounds().contains(event.getPosition())) return;
         if (event.x < arrowWidth) { if (chosen > 0 && onChoose) onChoose(chosen - 1); return; }
         if (event.x > getWidth() - arrowWidth)
         {

@@ -1099,9 +1099,11 @@ have to be badly: dragging to reach PING-PONG from NORMAL is a gesture for a
 continuous value, and neither a two-state switch nor an eight-item list is one.
 
 **A selector draws itself from the count the type declares.** Two or three named
-states are a switch with every state on screen and the live one lit; more than
-that is a name between two arrows, where the arrows step and the name opens the
-list. The cell is declared in the layout; which of the two it becomes is settled
+states are stacked with the live one lit; more than that is a name between two
+arrows, where the arrows step and the name opens the list. Stacked rather than
+in a row because the names are words of very different lengths — OFF against
+PING-PONG — and a row either crops the long ones or gives the short ones room
+they do not need. The cell is declared in the layout; which of the two it becomes is settled
 at runtime, because what a mode steps through is the effect's business and the
 layout cannot know it. The arrows grey at the end they cannot pass — a list that
 does not wrap should say so before it is clicked.
@@ -1129,6 +1131,26 @@ every field to having a label. The three gating rules are checked both ways
 round — a rule that greys a knob and never ungreys it looks exactly like one
 that works — and every other type is held to leaving all of its knobs live, so a
 rule added by accident to one of them is caught rather than merely unnoticed.
+
+**The bug this shook out**
+
+A mode field looked right only after some *other* click, or after switching
+tabs. The panel read parameter values from the cached atomic beside them, and
+that atomic is kept up to date by one of the parameter's own listeners — while
+JUCE calls listeners in the reverse of the order they registered. A panel
+attachment registers after the state does, so it was called first and read the
+value from before the change it was being told about.
+
+`Editor::value` now reads the parameter itself, which stores its value before it
+tells anybody. It costs a lookup by name per read, which at the rate the panel
+refreshes is nothing, and the atomic stays what the audio thread reads.
+
+The race is reproduced deterministically in the tests rather than by eye: a
+listener registered on a parameter records both readings at the moment it is
+told, and the test pins the parameter's own reading while reporting what the
+atomic held — which, at the time of writing, is still the old value. The same
+hazard had been sitting under the name plate and the greyed knobs, where it
+happened to be masked by the extra refreshes those paths trigger.
 
 **Still open**
 

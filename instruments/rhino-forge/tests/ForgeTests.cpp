@@ -660,6 +660,57 @@ void fxDisplaySuite()
                 "a reverb opens somewhere a decay can be read from");
     }
 
+    // --- Reading a parameter back while it is still being announced ------------
+    //
+    // The panel used to read parameter values from the cached atomic beside
+    // them, and a mode field appeared to wait for an unrelated click before it
+    // caught up. This is why: that atomic is kept up to date by one of the
+    // parameter's own listeners, and JUCE calls listeners in the reverse of the
+    // order they registered. A panel attachment registers after the state does,
+    // so it is called first — and reads the value from before the change it is
+    // being told about.
+    //
+    // What the panel reads now is the parameter itself, which stores its value
+    // before it tells anybody. This pins that property rather than the panel
+    // that depends on it, because the property is the whole of the fix.
+    {
+        rhino::forge::Processor processor;
+        auto* parameter = processor.state.getParameter("fx1s1ModeA");
+        require(parameter != nullptr, "the parameter this checks exists");
+        if (parameter != nullptr)
+        {
+            struct Watcher final : juce::AudioProcessorParameter::Listener
+            {
+                Watcher(rhino::forge::Processor& p, juce::RangedAudioParameter& r)
+                    : processor(p), ranged(r) { ranged.addListener(this); }
+                ~Watcher() override { ranged.removeListener(this); }
+                void parameterValueChanged(int, float) override
+                {
+                    ++calls;
+                    fromParameter = ranged.convertFrom0to1(ranged.getValue());
+                    const auto* atomic = processor.state.getRawParameterValue("fx1s1ModeA");
+                    fromAtomic = atomic == nullptr ? -1.0f : atomic->load();
+                }
+                void parameterGestureChanged(int, bool) override {}
+                rhino::forge::Processor& processor;
+                juce::RangedAudioParameter& ranged;
+                int calls = 0;
+                float fromParameter = -1.0f, fromAtomic = -1.0f;
+            };
+
+            Watcher watcher(processor, *parameter);
+            parameter->setValueNotifyingHost(parameter->convertTo0to1(1.0f));
+            require(watcher.calls > 0, "setting a parameter tells its listeners");
+            requireClose(watcher.fromParameter, 1.0f, 0.001f,
+                         "a parameter read inside its own announcement is already the new value");
+            // The atomic is allowed to be either, and saying which it was makes
+            // the reason for the fix visible when this is read later.
+            if (std::abs(watcher.fromAtomic - 1.0f) > 0.001f)
+                std::cerr << "       (the cached atomic was still "
+                          << watcher.fromAtomic << " at that moment, which is the race)" << '\n';
+        }
+    }
+
     // --- A mode field, read back the way it is written -------------------------
     //
     // The parameter behind a mode is a plain 0..1, because what it steps
@@ -690,6 +741,61 @@ void fxDisplaySuite()
                             && juce::String(mode->choices[static_cast<size_t>(choice)]).isNotEmpty(),
                         "every choice a mode offers has a name to draw");
             require(mode->label != nullptr, "a mode field that has choices has a label");
+        }
+    }
+
+    // --- A stack of choices, at the size the panel gives it ---------------------
+    //
+    // The choices are stacked, so the field has to divide into as many rows as
+    // the most any mode offers and every one of them still be readable. Checked
+    // as geometry rather than by eye: the three-choice case is the tight one,
+    // and it is tight at the smallest window rather than at the default.
+    {
+        const auto tightest = juce::Rectangle<int>(0, 0, rhino::forge::ui::minPanelWidth,
+                                                   rhino::forge::ui::minPanelHeight);
+        const auto shared = rhino::forge::ui::uniformKnobDiameter(tightest);
+        for (const auto& module : rhino::forge::ui::modules())
+        {
+            const auto area = rhino::forge::ui::moduleBounds(tightest, module);
+            for (int r = 0; r < static_cast<int>(module.rows.size()); ++r)
+            {
+                const auto& controls = module.rows[static_cast<size_t>(r)].controls;
+                for (int c = 0; c < static_cast<int>(controls.size()); ++c)
+                {
+                    if (controls[static_cast<size_t>(c)].style != rhino::forge::ui::Style::selector)
+                        continue;
+                    const auto block = rhino::forge::ui::controlBlock(area, module, r, c, shared);
+                    const auto field = block.withTrimmedTop(rhino::forge::ui::stepperLabelHeight);
+
+                    rhino::forge::ui::FxSelector selector;
+                    selector.setBounds(field);
+                    // Every mode field the rack can show, at its widest.
+                    for (int count = 2; count <= rhino::forge::ui::FxSelector::inlineLimit; ++count)
+                    {
+                        selector.count = count;
+                        auto covered = 0;
+                        for (int i = 0; i < count; ++i)
+                        {
+                            const auto segment = selector.segmentBounds(i);
+                            require(segment.getHeight() >= 14,
+                                    "a stacked choice stays tall enough to read");
+                            require(segment.getWidth() == field.getWidth(),
+                                    "a stacked choice takes the whole width of its field");
+                            covered += segment.getHeight();
+                            for (int j = i + 1; j < count; ++j)
+                                require(!segment.intersects(selector.segmentBounds(j)),
+                                        "no two stacked choices overlap");
+                        }
+                        require(covered == field.getHeight(),
+                                "the stack fills its field exactly, with no gap and no overhang");
+                    }
+                    // A field with more choices than fit draws one line instead,
+                    // and it has to sit inside the same box.
+                    selector.count = 8;
+                    require(field.withZeroOrigin().contains(selector.listBounds()),
+                            "a field too long to stack draws a line inside the box it was given");
+                }
+            }
         }
     }
 

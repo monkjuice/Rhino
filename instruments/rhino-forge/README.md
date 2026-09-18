@@ -89,10 +89,12 @@ on every knob in the row, and lit down the left edge of the shelf it sits on. A
 rack is meant to be read by colour down its four rows before a word on it is.
 
 A slot's two mode fields are drawn as whatever the choice in front of you
-actually is. Two or three named states — `PLATE | HALL`, `NORMAL | PING-PONG`,
-`OFF | PRE | POST` — are a switch with every state on screen and the live one
-lit. More than that, as with the distortion's eight shapes, is a name between
-two arrows: the arrows step, the name opens the list. Each carries the label the
+actually is. Two or three named states — `PLATE / HALL`, `NORMAL / PING-PONG`,
+`OFF / PRE / POST` — are stacked, with the live one lit; the names are words of
+very different lengths, and a column gives each of them the field's full width
+rather than cropping the long ones. More than three, as with the distortion's
+eight shapes, is a name between two arrows: the arrows step, the name opens the
+list. Each carries the label the
 type gives it, so the field says what it is choosing as well as what is chosen.
 
 A knob a mode has made meaningless greys out rather than disappearing: the

@@ -870,8 +870,23 @@ void Editor::applyEnableStates()
     }
 }
 
+// Read from the parameter itself rather than from the cached atomic beside it.
+//
+// That atomic is kept up to date by one of the parameter's listeners, and the
+// panel's own attachments are others. The order listeners are called in is not
+// defined — so a panel answering a change it made itself could be called first
+// and read the value from *before* that change. It corrected itself the next
+// time anything refreshed, which is why a mode field appeared to wait for an
+// unrelated click or a tab switch before it caught up.
+//
+// The parameter's own value has no such race: setValueNotifyingHost stores it
+// before it tells anybody. This costs a lookup by name per read, which at the
+// rate the panel refreshes is nothing, and the atomic stays what the audio
+// thread reads.
 float Editor::value(const juce::String& id) const
 {
+    if (const auto* parameter = processor.state.getParameter(id))
+        return parameter->convertFrom0to1(parameter->getValue());
     const auto* raw = processor.state.getRawParameterValue(id);
     return raw == nullptr ? 0.0f : raw->load();
 }

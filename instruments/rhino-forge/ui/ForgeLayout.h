@@ -243,10 +243,13 @@ inline constexpr int minFaderHeight = 54;
 inline constexpr int maxPlateWidth = 200;
 inline constexpr int maxPlateHeight = 56;
 
-// A selector is a shade taller than a stepper, because two or three states side
-// by side need the room a single number does not.
-inline constexpr int selectorHeight = 26;
-inline constexpr int maxSelectorWidth = 168;
+// A selector stacks its choices, so it is as tall as the most any mode field
+// offers inline — three — and no wider than the longest of their names needs.
+// A field of two gives each of them half of this rather than leaving a gap, and
+// one with too many to stack draws a single line centred in it.
+inline constexpr int selectorSegmentHeight = 18;
+inline constexpr int selectorHeight = selectorSegmentHeight * 3;
+inline constexpr int maxSelectorWidth = 124;
 
 // A table: the gutter its row numbers sit in, the strip of column titles above
 // its rows, and the caps that stop a field stretching the full width of the

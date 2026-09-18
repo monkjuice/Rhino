@@ -201,6 +201,9 @@ private:
     void refreshWarpFields();
     // The warp list, grouped by category the way the manual groups it.
     void showWarpMenu(Control&);
+    // The two stages of one oscillator exchanged, which is the action at the
+    // foot of that list.
+    void swapWarpModes(const juce::String& id);
     // One oscillator's two warp stages, resolved as the engine resolves them,
     // so the display draws the warp the voice is rendering.
     std::array<WarpStage, warpSlots> warpStagesOf(const char* prefix) const;

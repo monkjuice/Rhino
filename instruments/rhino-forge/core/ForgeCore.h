@@ -1617,6 +1617,16 @@ private:
             ? juce::jlimit(1.0f, warpHeadroomCeiling, warpHeadroom(warp[0]) * warpHeadroom(warp[1]))
             : 1.0f;
         const auto level = table.levelFor(hz * 1.05f * headroom, sampleRate);
+        // What FM is doing to the rate the cycle runs at, this sample. One
+        // unless a stage is actually modulating the frequency, so an
+        // oscillator that is not being frequency-modulated advances exactly as
+        // it always did. It is worked out once for the whole stack: every
+        // member of it is reading one modulator, and a stack that bent by
+        // different amounts would no longer be one oscillator.
+        const auto pitch = warped
+            ? warpPitchFactor(warp[0].mode, warp[0].amount, warp[0].modulator)
+            * warpPitchFactor(warp[1].mode, warp[1].amount, warp[1].modulator)
+            : 1.0f;
 
         auto stackLeft = 0.0f, stackRight = 0.0f, power = 0.0f;
         for (int i = 0; i < count; ++i)
@@ -1651,7 +1661,8 @@ private:
 
             const auto ratio = std::pow(2.0f, offset * detune
                                               * unisonSpreadSemitones / 12.0f);
-            phases[static_cast<size_t>(i)] = wrap(phases[static_cast<size_t>(i)] + hz * ratio * dt);
+            phases[static_cast<size_t>(i)] =
+                wrap(phases[static_cast<size_t>(i)] + hz * ratio * pitch * dt);
         }
 
         // Power normalisation, so widening the stack changes the sound without
@@ -1736,15 +1747,20 @@ private:
         const auto pointAt = [&] (std::array<WarpStage, warpSlots>& warp, float other, bool otherOn)
         {
             for (auto& stage : warp)
-            {
-                const auto missing = (warpReadsOtherOscillator(stage.mode) && !otherOn)
-                                  || (warpReadsSub(stage.mode) && !on(patch.subEnable));
-                if (missing) { stage = {}; continue; }
-                stage.modulator = warpReadsOtherOscillator(stage.mode) ? other
-                                : warpReadsSub(stage.mode)             ? fromSub
-                                : warpReadsNoise(stage.mode)           ? fromNoise
-                                                                       : 0.0f;
-            }
+                switch (warpSourceOf(stage.mode))
+                {
+                    case WarpSource::otherOscillator:
+                        if (otherOn) stage.modulator = other; else stage = {};
+                        break;
+                    case WarpSource::sub:
+                        if (on(patch.subEnable)) stage.modulator = fromSub; else stage = {};
+                        break;
+                    case WarpSource::noise: stage.modulator = fromNoise; break;
+                    // A stage reading itself needs nothing from out here; it
+                    // keeps its own last output beside its filter state.
+                    case WarpSource::self:
+                    case WarpSource::none:  break;
+                }
         };
         pointAt(warpA, fromB, on(patch.b.enable));
         pointAt(warpB, fromA, on(patch.a.enable));

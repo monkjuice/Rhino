@@ -77,17 +77,62 @@ inline juce::String warpTooltipFor(int mode)
         case WarpMode::tapeSat:
             return "The gentlest of the saturations: warmth and a little compression rather "
                    "than an edge";
-        case WarpMode::fmOsc:
-            return "Modulate this oscillator with the other one. The other oscillator has to be "
-                   "on, though its level can be down if it is only wanted as a modulator";
-        case WarpMode::fmSub:
-            return "Modulate this oscillator with the sub, an octave below the note. "
+        // PD moves where in the cycle the table is read. The note does not
+        // move with it, which is the whole difference from FM below.
+        case WarpMode::pdOsc:
+            return "Push the read along the cycle with the other oscillator. It has to be on, "
+                   "though its level can be down if it is only wanted as a modulator. "
+                   "Unlike FM, this leaves the note exactly where it was";
+        case WarpMode::pdSub:
+            return "Push the read along the cycle with the sub, an octave below the note. "
                    "The SUB module has to be on, though its level can be down";
+        case WarpMode::pdNoise:
+            return "Push the read along the cycle with noise, which reads as grain rather "
+                   "than as pitch";
+        case WarpMode::pdSelf:
+            return "Push the read along the cycle with this stage's own last output. "
+                   "A little is a saw, a lot is chaos";
+
+        // FM moves the rate the cycle runs at, which is why it can bend the
+        // note where PD cannot.
+        case WarpMode::fmOsc:
+            return "Modulate this oscillator's frequency with the other one, in proportion. "
+                   "It has to be on, though its level can be down. Clamped at zero rather than "
+                   "running backwards, which is the traditional FM sound";
+        case WarpMode::fmSub:
+            return "Modulate this oscillator's frequency with the sub. The SUB module has to "
+                   "be on, though its level can be down";
         case WarpMode::fmNoise:
-            return "Modulate this oscillator with noise, which reads as grain rather than pitch";
-        case WarpMode::fmSelf:
-            return "Modulate this oscillator with its own last output. A little is a saw, "
-                   "a lot is chaos";
+            return "Modulate this oscillator's frequency with noise: grain and grit rather "
+                   "than a second pitch";
+        case WarpMode::fmExpOsc:
+            return "The same, on an exponential curve: a small move in the other oscillator "
+                   "sweeps the frequency a long way. Brighter and harsher than linear FM, "
+                   "and it does not hold the note where linear does";
+        case WarpMode::fmExpSub:
+            return "Exponential frequency modulation from the sub. Sweeps further for the "
+                   "same depth than linear does, and takes the pitch with it";
+        case WarpMode::fmExpNoise:
+            return "Exponential frequency modulation from noise. The most violent of the six";
+
+        case WarpMode::amOsc:
+            return "Ride this oscillator's level with the other one. The carrier is still in "
+                   "there, so this is a tremolo taken up to audio rate";
+        case WarpMode::amSub:
+            return "Ride this oscillator's level with the sub, an octave below the note";
+        case WarpMode::amNoise:
+            return "Ride this oscillator's level with noise, which reads as grit on the sound";
+
+        case WarpMode::rmOsc:
+            return "Multiply this oscillator by the other one outright. The carrier's own "
+                   "pitch leaves the sound and what is left is the two sidebands: the "
+                   "clangorous, bell-like one";
+        case WarpMode::rmSub:
+            return "Multiply this oscillator by the sub, which puts the note an octave down "
+                   "and takes the original out";
+        case WarpMode::rmNoise:
+            return "Multiply this oscillator by noise, which leaves neither pitch intact";
+
         case WarpMode::off:
             break;
     }

@@ -1172,17 +1172,39 @@ which is the arrangement the manual's warp figure has and the order the stages
 are applied in. The row weighs the same as the knob row above it and divides
 into the same six cells, so WARP 1 stands under POSITION and WARP 2 under LEVEL.
 
-**Twenty-six modes in six families**, grouped in the menu the way the manual
+**Thirty-eight modes in nine families**, grouped in the menu the way the manual
 groups them — OFF and SYNC are one item each because they are one mode each, and
-ALT WARP, FILTER, DISTORTION and FM open submenus. A field of twenty-six draws
-as a name between two arrows, which is the presentation `FxSelector` already had
-for a list too long to stack; the arrows step without opening anything.
+ALT WARP, FILTER, DISTORTION, FM, PD, AM and RM open submenus. A field this long
+draws as a name between two arrows, which is the presentation `FxSelector`
+already had for a list too long to stack; the arrows step without opening
+anything. At the foot of the menu, past a rule, the two stages change places —
+the modes swap and the depths stay put, exactly as the manual describes.
 
-The FM family is where Forge and Serum part company. Serum names two filters as
-FM sources; Forge has one, and it sits downstream of the oscillators, so
-pointing an oscillator at it would be a loop. FM SELF stands in its place —
-a stage reading its own last output, which is the other classic FM source and
-one the manual's list happens not to carry.
+**FM and PD are separate families**, which the first pass of this milestone got
+wrong. It shipped four modes called FM that were phase modulation, which is what
+the manual calls PD: "this is similar to FM except that the phase is modulated
+instead of the frequency". They are now named for what they do and the four
+places they occupy did not move, because a mode is stored as an index and moving
+one moves it inside every preset already saved.
+
+The difference is not cosmetic. PD pushes the read along the cycle, so the note
+stays exactly where it was however deep it goes. FM reaches the phase increment
+instead — the one thing every other warp deliberately leaves alone — so it bends
+the note, and it is the only family whose depth knob can. Linear is proportional
+and clamps at zero rather than running the frequency backwards, which the manual
+names as the traditional "can't do thru-zero" FM; exponential sweeps in octaves,
+which is why it is the brighter and harsher of the two and why it does not hold
+the pitch where linear does. `warpPitchFactor` is the whole of that difference
+and is the one thing outside the read chain that a warp touches.
+
+AM rides the carrier and leaves it in the sound; RM replaces it, so the carrier's
+own pitch goes and the two sidebands are what is left.
+
+Three sources, against Serum's six: the other oscillator, the sub and the noise.
+Serum names its two filters as well; Forge has one filter and it sits downstream
+of both oscillators, so pointing an oscillator at it would be a loop. PD carries
+a fourth that the other families do not — a stage reading its own last output —
+which is what the manual's own list does.
 
 **One implementation, two readers.** A warp is handed a `read` that turns a
 phase into a sample, so the same function serves the voice — reading a
@@ -1253,7 +1275,7 @@ with its level all the way down, which is what the manual says of it. And the
 four new destinations are held to landing where their indices say while the
 racks stay exactly where they were.
 
-**The two things the tests changed**
+**The three things the tests changed**
 
 FM SELF at any useful depth was chaotic rather than periodic. The feedback index
 now runs to a quarter of a cycle rather than four, which is the range a feedback
@@ -1266,15 +1288,22 @@ into a saw.
 A stage pointed at a source that is switched off is now turned off rather than
 handed a modulator of zero. The difference is not the silence — that was already
 right — it is that a live stage also asks the table for bandwidth it is not
-going to use, so choosing FM OSC with the other oscillator off quietly went dull
-for nothing.
+going to use, so choosing a cross-modulation with its source off quietly went
+dull for nothing.
+
+The clamp on linear FM bites earlier than it reads: at full depth the frequency
+is already at a standstill a quarter of the way down the modulator, so a good
+part of every trough is spent there. That is what traditional FM is, and the
+test now says so in the number rather than asserting vaguely that it still
+moves.
 
 **Still open**
 
 - The unison spread the manual lists beside RANGE — spreading each warp depth
   across the stack — belongs with the unison panel rather than here.
-- PD, AM and RM appear in the manual's own menu figure and nowhere in its table,
-  so there is nothing to build them from but a guess. Left out deliberately.
+- The two filters Serum offers as modulation sources. Forge's one filter is
+  downstream of the oscillators, so it needs a tap taken before the voice sum
+  before it could be one — which is a routing change rather than a warp.
 - FLIP and QUANTIZE put a step in the waveform, and reading a duller copy of the
   table only takes the edge off it. They are the two modes that would most
   repay oversampling the oscillator, which nothing in Forge does yet.

@@ -35,10 +35,17 @@ namespace rhino::forge
 // for, and few enough that the row fits under the knobs it belongs to.
 inline constexpr int warpSlots = 2;
 
-// The groups the menu is built from. A category is a fact about a mode rather
-// than about the panel, so it lives here beside the modes.
-enum class WarpCategory { off, sync, alt, filter, distortion, fm };
-inline constexpr int warpCategoryCount = 6;
+// The groups the menu is built from, in the order it shows them, which is the
+// order the manual's own menu figure has. A category is a fact about a mode
+// rather than about the panel, so it lives here beside the modes.
+//
+// FM and PD are separate families and not two names for one thing. FM moves the
+// carrier's *frequency*, so a deep setting bends the note; PD moves its *phase*,
+// so the note stays exactly where it was however deep it goes. The manual draws
+// the same line -- "this is similar to FM except that the phase is modulated
+// instead of the frequency" -- and they sound nothing alike.
+enum class WarpCategory { off, sync, alt, filter, distortion, fm, pd, am, rm };
+inline constexpr int warpCategoryCount = 9;
 
 inline const char* warpCategoryName(WarpCategory category)
 {
@@ -49,10 +56,20 @@ inline const char* warpCategoryName(WarpCategory category)
         case WarpCategory::filter:     return "FILTER";
         case WarpCategory::distortion: return "DISTORTION";
         case WarpCategory::fm:         return "FM";
+        case WarpCategory::pd:         return "PD";
+        case WarpCategory::am:         return "AM";
+        case WarpCategory::rm:         return "RM";
         case WarpCategory::off:        break;
     }
     return "OFF";
 }
+
+// Where a mode gets the signal it modulates with. Forge has three: the other
+// oscillator, the sub, and the noise -- plus a stage's own output, which only
+// PD offers, exactly as the manual's list does. Serum names its two filters as
+// sources as well; Forge has one filter and it sits downstream of both
+// oscillators, so pointing an oscillator at it would be a loop.
+enum class WarpSource { none, otherOscillator, sub, noise, self };
 
 // Appended to, never inserted into: a warp mode is stored as an index into this
 // list, so every index already written into a preset has to keep meaning what
@@ -71,11 +88,23 @@ enum class WarpMode
     // Distortion: the sample-domain family, shaping what came out of the table
     // rather than where it was read.
     tube, softClip, hardClip, diode, linearFold, sineFold, rectify, tapeSat,
-    // FM: phase modulation from another source in the voice.
-    fmOsc, fmSub, fmNoise, fmSelf,
+    // PD: phase distortion from another source in the voice. These four were
+    // built first and were called FM at the time, which was the wrong name for
+    // them -- they move the phase, and the manual calls that PD. The names
+    // changed and the places did not, because a mode is stored as an index.
+    pdOsc, pdSub, pdNoise, pdSelf,
+    // FM proper: the carrier's frequency rather than its phase. Linear keeps
+    // the note where it was put; exponential does not, and is the brighter and
+    // harsher of the two for exactly that reason.
+    fmOsc, fmSub, fmNoise,
+    fmExpOsc, fmExpSub, fmExpNoise,
+    // AM and RM: the carrier's amplitude. AM keeps it and rides it; RM replaces
+    // it outright, which is what puts the carrier's own pitch out of the sound.
+    amOsc, amSub, amNoise,
+    rmOsc, rmSub, rmNoise,
 };
 
-inline constexpr int warpModeCount = 26;
+inline constexpr int warpModeCount = 38;
 
 struct WarpInfo
 {
@@ -103,10 +132,49 @@ inline const std::array<WarpInfo, warpModeCount>& warpModes()
         {"LIN FOLD", WarpCategory::distortion},  {"SINE FOLD", WarpCategory::distortion},
         {"RECTIFY", WarpCategory::distortion},   {"TAPE SAT", WarpCategory::distortion},
 
-        {"FM OSC", WarpCategory::fm},   {"FM SUB", WarpCategory::fm},
-        {"FM NOISE", WarpCategory::fm}, {"FM SELF", WarpCategory::fm},
+        {"PD OSC", WarpCategory::pd},   {"PD SUB", WarpCategory::pd},
+        {"PD NOISE", WarpCategory::pd}, {"PD SELF", WarpCategory::pd},
+
+        {"FM OSC", WarpCategory::fm},     {"FM SUB", WarpCategory::fm},
+        {"FM NOISE", WarpCategory::fm},
+        {"FM EXP OSC", WarpCategory::fm}, {"FM EXP SUB", WarpCategory::fm},
+        {"FM EXP NOISE", WarpCategory::fm},
+
+        {"AM OSC", WarpCategory::am},   {"AM SUB", WarpCategory::am},
+        {"AM NOISE", WarpCategory::am},
+
+        {"RM OSC", WarpCategory::rm},   {"RM SUB", WarpCategory::rm},
+        {"RM NOISE", WarpCategory::rm},
     }};
     return table;
+}
+
+// Which signal a mode modulates with, or nothing for the modes that read only
+// the table. One answer for all four families, so a source added to one of them
+// is a source added to every one that wants it.
+inline WarpSource warpSourceOf(WarpMode mode)
+{
+    switch (mode)
+    {
+        case WarpMode::pdOsc:
+        case WarpMode::fmOsc:
+        case WarpMode::fmExpOsc:
+        case WarpMode::amOsc:
+        case WarpMode::rmOsc:      return WarpSource::otherOscillator;
+        case WarpMode::pdSub:
+        case WarpMode::fmSub:
+        case WarpMode::fmExpSub:
+        case WarpMode::amSub:
+        case WarpMode::rmSub:      return WarpSource::sub;
+        case WarpMode::pdNoise:
+        case WarpMode::fmNoise:
+        case WarpMode::fmExpNoise:
+        case WarpMode::amNoise:
+        case WarpMode::rmNoise:    return WarpSource::noise;
+        case WarpMode::pdSelf:     return WarpSource::self;
+        default: break;
+    }
+    return WarpSource::none;
 }
 
 inline WarpMode warpModeOf(float value)
@@ -125,6 +193,16 @@ inline const char* warpModeName(int mode)
 }
 
 inline WarpCategory warpCategoryOf(WarpMode mode) { return warpInfo(mode).category; }
+
+// Whether a mode moves the carrier's frequency rather than reading its table
+// somewhere else. These are the only modes that reach the phase increment, and
+// therefore the only ones whose depth knob can move the note.
+inline bool warpBendsPitch(WarpMode mode) { return warpCategoryOf(mode) == WarpCategory::fm; }
+
+inline bool warpIsExponential(WarpMode mode)
+{
+    return mode == WarpMode::fmExpOsc || mode == WarpMode::fmExpSub || mode == WarpMode::fmExpNoise;
+}
 
 // Whether the depth knob beside a mode does anything. Only OFF leaves it with
 // nothing to set, and the panel greys it there rather than hiding it: the knob
@@ -170,20 +248,23 @@ inline bool warpShapesWaveform(WarpMode mode)
 
 // What a mode reads besides the table, so the oscillator only works out the
 // sources the patch actually asks for.
-inline bool warpReadsOtherOscillator(WarpMode mode) { return mode == WarpMode::fmOsc; }
-inline bool warpReadsSub(WarpMode mode) { return mode == WarpMode::fmSub; }
-inline bool warpReadsNoise(WarpMode mode) { return mode == WarpMode::fmNoise; }
+inline bool warpReadsOtherOscillator(WarpMode mode)
+{
+    return warpSourceOf(mode) == WarpSource::otherOscillator;
+}
+inline bool warpReadsSub(WarpMode mode) { return warpSourceOf(mode) == WarpSource::sub; }
+inline bool warpReadsNoise(WarpMode mode) { return warpSourceOf(mode) == WarpSource::noise; }
 
 // --- The state three of the modes keep ---------------------------------------
 //
-// A filter is a filter: it has to remember what it was given. FM SELF feeds a
+// A filter is a filter: it has to remember what it was given. PD SELF feeds a
 // stage its own last output. Everything else here is a pure function of the
 // phase, and reads none of this.
 struct WarpState
 {
     // The filter modes' two poles.
     float low = 0.0f, band = 0.0f;
-    // The last two samples FM SELF put out. Two rather than one because the
+    // The last two samples PD SELF put out. Two rather than one because the
     // average of the pair is what goes back round -- see the mode itself.
     float last = 0.0f, before = 0.0f;
 };
@@ -270,7 +351,37 @@ inline constexpr float warpFeedbackScale = 0.0625f;
 inline float warpFmIndex(WarpMode mode, float amount) noexcept
 {
     const auto cycles = juce::jlimit(0.0f, 1.0f, amount) * 4.0f;
-    return mode == WarpMode::fmSelf ? cycles * warpFeedbackScale : cycles;
+    return mode == WarpMode::pdSelf ? cycles * warpFeedbackScale : cycles;
+}
+
+// How far linear FM may push the carrier's frequency, as a multiple of the note.
+// Four means the top of the knob reaches five times the note at the peak of the
+// modulator and zero at its trough -- which is where the clamp the manual
+// mentions comes in.
+inline constexpr float warpFmDepth = 4.0f;
+
+// How far exponential FM may push it, in octaves either way. Four is enough for
+// the rapid sweeps the manual describes as brighter and harsher, and it is the
+// reason exponential does not hold the note where linear does: the mean of an
+// exponential sweep is not the pitch it swept from.
+inline constexpr float warpFmOctaves = 4.0f;
+
+// What an FM stage is doing to the carrier's frequency this sample, as a
+// multiple of it. One for every mode that is not FM, so the two stages simply
+// multiply and nothing downstream needs a special case.
+//
+// Linear clamps at zero rather than running the frequency negative. Serum's
+// does the same and says why: a clamp is the traditional FM every classic
+// digital synth had, and it is the sound people reach for. PD is where a
+// modulation that genuinely passes through zero lives, because a phase pushed
+// backwards simply reads backwards.
+inline float warpPitchFactor(WarpMode mode, float amount, float modulator) noexcept
+{
+    if (!warpBendsPitch(mode)) return 1.0f;
+    const auto depth = juce::jlimit(0.0f, 1.0f, amount);
+    if (warpIsExponential(mode))
+        return std::exp2(depth * warpFmOctaves * modulator);
+    return juce::jmax(0.0f, 1.0f + depth * warpFmDepth * modulator);
 }
 
 // Two saturators with genuinely different knees, so the modes built on them do
@@ -433,10 +544,25 @@ inline float warpHeadroom(const WarpStage& stage)
         case WarpMode::lowPass:
         case WarpMode::highPass:
         case WarpMode::bandPass:   return 1.0f;
+        case WarpMode::pdOsc:
+        case WarpMode::pdSub:
+        case WarpMode::pdNoise:
+        case WarpMode::pdSelf:     return 1.0f + warpFmIndex(stage.mode, a) * 2.0f;
+        // FM asks for the highest frequency it will reach, because that is
+        // literally the rate the table is about to be read at.
         case WarpMode::fmOsc:
         case WarpMode::fmSub:
-        case WarpMode::fmNoise:
-        case WarpMode::fmSelf:     return 1.0f + warpFmIndex(stage.mode, a) * 2.0f;
+        case WarpMode::fmNoise:    return 1.0f + a * warpFmDepth;
+        case WarpMode::fmExpOsc:
+        case WarpMode::fmExpSub:
+        case WarpMode::fmExpNoise: return std::exp2(a * warpFmOctaves);
+        // A product of two signals is as wide as the two of them together.
+        case WarpMode::amOsc:
+        case WarpMode::amSub:
+        case WarpMode::amNoise:
+        case WarpMode::rmOsc:
+        case WarpMode::rmSub:
+        case WarpMode::rmNoise:    return 1.0f + a;
         default: break;
     }
     // Everything left is a waveshaper. Starting it from a duller copy does not
@@ -600,14 +726,47 @@ float warpRead(const WarpStage& stage, float phase, WarpState& state, Read&& rea
             return input + (warpShape(stage.mode, a, input) - input) * a;
         }
 
-        // Phase modulation rather than frequency modulation, which is the same
-        // spectrum without the problem thru-zero exists to solve: a phase that
-        // is pushed backwards simply reads backwards, and there is no negative
-        // frequency for the oscillator to stop or reflect at.
+        // Phase distortion: the read is pushed along the cycle by the modulator
+        // rather than the cycle being made to run faster. The note therefore
+        // stays exactly where it was however deep this goes, and a phase pushed
+        // backwards simply reads backwards -- there is no negative frequency
+        // for the oscillator to stop or reflect at, which is the whole problem
+        // thru-zero exists to solve.
+        case WarpMode::pdOsc:
+        case WarpMode::pdSub:
+        case WarpMode::pdNoise:
+            return read(warpFrac(phase + warpFmIndex(stage.mode, a) * stage.modulator));
+
+        // FM reaches the phase increment rather than the read, so there is
+        // nothing to do here -- see warpPitchFactor, which the oscillator
+        // applies to the rate the cycle runs at.
         case WarpMode::fmOsc:
         case WarpMode::fmSub:
         case WarpMode::fmNoise:
-            return read(warpFrac(phase + warpFmIndex(stage.mode, a) * stage.modulator));
+        case WarpMode::fmExpOsc:
+        case WarpMode::fmExpSub:
+        case WarpMode::fmExpNoise:
+            break;
+
+        // Amplitude modulation rides the carrier: at full depth the modulator
+        // opens and closes it between silence and twice its level, and the
+        // carrier itself is still in there, which is what makes AM a tremolo
+        // taken up to audio rate rather than a new sound.
+        case WarpMode::amOsc:
+        case WarpMode::amSub:
+        case WarpMode::amNoise:
+            return read(phase) * (1.0f - a + a * (1.0f + stage.modulator));
+
+        // Ring modulation replaces it instead. The carrier's own pitch leaves
+        // the sound entirely and what is left is the two sidebands, which is
+        // why RM is the clangorous one and AM is not.
+        case WarpMode::rmOsc:
+        case WarpMode::rmSub:
+        case WarpMode::rmNoise:
+        {
+            const auto input = read(phase);
+            return input + (input * stage.modulator - input) * a;
+        }
 
         // The same thing driven by this stage's own output.
         //
@@ -622,7 +781,7 @@ float warpRead(const WarpStage& stage, float phase, WarpState& state, Read&& rea
         // run from a saw to a hard edge to noise, and the depth this table is
         // read at decides where along that the noise starts. A saw reaches it
         // sooner than a sine would.
-        case WarpMode::fmSelf:
+        case WarpMode::pdSelf:
         {
             const auto fed = 0.5f * (state.last + state.before);
             const auto shaped = read(warpFrac(phase + warpFmIndex(stage.mode, a) * fed));

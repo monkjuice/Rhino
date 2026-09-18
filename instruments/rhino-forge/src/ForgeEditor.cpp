@@ -429,14 +429,38 @@ void Editor::showWarpMenu(Control& control)
                         warpCategoryOf(warpModeOf(static_cast<float>(current))) == group);
     }
 
+    // At the foot, past a rule, the way the manual's own menu has it: the two
+    // stages change places. The modes swap and the depths stay put, which is
+    // exactly what the manual describes -- WARP 1's knob is left driving
+    // whatever was on the right, and that is the point of it, because the pair
+    // of knobs is where the hand already is.
+    menu.addSeparator();
+    menu.addItem(warpModeCount + 1, "Swap warp 1 and warp 2");
+
     const auto safe = juce::Component::SafePointer<Editor>(this);
     const auto id = control.id;
     menu.showMenuAsync(juce::PopupMenu::Options {}.withTargetComponent(control.selector.get()),
                        [safe, id] (int choice)
     {
         if (safe == nullptr || choice == 0) return;
+        if (choice == warpModeCount + 1) { safe->swapWarpModes(id); return; }
         safe->setWarpMode(id, choice - 1);
     });
+}
+
+// The two stages of whichever oscillator this field belongs to, exchanged. The
+// id says which: "oscBWarp2Mode" is oscillator B, and which of the two stages
+// was clicked does not matter because both end up holding the other's mode.
+void Editor::swapWarpModes(const juce::String& id)
+{
+    const auto prefix = id.startsWith("oscB") ? "oscB" : "oscA";
+    const auto first = juce::String(prefix) + "Warp1Mode";
+    const auto second = juce::String(prefix) + "Warp2Mode";
+    const auto held = juce::roundToInt(value(first));
+    setWarpMode(first, juce::roundToInt(value(second)));
+    setWarpMode(second, held);
+    refreshWarpFields();
+    repaint();
 }
 
 // One oscillator's two stages, resolved the way the engine resolves them, so

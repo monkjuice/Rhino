@@ -131,11 +131,21 @@ shared by every voice, is the source that drives a rack cleanly.
 
 Each oscillator carries two **warp** stages under its knobs, applied in the
 order they are drawn: a mode chosen from a menu grouped the way the Serum
-manual groups it, and a knob setting how deep that mode goes. Twenty-six modes
-across six families — a window sync, nine ways of bending where in the cycle the
-table is read, three pitch-tracked filters on the waveform itself, eight
-waveshapers, and four kinds of phase modulation from elsewhere in the voice. The
-arrows beside a field step through the list without opening it.
+manual groups it, and a knob setting how deep that mode goes. Thirty-eight modes
+across nine families — a window sync, nine ways of bending where in the cycle
+the table is read, three pitch-tracked filters on the waveform itself, eight
+waveshapers, and then four kinds of cross-modulation from elsewhere in the
+voice: FM on the carrier's frequency, linear or exponential; PD on its phase;
+AM and RM on its level. The arrows beside a field step through the list without
+opening it, and the foot of the menu swaps the two stages over.
+
+FM and PD are separate families and not two names for one thing. FM moves the
+rate the cycle runs at, so a deep setting bends the note and linear clamps at
+zero rather than running backwards — the traditional FM every classic digital
+synth had. PD moves where in the cycle the table is read, so the note stays
+exactly where it was however deep it goes. The three sources are the other
+oscillator, the sub and the noise, each of which must be switched on though its
+level may be all the way down; PD adds a fourth, a stage reading its own output.
 
 Every mode leaves the wave exactly as it was at the depth it calls neutral, so a
 mode can be chosen and then opened up rather than the other way round; four of

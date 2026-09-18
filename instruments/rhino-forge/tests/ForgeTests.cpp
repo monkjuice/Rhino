@@ -3899,10 +3899,12 @@ void warpSuite()
         auto patch = warpTestPatch();
         patch.a.unison = 4.0f;
         patch.a.detune = 0.3f;
-        // FM OSC reads the other oscillator, which has to be sounding for the
-        // mode to mean anything.
+        // The modes that read another source need it switched on, or the stage
+        // takes itself out and the render below proves nothing about it.
         patch.b.enable = 1.0f;
         patch.b.level = 0.5f;
+        patch.subEnable = 1.0f;
+        patch.subLevel = 0.0f;
         for (int slot = 0; slot < rhino::forge::warpSlots; ++slot)
         {
             patch.a.warpMode[static_cast<size_t>(slot)] = static_cast<float>(mode);
@@ -3960,8 +3962,8 @@ void warpSuite()
                                   {WarpMode::asym, 0.8f, 1.0, saw}, {WarpMode::flip, 0.6f, 1.0, saw},
                                   {WarpMode::mirror, 0.7f, 1.0, saw}, {WarpMode::quantize, 0.7f, 1.0, saw},
                                   {WarpMode::hardClip, 0.7f, 1.0, saw}, {WarpMode::linearFold, 0.7f, 1.0, saw},
-                                  {WarpMode::lowPass, 0.7f, 1.0, saw}, {WarpMode::fmSub, 0.5f, 2.0, saw},
-                                  {WarpMode::fmSelf, 0.7f, 1.0, sine}};
+                                  {WarpMode::lowPass, 0.7f, 1.0, saw}, {WarpMode::pdSub, 0.5f, 2.0, saw},
+                                  {WarpMode::pdSelf, 0.7f, 1.0, sine}};
         for (const auto& checked : checks)
         {
             auto patch = warpTestPatch();
@@ -4054,18 +4056,25 @@ void warpSuite()
         require(difference > 0.01f, "the two warp stages run in the order they are declared");
     }
 
-    // FM OSC needs the other oscillator, exactly as the manual says. With it
-    // switched off there is nothing to modulate with and the mode is silent
-    // rather than wrong.
+    // Every mode driven by the other oscillator needs it switched on, exactly as
+    // the manual says of all four families. With it off there is nothing to
+    // modulate with and the stage takes itself out rather than going quietly
+    // wrong; with it on, its own level makes no difference to the modulation.
+    for (const auto mode : {WarpMode::pdOsc, WarpMode::fmOsc, WarpMode::fmExpOsc,
+                            WarpMode::amOsc, WarpMode::rmOsc})
     {
         auto alone = warpTestPatch();
-        alone.a.warpMode[0] = static_cast<float>(WarpMode::fmOsc);
+        alone.a.warpMode[0] = static_cast<float>(mode);
         alone.a.warpAmount[0] = 1.0f;
         const auto withoutB = warpRender(alone, 2048);
         auto difference = 0.0f;
         for (size_t i = 0; i < withoutB.size(); ++i)
             difference = juce::jmax(difference, std::abs(withoutB[i] - plainRender[i]));
-        require(difference < 1.0e-5f, "FM from the other oscillator does nothing while it is off");
+        if (difference > 1.0e-5f)
+        {
+            require(false, "a stage driven by the other oscillator does nothing while it is off");
+            std::cerr << "       " << rhino::forge::warpModeName(static_cast<int>(mode)) << '\n';
+        }
 
         alone.b.enable = 1.0f;
         alone.b.level = 0.0f;   // heard only as a modulator, as the manual suggests
@@ -4073,7 +4082,97 @@ void warpSuite()
         difference = 0.0f;
         for (size_t i = 0; i < withB.size(); ++i)
             difference = juce::jmax(difference, std::abs(withB[i] - plainRender[i]));
-        require(difference > 0.01f, "FM from the other oscillator works with its level all the way down");
+        if (difference < 0.01f)
+        {
+            require(false, "a stage driven by the other oscillator works with its level down");
+            std::cerr << "       " << rhino::forge::warpModeName(static_cast<int>(mode)) << '\n';
+        }
+    }
+
+    // --- FM against PD --------------------------------------------------------
+    //
+    // The manual separates them and so does this. PD moves where in the cycle
+    // the table is read and never touches the rate the cycle runs at; FM moves
+    // that rate and nothing else. The multiplier is the whole of the
+    // difference, so it is checked directly rather than inferred from a render.
+    {
+        const auto factor = [] (WarpMode mode, float depth, float modulator)
+        {
+            return rhino::forge::warpPitchFactor(mode, depth, modulator);
+        };
+        for (const auto mode : {WarpMode::pdOsc, WarpMode::pdSelf, WarpMode::bendUp,
+                                WarpMode::amOsc, WarpMode::rmOsc, WarpMode::sync})
+            requireClose(factor(mode, 1.0f, 1.0f), 1.0f, 0.0001f,
+                         "only the FM modes reach the rate the cycle runs at");
+        for (const auto mode : {WarpMode::fmOsc, WarpMode::fmExpOsc})
+        {
+            requireClose(factor(mode, 0.0f, 1.0f), 1.0f, 0.0001f,
+                         "FM at no depth leaves the note where it was");
+            requireClose(factor(mode, 1.0f, 0.0f), 1.0f, 0.0001f,
+                         "FM with nothing arriving leaves the note where it was");
+        }
+        // Linear is proportional and clamps at zero rather than running the
+        // frequency backwards, which is the traditional FM the manual describes.
+        requireClose(factor(WarpMode::fmOsc, 1.0f, 1.0f), 1.0f + rhino::forge::warpFmDepth, 0.0001f,
+                     "linear FM is proportional to the modulator");
+        requireClose(factor(WarpMode::fmOsc, 1.0f, -1.0f), 0.0f, 0.0001f,
+                     "linear FM clamps at zero rather than running backwards");
+        // The clamp bites at a quarter of the way down at full depth, which is
+        // what "traditional FM" means: a good part of the modulator's trough is
+        // spent at a standstill. Short of that it is still proportional.
+        requireClose(factor(WarpMode::fmOsc, 1.0f, -0.2f),
+                     1.0f - 0.2f * rhino::forge::warpFmDepth, 0.0001f,
+                     "linear FM short of the clamp is still proportional");
+        // Exponential is symmetric in octaves, which is why it sweeps so much
+        // further for the same depth and why it does not hold the note.
+        requireClose(factor(WarpMode::fmExpOsc, 1.0f, 1.0f),
+                     std::pow(2.0f, rhino::forge::warpFmOctaves), 0.01f,
+                     "exponential FM sweeps in octaves");
+        requireClose(factor(WarpMode::fmExpOsc, 1.0f, -1.0f),
+                     1.0f / std::pow(2.0f, rhino::forge::warpFmOctaves), 0.001f,
+                     "exponential FM sweeps the same distance downwards");
+
+        // And the two are audibly different things from the same source at the
+        // same depth, which is the claim the separation is worth making for.
+        auto pd = warpTestPatch();
+        pd.b.enable = 1.0f;
+        pd.b.level = 0.0f;
+        pd.a.warpMode[0] = static_cast<float>(WarpMode::pdOsc);
+        pd.a.warpAmount[0] = 0.6f;
+        auto fm = pd;
+        fm.a.warpMode[0] = static_cast<float>(WarpMode::fmOsc);
+        const auto pdRender = warpRender(pd, 4096);
+        const auto fmRender = warpRender(fm, 4096);
+        auto difference = 0.0f;
+        for (size_t i = 0; i < pdRender.size(); ++i)
+            difference = juce::jmax(difference, std::abs(pdRender[i] - fmRender[i]));
+        require(difference > 0.05f, "FM and PD from one source at one depth are not one sound");
+    }
+
+    // --- AM against RM --------------------------------------------------------
+    //
+    // AM rides the carrier and leaves it in the sound; RM replaces it, so the
+    // carrier's own pitch goes and the two sidebands are what is left. Driven
+    // by the sub, which runs an octave below the note, that difference is
+    // exact rather than approximate: a cycle of the note later, the sub has
+    // turned over, so a ring-modulated wave comes back inverted while an
+    // amplitude-modulated one does not.
+    {
+        const auto note = 57;
+        const auto period = 48000.0 / (440.0 * std::pow(2.0, (note - 69) / 12.0));
+        const auto driven = [note] (WarpMode mode)
+        {
+            auto patch = warpTestPatch();
+            patch.subEnable = 1.0f;
+            patch.subLevel = 0.0f;
+            patch.a.warpMode[0] = static_cast<float>(mode);
+            patch.a.warpAmount[0] = 1.0f;
+            return warpRender(patch, 16384, note);
+        };
+        require(warpRepeat(driven(WarpMode::amSub), period) > 0.2,
+                "an amplitude-modulated oscillator still has its own note in it");
+        require(warpRepeat(driven(WarpMode::rmSub), period) < -0.5,
+                "a ring-modulated oscillator comes back inverted, its own note gone");
     }
 
     // --- The matrix reaches the depths ----------------------------------------

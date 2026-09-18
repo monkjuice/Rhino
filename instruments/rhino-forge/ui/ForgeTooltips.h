@@ -28,6 +28,8 @@ inline juce::String tooltipFor(const juce::String& id)
         {"Blend", "Balance the centre of oscillator %'s stack against its edges"},
         {"Pan", "Place oscillator % in the stereo field"},
         {"Level", "Set oscillator %'s level"},
+        {"Send1", "How much of oscillator % is sent to BUS 1, on top of where it already goes"},
+        {"Send2", "How much of oscillator % is sent to BUS 2, on top of where it already goes"},
     };
     for (const auto& letter : {"A", "B"})
         if (id.startsWith("osc" + juce::String(letter)))
@@ -46,10 +48,34 @@ inline juce::String tooltipFor(const juce::String& id)
         {"resonance", "Emphasise the filter edge"},
         {"drive", "Saturate what is routed into the filter"},
         {"filterType", "Low pass, high pass or band pass"},
-        {"routeA", "Send oscillator A through the filter"},
-        {"routeB", "Send oscillator B through the filter"},
-        {"routeSub", "Send the sub through the filter"},
-        {"routeNoise", "Send the noise through the filter"},
+        // One switch with two drawings: a lettered chip on the FILTER module,
+        // and the TO field at the top of the channel's mixer strip.
+        {"routeA", "Send oscillator A through the filter, or straight to the main output"},
+        {"routeB", "Send oscillator B through the filter, or straight to the main output"},
+        {"routeSub", "Send the sub through the filter, or straight to the main output"},
+        {"routeNoise", "Send the noise through the filter, or straight to the main output"},
+
+        // The mixer. A channel's own controls read the same way whichever
+        // channel they belong to, so each says what it does to that channel.
+        {"subPan", "Place the sub in the stereo field"},
+        {"noisePan", "Place the noise in the stereo field"},
+        {"subSend1", "How much of the sub is sent to BUS 1, on top of where it already goes"},
+        {"subSend2", "How much of the sub is sent to BUS 2, on top of where it already goes"},
+        {"noiseSend1", "How much of the noise is sent to BUS 1, on top of where it already goes"},
+        {"noiseSend2", "How much of the noise is sent to BUS 2, on top of where it already goes"},
+        {"filterPan", "Place the filter's output in the stereo field"},
+        {"filterMix", "Blend the filter's output against what was sent into it"},
+        {"filterLevel", "Set the level of everything coming out of the filter"},
+        {"filterSend1", "How much of the filter's output is sent to BUS 1, as well as to the output"},
+        {"filterSend2", "How much of the filter's output is sent to BUS 2, as well as to the output"},
+        {"bus1Enable", "Switch BUS 1 out of the mix; what is sent to it is then heard nowhere"},
+        {"bus2Enable", "Switch BUS 2 out of the mix; what is sent to it is then heard nowhere"},
+        {"bus1Dest", "Send BUS 1 to the main output, or across into BUS 2"},
+        {"bus2Dest", "Send BUS 2 to the main output, or across into BUS 1"},
+        {"bus1Pan", "Place everything arriving at BUS 1 in the stereo field"},
+        {"bus2Pan", "Place everything arriving at BUS 2 in the stereo field"},
+        {"bus1Level", "Set the level of everything arriving at BUS 1"},
+        {"bus2Level", "Set the level of everything arriving at BUS 2"},
 
         {"polyphony", "Limit simultaneous notes"},
         {"mono", "Collapse to one voice for basses and leads"},

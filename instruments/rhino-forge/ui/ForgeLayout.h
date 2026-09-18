@@ -17,21 +17,37 @@ using rhino::forge::ModSource;
 enum class Display { none, oscillator, envelope, lfo, filter };
 
 // A knob is the default. A stepper is the compact field used where reading an
-// exact value matters more than sweeping a range: tuning, filter type. A chip
-// is a small on/off button, used for the filter's per-source routing. A rocker
-// is a two-state switch that occupies a knob's footprint, so it lines up with
-// the knobs beside it. A bar is a horizontal fill drawn from the middle of its
-// range, for a signed amount read across a table row.
-enum class Style { knob, stepper, chip, rocker, bar };
+// exact value matters more than sweeping a range: tuning, filter type, a mixer
+// channel's destination. A chip is a small on/off button, used for the filter's
+// per-source routing. A rocker is a two-state switch that occupies a knob's
+// footprint, so it lines up with the knobs beside it. A bar is a horizontal
+// fill drawn from the middle of its range, for a signed amount read across a
+// table row. A fader is the tall vertical one a mixer channel is balanced on,
+// and the only control that is taller than it is wide.
+enum class Style { knob, stepper, chip, rocker, bar, fader };
 
-// Only the top row of the panel changes with the tabs. Everything a module
-// declares as "always" stays put whichever tab is showing, which is what keeps
-// the filter, the envelope, the LFO and the macros reachable while the matrix
-// is open.
-enum class Page { always, oscillators, matrix, table };
+// The tabs. A page is one bit, so which tabs show a module is a set rather
+// than a single answer — which is what the mixer needs: it takes the whole
+// signal row, so SUB, NOISE and FILTER have to be absent from that one tab
+// while staying put on the other three.
+enum class Page { oscillators = 1, table = 2, matrix = 4, mix = 8 };
 
-inline constexpr Page tabPages[] {Page::oscillators, Page::table, Page::matrix};
-inline constexpr int tabCount = 3;
+inline constexpr Page tabPages[] {Page::oscillators, Page::table, Page::matrix, Page::mix};
+inline constexpr int tabCount = 4;
+
+// Which tabs show a module. Not a Page: a module is on one page, or on all of
+// them, or on all but one, and only a set says all three.
+using PageSet = int;
+
+inline constexpr PageSet only(Page page) { return static_cast<PageSet>(page); }
+
+inline constexpr PageSet everyPage =
+    only(Page::oscillators) | only(Page::table) | only(Page::matrix) | only(Page::mix);
+
+// Shown wherever a module is not standing in its place. The mixer is the view
+// of the sub, the noise and the filter, so those three name it here rather
+// than being hidden by the mixer reaching over them.
+inline constexpr PageSet everyPageBut(Page page) { return everyPage & ~only(page); }
 
 inline const char* pageName(Page page)
 {
@@ -40,7 +56,7 @@ inline const char* pageName(Page page)
         case Page::matrix:      return "MATRIX";
         case Page::oscillators: return "OSC";
         case Page::table:       return "TABLE";
-        case Page::always:      break;
+        case Page::mix:         return "MIX";
     }
     return "";
 }
@@ -108,10 +124,10 @@ struct Module
     // header. Zero means it is not one. Declared last so the modules that are
     // not sources need not mention it.
     int handleSource;
-    // Everything below is optional, and only the three modules that need it
-    // say anything: the tabbed pair at the top, and the macro column down the
+    // Everything below is optional, and only the modules that need it say
+    // anything: the tabbed group at the top, and the macro column down the
     // right-hand side.
-    Page page = Page::always;
+    PageSet pages = everyPage;
     // How many grid rows the module covers. The macros are one tall column
     // beside two rows of modules rather than a box of their own.
     int rowSpan = 1;
@@ -180,6 +196,13 @@ inline constexpr int maxStepperWidth = 122;
 inline constexpr int chipHeight = 20;
 inline constexpr int maxChipWidth = 44;
 
+// A fader is read as a distance, so it takes the whole height of its cell and
+// only as much width as the track and its thumb need. The label sits above it
+// on the same line a knob's does, so a strip of faders and a strip of knobs
+// line up across the mixer.
+inline constexpr int maxFaderWidth = 34;
+inline constexpr int minFaderHeight = 54;
+
 // A table: the gutter its row numbers sit in, the strip of column titles above
 // its rows, and the caps that stop a field stretching the full width of the
 // panel merely because the matrix has that width to spend.
@@ -210,13 +233,13 @@ inline const std::vector<Module>& modules()
                 {"oscAFine", "FINE", Style::stepper}}},
           {74, {{"oscAPosition", "POSITION"}, {"oscAUnison", "UNISON"}, {"oscADetune", "DETUNE"},
                 {"oscABlend", "BLEND"}, {"oscAPan", "PAN"}, {"oscALevel", "LEVEL"}}}},
-         0, Page::oscillators},
+         0, only(Page::oscillators)},
         {"oscB", "OSC B", "MORPH", "oscBEnable", false, Display::oscillator, 0, 12, 8, false,
          {{26, {{"oscBOctave", "OCT", Style::stepper}, {"oscBSemitone", "SEMI", Style::stepper},
                 {"oscBFine", "FINE", Style::stepper}}},
           {74, {{"oscBPosition", "POSITION"}, {"oscBUnison", "UNISON"}, {"oscBDetune", "DETUNE"},
                 {"oscBBlend", "BLEND"}, {"oscBPan", "PAN"}, {"oscBLevel", "LEVEL"}}}},
-         0, Page::oscillators},
+         0, only(Page::oscillators)},
 
         // The matrix takes the two oscillators' columns — not the whole row,
         // because SUB, NOISE and FILTER sit either side of them and stay on
@@ -250,7 +273,7 @@ inline const std::vector<Module>& modules()
           {1, {{"mod8Source", "", Style::stepper, nullptr, 2},
                {"mod8Depth", "", Style::bar, nullptr, 3},
                {"mod8Dest", "", Style::stepper, nullptr, 2}}}},
-         0, Page::matrix, 1, columnTitleHeight, rowNumberGutter},
+         0, only(Page::matrix), 1, columnTitleHeight, rowNumberGutter},
 
         // The wavetable editor takes the same columns as the matrix does,
         // and declares no controls at all. Nothing on it is a parameter: a table
@@ -259,15 +282,20 @@ inline const std::vector<Module>& modules()
         // the framework lays out. The framework needs no special case for that
         // — a module with no rows simply has nothing to place.
         {"table", "WAVETABLE", "EDITOR", nullptr, true, Display::none, 0, 4, 16, false, {},
-         0, Page::table},
+         0, only(Page::table)},
 
         // SUB and NOISE stand at the left-hand end of the signal row, beside the
         // oscillators they are mixed with, and FILTER at the right-hand end,
         // where everything above it arrives.
+        // Absent from MIX, where the mixer's own SUB and NOISE strips stand in
+        // their place: the mixer is a second view of these two sources rather
+        // than a panel that happens to sit beside them.
         {"sub", "SUB", "", "subEnable", false, Display::none, 0, 0, 2, false,
-         {{100, {{"subLevel", "LEVEL"}}}}},
+         {{100, {{"subLevel", "LEVEL"}}}},
+         0, everyPageBut(Page::mix)},
         {"noise", "NOISE", "", "noiseEnable", true, Display::none, 0, 2, 2, false,
-         {{100, {{"noiseLevel", "LEVEL"}}}}},
+         {{100, {{"noiseLevel", "LEVEL"}}}},
+         0, everyPageBut(Page::mix)},
         // Four columns for three knobs, against the oscillators' eight for six:
         // the same width per knob, so nothing in the row is drawn at a size its
         // neighbours are not.
@@ -285,7 +313,8 @@ inline const std::vector<Module>& modules()
          {{26, {{"filterType", "TYPE", Style::stepper, nullptr, 2}, {"routeA", "A", Style::chip},
                 {"routeB", "B", Style::chip}, {"routeSub", "S", Style::chip},
                 {"routeNoise", "N", Style::chip}}},
-          {74, {{"cutoff", "CUTOFF"}, {"resonance", "RES"}, {"drive", "DRIVE"}}}}},
+          {74, {{"cutoff", "CUTOFF"}, {"resonance", "RES"}, {"drive", "DRIVE"}}}},
+         0, everyPageBut(Page::mix)},
         // GLOBAL is a narrow column rather than a wide box, and it opens the
         // lower row: what the voice is, before anything that shapes it. Five
         // controls in a row want more width than this panel has to give beside
@@ -327,7 +356,7 @@ inline const std::vector<Module>& modules()
                  {"env4Attack", "ATTACK"}, {"env4Decay", "DECAY"},
                  {"env4Sustain", "SUSTAIN"}, {"env4Release", "RELEASE"}},
            envCount}},
-         static_cast<int>(ModSource::env1), Page::always, 1, 0, 0, 62},
+         static_cast<int>(ModSource::env1), everyPage, 1, 0, 0, 62},
         // Six LFOs in one module, one shown at a time, chosen by the numbered
         // buttons in the header. Six boxes side by side would not fit, and six
         // that did would each be too small to read — Serum shows its eight the
@@ -379,7 +408,90 @@ inline const std::vector<Module>& modules()
                  {"lfo6Rate", "RATE", Style::knob, "lfo6RateUnit"},
                  {"lfo6Division", "RATE", Style::knob, nullptr, 1, "lfo6RateUnit", true}},
            lfoCount}},
-         static_cast<int>(ModSource::lfo1), Page::always, 1, 0, 0, 62},
+         static_cast<int>(ModSource::lfo1), everyPage, 1, 0, 0, 62},
+
+        // --- The mixer -------------------------------------------------------
+        //
+        // Eight channels across the whole signal row, three grid columns each.
+        // The MIX tab is the only one that takes the row entire: the mixer is
+        // the view of SUB, NOISE and the filter, so those three modules stand
+        // down rather than sitting beside strips of themselves.
+        //
+        // The order is the signal path read left to right, the same order the
+        // OSC tab is in, and it ends where the signal does: the two busses the
+        // sends arrive at, then the main output.
+        //
+        // A strip declares the same four rows whatever it carries, so TO sits
+        // on one line across the mixer, the sends on the next, the pans on the
+        // third and the faders along the foot. A channel with nothing to put in
+        // a row leaves the row out and the rows below it keep their weights, so
+        // its fader still lands on the same line as every other.
+        //
+        // Every strip is compact: its knobs are sized to its own cells and held
+        // under the diameter the rest of the panel shares. Without that, eight
+        // narrow channels would be the tightest cells on the panel and every
+        // knob in Forge would shrink to match them.
+        //
+        // The header enable is the source's own — switching OSC A off here is
+        // switching it off, exactly as Serum's mixer header does, which is also
+        // what gives every channel the mute it has no separate control for.
+        {"mixSub", "SUB", "", "subEnable", false, Display::none, 0, 0, 3, true,
+         {{16, {{"routeSub", "TO", Style::stepper}}},
+          {26, {{"subSend1", "BUS 1"}, {"subSend2", "BUS 2"}}},
+          {26, {{"subPan", "PAN"}}},
+          {32, {{"subLevel", "LEVEL", Style::fader}}}},
+         0, only(Page::mix)},
+        {"mixOscA", "OSC A", "", "oscAEnable", false, Display::none, 0, 3, 3, true,
+         {{16, {{"routeA", "TO", Style::stepper}}},
+          {26, {{"oscASend1", "BUS 1"}, {"oscASend2", "BUS 2"}}},
+          {26, {{"oscAPan", "PAN"}}},
+          {32, {{"oscALevel", "LEVEL", Style::fader}}}},
+         0, only(Page::mix)},
+        {"mixOscB", "OSC B", "", "oscBEnable", false, Display::none, 0, 6, 3, true,
+         {{16, {{"routeB", "TO", Style::stepper}}},
+          {26, {{"oscBSend1", "BUS 1"}, {"oscBSend2", "BUS 2"}}},
+          {26, {{"oscBPan", "PAN"}}},
+          {32, {{"oscBLevel", "LEVEL", Style::fader}}}},
+         0, only(Page::mix)},
+        {"mixNoise", "NOISE", "", "noiseEnable", true, Display::none, 0, 9, 3, true,
+         {{16, {{"routeNoise", "TO", Style::stepper}}},
+          {26, {{"noiseSend1", "BUS 1"}, {"noiseSend2", "BUS 2"}}},
+          {26, {{"noisePan", "PAN"}}},
+          {32, {{"noiseLevel", "LEVEL", Style::fader}}}},
+         0, only(Page::mix)},
+        // The filter's own channel. It has no TO field, because everything the
+        // filter passes goes to the main output and the only other place it
+        // could go is a bus, which the sends already reach. MIX shares the pan
+        // row instead, where TYPE would have been.
+        {"mixFilter", "FILTER", "", "filterEnable", false, Display::none, 0, 12, 3, true,
+         {{16, {}},
+          {26, {{"filterSend1", "BUS 1"}, {"filterSend2", "BUS 2"}}},
+          {26, {{"filterPan", "PAN"}, {"filterMix", "MIX"}}},
+          {32, {{"filterLevel", "LEVEL", Style::fader}}}},
+         0, only(Page::mix)},
+        // The two busses. Their sends row is empty: a bus receives sends, it
+        // does not carry them, and where it goes afterwards is the TO field.
+        {"mixBus1", "BUS 1", "", "bus1Enable", true, Display::none, 0, 15, 3, true,
+         {{16, {{"bus1Dest", "TO", Style::stepper}}},
+          {26, {}},
+          {26, {{"bus1Pan", "PAN"}}},
+          {32, {{"bus1Level", "LEVEL", Style::fader}}}},
+         0, only(Page::mix)},
+        {"mixBus2", "BUS 2", "", "bus2Enable", true, Display::none, 0, 18, 3, true,
+         {{16, {{"bus2Dest", "TO", Style::stepper}}},
+          {26, {}},
+          {26, {{"bus2Pan", "PAN"}}},
+          {32, {{"bus2Level", "LEVEL", Style::fader}}}},
+         0, only(Page::mix)},
+        // Where everything arrives. It is the OUTPUT knob from GLOBAL, drawn as
+        // the fader at the end of the row: one setting, and the mixer is where
+        // a final level is actually read against the channels feeding it.
+        {"mixMain", "MAIN", "", nullptr, false, Display::none, 0, 21, 3, true,
+         {{16, {}},
+          {26, {}},
+          {26, {}},
+          {32, {{"output", "LEVEL", Style::fader}}}},
+         0, only(Page::mix)},
 
         // The macros close the lower row, two across and four down in the
         // narrowest column the panel has: they are deliberately smaller than
@@ -417,13 +529,14 @@ inline juce::Rectangle<int> bankButtonBounds(juce::Rectangle<int> moduleArea, co
 // Whether a module is shown while the given tab is chosen.
 inline bool onPage(const Module& module, Page page)
 {
-    return module.page == Page::always || module.page == page;
+    return (module.pages & only(page)) != 0;
 }
 
-// Two modules can only collide if some tab shows both of them at once.
+// Two modules can only collide if some tab shows both of them at once, which
+// is exactly the two sets of pages overlapping.
 inline bool sharePage(const Module& a, const Module& b)
 {
-    return a.page == Page::always || b.page == Page::always || a.page == b.page;
+    return (a.pages & b.pages) != 0;
 }
 
 // --- What the window may be ---------------------------------------------------
@@ -576,8 +689,14 @@ inline juce::Rectangle<int> rowGutterBounds(juce::Rectangle<int> moduleArea, con
 
 // How many controls one bank of a row declares. Every bank declares the same
 // ones, so this is the length of the row divided between them.
+//
+// A row can be empty: a mixer strip declares the same four rows as the strips
+// beside it so their faders land on one line, and leaves out whatever it has
+// nothing to put in. Such a row has no controls per bank rather than one,
+// which is also what keeps rowHasKnobs from reading past the end of it.
 inline int controlsPerBank(const Row& row)
 {
+    if (row.controls.empty()) return 0;
     const auto banks = juce::jmax(1, row.banks);
     return juce::jmax(1, static_cast<int>(row.controls.size()) / banks);
 }
@@ -722,6 +841,19 @@ inline juce::Rectangle<int> barBlock(juce::Rectangle<int> moduleArea, const Modu
         .withCentre(cell.getCentre());
 }
 
+// A fader takes its cell's full height, less the label line above it. Unlike a
+// knob it is not square and does not follow the panel's shared diameter: a
+// mixer channel is balanced by how far the thumb has travelled, and that
+// distance is worth every pixel of the cell.
+inline juce::Rectangle<int> faderBlock(juce::Rectangle<int> moduleArea, const Module& module,
+                                       int rowIndex, int index)
+{
+    const auto cell = cellBounds(moduleArea, module, rowIndex, index);
+    return juce::Rectangle<int>(juce::jmin(juce::jmax(10, cell.getWidth() - 6), maxFaderWidth),
+                                juce::jmax(1, cell.getHeight() - 2))
+        .withCentre(cell.getCentre());
+}
+
 // A chip carries its own label, so unlike a knob or a stepper it needs no
 // separate label strip above it.
 inline juce::Rectangle<int> chipBlock(juce::Rectangle<int> moduleArea, const Module& module,
@@ -789,6 +921,7 @@ inline juce::Rectangle<int> controlBlock(juce::Rectangle<int> moduleArea, const 
         }
         case Style::bar:     return barBlock(moduleArea, module, rowIndex, index);
         case Style::chip:    return chipBlock(moduleArea, module, rowIndex, index);
+        case Style::fader:   return faderBlock(moduleArea, module, rowIndex, index);
         // A rocker takes a knob's whole block so its label and readout sit on
         // the same lines as the knobs either side of it.
         case Style::rocker:

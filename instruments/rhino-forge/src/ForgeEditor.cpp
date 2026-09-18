@@ -138,10 +138,23 @@ void Editor::buildTabs()
     {
         const auto target = ui::tabPages[i];
         auto tab = std::make_unique<ui::PageTab>(ui::pageName(target));
-        tab->accent = target == ui::Page::matrix ? ui::signalViolet : ui::electricBlue;
-        tab->setTooltip(target == ui::Page::matrix
-                            ? "Show the modulation matrix in place of the oscillators"
-                            : "Show the oscillators");
+        // Violet for the two tabs that stand something else in the
+        // oscillators' place, blue for the signal path itself. The mixer takes
+        // the whole row rather than standing in for a pair of modules, so it
+        // keeps the signal path's colour.
+        tab->accent = target == ui::Page::matrix || target == ui::Page::table
+                          ? ui::signalViolet : ui::electricBlue;
+        tab->setTooltip([target]
+        {
+            switch (target)
+            {
+                case ui::Page::matrix: return "Show the modulation matrix in place of the oscillators";
+                case ui::Page::table:  return "Draw on the oscillators' wavetables";
+                case ui::Page::mix:    return "Balance and route every source, the filter and the two busses";
+                case ui::Page::oscillators: break;
+            }
+            return "Show the oscillators";
+        }());
         tab->setToggleState(target == page, juce::dontSendNotification);
         tab->onClick = [this, target] { showPage(target); };
         addAndMakeVisible(*tab);
@@ -254,12 +267,16 @@ void Editor::buildModules()
                 }
                 else
                 {
-                    // Both bar styles route to drawLinearSlider. A stepper is
-                    // vertical and painted as a numeric field; a matrix amount
-                    // is horizontal, and drags along the fill it draws.
-                    control->slider.setSliderStyle(declared.style == ui::Style::bar
-                                                       ? juce::Slider::LinearBar
-                                                       : juce::Slider::LinearBarVertical);
+                    // Every one of these routes to drawLinearSlider. A stepper
+                    // is a bar painted as a numeric field; a matrix amount is a
+                    // horizontal bar, and drags along the fill it draws; a
+                    // fader is a genuine vertical slider with a thumb that
+                    // travels, and is the only one of the three that prints no
+                    // value of its own.
+                    control->slider.setSliderStyle(
+                        declared.style == ui::Style::bar     ? juce::Slider::LinearBar
+                        : declared.style == ui::Style::fader ? juce::Slider::LinearVertical
+                                                             : juce::Slider::LinearBarVertical);
                     control->slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
                 }
                 control->slider.setLookAndFeel(&lookAndFeel);
@@ -269,7 +286,7 @@ void Editor::buildModules()
                 control->slider.setColour(juce::Slider::textBoxTextColourId, ui::text);
                 control->slider.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
                 control->slider.setTooltip(ui::tooltipFor(declared.id));
-                if (declared.style == ui::Style::knob)
+                if (declared.style == ui::Style::knob || declared.style == ui::Style::fader)
                 {
                     // onDragStart/onDragEnd/onValueChange are the editor's to
                     // use: the parameter attachment listens as a Slider
@@ -705,6 +722,12 @@ void Editor::resized()
                 case ui::Style::bar:
                     control.slider.setBounds(block);
                     break;
+                case ui::Style::fader:
+                    // The same label line a knob's sits on, so a row of faders
+                    // and a row of knobs line up across the mixer.
+                    control.label.setBounds(block.removeFromTop(ui::knobLabelHeight));
+                    control.slider.setBounds(block);
+                    break;
                 case ui::Style::stepper:
                     // Inside a table the column title is the label, so the
                     // field takes the whole block rather than the half of it
@@ -1119,10 +1142,30 @@ void Editor::showValueBubble(Control& control)
 
     const auto knob = control.slider.getBounds();
     const auto size = juce::Rectangle<int>(valueBubble.widthFor(), ui::ValueBubble::heightFor());
-    // Above the knob by preference, below it when the knob is near the top of
-    // the panel, and never off either side.
-    auto placed = size.withCentre({knob.getCentreX(), knob.getY() - size.getHeight() / 2 - 6});
-    if (placed.getY() < 4) placed.setY(knob.getBottom() + 6);
+    juce::Rectangle<int> placed;
+    if (control.style == ui::Style::fader)
+    {
+        // Beside a fader rather than above it. A fader is as tall as its cell,
+        // so "above" is above the label and halfway up the knob over it —
+        // covering two things to report a third. Beside the thumb covers
+        // nothing and follows the hand up and down the travel.
+        const auto thumb = juce::roundToInt(
+            ui::faderThumbY(knob.toFloat(),
+                            ui::faderProportion(control.slider.getRange(), control.slider.getValue())));
+        placed = size.withCentre({knob.getRight() + 6 + size.getWidth() / 2, thumb});
+        // Flipped to the other side when the right-hand one would run off the
+        // panel, which is what the last channel of the mixer needs.
+        if (placed.getRight() > getWidth() - 4)
+            placed = size.withCentre({knob.getX() - 6 - size.getWidth() / 2, thumb});
+        placed.setY(juce::jlimit(4, juce::jmax(4, getHeight() - size.getHeight() - 4), placed.getY()));
+    }
+    else
+    {
+        // Above the knob by preference, below it when the knob is near the top
+        // of the panel, and never off either side.
+        placed = size.withCentre({knob.getCentreX(), knob.getY() - size.getHeight() / 2 - 6});
+        if (placed.getY() < 4) placed.setY(knob.getBottom() + 6);
+    }
     placed.setX(juce::jlimit(4, juce::jmax(4, getWidth() - size.getWidth() - 4), placed.getX()));
     valueBubble.setBounds(placed);
 

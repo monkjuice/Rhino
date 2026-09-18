@@ -42,6 +42,17 @@ juce::String asCount(float value) { return juce::String(juce::roundToInt(value))
 
 juce::String asGain(float value) { return juce::String(value, 2); }
 
+// A fader reads in decibels, because that is the unit a level is balanced in.
+// The value behind it is still the linear gain every other level in Forge is,
+// so nothing about the range or the saved patch changes — only what the bubble
+// says while the fader is moving.
+juce::String asDecibels(float value)
+{
+    if (value <= 0.0001f) return "-inf dB";
+    const auto db = 20.0f * std::log10(value);
+    return (db > 0.0f ? "+" : "") + juce::String(db, 1) + " dB";
+}
+
 juce::String asOctaves(float value)
 {
     const auto octaves = juce::roundToInt(value);
@@ -176,9 +187,21 @@ std::unique_ptr<juce::RangedAudioParameter> parameter(const juce::String& id, co
 // Module enables are genuine switches, so they are declared as bools and show
 // up in a host's automation lane as on/off rather than as a float that happens
 // to be stepped.
-std::unique_ptr<juce::RangedAudioParameter> toggle(const juce::String& id, const juce::String& name, bool initial)
+//
+// A switch whose two states have names of their own says them: the mixer draws
+// the filter routing as a field rather than as a chip, and "FILTER" or "MAIN"
+// is what that field has to read. The chips on the FILTER module are unaffected
+// — they carry their own caption and never print a value.
+std::unique_ptr<juce::RangedAudioParameter> toggle(const juce::String& id, const juce::String& name,
+                                                   bool initial, const char* whenOff = nullptr,
+                                                   const char* whenOn = nullptr)
 {
-    return std::make_unique<juce::AudioParameterBool>(juce::ParameterID {id, 1}, name, initial);
+    auto attributes = juce::AudioParameterBoolAttributes();
+    if (whenOff != nullptr && whenOn != nullptr)
+        attributes = attributes.withStringFromValueFunction(
+            [whenOff, whenOn] (bool value, int) { return juce::String(value ? whenOn : whenOff); });
+    return std::make_unique<juce::AudioParameterBool>(juce::ParameterID {id, 1}, name, initial,
+                                                      attributes);
 }
 }
 
@@ -218,7 +241,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout Processor::parameterLayout()
         result.push_back(parameter(id("Detune"), name("Detune"), {0.0f, 1.0f}, 0.18f, asPercent));
         result.push_back(parameter(id("Blend"), name("Blend"), {0.0f, 1.0f}, 0.5f, asPercent));
         result.push_back(parameter(id("Pan"), name("Pan"), {-1.0f, 1.0f}, 0.0f, asPan));
-        result.push_back(parameter(id("Level"), name("Level"), {0.0f, 1.0f}, level, asPercent));
+        result.push_back(parameter(id("Level"), name("Level"), {0.0f, 1.0f}, level, asDecibels));
     };
     // 6/9 is SAW and 1/9 is TRI: a fresh patch starts on shapes with names
     // rather than part-way between two of them.
@@ -226,20 +249,87 @@ juce::AudioProcessorValueTreeState::ParameterLayout Processor::parameterLayout()
     oscillator(1, "oscB", "Osc B", true, 1.0f / 9.0f, 7.0f, 0.25f);
 
     result.push_back(toggle("subEnable", "Sub Enable", true));
-    result.push_back(parameter("subLevel", "Sub Level", {0.0f, 1.0f}, 0.12f, asPercent));
+    result.push_back(parameter("subLevel", "Sub Level", {0.0f, 1.0f}, 0.17f, asDecibels));
     result.push_back(toggle("noiseEnable", "Noise Enable", false));
-    result.push_back(parameter("noiseLevel", "Noise Level", {0.0f, 1.0f}, 0.25f, asPercent));
+    result.push_back(parameter("noiseLevel", "Noise Level", {0.0f, 1.0f}, 0.35f, asDecibels));
     result.push_back(toggle("filterEnable", "Filter Enable", true));
     result.push_back(std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID {"filterType", 1}, "Filter Type",
         juce::StringArray {"LP", "HP", "BP"}, 0));
-    result.push_back(toggle("routeA", "Filter Route Osc A", true));
-    result.push_back(toggle("routeB", "Filter Route Osc B", true));
-    result.push_back(toggle("routeSub", "Filter Route Sub", true));
-    result.push_back(toggle("routeNoise", "Filter Route Noise", true));
+    // Where a source goes. One switch, two readings: the FILTER module draws it
+    // as a lettered chip, the mixer as a field that says the destination out.
+    result.push_back(toggle("routeA", "Filter Route Osc A", true, "MAIN", "FILTER"));
+    result.push_back(toggle("routeB", "Filter Route Osc B", true, "MAIN", "FILTER"));
+    result.push_back(toggle("routeSub", "Filter Route Sub", true, "MAIN", "FILTER"));
+    result.push_back(toggle("routeNoise", "Filter Route Noise", true, "MAIN", "FILTER"));
     result.push_back(parameter("cutoff", "Cutoff", {30.0f, 18000.0f, 0.0f, 0.25f}, 7800.0f, asHertz));
     result.push_back(parameter("resonance", "Resonance", {0.0f, 1.0f}, 0.12f, asPercent));
     result.push_back(parameter("drive", "Drive", {0.0f, 1.0f}, 0.08f, asPercent));
+
+    // --- The mixer ------------------------------------------------------------
+    //
+    // Everything below exists so the MIX tab can be a mixer rather than a
+    // second set of level knobs: a pan for the two sources that had none, a
+    // channel of the filter's own, two sends per channel, and the two busses
+    // those sends arrive at.
+    //
+    // The oscillators are not repeated here. Their pan and level already exist
+    // and the mixer shows those very parameters — one setting, two places to
+    // reach it, exactly as Serum's mixer shows the oscillator levels.
+    //
+    // SUB and NOISE are summed into both channels at full amplitude today, and
+    // every oscillator is summed at equal power, which leaves those two 3 dB
+    // hot against an oscillator reading the same level. Giving them a pan law
+    // settles that, and their defaults above rise by the same 3 dB so a fresh
+    // patch is unchanged. A patch saved before the mixer is corrected on the
+    // way in — see Processor::migrated.
+    result.push_back(parameter("subPan", "Sub Pan", {-1.0f, 1.0f}, 0.0f, asPan));
+    result.push_back(parameter("noisePan", "Noise Pan", {-1.0f, 1.0f}, 0.0f, asPan));
+
+    // The filter is a channel of the mixer as well as a module: what comes out
+    // of it has a place in the image, a blend against what went in, and a level
+    // of its own. All three default to leaving the filter exactly as it was.
+    result.push_back(parameter("filterPan", "Filter Pan", {-1.0f, 1.0f}, 0.0f, asPan));
+    result.push_back(parameter("filterMix", "Filter Mix", {0.0f, 1.0f}, 1.0f, asPercent));
+    result.push_back(parameter("filterLevel", "Filter Level", {0.0f, 1.0f}, 1.0f, asDecibels));
+
+    // Two sends per channel. A send is parallel to wherever the channel is
+    // already going, which is what makes it a send rather than a second
+    // destination: a source can reach the filter and both busses at once.
+    const auto sends = [&result] (const char* prefix, const char* label)
+    {
+        for (int bus = 1; bus <= busCount; ++bus)
+            result.push_back(parameter(juce::String(prefix) + "Send" + juce::String(bus),
+                                       juce::String(label) + " Send " + juce::String(bus),
+                                       {0.0f, 1.0f}, 0.0f, asPercent));
+    };
+    sends("oscA", "Osc A");
+    sends("oscB", "Osc B");
+    sends("sub", "Sub");
+    sends("noise", "Noise");
+    sends("filter", "Filter");
+
+    // The two busses. Each is a summing point with a level and a place in the
+    // image, and it goes to the main output or across to the other one. They
+    // carry no effects yet — the FX racks that make a bus worth sending to
+    // arrive with M11, and land on these channels without moving them.
+    for (int bus = 1; bus <= busCount; ++bus)
+    {
+        const auto id = [bus] (const char* suffix) { return "bus" + juce::String(bus) + suffix; };
+        const auto name = [bus] (const char* suffix)
+        {
+            return "Bus " + juce::String(bus) + " " + suffix;
+        };
+        result.push_back(toggle(id("Enable"), name("Enable"), true));
+        // A bus goes to the main output, or across to the other bus. Two
+        // busses pointed at each other would be a loop; the engine breaks it
+        // rather than the parameter forbidding it, so neither setting is one
+        // the panel has to refuse. See Core::renderSample.
+        result.push_back(toggle(id("Dest"), name("Destination"), false,
+                                "MAIN", bus == 1 ? "BUS 2" : "BUS 1"));
+        result.push_back(parameter(id("Pan"), name("Pan"), {-1.0f, 1.0f}, 0.0f, asPan));
+        result.push_back(parameter(id("Level"), name("Level"), {0.0f, 1.0f}, 0.75f, asDecibels));
+    }
     // Four envelopes, declared identically and with the same defaults. ENV 1 is
     // the amplitude and ENV 2-4 are sources, but that is a matter of what reads
     // them, not of what they are: the LFOs were given a rate each so six of them
@@ -303,7 +393,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout Processor::parameterLayout()
     result.push_back(toggle("mono", "Mono", false));
     result.push_back(toggle("legato", "Legato", true));
     result.push_back(parameter("glide", "Glide", {0.0f, 2.0f, 0.0f, 0.35f}, 0.08f, asSeconds));
-    result.push_back(parameter("output", "Output", {0.0f, 1.25f}, 0.75f, asGain));
+    result.push_back(parameter("output", "Output", {0.0f, 1.25f}, 0.75f, asDecibels));
 
     for (int macro = 1; macro <= macroCount; ++macro)
         result.push_back(parameter("macro" + juce::String(macro), "Macro " + juce::String(macro),
@@ -466,8 +556,10 @@ Patch Processor::patch() const
     result.b.table = tables.table(1);
     result.subEnable = value("subEnable");
     result.subLevel = value("subLevel");
+    result.subPan = value("subPan");
     result.noiseEnable = value("noiseEnable");
     result.noiseLevel = value("noiseLevel");
+    result.noisePan = value("noisePan");
     result.filterEnable = value("filterEnable");
     result.filterType = value("filterType");
     result.routeA = value("routeA");
@@ -477,6 +569,34 @@ Patch Processor::patch() const
     result.cutoff = value("cutoff");
     result.resonance = value("resonance");
     result.drive = value("drive");
+    result.filterPan = value("filterPan");
+    result.filterMix = value("filterMix");
+    result.filterLevel = value("filterLevel");
+    const auto readSends = [&value] (const char* prefix)
+    {
+        Sends sends;
+        for (int bus = 0; bus < busCount; ++bus)
+            sends.amount[static_cast<size_t>(bus)] =
+                value(juce::String(prefix) + "Send" + juce::String(bus + 1));
+        return sends;
+    };
+    result.sendA = readSends("oscA");
+    result.sendB = readSends("oscB");
+    result.sendSub = readSends("sub");
+    result.sendNoise = readSends("noise");
+    result.sendFilter = readSends("filter");
+    for (int bus = 0; bus < busCount; ++bus)
+    {
+        const auto id = [bus] (const char* suffix)
+        {
+            return "bus" + juce::String(bus + 1) + suffix;
+        };
+        auto& settings = result.buses[static_cast<size_t>(bus)];
+        settings.enable = value(id("Enable"));
+        settings.dest = value(id("Dest"));
+        settings.pan = value(id("Pan"));
+        settings.level = value(id("Level"));
+    }
     for (int env = 0; env < envCount; ++env)
     {
         auto& shape = result.envs[static_cast<size_t>(env)];
@@ -632,6 +752,12 @@ juce::ValueTree Processor::migrated(const juce::ValueTree& savedState) const
     // envelopes did too, whether or not it happens to name an envelope at all.
     const auto predatesLfoBanks = parameterEntry(result, "lfoShape").isValid();
     const auto predatesEnvBanks = predatesLfoBanks || parameterEntry(result, "attack").isValid();
+    // The mixer gave SUB and NOISE a pan, so a state that names neither is one
+    // written before those two were panned — and therefore one whose levels are
+    // in the old, 3 dB hotter scale. `subPan` is added below like any other
+    // missing parameter, which is what clears this mark and makes running the
+    // whole of this twice safe.
+    const auto predatesMixer = !parameterEntry(result, "subPan").isValid();
 
     // LFO 2-6.
     if (predatesLfoBanks)
@@ -656,6 +782,22 @@ juce::ValueTree Processor::migrated(const juce::ValueTree& savedState) const
         // the numbering this step expects, which is why that one runs first.
         inserted(static_cast<int>(ModSource::env1), envCount - 1);
     }
+
+    // SUB and NOISE used to be summed into both channels at full amplitude and
+    // are now panned at equal power, which costs them 3 dB at centre. Their
+    // saved levels are raised by exactly that, so a patch written before the
+    // mixer sounds as it did. A level already at the top of its range cannot be
+    // raised and is left there — the only patches this changes are ones whose
+    // sub or noise was already at maximum.
+    if (predatesMixer)
+        for (const auto* id : {"subLevel", "noiseLevel"})
+        {
+            auto entry = parameterEntry(result, id);
+            if (!entry.isValid()) continue;
+            const auto was = static_cast<float>(entry.getProperty("value"));
+            entry.setProperty("value", juce::jlimit(0.0f, 1.0f, was * juce::MathConstants<float>::sqrt2),
+                              nullptr);
+        }
 
     for (int i = result.getNumChildren(); --i >= 0;)
     {

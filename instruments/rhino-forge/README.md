@@ -6,8 +6,8 @@ types.
 
 Forge is a synthesiser and nothing else. The panel is a set of modules — two
 oscillators, sub, noise, a filter, four envelopes, six LFOs, global voicing,
-eight macros and the modulation matrix — each in its own box with its own
-enable. Effects are deliberately absent until the synth is finished.
+eight macros, the modulation matrix and the mixer — each in its own box with its
+own enable. Effects are deliberately absent until the synth is finished.
 
 The four envelopes share one module and the six LFOs share another, each showing
 one at a time: numbered cards hanging from the module's top edge say which, and
@@ -42,13 +42,33 @@ gesture so a wheel notch shows something too. The steppers and the matrix's
 amount bars are unaffected — a field whose whole purpose is to be read exactly
 still shows what it holds.
 
-Three tabs in the title bar, `OSC`, `TABLE` and `MATRIX`, switch **only the two
-oscillators**: the wavetable editor and the matrix take turns in their columns,
-while sub, noise and the filter hold their places either side and the whole
-lower row stays put. A module says which tab it belongs to by declaring a
-`Page`; a module that declares nothing is always shown. Switching tabs hides and shows components
-rather than rebuilding them, so a knob the matrix is covering is still driven by
-the host and by its own modulation slots while it is out of sight.
+Four tabs in the title bar: `OSC`, `TABLE`, `MATRIX` and `MIX`. The first three
+switch **only the two oscillators** — the wavetable editor and the matrix take
+turns in their columns, while sub, noise and the filter hold their places either
+side. `MIX` is the one that takes the whole signal row, because the mixer is the
+view of those same sources rather than a panel that sits beside them. The lower
+row never moves.
+
+A module says which tabs it appears on by declaring a set of pages, so the
+answer can be one tab, every tab, or every tab but one — which is what sub,
+noise and the filter need. Switching tabs hides and shows components rather than
+rebuilding them, so a knob the matrix is covering is still driven by the host
+and by its own modulation slots while it is out of sight.
+
+`MIX` is eight channels across the row, in the order the signal travels: SUB,
+OSC A, OSC B, NOISE, FILTER, BUS 1, BUS 2, MAIN. Every source channel carries
+where it goes, a send to each bus, a pan and a fader; the filter's channel adds
+a blend against what was sent into it; the busses carry a level, a pan and a
+destination. Nothing on it is a second copy of a setting — a channel's pan and
+level are the module's own parameters, shown where a balance is actually read.
+
+A channel's header enable is the source's own, exactly as Serum's mixer header
+is, which is also what gives every channel its mute. The two busses are summing
+points with a level and a place in the image; a bus can feed the other one or
+the main output, and two pointed at each other is broken by the engine rather
+than refused by the panel. They carry no effects yet: the FX racks that make a
+bus worth sending to arrive with M11 and land on these channels without moving
+them.
 
 Each oscillator reads a wavetable of its own. `TABLE` draws on it: freehand or
 straight lines on the selected frame, a strip of every frame below it, and add,

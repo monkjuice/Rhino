@@ -365,6 +365,12 @@ inline juce::String envParameterId(int env, const char* suffix)
 
 inline constexpr int macroCount = 8;
 
+// How many mixer busses there are. Two, as Serum has: enough for the two
+// parallel paths a patch actually wants — a space and a colour — and few
+// enough that every channel can carry a send to each without the strip
+// becoming a list.
+inline constexpr int busCount = 2;
+
 // Modulation sources. The envelopes and velocity are unipolar (0..1); the LFOs
 // are bipolar (-1..1); note is unipolar across the keyboard.
 //
@@ -437,9 +443,13 @@ struct DestinationInfo
     const char* label;
 };
 
-inline const std::array<DestinationInfo, 16>& destinations()
+// Appended to, never inserted into: a slot stores its destination as an index
+// into this list, so every index already written into a preset has to keep
+// meaning what it meant. The five the mixer added therefore sit at the end
+// rather than beside the controls they belong with.
+inline const std::array<DestinationInfo, 21>& destinations()
 {
-    static const std::array<DestinationInfo, 16> table {{
+    static const std::array<DestinationInfo, 21> table {{
         {"", "OFF"},
         {"oscAPosition", "A POS"},   {"oscALevel", "A LEVEL"}, {"oscAPan", "A PAN"},
         {"oscADetune", "A DETUNE"},  {"oscASemitone", "A PITCH"},
@@ -447,13 +457,16 @@ inline const std::array<DestinationInfo, 16>& destinations()
         {"oscBDetune", "B DETUNE"},  {"oscBSemitone", "B PITCH"},
         {"subLevel", "SUB"},         {"noiseLevel", "NOISE"},
         {"cutoff", "CUTOFF"},        {"resonance", "RES"},     {"drive", "DRIVE"},
+        {"subPan", "SUB PAN"},       {"noisePan", "NOISE PAN"},
+        {"filterPan", "FLT PAN"},    {"filterMix", "FLT MIX"}, {"filterLevel", "FLT LEVEL"},
     }};
     return table;
 }
 
-// Output is deliberately absent: it is applied once after the voices are
-// summed, so a per-voice modulation of it would not mean anything.
-inline constexpr int destinationCount = 16;
+// Output is deliberately absent, and so are the bus levels and the sends: all
+// of them are applied once the voices are summed, so a per-voice modulation of
+// one would not mean anything. Everything here is read inside the voice.
+inline constexpr int destinationCount = 21;
 inline constexpr int modSlotCount = 8;
 
 // Held as floats because that is what a parameter read gives back, and it
@@ -478,16 +491,55 @@ struct Modulation
     }
 };
 
+// One mixer channel's send amounts, one per bus. Every channel that can be
+// sent anywhere owns a set of these, so a channel is described by what it is
+// rather than by which of several parallel arrays its index falls in.
+struct Sends
+{
+    std::array<float, busCount> amount {};
+};
+
+// A bus: where the sends arrive. It has a level and a place in the image like
+// any channel, and it goes to the main output or across to the other bus.
+//
+// It carries no effects yet. That is the whole reason a bus exists in Serum,
+// and the reason it exists here is that the routing has to be in place before
+// a rack can be hung on it — so the topology lands first and M11 fills it in.
+// Until then a bus is a summing point: audibly a gain, but one several sources
+// share and one that can be panned and re-routed as a group.
+struct Bus
+{
+    float enable = 1.0f;
+    // False for the main output, true for the other bus.
+    float dest = 0.0f;
+    float pan = 0.0f;
+    float level = 0.75f;
+};
+
 struct Patch
 {
     Oscillator a, b;
-    float subEnable = 1.0f, subLevel = 0.12f;
-    float noiseEnable = 0.0f, noiseLevel = 0.25f;
+    float subEnable = 1.0f, subLevel = 0.17f;
+    float noiseEnable = 0.0f, noiseLevel = 0.35f;
+    // SUB and NOISE are panned with the same equal-power law the oscillators
+    // use, so a source reading a given level is that loud whichever source it
+    // is. Their levels above carry the 3 dB that law costs at centre, which is
+    // why they are not the 0.12 and 0.25 they were before the mixer.
+    float subPan = 0.0f, noisePan = 0.0f;
     float filterEnable = 1.0f, filterType = 0.0f;
     // Each source either passes through the filter or bypasses it straight to
     // the voice sum, exactly as Serum's per-source routing buttons work.
     float routeA = 1.0f, routeB = 1.0f, routeSub = 1.0f, routeNoise = 1.0f;
     float cutoff = 7800.0f, resonance = 0.12f, drive = 0.08f;
+    // The filter's own channel in the mixer: where its output sits in the
+    // image, how much of it is the filtered signal rather than what went in,
+    // and how loud the whole channel is. The defaults leave the filter exactly
+    // as it behaved before it had a channel.
+    float filterPan = 0.0f, filterMix = 1.0f, filterLevel = 1.0f;
+    // What each channel sends to each bus, parallel to wherever it is already
+    // going.
+    Sends sendA, sendB, sendSub, sendNoise, sendFilter;
+    std::array<Bus, busCount> buses {};
     // The four envelopes. ENV 1 is the voice's amplitude and every voice is
     // rendered through it; ENV 2-4 reach anything at all through the matrix.
     std::array<EnvSetting, envCount> envs {};
@@ -533,6 +585,11 @@ inline float* destinationField(Patch& patch, int destination)
         case 13: return &patch.cutoff;
         case 14: return &patch.resonance;
         case 15: return &patch.drive;
+        case 16: return &patch.subPan;
+        case 17: return &patch.noisePan;
+        case 18: return &patch.filterPan;
+        case 19: return &patch.filterMix;
+        case 20: return &patch.filterLevel;
         default: break;
     }
     return nullptr;
@@ -568,6 +625,40 @@ inline float softClip(float x)
     if (magnitude <= knee) return x;
     const auto limited = knee + (1.0f - knee) * std::tanh((magnitude - knee) / (1.0f - knee));
     return x < 0.0f ? -limited : limited;
+}
+
+// --- Panning ------------------------------------------------------------------
+//
+// Two laws, because a pan means two different things in a mixer.
+//
+// A *source* pan spreads one source among the others. It is the law the unison
+// stack already spreads across, and it holds the source's power constant as it
+// moves — at the cost of 3 dB against the mono sum, which is why a centred
+// source reads 0.707 rather than 1.
+//
+// A *channel* pan moves a sum that is already balanced: the filter's output, or
+// a bus. Costing that 3 dB would mean placing a channel in the centre quietly
+// turned it down, so the channel law is the same curve normalised to unity at
+// centre instead. Both hold left-squared plus right-squared constant; they
+// differ only in where that constant sits.
+inline float sourcePanLeft(float pan)
+{
+    return std::sqrt(0.5f * (1.0f - juce::jlimit(-1.0f, 1.0f, pan)));
+}
+
+inline float sourcePanRight(float pan)
+{
+    return std::sqrt(0.5f * (1.0f + juce::jlimit(-1.0f, 1.0f, pan)));
+}
+
+inline float channelPanLeft(float pan)
+{
+    return std::sqrt(1.0f - juce::jlimit(-1.0f, 1.0f, pan));
+}
+
+inline float channelPanRight(float pan)
+{
+    return std::sqrt(1.0f + juce::jlimit(-1.0f, 1.0f, pan));
 }
 
 // Octave, semitone and fine are one frequency multiplier. Fine is in cents.
@@ -777,6 +868,10 @@ public:
         meterStage = {};
         meterOffsets = {};
 
+        // What every voice has sent to each bus. Filled inside the loop and
+        // resolved once after it.
+        std::array<float, busCount> busLeft {}, busRight {};
+
         for (auto& voice : voices)
         {
             if (!voice.active) continue;
@@ -863,7 +958,8 @@ public:
             // driven, and switching the module off bypasses the drive with it.
             // The filter state keeps running either way, so switching the
             // module or a route back on does not click.
-            auto routedLeft = buses.wetLeft, routedRight = buses.wetRight;
+            const auto inputLeft = buses.wetLeft, inputRight = buses.wetRight;
+            auto routedLeft = inputLeft, routedRight = inputRight;
             const auto type = filterTypeOf(active);
             if (on(active.filterEnable))
             {
@@ -871,6 +967,13 @@ public:
                                     voice.lowLeft, voice.bandLeft, active.cutoff, active.resonance, type);
                 routedRight = filter(saturate(routedRight, active.drive),
                                      voice.lowRight, voice.bandRight, active.cutoff, active.resonance, type);
+                // MIX blends what came out against what went in. With the
+                // module switched off there is nothing to blend — the two are
+                // the same signal — so the knob is skipped rather than applied
+                // to a pair of identical values.
+                const auto mix = juce::jlimit(0.0f, 1.0f, active.filterMix);
+                routedLeft = routedLeft * mix + inputLeft * (1.0f - mix);
+                routedRight = routedRight * mix + inputRight * (1.0f - mix);
             }
             else
             {
@@ -878,9 +981,29 @@ public:
                 filter(routedRight, voice.lowRight, voice.bandRight, active.cutoff, active.resonance, type);
             }
 
+            // The rest of the filter's channel: its place in the image and its
+            // own fader, then its sends, which are taken after that fader
+            // exactly as every other channel's are.
+            const auto filterGain = juce::jlimit(0.0f, 1.0f, active.filterLevel);
+            routedLeft *= filterGain * channelPanLeft(active.filterPan);
+            routedRight *= filterGain * channelPanRight(active.filterPan);
+            send(routedLeft, routedRight, active.sendFilter, buses);
+
             left += (routedLeft + buses.dryLeft) * voice.tail;
             right += (routedRight + buses.dryRight) * voice.tail;
+            // The busses are one sum across every voice rather than one per
+            // voice. It makes no difference to a gain, and it is what an
+            // effects rack will need when one arrives: a reverb on a bus is a
+            // single tail fed by every note, not a copy per note.
+            for (int bus = 0; bus < busCount; ++bus)
+            {
+                const auto index = static_cast<size_t>(bus);
+                busLeft[index] += buses.sendLeft[index] * voice.tail;
+                busRight[index] += buses.sendRight[index] * voice.tail;
+            }
         }
+
+        resolveBuses(patch, busLeft, busRight, left, right);
 
         // The values the panel draws, worked out once from the phases the loop
         // settled on rather than per voice: a sample and hold's step cannot be
@@ -896,14 +1019,92 @@ public:
     }
 
 private:
+    // Each bus given its level and its place, then handed to wherever it goes.
+    //
+    // A bus pointed at the other is folded in first, so the one being fed is
+    // resolved last and arrives at the output carrying both. Two busses pointed
+    // at each other is a loop with no answer; the second of the pair goes to the
+    // main output instead, which is a setting the panel then never has to
+    // refuse. Written for two busses, because "the other bus" is only a thing
+    // there are two of.
+    static void resolveBuses(const Patch& patch, std::array<float, busCount>& busLeft,
+                             std::array<float, busCount>& busRight, float& left, float& right)
+    {
+        static_assert(busCount == 2, "resolveBuses routes a bus to 'the other one'");
+        const auto crossed = [&patch] (int bus)
+        {
+            const auto& settings = patch.buses[static_cast<size_t>(bus)];
+            return on(settings.enable) && on(settings.dest);
+        };
+
+        // A bus feeding the other is resolved first, whichever of the two it is.
+        std::array<int, busCount> order {0, 1};
+        if (crossed(1) && !crossed(0)) order = {1, 0};
+
+        for (int i = 0; i < busCount; ++i)
+        {
+            const auto bus = order[static_cast<size_t>(i)];
+            const auto index = static_cast<size_t>(bus);
+            const auto& settings = patch.buses[index];
+            if (!on(settings.enable)) continue;
+
+            const auto gain = juce::jlimit(0.0f, 1.0f, settings.level);
+            const auto outLeft = busLeft[index] * gain * channelPanLeft(settings.pan);
+            const auto outRight = busRight[index] * gain * channelPanRight(settings.pan);
+
+            const auto other = static_cast<size_t>(1 - bus);
+            // The second of a mutually crossed pair: its destination would be
+            // the bus that has already been folded into it.
+            const auto loop = i == busCount - 1 && crossed(1 - bus);
+            if (on(settings.dest) && !loop)
+            {
+                busLeft[other] += outLeft;
+                busRight[other] += outRight;
+            }
+            else
+            {
+                left += outLeft;
+                right += outRight;
+            }
+        }
+    }
+
     enum class EnvelopeStage { idle, attack, decay, sustain, release };
 
-    // What a voice accumulates into: the sources routed through the filter,
-    // and the sources that bypass it.
+    // What a voice accumulates into: the sources routed through the filter, the
+    // sources that bypass it, and what every channel has sent to each bus.
+    //
+    // A send is parallel to wherever the channel is already going, so a source
+    // appears in one of the first two pairs and in as many of the send pairs as
+    // it is sent to.
     struct Buses
     {
         float wetLeft = 0.0f, wetRight = 0.0f, dryLeft = 0.0f, dryRight = 0.0f;
+        std::array<float, busCount> sendLeft {}, sendRight {};
     };
+
+    // One channel's signal handed to the destination it names and to whichever
+    // busses it is sent to. The routing decision is made here, once, rather
+    // than being threaded through everything downstream.
+    static void distribute(float left, float right, bool throughFilter,
+                           const Sends& sends, Buses& buses)
+    {
+        (throughFilter ? buses.wetLeft : buses.dryLeft) += left;
+        (throughFilter ? buses.wetRight : buses.dryRight) += right;
+        send(left, right, sends, buses);
+    }
+
+    static void send(float left, float right, const Sends& sends, Buses& buses)
+    {
+        for (int bus = 0; bus < busCount; ++bus)
+        {
+            const auto index = static_cast<size_t>(bus);
+            const auto amount = juce::jlimit(0.0f, 1.0f, sends.amount[index]);
+            if (amount <= 0.0f) continue;
+            buses.sendLeft[index] += left * amount;
+            buses.sendRight[index] += right * amount;
+        }
+    }
 
     struct Voice
     {
@@ -1229,8 +1430,8 @@ private:
 
             const auto sample = table.sample(level, position, phases[static_cast<size_t>(i)]) * gain;
             const auto pan = juce::jlimit(-1.0f, 1.0f, osc.pan + spread * detune * 1.6f);
-            stackLeft += sample * std::sqrt(0.5f * (1.0f - pan));
-            stackRight += sample * std::sqrt(0.5f * (1.0f + pan));
+            stackLeft += sample * sourcePanLeft(pan);
+            stackRight += sample * sourcePanRight(pan);
 
             const auto ratio = std::pow(2.0f, offset * detune
                                               * unisonSpreadSemitones / 12.0f);
@@ -1253,36 +1454,50 @@ private:
             * (1.0f - std::exp(-1.0f / (static_cast<float>(sampleRate) * glide)));
         const auto hz = voice.currentHz;
 
-        // Each source is handed whichever pair of accumulators its routing
-        // selects, so the routing decision is made once, here, rather than
-        // being threaded through everything downstream.
-        renderOscillator(voice.phaseA, patch.a, hz, dt,
-                         on(patch.routeA) ? buses.wetLeft : buses.dryLeft,
-                         on(patch.routeA) ? buses.wetRight : buses.dryRight);
-        renderOscillator(voice.phaseB, patch.b, hz, dt,
-                         on(patch.routeB) ? buses.wetLeft : buses.dryLeft,
-                         on(patch.routeB) ? buses.wetRight : buses.dryRight);
+        // Every source is rendered on its own before it is handed anywhere,
+        // because a channel's sends are taken from that channel rather than
+        // from the sum it lands in: an oscillator can reach the filter and both
+        // busses at once, and it cannot do that while it is being written
+        // straight into somebody else's accumulator.
+        auto left = 0.0f, right = 0.0f;
+        renderOscillator(voice.phaseA, patch.a, hz, dt, left, right);
+        distribute(left, right, on(patch.routeA), patch.sendA, buses);
+
+        left = right = 0.0f;
+        renderOscillator(voice.phaseB, patch.b, hz, dt, left, right);
+        distribute(left, right, on(patch.routeB), patch.sendB, buses);
 
         // The sub and the noise generator are their own sources: each is silent
-        // unless its own module is on, whatever its level knob reads.
+        // unless its own module is on, whatever its level knob reads. Each is
+        // placed with the source pan law, the same one the oscillators spread
+        // their stacks across.
         if (on(patch.subEnable))
         {
             const auto sub = std::sin(voice.phaseSub * juce::MathConstants<float>::twoPi) * patch.subLevel;
-            (on(patch.routeSub) ? buses.wetLeft : buses.dryLeft) += sub;
-            (on(patch.routeSub) ? buses.wetRight : buses.dryRight) += sub;
+            distribute(sub * sourcePanLeft(patch.subPan), sub * sourcePanRight(patch.subPan),
+                       on(patch.routeSub), patch.sendSub, buses);
         }
         if (on(patch.noiseEnable))
         {
             const auto hiss = noise() * patch.noiseLevel;
-            (on(patch.routeNoise) ? buses.wetLeft : buses.dryLeft) += hiss;
-            (on(patch.routeNoise) ? buses.wetRight : buses.dryRight) += hiss;
+            distribute(hiss * sourcePanLeft(patch.noisePan), hiss * sourcePanRight(patch.noisePan),
+                       on(patch.routeNoise), patch.sendNoise, buses);
         }
 
+        // The amp envelope reaches the sends as well as the two destinations.
+        // A send is taken after the channel's own fader, and ENV 1 is part of
+        // what that fader amounts to, so a note that has finished must be
+        // sending nothing.
         const auto level = voice.envelope[ampEnv] * voice.velocity;
         buses.wetLeft *= level;
         buses.wetRight *= level;
         buses.dryLeft *= level;
         buses.dryRight *= level;
+        for (int bus = 0; bus < busCount; ++bus)
+        {
+            buses.sendLeft[static_cast<size_t>(bus)] *= level;
+            buses.sendRight[static_cast<size_t>(bus)] *= level;
+        }
         voice.phaseSub = wrap(voice.phaseSub + hz * 0.5f * dt);
     }
 

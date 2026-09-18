@@ -834,12 +834,80 @@ both eras: a state from before either bank lands its slots where the two shifts
 leave them, a state from between them has only the envelope shift applied, and
 neither moves again when it is saved and reopened.
 
+### M10c — the mixer, and two busses — done
+
+Serum's mixer is the page where a patch is balanced: a channel per source, per
+filter and per bus, each carrying where it goes, what it sends, where it sits
+and how loud it is. Forge had the levels and two of the pans scattered across
+the modules that owned them, no pan at all on the sub or the noise, no channel
+for the filter, and no summing point anywhere. The MIX tab is where those become
+one thing you can read across.
+
+**What was decided, and why**
+
+| Question | Decision |
+| --- | --- |
+| How much of the panel | The whole signal row. The mixer *is* the view of SUB, NOISE and FILTER, so those three stand down while it is open rather than sitting beside strips of themselves. This is the first tab that needs a module to be on some tabs and not others, which is why `Module::page` became a set of pages. |
+| The per-source routing | Unchanged. `routeA`, `routeB`, `routeSub` and `routeNoise` are the same switches the FILTER module's A/B/S/N chips drive; the mixer draws each as a field that says FILTER or MAIN. One setting, two drawings, and no migration. |
+| Muting a channel | The channel header's enable, which is the source's own — the same thing Serum's mixer header does. There is no separate mute and no `NONE` in the routing field, because switching the source off is what that would have meant. |
+| A `DIRECT` output | Left out. Without an FX section DIRECT and MAIN are the same signal path, so the control could not be honestly explained, and the layout test requires every parameter be on the panel with a real tooltip. It arrives with the rack in M11. |
+| What a bus is, before FX | A summing point with a level, a pan, and a destination of MAIN or the other bus. Audibly that is a gain — the racks that make a bus worth sending to are M11 — but the topology has to exist before a rack can hang on it, and a submix several sources share is a real thing to have meanwhile. |
+| Where a bus is summed | Once, across every voice, rather than per voice. It makes no difference to a gain and it is what a rack will need: a reverb on a bus is one tail fed by every note, not a copy per note. |
+| Two busses pointed at each other | Broken by the engine, not refused by the panel: the second of the pair goes to the main output instead. A setting the panel has to refuse is a setting a host can still automate into. |
+
+**Two pan laws, deliberately**
+
+A *source* pan spreads one source among the others and holds its power as it
+moves, at the cost of 3 dB against the mono sum. A *channel* pan moves a sum
+that is already balanced, so costing it that 3 dB would mean centring a channel
+quietly turned it down; the channel law is the same curve normalised to unity at
+centre. Both are in `ForgeCore.h` beside each other, and the mixer tests measure
+the difference rather than asserting it.
+
+**The one thing that changed under an existing patch**
+
+SUB and NOISE were summed into both channels at full amplitude, while every
+oscillator was summed at equal power — so those two were 3 dB hot against an
+oscillator reading the same level. Giving them a pan settles that, and their
+defaults rose by the same 3 dB so a fresh patch is unchanged. A patch saved
+before the mixer has its sub and noise levels raised on the way in, which the
+preset tests check both ways: raised once, and not raised again on the next
+open. A level already at the top of its range stays there, which is the only
+case this does not fully preserve.
+
+**What is new**
+
+- `MIX` tab, eight channels: SUB, OSC A, OSC B, NOISE, FILTER, BUS 1, BUS 2, MAIN.
+- `Style::fader` — the first control taller than it is wide. It prints no value,
+  like every other control here; the bubble appears beside the thumb rather than
+  above the fader, which on a control this tall would cover its own label.
+- `subPan`, `noisePan`; `filterPan`, `filterMix`, `filterLevel`; two sends on
+  each of the five source and filter channels; `enable`, `dest`, `pan` and
+  `level` on each bus.
+- Five new modulation destinations, appended rather than inserted so every index
+  already written into a preset keeps its meaning. The sends and the bus levels
+  are deliberately not destinations: they are applied after the voices are
+  summed, exactly as `output` is.
+- Levels read in decibels rather than per cent, which is the unit a balance is
+  actually set in. The values behind them are the same linear gains.
+
+**Still open**
+
+- A fader carries no modulation ring, so while the MIX tab is showing, a level
+  being moved by the matrix does not show it. The same parameter's knob on the
+  OSC tab does.
+- Nothing meters. A channel strip with no signal on it is the obvious next
+  thing, and wants the per-channel levels published the way the envelopes are.
+
 ## Out of scope for now
 
 These are the north star, not this plan. They come after the synth is finished.
 
 - **M11 — FX rack.** Chorus, distortion, delay, reverb, compressor, EQ, in a
-  reorderable chain.
+  reorderable chain. Three racks, on MAIN and on each bus, which is what the
+  mixer's busses were built to carry. It also brings the `DIRECT` output that
+  M10c left out, because an output that bypasses the effects needs effects to
+  bypass.
 - **M12 — Second filter,** with the serial/parallel routing Serum exposes.
 - **M13 — Preset browser** with tags and search.
 - **Later still:** MPE, sample and granular sources, spectral oscillators.
@@ -900,3 +968,4 @@ way to look at a change.
 | M9e Voice tail, not a truncated filter | **done** — ready to test by ear |
 | M10a Six LFOs, per voice | **done** — ready to test by ear |
 | M10b ENV 2–4 | **done** — ready to test by ear |
+| M10c The mixer, and two busses | **done** — ready to test by ear and by eye |

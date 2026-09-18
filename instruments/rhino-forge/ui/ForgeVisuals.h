@@ -26,6 +26,30 @@ inline constexpr int handleWidth = 70;
 // than as part of it.
 inline constexpr float moduleEdgeHeight = 3.0f;
 
+// --- Fader geometry -----------------------------------------------------------
+//
+// Shared, because the look draws the thumb here and the value bubble is placed
+// beside it: two readings of one position, which have to be the same one.
+inline constexpr float faderThumbHeight = 7.0f;
+
+// Where the thumb's centre sits, given how far down its travel it is. It never
+// hangs off either end, so what it moves along is the slot less its own height.
+inline float faderThumbY(juce::Rectangle<float> area, float proportionFromTop)
+{
+    const auto travel = juce::jmax(1.0f, area.getHeight() - faderThumbHeight);
+    return area.getY() + faderThumbHeight * 0.5f + proportionFromTop * travel;
+}
+
+// How far down its travel a value sits, measured from the top: a fader is read
+// as how far it has been brought up from the bottom.
+inline float faderProportion(juce::Range<double> range, double plain)
+{
+    const auto span = range.getLength();
+    return span > 0.0
+        ? 1.0f - static_cast<float>(juce::jlimit(0.0, 1.0, (plain - range.getStart()) / span))
+        : 1.0f;
+}
+
 // A card is square where it meets the module's top edge and round at its foot.
 inline juce::Path cardOutline(juce::Rectangle<float> area)
 {
@@ -80,8 +104,14 @@ public:
     // wherever zero falls in the range, so the sign of a depth reads across the
     // table without the number being looked at.
     void drawLinearSlider(juce::Graphics& g, int x, int y, int width, int height,
-                          float, float, float, juce::Slider::SliderStyle style, juce::Slider& slider) override
+                          float, float, float, juce::Slider::SliderStyle style,
+                          juce::Slider& slider) override
     {
+        if (style == juce::Slider::LinearVertical)
+        {
+            drawFader(g, {x, y, width, height}, slider);
+            return;
+        }
         const auto area = juce::Rectangle<int>(x, y, width, height).toFloat().reduced(1.0f);
         const auto accent = slider.findColour(juce::Slider::rotarySliderFillColourId);
         const auto enabled = slider.isEnabled();
@@ -120,6 +150,66 @@ public:
         g.setColour((horizontal || !active ? text : accent).withAlpha(enabled ? 1.0f : 0.35f));
         g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
         g.drawText(slider.getTextFromValue(slider.getValue()), area, juce::Justification::centred);
+    }
+
+    // A mixer fader. A slot cut into the panel, the part of it that has been
+    // brought up lit, and a wide thumb across it: the thumb is what the hand
+    // aims at and what the eye reads a balance from, so it is drawn as a bar
+    // rather than as a cap with a line on it.
+    //
+    // It prints no value, for the same reason no knob does — the reading
+    // appears in the bubble beside the hand asking for it. What is drawn beside
+    // the slot instead is the mark for the level the fader opens at, which is
+    // the one position on it worth finding without reading a number.
+    //
+    // Where the thumb sits is worked out from the slider's own value rather
+    // than from the position JUCE passes in, which is a pixel coordinate along
+    // the axis and not the proportion the rest of this panel is drawn from.
+    void drawFader(juce::Graphics& g, juce::Rectangle<int> bounds, juce::Slider& slider)
+    {
+        const auto area = bounds.toFloat().reduced(1.0f);
+        const auto accent = slider.findColour(juce::Slider::rotarySliderFillColourId);
+        const auto enabled = slider.isEnabled();
+        const auto alpha = enabled ? 1.0f : 0.35f;
+
+        const auto range = slider.getRange();
+        const auto proportionOf = [range] (double plain) { return faderProportion(range, plain); };
+
+        const auto slotWidth = juce::jmin(9.0f, area.getWidth());
+        const auto yFor = [&area] (float proportion)
+        {
+            return faderThumbY(area, proportion);
+        };
+        const auto thumbY = yFor(proportionOf(slider.getValue()));
+        const auto slot = juce::Rectangle<float>(slotWidth, area.getHeight())
+                              .withCentre(area.getCentre());
+
+        g.setColour(juce::Colour(0xff0b0e18).withAlpha(enabled ? 1.0f : 0.5f));
+        g.fillRoundedRectangle(slot, 3.0f);
+        if (thumbY < slot.getBottom() - 1.0f)
+        {
+            g.setColour(accent.withAlpha(alpha * 0.45f));
+            g.fillRoundedRectangle(slot.withTop(thumbY), 3.0f);
+        }
+        g.setColour(line.withAlpha(alpha * 0.9f));
+        g.drawRoundedRectangle(slot, 3.0f, 1.0f);
+
+        // The level the fader opens at, ticked down both sides of the slot
+        // rather than across it so the thumb never covers it.
+        const auto markY = yFor(proportionOf(slider.getDoubleClickReturnValue()));
+        const auto tick = juce::jmax(2.0f, (area.getWidth() - slotWidth) * 0.5f - 2.0f);
+        g.setColour(line.withAlpha(alpha));
+        g.fillRect(area.getX(), markY - 0.5f, tick, 1.0f);
+        g.fillRect(area.getRight() - tick, markY - 0.5f, tick, 1.0f);
+
+        const auto thumb = juce::Rectangle<float>(area.getWidth(), faderThumbHeight)
+                               .withCentre({area.getCentreX(), thumbY});
+        g.setColour(juce::Colour(0xff0b0e18).withAlpha(alpha));
+        g.fillRoundedRectangle(thumb, 2.0f);
+        g.setColour(juce::Colour(0xff39405c).withAlpha(alpha));
+        g.drawRoundedRectangle(thumb.reduced(0.5f), 2.0f, 1.0f);
+        g.setColour(accent.withAlpha(alpha));
+        g.fillRoundedRectangle(thumb.reduced(2.5f, 2.5f), 1.0f);
     }
 
     void drawRotarySlider(juce::Graphics& g, int x, int y, int width, int height,

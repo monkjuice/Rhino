@@ -999,14 +999,67 @@ heap.
 - A slot has no display of its own — no delay filter curve, no EQ response. The
   filter module's own display is the model for what those should be.
 
+### M11b — the rack, by eye — done
+
+M11a left the rack working and unreadable: four slots deep and twelve controls
+wide, every row the same violet, and the only thing saying which effect was
+where was a small field reading "DELAY". A rack is read at a glance or not at
+all.
+
+**What each type now carries**
+
+- **A colour.** Six hues far enough apart to tell apart, none of them the
+  electric blue the signal path uses or the violet the modulators do, so an
+  effect never reads as either. The slot wears it on its plate, on every knob in
+  the row, and lit down the left edge of its shelf.
+- **A mark.** The shape of what the effect *does* to a signal rather than a
+  symbol standing for its name: a reverb's decaying burst, a delay's four fading
+  repeats, a chorus's two copies walking apart, a distortion's flattened peaks,
+  an equaliser's boost and cut, a filter's resonant corner. Drawn from paths
+  into whatever box they are given, so they serve a plate at any panel size.
+- **A name plate**, which replaced the TYPE stepper. `Style::plate` is the first
+  control that is a board rather than a field: it carries the mark, the name and
+  the colour, and clicking it opens the list. A slot's identity and its one
+  structural choice are now the same object rather than a badge beside a field.
+- **An opening setting.** A parameter has one default and a slot's knobs serve
+  seven types, so the default cannot be right for all of them — 100% wet is what
+  an equaliser wants and exactly what a reverb on the main output does not. What
+  a type opens on lives beside the type in `ForgeFx.h` and the panel applies it
+  when a type is chosen, which is what Serum's per-module default preset does.
+  **Only from the panel**: a type arriving from a preset or from a host's
+  automation lane lands with the values that came with it.
+
+**Two things worth keeping in mind**
+
+The plate drives a choice parameter, which `ButtonAttachment` cannot carry. The
+slot's slider stays attached and is simply never shown nor added as a child: the
+attachment is what a host reads and writes the type through, the plate draws the
+value and the menu sets it. That is cheaper than a second path to the parameter
+and it keeps host automation working untouched.
+
+The equaliser opening flat is a checkable claim rather than a stated one, because
+its gain sits at the centre of a signed range — the test reads `fxScaled` back
+and holds it to 0 dB. A reverb and a delay are held to opening mostly dry for
+the same reason: they are the two usually placed on MAIN.
+
+**Still open**
+
+- No slot has a display of its own. Serum's delay draws its filter, its
+  distortion draws the transfer curve, its compressor draws gain reduction. The
+  FILTER module's own response display is the model for what those should be,
+  and it is the obvious next piece of polish.
+- The mode fields are still steppers you drag. A two-choice field would read
+  better as a click-to-cycle, but that is a change to every stepper on the
+  panel rather than to the rack.
+
 ## Out of scope for now
 
 These are the north star, not this plan. They come after the synth is finished.
 
-- **M11b — the rest of the rack.** Rack and module presets, reordering by drag,
-  copy and paste between racks, and the seven Serum types M11a left out. Plus
-  the `DIRECT` output, which needed effects to bypass before it could mean
-  anything.
+- **M11c — the rest of the rack.** Rack and module presets, reordering by drag,
+  copy and paste between racks, a display per slot, and the seven Serum types
+  M11a left out. Plus the `DIRECT` output, which needed effects to bypass
+  before it could mean anything.
 - **M12 — Second filter,** with the serial/parallel routing Serum exposes.
 - **M13 — Preset browser** with tags and search.
 - **Later still:** MPE, sample and granular sources, spectral oscillators.
@@ -1069,3 +1122,4 @@ way to look at a change.
 | M10b ENV 2–4 | **done** — ready to test by ear |
 | M10c The mixer, and two busses | **done** — ready to test by ear and by eye |
 | M11a The effects racks | **done** — ready to test by ear |
+| M11b The rack, by eye | **done** — ready to test by eye |

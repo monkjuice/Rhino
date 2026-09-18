@@ -1813,6 +1813,38 @@ void fxSuite()
     requireText(textFor(reading, rhino::forge::fxParameterId(0, 0, "Knob5").toRawUTF8(), 0.5f),
                 "-", "a knob the type does not use reads as nothing");
 
+    // --- What a type opens on --------------------------------------------------
+    //
+    // Every type is put into a slot by the panel, which then sets it up from
+    // the table beside the type. These hold that table to the two things that
+    // would actually be wrong: an equaliser that colours a signal the moment it
+    // is dropped in, and a reverb that drowns the main output.
+    for (int type = 1; type < rhino::forge::fxTypeCount; ++type)
+    {
+        const auto& info = rhino::forge::fxTypes()[static_cast<size_t>(type)];
+        require(info.initMix > 0.0f && info.initMix <= 1.0f,
+                "a type opens at a wet amount you can hear and cannot exceed");
+        for (int index = 0; index < rhino::forge::fxKnobCount; ++index)
+            require(info.init[static_cast<size_t>(index)] >= 0.0f
+                        && info.init[static_cast<size_t>(index)] <= 1.0f,
+                    "a type opens on knob values inside the range the knobs have");
+    }
+    // An equaliser has to open flat, or dropping one in colours the sound
+    // before it is asked to. Gain sits at the centre of a signed range, so
+    // "flat" is a number this can check rather than a claim.
+    {
+        const auto& eq = rhino::forge::fxTypes()[static_cast<size_t>(FxType::equaliser)];
+        requireClose(rhino::forge::fxScaled(eq.init[2], -18.0f, 18.0f), 0.0f, 0.01f,
+                     "an equaliser's low band opens at no gain at all");
+        requireClose(rhino::forge::fxScaled(eq.init[5], -18.0f, 18.0f), 0.0f, 0.01f,
+                     "an equaliser's high band opens at no gain at all");
+    }
+    // A reverb and a delay are the two that usually sit on the main output, so
+    // they are the two that must not arrive fully wet.
+    for (const auto type : {FxType::reverb, FxType::delay})
+        require(rhino::forge::fxTypes()[static_cast<size_t>(type)].initMix < 0.5f,
+                "a reverb and a delay open mostly dry, because they are usually placed on MAIN");
+
     // --- The matrix reaches the rack ------------------------------------------
     //
     // FX run on the summed voices, so a per-voice source has to resolve to one

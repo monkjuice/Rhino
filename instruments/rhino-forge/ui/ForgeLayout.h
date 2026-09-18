@@ -23,8 +23,11 @@ enum class Display { none, oscillator, envelope, lfo, filter };
 // footprint, so it lines up with the knobs beside it. A bar is a horizontal
 // fill drawn from the middle of its range, for a signed amount read across a
 // table row. A fader is the tall vertical one a mixer channel is balanced on,
-// and the only control that is taller than it is wide.
-enum class Style { knob, stepper, chip, rocker, bar, fader };
+// and the only control that is taller than it is wide. A plate is a rack slot's
+// name board: it carries the effect's mark, its name and its colour, and
+// clicking it is how the slot is filled — so a slot's identity and its one
+// structural choice are one object rather than a badge beside a field.
+enum class Style { knob, stepper, chip, rocker, bar, fader, plate };
 
 // The tabs. A page is one bit, so which tabs show a module is a set rather
 // than a single answer — which is what the mixer needs: it takes the whole
@@ -220,6 +223,12 @@ inline constexpr int maxChipWidth = 44;
 // line up across the mixer.
 inline constexpr int maxFaderWidth = 34;
 inline constexpr int minFaderHeight = 54;
+
+// A plate is a board rather than a field, so it takes the height of its row
+// instead of a control's fixed height — and it carries its own name, so unlike
+// a knob or a stepper it needs no label strip above it.
+inline constexpr int maxPlateWidth = 200;
+inline constexpr int maxPlateHeight = 56;
 
 // A table: the gutter its row numbers sit in, the strip of column titles above
 // its rows, and the caps that stop a field stretching the full width of the
@@ -460,7 +469,7 @@ inline const std::vector<Module>& modules()
         // is, and the type says what it is.
         {"fx", "FX", "RACK", nullptr, true, Display::none, 0, 0, 24, true,
          {
-          {25, {{"fx1s1Type", "TYPE", Style::stepper, nullptr, 2},
+          {25, {{"fx1s1Type", "TYPE", Style::plate, nullptr, 2},
                 {"fx1s1ModeA", "MODE", Style::stepper, nullptr, 2},
                 {"fx1s1ModeB", "MODE", Style::stepper, nullptr, 2},
                 {"fx1s1Knob1", "KNOB 1"}, {"fx1s1Knob2", "KNOB 2"}, {"fx1s1Knob3", "KNOB 3"},
@@ -468,7 +477,7 @@ inline const std::vector<Module>& modules()
                 {"fx1s1Mix", "MIX"}, {"fx1s1Level", "LEVEL"},
                 {"fx1s1Bypass", "BYP", Style::chip},
 
-                {"fx2s1Type", "TYPE", Style::stepper, nullptr, 2},
+                {"fx2s1Type", "TYPE", Style::plate, nullptr, 2},
                 {"fx2s1ModeA", "MODE", Style::stepper, nullptr, 2},
                 {"fx2s1ModeB", "MODE", Style::stepper, nullptr, 2},
                 {"fx2s1Knob1", "KNOB 1"}, {"fx2s1Knob2", "KNOB 2"}, {"fx2s1Knob3", "KNOB 3"},
@@ -476,7 +485,7 @@ inline const std::vector<Module>& modules()
                 {"fx2s1Mix", "MIX"}, {"fx2s1Level", "LEVEL"},
                 {"fx2s1Bypass", "BYP", Style::chip},
 
-                {"fx3s1Type", "TYPE", Style::stepper, nullptr, 2},
+                {"fx3s1Type", "TYPE", Style::plate, nullptr, 2},
                 {"fx3s1ModeA", "MODE", Style::stepper, nullptr, 2},
                 {"fx3s1ModeB", "MODE", Style::stepper, nullptr, 2},
                 {"fx3s1Knob1", "KNOB 1"}, {"fx3s1Knob2", "KNOB 2"}, {"fx3s1Knob3", "KNOB 3"},
@@ -484,7 +493,7 @@ inline const std::vector<Module>& modules()
                 {"fx3s1Mix", "MIX"}, {"fx3s1Level", "LEVEL"},
                 {"fx3s1Bypass", "BYP", Style::chip}},
            rackCount},
-          {25, {{"fx1s2Type", "TYPE", Style::stepper, nullptr, 2},
+          {25, {{"fx1s2Type", "TYPE", Style::plate, nullptr, 2},
                 {"fx1s2ModeA", "MODE", Style::stepper, nullptr, 2},
                 {"fx1s2ModeB", "MODE", Style::stepper, nullptr, 2},
                 {"fx1s2Knob1", "KNOB 1"}, {"fx1s2Knob2", "KNOB 2"}, {"fx1s2Knob3", "KNOB 3"},
@@ -492,7 +501,7 @@ inline const std::vector<Module>& modules()
                 {"fx1s2Mix", "MIX"}, {"fx1s2Level", "LEVEL"},
                 {"fx1s2Bypass", "BYP", Style::chip},
 
-                {"fx2s2Type", "TYPE", Style::stepper, nullptr, 2},
+                {"fx2s2Type", "TYPE", Style::plate, nullptr, 2},
                 {"fx2s2ModeA", "MODE", Style::stepper, nullptr, 2},
                 {"fx2s2ModeB", "MODE", Style::stepper, nullptr, 2},
                 {"fx2s2Knob1", "KNOB 1"}, {"fx2s2Knob2", "KNOB 2"}, {"fx2s2Knob3", "KNOB 3"},
@@ -500,7 +509,7 @@ inline const std::vector<Module>& modules()
                 {"fx2s2Mix", "MIX"}, {"fx2s2Level", "LEVEL"},
                 {"fx2s2Bypass", "BYP", Style::chip},
 
-                {"fx3s2Type", "TYPE", Style::stepper, nullptr, 2},
+                {"fx3s2Type", "TYPE", Style::plate, nullptr, 2},
                 {"fx3s2ModeA", "MODE", Style::stepper, nullptr, 2},
                 {"fx3s2ModeB", "MODE", Style::stepper, nullptr, 2},
                 {"fx3s2Knob1", "KNOB 1"}, {"fx3s2Knob2", "KNOB 2"}, {"fx3s2Knob3", "KNOB 3"},
@@ -508,7 +517,7 @@ inline const std::vector<Module>& modules()
                 {"fx3s2Mix", "MIX"}, {"fx3s2Level", "LEVEL"},
                 {"fx3s2Bypass", "BYP", Style::chip}},
            rackCount},
-          {25, {{"fx1s3Type", "TYPE", Style::stepper, nullptr, 2},
+          {25, {{"fx1s3Type", "TYPE", Style::plate, nullptr, 2},
                 {"fx1s3ModeA", "MODE", Style::stepper, nullptr, 2},
                 {"fx1s3ModeB", "MODE", Style::stepper, nullptr, 2},
                 {"fx1s3Knob1", "KNOB 1"}, {"fx1s3Knob2", "KNOB 2"}, {"fx1s3Knob3", "KNOB 3"},
@@ -516,7 +525,7 @@ inline const std::vector<Module>& modules()
                 {"fx1s3Mix", "MIX"}, {"fx1s3Level", "LEVEL"},
                 {"fx1s3Bypass", "BYP", Style::chip},
 
-                {"fx2s3Type", "TYPE", Style::stepper, nullptr, 2},
+                {"fx2s3Type", "TYPE", Style::plate, nullptr, 2},
                 {"fx2s3ModeA", "MODE", Style::stepper, nullptr, 2},
                 {"fx2s3ModeB", "MODE", Style::stepper, nullptr, 2},
                 {"fx2s3Knob1", "KNOB 1"}, {"fx2s3Knob2", "KNOB 2"}, {"fx2s3Knob3", "KNOB 3"},
@@ -524,7 +533,7 @@ inline const std::vector<Module>& modules()
                 {"fx2s3Mix", "MIX"}, {"fx2s3Level", "LEVEL"},
                 {"fx2s3Bypass", "BYP", Style::chip},
 
-                {"fx3s3Type", "TYPE", Style::stepper, nullptr, 2},
+                {"fx3s3Type", "TYPE", Style::plate, nullptr, 2},
                 {"fx3s3ModeA", "MODE", Style::stepper, nullptr, 2},
                 {"fx3s3ModeB", "MODE", Style::stepper, nullptr, 2},
                 {"fx3s3Knob1", "KNOB 1"}, {"fx3s3Knob2", "KNOB 2"}, {"fx3s3Knob3", "KNOB 3"},
@@ -532,7 +541,7 @@ inline const std::vector<Module>& modules()
                 {"fx3s3Mix", "MIX"}, {"fx3s3Level", "LEVEL"},
                 {"fx3s3Bypass", "BYP", Style::chip}},
            rackCount},
-          {25, {{"fx1s4Type", "TYPE", Style::stepper, nullptr, 2},
+          {25, {{"fx1s4Type", "TYPE", Style::plate, nullptr, 2},
                 {"fx1s4ModeA", "MODE", Style::stepper, nullptr, 2},
                 {"fx1s4ModeB", "MODE", Style::stepper, nullptr, 2},
                 {"fx1s4Knob1", "KNOB 1"}, {"fx1s4Knob2", "KNOB 2"}, {"fx1s4Knob3", "KNOB 3"},
@@ -540,7 +549,7 @@ inline const std::vector<Module>& modules()
                 {"fx1s4Mix", "MIX"}, {"fx1s4Level", "LEVEL"},
                 {"fx1s4Bypass", "BYP", Style::chip},
 
-                {"fx2s4Type", "TYPE", Style::stepper, nullptr, 2},
+                {"fx2s4Type", "TYPE", Style::plate, nullptr, 2},
                 {"fx2s4ModeA", "MODE", Style::stepper, nullptr, 2},
                 {"fx2s4ModeB", "MODE", Style::stepper, nullptr, 2},
                 {"fx2s4Knob1", "KNOB 1"}, {"fx2s4Knob2", "KNOB 2"}, {"fx2s4Knob3", "KNOB 3"},
@@ -548,7 +557,7 @@ inline const std::vector<Module>& modules()
                 {"fx2s4Mix", "MIX"}, {"fx2s4Level", "LEVEL"},
                 {"fx2s4Bypass", "BYP", Style::chip},
 
-                {"fx3s4Type", "TYPE", Style::stepper, nullptr, 2},
+                {"fx3s4Type", "TYPE", Style::plate, nullptr, 2},
                 {"fx3s4ModeA", "MODE", Style::stepper, nullptr, 2},
                 {"fx3s4ModeB", "MODE", Style::stepper, nullptr, 2},
                 {"fx3s4Knob1", "KNOB 1"}, {"fx3s4Knob2", "KNOB 2"}, {"fx3s4Knob3", "KNOB 3"},
@@ -1013,6 +1022,15 @@ inline juce::Rectangle<int> faderBlock(juce::Rectangle<int> moduleArea, const Mo
         .withCentre(cell.getCentre());
 }
 
+inline juce::Rectangle<int> plateBlock(juce::Rectangle<int> moduleArea, const Module& module,
+                                      int rowIndex, int index)
+{
+    const auto cell = cellBounds(moduleArea, module, rowIndex, index);
+    return juce::Rectangle<int>(juce::jmin(cell.getWidth() - 10, maxPlateWidth),
+                                juce::jmin(cell.getHeight() - 8, maxPlateHeight))
+        .withCentre(cell.getCentre());
+}
+
 // A chip carries its own label, so unlike a knob or a stepper it needs no
 // separate label strip above it.
 inline juce::Rectangle<int> chipBlock(juce::Rectangle<int> moduleArea, const Module& module,
@@ -1081,6 +1099,7 @@ inline juce::Rectangle<int> controlBlock(juce::Rectangle<int> moduleArea, const 
         case Style::bar:     return barBlock(moduleArea, module, rowIndex, index);
         case Style::chip:    return chipBlock(moduleArea, module, rowIndex, index);
         case Style::fader:   return faderBlock(moduleArea, module, rowIndex, index);
+        case Style::plate:   return plateBlock(moduleArea, module, rowIndex, index);
         // A rocker takes a knob's whole block so its label and readout sit on
         // the same lines as the knobs either side of it.
         case Style::rocker:

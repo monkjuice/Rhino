@@ -81,6 +81,19 @@ labelling them, and by the readout turning 0.6 into 480 milliseconds. A knob the
 type does not use is taken off the panel rather than greyed, because a reverb
 has no fourth knob at all.
 
+A slot is filled by clicking its **name plate** and choosing from the list, so a
+slot's identity and its one structural choice are the same object. Each type has
+a colour and a mark of its own — a reverb's decaying burst, a delay's fading
+repeats, a distortion's flattened peaks — and the slot wears both: on the plate,
+on every knob in the row, and lit down the left edge of the shelf it sits on. A
+rack is meant to be read by colour down its four rows before a word on it is.
+
+Choosing a type also sets that type up, the way adding a module in Serum loads
+its default preset. One parameter default cannot serve seven types — 100% wet is
+right for an equaliser and wrong for a reverb on the main output — so what a
+type opens on lives beside the type. A type arriving from a preset or from a
+host's automation lane is left exactly as it came.
+
 That shape is what lets a rack hold anything anywhere. Naming every control of
 every type in every slot would be several hundred parameters with nearly all of
 them dead at any moment, so a host's automation lane reads "MAIN 2 KNOB 3"

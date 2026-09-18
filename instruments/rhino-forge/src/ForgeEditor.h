@@ -41,6 +41,11 @@ private:
         juce::Label label;
         ui::ModKnob slider;
         std::unique_ptr<ui::ToggleChip> chip;
+        // A rack slot's name plate. It drives the same parameter its slider is
+        // attached to; the slider itself is never shown, and is kept only
+        // because the attachment is what carries the value to and from the
+        // host.
+        std::unique_ptr<ui::FxPlate> plate;
         std::unique_ptr<ui::RockerSwitch> rocker;
         std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachment;
         std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> buttonAttachment;
@@ -162,6 +167,14 @@ private:
     // panel rather than greyed: greying says "not just now", and this is "not
     // ever, while that type is in this slot". Everything else answers true.
     bool fxControlUsed(const Control&) const;
+    // The list of types, opened by clicking a slot's plate. This is how a slot
+    // is filled and emptied.
+    void showFxTypeMenu(Control&);
+    // Sets one slot's knobs and its wet/dry to what its type opens on. Called
+    // only when a type is chosen on the panel.
+    void initialiseFxSlot(int rack, int slot);
+    // The shelves the slots sit on, drawn behind their controls.
+    void paintFxShelves(juce::Graphics&, juce::Rectangle<int> area, const ui::Module&);
     // The type each slot last showed, so a type arriving from a preset or from
     // host automation re-labels its slot rather than only one chosen by hand.
     std::array<int, rackCount * fxSlotCount> fxTypesShown {};

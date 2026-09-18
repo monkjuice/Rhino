@@ -682,6 +682,211 @@ public:
 // LFOs read as six tabs of one module rather than as six buttons parked in its
 // header. A routing chip is still a ToggleChip: that one sits inside a control
 // row, where there is no edge for a card to hang from.
+// --- The effects, by eye ------------------------------------------------------
+//
+// A rack row is read at a glance or not at all: four slots deep and twelve
+// controls wide, the thing you need first is *which effect is this*. So each
+// type gets a colour and a mark of its own, and the slot wears both — the mark
+// on its name plate, the colour on the plate, on its knobs and down its left
+// edge.
+//
+// The colours are chosen to separate on this panel rather than to mean
+// anything: six hues far enough apart to tell apart at a glance, none of them
+// the electric blue the signal path uses or the violet the modulators do, so an
+// effect never reads as either.
+inline juce::Colour fxTypeColour(int type)
+{
+    switch (type)
+    {
+        case 1: return juce::Colour(0xff35d6c4);   // REVERB, a cold room
+        case 2: return juce::Colour(0xff4a9bff);   // DELAY
+        case 3: return juce::Colour(0xffe86bd0);   // CHORUS
+        case 4: return juce::Colour(0xffff6f4a);   // DIST, the one that burns
+        case 5: return juce::Colour(0xffffc24d);   // EQ
+        case 6: return juce::Colour(0xff6fdc5a);   // FILTER
+        default: break;
+    }
+    return line;                                   // OFF: an empty shelf
+}
+
+// The mark on a type's plate. Each one is the shape of what the effect does to
+// a signal rather than a symbol standing for its name — a reverb's decaying
+// burst, a delay's fading repeats, a distortion's flattened peaks — so the
+// plates can be told apart before the words on them are read.
+//
+// Drawn into whatever box it is given, so the same marks serve a plate at any
+// size the panel ends up at.
+inline void drawFxMark(juce::Graphics& g, juce::Rectangle<float> box, int type, juce::Colour colour,
+                       float alpha)
+{
+    const auto middle = box.getCentreY();
+    const auto height = box.getHeight();
+    g.setColour(colour.withAlpha(alpha));
+
+    const auto stem = [&] (float x, float amount, float thickness)
+    {
+        const auto half = juce::jmax(1.0f, height * 0.5f * amount);
+        g.fillRect(x - thickness * 0.5f, middle - half, thickness, half * 2.0f);
+    };
+
+    switch (type)
+    {
+        // A struck impulse and the cloud of reflections behind it, thinning as
+        // it goes.
+        case 1:
+        {
+            constexpr int count = 11;
+            for (int i = 0; i < count; ++i)
+            {
+                const auto along = static_cast<float>(i) / (count - 1);
+                const auto x = box.getX() + along * box.getWidth();
+                g.setColour(colour.withAlpha(alpha * (1.0f - along * 0.75f)));
+                stem(x, std::pow(1.0f - along, 1.6f) * 0.9f + 0.06f, 1.6f);
+            }
+            return;
+        }
+        // The same shape arriving four times, quieter each time.
+        case 2:
+        {
+            for (int i = 0; i < 4; ++i)
+            {
+                const auto along = static_cast<float>(i) / 3.0f;
+                g.setColour(colour.withAlpha(alpha * (1.0f - along * 0.7f)));
+                stem(box.getX() + 3.0f + along * (box.getWidth() - 6.0f),
+                     0.85f * std::pow(0.62f, static_cast<float>(i)), 2.4f);
+            }
+            return;
+        }
+        // Two copies of one wave, walking apart and back together.
+        case 3:
+        {
+            for (int copy = 0; copy < 2; ++copy)
+            {
+                juce::Path wave;
+                for (int i = 0; i <= 28; ++i)
+                {
+                    const auto along = static_cast<float>(i) / 28.0f;
+                    const auto phase = along * juce::MathConstants<float>::twoPi
+                                     + (copy == 0 ? 0.0f : 0.9f);
+                    const auto y = middle - std::sin(phase) * height * 0.3f;
+                    const auto x = box.getX() + along * box.getWidth();
+                    if (i == 0) wave.startNewSubPath(x, y); else wave.lineTo(x, y);
+                }
+                g.setColour(colour.withAlpha(alpha * (copy == 0 ? 1.0f : 0.5f)));
+                g.strokePath(wave, juce::PathStrokeType(1.6f));
+            }
+            return;
+        }
+        // A wave with its peaks flattened off, which is the whole of what a
+        // clipper does.
+        case 4:
+        {
+            juce::Path wave;
+            for (int i = 0; i <= 40; ++i)
+            {
+                const auto along = static_cast<float>(i) / 40.0f;
+                const auto raw = std::sin(along * juce::MathConstants<float>::twoPi * 1.5f) * 2.2f;
+                const auto y = middle - juce::jlimit(-1.0f, 1.0f, raw) * height * 0.36f;
+                const auto x = box.getX() + along * box.getWidth();
+                if (i == 0) wave.startNewSubPath(x, y); else wave.lineTo(x, y);
+            }
+            g.strokePath(wave, juce::PathStrokeType(1.8f));
+            return;
+        }
+        // A boost and a cut: the two bands the module actually has.
+        case 5:
+        {
+            juce::Path curve;
+            for (int i = 0; i <= 40; ++i)
+            {
+                const auto along = static_cast<float>(i) / 40.0f;
+                const auto bump = std::exp(-std::pow((along - 0.28f) * 5.0f, 2.0f));
+                const auto dip = std::exp(-std::pow((along - 0.72f) * 5.0f, 2.0f));
+                const auto y = middle - (bump - dip) * height * 0.34f;
+                const auto x = box.getX() + along * box.getWidth();
+                if (i == 0) curve.startNewSubPath(x, y); else curve.lineTo(x, y);
+            }
+            g.strokePath(curve, juce::PathStrokeType(1.8f));
+            return;
+        }
+        // A corner with resonance on it, falling away past the knee.
+        case 6:
+        {
+            juce::Path curve;
+            for (int i = 0; i <= 40; ++i)
+            {
+                const auto along = static_cast<float>(i) / 40.0f;
+                const auto peak = std::exp(-std::pow((along - 0.6f) * 9.0f, 2.0f)) * 0.55f;
+                const auto fall = along < 0.6f ? 0.0f : (along - 0.6f) * 2.6f;
+                const auto y = middle + (fall - peak) * height * 0.62f - height * 0.12f;
+                const auto x = box.getX() + along * box.getWidth();
+                if (i == 0) curve.startNewSubPath(x, y); else curve.lineTo(x, y);
+            }
+            g.strokePath(curve, juce::PathStrokeType(1.8f));
+            return;
+        }
+        default: break;
+    }
+
+    // OFF. A dashed line across an empty shelf, which says "nothing here" in a
+    // way an empty box does not.
+    for (int i = 0; i < 6; ++i)
+    {
+        const auto x = box.getX() + (static_cast<float>(i) + 0.5f) * box.getWidth() / 6.0f;
+        g.fillRect(x - 4.0f, middle - 0.75f, 8.0f, 1.5f);
+    }
+}
+
+// One slot's name plate: the type's mark, its name, and the colour both are in.
+// It is the control that sets the type as well as the thing that says what it
+// is — clicking it opens the list, which is how a rack slot is filled
+// everywhere else that has one, and it means a slot's identity and its one
+// structural choice are the same object rather than a badge beside a field.
+class FxPlate final : public juce::Button
+{
+public:
+    FxPlate() : juce::Button("FX") {}
+
+    int type = 0;
+    std::function<void()> onPlateClick;
+
+    void paintButton(juce::Graphics& g, bool highlighted, bool held) override
+    {
+        const auto area = getLocalBounds().toFloat().reduced(1.0f);
+        const auto colour = fxTypeColour(type);
+        const auto filled = type != 0;
+        const auto enabled = isEnabled();
+        const auto alpha = enabled ? 1.0f : 0.4f;
+
+        g.setColour(juce::Colour(0xff0b0e18).withAlpha(enabled ? 1.0f : 0.5f));
+        g.fillRoundedRectangle(area, 4.0f);
+        if (filled)
+        {
+            // A wash of the type's own colour, so a filled slot reads as
+            // occupied across the width of the rack without being read.
+            g.setGradientFill(juce::ColourGradient(colour.withAlpha(alpha * 0.22f), area.getTopLeft(),
+                                                   colour.withAlpha(alpha * 0.04f), area.getBottomRight(),
+                                                   false));
+            g.fillRoundedRectangle(area, 4.0f);
+        }
+        g.setColour((filled ? colour : line).withAlpha(alpha * (highlighted || held ? 1.0f : 0.75f)));
+        g.drawRoundedRectangle(area, 4.0f, 1.0f);
+
+        // The mark takes the left third and the name the rest, so the names
+        // line up down the rack whatever the marks are.
+        auto body = area.reduced(7.0f, 5.0f);
+        const auto mark = body.removeFromLeft(juce::jmin(34.0f, body.getWidth() * 0.4f));
+        drawFxMark(g, mark, type, filled ? colour : mutedText, alpha * 0.9f);
+
+        body.removeFromLeft(6.0f);
+        g.setColour((filled ? colour : mutedText).withAlpha(alpha));
+        g.setFont(juce::FontOptions(13.0f, juce::Font::bold));
+        g.drawText(getName(), body, juce::Justification::centredLeft);
+    }
+
+    void clicked() override { if (onPlateClick) onPlateClick(); }
+};
+
 class BankCard final : public juce::Button
 {
 public:
@@ -799,6 +1004,26 @@ public:
         g.drawText(getName(), getLocalBounds(), juce::Justification::centred);
     }
 };
+
+// One slot of a rack, drawn as a shelf: a well a shade below the module, with
+// the type's colour lit down its left edge the way a module's is lit across its
+// top. Four of them stacked is the rack, and the lit edges are what makes the
+// filled slots countable from across the room.
+inline void drawFxShelf(juce::Graphics& g, juce::Rectangle<int> area, int type, bool on)
+{
+    const auto box = area.toFloat().reduced(0.0f, 2.0f);
+    const auto filled = type != 0;
+    const auto alpha = on ? 1.0f : 0.4f;
+
+    g.setColour(juce::Colour(0xff0e1220).withAlpha(on ? 1.0f : 0.6f));
+    g.fillRoundedRectangle(box, 4.0f);
+    g.setColour(line.withAlpha(alpha * 0.55f));
+    g.drawRoundedRectangle(box, 4.0f, 1.0f);
+    if (!filled) return;
+
+    g.setColour(fxTypeColour(type).withAlpha(alpha));
+    g.fillRoundedRectangle(box.withWidth(moduleEdgeHeight), 1.5f);
+}
 
 // --- Tables -----------------------------------------------------------------
 //

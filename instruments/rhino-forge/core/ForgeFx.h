@@ -121,39 +121,66 @@ struct FxTypeInfo
     const char* name;
     std::array<const char*, fxKnobCount> knobs;
     FxModeInfo modeA, modeB;
+    // Where the knobs and the wet/dry sit when this type is put into a slot.
+    //
+    // A parameter has one default and a slot's knobs serve seven types, so the
+    // default cannot be right for all of them — 100% wet is what an equaliser,
+    // a filter and a distortion want and exactly what a reverb on the main
+    // output does not. So the panel applies these when a type is chosen, which
+    // is the same thing Serum's per-module default preset does: putting a
+    // reverb in a slot should give you a reverb, not a drowned one.
+    std::array<float, fxKnobCount> init;
+    float initMix;
 };
 
 inline const std::array<FxTypeInfo, fxTypeCount>& fxTypes()
 {
     static const std::array<FxTypeInfo, fxTypeCount> table {{
-        {"OFF", {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr}, {}, {}},
+        {"OFF", {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr}, {}, {},
+         {0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f}, 1.0f},
 
         // Serum's reverb carries a high cut as well as damping. Damping is the
         // one that shapes a tail rather than trimming it, so it is the one kept
         // here; PRE-DLY earns its place instead, because separating a transient
         // from its tail is what a reverb is usually reached for.
         {"REVERB", {"SIZE", "DECAY", "DAMP", "WIDTH", "PRE-DLY", "LO CUT"},
-         {"TYPE", {"PLATE", "HALL"}, 2}, {}},
+         {"TYPE", {"PLATE", "HALL"}, 2}, {},
+         // A medium plate, wide, with the bottom kept out of the tail. Barely
+         // a third wet, because this is the type most often placed on the main
+         // output rather than on a send.
+         {0.55f, 0.5f, 0.45f, 0.8f, 0.1f, 0.25f}, 0.3f},
 
         // OFFSET is the right-hand delay as a share of the left, so the pair is
         // one control and a spread rather than two times to keep in step. Past
         // the centre it reads DOT and TRIP where it lands on them.
         {"DELAY", {"TIME", "OFFSET", "FEEDBACK", "FREQ", "Q", nullptr},
-         {"MODE", {"NORMAL", "PING-PONG"}, 2}, {"UNIT", {"MS", "BPM"}, 2}},
+         {"MODE", {"NORMAL", "PING-PONG"}, 2}, {"UNIT", {"MS", "BPM"}, 2},
+         // A few audible repeats, even across the two channels, darkening as
+         // they go.
+         {0.4f, 0.5f, 0.35f, 0.7f, 0.6f, 0.5f}, 0.3f},
 
         {"CHORUS", {"RATE", "DELAY 1", "DELAY 2", "DEPTH", "FEEDBACK", "FILTER"},
-         {"UNIT", {"HZ", "BPM"}, 2}, {"FILTER", {"LPF", "HPF"}, 2}},
+         {"UNIT", {"HZ", "BPM"}, 2}, {"FILTER", {"LPF", "HPF"}, 2},
+         // Slow and shallow, the two taps far enough apart to be two.
+         {0.25f, 0.3f, 0.5f, 0.35f, 0.2f, 0.8f}, 0.5f},
 
         {"DIST", {"DRIVE", "FREQ", "Q", nullptr, nullptr, nullptr},
          {"SHAPE", {"TUBE", "SOFT", "HARD", "DIODE", "FOLD", "SINE", "CRUSH", "DOWNSMP"}, 8},
-         {"FILTER", {"OFF", "PRE", "POST"}, 3}},
+         {"FILTER", {"OFF", "PRE", "POST"}, 3},
+         // Enough drive to hear, all wet: an insert, not a send.
+         {0.3f, 0.5f, 0.3f, 0.5f, 0.5f, 0.5f}, 1.0f},
 
         {"EQ", {"FREQ L", "Q L", "GAIN L", "FREQ H", "Q H", "GAIN H"},
          {"LOW", {"SHELF", "PEAK", "HI PASS"}, 3},
-         {"HIGH", {"SHELF", "PEAK", "LO PASS"}, 3}},
+         {"HIGH", {"SHELF", "PEAK", "LO PASS"}, 3},
+         // Flat. A gain of 0.5 is 0 dB, so an equaliser dropped into a slot
+         // does nothing until it is asked to.
+         {0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f}, 1.0f},
 
         {"FILTER", {"CUTOFF", "RES", "DRIVE", nullptr, nullptr, nullptr},
-         {"TYPE", {"LP", "HP", "BP"}, 3}, {}},
+         {"TYPE", {"LP", "HP", "BP"}, 3}, {},
+         // Open, so it is heard as a filter to close rather than as a mute.
+         {0.8f, 0.2f, 0.0f, 0.5f, 0.5f, 0.5f}, 1.0f},
     }};
     return table;
 }

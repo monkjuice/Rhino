@@ -215,6 +215,20 @@ void Editor::refreshFxSlots()
             int rack = 0, slot = 0;
             if (!fxControlAt(control.id, rack, slot)) continue;
             const auto& info = processor.fxSlotType(rack, slot);
+            const auto type = juce::roundToInt(value(fxParameterId(rack, slot, "Type")));
+            const auto colour = ui::fxTypeColour(type);
+
+            // Everything in the slot takes the type's colour, so a rack is read
+            // by colour down its four rows before a single word on it is.
+            control.slider.setColour(juce::Slider::rotarySliderFillColourId, colour);
+            control.slider.setColour(juce::Slider::thumbColourId, colour);
+            if (control.chip != nullptr) control.chip->accent = colour;
+            if (control.plate != nullptr)
+            {
+                control.plate->type = type;
+                control.plate->setName(fxTypeName(type));
+                control.plate->repaint();
+            }
 
             const auto apply = [&control] (const char* label, const juce::String& tip)
             {
@@ -249,6 +263,88 @@ void Editor::refreshFxSlots()
                 continue;
             }
         }
+    }
+}
+
+// One slot set to what its type opens on. The values live beside the type in
+// ForgeFx.h rather than here, because what a reverb should open on is a fact
+// about reverbs and not about this panel.
+void Editor::initialiseFxSlot(int rack, int slot)
+{
+    const auto& info = processor.fxSlotType(rack, slot);
+    const auto set = [this] (const juce::String& id, float value)
+    {
+        if (auto* parameter = processor.state.getParameter(id))
+            parameter->setValueNotifyingHost(parameter->convertTo0to1(value));
+    };
+    for (int knob = 0; knob < fxKnobCount; ++knob)
+        set(fxParameterId(rack, slot, "Knob") + juce::String(knob + 1),
+            info.init[static_cast<size_t>(knob)]);
+    set(fxParameterId(rack, slot, "Mix"), info.initMix);
+    // The modes stay where they are: their first choice is the ordinary one for
+    // every type, and a slot that has just been given a type is already on it.
+    refreshFxSlots();
+    repaint();
+}
+
+// Filling a slot. The list is the types in the order they are declared, with
+// OFF at the top as the way to empty a slot again — the same list the type
+// parameter holds, so nothing here can offer a type the engine does not have.
+void Editor::showFxTypeMenu(Control& control)
+{
+    auto* parameter = processor.state.getParameter(control.id);
+    if (parameter == nullptr) return;
+
+    juce::PopupMenu menu;
+    menu.addSectionHeader("Put in this slot");
+    const auto current = juce::roundToInt(control.slider.getValue());
+    for (int type = 0; type < fxTypeCount; ++type)
+    {
+        juce::PopupMenu::Item item(fxTypeName(type));
+        item.itemID = type + 1;
+        item.isTicked = type == current;
+        // The list is read by colour as much as by name, so it carries the same
+        // colours the plates do.
+        item.colour = type == 0 ? ui::mutedText : ui::fxTypeColour(type);
+        menu.addItem(item);
+    }
+
+    int rack = 0, slot = 0;
+    if (!fxControlAt(control.id, rack, slot)) return;
+
+    const auto safe = juce::Component::SafePointer<Editor>(this);
+    menu.showMenuAsync(juce::PopupMenu::Options {}.withTargetComponent(control.plate.get()),
+                       [safe, parameter, rack, slot] (int choice)
+    {
+        if (safe == nullptr || choice == 0) return;
+        const auto type = choice - 1;
+        parameter->setValueNotifyingHost(parameter->convertTo0to1(static_cast<float>(type)));
+        // Putting an effect into a slot sets that effect up, the way adding a
+        // module in Serum loads its default preset. Only from here: a type
+        // arriving from a preset or from a host's automation lane must land
+        // with the values that came with it, not with these on top.
+        //
+        // OFF is left alone deliberately, so emptying a slot and putting the
+        // same type back finds it as it was.
+        if (type != 0) safe->initialiseFxSlot(rack, slot);
+    });
+}
+
+// A shelf behind each slot, lit down its left edge in the type's colour. Drawn
+// here rather than by the module shell because there are four of them inside
+// one module, and which colour each takes is a parameter rather than a
+// declaration.
+void Editor::paintFxShelves(juce::Graphics& g, juce::Rectangle<int> area, const ui::Module& module)
+{
+    const auto rack = shownRack();
+    for (int slot = 0; slot < static_cast<int>(module.rows.size()) && slot < fxSlotCount; ++slot)
+    {
+        const auto row = ui::rowBounds(area, module, slot);
+        const auto type = juce::roundToInt(value(fxParameterId(rack, slot, "Type")));
+        // Widened past the controls by the module's own padding, so the shelves
+        // read as the full width of the rack rather than as a box around the
+        // knobs.
+        ui::drawFxShelf(g, row.expanded(6, 1), type, true);
     }
 }
 
@@ -349,6 +445,26 @@ void Editor::buildModules()
                 control->index = i;
                 control->bank = ui::bankOf(descriptor, r, i);
 
+                if (declared.style == ui::Style::plate)
+                {
+                    control->plate = std::make_unique<ui::FxPlate>();
+                    control->plate->setTooltip(ui::tooltipFor(declared.id));
+                    auto* held = control.get();
+                    control->plate->onPlateClick = [this, held] { showFxTypeMenu(*held); };
+                    // The slider is never shown and never added as a child: it
+                    // is here for its attachment, which is what a host reads
+                    // and writes the type through. The plate draws the value
+                    // and the menu sets it.
+                    control->slider.setSliderStyle(juce::Slider::LinearBarVertical);
+                    control->slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+                    control->slider.onValueChange = [this] { refreshFxSlots(); resized(); repaint(); };
+                    control->attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+                        processor.state, declared.id, control->slider);
+                    addAndMakeVisible(*control->plate);
+                    module.controls.push_back(std::move(control));
+                    continue;
+                }
+
                 if (declared.style == ui::Style::chip)
                 {
                     control->chip = std::make_unique<ui::ToggleChip>(declared.label);
@@ -429,14 +545,6 @@ void Editor::buildModules()
                         else if (bubbleControl == held) showValueBubble(*held);
                     };
                 }
-                // A slot's type decides what the six knobs beside it are
-                // called and which of them exist at all, so changing it
-                // re-labels the slot and lays the module out again. This fires
-                // for host automation as well as for a hand, which is what it
-                // is for: a type arriving from a preset has to land the same
-                // way one chosen here does.
-                if (control->id.startsWith("fx") && control->id.endsWith("Type"))
-                    control->slider.onValueChange = [this] { refreshFxSlots(); resized(); repaint(); };
                 // A mode field changes what the knobs beside it read — a
                 // delay's time is milliseconds or a division depending on it —
                 // so the readouts are pushed when it moves.
@@ -604,6 +712,12 @@ void Editor::applyEnableStates()
                 && (on || !ui::inSharedCell(*module.descriptor, control->row, control->index));
 
             control->label.setVisible(shown);
+            if (control->plate != nullptr)
+            {
+                control->plate->setEnabled(on);
+                control->plate->setVisible(shown);
+                continue;
+            }
             if (control->chip != nullptr)
             {
                 control->chip->setEnabled(on);
@@ -659,6 +773,7 @@ void Editor::paint(juce::Graphics& g)
                                 : juce::String());
 
         if (descriptor.columnHeaderHeight > 0) paintTable(g, area, descriptor);
+        if (rackModule) paintFxShelves(g, area, descriptor);
 
         const auto display = ui::displayBounds(area, descriptor);
         if (display.isEmpty()) continue;
@@ -876,6 +991,9 @@ void Editor::resized()
                     break;
                 case ui::Style::bar:
                     control.slider.setBounds(block);
+                    break;
+                case ui::Style::plate:
+                    control.plate->setBounds(block);
                     break;
                 case ui::Style::fader:
                     // The same label line a knob's sits on, so a row of faders

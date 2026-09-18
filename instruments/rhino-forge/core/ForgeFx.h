@@ -202,6 +202,37 @@ inline const char* fxModeName(const FxModeInfo& mode, float value)
     return mode.count <= 0 ? "" : mode.choices[static_cast<size_t>(fxModeOf(mode, value))];
 }
 
+// Whether a knob does anything, given the modes its slot is set to.
+//
+// This is a different thing from a knob the type does not have at all. A reverb
+// has no fourth knob ever, and the panel takes that one off the panel; these
+// come back the moment the mode beside them moves, so they are greyed instead —
+// which is the difference between "not here" and "not just now".
+//
+// There are only three of them, and each is a fact about the effect rather than
+// about the panel, so they live here beside the types rather than in the editor.
+inline bool fxKnobLive(const FxSlot& slot, int knob)
+{
+    const auto& info = fxTypeInfo(slot.type);
+    switch (fxTypeOf(slot.type))
+    {
+        // FREQ and Q belong to the distortion's filter, and there is no filter
+        // to set when it is switched out of the path.
+        case FxType::distortion:
+            return knob < 1 || fxModeOf(info.modeB, slot.modeB) != 0;
+
+        // A pass shape has no gain to give. Serum says the same of its own
+        // equaliser: the gain knob has no effect once the band is a high pass.
+        case FxType::equaliser:
+            if (knob == 2) return fxModeOf(info.modeA, slot.modeA) != 2;
+            if (knob == 5) return fxModeOf(info.modeB, slot.modeB) != 2;
+            return true;
+
+        default: break;
+    }
+    return true;
+}
+
 // --- Turning a normalised knob into what it means -----------------------------
 //
 // Every one of these is read twice: by the DSP that renders the effect, and by

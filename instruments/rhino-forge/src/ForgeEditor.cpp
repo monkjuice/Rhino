@@ -170,6 +170,13 @@ juce::String Editor::fxHeaderDetail() const
     return held.isEmpty() ? "EMPTY" : held.joinIntoString(" > ");
 }
 
+bool Editor::fxKnobLive(const Control& control) const
+{
+    int rack = 0, slot = 0;
+    if (!control.id.contains("Knob") || !fxControlAt(control.id, rack, slot)) return true;
+    return rhino::forge::fxKnobLive(fxSlotOf(rack, slot), control.id.getTrailingIntValue() - 1);
+}
+
 bool Editor::fxControlUsed(const Control& control) const
 {
     int rack = 0, slot = 0;
@@ -253,17 +260,66 @@ void Editor::refreshFxSlots()
             if (control.id.endsWith("ModeA") || control.id.endsWith("ModeB"))
             {
                 const auto& mode = control.id.endsWith("ModeB") ? info.modeB : info.modeA;
+                if (control.selector != nullptr)
+                {
+                    // Copied out of the table rather than pointed into it: the
+                    // type in this slot changes underneath the selector, and a
+                    // pointer to the old type's choices is a dangling read on
+                    // the next repaint.
+                    control.selector->choices = mode.choices;
+                    control.selector->count = mode.count;
+                    control.selector->chosen = fxModeOf(mode, value(control.id));
+                    control.selector->accent = colour;
+                    control.selector->setTooltip(
+                        mode.label == nullptr ? juce::String()
+                            : juce::String(mode.label) + ", on the " + info.name + " in this slot");
+                    control.selector->repaint();
+                }
                 apply(mode.label, mode.label == nullptr ? juce::String()
                           : juce::String(mode.label) + ", on the " + info.name + " in this slot");
-                // A field with two choices steps between two, one with three
-                // between three, so the detents follow the type rather than
-                // the range the parameter was declared with.
-                control.slider.gestureSteps = juce::jmax(2, mode.count);
-                control.slider.updateText();
                 continue;
             }
         }
     }
+}
+
+// A mode parameter is a plain 0..1, because what it steps through changes with
+// the type and a host's choice list is fixed when the parameter is made. So a
+// choice is spread across that range, and fxModeOf reads it back the same way —
+// one arithmetic, two directions.
+void Editor::setFxMode(const juce::String& id, int count, int choice)
+{
+    auto* parameter = processor.state.getParameter(id);
+    if (parameter == nullptr || count <= 1) return;
+    const auto at = static_cast<float>(juce::jlimit(0, count - 1, choice))
+                  / static_cast<float>(count - 1);
+    parameter->setValueNotifyingHost(parameter->convertTo0to1(at));
+}
+
+// The list, for a mode field with more choices than fit across it — the
+// distortion's eight shapes are the only one so far.
+void Editor::showFxModeMenu(Control& control)
+{
+    if (control.selector == nullptr || control.selector->count <= 0) return;
+    const auto count = control.selector->count;
+
+    juce::PopupMenu menu;
+    for (int i = 0; i < count; ++i)
+    {
+        juce::PopupMenu::Item item(control.selector->choices[static_cast<size_t>(i)]);
+        item.itemID = i + 1;
+        item.isTicked = i == control.selector->chosen;
+        menu.addItem(item);
+    }
+
+    const auto safe = juce::Component::SafePointer<Editor>(this);
+    const auto id = control.id;
+    menu.showMenuAsync(juce::PopupMenu::Options {}.withTargetComponent(control.selector.get()),
+                       [safe, id, count] (int choice)
+    {
+        if (safe == nullptr || choice == 0) return;
+        safe->setFxMode(id, count, choice - 1);
+    });
 }
 
 // One slot set to what its type opens on. The values live beside the type in
@@ -473,6 +529,34 @@ void Editor::buildModules()
                 control->row = r;
                 control->index = i;
                 control->bank = ui::bankOf(descriptor, r, i);
+
+                if (declared.style == ui::Style::selector)
+                {
+                    control->selector = std::make_unique<ui::FxSelector>();
+                    auto* held = control.get();
+                    control->selector->onChoose = [this, held] (int choice)
+                    {
+                        setFxMode(held->id, held->selector->count, choice);
+                    };
+                    control->selector->onOpenList = [this, held] { showFxModeMenu(*held); };
+                    // As with the plate: the slider is here for its attachment,
+                    // never shown and never added as a child. The attachment is
+                    // what a host reads and writes the mode through.
+                    control->slider.setSliderStyle(juce::Slider::LinearBarVertical);
+                    control->slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+                    control->slider.onValueChange = [this] { refreshFxSlots(); repaintFxDisplays(); };
+                    control->attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+                        processor.state, declared.id, control->slider);
+
+                    control->label.setText(declared.label, juce::dontSendNotification);
+                    control->label.setJustificationType(juce::Justification::centred);
+                    control->label.setColour(juce::Label::textColourId, ui::mutedText);
+                    control->label.setFont(juce::FontOptions(9.0f));
+                    addAndMakeVisible(control->label);
+                    addAndMakeVisible(*control->selector);
+                    module.controls.push_back(std::move(control));
+                    continue;
+                }
 
                 if (declared.style == ui::Style::plate)
                 {
@@ -733,7 +817,11 @@ void Editor::applyEnableStates()
             // and a tempo division means nothing while the rate is in Hertz.
             const auto on = module.on()
                 && (control->disabledBy == nullptr || value(control->disabledBy) < 0.5f)
-                && (control->enabledBy == nullptr || value(control->enabledBy) >= 0.5f);
+                && (control->enabledBy == nullptr || value(control->enabledBy) >= 0.5f)
+                // A rack knob its modes have made meaningless greys out, the
+                // same way polyphony does under mono. It is still here; it just
+                // has nothing to do until the mode beside it moves.
+                && fxKnobLive(*control);
             // A control that shares its cell leaves rather than greys out: the
             // other reading of the same setting is standing in the same place,
             // and a greyed control would be sitting on top of the live one.
@@ -750,6 +838,12 @@ void Editor::applyEnableStates()
             {
                 control->plate->setEnabled(on);
                 control->plate->setVisible(shown);
+                continue;
+            }
+            if (control->selector != nullptr)
+            {
+                control->selector->setEnabled(on);
+                control->selector->setVisible(shown);
                 continue;
             }
             if (control->chip != nullptr)
@@ -1028,6 +1122,10 @@ void Editor::resized()
                     break;
                 case ui::Style::plate:
                     control.plate->setBounds(block);
+                    break;
+                case ui::Style::selector:
+                    control.label.setBounds(block.removeFromTop(ui::stepperLabelHeight));
+                    control.selector->setBounds(block);
                     break;
                 case ui::Style::fader:
                     // The same label line a knob's sits on, so a row of faders

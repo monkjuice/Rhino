@@ -837,6 +837,130 @@ inline void drawFxMark(juce::Graphics& g, juce::Rectangle<float> box, int type, 
     }
 }
 
+// A slot's mode field, drawn as whatever the choice in front of you actually is.
+//
+// The field behind it is one float per slot, because what it steps through
+// changes with the type. What it *looks* like should not be one thing for all of
+// them: two or three named states are a switch, and eight are a list. So this
+// draws itself either way, from the count the type declares.
+//
+//   two or three  every choice on screen, the live one lit, click one to take it
+//   more than that  a name between two arrows: the arrows step, the name opens
+//
+// A stepper you drag served both badly. Dragging to reach "PING-PONG" from
+// "NORMAL" is a gesture for a continuous value, and neither of these is one.
+class FxSelector final : public juce::Component, public juce::SettableTooltipClient
+{
+public:
+    // Copied rather than pointed at: the type in the slot changes underneath
+    // this, and a pointer into the table for the type that *was* there is a
+    // dangling read waiting for the next repaint.
+    std::array<const char*, 8> choices {};
+    int count = 0;
+    int chosen = 0;
+    juce::Colour accent = electricBlue;
+    std::function<void(int)> onChoose;
+    // Opens the list, for a field with too many choices to show at once.
+    std::function<void()> onOpenList;
+
+    static constexpr int arrowWidth = 20;
+
+    // A field with this many or fewer shows them all; past it, a list.
+    static constexpr int inlineLimit = 3;
+
+    bool inlineChoices() const { return count > 0 && count <= inlineLimit; }
+
+    juce::Rectangle<int> segmentBounds(int index) const
+    {
+        const auto area = getLocalBounds();
+        if (count <= 0) return area;
+        const auto width = area.getWidth() / count;
+        // The last one takes the remainder, so the row of them ends exactly
+        // where the field does rather than a pixel or two short.
+        return {area.getX() + index * width, area.getY(),
+                index == count - 1 ? area.getRight() - (area.getX() + index * width) : width,
+                area.getHeight()};
+    }
+
+    void paint(juce::Graphics& g) override
+    {
+        const auto enabled = isEnabled();
+        const auto alpha = enabled ? 1.0f : 0.35f;
+        if (count <= 0)
+        {
+            g.setColour(juce::Colour(0xff0b0e18).withAlpha(alpha * 0.6f));
+            g.fillRoundedRectangle(getLocalBounds().toFloat().reduced(1.0f), 3.0f);
+            return;
+        }
+
+        if (inlineChoices())
+        {
+            for (int i = 0; i < count; ++i)
+            {
+                const auto box = segmentBounds(i).toFloat().reduced(1.0f);
+                const auto live = i == chosen;
+                g.setColour((live ? accent.withAlpha(alpha * 0.22f) : juce::Colour(0xff0b0e18))
+                                .withAlpha(live ? alpha * 0.22f : alpha));
+                g.fillRoundedRectangle(box, 3.0f);
+                g.setColour((live ? accent : line).withAlpha(alpha * (live ? 1.0f : 0.7f)));
+                g.drawRoundedRectangle(box, 3.0f, 1.0f);
+                g.setColour((live ? accent : mutedText).withAlpha(alpha));
+                g.setFont(juce::FontOptions(9.0f, juce::Font::bold));
+                g.drawText(choices[static_cast<size_t>(i)], box, juce::Justification::centred);
+            }
+            return;
+        }
+
+        const auto area = getLocalBounds().toFloat().reduced(1.0f);
+        g.setColour(juce::Colour(0xff0b0e18).withAlpha(alpha));
+        g.fillRoundedRectangle(area, 3.0f);
+        g.setColour(accent.withAlpha(alpha));
+        g.drawRoundedRectangle(area, 3.0f, 1.0f);
+        g.setFont(juce::FontOptions(10.0f, juce::Font::bold));
+        g.drawText(choices[static_cast<size_t>(juce::jlimit(0, count - 1, chosen))],
+                   area.reduced(static_cast<float>(arrowWidth), 0.0f), juce::Justification::centred);
+
+        // The two arrows, greyed at the end they cannot go past — a list that
+        // does not wrap should say so before it is clicked.
+        const auto arrow = [&] (juce::Rectangle<float> box, bool pointingLeft, bool live)
+        {
+            juce::Path path;
+            const auto middle = box.getCentreY();
+            const auto x = box.getCentreX();
+            if (pointingLeft) { path.startNewSubPath(x + 2.5f, middle - 4.0f);
+                                path.lineTo(x - 2.5f, middle); path.lineTo(x + 2.5f, middle + 4.0f); }
+            else              { path.startNewSubPath(x - 2.5f, middle - 4.0f);
+                                path.lineTo(x + 2.5f, middle); path.lineTo(x - 2.5f, middle + 4.0f); }
+            g.setColour((live ? accent : line).withAlpha(alpha * (live ? 0.9f : 0.5f)));
+            g.strokePath(path, juce::PathStrokeType(1.4f));
+        };
+        arrow(area.withWidth(static_cast<float>(arrowWidth)), true, chosen > 0);
+        arrow(area.withLeft(area.getRight() - arrowWidth), false, chosen < count - 1);
+    }
+
+    void mouseDown(const juce::MouseEvent& event) override
+    {
+        if (!isEnabled() || count <= 0) return;
+        if (inlineChoices())
+        {
+            for (int i = 0; i < count; ++i)
+                if (segmentBounds(i).contains(event.getPosition()))
+                {
+                    if (i != chosen && onChoose) onChoose(i);
+                    return;
+                }
+            return;
+        }
+        if (event.x < arrowWidth) { if (chosen > 0 && onChoose) onChoose(chosen - 1); return; }
+        if (event.x > getWidth() - arrowWidth)
+        {
+            if (chosen < count - 1 && onChoose) onChoose(chosen + 1);
+            return;
+        }
+        if (onOpenList) onOpenList();
+    }
+};
+
 // One slot's name plate: the type's mark, its name, and the colour both are in.
 // It is the control that sets the type as well as the thing that says what it
 // is — clicking it opens the list, which is how a rack slot is filled

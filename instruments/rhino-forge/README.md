@@ -88,6 +88,19 @@ repeats, a distortion's flattened peaks — and the slot wears both: on the plat
 on every knob in the row, and lit down the left edge of the shelf it sits on. A
 rack is meant to be read by colour down its four rows before a word on it is.
 
+A slot's two mode fields are drawn as whatever the choice in front of you
+actually is. Two or three named states — `PLATE | HALL`, `NORMAL | PING-PONG`,
+`OFF | PRE | POST` — are a switch with every state on screen and the live one
+lit. More than that, as with the distortion's eight shapes, is a name between
+two arrows: the arrows step, the name opens the list. Each carries the label the
+type gives it, so the field says what it is choosing as well as what is chosen.
+
+A knob a mode has made meaningless greys out rather than disappearing: the
+distortion's FREQ and Q while its filter is off, an equaliser band's gain once
+that band is a pass shape. That is a different thing from a knob the type does
+not have at all, which comes off the panel entirely — "not just now" against
+"not ever, while this is in the slot".
+
 Each slot draws itself in a strip beside its mode fields: a reverb's decay
 envelope, a delay's repeats falling away across the two channels, a chorus's two
 taps swinging across one cycle, a distortion's transfer curve against the

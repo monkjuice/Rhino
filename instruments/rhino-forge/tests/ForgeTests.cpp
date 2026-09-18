@@ -660,6 +660,87 @@ void fxDisplaySuite()
                 "a reverb opens somewhere a decay can be read from");
     }
 
+    // --- A mode field, read back the way it is written -------------------------
+    //
+    // The parameter behind a mode is a plain 0..1, because what it steps
+    // through changes with the type. The panel spreads a choice across that
+    // range and fxModeOf reads it back; if the two ever disagreed, a field
+    // would show one state and the engine would run another. So every choice of
+    // every mode of every type is written and read here.
+    for (int type = 0; type < rhino::forge::fxTypeCount; ++type)
+    {
+        const auto& info = rhino::forge::fxTypes()[static_cast<size_t>(type)];
+        for (const auto* mode : {&info.modeA, &info.modeB})
+        {
+            if (mode->count <= 1) continue;
+            for (int choice = 0; choice < mode->count; ++choice)
+            {
+                const auto at = static_cast<float>(choice) / static_cast<float>(mode->count - 1);
+                if (rhino::forge::fxModeOf(*mode, at) != choice)
+                {
+                    require(false, "a mode choice reads back as the one that was set");
+                    std::cerr << "       " << info.name << " choice " << choice
+                              << " of " << mode->count << '\n';
+                }
+            }
+            // Every choice a field offers has to be named, or the selector
+            // draws an empty segment.
+            for (int choice = 0; choice < mode->count; ++choice)
+                require(mode->choices[static_cast<size_t>(choice)] != nullptr
+                            && juce::String(mode->choices[static_cast<size_t>(choice)]).isNotEmpty(),
+                        "every choice a mode offers has a name to draw");
+            require(mode->label != nullptr, "a mode field that has choices has a label");
+        }
+    }
+
+    // --- What a mode makes meaningless -----------------------------------------
+    //
+    // Three rules, each a fact about the effect rather than about the panel.
+    // Checked both ways round, because a rule that greys a knob and never
+    // ungreys it looks exactly like one that works.
+    {
+        rhino::forge::FxSlot distortion;
+        distortion.type = static_cast<float>(FxType::distortion);
+        const auto& dist = rhino::forge::fxTypes()[static_cast<size_t>(FxType::distortion)];
+        distortion.modeB = 0.0f;   // FILTER OFF
+        require(rhino::forge::fxKnobLive(distortion, 0), "DRIVE is live whatever the filter is doing");
+        require(!rhino::forge::fxKnobLive(distortion, 1),
+                "a distortion's FREQ is dead while its filter is switched off");
+        require(!rhino::forge::fxKnobLive(distortion, 2),
+                "a distortion's Q is dead while its filter is switched off");
+        distortion.modeB = 1.0f / static_cast<float>(dist.modeB.count - 1);   // PRE
+        require(rhino::forge::fxKnobLive(distortion, 1),
+                "a distortion's FREQ comes back once the filter is in the path");
+
+        rhino::forge::FxSlot eq;
+        eq.type = static_cast<float>(FxType::equaliser);
+        const auto& bands = rhino::forge::fxTypes()[static_cast<size_t>(FxType::equaliser)];
+        eq.modeA = 0.0f;   // SHELF
+        require(rhino::forge::fxKnobLive(eq, 2), "a shelf has a gain to set");
+        eq.modeA = 1.0f;   // the last choice, HI PASS
+        require(!rhino::forge::fxKnobLive(eq, 2), "a high pass has no gain to set");
+        require(rhino::forge::fxKnobLive(eq, 0), "a high pass still has a frequency to set");
+        eq.modeB = 1.0f;   // LO PASS
+        require(!rhino::forge::fxKnobLive(eq, 5), "a low pass has no gain to set");
+        juce::ignoreUnused(bands);
+
+        // Every other type leaves every knob alone, so a rule added by accident
+        // to one of them is caught rather than merely unnoticed.
+        for (const auto type : {FxType::reverb, FxType::delay, FxType::chorus, FxType::filter})
+        {
+            rhino::forge::FxSlot other;
+            other.type = static_cast<float>(type);
+            for (const auto mode : {0.0f, 0.5f, 1.0f})
+            {
+                other.modeA = mode;
+                other.modeB = mode;
+                for (int knob = 0; knob < rhino::forge::fxKnobCount; ++knob)
+                    require(rhino::forge::fxKnobLive(other, knob),
+                            "a type with no such rule leaves all of its knobs live");
+            }
+        }
+    }
+
     // --- The strip they are drawn in -------------------------------------------
     //
     // Every rack row reserves one, and nothing else on the panel does. A module

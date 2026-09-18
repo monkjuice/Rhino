@@ -47,6 +47,9 @@ private:
         // because the attachment is what carries the value to and from the
         // host.
         std::unique_ptr<ui::FxPlate> plate;
+        // A slot's mode field. Like the plate, it drives the parameter its
+        // slider is attached to and that slider is never shown.
+        std::unique_ptr<ui::FxSelector> selector;
         std::unique_ptr<ui::RockerSwitch> rocker;
         std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachment;
         std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> buttonAttachment;
@@ -168,6 +171,11 @@ private:
     // panel rather than greyed: greying says "not just now", and this is "not
     // ever, while that type is in this slot". Everything else answers true.
     bool fxControlUsed(const Control&) const;
+    // Whether a rack knob has anything to do under the modes its slot is set
+    // to. The rule is a fact about the effect and lives beside the types; this
+    // is the part that works out which slot and which knob is being asked
+    // about. Everything that is not a rack knob answers true.
+    bool fxKnobLive(const Control&) const;
     // The list of types, opened by clicking a slot's plate. This is how a slot
     // is filled and emptied.
     void showFxTypeMenu(Control&);
@@ -177,6 +185,11 @@ private:
     // One slot's settings, read back out of the parameters so a display can be
     // drawn from the same values the engine is rendering from.
     FxSlot fxSlotOf(int rack, int slot) const;
+    // Sets one mode field to one of its choices, spreading the choice across the
+    // 0..1 the parameter behind it actually holds.
+    void setFxMode(const juce::String& id, int count, int choice);
+    // The list a mode field with too many choices to show at once opens.
+    void showFxModeMenu(Control&);
     // The shelves the slots sit on, drawn behind their controls.
     void paintFxShelves(juce::Graphics&, juce::Rectangle<int> area, const ui::Module&);
     // The rack's box alone, for a knob that is being turned inside it.

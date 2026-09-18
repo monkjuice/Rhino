@@ -1042,12 +1042,6 @@ its gain sits at the centre of a signed range — the test reads `fxScaled` back
 and holds it to 0 dB. A reverb and a delay are held to opening mostly dry for
 the same reason: they are the two usually placed on MAIN.
 
-**Still open**
-
-- The mode fields are still steppers you drag. A two-choice field would read
-  better as a click-to-cycle, but that is a change to every stepper on the
-  panel rather than to the rack.
-
 ### M11c — a display per slot — done
 
 Every slot now draws itself in a strip between its mode fields and its knobs:
@@ -1098,11 +1092,56 @@ the division its own readout names.
   going through it — no gain reduction, no live level. That wants per-channel
   levels published the way the envelopes are, which the mixer wants too.
 
+### M11d — controls that fit what they are choosing — done
+
+The mode fields were steppers you drag, which served both of the things they
+have to be badly: dragging to reach PING-PONG from NORMAL is a gesture for a
+continuous value, and neither a two-state switch nor an eight-item list is one.
+
+**A selector draws itself from the count the type declares.** Two or three named
+states are a switch with every state on screen and the live one lit; more than
+that is a name between two arrows, where the arrows step and the name opens the
+list. The cell is declared in the layout; which of the two it becomes is settled
+at runtime, because what a mode steps through is the effect's business and the
+layout cannot know it. The arrows grey at the end they cannot pass — a list that
+does not wrap should say so before it is clicked.
+
+`FxSelector` copies the choices out of the type table rather than pointing into
+it. The type in a slot changes underneath the selector, and a pointer to the old
+type's choices is a dangling read waiting for the next repaint.
+
+**A knob a mode has made meaningless now greys out.** Three rules, each a fact
+about the effect rather than about the panel, so they live beside the types in
+`ForgeFx.h`: the distortion's FREQ and Q are dead while its filter is switched
+off, and an equaliser band's gain is dead once that band is a pass shape — which
+is what Serum says of its own. Greyed rather than hidden, because unlike a knob
+the type does not have at all, these come back the moment the mode beside them
+moves. The decision is made in `applyEnableStates` with every other reason a
+control is or is not live, which is the lesson M11a learned the hard way.
+
+**What is checked**
+
+Every choice of every mode of every type is written through the panel's
+arithmetic and read back through `fxModeOf`, because the parameter behind a mode
+is a plain 0..1 and a disagreement between those two would show one state while
+the engine ran another. Every choice is also held to having a name to draw and
+every field to having a label. The three gating rules are checked both ways
+round — a rule that greys a knob and never ungreys it looks exactly like one
+that works — and every other type is held to leaving all of its knobs live, so a
+rule added by accident to one of them is caught rather than merely unnoticed.
+
+**Still open**
+
+- The same treatment would suit the steppers outside the rack: the filter's
+  TYPE is three choices and an LFO's UNIT is two, and both are dragged today.
+  `FxSelector` is general enough to take them; it was kept to the rack because
+  that is what was asked for.
+
 ## Out of scope for now
 
 These are the north star, not this plan. They come after the synth is finished.
 
-- **M11d — the rest of the rack.** Rack and module presets, reordering by drag,
+- **M11e — the rest of the rack.** Rack and module presets, reordering by drag,
   copy and paste between racks, and the seven Serum types M11a left out. Plus
   the `DIRECT` output, which needed effects to bypass before it could mean
   anything.
@@ -1170,3 +1209,4 @@ way to look at a change.
 | M11a The effects racks | **done** — ready to test by ear |
 | M11b The rack, by eye | **done** — ready to test by eye |
 | M11c A display per slot | **done** — ready to test by eye |
+| M11d Controls that fit what they choose | **done** — ready to test by hand |

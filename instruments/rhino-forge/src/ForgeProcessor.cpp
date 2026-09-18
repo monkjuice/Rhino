@@ -389,6 +389,70 @@ juce::AudioProcessorValueTreeState::ParameterLayout Processor::parameterLayout()
         result.push_back(std::make_unique<juce::AudioParameterChoice>(
             juce::ParameterID {id("Division"), 1}, name("Division"), lfoDivisionNames, 2));
     }
+    // --- The effects racks ----------------------------------------------------
+    //
+    // Three racks of four slots, and every slot declares the same twelve
+    // parameters whatever type it holds. A slot's knobs are plain 0..1: what
+    // 0.6 means is the type's business, declared once in ForgeFx.h and read by
+    // the DSP, by the panel's labels and by the readout below — so a bubble
+    // saying "480 ms" is bound to be the delay actually being heard.
+    //
+    // This is what a host's automation lane pays for a rack that holds any type
+    // in any slot: it reads "FX 1.2 KNOB 3" rather than "Reverb Damp". Naming
+    // them properly would mean a parameter per control per type per slot, which
+    // is several hundred of them, nearly all dead at any moment.
+    juce::StringArray fxTypeNames;
+    for (int i = 0; i < fxTypeCount; ++i) fxTypeNames.add(fxTypeName(i));
+
+    for (int rack = 0; rack < rackCount; ++rack)
+    {
+        const auto rackLabel = juce::String(rackName(rack));
+        result.push_back(toggle(fxRackParameterId(rack, "Bypass"), rackLabel + " FX Bypass", false));
+
+        for (int slot = 0; slot < fxSlotCount; ++slot)
+        {
+            const auto id = [rack, slot] (const char* suffix)
+            {
+                return fxParameterId(rack, slot, suffix);
+            };
+            const auto name = [&rackLabel, slot] (const juce::String& suffix)
+            {
+                return rackLabel + " " + juce::String(slot + 1) + " " + suffix;
+            };
+            result.push_back(std::make_unique<juce::AudioParameterChoice>(
+                juce::ParameterID {id("Type"), 1}, name("Type"), fxTypeNames, 0));
+            // The two mode fields are floats rather than choices because what
+            // they step through changes with the type, and a host's choice list
+            // is fixed when the parameter is made. The formatter reads the
+            // slot's current type, exactly as POSITION's reads the table an
+            // oscillator is on.
+            for (const auto* suffix : {"ModeA", "ModeB"})
+            {
+                const auto whichB = juce::String(suffix) == "ModeB";
+                result.push_back(parameter(id(suffix), name(whichB ? "Mode B" : "Mode A"), {0.0f, 1.0f}, 0.0f,
+                                           [this, rack, slot, whichB] (float value)
+                                           {
+                                               const auto& info = fxTypeInfo(
+                                                   state.getRawParameterValue(fxParameterId(rack, slot, "Type"))->load());
+                                               const auto& mode = whichB ? info.modeB : info.modeA;
+                                               const auto* named = fxModeName(mode, value);
+                                               return juce::String(named).isEmpty() ? juce::String("-")
+                                                                                    : juce::String(named);
+                                           }));
+            }
+            result.push_back(toggle(id("Bypass"), name("Bypass"), false));
+            for (int knob = 0; knob < fxKnobCount; ++knob)
+                result.push_back(parameter(id("Knob") + juce::String(knob + 1),
+                                           name("Knob " + juce::String(knob + 1)), {0.0f, 1.0f}, 0.5f,
+                                           [this, rack, slot, knob] (float value)
+                                           {
+                                               return fxKnobText(rack, slot, knob, value);
+                                           }));
+            result.push_back(parameter(id("Mix"), name("Mix"), {0.0f, 1.0f}, 1.0f, asPercent));
+            result.push_back(parameter(id("Level"), name("Level"), {0.0f, 2.0f}, 1.0f, asDecibels));
+        }
+    }
+
     result.push_back(parameter("polyphony", "Polyphony", {1.0f, 16.0f, 1.0f}, 8.0f, asCount));
     result.push_back(toggle("mono", "Mono", false));
     result.push_back(toggle("legato", "Legato", true));
@@ -484,6 +548,10 @@ void Processor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
     // Anything played on the editor's keyboard joins the host's own notes
     // before a single sample is rendered.
     keyboardState.processNextMidiBuffer(midi, 0, buffer.getNumSamples(), true);
+    // The racks divide the tempo themselves: a synced LFO's rate is resolved
+    // into Hertz before the patch is built, but a delay's division has to be
+    // read against the tempo at the moment it is rendered.
+    core.setTempo(hostBpm.load(std::memory_order_relaxed));
     const auto values = patch();
     const auto mods = modulation();
     auto event = midi.cbegin();
@@ -520,6 +588,110 @@ void Processor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
     for (int destination = 1; destination < destinationCount; ++destination)
         meterOffsets[static_cast<size_t>(destination)]
             .store(core.modulationOffset(destination), std::memory_order_relaxed);
+}
+
+const FxTypeInfo& Processor::fxSlotType(int rack, int slot) const
+{
+    return fxTypeInfo(state.getRawParameterValue(fxParameterId(rack, slot, "Type"))->load());
+}
+
+// A slot's knobs are plain 0..1 and mean whatever the type in that slot says
+// they mean, so this is where a number becomes a reading. It is the same
+// arithmetic the DSP runs — taken from the same helpers in ForgeFx.h rather
+// than copied — which is what binds "480 ms" in the bubble to the delay that is
+// actually sounding.
+juce::String Processor::fxKnobText(int rack, int slot, int knob, float value) const
+{
+    const auto asMilliseconds = [] (float seconds)
+    {
+        return seconds < 1.0f ? juce::String(juce::roundToInt(seconds * 1000.0f)) + " ms"
+                              : juce::String(seconds, 2) + " s";
+    };
+    const auto hertz = [] (float hz)
+    {
+        return hz >= 1000.0f ? juce::String(hz / 1000.0f, 2) + " kHz"
+                             : juce::String(juce::roundToInt(hz)) + " Hz";
+    };
+    const auto percent = [value] { return juce::String(juce::roundToInt(value * 100.0f)) + " %"; };
+
+    const auto* id = fxSlotType(rack, slot).knobs[static_cast<size_t>(knob)];
+    if (id == nullptr) return "-";
+
+    const auto read = [this, rack, slot] (int which)
+    {
+        return state.getRawParameterValue(fxParameterId(rack, slot, "Knob")
+                                          + juce::String(which + 1))->load();
+    };
+    juce::ignoreUnused(read);
+
+    switch (fxTypeOf(state.getRawParameterValue(fxParameterId(rack, slot, "Type"))->load()))
+    {
+        case FxType::reverb:
+            if (knob == 4) return asMilliseconds(fxScaled(value, 0.0f, 0.2f));
+            if (knob == 5) return hertz(fxHertz(value, 20.0f, 1200.0f));
+            return percent();
+
+        case FxType::delay:
+        {
+            if (knob == 0)
+            {
+                const auto synced = fxModeOf(fxTypes()[static_cast<size_t>(FxType::delay)].modeB,
+                                             state.getRawParameterValue(
+                                                 fxParameterId(rack, slot, "ModeB"))->load()) == 1;
+                if (synced) return juce::String(fxDivisionAt(value).label);
+                return asMilliseconds(fxScaled(value, 0.01f, fxMaxDelayTime, 2.0f));
+            }
+            if (knob == 1)
+            {
+                // The two ratios a delay is actually set to are named where the
+                // knob lands on them, as Serum's own offset does.
+                const auto ratio = fxOffsetRatio(value);
+                if (std::abs(ratio - 1.5f) < 0.02f) return juce::String("DOT");
+                if (std::abs(ratio - 4.0f / 3.0f) < 0.02f) return juce::String("TRIP");
+                return juce::String(ratio, 2) + " x";
+            }
+            if (knob == 3) return hertz(fxHertz(value, 200.0f, 16000.0f));
+            return percent();
+        }
+
+        case FxType::chorus:
+        {
+            if (knob == 0)
+            {
+                const auto synced = fxModeOf(fxTypes()[static_cast<size_t>(FxType::chorus)].modeA,
+                                             state.getRawParameterValue(
+                                                 fxParameterId(rack, slot, "ModeA"))->load()) == 1;
+                if (synced) return juce::String(fxDivisionAt(value).label);
+                return juce::String(fxScaled(value, 0.02f, 8.0f, 2.0f), 2) + " Hz";
+            }
+            if (knob == 1 || knob == 2) return asMilliseconds(fxScaled(value, 0.5f, 30.0f) * 0.001f);
+            if (knob == 3) return asMilliseconds(fxScaled(value, 0.0f, 6.0f) * 0.001f);
+            if (knob == 5) return hertz(fxHertz(value, 120.0f, 16000.0f));
+            return percent();
+        }
+
+        case FxType::distortion:
+            if (knob == 1) return hertz(fxHertz(value, 40.0f, 16000.0f));
+            if (knob == 2) return juce::String(fxScaled(value, 0.4f, 8.0f), 2);
+            return percent();
+
+        case FxType::equaliser:
+            if (knob == 0) return hertz(fxHertz(value, 20.0f, 2000.0f));
+            if (knob == 3) return hertz(fxHertz(value, 500.0f, 18000.0f));
+            if (knob == 1 || knob == 4) return juce::String(fxScaled(value, 0.2f, 6.0f), 2);
+            {
+                const auto gain = fxScaled(value, -18.0f, 18.0f);
+                return (gain > 0.0f ? "+" : "") + juce::String(gain, 1) + " dB";
+            }
+
+        case FxType::filter:
+            if (knob == 0) return hertz(fxHertz(value, 30.0f, 18000.0f));
+            return percent();
+
+        case FxType::off:
+            break;
+    }
+    return percent();
 }
 
 Patch Processor::patch() const
@@ -611,6 +783,28 @@ Patch Processor::patch() const
         setting.rate = lfoRateHz(lfo);
         setting.shape = value(lfoParameterId(lfo, "Shape"));
         setting.mode = value(lfoParameterId(lfo, "Mode"));
+    }
+    for (int rack = 0; rack < rackCount; ++rack)
+    {
+        auto& held = result.racks[static_cast<size_t>(rack)];
+        held.bypass = value(fxRackParameterId(rack, "Bypass"));
+        for (int slot = 0; slot < fxSlotCount; ++slot)
+        {
+            const auto id = [rack, slot] (const char* suffix)
+            {
+                return fxParameterId(rack, slot, suffix);
+            };
+            auto& settings = held.slots[static_cast<size_t>(slot)];
+            settings.type = value(id("Type"));
+            settings.modeA = value(id("ModeA"));
+            settings.modeB = value(id("ModeB"));
+            settings.bypass = value(id("Bypass"));
+            for (int knob = 0; knob < fxKnobCount; ++knob)
+                settings.knobs[static_cast<size_t>(knob)] =
+                    value(id("Knob") + juce::String(knob + 1));
+            settings.mix = value(id("Mix"));
+            settings.level = value(id("Level"));
+        }
     }
     result.polyphony = value("polyphony");
     result.mono = value("mono");

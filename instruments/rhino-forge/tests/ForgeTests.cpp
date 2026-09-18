@@ -275,6 +275,14 @@ void layoutSuite()
                             "no two banks name the same parameter");
                 }
         }
+        // A banked module with no drag handle draws its own title, and its
+        // cards start just past it — so that title has to be short enough to
+        // fit the gutter they leave. Three characters at the header's font is
+        // what bankTitleGutter covers.
+        if (banks > 1 && module.handleSource == 0)
+            require(juce::String(module.title).length() <= 3,
+                    "a banked module that draws its own title keeps it short enough for its cards");
+
         // A module that is a source and shows several banks drags a different
         // source per bank, so all of them have to be real sources.
         if (module.handleSource != 0)
@@ -375,6 +383,14 @@ void layoutSuite()
     for (int i = 1; i < rhino::forge::ui::tabCount; ++i)
         require(!rhino::forge::ui::tabBounds(i - 1).intersects(rhino::forge::ui::tabBounds(i)),
                 "no two tabs overlap");
+    // The strip grows by a tab every time a page is added, and the preset name
+    // and buttons are laid out from the right edge — so the two meet in the
+    // middle at the narrowest window the panel allows, and nowhere else. The
+    // fifth tab came within a hair of this, which is why the check exists.
+    require(rhino::forge::ui::tabBounds(rhino::forge::ui::tabCount - 1).getRight()
+                < rhino::forge::ui::minPanelWidth - rhino::forge::ui::windowMargin
+                  - rhino::forge::ui::presetStripWidth,
+            "the tab strip stays clear of the preset controls at the narrowest window");
 
     // A table names its columns once, above its rows, so every row has to have
     // the same controls in the same order as the first or the titles lie.
@@ -1563,6 +1579,267 @@ void mixerSuite()
     require(peakForNote(fresh) > 0.0f, "the patch Forge opens on still makes a sound");
     for (const auto* id : {"oscASend1", "oscASend2", "subSend1", "filterSend1"})
         require(value(fresh, id) == 0.0f, "nothing is sent anywhere until it is asked for");
+}
+
+// ------------------------------------------------------------------- rack ---
+
+// The rack is measured rather than read back, for the same reason the mixer is:
+// a slot wired to the wrong accumulator, a delay line read at the wrong offset
+// or a type that silently does nothing all look perfectly correct in the
+// parameters.
+//
+// These lean on what each type *provably* does rather than on how it sounds — a
+// delay puts energy where there was none, a filter takes brightness away, a
+// distortion adds harmonics — because those are the claims that would be wrong
+// if the wiring were wrong.
+// Defined with the modulation suite further down, which is where the rest of
+// the matrix checks live; declared here because the rack is reached the same
+// way any other destination is and this is where that is proven.
+void setSlot(rhino::forge::Processor& processor, int slot, float source, float destination, float depth);
+
+void fxSuite()
+{
+    using rhino::forge::FxType;
+    constexpr int samples = 16384;
+    juce::AudioBuffer<float> buffer(2, samples);
+
+    // One slot of one rack, set up in a line.
+    const auto place = [] (rhino::forge::Processor& processor, int rack, int slot, FxType type)
+    {
+        setValue(processor, rhino::forge::fxParameterId(rack, slot, "Type").toRawUTF8(),
+                 static_cast<float>(type));
+    };
+    const auto knob = [] (rhino::forge::Processor& processor, int rack, int slot, int index, float value)
+    {
+        setValue(processor, (rhino::forge::fxParameterId(rack, slot, "Knob")
+                             + juce::String(index + 1)).toRawUTF8(), value);
+    };
+
+    // Everything below plays one short note and then listens to what is left
+    // after it, which is where a delay and a reverb live and where a dry synth
+    // is silent.
+    const auto tailAfterNote = [&buffer] (rhino::forge::Processor& processor)
+    {
+        processor.prepareToPlay(48000.0, buffer.getNumSamples());
+        buffer.clear();
+        juce::MidiBuffer midi;
+        midi.addEvent(juce::MidiMessage::noteOn(1, 57, 1.0f), 0);
+        midi.addEvent(juce::MidiMessage::noteOff(1, 57), 2000);
+        processor.processBlock(buffer, midi);
+        // Well past the note and its release, so anything here arrived by way
+        // of a delay line rather than from the voice.
+        return rms(buffer, 0, 9000);
+    };
+
+    // --- A rack does something, and only where it is put ----------------------
+
+    rhino::forge::Processor dry;
+    soloSineOnA(dry);
+    setValue(dry, "env1Release", 0.02f);
+    const auto silence = tailAfterNote(dry);
+
+    rhino::forge::Processor delayed;
+    soloSineOnA(delayed);
+    setValue(delayed, "env1Release", 0.02f);
+    place(delayed, 0, 0, FxType::delay);
+    knob(delayed, 0, 0, 0, 0.35f);   // a time long enough to outlast the note
+    knob(delayed, 0, 0, 2, 0.8f);    // feedback, so there is a tail to find
+    const auto withDelay = tailAfterNote(delayed);
+    require(allSamplesFinite(buffer), "a delay renders finite audio");
+    require(withDelay > silence * 4.0f + 0.0001f,
+            "a delay on the main rack leaves sound behind after the note has gone");
+
+    // The same delay on a bus nothing is sent to must change nothing at all.
+    rhino::forge::Processor unsent;
+    soloSineOnA(unsent);
+    setValue(unsent, "env1Release", 0.02f);
+    place(unsent, 1, 0, FxType::delay);
+    knob(unsent, 1, 0, 0, 0.35f);
+    knob(unsent, 1, 0, 2, 0.8f);
+    requireClose(tailAfterNote(unsent), silence, silence + 0.0001f,
+                 "a rack on a bus with nothing sent to it is heard nowhere");
+
+    // Sent to that bus, it arrives. This is the whole point of the busses.
+    rhino::forge::Processor sentToBus;
+    soloSineOnA(sentToBus);
+    setValue(sentToBus, "env1Release", 0.02f);
+    setValue(sentToBus, "oscASend1", 1.0f);
+    setValue(sentToBus, "bus1Level", 1.0f);
+    place(sentToBus, 1, 0, FxType::delay);
+    knob(sentToBus, 1, 0, 0, 0.35f);
+    knob(sentToBus, 1, 0, 2, 0.8f);
+    require(tailAfterNote(sentToBus) > silence * 4.0f + 0.0001f,
+            "a source sent to a bus is heard through that bus's rack");
+
+    // A reverb is the type most easily broken into silence — a comb read past
+    // the end of its own line answers nothing and the bank stays quiet — so it
+    // is held to the same claim the delay is: sound after the note is gone.
+    rhino::forge::Processor reverbed;
+    soloSineOnA(reverbed);
+    setValue(reverbed, "env1Release", 0.02f);
+    place(reverbed, 0, 0, FxType::reverb);
+    knob(reverbed, 0, 0, 0, 0.8f);   // size
+    knob(reverbed, 0, 0, 1, 0.9f);   // decay
+    knob(reverbed, 0, 0, 2, 0.1f);   // very little damping, so the tail carries
+    require(tailAfterNote(reverbed) > silence * 4.0f + 0.0001f,
+            "a reverb leaves a tail behind the note");
+    require(allSamplesFinite(buffer), "a reverb renders finite audio");
+
+    // --- Bypass, at both levels ------------------------------------------------
+
+    rhino::forge::Processor bypassed;
+    soloSineOnA(bypassed);
+    setValue(bypassed, "env1Release", 0.02f);
+    place(bypassed, 0, 0, FxType::delay);
+    knob(bypassed, 0, 0, 0, 0.35f);
+    knob(bypassed, 0, 0, 2, 0.8f);
+    setValue(bypassed, rhino::forge::fxParameterId(0, 0, "Bypass").toRawUTF8(), 1.0f);
+    requireClose(tailAfterNote(bypassed), silence, silence + 0.0001f,
+                 "a bypassed slot is out of the signal");
+    setValue(bypassed, rhino::forge::fxParameterId(0, 0, "Bypass").toRawUTF8(), 0.0f);
+    setValue(bypassed, rhino::forge::fxRackParameterId(0, "Bypass").toRawUTF8(), 1.0f);
+    requireClose(tailAfterNote(bypassed), silence, silence + 0.0001f,
+                 "bypassing the whole rack takes every slot in it out at once");
+
+    // A slot left at OFF is not a slot that does nothing quietly — it must be
+    // exactly the same signal as no slot at all.
+    rhino::forge::Processor emptySlot;
+    soloSineOnA(emptySlot);
+    renderNote(emptySlot, buffer);
+    const auto plain = rms(buffer, 0, 1024);
+    place(emptySlot, 0, 2, FxType::off);
+    renderNote(emptySlot, buffer);
+    requireClose(rms(buffer, 0, 1024), plain, plain * 0.0001f, "a slot set to OFF changes nothing");
+
+    // --- MIX and LEVEL mean one thing across every type ------------------------
+
+    rhino::forge::Processor blended;
+    soloSineOnA(blended);
+    place(blended, 0, 0, FxType::filter);
+    knob(blended, 0, 0, 0, 0.05f);   // a low cutoff, so the effect is obvious
+    knob(blended, 0, 0, 1, 0.0f);
+    renderNote(blended, buffer);
+    const auto filtered = rms(buffer, 0, 1024);
+    require(filtered < plain * 0.7f, "a filter in the rack takes the level down");
+    setValue(blended, rhino::forge::fxParameterId(0, 0, "Mix").toRawUTF8(), 0.0f);
+    renderNote(blended, buffer);
+    requireClose(rms(buffer, 0, 1024), plain, plain * 0.02f,
+                 "MIX at nothing passes what went into the slot, whatever the slot is doing");
+    setValue(blended, rhino::forge::fxParameterId(0, 0, "Mix").toRawUTF8(), 1.0f);
+    setValue(blended, rhino::forge::fxParameterId(0, 0, "Level").toRawUTF8(), 0.0f);
+    renderNote(blended, buffer);
+    require(rms(buffer, 0, 1024) < plain * 0.001f, "a slot's LEVEL at nothing silences it");
+
+    // --- The slots run in order ------------------------------------------------
+    //
+    // A filter opened wide after a filter closed down is still dark; the other
+    // way round it is still dark too, but a rack that ran its slots in the
+    // wrong order would let the second one undo the first.
+    rhino::forge::Processor ordered;
+    soloSineOnA(ordered);
+    setValue(ordered, "oscAPosition", 6.0f / 9.0f);   // a saw, so there is something to take away
+    renderNote(ordered, buffer);
+    const auto open = brightness(buffer, 0, 1024);
+    place(ordered, 0, 0, FxType::filter);
+    knob(ordered, 0, 0, 0, 0.1f);
+    knob(ordered, 0, 0, 1, 0.0f);
+    renderNote(ordered, buffer);
+    const auto afterFirst = brightness(buffer, 0, 1024);
+    require(afterFirst < open * 0.8f, "a low pass in the rack takes the top off");
+    place(ordered, 0, 1, FxType::filter);
+    knob(ordered, 0, 1, 0, 1.0f);
+    knob(ordered, 0, 1, 1, 0.0f);
+    renderNote(ordered, buffer);
+    require(brightness(buffer, 0, 1024) < open * 0.8f,
+            "a filter wide open after a closed one cannot put back what the first took out");
+
+    // --- Every type renders, and none of them is silent or infinite ------------
+    //
+    // The cheapest check there is, and the one that would have caught every
+    // mistake made writing these: a type whose state is read before it is
+    // prepared, or whose feedback path runs away.
+    for (int type = 1; type < rhino::forge::fxTypeCount; ++type)
+    {
+        rhino::forge::Processor each;
+        soloSineOnA(each);
+        place(each, 0, 0, static_cast<FxType>(type));
+        // Driven hard on purpose: a feedback path that is going to run away
+        // does it here rather than in somebody's project.
+        for (int index = 0; index < rhino::forge::fxKnobCount; ++index)
+            knob(each, 0, 0, index, 0.95f);
+        renderNote(each, buffer);
+        if (!allSamplesFinite(buffer))
+        {
+            require(false, "every effect type renders finite audio at its extremes");
+            std::cerr << "       type: " << rhino::forge::fxTypeName(type) << '\n';
+        }
+        if (buffer.getMagnitude(0, buffer.getNumSamples()) > 1.0f)
+        {
+            require(false, "no effect type leaves full scale");
+            std::cerr << "       type: " << rhino::forge::fxTypeName(type) << '\n';
+        }
+        // And again with everything at nothing, which is the other end a
+        // divide-by-zero hides at.
+        for (int index = 0; index < rhino::forge::fxKnobCount; ++index)
+            knob(each, 0, 0, index, 0.0f);
+        renderNote(each, buffer);
+        if (!allSamplesFinite(buffer))
+        {
+            require(false, "every effect type renders finite audio at the bottom of its range");
+            std::cerr << "       type: " << rhino::forge::fxTypeName(type) << '\n';
+        }
+    }
+
+    // --- A knob's reading is the one the DSP uses ------------------------------
+    //
+    // The whole point of the type table: the panel, the readout and the render
+    // all take their arithmetic from the same helpers. If a delay's TIME said
+    // 250 ms while the line was read at some other offset, this is what would
+    // notice.
+    rhino::forge::Processor reading;
+    place(reading, 0, 0, FxType::delay);
+    const auto quarter = rhino::forge::fxScaled(0.5f, 0.01f, rhino::forge::fxMaxDelayTime, 2.0f);
+    requireText(textFor(reading, rhino::forge::fxParameterId(0, 0, "Knob1").toRawUTF8(), 0.5f),
+                quarter < 1.0f ? juce::String(juce::roundToInt(quarter * 1000.0f)) + " ms"
+                               : juce::String(quarter, 2) + " s",
+                "a delay's TIME reads the time the engine will use");
+    // Switched to beats, the same knob reads a division instead.
+    setValue(reading, rhino::forge::fxParameterId(0, 0, "ModeB").toRawUTF8(), 1.0f);
+    requireText(textFor(reading, rhino::forge::fxParameterId(0, 0, "Knob1").toRawUTF8(), 1.0f),
+                "2/1", "a synced delay's TIME reads a division of the beat");
+    // A knob the type does not use says so rather than showing a number that
+    // means nothing.
+    place(reading, 0, 0, FxType::filter);
+    requireText(textFor(reading, rhino::forge::fxParameterId(0, 0, "Knob5").toRawUTF8(), 0.5f),
+                "-", "a knob the type does not use reads as nothing");
+
+    // --- The matrix reaches the rack ------------------------------------------
+    //
+    // FX run on the summed voices, so a per-voice source has to resolve to one
+    // voice's value rather than to none. What is checked here is that it
+    // arrives at all: a macro is a steady source, so the same patch at two
+    // macro settings has to render differently.
+    rhino::forge::Processor modulated;
+    soloSineOnA(modulated);
+    place(modulated, 0, 0, FxType::filter);
+    knob(modulated, 0, 0, 0, 0.05f);
+    knob(modulated, 0, 0, 1, 0.0f);
+    const auto cutoffSlot = rhino::forge::fxDestinationOf(0, 0, 0);
+    require(cutoffSlot > 0 && cutoffSlot < rhino::forge::destinationCount,
+            "a rack knob has a destination index inside the list");
+    requireText(juce::String(rhino::forge::destinations()[static_cast<size_t>(cutoffSlot)].id),
+                rhino::forge::fxParameterId(0, 0, "Knob1"),
+                "the destination list names the parameter it claims to");
+    // Slots are numbered from one here, as the parameter ids are.
+    setSlot(modulated, 1, static_cast<float>(rhino::forge::ModSource::macro1),
+            static_cast<float>(cutoffSlot), 1.0f);
+    setValue(modulated, "macro1", 0.0f);
+    renderNote(modulated, buffer);
+    const auto closed = brightness(buffer, 0, 1024);
+    setValue(modulated, "macro1", 1.0f);
+    renderNote(modulated, buffer);
+    require(brightness(buffer, 0, 1024) > closed * 1.2f,
+            "a macro pointed at a rack knob opens it");
 }
 
 void envelopeSuite()
@@ -3065,6 +3342,7 @@ void engineSuite()
 
     filterRoutingSuite();
     mixerSuite();
+    fxSuite();
     envelopeSuite();
     auxEnvelopeSuite();
     lfoSuite();

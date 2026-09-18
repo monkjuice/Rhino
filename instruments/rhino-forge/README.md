@@ -4,10 +4,9 @@ Rhino Forge is Rhino's independent synthesizer project. It is a VST3 and
 standalone JUCE application that deliberately owns no Tracktion or Rhino-DAW
 types.
 
-Forge is a synthesiser and nothing else. The panel is a set of modules — two
-oscillators, sub, noise, a filter, four envelopes, six LFOs, global voicing,
-eight macros, the modulation matrix and the mixer — each in its own box with its
-own enable. Effects are deliberately absent until the synth is finished.
+The panel is a set of modules — two oscillators, sub, noise, a filter, four
+envelopes, six LFOs, global voicing, eight macros, the modulation matrix, the
+mixer and three effects racks — each in its own box with its own enable.
 
 The four envelopes share one module and the six LFOs share another, each showing
 one at a time: numbered cards hanging from the module's top edge say which, and
@@ -42,11 +41,11 @@ gesture so a wheel notch shows something too. The steppers and the matrix's
 amount bars are unaffected — a field whose whole purpose is to be read exactly
 still shows what it holds.
 
-Four tabs in the title bar: `OSC`, `TABLE`, `MATRIX` and `MIX`. The first three
-switch **only the two oscillators** — the wavetable editor and the matrix take
-turns in their columns, while sub, noise and the filter hold their places either
-side. `MIX` is the one that takes the whole signal row, because the mixer is the
-view of those same sources rather than a panel that sits beside them. The lower
+Five tabs in the title bar: `OSC`, `TABLE`, `MATRIX`, `MIX` and `FX`. The first
+three switch **only the two oscillators** — the wavetable editor and the matrix
+take turns in their columns, while sub, noise and the filter hold their places
+either side. `MIX` and `FX` take the whole signal row instead, because each is a
+view of everything upstream rather than a panel that sits beside it. The lower
 row never moves.
 
 A module says which tabs it appears on by declaring a set of pages, so the
@@ -70,6 +69,29 @@ than refused by the panel. They carry no effects yet: the FX racks that make a
 bus worth sending to arrive with M11 and land on these channels without moving
 them.
 
+`FX` is three racks — one on the main output and one on each bus — chosen by the
+named cards in the module's header. A rack is four slots and the signal runs
+down them, top to bottom. A slot holds any of six types, the same type can sit
+in two slots, and every slot declares the same twelve controls whatever is in
+it: a type, two mode fields, six general knobs, a bypass, a mix and a level.
+
+What those six knobs *mean* belongs to the type, declared once in
+[core/ForgeFx.h](core/ForgeFx.h) and read three times — by the DSP, by the panel
+labelling them, and by the readout turning 0.6 into 480 milliseconds. A knob the
+type does not use is taken off the panel rather than greyed, because a reverb
+has no fourth knob at all.
+
+That shape is what lets a rack hold anything anywhere. Naming every control of
+every type in every slot would be several hundred parameters with nearly all of
+them dead at any moment, so a host's automation lane reads "MAIN 2 KNOB 3"
+rather than "Reverb Damp" — the same trade Serum makes, for the same reason.
+
+The racks run on the summed voices rather than inside them, the way an insert
+after the synth does. A per-voice source pointed at a rack knob therefore has to
+resolve to a single value, and Core takes the loudest voice's — the voice the
+envelope and LFO displays already follow. An LFO in OFF, which free-runs and is
+shared by every voice, is the source that drives a rack cleanly.
+
 Each oscillator reads a wavetable of its own. `TABLE` draws on it: freehand or
 straight lines on the selected frame, a strip of every frame below it, and add,
 duplicate, remove, init, normalise and undo. A table can also be loaded from an
@@ -92,6 +114,8 @@ which decisions are already settled. Read it before changing the synth.
 | File | Holds |
 | --- | --- |
 | `core/ForgeCore.h` | The voice engine. No AudioProcessor, UI, state tree, filesystem, or allocation in `renderSample`. |
+| `core/ForgeFx.h` | What an effects rack is: the types, what each one's controls are called, and what a normalised knob means in each. No DSP. |
+| `core/ForgeFxDsp.h` | The racks, rendered. A slot carries every type's state, sized once at `prepare`, because a type changes while audio is running. |
 | `src/ForgeProcessor.*` | Parameters, host automation, state, preset files. |
 | `ui/ForgeLayout.h` | What modules exist, what each contains, and where it sits. Pure geometry and declaration. |
 | `ui/ForgeVisuals.h` | The knob look and the drawing primitives. Decides nothing about placement. |

@@ -1,18 +1,22 @@
 #pragma once
 
 #include "ForgeWavetable.h"
+#include "ForgeFxDsp.h"
 
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <vector>
 
 // The reusable sound engine. It deliberately owns no AudioProcessor, UI,
 // Tracktion, state tree, filesystem, or allocation in renderSample().
 //
-// Forge is a synthesiser only. Effects live outside this file and, until the
-// FX rack milestone, do not exist at all. See PLAN.md.
+// The voices are this file's. The effects are not: they live in ForgeFxDsp.h
+// and run on the summed voices rather than inside them, the way an insert after
+// the synth does. Core owns the three racks because they hold delay lines and
+// filter state, and hands each of them the patch that describes it.
 namespace rhino::forge
 {
 // How many detuned copies one oscillator's unison stack may hold. The per-voice
@@ -446,8 +450,11 @@ struct DestinationInfo
 // Appended to, never inserted into: a slot stores its destination as an index
 // into this list, so every index already written into a preset has to keep
 // meaning what it meant. The five the mixer added therefore sit at the end
-// rather than beside the controls they belong with.
-inline const std::array<DestinationInfo, 21>& destinations()
+// rather than beside the controls they belong with, and the racks' come after
+// those.
+inline const std::vector<DestinationInfo>& destinations();
+
+inline const std::array<DestinationInfo, 21>& namedDestinations()
 {
     static const std::array<DestinationInfo, 21> table {{
         {"", "OFF"},
@@ -463,11 +470,88 @@ inline const std::array<DestinationInfo, 21>& destinations()
     return table;
 }
 
+// Where the named list stops and the racks begin. Everything at or past this is
+// a slot's knob or its mix, worked out from the index rather than written out:
+// three racks of four slots of seven controls is eighty-four entries, and
+// eighty-four hand-written lines is eighty-four chances to mislabel one.
+inline constexpr int fxDestinationBase = 21;
+
+// A slot's six knobs and its mix. LEVEL is left out on purpose — it is the
+// slot's own trim rather than something to play, and a rack whose every stage
+// could be swept in level is a rack that is hard to keep at a sane loudness.
+inline constexpr int fxDestinationsPerSlot = fxKnobCount + 1;
+inline constexpr int fxDestinationCount = rackCount * fxSlotCount * fxDestinationsPerSlot;
+
 // Output is deliberately absent, and so are the bus levels and the sends: all
 // of them are applied once the voices are summed, so a per-voice modulation of
-// one would not mean anything. Everything here is read inside the voice.
-inline constexpr int destinationCount = 21;
+// one would not mean anything.
+//
+// The rack's own controls are applied after the voices too, and they are here
+// anyway. A rack is one process fed by every note, so a per-voice source
+// reaching it has to resolve to a single value; Core takes the loudest voice's,
+// which is the voice every other display already follows. Serum allows the same
+// thing and warns about the same consequence: a per-voice envelope on an FX
+// knob retriggers on every note.
+inline constexpr int destinationCount = fxDestinationBase + fxDestinationCount;
 inline constexpr int modSlotCount = 8;
+
+// A parameter id belonging to one rack slot: fxParameterId(0, 1, "Mix") is
+// "fx1s2Mix". One spelling of the pattern, shared by the parameters, the panel,
+// the destination list and the tests, so twelve slots cannot drift apart from
+// the ids they name — the same reason the envelopes and the LFOs have one.
+inline juce::String fxParameterId(int rack, int slot, const char* suffix)
+{
+    return "fx" + juce::String(rack + 1) + "s" + juce::String(slot + 1) + suffix;
+}
+
+// A rack's own bypass, which is the button the mixer's BUS and MAIN channels
+// carry: fxRackParameterId(0, "Bypass") is "fx1Bypass".
+inline juce::String fxRackParameterId(int rack, const char* suffix)
+{
+    return "fx" + juce::String(rack + 1) + suffix;
+}
+
+// Where one slot's run of destinations starts.
+inline int fxDestinationOf(int rack, int slot, int control)
+{
+    return fxDestinationBase
+         + ((rack * fxSlotCount) + slot) * fxDestinationsPerSlot + control;
+}
+
+// The whole destination list: the named controls, then every rack slot's six
+// knobs and its mix. Built once, and held by value because the generated half
+// owns the strings it names — a `const char*` here would point at a temporary.
+inline const std::vector<DestinationInfo>& destinations()
+{
+    static const std::vector<DestinationInfo> table = []
+    {
+        // The ids and labels the generated half needs, kept alive for as long
+        // as the table points into them.
+        static std::vector<juce::String> pool;
+        pool.reserve(static_cast<size_t>(fxDestinationCount) * 2);
+
+        std::vector<DestinationInfo> built;
+        built.reserve(static_cast<size_t>(destinationCount));
+        for (const auto& named : namedDestinations()) built.push_back(named);
+
+        for (int rack = 0; rack < rackCount; ++rack)
+            for (int slot = 0; slot < fxSlotCount; ++slot)
+                for (int control = 0; control < fxDestinationsPerSlot; ++control)
+                {
+                    const auto knob = control < fxKnobCount;
+                    pool.push_back(knob ? fxParameterId(rack, slot, "Knob") + juce::String(control + 1)
+                                        : fxParameterId(rack, slot, "Mix"));
+                    // Named for where it is rather than for what it does: a
+                    // slot's knob 3 is a different control in a reverb and in a
+                    // delay, and the matrix cannot know which is in there.
+                    pool.push_back(juce::String(rackName(rack)) + " " + juce::String(slot + 1) + " "
+                                   + (knob ? "K" + juce::String(control + 1) : juce::String("MIX")));
+                    built.push_back({pool[pool.size() - 2].toRawUTF8(), pool.back().toRawUTF8()});
+                }
+        return built;
+    }();
+    return table;
+}
 
 // Held as floats because that is what a parameter read gives back, and it
 // keeps the slot a plain value the processor can fill without conversion.
@@ -540,6 +624,10 @@ struct Patch
     // going.
     Sends sendA, sendB, sendSub, sendNoise, sendFilter;
     std::array<Bus, busCount> buses {};
+    // One effects rack on the main output and one on each bus, in that order.
+    // They run on the summed voices rather than inside them, which is what an
+    // insert after the synth is — see ForgeFxDsp.h.
+    std::array<Rack, rackCount> racks {};
     // The four envelopes. ENV 1 is the voice's amplitude and every voice is
     // rendered through it; ENV 2-4 reach anything at all through the matrix.
     std::array<EnvSetting, envCount> envs {};
@@ -592,7 +680,15 @@ inline float* destinationField(Patch& patch, int destination)
         case 20: return &patch.filterLevel;
         default: break;
     }
-    return nullptr;
+    // Past the named list, a destination is a rack slot's knob or its mix,
+    // found by dividing the index rather than by twelve dozen switch cases.
+    const auto fx = destination - fxDestinationBase;
+    if (fx < 0 || fx >= fxDestinationCount) return nullptr;
+    const auto control = fx % fxDestinationsPerSlot;
+    const auto slot = (fx / fxDestinationsPerSlot) % fxSlotCount;
+    const auto rack = fx / (fxDestinationsPerSlot * fxSlotCount);
+    auto& held = patch.racks[static_cast<size_t>(rack)].slots[static_cast<size_t>(slot)];
+    return control < fxKnobCount ? &held.knobs[static_cast<size_t>(control)] : &held.mix;
 }
 
 // Taken as a bare value as well as from a patch, because the panel draws the
@@ -677,6 +773,10 @@ public:
         // Touched here so the table is built on whichever thread prepares the
         // synth, never lazily on the first note from the audio thread.
         builtInWavetable();
+        // Every rack's delay lines are sized here, which is the one place they
+        // may be: a slot's type changes while audio is running, so each slot
+        // carries every type's state and none of it can be built on demand.
+        for (auto& rack : racks) rack.prepare(sampleRate);
         reset();
     }
 
@@ -695,6 +795,7 @@ public:
         meterEnvelope = {};
         meterStage = {};
         meterOffsets = {};
+        for (auto& rack : racks) rack.reset();
     }
 
     void noteOn(int note, float velocity)
@@ -819,6 +920,12 @@ public:
         renderSample(patch, Modulation {}, left, right);
     }
 
+    // The tempo a synced delay or chorus divides. Set by the Processor once per
+    // block, the same reading a synced LFO is resolved against — except that an
+    // LFO is resolved before the patch is built and a rack is read from it, so
+    // the rack needs the tempo itself rather than a rate worked out from it.
+    void setTempo(double bpm) { tempo = bpm; }
+
     void renderSample(const Patch& patch, const Modulation& modulation, float& left, float& right)
     {
         left = right = 0.0f;
@@ -863,6 +970,17 @@ public:
         }
 
         const auto modulated = modulation.anyActive();
+        // Whether anything is pointed at a rack at all. A rack runs once on the
+        // summed voices, so a per-voice source reaching one has to be resolved
+        // to a single voice's value — and carrying a copy of every rack out of
+        // the loop to do that is only worth it when something actually is.
+        auto fxModulated = false;
+        if (modulated)
+            for (const auto& slot : modulation.slots)
+                if (slot.depth != 0.0f && slot.source >= 0.5f
+                    && juce::roundToInt(slot.destination) >= fxDestinationBase)
+                    fxModulated = true;
+        const Patch* fxPatch = &patch;
 
         meterEnvelope = {};
         meterStage = {};
@@ -951,6 +1069,11 @@ public:
             }
             const auto& active = *voicePatch;
 
+            // The loudest voice is the one every display already follows, and
+            // it is the one a rack follows too: one process fed by every note
+            // cannot have a value per note.
+            if (fxModulated && loudest) { fxScratch.racks = active.racks; fxPatch = &fxScratch; }
+
             Buses buses;
             renderOscillators(voice, active, buses);
 
@@ -1003,7 +1126,12 @@ public:
             }
         }
 
-        resolveBuses(patch, busLeft, busRight, left, right);
+        resolveBuses(*fxPatch, busLeft, busRight, left, right, racks, tempo);
+
+        // Everything that reached the main output, through the main rack, and
+        // only then through the master level — which is the order Serum states:
+        // audio routed to MAIN passes the modules, and then the master volume.
+        racks[0].process(fxPatch->racks[0], tempo, left, right);
 
         // The values the panel draws, worked out once from the phases the loop
         // settled on rather than per voice: a sample and hold's step cannot be
@@ -1028,7 +1156,8 @@ private:
     // refuse. Written for two busses, because "the other bus" is only a thing
     // there are two of.
     static void resolveBuses(const Patch& patch, std::array<float, busCount>& busLeft,
-                             std::array<float, busCount>& busRight, float& left, float& right)
+                             std::array<float, busCount>& busRight, float& left, float& right,
+                             std::array<FxRack, rackCount>& racks, double tempo)
     {
         static_assert(busCount == 2, "resolveBuses routes a bus to 'the other one'");
         const auto crossed = [&patch] (int bus)
@@ -1047,6 +1176,13 @@ private:
             const auto index = static_cast<size_t>(bus);
             const auto& settings = patch.buses[index];
             if (!on(settings.enable)) continue;
+
+            // A bus's rack sits between what arrived and the bus's own fader,
+            // so the fader sets how much of the processed signal is heard
+            // rather than how hard the rack is driven. Rack 0 is the main
+            // output's, so bus n uses rack n + 1.
+            racks[static_cast<size_t>(bus + 1)].process(patch.racks[static_cast<size_t>(bus + 1)],
+                                                        tempo, busLeft[index], busRight[index]);
 
             const auto gain = juce::jlimit(0.0f, 1.0f, settings.level);
             const auto outLeft = busLeft[index] * gain * channelPanLeft(settings.pan);
@@ -1551,6 +1687,15 @@ private:
     // Reused every voice and every sample so a modulated render allocates
     // nothing; only touched when at least one slot is live.
     Patch scratch {};
+    // The three racks, rendered. They hold delay lines and filter state, so
+    // they belong to the Core rather than to the patch that describes them.
+    std::array<FxRack, rackCount> racks;
+    double tempo = 0.0;
+    // Where the loudest voice's modulated rack settings are kept, so the racks
+    // can be run from them once the loop is over. Only touched when something
+    // is actually pointed at a rack.
+    Patch fxScratch {};
+
     std::array<int, 16> heldNotes {};
     int heldCount = 0;
     bool monoMode = false;

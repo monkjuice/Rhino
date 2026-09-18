@@ -5,8 +5,10 @@ Forge's long-term north star is the [Serum 2 manual](https://xferrecords.com/web
 workflow. Forge takes inspiration from that structure. It reuses no Serum code,
 assets, names, presets, or artwork.
 
-This plan covers **the synth only**. Effects are deliberately out of scope until
-the synth is finished; see [Out of scope](#out-of-scope-for-now).
+This plan covered **the synth only** for its first eleven milestones. Effects
+were deliberately out of scope until the synth was finished, and arrived at M11a
+once the mixer's busses had somewhere to send to; the rest of the rack, and the
+things still absent, are in [Out of scope](#out-of-scope-for-now).
 
 The delivery plan for Rhino's instruments as a whole lives in
 [INSTRUMENT_PLAN.md](../../INSTRUMENT_PLAN.md). This file supersedes its
@@ -899,15 +901,112 @@ case this does not fully preserve.
 - Nothing meters. A channel strip with no signal on it is the obvious next
   thing, and wants the per-channel levels published the way the envelopes are.
 
+### M11a — the effects racks — done
+
+The busses M10c added were a routing topology with nothing at the end of them:
+audibly a gain, because a send is only worth making if something is waiting
+where it arrives. This is what was waiting.
+
+Three racks — MAIN, BUS 1, BUS 2 — of four slots each, on a new `FX` tab that
+takes the whole signal row the way `MIX` does. Six types: REVERB, DELAY, CHORUS,
+DIST, EQ and FILTER.
+
+**The decision the whole thing turns on**
+
+Serum's rack holds any type in any slot, in any order, with duplicates. A host's
+parameter list is fixed at construction, so a slot cannot declare a parameter per
+control of whichever type it happens to hold — thirteen types across twelve slots
+is several hundred parameters, nearly all dead at any moment.
+
+So a slot declares a fixed set instead: a type, two mode fields, six general
+0..1 knobs, a bypass, a mix and a level. What those knobs *mean* is the type's,
+declared once in `ForgeFx.h` and read by three things that must agree:
+
+| Reader | What it takes from the table |
+| --- | --- |
+| `ForgeFxDsp.h` | The arithmetic that turns 0.6 into 480 ms of delay line |
+| `Editor::refreshFxSlots` | The label on the knob, and whether the knob exists at all |
+| `Processor::fxKnobText` | The reading in the bubble, from the same helpers the DSP calls |
+
+Nothing copies anyone else's arithmetic, which is what binds "480 ms" in the
+bubble to the delay actually sounding. The engine test measures that rather than
+asserting it.
+
+The price is that a host's automation lane reads "MAIN 2 KNOB 3" rather than
+"Reverb Damp". Serum pays the same price for the same reason, and it was taken
+deliberately over a fixed chain of named effects.
+
+**What that made the panel do**
+
+- A fifth tab. `tabWidth` came down from 104 to 86, because five at the old
+  width reached within a hair of the preset field at the narrowest window
+  allowed — and the layout test now holds the strip clear of that field rather
+  than only holding the tabs clear of each other.
+- The rack is **one module of four rows and three banks**, so the bank machinery
+  the envelopes and the LFOs already use is the MAIN / BUS 1 / BUS 2 chooser.
+  Nothing new was needed for it beyond named cards: a bank is usually one of
+  several numbered copies of one thing, and these three are not copies.
+- A banked module with no drag handle draws its own title, which the rack is the
+  first of — so its cards start past a title gutter, and the layout test holds
+  such a title to three characters rather than letting a longer one overlap.
+- **Visibility is decided in one place.** A knob its type does not use is taken
+  off the panel, and the first attempt did that in `refreshFxSlots` — which the
+  24 Hz `applyEnableStates` put straight back, once a frame. It belongs in
+  `applyEnableStates` with every other reason a control is or is not on screen,
+  exactly as the comment above `applyPage` already said.
+
+**Where the racks sit in the signal**
+
+Sends arrive at a bus, the bus's rack runs, then the bus's own fader and pan,
+then its destination. Everything reaching the main output runs the MAIN rack and
+only then the master level — which is the order Serum states: audio routed to
+MAIN passes the modules, and then the master volume.
+
+A rack is one process fed by every note, not a copy per note. That is why the
+bus sum was already global as of M10c, and it is what a reverb needs: one tail
+fed by every note.
+
+**Modulation**
+
+A rack knob and a slot's mix are modulation destinations, appended past the
+named list and generated from the slot indices rather than written out —
+eighty-four hand-written lines is eighty-four chances to mislabel one. A slot's
+LEVEL is deliberately not one: it is a trim, and a rack whose every stage could
+be swept in level is hard to keep at a sane loudness.
+
+Because a rack runs after the voices, a per-voice source has to resolve to a
+single voice, and Core takes the loudest — the voice every display already
+follows. Serum allows the same and warns about the same consequence: a per-voice
+envelope on an FX knob retriggers on every note.
+
+**No allocation once audio is running**
+
+A slot's type changes between one sample and the next, so each slot carries the
+state of every type it could hold, sized at `prepare` for the longest line any of
+them needs. A few megabytes across twelve slots, and it buys the thing that
+matters: changing a slot from a filter to a reverb mid-note cannot touch the
+heap.
+
+**Still open**
+
+- No rack presets, no reordering by drag, no copy or paste of a rack. Serum has
+  all of these; a slot is set by its TYPE field for now.
+- `DIRECT` is still absent. The rack is what it was waiting for, so it is the
+  next thing rather than a later one.
+- Seven of Serum's types are not here: Bode, Compressor, Convolve, Flanger,
+  Hyper/Dimension, Phaser, and the three splitters. Each is now DSP and a row in
+  one table rather than any new machinery.
+- A slot has no display of its own — no delay filter curve, no EQ response. The
+  filter module's own display is the model for what those should be.
+
 ## Out of scope for now
 
 These are the north star, not this plan. They come after the synth is finished.
 
-- **M11 — FX rack.** Chorus, distortion, delay, reverb, compressor, EQ, in a
-  reorderable chain. Three racks, on MAIN and on each bus, which is what the
-  mixer's busses were built to carry. It also brings the `DIRECT` output that
-  M10c left out, because an output that bypasses the effects needs effects to
-  bypass.
+- **M11b — the rest of the rack.** Rack and module presets, reordering by drag,
+  copy and paste between racks, and the seven Serum types M11a left out. Plus
+  the `DIRECT` output, which needed effects to bypass before it could mean
+  anything.
 - **M12 — Second filter,** with the serial/parallel routing Serum exposes.
 - **M13 — Preset browser** with tags and search.
 - **Later still:** MPE, sample and granular sources, spectral oscillators.
@@ -969,3 +1068,4 @@ way to look at a change.
 | M10a Six LFOs, per voice | **done** — ready to test by ear |
 | M10b ENV 2–4 | **done** — ready to test by ear |
 | M10c The mixer, and two busses | **done** — ready to test by ear and by eye |
+| M11a The effects racks | **done** — ready to test by ear |

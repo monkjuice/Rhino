@@ -150,6 +150,31 @@ private:
     // Which envelope the panel is showing: the ENV module's chosen bank, and so
     // also the one its display draws, its knobs drive and its handle drags.
     int shownEnv() const;
+    // A rack slot's six general knobs and its two mode fields say what they are
+    // only once a type is in the slot, so their labels, their tooltips and
+    // whether they are on screen at all are settled here rather than declared.
+    // Called when a type changes, when the rack shown changes, and on the way
+    // in — including for the banks that are not showing, so a slot is right the
+    // moment it is revealed rather than a repaint later.
+    void refreshFxSlots();
+    // Whether a rack control is one the type in its slot actually has. A reverb
+    // has no fourth knob at all, so the knob declared there is taken off the
+    // panel rather than greyed: greying says "not just now", and this is "not
+    // ever, while that type is in this slot". Everything else answers true.
+    bool fxControlUsed(const Control&) const;
+    // The type each slot last showed, so a type arriving from a preset or from
+    // host automation re-labels its slot rather than only one chosen by hand.
+    std::array<int, rackCount * fxSlotCount> fxTypesShown {};
+    // Which rack the FX module is showing: its chosen bank.
+    int shownRack() const;
+    // What the rack module's header says: the rack being shown, and what is in
+    // it.
+    juce::String fxHeaderDetail() const;
+    // The slot and rack a control belongs to, or false when it is not one of
+    // the rack's. Read back from the id, because that is the one place the
+    // three numbers are written down.
+    static bool fxControlAt(const juce::String& id, int& rack, int& slot);
+
     void buildBankButtons();
     void showBank(ModuleUi&, int bank);
     void applyEnableStates();

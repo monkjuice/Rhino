@@ -132,6 +132,126 @@ void Editor::applyTableCounts()
         }
 }
 
+// "fx2s3Knob1" is rack 2, slot 3. Parsed rather than carried on the Control,
+// because the id is where those numbers are actually written down and a second
+// copy of them is a second thing to keep in step.
+bool Editor::fxControlAt(const juce::String& id, int& rack, int& slot)
+{
+    if (!id.startsWith("fx")) return false;
+    const auto body = id.substring(2);
+    const auto split = body.indexOfChar('s');
+    if (split <= 0) return false;
+    const auto rackNumber = body.substring(0, split).getIntValue();
+    const auto slotNumber = body.substring(split + 1).getIntValue();
+    if (rackNumber < 1 || rackNumber > rackCount || slotNumber < 1 || slotNumber > fxSlotCount)
+        return false;
+    rack = rackNumber - 1;
+    slot = slotNumber - 1;
+    return true;
+}
+
+int Editor::shownRack() const
+{
+    for (const auto& module : moduleUis)
+        if (juce::String(module.descriptor->id) == "fx")
+            return juce::jlimit(0, rackCount - 1, module.bank);
+    return 0;
+}
+
+juce::String Editor::fxHeaderDetail() const
+{
+    const auto rack = shownRack();
+    juce::StringArray held;
+    for (int slot = 0; slot < fxSlotCount; ++slot)
+    {
+        const auto type = value(fxParameterId(rack, slot, "Type"));
+        if (fxTypeOf(type) != FxType::off) held.add(fxTypeName(juce::roundToInt(type)));
+    }
+    return held.isEmpty() ? "EMPTY" : held.joinIntoString(" > ");
+}
+
+bool Editor::fxControlUsed(const Control& control) const
+{
+    int rack = 0, slot = 0;
+    if (!fxControlAt(control.id, rack, slot)) return true;
+    const auto& info = processor.fxSlotType(rack, slot);
+    if (control.id.contains("Knob"))
+    {
+        const auto knob = control.id.getTrailingIntValue() - 1;
+        return knob >= 0 && knob < fxKnobCount && info.knobs[static_cast<size_t>(knob)] != nullptr;
+    }
+    if (control.id.endsWith("ModeA")) return info.modeA.count > 0;
+    if (control.id.endsWith("ModeB")) return info.modeB.count > 0;
+    // TYPE is how an empty slot is filled, so it is always there. MIX, LEVEL
+    // and the bypass belong to the slot rather than to what is in it, but an
+    // empty slot has nothing for them to act on — so a row set to OFF is a
+    // blank row with one field on it, which is what an empty rack should look
+    // like.
+    return control.id.endsWith("Type")
+        || fxTypeOf(value(fxParameterId(rack, slot, "Type"))) != FxType::off;
+}
+
+// A slot's twelve controls are always declared and always attached; what
+// changes with the type is what they are called and what they explain.
+// Whether they are on screen is applyEnableStates's to decide, because that
+// runs on a timer and would otherwise put back whatever this took away.
+//
+// Every rack is refreshed, not only the one showing, so switching banks reveals
+// a slot that is already right rather than one that corrects itself a frame
+// later.
+void Editor::refreshFxSlots()
+{
+    for (int rack = 0; rack < rackCount; ++rack)
+        for (int slot = 0; slot < fxSlotCount; ++slot)
+            fxTypesShown[static_cast<size_t>(rack * fxSlotCount + slot)] =
+                juce::roundToInt(value(fxParameterId(rack, slot, "Type")));
+
+    for (auto& module : moduleUis)
+    {
+        if (juce::String(module.descriptor->id) != "fx") continue;
+        for (auto& held : module.controls)
+        {
+            auto& control = *held;
+            int rack = 0, slot = 0;
+            if (!fxControlAt(control.id, rack, slot)) continue;
+            const auto& info = processor.fxSlotType(rack, slot);
+
+            const auto apply = [&control] (const char* label, const juce::String& tip)
+            {
+                if (label != nullptr) control.label.setText(label, juce::dontSendNotification);
+                control.slider.setTooltip(tip);
+            };
+
+            if (control.id.contains("Knob"))
+            {
+                // A knob's reading depends on the type and on the mode fields
+                // beside it — a delay's TIME is milliseconds or a division —
+                // and a slider only re-reads its parameter's text when its
+                // value moves, so it is pushed here instead.
+                control.slider.updateText();
+                const auto knob = control.id.getTrailingIntValue() - 1;
+                const auto* label = knob >= 0 && knob < fxKnobCount
+                    ? info.knobs[static_cast<size_t>(knob)] : nullptr;
+                apply(label, label == nullptr ? juce::String()
+                          : juce::String(label) + ", on the " + info.name + " in this slot");
+                continue;
+            }
+            if (control.id.endsWith("ModeA") || control.id.endsWith("ModeB"))
+            {
+                const auto& mode = control.id.endsWith("ModeB") ? info.modeB : info.modeA;
+                apply(mode.label, mode.label == nullptr ? juce::String()
+                          : juce::String(mode.label) + ", on the " + info.name + " in this slot");
+                // A field with two choices steps between two, one with three
+                // between three, so the detents follow the type rather than
+                // the range the parameter was declared with.
+                control.slider.gestureSteps = juce::jmax(2, mode.count);
+                control.slider.updateText();
+                continue;
+            }
+        }
+    }
+}
+
 void Editor::buildTabs()
 {
     for (int i = 0; i < ui::tabCount; ++i)
@@ -143,6 +263,7 @@ void Editor::buildTabs()
         // the whole row rather than standing in for a pair of modules, so it
         // keeps the signal path's colour.
         tab->accent = target == ui::Page::matrix || target == ui::Page::table
+                       || target == ui::Page::fx
                           ? ui::signalViolet : ui::electricBlue;
         tab->setTooltip([target]
         {
@@ -151,6 +272,7 @@ void Editor::buildTabs()
                 case ui::Page::matrix: return "Show the modulation matrix in place of the oscillators";
                 case ui::Page::table:  return "Draw on the oscillators' wavetables";
                 case ui::Page::mix:    return "Balance and route every source, the filter and the two busses";
+                case ui::Page::fx:     return "The effects racks: one on the main output and one on each bus";
                 case ui::Page::oscillators: break;
             }
             return "Show the oscillators";
@@ -181,6 +303,9 @@ void Editor::showPage(ui::Page target)
 void Editor::applyPage()
 {
     applyEnableStates();
+    // Before the layout pass below, because which of a slot's knobs are on
+    // screen is what that pass is placing.
+    refreshFxSlots();
     if (tablePanel != nullptr) tablePanel->setVisible(page == ui::Page::table);
     // Last, because a macro's handle takes the place of its label and the
     // layout pass is what decides that.
@@ -304,6 +429,20 @@ void Editor::buildModules()
                         else if (bubbleControl == held) showValueBubble(*held);
                     };
                 }
+                // A slot's type decides what the six knobs beside it are
+                // called and which of them exist at all, so changing it
+                // re-labels the slot and lays the module out again. This fires
+                // for host automation as well as for a hand, which is what it
+                // is for: a type arriving from a preset has to land the same
+                // way one chosen here does.
+                if (control->id.startsWith("fx") && control->id.endsWith("Type"))
+                    control->slider.onValueChange = [this] { refreshFxSlots(); resized(); repaint(); };
+                // A mode field changes what the knobs beside it read — a
+                // delay's time is milliseconds or a division depending on it —
+                // so the readouts are pushed when it moves.
+                if (control->id.startsWith("fx")
+                    && (control->id.endsWith("ModeA") || control->id.endsWith("ModeB")))
+                    control->slider.onValueChange = [this] { refreshFxSlots(); };
                 // The attachment installs the parameter's own text formatting,
                 // so it must be created before anything reads the slider's text.
                 control->attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
@@ -362,14 +501,21 @@ void Editor::buildBankButtons()
         const auto banks = ui::bankCount(*module.descriptor);
         if (banks <= 1) continue;
         const auto accent = ui::accentFor(*module.descriptor);
+        // A bank is usually one of several numbered copies of one thing — ENV 3,
+        // LFO 5 — and the card says the number. The rack's three banks are not
+        // copies: they are the main output and the two busses, and a card
+        // reading "2" would not say which. A module that asks for wider cards
+        // is one whose banks have names.
+        const auto named = module.descriptor->bankWidth > 0;
         for (int bank = 0; bank < banks; ++bank)
         {
-            auto button = std::make_unique<ui::BankCard>(juce::String(bank + 1));
+            const auto caption = named ? juce::String(rackName(bank)) : juce::String(bank + 1);
+            auto button = std::make_unique<ui::BankCard>(caption);
             button->accent = accent;
             button->setClickingTogglesState(false);
             button->setToggleState(bank == module.bank, juce::dontSendNotification);
-            button->setTooltip("Show " + juce::String(module.descriptor->title) + " "
-                               + juce::String(bank + 1));
+            button->setTooltip(named ? "Show the effects rack on " + caption
+                                     : "Show " + juce::String(module.descriptor->title) + " " + caption);
             button->onClick = [this, which = &module, bank] { showBank(*which, bank); };
             addAndMakeVisible(*button);
             module.bankButtons.push_back(std::move(button));
@@ -386,6 +532,10 @@ void Editor::showBank(ModuleUi& module, int bank)
     // The handle in the header drags whichever of them is showing, so the
     // layout has to run again to put the right one there.
     applyEnableStates();
+    // Switching the rack showing is switching which twelve-by-four set of
+    // controls is on screen, and each slot's knobs are named by whatever type
+    // that slot holds.
+    refreshFxSlots();
     refreshModulationRings();
     resized();
     repaint();
@@ -448,6 +598,9 @@ void Editor::applyEnableStates()
             const auto shown = onPage
                 // A module declared in banks has only one of them on screen.
                 && control->bank == module.bank
+                // A rack knob its slot's type does not have is not a control
+                // at all while that type is in there.
+                && fxControlUsed(*control)
                 && (on || !ui::inSharedCell(*module.descriptor, control->row, control->index));
 
             control->label.setVisible(shown);
@@ -497,9 +650,11 @@ void Editor::paint(juce::Graphics& g)
         // is actually running at, which in sync is a tempo division and so
         // cannot be read off the greyed-out rate knob.
         const auto tableModule = juce::String(descriptor.id) == "table";
+        const auto rackModule = juce::String(descriptor.id) == "fx";
         ui::drawModuleShell(g, area, descriptor, on,
                             descriptor.display == ui::Display::envelope ? envHeaderDetail()
                             : descriptor.display == ui::Display::lfo ? lfoHeaderDetail()
+                            : rackModule ? fxHeaderDetail()
                             : tableModule && tablePanel != nullptr ? tablePanel->headerDetail()
                                 : juce::String());
 
@@ -1189,6 +1344,20 @@ void Editor::timerCallback()
     // Cheap to re-apply every tick, and it catches a dependency changing from
     // host automation as well as from the panel. Both of these only repaint
     // when something has actually changed.
+    // A type can change without the panel being touched: a preset loaded, a
+    // host automating it, a second editor on the same plugin. Noticed the same
+    // way a replaced wavetable is, by comparing against what is on screen, so
+    // the labels are only rebuilt when one has actually moved.
+    for (int rack = 0; rack < rackCount; ++rack)
+        for (int slot = 0; slot < fxSlotCount; ++slot)
+            if (fxTypesShown[static_cast<size_t>(rack * fxSlotCount + slot)]
+                != juce::roundToInt(value(fxParameterId(rack, slot, "Type"))))
+            {
+                refreshFxSlots();
+                resized();
+                repaint();
+            }
+
     applyEnableStates();
     refreshModulationRings();
 

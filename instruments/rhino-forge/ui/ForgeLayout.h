@@ -30,10 +30,10 @@ enum class Style { knob, stepper, chip, rocker, bar, fader };
 // than a single answer — which is what the mixer needs: it takes the whole
 // signal row, so SUB, NOISE and FILTER have to be absent from that one tab
 // while staying put on the other three.
-enum class Page { oscillators = 1, table = 2, matrix = 4, mix = 8 };
+enum class Page { oscillators = 1, table = 2, matrix = 4, mix = 8, fx = 16 };
 
-inline constexpr Page tabPages[] {Page::oscillators, Page::table, Page::matrix, Page::mix};
-inline constexpr int tabCount = 4;
+inline constexpr Page tabPages[] {Page::oscillators, Page::table, Page::matrix, Page::mix, Page::fx};
+inline constexpr int tabCount = 5;
 
 // Which tabs show a module. Not a Page: a module is on one page, or on all of
 // them, or on all but one, and only a set says all three.
@@ -42,12 +42,18 @@ using PageSet = int;
 inline constexpr PageSet only(Page page) { return static_cast<PageSet>(page); }
 
 inline constexpr PageSet everyPage =
-    only(Page::oscillators) | only(Page::table) | only(Page::matrix) | only(Page::mix);
+    only(Page::oscillators) | only(Page::table) | only(Page::matrix) | only(Page::mix) | only(Page::fx);
 
-// Shown wherever a module is not standing in its place. The mixer is the view
-// of the sub, the noise and the filter, so those three name it here rather
-// than being hidden by the mixer reaching over them.
+// Shown wherever a module is not standing in its place. Two tabs take the whole
+// signal row — the mixer, which is the view of the sub, the noise and the
+// filter, and the rack — so those three name both here rather than being
+// hidden by something reaching over them.
 inline constexpr PageSet everyPageBut(Page page) { return everyPage & ~only(page); }
+
+inline constexpr PageSet everyPageBut(Page first, Page second)
+{
+    return everyPage & ~only(first) & ~only(second);
+}
 
 inline const char* pageName(Page page)
 {
@@ -57,6 +63,7 @@ inline const char* pageName(Page page)
         case Page::oscillators: return "OSC";
         case Page::table:       return "TABLE";
         case Page::mix:         return "MIX";
+        case Page::fx:          return "FX";
     }
     return "";
 }
@@ -140,6 +147,10 @@ struct Module
     // display is the thing being read rather than a picture of it. Zero means
     // the panel's shared share.
     int displayShare = 0;
+    // Wider bank cards, for a module whose banks have names rather than
+    // numbers: the rack's three are MAIN, BUS 1 and BUS 2. The four envelopes
+    // and the six LFOs are genuinely numbered and keep the narrow card.
+    int bankWidth = 0;
 };
 
 // The numbered cards that choose which bank a module is showing, laid along its
@@ -149,6 +160,13 @@ struct Module
 // module rather than as a button sitting on it.
 inline constexpr int bankButtonWidth = 32;
 inline constexpr int bankButtonGap = 4;
+
+// How wide one module's bank cards are: its own width when it asks for one, and
+// the numbered default otherwise.
+inline int bankWidthOf(const Module& module)
+{
+    return module.bankWidth > 0 ? module.bankWidth : bankButtonWidth;
+}
 
 // Twenty-four rather than twelve. The panel is two rows of five and four
 // modules, and twelve columns cannot cut either of those into the widths the
@@ -206,6 +224,9 @@ inline constexpr int minFaderHeight = 54;
 // A table: the gutter its row numbers sit in, the strip of column titles above
 // its rows, and the caps that stop a field stretching the full width of the
 // panel merely because the matrix has that width to spend.
+// Wide enough for "BUS 1" rather than for a digit.
+inline constexpr int fxBankWidth = 56;
+
 inline constexpr int rowNumberGutter = 34;
 inline constexpr int columnTitleHeight = 18;
 inline constexpr int tableFieldHeight = 28;
@@ -216,9 +237,18 @@ inline constexpr int maxTableBarWidth = 460;
 // preset controls on the right.
 inline constexpr int tabTop = 24;
 inline constexpr int tabHeight = 28;
-inline constexpr int tabWidth = 104;
+// Narrowed when the rack made a fifth tab. Five at the old width reached within
+// a hair of the preset field at the narrowest window the panel allows, and the
+// layout test now holds the strip clear of it rather than only holding the tabs
+// clear of each other.
+inline constexpr int tabWidth = 86;
 inline constexpr int tabGap = 6;
 inline constexpr int tabStripLeft = 252;
+
+// How much of the right-hand end of the title bar the preset name and buttons
+// take. The editor lays those out from the right edge; this is the same figure,
+// named here so the layout test can check the tabs never reach it.
+inline constexpr int presetStripWidth = 350;
 
 inline juce::Rectangle<int> tabBounds(int index)
 {
@@ -292,10 +322,10 @@ inline const std::vector<Module>& modules()
         // than a panel that happens to sit beside them.
         {"sub", "SUB", "", "subEnable", false, Display::none, 0, 0, 2, false,
          {{100, {{"subLevel", "LEVEL"}}}},
-         0, everyPageBut(Page::mix)},
+         0, everyPageBut(Page::mix, Page::fx)},
         {"noise", "NOISE", "", "noiseEnable", true, Display::none, 0, 2, 2, false,
          {{100, {{"noiseLevel", "LEVEL"}}}},
-         0, everyPageBut(Page::mix)},
+         0, everyPageBut(Page::mix, Page::fx)},
         // Four columns for three knobs, against the oscillators' eight for six:
         // the same width per knob, so nothing in the row is drawn at a size its
         // neighbours are not.
@@ -314,7 +344,7 @@ inline const std::vector<Module>& modules()
                 {"routeB", "B", Style::chip}, {"routeSub", "S", Style::chip},
                 {"routeNoise", "N", Style::chip}}},
           {74, {{"cutoff", "CUTOFF"}, {"resonance", "RES"}, {"drive", "DRIVE"}}}},
-         0, everyPageBut(Page::mix)},
+         0, everyPageBut(Page::mix, Page::fx)},
         // GLOBAL is a narrow column rather than a wide box, and it opens the
         // lower row: what the voice is, before anything that shapes it. Five
         // controls in a row want more width than this panel has to give beside
@@ -410,6 +440,125 @@ inline const std::vector<Module>& modules()
            lfoCount}},
          static_cast<int>(ModSource::lfo1), everyPage, 1, 0, 0, 62},
 
+        // --- The effects rack -------------------------------------------------
+        //
+        // One module, four rows, three banks. A row is a slot and a bank is a
+        // rack, so the named cards in the header are the MAIN / BUS 1 / BUS 2
+        // chooser and everything else falls out of the machinery the envelopes
+        // and the LFOs already use: every bank declares the same controls in
+        // the same order, and the banks not showing stay built, stay attached
+        // and keep running.
+        //
+        // The signal goes down the rows, top to bottom, exactly as Serum's rack
+        // does. Like the mixer it takes the whole signal row, because a rack is
+        // where everything upstream has already arrived.
+        //
+        // Every slot declares the same twelve controls whatever type it holds.
+        // The six in the middle are labelled from that type and the ones it
+        // does not use are hidden — see Editor::refreshFxSlots. That is why
+        // they are declared as "KNOB 1" here: this file says where a control
+        // is, and the type says what it is.
+        {"fx", "FX", "RACK", nullptr, true, Display::none, 0, 0, 24, true,
+         {
+          {25, {{"fx1s1Type", "TYPE", Style::stepper, nullptr, 2},
+                {"fx1s1ModeA", "MODE", Style::stepper, nullptr, 2},
+                {"fx1s1ModeB", "MODE", Style::stepper, nullptr, 2},
+                {"fx1s1Knob1", "KNOB 1"}, {"fx1s1Knob2", "KNOB 2"}, {"fx1s1Knob3", "KNOB 3"},
+                {"fx1s1Knob4", "KNOB 4"}, {"fx1s1Knob5", "KNOB 5"}, {"fx1s1Knob6", "KNOB 6"},
+                {"fx1s1Mix", "MIX"}, {"fx1s1Level", "LEVEL"},
+                {"fx1s1Bypass", "BYP", Style::chip},
+
+                {"fx2s1Type", "TYPE", Style::stepper, nullptr, 2},
+                {"fx2s1ModeA", "MODE", Style::stepper, nullptr, 2},
+                {"fx2s1ModeB", "MODE", Style::stepper, nullptr, 2},
+                {"fx2s1Knob1", "KNOB 1"}, {"fx2s1Knob2", "KNOB 2"}, {"fx2s1Knob3", "KNOB 3"},
+                {"fx2s1Knob4", "KNOB 4"}, {"fx2s1Knob5", "KNOB 5"}, {"fx2s1Knob6", "KNOB 6"},
+                {"fx2s1Mix", "MIX"}, {"fx2s1Level", "LEVEL"},
+                {"fx2s1Bypass", "BYP", Style::chip},
+
+                {"fx3s1Type", "TYPE", Style::stepper, nullptr, 2},
+                {"fx3s1ModeA", "MODE", Style::stepper, nullptr, 2},
+                {"fx3s1ModeB", "MODE", Style::stepper, nullptr, 2},
+                {"fx3s1Knob1", "KNOB 1"}, {"fx3s1Knob2", "KNOB 2"}, {"fx3s1Knob3", "KNOB 3"},
+                {"fx3s1Knob4", "KNOB 4"}, {"fx3s1Knob5", "KNOB 5"}, {"fx3s1Knob6", "KNOB 6"},
+                {"fx3s1Mix", "MIX"}, {"fx3s1Level", "LEVEL"},
+                {"fx3s1Bypass", "BYP", Style::chip}},
+           rackCount},
+          {25, {{"fx1s2Type", "TYPE", Style::stepper, nullptr, 2},
+                {"fx1s2ModeA", "MODE", Style::stepper, nullptr, 2},
+                {"fx1s2ModeB", "MODE", Style::stepper, nullptr, 2},
+                {"fx1s2Knob1", "KNOB 1"}, {"fx1s2Knob2", "KNOB 2"}, {"fx1s2Knob3", "KNOB 3"},
+                {"fx1s2Knob4", "KNOB 4"}, {"fx1s2Knob5", "KNOB 5"}, {"fx1s2Knob6", "KNOB 6"},
+                {"fx1s2Mix", "MIX"}, {"fx1s2Level", "LEVEL"},
+                {"fx1s2Bypass", "BYP", Style::chip},
+
+                {"fx2s2Type", "TYPE", Style::stepper, nullptr, 2},
+                {"fx2s2ModeA", "MODE", Style::stepper, nullptr, 2},
+                {"fx2s2ModeB", "MODE", Style::stepper, nullptr, 2},
+                {"fx2s2Knob1", "KNOB 1"}, {"fx2s2Knob2", "KNOB 2"}, {"fx2s2Knob3", "KNOB 3"},
+                {"fx2s2Knob4", "KNOB 4"}, {"fx2s2Knob5", "KNOB 5"}, {"fx2s2Knob6", "KNOB 6"},
+                {"fx2s2Mix", "MIX"}, {"fx2s2Level", "LEVEL"},
+                {"fx2s2Bypass", "BYP", Style::chip},
+
+                {"fx3s2Type", "TYPE", Style::stepper, nullptr, 2},
+                {"fx3s2ModeA", "MODE", Style::stepper, nullptr, 2},
+                {"fx3s2ModeB", "MODE", Style::stepper, nullptr, 2},
+                {"fx3s2Knob1", "KNOB 1"}, {"fx3s2Knob2", "KNOB 2"}, {"fx3s2Knob3", "KNOB 3"},
+                {"fx3s2Knob4", "KNOB 4"}, {"fx3s2Knob5", "KNOB 5"}, {"fx3s2Knob6", "KNOB 6"},
+                {"fx3s2Mix", "MIX"}, {"fx3s2Level", "LEVEL"},
+                {"fx3s2Bypass", "BYP", Style::chip}},
+           rackCount},
+          {25, {{"fx1s3Type", "TYPE", Style::stepper, nullptr, 2},
+                {"fx1s3ModeA", "MODE", Style::stepper, nullptr, 2},
+                {"fx1s3ModeB", "MODE", Style::stepper, nullptr, 2},
+                {"fx1s3Knob1", "KNOB 1"}, {"fx1s3Knob2", "KNOB 2"}, {"fx1s3Knob3", "KNOB 3"},
+                {"fx1s3Knob4", "KNOB 4"}, {"fx1s3Knob5", "KNOB 5"}, {"fx1s3Knob6", "KNOB 6"},
+                {"fx1s3Mix", "MIX"}, {"fx1s3Level", "LEVEL"},
+                {"fx1s3Bypass", "BYP", Style::chip},
+
+                {"fx2s3Type", "TYPE", Style::stepper, nullptr, 2},
+                {"fx2s3ModeA", "MODE", Style::stepper, nullptr, 2},
+                {"fx2s3ModeB", "MODE", Style::stepper, nullptr, 2},
+                {"fx2s3Knob1", "KNOB 1"}, {"fx2s3Knob2", "KNOB 2"}, {"fx2s3Knob3", "KNOB 3"},
+                {"fx2s3Knob4", "KNOB 4"}, {"fx2s3Knob5", "KNOB 5"}, {"fx2s3Knob6", "KNOB 6"},
+                {"fx2s3Mix", "MIX"}, {"fx2s3Level", "LEVEL"},
+                {"fx2s3Bypass", "BYP", Style::chip},
+
+                {"fx3s3Type", "TYPE", Style::stepper, nullptr, 2},
+                {"fx3s3ModeA", "MODE", Style::stepper, nullptr, 2},
+                {"fx3s3ModeB", "MODE", Style::stepper, nullptr, 2},
+                {"fx3s3Knob1", "KNOB 1"}, {"fx3s3Knob2", "KNOB 2"}, {"fx3s3Knob3", "KNOB 3"},
+                {"fx3s3Knob4", "KNOB 4"}, {"fx3s3Knob5", "KNOB 5"}, {"fx3s3Knob6", "KNOB 6"},
+                {"fx3s3Mix", "MIX"}, {"fx3s3Level", "LEVEL"},
+                {"fx3s3Bypass", "BYP", Style::chip}},
+           rackCount},
+          {25, {{"fx1s4Type", "TYPE", Style::stepper, nullptr, 2},
+                {"fx1s4ModeA", "MODE", Style::stepper, nullptr, 2},
+                {"fx1s4ModeB", "MODE", Style::stepper, nullptr, 2},
+                {"fx1s4Knob1", "KNOB 1"}, {"fx1s4Knob2", "KNOB 2"}, {"fx1s4Knob3", "KNOB 3"},
+                {"fx1s4Knob4", "KNOB 4"}, {"fx1s4Knob5", "KNOB 5"}, {"fx1s4Knob6", "KNOB 6"},
+                {"fx1s4Mix", "MIX"}, {"fx1s4Level", "LEVEL"},
+                {"fx1s4Bypass", "BYP", Style::chip},
+
+                {"fx2s4Type", "TYPE", Style::stepper, nullptr, 2},
+                {"fx2s4ModeA", "MODE", Style::stepper, nullptr, 2},
+                {"fx2s4ModeB", "MODE", Style::stepper, nullptr, 2},
+                {"fx2s4Knob1", "KNOB 1"}, {"fx2s4Knob2", "KNOB 2"}, {"fx2s4Knob3", "KNOB 3"},
+                {"fx2s4Knob4", "KNOB 4"}, {"fx2s4Knob5", "KNOB 5"}, {"fx2s4Knob6", "KNOB 6"},
+                {"fx2s4Mix", "MIX"}, {"fx2s4Level", "LEVEL"},
+                {"fx2s4Bypass", "BYP", Style::chip},
+
+                {"fx3s4Type", "TYPE", Style::stepper, nullptr, 2},
+                {"fx3s4ModeA", "MODE", Style::stepper, nullptr, 2},
+                {"fx3s4ModeB", "MODE", Style::stepper, nullptr, 2},
+                {"fx3s4Knob1", "KNOB 1"}, {"fx3s4Knob2", "KNOB 2"}, {"fx3s4Knob3", "KNOB 3"},
+                {"fx3s4Knob4", "KNOB 4"}, {"fx3s4Knob5", "KNOB 5"}, {"fx3s4Knob6", "KNOB 6"},
+                {"fx3s4Mix", "MIX"}, {"fx3s4Level", "LEVEL"},
+                {"fx3s4Bypass", "BYP", Style::chip}},
+           rackCount}
+         },
+         0, only(Page::fx), 1, 0, 0, 0, fxBankWidth},
+
         // --- The mixer -------------------------------------------------------
         //
         // Eight channels across the whole signal row, three grid columns each.
@@ -469,17 +618,19 @@ inline const std::vector<Module>& modules()
           {26, {{"filterPan", "PAN"}, {"filterMix", "MIX"}}},
           {32, {{"filterLevel", "LEVEL", Style::fader}}}},
          0, only(Page::mix)},
-        // The two busses. Their sends row is empty: a bus receives sends, it
-        // does not carry them, and where it goes afterwards is the TO field.
+        // The two busses. They carry no sends — a bus receives them rather than
+        // making them, and where it goes afterwards is the TO field — so that
+        // row holds the switch that takes the bus's own effects rack out of
+        // the signal, which is the button Serum puts on this channel too.
         {"mixBus1", "BUS 1", "", "bus1Enable", true, Display::none, 0, 15, 3, true,
          {{16, {{"bus1Dest", "TO", Style::stepper}}},
-          {26, {}},
+          {26, {{"fx2Bypass", "FX", Style::chip}}},
           {26, {{"bus1Pan", "PAN"}}},
           {32, {{"bus1Level", "LEVEL", Style::fader}}}},
          0, only(Page::mix)},
         {"mixBus2", "BUS 2", "", "bus2Enable", true, Display::none, 0, 18, 3, true,
          {{16, {{"bus2Dest", "TO", Style::stepper}}},
-          {26, {}},
+          {26, {{"fx3Bypass", "FX", Style::chip}}},
           {26, {{"bus2Pan", "PAN"}}},
           {32, {{"bus2Level", "LEVEL", Style::fader}}}},
          0, only(Page::mix)},
@@ -488,7 +639,7 @@ inline const std::vector<Module>& modules()
         // a final level is actually read against the channels feeding it.
         {"mixMain", "MAIN", "", nullptr, false, Display::none, 0, 21, 3, true,
          {{16, {}},
-          {26, {}},
+          {26, {{"fx1Bypass", "FX", Style::chip}}},
           {26, {}},
           {32, {{"output", "LEVEL", Style::fader}}}},
          0, only(Page::mix)},
@@ -516,14 +667,22 @@ inline int bankCount(const Module& module)
 // One bank button in a module's header. They start after whatever the header
 // already carries on the left: the enable LED, and the drag handle of a module
 // that is itself a source.
+// Room for a short title, for a banked module that draws one. The envelopes and
+// the LFOs do not: their drag handle carries the name and stands where the
+// title would. The rack has no handle, so its title is drawn and its cards have
+// to start past it. The layout test holds such a title to three characters,
+// which is what this width covers at the header's font.
+inline constexpr int bankTitleGutter = 34;
+
 inline juce::Rectangle<int> bankButtonBounds(juce::Rectangle<int> moduleArea, const Module& module,
                                              int bank, int handleWidth)
 {
     auto left = moduleArea.getX() + 10;
     if (module.enableId != nullptr) left += headerHeight;
     if (module.handleSource != 0) left += handleWidth + 8;
-    return {left + bank * (bankButtonWidth + bankButtonGap), moduleArea.getY(),
-            bankButtonWidth, headerHeight};
+    else left += bankTitleGutter;
+    const auto width = bankWidthOf(module);
+    return {left + bank * (width + bankButtonGap), moduleArea.getY(), width, headerHeight};
 }
 
 // Whether a module is shown while the given tab is chosen.

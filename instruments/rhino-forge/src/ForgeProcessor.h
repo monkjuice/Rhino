@@ -84,9 +84,20 @@ public:
             : 0.0f;
     }
 
+    // What one of a rack slot's general knobs reads as, in the unit whichever
+    // type that slot holds gives it. Public because the panel asks the same
+    // question to label the knob's bubble and to decide whether the knob is in
+    // use at all. Message thread and audio thread both reach it; everything it
+    // touches is an atomic parameter read.
+    juce::String fxKnobText(int rack, int slot, int knob, float value) const;
+
+    // Which type a slot holds, and therefore what its controls are.
+    const FxTypeInfo& fxSlotType(int rack, int slot) const;
+
 private:
     // Not static: POSITION's readout closes over this Processor so it can name
-    // the frame it is on in whichever table the oscillator is reading.
+    // the frame it is on in whichever table the oscillator is reading, and a
+    // rack knob's closes over it for the same reason.
     juce::AudioProcessorValueTreeState::ParameterLayout parameterLayout();
     Core core;
     std::array<std::atomic<float>, envCount> meterLevel {};

@@ -126,6 +126,26 @@ inline juce::String tooltipFor(const juce::String& id)
             return found->second.replace("%", id.substring(3, 4));
     }
 
+    // The rack. A slot's controls are the same twelve whatever type it holds,
+    // so what they say here is what they are *for* — the panel replaces each
+    // one at runtime with the type's own words, which is the only place that
+    // can be known. See Editor::refreshFxSlots.
+    if (id.startsWith("fx"))
+    {
+        if (id.endsWith("Type")) return "What this slot of the rack is: a reverb, a delay, "
+                                        "a chorus, a distortion, an equaliser, a filter, or nothing";
+        if (id.endsWith("ModeA") || id.endsWith("ModeB"))
+            return "A choice belonging to whichever effect is in this slot";
+        if (id.contains("Knob")) return "A control of whichever effect is in this slot. "
+                                        "Its name and its units come from that effect";
+        if (id.endsWith("Mix")) return "The wet and dry balance for this slot, from all dry to all wet";
+        if (id.endsWith("Level")) return "The output level of this slot";
+        // The rack's own bypass carries no slot in its id; a slot's does.
+        if (id.endsWith("Bypass"))
+            return id.contains("s") ? "Take this slot out of the rack without removing what is set on it"
+                                    : "Take this whole rack out of the signal";
+    }
+
     if (id.startsWith("macro"))
         return "A performance macro. Drag its number onto a knob, or right-click the knob";
 

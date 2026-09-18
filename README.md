@@ -37,7 +37,7 @@ This is an early composition workflow, not a complete DAW. Recording, media bund
 If the Release build already exists, run this from the repository root:
 
 ```powershell
-& ".\native\build\RhinoNative_artefacts\Release\Rhino.exe"
+& ".\native\build\RhinoNative_artefacts\Release\RhinoDAW.exe"
 ```
 
 To build it, install Python 3.12+, CMake 3.24+, and Visual Studio 2022 with the **Desktop development with C++** workload and Windows SDK. Run from the repository root:
@@ -47,7 +47,7 @@ python native/scripts/fetch-dependencies.py
 cmake -S native -B native/build -G "Visual Studio 17 2022" -A x64
 cmake --build native/build --config Release --parallel 2
 ctest --test-dir native/build -C Release --output-on-failure
-& ".\native\build\RhinoNative_artefacts\Release\Rhino.exe"
+& ".\native\build\RhinoNative_artefacts\Release\RhinoDAW.exe"
 ```
 
 The fetch script downloads pinned Tracktion and JUCE revisions into `native/.deps`. Dependencies and build outputs are ignored by version control.

@@ -17,7 +17,13 @@ add_subdirectory(.deps/juce EXCLUDE_FROM_ALL)
 add_subdirectory(.deps/tracktion EXCLUDE_FROM_ALL)
 
 juce_add_gui_app(RhinoNative
-    PRODUCT_NAME "Rhino"
+    # The binary is deliberately not called Rhino.exe. Graphics drivers
+    # carry per-executable profiles keyed on that name, and NVIDIA ships
+    # one for Rhinoceros 3D, whose settings are applied to anything with
+    # the same filename -- which corrupts this app's Direct2D repaints.
+    # The product is still Rhino: the name shown to the user comes from
+    # getApplicationName(), not from here.
+    PRODUCT_NAME "RhinoDAW"
     BUNDLE_ID "com.rhino.native"
     ICON_BIG assets/rhino_app_icon_1024.png
     ICON_SMALL assets/rhino_app_icon_256.png

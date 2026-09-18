@@ -77,7 +77,7 @@ Prefer a unit test over a scenario whenever the code under test needs no `Sessio
 
 ## Debugging a crash that only one project file triggers
 
-`Rhino.exe` opens a `.rhinoedit` passed as its first argument (see `Application::initialise`), which turns "it crashes when I open my project" into a headless repro that runs in about ten seconds. Everything below follows from having that loop.
+`RhinoDAW.exe` opens a `.rhinoedit` passed as its first argument (see `Application::initialise`), which turns "it crashes when I open my project" into a headless repro that runs in about ten seconds. Everything below follows from having that loop.
 
 **Name the faulting module before blaming anything.** Windows records it, and it is the difference between debugging Rhino and debugging a plugin:
 
@@ -85,7 +85,7 @@ Prefer a unit test over a scenario whenever the code under test needs no `Sessio
 Get-WinEvent -FilterHashtable @{LogName='Application'; ProviderName='Application Error'; StartTime=(Get-Date).AddHours(-6)}
 ```
 
-A project that loads a VST invites the assumption that the VST is at fault. The log said `Rhino.exe` faulting in `Rhino.exe`, which ruled that out in one step. The same entry gives a fault offset, and an identical offset across attempts means the crash is deterministic and worth bisecting rather than a race.
+A project that loads a VST invites the assumption that the VST is at fault. The log said `RhinoDAW.exe` faulting in `RhinoDAW.exe`, which ruled that out in one step. The same entry gives a fault offset, and an identical offset across attempts means the crash is deterministic and worth bisecting rather than a race.
 
 **Bracket it with `rhino.log`** (`%APPDATA%\Rhino\rhino.log`). `ProjectFiles.cpp` writes `Opening <name>...` before the load and `Opened <name>` after it, so a session with the first and not the second puts the fault inside that call. A different project opening successfully in the same session is the strongest possible hint that the data, not the build, is the trigger.
 
@@ -94,6 +94,36 @@ A project that loads a VST invites the assumption that the VST is at fault. The 
 **Re-run before believing a non-crash.** A single clean run is noise: a launch can sit on a dialog or lose a race and look like success. Two orders and a repeat of the same file cost a minute and prevent a wrong conclusion. One such false pass nearly sent this investigation at the wrong file.
 
 `juce::Array::operator[]` returns a default-constructed value for an out-of-range index rather than asserting in Release, so an out-of-bounds track or plugin lookup surfaces as a null dereference somewhere later. When a guard like `if (tracks.size() > 1)` protects one access, check every other access to the same index — the bug here was a read that was guarded and a write that was not.
+
+## When the same source renders differently on two machines
+
+Graphics drivers carry per-application profiles keyed on the **executable's
+filename**, and they apply them to any binary that happens to match. Naming the
+app `Rhino.exe` handed it NVIDIA's profile for Rhinoceros 3D, the CAD package,
+whose settings corrupt this app's Direct2D repaints: every interaction left
+stale regions behind, and they accumulated until the window was unreadable.
+`PRODUCT_NAME` in `native/CMakeLists.txt` is therefore `RhinoDAW`, and the
+product name the user sees comes from `getApplicationName()` instead.
+
+The profile database is readable, so a suspected collision can be confirmed
+rather than guessed -- search `%ProgramData%\NVIDIA Corporation\Drs\*.bin` for
+the executable name encoded as UTF-16LE.
+
+Two habits earned this one, and both generalise:
+
+**Copy the binary under a second name before theorising.** Byte-identical files
+differing only in filename isolate the environment from the build in one step.
+A hash of both is the whole proof, and it costs seconds.
+
+**A machine that works is a control, not a consolation.** The laptop rendered
+correctly throughout. That was not luck: it has hybrid graphics, so a 2D app
+runs on the Intel iGPU and no NVIDIA profile is ever consulted. Comparing the
+two machines' GPUs is what put the driver in frame at all.
+
+Timelines lie. An OS update and a GPU driver each looked convincing here
+because they sat near the right dates; both were wrong. What settled it was
+restoring the deleted folder and running the old binary beside the new one.
+Prefer a control you can execute over a correlation you can only argue.
 
 ## Verifying pitch, level or timbre
 

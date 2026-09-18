@@ -908,6 +908,24 @@ public:
         window->setContentOwned(loading.getComponent(), true);
         window->centreWithSize(560, 320);
         window->setVisible(!startupTest);
+
+        // RHINO_RENDERER=software selects JUCE's rasteriser. It keeps one
+        // persistent surface, so a region nobody repainted still holds the last
+        // correct frame; the Direct2D backend presents from rotating buffers
+        // where that same region holds an older frame instead.
+        if (auto* peer = window->getPeer())
+        {
+            const auto engines = peer->getAvailableRenderingEngines();
+            const auto requested = juce::SystemStats::getEnvironmentVariable("RHINO_RENDERER", {}).trim();
+            if (requested.isNotEmpty())
+            {
+                auto match = -1;
+                for (int i = 0; i < engines.size(); ++i)
+                    if (engines[i].containsIgnoreCase(requested)) { match = i; break; }
+                if (match >= 0) peer->setCurrentRenderingEngine(match);
+            }
+            juce::Logger::writeToLog("Rhino: rendering engine " + engines[peer->getCurrentRenderingEngine()]);
+        }
         const auto screenshot = juce::SystemStats::getEnvironmentVariable("RHINO_STARTUP_SNAPSHOT", {});
         if (startupTest && screenshot.isNotEmpty())
         {

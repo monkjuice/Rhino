@@ -2,6 +2,7 @@
 import io
 from pathlib import Path
 import tarfile
+import time
 import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1] / '.deps'
@@ -32,6 +33,18 @@ for name, repository, revision in DEPENDENCIES:
     with tarfile.open(fileobj=io.BytesIO(archive), mode='r:gz') as tar:
         prefix = tar.getmembers()[0].name.split('/')[0]
         tar.extractall(ROOT, filter='data')
-    (ROOT / prefix).rename(destination)
+    # Windows can still hold the freshly written tree open when extraction
+    # returns -- a virus scanner following the writes is enough -- and the
+    # rename then fails with "Access is denied" on a directory that is
+    # complete and correct. Retry rather than abort: the caller is left with
+    # an unnamed tree the script would otherwise refuse to adopt on rerun.
+    for attempt in range(20):
+        try:
+            (ROOT / prefix).rename(destination)
+            break
+        except PermissionError:
+            if attempt == 19:
+                raise
+            time.sleep(0.5)
     marker.write_text(revision)
     print(f'{name}: ready', flush=True)

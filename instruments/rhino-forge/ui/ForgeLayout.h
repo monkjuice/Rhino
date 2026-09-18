@@ -33,6 +33,20 @@ enum class Display { none, oscillator, envelope, lfo, filter };
 // the effect's business, because that is what knows how many there are.
 enum class Style { knob, stepper, chip, rocker, bar, fader, plate, selector };
 
+// Whether a control of this style draws the modulation reaching it: a knob
+// wears the ring outside its rim, a bar-style field the strip along its foot.
+// Nothing else draws any of it, and that is what decides where a dragged source
+// may be dropped — landing on a control that could not show the routing
+// afterwards would read as the drag having failed.
+//
+// A fader is the one destination this leaves out. The matrix still reaches a
+// channel's level from its own table; it is only the drop that stops at the
+// mixer, until a fader has somewhere to put a reach.
+inline constexpr bool showsModulation(Style style)
+{
+    return style == Style::knob || style == Style::stepper || style == Style::bar;
+}
+
 // The tabs. A page is one bit, so which tabs show a module is a set rather
 // than a single answer — which is what the mixer needs: it takes the whole
 // signal row, so SUB, NOISE and FILTER have to be absent from that one tab

@@ -198,6 +198,40 @@ void layoutSuite()
         }
     }
 
+    // A source is dropped on whatever is under the cursor, so a control is only
+    // worth aiming at if it can show what landed on it afterwards. A knob wears
+    // the ring and a numeric field wears the strip along its foot; a fader, a
+    // switch and a mode field draw none of it, which is why the drop is offered
+    // to the first two and the rest are still reached from the matrix table.
+    //
+    // The two tuning fields are the reason this is not just a rule about knobs:
+    // they are the only destinations the panel draws as fields, so they are the
+    // ones a narrowing of it would silently take the drop away from again.
+    const auto destinationOf = [] (const char* id)
+    {
+        for (int i = 1; i < rhino::forge::destinationCount; ++i)
+            if (juce::String(id) == rhino::forge::destinations()[static_cast<size_t>(i)].id)
+                return i;
+        return 0;
+    };
+    for (const auto* id : {"oscASemitone", "oscBSemitone"})
+    {
+        require(destinationOf(id) != 0, "an oscillator's tuning field is a destination");
+        auto declared = 0;
+        for (const auto& module : modules)
+            for (const auto& row : module.rows)
+                for (const auto& control : row.controls)
+                    if (juce::String(control.id) == id
+                        && control.style == rhino::forge::ui::Style::stepper)
+                        ++declared;
+        require(declared == 1, "an oscillator's tuning field is on the panel as a numeric field");
+    }
+    require(rhino::forge::ui::showsModulation(rhino::forge::ui::Style::stepper)
+                && rhino::forge::ui::showsModulation(rhino::forge::ui::Style::knob)
+                && !rhino::forge::ui::showsModulation(rhino::forge::ui::Style::fader)
+                && !rhino::forge::ui::showsModulation(rhino::forge::ui::Style::chip),
+            "the panel agrees with the look about which styles draw modulation");
+
     // A control that greys out under another must name a parameter that exists,
     // or the dependency silently never fires.
     for (const auto& module : modules)

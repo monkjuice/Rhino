@@ -1381,12 +1381,20 @@ void Editor::buildHandles()
         add(static_cast<int>(ModSource::macro1) + macro, juce::String(macro + 1), ui::electricBlue);
 }
 
+// What a dragged source can be dropped on. A knob always answers, whether or not
+// the matrix can reach it, so a drop on one it cannot reach is refused out loud
+// rather than passing through to whatever is behind it. Every other style that
+// can show a routing — the numeric fields — is a target only when it really is
+// a destination, which keeps the ones that merely look alike out of the way of
+// a drag crossing the panel: an LFO's shape, a channel's routing and the
+// matrix's own columns are all fields, and none of them is modulated.
 Editor::Control* Editor::controlAt(juce::Point<int> panelPosition)
 {
     for (auto& module : moduleUis)
         for (auto& control : module.controls)
-            if (control->style == ui::Style::knob && control->slider.isVisible()
-                && control->slider.getBounds().contains(panelPosition))
+            if (control->slider.isVisible() && ui::showsModulation(control->style)
+                && control->slider.getBounds().contains(panelPosition)
+                && (control->style == ui::Style::knob || destinationFor(control->id) != 0))
                 return control.get();
     return nullptr;
 }
@@ -1619,7 +1627,10 @@ void Editor::refreshModulationRings()
     for (auto& module : moduleUis)
         for (auto& control : module.controls)
         {
-            if (control->style != ui::Style::knob) continue;
+            // Only the styles that draw a routing are worth walking. One the
+            // matrix cannot reach is still visited, because that is what takes
+            // a ring back off a control whose slot has just been cleared.
+            if (!ui::showsModulation(control->style)) continue;
             const auto destination = destinationFor(control->id);
             const auto depth = destination == 0 ? 0.0f : depths[static_cast<size_t>(destination)];
             const auto offset = destination == 0 ? 0.0f : processor.modulationOffset(destination);

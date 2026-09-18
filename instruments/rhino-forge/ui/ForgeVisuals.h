@@ -90,6 +90,30 @@ inline bool onModRing(juce::Rectangle<int> rotaryArea, juce::Point<int> position
     return distance >= radius * 0.82f && distance <= radius * 1.06f;
 }
 
+// --- Numeric field geometry -------------------------------------------------
+//
+// A bar-style field has no rim to hang a ring on, so the modulation reaching it
+// is drawn as a strip along its foot instead: same two readings the ring
+// carries, laid out left to right across the field's own range rather than
+// around a circle. Shared by the look and the component for the same reason the
+// knob geometry above is.
+
+// The strip itself, in the field's dead space below the glyphs, which is why it
+// is thin enough to leave the number alone.
+inline juce::Rectangle<float> modBarBounds(juce::Rectangle<float> field)
+{
+    return field.reduced(2.0f, 0.0f).withTop(field.getBottom() - 3.5f);
+}
+
+// The band the strip can be grabbed in. Taller than the mark it draws, because
+// three pixels is not something a hand can aim at, and the field is only
+// twenty-one tall to begin with — so the bottom third of it is the strip and
+// the rest stays the field's own drag.
+inline bool onModBar(juce::Rectangle<float> field, juce::Point<int> position)
+{
+    return field.withTop(field.getBottom() - 7.0f).contains(position.toFloat());
+}
+
 inline juce::Colour accentFor(const Module& module)
 {
     return module.violet ? signalViolet : electricBlue;
@@ -147,10 +171,59 @@ public:
         g.setColour((active ? accent : line).withAlpha(enabled ? 1.0f : 0.35f));
         g.drawRoundedRectangle(area, 3.0f, 1.0f);
 
+        drawModBar(g, area, slider, enabled);
+
         // Over a fill, the value is read against the accent rather than in it.
         g.setColour((horizontal || !active ? text : accent).withAlpha(enabled ? 1.0f : 0.35f));
         g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
         g.drawText(slider.getTextFromValue(slider.getValue()), area, juce::Justification::centred);
+    }
+
+    // A modulated field carries the strip the knob carries a ring: how far the
+    // matrix could move this value, faint, and — while a note is sounding —
+    // where it has it this instant, bright, with a marker at the end. Both are
+    // laid out across the field's own range from wherever the value sits now,
+    // so the same drop reads the same way on a numeric field as on a knob.
+    //
+    // A field nothing is pointed at draws none of it, which is every field on
+    // the panel but the two the matrix can reach.
+    void drawModBar(juce::Graphics& g, juce::Rectangle<float> field, juce::Slider& slider,
+                    bool enabled)
+    {
+        const auto& properties = slider.getProperties();
+        const auto depth = static_cast<float>(properties.getWithDefault("modDepth", 0.0));
+        const auto offset = static_cast<float>(properties.getWithDefault("modOffset", 0.0));
+        const auto live = static_cast<bool>(properties.getWithDefault("modLive", false));
+        if ((depth == 0.0f && offset == 0.0f) || !enabled) return;
+
+        const auto bar = modBarBounds(field);
+        const auto range = slider.getRange();
+        const auto span = static_cast<float>(range.getLength());
+        const auto position = span > 0.0f
+            ? static_cast<float>(slider.getValue() - range.getStart()) / span : 0.0f;
+        const auto xAt = [&] (float amount)
+        {
+            return bar.getX() + juce::jlimit(0.0f, 1.0f, position + amount) * bar.getWidth();
+        };
+        const auto now = xAt(0.0f);
+        const auto reach = [&] (float to, juce::Colour colour, float thickness)
+        {
+            if (std::abs(to - now) < 1.0f) return;
+            g.setColour(colour);
+            g.fillRoundedRectangle({juce::jmin(now, to), bar.getBottom() - thickness,
+                                    std::abs(to - now), thickness}, thickness * 0.5f);
+        };
+
+        const auto hovered = static_cast<bool>(properties.getWithDefault("modHover", false));
+        reach(xAt(depth), signalViolet.withAlpha(hovered ? 0.75f : 0.32f), bar.getHeight());
+        if (live)
+        {
+            const auto at = xAt(offset);
+            reach(at, signalViolet.withAlpha(0.95f), bar.getHeight());
+            g.setColour(signalViolet.interpolatedWith(juce::Colours::white, 0.75f));
+            g.fillEllipse(juce::Rectangle<float>(3.5f, 3.5f)
+                              .withCentre({at, bar.getCentreY()}));
+        }
     }
 
     // A mixer fader. A slot cut into the panel, the part of it that has been
@@ -378,9 +451,16 @@ public:
         setValue(getMinimum() + (now + direction) * step, juce::sendNotificationSync);
     }
 
+    // "The ring" is whichever shape this control wears its modulation in: the
+    // band outside a knob's rim, or the strip along the foot of a numeric
+    // field. Everything past this point — the drag, the double-click, the
+    // cursor — is the same gesture either way.
     bool overRing(juce::Point<int> position)
     {
-        return ringDraggable && onModRing(ringArea(), position);
+        if (!ringDraggable) return false;
+        const auto area = ringArea();
+        return isBar() ? onModBar(area.toFloat().reduced(1.0f), position)
+                       : onModRing(area, position);
     }
 
     void mouseDown(const juce::MouseEvent& event) override

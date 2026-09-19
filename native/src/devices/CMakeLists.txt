@@ -9,6 +9,7 @@
 # Sources are listed explicitly, as they are in the parent CMakeLists: a new
 # device needs a line here, a line in DeviceCatalog.cpp, and nothing else.
 add_library(RhinoDevices STATIC
+    DeviceCatalog.cpp
     instruments/DrumDevice.cpp
     instruments/RhinoWaveDevice.cpp
     audio/UtilityDevice.cpp

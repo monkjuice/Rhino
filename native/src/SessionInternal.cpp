@@ -46,16 +46,15 @@ juce::Colour presetColour(Session::PatternPreset preset)
     return juce::Colour(0xff4b6671);
 }
 
+juce::Colour instrumentColour(const DeviceDescriptor& device)
+{
+    return device.colour != 0 ? juce::Colour(device.colour) : juce::Colour(0xff4b6671);
+}
+
 juce::Colour instrumentColour(Session::Instrument instrument)
 {
-    switch (instrument)
-    {
-        case Session::Instrument::FourOsc:    return juce::Colour(0xff3d6f8b);
-        case Session::Instrument::RhinoWave:  return juce::Colour(0xff574ec8);
-        case Session::Instrument::RhinoForge: return juce::Colour(0xff3a9aa9);
-        case Session::Instrument::Drums:      return juce::Colour(0xff738044);
-        case Session::Instrument::Utility:    return juce::Colour(0xff56636c);
-    }
+    if (const auto* device = descriptorFor(instrument))
+        return instrumentColour(*device);
     return juce::Colour(0xff4b6671);
 }
 
@@ -75,18 +74,9 @@ juce::Colour nextClipColour(juce::Colour current)
     return juce::Colour(palette[static_cast<size_t>((closest + 1) % static_cast<int>(std::size(palette)))]);
 }
 
-bool effectTypeAndName(Session::AudioEffect effect, const char*& type, juce::String& name)
+const DeviceDescriptor* audioEffectDescriptor(Session::AudioEffect effect)
 {
-    switch (effect)
-    {
-        case Session::AudioEffect::Equaliser:  type = te::EqualiserPlugin::xmlTypeName;  name = "EQ"; break;
-        case Session::AudioEffect::Reverb:     type = te::ReverbPlugin::xmlTypeName;     name = "Reverb"; break;
-        case Session::AudioEffect::Delay:      type = te::DelayPlugin::xmlTypeName;      name = "Delay"; break;
-        case Session::AudioEffect::Compressor: type = te::CompressorPlugin::xmlTypeName; name = "Compressor"; break;
-        case Session::AudioEffect::RhinoSpace: type = RhinoSpaceDevice::xmlTypeName;     name = "Rhino Space"; break;
-        case Session::AudioEffect::RhinoBloom: type = RhinoBloomDevice::xmlTypeName;     name = "Rhino Bloom"; break;
-    }
-    return type != nullptr;
+    return descriptorFor(effect);
 }
 
 void resetPluginList(te::PluginList* list)
@@ -229,9 +219,10 @@ tracktion::core::TimeRange firstFreeDuplicateRange(te::Clip& source)
 // changes the answer.
 bool isInstrumentPlugin(te::Plugin& plugin)
 {
-    const auto type = plugin.getPluginType();
-    return type == te::FourOscPlugin::xmlTypeName || type == DrumDevice::xmlTypeName
-        || type == RhinoWaveDevice::xmlTypeName || isForgePlugin(plugin);
+    if (const auto* device = DeviceCatalog::byTypeName(plugin.getPluginType()))
+        return device->kind == DeviceKind::Instrument;
+    // Forge is an external plugin, so it has no type name to look up.
+    return isForgePlugin(plugin);
 }
 
 te::Plugin* trackInstrument(te::AudioTrack& track)
@@ -287,15 +278,18 @@ void collapseStackedInstruments(te::Edit& edit)
     }
 }
 
-juce::Result switchTrackInstrument(te::Edit& edit, te::AudioTrack& track, Session::Instrument instrument, bool& changed,
-                                   const juce::PluginDescription* forgeDescription)
+juce::Result switchTrackInstrument(te::Edit& edit, te::AudioTrack& track, const DeviceDescriptor& device,
+                                   bool& changed, const juce::PluginDescription* forgeDescription)
 {
     // MIDI effects run ahead of the instrument, so a new one goes in after them.
     int instrumentInsertIndex = 0;
     while (instrumentInsertIndex < track.pluginList.size())
     {
         auto* plugin = track.pluginList[instrumentInsertIndex];
-        if (plugin == nullptr || plugin->getPluginType() != RhinoArpDevice::xmlTypeName)
+        // Any MIDI effect, not just the one that existed when this was
+        // written: the catalog knows which plugins run ahead of the instrument.
+        const auto* leading = plugin != nullptr ? DeviceCatalog::byTypeName(plugin->getPluginType()) : nullptr;
+        if (leading == nullptr || leading->kind != DeviceKind::MidiEffect)
             break;
         ++instrumentInsertIndex;
     }
@@ -305,18 +299,11 @@ juce::Result switchTrackInstrument(te::Edit& edit, te::AudioTrack& track, Sessio
         if (plugin != nullptr && isInstrumentPlugin(*plugin))
             existingInstruments.add(plugin);
 
-    const auto wants = [instrument](te::Plugin& plugin)
+    const auto wants = [&device](te::Plugin& plugin)
     {
-        const auto type = plugin.getPluginType();
-        switch (instrument)
-        {
-            case Session::Instrument::FourOsc:    return type == te::FourOscPlugin::xmlTypeName;
-            case Session::Instrument::RhinoWave:  return type == RhinoWaveDevice::xmlTypeName;
-            case Session::Instrument::Drums:      return type == DrumDevice::xmlTypeName;
-            case Session::Instrument::RhinoForge: return isForgePlugin(plugin);
-            case Session::Instrument::Utility:    break;
-        }
-        return false;
+        if (device.external)
+            return isForgePlugin(plugin);
+        return device.typeName.isNotEmpty() && plugin.getPluginType() == device.typeName;
     };
 
     te::Plugin* selected = nullptr;
@@ -333,7 +320,7 @@ juce::Result switchTrackInstrument(te::Edit& edit, te::AudioTrack& track, Sessio
         // before it and audio effects after it keep their order.
         if (auto* current = existingInstruments.getFirst())
             instrumentInsertIndex = track.pluginList.indexOf(current);
-        if (instrument == Session::Instrument::RhinoForge)
+        if (device.external)
         {
             if (forgeDescription == nullptr)
                 return juce::Result::fail("Rhino Forge.vst3 was not found. Build or install the Forge VST3 first.");
@@ -346,10 +333,7 @@ juce::Result switchTrackInstrument(te::Edit& edit, te::AudioTrack& track, Sessio
         }
         else
         {
-            const auto type = instrument == Session::Instrument::Drums ? juce::String(DrumDevice::xmlTypeName)
-                : instrument == Session::Instrument::RhinoWave ? juce::String(RhinoWaveDevice::xmlTypeName)
-                : juce::String(te::FourOscPlugin::xmlTypeName);
-            auto created = edit.getPluginCache().createNewPlugin(type, {});
+            auto created = edit.getPluginCache().createNewPlugin(device.typeName, {});
             if (created == nullptr)
                 return juce::Result::fail("The target track device could not be created.");
             selected = created.get();
@@ -383,6 +367,15 @@ juce::Result switchTrackInstrument(te::Edit& edit, te::AudioTrack& track, Sessio
     }
 
     return juce::Result::ok();
+}
+
+juce::Result switchTrackInstrument(te::Edit& edit, te::AudioTrack& track, Session::Instrument instrument, bool& changed,
+                                   const juce::PluginDescription* forgeDescription)
+{
+    const auto* device = descriptorFor(instrument);
+    if (device == nullptr)
+        return juce::Result::fail("That instrument is not in this build.");
+    return switchTrackInstrument(edit, track, *device, changed, forgeDescription);
 }
 
 }

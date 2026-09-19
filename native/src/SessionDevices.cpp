@@ -11,34 +11,40 @@ namespace
 bool isTrackInfrastructure(const juce::String& type)
 {
     // Tracktion represents permanent channel-strip facilities as plugins in
-    // the processing graph. They are deliberately not user devices.
-    return type == UtilityDevice::xmlTypeName || type == "volume" || type == "level";
+    // the processing graph. They are deliberately not user devices. "volume"
+    // and "level" are the engine's own and have no catalog entry.
+    if (const auto* device = DeviceCatalog::byTypeName(type))
+        return device->infrastructure;
+    return type == "volume" || type == "level";
 }
 
 bool isBuiltInInstrument(const juce::String& type)
 {
-    return type == te::FourOscPlugin::xmlTypeName || type == DrumDevice::xmlTypeName
-        || type == RhinoWaveDevice::xmlTypeName;
+    const auto* device = DeviceCatalog::byTypeName(type);
+    return device != nullptr && device->kind == DeviceKind::Instrument;
 }
 
 Session::DeviceKind deviceKind(te::Plugin& plugin)
 {
-    const auto type = plugin.getPluginType();
-    if (type == RhinoArpDevice::xmlTypeName)
-        return Session::DeviceKind::MidiEffect;
-    if (isBuiltInInstrument(type) || isForgePlugin(plugin))
+    if (const auto* device = DeviceCatalog::byTypeName(plugin.getPluginType()))
+        return device->kind;
+    // Forge is an external plugin and has no type name to look up.
+    if (isForgePlugin(plugin))
         return Session::DeviceKind::Instrument;
     return Session::DeviceKind::AudioEffect;
 }
 
 bool isSelectedPatternInstrument(te::Plugin& plugin, const juce::String& selected)
 {
-    const auto type = plugin.getPluginType();
-    if (type == te::FourOscPlugin::xmlTypeName) return selected.isEmpty() || selected == "synth";
-    if (type == DrumDevice::xmlTypeName) return selected == "drums";
-    if (type == RhinoWaveDevice::xmlTypeName) return selected == "wave";
-    if (isForgePlugin(plugin)) return selected == "forge";
-    return true;
+    const auto* device = DeviceCatalog::byTypeName(plugin.getPluginType());
+    if (device == nullptr && isForgePlugin(plugin))
+        device = DeviceCatalog::byId("RhinoForge");
+    if (device == nullptr || device->patternKey.isEmpty())
+        return true;
+    // An unset property means the original starter synth.
+    if (selected.isEmpty())
+        return device->patternKey == "synth";
+    return device->patternKey == selected;
 }
 
 int channelStripInsertIndex(te::AudioTrack& track)
@@ -65,11 +71,27 @@ te::PluginList* Session::pluginListForTrack(int trackIndex) const
 
 juce::Result Session::addAudioEffect(AudioEffect effect, int trackIndex)
 {
-    const char* type = nullptr;
-    juce::String name;
-    if (!effectTypeAndName(effect, type, name))
+    const auto* device = audioEffectDescriptor(effect);
+    if (device == nullptr)
         return juce::Result::fail("That audio effect could not be created.");
+    return addDevice(device->id, trackIndex);
+}
 
+// The one entry point for adding a device: everything else, including the
+// enum overloads above, comes through here. A device with no enum of its own
+// is added exactly like one that has.
+juce::Result Session::addDevice(const juce::String& deviceId, int trackIndex)
+{
+    const auto* device = DeviceCatalog::byId(deviceId);
+    if (device == nullptr)
+        return juce::Result::fail("That device is not in this build.");
+    if (device->kind == DeviceKind::Instrument)
+        return addInstrumentDevice(*device, trackIndex);
+    if (device->kind == DeviceKind::MidiEffect)
+        return addMidiEffectDevice(*device, trackIndex);
+
+    const auto& name = device->displayName;
+    const auto& type = device->typeName;
     auto* list = pluginListForTrack(trackIndex);
     if (list == nullptr)
         return juce::Result::fail("Drop audio effects on a track.");
@@ -99,10 +121,19 @@ juce::Result Session::addAudioEffect(AudioEffect effect, int trackIndex)
 
 juce::Result Session::addClipAudioEffect(AudioEffect effect, te::EditItemID clipID)
 {
-    const char* type = nullptr;
-    juce::String name;
-    if (!effectTypeAndName(effect, type, name))
+    const auto* device = audioEffectDescriptor(effect);
+    if (device == nullptr)
         return juce::Result::fail("That audio effect could not be created.");
+    return addClipDevice(device->id, clipID);
+}
+
+juce::Result Session::addClipDevice(const juce::String& deviceId, te::EditItemID clipID)
+{
+    const auto* device = DeviceCatalog::byId(deviceId);
+    if (device == nullptr || device->kind != DeviceKind::AudioEffect)
+        return juce::Result::fail("Clip effects can only be audio effects.");
+    const auto& name = device->displayName;
+    const auto& type = device->typeName;
 
     auto* clip = dynamic_cast<te::AudioClipBase*>(findClip(clipID));
     if (clip == nullptr)
@@ -128,7 +159,16 @@ juce::Result Session::addClipAudioEffect(AudioEffect effect, te::EditItemID clip
 
 juce::Result Session::addInstrument(Instrument instrument, int trackIndex)
 {
-    if (instrument == Instrument::RhinoForge && !forgeDescription)
+    const auto* device = descriptorFor(instrument);
+    if (device == nullptr)
+        return juce::Result::fail("That instrument is not in this build.");
+    return addDevice(device->id, trackIndex);
+}
+
+juce::Result Session::addInstrumentDevice(const DeviceDescriptor& device, int trackIndex)
+{
+    // An external instrument may not have been scanned for yet.
+    if (device.external && !forgeDescription)
         initialiseExternalPlugins(true);
 
     const auto tracks = te::getAudioTracks(*edit);
@@ -136,39 +176,28 @@ juce::Result Session::addInstrument(Instrument instrument, int trackIndex)
         return juce::Result::fail("Drop instruments on a track.");
 
     auto* track = tracks[trackIndex];
-    const char* type = nullptr;
-    juce::String name;
-    switch (instrument)
-    {
-        case Instrument::FourOsc: type = te::FourOscPlugin::xmlTypeName; name = "4OSC"; break;
-        case Instrument::RhinoWave: type = RhinoWaveDevice::xmlTypeName; name = "Rhino Wave"; break;
-        case Instrument::RhinoForge: name = "Rhino Forge"; break;
-        case Instrument::Drums:   type = DrumDevice::xmlTypeName;        name = "Rhino Drums"; break;
-        case Instrument::Utility: type = UtilityDevice::xmlTypeName;     name = "Utility"; break;
-    }
+    const auto& name = device.displayName;
 
     edit->getUndoManager().beginNewTransaction("Add " + name);
     bool changed = false;
-    if (instrument == Instrument::Utility)
+    // A channel-strip facility is added to the chain rather than becoming the
+    // track's instrument, so it does not displace one.
+    if (device.infrastructure)
     {
         te::Plugin* plugin = nullptr;
-        const auto result = ensurePlugin(*edit, *track, type, track->pluginList.size(), plugin, changed);
+        const auto result = ensurePlugin(*edit, *track, device.typeName, track->pluginList.size(), plugin, changed);
         if (result.failed())
             return juce::Result::fail(name + " could not be created.");
     }
     else
     {
-        const auto result = switchTrackInstrument(*edit, *track, instrument, changed,
+        const auto result = switchTrackInstrument(*edit, *track, device, changed,
                                                   forgeDescription ? &*forgeDescription : nullptr);
         if (result.failed())
             return result;
     }
-    if (trackIndex == 0 && instrument != Instrument::Utility)
-        edit->state.setProperty("rhinoPatternInstrument",
-                                instrument == Instrument::Drums ? "drums"
-                                    : instrument == Instrument::RhinoWave ? "wave"
-                                    : instrument == Instrument::RhinoForge ? "forge" : "synth",
-                                &edit->getUndoManager());
+    if (trackIndex == 0 && !device.infrastructure && device.patternKey.isNotEmpty())
+        edit->state.setProperty("rhinoPatternInstrument", device.patternKey, &edit->getUndoManager());
     edit->getUndoManager().beginNewTransaction();
     if (changed)
         markModified();
@@ -180,17 +209,20 @@ juce::Result Session::addInstrument(Instrument instrument, int trackIndex)
 
 juce::Result Session::addMidiEffect(MidiEffect effect, int trackIndex)
 {
+    const auto* device = descriptorFor(effect);
+    if (device == nullptr)
+        return juce::Result::fail("That MIDI effect is not in this build.");
+    return addDevice(device->id, trackIndex);
+}
+
+juce::Result Session::addMidiEffectDevice(const DeviceDescriptor& device, int trackIndex)
+{
     const auto tracks = te::getAudioTracks(*edit);
     if (!juce::isPositiveAndBelow(trackIndex, tracks.size()))
         return juce::Result::fail("Drop MIDI FX on an instrument track.");
 
-    const char* type = nullptr;
-    juce::String name;
-    switch (effect)
-    {
-        case MidiEffect::RhinoArp: type = RhinoArpDevice::xmlTypeName; name = "Rhino Arp"; break;
-    }
-
+    const auto& name = device.displayName;
+    const auto& type = device.typeName;
     auto* track = tracks[trackIndex];
     edit->getUndoManager().beginNewTransaction("Add " + name);
     auto plugin = edit->getPluginCache().createNewPlugin(type, {});
@@ -218,7 +250,7 @@ juce::Result Session::addMidiEffect(MidiEffect effect, int trackIndex)
     return juce::Result::ok();
 }
 
-juce::Result Session::addDrumKit(DrumDevice::Kit kit, int trackIndex)
+juce::Result Session::addDrumKit(DrumKit kit, int trackIndex)
 {
     const auto tracks = te::getAudioTracks(*edit);
     if (!juce::isPositiveAndBelow(trackIndex, tracks.size()))
@@ -226,7 +258,10 @@ juce::Result Session::addDrumKit(DrumDevice::Kit kit, int trackIndex)
     const auto name = DrumDevice::kitName(kit);
     edit->getUndoManager().beginNewTransaction("Add " + name);
     bool changed = false;
-    if (const auto result = switchTrackInstrument(*edit, *tracks[trackIndex], Instrument::Drums, changed);
+    const auto* drumDevice = DeviceCatalog::byId("Drums");
+    if (drumDevice == nullptr)
+        return juce::Result::fail("The drum instrument is not in this build.");
+    if (const auto result = switchTrackInstrument(*edit, *tracks[trackIndex], *drumDevice, changed);
         result.failed())
         return result;
     auto* drums = findDrumDevice(*tracks[trackIndex]);
@@ -425,9 +460,12 @@ juce::Result Session::deleteDevice(int track, int slot)
         return juce::Result::fail("Select a removable device first.");
     auto* plugin = (*list)[slot];
     const auto type = plugin->getPluginType();
-    const auto coreStarterDevice = track == 0 && (type == UtilityDevice::xmlTypeName
-        || type == te::FourOscPlugin::xmlTypeName || type == DrumDevice::xmlTypeName);
-    if (plugin == nullptr || coreStarterDevice || type == UtilityDevice::xmlTypeName)
+    // The starter chain is a property of the first track, not of the devices
+    // themselves, so this is a list of ids rather than a catalog flag.
+    const auto* device = DeviceCatalog::byTypeName(type);
+    const auto id = device != nullptr ? device->id : juce::String();
+    const auto coreStarterDevice = track == 0 && (id == "Utility" || id == "FourOsc" || id == "Drums");
+    if (plugin == nullptr || coreStarterDevice || isTrackInfrastructure(type))
         return juce::Result::fail("Core devices stay in the starter track chain.");
     edit->getUndoManager().beginNewTransaction("Delete device");
     plugin->removeFromParent();

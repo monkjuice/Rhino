@@ -40,40 +40,22 @@ inline std::optional<Session::PatternPreset> patternPresetFromId(const juce::Str
     return std::nullopt;
 }
 
-inline std::optional<Session::AudioEffect> audioEffectFromId(const juce::String& id)
+// Devices are resolved through the catalog, so a device added since this was
+// written resolves without a line being added here. The kind is checked
+// because a drop target accepts one kind and must refuse the others.
+inline const DeviceDescriptor* deviceFromId(const juce::String& id, DeviceKind kind)
 {
-    if (id == "Equaliser")  return Session::AudioEffect::Equaliser;
-    if (id == "Reverb")     return Session::AudioEffect::Reverb;
-    if (id == "Delay")      return Session::AudioEffect::Delay;
-    if (id == "Compressor") return Session::AudioEffect::Compressor;
-    if (id == "RhinoSpace") return Session::AudioEffect::RhinoSpace;
-    if (id == "RhinoBloom") return Session::AudioEffect::RhinoBloom;
-    return std::nullopt;
+    const auto* device = DeviceCatalog::byId(id);
+    return device != nullptr && device->kind == kind ? device : nullptr;
 }
 
-inline std::optional<Session::Instrument> instrumentFromId(const juce::String& id)
+inline std::optional<DrumKit> drumKitFromId(const juce::String& id)
 {
-    if (id == "FourOsc")   return Session::Instrument::FourOsc;
-    if (id == "RhinoWave") return Session::Instrument::RhinoWave;
-    if (id == "RhinoForge") return Session::Instrument::RhinoForge;
-    if (id == "Drums")     return Session::Instrument::Drums;
-    if (id == "Utility")   return Session::Instrument::Utility;
-    return std::nullopt;
-}
-
-inline std::optional<DrumDevice::Kit> drumKitFromId(const juce::String& id)
-{
-    if (id == "Rhino808")   return DrumDevice::Kit::Rhino808;
-    if (id == "HouseKit")   return DrumDevice::Kit::House;
-    if (id == "BreakKit")   return DrumDevice::Kit::Break;
-    if (id == "MinimalKit") return DrumDevice::Kit::Minimal;
-    if (id == "ClapKit")    return DrumDevice::Kit::Clap;
-    return std::nullopt;
-}
-
-inline std::optional<Session::MidiEffect> midiEffectFromId(const juce::String& id)
-{
-    if (id == "RhinoArp") return Session::MidiEffect::RhinoArp;
+    if (id == "Rhino808")   return DrumKit::Rhino808;
+    if (id == "HouseKit")   return DrumKit::House;
+    if (id == "BreakKit")   return DrumKit::Break;
+    if (id == "MinimalKit") return DrumKit::Minimal;
+    if (id == "ClapKit")    return DrumKit::Clap;
     return std::nullopt;
 }
 

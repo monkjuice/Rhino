@@ -7,22 +7,17 @@ namespace rhino
 {
 namespace
 {
-std::optional<Session::AudioEffect> effectFromBrowserDrop(const juce::String& description)
+// The rack takes any device the browser can offer, whatever its kind, so one
+// lookup covers all three prefixes.
+const DeviceDescriptor* deviceFromBrowserDrop(const juce::String& description)
 {
-    if (!description.startsWith("rhino-browser:effect:")) return std::nullopt;
-    return audioEffectFromId(browserDropId(description));
-}
-
-std::optional<Session::Instrument> instrumentFromBrowserDrop(const juce::String& description)
-{
-    if (!description.startsWith("rhino-browser:instrument:")) return std::nullopt;
-    return instrumentFromId(browserDropId(description));
-}
-
-std::optional<Session::MidiEffect> midiEffectFromBrowserDrop(const juce::String& description)
-{
-    if (!description.startsWith("rhino-browser:midi-effect:")) return std::nullopt;
-    return midiEffectFromId(browserDropId(description));
+    static constexpr const char* prefixes[] {
+        "rhino-browser:effect:", "rhino-browser:instrument:", "rhino-browser:midi-effect:"
+    };
+    for (const auto* prefix : prefixes)
+        if (description.startsWith(prefix))
+            return DeviceCatalog::byId(browserDropId(description));
+    return nullptr;
 }
 
 void styleAutomationButton(juce::TextButton& button, const Session::DeviceParameter& parameter)
@@ -135,9 +130,10 @@ public:
                                                   [this](const auto& candidate) { return candidate.pluginIndex == slot; });
             deviceName = visibleSlot != deviceSlots.end() ? visibleSlot->name : "Device";
             const auto deviceType = visibleSlot != deviceSlots.end() ? visibleSlot->type : juce::String();
-            isRhinoWave = deviceType == RhinoWaveDevice::xmlTypeName;
-            deviceTypeLabel = deviceType == RhinoWaveDevice::xmlTypeName ? "RHINO SYNTH"
-                : deviceType == DrumDevice::xmlTypeName || deviceType == te::FourOscPlugin::xmlTypeName ? "RHINO INSTRUMENT"
+            const auto* device = DeviceCatalog::byTypeName(deviceType);
+            isRhinoWave = device != nullptr && device->id == "RhinoWave";
+            deviceTypeLabel = isRhinoWave ? "RHINO SYNTH"
+                : device != nullptr && device->kind == DeviceKind::Instrument ? "RHINO INSTRUMENT"
                 : "RHINO FX";
             parameters = session.deviceParameters(track, slot);
             while (labels.size() < static_cast<int>(parameters.size()))
@@ -597,45 +593,46 @@ void DeviceRack::openSelectedDevice()
 bool DeviceRack::isInterestedInDragSource(const juce::DragAndDropTarget::SourceDetails& details)
 {
     const auto description = details.description.toString();
-    return effectFromBrowserDrop(description).has_value()
-        || instrumentFromBrowserDrop(description).has_value()
-        || midiEffectFromBrowserDrop(description).has_value();
+    return deviceFromBrowserDrop(description) != nullptr;
 }
 
 void DeviceRack::itemDropped(const juce::DragAndDropTarget::SourceDetails& details)
 {
     const auto description = details.description.toString();
-    if (const auto effect = effectFromBrowserDrop(description))
-    {
-        const auto result = session.addAudioEffect(*effect, selectedTrack);
-        if (status) status(result.wasOk() ? "Added effect to " + session.trackName(selectedTrack) : result.getErrorMessage());
-    }
-    else if (const auto instrument = instrumentFromBrowserDrop(description))
-    {
-        const auto result = session.addInstrument(*instrument, selectedTrack);
-        if (status) status(result.wasOk() ? "Added instrument to " + session.trackName(selectedTrack) : result.getErrorMessage());
-    }
-    else if (const auto midiEffect = midiEffectFromBrowserDrop(description))
-    {
-        const auto result = session.addMidiEffect(*midiEffect, selectedTrack);
-        if (status) status(result.wasOk() ? "Added MIDI FX to " + session.trackName(selectedTrack) : result.getErrorMessage());
-    }
+    const auto* device = deviceFromBrowserDrop(description);
+    if (device == nullptr)
+        return;
+    const auto noun = device->kind == DeviceKind::Instrument ? "instrument"
+        : device->kind == DeviceKind::MidiEffect ? "MIDI FX" : "effect";
+    const auto result = session.addDevice(device->id, selectedTrack);
+    if (status)
+        status(result.wasOk() ? "Added " + juce::String(noun) + " to " + session.trackName(selectedTrack)
+                              : result.getErrorMessage());
 }
 
 void DeviceRack::showAddMenu()
 {
+    // Built from the catalog, so a new device appears here the moment it has
+    // an entry. Infrastructure is left out: the engine puts it in the chain.
+    static const auto entries = []
+    {
+        std::vector<const DeviceDescriptor*> list;
+        for (const auto& device : DeviceCatalog::all())
+            if (!device.infrastructure)
+                list.push_back(&device);
+        return list;
+    }();
+
     juce::PopupMenu audioEffects, instruments, midiEffects, menu;
-    audioEffects.addItem(101, "EQ");
-    audioEffects.addItem(102, "Reverb");
-    audioEffects.addItem(103, "Delay");
-    audioEffects.addItem(104, "Compressor");
-    audioEffects.addItem(105, "Rhino Space");
-    audioEffects.addItem(106, "Rhino Bloom");
-    instruments.addItem(201, "4OSC");
-    instruments.addItem(202, "Rhino Wave");
-    instruments.addItem(203, "Rhino Forge", session.isForgeAvailable());
-    instruments.addItem(204, "Rhino Drums");
-    midiEffects.addItem(301, "Rhino Arp");
+    for (int i = 0; i < static_cast<int>(entries.size()); ++i)
+    {
+        const auto* device = entries[static_cast<size_t>(i)];
+        // An external device can only be added once it has been found.
+        const auto enabled = !device->external || session.isForgeAvailable();
+        auto& target = device->kind == DeviceKind::Instrument ? instruments
+            : device->kind == DeviceKind::MidiEffect ? midiEffects : audioEffects;
+        target.addItem(i + 1, device->displayName, enabled);
+    }
     menu.addSubMenu("Audio Effects", audioEffects);
     menu.addSubMenu("Instruments", instruments);
     menu.addSubMenu("MIDI Effects", midiEffects);
@@ -643,13 +640,9 @@ void DeviceRack::showAddMenu()
         [safe = juce::Component::SafePointer<DeviceRack>(this)](int result)
         {
             if (safe == nullptr || result == 0) return;
-            juce::Result added = juce::Result::fail("That device could not be created.");
-            if (result >= 101 && result <= 106)
-                added = safe->session.addAudioEffect(static_cast<Session::AudioEffect>(result - 101), safe->selectedTrack);
-            else if (result >= 201 && result <= 204)
-                added = safe->session.addInstrument(static_cast<Session::Instrument>(result - 201), safe->selectedTrack);
-            else if (result == 301)
-                added = safe->session.addMidiEffect(Session::MidiEffect::RhinoArp, safe->selectedTrack);
+            if (!juce::isPositiveAndBelow(result - 1, static_cast<int>(entries.size()))) return;
+            const auto* device = entries[static_cast<size_t>(result - 1)];
+            const auto added = safe->session.addDevice(device->id, safe->selectedTrack);
 
             if (safe->status)
                 safe->status(added.wasOk() ? "Added device to " + safe->session.trackName(safe->selectedTrack)
@@ -657,11 +650,8 @@ void DeviceRack::showAddMenu()
             if (added.wasOk())
             {
                 safe->sync();
-                const auto wantedKind = result >= 101 && result <= 106 ? Session::DeviceKind::AudioEffect
-                    : result >= 201 && result <= 204 ? Session::DeviceKind::Instrument
-                    : Session::DeviceKind::MidiEffect;
                 for (int i = 0; i < static_cast<int>(safe->slots.size()); ++i)
-                    if (safe->slots[static_cast<size_t>(i)].kind == wantedKind)
+                    if (safe->slots[static_cast<size_t>(i)].kind == device->kind)
                         safe->selectedDevice = i;
                 safe->sync();
                 if (juce::isPositiveAndBelow(safe->selectedDevice, safe->devicePanels.size()))

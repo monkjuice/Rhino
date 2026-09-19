@@ -283,9 +283,9 @@ void SessionView::applyBrowserDrop(const juce::String& description, int track, i
     }
     else if (kind == "instrument")
     {
-        if (const auto instrument = instrumentFromId(id))
+        if (const auto* instrument = deviceFromId(id, DeviceKind::Instrument))
         {
-            result = session.insertInstrumentClipInSlot(*instrument, track, scene);
+            result = session.insertDeviceClipInSlot(instrument->id, track, scene);
             message = "Added instrument clip to " + session.trackName(track) + " / " + session.sceneName(scene);
         }
     }
@@ -299,9 +299,9 @@ void SessionView::applyBrowserDrop(const juce::String& description, int track, i
     }
     else if (kind == "effect")
     {
-        if (const auto effect = audioEffectFromId(id))
+        if (const auto* effect = deviceFromId(id, DeviceKind::AudioEffect))
         {
-            result = session.addAudioEffect(*effect, track);
+            result = session.addDevice(effect->id, track);
             message = "Added browser effect to " + session.trackName(track) + " Device View";
         }
     }
@@ -315,9 +315,9 @@ void SessionView::applyBrowserDrop(const juce::String& description, int track, i
     }
     else if (kind == "midi-effect")
     {
-        if (const auto effect = midiEffectFromId(id))
+        if (const auto* effect = deviceFromId(id, DeviceKind::MidiEffect))
         {
-            result = session.addMidiEffect(*effect, track);
+            result = session.addDevice(effect->id, track);
             message = "Added MIDI FX to " + session.trackName(track) + " Device View";
         }
     }

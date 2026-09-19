@@ -301,19 +301,28 @@ juce::Result Session::insertPatternPresetInSlot(PatternPreset preset, int track,
 
 juce::Result Session::insertInstrumentClipInSlot(Instrument instrument, int track, int scene)
 {
-    if (instrument == Instrument::Utility)
-        return addInstrument(instrument, track);
+    const auto* device = descriptorFor(instrument);
+    if (device == nullptr)
+        return juce::Result::fail("That instrument is not in this build.");
+    return insertDeviceClipInSlot(device->id, track, scene);
+}
+
+juce::Result Session::insertDeviceClipInSlot(const juce::String& deviceId, int track, int scene)
+{
+    const auto* device = DeviceCatalog::byId(deviceId);
+    if (device == nullptr)
+        return juce::Result::fail("That device is not in this build.");
+    // Only an instrument gives a slot a clip. Anything else joins the track's
+    // chain instead, which is what a Utility drop on a slot has always done.
+    if (device->kind != DeviceKind::Instrument || device->infrastructure)
+        return addDevice(device->id, track);
     auto* slot = clipSlotAt(track, scene);
     if (slot == nullptr)
         return juce::Result::fail("Drop instruments on a session slot.");
-    const auto useDrums = instrument == Instrument::Drums;
-    const auto name = useDrums ? juce::String("Rhino Drums")
-        : instrument == Instrument::RhinoWave ? juce::String("Rhino Wave")
-        : instrument == Instrument::RhinoForge ? juce::String("Rhino Forge")
-        : juce::String("4OSC synth");
+    const auto name = DeviceCatalog::labelFor(*device);
     edit->getUndoManager().beginNewTransaction("Add " + name + " to slot");
     bool instrumentChanged = false;
-    const auto result = switchTrackInstrument(*edit, *te::getAudioTracks(*edit)[track], instrument, instrumentChanged,
+    const auto result = switchTrackInstrument(*edit, *te::getAudioTracks(*edit)[track], *device, instrumentChanged,
                                               forgeDescription ? &*forgeDescription : nullptr);
     if (result.failed())
         return result;
@@ -322,7 +331,7 @@ juce::Result Session::insertInstrumentClipInSlot(Instrument instrument, int trac
     auto clip = te::insertMIDIClip(*slot, name, {tracktion::core::TimePosition(), end});
     if (clip == nullptr)
         return juce::Result::fail("The instrument clip could not be added to that slot.");
-    clip->setColour(instrumentColour(instrument));
+    clip->setColour(instrumentColour(*device));
     clip->setLoopRangeBeats({tracktion::core::BeatPosition(), tracktion::core::BeatPosition::fromBeats(beats)});
     edit->getUndoManager().beginNewTransaction();
     markModified();

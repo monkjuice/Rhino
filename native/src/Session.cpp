@@ -16,12 +16,7 @@ void Session::setCommandLineTestMode(bool enabled)
 
 Session::Session() : engine(commandLineTestMode ? "Rhino Native Tests" : "Theda Native")
 {
-    engine.getPluginManager().createBuiltInType<UtilityDevice>();
-    engine.getPluginManager().createBuiltInType<DrumDevice>();
-    engine.getPluginManager().createBuiltInType<RhinoSpaceDevice>();
-    engine.getPluginManager().createBuiltInType<RhinoBloomDevice>();
-    engine.getPluginManager().createBuiltInType<RhinoArpDevice>();
-    engine.getPluginManager().createBuiltInType<RhinoWaveDevice>();
+    DeviceCatalog::registerBuiltInTypes(engine);
     initialiseExternalPlugins();
     buildStarterEdit();
 }

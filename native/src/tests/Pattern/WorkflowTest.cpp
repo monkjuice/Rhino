@@ -1,4 +1,12 @@
 #include "../../Session.h"
+// The scenarios drive devices directly, so this runner needs the definitions
+// rather than their catalog entries.
+#include "audio/UtilityDevice.h"
+#include "audio/RhinoBloomDevice.h"
+#include "audio/RhinoSpaceDevice.h"
+#include "instruments/DrumDevice.h"
+#include "instruments/RhinoWaveDevice.h"
+#include "midi/RhinoArpDevice.h"
 #include "DeviceRackTest.h"
 #include <stdexcept>
 

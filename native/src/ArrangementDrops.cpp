@@ -67,17 +67,17 @@ void Arrangement::itemDropped(const juce::DragAndDropTarget::SourceDetails& deta
     if (kind == "effect")
         if (const auto clipIndex = hit(details.localPosition.toFloat()); clipIndex >= 0)
         {
-            const auto effect = audioEffectFromId(browserDropId(description));
-            if (!effect)
+            const auto* effect = deviceFromId(browserDropId(description), DeviceKind::AudioEffect);
+            if (effect == nullptr)
             {
                 if (status) status("That browser item cannot be inserted here.");
                 return;
             }
             const auto& clip = clips[static_cast<size_t>(clipIndex)];
-            const auto result = session.addClipAudioEffect(*effect, clip.id);
+            const auto result = session.addClipDevice(effect->id, clip.id);
             if (result.failed())
             {
-                const auto trackResult = session.addAudioEffect(*effect, clip.track);
+                const auto trackResult = session.addDevice(effect->id, clip.track);
                 if (trackResult.failed())
                 {
                     if (status) status(result.getErrorMessage() + " " + trackResult.getErrorMessage());
@@ -139,10 +139,10 @@ juce::Result Arrangement::applyBrowserDrop(const juce::String& description, int 
 
     if (kind == "effect")
     {
-        const auto effect = audioEffectFromId(id);
-        if (!effect) return juce::Result::fail("That browser item cannot be inserted here.");
+        const auto* effect = deviceFromId(id, DeviceKind::AudioEffect);
+        if (effect == nullptr) return juce::Result::fail("That browser item cannot be inserted here.");
         if (track < 0) return juce::Result::fail("Drop audio effects on a track or clip.");
-        const auto result = session.addAudioEffect(*effect, track);
+        const auto result = session.addDevice(effect->id, track);
         if (result.failed()) return result;
         selectTrack(track);
         if (status) status("Added browser effect to " + session.trackName(track) + " Device View");
@@ -151,13 +151,13 @@ juce::Result Arrangement::applyBrowserDrop(const juce::String& description, int 
 
     if (kind == "instrument")
     {
-        const auto instrument = instrumentFromId(id);
-        if (!instrument) return juce::Result::fail("That browser item cannot be inserted here.");
+        const auto* instrument = deviceFromId(id, DeviceKind::Instrument);
+        if (instrument == nullptr) return juce::Result::fail("That browser item cannot be inserted here.");
         if (track < 0) return juce::Result::fail("Drop instruments on a track or clip.");
         // An instrument drop changes what the track is, never its clips. The
         // track's existing notes stay and play through the new instrument.
         juce::ignoreUnused(startSeconds, insertPreset);
-        const auto result = session.addInstrument(*instrument, track);
+        const auto result = session.addDevice(instrument->id, track);
         if (result.failed()) return result;
         selectTrack(track);
         if (status) status("Track " + juce::String(track + 1) + " now runs " + session.trackName(track)
@@ -180,10 +180,10 @@ juce::Result Arrangement::applyBrowserDrop(const juce::String& description, int 
 
     if (kind == "midi-effect")
     {
-        const auto effect = midiEffectFromId(id);
-        if (!effect) return juce::Result::fail("That browser item cannot be inserted here.");
+        const auto* effect = deviceFromId(id, DeviceKind::MidiEffect);
+        if (effect == nullptr) return juce::Result::fail("That browser item cannot be inserted here.");
         if (track < 0) return juce::Result::fail("Drop MIDI FX on an instrument track.");
-        const auto result = session.addMidiEffect(*effect, track);
+        const auto result = session.addDevice(effect->id, track);
         if (result.failed()) return result;
         selectTrack(track);
         if (status) status("Added MIDI FX to " + session.trackName(track) + " Device View");

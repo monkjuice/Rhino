@@ -1,4 +1,14 @@
 #include "../Session.h"
+#include "../BrowserPanel.h"
+// A test drives the DSP directly, so unlike the rest of the app it needs the
+// device definitions rather than their catalog entries.
+#include "audio/UtilityDevice.h"
+#include "audio/RhinoBloomDevice.h"
+#include "audio/RhinoSpaceDevice.h"
+#include "instruments/DrumDevice.h"
+#include "instruments/RhinoWaveDevice.h"
+#include "midi/RhinoArpDevice.h"
+#include <algorithm>
 #include <cmath>
 #include <source_location>
 #include <stdexcept>
@@ -56,6 +66,36 @@ int runSelfTest()
 
         // The drum DSP is exercised on its own instance rather than the one on
         // the pattern track, which is replaced whenever the instrument changes.
+        // The device catalog is meant to be the only place a device is
+        // declared: the browser, the add path and the engine all read it. A
+        // device added there and nowhere else must therefore be offered by
+        // the browser and be addable, which is what these two check.
+        {
+            BrowserPanel browser(session);
+            const auto& rows = browser.libraryItems();
+            for (const auto& device : DeviceCatalog::all())
+            {
+                if (!device.browsable)
+                    continue;
+                const auto listed = std::any_of(rows.begin(), rows.end(),
+                    [&device](const BrowserPanel::Item& row) { return row.deviceId == device.id; });
+                require(listed);   // browsable catalog device has a browser row
+            }
+            for (const auto& row : rows)
+                if (row.deviceId.isNotEmpty())
+                    require(DeviceCatalog::byId(row.deviceId) != nullptr);
+        }
+        for (const auto& device : DeviceCatalog::all())
+        {
+            // An external device needs its plugin installed, which a test
+            // machine may not have, so it is the one thing skipped here.
+            if (device.external)
+                continue;
+            require(session.addDevice(device.id, 0).wasOk());
+        }
+        require(session.addDevice("NoSuchDevice", 0).failed());
+
+
         auto drumPlugin = session.edit->getPluginCache().createNewPlugin(DrumDevice::xmlTypeName, {});
         auto* drums = dynamic_cast<DrumDevice*>(drumPlugin.get());
         require(drums != nullptr);

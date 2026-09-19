@@ -1,5 +1,13 @@
 #pragma once
 #include "Session.h"
+#include "DeviceIds.h"
+// Session's public header reaches the device library through its catalog
+// only. These two are included here, in the private header, because the
+// Session implementation genuinely manipulates them: it sets a drum kit and
+// reads wave parameters. Nothing outside Session's own .cpp files sees this.
+#include "audio/UtilityDevice.h"
+#include "instruments/DrumDevice.h"
+#include "instruments/RhinoWaveDevice.h"
 
 // Shared internals of the Session implementation.
 //
@@ -58,9 +66,10 @@ float exposedParameterMaximum(te::Plugin& plugin, int index, float maximum);
 // Engine and model helpers (SessionInternal.cpp)
 void panicMidiOnTrack(te::ClipTrack* clipTrack);
 juce::Colour presetColour(Session::PatternPreset preset);
+juce::Colour instrumentColour(const DeviceDescriptor& device);
 juce::Colour instrumentColour(Session::Instrument instrument);
 juce::Colour nextClipColour(juce::Colour current);
-bool effectTypeAndName(Session::AudioEffect effect, const char*& type, juce::String& name);
+const DeviceDescriptor* audioEffectDescriptor(Session::AudioEffect effect);
 void resetPluginList(te::PluginList* list);
 double stepDurationBeats(int steps);
 bool sameDeviceTarget(Session::DeviceTarget a, Session::DeviceTarget b);
@@ -77,6 +86,10 @@ void collapseStackedInstruments(te::Edit& edit);
 tracktion::core::TimeRange firstFreeDuplicateRange(te::Clip& source);
 juce::Result ensurePlugin(te::Edit& edit, te::AudioTrack& track, const juce::String& type,
                           int insertIndex, te::Plugin*& plugin, bool& changed);
+// Takes a catalog entry, so an instrument that has no Session::Instrument
+// value can still be switched to. The enum overload is shorthand for it.
+juce::Result switchTrackInstrument(te::Edit& edit, te::AudioTrack& track, const DeviceDescriptor& device,
+                                   bool& changed, const juce::PluginDescription* forgeDescription = nullptr);
 juce::Result switchTrackInstrument(te::Edit& edit, te::AudioTrack& track, Session::Instrument instrument, bool& changed,
                                    const juce::PluginDescription* forgeDescription = nullptr);
 

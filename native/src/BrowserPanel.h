@@ -34,12 +34,17 @@ public:
         juce::String name;
         juce::String detail;
         std::optional<Session::PatternPreset> preset;
-        std::optional<Session::AudioEffect> effect;
-        std::optional<Session::Instrument> instrument;
-        std::optional<Session::MidiEffect> midiEffect;
+        // A catalog id, empty when the row is not a device. One field covers
+        // instruments, audio FX and MIDI FX, because the catalog knows which
+        // of those a given id is.
+        juce::String deviceId;
         std::optional<Session::BuiltInSample> sample;
-        std::optional<DrumDevice::Kit> drumKit;
+        std::optional<DrumKit> drumKit;
     };
+
+    // What the browser offers, in the order it offers it. Exposed so a test
+    // can check that the device catalog really is what fills the library.
+    const std::vector<Item>& libraryItems() const { return items; }
 
 private:
     class FolderNode;

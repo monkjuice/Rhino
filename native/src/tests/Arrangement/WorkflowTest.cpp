@@ -1,4 +1,8 @@
 #include "../../Arrangement.h"
+// The scenarios drive devices directly, so this runner needs the definitions
+// rather than their catalog entries.
+#include "instruments/DrumDevice.h"
+#include "instruments/RhinoWaveDevice.h"
 #include "../../Theme.h"
 #include "../../StepGrid.h"
 #include "../../SessionView.h"

@@ -1,10 +1,7 @@
 #pragma once
-#include "audio/UtilityDevice.h"
-#include "instruments/DrumDevice.h"
-#include "audio/RhinoSpaceDevice.h"
-#include "audio/RhinoBloomDevice.h"
-#include "midi/RhinoArpDevice.h"
-#include "instruments/RhinoWaveDevice.h"
+// The device library is reached through its catalog, never through a device
+// header: what Session needs is a device's identity and metadata, not its DSP.
+#include "DeviceCatalog.h"
 #include "ClipGeometry.h"
 #include <optional>
 #include <vector>
@@ -12,6 +9,8 @@
 namespace rhino
 {
 struct PresetPattern;
+// Held only as a pointer here, so the definition stays in the device library.
+class UtilityDevice;
 
 // Message-thread facade. The engine owns scheduling, streaming and playback.
 // Member order keeps the engine alive until its edit and devices are released.
@@ -62,12 +61,8 @@ public:
         Whistle,
         Siren
     };
-    enum class DeviceKind
-    {
-        MidiEffect,
-        Instrument,
-        AudioEffect
-    };
+    // Declared by the device catalog so there is one spelling of the idea.
+    using DeviceKind = rhino::DeviceKind;
     struct DeviceSlot
     {
         juce::String name;
@@ -196,13 +191,18 @@ public:
     bool trackHasInstrument(int track) const;
     juce::Result selectPatternClip(te::EditItemID);
     bool isPatternDrums() const;
+    // Adding a device by its catalog id is the general form; the three enum
+    // overloads below are shorthand for the devices that had an enum before
+    // the catalog existed. A device added from now on needs no enum.
+    juce::Result addDevice(const juce::String& deviceId, int track);
+    juce::Result addClipDevice(const juce::String& deviceId, te::EditItemID);
     juce::Result addAudioEffect(AudioEffect, int track);
     juce::Result addClipAudioEffect(AudioEffect, te::EditItemID);
     juce::Result addInstrument(Instrument, int track);
     // A drum kit is the drum instrument plus a kit selection, so these behave
     // like any other instrument drop: the track switches to Rhino Drums and
     // takes that kit's name.
-    juce::Result addDrumKit(DrumDevice::Kit, int track);
+    juce::Result addDrumKit(DrumKit, int track);
     bool isForgeAvailable() const { return forgeDescription.has_value(); }
     juce::Result addMidiEffect(MidiEffect, int track);
     int trackCount() const;
@@ -336,6 +336,7 @@ public:
     juce::Result addScene();
     juce::Result deleteScene(int scene);
     juce::Result insertPatternPresetInSlot(PatternPreset, int track, int scene);
+    juce::Result insertDeviceClipInSlot(const juce::String& deviceId, int track, int scene);
     juce::Result insertInstrumentClipInSlot(Instrument, int track, int scene);
     juce::Result insertAudioFileInSlot(const juce::File&, int track, int scene);
     juce::Result insertBuiltInSampleInSlot(BuiltInSample, int track, int scene);
@@ -360,6 +361,11 @@ public:
     te::Plugin* patternInstrumentForTrack(int track) const;
     Instrument patternInstrumentKind() const;
 private:
+    // Reached only through addDevice, which resolves the id and dispatches
+    // on the device's kind.
+    juce::Result addInstrumentDevice(const DeviceDescriptor&, int track);
+    juce::Result addMidiEffectDevice(const DeviceDescriptor&, int track);
+
     // The arrangement workflow test reaches engine-level slot state through
     // this, the same way it does for StepGrid and Arrangement.
     friend int runArrangementTest();

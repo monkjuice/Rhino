@@ -26,54 +26,20 @@ juce::String presetId(Session::PatternPreset preset)
     return {};
 }
 
-juce::String effectId(Session::AudioEffect effect)
-{
-    switch (effect)
-    {
-        case Session::AudioEffect::Equaliser:  return "Equaliser";
-        case Session::AudioEffect::Reverb:     return "Reverb";
-        case Session::AudioEffect::Delay:      return "Delay";
-        case Session::AudioEffect::Compressor: return "Compressor";
-        case Session::AudioEffect::RhinoSpace: return "RhinoSpace";
-        case Session::AudioEffect::RhinoBloom: return "RhinoBloom";
-    }
-    return {};
-}
 
-juce::String instrumentId(Session::Instrument instrument)
-{
-    switch (instrument)
-    {
-        case Session::Instrument::FourOsc:   return "FourOsc";
-        case Session::Instrument::RhinoWave: return "RhinoWave";
-        case Session::Instrument::RhinoForge: return "RhinoForge";
-        case Session::Instrument::Drums:     return "Drums";
-        case Session::Instrument::Utility:   return "Utility";
-    }
-    return {};
-}
-
-juce::String drumKitId(DrumDevice::Kit kit)
+juce::String drumKitId(DrumKit kit)
 {
     switch (kit)
     {
-        case DrumDevice::Kit::Rhino808: return "Rhino808";
-        case DrumDevice::Kit::House:    return "HouseKit";
-        case DrumDevice::Kit::Break:    return "BreakKit";
-        case DrumDevice::Kit::Minimal:  return "MinimalKit";
-        case DrumDevice::Kit::Clap:     return "ClapKit";
+        case DrumKit::Rhino808: return "Rhino808";
+        case DrumKit::House:    return "HouseKit";
+        case DrumKit::Break:    return "BreakKit";
+        case DrumKit::Minimal:  return "MinimalKit";
+        case DrumKit::Clap:     return "ClapKit";
     }
     return {};
 }
 
-juce::String midiEffectId(Session::MidiEffect effect)
-{
-    switch (effect)
-    {
-        case Session::MidiEffect::RhinoArp: return "RhinoArp";
-    }
-    return {};
-}
 
 juce::String sampleId(Session::BuiltInSample sample)
 {
@@ -212,15 +178,12 @@ BrowserPanel::BrowserPanel(Session& s) : session(s)
 
     // Grouped by what a row is, then by family inside that, the way Live's
     // library separates Drums from Instruments and both from Clips.
+    // Grouped by what a row is, then by family inside that, the way Live's
+    // library separates Drums from Instruments and both from Clips.
+    //
+    // Devices are not listed here: they come from the catalog, so a device
+    // added to src/devices appears in the browser with no change to this file.
     items = {
-        {"Instruments", "Synths", "4OSC synth", "Subtractive synth", std::nullopt, std::nullopt, Session::Instrument::FourOsc},
-        {"Instruments", "Synths", "Rhino Wave", "Morphing wavetable-style synth", std::nullopt, std::nullopt, Session::Instrument::RhinoWave},
-        {"Instruments", "Synths", "Rhino Forge", "Two-oscillator Forge synth", std::nullopt, std::nullopt, Session::Instrument::RhinoForge},
-        {"Instruments", "Drum Rack", "Rhino 808", "TR-808 kit: kick, snare, toms, hats", std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt, DrumDevice::Kit::Rhino808},
-        {"Instruments", "Drum Rack", "House Kit", "Deep kick, tight hats, for the House pattern", std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt, DrumDevice::Kit::House},
-        {"Instruments", "Drum Rack", "Break Kit", "Snappy snare, bright hats, for the Break pattern", std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt, DrumDevice::Kit::Break},
-        {"Instruments", "Drum Rack", "Minimal Kit", "Short, quiet pads, for the Minimal pattern", std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt, DrumDevice::Kit::Minimal},
-        {"Instruments", "Drum Rack", "Clap Kit", "Clap on the backbeat, for the Clap pattern", std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt, DrumDevice::Kit::Clap},
         {"Patterns", "Synth", "Warm pulse", "Soft one-bar 4OSC chord pulse", Session::PatternPreset::WarmPulse},
         {"Patterns", "Synth", "Acid steps", "Tight 16-step synth riff", Session::PatternPreset::AcidSteps},
         {"Patterns", "Synth", "Arp run", "Held chord made for Rhino Arp", Session::PatternPreset::ArpRun},
@@ -235,17 +198,25 @@ BrowserPanel::BrowserPanel(Session& s) : session(s)
         {"Patterns", "Drums", "Break kit", "Syncopated kick/snare/hats groove", Session::PatternPreset::BreakKit},
         {"Patterns", "Drums", "Minimal kit", "Sparse kick/snare/hats sketch", Session::PatternPreset::MinimalKit},
         {"Patterns", "Drums", "Clap kit", "Kick, clap backbeat, tight hats", Session::PatternPreset::ClapKit},
-        {"Samples", "Built-in", "Whistle", "Built-in audio sample", std::nullopt, std::nullopt, std::nullopt, std::nullopt, Session::BuiltInSample::Whistle},
-        {"Samples", "Built-in", "Siren", "Built-in audio sample", std::nullopt, std::nullopt, std::nullopt, std::nullopt, Session::BuiltInSample::Siren},
-        {"Audio FX", "EQ and Filters", "EQ", "Tracktion 4-band EQ", std::nullopt, Session::AudioEffect::Equaliser},
-        {"Audio FX", "Dynamics", "Compressor", "Tracktion compressor", std::nullopt, Session::AudioEffect::Compressor},
-        {"Audio FX", "Dynamics", "Utility gain", "Level trim inside a chain", std::nullopt, std::nullopt, Session::Instrument::Utility},
-        {"Audio FX", "Delay and Reverb", "Reverb", "Tracktion reverb", std::nullopt, Session::AudioEffect::Reverb},
-        {"Audio FX", "Delay and Reverb", "Delay", "Tracktion delay", std::nullopt, Session::AudioEffect::Delay},
-        {"Audio FX", "Rhino", "Rhino Space", "Floating multi FX: smear, drive, width", std::nullopt, Session::AudioEffect::RhinoSpace},
-        {"Audio FX", "Rhino", "Rhino Bloom", "Chorus, clouds, plate, colour", std::nullopt, Session::AudioEffect::RhinoBloom},
-        {"MIDI FX", "", "Rhino Arp", "Drop before an instrument to arpeggiate it", std::nullopt, std::nullopt, std::nullopt, Session::MidiEffect::RhinoArp}
+        {"Instruments", "Drum Rack", "Rhino 808", "TR-808 kit: kick, snare, toms, hats", std::nullopt, {}, std::nullopt, DrumKit::Rhino808},
+        {"Instruments", "Drum Rack", "House Kit", "Deep kick, tight hats, for the House pattern", std::nullopt, {}, std::nullopt, DrumKit::House},
+        {"Instruments", "Drum Rack", "Break Kit", "Snappy snare, bright hats, for the Break pattern", std::nullopt, {}, std::nullopt, DrumKit::Break},
+        {"Instruments", "Drum Rack", "Minimal Kit", "Short, quiet pads, for the Minimal pattern", std::nullopt, {}, std::nullopt, DrumKit::Minimal},
+        {"Instruments", "Drum Rack", "Clap Kit", "Clap on the backbeat, for the Clap pattern", std::nullopt, {}, std::nullopt, DrumKit::Clap},
+        {"Samples", "Built-in", "Whistle", "Built-in audio sample", std::nullopt, {}, Session::BuiltInSample::Whistle},
+        {"Samples", "Built-in", "Siren", "Built-in audio sample", std::nullopt, {}, Session::BuiltInSample::Siren},
     };
+
+    // Instruments, Audio FX and MIDI FX, in catalog order.
+    for (const auto& device : DeviceCatalog::all())
+    {
+        if (!device.browsable)
+            continue;
+        const auto section = device.kind == DeviceKind::Instrument ? "Instruments"
+            : device.kind == DeviceKind::MidiEffect ? "MIDI FX" : "Audio FX";
+        items.push_back({section, device.category, DeviceCatalog::labelFor(device),
+                         device.description, std::nullopt, device.id});
+    }
 
     for (auto* component : std::initializer_list<juce::Component*>{&title, &search, &apply, &categoryList, &tree})
         addAndMakeVisible(component);
@@ -349,9 +320,13 @@ juce::Colour BrowserPanel::colourFor(const Item& item) const
 {
     if (item.sample) return juce::Colour(0xffe09a70);
     if (item.preset) return juce::Colour(0xffc6d58c);
-    if (item.effect) return juce::Colour(0xffffb15f);
-    if (item.midiEffect) return juce::Colour(0xffbda4ff);
-    if (item.instrument || item.drumKit) return juce::Colour(0xff8cc5d2);
+    if (const auto* device = DeviceCatalog::byId(item.deviceId))
+    {
+        if (device->kind == DeviceKind::AudioEffect) return juce::Colour(0xffffb15f);
+        if (device->kind == DeviceKind::MidiEffect)  return juce::Colour(0xffbda4ff);
+        return juce::Colour(0xff8cc5d2);
+    }
+    if (item.drumKit) return juce::Colour(0xff8cc5d2);
     return juce::Colour(0xff6f7b85);
 }
 
@@ -421,12 +396,14 @@ juce::String BrowserPanel::dragDescriptionFor(const Item& item) const
 {
     if (item.preset)
         return "rhino-browser:preset:" + presetId(*item.preset);
-    if (item.effect)
-        return "rhino-browser:effect:" + effectId(*item.effect);
-    if (item.instrument)
-        return "rhino-browser:instrument:" + instrumentId(*item.instrument);
-    if (item.midiEffect)
-        return "rhino-browser:midi-effect:" + midiEffectId(*item.midiEffect);
+    // The kind still appears in the description because each drop target
+    // accepts only some of them; the catalog is what decides which it is.
+    if (const auto* device = DeviceCatalog::byId(item.deviceId))
+    {
+        const auto kind = device->kind == DeviceKind::Instrument ? "instrument"
+            : device->kind == DeviceKind::MidiEffect ? "midi-effect" : "effect";
+        return "rhino-browser:" + juce::String(kind) + ":" + device->id;
+    }
     if (item.sample)
         return "rhino-browser:sample:" + sampleId(*item.sample);
     if (item.drumKit)
@@ -449,24 +426,12 @@ void BrowserPanel::applyItem(const Item& item)
         session.applyPatternPreset(*item.preset);
         if (status) status("Loaded " + item.name);
     }
-    else if (item.effect)
+    else if (item.deviceId.isNotEmpty())
     {
         const auto track = selectedTargetTrack();
-        const auto result = session.addAudioEffect(*item.effect, track);
-        if (status) status(result.wasOk() ? "Added " + item.name + " to " + session.trackName(track) : result.getErrorMessage());
-    }
-    else if (item.instrument)
-    {
-        const auto track = selectedTargetTrack();
-        const auto result = session.addInstrument(*item.instrument, track);
+        const auto result = session.addDevice(item.deviceId, track);
         if (status) status(result.wasOk() ? "Added " + item.name + " to " + session.trackName(track)
                                           : result.getErrorMessage());
-    }
-    else if (item.midiEffect)
-    {
-        const auto track = selectedTargetTrack();
-        const auto result = session.addMidiEffect(*item.midiEffect, track);
-        if (status) status(result.wasOk() ? "Added " + item.name + " to " + session.trackName(track) : result.getErrorMessage());
     }
     else if (item.drumKit)
     {

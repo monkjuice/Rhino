@@ -1,4 +1,5 @@
 #pragma once
+#include "DeviceCatalog.h"
 #include <tracktion_engine/tracktion_engine.h>
 #include <array>
 
@@ -26,8 +27,10 @@ public:
     // The kit reshapes the same sample set: pitch, decay and level per voice,
     // and which pad the backbeat lands on. Live's drum racks differ the same
     // way, by what sits on each pad rather than by a different engine.
-    enum class Kit { Rhino808, House, Break, Minimal, Clap };
-    static constexpr int kitCount = 5;
+    // Kit itself is declared in DeviceCatalog.h, so Session and the browser
+    // can name one without including this header.
+    using Kit = DrumKit;
+    static constexpr int kitCount = drumKitCount;
     static juce::String kitName(Kit);
     te::AutomatableParameter& kitParameter() { return *kitSelect; }
     Kit kit() const;

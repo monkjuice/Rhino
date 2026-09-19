@@ -231,6 +231,99 @@ inline juce::String waveLabel(float position)
     return table.frameTitle(frame) + ">" + table.frameTitle(frame + 1);
 }
 
+// --- The sub oscillator's shapes ----------------------------------------------
+//
+// Six of them, in the order and with the names Serum's sub gives them: a sine,
+// a rounded rectangle, a triangle, a saw, a square and a pulse. That order runs
+// from the shape with nothing but a fundamental to the ones with the most
+// harmonics over it, which is what a picker of six icons wants to read as.
+//
+// They are frames of a table rather than formulas evaluated per sample, for the
+// reason every other shape in Forge is: a saw an octave below the note is a
+// harmonic series running past Nyquist, and the band-limited copies a Wavetable
+// keeps are what stop the top of it folding back down. The sub was a sine until
+// now and a sine has nothing to fold, which is why this is the moment the table
+// is needed.
+inline constexpr int subShapeCount = 6;
+
+inline const char* subShapeName(int shape)
+{
+    switch (shape)
+    {
+        case 1: return "RECT";
+        case 2: return "TRI";
+        case 3: return "SAW";
+        case 4: return "SQR";
+        case 5: return "PULSE";
+        default: break;
+    }
+    return "SINE";
+}
+
+// One sub frame, at a point in its cycle. Bipolar and full scale, like every
+// other frame Forge authors, so changing shape moves the harmonics rather than
+// the level.
+inline float subShape(int shape, float phase)
+{
+    const auto cycle = phase * juce::MathConstants<float>::twoPi;
+    switch (shape)
+    {
+        // A sine driven past full scale and clipped: flat tops with the sine's
+        // own curve either side of them, which is the rounded rectangle the
+        // manual describes -- between a sine and a square, and softer at the
+        // corners than the trapezoid the main table carries.
+        case 1: return juce::jlimit(-1.0f, 1.0f, std::sin(cycle) * 2.6f);
+        case 2: return 1.0f - 4.0f * std::abs(phase - 0.5f);
+        // Rotated half a cycle, the same way the main table stores its saw:
+        // same harmonics either way round, but the picture shows the edge.
+        case 3: return phase < 0.5f ? phase * 2.0f : phase * 2.0f - 2.0f;
+        case 4: return phase < 0.5f ? 1.0f : -1.0f;
+        case 5: return phase < 0.25f ? 1.0f : -1.0f;
+        default: break;
+    }
+    return std::sin(cycle);
+}
+
+// The six, rendered into a band-limited table once. A table of its own rather
+// than frames added to the built-in ten: POSITION morphs between neighbours in
+// that one, and a sub shape is chosen outright, so putting them in the same
+// table would have put six shapes in the oscillators' morph that nobody asked
+// to travel through.
+inline const Wavetable& subWavetable()
+{
+    static const Wavetable table = []
+    {
+        std::vector<float> samples(static_cast<size_t>(subShapeCount) * wavetableFrameSize);
+        std::vector<juce::String> names;
+        names.reserve(static_cast<size_t>(subShapeCount));
+        for (int shape = 0; shape < subShapeCount; ++shape)
+        {
+            names.push_back(subShapeName(shape));
+            for (int i = 0; i < wavetableFrameSize; ++i)
+                samples[static_cast<size_t>(shape) * wavetableFrameSize + static_cast<size_t>(i)]
+                    = subShape(shape, static_cast<float>(i) / static_cast<float>(wavetableFrameSize));
+        }
+        return Wavetable(samples.data(), subShapeCount, "SUB SHAPES", std::move(names));
+    }();
+    return table;
+}
+
+// Which shape a sub setting names. Rounded rather than truncated, and clamped,
+// so a value arriving from a host lands on a real frame.
+inline int subShapeOf(float wave)
+{
+    return juce::jlimit(0, subShapeCount - 1, juce::roundToInt(wave));
+}
+
+// How far the sub sits below the note. OCT 0 is one octave down -- the pitch
+// the sub has always run at, and what makes it a sub -- so every patch written
+// before the control existed still sounds as it did, and the reading matches
+// Serum's, whose own sub is an octave below at zero.
+inline float subRatio(float octave)
+{
+    return 0.5f * std::pow(2.0f, juce::jlimit(-2.0f, 2.0f, octave));
+}
+
 // How many LFOs there are. They are identical: none is defined in terms of
 // another, and the panel shows one at a time rather than six at once.
 inline constexpr int lfoCount = 6;
@@ -651,6 +744,10 @@ struct Patch
 {
     Oscillator a, b;
     float subEnable = 1.0f, subLevel = 0.17f;
+    // Which of the six shapes the sub is reading, and how far below the note it
+    // is reading it. Both open where the sub has always stood -- a sine, one
+    // octave down -- so a patch written before either existed is unchanged.
+    float subWave = 0.0f, subOctave = 0.0f;
     float noiseEnable = 0.0f, noiseLevel = 0.35f;
     // SUB and NOISE are panned with the same equal-power law the oscillators
     // use, so a source reading a given level is that loud whichever source it
@@ -827,9 +924,10 @@ public:
         sampleRate = std::max(1.0, newSampleRate);
         tailStep = static_cast<float>(1.0 / (sampleRate * voiceTailSeconds));
         dcBlock = warpDcCoefficient(sampleRate);
-        // Touched here so the table is built on whichever thread prepares the
-        // synth, never lazily on the first note from the audio thread.
+        // Touched here so the tables are built on whichever thread prepares
+        // the synth, never lazily on the first note from the audio thread.
         builtInWavetable();
+        subWavetable();
         // Every rack's delay lines are sized here, which is the one place they
         // may be: a slot's type changes while audio is running, so each slot
         // carries every type's state and none of it can be built on demand.
@@ -1751,8 +1849,16 @@ private:
         const auto wantsOther = asks(warpA, warpReadsOtherOscillator) || asks(warpB, warpReadsOtherOscillator);
         const auto wantsSub = asks(warpA, warpReadsSub) || asks(warpB, warpReadsSub);
         const auto wantsNoise = asks(warpA, warpReadsNoise) || asks(warpB, warpReadsNoise);
-        const auto fromSub = wantsSub
-            ? std::sin(voice.phaseSub * juce::MathConstants<float>::twoPi) : 0.0f;
+        // The sub, read once for whoever needs it: the source itself below, and
+        // any warp stage pointed at it. Both read the same shape at the same
+        // band limit, because a stage reading FM SUB is reading the sub rather
+        // than a sine that happens to stand where it does.
+        const auto hzSub = hz * subRatio(patch.subOctave);
+        const auto& subTable = subWavetable();
+        const auto subBand = subTable.levelFor(hzSub, sampleRate);
+        const auto subShapeIndex = subShapeOf(patch.subWave);
+        const auto subSample = [&] { return subTable.frameSample(subBand, subShapeIndex, voice.phaseSub); };
+        const auto fromSub = wantsSub ? subSample() : 0.0f;
         const auto fromNoise = wantsNoise ? noise() : 0.0f;
         // The centre of the other oscillator's stack, not the whole of it: a
         // modulator is one signal, and twelve detuned copies of one would cost
@@ -1808,7 +1914,7 @@ private:
         // their stacks across.
         if (on(patch.subEnable))
         {
-            const auto sub = std::sin(voice.phaseSub * juce::MathConstants<float>::twoPi) * patch.subLevel;
+            const auto sub = subSample() * patch.subLevel;
             distribute(sub * sourcePanLeft(patch.subPan), sub * sourcePanRight(patch.subPan),
                        on(patch.routeSub), patch.sendSub, buses);
         }
@@ -1833,7 +1939,7 @@ private:
             buses.sendLeft[static_cast<size_t>(bus)] *= level;
             buses.sendRight[static_cast<size_t>(bus)] *= level;
         }
-        voice.phaseSub = wrap(voice.phaseSub + hz * 0.5f * dt);
+        voice.phaseSub = wrap(voice.phaseSub + hzSub * dt);
     }
 
     // A state-variable filter computes all three responses anyway, so the type

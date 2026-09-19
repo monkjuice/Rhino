@@ -171,7 +171,11 @@ inline juce::String tooltipFor(const juce::String& id)
 
     static const std::map<juce::String, juce::String> tips {
         {"subEnable", "Switch the sub oscillator on or off"},
-        {"subLevel", "Blend in a sine one octave below the note"},
+        {"subWave", "The shape the sub reads: a sine for weight and nothing else, "
+                    "through to a saw or a pulse when the low end should have harmonics of its own"},
+        {"subOctave", "How far below the note the sub plays. Zero is one octave down, "
+                      "which is where a sub belongs and where it has always been"},
+        {"subLevel", "Blend in the sub oscillator, an octave or more below the note"},
         {"noiseEnable", "Switch the noise source on or off"},
         {"noiseLevel", "Blend in broadband noise"},
         {"filterEnable", "Switch the filter out of the voice, drive and all"},

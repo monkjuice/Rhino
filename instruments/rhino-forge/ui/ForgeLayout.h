@@ -31,7 +31,11 @@ enum class Display { none, oscillator, envelope, lfo, filter };
 // two or three are drawn as a switch with every state on screen, more as a name
 // between two arrows. The cell is declared here; which of the two it becomes is
 // the effect's business, because that is what knows how many there are.
-enum class Style { knob, stepper, chip, rocker, bar, fader, plate, selector };
+// A wave is a grid of shapes drawn as themselves, for a choice whose options
+// are pictures rather than words: the sub's six waveforms are recognised faster
+// as six icons than read as six names, and they carry no label of their own for
+// the same reason a chip does not.
+enum class Style { knob, stepper, chip, rocker, bar, fader, plate, selector, wave };
 
 // Whether a control of this style draws the modulation reaching it: a knob
 // wears the ring outside its rim, a bar-style field the strip along its foot.
@@ -259,6 +263,13 @@ inline constexpr int maxChipWidth = 44;
 inline constexpr int maxFaderWidth = 34;
 inline constexpr int minFaderHeight = 54;
 
+// A wave grid is read as pictures, so it wants room; but it is a picker, not a
+// display, and left uncapped it would be the largest thing in the top row at a
+// wide window. These are the sizes past which more room stops making a shape
+// easier to recognise.
+inline constexpr int maxWaveGridWidth = 132;
+inline constexpr int maxWaveGridHeight = 168;
+
 // A plate is a board rather than a field, so it takes the height of its row
 // instead of a control's fixed height — and it carries its own name, so unlike
 // a knob or a stepper it needs no label strip above it.
@@ -408,8 +419,23 @@ inline const std::vector<Module>& modules()
         // Absent from MIX, where the mixer's own SUB and NOISE strips stand in
         // their place: the mixer is a second view of these two sources rather
         // than a panel that happens to sit beside them.
+        //
+        // Three rows now that the sub has a shape and a pitch of its own: the
+        // six waveforms, the octave they are read at, and the level they are
+        // mixed in at. The order is the one Serum's own sub strip reads in, and
+        // the one the signal takes — what the wave is, where it sits, how much
+        // of it there is.
+        //
+        // The grid takes half because it is the only thing here that is
+        // recognised rather than read, and because the alternative was a knob
+        // floating in a tall empty cell: a knob is centred in whatever it is
+        // given, so room LEVEL does not need becomes a gap above it rather than
+        // a larger control. Thirty per cent is still well over what the shared
+        // knob diameter needs, so nothing else on the panel shrinks for it.
         {"sub", "SUB", "", "subEnable", false, Display::none, 0, 0, 2, false,
-         {{100, {{"subLevel", "LEVEL"}}}},
+         {{50, {{"subWave", "", Style::wave}}},
+          {20, {{"subOctave", "OCT", Style::stepper}}},
+          {30, {{"subLevel", "LEVEL"}}}},
          0, everyPageBut(Page::mix, Page::fx)},
         {"noise", "NOISE", "", "noiseEnable", true, Display::none, 0, 2, 2, false,
          {{100, {{"noiseLevel", "LEVEL"}}}},
@@ -1143,6 +1169,17 @@ inline juce::Rectangle<int> selectorBlock(juce::Rectangle<int> moduleArea, const
         .withCentre(cell.getCentre());
 }
 
+// A wave grid carries no label, so it takes its cell whole, less the inset that
+// keeps its outer cells off the cells of the controls above and below it.
+inline juce::Rectangle<int> waveGridBlock(juce::Rectangle<int> moduleArea, const Module& module,
+                                          int rowIndex, int index)
+{
+    const auto cell = cellBounds(moduleArea, module, rowIndex, index);
+    return juce::Rectangle<int>(juce::jmin(juce::jmax(12, cell.getWidth() - 6), maxWaveGridWidth),
+                                juce::jmin(juce::jmax(12, cell.getHeight() - 6), maxWaveGridHeight))
+        .withCentre(cell.getCentre());
+}
+
 inline juce::Rectangle<int> plateBlock(juce::Rectangle<int> moduleArea, const Module& module,
                                       int rowIndex, int index)
 {
@@ -1219,6 +1256,7 @@ inline juce::Rectangle<int> controlBlock(juce::Rectangle<int> moduleArea, const 
         }
         case Style::bar:     return barBlock(moduleArea, module, rowIndex, index);
         case Style::chip:    return chipBlock(moduleArea, module, rowIndex, index);
+        case Style::wave:    return waveGridBlock(moduleArea, module, rowIndex, index);
         case Style::fader:   return faderBlock(moduleArea, module, rowIndex, index);
         case Style::plate:   return plateBlock(moduleArea, module, rowIndex, index);
         case Style::selector:

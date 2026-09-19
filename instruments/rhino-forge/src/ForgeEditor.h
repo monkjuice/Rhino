@@ -50,6 +50,10 @@ private:
         // A slot's mode field. Like the plate, it drives the parameter its
         // slider is attached to and that slider is never shown.
         std::unique_ptr<ui::FxSelector> selector;
+        // The sub's waveform picker. Like the plate and the mode field, it
+        // drives the parameter its slider is attached to and that slider is
+        // never shown.
+        std::unique_ptr<ui::WaveGrid> waves;
         std::unique_ptr<ui::RockerSwitch> rocker;
         std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachment;
         std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> buttonAttachment;

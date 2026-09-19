@@ -5,6 +5,7 @@
 #include "../ui/ForgeFxDisplay.h"
 #include <algorithm>
 #include <iostream>
+#include <memory>
 #include <vector>
 
 // One binary, three CTest cases selected by argv, matching Rhino's own test
@@ -467,6 +468,70 @@ void layoutSuite()
             for (size_t c = 0; c < row.controls.size() && c < first.size(); ++c)
                 require(row.controls[c].style == first[c].style && row.controls[c].weight == first[c].weight,
                         "a table column keeps its style and its width down every row");
+        }
+    }
+
+    // A wave grid is painted cell by cell and hit-tested cell by cell, against
+    // the same arithmetic — so what that arithmetic has to guarantee is that
+    // the cells tile the box: no gap a click could fall into, no overlap where
+    // two shapes would answer for one point, and nothing outside the component
+    // the pointer is being measured against. Checked over the range of sizes
+    // the picker is laid out at rather than at one, because tiling by dividing
+    // a box is exactly where integer division goes wrong.
+    {
+        rhino::forge::ui::WaveGrid grid;
+        grid.choices = rhino::forge::subShapeCount;
+        for (int width = 30; width <= rhino::forge::ui::maxWaveGridWidth; width += 3)
+            for (int height = 30; height <= rhino::forge::ui::maxWaveGridHeight; height += 3)
+            {
+                grid.setBounds(0, 0, width, height);
+                auto covered = 0;
+                for (int i = 0; i < grid.choices; ++i)
+                {
+                    const auto cell = grid.cellBounds(i);
+                    require(!cell.isEmpty() && grid.getLocalBounds().contains(cell),
+                            "a wave grid's cell stays inside the picker");
+                    covered += cell.getWidth() * cell.getHeight();
+                    for (int j = i + 1; j < grid.choices; ++j)
+                        require(!cell.intersects(grid.cellBounds(j)),
+                                "no two wave grid cells overlap");
+                }
+                require(covered == width * height, "a wave grid's cells tile it exactly");
+            }
+    }
+
+    // The picker, built by the editor the panel actually opens with rather than
+    // by this test. Everything above holds the declaration to its parameters;
+    // this holds the component to its declaration — that the sub's six shapes
+    // reached it, that choosing one writes the parameter a host reads, and that
+    // the cell lit afterwards is the cell chosen. Nothing else on the panel
+    // drives a parameter from a picture, so nothing else was covering this.
+    {
+        std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+        require(editor != nullptr, "the panel opens");
+        if (editor != nullptr)
+        {
+            editor->setSize(rhino::forge::ui::defaultPanelWidth, rhino::forge::ui::defaultPanelHeight);
+            rhino::forge::ui::WaveGrid* grid = nullptr;
+            for (auto* child : editor->getChildren())
+                if (auto* found = dynamic_cast<rhino::forge::ui::WaveGrid*>(child)) grid = found;
+            require(grid != nullptr, "the panel builds a picker for the wave grid it declares");
+            if (grid != nullptr)
+            {
+                require(grid->choices == rhino::forge::subShapeCount && grid->shapeAt != nullptr,
+                        "the picker offers every sub shape, drawn from the shapes themselves");
+                require(!grid->getBounds().isEmpty(), "the picker is given a rectangle to draw in");
+                for (int shape = rhino::forge::subShapeCount; --shape >= 0;)
+                {
+                    grid->onChoose(shape);
+                    requireClose(value(processor, "subWave"), static_cast<float>(shape), 0.001f,
+                                 "choosing a shape writes the parameter the engine reads");
+                    require(grid->chosen == shape, "the picker lights the shape that was chosen");
+                }
+                // And back, so the panel this test opened leaves the processor
+                // on the shape it found it on.
+                grid->onChoose(0);
+            }
         }
     }
 
@@ -1393,6 +1458,12 @@ void legacyStateSuite()
         requireClose(read("cutoff"), 900.0f, 0.5f, "everything else is left alone");
         requireClose(read("subPan"), 0.0f, 0.001f, "a pan the state predates opens centred");
         requireClose(read("filterMix"), 1.0f, 0.001f, "the filter channel opens all wet");
+        // The sub had one shape and one pitch before it had a picker, so a
+        // state written then has to reopen on them: the first frame is the sine
+        // and zero octaves is the octave below the note it has always played.
+        requireClose(read("subWave"), 0.0f, 0.001f, "a sub shape the state predates opens on the sine");
+        requireClose(read("subOctave"), 0.0f, 0.001f,
+                     "a sub octave the state predates opens where the sub has always sat");
 
         // The raise must not compound. Saving and reopening carries subPan,
         // which is the mark that says the state has already been through this.
@@ -4357,6 +4428,7 @@ void warpSuite()
 }
 
 void tuningSuite();
+void subSuite();
 
 void engineSuite()
 {
@@ -4421,6 +4493,7 @@ void engineSuite()
     oscillatorSuite();
     warpSuite();
     tuningSuite();
+    subSuite();
 
     // Output stays finite and bounded across an extreme patch.
     rhino::forge::Processor extreme;
@@ -4463,17 +4536,111 @@ void engineSuite()
     require(peak <= 1.0f, "an extreme patch stays within full scale");
 }
 
-// --- Tuning -------------------------------------------------------------------
+// --- Measuring what was rendered ---------------------------------------------
 //
 // The first question a player asks and the one the panel cannot answer for
 // itself: does a note come out at the pitch it names? Measured off the rendered
 // signal rather than off the phase accumulator, so nothing here can agree with
 // the oscillator by construction — a transposed table, a mis-scaled frame or a
 // phase increment that is off by a ratio all show up as cents.
-double renderedFundamental(int note, double sampleRate)
-{
-    constexpr int order = 15, size = 1 << order;
+//
+// The same window answers what a shape is as well as where it sits, which is
+// what the sub's six waveforms are held to below: one transform, read once for
+// the fundamental and once per partial over it.
 
+// How long a window is measured over. Big enough that a bin is a couple of
+// Hertz wide at either rate, so two partials of a low note are never in the
+// same bin and the interpolation below has room to work.
+constexpr int spectrumOrder = 15;
+constexpr int spectrumSize = 1 << spectrumOrder;
+
+// The magnitude spectrum of a patch rendered through Core, measured past the
+// attack so the window holds steady state and not the envelope's edge.
+std::vector<double> renderedSpectrum(const rhino::forge::Patch& patch, int note, double sampleRate)
+{
+    rhino::forge::Core core;
+    core.initialise(sampleRate);
+    core.noteOn(note, 1.0f, patch);
+    for (int i = 0; i < 4096; ++i) { auto l = 0.0f, r = 0.0f; core.renderSample(patch, l, r); }
+
+    std::vector<float> data(2 * spectrumSize, 0.0f);
+    for (int i = 0; i < spectrumSize; ++i)
+    {
+        auto l = 0.0f, r = 0.0f;
+        core.renderSample(patch, l, r);
+        const auto w = 0.5 - 0.5 * std::cos(2.0 * juce::MathConstants<double>::pi
+                                            * static_cast<double>(i) / static_cast<double>(spectrumSize));
+        data[static_cast<size_t>(i)] = static_cast<float>(0.5 * (l + r) * w);
+    }
+
+    juce::dsp::FFT fft(spectrumOrder);
+    fft.performRealOnlyForwardTransform(data.data());
+    std::vector<double> magnitude(static_cast<size_t>(spectrumSize / 2), 0.0);
+    for (int bin = 0; bin < spectrumSize / 2; ++bin)
+    {
+        const auto re = static_cast<double>(data[static_cast<size_t>(2 * bin)]);
+        const auto im = static_cast<double>(data[static_cast<size_t>(2 * bin + 1)]);
+        magnitude[static_cast<size_t>(bin)] = std::sqrt(re * re + im * im);
+    }
+    return magnitude;
+}
+
+// Where a peak really sits between two bins, and how tall it really is. A
+// partial almost never lands on a bin centre, and a Hann window spreads it
+// across three — so taking the tallest bin alone misreads the frequency by up
+// to half a bin and the amplitude by up to 1.4 dB. Fitting a parabola through
+// the logs of the three recovers both, which is what lets one partial be
+// compared against another closely enough to name a waveform.
+struct SpectrumPeak
+{
+    double frequency = 0.0;
+    double amplitude = 0.0;
+};
+
+SpectrumPeak peakAt(const std::vector<double>& magnitude, int bin, double sampleRate)
+{
+    const auto at = [&magnitude] (int index)
+    {
+        if (index < 0 || index >= static_cast<int>(magnitude.size())) return 1.0e-20;
+        return std::max(1.0e-20, magnitude[static_cast<size_t>(index)]);
+    };
+    const auto a = std::log(at(bin - 1)), b = std::log(at(bin)), c = std::log(at(bin + 1));
+    const auto denominator = a - 2.0 * b + c;
+    const auto shift = std::abs(denominator) > 1.0e-12 ? 0.5 * (a - c) / denominator : 0.0;
+    return {(static_cast<double>(bin) + shift) * sampleRate / static_cast<double>(spectrumSize),
+            std::exp(b - 0.25 * (a - c) * shift)};
+}
+
+// The tallest partial in a spectrum, which for every shape measured here is the
+// fundamental.
+SpectrumPeak loudestPeak(const std::vector<double>& magnitude, double sampleRate)
+{
+    auto best = 2;
+    for (int bin = 3; bin < static_cast<int>(magnitude.size()) - 1; ++bin)
+        if (magnitude[static_cast<size_t>(bin)] > magnitude[static_cast<size_t>(best)]) best = bin;
+    return peakAt(magnitude, best, sampleRate);
+}
+
+// The amplitude of one harmonic of a known fundamental, found by looking for
+// the local maximum where that harmonic should be rather than trusting a bin
+// index: a fundamental measured to a fraction of a bin puts the tenth harmonic
+// several bins from wherever the arithmetic lands.
+double partialAmplitude(const std::vector<double>& magnitude, double fundamental, int harmonic,
+                        double sampleRate)
+{
+    const auto centre = static_cast<int>(std::lround(fundamental * harmonic
+                                                     * static_cast<double>(spectrumSize) / sampleRate));
+    if (centre < 2 || centre >= static_cast<int>(magnitude.size()) - 2) return 0.0;
+    auto best = centre;
+    for (int bin = centre - 2; bin <= centre + 2; ++bin)
+        if (magnitude[static_cast<size_t>(bin)] > magnitude[static_cast<size_t>(best)]) best = bin;
+    return peakAt(magnitude, best, sampleRate).amplitude;
+}
+
+// The patch tuningSuite asks its question of: one oscillator on the saw frame
+// and nothing else sounding.
+rhino::forge::Patch sawOnly()
+{
     rhino::forge::Patch patch;
     patch.a.enable = 1.0f;
     patch.a.position = 6.0f / 9.0f;   // the SAW frame, landed on exactly
@@ -4485,46 +4652,12 @@ double renderedFundamental(int note, double sampleRate)
     patch.filterEnable = 0.0f;
     patch.envs[rhino::forge::ampEnv].attack = 0.001f;
     patch.envs[rhino::forge::ampEnv].sustain = 1.0f;
+    return patch;
+}
 
-    rhino::forge::Core core;
-    core.initialise(sampleRate);
-    core.noteOn(note, 1.0f, patch);
-
-    // Past the attack before anything is measured, so the window holds steady
-    // state and not the envelope's edge.
-    for (int i = 0; i < 4096; ++i) { auto l = 0.0f, r = 0.0f; core.renderSample(patch, l, r); }
-
-    std::vector<float> data(2 * size, 0.0f);
-    for (int i = 0; i < size; ++i)
-    {
-        auto l = 0.0f, r = 0.0f;
-        core.renderSample(patch, l, r);
-        const auto w = 0.5 - 0.5 * std::cos(2.0 * juce::MathConstants<double>::pi
-                                            * static_cast<double>(i) / static_cast<double>(size));
-        data[static_cast<size_t>(i)] = static_cast<float>(0.5 * (l + r) * w);
-    }
-
-    juce::dsp::FFT fft(order);
-    fft.performRealOnlyForwardTransform(data.data());
-    const auto magnitude = [&data] (int bin)
-    {
-        const auto re = static_cast<double>(data[static_cast<size_t>(2 * bin)]);
-        const auto im = static_cast<double>(data[static_cast<size_t>(2 * bin + 1)]);
-        return std::sqrt(re * re + im * im);
-    };
-
-    // A saw's fundamental is its loudest partial, so the tallest bin names it.
-    auto best = 2;
-    for (int bin = 3; bin < size / 2 - 1; ++bin)
-        if (magnitude(bin) > magnitude(best)) best = bin;
-
-    // Where a Hann window actually puts the peak between two bins.
-    const auto a = std::log(std::max(1.0e-20, magnitude(best - 1)));
-    const auto b = std::log(std::max(1.0e-20, magnitude(best)));
-    const auto c = std::log(std::max(1.0e-20, magnitude(best + 1)));
-    const auto denominator = a - 2.0 * b + c;
-    const auto shift = std::abs(denominator) > 1.0e-12 ? 0.5 * (a - c) / denominator : 0.0;
-    return (static_cast<double>(best) + shift) * sampleRate / static_cast<double>(size);
+double renderedFundamental(int note, double sampleRate)
+{
+    return loudestPeak(renderedSpectrum(sawOnly(), note, sampleRate), sampleRate).frequency;
 }
 
 void tuningSuite()
@@ -4539,6 +4672,138 @@ void tuningSuite()
             // interpolation's own error, which measures at about half of one.
             require(std::abs(cents) < 2.0, "a note sounds at the pitch it names");
         }
+}
+
+// --- The sub oscillator -------------------------------------------------------
+//
+// The sub has a shape and a pitch of its own, and both claims are settled the
+// way every other claim about what Forge sounds like is: by measuring the
+// rendered signal. Nothing here reads the phase accumulator or the table, so a
+// wave wired to the wrong frame, a frame generated wrongly, or an octave
+// applied to the phase increment twice all show up as a number that is out.
+//
+// The harmonic ratios below are the textbook ones and were confirmed against
+// the authored frames before they were written down: a saw's second partial is
+// half its first, a square and a triangle have no second at all and differ by
+// their third, a 25% pulse has a null at its fourth, and the rounded rectangle
+// sits between a sine and a square rather than being either.
+void subSuite()
+{
+    // The sub alone: no oscillator, no noise, no filter, and the amp envelope
+    // out of the way, so the whole of what is measured is the sub.
+    const auto subOnly = [] (int wave, float octave)
+    {
+        rhino::forge::Patch patch;
+        patch.a.enable = 0.0f;
+        patch.b.enable = 0.0f;
+        patch.noiseEnable = 0.0f;
+        patch.filterEnable = 0.0f;
+        patch.subEnable = 1.0f;
+        patch.subLevel = 1.0f;
+        patch.subWave = static_cast<float>(wave);
+        patch.subOctave = octave;
+        patch.envs[rhino::forge::ampEnv].attack = 0.001f;
+        patch.envs[rhino::forge::ampEnv].sustain = 1.0f;
+        return patch;
+    };
+
+    constexpr auto sampleRate = 48000.0;
+    constexpr auto note = 57;   // A3, so the sub at OCT 0 lands on A2
+    const auto nominal = 440.0 * std::pow(2.0, (note - 69) / 12.0);
+
+    // Where the sub sits. OCT 0 is an octave below the note, which is what it
+    // has always been and what a patch written before the control existed
+    // expects; every step either way is a doubling or a halving of that.
+    for (const auto octave : {-2.0f, -1.0f, 0.0f, 1.0f, 2.0f})
+    {
+        const auto expected = nominal * 0.5 * std::pow(2.0, octave);
+        const auto spectrum = renderedSpectrum(subOnly(0, octave), note, sampleRate);
+        const auto cents = 1200.0 * std::log2(loudestPeak(spectrum, sampleRate).frequency / expected);
+        require(std::abs(cents) < 2.0, "the sub sounds an octave below the note, moved by its own octave");
+    }
+
+    // What each shape is, by its harmonics. Measured against the fundamental
+    // rather than in absolute terms, because the shapes are normalised to the
+    // same peak and not to the same fundamental -- a square's is 2 dB over a
+    // sine's at the same setting, exactly as it is in the table the
+    // oscillators read.
+    const auto partials = [&] (int wave)
+    {
+        const auto spectrum = renderedSpectrum(subOnly(wave, 0.0f), note, sampleRate);
+        const auto fundamental = loudestPeak(spectrum, sampleRate);
+        std::array<double, 7> ratio {};
+        ratio[1] = 1.0;
+        for (int harmonic = 2; harmonic < static_cast<int>(ratio.size()); ++harmonic)
+            ratio[static_cast<size_t>(harmonic)] =
+                partialAmplitude(spectrum, fundamental.frequency, harmonic, sampleRate)
+                / std::max(1.0e-12, fundamental.amplitude);
+        return ratio;
+    };
+
+    // A sine is the fundamental and nothing else. The tolerance is what the
+    // window leaks into the neighbouring partials, not what the oscillator
+    // produces.
+    const auto sine = partials(0);
+    require(sine[2] < 0.002 && sine[3] < 0.002, "the sub's sine carries no harmonics");
+
+    // A rounded rectangle: odd harmonics like a square, but less of each. The
+    // third is what separates it from both of its neighbours -- nothing at all
+    // on a sine, a third on a square, and 0.27 here.
+    const auto rect = partials(1);
+    require(rect[2] < 0.01, "the sub's rounded rectangle is an odd-harmonic wave");
+    requireClose(static_cast<float>(rect[3]), 0.269f, 0.02f,
+                 "the sub's rounded rectangle sits between a sine and a square");
+    require(rect[5] < 0.2 && rect[5] > 0.05,
+            "the sub's rounded rectangle is softer than a square further up");
+
+    const auto triangle = partials(2);
+    require(triangle[2] < 0.01, "the sub's triangle is an odd-harmonic wave");
+    requireClose(static_cast<float>(triangle[3]), 1.0f / 9.0f, 0.015f,
+                 "the sub's triangle has a ninth of its fundamental at the third harmonic");
+
+    const auto saw = partials(3);
+    requireClose(static_cast<float>(saw[2]), 0.5f, 0.02f, "the sub's saw halves at the second harmonic");
+    requireClose(static_cast<float>(saw[3]), 1.0f / 3.0f, 0.02f, "the sub's saw thirds at the third");
+    requireClose(static_cast<float>(saw[4]), 0.25f, 0.02f, "the sub's saw quarters at the fourth");
+
+    const auto square = partials(4);
+    require(square[2] < 0.01 && square[4] < 0.01, "the sub's square has no even harmonics");
+    requireClose(static_cast<float>(square[3]), 1.0f / 3.0f, 0.02f,
+                 "the sub's square thirds at the third harmonic");
+
+    // A quarter-cycle pulse, which is the one shape here that is neither odd
+    // only nor a plain 1/h series: its fourth harmonic falls in the null the
+    // duty cycle puts there, and that null is what tells it from a square.
+    const auto pulse = partials(5);
+    requireClose(static_cast<float>(pulse[2]), 0.7071f, 0.03f,
+                 "the sub's pulse is loud at the second harmonic");
+    require(pulse[4] < 0.02, "the sub's pulse has a null where its duty cycle puts one");
+
+    // Every shape is read through the same band-limited copies the oscillators
+    // are, which is the reason the sub is a table at all now that it is not
+    // only a sine. The saw is the one with something at every harmonic, so it
+    // is the one that would alias first: pushed two octaves up and played at
+    // the top of the keyboard, everything it renders must still be a harmonic
+    // of the note.
+    const auto& table = rhino::forge::subWavetable();
+    require(table.frameCount() == rhino::forge::subShapeCount,
+            "the sub's table holds every declared shape");
+    require(table.levelCount() > 1, "the sub's table carries band-limited copies");
+
+    const auto high = renderedSpectrum(subOnly(3, 2.0f), 96, sampleRate);
+    const auto top = loudestPeak(high, sampleRate);
+    auto alias = 0.0;
+    for (int bin = 2; bin < static_cast<int>(high.size()) - 1; ++bin)
+    {
+        const auto hz = static_cast<double>(bin) * sampleRate / static_cast<double>(spectrumSize);
+        const auto of = hz / top.frequency;
+        // Anything within a fifth of a harmonic's place is that harmonic or the
+        // window's skirt around it; what is left is either aliasing or nothing.
+        if (std::abs(of - std::round(of)) < 0.2) continue;
+        alias = std::max(alias, high[static_cast<size_t>(bin)]);
+    }
+    require(alias < 0.02 * top.amplitude,
+            "a saw sub two octaves up folds nothing back down the spectrum");
 }
 }
 

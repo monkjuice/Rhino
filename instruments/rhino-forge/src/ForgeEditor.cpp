@@ -740,6 +740,45 @@ void Editor::buildModules()
                     continue;
                 }
 
+                if (declared.style == ui::Style::wave)
+                {
+                    control->waves = std::make_unique<ui::WaveGrid>();
+                    control->waves->accent = accent;
+                    control->waves->choices = subShapeCount;
+                    control->waves->shapeAt = [] (int shape, float phase) { return subShape(shape, phase); };
+                    control->waves->setTooltip(ui::tooltipFor(declared.id));
+                    auto* held = control.get();
+                    control->waves->onChoose = [this, held] (int choice)
+                    {
+                        auto* parameter = processor.state.getParameter(held->id);
+                        if (parameter == nullptr) return;
+                        parameter->setValueNotifyingHost(parameter->convertTo0to1(
+                            static_cast<float>(juce::jlimit(0, subShapeCount - 1, choice))));
+                    };
+                    // As with the plate: the slider is here for its attachment,
+                    // which is what a host reads and writes the shape through.
+                    // The grid follows it rather than the other way round, so a
+                    // preset load or an automation lane lights the right cell.
+                    control->slider.setSliderStyle(juce::Slider::LinearBarVertical);
+                    control->slider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+                    control->slider.onValueChange = [held]
+                    {
+                        held->waves->chosen = juce::jlimit(0, subShapeCount - 1,
+                                                           juce::roundToInt(held->slider.getValue()));
+                        held->waves->repaint();
+                    };
+                    control->attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+                        processor.state, declared.id, control->slider);
+                    // The attachment only fires the callback above when it moves
+                    // the slider, and a patch already on the first shape does
+                    // not move it, so the grid is told once outright.
+                    control->waves->chosen = juce::jlimit(0, subShapeCount - 1,
+                                                          juce::roundToInt(control->slider.getValue()));
+                    addAndMakeVisible(*control->waves);
+                    module.controls.push_back(std::move(control));
+                    continue;
+                }
+
                 if (declared.style == ui::Style::plate)
                 {
                     control->plate = std::make_unique<ui::FxPlate>();
@@ -1034,6 +1073,12 @@ void Editor::applyEnableStates()
                 control->chip->setVisible(shown);
                 continue;
             }
+            if (control->waves != nullptr)
+            {
+                control->waves->setEnabled(on);
+                control->waves->setVisible(shown);
+                continue;
+            }
             if (control->rocker != nullptr)
             {
                 control->rocker->setEnabled(on);
@@ -1326,6 +1371,9 @@ void Editor::resized()
                     break;
                 case ui::Style::plate:
                     control.plate->setBounds(block);
+                    break;
+                case ui::Style::wave:
+                    control.waves->setBounds(block);
                     break;
                 case ui::Style::selector:
                     control.label.setBounds(block.removeFromTop(ui::stepperLabelHeight));

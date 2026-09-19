@@ -1366,6 +1366,110 @@ inline void strokeGlow(juce::Graphics& g, const juce::Path& path, juce::Colour c
     g.strokePath(path, joined(1.8f));
 }
 
+// --- A picker of waves --------------------------------------------------------
+//
+// Choices drawn as the shapes they are rather than named in a field. The sub
+// oscillator is the first thing on the panel with a shape that is a choice
+// instead of a sweep: POSITION travels a table and reads out the frames it
+// passes, but a sub is set to one wave and left there, and six icons say which
+// six are on offer and which one is on in a single glance.
+//
+// The wave is drawn from the same formula the table was generated from, so
+// what the picker shows is what the engine reads, band limiting aside.
+class WaveGrid final : public juce::Component, public juce::SettableTooltipClient
+{
+public:
+    // One entry per choice, in the engine's own order, and the shape of each at
+    // a point in its cycle. Handed in rather than looked up so this stays a
+    // picker of waves and not a picker of sub waves.
+    int choices = 0;
+    std::function<float(int, float)> shapeAt;
+    int chosen = 0;
+    int columns = 2;
+    juce::Colour accent = electricBlue;
+    std::function<void(int)> onChoose;
+
+    int rows() const { return choices <= 0 ? 0 : (choices + columns - 1) / columns; }
+
+    // Tiled by dividing the box rather than by multiplying a cell size, so the
+    // cells meet exactly and the last column and row end on the edge instead of
+    // a pixel or two short of it.
+    juce::Rectangle<int> cellBounds(int index) const
+    {
+        const auto area = getLocalBounds();
+        const auto down = rows();
+        if (choices <= 0 || down <= 0) return area;
+        const auto column = index % columns, row = index / columns;
+        const auto x = area.getX() + area.getWidth() * column / columns;
+        const auto right = area.getX() + area.getWidth() * (column + 1) / columns;
+        const auto y = area.getY() + area.getHeight() * row / down;
+        const auto bottom = area.getY() + area.getHeight() * (row + 1) / down;
+        return {x, y, right - x, bottom - y};
+    }
+
+    void paint(juce::Graphics& g) override
+    {
+        if (choices <= 0 || !shapeAt) return;
+        const auto enabled = isEnabled();
+        const auto alpha = enabled ? 1.0f : 0.35f;
+        for (int i = 0; i < choices; ++i)
+        {
+            const auto cell = cellBounds(i).toFloat().reduced(1.5f);
+            const auto live = i == chosen;
+            const auto lit = enabled && i == hovered;
+            g.setColour(live ? accent.withAlpha(alpha * 0.20f)
+                             : juce::Colour(0xff0b0e18).withAlpha(alpha));
+            g.fillRoundedRectangle(cell, 3.0f);
+            g.setColour((live ? accent : line).withAlpha(alpha * (live ? 1.0f : lit ? 0.9f : 0.6f)));
+            g.drawRoundedRectangle(cell, 3.0f, 1.0f);
+
+            // Inset hard enough that a square's flat top does not sit on the
+            // cell's own border, where the two would read as one line.
+            const auto box = cell.reduced(cell.getWidth() * 0.18f, cell.getHeight() * 0.28f);
+            const auto shape = i;
+            const auto trace = wavePath(box, [this, shape] (float phase) { return shapeAt(shape, phase); }, 128);
+            if (live)
+            {
+                strokeGlow(g, trace, accent, alpha);
+            }
+            else
+            {
+                g.setColour((lit ? text : mutedText).withAlpha(alpha * (lit ? 1.0f : 0.8f)));
+                g.strokePath(trace, juce::PathStrokeType(1.4f, juce::PathStrokeType::curved,
+                                                         juce::PathStrokeType::rounded));
+            }
+        }
+    }
+
+    void mouseDown(const juce::MouseEvent& event) override
+    {
+        if (!isEnabled()) return;
+        for (int i = 0; i < choices; ++i)
+            if (cellBounds(i).contains(event.getPosition()))
+            {
+                if (i != chosen && onChoose) onChoose(i);
+                return;
+            }
+    }
+
+    void mouseMove(const juce::MouseEvent& event) override { hover(event.getPosition()); }
+    void mouseEnter(const juce::MouseEvent& event) override { hover(event.getPosition()); }
+    void mouseExit(const juce::MouseEvent&) override { hover({-1, -1}); }
+
+private:
+    void hover(juce::Point<int> where)
+    {
+        auto under = -1;
+        for (int i = 0; i < choices; ++i)
+            if (cellBounds(i).contains(where)) under = i;
+        if (under == hovered) return;
+        hovered = under;
+        repaint();
+    }
+
+    int hovered = -1;
+};
+
 // --- The picture tube -------------------------------------------------------
 //
 // An oscillator draws its wave on a small CRT: a black surround, a bowed glass

@@ -273,6 +273,19 @@ juce::AudioProcessorValueTreeState::ParameterLayout Processor::parameterLayout()
     oscillator(1, "oscB", "Osc B", true, 1.0f / 9.0f, 7.0f, 0.25f);
 
     result.push_back(toggle("subEnable", "Sub Enable", true));
+    // The shape, as a choice rather than a stepped float, so a host's lane
+    // reads SAW instead of 0.6 — the same treatment the filter type and the
+    // warp modes get. The names are the engine's own, in the engine's order, so
+    // the index a host writes is the frame the sub reads.
+    juce::StringArray subWaveNames;
+    for (int shape = 0; shape < subShapeCount; ++shape) subWaveNames.add(subShapeName(shape));
+    result.push_back(std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID {"subWave", 1}, "Sub Wave", subWaveNames, 0));
+    // Two octaves either way, against an oscillator's four. Zero is already an
+    // octave below the note, so the bottom of this range is three octaves down
+    // — far enough that the fundamental of a low note has left the range a
+    // speaker reproduces, and further would only be further inaudible.
+    result.push_back(parameter("subOctave", "Sub Octave", {-2.0f, 2.0f, 1.0f}, 0.0f, asOctaves));
     result.push_back(parameter("subLevel", "Sub Level", {0.0f, 1.0f}, 0.17f, asDecibels));
     result.push_back(toggle("noiseEnable", "Noise Enable", false));
     result.push_back(parameter("noiseLevel", "Noise Level", {0.0f, 1.0f}, 0.35f, asDecibels));
@@ -762,6 +775,8 @@ Patch Processor::patch() const
     result.a.table = tables.table(0);
     result.b.table = tables.table(1);
     result.subEnable = value("subEnable");
+    result.subWave = value("subWave");
+    result.subOctave = value("subOctave");
     result.subLevel = value("subLevel");
     result.subPan = value("subPan");
     result.noiseEnable = value("noiseEnable");

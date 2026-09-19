@@ -24,6 +24,11 @@ juce::String slotParameter(int slot, const char* suffix)
 // from the C of the mapping octave, so the reach is a C to the E an octave and
 // a third above it.
 constexpr int computerKeySpan = 17;
+
+bool isFxModule(const ui::Module& module)
+{
+    return module.id != nullptr && module.id[0] == 'f' && module.id[1] == 'x' && module.id[2] == '\0';
+}
 }
 
 Editor::Editor(Processor& p)
@@ -159,9 +164,126 @@ bool Editor::fxControlAt(const juce::String& id, int& rack, int& slot)
 int Editor::shownRack() const
 {
     for (const auto& module : moduleUis)
-        if (juce::String(module.descriptor->id) == "fx")
+        if (isFxModule(*module.descriptor))
             return juce::jlimit(0, rackCount - 1, module.bank);
     return 0;
+}
+
+bool Editor::moduleShown(const ui::Module& module) const
+{
+    if (!ui::onPage(module, page)) return false;
+    return page != ui::Page::fx || !fxExpanded || isFxModule(module);
+}
+
+juce::Rectangle<int> Editor::moduleAreaFor(const ui::Module& module) const
+{
+    if (isFxModule(module))
+        return ui::fxModuleBounds(getLocalBounds(), module, fxExpanded);
+    return ui::moduleBounds(getLocalBounds(), module);
+}
+
+juce::Rectangle<int> Editor::fxRackAreaFor(juce::Rectangle<int> moduleArea) const
+{
+    return ui::fxRackBounds(moduleArea, fxListOpen);
+}
+
+Editor::Control* Editor::fxTypeControl(int rack, int slot)
+{
+    for (auto& module : moduleUis)
+        for (auto& control : module.controls)
+        {
+            int heldRack = 0, heldSlot = 0;
+            if (control->id.endsWith("Type") && fxControlAt(control->id, heldRack, heldSlot)
+                && heldRack == rack && heldSlot == slot)
+                return control.get();
+        }
+    return nullptr;
+}
+
+void Editor::toggleFxExpanded()
+{
+    if (page != ui::Page::fx) return;
+    fxExpanded = !fxExpanded;
+    fxDragSlot = fxDropSlot = -1;
+    applyPage();
+}
+
+void Editor::toggleFxList()
+{
+    if (page != ui::Page::fx) return;
+    fxListOpen = !fxListOpen;
+    fxDragSlot = fxDropSlot = -1;
+    resized();
+    repaint();
+}
+
+void Editor::setFxSlotBypassed(int rack, int slot, bool bypassed)
+{
+    if (auto* parameter = processor.state.getParameter(fxParameterId(rack, slot, "Bypass")))
+    {
+        parameter->beginChangeGesture();
+        parameter->setValueNotifyingHost(parameter->convertTo0to1(bypassed ? 1.0f : 0.0f));
+        parameter->endChangeGesture();
+        repaintFxDisplays();
+    }
+}
+
+void Editor::removeFxSlot(int rack, int slot)
+{
+    if (auto* parameter = processor.state.getParameter(fxParameterId(rack, slot, "Type")))
+    {
+        parameter->beginChangeGesture();
+        parameter->setValueNotifyingHost(parameter->convertTo0to1(0.0f));
+        parameter->endChangeGesture();
+        refreshFxSlots();
+        applyEnableStates();
+        repaintFxDisplays();
+    }
+}
+
+// Move one module in the left-hand signal-flow list. The parameters are fixed
+// to slots for host automation, so reordering means moving every value held by
+// those slots while leaving the parameter list itself stable.
+void Editor::moveFxSlot(int rack, int from, int to)
+{
+    from = juce::jlimit(0, fxSlotCount - 1, from);
+    to = juce::jlimit(0, fxSlotCount - 1, to);
+    if (from == to) return;
+
+    std::array<FxSlot, fxSlotCount> ordered;
+    for (int slot = 0; slot < fxSlotCount; ++slot) ordered[static_cast<size_t>(slot)] = fxSlotOf(rack, slot);
+    const auto moved = ordered[static_cast<size_t>(from)];
+    if (from < to)
+        for (int slot = from; slot < to; ++slot)
+            ordered[static_cast<size_t>(slot)] = ordered[static_cast<size_t>(slot + 1)];
+    else
+        for (int slot = from; slot > to; --slot)
+            ordered[static_cast<size_t>(slot)] = ordered[static_cast<size_t>(slot - 1)];
+    ordered[static_cast<size_t>(to)] = moved;
+
+    const auto set = [this] (const juce::String& id, float plain)
+    {
+        if (auto* parameter = processor.state.getParameter(id))
+            parameter->setValueNotifyingHost(parameter->convertTo0to1(plain));
+    };
+    for (int slot = 0; slot < fxSlotCount; ++slot)
+    {
+        const auto& held = ordered[static_cast<size_t>(slot)];
+        const auto id = [rack, slot] (const char* suffix) { return fxParameterId(rack, slot, suffix); };
+        set(id("Type"), held.type);
+        set(id("ModeA"), held.modeA);
+        set(id("ModeB"), held.modeB);
+        set(id("Bypass"), held.bypass);
+        for (int knob = 0; knob < fxKnobCount; ++knob)
+            set(id("Knob") + juce::String(knob + 1), held.knobs[static_cast<size_t>(knob)]);
+        set(id("Mix"), held.mix);
+        set(id("Level"), held.level);
+    }
+    fxSelectedSlot = to;
+    refreshFxSlots();
+    applyEnableStates();
+    resized();
+    repaint();
 }
 
 juce::String Editor::fxHeaderDetail() const
@@ -221,7 +343,7 @@ void Editor::refreshFxSlots()
 
     for (auto& module : moduleUis)
     {
-        if (juce::String(module.descriptor->id) != "fx") continue;
+        if (!isFxModule(*module.descriptor)) continue;
         for (auto& held : module.controls)
         {
             auto& control = *held;
@@ -571,16 +693,17 @@ FxSlot Editor::fxSlotOf(int rack, int slot) const
 void Editor::repaintFxDisplays()
 {
     for (const auto& module : ui::modules())
-        if (juce::String(module.id) == "fx")
-            repaint(ui::moduleBounds(getLocalBounds(), module));
+        if (isFxModule(module))
+            repaint(moduleAreaFor(module));
 }
 
 void Editor::paintFxShelves(juce::Graphics& g, juce::Rectangle<int> area, const ui::Module& module)
 {
     const auto rack = shownRack();
+    const auto rackArea = fxRackAreaFor(area);
     for (int slot = 0; slot < static_cast<int>(module.rows.size()) && slot < fxSlotCount; ++slot)
     {
-        const auto row = ui::rowBounds(area, module, slot);
+        const auto row = ui::rowBounds(rackArea, module, slot);
         const auto held = fxSlotOf(rack, slot);
         // Widened past the controls by the module's own padding, so the shelves
         // read as the full width of the rack rather than as a box around the
@@ -588,10 +711,45 @@ void Editor::paintFxShelves(juce::Graphics& g, juce::Rectangle<int> area, const 
         ui::drawFxShelf(g, row.expanded(6, 1), juce::roundToInt(held.type), true);
         // A slot that is bypassed still says what is in it, dimmed — the point
         // of a bypass is to hear a rack without it and put it straight back.
-        ui::drawFxDisplay(g, ui::rowDisplayBounds(area, module, slot).reduced(4, 6), held,
+        ui::drawFxDisplay(g, ui::rowDisplayBounds(rackArea, module, slot).reduced(4, 6), held,
                           processor.getSampleRate() > 0.0 ? processor.getSampleRate() : 48000.0,
                           processor.hostTempo(), fxOn(held.bypass) ? 0.3f : 1.0f);
+        if (slot == fxSelectedSlot)
+        {
+            g.setColour(ui::fxTypeColour(juce::roundToInt(held.type)).withAlpha(0.65f));
+            g.drawRoundedRectangle(row.expanded(5, 0).toFloat().reduced(0.5f, 2.5f), 4.0f, 1.2f);
+        }
     }
+}
+
+void Editor::paintFxList(juce::Graphics& g, juce::Rectangle<int> area, const ui::Module& module)
+{
+    const auto rack = shownRack();
+    const auto list = ui::fxListBounds(area, fxListOpen);
+    g.setColour(juce::Colour(0xff070a12));
+    g.fillRoundedRectangle(list.toFloat(), 4.0f);
+    g.setColour(ui::line.withAlpha(0.7f));
+    g.drawRoundedRectangle(list.toFloat(), 4.0f, 1.0f);
+
+    for (int slot = 0; slot < fxSlotCount; ++slot)
+    {
+        const auto held = fxSlotOf(rack, slot);
+        ui::drawFxListItem(g, ui::fxListItemBounds(area, module, slot, fxListOpen), slot,
+                           juce::roundToInt(held.type), fxOn(held.bypass),
+                           slot == fxSelectedSlot, fxListOpen);
+    }
+
+    if (fxDragSlot >= 0 && fxDropSlot >= 0 && fxDropSlot != fxDragSlot)
+    {
+        const auto target = ui::fxListItemBounds(area, module, fxDropSlot, fxListOpen);
+        const auto y = fxDropSlot > fxDragSlot ? target.getBottom() : target.getY();
+        g.setColour(ui::signalViolet);
+        g.fillRoundedRectangle(static_cast<float>(list.getX() + 5), static_cast<float>(y - 1),
+                               static_cast<float>(list.getWidth() - 10), 2.0f, 1.0f);
+    }
+
+    ui::drawFxListViewButton(g, ui::fxListButtonBounds(area), fxListOpen);
+    ui::drawFxExpandButton(g, ui::fxExpandButtonBounds(area), fxExpanded);
 }
 
 void Editor::buildTabs()
@@ -784,7 +942,13 @@ void Editor::buildModules()
                     control->plate = std::make_unique<ui::FxPlate>();
                     control->plate->setTooltip(ui::tooltipFor(declared.id));
                     auto* held = control.get();
-                    control->plate->onPlateClick = [this, held] { showFxTypeMenu(*held); };
+                    control->plate->onPlateClick = [this, held]
+                    {
+                        int rack = 0, slot = 0;
+                        if (fxControlAt(held->id, rack, slot)) fxSelectedSlot = slot;
+                        showFxTypeMenu(*held);
+                        repaintFxDisplays();
+                    };
                     // The slider is never shown and never added as a child: it
                     // is here for its attachment, which is what a host reads
                     // and writes the type through. The plate draws the value
@@ -1027,7 +1191,7 @@ void Editor::applyEnableStates()
 {
     for (auto& module : moduleUis)
     {
-        const auto onPage = ui::onPage(*module.descriptor, page);
+        const auto onPage = moduleShown(*module.descriptor);
         if (module.enable != nullptr) module.enable->setVisible(onPage);
         for (auto& button : module.bankButtons) button->setVisible(onPage);
 
@@ -1125,8 +1289,8 @@ void Editor::paint(juce::Graphics& g)
     for (const auto& module : moduleUis)
     {
         const auto& descriptor = *module.descriptor;
-        if (!ui::onPage(descriptor, page)) continue;
-        const auto area = ui::moduleBounds(getLocalBounds(), descriptor);
+        if (!moduleShown(descriptor)) continue;
+        const auto area = moduleAreaFor(descriptor);
         const auto on = module.on();
         const auto alpha = on ? 1.0f : 0.35f;
         // A module's header carries what it is doing rather than what it is:
@@ -1134,16 +1298,21 @@ void Editor::paint(juce::Graphics& g)
         // is actually running at, which in sync is a tempo division and so
         // cannot be read off the greyed-out rate knob.
         const auto tableModule = juce::String(descriptor.id) == "table";
-        const auto rackModule = juce::String(descriptor.id) == "fx";
+        const auto rackModule = isFxModule(descriptor);
         ui::drawModuleShell(g, area, descriptor, on,
                             descriptor.display == ui::Display::envelope ? envHeaderDetail()
                             : descriptor.display == ui::Display::lfo ? lfoHeaderDetail()
                             : rackModule ? fxHeaderDetail()
                             : tableModule && tablePanel != nullptr ? tablePanel->headerDetail()
-                                : juce::String());
+                                : juce::String(),
+                            rackModule ? (ui::fxViewButtonSize * 2 + ui::fxViewButtonGap + 12) : 0);
 
         if (descriptor.columnHeaderHeight > 0) paintTable(g, area, descriptor);
-        if (rackModule) paintFxShelves(g, area, descriptor);
+        if (rackModule)
+        {
+            paintFxShelves(g, area, descriptor);
+            paintFxList(g, area, descriptor);
+        }
 
         const auto display = ui::displayBounds(area, descriptor);
         if (display.isEmpty()) continue;
@@ -1313,7 +1482,9 @@ void Editor::resized()
     for (auto& module : moduleUis)
     {
         const auto& descriptor = *module.descriptor;
-        const auto area = ui::moduleBounds(getLocalBounds(), descriptor);
+        const auto visible = moduleShown(descriptor);
+        const auto area = moduleAreaFor(descriptor);
+        const auto controlsArea = isFxModule(descriptor) ? fxRackAreaFor(area) : area;
 
         if (module.enable != nullptr)
         {
@@ -1329,7 +1500,7 @@ void Editor::resized()
             const auto showing = descriptor.handleSource + module.bank;
             for (int bank = 0; bank < ui::bankCount(descriptor); ++bank)
                 if (auto* other = handleFor(descriptor.handleSource + bank))
-                    other->setVisible(descriptor.handleSource + bank == showing);
+                    other->setVisible(visible && descriptor.handleSource + bank == showing);
             // Flush with the module's top edge and the full height of the
             // header: the handle is a card hanging off that edge, not a button
             // floating inside it.
@@ -1344,7 +1515,7 @@ void Editor::resized()
         for (auto& held : module.controls)
         {
             auto& control = *held;
-            auto block = ui::controlBlock(area, descriptor, control.row, control.index, diameter);
+            auto block = ui::controlBlock(controlsArea, descriptor, control.row, control.index, diameter);
 
             // A macro's drag handle replaces its numeric label: the number is
             // the thing you grab, and the knob keeps its own drag gesture.
@@ -1353,6 +1524,7 @@ void Editor::resized()
                 const auto macro = control.id.getTrailingIntValue();
                 if (auto* handle = handleFor(static_cast<int>(ModSource::macro1) + macro - 1))
                 {
+                    handle->setVisible(visible && control.bank == module.bank);
                     const auto labelRow = block.removeFromTop(ui::knobLabelHeight);
                     handle->setBounds(juce::Rectangle<int>(26, ui::knobLabelHeight)
                                           .withCentre(labelRow.getCentre()));
@@ -1461,7 +1633,7 @@ const ui::Module* Editor::envelopeModule() const
     {
         const auto& descriptor = *module.descriptor;
         if (descriptor.display != ui::Display::envelope) continue;
-        return ui::onPage(descriptor, page) ? &descriptor : nullptr;
+        return moduleShown(descriptor) ? &descriptor : nullptr;
     }
     return nullptr;
 }
@@ -1500,6 +1672,47 @@ void Editor::mouseDown(const juce::MouseEvent& event)
     if (event.eventComponent == this && !event.mods.isPopupMenu())
     {
         const auto at = event.getEventRelativeTo(this).getPosition();
+        if (page == ui::Page::fx)
+            for (const auto& module : ui::modules())
+            {
+                if (!isFxModule(module)) continue;
+                const auto area = moduleAreaFor(module);
+                if (ui::fxExpandButtonBounds(area).contains(at)) { toggleFxExpanded(); return; }
+                if (ui::fxListButtonBounds(area).contains(at)) { toggleFxList(); return; }
+                for (int slot = 0; slot < fxSlotCount; ++slot)
+                {
+                    const auto item = ui::fxListItemBounds(area, module, slot, fxListOpen);
+                    if (!item.contains(at)) continue;
+                    const auto rack = shownRack();
+                    if (fxListOpen && ui::fxListBypassBounds(item).contains(at))
+                    {
+                        const auto held = fxSlotOf(rack, slot);
+                        if (fxTypeOf(held.type) != FxType::off)
+                            setFxSlotBypassed(rack, slot, !fxOn(held.bypass));
+                        return;
+                    }
+                    if (fxListOpen && ui::fxListRemoveBounds(item).contains(at))
+                    {
+                        if (fxTypeOf(fxSlotOf(rack, slot).type) != FxType::off)
+                            removeFxSlot(rack, slot);
+                        return;
+                    }
+                    fxSelectedSlot = slot;
+                    fxDragSlot = fxDropSlot = slot;
+                    fxDragStart = at;
+                    repaintFxDisplays();
+                    // An empty row is an add affordance. A filled one keeps a
+                    // single click for selection/drag and opens its type list
+                    // on a deliberate double-click.
+                    if (fxTypeOf(fxSlotOf(rack, slot).type) == FxType::off
+                        || event.getNumberOfClicks() >= 2)
+                    {
+                        fxDragSlot = fxDropSlot = -1;
+                        if (auto* control = fxTypeControl(rack, slot)) showFxTypeMenu(*control);
+                    }
+                    return;
+                }
+            }
         if (const auto display = envelopeDisplayBounds(); !display.isEmpty())
         {
             const auto zoom = envelopeZoom[static_cast<size_t>(shownEnv())];
@@ -1542,6 +1755,12 @@ bool Editor::keyStateChanged(bool isKeyDown)
 
 bool Editor::keyPressed(const juce::KeyPress& key)
 {
+    if (page == ui::Page::fx
+        && key == juce::KeyPress('f', juce::ModifierKeys::altModifier, 0))
+    {
+        toggleFxExpanded();
+        return true;
+    }
     // Undo belongs to the editor rather than to the panel because a plugin
     // window gives its keyboard focus to whichever child last took it, and the
     // panel is often not that child. Scoped to the tab that has something to
@@ -1625,6 +1844,27 @@ void Editor::mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWhee
 
 void Editor::mouseDrag(const juce::MouseEvent& event)
 {
+    if (fxDragSlot >= 0)
+    {
+        const auto at = event.getEventRelativeTo(this).getPosition();
+        if (at.getDistanceFrom(fxDragStart) < 4.0f) return;
+        for (const auto& module : ui::modules())
+        {
+            if (!isFxModule(module)) continue;
+            const auto area = moduleAreaFor(module);
+            auto nearest = 0;
+            auto distance = std::numeric_limits<int>::max();
+            for (int slot = 0; slot < fxSlotCount; ++slot)
+            {
+                const auto centre = ui::fxListItemBounds(area, module, slot, fxListOpen).getCentreY();
+                const auto next = std::abs(at.y - centre);
+                if (next < distance) { distance = next; nearest = slot; }
+            }
+            fxDropSlot = nearest;
+            repaintFxDisplays();
+            return;
+        }
+    }
     if (draggingHandle == nullptr) return;
     dragPosition = event.getEventRelativeTo(this).getPosition();
     repaint();
@@ -1632,6 +1872,16 @@ void Editor::mouseDrag(const juce::MouseEvent& event)
 
 void Editor::mouseUp(const juce::MouseEvent& event)
 {
+    if (fxDragSlot >= 0)
+    {
+        const auto from = fxDragSlot;
+        const auto to = fxDropSlot;
+        const auto moved = event.getEventRelativeTo(this).getPosition().getDistanceFrom(fxDragStart) >= 4.0f;
+        fxDragSlot = fxDropSlot = -1;
+        if (moved && to >= 0 && to != from) moveFxSlot(shownRack(), from, to);
+        else repaintFxDisplays();
+        return;
+    }
     if (draggingHandle == nullptr) return;
     const auto source = draggingHandle->source;
     draggingHandle->dragging = false;

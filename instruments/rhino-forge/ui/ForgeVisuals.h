@@ -1254,6 +1254,124 @@ inline void drawFxShelf(juce::Graphics& g, juce::Rectangle<int> area, int type, 
     g.fillRoundedRectangle(box.withWidth(moduleEdgeHeight), 1.5f);
 }
 
+// The list at the left of the rack is deliberately quieter than the editors
+// beside it: it is the signal-flow map, not a second copy of the controls. Each
+// row repeats the type's own mark and colour, then keeps only the two structural
+// actions Serum's rack establishes as useful at this level -- auditioning a
+// bypass and removing the module. Folded, the word and actions leave but the
+// four marks stay in their exact vertical positions.
+inline void drawFxListItem(juce::Graphics& g, juce::Rectangle<int> area, int slot, int type,
+                           bool bypassed, bool selected, bool open)
+{
+    const auto filled = type != 0;
+    const auto colour = fxTypeColour(type);
+    const auto box = area.toFloat().reduced(0.0f, 2.0f);
+
+    g.setColour(selected ? colour.withAlpha(filled ? 0.16f : 0.08f)
+                         : juce::Colour(0xff090c15));
+    g.fillRoundedRectangle(box, 4.0f);
+    g.setColour((selected ? colour : line).withAlpha(selected ? 0.9f : 0.55f));
+    g.drawRoundedRectangle(box, 4.0f, selected ? 1.4f : 1.0f);
+    if (filled)
+    {
+        g.setColour(colour.withAlpha(bypassed ? 0.35f : 1.0f));
+        g.fillRoundedRectangle(box.withWidth(moduleEdgeHeight), 1.5f);
+    }
+
+    auto icon = juce::Rectangle<float>(open ? 44.0f : box.getWidth(), box.getHeight())
+                    .withPosition(box.getX(), box.getY()).reduced(8.0f, 9.0f);
+    drawFxMark(g, icon, type, filled ? colour : mutedText, bypassed ? 0.35f : 0.95f);
+
+    if (!open)
+    {
+        g.setColour((filled ? colour : mutedText).withAlpha(0.9f));
+        g.setFont(juce::FontOptions(8.0f, juce::Font::bold));
+        g.drawText(juce::String(slot + 1), area.reduced(4).withHeight(12),
+                   juce::Justification::topLeft);
+        return;
+    }
+
+    auto textArea = area.withTrimmedLeft(50).withTrimmedRight(54);
+    g.setColour((filled ? colour : mutedText).withAlpha(bypassed ? 0.42f : 1.0f));
+    g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
+    g.drawText(fxTypeName(type), textArea.withTrimmedBottom(textArea.getHeight() / 2 - 2),
+               juce::Justification::centredLeft);
+    g.setColour(mutedText.withAlpha(0.65f));
+    g.setFont(juce::FontOptions(8.5f));
+    g.drawText("SLOT " + juce::String(slot + 1), textArea.withTrimmedTop(textArea.getHeight() / 2),
+               juce::Justification::centredLeft);
+
+    const auto bypass = fxListBypassBounds(area).toFloat();
+    const auto centre = bypass.getCentre();
+    const auto powerColour = bypassed ? juce::Colour(0xffff6f4a) : (filled ? colour : line);
+    g.setColour(powerColour.withAlpha(filled ? 0.9f : 0.35f));
+    g.drawEllipse(juce::Rectangle<float>(11.0f, 11.0f).withCentre(centre), 1.25f);
+    g.fillRect(centre.x - 0.75f, centre.y - 7.0f, 1.5f, 7.0f);
+
+    const auto remove = fxListRemoveBounds(area).toFloat().reduced(6.0f);
+    g.setColour((filled ? mutedText : line).withAlpha(filled ? 0.75f : 0.3f));
+    g.drawLine({remove.getTopLeft(), remove.getBottomRight()}, 1.2f);
+    g.drawLine({remove.getTopRight(), remove.getBottomLeft()}, 1.2f);
+}
+
+inline void drawFxListViewButton(juce::Graphics& g, juce::Rectangle<int> area, bool open)
+{
+    const auto box = area.toFloat().reduced(0.5f);
+    g.setColour(juce::Colour(0xff090c15));
+    g.fillRoundedRectangle(box, 3.0f);
+    g.setColour(signalViolet.withAlpha(0.75f));
+    g.drawRoundedRectangle(box, 3.0f, 1.0f);
+
+    const auto rail = box.reduced(5.0f, 5.0f);
+    g.setColour(signalViolet.withAlpha(open ? 0.9f : 0.45f));
+    g.fillRoundedRectangle(rail.withWidth(open ? rail.getWidth() * 0.42f : 3.0f), 1.0f);
+    juce::Path arrow;
+    const auto x = rail.getRight() - 2.0f;
+    const auto middle = rail.getCentreY();
+    const auto direction = open ? -1.0f : 1.0f;
+    arrow.startNewSubPath(x - direction * 3.0f, middle - 3.5f);
+    arrow.lineTo(x + direction * 1.0f, middle);
+    arrow.lineTo(x - direction * 3.0f, middle + 3.5f);
+    g.strokePath(arrow, juce::PathStrokeType(1.2f));
+}
+
+inline void drawFxExpandButton(juce::Graphics& g, juce::Rectangle<int> area, bool expanded)
+{
+    const auto box = area.toFloat().reduced(0.5f);
+    g.setColour(expanded ? signalViolet.withAlpha(0.2f) : juce::Colour(0xff090c15));
+    g.fillRoundedRectangle(box, 3.0f);
+    g.setColour(signalViolet.withAlpha(expanded ? 1.0f : 0.75f));
+    g.drawRoundedRectangle(box, 3.0f, 1.0f);
+
+    const auto inset = box.reduced(5.0f);
+    if (expanded)
+    {
+        // The familiar overlapping-window mark: restore the rack to its
+        // ordinary one-row footprint.
+        const auto back = juce::Rectangle<float>(7.0f, 7.0f).withCentre(inset.getCentre())
+                              .translated(2.0f, -2.0f);
+        const auto front = back.translated(-3.0f, 3.0f);
+        g.drawRoundedRectangle(back, 1.0f, 1.1f);
+        g.drawRoundedRectangle(front, 1.0f, 1.1f);
+    }
+    else
+    {
+        // Four outward corners: grow the rack through the lower module row.
+        juce::Path corners;
+        const auto corner = [&corners] (float x, float y, float sx, float sy)
+        {
+            corners.startNewSubPath(x + sx * 3.5f, y);
+            corners.lineTo(x, y);
+            corners.lineTo(x, y + sy * 3.5f);
+        };
+        corner(inset.getX(), inset.getY(), 1.0f, 1.0f);
+        corner(inset.getRight(), inset.getY(), -1.0f, 1.0f);
+        corner(inset.getX(), inset.getBottom(), 1.0f, -1.0f);
+        corner(inset.getRight(), inset.getBottom(), -1.0f, -1.0f);
+        g.strokePath(corners, juce::PathStrokeType(1.15f));
+    }
+}
+
 // --- Tables -----------------------------------------------------------------
 //
 // The matrix is eight slots read as rows. What makes that a table rather than a
@@ -2226,7 +2344,7 @@ inline void drawFilterResponse(juce::Graphics& g, juce::Rectangle<int> area, rhi
 // for the title. Knob labels are laid out below that strip, which is why they
 // no longer collide with it.
 inline void drawModuleShell(juce::Graphics& g, juce::Rectangle<int> area, const Module& module, bool on,
-                            const juce::String& detailOverride = {})
+                            const juce::String& detailOverride = {}, int detailRightInset = 0)
 {
     const auto box = area.toFloat();
     const auto accent = accentFor(module);
@@ -2250,6 +2368,7 @@ inline void drawModuleShell(juce::Graphics& g, juce::Rectangle<int> area, const 
         g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
         g.drawText(module.title, header, juce::Justification::centredLeft);
     }
+    header.removeFromRight(juce::jlimit(0, header.getWidth(), detailRightInset));
     const auto detail = detailOverride.isNotEmpty() ? detailOverride : juce::String(module.detail);
     if (detail.isNotEmpty())
     {

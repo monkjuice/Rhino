@@ -218,6 +218,10 @@ private:
     std::array<WarpStage, warpSlots> warpStagesOf(const char* prefix) const;
     // The shelves the slots sit on, drawn behind their controls.
     void paintFxShelves(juce::Graphics&, juce::Rectangle<int> area, const ui::Module&);
+    // The compact signal-flow overview at the left of the rack. It is a
+    // painted view of the same four slot parameters, not another component
+    // tree or a cached copy of the rack.
+    void paintFxList(juce::Graphics&, juce::Rectangle<int> area, const ui::Module&);
     // The rack's box alone, for a knob that is being turned inside it.
     void repaintFxDisplays();
     // The type each slot last showed, so a type arriving from a preset or from
@@ -232,6 +236,25 @@ private:
     // the rack's. Read back from the id, because that is the one place the
     // three numbers are written down.
     static bool fxControlAt(const juce::String& id, int& rack, int& slot);
+    Control* fxTypeControl(int rack, int slot);
+    void toggleFxExpanded();
+    void toggleFxList();
+    void setFxSlotBypassed(int rack, int slot, bool bypassed);
+    void removeFxSlot(int rack, int slot);
+    void moveFxSlot(int rack, int from, int to);
+    bool moduleShown(const ui::Module&) const;
+    juce::Rectangle<int> moduleAreaFor(const ui::Module&) const;
+    juce::Rectangle<int> fxRackAreaFor(juce::Rectangle<int> moduleArea) const;
+
+    // View state only. Expansion hides the lower synth row and lets the rack
+    // use it; folding the list leaves a mark-only rail. Neither belongs in a
+    // preset or in host automation.
+    bool fxExpanded = false;
+    bool fxListOpen = true;
+    int fxSelectedSlot = 0;
+    int fxDragSlot = -1;
+    int fxDropSlot = -1;
+    juce::Point<int> fxDragStart;
 
     void buildBankButtons();
     void showBank(ModuleUi&, int bank);

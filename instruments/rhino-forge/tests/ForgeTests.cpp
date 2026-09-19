@@ -630,6 +630,46 @@ void layoutSuite()
                     }
             }
         }
+
+    // The FX rack has a second geometry when it grows through both module
+    // rows, and two widths for its left-hand list. Exercise all four view
+    // combinations at every supported size: the sidebar must never steal a
+    // control's cell or escape the module it is summarising.
+    const rhino::forge::ui::Module* fxModule = nullptr;
+    for (const auto& module : modules)
+        if (juce::String(module.id) == "fx") fxModule = &module;
+    require(fxModule != nullptr, "the panel declares its effects rack");
+    if (fxModule != nullptr)
+        for (int width = rhino::forge::ui::minPanelWidth; width <= rhino::forge::ui::maxPanelWidth; width += 40)
+            for (int height = rhino::forge::ui::minPanelHeight; height <= rhino::forge::ui::maxPanelHeight; height += 40)
+                for (const auto expanded : {false, true})
+                    for (const auto listOpen : {false, true})
+                    {
+                        const auto panel = juce::Rectangle<int>(0, 0, width, height);
+                        const auto area = rhino::forge::ui::fxModuleBounds(panel, *fxModule, expanded);
+                        const auto list = rhino::forge::ui::fxListBounds(area, listOpen);
+                        const auto rack = rhino::forge::ui::fxRackBounds(area, listOpen);
+                        require(rhino::forge::ui::contentBounds(panel).contains(area),
+                                "either FX height stays inside the module field");
+                        require(area.contains(list) && area.contains(rack) && !list.intersects(rack),
+                                "the FX list and editor divide the rack without overlap");
+                        require(area.contains(rhino::forge::ui::fxExpandButtonBounds(area))
+                                    && area.contains(rhino::forge::ui::fxListButtonBounds(area)),
+                                "both FX view buttons stay in the rack header");
+                        for (int slot = 0; slot < rhino::forge::fxSlotCount; ++slot)
+                        {
+                            const auto item = rhino::forge::ui::fxListItemBounds(area, *fxModule, slot, listOpen);
+                            require(list.contains(item), "every FX list item stays in the list");
+                            const auto& row = fxModule->rows[static_cast<size_t>(slot)];
+                            for (int control = 0; control < static_cast<int>(row.controls.size()); ++control)
+                            {
+                                const auto block = rhino::forge::ui::controlBlock(
+                                    rack, *fxModule, slot, control,
+                                    rhino::forge::ui::uniformKnobDiameter(panel));
+                                require(rack.contains(block), "every FX control stays beside the list");
+                            }
+                        }
+                    }
 }
 
 // ------------------------------------------------------------- fx displays ---

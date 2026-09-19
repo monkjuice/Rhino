@@ -295,6 +295,17 @@ inline constexpr int fxBankWidth = 56;
 // same column down all four slots, with the knobs to its right.
 inline constexpr int fxDisplayWeight = 3;
 
+// The FX page has a second reading of the four slots down its left edge. At
+// full width it names every effect and exposes its bypass/remove actions; when
+// folded it becomes a narrow strip of the same four marks. The rack controls
+// keep the rest of the module, so folding the list gives dense patches their
+// room back without taking the overview away altogether.
+inline constexpr int fxListOpenWidth = 198;
+inline constexpr int fxListFoldedWidth = 54;
+inline constexpr int fxListGap = 8;
+inline constexpr int fxViewButtonSize = 22;
+inline constexpr int fxViewButtonGap = 5;
+
 inline constexpr int rowNumberGutter = 34;
 inline constexpr int columnTitleHeight = 18;
 inline constexpr int tableFieldHeight = 28;
@@ -887,6 +898,58 @@ inline juce::Rectangle<int> moduleBounds(juce::Rectangle<int> bounds, const Modu
     return juce::Rectangle<int>(x, y, width, height).reduced(moduleGap / 2, 0);
 }
 
+// The ordinary FX page occupies the signal row. Expanded, it occupies the
+// complete module field above the keyboard and hides the modulators underneath
+// it. This is view geometry only: all controls remain attached to the same
+// parameters and the engine sees no state change.
+inline juce::Rectangle<int> fxModuleBounds(juce::Rectangle<int> bounds, const Module& module,
+                                           bool expanded)
+{
+    return expanded ? contentBounds(bounds) : moduleBounds(bounds, module);
+}
+
+inline int fxListWidth(bool open) { return open ? fxListOpenWidth : fxListFoldedWidth; }
+
+inline juce::Rectangle<int> fxListBounds(juce::Rectangle<int> moduleArea, bool open)
+{
+    return moduleArea.withTrimmedTop(headerHeight).reduced(8, 6)
+        .withWidth(fxListWidth(open));
+}
+
+// A synthetic module rectangle for the controls on the right of the list. It
+// retains the real header position, so all existing row/control geometry can
+// be reused without teaching it about the sidebar.
+inline juce::Rectangle<int> fxRackBounds(juce::Rectangle<int> moduleArea, bool listOpen)
+{
+    return moduleArea.withTrimmedLeft(fxListWidth(listOpen) + fxListGap);
+}
+
+// View controls live at the far right of the rack header: the outer one grows
+// the rack through both module rows, the inner one folds the list to its icon
+// rail. They are painted rather than heavyweight child components because they
+// are view state, are hit only on the panel background and never automate.
+inline juce::Rectangle<int> fxExpandButtonBounds(juce::Rectangle<int> moduleArea)
+{
+    return {moduleArea.getRight() - 8 - fxViewButtonSize,
+            moduleArea.getY() + (headerHeight - fxViewButtonSize) / 2,
+            fxViewButtonSize, fxViewButtonSize};
+}
+
+inline juce::Rectangle<int> fxListButtonBounds(juce::Rectangle<int> moduleArea)
+{
+    return fxExpandButtonBounds(moduleArea).translated(-fxViewButtonSize - fxViewButtonGap, 0);
+}
+
+inline juce::Rectangle<int> fxListBypassBounds(juce::Rectangle<int> item)
+{
+    return item.withLeft(item.getRight() - 48).withWidth(20).withSizeKeepingCentre(20, 20);
+}
+
+inline juce::Rectangle<int> fxListRemoveBounds(juce::Rectangle<int> item)
+{
+    return item.withLeft(item.getRight() - 24).withWidth(20).withSizeKeepingCentre(20, 20);
+}
+
 // Everything inside a module below its header and its display: what the column
 // titles, the row gutter and the control rows divide between them.
 inline juce::Rectangle<int> moduleBody(juce::Rectangle<int> moduleArea, const Module& module)
@@ -949,6 +1012,14 @@ inline juce::Rectangle<int> rowBounds(juce::Rectangle<int> moduleArea, const Mod
         y += area.getHeight() * module.rows[static_cast<size_t>(i)].weight / total;
     const auto height = area.getHeight() * module.rows[static_cast<size_t>(rowIndex)].weight / total;
     return {area.getX(), y, area.getWidth(), height};
+}
+
+inline juce::Rectangle<int> fxListItemBounds(juce::Rectangle<int> moduleArea, const Module& module,
+                                             int slot, bool listOpen)
+{
+    const auto list = fxListBounds(moduleArea, listOpen);
+    const auto row = rowBounds(fxRackBounds(moduleArea, listOpen), module, slot);
+    return {list.getX(), row.getY(), list.getWidth(), row.getHeight()};
 }
 
 // The strip to the left of a table row, where its number is drawn.

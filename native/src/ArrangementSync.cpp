@@ -72,6 +72,11 @@ void Arrangement::sync()
     buildRows();
     // The same for a band: ungrouping, or deleting the last of its tracks,
     // leaves nothing for a group selection to be about.
+    // A name being typed on a track or band that has just gone is abandoned:
+    // committing it would rename whatever took that index instead.
+    if ((renamingTrack >= 0 && !juce::isPositiveAndBelow(renamingTrack, session.trackCount()))
+        || (renamingGroup > 0 && groupById(renamingGroup) == nullptr))
+        endRename(false);
     if (selectedGroup > 0 && groupById(selectedGroup) == nullptr)
     {
         selectedGroup = -1;

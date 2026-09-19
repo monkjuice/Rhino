@@ -243,12 +243,10 @@ void Arrangement::paintGroupRow(juce::Graphics& g, int row)
     g.fillPath(arrow);
 
     g.setFont(uiFontBold(10.0f));
-    const auto nameLeft = static_cast<int>(disclosure.getRight()) + 6;
-    const auto nameRight = static_cast<int>(groupButtonBounds(area, 0).getX()) - 6;
+    if (renamingGroup != group->id)
     {
+        const auto nameArea = groupNameBounds(group->id).reduced(1, 1);
         juce::Graphics::ScopedSaveState scope(g);
-        const auto nameArea = juce::Rectangle<int>(nameLeft, static_cast<int>(area.getY()) + 6,
-                                                   std::max(1, nameRight - nameLeft), 14);
         g.reduceClipRegion(nameArea);
         drawSnappedText(g, group->name + "  (" + juce::String(group->trackCount) + ")", nameArea);
     }
@@ -353,29 +351,6 @@ void Arrangement::showGroupMenu(int groupId)
                 safe->ungroupSelection();
             }
         });
-}
-
-void Arrangement::renameGroup(int groupId)
-{
-    const auto* group = groupById(groupId);
-    if (group == nullptr)
-        return;
-    const auto current = group->name;
-    auto* window = new juce::AlertWindow("Rename group", "New name for " + current + ":",
-                                         juce::MessageBoxIconType::NoIcon, this);
-    window->addTextEditor("name", current, {});
-    window->addButton("Rename", 1, juce::KeyPress(juce::KeyPress::returnKey));
-    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
-    window->enterModalState(true, juce::ModalCallbackFunction::create(
-        [safe = juce::Component::SafePointer<Arrangement>(this), groupId, window](int result)
-        {
-            const auto name = window->getTextEditorContents("name");
-            delete window;
-            if (result != 1 || safe == nullptr) return;
-            const auto done = safe->session.setTrackGroupName(groupId, name);
-            if (safe->status)
-                safe->status(done.failed() ? done.getErrorMessage() : "Renamed the group to " + name.trim());
-        }), false);
 }
 
 void Arrangement::groupSelectedTracks()

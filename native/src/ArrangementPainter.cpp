@@ -66,14 +66,15 @@ void Arrangement::paint(juce::Graphics& g)
         }
         // The name holds the top line of the card whatever height the row is
         // dragged to, level with the two buttons beside it. Dark text on a
-        // light card, light on a dark one, so every colour stays readable.
+        // light card, light on a dark one, so every colour stays readable. A
+        // card being renamed gives that line to the editor instead.
         g.setColour(cardColour.contrasting(0.8f));
         g.setFont(uiFontBold(10.0f));
+        if (renamingTrack != track)
         {
             // Clipped rather than shrunk to fit: a scaled-down line lands on a
             // fractional em again, which is the blur this is avoiding.
-            const auto nameArea = nameColumn.withY(row.getY() + cardControlsTop)
-                                            .withHeight(18.0f).toNearestInt().reduced(6, 0);
+            const auto nameArea = trackNameBounds(track);
             juce::Graphics::ScopedSaveState scope(g);
             g.reduceClipRegion(nameArea);
             drawSnappedText(g, juce::String(track + 1).paddedLeft('0', 2) + "  " + session.trackName(track), nameArea);

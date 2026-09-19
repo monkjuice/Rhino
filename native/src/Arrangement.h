@@ -138,7 +138,16 @@ private:
     void dragCardGesture(const juce::MouseEvent&);
     void endCardGesture();
     void showTrackMenu(int track);
+    // ArrangementRename.cpp
+    void configureNameEditor();
+    juce::Rectangle<int> trackNameBounds(int track) const;
+    juce::Rectangle<int> groupNameBounds(int groupId) const;
+    bool isRenaming() const;
+    void layoutNameEditor();
+    void startRename(int track, int groupId, const juce::String& current);
+    void endRename(bool keep);
     void renameTrack(int track);
+    void renameGroup(int groupId);
     // ArrangementGroups.cpp
     const Session::TrackGroup* groupById(int groupId) const;
     const Session::TrackGroup* groupStartingAt(int track) const;
@@ -156,7 +165,6 @@ private:
     void paintGroupRow(juce::Graphics&, int row);
     void paintGroupSpine(juce::Graphics&, int track, juce::Rectangle<float> row);
     void showGroupMenu(int groupId);
-    void renameGroup(int groupId);
     void groupSelectedTracks();
     void ungroupSelection();
     juce::String controlDescription(juce::Component*) const;
@@ -197,6 +205,10 @@ private:
     // transparent to the mouse, so a click on empty header space still reaches
     // the arrangement and selects the track.
     juce::Component laneHeaders;
+    // Renaming happens in place, on the line the name is painted on. The editor
+    // is a child of laneHeaders so a row scrolled half out of view crops it.
+    juce::TextEditor nameEditor;
+    int renamingTrack = -1, renamingGroup = -1;
     std::vector<std::unique_ptr<juce::TextButton>> mute, solo;
     // The same mixer values the session view shows, laid out horizontally.
     std::vector<std::unique_ptr<juce::Slider>> volume, pan;

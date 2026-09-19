@@ -109,6 +109,44 @@
         require(bands.size() == 1 && bands[0].firstTrack == 1 && bands[0].trackCount == 2,
                 "and the band is back to the two tracks and the place it started from");
 
+        scenario("renaming: the name is edited on the card, not in a dialog");
+        {
+            require(!view.isRenaming(), "Nothing is being renamed to start with");
+            const auto original = session.trackName(1);
+            view.selectTrack(1);
+            require(view.keyPressed(juce::KeyPress(juce::KeyPress::F2Key)), "F2 is answered by the arrangement");
+            require(view.isRenaming() && view.nameEditor.isVisible(),
+                    "and puts an editor on the card rather than opening a window");
+            require(view.nameEditor.getText() == original, "primed with the name it is replacing");
+            require(view.nameEditor.getBounds().getWidth() > 0 && view.nameEditor.getBounds().getHeight() > 0,
+                    "and placed on the line that name was painted on");
+            view.nameEditor.setText("Bassline");
+            view.endRename(true);
+            require(!view.isRenaming() && !view.nameEditor.isVisible(), "Return closes the editor");
+            require(session.trackName(1) == "Bassline", "and the card takes what was typed");
+            view.keyPressed(juce::KeyPress(juce::KeyPress::F2Key));
+            view.nameEditor.setText("Discarded");
+            view.endRename(false);
+            require(session.trackName(1) == "Bassline", "Escape leaves the name as it was");
+            require(session.setTrackName(1, original).wasOk(), "The card can be named back");
+
+            // The band answers F2 before the track under it, because selecting
+            // a band is how you say you meant the group.
+            view.selectGroup(bandId);
+            require(view.keyPressed(juce::KeyPress(juce::KeyPress::F2Key)), "F2 is answered with a band selected");
+            require(view.isRenaming() && view.nameEditor.getText() == "Drums",
+                    "and edits the band's name rather than a track's");
+            view.nameEditor.setText("Kit");
+            view.endRename(true);
+            require(session.trackGroups().front().name == "Kit", "The band takes what was typed");
+            require(session.setTrackGroupName(bandId, "Drums").wasOk(), "and can be named back");
+
+            view.selectTrack(session.masterTrackIndex());
+            view.keyPressed(juce::KeyPress(juce::KeyPress::F2Key));
+            require(!view.isRenaming(), "The main row has no name to edit");
+            view.selectTrack(1);
+        }
+
         scenario("track groups: mute and solo reach every member");
         session.setTrackGroupMuted(bandId, true);
         require(session.trackMixer(1).muted && session.trackMixer(2).muted,

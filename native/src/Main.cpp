@@ -678,7 +678,8 @@ private:
                 if (result == 1)
                     juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon, "Keyboard shortcuts",
                         "Space  Play/Pause\nCtrl+N  New project\nCtrl+O  Open project\nCtrl+S  Save project\nCtrl+Shift+S  Save as\n"
-                        "Ctrl+Shift+E  Export WAV\nCtrl+Z  Undo\nCtrl+Y / Ctrl+Shift+Z  Redo\nCtrl+F  Search browser\nCtrl+A  Add a clip to the focused track\nDouble-click a lane  Add a clip there\n?  Show/hide Info View\nF12  Full screen");
+                        "Ctrl+Shift+E  Export WAV\nCtrl+Z  Undo\nCtrl+Y / Ctrl+Shift+Z  Redo\nCtrl+F  Search browser\nCtrl+A  Add a clip to the focused track\nDouble-click a lane  Add a clip there\n"
+                        "Ctrl+T  Add a track\nF2  Rename the selected track or group\nCtrl+G  Group the selected tracks\nCtrl+Shift+G  Ungroup\n?  Show/hide Info View\nF12  Full screen");
                 else if (result == 2)
                     juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon, "About Rhino",
                         "Rhino\nA native desktop DAW for patterns, arrangement, and offline WAV export.");

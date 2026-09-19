@@ -595,28 +595,6 @@ void Arrangement::showTrackMenu(int track)
         });
 }
 
-// The name is asked for where the rest of the app asks for text, rather than
-// turned into an editor on the card: a card can be inches tall, and the name
-// column is the narrowest thing on it.
-void Arrangement::renameTrack(int track)
-{
-    auto* window = new juce::AlertWindow("Rename track", "New name for " + session.trackName(track) + ":",
-                                         juce::MessageBoxIconType::NoIcon, this);
-    window->addTextEditor("name", session.trackName(track), {});
-    window->addButton("Rename", 1, juce::KeyPress(juce::KeyPress::returnKey));
-    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
-    window->enterModalState(true, juce::ModalCallbackFunction::create([this, track, window](int result)
-    {
-        const auto name = window->getTextEditorContents("name");
-        delete window;
-        if (result != 1) return;
-        if (const auto done = session.setTrackName(track, name); done.failed() && status)
-            status(done.getErrorMessage());
-        else if (status)
-            status("Renamed track " + juce::String(track + 1) + " to " + name.trim());
-    }), false);
-}
-
 // What the Info View says while the pointer rests on a header control. The
 // controls are the same objects the session view drives, so the text names the
 // track rather than leaving the reader to work out which card it came from.

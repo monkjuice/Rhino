@@ -73,6 +73,7 @@ Arrangement::Arrangement(Session& s) : session(s), vblank(this, [this] { updateP
     addAndMakeVisible(snapSize);
     laneHeaders.setInterceptsMouseClicks(false, true);
     addAndMakeVisible(laneHeaders);
+    configureNameEditor();
     sync();
 }
 
@@ -171,6 +172,7 @@ void Arrangement::resized()
         masterVolume.setBounds(56, controlsY, 62, 16);
         masterPan.setBounds(122, controlsY, 62, 16);
     }
+    layoutNameEditor();
     scroll.setBounds(static_cast<int>(headerWidth), getHeight() - 14, getWidth() - static_cast<int>(headerWidth) - 14, 14);
     trackScrollBar.setBounds(getWidth() - 12, static_cast<int>(lanesTop), 12, getHeight() - static_cast<int>(lanesTop) - 18);
     updateScroll();
@@ -240,10 +242,6 @@ bool Arrangement::keyPressed(const juce::KeyPress& key)
     if (key.getKeyCode() == juce::KeyPress::F2Key)
     {
         if (focus == Focus::group && selectedGroup > 0) renameGroup(selectedGroup);
-        else if (session.isMasterTrack(selectedTrack))
-        {
-            if (status) status("The main row keeps its name");
-        }
         else renameTrack(selectedTrack);
         return true;
     }
@@ -478,6 +476,7 @@ void Arrangement::changeListenerCallback(juce::ChangeBroadcaster*)
 void Arrangement::editWillChange()
 {
     cancelDrag();
+    endRename(false);
     clips.clear();
     waveforms.clear();
     rows.clear();

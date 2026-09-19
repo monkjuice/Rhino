@@ -72,6 +72,7 @@ target_sources(RhinoNative PRIVATE
     src/ArrangementSync.cpp
     src/ArrangementGestures.cpp
     src/ArrangementGroups.cpp
+    src/ArrangementRename.cpp
     src/ArrangementAutomation.cpp
     src/ArrangementDrops.cpp
     src/SessionView.cpp

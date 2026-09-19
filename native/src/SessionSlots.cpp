@@ -19,10 +19,14 @@ namespace
 constexpr int presetSlotBars = 1;
 }
 
+// One guard for every way a slot is reached - launching, reading, filling. A
+// group track carries the audio of the tracks under it, so it has nothing of
+// its own to launch.
 te::ClipSlot* Session::clipSlotAt(int track, int scene) const
 {
     const auto tracks = te::getAudioTracks(*edit);
     if (!juce::isPositiveAndBelow(track, tracks.size())) return nullptr;
+    if (isGroupBusTrack(track)) return nullptr;
     const auto slots = tracks[track]->getClipSlotList().getClipSlots();
     if (!juce::isPositiveAndBelow(scene, slots.size())) return nullptr;
     return slots[scene];

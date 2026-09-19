@@ -1,19 +1,14 @@
-        // Groups are organisational: a band over a contiguous run of tracks
-        // that folds away, carries mute and solo to its members, and decides
-        // membership by where a track sits rather than by a stored span.
+        // A group is a bus: its own track carries the name, fader and devices,
+        // and every member's output is routed into it. That track is an
+        // ordinary audio track, which is what lets the mixer, the devices and
+        // the automation reach it with no code of their own - and it is what
+        // these first assertions are really about.
         const auto tracksBeforeGroups = session.trackCount();
         while (session.trackCount() < 4)
             require(session.addAudioTrack().wasOk(), "Groups need four tracks to work with");
         view.setSize(1000, 620);
         view.sync();
         view.resized();
-        const auto bandRow = [&view]
-        {
-            for (int i = 0; i < static_cast<int>(view.rows.size()); ++i)
-                if (view.rows[static_cast<size_t>(i)].group >= 0)
-                    return i;
-            return -1;
-        };
         const auto clickAt = [&view](juce::Point<float> point)
         {
             const juce::ModifierKeys leftButton(juce::ModifierKeys::leftButtonModifier);
@@ -23,186 +18,178 @@
             view.mouseDown(press);
             view.mouseUp(press);
         };
+        const auto destinationOf = [&session](int track)
+        {
+            return te::getAudioTracks(*session.edit)[track]->getOutput().getDestinationTrack();
+        };
 
-        scenario("track groups: grouping gathers the tracks into one run");
-        require(session.trackGroups().empty(), "A document starts with no bands");
+        scenario("track groups: grouping builds a bus above the tracks");
+        require(session.trackGroups().empty(), "A document starts with no groups");
+        const auto looseCount = session.trackCount();
         require(session.groupTracks({1, 2}, "Drums").wasOk(), "Two cards can be grouped");
+        require(session.trackCount() == looseCount + 1, "Grouping adds the group's own track");
         auto bands = session.trackGroups();
-        require(bands.size() == 1, "Grouping makes one band");
-        require(bands[0].name == "Drums", "The band takes the name it was given");
-        require(bands[0].firstTrack == 1 && bands[0].trackCount == 2,
-                "The run starts where the topmost of the grouped cards already was");
+        require(bands.size() == 1, "and there is one group");
         const auto bandId = bands[0].id;
-        require(session.trackGroupId(1) == bandId && session.trackGroupId(2) == bandId,
-                "Both tracks belong to the band");
-        require(session.trackGroupId(0) == 0 && session.trackGroupId(3) == 0,
-                "and nothing else does");
+        const auto bus = bands[0].busTrack;
+        require(bus == 1, "The bus takes the place the topmost grouped card had");
+        require(bands[0].firstTrack == 2 && bands[0].trackCount == 2,
+                "and its members are the run directly under it");
+        require(session.trackName(bus) == "Drums", "The bus carries the group's name");
+        require(session.isGroupBusTrack(bus) && session.trackGroupId(bus) == 0,
+                "A bus is the group rather than a member of it");
+        require(session.trackGroupId(2) == bandId && session.trackGroupId(3) == bandId,
+                "Both cards under it belong to the group");
 
-        scenario("track groups: the band is a row of its own");
+        scenario("track groups: the members feed the bus");
+        require(destinationOf(2) == te::getAudioTracks(*session.edit)[bus]
+                    && destinationOf(3) == te::getAudioTracks(*session.edit)[bus],
+                "Every member sends its audio to the bus rather than to the main output");
+        require(destinationOf(0) == nullptr && destinationOf(4) == nullptr,
+                "and the tracks outside it still go straight to the main output");
+
+        scenario("track groups: a bus takes audio effects and nothing else");
+        {
+            const auto slots = session.deviceSlots(bus).size();
+            require(session.addAudioEffect(Session::AudioEffect::Reverb, bus).wasOk(),
+                    "An audio effect can go on a group");
+            require(session.deviceSlots(bus).size() == slots + 1, "and joins its chain");
+            require(session.addInstrument(Session::Instrument::FourOsc, bus).failed(),
+                    "An instrument cannot: a group carries audio that has already been played");
+            require(session.addMidiEffect(Session::MidiEffect::RhinoArp, bus).failed(),
+                    "and a MIDI effect cannot, because there is no sequence left to act on");
+            require(!session.trackHasInstrument(bus), "so a bus never runs an instrument");
+        }
+
+        scenario("track groups: a bus takes no clips");
+        require(session.createClip(bus, 0.0).failed(), "A group refuses a MIDI clip");
+        require(session.importAudioAt(source.getFile(), bus, 0.0).failed(), "and refuses audio");
+        require(te::getAudioTracks(*session.edit)[bus]->getClips().isEmpty(), "so it stays empty");
+        require(session.insertAudioFileInSlot(source.getFile(), bus, 0).failed(),
+                "and has no session slots to fill either");
+
+        scenario("track groups: one level only");
+        require(session.groupTracks({bus, 4}).failed(), "A group cannot go inside another group");
+        require(session.addTracksToGroup({bus}, bandId).failed(), "nor be added to one");
+
+        scenario("track groups: the cards read as one block");
         view.sync();
         view.resized();
-        require(view.groups.size() == 1, "The arrangement reads the band from the session");
-        require(bandRow() >= 0, "The band has a row in the stack");
-        require(view.rows[static_cast<size_t>(bandRow())].track == 1,
-                "It is the row of the first track it covers");
-        require(view.rowBounds(bandRow()).getBottom() <= view.lane(1).getY() + 0.001f,
-                "and it sits above that track's lane");
-        require(view.cardAt({90.0f, view.rowBounds(bandRow()).getCentreY()}) < 0,
-                "The band is not a card, so it cannot be carried or resized like one");
-        require(view.trackAt(view.rowBounds(bandRow()).getCentreY()) < 0,
-                "and it is no track, so a clip dropped on it lands nowhere");
+        require(view.groups.size() == 1, "The arrangement reads the group from the session");
+        require(view.trackIndent(bus) == 0.0f, "A bus card starts at the panel edge");
+        require(view.trackIndent(2) == view.groupIndent && view.trackIndent(3) == view.groupIndent,
+                "and the cards inside it start at the indent");
+        require(view.mute[2]->getX() - view.mute[bus]->getX() == static_cast<int>(view.groupIndent),
+                "so their controls move right by exactly that much");
+        require(view.cardAt({90.0f, view.lane(bus).getCentreY()}) == bus,
+                "A bus is a card like any other: it can be selected, carried and resized");
 
         scenario("track groups: collapsing folds the members away");
         const auto openStackHeight = view.rowsHeight;
-        require(session.setTrackGroupCollapsed(bandId, true).wasOk(), "A band can be collapsed");
+        require(session.setTrackGroupCollapsed(bandId, true).wasOk(), "A group can be collapsed");
         view.sync();
         view.resized();
-        require(view.lane(1).getHeight() == 0.0f && view.lane(2).getHeight() == 0.0f,
-                "A collapsed band leaves its members no height");
-        require(view.lane(0).getHeight() > 0.0f && view.lane(3).getHeight() > 0.0f,
-                "The tracks outside it keep theirs");
+        require(view.lane(2).getHeight() == 0.0f && view.lane(3).getHeight() == 0.0f,
+                "A collapsed group leaves its members no height");
+        require(view.lane(bus).getHeight() > 0.0f, "while the bus keeps its own row");
         require(view.rowsHeight < openStackHeight, "The stack is shorter by what the folded rows took");
-        require(!view.mute[1]->isVisible() && !view.volume[1]->isVisible(),
-                "A folded member's controls go with it rather than piling up under the band");
-        require(view.cardAt({90.0f, view.lane(3).getCentreY()}) == 3,
-                "The cards still below the band answer at their new places");
+        require(!view.mute[2]->isVisible() && !view.volume[2]->isVisible(),
+                "A folded member's controls go with it");
+        require(destinationOf(2) == te::getAudioTracks(*session.edit)[bus],
+                "Folding is a view setting: the audio still goes where it did");
 
         scenario("track groups: the disclosure folds and unfolds");
-        clickAt(view.groupDisclosureBounds(view.rowBounds(bandRow())).getCentre());
-        require(!session.trackGroups().front().collapsed, "Clicking the disclosure expands a folded band");
+        clickAt(view.busDisclosureBounds(view.lane(bus)).getCentre());
+        require(!session.trackGroups().front().collapsed, "Clicking the arrow on the bus expands a folded group");
         view.sync();
         view.resized();
-        require(view.lane(1).getHeight() > 0.0f && view.mute[1]->isVisible(),
+        require(view.lane(2).getHeight() > 0.0f && view.mute[2]->isVisible(),
                 "Expanding brings the members back with their controls");
-        clickAt(view.groupDisclosureBounds(view.rowBounds(bandRow())).getCentre());
-        require(session.trackGroups().front().collapsed, "and clicking it again folds the band back up");
-        require(session.setTrackGroupCollapsed(bandId, false).wasOk(), "A band can be expanded again");
+        clickAt(view.busDisclosureBounds(view.lane(bus)).getCentre());
+        require(session.trackGroups().front().collapsed, "and clicking it again folds the group back up");
+        require(session.setTrackGroupCollapsed(bandId, false).wasOk(), "A group can be expanded again");
         view.sync();
         view.resized();
 
-        scenario("track groups: a member's card starts at the group's indent");
-        require(view.trackIndent(0) == 0.0f, "A loose card starts at the panel edge");
-        require(view.trackIndent(1) == view.groupIndent && view.trackIndent(2) == view.groupIndent,
-                "A card inside a band starts at the indent");
-        require(view.mute[1]->getX() - view.mute[0]->getX() == static_cast<int>(view.groupIndent),
-                "and its controls move right by exactly that much, so the step in the edge is unbroken");
-        require(view.volume[1]->getX() == view.mute[1]->getX(),
-                "The indented buttons still sit squarely over the indented faders");
+        scenario("track groups: the bus is part of the document");
+        {
+            const std::function<juce::ValueTree(const juce::ValueTree&)> findBus =
+                [&findBus](const juce::ValueTree& tree) -> juce::ValueTree
+            {
+                if (tree.hasProperty("rhinoGroupBus")) return tree;
+                for (int i = 0; i < tree.getNumChildren(); ++i)
+                    if (const auto found = findBus(tree.getChild(i)); found.isValid()) return found;
+                return {};
+            };
+            const auto snapshot = session.projectSnapshot();
+            const auto savedBus = findBus(snapshot);
+            require(savedBus.isValid(), "The bus is written into the saved project");
+            require(static_cast<int>(savedBus.getProperty("rhinoGroupBus")) == bandId,
+                    "carrying the id its members name");
+        }
 
         scenario("track groups: a command reaches every selected card");
-        require(session.addTracksToGroup({0, 3}, bandId).wasOk(), "Several loose cards can join a band at once");
-        require(session.trackGroups().front().trackCount == 4,
-                "and the band covers all of them rather than only the first");
-        require(session.addTracksToGroup({0}, bandId).failed(),
-                "A card already in the band has nothing to join");
-        require(session.removeTracksFromGroup({0, 3}).wasOk(), "Several members can leave at once");
+        require(session.addTracksToGroup({0, 4}, bandId).wasOk(), "Several loose cards can join at once");
+        require(session.trackGroups().front().trackCount == 4, "and the group covers all of them");
+        require(destinationOf(session.trackGroups().front().firstTrack)
+                    == te::getAudioTracks(*session.edit)[session.trackGroups().front().busTrack],
+                "with their audio following them in");
+        require(session.removeTracksFromGroup({session.trackGroups().front().firstTrack,
+                                               session.trackGroups().front().lastTrack()}).wasOk(),
+                "Several members can leave at once");
         bands = session.trackGroups();
-        require(bands.size() == 1 && bands[0].trackCount == 2, "leaving the band with the two that stayed");
-        require(session.removeTracksFromGroup({bands[0].lastTrack() + 1}).failed(),
-                "A card outside the band has no group to leave");
-        // The card that left from the top slid below the ones that stayed, which
-        // is how the band survives as one run. Carry it back, so the scenarios
-        // after this one meet the stack they expect.
-        require(bands[0].firstTrack == 0, "Taking the topmost member out moves the band up to where it was");
-        require(session.moveTrack(3, 0).wasOk(), "The card that left can be carried back above the band");
-        bands = session.trackGroups();
-        require(bands.size() == 1 && bands[0].firstTrack == 1 && bands[0].trackCount == 2,
-                "and the band is back to the two tracks and the place it started from");
+        require(bands.size() == 1 && bands[0].trackCount == 2, "leaving the group with the two that stayed");
+
+        scenario("track groups: where a track sits decides what it feeds");
+        {
+            const auto below = bands[0].lastTrack() + 1;
+            require(session.trackGroupId(below) == 0 && destinationOf(below) == nullptr,
+                    "A card below the group is outside it");
+            require(session.moveTrack(below, bands[0].lastTrack()).wasOk(),
+                    "and can be carried into the middle of it");
+            bands = session.trackGroups();
+            require(bands[0].trackCount == 3, "Landing between two members joins the group");
+            require(destinationOf(bands[0].lastTrack()) == te::getAudioTracks(*session.edit)[bands[0].busTrack],
+                    "and the audio follows it in without anything else being asked");
+            require(session.removeTracksFromGroup({bands[0].lastTrack()}).wasOk(), "It can be taken back out");
+            bands = session.trackGroups();
+            require(bands[0].trackCount == 2 && destinationOf(bands[0].lastTrack() + 1) == nullptr,
+                    "and its audio goes back to the main output");
+        }
 
         scenario("renaming: the name is edited on the card, not in a dialog");
         {
             require(!view.isRenaming(), "Nothing is being renamed to start with");
-            const auto original = session.trackName(1);
-            view.selectTrack(1);
+            // Adding a card above the group carried the bus up with it, so the
+            // index it started at is not the one it is at now.
+            const auto renamed = session.trackGroups().front().busTrack;
+            const auto original = session.trackName(renamed);
+            view.sync();
+            view.selectTrack(renamed);
             require(view.keyPressed(juce::KeyPress(juce::KeyPress::F2Key)), "F2 is answered by the arrangement");
             require(view.isRenaming() && view.nameEditor.isVisible(),
                     "and puts an editor on the card rather than opening a window");
             require(view.nameEditor.getText() == original, "primed with the name it is replacing");
-            require(view.nameEditor.getBounds().getWidth() > 0 && view.nameEditor.getBounds().getHeight() > 0,
-                    "and placed on the line that name was painted on");
-            view.nameEditor.setText("Bassline");
+            view.nameEditor.setText("Kit");
             view.endRename(true);
-            require(!view.isRenaming() && !view.nameEditor.isVisible(), "Return closes the editor");
-            require(session.trackName(1) == "Bassline", "and the card takes what was typed");
+            require(session.trackName(renamed) == "Kit", "and a group is renamed by renaming its card");
+            require(session.trackGroups().front().name == "Kit", "which is the group's name");
             view.keyPressed(juce::KeyPress(juce::KeyPress::F2Key));
             view.nameEditor.setText("Discarded");
             view.endRename(false);
-            require(session.trackName(1) == "Bassline", "Escape leaves the name as it was");
-            require(session.setTrackName(1, original).wasOk(), "The card can be named back");
-
-            // The band answers F2 before the track under it, because selecting
-            // a band is how you say you meant the group.
-            view.selectGroup(bandId);
-            require(view.keyPressed(juce::KeyPress(juce::KeyPress::F2Key)), "F2 is answered with a band selected");
-            require(view.isRenaming() && view.nameEditor.getText() == "Drums",
-                    "and edits the band's name rather than a track's");
-            view.nameEditor.setText("Kit");
-            view.endRename(true);
-            require(session.trackGroups().front().name == "Kit", "The band takes what was typed");
-            require(session.setTrackGroupName(bandId, "Drums").wasOk(), "and can be named back");
-
+            require(session.trackName(renamed) == "Kit", "Escape leaves the name as it was");
+            require(session.setTrackName(renamed, original).wasOk(), "The card can be named back");
             view.selectTrack(session.masterTrackIndex());
             view.keyPressed(juce::KeyPress(juce::KeyPress::F2Key));
             require(!view.isRenaming(), "The main row has no name to edit");
-            view.selectTrack(1);
         }
-
-        scenario("track groups: mute and solo reach every member");
-        session.setTrackGroupMuted(bandId, true);
-        require(session.trackMixer(1).muted && session.trackMixer(2).muted,
-                "Muting the band mutes every track under it");
-        require(session.trackGroupMuted(bandId), "and the band reads as muted");
-        session.setTrackMuted(2, false);
-        require(!session.trackGroupMuted(bandId), "A band is muted only while all of its tracks are");
-        session.setTrackGroupMuted(bandId, false);
-        require(!session.trackMixer(1).muted && !session.trackMixer(2).muted,
-                "Unmuting the band clears every one of them");
-
-        scenario("track groups: the band is part of the document");
-        {
-            const std::function<juce::ValueTree(const juce::ValueTree&)> findBand =
-                [&findBand](const juce::ValueTree& tree) -> juce::ValueTree
-            {
-                if (tree.hasType("rhinoTrackGroup")) return tree;
-                for (int i = 0; i < tree.getNumChildren(); ++i)
-                    if (const auto found = findBand(tree.getChild(i)); found.isValid()) return found;
-                return {};
-            };
-            const std::function<juce::ValueTree(const juce::ValueTree&)> findMember =
-                [&findMember](const juce::ValueTree& tree) -> juce::ValueTree
-            {
-                if (tree.hasProperty("rhinoGroup")) return tree;
-                for (int i = 0; i < tree.getNumChildren(); ++i)
-                    if (const auto found = findMember(tree.getChild(i)); found.isValid()) return found;
-                return {};
-            };
-            const auto snapshot = session.projectSnapshot();
-            const auto savedBand = findBand(snapshot);
-            require(savedBand.isValid(), "The band is written into the saved project");
-            require(savedBand.getProperty("name").toString() == "Drums", "with the name it was given");
-            const auto member = findMember(snapshot);
-            require(member.isValid() && static_cast<int>(member.getProperty("rhinoGroup")) == bandId,
-                    "and membership travels on the track, so reordering carries it");
-        }
-
-        scenario("track groups: where a track sits decides what it is in");
-        require(session.moveTrack(3, 1).wasOk(), "A loose track can be carried above the band");
-        require(session.trackGroupId(1) == 0, "Landing above the band leaves it loose");
-        require(session.trackGroups().front().firstTrack == 2,
-                "and the band is still one run, one place further down");
-        require(session.moveTrack(1, 2).wasOk(), "That track can be carried on into the band");
-        require(session.trackGroupId(2) == bandId, "A track carried into the middle of a band joins it");
-        require(session.trackGroups().front().trackCount == 3, "so the band now covers three tracks");
-        require(session.removeTrackFromGroup(2).wasOk(), "A member can be taken out of the band");
-        bands = session.trackGroups();
-        require(bands.size() == 1 && bands[0].trackCount == 2,
-                "Removing a track from the middle keeps the band one run rather than splitting it");
-        require(session.trackGroupId(3) == 0, "and the track it let go is loose below it");
 
         scenario("track groups: Ctrl+G groups the selected cards");
-        require(session.ungroupTracks(bandId).wasOk(), "A band can be taken away");
-        require(session.trackGroups().empty(), "Ungrouping leaves no band behind");
-        require(session.trackCount() == 4, "and keeps every track it held");
+        require(session.ungroupTracks(bandId).wasOk(), "A group can be taken away");
+        require(session.trackGroups().empty(), "Ungrouping leaves no group behind");
+        require(session.trackCount() == looseCount, "and takes the bus track with it");
+        require(destinationOf(1) == nullptr && destinationOf(2) == nullptr,
+                "handing every member back to the main output");
         view.sync();
         view.selectTrack(1);
         view.selectTrackRange(1, 2);
@@ -213,7 +200,17 @@
         const auto commandShiftG = juce::KeyPress('G',
             juce::ModifierKeys(juce::ModifierKeys::commandModifier | juce::ModifierKeys::shiftModifier), 0);
         require(view.keyPressed(commandShiftG), "Ctrl+Shift+G is answered too");
-        require(session.trackGroups().empty(), "and takes the band back off them");
+        require(session.trackGroups().empty(), "and takes the group off them again");
+
+        scenario("track groups: deleting the bus dissolves the group");
+        require(session.groupTracks({1, 2}, "Temp").wasOk(), "A group can be made again");
+        {
+            const auto temp = session.trackGroups().front();
+            require(session.removeAudioTrack(temp.busTrack).wasOk(), "Its bus can be deleted like any track");
+            require(session.trackGroups().empty(), "which dissolves the group");
+            require(session.trackCount() == looseCount, "leaving every track it held");
+            require(destinationOf(1) == nullptr, "and putting their audio back on the main output");
+        }
 
         while (session.trackCount() > tracksBeforeGroups)
             require(session.removeAudioTrack(session.trackCount() - 1).wasOk(),

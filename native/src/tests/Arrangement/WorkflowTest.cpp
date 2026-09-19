@@ -82,6 +82,8 @@ int runArrangementTest()
        #include "scenarios/AudioClipEditing.inc"
         scenario("track management");
        #include "scenarios/TrackManagement.inc"
+        scenario("group bus routing");
+       #include "scenarios/GroupBusRouting.inc"
         scenario("note editor");
        #include "scenarios/NoteEditor.inc"
         scenario("gestures and persistence");

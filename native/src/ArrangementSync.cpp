@@ -70,19 +70,10 @@ void Arrangement::sync()
         masterPan.setValue(session.masterPan(), juce::dontSendNotification);
     std::erase_if(waveforms, [&usedFiles](const auto& item) { return !usedFiles.contains(item.first); });
     buildRows();
-    // The same for a band: ungrouping, or deleting the last of its tracks,
-    // leaves nothing for a group selection to be about.
-    // A name being typed on a track or band that has just gone is abandoned:
-    // committing it would rename whatever took that index instead.
-    if ((renamingTrack >= 0 && !juce::isPositiveAndBelow(renamingTrack, session.trackCount()))
-        || (renamingGroup > 0 && groupById(renamingGroup) == nullptr))
+    // A name being typed on a track that has just gone is abandoned: committing
+    // it would rename whatever took that index instead.
+    if (renamingTrack >= 0 && !juce::isPositiveAndBelow(renamingTrack, session.trackCount()))
         endRename(false);
-    if (selectedGroup > 0 && groupById(selectedGroup) == nullptr)
-    {
-        selectedGroup = -1;
-        if (focus == Focus::group)
-            focus = Focus::track;
-    }
     if (focusedAutomation.isValid() && !session.trackAutomationState(focusedAutomation).visible)
     {
         focusedAutomation = {};

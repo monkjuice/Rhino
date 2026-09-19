@@ -60,21 +60,19 @@ private:
     // What the last click selected, and therefore what Delete acts on. A track
     // is always highlighted as the working row, so "a track is selected" cannot
     // be inferred from selectedTrack - it has to be recorded.
-    enum class Focus { none, clip, track, automation, group };
+    enum class Focus { none, clip, track, automation };
     // Automation is edited by dragging a point, or by lifting a lane that has
     // never been drawn off its resting line, which is what makes it active.
     enum class AutomationGesture { none, movePoint, moveLine };
     // Lanes stack: every track owns one row, plus one row for each automation
-    // the user has sent to its own lane, plus one header row for each group.
-    // Ghost rows repeat the track's clips dimmed, so an automation stays
-    // visually anchored to what it drives. A collapsed group gives its members
-    // zero height rather than dropping their rows, so every track still has a
-    // row to be addressed and drawn through.
+    // the user has sent to its own lane. Ghost rows repeat the track's clips
+    // dimmed, so an automation stays visually anchored to what it drives. A
+    // collapsed group gives its members zero height rather than dropping their
+    // rows, so every track still has a row to be addressed and drawn through.
     struct LaneRow
     {
         int track = 0;
         int automation = -1; // -1 is the track's own row
-        int group = -1;      // >= 0 when the row is a group's header
         float top = 0.0f;
         float height = 0.0f;
     };
@@ -141,30 +139,24 @@ private:
     // ArrangementRename.cpp
     void configureNameEditor();
     juce::Rectangle<int> trackNameBounds(int track) const;
-    juce::Rectangle<int> groupNameBounds(int groupId) const;
     bool isRenaming() const;
     void layoutNameEditor();
-    void startRename(int track, int groupId, const juce::String& current);
+    void startRename(int track, const juce::String& current);
     void endRename(bool keep);
     void renameTrack(int track);
-    void renameGroup(int groupId);
     // ArrangementGroups.cpp
     const Session::TrackGroup* groupById(int groupId) const;
-    const Session::TrackGroup* groupStartingAt(int track) const;
+    const Session::TrackGroup* groupForBus(int track) const;
     const Session::TrackGroup* groupContaining(int track) const;
     bool isTrackHidden(int track) const;
     float trackIndent(int track) const;
     bool isTrackSelected(int track) const;
     void selectTrackRange(int from, int to);
     void toggleTrackSelection(int track);
-    void selectGroup(int groupId);
-    int groupRowAt(juce::Point<float>) const;
-    juce::Rectangle<float> groupDisclosureBounds(juce::Rectangle<float> row) const;
-    juce::Rectangle<float> groupButtonBounds(juce::Rectangle<float> row, int index) const;
+    juce::Rectangle<float> busDisclosureBounds(juce::Rectangle<float> row) const;
     bool beginGroupGesture(const juce::MouseEvent&);
-    void paintGroupRow(juce::Graphics&, int row);
-    void paintGroupSpine(juce::Graphics&, int track, juce::Rectangle<float> row);
-    void showGroupMenu(int groupId);
+    void paintGroupGutter(juce::Graphics&, int track, juce::Rectangle<float> row);
+    void toggleGroupCollapsed(int groupId);
     void groupSelectedTracks();
     void ungroupSelection();
     juce::String controlDescription(juce::Component*) const;
@@ -208,7 +200,7 @@ private:
     // Renaming happens in place, on the line the name is painted on. The editor
     // is a child of laneHeaders so a row scrolled half out of view crops it.
     juce::TextEditor nameEditor;
-    int renamingTrack = -1, renamingGroup = -1;
+    int renamingTrack = -1;
     std::vector<std::unique_ptr<juce::TextButton>> mute, solo;
     // The same mixer values the session view shows, laid out horizontally.
     std::vector<std::unique_ptr<juce::Slider>> volume, pan;
@@ -223,7 +215,7 @@ private:
     // Grouping acts on several cards at once, so the working track is joined by
     // the set a shift-click has gathered. It always holds selectedTrack.
     std::vector<int> selectedTracks {0};
-    int trackSelectionAnchor = 0, selectedGroup = -1;
+    int trackSelectionAnchor = 0;
     bool dragging = false;
     bool marqueeSelecting = false;
     juce::Rectangle<float> marqueeBounds;
@@ -250,11 +242,11 @@ private:
     bool moveStarted = false;
     static constexpr float headerWidth = 228.0f, rulerTop = 32.0f, lanesTop = 56.0f, masterLaneHeight = 26.0f;
     static constexpr float automationRowHeight = 44.0f;
-    // A group header is one line: its disclosure, its name and its two buttons.
-    // Its members are pushed right by groupIndent, and the gap that opens up is
-    // filled with the group's colour: the step in the left edge is what tells a
-    // card inside a group from one below it at a glance.
-    static constexpr float groupRowHeight = 24.0f, groupIndent = 13.0f, groupSpineLeft = 3.0f;
+    // A group's members are pushed right by groupIndent, and the gap that opens
+    // up is filled with the bus's colour; the bus itself keeps that column for
+    // its disclosure arrow. The step in the left edge is what tells a card
+    // inside a group from one below it at a glance.
+    static constexpr float groupIndent = 13.0f, groupSpineLeft = 3.0f;
     // A card is name plus one control line at its shortest; the mixer line is
     // the next thing that fits, and past that a row only gets roomier.
     static constexpr float minimumLaneHeight = 32.0f, mixerLaneHeight = 54.0f, maximumLaneHeight = 260.0f;

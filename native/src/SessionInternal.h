@@ -30,12 +30,15 @@ extern const juce::Identifier automationParameterID;
 extern const juce::Identifier automationOwnLaneID;
 extern const juce::Identifier automationTimeID;
 extern const juce::Identifier automationValueID;
-extern const juce::Identifier trackGroupID;
+extern const juce::Identifier trackGroupBusID;
 extern const juce::Identifier trackGroupMemberID;
-extern const juce::Identifier trackGroupIdID;
-extern const juce::Identifier trackGroupNameID;
-extern const juce::Identifier trackGroupColourID;
 extern const juce::Identifier trackGroupCollapsedID;
+// Only the migration reads these: they describe the group table written before
+// a group was a bus track of its own.
+extern const juce::Identifier legacyTrackGroupID;
+extern const juce::Identifier legacyTrackGroupIdID;
+extern const juce::Identifier legacyTrackGroupNameID;
+extern const juce::Identifier legacyTrackGroupColourID;
 
 // True while the app is running a --self-test style command line. Persistent
 // preferences are neither read nor written then, so a developer's settings

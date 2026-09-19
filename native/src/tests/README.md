@@ -7,6 +7,8 @@ The command-line suite deliberately has two layers:
 
 `Pattern/WorkflowTest.cpp` and `Arrangement/WorkflowTest.cpp` are only runners. Their `scenarios/` includes preserve one shared workflow while keeping each feature area small enough to inspect independently. A scenario may depend on state created by an earlier scenario, so keep their include order explicit.
 
+**Anything that renders has to come before `scenarios/GesturesAndPersistence.inc`.** That scenario calls `Session::releaseAudioDevice`, and an offline render attempted afterwards never returns - `RenderTask::runJob` simply never reports `jobHasFinished`, so the symptom is the whole runner timing out rather than a failed assertion. `scenarios/GroupBusRouting.inc` sits where it does for exactly this reason.
+
 Add a unit-style test when behavior can be exercised without a complete `Session`, audio render, desktop peer, or pointer sequence. Add a workflow scenario when the contract crosses those boundaries. Prefer extending the narrowest existing file; create a new scenario once a file approaches roughly 200 lines or mixes unrelated behavior.
 
 CTest entry points:

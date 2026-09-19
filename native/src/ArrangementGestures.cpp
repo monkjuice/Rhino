@@ -26,8 +26,8 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
         repaint();
         return;
     }
-    // A group's band answers for its whole row - disclosure, buttons, menu -
-    // before the lanes under it are consulted.
+    // The disclosure on a group's card answers before anything else on it: it
+    // is the one part of that card that is about the group rather than the bus.
     if (beginGroupGesture(event))
         return;
     // An automation row answers for its own lane wherever it is clicked,
@@ -62,9 +62,7 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
         {
             // The menu acts on the whole selection, so a right-click inside one
             // keeps it rather than collapsing it the way a plain click does.
-            if (isTrackSelected(track))
-                selectedGroup = -1;
-            else
+            if (!isTrackSelected(track))
                 selectTrack(track);
             setSelection({});
             focus = Focus::track;
@@ -422,7 +420,7 @@ int Arrangement::cardResizeEdgeAt(juce::Point<float> point) const
     for (int index = 0; index < static_cast<int>(rows.size()); ++index)
     {
         const auto& entry = rows[static_cast<size_t>(index)];
-        if (entry.automation >= 0 || entry.group >= 0 || entry.height <= 0.0f) continue;
+        if (entry.automation >= 0 || entry.height <= 0.0f) continue;
         const auto row = rowBounds(index);
         if (std::abs(point.y - row.getBottom()) <= grab)
             return rows[static_cast<size_t>(index)].track;
@@ -435,7 +433,7 @@ int Arrangement::cardAt(juce::Point<float> point) const
     if (point.x >= headerWidth || point.y < lanesTop || point.y >= masterLane().getY())
         return -1;
     const auto row = rowAt(point.y);
-    if (row < 0 || rows[static_cast<size_t>(row)].automation >= 0 || rows[static_cast<size_t>(row)].group >= 0)
+    if (row < 0 || rows[static_cast<size_t>(row)].automation >= 0)
         return -1;
     return rows[static_cast<size_t>(row)].track;
 }
@@ -554,8 +552,14 @@ void Arrangement::showTrackMenu(int track)
     menu.addSeparator();
     menu.addItem(3, "Rename " + session.trackName(track) + "...       F2");
     menu.addSeparator();
-    const auto memberOf = session.trackGroupId(track);
-    if (memberOf > 0)
+    // A bus is the group, so what it offers is what happens to the group. The
+    // cards under it offer what happens to their membership.
+    if (const auto busOf = session.trackGroupBusId(track); busOf > 0)
+    {
+        menu.addItem(6, groupById(busOf) != nullptr && groupById(busOf)->collapsed ? "Expand" : "Collapse");
+        menu.addItem(7, "Ungroup       Ctrl+Shift+G");
+    }
+    else if (session.trackGroupId(track) > 0)
         menu.addItem(4, "Remove " + subject + " from group");
     else
     {
@@ -585,6 +589,12 @@ void Arrangement::showTrackMenu(int track)
                     safe->status(done.failed() ? done.getErrorMessage() : subject + " left the group");
             }
             else if (choice == 5) safe->groupSelectedTracks();
+            else if (choice == 6) safe->toggleGroupCollapsed(safe->session.trackGroupBusId(track));
+            else if (choice == 7)
+            {
+                safe->selectTrack(track);
+                safe->ungroupSelection();
+            }
             else if (choice >= 100 && choice - 100 < static_cast<int>(safe->groups.size()))
             {
                 const auto group = safe->groups[static_cast<size_t>(choice - 100)];

@@ -85,6 +85,10 @@ juce::Result Session::addDevice(const juce::String& deviceId, int trackIndex)
     const auto* device = DeviceCatalog::byId(deviceId);
     if (device == nullptr)
         return juce::Result::fail("That device is not in this build.");
+    // A group carries audio that has already been played: there is nothing for
+    // an instrument to play, and no sequence for a MIDI effect to act on.
+    if (isGroupBusTrack(trackIndex) && device->kind != DeviceKind::AudioEffect)
+        return juce::Result::fail("A group track takes audio effects only.");
     if (device->kind == DeviceKind::Instrument)
         return addInstrumentDevice(*device, trackIndex);
     if (device->kind == DeviceKind::MidiEffect)

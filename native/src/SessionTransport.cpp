@@ -58,6 +58,8 @@ juce::Result Session::importAudioAt(const juce::File& file, int trackIndex, doub
     jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
     if (!std::isfinite(startSeconds) || startSeconds < 0.0)
         return juce::Result::fail("Invalid audio drop position.");
+    if (isGroupBusTrack(trackIndex))
+        return juce::Result::fail("A group track carries its members' audio, so it takes no clips.");
     // Audio belongs on a track without an instrument. Dropping a sample onto an
     // instrument track is the one drop Rhino refuses outright.
     if (trackHasInstrument(trackIndex))

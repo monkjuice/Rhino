@@ -1,13 +1,14 @@
 #include "ArrangementInternal.h"
 #include "Theme.h"
 
-// Renaming a track card or a group band, in place.
+// Renaming a track card in place. A group is a bus track, so renaming a group
+// is renaming its card and needs nothing of its own.
 //
-// One editor serves both, placed over the line the name is already painted on
-// so the text does not move when it becomes editable. It is a child of
-// laneHeaders, which crops it at the lane viewport exactly as it crops the
-// cards' buttons, so an editor on a row scrolled half out of view is clipped
-// rather than drawn over the ruler.
+// The editor is placed over the line the name is already painted on, so the
+// text does not move when it becomes editable. It is a child of laneHeaders,
+// which crops it at the lane viewport exactly as it crops the cards' buttons,
+// so an editor on a row scrolled half out of view is clipped rather than drawn
+// over the ruler.
 //
 // Return keeps the new name, Escape abandons it, and clicking away keeps it -
 // the same bargain as renaming a file. Nothing here is modal: the transport,
@@ -50,24 +51,9 @@ juce::Rectangle<int> Arrangement::trackNameBounds(int track) const
         .toNearestInt().reduced(6, 0);
 }
 
-// The band's name sits between its disclosure and its two buttons, so it is
-// measured from both rather than given a width of its own.
-juce::Rectangle<int> Arrangement::groupNameBounds(int groupId) const
-{
-    for (int index = 0; index < static_cast<int>(rows.size()); ++index)
-        if (rows[static_cast<size_t>(index)].group == groupId)
-        {
-            const auto area = rowBounds(index);
-            const auto left = static_cast<int>(groupDisclosureBounds(area).getRight()) + 6;
-            const auto right = static_cast<int>(groupButtonBounds(area, 0).getX()) - 6;
-            return {left, static_cast<int>(area.getY()) + 5, std::max(1, right - left), 15};
-        }
-    return {};
-}
-
 bool Arrangement::isRenaming() const
 {
-    return renamingTrack >= 0 || renamingGroup > 0;
+    return renamingTrack >= 0;
 }
 
 // Positions are inside laneHeaders, which starts at the lanes rather than at
@@ -76,7 +62,7 @@ void Arrangement::layoutNameEditor()
 {
     if (!isRenaming())
         return;
-    const auto area = renamingGroup > 0 ? groupNameBounds(renamingGroup) : trackNameBounds(renamingTrack);
+    const auto area = trackNameBounds(renamingTrack);
     if (area.isEmpty())
     {
         endRename(false);
@@ -85,18 +71,15 @@ void Arrangement::layoutNameEditor()
     nameEditor.setBounds(area.translated(0, -static_cast<int>(lanesTop)));
 }
 
-void Arrangement::startRename(int track, int groupId, const juce::String& current)
+void Arrangement::startRename(int track, const juce::String& current)
 {
     // A rename already running is kept, not abandoned, so starting a second one
     // behaves the way clicking away from the first would.
     endRename(true);
     renamingTrack = track;
-    renamingGroup = groupId;
-    if (const auto area = renamingGroup > 0 ? groupNameBounds(renamingGroup) : trackNameBounds(renamingTrack);
-        area.isEmpty())
+    if (trackNameBounds(renamingTrack).isEmpty())
     {
         renamingTrack = -1;
-        renamingGroup = -1;
         return;
     }
     layoutNameEditor();
@@ -115,14 +98,12 @@ void Arrangement::endRename(bool keep)
     // Cleared first: hiding the editor and handing focus back both report a
     // lost focus, which would otherwise come straight back through here.
     const auto track = std::exchange(renamingTrack, -1);
-    const auto group = std::exchange(renamingGroup, -1);
     const auto name = nameEditor.getText();
     nameEditor.setVisible(false);
     grabKeyboardFocus();
     if (keep)
     {
-        const auto done = group > 0 ? session.setTrackGroupName(group, name)
-                                    : session.setTrackName(track, name);
+        const auto done = session.setTrackName(track, name);
         if (status)
             status(done.failed() ? done.getErrorMessage() : "Renamed to " + name.trim());
     }
@@ -136,13 +117,7 @@ void Arrangement::renameTrack(int track)
         if (status) status("The main row keeps its name");
         return;
     }
-    startRename(track, -1, session.trackName(track));
-}
-
-void Arrangement::renameGroup(int groupId)
-{
-    if (const auto* group = groupById(groupId))
-        startRename(-1, groupId, group->name);
+    startRename(track, session.trackName(track));
 }
 
 }

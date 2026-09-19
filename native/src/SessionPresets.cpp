@@ -91,6 +91,8 @@ juce::Result Session::createClip(int trackIndex, double startSeconds)
     const auto tracks = te::getAudioTracks(*edit);
     if (!juce::isPositiveAndBelow(trackIndex, tracks.size()))
         return juce::Result::fail("Select a track first.");
+    if (isGroupBusTrack(trackIndex))
+        return juce::Result::fail("A group track carries its members' audio, so it takes no clips.");
     if (!trackHasInstrument(trackIndex))
         return juce::Result::fail("Drop an instrument on this track before adding clips to it.");
     auto* track = tracks[trackIndex];

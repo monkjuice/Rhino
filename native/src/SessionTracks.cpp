@@ -42,20 +42,28 @@ juce::Result Session::addAudioTrack()
     return juce::Result::ok();
 }
 
-// Both utility pointers are positional - track 0's and track 1's - so any
-// track that appears or disappears can leave them stale or dangling.
+// Both utility pointers are positional - the first track and the second - so
+// any track that appears or disappears can leave them stale or dangling. A
+// group bus is skipped: it is a track in the list, but it is a sum of other
+// tracks and carries no utility of its own.
 void Session::refreshUtilityPointers()
 {
     const auto tracks = te::getAudioTracks(*edit);
     utility = nullptr;
     audioUtility = nullptr;
-    for (int i = 0; i < tracks.size() && i < 2; ++i)
+    auto found = 0;
+    for (int i = 0; i < tracks.size() && found < 2; ++i)
+    {
+        if (isGroupBusTrack(i))
+            continue;
         for (auto plugin : tracks[i]->pluginList)
             if (auto* device = dynamic_cast<UtilityDevice*>(plugin))
             {
-                (i == 0 ? utility : audioUtility) = device;
+                (found == 0 ? utility : audioUtility) = device;
                 break;
             }
+        ++found;
+    }
 }
 
 juce::Result Session::removeAudioTrack(int track)

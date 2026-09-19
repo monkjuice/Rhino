@@ -230,42 +230,44 @@ public:
     juce::Result setTrackColour(int track, juce::Colour);
     static const std::vector<juce::Colour>& trackColourPalette();
     juce::Result moveTrack(int track, int destination);
-    // Track groups are organisational: a named, collapsible band over a
-    // contiguous run of tracks. Audio still reaches the main output directly,
-    // so a group changes how the arrangement is read and how a command reaches
-    // several tracks at once, never the signal path.
+    // A group is a bus. Its own track carries the group's name, colour, fader,
+    // mute, solo and devices, and every member's output is routed into it. That
+    // track is an ordinary audio track, so every track-indexed call here
+    // reaches a bus without a second code path - but it takes audio effects
+    // only: a sum has nothing for an instrument to play, no sequence for a MIDI
+    // effect to act on, and nowhere to put a clip.
     struct TrackGroup
     {
         int id = 0;
+        int busTrack = -1;
         juce::String name;
         juce::Colour colour;
         bool collapsed = false;
-        int firstTrack = 0;
-        int trackCount = 0;
+        int firstTrack = 0;  // the first member, always busTrack + 1
+        int trackCount = 0;  // the members, not counting the bus
         int lastTrack() const { return firstTrack + trackCount - 1; }
-        bool contains(int track) const { return track >= firstTrack && track <= lastTrack(); }
+        bool contains(int track) const { return trackCount > 0 && track >= firstTrack && track <= lastTrack(); }
+        bool covers(int track) const { return track == busTrack || contains(track); }
     };
-    // In track order, one entry per run. A group with no members is not here.
+    // In track order, one entry per bus. A bus with no members is still a group.
     std::vector<TrackGroup> trackGroups() const;
     std::optional<TrackGroup> trackGroup(int groupId) const;
     // Zero is "not in a group", so it can never be mistaken for a group index.
+    // A bus is not a member of its own group: it answers the second of these.
     int trackGroupId(int track) const;
-    // Grouping carries the tracks together: they end up as one run starting
-    // where the topmost of them already was.
+    int trackGroupBusId(int track) const;
+    bool isGroupBusTrack(int track) const;
+    // Grouping makes a bus and carries the tracks under it: they end up as one
+    // run starting where the topmost of them already was.
     juce::Result groupTracks(std::vector<int> tracks, const juce::String& name = {});
     juce::Result addTrackToGroup(int track, int groupId);
     juce::Result addTracksToGroup(std::vector<int> tracks, int groupId);
     juce::Result removeTrackFromGroup(int track);
     juce::Result removeTracksFromGroup(std::vector<int> tracks);
+    // Deletes the bus and hands its members back to the main output. The tracks
+    // themselves survive: what goes is the mixing point.
     juce::Result ungroupTracks(int groupId);
-    juce::Result setTrackGroupName(int groupId, const juce::String& name);
-    juce::Result setTrackGroupColour(int groupId, juce::Colour);
     juce::Result setTrackGroupCollapsed(int groupId, bool collapsed);
-    // A group is muted or soloed when every one of its tracks is.
-    bool trackGroupMuted(int groupId) const;
-    bool trackGroupSoloed(int groupId) const;
-    void setTrackGroupMuted(int groupId, bool muted);
-    void setTrackGroupSoloed(int groupId, bool soloed);
     std::vector<DeviceSlot> deviceSlots(int track) const;
     std::vector<DeviceParameter> deviceParameters(int track, int slot) const;
     DeviceTarget lastTouchedDeviceParameter() const { return lastTouchedParameter; }
@@ -442,11 +444,13 @@ private:
     // The reorder itself, without a transaction or a notification, so the group
     // calls can move several tracks inside one of their own.
     void moveTrackInEdit(int track, int destination);
-    juce::ValueTree trackGroupState(int groupId) const;
+    void arrangeTrackOrder(const std::vector<te::EditItemID>& desired);
     juce::Result assignTracksToGroup(std::vector<int> tracks, int groupId);
-    // A group is one run of tracks. Anything that reorders or removes tracks
-    // can break that, so the runs are repaired rather than trusted.
+    // A group is a bus followed by one run of members, and a member's audio
+    // goes to its bus. Anything that reorders or removes tracks can break both,
+    // so this repairs the runs and then makes the routing follow them.
     void reconcileTrackGroups();
+    void migrateLegacyTrackGroups();
     void ensureSceneSlots(int minimumScenes = defaultScenes);
     std::optional<te::MonotonicBeat> nextLaunchBeat() const;
     void startTransportForLaunch();

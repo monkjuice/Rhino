@@ -29,7 +29,7 @@ Application code, `native/src`:
 | Session model and engine ownership | `Session.h` declares everything; `Session.cpp` holds construction, project load/save and undo. Implementation is split across `Session*.cpp` by responsibility — notes, devices, automation, clips, presets, tracks, groups, transport. |
 | Note grid UI | `StepGrid.*` — the 16-step pattern editor |
 | Arrangement UI | `Arrangement.*`, `ArrangementGeometry.cpp`, `ClipGeometry.h` |
-| Track groups: the model and the arrangement's band | `SessionGroups.cpp`, `ArrangementGroups.cpp` |
+| Track groups, which are bus tracks | `SessionGroups.cpp`, `ArrangementGroups.cpp` |
 | Renaming a track card or a group band in place | `ArrangementRename.cpp` |
 | Auditioning a library sound | `SessionPreview.cpp` |
 | Session view (clip launcher) UI, paused, see [SESSION-VIEW.md](SESSION-VIEW.md) | `SessionView.h`, `SessionView.cpp`, `SessionViewPainter.cpp`, `SessionViewGestures.cpp` |
@@ -90,6 +90,8 @@ Five CTest cases, all the same binary with different flags. Build and run:
 cmake --build native/build --config Release --parallel 2
 ctest --test-dir native/build -C Release --output-on-failure
 ```
+
+Anything that renders must be included before `GesturesAndPersistence.inc`, which closes the audio device; a render attempted after it never returns and the runner times out.
 
 Workflow scenarios live in `native/src/tests/*/scenarios/*.inc`. They are bare statement blocks included inside a runner function, not translation units — they share one `Session`, run in order, and may depend on state from an earlier scenario. The first failure aborts the whole runner, so you get one message rather than a list. Add a scenario by including it in the runner; `.inc` files are deliberately absent from CMake.
 

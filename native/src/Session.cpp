@@ -189,30 +189,38 @@ juce::Result Session::restoreProject(const juce::ValueTree& state, const juce::F
     const auto tracks = te::getAudioTracks(*candidate);
     if (tracks.isEmpty())
         return juce::Result::fail("This project has no tracks.");
+    // A group bus is a track in this list, and it holds neither clips nor a
+    // utility. The pattern track and the audio track are therefore the first
+    // two tracks that are not buses, rather than indices 0 and 1.
+    std::vector<te::AudioTrack*> playable;
+    for (auto* track : tracks)
+        if (static_cast<int>(track->state.getProperty(trackGroupBusID, 0)) == 0)
+            playable.push_back(track);
+    if (playable.empty())
+        return juce::Result::fail("This project has no playable tracks.");
+    auto* patternTrack = playable.front();
+    auto* audioTrack = playable.size() > 1 ? playable[1] : nullptr;
     te::MidiClip* nextPattern = nullptr;
     UtilityDevice* nextUtility = nullptr;
     UtilityDevice* nextAudioUtility = nullptr;
-    for (auto* track : tracks)
-        for (auto* clip : track->getClips())
-            if (auto* midi = dynamic_cast<te::MidiClip*>(clip))
-            {
-                if (track == tracks[0]) nextPattern = midi;
-            }
-    for (auto plugin : tracks[0]->pluginList)
+    for (auto* clip : patternTrack->getClips())
+        if (auto* midi = dynamic_cast<te::MidiClip*>(clip))
+            nextPattern = midi;
+    for (auto plugin : patternTrack->pluginList)
         if (auto* device = dynamic_cast<UtilityDevice*>(plugin)) nextUtility = device;
-    if (tracks.size() > 1)
-        for (auto plugin : tracks[1]->pluginList)
+    if (audioTrack != nullptr)
+        for (auto plugin : audioTrack->pluginList)
             if (auto* device = dynamic_cast<UtilityDevice*>(plugin)) nextAudioUtility = device;
     if (!nextPattern || !nextUtility)
         return juce::Result::fail("The project is missing its pattern track devices.");
     // Documents written when a track could stack instruments collapse here.
     collapseStackedInstruments(*candidate);
-    if (trackInstrument(*tracks[0]) == nullptr)
+    if (trackInstrument(*patternTrack) == nullptr)
     {
         auto device = candidate->getPluginCache().createNewPlugin(te::FourOscPlugin::xmlTypeName, {});
         if (device == nullptr)
             return juce::Result::fail("The pattern track instrument could not be created.");
-        tracks[0]->pluginList.insertPlugin(device, 0, nullptr);
+        patternTrack->pluginList.insertPlugin(device, 0, nullptr);
     }
     // Positional, exactly like the pointer it fills: the audio utility belongs to
     // track 1, so a project saved with nothing but the pattern track has nowhere
@@ -222,11 +230,11 @@ juce::Result Session::restoreProject(const juce::ValueTree& state, const juce::F
     // have, and dereferences it. refreshUtilityPointers() leaves this pointer
     // null for precisely the same reason, so null is the supported state for a
     // project this shape rather than a device that failed to be created.
-    if (!nextAudioUtility && tracks.size() > 1)
+    if (!nextAudioUtility && audioTrack != nullptr)
     {
         auto device = candidate->getPluginCache().createNewPlugin(UtilityDevice::xmlTypeName, {});
         nextAudioUtility = dynamic_cast<UtilityDevice*>(device.get());
-        tracks[1]->pluginList.insertPlugin(device, 0, nullptr);
+        audioTrack->pluginList.insertPlugin(device, 0, nullptr);
     }
     listeners.call(&Listener::editWillChange);
     stop();
@@ -239,12 +247,12 @@ juce::Result Session::restoreProject(const juce::ValueTree& state, const juce::F
     if (patternInstrument == "wave")
     {
         bool instrumentChanged = false;
-        juce::ignoreUnused(switchTrackInstrument(*edit, *tracks[0], Instrument::RhinoWave, instrumentChanged));
+        juce::ignoreUnused(switchTrackInstrument(*edit, *patternTrack, Instrument::RhinoWave, instrumentChanged));
     }
     else if (patternInstrument == "forge")
     {
         bool instrumentChanged = false;
-        juce::ignoreUnused(switchTrackInstrument(*edit, *tracks[0], Instrument::RhinoForge, instrumentChanged,
+        juce::ignoreUnused(switchTrackInstrument(*edit, *patternTrack, Instrument::RhinoForge, instrumentChanged,
                                                  forgeDescription ? &*forgeDescription : nullptr));
     }
     else
@@ -253,6 +261,10 @@ juce::Result Session::restoreProject(const juce::ValueTree& state, const juce::F
     }
     ensureSceneSlots();
     ensureTrackMixers();
+    // Documents written before a group was a bus are rebuilt as real ones here,
+    // which is also what puts every member output back onto its bus.
+    migrateLegacyTrackGroups();
+    reconcileTrackGroups();
     projectFile = file;
     savedRevision = ++changeRevision;
     edit->getUndoManager().clearUndoHistory();

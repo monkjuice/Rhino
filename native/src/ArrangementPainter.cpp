@@ -23,11 +23,6 @@ void Arrangement::paint(juce::Graphics& g)
         // draws nothing here and the band above it speaks for it.
         if (row.getHeight() <= 0.0f) continue;
         if (row.getBottom() < lanesTop || row.getY() > lanesTop + laneContentHeight()) continue;
-        if (rows[static_cast<size_t>(index)].group >= 0)
-        {
-            paintGroupRow(g, index);
-            continue;
-        }
         if (rows[static_cast<size_t>(index)].automation >= 0)
         {
             paintGhostRow(g, index);
@@ -50,7 +45,7 @@ void Arrangement::paint(juce::Graphics& g)
         g.fillRect(nameColumn);
         g.setColour(juce::Colour(0xff39434b));
         g.fillRect(indent + cardControlsWidth, row.getY(), cardDividerWidth, row.getHeight());
-        paintGroupSpine(g, track, row);
+        paintGroupGutter(g, track, row);
         if (isTrackSelected(track))
         {
             // Highlighted and selected are the same state: every card in the
@@ -94,7 +89,6 @@ void Arrangement::paint(juce::Graphics& g)
             const auto row = rowBounds(index);
             if (row.getHeight() <= 0.0f) continue;
             if (row.getBottom() < lanesTop || row.getY() > laneBottom) continue;
-            if (rows[static_cast<size_t>(index)].group >= 0) continue;
             const auto ownRow = rows[static_cast<size_t>(index)].automation < 0;
             g.setColour(juce::Colour(ownRow ? 0xff39434b : 0xff2c353c));
             g.drawHorizontalLine(static_cast<int>(row.getBottom()) - 1, 0.0f, static_cast<float>(getWidth()) - 14.0f);
@@ -273,7 +267,8 @@ void Arrangement::paint(juce::Graphics& g)
     // The hint belongs on the first track that could take audio, which is any
     // empty track without an instrument rather than a fixed lane index.
     for (int track = 0; track < session.trackCount(); ++track)
-        if (!tracksWithClips.contains(track) && !session.trackHasInstrument(track) && !isTrackHidden(track))
+        if (!tracksWithClips.contains(track) && !session.trackHasInstrument(track) && !isTrackHidden(track)
+            && !session.isGroupBusTrack(track))
         {
             g.setColour(juce::Colour(0xff75828e));
             g.drawText("Drop audio here", lane(track).reduced(16, 0), juce::Justification::centredLeft);
@@ -289,7 +284,7 @@ void Arrangement::paint(juce::Graphics& g)
         for (int index = 0; index < static_cast<int>(rows.size()); ++index)
         {
             const auto row = rowBounds(index);
-            if (row.getHeight() <= 0.0f || rows[static_cast<size_t>(index)].group >= 0) continue;
+            if (row.getHeight() <= 0.0f) continue;
             if (row.getBottom() < lanesTop || row.getY() > lanesTop + laneContentHeight()) continue;
             paintAutomationRow(g, index);
         }

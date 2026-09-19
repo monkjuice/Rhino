@@ -241,8 +241,7 @@ bool Arrangement::keyPressed(const juce::KeyPress& key)
     // under it, because selecting a band is how you say you meant the group.
     if (key.getKeyCode() == juce::KeyPress::F2Key)
     {
-        if (focus == Focus::group && selectedGroup > 0) renameGroup(selectedGroup);
-        else renameTrack(selectedTrack);
+        renameTrack(selectedTrack);
         return true;
     }
     if (key.getModifiers().isCommandDown() && key.getKeyCode() == 'A')
@@ -319,14 +318,6 @@ bool Arrangement::keyPressed(const juce::KeyPress& key)
             }
             const auto result = session.clearTrackAutomationPoints(focusedAutomation);
             if (status) status(result.wasOk() ? "Automation deleted" : result.getErrorMessage());
-            return true;
-        }
-        // Delete on a band takes the band away and leaves every track it held,
-        // because a group is a way of reading the stack rather than a thing the
-        // tracks live inside.
-        if (focus == Focus::group)
-        {
-            ungroupSelection();
             return true;
         }
         if (focus == Focus::track)
@@ -413,7 +404,6 @@ void Arrangement::selectTrack(int track)
     selectedTrack = track;
     selectedTracks = {track};
     trackSelectionAnchor = track;
-    selectedGroup = -1;
     if (changed && trackSelected) trackSelected(track);
     repaint();
 }
@@ -483,7 +473,6 @@ void Arrangement::editWillChange()
     groups.clear();
     selectedTracks = {0};
     trackSelectionAnchor = 0;
-    selectedGroup = -1;
     trackLanes.clear();
     trackRowIndex.clear();
     rowsHeight = 0.0f;

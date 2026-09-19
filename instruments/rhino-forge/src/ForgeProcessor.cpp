@@ -428,7 +428,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout Processor::parameterLayout()
     }
     // --- The effects racks ----------------------------------------------------
     //
-    // Three racks of four slots, and every slot declares the same twelve
+    // Three racks of eight slots, and every slot declares the same twelve
     // parameters whatever type it holds. A slot's knobs are plain 0..1: what
     // 0.6 means is the type's business, declared once in ForgeFx.h and read by
     // the DSP, by the panel's labels and by the readout below — so a bubble

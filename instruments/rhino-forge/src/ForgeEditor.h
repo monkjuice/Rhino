@@ -219,7 +219,7 @@ private:
     // The shelves the slots sit on, drawn behind their controls.
     void paintFxShelves(juce::Graphics&, juce::Rectangle<int> area, const ui::Module&);
     // The compact signal-flow overview at the left of the rack. It is a
-    // painted view of the same four slot parameters, not another component
+    // painted view of the same slot parameters, not another component
     // tree or a cached copy of the rack.
     void paintFxList(juce::Graphics&, juce::Rectangle<int> area, const ui::Module&);
     // The rack's box alone, for a knob that is being turned inside it.
@@ -245,12 +245,17 @@ private:
     bool moduleShown(const ui::Module&) const;
     juce::Rectangle<int> moduleAreaFor(const ui::Module&) const;
     juce::Rectangle<int> fxRackAreaFor(juce::Rectangle<int> moduleArea) const;
+    int fxFirstVisibleSlot() const;
+    void setFxFirstVisibleSlot(int slot);
+    void clampFxScroll();
 
     // View state only. Expansion hides the lower synth row and lets the rack
     // use it; folding the list leaves a mark-only rail. Neither belongs in a
     // preset or in host automation.
     bool fxExpanded = false;
     bool fxListOpen = true;
+    std::array<int, rackCount> fxFirstVisibleSlots {};
+    float fxWheel = 0.0f;
     int fxSelectedSlot = 0;
     int fxDragSlot = -1;
     int fxDropSlot = -1;

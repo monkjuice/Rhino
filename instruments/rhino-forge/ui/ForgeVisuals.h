@@ -765,7 +765,7 @@ public:
 // row, where there is no edge for a card to hang from.
 // --- The effects, by eye ------------------------------------------------------
 //
-// A rack row is read at a glance or not at all: four slots deep and twelve
+// A rack row is read at a glance or not at all: fixed-height slots and twelve
 // controls wide, the thing you need first is *which effect is this*. So each
 // type gets a colour and a mark of its own, and the slot wears both — the mark
 // on its name plate, the colour on the plate, on its knobs and down its left
@@ -1236,7 +1236,7 @@ public:
 
 // One slot of a rack, drawn as a shelf: a well a shade below the module, with
 // the type's colour lit down its left edge the way a module's is lit across its
-// top. Four of them stacked is the rack, and the lit edges are what makes the
+// top. Stacked at a fixed height they form the rack, and the lit edges make the
 // filled slots countable from across the room.
 inline void drawFxShelf(juce::Graphics& g, juce::Rectangle<int> area, int type, bool on)
 {
@@ -1259,7 +1259,7 @@ inline void drawFxShelf(juce::Graphics& g, juce::Rectangle<int> area, int type, 
 // row repeats the type's own mark and colour, then keeps only the two structural
 // actions Serum's rack establishes as useful at this level -- auditioning a
 // bypass and removing the module. Folded, the word and actions leave but the
-// four marks stay in their exact vertical positions.
+// marks stay in their exact vertical positions.
 inline void drawFxListItem(juce::Graphics& g, juce::Rectangle<int> area, int slot, int type,
                            bool bypassed, bool selected, bool open)
 {

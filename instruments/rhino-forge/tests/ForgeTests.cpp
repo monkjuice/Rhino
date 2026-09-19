@@ -408,7 +408,11 @@ void layoutSuite()
         for (int r = 0; r < static_cast<int>(modules[i].rows.size()); ++r)
         {
             const auto row = rhino::forge::ui::rowBounds(area, modules[i], r);
-            require(controls.contains(row), "a control row stays inside its module");
+            if (juce::String(modules[i].id) == "fx")
+                require(row.getHeight() == rhino::forge::ui::fxSlotHeight,
+                        "every FX control row has the fixed rack height");
+            else
+                require(controls.contains(row), "a control row stays inside its module");
             for (int s = r + 1; s < static_cast<int>(modules[i].rows.size()); ++s)
                 require(!row.intersects(rhino::forge::ui::rowBounds(area, modules[i], s)),
                         "no two control rows in a module overlap");
@@ -548,7 +552,8 @@ void layoutSuite()
             {
                 const auto block = rhino::forge::ui::controlBlock(area, module, r, i, diameter);
                 require(!block.isEmpty(), "every control gets a non-empty rectangle");
-                require(area.contains(block), "every control stays inside its module");
+                if (juce::String(module.id) != "fx")
+                    require(area.contains(block), "every control stays inside its module");
                 if (row.controls[static_cast<size_t>(i)].style != rhino::forge::ui::Style::knob)
                     continue;
                 if (module.compactKnobs)
@@ -616,7 +621,10 @@ void layoutSuite()
                     }
                 }
 
-                // And every control still lands inside the module that owns it.
+                // And every ordinary control still lands inside the module
+                // that owns it. FX rows intentionally continue below their
+                // fixed-height viewport and are tested as a scrolled rack.
+                if (juce::String(modules[i].id) == "fx") continue;
                 for (int r = 0; r < static_cast<int>(modules[i].rows.size()); ++r)
                     for (int c = 0; c < static_cast<int>(modules[i].rows[static_cast<size_t>(r)].controls.size()); ++c)
                     {
@@ -656,17 +664,29 @@ void layoutSuite()
                         require(area.contains(rhino::forge::ui::fxExpandButtonBounds(area))
                                     && area.contains(rhino::forge::ui::fxListButtonBounds(area)),
                                 "both FX view buttons stay in the rack header");
-                        for (int slot = 0; slot < rhino::forge::fxSlotCount; ++slot)
+                        const auto visible = rhino::forge::ui::fxVisibleSlotCount(area);
+                        const auto lastFirst = rhino::forge::ui::fxMaxFirstSlot(area);
+                        require(visible >= 1 && visible <= rhino::forge::fxSlotCount,
+                                "the FX viewport always exposes at least one whole slot");
+                        for (const auto first : {0, lastFirst})
                         {
-                            const auto item = rhino::forge::ui::fxListItemBounds(area, *fxModule, slot, listOpen);
-                            require(list.contains(item), "every FX list item stays in the list");
-                            const auto& row = fxModule->rows[static_cast<size_t>(slot)];
-                            for (int control = 0; control < static_cast<int>(row.controls.size()); ++control)
+                            const auto scrolledRack = rhino::forge::ui::fxScrolledRackBounds(
+                                area, listOpen, first);
+                            for (int slot = first; slot < first + visible; ++slot)
                             {
-                                const auto block = rhino::forge::ui::controlBlock(
-                                    rack, *fxModule, slot, control,
-                                    rhino::forge::ui::uniformKnobDiameter(panel));
-                                require(rack.contains(block), "every FX control stays beside the list");
+                                const auto item = rhino::forge::ui::fxListItemBounds(
+                                    area, *fxModule, slot, listOpen, first);
+                                require(list.contains(item), "every visible FX list item stays in the list");
+                                require(item.getHeight() == rhino::forge::ui::fxSlotHeight,
+                                        "an FX slot keeps its fixed height in every view");
+                                const auto& row = fxModule->rows[static_cast<size_t>(slot)];
+                                for (int control = 0; control < static_cast<int>(row.controls.size()); ++control)
+                                {
+                                    const auto block = rhino::forge::ui::controlBlock(
+                                        scrolledRack, *fxModule, slot, control,
+                                        rhino::forge::ui::uniformKnobDiameter(panel));
+                                    require(rack.contains(block), "every visible FX control stays beside the list");
+                                }
                             }
                         }
                     }
@@ -2145,12 +2165,14 @@ void fxSuite()
 
     // --- A rack does something, and only where it is put ----------------------
 
-    rhino::forge::Processor dry;
+    auto dryOwner = std::make_unique<rhino::forge::Processor>();
+    auto& dry = *dryOwner;
     soloSineOnA(dry);
     setValue(dry, "env1Release", 0.02f);
     const auto silence = tailAfterNote(dry);
 
-    rhino::forge::Processor delayed;
+    auto delayedOwner = std::make_unique<rhino::forge::Processor>();
+    auto& delayed = *delayedOwner;
     soloSineOnA(delayed);
     setValue(delayed, "env1Release", 0.02f);
     place(delayed, 0, 0, FxType::delay);
@@ -2161,8 +2183,21 @@ void fxSuite()
     require(withDelay > silence * 4.0f + 0.0001f,
             "a delay on the main rack leaves sound behind after the note has gone");
 
+    // Capacity past the original four is signal-path capacity, not only extra
+    // parameters in the panel. Prove the last slot is rendered as an insert.
+    auto extendedOwner = std::make_unique<rhino::forge::Processor>();
+    auto& extended = *extendedOwner;
+    soloSineOnA(extended);
+    setValue(extended, "env1Release", 0.02f);
+    place(extended, 0, rhino::forge::fxSlotCount - 1, FxType::delay);
+    knob(extended, 0, rhino::forge::fxSlotCount - 1, 0, 0.35f);
+    knob(extended, 0, rhino::forge::fxSlotCount - 1, 2, 0.8f);
+    require(tailAfterNote(extended) > silence * 4.0f + 0.0001f,
+            "the eighth FX slot is part of the rendered chain");
+
     // The same delay on a bus nothing is sent to must change nothing at all.
-    rhino::forge::Processor unsent;
+    auto unsentOwner = std::make_unique<rhino::forge::Processor>();
+    auto& unsent = *unsentOwner;
     soloSineOnA(unsent);
     setValue(unsent, "env1Release", 0.02f);
     place(unsent, 1, 0, FxType::delay);
@@ -2172,7 +2207,8 @@ void fxSuite()
                  "a rack on a bus with nothing sent to it is heard nowhere");
 
     // Sent to that bus, it arrives. This is the whole point of the busses.
-    rhino::forge::Processor sentToBus;
+    auto sentToBusOwner = std::make_unique<rhino::forge::Processor>();
+    auto& sentToBus = *sentToBusOwner;
     soloSineOnA(sentToBus);
     setValue(sentToBus, "env1Release", 0.02f);
     setValue(sentToBus, "oscASend1", 1.0f);
@@ -2186,7 +2222,8 @@ void fxSuite()
     // A reverb is the type most easily broken into silence — a comb read past
     // the end of its own line answers nothing and the bank stays quiet — so it
     // is held to the same claim the delay is: sound after the note is gone.
-    rhino::forge::Processor reverbed;
+    auto reverbedOwner = std::make_unique<rhino::forge::Processor>();
+    auto& reverbed = *reverbedOwner;
     soloSineOnA(reverbed);
     setValue(reverbed, "env1Release", 0.02f);
     place(reverbed, 0, 0, FxType::reverb);
@@ -2199,7 +2236,8 @@ void fxSuite()
 
     // --- Bypass, at both levels ------------------------------------------------
 
-    rhino::forge::Processor bypassed;
+    auto bypassedOwner = std::make_unique<rhino::forge::Processor>();
+    auto& bypassed = *bypassedOwner;
     soloSineOnA(bypassed);
     setValue(bypassed, "env1Release", 0.02f);
     place(bypassed, 0, 0, FxType::delay);
@@ -2215,7 +2253,8 @@ void fxSuite()
 
     // A slot left at OFF is not a slot that does nothing quietly — it must be
     // exactly the same signal as no slot at all.
-    rhino::forge::Processor emptySlot;
+    auto emptySlotOwner = std::make_unique<rhino::forge::Processor>();
+    auto& emptySlot = *emptySlotOwner;
     soloSineOnA(emptySlot);
     renderNote(emptySlot, buffer);
     const auto plain = rms(buffer, 0, 1024);
@@ -2225,7 +2264,8 @@ void fxSuite()
 
     // --- MIX and LEVEL mean one thing across every type ------------------------
 
-    rhino::forge::Processor blended;
+    auto blendedOwner = std::make_unique<rhino::forge::Processor>();
+    auto& blended = *blendedOwner;
     soloSineOnA(blended);
     place(blended, 0, 0, FxType::filter);
     knob(blended, 0, 0, 0, 0.05f);   // a low cutoff, so the effect is obvious
@@ -2247,7 +2287,8 @@ void fxSuite()
     // A filter opened wide after a filter closed down is still dark; the other
     // way round it is still dark too, but a rack that ran its slots in the
     // wrong order would let the second one undo the first.
-    rhino::forge::Processor ordered;
+    auto orderedOwner = std::make_unique<rhino::forge::Processor>();
+    auto& ordered = *orderedOwner;
     soloSineOnA(ordered);
     setValue(ordered, "oscAPosition", 6.0f / 9.0f);   // a saw, so there is something to take away
     renderNote(ordered, buffer);
@@ -2272,7 +2313,8 @@ void fxSuite()
     // prepared, or whose feedback path runs away.
     for (int type = 1; type < rhino::forge::fxTypeCount; ++type)
     {
-        rhino::forge::Processor each;
+        auto eachOwner = std::make_unique<rhino::forge::Processor>();
+        auto& each = *eachOwner;
         soloSineOnA(each);
         place(each, 0, 0, static_cast<FxType>(type));
         // Driven hard on purpose: a feedback path that is going to run away
@@ -2308,7 +2350,8 @@ void fxSuite()
     // all take their arithmetic from the same helpers. If a delay's TIME said
     // 250 ms while the line was read at some other offset, this is what would
     // notice.
-    rhino::forge::Processor reading;
+    auto readingOwner = std::make_unique<rhino::forge::Processor>();
+    auto& reading = *readingOwner;
     place(reading, 0, 0, FxType::delay);
     const auto quarter = rhino::forge::fxScaled(0.5f, 0.01f, rhino::forge::fxMaxDelayTime, 2.0f);
     requireText(textFor(reading, rhino::forge::fxParameterId(0, 0, "Knob1").toRawUTF8(), 0.5f),
@@ -2363,7 +2406,8 @@ void fxSuite()
     // voice's value rather than to none. What is checked here is that it
     // arrives at all: a macro is a steady source, so the same patch at two
     // macro settings has to render differently.
-    rhino::forge::Processor modulated;
+    auto modulatedOwner = std::make_unique<rhino::forge::Processor>();
+    auto& modulated = *modulatedOwner;
     soloSineOnA(modulated);
     place(modulated, 0, 0, FxType::filter);
     knob(modulated, 0, 0, 0, 0.05f);
@@ -2529,25 +2573,29 @@ void modulationSuite()
 
     // A slot at zero depth must cost nothing at all, not merely almost nothing:
     // an idle matrix may not colour the sound.
-    rhino::forge::Processor bare;
+    auto bareOwner = std::make_unique<rhino::forge::Processor>();
+    auto& bare = *bareOwner;
     closedFilterOnA(bare);
     renderNote(bare, plain);
 
-    rhino::forge::Processor wired;
+    auto wiredOwner = std::make_unique<rhino::forge::Processor>();
+    auto& wired = *wiredOwner;
     closedFilterOnA(wired);
     setSlot(wired, 1, srcLfo1, destCutoff, 0.0f);
     renderNote(wired, modulated);
     require(identical(plain, modulated), "a slot at zero depth renders bit-identically to no slot");
 
     // Pointed at nothing, a slot with depth is equally inert.
-    rhino::forge::Processor unpointed;
+    auto unpointedOwner = std::make_unique<rhino::forge::Processor>();
+    auto& unpointed = *unpointedOwner;
     closedFilterOnA(unpointed);
     setSlot(unpointed, 1, srcLfo1, destOff, 1.0f);
     renderNote(unpointed, modulated);
     require(identical(plain, modulated), "a slot with no destination renders bit-identically");
 
     // With depth, the envelope opens the filter and more gets through.
-    rhino::forge::Processor swept;
+    auto sweptOwner = std::make_unique<rhino::forge::Processor>();
+    auto& swept = *sweptOwner;
     closedFilterOnA(swept);
     setSlot(swept, 1, srcEnv1, destCutoff, 1.0f);
     renderNote(swept, modulated);
@@ -2556,7 +2604,8 @@ void modulationSuite()
     require(opened > closed * 1.2f, "an envelope pointed at the cutoff opens the filter");
 
     // Two slots on one destination sum, rather than one winning.
-    rhino::forge::Processor halves;
+    auto halvesOwner = std::make_unique<rhino::forge::Processor>();
+    auto& halves = *halvesOwner;
     closedFilterOnA(halves);
     setSlot(halves, 1, srcEnv1, destCutoff, 0.5f);
     setSlot(halves, 2, srcEnv1, destCutoff, 0.5f);
@@ -2572,7 +2621,8 @@ void modulationSuite()
     // What the knobs draw is published from the same reading the voice renders
     // with, so a ring that moves is proof the engine moved the value, not a
     // second guess at it from the UI.
-    rhino::forge::Processor watched;
+    auto watchedOwner = std::make_unique<rhino::forge::Processor>();
+    auto& watched = *watchedOwner;
     closedFilterOnA(watched);
     require(watched.modulationOffset(destCutoff) == 0.0f,
             "an idle matrix publishes no offset for a knob to draw");
@@ -2600,7 +2650,8 @@ void modulationSuite()
     // animate. This holds for a macro too, which is the case that looks most
     // like it ought to be an exception: the hand is on the macro, but until a
     // note is played the macro is moving nothing.
-    rhino::forge::Processor idle;
+    auto idleOwner = std::make_unique<rhino::forge::Processor>();
+    auto& idle = *idleOwner;
     closedFilterOnA(idle);
     setSlot(idle, 1, static_cast<float>(rhino::forge::ModSource::macro1), destCutoff, 1.0f);
     setValue(idle, "macro1", 0.5f);
@@ -2634,7 +2685,8 @@ void modulationSuite()
     {
         const auto offsetFor = [samples] (float source, float macro, bool bipolar)
         {
-            rhino::forge::Processor probe;
+            auto probeOwner = std::make_unique<rhino::forge::Processor>();
+            auto& probe = *probeOwner;
             closedFilterOnA(probe);
             setSlot(probe, 1, source, static_cast<float>(destCutoff), 1.0f);
             setValue(probe, "mod1Bipolar", bipolar ? 1.0f : 0.0f);
@@ -2663,7 +2715,10 @@ void modulationSuite()
     // An LFO already swings both ways, so the switch has nothing to centre and
     // must not quietly double its reach instead.
     {
-        rhino::forge::Processor uni, bi;
+        auto uniOwner = std::make_unique<rhino::forge::Processor>();
+        auto biOwner = std::make_unique<rhino::forge::Processor>();
+        auto& uni = *uniOwner;
+        auto& bi = *biOwner;
         closedFilterOnA(uni);
         closedFilterOnA(bi);
         setSlot(uni, 1, srcLfo1, destCutoff, 1.0f);
@@ -2681,13 +2736,15 @@ void modulationSuite()
     require(value(bare, "mod1Bipolar") == 0.0f, "a slot starts unipolar");
 
     // Depth clamps at the destination's own limits instead of running past them.
-    rhino::forge::Processor slammed;
+    auto slammedOwner = std::make_unique<rhino::forge::Processor>();
+    auto& slammed = *slammedOwner;
     closedFilterOnA(slammed);
     setValue(slammed, "cutoff", 18000.0f);
     setSlot(slammed, 1, srcEnv1, destCutoff, 1.0f);
     renderNote(slammed, modulated);
     require(allSamplesFinite(modulated), "modulation past a parameter's top stays finite");
-    rhino::forge::Processor atTop;
+    auto atTopOwner = std::make_unique<rhino::forge::Processor>();
+    auto& atTop = *atTopOwner;
     closedFilterOnA(atTop);
     setValue(atTop, "cutoff", 18000.0f);
     renderNote(atTop, plain);
@@ -2697,7 +2754,8 @@ void modulationSuite()
     // Velocity is a source like any other, and a softer note modulates less.
     const auto atVelocity = [&] (float velocity)
     {
-        rhino::forge::Processor processor;
+        auto processorOwner = std::make_unique<rhino::forge::Processor>();
+        auto& processor = *processorOwner;
         closedFilterOnA(processor);
         setSlot(processor, 1, srcVelocity, destCutoff, 1.0f);
         processor.prepareToPlay(48000.0, samples);
@@ -2714,7 +2772,8 @@ void modulationSuite()
 
     // Pitch is reachable now that Semitone is continuous, which is what
     // replaced the old hardwired LFO-to-pitch knob.
-    rhino::forge::Processor bent;
+    auto bentOwner = std::make_unique<rhino::forge::Processor>();
+    auto& bent = *bentOwner;
     soloSineOnA(bent);
     for (int slot = 1; slot <= rhino::forge::modSlotCount; ++slot)
         setSlot(bent, slot, srcOff, destOff, 0.0f);
@@ -2732,7 +2791,8 @@ void modulationSuite()
                 + rhino::forge::macroCount,
             "every macro is offered as a source");
 
-    rhino::forge::Processor byMacro;
+    auto byMacroOwner = std::make_unique<rhino::forge::Processor>();
+    auto& byMacro = *byMacroOwner;
     closedFilterOnA(byMacro);
     setValue(byMacro, "macro1", 1.0f);
     renderNote(byMacro, plain);
@@ -2748,7 +2808,8 @@ void modulationSuite()
     require(identical(plain, modulated), "a macro at zero leaves its target exactly where it was");
 
     // And a source that never moves still behaves: NOTE is constant per voice.
-    rhino::forge::Processor byNote;
+    auto byNoteOwner = std::make_unique<rhino::forge::Processor>();
+    auto& byNote = *byNoteOwner;
     closedFilterOnA(byNote);
     setValue(byNote, "subEnable", 1.0f);
     setValue(byNote, "subLevel", 0.0f);
@@ -4403,6 +4464,15 @@ void warpSuite()
                     && rhino::forge::destinationField(patch, rhino::forge::fxDestinationBase)
                            == &patch.racks[0].slots[0].knobs[0],
                 "appending the warp depths left the racks where they were");
+        require(base == 105
+                    && rhino::forge::fxDestinationOf(1, 0, 0) == 49
+                    && rhino::forge::fxDestinationOf(2, 3, 6) == 104,
+                "the original four rack slots keep their saved destination indices");
+        require(rhino::forge::fxDestinationOf(0, 4, 0) == rhino::forge::extendedFxDestinationBase
+                    && rhino::forge::destinationField(
+                           patch, rhino::forge::fxDestinationOf(2, 7, 6))
+                           == &patch.racks[2].slots[7].mix,
+                "the extended rack slots append after the existing warp destinations");
         for (int i = 0; i < rhino::forge::warpDestinationCount; ++i)
             require(juce::String(rhino::forge::destinations()[static_cast<size_t>(base + i)].id)
                         == rhino::forge::warpDestinations()[static_cast<size_t>(i)].id,
@@ -4472,7 +4542,11 @@ void subSuite();
 
 void engineSuite()
 {
-    rhino::forge::Processor processor;
+    // Hosts own plugin instances dynamically. Mirror that here: the engine
+    // suite deliberately nests many render helpers, and eight preallocated FX
+    // slots should not turn that test call tree into a Windows stack test.
+    auto processorStorage = std::make_unique<rhino::forge::Processor>();
+    auto& processor = *processorStorage;
 
     // A silent patch really is silent: with every source switched off, nothing
     // reaches the output however the level knobs are set.
@@ -4536,7 +4610,8 @@ void engineSuite()
     subSuite();
 
     // Output stays finite and bounded across an extreme patch.
-    rhino::forge::Processor extreme;
+    auto extremeStorage = std::make_unique<rhino::forge::Processor>();
+    auto& extreme = *extremeStorage;
     for (const auto* id : {"oscAEnable", "oscBEnable", "subEnable", "noiseEnable", "filterEnable"})
         setValue(extreme, id, 1.0f);
     setValue(extreme, "oscAUnison", 8.0f);

@@ -583,17 +583,18 @@ inline const std::array<DestinationInfo, 21>& namedDestinations()
     return table;
 }
 
-// Where the named list stops and the racks begin. Everything at or past this is
-// a slot's knob or its mix, worked out from the index rather than written out:
-// three racks of four slots of seven controls is eighty-four entries, and
-// eighty-four hand-written lines is eighty-four chances to mislabel one.
+// Where the named list stops and the racks begin. The original four slots per
+// rack remain in their historic contiguous block so every preset keeps naming
+// the same destination. New slots are appended after the warp destinations
+// below rather than inserted into that block.
 inline constexpr int fxDestinationBase = 21;
 
 // A slot's six knobs and its mix. LEVEL is left out on purpose — it is the
 // slot's own trim rather than something to play, and a rack whose every stage
 // could be swept in level is a rack that is hard to keep at a sane loudness.
 inline constexpr int fxDestinationsPerSlot = fxKnobCount + 1;
-inline constexpr int fxDestinationCount = rackCount * fxSlotCount * fxDestinationsPerSlot;
+inline constexpr int legacyFxDestinationCount =
+    rackCount * legacyFxSlotCount * fxDestinationsPerSlot;
 
 // Output is deliberately absent, and so are the bus levels and the sends: all
 // of them are applied once the voices are summed, so a per-voice modulation of
@@ -611,7 +612,7 @@ inline constexpr int fxDestinationCount = rackCount * fxSlotCount * fxDestinatio
 // with, because this list is appended to and never inserted into: a slot stores
 // its destination as an index, and moving one is moving it inside every preset
 // already saved.
-inline constexpr int warpDestinationBase = fxDestinationBase + fxDestinationCount;
+inline constexpr int warpDestinationBase = fxDestinationBase + legacyFxDestinationCount;
 inline constexpr int warpDestinationCount = oscillatorCount * warpSlots;
 
 inline const std::array<DestinationInfo, warpDestinationCount>& warpDestinations()
@@ -627,12 +628,17 @@ inline const std::array<DestinationInfo, warpDestinationCount>& warpDestinations
 // list of twenty-six unrelated modes is a stutter rather than a modulation, and
 // nothing about it would be continuous; the depth beside it is the thing worth
 // playing, and it is here.
-inline constexpr int destinationCount = warpDestinationBase + warpDestinationCount;
+inline constexpr int extendedFxDestinationBase = warpDestinationBase + warpDestinationCount;
+inline constexpr int extendedFxSlotCount = fxSlotCount - legacyFxSlotCount;
+inline constexpr int extendedFxDestinationCount =
+    rackCount * extendedFxSlotCount * fxDestinationsPerSlot;
+inline constexpr int fxDestinationCount = legacyFxDestinationCount + extendedFxDestinationCount;
+inline constexpr int destinationCount = extendedFxDestinationBase + extendedFxDestinationCount;
 inline constexpr int modSlotCount = 8;
 
 // A parameter id belonging to one rack slot: fxParameterId(0, 1, "Mix") is
 // "fx1s2Mix". One spelling of the pattern, shared by the parameters, the panel,
-// the destination list and the tests, so twelve slots cannot drift apart from
+// the destination list and the tests, so rack slots cannot drift apart from
 // the ids they name — the same reason the envelopes and the LFOs have one.
 inline juce::String fxParameterId(int rack, int slot, const char* suffix)
 {
@@ -649,8 +655,12 @@ inline juce::String fxRackParameterId(int rack, const char* suffix)
 // Where one slot's run of destinations starts.
 inline int fxDestinationOf(int rack, int slot, int control)
 {
-    return fxDestinationBase
-         + ((rack * fxSlotCount) + slot) * fxDestinationsPerSlot + control;
+    if (slot < legacyFxSlotCount)
+        return fxDestinationBase
+             + ((rack * legacyFxSlotCount) + slot) * fxDestinationsPerSlot + control;
+    return extendedFxDestinationBase
+         + ((rack * extendedFxSlotCount) + slot - legacyFxSlotCount)
+             * fxDestinationsPerSlot + control;
 }
 
 // The whole destination list: the named controls, then every rack slot's six
@@ -669,22 +679,31 @@ inline const std::vector<DestinationInfo>& destinations()
         built.reserve(static_cast<size_t>(destinationCount));
         for (const auto& named : namedDestinations()) built.push_back(named);
 
+        const auto appendSlot = [&built] (int rack, int slot)
+        {
+            for (int control = 0; control < fxDestinationsPerSlot; ++control)
+            {
+                const auto knob = control < fxKnobCount;
+                pool.push_back(knob ? fxParameterId(rack, slot, "Knob") + juce::String(control + 1)
+                                    : fxParameterId(rack, slot, "Mix"));
+                // Named for where it is rather than for what it does: a
+                // slot's knob 3 is a different control in a reverb and in a
+                // delay, and the matrix cannot know which is in there.
+                pool.push_back(juce::String(rackName(rack)) + " " + juce::String(slot + 1) + " "
+                               + (knob ? "K" + juce::String(control + 1) : juce::String("MIX")));
+                built.push_back({pool[pool.size() - 2].toRawUTF8(), pool.back().toRawUTF8()});
+            }
+        };
+
         for (int rack = 0; rack < rackCount; ++rack)
-            for (int slot = 0; slot < fxSlotCount; ++slot)
-                for (int control = 0; control < fxDestinationsPerSlot; ++control)
-                {
-                    const auto knob = control < fxKnobCount;
-                    pool.push_back(knob ? fxParameterId(rack, slot, "Knob") + juce::String(control + 1)
-                                        : fxParameterId(rack, slot, "Mix"));
-                    // Named for where it is rather than for what it does: a
-                    // slot's knob 3 is a different control in a reverb and in a
-                    // delay, and the matrix cannot know which is in there.
-                    pool.push_back(juce::String(rackName(rack)) + " " + juce::String(slot + 1) + " "
-                                   + (knob ? "K" + juce::String(control + 1) : juce::String("MIX")));
-                    built.push_back({pool[pool.size() - 2].toRawUTF8(), pool.back().toRawUTF8()});
-                }
+            for (int slot = 0; slot < legacyFxSlotCount; ++slot)
+                appendSlot(rack, slot);
 
         for (const auto& named : warpDestinations()) built.push_back(named);
+
+        for (int rack = 0; rack < rackCount; ++rack)
+            for (int slot = legacyFxSlotCount; slot < fxSlotCount; ++slot)
+                appendSlot(rack, slot);
         return built;
     }();
     return table;
@@ -833,13 +852,22 @@ inline float* destinationField(Patch& patch, int destination)
         return &osc.warpAmount[static_cast<size_t>(warp % warpSlots)];
     }
 
-    // Past the named list, a destination is a rack slot's knob or its mix,
-    // found by dividing the index rather than by twelve dozen switch cases.
-    const auto fx = destination - fxDestinationBase;
-    if (fx < 0 || fx >= fxDestinationCount) return nullptr;
+    // The first four rack slots occupy their historic range. Slots five to
+    // eight live after the warp block so adding them cannot move an existing
+    // destination stored by index in an older preset.
+    auto fx = destination - fxDestinationBase;
+    auto slotsPerRack = legacyFxSlotCount;
+    auto slotOffset = 0;
+    if (fx < 0 || fx >= legacyFxDestinationCount)
+    {
+        fx = destination - extendedFxDestinationBase;
+        slotsPerRack = extendedFxSlotCount;
+        slotOffset = legacyFxSlotCount;
+        if (fx < 0 || fx >= extendedFxDestinationCount) return nullptr;
+    }
     const auto control = fx % fxDestinationsPerSlot;
-    const auto slot = (fx / fxDestinationsPerSlot) % fxSlotCount;
-    const auto rack = fx / (fxDestinationsPerSlot * fxSlotCount);
+    const auto slot = (fx / fxDestinationsPerSlot) % slotsPerRack + slotOffset;
+    const auto rack = fx / (fxDestinationsPerSlot * slotsPerRack);
     auto& held = patch.racks[static_cast<size_t>(rack)].slots[static_cast<size_t>(slot)];
     return control < fxKnobCount ? &held.knobs[static_cast<size_t>(control)] : &held.mix;
 }

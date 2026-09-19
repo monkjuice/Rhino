@@ -2,6 +2,7 @@
 
 #include "../core/ForgeCore.h"
 #include <juce_gui_basics/juce_gui_basics.h>
+#include <deque>
 #include <limits>
 #include <vector>
 
@@ -137,7 +138,7 @@ struct Row
     // the cells are divided by, and how many cells stand in front of it.
     //
     // A module's own display sits above its controls and there is one of it;
-    // a rack has four slots in one module and each wants its own, so this is
+    // a rack has several slots in one module and each wants its own, so this is
     // per row rather than per module. Zero means the row is all controls,
     // which every row but the rack's is.
     int displayWeight = 0;
@@ -292,12 +293,12 @@ inline constexpr int fxBankWidth = 56;
 
 // The share of a rack row given over to that slot's display. Three cells stand
 // in front of it — the name plate and the two mode fields — so it lands in the
-// same column down all four slots, with the knobs to its right.
+// same column down every slot, with the knobs to its right.
 inline constexpr int fxDisplayWeight = 3;
 
-// The FX page has a second reading of the four slots down its left edge. At
+// The FX page has a second reading of the slots down its left edge. At
 // full width it names every effect and exposes its bypass/remove actions; when
-// folded it becomes a narrow strip of the same four marks. The rack controls
+// folded it becomes a narrow strip of the same marks. The rack controls
 // keep the rest of the module, so folding the list gives dense patches their
 // room back without taking the overview away altogether.
 inline constexpr int fxListOpenWidth = 198;
@@ -305,6 +306,10 @@ inline constexpr int fxListFoldedWidth = 54;
 inline constexpr int fxListGap = 8;
 inline constexpr int fxViewButtonSize = 22;
 inline constexpr int fxViewButtonGap = 5;
+// A slot keeps the same physical height in the compact and expanded rack. The
+// viewport decides how many fit; it never stretches four effects into whatever
+// height happens to be available.
+inline constexpr int fxSlotHeight = 72;
 
 inline constexpr int rowNumberGutter = 34;
 inline constexpr int columnTitleHeight = 18;
@@ -332,6 +337,44 @@ inline constexpr int presetStripWidth = 350;
 inline juce::Rectangle<int> tabBounds(int index)
 {
     return {tabStripLeft + index * (tabWidth + tabGap), tabTop, tabWidth, tabHeight};
+}
+
+// Slots five onward repeat the exact host-facing controls of the original
+// four. Keep those legacy declarations readable below, and generate only the
+// extension so increasing the rack does not require copying thirty-six ids per
+// slot by hand. A deque owns the generated text because Control deliberately
+// stores light-weight string pointers.
+inline std::vector<Row> completeFxRows(std::vector<Row> rows)
+{
+    static std::deque<juce::String> ids;
+    const auto keep = [] (juce::String id)
+    {
+        ids.push_back(std::move(id));
+        return ids.back().toRawUTF8();
+    };
+
+    for (int slot = static_cast<int>(rows.size()); slot < fxSlotCount; ++slot)
+    {
+        std::vector<Control> controls;
+        controls.reserve(static_cast<size_t>(rackCount * 12));
+        for (int rack = 0; rack < rackCount; ++rack)
+        {
+            const auto id = [rack, slot, &keep] (const char* suffix)
+            {
+                return keep(fxParameterId(rack, slot, suffix));
+            };
+            controls.push_back({id("Type"), "TYPE", Style::plate, nullptr, 2});
+            controls.push_back({id("ModeA"), "MODE", Style::selector, nullptr, 2});
+            controls.push_back({id("ModeB"), "MODE", Style::selector, nullptr, 2});
+            for (int knob = 0; knob < fxKnobCount; ++knob)
+                controls.push_back({id(("Knob" + juce::String(knob + 1)).toRawUTF8()), "KNOB"});
+            controls.push_back({id("Mix"), "MIX"});
+            controls.push_back({id("Level"), "LEVEL"});
+            controls.push_back({id("Bypass"), "BYP", Style::chip});
+        }
+        rows.push_back({1, std::move(controls), rackCount, fxDisplayWeight, 3});
+    }
+    return rows;
 }
 
 inline const std::vector<Module>& modules()
@@ -567,7 +610,7 @@ inline const std::vector<Module>& modules()
 
         // --- The effects rack -------------------------------------------------
         //
-        // One module, four rows, three banks. A row is a slot and a bank is a
+        // One module, eight rows, three banks. A row is a slot and a bank is a
         // rack, so the named cards in the header are the MAIN / BUS 1 / BUS 2
         // chooser and everything else falls out of the machinery the envelopes
         // and the LFOs already use: every bank declares the same controls in
@@ -584,7 +627,7 @@ inline const std::vector<Module>& modules()
         // they are declared as "KNOB 1" here: this file says where a control
         // is, and the type says what it is.
         {"fx", "FX", "RACK", nullptr, true, Display::none, 0, 0, 24, true,
-         {
+         completeFxRows({
           {25, {{"fx1s1Type", "TYPE", Style::plate, nullptr, 2},
                 {"fx1s1ModeA", "MODE", Style::selector, nullptr, 2},
                 {"fx1s1ModeB", "MODE", Style::selector, nullptr, 2},
@@ -681,7 +724,7 @@ inline const std::vector<Module>& modules()
                 {"fx3s4Mix", "MIX"}, {"fx3s4Level", "LEVEL"},
                 {"fx3s4Bypass", "BYP", Style::chip}},
            rackCount, fxDisplayWeight, 3}
-         },
+         }),
          0, only(Page::fx), 1, 0, 0, 0, fxBankWidth},
 
         // --- The mixer -------------------------------------------------------
@@ -924,6 +967,29 @@ inline juce::Rectangle<int> fxRackBounds(juce::Rectangle<int> moduleArea, bool l
     return moduleArea.withTrimmedLeft(fxListWidth(listOpen) + fxListGap);
 }
 
+// The shared vertical viewport for the overview and the editable rack. The
+// horizontal pieces differ, but their slot edges must remain on one baseline.
+inline juce::Rectangle<int> fxViewportBounds(juce::Rectangle<int> moduleArea)
+{
+    return moduleArea.withTrimmedTop(headerHeight).reduced(0, 6);
+}
+
+inline int fxVisibleSlotCount(juce::Rectangle<int> moduleArea)
+{
+    return juce::jlimit(1, fxSlotCount, fxViewportBounds(moduleArea).getHeight() / fxSlotHeight);
+}
+
+inline int fxMaxFirstSlot(juce::Rectangle<int> moduleArea)
+{
+    return juce::jmax(0, fxSlotCount - fxVisibleSlotCount(moduleArea));
+}
+
+inline juce::Rectangle<int> fxScrolledRackBounds(juce::Rectangle<int> moduleArea, bool listOpen,
+                                                 int firstSlot)
+{
+    return fxRackBounds(moduleArea, listOpen).translated(0, -firstSlot * fxSlotHeight);
+}
+
 // View controls live at the far right of the rack header: the outer one grows
 // the rack through both module rows, the inner one folds the list to its icon
 // rail. They are painted rather than heavyweight child components because they
@@ -1003,6 +1069,9 @@ inline juce::Rectangle<int> controlArea(juce::Rectangle<int> moduleArea, const M
 inline juce::Rectangle<int> rowBounds(juce::Rectangle<int> moduleArea, const Module& module, int rowIndex)
 {
     const auto area = controlArea(moduleArea, module);
+    if (juce::String(module.id) == "fx")
+        return {area.getX(), area.getY() + rowIndex * fxSlotHeight, area.getWidth(), fxSlotHeight};
+
     auto total = 0;
     for (const auto& row : module.rows) total += row.weight;
     if (total <= 0) return area;
@@ -1015,10 +1084,10 @@ inline juce::Rectangle<int> rowBounds(juce::Rectangle<int> moduleArea, const Mod
 }
 
 inline juce::Rectangle<int> fxListItemBounds(juce::Rectangle<int> moduleArea, const Module& module,
-                                             int slot, bool listOpen)
+                                             int slot, bool listOpen, int firstSlot = 0)
 {
     const auto list = fxListBounds(moduleArea, listOpen);
-    const auto row = rowBounds(fxRackBounds(moduleArea, listOpen), module, slot);
+    const auto row = rowBounds(fxScrolledRackBounds(moduleArea, listOpen, firstSlot), module, slot);
     return {list.getX(), row.getY(), list.getWidth(), row.getHeight()};
 }
 

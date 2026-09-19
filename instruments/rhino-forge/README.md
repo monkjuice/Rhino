@@ -65,12 +65,11 @@ A channel's header enable is the source's own, exactly as Serum's mixer header
 is, which is also what gives every channel its mute. The two busses are summing
 points with a level and a place in the image; a bus can feed the other one or
 the main output, and two pointed at each other is broken by the engine rather
-than refused by the panel. They carry no effects yet: the FX racks that make a
-bus worth sending to arrive with M11 and land on these channels without moving
-them.
+than refused by the panel. Each bus carries the effects rack shown on the FX
+tab, so a send reaches the ordered chain selected by its BUS card.
 
 `FX` is three racks — one on the main output and one on each bus — chosen by the
-named cards in the module's header. A rack is four slots and the signal runs
+named cards in the module's header. A rack is eight slots and the signal runs
 down them, top to bottom. A slot holds any of six types, the same type can sit
 in two slots, and every slot declares the same twelve controls whatever is in
 it: a type, two mode fields, six general knobs, a bypass, a mix and a level.
@@ -80,9 +79,11 @@ colour and mark, lets a module be bypassed or removed, and reorders the chain by
 dragging; an empty row opens the type menu. The list folds to a mark-only rail
 when the editor needs the width. The expand button at the right of the rack
 header — or **Alt+F** on Windows — grows the rack through both module rows, so
-the four effects can use the full panel height without changing the keyboard or
-the title bar. Both are views of the same slot parameters, not copies of the
-rack, and neither view setting is saved in a preset.
+more of the chain is visible without changing the keyboard or the title bar.
+Every effect strip keeps a fixed height in both views; the wheel over the list
+scrolls by slots when all eight do not fit. Each rack remembers its own scroll
+position. These are views of the same slot parameters, not copies of the rack,
+and none of the view settings are saved in a preset.
 
 What those six knobs *mean* belongs to the type, declared once in
 [core/ForgeFx.h](core/ForgeFx.h) and read three times — by the DSP, by the panel
@@ -95,7 +96,7 @@ slot's identity and its one structural choice are the same object. Each type has
 a colour and a mark of its own — a reverb's decaying burst, a delay's fading
 repeats, a distortion's flattened peaks — and the slot wears both: on the plate,
 on every knob in the row, and lit down the left edge of the shelf it sits on. A
-rack is meant to be read by colour down its four rows before a word on it is.
+rack is meant to be read by colour down its rows before a word on it is.
 
 A slot's two mode fields are drawn as whatever the choice in front of you
 actually is. Two or three named states — `PLATE / HALL`, `NORMAL / PING-PONG`,

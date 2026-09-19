@@ -11,7 +11,7 @@
 // in. That has one consequence which decides the whole of this file — a host's
 // parameter list is fixed at construction, so a slot cannot declare a parameter
 // per control of whichever effect it happens to hold. Thirteen types across
-// twelve slots would be several hundred parameters, nearly all of them dead at
+// twenty-four slots would be several hundred parameters, nearly all of them dead at
 // any moment.
 //
 // So a slot declares a fixed set instead: a type, two mode fields, six general
@@ -29,7 +29,11 @@ namespace rhino::forge
 // were built for — a send is only worth making if something is waiting at the
 // other end of it.
 inline constexpr int rackCount = 3;
-inline constexpr int fxSlotCount = 4;
+// The first four are the original rack and keep their parameter/modulation
+// identities forever. The extra four extend the same fixed host parameter
+// list; the panel scrolls them rather than squeezing every strip smaller.
+inline constexpr int legacyFxSlotCount = 4;
+inline constexpr int fxSlotCount = 8;
 inline constexpr int fxKnobCount = 6;
 
 inline const char* rackName(int rack)

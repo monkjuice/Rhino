@@ -12,7 +12,7 @@
 // One rule governs this whole file: **nothing here allocates once audio is
 // running**. A slot's type changes while notes are sounding, so every slot
 // carries the state of every type it could hold, sized at `prepare` for the
-// longest line any of them needs. That is a few megabytes across twelve slots
+// longest line any of them needs. That is a bounded allocation across all slots
 // and it buys the thing that matters — changing a slot from a filter to a
 // reverb mid-note cannot touch the heap.
 //

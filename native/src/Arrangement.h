@@ -144,6 +144,7 @@ private:
     const Session::TrackGroup* groupStartingAt(int track) const;
     const Session::TrackGroup* groupContaining(int track) const;
     bool isTrackHidden(int track) const;
+    float trackIndent(int track) const;
     bool isTrackSelected(int track) const;
     void selectTrackRange(int from, int to);
     void toggleTrackSelection(int track);
@@ -238,9 +239,10 @@ private:
     static constexpr float headerWidth = 228.0f, rulerTop = 32.0f, lanesTop = 56.0f, masterLaneHeight = 26.0f;
     static constexpr float automationRowHeight = 44.0f;
     // A group header is one line: its disclosure, its name and its two buttons.
-    // Members carry a spine in the group colour down the left of their cards,
-    // which is what reads as nesting without indenting the controls.
-    static constexpr float groupRowHeight = 24.0f, groupSpineLeft = 3.0f, groupSpineWidth = 5.0f;
+    // Its members are pushed right by groupIndent, and the gap that opens up is
+    // filled with the group's colour: the step in the left edge is what tells a
+    // card inside a group from one below it at a glance.
+    static constexpr float groupRowHeight = 24.0f, groupIndent = 13.0f, groupSpineLeft = 3.0f;
     // A card is name plus one control line at its shortest; the mixer line is
     // the next thing that fits, and past that a row only gets roomier.
     static constexpr float minimumLaneHeight = 32.0f, mixerLaneHeight = 54.0f, maximumLaneHeight = 260.0f;

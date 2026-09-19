@@ -39,33 +39,31 @@ void Arrangement::paint(juce::Graphics& g)
         // The card is two columns with the panel grey between them: the
         // controls keep the panel background, and the name sits on the track
         // colour. The clips on the track keep whatever colours they were given.
-        const auto nameColumn = juce::Rectangle<float>(cardControlsWidth + cardDividerWidth, row.getY(),
-                                                       headerWidth - cardControlsWidth - cardDividerWidth,
+        // A card inside a group starts at its indent instead of at the edge.
+        const auto indent = trackIndent(track);
+        const auto nameColumn = juce::Rectangle<float>(indent + cardControlsWidth + cardDividerWidth, row.getY(),
+                                                       headerWidth - indent - cardControlsWidth - cardDividerWidth,
                                                        row.getHeight());
         const auto colour = session.trackColour(track);
         const auto cardColour = colour.isTransparent() ? juce::Colour(0xff41505d) : colour;
         g.setColour(cardColour);
         g.fillRect(nameColumn);
         g.setColour(juce::Colour(0xff39434b));
-        g.fillRect(cardControlsWidth, row.getY(), cardDividerWidth, row.getHeight());
+        g.fillRect(indent + cardControlsWidth, row.getY(), cardDividerWidth, row.getHeight());
+        paintGroupSpine(g, track, row);
         if (isTrackSelected(track))
         {
-            // Two different things. The strip marks the track the rest of the
-            // app is working on, which follows a clip click. The wash marks the
-            // cards themselves as the selected objects, which Delete and Ctrl+G
-            // act on, and a clip and a track card are never selected together.
-            if (focus == Focus::track || focus == Focus::group)
-            {
-                g.setColour(juce::Colour(0x12ffffff));
-                g.fillRect(row.withX(0.0f).withWidth(headerWidth));
-            }
+            // Highlighted and selected are the same state: every card in the
+            // selection is washed whatever the last click was, and the strip
+            // only says which of them the rest of the app is working on.
+            g.setColour(juce::Colour(0x12ffffff));
+            g.fillRect(row.withX(0.0f).withWidth(headerWidth));
             if (track == selectedTrack)
             {
                 g.setColour(juce::Colour(0xffc6d58c));
                 g.fillRect(row.withX(0.0f).withWidth(3.0f));
             }
         }
-        paintGroupSpine(g, track, row);
         // The name holds the top line of the card whatever height the row is
         // dragged to, level with the two buttons beside it. Dark text on a
         // light card, light on a dark one, so every colour stays readable.
@@ -112,7 +110,7 @@ void Arrangement::paint(juce::Graphics& g)
         g.fillRect(master);
         g.setColour(juce::Colour(0xff3a434b));
         g.drawHorizontalLine(static_cast<int>(master.getY()), 0.0f, master.getRight());
-        g.setColour(juce::Colour(isMasterSelected() && focus == Focus::track ? 0xff343f47 : 0xff222930));
+        g.setColour(juce::Colour(isMasterSelected() ? 0xff343f47 : 0xff222930));
         g.fillRect(master.withWidth(headerWidth));
         if (isMasterSelected())
         {

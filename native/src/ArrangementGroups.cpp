@@ -56,6 +56,12 @@ bool Arrangement::isTrackHidden(int track) const
     return group != nullptr && group->collapsed;
 }
 
+// A card inside a group starts further right, and the band above it does not.
+float Arrangement::trackIndent(int track) const
+{
+    return groupContaining(track) != nullptr ? groupIndent : 0.0f;
+}
+
 bool Arrangement::isTrackSelected(int track) const
 {
     return std::find(selectedTracks.begin(), selectedTracks.end(), track) != selectedTracks.end();
@@ -298,16 +304,16 @@ void Arrangement::paintGroupRow(juce::Graphics& g, int row)
     g.drawHorizontalLine(static_cast<int>(area.getBottom()) - 1, 0.0f, full.getRight());
 }
 
-// The spine is what reads as nesting on a member's card. It sits left of the
-// controls rather than indenting them, so a grouped card keeps the same layout
-// as an ungrouped one.
+// The gap the indent opens on a member's card, filled with the group's colour.
+// It runs the full height of every member, so a group reads as one block with a
+// step in its left edge rather than as cards that happen to share a colour.
 void Arrangement::paintGroupSpine(juce::Graphics& g, int track, juce::Rectangle<float> row)
 {
     const auto* group = groupContaining(track);
     if (group == nullptr)
         return;
-    g.setColour(bandColour(*group).withAlpha(group->collapsed ? 0.5f : 0.9f));
-    g.fillRect(groupSpineLeft, row.getY(), groupSpineWidth, row.getHeight());
+    g.setColour(bandColour(*group).withAlpha(0.9f));
+    g.fillRect(groupSpineLeft, row.getY(), groupIndent - groupSpineLeft, row.getHeight());
 }
 
 void Arrangement::showGroupMenu(int groupId)

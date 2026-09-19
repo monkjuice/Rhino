@@ -138,7 +138,6 @@ public:
         browser.status = files.status;
         // A browser double-click has no drop target of its own, so it follows
         // whichever track the visible arrangement has selected.
-        browser.targetTrack = [this] { return sessionViewOpen ? sessionView.selectedTrackIndex() : arrangement.selectedTrackIndex(); };
         rack.status = files.status;
         browserToggle.onClick = [this] { toggleBrowser(); };
         editorToggle.onClick = [this] { toggleClipEditor(); };

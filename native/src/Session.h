@@ -244,7 +244,9 @@ public:
     // where the topmost of them already was.
     juce::Result groupTracks(std::vector<int> tracks, const juce::String& name = {});
     juce::Result addTrackToGroup(int track, int groupId);
+    juce::Result addTracksToGroup(std::vector<int> tracks, int groupId);
     juce::Result removeTrackFromGroup(int track);
+    juce::Result removeTracksFromGroup(std::vector<int> tracks);
     juce::Result ungroupTracks(int groupId);
     juce::Result setTrackGroupName(int groupId, const juce::String& name);
     juce::Result setTrackGroupColour(int groupId, juce::Colour);

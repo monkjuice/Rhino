@@ -177,14 +177,26 @@ juce::Result Session::groupTracks(std::vector<int> tracks, const juce::String& n
 
 juce::Result Session::addTrackToGroup(int track, int groupId)
 {
+    return addTracksToGroup({track}, groupId);
+}
+
+// The group's own members come along, because the run has to be rebuilt around
+// whatever is joining it rather than only around the newcomers.
+juce::Result Session::addTracksToGroup(std::vector<int> tracks, int groupId)
+{
     const auto group = trackGroup(groupId);
     if (!group)
         return juce::Result::fail("That group is no longer there.");
-    if (group->contains(track))
-        return juce::Result::ok();
-    if (!juce::isPositiveAndBelow(track, trackCount()))
-        return juce::Result::fail("Select a track to add.");
-    std::vector<int> members {track};
+    std::vector<int> members;
+    auto joining = 0;
+    for (const auto track : tracks)
+        if (juce::isPositiveAndBelow(track, trackCount()) && !group->contains(track))
+        {
+            members.push_back(track);
+            ++joining;
+        }
+    if (joining == 0)
+        return juce::Result::fail("Select a track that is not already in that group.");
     for (int member = group->firstTrack; member <= group->lastTrack(); ++member)
         members.push_back(member);
     edit->getUndoManager().beginNewTransaction("Add to group");
@@ -215,6 +227,32 @@ juce::Result Session::removeTrackFromGroup(int track)
     reconcileTrackGroups();
     markModified();
     sendSynchronousChangeMessage();
+    return juce::Result::ok();
+}
+
+// One track at a time, addressed by id: each one slides out of its run before
+// it is let go, and that renumbers everything below it. The cost is one undo
+// step per track, which is the honest shape of the operation anyway.
+juce::Result Session::removeTracksFromGroup(std::vector<int> tracks)
+{
+    const auto existing = te::getAudioTracks(*edit);
+    std::vector<te::EditItemID> leaving;
+    for (const auto track : tracks)
+        if (juce::isPositiveAndBelow(track, existing.size()) && groupOf(existing, track) != noGroup)
+            leaving.push_back(existing[track]->itemID);
+    if (leaving.empty())
+        return juce::Result::fail("Those tracks are not in a group.");
+    for (const auto id : leaving)
+    {
+        const auto current = te::getAudioTracks(*edit);
+        for (int track = 0; track < current.size(); ++track)
+            if (current[track]->itemID == id)
+            {
+                if (const auto done = removeTrackFromGroup(track); done.failed())
+                    return done;
+                break;
+            }
+    }
     return juce::Result::ok();
 }
 

@@ -148,8 +148,6 @@ public:
         if (nowSelected) panel.reportSelection(item);
     }
 
-    void itemDoubleClicked(const juce::MouseEvent&) override { panel.applyItem(item); }
-
     juce::var getDragSourceDescription() override
     {
         const auto description = panel.dragDescriptionFor(item);
@@ -169,14 +167,9 @@ BrowserPanel::BrowserPanel(Session& s) : session(s)
     title.setFont(juce::FontOptions(12.0f));
     search.setTextToShowWhenEmpty("Search", juce::Colour(0xff6f7b85));
     search.onTextChange = [this] { rebuildTree(); };
-    search.onReturnKey = [this] { if (auto* item = selectedItem()) applyItem(*item); };
     search.setColour(juce::TextEditor::backgroundColourId, juce::Colour(0xff262c32));
     search.setColour(juce::TextEditor::outlineColourId, juce::Colour(0xff46515a));
     search.setFont(juce::FontOptions(12.0f));
-    apply.setTooltip("Add the selected item to a track");
-    apply.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff2b333a));
-    apply.setColour(juce::TextButton::textColourOffId, juce::Colour(0xffc2ccd4));
-    apply.onClick = [this] { if (auto* item = selectedItem()) applyItem(*item); };
 
     categoryList.setRowHeight(categoryRowHeight);
     categoryList.setColour(juce::ListBox::backgroundColourId, juce::Colour(0xff1b2026));
@@ -246,7 +239,7 @@ BrowserPanel::BrowserPanel(Session& s) : session(s)
                          device.description, std::nullopt, device.id});
     }
 
-    for (auto* component : std::initializer_list<juce::Component*>{&title, &search, &apply, &categoryList, &tree})
+    for (auto* component : std::initializer_list<juce::Component*>{&title, &search, &categoryList, &tree})
         addAndMakeVisible(component);
     rebuildTree();
 }
@@ -270,8 +263,7 @@ void BrowserPanel::resized()
 {
     const auto width = getWidth();
     title.setBounds(10, 6, width - 20, 16);
-    search.setBounds(8, 26, width - 58, 26);
-    apply.setBounds(width - 46, 26, 38, 26);
+    search.setBounds(8, 26, width - 16, 26);
     categoryList.setBounds(4, 78, width - 8, categoryRowHeight * static_cast<int>(categories.size()));
     const auto treeTop = categoryList.getBottom() + 8;
     tree.setBounds(4, treeTop, width - 8, std::max(0, getHeight() - treeTop - 6));
@@ -289,16 +281,6 @@ void BrowserPanel::focusSearch()
 {
     search.grabKeyboardFocus();
     search.selectAll();
-}
-
-bool BrowserPanel::keyPressed(const juce::KeyPress& key)
-{
-    if (key.getKeyCode() == juce::KeyPress::returnKey)
-    {
-        if (auto* item = selectedItem()) applyItem(*item);
-        return true;
-    }
-    return false;
 }
 
 int BrowserPanel::getNumRows()
@@ -411,12 +393,10 @@ void BrowserPanel::rebuildTree()
         tree.restoreOpennessState(*openness, false);
     if (restored != nullptr && restored->getParentItem() != nullptr && restored->getParentItem()->isOpen())
         restored->setSelected(true, true);
-    apply.setEnabled(selectedItem() != nullptr);
 }
 
 void BrowserPanel::reportSelection(const Item& item)
 {
-    apply.setEnabled(true);
     if (status) status(item.name + " - " + item.detail);
 }
 
@@ -439,50 +419,6 @@ juce::String BrowserPanel::dragDescriptionFor(const Item& item) const
     if (item.drumKit)
         return "rhino-browser:drumkit:" + drumKitId(*item.drumKit);
     return "rhino-browser:info:" + item.name;
-}
-
-// A document can hold a single track, so no fixed index is safe: an unanswered
-// or stale target falls back to the first track rather than the main row.
-int BrowserPanel::selectedTargetTrack() const
-{
-    const auto track = targetTrack ? targetTrack() : 0;
-    return juce::isPositiveAndBelow(track, session.trackCount()) ? track : 0;
-}
-
-void BrowserPanel::applyItem(const Item& item)
-{
-    if (item.preset)
-    {
-        session.applyPatternPreset(*item.preset);
-        if (status) status("Loaded " + item.name);
-    }
-    else if (item.deviceId.isNotEmpty())
-    {
-        const auto track = selectedTargetTrack();
-        const auto result = session.addDevice(item.deviceId, track);
-        if (status) status(result.wasOk() ? "Added " + item.name + " to " + session.trackName(track)
-                                          : result.getErrorMessage());
-    }
-    else if (item.drumKit)
-    {
-        const auto track = selectedTargetTrack();
-        const auto result = session.addDrumKit(*item.drumKit, track);
-        if (status) status(result.wasOk() ? "Added " + item.name + " to " + session.trackName(track) : result.getErrorMessage());
-    }
-    else if (item.file != juce::File())
-    {
-        const auto result = session.importAudio(item.file);
-        if (status) status(result.wasOk() ? "Added " + item.name : result.getErrorMessage());
-    }
-    else if (item.sample)
-    {
-        const auto result = session.importBuiltInSample(*item.sample);
-        if (status) status(result.wasOk() ? "Added " + item.name : result.getErrorMessage());
-    }
-    else if (status)
-    {
-        status(item.name + " is already part of this starter session.");
-    }
 }
 
 }

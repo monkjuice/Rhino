@@ -80,6 +80,35 @@
         view.sync();
         view.resized();
 
+        scenario("track groups: a member's card starts at the group's indent");
+        require(view.trackIndent(0) == 0.0f, "A loose card starts at the panel edge");
+        require(view.trackIndent(1) == view.groupIndent && view.trackIndent(2) == view.groupIndent,
+                "A card inside a band starts at the indent");
+        require(view.mute[1]->getX() - view.mute[0]->getX() == static_cast<int>(view.groupIndent),
+                "and its controls move right by exactly that much, so the step in the edge is unbroken");
+        require(view.volume[1]->getX() == view.mute[1]->getX(),
+                "The indented buttons still sit squarely over the indented faders");
+
+        scenario("track groups: a command reaches every selected card");
+        require(session.addTracksToGroup({0, 3}, bandId).wasOk(), "Several loose cards can join a band at once");
+        require(session.trackGroups().front().trackCount == 4,
+                "and the band covers all of them rather than only the first");
+        require(session.addTracksToGroup({0}, bandId).failed(),
+                "A card already in the band has nothing to join");
+        require(session.removeTracksFromGroup({0, 3}).wasOk(), "Several members can leave at once");
+        bands = session.trackGroups();
+        require(bands.size() == 1 && bands[0].trackCount == 2, "leaving the band with the two that stayed");
+        require(session.removeTracksFromGroup({bands[0].lastTrack() + 1}).failed(),
+                "A card outside the band has no group to leave");
+        // The card that left from the top slid below the ones that stayed, which
+        // is how the band survives as one run. Carry it back, so the scenarios
+        // after this one meet the stack they expect.
+        require(bands[0].firstTrack == 0, "Taking the topmost member out moves the band up to where it was");
+        require(session.moveTrack(3, 0).wasOk(), "The card that left can be carried back above the band");
+        bands = session.trackGroups();
+        require(bands.size() == 1 && bands[0].firstTrack == 1 && bands[0].trackCount == 2,
+                "and the band is back to the two tracks and the place it started from");
+
         scenario("track groups: mute and solo reach every member");
         session.setTrackGroupMuted(bandId, true);
         require(session.trackMixer(1).muted && session.trackMixer(2).muted,

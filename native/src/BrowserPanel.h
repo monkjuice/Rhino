@@ -18,12 +18,8 @@ public:
     ~BrowserPanel() override;
     void paint(juce::Graphics&) override;
     void resized() override;
-    bool keyPressed(const juce::KeyPress&) override;
     void focusSearch();
     std::function<void(juce::String)> status;
-    // Double-clicking a browser item acts on the track the user is looking at.
-    // A dragged item names its own target; a double-click has to be told.
-    std::function<int()> targetTrack;
 
     // One row of the library. `folder` is the subfolder inside `category`; an
     // empty folder puts the row at the top level of that category.
@@ -59,8 +55,6 @@ private:
     void selectedRowsChanged(int lastRowSelected) override;
 
     void rebuildTree();
-    void applyItem(const Item&);
-    int selectedTargetTrack() const;
     void reportSelection(const Item&);
     juce::String dragDescriptionFor(const Item&) const;
     juce::Colour colourFor(const Item&) const;
@@ -69,7 +63,6 @@ private:
     Session& session;
     juce::Label title;
     juce::TextEditor search;
-    juce::TextButton apply {"Add"};
     juce::ListBox categoryList {"Library", this};
     juce::TreeView tree;
     std::unique_ptr<FolderNode> root;

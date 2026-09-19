@@ -147,7 +147,10 @@ void Arrangement::resized()
         // the faders and keeps the buttons. Positions are inside the header
         // container, which crops whatever leaves the lanes.
         const auto top = static_cast<int>(row.getY() - lanesTop) + cardControlsTop;
-        const auto right = cardControlLeft + cardControlWidth + cardControlGap;
+        // A card inside a group is pushed right, controls and all, so the step
+        // in the left edge is unbroken down the whole group.
+        const auto left = cardControlLeft + static_cast<int>(trackIndent(i));
+        const auto right = left + cardControlWidth + cardControlGap;
         const auto mixerVisible = row.getHeight() >= mixerLaneHeight;
         // A row folded into a collapsed group is laid out at no height, so its
         // controls go with it rather than piling up under the band above.
@@ -156,9 +159,9 @@ void Arrangement::resized()
         solo[index]->setVisible(visible);
         volume[index]->setVisible(visible && mixerVisible);
         pan[index]->setVisible(visible && mixerVisible);
-        mute[index]->setBounds(cardControlLeft, top, cardControlWidth, 18);
+        mute[index]->setBounds(left, top, cardControlWidth, 18);
         solo[index]->setBounds(right, top, cardControlWidth, 18);
-        volume[index]->setBounds(cardControlLeft, top + 23, cardControlWidth, 16);
+        volume[index]->setBounds(left, top + 23, cardControlWidth, 16);
         pan[index]->setBounds(right, top + 23, cardControlWidth, 16);
     }
     {

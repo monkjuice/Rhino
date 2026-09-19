@@ -60,7 +60,12 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
     if (event.mods.isRightButtonDown())
         if (const auto track = cardAt(event.position); track >= 0)
         {
-            selectTrack(track);
+            // The menu acts on the whole selection, so a right-click inside one
+            // keeps it rather than collapsing it the way a plain click does.
+            if (isTrackSelected(track))
+                selectedGroup = -1;
+            else
+                selectTrack(track);
             setSelection({});
             focus = Focus::track;
             repaint();
@@ -522,56 +527,70 @@ void Arrangement::endCardGesture()
     repaint();
 }
 
+// Everything here acts on the cards that are selected rather than only on the
+// one under the pointer, which is what makes a gathered selection worth having.
 void Arrangement::showTrackMenu(int track)
 {
+    // Captured now: the callback outlives the click that opened the menu.
+    std::vector<int> targets;
+    for (const auto gathered : selectedTracks)
+        if (juce::isPositiveAndBelow(gathered, session.trackCount()))
+            targets.push_back(gathered);
+    if (targets.empty())
+        targets.push_back(track);
+    const auto several = targets.size() > 1;
+    const auto subject = several ? juce::String(targets.size()) + " tracks" : session.trackName(track);
+
     juce::PopupMenu menu;
-    menu.addSectionHeader(session.trackName(track));
+    menu.addSectionHeader(subject);
     menu.addCustomItem(1, std::make_unique<TrackSwatches>(session.trackColour(track),
-        [safe = juce::Component::SafePointer<Arrangement>(this), track](juce::Colour chosen)
+        [safe = juce::Component::SafePointer<Arrangement>(this), targets](juce::Colour chosen)
         {
-            if (safe != nullptr) safe->session.setTrackColour(track, chosen);
+            if (safe == nullptr) return;
+            for (const auto target : targets)
+                safe->session.setTrackColour(target, chosen);
         }), nullptr);
     menu.addItem(2, "No colour", !session.trackColour(track).isTransparent());
     menu.addSeparator();
-    menu.addItem(3, "Rename...       F2");
+    menu.addItem(3, "Rename " + session.trackName(track) + "...       F2");
     menu.addSeparator();
-    // Grouping acts on the cards that are selected, which is why the item says
-    // so: shift-clicking two cards and picking this groups both.
     const auto memberOf = session.trackGroupId(track);
     if (memberOf > 0)
-        menu.addItem(4, "Remove from group");
+        menu.addItem(4, "Remove " + subject + " from group");
     else
     {
-        menu.addItem(5, "Group selected tracks       Ctrl+G");
+        menu.addItem(5, "Group " + subject + "       Ctrl+G");
         juce::PopupMenu existing;
         for (int i = 0; i < static_cast<int>(groups.size()); ++i)
             existing.addItem(100 + i, groups[static_cast<size_t>(i)].name);
         if (!groups.empty())
-            menu.addSubMenu("Add to group", existing);
+            menu.addSubMenu("Add " + subject + " to group", existing);
     }
     const auto anchor = localPointToGlobal(lane(track).getTopLeft().toInt());
     menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this)
                            .withTargetScreenArea({anchor.x, anchor.y, 1, 1}),
-        [safe = juce::Component::SafePointer<Arrangement>(this), track](int choice)
+        [safe = juce::Component::SafePointer<Arrangement>(this), track, targets, subject](int choice)
         {
             if (safe == nullptr || choice == 0) return;
-            if (choice == 2) safe->session.setTrackColour(track, {});
+            if (choice == 2)
+            {
+                for (const auto target : targets)
+                    safe->session.setTrackColour(target, {});
+            }
             else if (choice == 3) safe->renameTrack(track);
             else if (choice == 4)
             {
-                const auto done = safe->session.removeTrackFromGroup(track);
+                const auto done = safe->session.removeTracksFromGroup(targets);
                 if (safe->status)
-                    safe->status(done.failed() ? done.getErrorMessage()
-                                               : safe->session.trackName(track) + " left its group");
+                    safe->status(done.failed() ? done.getErrorMessage() : subject + " left the group");
             }
             else if (choice == 5) safe->groupSelectedTracks();
             else if (choice >= 100 && choice - 100 < static_cast<int>(safe->groups.size()))
             {
                 const auto group = safe->groups[static_cast<size_t>(choice - 100)];
-                const auto done = safe->session.addTrackToGroup(track, group.id);
+                const auto done = safe->session.addTracksToGroup(targets, group.id);
                 if (safe->status)
-                    safe->status(done.failed() ? done.getErrorMessage()
-                                               : safe->session.trackName(track) + " joined " + group.name);
+                    safe->status(done.failed() ? done.getErrorMessage() : subject + " joined " + group.name);
             }
         });
 }

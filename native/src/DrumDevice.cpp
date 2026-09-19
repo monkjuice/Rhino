@@ -1,5 +1,5 @@
 #include "DrumDevice.h"
-#include "BinaryData.h"
+#include "ContentLibrary.h"
 #include <cmath>
 
 namespace rhino
@@ -269,15 +269,23 @@ void DrumDevice::applyToBuffer(const te::PluginRenderContext& context)
 }
 
 void DrumDevice::loadSample(juce::AudioBuffer<float>& destination, double& sourceRate,
-                            const void* data, int dataSize)
+                            const juce::String& relativePath)
 {
     if (destination.getNumSamples() > 0)
         return;
 
+    // Called from initialise(), never from the audio callback, so reading the
+    // file here costs no more than decoding an embedded copy used to.
+    const auto source = ContentLibrary::file(relativePath);
+    if (!source.existsAsFile())
+    {
+        juce::Logger::writeToLog("Rhino: drum sample missing: " + relativePath);
+        return;
+    }
+
     juce::AudioFormatManager formats;
     formats.registerBasicFormats();
-    std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(
-        std::make_unique<juce::MemoryInputStream>(data, static_cast<size_t>(dataSize), false)));
+    std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(source));
     if (reader == nullptr || reader->lengthInSamples <= 0)
         return;
 
@@ -328,13 +336,13 @@ float DrumDevice::renderSample(Voice& voice, const juce::AudioBuffer<float>& sam
 
 void DrumDevice::loadSamples()
 {
-    loadSample(clapSample, clapSampleRate, BinaryData::HandClap01_09_flac, BinaryData::HandClap01_09_flacSize);
-    loadSample(tr808Samples[0], tr808SampleRates[0], BinaryData::TR808Kick_wav, BinaryData::TR808Kick_wavSize);
-    loadSample(tr808Samples[1], tr808SampleRates[1], BinaryData::TR808Snare_wav, BinaryData::TR808Snare_wavSize);
-    loadSample(tr808Samples[2], tr808SampleRates[2], BinaryData::TR808ClosedHat_wav, BinaryData::TR808ClosedHat_wavSize);
-    loadSample(tr808Samples[3], tr808SampleRates[3], BinaryData::TR808OpenHat_wav, BinaryData::TR808OpenHat_wavSize);
-    loadSample(tr808Samples[4], tr808SampleRates[4], BinaryData::TR808LowTom_wav, BinaryData::TR808LowTom_wavSize);
-    loadSample(tr808Samples[5], tr808SampleRates[5], BinaryData::TR808MidTom_wav, BinaryData::TR808MidTom_wavSize);
-    loadSample(tr808Samples[6], tr808SampleRates[6], BinaryData::TR808HighTom_wav, BinaryData::TR808HighTom_wavSize);
+    loadSample(clapSample, clapSampleRate, "Samples/HandClap/HandClap-01_09.flac");
+    loadSample(tr808Samples[0], tr808SampleRates[0], "Samples/TR808/TR808Kick.wav");
+    loadSample(tr808Samples[1], tr808SampleRates[1], "Samples/TR808/TR808Snare.wav");
+    loadSample(tr808Samples[2], tr808SampleRates[2], "Samples/TR808/TR808ClosedHat.wav");
+    loadSample(tr808Samples[3], tr808SampleRates[3], "Samples/TR808/TR808OpenHat.wav");
+    loadSample(tr808Samples[4], tr808SampleRates[4], "Samples/TR808/TR808LowTom.wav");
+    loadSample(tr808Samples[5], tr808SampleRates[5], "Samples/TR808/TR808MidTom.wav");
+    loadSample(tr808Samples[6], tr808SampleRates[6], "Samples/TR808/TR808HighTom.wav");
 }
 }

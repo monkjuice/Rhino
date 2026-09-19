@@ -31,18 +31,15 @@ juce_add_gui_app(RhinoNative
     MICROPHONE_PERMISSION_TEXT "Record audio into your songs"
     NEEDS_CURL FALSE
     NEEDS_WEB_BROWSER FALSE)
+# Only what the UI needs before it can read anything from disk is embedded.
+# JUCE expands an asset to roughly three bytes of C++ per byte of data and
+# recompiles all of it on a clean build, so audio content belongs in the
+# content library under library/ instead -- see src/core/ContentLibrary.h.
 juce_add_binary_data(RhinoNativeAssets
     SOURCES
-        assets/HandClap-01_09.flac
-        assets/TR808/TR808Kick.wav
-        assets/TR808/TR808Snare.wav
-        assets/TR808/TR808ClosedHat.wav
-        assets/TR808/TR808OpenHat.wav
-        assets/TR808/TR808LowTom.wav
-        assets/TR808/TR808MidTom.wav
-        assets/TR808/TR808HighTom.wav
         assets/fonts/InterRegular.ttf
         assets/fonts/InterSemiBold.ttf)
+add_subdirectory(src/core)
 # Sources are listed explicitly: a new .cpp must be added here or it will not compile.
 # A class may span several translation units (Session, Arrangement); keep those grouped.
 target_sources(RhinoNative PRIVATE
@@ -107,6 +104,7 @@ target_compile_definitions(RhinoNative PRIVATE
     TRACKTION_ENABLE_TIMESTRETCH_SOUNDTOUCH=1)
 target_link_libraries(RhinoNative PRIVATE
     RhinoNativeAssets
+    RhinoCore
     tracktion::tracktion_engine tracktion::tracktion_graph tracktion::tracktion_core
     juce::juce_audio_utils juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags)

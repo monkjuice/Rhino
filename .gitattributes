@@ -6,3 +6,17 @@ research/sources/** -text
 # Wavetable files are sample data. `text=auto` detects them as binary anyway,
 # but saying so explicitly means no future setting can mangle a frame.
 instruments/rhino-forge/tables/*.wav -text
+
+# Audio content is stored with Git LFS, set up before the library had any
+# history so no blob of it was ever committed to the repository proper.
+# Plain git stores every version of a binary whole -- audio never deltas --
+# and the library is expected to grow well past the 18 MB it starts at.
+library/**/*.wav  filter=lfs diff=lfs merge=lfs -text
+library/**/*.flac filter=lfs diff=lfs merge=lfs -text
+library/**/*.aif  filter=lfs diff=lfs merge=lfs -text
+library/**/*.aiff filter=lfs diff=lfs merge=lfs -text
+library/**/*.ogg  filter=lfs diff=lfs merge=lfs -text
+library/**/*.mp3  filter=lfs diff=lfs merge=lfs -text
+
+# SOURCE.md and licence files beside them stay ordinary text: they are the
+# record of where the audio came from and must stay readable in a diff.

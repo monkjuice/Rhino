@@ -53,8 +53,9 @@ private:
     float render(Voice&);
     float nextNoise(Voice&) noexcept;
     void loadSamples();
+    // relativePath is resolved against the content library, not the executable.
     void loadSample(juce::AudioBuffer<float>& destination, double& sourceRate,
-                    const void* data, int dataSize);
+                    const juce::String& relativePath);
     float renderSample(Voice&, const juce::AudioBuffer<float>&, double sourceRate);
 
     struct VoiceShape

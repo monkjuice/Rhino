@@ -30,6 +30,12 @@ extern const juce::Identifier automationParameterID;
 extern const juce::Identifier automationOwnLaneID;
 extern const juce::Identifier automationTimeID;
 extern const juce::Identifier automationValueID;
+extern const juce::Identifier trackGroupID;
+extern const juce::Identifier trackGroupMemberID;
+extern const juce::Identifier trackGroupIdID;
+extern const juce::Identifier trackGroupNameID;
+extern const juce::Identifier trackGroupColourID;
+extern const juce::Identifier trackGroupCollapsedID;
 
 struct PresetNote { int step, pitch, length; };
 

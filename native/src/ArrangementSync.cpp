@@ -1,5 +1,6 @@
 #include "ArrangementInternal.h"
 #include "Playhead.h"
+#include <algorithm>
 #include <optional>
 #include <set>
 
@@ -15,6 +16,11 @@ void Arrangement::sync()
     const auto tracks = te::getAudioTracks(*session.edit);
     syncTrackControls();
     selectedTrack = juce::jlimit(0, session.masterTrackIndex(), selectedTrack);
+    // A gathered selection can name tracks the edit no longer has.
+    std::erase_if(selectedTracks, [this](int track) { return !juce::isPositiveAndBelow(track, session.trackCount()); });
+    if (selectedTracks.empty())
+        selectedTracks = {selectedTrack};
+    trackSelectionAnchor = juce::jlimit(0, std::max(0, session.trackCount() - 1), trackSelectionAnchor);
     songEnd = 0.0;
     for (int track = 0; track < tracks.size(); ++track)
     {
@@ -64,6 +70,14 @@ void Arrangement::sync()
         masterPan.setValue(session.masterPan(), juce::dontSendNotification);
     std::erase_if(waveforms, [&usedFiles](const auto& item) { return !usedFiles.contains(item.first); });
     buildRows();
+    // The same for a band: ungrouping, or deleting the last of its tracks,
+    // leaves nothing for a group selection to be about.
+    if (selectedGroup > 0 && groupById(selectedGroup) == nullptr)
+    {
+        selectedGroup = -1;
+        if (focus == Focus::group)
+            focus = Focus::track;
+    }
     if (focusedAutomation.isValid() && !session.trackAutomationState(focusedAutomation).visible)
     {
         focusedAutomation = {};

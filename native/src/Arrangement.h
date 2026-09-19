@@ -60,17 +60,21 @@ private:
     // What the last click selected, and therefore what Delete acts on. A track
     // is always highlighted as the working row, so "a track is selected" cannot
     // be inferred from selectedTrack - it has to be recorded.
-    enum class Focus { none, clip, track, automation };
+    enum class Focus { none, clip, track, automation, group };
     // Automation is edited by dragging a point, or by lifting a lane that has
     // never been drawn off its resting line, which is what makes it active.
     enum class AutomationGesture { none, movePoint, moveLine };
     // Lanes stack: every track owns one row, plus one row for each automation
-    // the user has sent to its own lane. Ghost rows repeat the track's clips
-    // dimmed, so an automation stays visually anchored to what it drives.
+    // the user has sent to its own lane, plus one header row for each group.
+    // Ghost rows repeat the track's clips dimmed, so an automation stays
+    // visually anchored to what it drives. A collapsed group gives its members
+    // zero height rather than dropping their rows, so every track still has a
+    // row to be addressed and drawn through.
     struct LaneRow
     {
         int track = 0;
         int automation = -1; // -1 is the track's own row
+        int group = -1;      // >= 0 when the row is a group's header
         float top = 0.0f;
         float height = 0.0f;
     };
@@ -135,6 +139,25 @@ private:
     void endCardGesture();
     void showTrackMenu(int track);
     void renameTrack(int track);
+    // ArrangementGroups.cpp
+    const Session::TrackGroup* groupById(int groupId) const;
+    const Session::TrackGroup* groupStartingAt(int track) const;
+    const Session::TrackGroup* groupContaining(int track) const;
+    bool isTrackHidden(int track) const;
+    bool isTrackSelected(int track) const;
+    void selectTrackRange(int from, int to);
+    void toggleTrackSelection(int track);
+    void selectGroup(int groupId);
+    int groupRowAt(juce::Point<float>) const;
+    juce::Rectangle<float> groupDisclosureBounds(juce::Rectangle<float> row) const;
+    juce::Rectangle<float> groupButtonBounds(juce::Rectangle<float> row, int index) const;
+    bool beginGroupGesture(const juce::MouseEvent&);
+    void paintGroupRow(juce::Graphics&, int row);
+    void paintGroupSpine(juce::Graphics&, int track, juce::Rectangle<float> row);
+    void showGroupMenu(int groupId);
+    void renameGroup(int groupId);
+    void groupSelectedTracks();
+    void ungroupSelection();
     juce::String controlDescription(juce::Component*) const;
     juce::Rectangle<float> lane(int track) const;
     // The master row is pinned under the scrolling lanes and never scrolls.
@@ -161,6 +184,7 @@ private:
     std::vector<ClipView> clips;
     std::vector<std::vector<Session::TrackAutomation>> trackLanes;
     std::vector<LaneRow> rows;
+    std::vector<Session::TrackGroup> groups;
     std::vector<int> trackRowIndex;
     float rowsHeight = 0.0f;
     juce::TextButton duplicateButton, addTrack, snap, automationButton, gridControl;
@@ -183,6 +207,10 @@ private:
     te::EditItemID selected;
     std::vector<te::EditItemID> selectedClips, clipboard;
     int selectedTrack = 0;
+    // Grouping acts on several cards at once, so the working track is joined by
+    // the set a shift-click has gathered. It always holds selectedTrack.
+    std::vector<int> selectedTracks {0};
+    int trackSelectionAnchor = 0, selectedGroup = -1;
     bool dragging = false;
     bool marqueeSelecting = false;
     juce::Rectangle<float> marqueeBounds;
@@ -207,8 +235,12 @@ private:
     int resizingTrack = -1, movingTrack = -1, moveDestination = -1;
     float resizePreview = 0.0f, resizeAnchor = 0.0f, resizeStartHeight = 0.0f, moveAnchor = 0.0f;
     bool moveStarted = false;
-    static constexpr float headerWidth = 196.0f, rulerTop = 32.0f, lanesTop = 56.0f, masterLaneHeight = 26.0f;
+    static constexpr float headerWidth = 228.0f, rulerTop = 32.0f, lanesTop = 56.0f, masterLaneHeight = 26.0f;
     static constexpr float automationRowHeight = 44.0f;
+    // A group header is one line: its disclosure, its name and its two buttons.
+    // Members carry a spine in the group colour down the left of their cards,
+    // which is what reads as nesting without indenting the controls.
+    static constexpr float groupRowHeight = 24.0f, groupSpineLeft = 3.0f, groupSpineWidth = 5.0f;
     // A card is name plus one control line at its shortest; the mixer line is
     // the next thing that fits, and past that a row only gets roomier.
     static constexpr float minimumLaneHeight = 32.0f, mixerLaneHeight = 54.0f, maximumLaneHeight = 260.0f;

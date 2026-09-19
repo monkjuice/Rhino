@@ -159,10 +159,12 @@ double Arrangement::snapUnitSeconds() const
 }
 
 // A ghost automation row answers with the track it clones, so dropping or
-// selecting on one behaves exactly as it does on the track itself.
+// selecting on one behaves exactly as it does on the track itself. A group
+// header answers with nothing: it covers several tracks, so there is no one
+// track a clip dropped on it could belong to.
 int Arrangement::trackAt(float y) const
 {
-    if (const auto row = rowAt(y); row >= 0)
+    if (const auto row = rowAt(y); row >= 0 && rows[static_cast<size_t>(row)].group < 0)
         return rows[static_cast<size_t>(row)].track;
     return -1;
 }

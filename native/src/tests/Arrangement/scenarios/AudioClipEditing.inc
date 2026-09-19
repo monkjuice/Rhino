@@ -150,7 +150,10 @@
         view.mouseDown(event({40, audioLaneY}, {40, audioLaneY}, false));
         require(view.selectedTrack == 1 && notifiedTrack == 1, "Clicking the audio lane selects and broadcasts the audio track");
         view.selected = patternID;
-        drag({240, 82}, {301, 82});
+        // In time rather than pixels: the drag has to cross the same musical
+        // distance whatever width the track headers are given. A quarter second
+        // plus a little lands on 0.25 once the sixteenth grid has snapped it.
+        drag({view.xFor(0.05), 82}, {view.xFor(0.33), 82});
         require(close(session.pattern().getPosition().time.getStart().inSeconds(), 0.25), "Pointer drag moves MIDI pattern clips");
         session.undo();
         require(close(session.pattern().getPosition().time.getStart().inSeconds(), 0.0), "Undo restores MIDI pattern move");

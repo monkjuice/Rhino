@@ -96,6 +96,8 @@ int runArrangementTest()
        #include "scenarios/TempoChange.inc"
         scenario("main track");
        #include "scenarios/MasterTrack.inc"
+        scenario("track groups");
+       #include "scenarios/TrackGroups.inc"
         // Last: it clears the pattern to control the whole clip, so nothing
         // downstream should be relying on the notes it replaces.
         scenario("note selection");

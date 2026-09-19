@@ -31,28 +31,39 @@ void drawDashedLine(juce::Graphics& g, float x1, float y1, float x2, float y2)
 void Arrangement::buildRows()
 {
     rows.clear();
+    groups = session.trackGroups();
     trackRowIndex.assign(static_cast<size_t>(std::max(0, session.trackCount())), -1);
     trackLanes.assign(static_cast<size_t>(std::max(0, session.trackCount())), {});
     for (int track = 0; track < session.trackCount(); ++track)
     {
+        // A group's header sits above the first of its members, so the band and
+        // the tracks it covers are one run of the same stack.
+        if (const auto* group = groupStartingAt(track))
+            rows.push_back({track, -1, group->id, 0.0f, 0.0f});
         trackLanes[static_cast<size_t>(track)] = session.trackAutomations(track);
         trackRowIndex[static_cast<size_t>(track)] = static_cast<int>(rows.size());
-        rows.push_back({track, -1, 0.0f, 0.0f});
+        rows.push_back({track, -1, -1, 0.0f, 0.0f});
         const auto& lanes = trackLanes[static_cast<size_t>(track)];
         for (int i = 0; i < static_cast<int>(lanes.size()); ++i)
             if (lanes[static_cast<size_t>(i)].ownLane)
-                rows.push_back({track, i, 0.0f, 0.0f});
+                rows.push_back({track, i, -1, 0.0f, 0.0f});
     }
     layoutRows();
 }
 
+// A row inside a collapsed group is laid out at no height rather than left out.
+// Everything that reaches a track through the stack - its lane, its clips, its
+// header controls - then answers with an empty rectangle and draws nothing,
+// which is one rule instead of a hidden case in each of them.
 void Arrangement::layoutRows()
 {
     auto top = 0.0f;
     for (auto& row : rows)
     {
         row.top = top;
-        row.height = row.automation < 0 ? laneHeightFor(row.track) : automationRowHeight;
+        row.height = row.group >= 0 ? groupRowHeight
+            : isTrackHidden(row.track) ? 0.0f
+            : row.automation < 0 ? laneHeightFor(row.track) : automationRowHeight;
         top += row.height;
     }
     rowsHeight = top;

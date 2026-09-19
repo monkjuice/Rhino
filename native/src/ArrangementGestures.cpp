@@ -26,6 +26,10 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
         repaint();
         return;
     }
+    // A group's band answers for its whole row - disclosure, buttons, menu -
+    // before the lanes under it are consulted.
+    if (beginGroupGesture(event))
+        return;
     // An automation row answers for its own lane wherever it is clicked,
     // header included, because its header is the lane's only label.
     if (event.mods.isRightButtonDown() && event.position.y >= lanesTop)
@@ -74,6 +78,18 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
         repaint();
         return;
     }
+    // Shift and Ctrl on a card gather cards instead of carrying one: that is the
+    // selection Ctrl+G groups, and the one a group command reaches.
+    if (event.position.x < headerWidth && (event.mods.isShiftDown() || event.mods.isCommandDown()))
+        if (const auto track = cardAt(event.position); track >= 0)
+        {
+            if (event.mods.isShiftDown()) selectTrackRange(trackSelectionAnchor, track);
+            else toggleTrackSelection(track);
+            setSelection({});
+            focus = Focus::track;
+            repaint();
+            return;
+        }
     pasteTime = snapped(std::max(0.0, timeAt(event.position.x)), event.mods.isAltDown());
     for (int track = 0; track < session.trackCount(); ++track)
         if (lane(track).withX(0.0f).contains(event.position))
@@ -390,67 +406,6 @@ void Arrangement::mouseMove(const juce::MouseEvent& event)
     setMouseCursor(pointerStyle);
 }
 
-namespace
-{
-// The colour grid the track menu shows. A menu item outlives the call that
-// opened it, so it holds the session by reference the way the view does.
-struct TrackSwatches final : public juce::PopupMenu::CustomComponent
-{
-    static constexpr int columns = 8, cell = 18;
-
-    TrackSwatches(Session& s, int t, juce::Colour current) : session(s), track(t), selected(current)
-    {
-        setSize(columns * cell + 12, rowCount() * cell + 12);
-    }
-
-    static int rowCount()
-    {
-        return (static_cast<int>(Session::trackColourPalette().size()) + columns - 1) / columns;
-    }
-
-    void getIdealSize(int& idealWidth, int& idealHeight) override
-    {
-        idealWidth = columns * cell + 12;
-        idealHeight = rowCount() * cell + 12;
-    }
-
-    juce::Rectangle<int> swatchBounds(int index) const
-    {
-        return {6 + index % columns * cell, 6 + index / columns * cell, cell - 2, cell - 2};
-    }
-
-    void paint(juce::Graphics& g) override
-    {
-        const auto& palette = Session::trackColourPalette();
-        for (int i = 0; i < static_cast<int>(palette.size()); ++i)
-        {
-            const auto box = swatchBounds(i);
-            g.setColour(palette[static_cast<size_t>(i)]);
-            g.fillRect(box);
-            const auto isSelected = palette[static_cast<size_t>(i)] == selected;
-            g.setColour(juce::Colour(isSelected ? 0xffe8eef2 : 0xff161b20));
-            g.drawRect(box, isSelected ? 2 : 1);
-        }
-    }
-
-    void mouseUp(const juce::MouseEvent& event) override
-    {
-        const auto& palette = Session::trackColourPalette();
-        for (int i = 0; i < static_cast<int>(palette.size()); ++i)
-            if (swatchBounds(i).contains(event.getPosition()))
-            {
-                session.setTrackColour(track, palette[static_cast<size_t>(i)]);
-                break;
-            }
-        triggerMenuItem();
-    }
-
-    Session& session;
-    int track;
-    juce::Colour selected;
-};
-}
-
 // A card bottom edge is a resize handle; the rest of the card carries the
 // track. Only a track's own row answers, because an automation lane is sized
 // by what it draws rather than by the user.
@@ -461,7 +416,8 @@ int Arrangement::cardResizeEdgeAt(juce::Point<float> point) const
     constexpr auto grab = 4.0f;
     for (int index = 0; index < static_cast<int>(rows.size()); ++index)
     {
-        if (rows[static_cast<size_t>(index)].automation >= 0) continue;
+        const auto& entry = rows[static_cast<size_t>(index)];
+        if (entry.automation >= 0 || entry.group >= 0 || entry.height <= 0.0f) continue;
         const auto row = rowBounds(index);
         if (std::abs(point.y - row.getBottom()) <= grab)
             return rows[static_cast<size_t>(index)].track;
@@ -474,7 +430,7 @@ int Arrangement::cardAt(juce::Point<float> point) const
     if (point.x >= headerWidth || point.y < lanesTop || point.y >= masterLane().getY())
         return -1;
     const auto row = rowAt(point.y);
-    if (row < 0 || rows[static_cast<size_t>(row)].automation >= 0)
+    if (row < 0 || rows[static_cast<size_t>(row)].automation >= 0 || rows[static_cast<size_t>(row)].group >= 0)
         return -1;
     return rows[static_cast<size_t>(row)].track;
 }
@@ -566,24 +522,58 @@ void Arrangement::endCardGesture()
     repaint();
 }
 
-// The palette is one grid rather than a list, so a colour is picked by where it
-// sits, the way it is in the DAWs this borrows from.
 void Arrangement::showTrackMenu(int track)
 {
     juce::PopupMenu menu;
     menu.addSectionHeader(session.trackName(track));
-    menu.addCustomItem(1, std::make_unique<TrackSwatches>(session, track, session.trackColour(track)), nullptr);
+    menu.addCustomItem(1, std::make_unique<TrackSwatches>(session.trackColour(track),
+        [safe = juce::Component::SafePointer<Arrangement>(this), track](juce::Colour chosen)
+        {
+            if (safe != nullptr) safe->session.setTrackColour(track, chosen);
+        }), nullptr);
     menu.addItem(2, "No colour", !session.trackColour(track).isTransparent());
     menu.addSeparator();
-    menu.addItem(3, "Rename...");
+    menu.addItem(3, "Rename...       F2");
+    menu.addSeparator();
+    // Grouping acts on the cards that are selected, which is why the item says
+    // so: shift-clicking two cards and picking this groups both.
+    const auto memberOf = session.trackGroupId(track);
+    if (memberOf > 0)
+        menu.addItem(4, "Remove from group");
+    else
+    {
+        menu.addItem(5, "Group selected tracks       Ctrl+G");
+        juce::PopupMenu existing;
+        for (int i = 0; i < static_cast<int>(groups.size()); ++i)
+            existing.addItem(100 + i, groups[static_cast<size_t>(i)].name);
+        if (!groups.empty())
+            menu.addSubMenu("Add to group", existing);
+    }
     const auto anchor = localPointToGlobal(lane(track).getTopLeft().toInt());
     menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this)
                            .withTargetScreenArea({anchor.x, anchor.y, 1, 1}),
-                       [this, track](int choice)
-                       {
-                           if (choice == 2) session.setTrackColour(track, {});
-                           else if (choice == 3) renameTrack(track);
-                       });
+        [safe = juce::Component::SafePointer<Arrangement>(this), track](int choice)
+        {
+            if (safe == nullptr || choice == 0) return;
+            if (choice == 2) safe->session.setTrackColour(track, {});
+            else if (choice == 3) safe->renameTrack(track);
+            else if (choice == 4)
+            {
+                const auto done = safe->session.removeTrackFromGroup(track);
+                if (safe->status)
+                    safe->status(done.failed() ? done.getErrorMessage()
+                                               : safe->session.trackName(track) + " left its group");
+            }
+            else if (choice == 5) safe->groupSelectedTracks();
+            else if (choice >= 100 && choice - 100 < static_cast<int>(safe->groups.size()))
+            {
+                const auto group = safe->groups[static_cast<size_t>(choice - 100)];
+                const auto done = safe->session.addTrackToGroup(track, group.id);
+                if (safe->status)
+                    safe->status(done.failed() ? done.getErrorMessage()
+                                               : safe->session.trackName(track) + " joined " + group.name);
+            }
+        });
 }
 
 // The name is asked for where the rest of the app asks for text, rather than

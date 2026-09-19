@@ -52,6 +52,7 @@ target_sources(RhinoNative PRIVATE
     src/SessionPatches.cpp
     src/SessionDevices.cpp
     src/SessionTracks.cpp
+    src/SessionGroups.cpp
     src/SessionSlots.cpp
     src/SessionMixer.cpp
     src/SessionClips.cpp
@@ -70,6 +71,7 @@ target_sources(RhinoNative PRIVATE
     src/ArrangementPainter.cpp
     src/ArrangementSync.cpp
     src/ArrangementGestures.cpp
+    src/ArrangementGroups.cpp
     src/ArrangementAutomation.cpp
     src/ArrangementDrops.cpp
     src/SessionView.cpp

@@ -26,9 +26,10 @@ Application code, `native/src`:
 
 | Area | Files |
 | --- | --- |
-| Session model and engine ownership | `Session.h` declares everything; `Session.cpp` holds construction, project load/save and undo. Implementation is split across `Session*.cpp` by responsibility — notes, devices, automation, clips, presets, tracks, transport. |
+| Session model and engine ownership | `Session.h` declares everything; `Session.cpp` holds construction, project load/save and undo. Implementation is split across `Session*.cpp` by responsibility — notes, devices, automation, clips, presets, tracks, groups, transport. |
 | Note grid UI | `StepGrid.*` — the 16-step pattern editor |
 | Arrangement UI | `Arrangement.*`, `ArrangementGeometry.cpp`, `ClipGeometry.h` |
+| Track groups: the model and the arrangement's band | `SessionGroups.cpp`, `ArrangementGroups.cpp` |
 | Session view (clip launcher) UI, paused, see [SESSION-VIEW.md](SESSION-VIEW.md) | `SessionView.h`, `SessionView.cpp`, `SessionViewPainter.cpp`, `SessionViewGestures.cpp` |
 | Scenes, clip slots and launching | `SessionSlots.cpp` |
 | Mixer: track volume, pan, mute, solo, main output | `SessionMixer.cpp` |

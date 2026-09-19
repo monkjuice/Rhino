@@ -22,7 +22,7 @@ Arrangement::Arrangement(Session& s) : session(s), vblank(this, [this] { updateP
     snap.setButtonText(L"\u2317");
     automationButton.setButtonText("A");
     duplicateButton.setTooltip("Duplicate selected clip");
-    addTrack.setTooltip("Add track");
+    addTrack.setTooltip("Add track (Ctrl+T)");
     snap.setTooltip("Toggle clip snap");
     gridControl.setTooltip("Arrangement grid settings");
     automationButton.setTooltip("Automation edit mode: drag lanes instead of clips");
@@ -149,7 +149,9 @@ void Arrangement::resized()
         const auto top = static_cast<int>(row.getY() - lanesTop) + cardControlsTop;
         const auto right = cardControlLeft + cardControlWidth + cardControlGap;
         const auto mixerVisible = row.getHeight() >= mixerLaneHeight;
-        const auto visible = row.getBottom() > lanesTop && row.getY() < lanesBottom;
+        // A row folded into a collapsed group is laid out at no height, so its
+        // controls go with it rather than piling up under the band above.
+        const auto visible = row.getHeight() > 1.0f && row.getBottom() > lanesTop && row.getY() < lanesBottom;
         mute[index]->setVisible(visible);
         solo[index]->setVisible(visible);
         volume[index]->setVisible(visible && mixerVisible);
@@ -222,6 +224,24 @@ bool Arrangement::keyPressed(const juce::KeyPress& key)
         snap.setToggleState(gridSettings.mode != GridMode::off, juce::dontSendNotification);
         resized();
         repaint();
+        return true;
+    }
+    if (key.getModifiers().isCommandDown() && key.getKeyCode() == 'G')
+    {
+        if (key.getModifiers().isShiftDown()) ungroupSelection();
+        else groupSelectedTracks();
+        return true;
+    }
+    // Renaming whatever card is highlighted. A band answers before the track
+    // under it, because selecting a band is how you say you meant the group.
+    if (key.getKeyCode() == juce::KeyPress::F2Key)
+    {
+        if (focus == Focus::group && selectedGroup > 0) renameGroup(selectedGroup);
+        else if (session.isMasterTrack(selectedTrack))
+        {
+            if (status) status("The main row keeps its name");
+        }
+        else renameTrack(selectedTrack);
         return true;
     }
     if (key.getModifiers().isCommandDown() && key.getKeyCode() == 'A')
@@ -300,6 +320,14 @@ bool Arrangement::keyPressed(const juce::KeyPress& key)
             if (status) status(result.wasOk() ? "Automation deleted" : result.getErrorMessage());
             return true;
         }
+        // Delete on a band takes the band away and leaves every track it held,
+        // because a group is a way of reading the stack rather than a thing the
+        // tracks live inside.
+        if (focus == Focus::group)
+        {
+            ungroupSelection();
+            return true;
+        }
         if (focus == Focus::track)
         {
             const auto name = session.trackName(selectedTrack);
@@ -375,12 +403,17 @@ void Arrangement::deleteSelection()
     setSelection({});
 }
 
+// Selecting one card collapses a gathered selection back to it, so this runs
+// even when the working track is already the one under the pointer.
 void Arrangement::selectTrack(int track)
 {
     track = juce::jlimit(0, session.masterTrackIndex(), track);
-    if (selectedTrack == track) return;
+    const auto changed = selectedTrack != track;
     selectedTrack = track;
-    if (trackSelected) trackSelected(track);
+    selectedTracks = {track};
+    trackSelectionAnchor = track;
+    selectedGroup = -1;
+    if (changed && trackSelected) trackSelected(track);
     repaint();
 }
 
@@ -445,6 +478,10 @@ void Arrangement::editWillChange()
     clips.clear();
     waveforms.clear();
     rows.clear();
+    groups.clear();
+    selectedTracks = {0};
+    trackSelectionAnchor = 0;
+    selectedGroup = -1;
     trackLanes.clear();
     trackRowIndex.clear();
     rowsHeight = 0.0f;

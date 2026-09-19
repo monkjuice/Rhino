@@ -19,7 +19,15 @@ void Arrangement::paint(juce::Graphics& g)
     for (int index = 0; index < static_cast<int>(rows.size()); ++index)
     {
         const auto row = rowBounds(index);
+        // A row folded into a collapsed group is laid out at no height, so it
+        // draws nothing here and the band above it speaks for it.
+        if (row.getHeight() <= 0.0f) continue;
         if (row.getBottom() < lanesTop || row.getY() > lanesTop + laneContentHeight()) continue;
+        if (rows[static_cast<size_t>(index)].group >= 0)
+        {
+            paintGroupRow(g, index);
+            continue;
+        }
         if (rows[static_cast<size_t>(index)].automation >= 0)
         {
             paintGhostRow(g, index);
@@ -40,20 +48,24 @@ void Arrangement::paint(juce::Graphics& g)
         g.fillRect(nameColumn);
         g.setColour(juce::Colour(0xff39434b));
         g.fillRect(cardControlsWidth, row.getY(), cardDividerWidth, row.getHeight());
-        if (track == selectedTrack)
+        if (isTrackSelected(track))
         {
             // Two different things. The strip marks the track the rest of the
             // app is working on, which follows a clip click. The wash marks the
-            // card itself as the selected object, which Delete acts on, and a
-            // clip and a track card are never selected together.
-            if (focus == Focus::track)
+            // cards themselves as the selected objects, which Delete and Ctrl+G
+            // act on, and a clip and a track card are never selected together.
+            if (focus == Focus::track || focus == Focus::group)
             {
                 g.setColour(juce::Colour(0x12ffffff));
                 g.fillRect(row.withX(0.0f).withWidth(headerWidth));
             }
-            g.setColour(juce::Colour(0xffc6d58c));
-            g.fillRect(row.withX(0.0f).withWidth(3.0f));
+            if (track == selectedTrack)
+            {
+                g.setColour(juce::Colour(0xffc6d58c));
+                g.fillRect(row.withX(0.0f).withWidth(3.0f));
+            }
         }
+        paintGroupSpine(g, track, row);
         // The name holds the top line of the card whatever height the row is
         // dragged to, level with the two buttons beside it. Dark text on a
         // light card, light on a dark one, so every colour stays readable.
@@ -81,7 +93,9 @@ void Arrangement::paint(juce::Graphics& g)
         for (int index = 0; index < static_cast<int>(rows.size()); ++index)
         {
             const auto row = rowBounds(index);
+            if (row.getHeight() <= 0.0f) continue;
             if (row.getBottom() < lanesTop || row.getY() > laneBottom) continue;
+            if (rows[static_cast<size_t>(index)].group >= 0) continue;
             const auto ownRow = rows[static_cast<size_t>(index)].automation < 0;
             g.setColour(juce::Colour(ownRow ? 0xff39434b : 0xff2c353c));
             g.drawHorizontalLine(static_cast<int>(row.getBottom()) - 1, 0.0f, static_cast<float>(getWidth()) - 14.0f);
@@ -260,7 +274,7 @@ void Arrangement::paint(juce::Graphics& g)
     // The hint belongs on the first track that could take audio, which is any
     // empty track without an instrument rather than a fixed lane index.
     for (int track = 0; track < session.trackCount(); ++track)
-        if (!tracksWithClips.contains(track) && !session.trackHasInstrument(track))
+        if (!tracksWithClips.contains(track) && !session.trackHasInstrument(track) && !isTrackHidden(track))
         {
             g.setColour(juce::Colour(0xff75828e));
             g.drawText("Drop audio here", lane(track).reduced(16, 0), juce::Justification::centredLeft);
@@ -276,6 +290,7 @@ void Arrangement::paint(juce::Graphics& g)
         for (int index = 0; index < static_cast<int>(rows.size()); ++index)
         {
             const auto row = rowBounds(index);
+            if (row.getHeight() <= 0.0f || rows[static_cast<size_t>(index)].group >= 0) continue;
             if (row.getBottom() < lanesTop || row.getY() > lanesTop + laneContentHeight()) continue;
             paintAutomationRow(g, index);
         }

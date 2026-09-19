@@ -13,6 +13,14 @@ const juce::Identifier automationParameterID {"parameter"};
 const juce::Identifier automationOwnLaneID {"ownLane"};
 const juce::Identifier automationTimeID {"time"};
 const juce::Identifier automationValueID {"value"};
+// A group is a node on the edit; membership is one property on the track, so
+// both travel with the document without a second save path.
+const juce::Identifier trackGroupID {"rhinoTrackGroup"};
+const juce::Identifier trackGroupMemberID {"rhinoGroup"};
+const juce::Identifier trackGroupIdID {"id"};
+const juce::Identifier trackGroupNameID {"name"};
+const juce::Identifier trackGroupColourID {"colour"};
+const juce::Identifier trackGroupCollapsedID {"collapsed"};
 
 void panicMidiOnTrack(te::ClipTrack* clipTrack)
 {

@@ -483,6 +483,15 @@ public:
             files.newProject();
             return true;
         }
+        // Adding a track is a document command rather than an arrangement one,
+        // so it answers wherever the focus is, the way New and Open do.
+        if (key.getModifiers().isCommandDown() && key.getKeyCode() == 'T')
+        {
+            const auto result = session.addAudioTrack();
+            logStatus(result.failed() ? result.getErrorMessage()
+                                      : "Added " + session.trackName(session.trackCount() - 1));
+            return true;
+        }
         if (key.getModifiers().isCommandDown() && key.getModifiers().isShiftDown() && key.getKeyCode() == 'E')
         {
             files.exportWav();

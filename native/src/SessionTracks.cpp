@@ -31,6 +31,9 @@ juce::Result Session::addAudioTrack()
     auto audioDevice = edit->getPluginCache().createNewPlugin(UtilityDevice::xmlTypeName, {});
     newTrack->pluginList.insertPlugin(audioDevice, 0, nullptr);
     refreshUtilityPointers();
+    // The new track lands after the last one, so it joins a group only if that
+    // group already ran to the bottom of the stack; reconciling says which.
+    reconcileTrackGroups();
     ensureSceneSlots();
     ensureTrackMixers();
     edit->getUndoManager().beginNewTransaction();
@@ -76,6 +79,7 @@ juce::Result Session::removeAudioTrack(int track)
         ensureEditablePatternClip();
     }
     refreshUtilityPointers();
+    reconcileTrackGroups();
     refreshLoop();
     edit->getUndoManager().beginNewTransaction();
     markModified();
@@ -166,6 +170,26 @@ const std::vector<juce::Colour>& Session::trackColourPalette()
     return palette;
 }
 
+// The reorder on its own. The group calls move several tracks inside one
+// transaction of their own, so opening one here would split theirs in half.
+void Session::moveTrackInEdit(int track, int destination)
+{
+    const auto tracks = te::getAudioTracks(*edit);
+    if (!juce::isPositiveAndBelow(track, tracks.size()))
+        return;
+    destination = juce::jlimit(0, tracks.size() - 1, destination);
+    if (destination == track)
+        return;
+    // An insert point names the track the moved one lands behind, so it is read
+    // from the order with the moved track already lifted out of it.
+    std::vector<te::Track*> remaining;
+    for (int i = 0; i < tracks.size(); ++i)
+        if (i != track)
+            remaining.push_back(tracks[i]);
+    auto* preceding = destination > 0 ? remaining[static_cast<size_t>(destination) - 1] : nullptr;
+    edit->moveTrack(tracks[track], te::TrackInsertPoint(nullptr, preceding));
+}
+
 juce::Result Session::moveTrack(int track, int destination)
 {
     const auto tracks = te::getAudioTracks(*edit);
@@ -176,17 +200,13 @@ juce::Result Session::moveTrack(int track, int destination)
     destination = juce::jlimit(0, tracks.size() - 1, destination);
     if (destination == track)
         return juce::Result::ok();
-    // An insert point names the track the moved one lands behind, so it is read
-    // from the order with the moved track already lifted out of it.
-    std::vector<te::Track*> remaining;
-    for (int i = 0; i < tracks.size(); ++i)
-        if (i != track)
-            remaining.push_back(tracks[i]);
-    auto* preceding = destination > 0 ? remaining[static_cast<size_t>(destination) - 1] : nullptr;
     edit->getUndoManager().beginNewTransaction("Move track");
-    edit->moveTrack(tracks[track], te::TrackInsertPoint(nullptr, preceding));
+    moveTrackInEdit(track, destination);
     edit->getUndoManager().beginNewTransaction();
     refreshUtilityPointers();
+    // Where a track lands decides which group it is in: carried into a group it
+    // joins, carried out of one it leaves.
+    reconcileTrackGroups();
     markModified();
     sendSynchronousChangeMessage();
     return juce::Result::ok();

@@ -182,9 +182,37 @@ juce::Rectangle<int> Editor::moduleAreaFor(const ui::Module& module) const
     return ui::moduleBounds(getLocalBounds(), module);
 }
 
-juce::Rectangle<int> Editor::fxRackAreaFor(juce::Rectangle<int> moduleArea) const
+int Editor::fxActiveSlotCount(int rack) const
 {
-    return ui::fxScrolledRackBounds(moduleArea, fxListOpen, fxFirstVisibleSlot());
+    auto count = 0;
+    for (int slot = 0; slot < fxSlotCount; ++slot)
+        if (fxTypesShown[static_cast<size_t>(rack * fxSlotCount + slot)] != 0) ++count;
+    return count;
+}
+
+int Editor::fxDisplayRow(int rack, int slot) const
+{
+    if (slot < 0 || slot >= fxSlotCount
+        || fxTypesShown[static_cast<size_t>(rack * fxSlotCount + slot)] == 0) return -1;
+    auto row = 0;
+    for (int before = 0; before < slot; ++before)
+        if (fxTypesShown[static_cast<size_t>(rack * fxSlotCount + before)] != 0) ++row;
+    return row;
+}
+
+int Editor::fxSlotAtDisplayRow(int rack, int row) const
+{
+    for (int slot = 0; slot < fxSlotCount; ++slot)
+        if (fxDisplayRow(rack, slot) == row) return slot;
+    return -1;
+}
+
+juce::Rectangle<int> Editor::fxRackAreaFor(juce::Rectangle<int> moduleArea, int rack, int slot) const
+{
+    const auto displayRow = fxDisplayRow(rack, slot);
+    const auto first = fxFirstVisibleSlots[static_cast<size_t>(rack)];
+    return ui::fxScrolledRackBounds(moduleArea, fxListOpen, first)
+        .translated(0, (displayRow - slot) * ui::fxSlotHeight);
 }
 
 int Editor::fxFirstVisibleSlot() const
@@ -197,8 +225,13 @@ void Editor::clampFxScroll()
     for (const auto& module : ui::modules())
     {
         if (!isFxModule(module)) continue;
-        const auto last = ui::fxMaxFirstSlot(moduleAreaFor(module));
-        for (auto& first : fxFirstVisibleSlots) first = juce::jlimit(0, last, first);
+        const auto area = moduleAreaFor(module);
+        for (int rack = 0; rack < rackCount; ++rack)
+        {
+            const auto last = ui::fxMaxFirstSlot(area, fxActiveSlotCount(rack));
+            auto& first = fxFirstVisibleSlots[static_cast<size_t>(rack)];
+            first = juce::jlimit(0, last, first);
+        }
         return;
     }
 }
@@ -209,7 +242,8 @@ void Editor::setFxFirstVisibleSlot(int slot)
     {
         if (!isFxModule(module)) continue;
         auto& first = fxFirstVisibleSlots[static_cast<size_t>(shownRack())];
-        const auto clamped = juce::jlimit(0, ui::fxMaxFirstSlot(moduleAreaFor(module)), slot);
+        const auto clamped = juce::jlimit(
+            0, ui::fxMaxFirstSlot(moduleAreaFor(module), fxActiveSlotCount(shownRack())), slot);
         if (first == clamped) return;
         first = clamped;
         fxDragSlot = fxDropSlot = -1;
@@ -251,6 +285,21 @@ void Editor::toggleFxList()
     repaint();
 }
 
+void Editor::addFxSlot()
+{
+    const auto rack = shownRack();
+    for (int slot = 0; slot < fxSlotCount; ++slot)
+    {
+        if (fxTypeOf(value(fxParameterId(rack, slot, "Type"))) != FxType::off) continue;
+        for (const auto& module : ui::modules())
+            if (isFxModule(module))
+                if (auto* control = fxTypeControl(rack, slot))
+                    showFxTypeMenu(*control,
+                                   ui::fxAddButtonBounds(moduleAreaFor(module), fxListOpen));
+        return;
+    }
+}
+
 void Editor::setFxSlotBypassed(int rack, int slot, bool bypassed)
 {
     if (auto* parameter = processor.state.getParameter(fxParameterId(rack, slot, "Bypass")))
@@ -264,13 +313,26 @@ void Editor::setFxSlotBypassed(int rack, int slot, bool bypassed)
 
 void Editor::removeFxSlot(int rack, int slot)
 {
-    if (auto* parameter = processor.state.getParameter(fxParameterId(rack, slot, "Type")))
+    const auto removedRow = fxDisplayRow(rack, slot);
+    if (removedRow < 0) return;
+
+    // Closing a module closes the chain around it. Parameter identities remain
+    // fixed; the values move through those identities exactly as drag reorder
+    // already does, and the vacated final slot becomes OFF.
+    if (slot < fxSlotCount - 1) moveFxSlot(rack, slot, fxSlotCount - 1);
+    if (auto* parameter = processor.state.getParameter(
+            fxParameterId(rack, fxSlotCount - 1, "Type")))
     {
         parameter->beginChangeGesture();
         parameter->setValueNotifyingHost(parameter->convertTo0to1(0.0f));
         parameter->endChangeGesture();
         refreshFxSlots();
+        const auto remaining = fxActiveSlotCount(rack);
+        fxSelectedSlot = remaining > 0
+            ? fxSlotAtDisplayRow(rack, juce::jmin(removedRow, remaining - 1)) : 0;
+        clampFxScroll();
         applyEnableStates();
+        resized();
         repaintFxDisplays();
     }
 }
@@ -351,13 +413,9 @@ bool Editor::fxControlUsed(const Control& control) const
     }
     if (control.id.endsWith("ModeA")) return info.modeA.count > 0;
     if (control.id.endsWith("ModeB")) return info.modeB.count > 0;
-    // TYPE is how an empty slot is filled, so it is always there. MIX, LEVEL
-    // and the bypass belong to the slot rather than to what is in it, but an
-    // empty slot has nothing for them to act on — so a row set to OFF is a
-    // blank row with one field on it, which is what an empty rack should look
-    // like.
-    return control.id.endsWith("Type")
-        || fxTypeOf(value(fxParameterId(rack, slot, "Type"))) != FxType::off;
+    // OFF is absence, not an empty module. Adding is the fixed + at the top of
+    // the list, so an unassigned slot contributes no plate, shelf or controls.
+    return fxTypeOf(value(fxParameterId(rack, slot, "Type"))) != FxType::off;
 }
 
 // A slot's twelve controls are always declared and always attached; what
@@ -657,21 +715,24 @@ void Editor::initialiseFxSlot(int rack, int slot)
     // The modes stay where they are: their first choice is the ordinary one for
     // every type, and a slot that has just been given a type is already on it.
     refreshFxSlots();
+    clampFxScroll();
+    resized();
     repaint();
 }
 
 // Filling a slot. The list is the types in the order they are declared, with
 // OFF at the top as the way to empty a slot again — the same list the type
 // parameter holds, so nothing here can offer a type the engine does not have.
-void Editor::showFxTypeMenu(Control& control)
+void Editor::showFxTypeMenu(Control& control, juce::Rectangle<int> target)
 {
     auto* parameter = processor.state.getParameter(control.id);
     if (parameter == nullptr) return;
 
     juce::PopupMenu menu;
-    menu.addSectionHeader("Put in this slot");
+    const auto adding = !target.isEmpty();
+    menu.addSectionHeader(adding ? "Add effect" : "Replace effect");
     const auto current = juce::roundToInt(control.slider.getValue());
-    for (int type = 0; type < fxTypeCount; ++type)
+    for (int type = adding ? 1 : 0; type < fxTypeCount; ++type)
     {
         juce::PopupMenu::Item item(fxTypeName(type));
         item.itemID = type + 1;
@@ -686,11 +747,19 @@ void Editor::showFxTypeMenu(Control& control)
     if (!fxControlAt(control.id, rack, slot)) return;
 
     const auto safe = juce::Component::SafePointer<Editor>(this);
-    menu.showMenuAsync(juce::PopupMenu::Options {}.withTargetComponent(control.plate.get()),
+    auto options = juce::PopupMenu::Options {};
+    if (target.isEmpty()) options = options.withTargetComponent(control.plate.get());
+    else options = options.withTargetScreenArea(localAreaToGlobal(target));
+    menu.showMenuAsync(options,
                        [safe, parameter, rack, slot] (int choice)
     {
         if (safe == nullptr || choice == 0) return;
         const auto type = choice - 1;
+        if (type == 0)
+        {
+            safe->removeFxSlot(rack, slot);
+            return;
+        }
         parameter->setValueNotifyingHost(parameter->convertTo0to1(static_cast<float>(type)));
         // Putting an effect into a slot sets that effect up, the way adding a
         // module in Serum loads its default preset. Only from here: a type
@@ -699,7 +768,7 @@ void Editor::showFxTypeMenu(Control& control)
         //
         // OFF is left alone deliberately, so emptying a slot and putting the
         // same type back finds it as it was.
-        if (type != 0) safe->initialiseFxSlot(rack, slot);
+        safe->initialiseFxSlot(rack, slot);
     });
 }
 
@@ -734,11 +803,12 @@ void Editor::repaintFxDisplays()
 void Editor::paintFxShelves(juce::Graphics& g, juce::Rectangle<int> area, const ui::Module& module)
 {
     const auto rack = shownRack();
-    const auto rackArea = fxRackAreaFor(area);
     juce::Graphics::ScopedSaveState clipped(g);
-    g.reduceClipRegion(ui::fxViewportBounds(area));
+    g.reduceClipRegion(ui::fxSlotViewportBounds(area));
     for (int slot = 0; slot < static_cast<int>(module.rows.size()) && slot < fxSlotCount; ++slot)
     {
+        if (fxDisplayRow(rack, slot) < 0) continue;
+        const auto rackArea = fxRackAreaFor(area, rack, slot);
         const auto row = ui::rowBounds(rackArea, module, slot);
         const auto held = fxSlotOf(rack, slot);
         // Widened past the controls by the module's own padding, so the shelves
@@ -766,22 +836,28 @@ void Editor::paintFxList(juce::Graphics& g, juce::Rectangle<int> area, const ui:
     g.fillRoundedRectangle(list.toFloat(), 4.0f);
     g.setColour(ui::line.withAlpha(0.7f));
     g.drawRoundedRectangle(list.toFloat(), 4.0f, 1.0f);
+    const auto active = fxActiveSlotCount(rack);
+    ui::drawFxAddButton(g, ui::fxAddButtonBounds(area, fxListOpen), fxListOpen,
+                        active < fxSlotCount);
 
     {
         juce::Graphics::ScopedSaveState clipped(g);
-        g.reduceClipRegion(list);
+        g.reduceClipRegion(ui::fxSlotViewportBounds(area).getIntersection(list));
         for (int slot = 0; slot < fxSlotCount; ++slot)
         {
+            const auto displayRow = fxDisplayRow(rack, slot);
+            if (displayRow < 0) continue;
             const auto held = fxSlotOf(rack, slot);
-            ui::drawFxListItem(g, ui::fxListItemBounds(area, module, slot, fxListOpen,
-                                                       fxFirstVisibleSlot()), slot,
+            ui::drawFxListItem(g, ui::fxListItemBounds(area, module, displayRow, fxListOpen,
+                                                       fxFirstVisibleSlot()), displayRow,
                                juce::roundToInt(held.type), fxOn(held.bypass),
                                slot == fxSelectedSlot, fxListOpen);
         }
 
         if (fxDragSlot >= 0 && fxDropSlot >= 0 && fxDropSlot != fxDragSlot)
         {
-            const auto target = ui::fxListItemBounds(area, module, fxDropSlot, fxListOpen,
+            const auto target = ui::fxListItemBounds(area, module,
+                                                      fxDisplayRow(rack, fxDropSlot), fxListOpen,
                                                       fxFirstVisibleSlot());
             const auto y = fxDropSlot > fxDragSlot ? target.getBottom() : target.getY();
             g.setColour(ui::signalViolet);
@@ -790,13 +866,14 @@ void Editor::paintFxList(juce::Graphics& g, juce::Rectangle<int> area, const ui:
         }
 
         const auto visible = ui::fxVisibleSlotCount(area);
-        if (visible < fxSlotCount)
+        if (visible < active)
         {
-            const auto rail = list.withLeft(list.getRight() - 4).reduced(0, 4);
-            const auto thumbHeight = juce::jmax(18, rail.getHeight() * visible / fxSlotCount);
+            const auto rail = ui::fxSlotViewportBounds(area).getIntersection(list)
+                                  .withLeft(list.getRight() - 4).reduced(0, 4);
+            const auto thumbHeight = juce::jmax(18, rail.getHeight() * visible / active);
             const auto travel = rail.getHeight() - thumbHeight;
             const auto first = fxFirstVisibleSlot();
-            const auto top = rail.getY() + travel * first / ui::fxMaxFirstSlot(area);
+            const auto top = rail.getY() + travel * first / ui::fxMaxFirstSlot(area, active);
             g.setColour(ui::line.withAlpha(0.55f));
             g.fillRoundedRectangle(rail.toFloat(), 1.5f);
             g.setColour(ui::signalViolet.withAlpha(0.8f));
@@ -1258,9 +1335,12 @@ void Editor::applyEnableStates()
             {
                 int rack = 0, slot = 0;
                 if (fxControlAt(control->id, rack, slot))
-                    inFxViewport = slot >= fxFirstVisibleSlot()
-                        && slot < fxFirstVisibleSlot()
-                                     + ui::fxVisibleSlotCount(moduleAreaFor(*module.descriptor));
+                {
+                    const auto row = fxDisplayRow(rack, slot);
+                    const auto first = fxFirstVisibleSlots[static_cast<size_t>(rack)];
+                    inFxViewport = row >= first
+                        && row < first + ui::fxVisibleSlotCount(moduleAreaFor(*module.descriptor));
+                }
             }
             // A control is live when its module is on and nothing else has
             // taken it over — polyphony means nothing once mono is switched on,
@@ -1558,7 +1638,6 @@ void Editor::resized()
         const auto& descriptor = *module.descriptor;
         const auto visible = moduleShown(descriptor);
         const auto area = moduleAreaFor(descriptor);
-        const auto controlsArea = isFxModule(descriptor) ? fxRackAreaFor(area) : area;
 
         if (module.enable != nullptr)
         {
@@ -1589,6 +1668,13 @@ void Editor::resized()
         for (auto& held : module.controls)
         {
             auto& control = *held;
+            auto controlsArea = area;
+            if (isFxModule(descriptor))
+            {
+                int rack = 0, slot = 0;
+                if (fxControlAt(control.id, rack, slot))
+                    controlsArea = fxRackAreaFor(area, rack, slot);
+            }
             auto block = ui::controlBlock(controlsArea, descriptor, control.row, control.index, diameter);
 
             // A macro's drag handle replaces its numeric label: the number is
@@ -1753,13 +1839,16 @@ void Editor::mouseDown(const juce::MouseEvent& event)
                 const auto area = moduleAreaFor(module);
                 if (ui::fxExpandButtonBounds(area).contains(at)) { toggleFxExpanded(); return; }
                 if (ui::fxListButtonBounds(area).contains(at)) { toggleFxList(); return; }
+                if (ui::fxAddButtonBounds(area, fxListOpen).contains(at)) { addFxSlot(); return; }
                 const auto list = ui::fxListBounds(area, fxListOpen);
+                const auto rack = shownRack();
                 for (int slot = 0; slot < fxSlotCount; ++slot)
                 {
-                    const auto item = ui::fxListItemBounds(area, module, slot, fxListOpen,
+                    const auto displayRow = fxDisplayRow(rack, slot);
+                    if (displayRow < 0) continue;
+                    const auto item = ui::fxListItemBounds(area, module, displayRow, fxListOpen,
                                                             fxFirstVisibleSlot());
                     if (!list.contains(at) || !item.contains(at)) continue;
-                    const auto rack = shownRack();
                     if (fxListOpen && ui::fxListBypassBounds(item).contains(at))
                     {
                         const auto held = fxSlotOf(rack, slot);
@@ -1777,11 +1866,9 @@ void Editor::mouseDown(const juce::MouseEvent& event)
                     fxDragSlot = fxDropSlot = slot;
                     fxDragStart = at;
                     repaintFxDisplays();
-                    // An empty row is an add affordance. A filled one keeps a
-                    // single click for selection/drag and opens its type list
-                    // on a deliberate double-click.
-                    if (fxTypeOf(fxSlotOf(rack, slot).type) == FxType::off
-                        || event.getNumberOfClicks() >= 2)
+                    // A single click selects/drags; a deliberate double-click
+                    // opens replacement choices for the module already here.
+                    if (event.getNumberOfClicks() >= 2)
                     {
                         fxDragSlot = fxDropSlot = -1;
                         if (auto* control = fxTypeControl(rack, slot)) showFxTypeMenu(*control);
@@ -1944,12 +2031,16 @@ void Editor::mouseDrag(const juce::MouseEvent& event)
             if (!isFxModule(module)) continue;
             const auto area = moduleAreaFor(module);
             const auto first = fxFirstVisibleSlot();
-            const auto end = juce::jmin(fxSlotCount, first + ui::fxVisibleSlotCount(area));
-            auto nearest = first;
+            const auto rack = shownRack();
+            const auto end = juce::jmin(fxActiveSlotCount(rack),
+                                         first + ui::fxVisibleSlotCount(area));
+            auto nearest = fxSlotAtDisplayRow(rack, first);
             auto distance = std::numeric_limits<int>::max();
-            for (int slot = first; slot < end; ++slot)
+            for (int row = first; row < end; ++row)
             {
-                const auto centre = ui::fxListItemBounds(area, module, slot, fxListOpen, first).getCentreY();
+                const auto slot = fxSlotAtDisplayRow(rack, row);
+                if (slot < 0) continue;
+                const auto centre = ui::fxListItemBounds(area, module, row, fxListOpen, first).getCentreY();
                 const auto next = std::abs(at.y - centre);
                 if (next < distance) { distance = next; nearest = slot; }
             }

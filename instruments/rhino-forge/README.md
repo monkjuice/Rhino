@@ -74,13 +74,16 @@ down them, top to bottom. A slot holds any of six types, the same type can sit
 in two slots, and every slot declares the same twelve controls whatever is in
 it: a type, two mode fields, six general knobs, a bypass, a mix and a level.
 
-The rack has a signal-flow list down its left side. It repeats each effect's
-colour and mark, lets a module be bypassed or removed, and reorders the chain by
-dragging; an empty row opens the type menu. The list folds to a mark-only rail
-when the editor needs the width. The expand button at the right of the rack
+The rack has a signal-flow list down its left side. A fixed **+ ADD EFFECT** at
+its top fills the next slot; only assigned effects occupy rows below it. The
+list repeats each effect's colour and mark, lets a module be bypassed or
+removed, and reorders the chain by dragging. Removing one closes the chain
+around it, leaving clean empty space after the final effect instead of an OFF
+placeholder. The list folds to a mark-only rail when the editor needs the
+width. The expand button at the right of the rack
 header — or **Alt+F** on Windows — grows the rack through both module rows, so
 more of the chain is visible without changing the keyboard or the title bar.
-Every effect strip keeps a fixed height in both views; the wheel over the list
+Every effect strip keeps a fixed, slightly roomier height in both views; the wheel over the list
 scrolls by slots when all eight do not fit. Each rack remembers its own scroll
 position. These are views of the same slot parameters, not copies of the rack,
 and none of the view settings are saved in a preset.

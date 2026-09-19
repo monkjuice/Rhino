@@ -1314,6 +1314,28 @@ inline void drawFxListItem(juce::Graphics& g, juce::Rectangle<int> area, int slo
     g.drawLine({remove.getTopRight(), remove.getBottomLeft()}, 1.2f);
 }
 
+inline void drawFxAddButton(juce::Graphics& g, juce::Rectangle<int> area, bool open, bool enabled)
+{
+    const auto box = area.toFloat().reduced(0.5f);
+    const auto accent = signalViolet.withAlpha(enabled ? 0.9f : 0.3f);
+    g.setColour(juce::Colour(0xff0d1120));
+    g.fillRoundedRectangle(box, 3.0f);
+    g.setColour(accent);
+    g.drawRoundedRectangle(box, 3.0f, 1.0f);
+
+    const auto centre = open ? juce::Point<float>(box.getX() + 12.0f, box.getCentreY())
+                             : box.getCentre();
+    g.drawLine(centre.x - 4.0f, centre.y, centre.x + 4.0f, centre.y, 1.3f);
+    g.drawLine(centre.x, centre.y - 4.0f, centre.x, centre.y + 4.0f, 1.3f);
+    if (open)
+    {
+        g.setFont(juce::FontOptions(9.0f, juce::Font::bold));
+        g.setColour(enabled ? text.withAlpha(0.9f) : mutedText.withAlpha(0.45f));
+        g.drawText(enabled ? "ADD EFFECT" : "RACK FULL",
+                   area.withTrimmedLeft(24), juce::Justification::centredLeft);
+    }
+}
+
 inline void drawFxListViewButton(juce::Graphics& g, juce::Rectangle<int> area, bool open)
 {
     const auto box = area.toFloat().reduced(0.5f);

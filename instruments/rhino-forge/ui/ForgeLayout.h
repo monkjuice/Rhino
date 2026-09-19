@@ -309,7 +309,10 @@ inline constexpr int fxViewButtonGap = 5;
 // A slot keeps the same physical height in the compact and expanded rack. The
 // viewport decides how many fit; it never stretches four effects into whatever
 // height happens to be available.
-inline constexpr int fxSlotHeight = 72;
+inline constexpr int fxSlotHeight = 76;
+// The add action is furniture, not a rack slot: it stays pinned above the
+// scrolling chain and empty space begins immediately below it.
+inline constexpr int fxListAddHeight = 28;
 
 inline constexpr int rowNumberGutter = 34;
 inline constexpr int columnTitleHeight = 18;
@@ -974,20 +977,31 @@ inline juce::Rectangle<int> fxViewportBounds(juce::Rectangle<int> moduleArea)
     return moduleArea.withTrimmedTop(headerHeight).reduced(0, 6);
 }
 
-inline int fxVisibleSlotCount(juce::Rectangle<int> moduleArea)
+inline juce::Rectangle<int> fxSlotViewportBounds(juce::Rectangle<int> moduleArea)
 {
-    return juce::jlimit(1, fxSlotCount, fxViewportBounds(moduleArea).getHeight() / fxSlotHeight);
+    return fxViewportBounds(moduleArea).withTrimmedTop(fxListAddHeight);
 }
 
-inline int fxMaxFirstSlot(juce::Rectangle<int> moduleArea)
+inline juce::Rectangle<int> fxAddButtonBounds(juce::Rectangle<int> moduleArea, bool listOpen)
 {
-    return juce::jmax(0, fxSlotCount - fxVisibleSlotCount(moduleArea));
+    return fxListBounds(moduleArea, listOpen).withHeight(fxListAddHeight).reduced(4, 3);
+}
+
+inline int fxVisibleSlotCount(juce::Rectangle<int> moduleArea)
+{
+    return juce::jlimit(1, fxSlotCount, fxSlotViewportBounds(moduleArea).getHeight() / fxSlotHeight);
+}
+
+inline int fxMaxFirstSlot(juce::Rectangle<int> moduleArea, int slotCount = fxSlotCount)
+{
+    return juce::jmax(0, slotCount - fxVisibleSlotCount(moduleArea));
 }
 
 inline juce::Rectangle<int> fxScrolledRackBounds(juce::Rectangle<int> moduleArea, bool listOpen,
                                                  int firstSlot)
 {
-    return fxRackBounds(moduleArea, listOpen).translated(0, -firstSlot * fxSlotHeight);
+    return fxRackBounds(moduleArea, listOpen)
+        .translated(0, fxListAddHeight - firstSlot * fxSlotHeight);
 }
 
 // View controls live at the far right of the rack header: the outer one grows
@@ -1084,11 +1098,13 @@ inline juce::Rectangle<int> rowBounds(juce::Rectangle<int> moduleArea, const Mod
 }
 
 inline juce::Rectangle<int> fxListItemBounds(juce::Rectangle<int> moduleArea, const Module& module,
-                                             int slot, bool listOpen, int firstSlot = 0)
+                                             int displayRow, bool listOpen, int firstSlot = 0)
 {
+    juce::ignoreUnused(module);
     const auto list = fxListBounds(moduleArea, listOpen);
-    const auto row = rowBounds(fxScrolledRackBounds(moduleArea, listOpen, firstSlot), module, slot);
-    return {list.getX(), row.getY(), list.getWidth(), row.getHeight()};
+    const auto viewport = fxSlotViewportBounds(moduleArea);
+    return {list.getX(), viewport.getY() + (displayRow - firstSlot) * fxSlotHeight,
+            list.getWidth(), fxSlotHeight};
 }
 
 // The strip to the left of a table row, where its number is drawn.

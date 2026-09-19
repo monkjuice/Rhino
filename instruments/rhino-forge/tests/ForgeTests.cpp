@@ -657,10 +657,14 @@ void layoutSuite()
                         const auto area = rhino::forge::ui::fxModuleBounds(panel, *fxModule, expanded);
                         const auto list = rhino::forge::ui::fxListBounds(area, listOpen);
                         const auto rack = rhino::forge::ui::fxRackBounds(area, listOpen);
+                        const auto add = rhino::forge::ui::fxAddButtonBounds(area, listOpen);
+                        const auto slots = rhino::forge::ui::fxSlotViewportBounds(area);
                         require(rhino::forge::ui::contentBounds(panel).contains(area),
                                 "either FX height stays inside the module field");
                         require(area.contains(list) && area.contains(rack) && !list.intersects(rack),
                                 "the FX list and editor divide the rack without overlap");
+                        require(list.contains(add) && area.contains(slots) && !add.intersects(slots),
+                                "the fixed FX add action stays above the scrolling slots");
                         require(area.contains(rhino::forge::ui::fxExpandButtonBounds(area))
                                     && area.contains(rhino::forge::ui::fxListButtonBounds(area)),
                                 "both FX view buttons stay in the rack header");
@@ -677,6 +681,7 @@ void layoutSuite()
                                 const auto item = rhino::forge::ui::fxListItemBounds(
                                     area, *fxModule, slot, listOpen, first);
                                 require(list.contains(item), "every visible FX list item stays in the list");
+                                require(slots.contains(item), "every visible FX item stays below the add action");
                                 require(item.getHeight() == rhino::forge::ui::fxSlotHeight,
                                         "an FX slot keeps its fixed height in every view");
                                 const auto& row = fxModule->rows[static_cast<size_t>(slot)];

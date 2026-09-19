@@ -187,7 +187,7 @@ private:
     bool fxKnobLive(const Control&) const;
     // The list of types, opened by clicking a slot's plate. This is how a slot
     // is filled and emptied.
-    void showFxTypeMenu(Control&);
+    void showFxTypeMenu(Control&, juce::Rectangle<int> target = {});
     // Sets one slot's knobs and its wet/dry to what its type opens on. Called
     // only when a type is chosen on the panel.
     void initialiseFxSlot(int rack, int slot);
@@ -239,12 +239,16 @@ private:
     Control* fxTypeControl(int rack, int slot);
     void toggleFxExpanded();
     void toggleFxList();
+    void addFxSlot();
     void setFxSlotBypassed(int rack, int slot, bool bypassed);
     void removeFxSlot(int rack, int slot);
     void moveFxSlot(int rack, int from, int to);
     bool moduleShown(const ui::Module&) const;
     juce::Rectangle<int> moduleAreaFor(const ui::Module&) const;
-    juce::Rectangle<int> fxRackAreaFor(juce::Rectangle<int> moduleArea) const;
+    juce::Rectangle<int> fxRackAreaFor(juce::Rectangle<int> moduleArea, int rack, int slot) const;
+    int fxActiveSlotCount(int rack) const;
+    int fxDisplayRow(int rack, int slot) const;
+    int fxSlotAtDisplayRow(int rack, int row) const;
     int fxFirstVisibleSlot() const;
     void setFxFirstVisibleSlot(int slot);
     void clampFxScroll();

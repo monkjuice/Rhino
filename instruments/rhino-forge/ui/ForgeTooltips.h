@@ -288,6 +288,11 @@ inline juce::String tooltipFor(const juce::String& id)
         if (id.endsWith("Depth"))
             return "How far, and in which direction, the source moves the target. "
                    "Draggable on the target's own ring too";
+        if (id.endsWith("Bipolar"))
+            return "BI centres the source, so the target's own setting is the middle "
+                   "of the reach rather than the bottom of it: the source at rest "
+                   "then pulls fully negative instead of doing nothing. LFOs already "
+                   "swing both ways and are unaffected";
     }
     const auto found = tips.find(id);
     return found == tips.end() ? juce::String() : found->second;

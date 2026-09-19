@@ -428,6 +428,15 @@ inline int envIndexOf(int source)
     return source >= first && source < first + envCount ? source - first : -1;
 }
 
+// Whether a source already swings both ways of its own accord. The LFOs do —
+// lfoWave runs -1 to 1 — and nothing else does: an envelope, a velocity, a note
+// number and a macro all start at nothing and only rise.
+//
+// This is what a slot's BI switch acts on. Centring a source that only rises
+// turns it into a swing; centring one that already swings would only double its
+// reach, which is the depth control's job, so BI leaves the LFOs alone.
+inline bool sourceIsBipolar(int source) { return lfoIndexOf(source) >= 0; }
+
 inline const char* modSourceName(int source)
 {
     if (source == static_cast<int>(ModSource::velocity)) return "VELOCITY";
@@ -595,6 +604,9 @@ struct ModSlot
     float source = 0.0f;
     float destination = 0.0f;
     float depth = 0.0f;
+    // Whether the source is centred before the depth is applied — see
+    // applyModulation. Held as a float for the same reason the rest are.
+    float bipolar = 0.0f;
 };
 
 struct Modulation
@@ -1378,6 +1390,23 @@ private:
                     break;
                 }
             }
+
+            // BI centres the source, so the destination's own setting becomes
+            // the middle of what the slot can reach rather than one end of it:
+            // a macro at rest pulls it as far negative as the depth goes, a
+            // macro at half leaves it alone, and a macro at the top pushes it
+            // as far positive. Serum calls this POL, and it is the difference
+            // between a source at zero meaning "no modulation" and meaning "as
+            // far negative as this reaches" — a whole octave on a pitch
+            // destination at full depth, and easy to mistake for the oscillator
+            // being mistuned.
+            //
+            // Half, not double: this recentres the reach without resizing it,
+            // so one depth still spans the destination exactly once and the top
+            // of the control is still the top of the control. Scaling to plus
+            // and minus the depth instead would put everything past halfway
+            // into the clamp, where turning the knob further did nothing.
+            if (slot.bipolar >= 0.5f && !sourceIsBipolar(source)) amount -= 0.5f;
 
             offsets[static_cast<size_t>(destination)] += slot.depth * amount;
             touched = true;

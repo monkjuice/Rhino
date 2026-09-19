@@ -2507,6 +2507,68 @@ void modulationSuite()
     requireClose(idle.modulationOffset(destCutoff), 0.5f, 0.001f,
                  "the same macro publishes its offset once a note is sounding");
 
+
+    // --- Polarity -------------------------------------------------------------
+    //
+    // BI centres a source that only rises, so the destination's own setting
+    // becomes the middle of the reach rather than the bottom of it. A macro at
+    // rest then pulls the destination as far negative as the depth goes, where
+    // UNI leaves it alone.
+    //
+    // This is checked on the published offset rather than on a render, because
+    // the claim is about the arithmetic and not about what a filter does with
+    // it. A Serum patch copied knob for knob came out an octave wrong on its
+    // pitch destination for exactly the want of this switch, which is why the
+    // whole travel is pinned here rather than only that it does something.
+    {
+        const auto offsetFor = [samples] (float source, float macro, bool bipolar)
+        {
+            rhino::forge::Processor probe;
+            closedFilterOnA(probe);
+            setSlot(probe, 1, source, static_cast<float>(destCutoff), 1.0f);
+            setValue(probe, "mod1Bipolar", bipolar ? 1.0f : 0.0f);
+            setValue(probe, "macro1", macro);
+            juce::AudioBuffer<float> rendered(2, samples);
+            renderNote(probe, rendered);
+            return probe.modulationOffset(destCutoff);
+        };
+        constexpr auto macro1 = static_cast<float>(rhino::forge::ModSource::macro1);
+
+        requireClose(offsetFor(macro1, 0.0f, false), 0.0f, 0.001f,
+                     "UNI leaves a source at rest moving nothing");
+        requireClose(offsetFor(macro1, 0.5f, false), 0.5f, 0.001f,
+                     "UNI reaches half the depth from half the source");
+        requireClose(offsetFor(macro1, 1.0f, false), 1.0f, 0.001f,
+                     "UNI reaches the whole depth from the top of the source");
+
+        requireClose(offsetFor(macro1, 0.0f, true), -0.5f, 0.001f,
+                     "BI at rest pulls as far negative as the depth reaches");
+        requireClose(offsetFor(macro1, 0.5f, true), 0.0f, 0.001f,
+                     "BI at half leaves the destination where it was set");
+        requireClose(offsetFor(macro1, 1.0f, true), 0.5f, 0.001f,
+                     "BI at the top reaches as far positive, the reach recentred not resized");
+    }
+
+    // An LFO already swings both ways, so the switch has nothing to centre and
+    // must not quietly double its reach instead.
+    {
+        rhino::forge::Processor uni, bi;
+        closedFilterOnA(uni);
+        closedFilterOnA(bi);
+        setSlot(uni, 1, srcLfo1, destCutoff, 1.0f);
+        setSlot(bi, 1, srcLfo1, destCutoff, 1.0f);
+        setValue(bi, "mod1Bipolar", 1.0f);
+        juce::AudioBuffer<float> unipolar(2, samples), bipolar(2, samples);
+        renderNote(uni, unipolar);
+        renderNote(bi, bipolar);
+        require(identical(unipolar, bipolar),
+                "BI leaves an LFO alone, which already swings both ways");
+    }
+
+    // Off to begin with, so every preset written before the switch existed
+    // still modulates exactly as it did.
+    require(value(bare, "mod1Bipolar") == 0.0f, "a slot starts unipolar");
+
     // Depth clamps at the destination's own limits instead of running past them.
     rhino::forge::Processor slammed;
     closedFilterOnA(slammed);

@@ -508,6 +508,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout Processor::parameterLayout()
             juce::ParameterID {id("Dest"), 1}, name("Destination"), destinationNames,
             slot == 1 ? 13 : 0));
         result.push_back(parameter(id("Depth"), name("Depth"), {-1.0f, 1.0f}, 0.0f, asSignedPercent));
+        // Whether the destination's own setting is the start of the reach or
+        // the middle of it. Off by default, so every preset written before this
+        // existed still modulates exactly as it did, and so a source at rest
+        // still means "nothing happening" until the switch says otherwise.
+        result.push_back(toggle(id("Bipolar"), name("Polarity"), false, "UNI", "BI"));
     }
     return {result.begin(), result.end()};
 }
@@ -853,7 +858,8 @@ Modulation Processor::modulation() const
     for (int slot = 0; slot < modSlotCount; ++slot)
     {
         const auto id = [slot] (const char* suffix) { return "mod" + juce::String(slot + 1) + suffix; };
-        result.slots[static_cast<size_t>(slot)] = {value(id("Source")), value(id("Dest")), value(id("Depth"))};
+        result.slots[static_cast<size_t>(slot)] = {value(id("Source")), value(id("Dest")),
+                                                   value(id("Depth")), value(id("Bipolar"))};
     }
     return result;
 }

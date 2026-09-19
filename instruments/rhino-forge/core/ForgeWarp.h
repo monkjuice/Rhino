@@ -336,22 +336,39 @@ inline float warpDrive(float amount) noexcept
     return 1.0f + juce::jlimit(0.0f, 1.0f, amount) * 15.0f;
 }
 
-// How far FM moves the read, in cycles. Four at the top, which is deep enough
-// for the metallic end of the range and shallow enough that the first half of
-// the knob is still musical.
+// How far PD moves the read, in cycles, at the top of the knob.
 //
-// Feedback is on a scale of its own, a sixteenth of that. A stage reading its
-// own last output is a loop, and a loop deep enough to push the read a whole
-// cycle does not settle on a waveform at all -- it goes to noise, and takes the
-// note with it. A quarter of a cycle at the top of the knob runs from a saw
-// through a hard edge and only reaches chaos at the very end, which is the
-// range feedback is actually reached for.
-inline constexpr float warpFeedbackScale = 0.0625f;
+// Measured rather than chosen. Serum was recorded playing the patch this was
+// calibrated on -- a sine two octaves down, phase-distorted by a saw two
+// octaves up -- and Forge was swept against that capture until the first pair
+// of sidebands lined up. Serum at 37% of its knob sits at 0.156 cycles, which
+// is what this gives at 37%.
+//
+// It used to be four cycles, nine times deeper, and that was the single reason
+// a patch copied over from Serum came out thin. A third of the way up the knob
+// put the read 9.3 radians off, which is past the first zero of J0: the carrier
+// the patch was built on cancelled itself out, and a bass note came back as a
+// bright buzz with a fiftieth of a percent of its energy below 100 Hz.
+//
+// Only that one point of Serum's travel was measured, so the rest of it is
+// assumed linear in index. A second capture at another depth would settle it.
+inline constexpr float warpPdCycles = 0.42f;
+
+// Feedback is on a scale of its own. A stage reading its own last output is a
+// loop, and a loop deep enough to push the read a whole cycle does not settle
+// on a waveform at all -- it goes to noise, and takes the note with it. A
+// quarter of a cycle at the top of the knob runs from a saw through a hard edge
+// and only reaches chaos at the very end, which is the range feedback is
+// actually reached for.
+//
+// Written out rather than taken as a fraction of the figure above, so that
+// recalibrating PD against Serum cannot quietly move it as well.
+inline constexpr float warpPdSelfCycles = 0.25f;
 
 inline float warpFmIndex(WarpMode mode, float amount) noexcept
 {
-    const auto cycles = juce::jlimit(0.0f, 1.0f, amount) * 4.0f;
-    return mode == WarpMode::pdSelf ? cycles * warpFeedbackScale : cycles;
+    const auto depth = juce::jlimit(0.0f, 1.0f, amount);
+    return depth * (mode == WarpMode::pdSelf ? warpPdSelfCycles : warpPdCycles);
 }
 
 // How far linear FM may push the carrier's frequency, as a multiple of the note.

@@ -539,6 +539,68 @@ void layoutSuite()
         }
     }
 
+    // The part number stamped on a plate reads across the panel, not down the
+    // declaration: the numbers a tab shows have to run 01, 02, 03 left to
+    // right with no gaps, whichever modules that tab is hiding.
+    for (const auto page : rhino::forge::ui::tabPages)
+    {
+        std::vector<std::pair<int, juce::String>> shown;
+        for (const auto& module : modules)
+        {
+            if (!rhino::forge::ui::onPage(module, page) || module.row != 0) continue;
+            shown.emplace_back(module.column, rhino::forge::ui::plateCode(module, page));
+        }
+        std::sort(shown.begin(), shown.end(),
+                  [] (const auto& a, const auto& b) { return a.first < b.first; });
+        for (int i = 0; i < static_cast<int>(shown.size()); ++i)
+            require(shown[static_cast<size_t>(i)].second
+                        == "A-" + juce::String(i + 1).paddedLeft('0', 2),
+                    "a tab's part numbers run left to right without gaps");
+    }
+
+    // The chassis and the module plates are cached between frames, so the panel
+    // now has a way of being wrong it did not have before: a change that moves
+    // a plate but does not reach the cache's key would leave the old picture on
+    // screen. The strip along the foot of the top row carries the plates'
+    // stamped legends and nothing else — no control is ever laid out in it — so
+    // a difference there is a difference in the cached layer, and changing tab
+    // has to produce one.
+    {
+        std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+        require(editor != nullptr, "the panel opens");
+        if (editor != nullptr)
+        {
+            editor->setSize(rhino::forge::ui::defaultPanelWidth, rhino::forge::ui::defaultPanelHeight);
+            const auto shot = [&editor]
+            {
+                juce::Image image(juce::Image::ARGB, editor->getWidth(), editor->getHeight(), true);
+                juce::Graphics g(image);
+                editor->paintEntireComponent(g, false);
+                return image;
+            };
+            const auto band = rhino::forge::ui::plateFooterBounds(
+                rhino::forge::ui::moduleBounds(editor->getLocalBounds(), modules.front()));
+
+            const auto before = shot();
+            rhino::forge::ui::PageTab* mix = nullptr;
+            for (auto* child : editor->getChildren())
+                if (auto* tab = dynamic_cast<rhino::forge::ui::PageTab*>(child))
+                    if (tab->getButtonText() == "MIX") mix = tab;
+            require(mix != nullptr && mix->onClick != nullptr,
+                    "the panel builds a tab that can be clicked for every page");
+            if (mix != nullptr && mix->onClick != nullptr)
+            {
+                mix->onClick();
+                const auto after = shot();
+                auto redrawn = false;
+                for (int y = band.getY(); y < band.getBottom() && !redrawn; ++y)
+                    for (int x = band.getX(); x < band.getRight() && !redrawn; ++x)
+                        redrawn = before.getPixelAt(x, y) != after.getPixelAt(x, y);
+                require(redrawn, "changing tab redraws the cached plate layer");
+            }
+        }
+    }
+
     // Every knob on the panel is the same size, whichever module it sits in.
     const auto diameter = rhino::forge::ui::uniformKnobDiameter(bounds);
     require(diameter >= 48, "the shared knob diameter stays usable");

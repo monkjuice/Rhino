@@ -157,6 +157,19 @@ private:
     void showPage(ui::Page);
     void applyPage();
     void paintTable(juce::Graphics&, juce::Rectangle<int> area, const ui::Module&);
+
+    // The chassis and the module plates, which do not change from one frame to
+    // the next. Painted once into an image and blitted thereafter: the panel
+    // repaints whole at 24Hz, and drawing this layer every time measured at
+    // fifty points of one core on its own. Everything that does move -- the
+    // displays, the header readings, the rack -- is still drawn live over it.
+    void paintChrome(juce::Graphics&);
+    // Everything the cached layer depends on, in one string. When this changes
+    // the image is thrown away and drawn again; when it does not, nothing in
+    // the layer can have moved.
+    juce::String chromeKey(float scale) const;
+    juce::Image chrome;
+    juce::String chromeState;
     bool slotIsLive(int slot) const;
     juce::String lfoHeaderDetail() const;
     // What the envelope module's header says: the stage the envelope showing is

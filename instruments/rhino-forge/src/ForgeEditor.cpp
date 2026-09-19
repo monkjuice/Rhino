@@ -1430,9 +1430,48 @@ float Editor::value(const juce::String& id) const
     return raw == nullptr ? 0.0f : raw->load();
 }
 
-void Editor::paint(juce::Graphics& g)
+juce::String Editor::chromeKey(float scale) const
+{
+    juce::String key;
+    key << getWidth() << 'x' << getHeight() << '@' << juce::String(scale, 3)
+        << '|' << static_cast<int>(page) << (fxExpanded ? 'E' : 'e') << (fxListOpen ? 'L' : 'l');
+    // A module that has been switched off is drawn dimmer, and one the tab is
+    // hiding is not drawn at all, so both belong in the key.
+    for (const auto& module : moduleUis)
+        key << (!moduleShown(*module.descriptor) ? '-' : module.on() ? '1' : '0');
+    return key;
+}
+
+void Editor::paintChrome(juce::Graphics& g)
 {
     ui::drawBackdrop(g, getLocalBounds());
+    for (const auto& module : moduleUis)
+    {
+        const auto& descriptor = *module.descriptor;
+        if (!moduleShown(descriptor)) continue;
+        ui::drawModuleShell(g, moduleAreaFor(descriptor), descriptor, module.on(),
+                            ui::plateCode(descriptor, page));
+    }
+}
+
+void Editor::paint(juce::Graphics& g)
+{
+    // Rendered at the display's own pixel scale rather than at the panel's
+    // logical size, so the cached layer is as sharp on a scaled monitor as it
+    // would be drawn straight onto the window.
+    const auto scale = g.getInternalContext().getPhysicalPixelScaleFactor();
+    const auto key = chromeKey(scale);
+    if (chrome.isNull() || key != chromeState)
+    {
+        chrome = juce::Image(juce::Image::ARGB,
+                             juce::jmax(1, juce::roundToInt(getWidth() * scale)),
+                             juce::jmax(1, juce::roundToInt(getHeight() * scale)), true);
+        juce::Graphics into(chrome);
+        into.addTransform(juce::AffineTransform::scale(scale));
+        paintChrome(into);
+        chromeState = key;
+    }
+    g.drawImage(chrome, getLocalBounds().toFloat(), juce::RectanglePlacement::stretchToFit);
 
     for (const auto& module : moduleUis)
     {
@@ -1447,13 +1486,13 @@ void Editor::paint(juce::Graphics& g)
         // cannot be read off the greyed-out rate knob.
         const auto tableModule = juce::String(descriptor.id) == "table";
         const auto rackModule = isFxModule(descriptor);
-        ui::drawModuleShell(g, area, descriptor, on,
-                            descriptor.display == ui::Display::envelope ? envHeaderDetail()
-                            : descriptor.display == ui::Display::lfo ? lfoHeaderDetail()
-                            : rackModule ? fxHeaderDetail()
-                            : tableModule && tablePanel != nullptr ? tablePanel->headerDetail()
-                                : juce::String(),
-                            rackModule ? (ui::fxViewButtonSize * 2 + ui::fxViewButtonGap + 12) : 0);
+        ui::drawModuleDetail(g, area, descriptor, on,
+                             descriptor.display == ui::Display::envelope ? envHeaderDetail()
+                             : descriptor.display == ui::Display::lfo ? lfoHeaderDetail()
+                             : rackModule ? fxHeaderDetail()
+                             : tableModule && tablePanel != nullptr ? tablePanel->headerDetail()
+                                 : juce::String(),
+                             rackModule ? (ui::fxViewButtonSize * 2 + ui::fxViewButtonGap + 12) : 0);
 
         if (descriptor.columnHeaderHeight > 0) paintTable(g, area, descriptor);
         if (rackModule)
@@ -1604,9 +1643,11 @@ void Editor::resized()
     applyEnableStates();
 
     const auto right = getWidth() - ui::windowMargin;
-    savePreset.setBounds(right - 62, 26, 62, 26);
-    loadPreset.setBounds(right - 130, 26, 62, 26);
-    presetName.setBounds(right - 350, 26, 212, 26);
+    const auto button = ui::presetButtonWidth;
+    savePreset.setBounds(right - button, ui::presetRowTop, button, ui::presetButtonHeight);
+    loadPreset.setBounds(right - button * 2 - 6, ui::presetRowTop, button, ui::presetButtonHeight);
+    presetName.setBounds(right - button * 2 - 6 - ui::presetNameWidth - 8, ui::presetRowTop,
+                         ui::presetNameWidth, ui::presetButtonHeight);
 
     for (int i = 0; i < ui::tabCount && i < static_cast<int>(tabs.size()); ++i)
         tabs[static_cast<size_t>(i)]->setBounds(ui::tabBounds(i));

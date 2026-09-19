@@ -186,6 +186,12 @@ struct Module
     // numbers: the rack's three are MAIN, BUS 1 and BUS 2. The four envelopes
     // and the six LFOs are genuinely numbered and keep the narrow card.
     int bankWidth = 0;
+    // What the legend along the plate's foot calls this module, where that is
+    // not simply its title. The header has room for OSC A and the foot has room
+    // for OSCILLATOR A, and a plate marked with the long name is what makes the
+    // short one in the header read as an abbreviation rather than as the name.
+    // Null means the title serves for both.
+    const char* plateName = nullptr;
 };
 
 // The numbered cards that choose which bank a module is showing, laid along its
@@ -209,6 +215,13 @@ inline int bankWidthOf(const Module& module)
 inline constexpr int gridColumns = 24;
 inline constexpr int moduleGap = 8;
 inline constexpr int headerHeight = 28;
+
+// The strip along a plate's foot carrying its stamped legend: the module's
+// long name on the left and its part number on the right, the way a piece of
+// equipment is marked rather than labelled. It is reserved out of the module's
+// interior rather than drawn over it, so no control can ever land on top of
+// it, and it costs every module the same few pixels at every window size.
+inline constexpr int plateFooterHeight = 13;
 
 // Row weights, top to bottom. Two rows, not three: the signal path across the
 // top — sources, the two oscillators, the filter — and everything that moves it
@@ -407,7 +420,7 @@ inline const std::vector<Module>& modules()
                 {"oscAWarp1Mode", "MODE 1", Style::selector, nullptr, 2},
                 {"oscAWarp2Mode", "MODE 2", Style::selector, nullptr, 2},
                 {"oscAWarp2", "WARP 2", Style::knob, nullptr, 1, "oscAWarp2Mode"}}}},
-         0, only(Page::oscillators), 1, 0, 0, oscillatorDisplayPercent},
+         0, only(Page::oscillators), 1, 0, 0, oscillatorDisplayPercent, 0, "OSCILLATOR A"},
         {"oscB", "OSC B", "MORPH", "oscBEnable", false, Display::oscillator, 0, 12, 8, false,
          {{20, {{"oscBOctave", "OCT", Style::stepper}, {"oscBSemitone", "SEMI", Style::stepper},
                 {"oscBFine", "FINE", Style::stepper}}},
@@ -417,7 +430,7 @@ inline const std::vector<Module>& modules()
                 {"oscBWarp1Mode", "MODE 1", Style::selector, nullptr, 2},
                 {"oscBWarp2Mode", "MODE 2", Style::selector, nullptr, 2},
                 {"oscBWarp2", "WARP 2", Style::knob, nullptr, 1, "oscBWarp2Mode"}}}},
-         0, only(Page::oscillators), 1, 0, 0, oscillatorDisplayPercent},
+         0, only(Page::oscillators), 1, 0, 0, oscillatorDisplayPercent, 0, "OSCILLATOR B"},
 
         // The matrix takes the two oscillators' columns — not the whole row,
         // because SUB, NOISE and FILTER sit either side of them and stay on
@@ -862,6 +875,27 @@ inline bool onPage(const Module& module, Page page)
     return (module.pages & only(page)) != 0;
 }
 
+// The part number stamped on a plate's foot: the grid row it sits in as a
+// letter, and its place across that row as a number.
+//
+// Worked out against the tab being shown rather than against the declaration,
+// so the numbers read left to right across the panel on every tab instead of
+// carrying the gaps left by whatever that tab is hiding. Two modules declared
+// at the same column are broken apart by declaration order, which only the
+// overlaid pages can produce and which no tab shows at once anyway.
+inline juce::String plateCode(const Module& module, Page page)
+{
+    auto ordinal = 1;
+    for (const auto& other : modules())
+    {
+        if (&other == &module || !onPage(other, page) || other.row != module.row) continue;
+        if (other.column < module.column
+            || (other.column == module.column && &other < &module)) ++ordinal;
+    }
+    return juce::String::charToString(static_cast<juce::juce_wchar>('A' + module.row))
+           + "-" + juce::String(ordinal).paddedLeft('0', 2);
+}
+
 // Two modules can only collide if some tab shows both of them at once, which
 // is exactly the two sets of pages overlapping.
 inline bool sharePage(const Module& a, const Module& b)
@@ -897,12 +931,74 @@ inline constexpr int windowMargin = 12;
 inline constexpr int titleBarHeight = 92;
 inline constexpr int keyboardGap = 26;
 
-// The keyboard sits across the bottom, under everything.
-inline juce::Rectangle<int> keyboardBounds(juce::Rectangle<int> bounds)
+// The full width the keyboard and the two decals beside it share.
+inline juce::Rectangle<int> keyboardStrip(juce::Rectangle<int> bounds)
 {
     return bounds.reduced(windowMargin, 0)
         .withTop(bounds.getBottom() - keyboardGap - keyboardHeight)
         .withHeight(keyboardHeight);
+}
+
+// The decals either side of the keyboard. They are the panel's markings rather
+// than controls, so they give up width before the keys do: at the narrowest
+// window the panel allows they come down to the point where they carry their
+// own lettering and nothing else, and the keys keep the rest.
+inline constexpr int deckPlateGap = 8;
+
+inline int deckPlateWidth(juce::Rectangle<int> bounds)
+{
+    return juce::jlimit(72, 132, bounds.getWidth() / 11);
+}
+
+inline juce::Rectangle<int> deckLeftBounds(juce::Rectangle<int> bounds)
+{
+    return keyboardStrip(bounds).withWidth(deckPlateWidth(bounds));
+}
+
+inline juce::Rectangle<int> deckRightBounds(juce::Rectangle<int> bounds)
+{
+    const auto strip = keyboardStrip(bounds);
+    return strip.withLeft(strip.getRight() - deckPlateWidth(bounds));
+}
+
+// The keys themselves: what the strip has left once both decals have taken
+// theirs.
+inline juce::Rectangle<int> keyboardBounds(juce::Rectangle<int> bounds)
+{
+    const auto flank = deckPlateWidth(bounds) + deckPlateGap;
+    return keyboardStrip(bounds).withTrimmedLeft(flank).withTrimmedRight(flank);
+}
+
+// --- The title bar's right-hand end -----------------------------------------
+//
+// The preset controls sit on the lower line of the title bar, under the unit
+// mark, with the identity plate filling the run between the last tab and them.
+inline constexpr int presetButtonWidth = 62;
+inline constexpr int presetButtonHeight = 26;
+inline constexpr int presetRowTop = 52;
+// Wide enough for the longest thing the panel ever puts here, which is not a
+// preset name but a refusal: "THAT CONTROL CANNOT BE MODULATED".
+inline constexpr int presetNameWidth = 212;
+
+// The mark at the very top right: what this unit is, in the two lines a plate
+// riveted to a machine would carry.
+inline juce::Rectangle<int> unitMarkBounds(juce::Rectangle<int> bounds)
+{
+    const auto right = bounds.getRight() - windowMargin;
+    return juce::Rectangle<int>(right - 140, 14, 140, 32);
+}
+
+// The identity plate: everything between the tab strip and the preset
+// controls. It stretches rather than sitting at a fixed width, because what it
+// has to fit between moves with the window — and it is the one piece of the
+// panel that can absorb that slack without anything else shifting.
+inline juce::Rectangle<int> identityPlateBounds(juce::Rectangle<int> bounds)
+{
+    const auto left = tabBounds(tabCount - 1).getRight() + 18;
+    const auto right = bounds.getRight() - windowMargin
+                       - presetButtonWidth * 2 - presetNameWidth - 18;
+    return right - left < 90 ? juce::Rectangle<int>()
+                             : juce::Rectangle<int>(left, 12, right - left, 68);
 }
 
 // The area the modules are laid out inside: below the title bar, above the
@@ -954,11 +1050,26 @@ inline juce::Rectangle<int> fxModuleBounds(juce::Rectangle<int> bounds, const Mo
     return expanded ? contentBounds(bounds) : moduleBounds(bounds, module);
 }
 
+// Everything on a plate between its header and the legend along its foot.
+// Every carve of a module's area begins here, so the footer is reserved in one
+// place and no caller can forget it.
+inline juce::Rectangle<int> moduleInterior(juce::Rectangle<int> moduleArea)
+{
+    return moduleArea.withTrimmedTop(headerHeight).withTrimmedBottom(plateFooterHeight);
+}
+
+// The legend strip itself, inset to the same margin the header's title uses so
+// the two line up down the plate's left edge.
+inline juce::Rectangle<int> plateFooterBounds(juce::Rectangle<int> moduleArea)
+{
+    return moduleArea.withTop(moduleArea.getBottom() - plateFooterHeight).reduced(10, 0);
+}
+
 inline int fxListWidth(bool open) { return open ? fxListOpenWidth : fxListFoldedWidth; }
 
 inline juce::Rectangle<int> fxListBounds(juce::Rectangle<int> moduleArea, bool open)
 {
-    return moduleArea.withTrimmedTop(headerHeight).reduced(8, 6)
+    return moduleInterior(moduleArea).reduced(8, 6)
         .withWidth(fxListWidth(open));
 }
 
@@ -974,7 +1085,7 @@ inline juce::Rectangle<int> fxRackBounds(juce::Rectangle<int> moduleArea, bool l
 // horizontal pieces differ, but their slot edges must remain on one baseline.
 inline juce::Rectangle<int> fxViewportBounds(juce::Rectangle<int> moduleArea)
 {
-    return moduleArea.withTrimmedTop(headerHeight).reduced(0, 6);
+    return moduleInterior(moduleArea).reduced(0, 6);
 }
 
 inline juce::Rectangle<int> fxSlotViewportBounds(juce::Rectangle<int> moduleArea)
@@ -1034,7 +1145,7 @@ inline juce::Rectangle<int> fxListRemoveBounds(juce::Rectangle<int> item)
 // titles, the row gutter and the control rows divide between them.
 inline juce::Rectangle<int> moduleBody(juce::Rectangle<int> moduleArea, const Module& module)
 {
-    auto body = moduleArea.withTrimmedTop(headerHeight).reduced(10, 6);
+    auto body = moduleInterior(moduleArea).reduced(10, 6);
     if (module.display != Display::none)
     {
         body.removeFromTop(body.getHeight() * displayShareOf(module) / 100);
@@ -1047,7 +1158,7 @@ inline juce::Rectangle<int> moduleBody(juce::Rectangle<int> moduleArea, const Mo
 inline juce::Rectangle<int> displayBounds(juce::Rectangle<int> moduleArea, const Module& module)
 {
     if (module.display == Display::none) return {};
-    auto body = moduleArea.withTrimmedTop(headerHeight).reduced(10, 6);
+    auto body = moduleInterior(moduleArea).reduced(10, 6);
     return body.removeFromTop(body.getHeight() * displayShareOf(module) / 100);
 }
 

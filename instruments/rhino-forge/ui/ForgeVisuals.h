@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ForgeLayout.h"
+#include "ForgeChrome.h"
 #include <functional>
 #include <vector>
 #include <BinaryData.h>
@@ -8,7 +9,9 @@
 #include <cmath>
 
 // Drawing primitives and the knob look. Layout lives next door in
-// ForgeLayout.h; nothing here decides where anything goes.
+// ForgeLayout.h; nothing here decides where anything goes. The material
+// everything is drawn out of -- plates, bevels, grain, fasteners -- lives in
+// ForgeChrome.h, so a module and a decal are made of the same metal.
 namespace rhino::forge::ui
 {
 inline const auto electricBlue = juce::Colour(0xff45a8ff);
@@ -313,12 +316,49 @@ public:
         g.strokePath(ticks, juce::PathStrokeType(1.0f));
 
         auto body = knob.reduced(radius * 0.19f);
-        juce::ColourGradient metal(juce::Colour(0xff34394b), body.getX(), body.getY(),
-                                   juce::Colour(0xff111522), body.getRight(), body.getBottom(), false);
-        g.setGradientFill(metal);
+
+        // A black ring all the way round the body, and the shadow it throws
+        // down onto the plate. The ring is what the rim highlight is read
+        // against -- without it the lit edge has nothing to be lit against and
+        // the knob flattens into a disc printed on the panel.
+        g.setColour(juce::Colours::black.withAlpha(enabled ? 0.9f : 0.4f));
+        g.fillEllipse(body.expanded(1.4f));
+        g.setColour(juce::Colours::black.withAlpha(enabled ? 0.4f : 0.15f));
+        g.fillEllipse(body.translated(0.0f, 2.0f).expanded(1.4f));
+
+        // A machined rim around an anodised cap. The rim is lit along its top
+        // edge and black along its foot -- the same bevel a plate has, bent
+        // into a circle -- and the cap inside it is domed rather than flat.
+        juce::ColourGradient rim(juce::Colour(0xff7b8397).withAlpha(enabled ? 1.0f : 0.4f),
+                                 body.getCentreX(), body.getY(),
+                                 juce::Colour(0xff05070e).withAlpha(enabled ? 1.0f : 0.4f),
+                                 body.getCentreX(), body.getBottom(), false);
+        g.setGradientFill(rim);
         g.fillEllipse(body);
-        g.setColour(juce::Colour(0xff050711));
-        g.drawEllipse(body, 2.0f);
+
+        const auto cap = body.reduced(juce::jmax(1.8f, radius * 0.13f));
+        juce::ColourGradient dome(juce::Colour(0xff3b4155), cap.getX() + cap.getWidth() * 0.28f,
+                                  cap.getY() + cap.getHeight() * 0.18f,
+                                  juce::Colour(0xff0d1019), cap.getRight(), cap.getBottom(), true);
+        dome.addColour(0.55, juce::Colour(0xff1c2130));
+        g.setGradientFill(dome);
+        g.fillEllipse(cap);
+
+        // The specular: a sliver of the lamp above the desk, across the top of
+        // the dome. Clipped to the cap so it cannot spill over the rim.
+        // Sized to sit inside the cap rather than clipped to it. A clip push
+        // per knob per frame measured at seven points of one core on its own,
+        // and an ellipse that already fits needs no clip to stay inside.
+        {
+            const auto gloss = cap.reduced(cap.getWidth() * 0.16f, cap.getHeight() * 0.3f)
+                                  .translated(0.0f, -cap.getHeight() * 0.16f);
+            juce::ColourGradient sheen(juce::Colours::white.withAlpha(enabled ? 0.14f : 0.04f),
+                                       gloss.getCentreX(), gloss.getY(),
+                                       juce::Colours::white.withAlpha(0.0f),
+                                       gloss.getCentreX(), gloss.getBottom(), false);
+            g.setGradientFill(sheen);
+            g.fillEllipse(gloss);
+        }
 
         // One lit LED where the pointer aims, rather than a strip filled from the
         // start of the travel. The eye then reads the position itself, which is
@@ -380,12 +420,20 @@ public:
             }
         }
 
+        // The indicator, run out to just short of the lit rim so the line and
+        // the LED read as one reading rather than two marks at odd radii. It is
+        // cut into the cap rather than printed on it: a dark line a pixel below
+        // the light one is the whole of that, and it is what stops the pointer
+        // looking like a sticker on a dome.
         juce::Path pointer;
         pointer.startNewSubPath(centre);
-        pointer.lineTo(polar(radius * 0.52f, angle));
+        pointer.lineTo(polar(radius * 0.62f, angle));
+        const auto stroke = juce::PathStrokeType(2.2f, juce::PathStrokeType::curved,
+                                                 juce::PathStrokeType::rounded);
+        g.setColour(juce::Colours::black.withAlpha(enabled ? 0.6f : 0.2f));
+        g.strokePath(pointer, stroke, juce::AffineTransform::translation(0.0f, 1.3f));
         g.setColour(text.withAlpha(enabled ? 1.0f : 0.35f));
-        g.strokePath(pointer, juce::PathStrokeType(2.2f, juce::PathStrokeType::curved,
-                                                   juce::PathStrokeType::rounded));
+        g.strokePath(pointer, stroke);
         g.setColour(accent.withAlpha(enabled ? 1.0f : 0.3f));
         g.fillEllipse(juce::Rectangle<float>(5.0f, 5.0f).withCentre(centre));
     }
@@ -1650,6 +1698,33 @@ inline juce::Path crtPath(juce::Rectangle<float> face)
     return tube;
 }
 
+// The L-shaped marks in a screen's corners: the registration a scope face
+// carries. Drawn inside the glass rather than on the frame, so they read as
+// part of what is being shown rather than as decoration around it.
+inline void drawDisplayBrackets(juce::Graphics& g, juce::Rectangle<float> face, juce::Colour colour,
+                                float alpha)
+{
+    const auto arm = juce::jmin(9.0f, face.getWidth() * 0.08f, face.getHeight() * 0.14f);
+    if (arm < 3.0f) return;
+    const auto inset = 5.0f;
+    const auto box = face.reduced(inset);
+
+    juce::Path marks;
+    const auto bracket = [&marks, arm] (float x, float y, float dx, float dy)
+    {
+        marks.startNewSubPath(x + dx * arm, y);
+        marks.lineTo(x, y);
+        marks.lineTo(x, y + dy * arm);
+    };
+    bracket(box.getX(),     box.getY(),       1.0f,  1.0f);
+    bracket(box.getRight(), box.getY(),      -1.0f,  1.0f);
+    bracket(box.getX(),     box.getBottom(),  1.0f, -1.0f);
+    bracket(box.getRight(), box.getBottom(), -1.0f, -1.0f);
+
+    g.setColour(colour.withAlpha(0.55f * alpha));
+    g.strokePath(marks, juce::PathStrokeType(1.3f));
+}
+
 inline void drawCrtScreen(juce::Graphics& g, juce::Rectangle<int> well,
                           juce::Colour phosphor, float alpha)
 {
@@ -1697,6 +1772,10 @@ inline void drawCrtScreen(juce::Graphics& g, juce::Rectangle<int> well,
         // The zero axis, as faint as a graticule etched on the glass.
         g.setColour(phosphor.withAlpha(0.16f * alpha));
         g.fillRect(face.getX() + 4.0f, cy, face.getWidth() - 8.0f, 1.0f);
+
+        // Registration marks in the corners, on the glass with the graticule
+        // rather than on the bezel around it.
+        drawDisplayBrackets(g, face, phosphor, alpha);
     }
 
     // The bezel: widest and faintest first, so the edge blooms outward.
@@ -1740,10 +1819,7 @@ inline juce::Path displayClip(juce::Rectangle<int> area)
 inline void drawDisplayWell(juce::Graphics& g, juce::Rectangle<int> area)
 {
     const auto box = area.toFloat();
-    g.setColour(juce::Colour(0xff0b0e18));
-    g.fillRoundedRectangle(box, displayCorner);
-    g.setColour(line.withAlpha(0.6f));
-    g.drawRoundedRectangle(box, displayCorner, 1.0f);
+    drawWell(g, box, juce::Colour(0xff0a0d16), 1.0f, displayCorner);
     g.setColour(line.withAlpha(0.45f));
     g.drawHorizontalLine(area.getCentreY(), box.getX(), box.getRight());
 }
@@ -2362,22 +2438,106 @@ inline void drawFilterResponse(juce::Graphics& g, juce::Rectangle<int> area, rhi
                right ? juce::Justification::centredLeft : juce::Justification::centredRight);
 }
 
-// The pedal shell: a raised body, an accent cap, and a header strip reserved
-// for the title. Knob labels are laid out below that strip, which is why they
-// no longer collide with it.
+// --- What the panel is badged with ------------------------------------------
+//
+// The markings, gathered in one place. None of them is information — nothing on
+// the panel is found by reading them — so they are decoration, and re-badging
+// the unit is editing this block and nothing else.
+inline const juce::String unitMark = juce::String::fromUTF8("\xe5\x88\x9d\xe5\x8f\xb7\xe6\xa9\x9f");
+inline constexpr const char* unitNumber = "UNIT 01";
+inline constexpr const char* makerName  = "RHINO FORGE";
+inline constexpr const char* makerModel = "SYNTHESIZER UNIT 01";
+inline constexpr const char* makerHouse = "TOKYO-3 AUDIO RESEARCH";
+inline constexpr const char* deckMark   = "NERV";
+inline constexpr const char* deckRole   = "SYNTH INTERFACE";
+inline constexpr const char* deckPlace  = "TOKYO-3";
+inline constexpr const char* deckMotto  = "FOR A MORE";
+inline constexpr const char* deckMotto2 = "HUMAN TOMORROW";
+inline const auto markRed = juce::Colour(0xffe0453a);
+
+// The legend along a plate's foot: what the module is called in full on the
+// left, its part number on the right. Stamped rather than printed — small,
+// wide-tracked and dim — so it is there to be found and never read by accident
+// while a knob is being turned.
+inline void drawPlateLegend(juce::Graphics& g, juce::Rectangle<int> area, const Module& module,
+                            const juce::String& code, float alpha)
+{
+    const auto footer = plateFooterBounds(area).toFloat();
+    if (footer.getHeight() < 6.0f || footer.getWidth() < 30.0f) return;
+
+    // The score the legend hangs under: a dark line with a lit one beneath it,
+    // which is the same two-line trick the plate's own bevel is made of.
+    const auto rule = juce::roundToInt(footer.getY() - 1.0f);
+    g.setColour(plateEdgeDark.withAlpha(0.75f * alpha));
+    g.drawHorizontalLine(rule, footer.getX(), footer.getRight());
+    g.setColour(plateEdgeLit.withAlpha(0.2f * alpha));
+    g.drawHorizontalLine(rule + 1, footer.getX(), footer.getRight());
+
+    g.setFont(juce::FontOptions(8.0f));
+    g.setColour(legendText.withAlpha(alpha));
+    if (module.plateName != nullptr)
+        drawTrackedText(g, module.plateName, footer, 1.5f, juce::Justification::left);
+    drawTrackedText(g, code, footer, 1.5f, juce::Justification::right);
+}
+
+// The module plate: a machined part, an accent along its top edge, a header
+// strip reserved for the title, and the legend stamped along its foot.
+//
+// Everything material about it comes from drawPlate, so a module, a decal and
+// the chassis are visibly the same metal cut to different shapes. What is left
+// here is only what makes it this module rather than any other — its accent,
+// its name and its number.
+// The one part of a module's header that changes from frame to frame: the
+// right-hand reading. An envelope names the stage it is in and an LFO the rate
+// it is actually running at, so this cannot be cached with the plate -- which
+// is exactly why it is a function of its own. Everything else about the shell
+// is still where it was a second ago.
+inline void drawModuleDetail(juce::Graphics& g, juce::Rectangle<int> area, const Module& module,
+                             bool on, const juce::String& detailOverride, int detailRightInset)
+{
+    const auto detail = detailOverride.isNotEmpty() ? detailOverride : juce::String(module.detail);
+    if (detail.isEmpty()) return;
+
+    auto header = area.withHeight(headerHeight).reduced(10, 0);
+    if (module.enableId != nullptr) header.removeFromLeft(headerHeight);
+    header.removeFromRight(juce::jlimit(0, header.getWidth(), detailRightInset));
+
+    g.setColour(mutedText.withAlpha(on ? 1.0f : 0.45f));
+    g.setFont(juce::FontOptions(9.0f));
+    g.drawText(detail, header, juce::Justification::centredRight);
+}
+
 inline void drawModuleShell(juce::Graphics& g, juce::Rectangle<int> area, const Module& module, bool on,
-                            const juce::String& detailOverride = {}, int detailRightInset = 0)
+                            const juce::String& code = {})
 {
     const auto box = area.toFloat();
     const auto accent = accentFor(module);
     const auto alpha = on ? 1.0f : 0.45f;
+    const auto cut = juce::jmax(0.0f, juce::jmin(plateCut, box.getWidth() * 0.5f,
+                                                 box.getHeight() * 0.5f));
 
-    g.setColour(panelRaised.withAlpha(on ? 1.0f : 0.55f));
-    g.fillRoundedRectangle(box, 5.0f);
-    g.setColour(line.withAlpha(alpha));
-    g.drawRoundedRectangle(box, 5.0f, 1.0f);
-    g.setColour(accent.withAlpha(alpha));
-    g.fillRoundedRectangle(box.withHeight(3.0f).reduced(1.0f, 0.0f), 2.0f);
+    drawPlate(g, box, on ? 1.0f : 0.72f);
+
+    // The accent runs between the two top corner cuts rather than across the
+    // full width, so it stops where the chamfer does instead of overhanging it.
+    const auto capWidth = box.getWidth() - cut * 2.0f;
+    if (capWidth > 0.0f)
+    {
+        const auto capLeft = box.getX() + cut;
+        // A wash under the line, so the accent looks like light coming off the
+        // edge rather than a stripe painted along it.
+        juce::ColourGradient wash(accent.withAlpha(0.16f * alpha), capLeft, box.getY(),
+                                  accent.withAlpha(0.0f), capLeft, box.getY() + 9.0f, false);
+        g.setGradientFill(wash);
+        g.fillRect(capLeft, box.getY() + 1.0f, capWidth, 9.0f);
+        g.setColour(accent.withAlpha(alpha));
+        g.fillRect(capLeft, box.getY() + 1.0f, capWidth, 2.0f);
+    }
+
+    // One rivet, at the corner the legend runs out to. A plate stamped at every
+    // corner reads as a pattern; a single one reads as hardware.
+    drawRivet(g, {box.getRight() - cut * 0.5f - 1.0f, box.getBottom() - cut * 0.5f - 1.0f},
+              1.7f, alpha);
 
     auto header = area.withHeight(headerHeight).reduced(10, 0);
     // The enable LED sits at the far left of the header; leave room for it.
@@ -2390,14 +2550,7 @@ inline void drawModuleShell(juce::Graphics& g, juce::Rectangle<int> area, const 
         g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
         g.drawText(module.title, header, juce::Justification::centredLeft);
     }
-    header.removeFromRight(juce::jlimit(0, header.getWidth(), detailRightInset));
-    const auto detail = detailOverride.isNotEmpty() ? detailOverride : juce::String(module.detail);
-    if (detail.isNotEmpty())
-    {
-        g.setColour(mutedText.withAlpha(alpha));
-        g.setFont(juce::FontOptions(9.0f));
-        g.drawText(detail, header, juce::Justification::centredRight);
-    }
+    drawPlateLegend(g, area, module, code, alpha);
 }
 
 // The FORGE wordmark, drawn at its own aspect ratio against the left edge of
@@ -2423,24 +2576,155 @@ inline void drawWordmark(juce::Graphics& g, juce::Rectangle<float> area)
                 juce::RectanglePlacement::stretchToFit);
 }
 
+// The plate in the title bar that says what this is: the maker, the model and
+// the house, with the rest of its face given over to hatching. It stretches to
+// fill whatever the tab strip and the preset controls leave between them, which
+// is why the hatching is worth having — it is the part that absorbs the slack.
+inline void drawIdentityPlate(juce::Graphics& g, juce::Rectangle<int> area)
+{
+    if (area.isEmpty()) return;
+    const auto box = area.toFloat();
+    drawPlate(g, box, 1.0f, 12.0f, topLeft | topRight | bottomLeft | bottomRight);
+
+    auto face = box.reduced(14.0f, 10.0f);
+    const auto lines = face.removeFromLeft(juce::jmin(face.getWidth(), 210.0f));
+
+    g.setColour(text.withAlpha(0.92f));
+    g.setFont(juce::FontOptions(15.0f, juce::Font::bold));
+    drawTrackedText(g, makerName, lines.withHeight(17.0f), 2.2f, juce::Justification::left);
+
+    g.setFont(juce::FontOptions(8.0f));
+    g.setColour(electricBlue.withAlpha(0.75f));
+    drawTrackedText(g, makerModel, lines.withTop(lines.getY() + 19.0f).withHeight(11.0f),
+                    1.4f, juce::Justification::left);
+    g.setColour(mutedText.withAlpha(0.8f));
+    drawTrackedText(g, makerHouse, lines.withTop(lines.getY() + 31.0f).withHeight(11.0f),
+                    1.4f, juce::Justification::left);
+
+    // Whatever is left over, hatched. Below a certain width there is no room
+    // for a run of stripes that reads as one, so it is left bare instead.
+    face.removeFromLeft(16.0f);
+    if (face.getWidth() > 40.0f)
+        drawHatch(g, face.withSizeKeepingCentre(face.getWidth(), 20.0f),
+                  plateEdgeLit.withAlpha(0.32f), 3.0f, 10.0f);
+}
+
+// The unit's own mark, at the very top corner: the one red thing on the panel,
+// and the only place any colour but the two accents is used.
+inline void drawUnitMark(juce::Graphics& g, juce::Rectangle<int> area)
+{
+    const auto box = area.toFloat();
+    g.setColour(markRed.withAlpha(0.95f));
+    g.setFont(juce::FontOptions(17.0f, juce::Font::bold));
+    drawTrackedText(g, unitMark, box.withHeight(19.0f), 2.0f, juce::Justification::right);
+    g.setFont(juce::FontOptions(8.0f));
+    g.setColour(markRed.withAlpha(0.7f));
+    drawTrackedText(g, unitNumber, box.withTop(box.getY() + 20.0f).withHeight(11.0f),
+                    2.0f, juce::Justification::right);
+}
+
+// The two decals either side of the keyboard. Both are plates like any other,
+// which is the point: the keys sit in a cut-out in the same piece of metal the
+// modules are bolted to, rather than on a strip of their own.
+inline void drawDeckPlates(juce::Graphics& g, juce::Rectangle<int> bounds)
+{
+    const auto left = deckLeftBounds(bounds).toFloat();
+    drawPlate(g, left, 1.0f, 10.0f);
+    {
+        auto face = left.reduced(10.0f, 8.0f);
+        g.setColour(text.withAlpha(0.85f));
+        g.setFont(juce::FontOptions(15.0f, juce::Font::bold));
+        drawTrackedText(g, deckMark, face.withHeight(17.0f), 2.6f, juce::Justification::left);
+        g.setFont(juce::FontOptions(7.0f));
+        g.setColour(electricBlue.withAlpha(0.6f));
+        drawTrackedText(g, deckRole, face.withTop(face.getY() + 19.0f).withHeight(10.0f),
+                        1.2f, juce::Justification::left);
+        g.setColour(legendText.withAlpha(0.9f));
+        drawTrackedText(g, deckPlace, face.withTop(face.getY() + 30.0f).withHeight(10.0f),
+                        1.2f, juce::Justification::left);
+        const auto strip = face.withTop(face.getBottom() - 12.0f);
+        if (strip.getWidth() > 30.0f)
+            drawHatch(g, strip, plateEdgeLit.withAlpha(0.3f), 2.5f, 8.0f);
+    }
+
+    const auto right = deckRightBounds(bounds).toFloat();
+    drawPlate(g, right, 1.0f, 10.0f);
+    {
+        const auto face = right.reduced(10.0f, 8.0f);
+        g.setFont(juce::FontOptions(8.0f));
+        g.setColour(legendText.withAlpha(0.95f));
+        drawTrackedText(g, deckMotto, face.withHeight(11.0f).translated(0.0f, 16.0f),
+                        1.3f, juce::Justification::left);
+        drawTrackedText(g, deckMotto2, face.withHeight(11.0f).translated(0.0f, 28.0f),
+                        1.3f, juce::Justification::left);
+        // The cross that closes the marking off, in the same red as the mark in
+        // the opposite corner — the two of them bracket the panel.
+        const auto arm = 4.0f;
+        const auto at = juce::Point<float>(face.getRight() - arm, face.getY() + 22.0f);
+        g.setColour(markRed.withAlpha(0.85f));
+        g.fillRect(at.x - arm, at.y - 0.75f, arm * 2.0f, 1.5f);
+        g.fillRect(at.x - 0.75f, at.y - arm, 1.5f, arm * 2.0f);
+    }
+}
+
+// The chassis: the metal every plate on the panel is bolted to, the frame
+// around it, and the hardware holding the two together.
 inline void drawBackdrop(juce::Graphics& g, juce::Rectangle<int> componentBounds)
 {
     const auto bounds = componentBounds.toFloat();
-    juce::ColourGradient background(juce::Colour(0xff090b13), 0.0f, 0.0f,
-                                    juce::Colour(0xff17182a), bounds.getRight(), bounds.getBottom(), false);
-    g.setGradientFill(background);
+
+    juce::ColourGradient base(chassisLit, bounds.getCentreX(), 0.0f,
+                              chassis, bounds.getCentreX(), bounds.getBottom(), false);
+    // The light is all in the top third, the way it would be under a lamp above
+    // the desk rather than one shining evenly at the panel.
+    base.addColour(0.34, chassis.interpolatedWith(chassisLit, 0.35f));
+    g.setGradientFill(base);
     g.fillRect(bounds);
-    // A hairline just inside the window edge. The lit strips that used to run
-    // down both sides are gone: they cost the modules most of the margin, and
-    // the panel already has plenty of light in it.
-    g.setColour(line);
-    g.drawRoundedRectangle(bounds.reduced(windowMargin * 0.5f), 3.0f, 1.0f);
+
+    juce::Path whole;
+    whole.addRectangle(bounds);
+    fillGrain(g, whole, 0.03f);
+
+    // The frame. Cut back from the window edge so the panel reads as a part
+    // with a border rather than as a picture filling a window.
+    const auto frame = bounds.reduced(4.0f);
+    constexpr auto frameCut = 18.0f;
+    const auto outline = chamferedPath(frame, frameCut);
+    strokeBevel(g, outline, frame, 1.0f, 1.6f, 0.85f);
+    g.setColour(electricBlue.withAlpha(0.05f));
+    g.strokePath(chamferedPath(frame.reduced(3.5f), frameCut - 2.5f), juce::PathStrokeType(1.0f));
+
+    // Four screws, sat in the room the chamfered corners make for them.
+    constexpr auto screwInset = 12.0f;
+    const juce::Point<float> screws[] {
+        {frame.getX() + screwInset,     frame.getY() + screwInset},
+        {frame.getRight() - screwInset, frame.getY() + screwInset},
+        {frame.getX() + screwInset,     frame.getBottom() - screwInset},
+        {frame.getRight() - screwInset, frame.getBottom() - screwInset}};
+    for (const auto& at : screws) drawScrew(g, at, 5.5f, 1.0f);
+
+    // The tab strip sits in a well sunk into the chassis, so the tab that is
+    // lit reads as a switch standing proud of it.
+    const auto strip = juce::Rectangle<int>(tabStripLeft - 9, tabTop - 6,
+                                            tabCount * (tabWidth + tabGap) - tabGap + 18,
+                                            tabHeight + 12).toFloat();
+    drawWell(g, strip, juce::Colour(0xff090b12), 0.9f, 7.0f);
 
     const auto margin = static_cast<float>(windowMargin);
-    drawWordmark(g, {margin, 20.0f, 220.0f, 36.0f});
+    drawWordmark(g, {margin + 22.0f, 18.0f, 196.0f, 32.0f});
     g.setColour(signalViolet);
-    g.setFont(juce::FontOptions(10.0f));
-    g.drawText("SYNTHETIC SIGNAL FORGE // UNIT 01", windowMargin + 2, 54, 280, 14,
-               juce::Justification::centredLeft);
+    g.setFont(juce::FontOptions(9.0f));
+    drawTrackedText(g, "SYNTHETIC SIGNAL FORGE // UNIT 01",
+                    {margin + 24.0f, 52.0f, 240.0f, 12.0f}, 0.6f, juce::Justification::left);
+
+    // The keys sit in a cut-out between the two decals rather than on top of
+    // the chassis, so a rim of shadow shows around them the way it would round
+    // anything dropped into a panel.
+    drawWell(g, keyboardBounds(componentBounds).toFloat().expanded(3.0f, 2.0f),
+             juce::Colour(0xff05070d), 1.0f, 5.0f);
+
+    drawIdentityPlate(g, identityPlateBounds(componentBounds));
+    drawUnitMark(g, unitMarkBounds(componentBounds));
+    drawDeckPlates(g, componentBounds);
 }
 }

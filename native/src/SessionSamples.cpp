@@ -90,6 +90,18 @@ juce::Result Session::importBuiltInSample(BuiltInSample sample, int track, doubl
     return importAudioAt(file, track, startSeconds);
 }
 
+// The generated samples are auditioned from the same cache, so clicking one in
+// the browser renders it exactly once and every later use finds it there.
+juce::Result Session::previewBuiltInSample(BuiltInSample sample)
+{
+    if (!previewEnabled())
+        return juce::Result::ok();
+    const auto file = sampleFile(sample);
+    if (const auto result = createSample(sample, file); result.failed())
+        return result;
+    return previewSample(file);
+}
+
 // Rendered on demand into the same cache the timeline import uses, so a slot
 // clip and an arrangement clip reference one file rather than two copies.
 juce::Result Session::insertBuiltInSampleInSlot(BuiltInSample sample, int track, int scene)

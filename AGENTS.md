@@ -31,6 +31,7 @@ Application code, `native/src`:
 | Arrangement UI | `Arrangement.*`, `ArrangementGeometry.cpp`, `ClipGeometry.h` |
 | Track groups: the model and the arrangement's band | `SessionGroups.cpp`, `ArrangementGroups.cpp` |
 | Renaming a track card or a group band in place | `ArrangementRename.cpp` |
+| Auditioning a library sound | `SessionPreview.cpp` |
 | Session view (clip launcher) UI, paused, see [SESSION-VIEW.md](SESSION-VIEW.md) | `SessionView.h`, `SessionView.cpp`, `SessionViewPainter.cpp`, `SessionViewGestures.cpp` |
 | Scenes, clip slots and launching | `SessionSlots.cpp` |
 | Mixer: track volume, pan, mute, solo, main output | `SessionMixer.cpp` |

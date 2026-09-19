@@ -37,6 +37,11 @@ extern const juce::Identifier trackGroupNameID;
 extern const juce::Identifier trackGroupColourID;
 extern const juce::Identifier trackGroupCollapsedID;
 
+// True while the app is running a --self-test style command line. Persistent
+// preferences are neither read nor written then, so a developer's settings
+// cannot decide what the suite does.
+bool isCommandLineTestMode();
+
 struct PresetNote { int step, pitch, length; };
 
 enum class SynthPatch { Default, ChordPad, SubBass, ReeseBass };

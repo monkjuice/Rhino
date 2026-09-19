@@ -139,6 +139,7 @@ public:
         virtual void editDidChange() = 0;
     };
     Session();
+    ~Session();
     static void setCommandLineTestMode(bool enabled);
     juce::ValueTree projectSnapshot();
     // Discards the open document for an untitled starter one. Callers ask about
@@ -153,6 +154,15 @@ public:
     juce::Result importAudio(const juce::File&);
     juce::Result importAudioAt(const juce::File&, int track, double startSeconds);
     juce::Result importBuiltInSample(BuiltInSample, int track = 1, double startSeconds = -1.0);
+    // Auditioning a library sound. The preview is mixed alongside the edit
+    // rather than routed through it, so it chooses no track, opens no undo
+    // transaction and changes nothing about the project.
+    juce::Result previewSample(const juce::File&);
+    juce::Result previewBuiltInSample(BuiltInSample);
+    void stopPreview();
+    bool isPreviewing() const;
+    bool previewEnabled() const { return browserPreview; }
+    void setPreviewEnabled(bool enabled);
     void togglePlayback();
     void stop();
     void releasePlayingNotes();
@@ -418,6 +428,10 @@ private:
         te::AutomatableParameter::Ptr parameter;
         float restoreValue = 0.0f;
     };
+    // SessionPreview.cpp
+    static bool readPreviewPreference();
+    void ensurePreviewAttached();
+    void releasePreview();
     void buildStarterEdit();
     void refreshAfterUndoRedo(bool changed);
     te::PluginList* pluginListForTrack(int track) const;
@@ -458,6 +472,15 @@ private:
     std::vector<AutomationRuntime> automationRuntime;
     std::vector<OfflineAutomation> offlineAutomation;
     std::optional<juce::PluginDescription> forgeDescription;
+    // Declared after the engine, so the preview is torn down before the device
+    // manager it is registered with. The destructor detaches it either way.
+    juce::TimeSliceThread previewThread {"Rhino preview"};
+    juce::AudioFormatManager previewFormats;
+    juce::AudioTransportSource previewTransport;
+    juce::AudioSourcePlayer previewPlayer;
+    std::unique_ptr<juce::AudioFormatReaderSource> previewReader;
+    bool browserPreview = readPreviewPreference();
+    bool previewAttached = false;
 };
 int runSelfTest();
 int runPatternTest();

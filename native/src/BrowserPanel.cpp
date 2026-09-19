@@ -148,6 +148,14 @@ public:
         if (nowSelected) panel.reportSelection(item);
     }
 
+    // Auditioning follows the click rather than the selection: the tree is
+    // rebuilt on every search and resize, and each rebuild restores the
+    // selection, which would otherwise replay the sound each time.
+    void itemClicked(const juce::MouseEvent& event) override
+    {
+        if (!event.mods.isPopupMenu()) panel.previewItem(item);
+    }
+
     juce::var getDragSourceDescription() override
     {
         const auto description = panel.dragDescriptionFor(item);
@@ -398,6 +406,16 @@ void BrowserPanel::rebuildTree()
 void BrowserPanel::reportSelection(const Item& item)
 {
     if (status) status(item.name + " - " + item.detail);
+}
+
+// Only rows that are a sound have one to play. An instrument or an effect is
+// a thing to put on a track, and there is nothing to hear until it is there.
+void BrowserPanel::previewItem(const Item& item)
+{
+    const auto result = item.sample      ? session.previewBuiltInSample(*item.sample)
+                      : item.file != juce::File() ? session.previewSample(item.file)
+                                        : juce::Result::ok();
+    if (result.failed() && status) status(result.getErrorMessage());
 }
 
 juce::String BrowserPanel::dragDescriptionFor(const Item& item) const

@@ -74,6 +74,8 @@ int runArrangementTest()
         }
         scenario("browser drops");
        #include "scenarios/BrowserDrops.inc"
+        scenario("library preview");
+       #include "scenarios/LibraryPreview.inc"
         scenario("rendering");
        #include "scenarios/Rendering.inc"
         scenario("audio clip editing");

@@ -55,6 +55,7 @@ private:
     void selectedRowsChanged(int lastRowSelected) override;
 
     void rebuildTree();
+    void previewItem(const Item&);
     void reportSelection(const Item&);
     juce::String dragDescriptionFor(const Item&) const;
     juce::Colour colourFor(const Item&) const;

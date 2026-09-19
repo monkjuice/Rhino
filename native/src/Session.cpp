@@ -14,11 +14,23 @@ void Session::setCommandLineTestMode(bool enabled)
     commandLineTestMode = enabled;
 }
 
+bool isCommandLineTestMode()
+{
+    return commandLineTestMode;
+}
+
 Session::Session() : engine(commandLineTestMode ? "Rhino Native Tests" : "Theda Native")
 {
     DeviceCatalog::registerBuiltInTypes(engine);
     initialiseExternalPlugins();
     buildStarterEdit();
+}
+
+// The preview holds an audio callback on the engine's device manager, so it has
+// to come off before either of them goes.
+Session::~Session()
+{
+    releasePreview();
 }
 
 // The starter document, built here rather than in the constructor so that File >

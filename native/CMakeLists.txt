@@ -57,6 +57,7 @@ target_sources(RhinoNative PRIVATE
     src/SessionMixer.cpp
     src/SessionClips.cpp
     src/SessionSamples.cpp
+    src/SessionPreview.cpp
     src/SessionAutomation.cpp
     src/SessionTransport.cpp
     src/SessionExternalPlugins.cpp

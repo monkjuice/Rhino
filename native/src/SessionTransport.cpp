@@ -115,6 +115,9 @@ void Session::releasePlayingNotes()
 
 void Session::releaseAudioDevice()
 {
+    // The preview is a callback on the device that is about to close, so it
+    // comes off first rather than being left pointing at a shut device.
+    releasePreview();
     te::TransportControl::stopAllTransports(engine, false, true);
     if (edit != nullptr)
     {

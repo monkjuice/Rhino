@@ -628,6 +628,8 @@ private:
         menu.addSeparator();
         menu.addItem(3, "Clear pattern");
         menu.addSeparator();
+        menu.addItem(5, "Preview library sounds", true, session.previewEnabled());
+        menu.addSeparator();
         menu.addItem(4, "Audio settings...");
         menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(target != nullptr ? *target : editMenu),
             [safe = juce::Component::SafePointer<ControlWindow>(this)](int result)
@@ -637,6 +639,13 @@ private:
                 else if (result == 2) safe->session.redo();
                 else if (result == 3) safe->session.clearPattern();
                 else if (result == 4) safe->showAudioSettings();
+                else if (result == 5)
+                {
+                    const auto on = !safe->session.previewEnabled();
+                    safe->session.setPreviewEnabled(on);
+                    safe->logStatus(on ? "Clicking a library sound plays it"
+                                       : "Library sounds are no longer played when clicked");
+                }
             });
     }
 

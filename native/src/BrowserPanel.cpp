@@ -1,9 +1,26 @@
 #include "BrowserPanel.h"
+#include "ContentLibrary.h"
 
 namespace rhino
 {
 namespace
 {
+// "VinylDrums" reads better as "Vinyl Drums". Only a lowercase letter
+// followed by an uppercase one is a word break, so "TR808" is left alone.
+juce::String spacedFolderName(const juce::String& raw)
+{
+    juce::String spaced;
+    for (int i = 0; i < raw.length(); ++i)
+    {
+        const auto character = raw[i];
+        if (i > 0 && juce::CharacterFunctions::isUpperCase(character)
+                  && juce::CharacterFunctions::isLowerCase(raw[i - 1]))
+            spaced << ' ';
+        spaced << character;
+    }
+    return spaced;
+}
+
 juce::String presetId(Session::PatternPreset preset)
 {
     switch (preset)
@@ -198,14 +215,25 @@ BrowserPanel::BrowserPanel(Session& s) : session(s)
         {"Patterns", "Drums", "Break kit", "Syncopated kick/snare/hats groove", Session::PatternPreset::BreakKit},
         {"Patterns", "Drums", "Minimal kit", "Sparse kick/snare/hats sketch", Session::PatternPreset::MinimalKit},
         {"Patterns", "Drums", "Clap kit", "Kick, clap backbeat, tight hats", Session::PatternPreset::ClapKit},
-        {"Instruments", "Drum Rack", "Rhino 808", "TR-808 kit: kick, snare, toms, hats", std::nullopt, {}, std::nullopt, DrumKit::Rhino808},
-        {"Instruments", "Drum Rack", "House Kit", "Deep kick, tight hats, for the House pattern", std::nullopt, {}, std::nullopt, DrumKit::House},
-        {"Instruments", "Drum Rack", "Break Kit", "Snappy snare, bright hats, for the Break pattern", std::nullopt, {}, std::nullopt, DrumKit::Break},
-        {"Instruments", "Drum Rack", "Minimal Kit", "Short, quiet pads, for the Minimal pattern", std::nullopt, {}, std::nullopt, DrumKit::Minimal},
-        {"Instruments", "Drum Rack", "Clap Kit", "Clap on the backbeat, for the Clap pattern", std::nullopt, {}, std::nullopt, DrumKit::Clap},
+        {"Instruments", "Drum Rack", "Rhino 808", "TR-808 kit: kick, snare, toms, hats", std::nullopt, {}, std::nullopt, {}, DrumKit::Rhino808},
+        {"Instruments", "Drum Rack", "House Kit", "Deep kick, tight hats, for the House pattern", std::nullopt, {}, std::nullopt, {}, DrumKit::House},
+        {"Instruments", "Drum Rack", "Break Kit", "Snappy snare, bright hats, for the Break pattern", std::nullopt, {}, std::nullopt, {}, DrumKit::Break},
+        {"Instruments", "Drum Rack", "Minimal Kit", "Short, quiet pads, for the Minimal pattern", std::nullopt, {}, std::nullopt, {}, DrumKit::Minimal},
+        {"Instruments", "Drum Rack", "Clap Kit", "Clap on the backbeat, for the Clap pattern", std::nullopt, {}, std::nullopt, {}, DrumKit::Clap},
         {"Samples", "Built-in", "Whistle", "Built-in audio sample", std::nullopt, {}, Session::BuiltInSample::Whistle},
         {"Samples", "Built-in", "Siren", "Built-in audio sample", std::nullopt, {}, Session::BuiltInSample::Siren},
     };
+
+    // The sample library on disk. Factory content today; a user root will sit
+    // beside it, which is why the pack name is carried on every row rather
+    // than assumed.
+    for (const auto& sample : ContentLibrary::samples())
+    {
+        const auto pack = spacedFolderName(sample.pack);
+        const auto folder = sample.group.isEmpty() ? pack : pack + " / " + spacedFolderName(sample.group);
+        items.push_back({"Samples", folder, sample.name, pack + " one-shot",
+                         std::nullopt, {}, std::nullopt, sample.file});
+    }
 
     // Instruments, Audio FX and MIDI FX, in catalog order.
     for (const auto& device : DeviceCatalog::all())
@@ -318,7 +346,7 @@ const BrowserPanel::Item* BrowserPanel::selectedItem() const
 
 juce::Colour BrowserPanel::colourFor(const Item& item) const
 {
-    if (item.sample) return juce::Colour(0xffe09a70);
+    if (item.sample || item.file != juce::File()) return juce::Colour(0xffe09a70);
     if (item.preset) return juce::Colour(0xffc6d58c);
     if (const auto* device = DeviceCatalog::byId(item.deviceId))
     {
@@ -404,6 +432,8 @@ juce::String BrowserPanel::dragDescriptionFor(const Item& item) const
             : device->kind == DeviceKind::MidiEffect ? "midi-effect" : "effect";
         return "rhino-browser:" + juce::String(kind) + ":" + device->id;
     }
+    if (item.file != juce::File())
+        return "rhino-browser:file:" + item.file.getFullPathName();
     if (item.sample)
         return "rhino-browser:sample:" + sampleId(*item.sample);
     if (item.drumKit)
@@ -438,6 +468,11 @@ void BrowserPanel::applyItem(const Item& item)
         const auto track = selectedTargetTrack();
         const auto result = session.addDrumKit(*item.drumKit, track);
         if (status) status(result.wasOk() ? "Added " + item.name + " to " + session.trackName(track) : result.getErrorMessage());
+    }
+    else if (item.file != juce::File())
+    {
+        const auto result = session.importAudio(item.file);
+        if (status) status(result.wasOk() ? "Added " + item.name : result.getErrorMessage());
     }
     else if (item.sample)
     {

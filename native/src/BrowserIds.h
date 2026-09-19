@@ -18,7 +18,20 @@ inline juce::String browserDropKind(const juce::String& description)
 
 inline juce::String browserDropId(const juce::String& description)
 {
-    return description.fromLastOccurrenceOf(":", false, false);
+    // Everything after the kind, read from the front rather than the back:
+    // a payload may itself contain a colon, as every Windows path does.
+    return description.fromFirstOccurrenceOf(":", false, false)
+                      .fromFirstOccurrenceOf(":", false, false);
+}
+
+// A library file drop carries its path. Returns a default File for any other
+// kind, which every caller treats as "not a file drop".
+inline juce::File browserDropFile(const juce::String& description)
+{
+    if (browserDropKind(description) != "file")
+        return {};
+    const auto path = browserDropId(description);
+    return path.isEmpty() ? juce::File() : juce::File(path);
 }
 
 inline std::optional<Session::PatternPreset> patternPresetFromId(const juce::String& id)

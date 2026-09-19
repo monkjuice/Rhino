@@ -39,6 +39,9 @@ public:
         // of those a given id is.
         juce::String deviceId;
         std::optional<Session::BuiltInSample> sample;
+        // A file in the content library. Set for library samples, empty for
+        // everything else. Dragged and applied by path.
+        juce::File file;
         std::optional<DrumKit> drumKit;
     };
 

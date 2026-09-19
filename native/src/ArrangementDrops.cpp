@@ -95,7 +95,8 @@ void Arrangement::itemDropped(const juce::DragAndDropTarget::SourceDetails& deta
                 + juce::String(session.clipPluginCount(clip.id)));
             return;
         }
-    if ((kind == "preset" || kind == "effect" || kind == "instrument" || kind == "midi-effect" || kind == "sample")
+    if ((kind == "preset" || kind == "effect" || kind == "instrument" || kind == "midi-effect"
+         || kind == "sample" || kind == "file")
         && targetTrack < 0
         && session.trackCount() > 0
         && static_cast<float>(details.localPosition.y) > lane(session.trackCount() - 1).getBottom())
@@ -187,6 +188,21 @@ juce::Result Arrangement::applyBrowserDrop(const juce::String& description, int 
         if (result.failed()) return result;
         selectTrack(track);
         if (status) status("Added MIDI FX to " + session.trackName(track) + " Device View");
+        return juce::Result::ok();
+    }
+
+    if (kind == "file")
+    {
+        const auto file = browserDropFile(description);
+        if (file == juce::File() || !file.existsAsFile())
+            return juce::Result::fail("That library file is missing.");
+        // Any track index is offered: importAudioAt is what knows an audio
+        // clip cannot share a track with an instrument, and says so.
+        if (track < 0) return juce::Result::fail("Drop audio on a track.");
+        const auto result = session.importAudioAt(file, track, startSeconds);
+        if (result.failed()) return result;
+        selectTrack(track);
+        if (status) status("Added " + file.getFileNameWithoutExtension() + " to " + session.trackName(track));
         return juce::Result::ok();
     }
 

@@ -1,4 +1,5 @@
 #include "ContentLibrary.h"
+#include <algorithm>
 
 namespace rhino
 {
@@ -78,4 +79,42 @@ bool ContentLibrary::isAvailable()
 {
     return root() != juce::File();
 }
+
+std::vector<LibrarySample> ContentLibrary::scanSamples()
+{
+    std::vector<LibrarySample> found;
+    const auto samplesRoot = file("Samples");
+    if (!samplesRoot.isDirectory())
+        return found;
+
+    // Extensions JUCE's basic formats can read. A pack may carry artwork or a
+    // SOURCE.md beside its audio, and neither belongs in the browser.
+    const auto* audioPattern = "*.wav;*.flac;*.aif;*.aiff;*.ogg;*.mp3";
+
+    for (const auto& pack : samplesRoot.findChildFiles(juce::File::findDirectories, false))
+        for (const auto& audio : pack.findChildFiles(juce::File::findFiles, true, audioPattern))
+        {
+            // One level of grouping inside a pack, which is how the packs here
+            // are laid out: VinylDrums/Kick/... and a loose file for a small one.
+            const auto parent = audio.getParentDirectory();
+            found.push_back({audio, pack.getFileName(),
+                             parent == pack ? juce::String() : parent.getFileName(),
+                             audio.getFileNameWithoutExtension()});
+        }
+
+    std::sort(found.begin(), found.end(), [](const LibrarySample& a, const LibrarySample& b)
+    {
+        if (a.pack != b.pack)   return a.pack < b.pack;
+        if (a.group != b.group) return a.group < b.group;
+        return a.name < b.name;
+    });
+    return found;
+}
+
+const std::vector<LibrarySample>& ContentLibrary::samples()
+{
+    static const std::vector<LibrarySample> scanned = scanSamples();
+    return scanned;
+}
+
 }

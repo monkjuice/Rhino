@@ -289,6 +289,16 @@ void SessionView::applyBrowserDrop(const juce::String& description, int track, i
             message = "Added instrument clip to " + session.trackName(track) + " / " + session.sceneName(scene);
         }
     }
+    else if (kind == "file")
+    {
+        const auto file = browserDropFile(description);
+        if (file != juce::File() && file.existsAsFile())
+        {
+            result = session.insertAudioFileInSlot(file, track, scene);
+            message = "Added " + file.getFileNameWithoutExtension() + " to "
+                + session.trackName(track) + " / " + session.sceneName(scene);
+        }
+    }
     else if (kind == "sample")
     {
         if (const auto sample = builtInSampleFromId(id))

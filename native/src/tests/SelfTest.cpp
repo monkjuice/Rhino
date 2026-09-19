@@ -1,5 +1,6 @@
 #include "../Session.h"
 #include "../BrowserPanel.h"
+#include "ContentLibrary.h"
 // A test drives the DSP directly, so unlike the rest of the app it needs the
 // device definitions rather than their catalog entries.
 #include "audio/UtilityDevice.h"
@@ -84,6 +85,19 @@ int runSelfTest()
             for (const auto& row : rows)
                 if (row.deviceId.isNotEmpty())
                     require(DeviceCatalog::byId(row.deviceId) != nullptr);
+
+            // The sample library is content on disk, so the browser has to be
+            // showing what is actually there rather than a list written into
+            // the source. Zero on both sides is a pass: a build without the
+            // library present still has a working browser.
+            const auto libraryRows = std::count_if(rows.begin(), rows.end(),
+                [](const BrowserPanel::Item& row) { return row.file != juce::File(); });
+            require(static_cast<size_t>(libraryRows) == ContentLibrary::samples().size());
+            for (const auto& row : rows)
+                if (row.file != juce::File())
+                    require(row.file.existsAsFile());
+            juce::Logger::writeToLog("Rhino: browser lists " + juce::String(libraryRows)
+                                     + " library samples");
         }
         for (const auto& device : DeviceCatalog::all())
         {

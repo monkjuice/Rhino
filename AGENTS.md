@@ -37,10 +37,27 @@ Application code, `native/src`:
 | App shell and lifecycle | `Main.cpp` |
 | Project files | `ProjectFiles.*` |
 | Playhead rendering | `Playhead.*` |
-| Built-in devices | `UtilityDevice`, `DrumDevice`, `RhinoArpDevice`, `RhinoBloomDevice`, `RhinoSpaceDevice`, `RhinoWaveDevice` |
+| Built-in devices | `native/src/devices/`, split `instruments/`, `audio/`, `midi/`. Declared once in `DeviceCatalog.cpp` |
+| Sample and content library | `library/` at the repository root, found by `native/src/core/ContentLibrary.h` |
 | Theme | `Theme.h` |
 
 The UI depends on `Session`; `Session` knows nothing about the UI. Keep that direction.
+
+`native/src` builds as three targets, not one: `RhinoCore` (`src/core`, JUCE only), `RhinoDevices` (`src/devices`, Tracktion and `RhinoCore`) and the application. A device may not include `Session.h` or any UI header, and `Session.h` reaches devices only through `DeviceCatalog.h`. That is what keeps editing a device from rebuilding the app, and it is worth preserving as more MIDI and audio FX arrive.
+
+## Content is files, never compiled in
+
+Samples, and the presets and patterns that will join them, live under `library/` at the repository root and are found at runtime by `ContentLibrary`. Nothing there is compiled. `juce_add_binary_data` expands an asset to roughly three bytes of C++ per byte of data and rebuilds all of it on a clean build, which is why `native/assets/` is now only the fonts and app icons — what the UI needs before it can read from disk. Audio under `library/` is stored with Git LFS, declared in `.gitattributes`; set that up *before* adding a new content type, because converting afterwards means rewriting history.
+
+A device reading its own samples does so in `initialise()`, which is prepare-to-play and never the audio callback, and must survive the files being absent — `DrumDevice` logs and falls silent. Measured cost of that read for the TR-808 kit: 525 KB in 1.2 ms warm, once per device instance.
+
+## Adding a device is three edits
+
+A device is its source under `native/src/devices/`, a line in that target's `CMakeLists.txt`, and an entry in `DeviceCatalog.cpp`. The catalog carries the id, engine type name, display name, kind, browser group, blurb, colour and pattern key, and the browser, the drop targets, the rack's add menu, the engine registration and the instrument rules all read it. Nothing in `Session` or the UI should ever need editing to add one; if it does, that is the bug. `--self-test` holds the line by asserting every browsable catalog device has a browser row and can be added.
+
+Never self-register a device from a static initialiser: a static library's unreferenced objects are dropped by the linker and the registration disappears without an error.
+
+`Session::addDevice(id, track)` is the one way to add a device. The `Instrument`, `AudioEffect` and `MidiEffect` enums survive only as shorthand for the devices that predate the catalog, converted to ids in `DeviceIds.h` and nowhere else. New devices get no enum.
 
 The main track is addressed as `trackCount()`, one past the last audio track, so every track-indexed call reaches it without a sentinel that `DeviceTarget` would read as invalid. `Session::pluginListForTrack` resolves that index to either a track's plugin list or the edit's master list. It carries effects only; the engine's `canBeAddedToMaster` is what refuses the rest.
 

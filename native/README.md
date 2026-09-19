@@ -4,7 +4,21 @@ How the native application works internally. For what Rhino is, how to build and
 
 ## Layout
 
-`src/` holds the application. `src/tests/` holds the test runners and their scenario files — see [the test README](src/tests/README.md). `assets/` is compiled in as JUCE binary data. `.deps/` holds pinned JUCE and Tracktion checkouts fetched by `scripts/fetch-dependencies.py`; it is ignored by version control and is not Rhino's code.
+`src/` holds the application, and builds as three targets so that editing one part does not rebuild the others:
+
+| Target | Holds | May depend on |
+| --- | --- | --- |
+| `RhinoCore` (`src/core/`) | Foundation with no engine or UI: `ContentLibrary` | JUCE only |
+| `RhinoDevices` (`src/devices/`) | Rhino's plugins, under `instruments/`, `audio/`, `midi/`, plus `DeviceCatalog` | Tracktion, `RhinoCore` |
+| `RhinoNative` (`src/`) | `Session`, the UI, the app shell | both of the above |
+
+A device may not include `Session.h` or any UI header, and `Session.h` reaches the device library through `DeviceCatalog.h` alone. It used to include all six device headers, so editing any device rebuilt nearly every translation unit.
+
+`src/tests/` holds the test runners and their scenario files — see [the test README](src/tests/README.md).
+
+Content — samples now, presets and patterns later — lives in files under `library/` at the repository root and is **never** compiled in. JUCE expands an embedded asset to roughly three bytes of C++ per byte of data and recompiles all of it on a clean build; the 700 KB that used to be embedded became 2.1 MB of generated source, and a sample library of any size is unworkable there. `ContentLibrary::root()` finds it: the `RHINO_LIBRARY_DIR` override, then a `Library` folder beside the executable for an installed build, then the repository's `library/` for a development build. Audio under `library/` is stored with Git LFS. `assets/` is what remains compiled in as JUCE binary data, and is deliberately only the fonts and app icons — what the UI needs before it can read anything from disk.
+
+`.deps/` holds pinned JUCE and Tracktion checkouts fetched by `scripts/fetch-dependencies.py`; it is ignored by version control and is not Rhino's code.
 
 A class may be defined across several translation units. `Session` is implemented in `Session.cpp` plus the `Session*.cpp` files; `Arrangement` in `Arrangement.cpp` plus `ArrangementGeometry.cpp` and its siblings. Every source file is listed explicitly in `CMakeLists.txt` — nothing is globbed, so a new file needs a line there.
 
@@ -32,7 +46,17 @@ A class may be defined across several translation units. `Session` is implemente
 
 Devices derive from `te::Plugin` and follow a fixed shape: a stable `xmlTypeName` (`rhino.<name>.v1`), the `getName`/`getPluginType`/`getVendor` overrides, and parameters wired through `referTo` / `addParam` / `attachToCurrentValue`, detached in the destructor and refreshed in `restorePluginStateFromValueTree`.
 
-Registration is currently hand-wired rather than table-driven, so a new device must also be added to `createBuiltInType` in `Session.cpp`, the relevant enum-to-type mapping, and the browser id maps. Check every site before assuming one edit is enough.
+Registration is table-driven. A new device is three edits and no more:
+
+1. the source under `src/devices/instruments/`, `audio/` or `midi/`;
+2. a line in `src/devices/CMakeLists.txt`;
+3. an entry in `DeviceCatalog.cpp`, plus its `createBuiltInType` line in `registerBuiltInTypes`.
+
+The catalog entry carries the device's id, engine type name, display name, kind, browser group and blurb, its colour, and the pattern key that selects it. The browser rows, the drag-and-drop targets, the rack's add menu, the engine registration and the one-instrument-per-track rules all read it, so nothing in `Session` or the UI needs touching. `--self-test` asserts that relationship: every browsable catalog device must have a browser row and must be addable.
+
+Do not make a device self-register from a static initialiser. Objects in a static library that nothing references are dropped by the linker, and the registration would vanish silently.
+
+`Session::addDevice(id, track)` is the one way to add a device. `Session`'s `Instrument`, `AudioEffect` and `MidiEffect` enums remain as a typed shorthand for the devices that predate the catalog — presets and tests name instruments with them — and `DeviceIds.h` is the only place they become catalog ids. A device added from now on needs no enum.
 
 ## Dependencies
 

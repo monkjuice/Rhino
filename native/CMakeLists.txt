@@ -40,6 +40,7 @@ juce_add_binary_data(RhinoNativeAssets
         assets/fonts/InterRegular.ttf
         assets/fonts/InterSemiBold.ttf)
 add_subdirectory(src/core)
+add_subdirectory(src/devices)
 # Sources are listed explicitly: a new .cpp must be added here or it will not compile.
 # A class may span several translation units (Session, Arrangement); keep those grouped.
 target_sources(RhinoNative PRIVATE
@@ -78,13 +79,6 @@ target_sources(RhinoNative PRIVATE
     src/DeviceEditorPanel.cpp
     src/DeviceRack.cpp
     src/Playhead.cpp
-    # Devices
-    src/UtilityDevice.cpp
-    src/DrumDevice.cpp
-    src/RhinoArpDevice.cpp
-    src/RhinoBloomDevice.cpp
-    src/RhinoSpaceDevice.cpp
-    src/RhinoWaveDevice.cpp
     # App
     src/Main.cpp
     src/TransportDisplay.cpp
@@ -105,6 +99,7 @@ target_compile_definitions(RhinoNative PRIVATE
 target_link_libraries(RhinoNative PRIVATE
     RhinoNativeAssets
     RhinoCore
+    RhinoDevices
     tracktion::tracktion_engine tracktion::tracktion_graph tracktion::tracktion_core
     juce::juce_audio_utils juce::juce_recommended_config_flags
     juce::juce_recommended_warning_flags)

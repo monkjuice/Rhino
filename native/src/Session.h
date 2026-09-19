@@ -1,10 +1,10 @@
 #pragma once
-#include "UtilityDevice.h"
-#include "DrumDevice.h"
-#include "RhinoSpaceDevice.h"
-#include "RhinoBloomDevice.h"
-#include "RhinoArpDevice.h"
-#include "RhinoWaveDevice.h"
+#include "audio/UtilityDevice.h"
+#include "instruments/DrumDevice.h"
+#include "audio/RhinoSpaceDevice.h"
+#include "audio/RhinoBloomDevice.h"
+#include "midi/RhinoArpDevice.h"
+#include "instruments/RhinoWaveDevice.h"
 #include "ClipGeometry.h"
 #include <optional>
 #include <vector>

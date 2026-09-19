@@ -1,5 +1,5 @@
 #include "DeviceEditorPanel.h"
-#include "RhinoSpaceDevice.h"
+#include "audio/RhinoSpaceDevice.h"
 #include <algorithm>
 #include <cmath>
 

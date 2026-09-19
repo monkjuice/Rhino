@@ -37,12 +37,17 @@ Editor::Editor(Processor& p)
 
     keyboard.setAvailableRange(21, 108);
     keyboard.setLowestVisibleKey(21);
-    // Middle C is C4 here because middle C is C4 in Rhino's own grid, which
-    // names its rows with the same octave number — see StepGridPainter. JUCE's
-    // keyboard defaults to 3 instead, so without this the same key reads C3 on
-    // the panel and C4 on the grid that is driving it, and a player comparing
-    // the two concludes the synth is an octave out when only the label is.
-    keyboard.setOctaveForMiddleC(4);
+    // Middle C is C3, which is what Ableton, Serum, FL and Logic all call MIDI
+    // 60. Rhino's own grid says the same — see StepGridPainter, which was moved
+    // with this — so the panel, the grid driving it and the DAW next to it all
+    // name one note the same way.
+    //
+    // It used to be C4 here and on the grid. Both were self-consistent and both
+    // disagreed with everything outside Rhino, so a player checking Forge
+    // against Serum pressed two keys marked C3, got notes an octave apart, and
+    // reasonably concluded the synth was out of tune. It was not; only the
+    // label was. This is JUCE's own default, so the call stays to say so.
+    keyboard.setOctaveForMiddleC(3);
     keyboard.setScrollButtonsVisible(false);
     keyboard.setKeyPressBaseOctave(computerKeyOctave);
     keyboard.setColour(juce::MidiKeyboardComponent::whiteNoteColourId, juce::Colour(0xffd8dcea));

@@ -107,7 +107,12 @@ private:
     // notes wide starting at the C of this octave; z and x walk it, and the
     // keys it can reach are washed in on the piano so you can see where you
     // are without having to play a note to find out.
-    int computerKeyOctave = 6;
+    //
+    // Five, so the first letter key is middle C — MIDI 60, the C3 a DAW means
+    // when it says C3. It was six, which started the reach an octave above
+    // that, so typing a C and playing a DAW's C3 gave two different notes and
+    // the synth read an octave sharp.
+    int computerKeyOctave = 5;
     // Every control has carried a tooltip since M2, but without one of these
     // nothing ever showed them. Parented to the editor rather than given a
     // desktop window of its own, which is what a plugin in a host needs.

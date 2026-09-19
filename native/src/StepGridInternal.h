@@ -18,6 +18,11 @@ inline int pitchClassOf(int pitch)
     return (pitch % 12 + 12) % 12;
 }
 
+// The last argument is the octave number middle C carries: 3, so MIDI 60 reads
+// C3 the way Ableton, FL and Logic name it, and the way Forge's own keyboard
+// does. It was 4, which was consistent inside Rhino and wrong against every
+// DAW a pattern gets compared with. StepGridPainter names its rows the same
+// way; the two have to move together.
 inline juce::String drumLaneName(int pitch)
 {
     if (pitch == 48) return "Kick";
@@ -28,7 +33,7 @@ inline juce::String drumLaneName(int pitch)
     if (pitch == 56) return "Clap";
     if (pitch == 58) return "Closed Hat";
     if (pitch == 59) return "Open Hat";
-    return juce::MidiMessage::getMidiNoteName(pitch, true, true, 4);
+    return juce::MidiMessage::getMidiNoteName(pitch, true, true, 3);
 }
 
 }

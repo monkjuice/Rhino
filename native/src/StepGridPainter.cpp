@@ -57,7 +57,9 @@ void StepGrid::paintKeyboard(juce::Graphics& g)
         if (labelEvery == 0 || black || (labelEvery == 12 && pitchClassOf(pitch) != 0))
             continue;
         g.setColour(juce::Colour(pitchClassOf(pitch) == 0 ? 0xff2f353c : 0xff70767d));
-        g.drawText(juce::MidiMessage::getMidiNoteName(pitch, true, true, 4),
+        // Middle C is C3 here, matching drumLaneName and Forge's keyboard — see
+        // StepGridInternal.h for why the three of them have to agree.
+        g.drawText(juce::MidiMessage::getMidiNoteName(pitch, true, true, 3),
                    key.reduced(3.0f, 0.0f), juce::Justification::centredRight);
     }
 }

@@ -35,7 +35,7 @@ public:
         g.setColour((highlighted || down ? accent : line).withAlpha(enabled ? 0.9f : 0.3f));
         g.drawRoundedRectangle(area, 3.0f, 1.0f);
         g.setColour((down ? rhino::forge::ui::text : mutedText).withAlpha(enabled ? 1.0f : 0.35f));
-        g.setFont(juce::FontOptions(9.5f, juce::Font::bold));
+        g.setFont(panelFont(Face::emphasis, 9.5f));
         g.drawText(getName(), area, juce::Justification::centred);
     }
 };
@@ -248,7 +248,7 @@ public:
             if (cell.getWidth() >= 22)
             {
                 g.setColour((on ? rhino::forge::ui::text : mutedText).withAlpha(0.85f));
-                g.setFont(juce::FontOptions(8.5f, juce::Font::bold));
+                g.setFont(panelFont(Face::reading, 8.5f));
                 g.drawText(juce::String(i + 1), cell.removeFromBottom(11), juce::Justification::centred);
             }
         }

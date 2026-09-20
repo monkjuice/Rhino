@@ -76,7 +76,7 @@ Editor::Editor(Processor& p)
 
     presetName.setText("INIT SIGNAL", juce::dontSendNotification);
     presetName.setJustificationType(juce::Justification::centredRight);
-    presetName.setFont(juce::FontOptions(10.0f));
+    presetName.setFont(ui::panelFont(ui::Face::label, 10.0f));
     presetName.setColour(juce::Label::textColourId, ui::mutedText);
     addAndMakeVisible(presetName);
 
@@ -1087,7 +1087,13 @@ void Editor::buildModules()
                     control->label.setText(declared.label, juce::dontSendNotification);
                     control->label.setJustificationType(juce::Justification::centred);
                     control->label.setColour(juce::Label::textColourId, ui::mutedText);
-                    control->label.setFont(juce::FontOptions(9.0f));
+                    control->label.setFont(ui::panelFont(ui::Face::label, 9.0f));
+                    // A label's text is rasterised once and blitted after. The
+                    // panel repaints whole at 24Hz, so without this every label
+                    // on it lays its glyphs out again every frame for a string
+                    // that has not changed — and setText still repaints, so a
+                    // label that does change is still right.
+                    control->label.setBufferedToImage(true);
                     addAndMakeVisible(control->label);
                     addAndMakeVisible(*control->selector);
                     module.controls.push_back(std::move(control));
@@ -1174,7 +1180,8 @@ void Editor::buildModules()
                 control->label.setText(declared.label, juce::dontSendNotification);
                 control->label.setJustificationType(juce::Justification::centred);
                 control->label.setColour(juce::Label::textColourId, ui::mutedText);
-                control->label.setFont(juce::FontOptions(declared.style == ui::Style::stepper ? 9.0f : 10.0f));
+                control->label.setFont(ui::panelFont(ui::Face::label, declared.style == ui::Style::stepper ? 9.0f : 10.0f));
+                control->label.setBufferedToImage(true);
 
                 if (declared.style == ui::Style::rocker)
                 {
@@ -1514,6 +1521,21 @@ juce::String Editor::chromeKey(float scale) const
 void Editor::paintChrome(juce::Graphics& g)
 {
     ui::drawBackdrop(g, getLocalBounds());
+
+    // The shared plates go down first, because the modules that sit on them
+    // draw their own panels on top. Each group is drawn once however many
+    // members it has, which is what the set is for.
+    juce::StringArray drawn;
+    for (const auto& module : moduleUis)
+    {
+        const auto& descriptor = *module.descriptor;
+        if (descriptor.group == nullptr || !moduleShown(descriptor)) continue;
+        if (drawn.contains(descriptor.group)) continue;
+        drawn.add(descriptor.group);
+        ui::drawGroupPlate(g, ui::groupBounds(getLocalBounds(), descriptor.group, page),
+                           descriptor.group, ui::plateCode(descriptor, page));
+    }
+
     for (const auto& module : moduleUis)
     {
         const auto& descriptor = *module.descriptor;

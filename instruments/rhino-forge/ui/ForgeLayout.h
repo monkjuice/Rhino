@@ -192,6 +192,16 @@ struct Module
     // short one in the header read as an abbreviation rather than as the name.
     // Null means the title serves for both.
     const char* plateName = nullptr;
+    // Modules sharing a group are drawn inside one plate: the group carries the
+    // outer plate, its legend and its part number, and each module in it gets a
+    // shallower inner panel instead of a plate of its own. The string is both
+    // the key and what is stamped on the plate's foot, so a group needs no
+    // declaration anywhere else.
+    //
+    // SUB and NOISE are one piece of hardware with two channels on it. Drawn as
+    // two separate plates they read as two, which is the whole reason this
+    // exists.
+    const char* group = nullptr;
 };
 
 // The numbered cards that choose which bank a module is showing, laid along its
@@ -506,10 +516,10 @@ inline const std::vector<Module>& modules()
          {{50, {{"subWave", "", Style::wave}}},
           {20, {{"subOctave", "OCT", Style::stepper}}},
           {30, {{"subLevel", "LEVEL"}}}},
-         0, everyPageBut(Page::mix, Page::fx)},
+         0, everyPageBut(Page::mix, Page::fx), 1, 0, 0, 0, 0, nullptr, "SUB / NOISE"},
         {"noise", "NOISE", "", "noiseEnable", true, Display::none, 0, 2, 2, false,
          {{100, {{"noiseLevel", "LEVEL"}}}},
-         0, everyPageBut(Page::mix, Page::fx)},
+         0, everyPageBut(Page::mix, Page::fx), 1, 0, 0, 0, 0, nullptr, "SUB / NOISE"},
         // Four columns for three knobs, against the oscillators' eight for six:
         // the same width per knob, so nothing in the row is drawn at a size its
         // neighbours are not.
@@ -1060,6 +1070,26 @@ inline juce::Rectangle<int> moduleInterior(juce::Rectangle<int> moduleArea)
 
 // The legend strip itself, inset to the same margin the header's title uses so
 // the two line up down the plate's left edge.
+// How far a grouped module's own panel sits inside the area it was given, so
+// the plate underneath shows around it.
+inline constexpr int innerPanelInset = 3;
+
+// The plate a group shares: everything its members between them occupy. Worked
+// out from the members rather than declared, so a module moving column moves
+// the plate with it.
+inline juce::Rectangle<int> groupBounds(juce::Rectangle<int> bounds, const char* group, Page page)
+{
+    juce::Rectangle<int> plate;
+    for (const auto& module : modules())
+    {
+        if (module.group == nullptr || juce::String(module.group) != group) continue;
+        if (!onPage(module, page)) continue;
+        const auto area = moduleBounds(bounds, module);
+        plate = plate.isEmpty() ? area : plate.getUnion(area);
+    }
+    return plate;
+}
+
 inline juce::Rectangle<int> plateFooterBounds(juce::Rectangle<int> moduleArea)
 {
     return moduleArea.withTop(moduleArea.getBottom() - plateFooterHeight).reduced(10, 0);

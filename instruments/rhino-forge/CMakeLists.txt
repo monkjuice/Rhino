@@ -33,10 +33,24 @@ juce_add_plugin(RhinoForge
     VST3_AUTO_MANIFEST FALSE
     EDITOR_WANTS_KEYBOARD_FOCUS FALSE)
 
-# The panel's wordmark. forge_logo.png is stored at the size the panel draws it
-# so paint() blits rather than rescaling a master on every repaint; the
-# full-resolution originals sit beside it for packaging and store art.
-juce_add_binary_data(RhinoForgeAssets SOURCES ui/assets/forge_logo.png)
+# What the panel needs before it can read anything from disk: its wordmark, its
+# four typefaces and the two pieces of hardware it is screwed together with.
+#
+# forge_logo.png is stored at the size the panel draws it so paint() blits
+# rather than rescaling a master on every repaint; the full-resolution
+# originals sit beside it for packaging and store art. The screws are 64px
+# because that is comfortably more than the ~13px they are ever drawn at, even
+# on a scaled display. The typefaces are subsets — see ui/assets/fonts/README.md
+# for what was cut and how to re-cut them; unsubsetted they are 988 KB, and
+# juce_add_binary_data expands an asset to roughly three bytes of C++ per byte.
+juce_add_binary_data(RhinoForgeAssets SOURCES
+    ui/assets/forge_logo.png
+    ui/assets/screw_cross.png
+    ui/assets/screw_dome.png
+    ui/assets/fonts/ChakraPetchSemiBold.ttf
+    ui/assets/fonts/RajdhaniMedium.ttf
+    ui/assets/fonts/RajdhaniSemiBold.ttf
+    ui/assets/fonts/IBMPlexMonoMedium.ttf)
 
 target_sources(RhinoForge PRIVATE
     core/ForgeCore.h
@@ -47,6 +61,7 @@ target_sources(RhinoForge PRIVATE
     core/ForgeWarp.h
     ui/ForgeLayout.h
     ui/ForgeChrome.h
+    ui/ForgeType.h
     ui/ForgeTablePanel.h
     ui/ForgeVisuals.h
     ui/ForgeFxDisplay.h
@@ -82,6 +97,7 @@ if (BUILD_TESTING)
     core/ForgeWarp.h
         ui/ForgeLayout.h
         ui/ForgeChrome.h
+        ui/ForgeType.h
         ui/ForgeTablePanel.h
         ui/ForgeVisuals.h
     ui/ForgeFxDisplay.h

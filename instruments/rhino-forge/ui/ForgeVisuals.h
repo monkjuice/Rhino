@@ -2,6 +2,7 @@
 
 #include "ForgeLayout.h"
 #include "ForgeChrome.h"
+#include "ForgeType.h"
 #include <functional>
 #include <vector>
 #include <BinaryData.h>
@@ -201,6 +202,17 @@ inline juce::PopupMenu panelColourMenu(int current, const juce::String& title)
 class LookAndFeel final : public juce::LookAndFeel_V4
 {
 public:
+    // LOAD, SAVE and anything else JUCE draws the text of itself. Without
+    // these two the panel would be set in Rajdhani and Chakra Petch with the
+    // platform's default face showing through wherever a stock component
+    // draws its own string.
+    juce::Font getTextButtonFont(juce::TextButton&, int buttonHeight) override
+    {
+        return panelFont(Face::emphasis, juce::jmin(12.0f, static_cast<float>(buttonHeight) * 0.48f));
+    }
+
+    juce::Font getPopupMenuFont() override { return panelFont(Face::label, 13.0f); }
+
     // Steppers and bars are both bar-style sliders, so JUCE routes them here.
     // A vertical one is a plain numeric field: for a tuning value the number is
     // the information and a fill proportion would be noise. A horizontal one is
@@ -280,7 +292,7 @@ public:
 
         // Over a fill, the value is read against the accent rather than in it.
         g.setColour((horizontal || !active ? text : accent).withAlpha(enabled ? 1.0f : 0.35f));
-        g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
+        g.setFont(panelFont(Face::reading, 11.0f));
         g.drawText(slider.getTextFromValue(slider.getValue()), area, juce::Justification::centred);
     }
 
@@ -852,7 +864,7 @@ public:
         }
 
         g.setColour(lit ? juce::Colours::white : accent);
-        g.setFont(juce::FontOptions(juce::jmin(13.0f, text.getHeight() * 0.72f), juce::Font::bold));
+        g.setFont(panelFont(Face::emphasis, juce::jmin(13.0f, text.getHeight() * 0.72f)));
         g.drawText(caption, text, juce::Justification::centred);
     }
 };
@@ -967,7 +979,7 @@ public:
         g.setColour((on ? accent : line).withAlpha(enabled ? (highlighted ? 1.0f : 0.85f) : 0.3f));
         g.drawRoundedRectangle(area, 3.0f, 1.0f);
         g.setColour((on ? accent : mutedText).withAlpha(enabled ? 1.0f : 0.35f));
-        g.setFont(juce::FontOptions(10.0f, juce::Font::bold));
+        g.setFont(panelFont(Face::emphasis, 10.0f));
         g.drawText(getName(), area, juce::Justification::centred);
     }
 };
@@ -1223,7 +1235,7 @@ public:
                 g.setColour((live ? accent : line).withAlpha(alpha * (live ? 1.0f : 0.7f)));
                 g.drawRoundedRectangle(box, 3.0f, 1.0f);
                 g.setColour((live ? accent : mutedText).withAlpha(alpha));
-                g.setFont(juce::FontOptions(10.0f, juce::Font::bold));
+                g.setFont(panelFont(Face::emphasis, 10.0f));
                 g.drawText(choices[static_cast<size_t>(i)], box, juce::Justification::centred);
             }
             return;
@@ -1234,7 +1246,7 @@ public:
         g.fillRoundedRectangle(area, 3.0f);
         g.setColour(accent.withAlpha(alpha));
         g.drawRoundedRectangle(area, 3.0f, 1.0f);
-        g.setFont(juce::FontOptions(10.0f, juce::Font::bold));
+        g.setFont(panelFont(Face::emphasis, 10.0f));
         g.drawText(choices[static_cast<size_t>(juce::jlimit(0, count() - 1, chosen))],
                    area.reduced(static_cast<float>(arrowWidth), 0.0f), juce::Justification::centred);
 
@@ -1323,7 +1335,7 @@ public:
 
         body.removeFromLeft(6.0f);
         g.setColour((filled ? colour : mutedText).withAlpha(alpha));
-        g.setFont(juce::FontOptions(13.0f, juce::Font::bold));
+        g.setFont(panelFont(Face::emphasis, 13.0f));
         g.drawText(getName(), body, juce::Justification::centredLeft);
     }
 
@@ -1352,7 +1364,7 @@ public:
         g.setColour(accent.withAlpha(on ? 1.0f : 0.3f));
         g.fillRect(area.withHeight(moduleEdgeHeight));
         g.setColour(on ? juce::Colours::white : mutedText);
-        g.setFont(juce::FontOptions(12.0f, juce::Font::bold));
+        g.setFont(panelFont(Face::emphasis, 12.0f));
         g.drawText(getName(), area.withTrimmedTop(moduleEdgeHeight), juce::Justification::centred);
     }
 };
@@ -1385,8 +1397,8 @@ public:
 
     int widthFor() const
     {
-        const juce::Font captionFont(juce::FontOptions(10.0f, juce::Font::bold));
-        const juce::Font readingFont(juce::FontOptions(16.0f, juce::Font::bold));
+        const auto captionFont = panelFont(Face::label, 10.0f);
+        const auto readingFont = panelFont(Face::reading, 16.0f);
         return juce::jmax(64, juce::roundToInt(juce::jmax(juce::GlyphArrangement::getStringWidth(captionFont, caption),
                                                           juce::GlyphArrangement::getStringWidth(readingFont, reading)))
                                   + padding * 2 + slack);
@@ -1406,10 +1418,10 @@ public:
 
         auto body = getLocalBounds().reduced(padding, 0).withTrimmedTop(padding / 2);
         g.setColour(mutedText);
-        g.setFont(juce::FontOptions(10.0f, juce::Font::bold));
+        g.setFont(panelFont(Face::label, 10.0f));
         g.drawText(caption, body.removeFromTop(captionHeight), juce::Justification::centred);
         g.setColour(text);
-        g.setFont(juce::FontOptions(16.0f, juce::Font::bold));
+        g.setFont(panelFont(Face::reading, 16.0f));
         g.drawText(reading, body.removeFromTop(readingHeight), juce::Justification::centred);
     }
 };
@@ -1443,7 +1455,7 @@ public:
         // Qualified: Button has a private `text` member of its own that would
         // otherwise win the lookup here.
         g.setColour(on ? rhino::forge::ui::text : mutedText.withAlpha(highlighted ? 1.0f : 0.8f));
-        g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
+        g.setFont(panelFont(Face::header, 11.0f));
         g.drawText(getName(), getLocalBounds(), juce::Justification::centred);
     }
 };
@@ -1499,7 +1511,7 @@ inline void drawFxListItem(juce::Graphics& g, juce::Rectangle<int> area, int slo
     if (!open)
     {
         g.setColour((filled ? colour : mutedText).withAlpha(0.9f));
-        g.setFont(juce::FontOptions(8.0f, juce::Font::bold));
+        g.setFont(panelFont(Face::reading, 8.0f));
         g.drawText(juce::String(slot + 1), area.reduced(4).withHeight(12),
                    juce::Justification::topLeft);
         return;
@@ -1507,11 +1519,11 @@ inline void drawFxListItem(juce::Graphics& g, juce::Rectangle<int> area, int slo
 
     auto textArea = area.withTrimmedLeft(50).withTrimmedRight(54);
     g.setColour((filled ? colour : mutedText).withAlpha(bypassed ? 0.42f : 1.0f));
-    g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
+    g.setFont(panelFont(Face::emphasis, 11.0f));
     g.drawText(fxTypeName(type), textArea.withTrimmedBottom(textArea.getHeight() / 2 - 2),
                juce::Justification::centredLeft);
     g.setColour(mutedText.withAlpha(0.65f));
-    g.setFont(juce::FontOptions(8.5f));
+    g.setFont(panelFont(Face::label, 8.5f));
     g.drawText("SLOT " + juce::String(slot + 1), textArea.withTrimmedTop(textArea.getHeight() / 2),
                juce::Justification::centredLeft);
 
@@ -1543,7 +1555,7 @@ inline void drawFxAddButton(juce::Graphics& g, juce::Rectangle<int> area, bool o
     g.drawLine(centre.x, centre.y - 4.0f, centre.x, centre.y + 4.0f, 1.3f);
     if (open)
     {
-        g.setFont(juce::FontOptions(9.0f, juce::Font::bold));
+        g.setFont(panelFont(Face::emphasis, 9.0f));
         g.setColour(enabled ? text.withAlpha(0.9f) : mutedText.withAlpha(0.45f));
         g.drawText(enabled ? "ADD EFFECT" : "RACK FULL",
                    area.withTrimmedLeft(24), juce::Justification::centredLeft);
@@ -1619,7 +1631,7 @@ inline void drawColumnTitle(juce::Graphics& g, juce::Rectangle<int> area, const 
 {
     if (title.isEmpty()) return;
     g.setColour(mutedText.withAlpha(0.8f));
-    g.setFont(juce::FontOptions(9.0f, juce::Font::bold));
+    g.setFont(panelFont(Face::label, 9.0f));
     g.drawText(title, area, juce::Justification::centred);
 }
 
@@ -1643,7 +1655,7 @@ inline void drawTableRow(juce::Graphics& g, juce::Rectangle<int> row, juce::Rect
                                    .reduced(0.0f, 2.0f), 3.0f);
     }
     g.setColour(live ? accent : mutedText.withAlpha(0.45f));
-    g.setFont(juce::FontOptions(10.0f, juce::Font::bold));
+    g.setFont(panelFont(Face::reading, 10.0f));
     g.drawText(juce::String(number), gutter, juce::Justification::centred);
 }
 
@@ -2215,7 +2227,7 @@ inline void drawEnvelopeZoom(juce::Graphics& g, juce::Rectangle<int> display, in
     const auto button = [&] (juce::Rectangle<int> box, const char* glyph, bool enabled)
     {
         g.setColour(text.withAlpha((enabled ? 0.95f : 0.22f) * alpha));
-        g.setFont(juce::FontOptions(13.0f, juce::Font::bold));
+        g.setFont(panelFont(Face::emphasis, 13.0f));
         g.drawText(glyph, box, juce::Justification::centred);
     };
     button(envelopeZoomIn(display), "+", zoom > 0);
@@ -2231,7 +2243,7 @@ inline void drawEnvelopeZoom(juce::Graphics& g, juce::Rectangle<int> display, in
     g.addTransform(juce::AffineTransform::rotation(-juce::MathConstants<float>::halfPi,
                                                    middle.getCentreX(), middle.getCentreY()));
     g.setColour(mutedText.withAlpha(0.9f * alpha));
-    g.setFont(juce::FontOptions(9.0f, juce::Font::bold));
+    g.setFont(panelFont(Face::reading, 9.0f));
     g.drawText(envelopeTimeText(envelopeAxis(zoom).seconds).toUpperCase().removeCharacters(" "),
                juce::Rectangle<float>(middle.getHeight(), middle.getWidth())
                    .withCentre(middle.getCentre()),
@@ -2244,7 +2256,7 @@ inline void drawEnvelopeZoom(juce::Graphics& g, juce::Rectangle<int> display, in
 inline void drawEnvelopeGrid(juce::Graphics& g, juce::Rectangle<float> box, EnvelopeAxis axis)
 {
     const auto marks = juce::roundToInt(axis.seconds / axis.mark);
-    g.setFont(juce::FontOptions(9.0f));
+    g.setFont(panelFont(Face::reading, 9.0f));
     for (int i = 1; i < marks; ++i)
     {
         const auto at = axis.mark * static_cast<float>(i);
@@ -2539,7 +2551,7 @@ inline juce::String filterDecadeText(float hz)
 // a shape; with them it is a reading.
 inline void drawFilterGrid(juce::Graphics& g, juce::Rectangle<float> box, float alpha)
 {
-    g.setFont(juce::FontOptions(9.0f));
+    g.setFont(panelFont(Face::reading, 9.0f));
     for (const auto hz : {100.0f, 1000.0f, 10000.0f})
     {
         const auto x = filterHzToX(box, hz);
@@ -2602,7 +2614,7 @@ inline void drawFilterResponse(juce::Graphics& g, juce::Rectangle<int> area, rhi
     g.setColour(colour.withAlpha(0.45f * alpha));
     g.drawVerticalLine(juce::roundToInt(x), box.getY(), box.getBottom());
     g.setColour(colour.withAlpha(alpha));
-    const juce::Font readingFont(juce::FontOptions(10.0f, juce::Font::bold));
+    const auto readingFont = panelFont(Face::reading, 10.0f);
     g.setFont(readingFont);
     const auto reading = filterHzText(cutoff);
     const auto width = juce::jmax(46.0f, juce::GlyphArrangement::getStringWidth(readingFont, reading) + 8.0f);
@@ -2649,7 +2661,7 @@ inline void drawPlateLegend(juce::Graphics& g, juce::Rectangle<int> area, const 
     g.setColour(plateEdgeLit.withAlpha(0.2f * alpha));
     g.drawHorizontalLine(rule + 1, footer.getX(), footer.getRight());
 
-    g.setFont(juce::FontOptions(8.0f));
+    g.setFont(panelFont(Face::label, 9.0f));
     g.setColour(legendText.withAlpha(alpha));
     if (module.plateName != nullptr)
         drawTrackedText(g, module.plateName, footer, 1.5f, juce::Justification::left);
@@ -2679,7 +2691,7 @@ inline void drawModuleDetail(juce::Graphics& g, juce::Rectangle<int> area, const
     header.removeFromRight(juce::jlimit(0, header.getWidth(), detailRightInset));
 
     g.setColour(mutedText.withAlpha(on ? 1.0f : 0.45f));
-    g.setFont(juce::FontOptions(9.0f));
+    g.setFont(panelFont(Face::label, 9.0f));
     g.drawText(detail, header, juce::Justification::centredRight);
 }
 
@@ -2691,7 +2703,16 @@ inline void drawModuleShell(juce::Graphics& g, juce::Rectangle<int> area, const 
     const auto cut = juce::jmax(0.0f, juce::jmin(plateCut, box.getWidth() * 0.5f,
                                                  box.getHeight() * 0.5f));
 
-    drawPlate(g, box, on ? 1.0f : 0.72f);
+    const auto grouped = module.group != nullptr;
+    if (grouped)
+        // Stopping short of the legend strip, which belongs to the plate
+        // underneath: run the panel the full height of the module and it
+        // covers the very text the plate is carrying for it.
+        drawInnerPanel(g, box.withTrimmedBottom(plateFooterHeight)
+                              .reduced(static_cast<float>(innerPanelInset)),
+                       on ? 1.0f : 0.72f);
+    else
+        drawPlate(g, box, on ? 1.0f : 0.72f);
 
     // The accent runs between the two top corner cuts rather than across the
     // full width, so it stops where the chamfer does instead of overhanging it.
@@ -2715,10 +2736,16 @@ inline void drawModuleShell(juce::Graphics& g, juce::Rectangle<int> area, const 
 
     // Two rivets on the diagonal: one under the corner the light lands on, one
     // at the corner the legend runs out to. A plate stamped at every corner
-    // reads as a pattern; a pair on opposite corners reads as hardware.
-    drawRivet(g, {box.getX() + cut * 0.55f, box.getY() + cut * 0.55f + 6.0f}, 1.5f, alpha);
-    drawRivet(g, {box.getRight() - cut * 0.5f - 1.0f, box.getBottom() - cut * 0.5f - 1.0f},
-              1.7f, alpha);
+    // reads as a pattern; a pair on opposite corners reads as hardware. A
+    // module inside a shared plate carries neither — the plate it sits on has
+    // its own, and hardware on both would say the panel is screwed together
+    // twice in the same place.
+    if (!grouped)
+    {
+        drawRivet(g, {box.getX() + cut * 0.55f, box.getY() + cut * 0.55f + 6.0f}, 3.2f, alpha);
+        drawRivet(g, {box.getRight() - cut * 0.5f - 1.0f, box.getBottom() - cut * 0.5f - 1.0f},
+                  3.4f, alpha);
+    }
 
     auto header = area.withHeight(headerHeight).reduced(10, 0);
     // The enable LED sits at the far left of the header; leave room for it.
@@ -2728,10 +2755,38 @@ inline void drawModuleShell(juce::Graphics& g, juce::Rectangle<int> area, const 
     if (module.handleSource == 0)
     {
         g.setColour(text.withAlpha(alpha));
-        g.setFont(juce::FontOptions(11.0f, juce::Font::bold));
+        g.setFont(panelFont(Face::header, 11.0f));
         g.drawText(module.title, header, juce::Justification::centredLeft);
     }
-    drawPlateLegend(g, area, module, code, alpha);
+    if (!grouped) drawPlateLegend(g, area, module, code, alpha);
+}
+
+// The plate a group of modules shares: the metal, its fasteners and the legend
+// along its foot. Its members draw their own panels on top of it.
+inline void drawGroupPlate(juce::Graphics& g, juce::Rectangle<int> area, const juce::String& legend,
+                           const juce::String& code)
+{
+    const auto box = area.toFloat();
+    drawPlate(g, box);
+
+    const auto cut = juce::jmax(0.0f, juce::jmin(plateCut, box.getWidth() * 0.5f,
+                                                 box.getHeight() * 0.5f));
+    drawRivet(g, {box.getX() + cut * 0.55f, box.getY() + cut * 0.55f + 6.0f}, 3.2f, 1.0f);
+    drawRivet(g, {box.getRight() - cut * 0.5f - 1.0f, box.getBottom() - cut * 0.5f - 1.0f},
+              3.4f, 1.0f);
+
+    const auto footer = plateFooterBounds(area).toFloat();
+    if (footer.getHeight() < 6.0f || footer.getWidth() < 30.0f) return;
+    const auto rule = juce::roundToInt(footer.getY() - 1.0f);
+    g.setColour(plateEdgeDark.withAlpha(0.75f));
+    g.drawHorizontalLine(rule, footer.getX(), footer.getRight());
+    g.setColour(plateEdgeLit.withAlpha(0.2f));
+    g.drawHorizontalLine(rule + 1, footer.getX(), footer.getRight());
+
+    g.setFont(panelFont(Face::label, 9.0f));
+    g.setColour(legendText);
+    drawTrackedText(g, legend, footer, 1.5f, juce::Justification::left);
+    drawTrackedText(g, code, footer, 1.5f, juce::Justification::right);
 }
 
 // The FORGE wordmark, drawn at its own aspect ratio against the left edge of
@@ -2745,7 +2800,7 @@ inline void drawWordmark(juce::Graphics& g, juce::Rectangle<float> area)
         // Binary data missing is a build fault, not a runtime state, but the
         // panel should still name itself rather than show a gap.
         g.setColour(text);
-        g.setFont(juce::FontOptions(30.0f, juce::Font::bold));
+        g.setFont(panelFont(Face::header, 30.0f));
         g.drawText("FORGE", area.toNearestInt(), juce::Justification::centredLeft);
         return;
     }
@@ -2771,10 +2826,10 @@ inline void drawIdentityPlate(juce::Graphics& g, juce::Rectangle<int> area)
     const auto lines = face.removeFromLeft(juce::jmin(face.getWidth(), 210.0f));
 
     g.setColour(text.withAlpha(0.92f));
-    g.setFont(juce::FontOptions(15.0f, juce::Font::bold));
+    g.setFont(panelFont(Face::header, 15.0f));
     drawTrackedText(g, makerName, lines.withHeight(17.0f), 2.2f, juce::Justification::left);
 
-    g.setFont(juce::FontOptions(8.0f));
+    g.setFont(panelFont(Face::label, 8.0f));
     g.setColour(electricBlue.withAlpha(0.75f));
     drawTrackedText(g, makerModel, lines.withTop(lines.getY() + 19.0f).withHeight(11.0f),
                     1.4f, juce::Justification::left);
@@ -2796,9 +2851,9 @@ inline void drawUnitMark(juce::Graphics& g, juce::Rectangle<int> area)
 {
     const auto box = area.toFloat();
     g.setColour(markRed.withAlpha(0.95f));
-    g.setFont(juce::FontOptions(17.0f, juce::Font::bold));
+    g.setFont(fallbackFont(17.0f, true));
     drawTrackedText(g, unitMark, box.withHeight(19.0f), 2.0f, juce::Justification::right);
-    g.setFont(juce::FontOptions(8.0f));
+    g.setFont(panelFont(Face::label, 8.0f));
     g.setColour(markRed.withAlpha(0.7f));
     drawTrackedText(g, unitNumber, box.withTop(box.getY() + 20.0f).withHeight(11.0f),
                     2.0f, juce::Justification::right);
@@ -2814,9 +2869,9 @@ inline void drawDeckPlates(juce::Graphics& g, juce::Rectangle<int> bounds)
     {
         auto face = left.reduced(10.0f, 8.0f);
         g.setColour(text.withAlpha(0.85f));
-        g.setFont(juce::FontOptions(15.0f, juce::Font::bold));
+        g.setFont(panelFont(Face::header, 15.0f));
         drawTrackedText(g, deckMark, face.withHeight(17.0f), 2.6f, juce::Justification::left);
-        g.setFont(juce::FontOptions(7.0f));
+        g.setFont(panelFont(Face::label, 7.0f));
         g.setColour(electricBlue.withAlpha(0.6f));
         drawTrackedText(g, deckRole, face.withTop(face.getY() + 19.0f).withHeight(10.0f),
                         1.2f, juce::Justification::left);
@@ -2832,7 +2887,7 @@ inline void drawDeckPlates(juce::Graphics& g, juce::Rectangle<int> bounds)
     drawPlate(g, right, 1.0f, 10.0f);
     {
         const auto face = right.reduced(10.0f, 8.0f);
-        g.setFont(juce::FontOptions(8.0f));
+        g.setFont(panelFont(Face::label, 8.0f));
         g.setColour(legendText.withAlpha(0.95f));
         drawTrackedText(g, deckMotto, face.withHeight(11.0f).translated(0.0f, 16.0f),
                         1.3f, juce::Justification::left);
@@ -2864,7 +2919,7 @@ inline void drawBackdrop(juce::Graphics& g, juce::Rectangle<int> componentBounds
 
     juce::Path whole;
     whole.addRectangle(bounds);
-    fillGrain(g, whole, 0.03f);
+    fillGrain(g, whole, 0.09f);
 
     // The frame. Cut back from the window edge so the panel reads as a part
     // with a border rather than as a picture filling a window.
@@ -2894,7 +2949,7 @@ inline void drawBackdrop(juce::Graphics& g, juce::Rectangle<int> componentBounds
     const auto margin = static_cast<float>(windowMargin);
     drawWordmark(g, {margin + 22.0f, 18.0f, 196.0f, 32.0f});
     g.setColour(signalViolet);
-    g.setFont(juce::FontOptions(9.0f));
+    g.setFont(panelFont(Face::label, 9.0f));
     drawTrackedText(g, "SYNTHETIC SIGNAL FORGE // UNIT 01",
                     {margin + 24.0f, 52.0f, 240.0f, 12.0f}, 0.6f, juce::Justification::left);
 

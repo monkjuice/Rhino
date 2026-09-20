@@ -1,5 +1,7 @@
 #pragma once
 
+#include <array>
+#include <BinaryData.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
 // Forge's material, drawn rather than blitted.
@@ -92,33 +94,72 @@ inline juce::Path chamferedPath(juce::Rectangle<float> box, float cut, int corne
 
 // A seamless tile of brushed metal, generated once and tiled thereafter.
 //
-// This is the one place the panel uses a raster, and it is 96 pixels square
+// This is the one place the panel uses a raster, and it is 128 pixels square
 // rather than the size of a plate: tiled, it stays sharp at any window size and
 // costs one small image for the whole panel, where a full-panel texture would
 // be both enormous and wrong at every size but the one it was made at.
 //
-// The brush runs vertically — a per-column bias, with fine per-pixel noise over
-// it — because that is the direction the mockup's plates are drawn to have been
-// machined in, and it is what keeps a large plate from reading as flat paint.
+// The brush runs *horizontally*, and it is fine.
+//
+// Two passes at this were wrong in opposite directions and both were caught by
+// looking rather than by measuring. The first ran the grain vertically at a
+// standard deviation of 2, and at that depth a plate is flat paint. The second
+// chased the reference's measured standard deviation of 13 with banded rows
+// and a second blown-up pass of the same tile, and landed on television static
+// — the number was inflated by a knob sitting inside the patch I sampled.
+//
+// What the reference actually has is a tight two-pixel weave with a little
+// unevenness over it: dense, even, low contrast per pixel. That is what a
+// machined face looks like, and it is nothing like noise. Fine tooth, gentle
+// drift, and a few hairline scratches for incident.
 inline const juce::Image& brushedGrain()
 {
     static const juce::Image tile = []
     {
-        constexpr int size = 96;
+        constexpr int size = 128;
         juce::Image image(juce::Image::ARGB, size, size, true);
         juce::Random random(0x5f0267e);
-        for (int x = 0; x < size; ++x)
+
+        // The drift: one value per row, smoothed along its length and wrapped,
+        // so the tile joins itself and no seam shows where it repeats.
+        std::array<float, size> drift {};
+        for (auto& value : drift) value = random.nextFloat() - 0.5f;
+        std::array<float, size> smoothed {};
+        for (int y = 0; y < size; ++y)
+            smoothed[static_cast<size_t>(y)] =
+                (drift[static_cast<size_t>((y + size - 1) % size)]
+                 + drift[static_cast<size_t>(y)] * 2.0f
+                 + drift[static_cast<size_t>((y + 1) % size)]) * 0.25f;
+
+        for (int y = 0; y < size; ++y)
         {
-            // One bias for the whole column is what makes it a brush stroke
-            // rather than a sandblast.
-            const auto column = random.nextFloat() - 0.5f;
-            for (int y = 0; y < size; ++y)
+            // The weave itself: alternate rows lit and shaded, which at one
+            // pixel each is the two-pixel period the reference has.
+            const auto weave = (y % 2 == 0 ? 0.42f : -0.42f);
+            for (int x = 0; x < size; ++x)
             {
-                const auto speck = (random.nextFloat() - 0.5f) * 0.45f;
-                const auto amount = juce::jlimit(-1.0f, 1.0f, column + speck);
-                const auto white = amount > 0.0f;
-                image.setPixelAt(x, y, (white ? juce::Colours::white : juce::Colours::black)
+                const auto speck = (random.nextFloat() - 0.5f) * 0.34f;
+                const auto amount = juce::jlimit(-1.0f, 1.0f,
+                                                 weave + smoothed[static_cast<size_t>(y)] * 0.5f + speck);
+                image.setPixelAt(x, y, (amount > 0.0f ? juce::Colours::white : juce::Colours::black)
                                            .withAlpha(std::abs(amount)));
+            }
+        }
+
+        // A few hairlines, short and faint. More than this and they stop being
+        // marks on a surface and become a pattern in their own right.
+        for (int n = 0; n < 4; ++n)
+        {
+            const auto y = random.nextInt(size);
+            const auto length = size / 4 + random.nextInt(size / 2);
+            const auto from = random.nextInt(size);
+            const auto bright = 0.16f + random.nextFloat() * 0.16f;
+            for (int i = 0; i < length; ++i)
+            {
+                const auto fade = bright * (1.0f - std::abs(i / (float) length - 0.5f) * 1.7f);
+                if (fade <= 0.0f) continue;
+                image.setPixelAt((from + i) % size, y,
+                                 juce::Colours::white.withAlpha(juce::jlimit(0.0f, 1.0f, fade)));
             }
         }
         return image;
@@ -126,64 +167,76 @@ inline const juce::Image& brushedGrain()
     return tile;
 }
 
-// Lays the grain over whatever shape has already been filled. Kept very faint:
-// the grain is meant to be felt at a glance and only found when looked for.
-inline void fillGrain(juce::Graphics& g, const juce::Path& shape, float opacity)
+// Lays the grain over whatever shape has already been filled.
+//
+// Drawn at a scale as well as an opacity, because one frequency of noise still
+// reads as noise: the fine pass is the tooth of the metal and a second pass of
+// the same tile blown up several times is the mottling a rolled sheet has, and
+// it is the second one that stops a large plate looking like an even wash.
+inline void fillGrain(juce::Graphics& g, const juce::Path& shape, float opacity, float scale = 1.0f)
 {
     if (opacity <= 0.0f) return;
     juce::Graphics::ScopedSaveState state(g);
     g.reduceClipRegion(shape);
-    g.setTiledImageFill(brushedGrain(), 0, 0, opacity);
+    juce::FillType fill(brushedGrain(), juce::AffineTransform::scale(scale));
+    fill.setOpacity(opacity);
+    g.setFillType(fill);
     g.fillPath(shape);
 }
 
 // --- Fasteners --------------------------------------------------------------
 
-// A screw: a machined boss with a socket sunk into it. Four of them hold the
-// chassis down at its corners, and they are the largest piece of hardware on
-// the panel, so they get a rim, a face lit from the top left, and a socket with
-// its own shadow.
-inline void drawScrew(juce::Graphics& g, juce::Point<float> centre, float radius, float alpha)
+// The two pieces of hardware the panel is put together with.
+//
+// A fastener is the one thing here where a drawing loses to a photograph. It
+// is small, it is round, and what sells it is the way real metal catches the
+// light across a curve — a handful of arcs and gradients gets the shape and
+// none of the material, which is why the procedural pair these replace read as
+// grey dots however they were tuned. Everything structural is still geometry;
+// this is the exception the rule is worth making for.
+//
+// Both are 64px square and are always drawn smaller than that, so the blit is
+// a downscale and stays sharp at any panel size and on a scaled display.
+enum class Fastener
 {
-    if (radius < 2.0f) return;
-    const auto boss = juce::Rectangle<float>(radius * 2.0f, radius * 2.0f).withCentre(centre);
+    // The black cross-head, holding the chassis together at its corners.
+    cross,
+    // The domed stud, at the corners of the plates bolted onto it.
+    dome
+};
 
-    g.setColour(plateEdgeDark.withAlpha(0.7f * alpha));
-    g.fillEllipse(boss.expanded(1.0f).translated(0.0f, 1.0f));
-
-    juce::ColourGradient metal(juce::Colour(0xff9aa2b4).withAlpha(alpha), boss.getX(), boss.getY(),
-                               juce::Colour(0xff2b303d).withAlpha(alpha), boss.getRight(), boss.getBottom(), false);
-    g.setGradientFill(metal);
-    g.fillEllipse(boss);
-
-    g.setColour(plateEdgeDark.withAlpha(0.8f * alpha));
-    g.drawEllipse(boss.reduced(0.5f), 1.0f);
-
-    // The socket. Filled dark, then given a lit lower rim so it reads as a hole
-    // rather than a dot painted on the boss.
-    const auto socket = boss.reduced(radius * 0.42f);
-    g.setColour(juce::Colour(0xff0b0d14).withAlpha(alpha));
-    g.fillEllipse(socket);
-    g.setColour(juce::Colour(0xffb6bdcc).withAlpha(0.35f * alpha));
-    juce::Path lip;
-    lip.addCentredArc(socket.getCentreX(), socket.getCentreY(),
-                      socket.getWidth() * 0.5f, socket.getHeight() * 0.5f, 0.0f,
-                      juce::MathConstants<float>::pi * 0.35f,
-                      juce::MathConstants<float>::pi * 1.25f, true);
-    g.strokePath(lip, juce::PathStrokeType(1.0f));
+inline const juce::Image& fastenerImage(Fastener kind)
+{
+    static const juce::Image cross = juce::ImageCache::getFromMemory(
+        BinaryData::screw_cross_png, BinaryData::screw_cross_pngSize);
+    static const juce::Image dome = juce::ImageCache::getFromMemory(
+        BinaryData::screw_dome_png, BinaryData::screw_dome_pngSize);
+    return kind == Fastener::cross ? cross : dome;
 }
 
-// A rivet: the small one, dotted along a plate's own corners. No socket — at
-// this size a highlight and a shadow is all that survives, and anything more
-// turns into a smudge.
+inline void drawFastener(juce::Graphics& g, juce::Point<float> centre, float radius,
+                         Fastener kind, float alpha)
+{
+    if (radius < 1.0f || alpha <= 0.0f) return;
+    const auto& art = fastenerImage(kind);
+    if (art.isNull()) return;
+
+    juce::Graphics::ScopedSaveState state(g);
+    g.setImageResamplingQuality(juce::Graphics::highResamplingQuality);
+    g.setOpacity(alpha);
+    g.drawImage(art, juce::Rectangle<float>(radius * 2.0f, radius * 2.0f).withCentre(centre),
+                juce::RectanglePlacement::centred);
+}
+
+// The names the rest of the panel already calls these by.
+inline void drawScrew(juce::Graphics& g, juce::Point<float> centre, float radius, float alpha)
+{
+    drawFastener(g, centre, radius, Fastener::cross, alpha);
+}
+
 inline void drawRivet(juce::Graphics& g, juce::Point<float> centre, float radius, float alpha)
 {
-    if (radius < 1.0f) return;
-    const auto head = juce::Rectangle<float>(radius * 2.0f, radius * 2.0f).withCentre(centre);
-    g.setColour(juce::Colour(0xff05070d).withAlpha(0.85f * alpha));
-    g.fillEllipse(head);
-    g.setColour(juce::Colour(0xff6f7787).withAlpha(0.5f * alpha));
-    g.drawEllipse(head.reduced(0.4f).translated(0.0f, -0.4f), 0.8f);
+    drawFastener(g, centre, radius, Fastener::dome, alpha);
 }
 
 // --- Markings ---------------------------------------------------------------
@@ -267,7 +320,7 @@ inline void drawPlateShadow(juce::Graphics& g, juce::Rectangle<float> box, float
 // lines, which is the point of having them in one place — a module that drew
 // its own background would drift away from this the first time either changed.
 inline void drawPlate(juce::Graphics& g, juce::Rectangle<float> box, float alpha = 1.0f,
-                      float cut = plateCut, int corners = everyCorner, float grain = 0.045f)
+                      float cut = plateCut, int corners = everyCorner, float grain = 0.11f)
 {
     if (box.getWidth() < 2.0f || box.getHeight() < 2.0f) return;
     const auto outline = chamferedPath(box, cut, corners);
@@ -296,6 +349,26 @@ inline void drawPlate(juce::Graphics& g, juce::Rectangle<float> box, float alpha
     const auto step = chamferedPath(box.reduced(4.8f), cut - 3.4f, corners);
     strokeBevel(g, step, box, alpha, 1.0f, 0.62f);
     strokeSideLight(g, step, box, alpha * 0.6f, 1.0f);
+}
+
+// A module's own panel inside a shared plate. Shallower than a plate — a
+// thinner lip, no shadow, no fasteners — because it is a division of one piece
+// of metal rather than a second piece bolted onto it, and giving it the full
+// relief would say the opposite.
+inline void drawInnerPanel(juce::Graphics& g, juce::Rectangle<float> box, float alpha = 1.0f,
+                           float cut = 6.0f)
+{
+    if (box.getWidth() < 2.0f || box.getHeight() < 2.0f) return;
+    const auto outline = chamferedPath(box, cut);
+
+    juce::ColourGradient face(plateFaceTop.brighter(0.16f).withAlpha(alpha), box.getCentreX(), box.getY(),
+                              plateFaceFoot.withAlpha(alpha), box.getCentreX(), box.getBottom(), false);
+    g.setGradientFill(face);
+    g.fillPath(outline);
+    fillGrain(g, outline, 0.09f * alpha);
+
+    strokeBevel(g, outline, box, alpha * 0.8f, 1.1f, 0.8f);
+    strokeSideLight(g, outline, box, alpha * 0.7f, 1.1f);
 }
 
 // A well: the inverse of a plate. Sunk into the face rather than raised off it,

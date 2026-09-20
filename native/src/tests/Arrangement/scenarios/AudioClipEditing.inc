@@ -4,7 +4,7 @@
         const auto id = clip->itemID;
         view.sync();
         view.fit();
-        view.selected = id;
+        view.setSelection({id}, id);
         session.edit->getTransport().setPosition(tracktion::core::TimePosition::fromSeconds(0.5));
         view.splitSelectedAtPlayhead();
         require(te::getAudioTracks(*session.edit)[1]->getClips().size() == 2, "Split creates a second audio clip");
@@ -14,7 +14,7 @@
         require(clip != nullptr, "Original clip remains after undo split");
         view.sync();
         view.fit();
-        view.selected = id;
+        view.setSelection({id}, id);
         view.gridSettings.mode = GridMode::fixed;
         view.gridSettings.fixedDivision = GridDivision::sixteenth;
         view.keyPressed(juce::KeyPress(juce::KeyPress::rightKey));
@@ -36,6 +36,9 @@
         require(te::getAudioTracks(*session.edit)[1]->getClips().size() == 1, "Undo duplicate restores one audio clip");
         clip = session.findAudioClip(id);
         require(clip != nullptr, "Original clip remains after undo duplicate");
+        // Duplicating moves the selection onto the copy, as it does in Live, so
+        // undoing it leaves the selection naming a clip that is no longer there.
+        view.setSelection({id}, id);
         const auto originalColour = clip->getColour();
         view.keyPressed(juce::KeyPress('C'));
         require(clip->getColour() != originalColour, "C cycles the selected clip colour label");
@@ -82,14 +85,14 @@
         session.undo();
         view.sync();
         view.fit();
-        view.selected = id;
+        view.setSelection({id}, id);
         view.duplicateSelected();
         auto* snapDuplicate = te::getAudioTracks(*session.edit)[1]->getClips().getLast();
         const auto snapDuplicateID = snapDuplicate->itemID;
         require(session.editClip(snapDuplicateID, {1.35, 2.35, snapDuplicate->getPosition().offset.inSeconds()}, ClipGesture::move).wasOk(),
                 "Can move duplicate away before testing clip-edge snap");
         view.sync();
-        view.selected = snapDuplicateID;
+        view.setSelection({snapDuplicateID}, snapDuplicateID);
         drag({view.xFor(1.85), view.lane(1).getCentreY()}, {view.xFor(1.46), view.lane(1).getCentreY()});
         require(close(session.findAudioClip(snapDuplicateID)->getPosition().time.getStart().inSeconds(), originalEnd),
                 "Dragging a clip near a neighbor edge snaps it flush instead of overlapping");
@@ -99,7 +102,7 @@
         require(session.editClip(id, {0.0, 0.5, 0.0}, ClipGesture::trimRight).wasOk(),
                 "Can trim the source audio clip before testing trimmed edge snap");
         view.sync();
-        view.selected = id;
+        view.setSelection({id}, id);
         view.duplicateSelected();
         auto* trimmedDuplicate = te::getAudioTracks(*session.edit)[1]->getClips().getLast();
         const auto trimmedDuplicateID = trimmedDuplicate->itemID;
@@ -108,7 +111,7 @@
         require(session.editClip(trimmedDuplicateID, {1.35, 1.85, trimmedDuplicate->getPosition().offset.inSeconds()}, ClipGesture::move).wasOk(),
                 "Can move trimmed duplicate away before testing edge snap");
         view.sync();
-        view.selected = trimmedDuplicateID;
+        view.setSelection({trimmedDuplicateID}, trimmedDuplicateID);
         drag({view.xFor(1.6), view.lane(1).getCentreY()}, {view.xFor(0.77), view.lane(1).getCentreY()});
         require(close(session.findAudioClip(trimmedDuplicateID)->getPosition().time.getStart().inSeconds(), 0.5),
                 "Dragging a trimmed clip near a neighbor edge snaps it flush instead of overlapping");
@@ -116,7 +119,7 @@
         session.undo();
         session.undo();
         session.undo();
-        view.selected = id;
+        view.setSelection({id}, id);
         const auto rulerY = view.rulerTop + 8.0f;
         drag({view.xFor(0.5), rulerY}, {view.xFor(1.5), rulerY});
         auto loopRange = session.edit->getTransport().getLoopRange();
@@ -149,7 +152,7 @@
         require(view.selectedTrack == 0, "Clicking the pattern lane selects the pattern track");
         view.mouseDown(event({40, audioLaneY}, {40, audioLaneY}, false));
         require(view.selectedTrack == 1 && notifiedTrack == 1, "Clicking the audio lane selects and broadcasts the audio track");
-        view.selected = patternID;
+        view.setSelection({patternID}, patternID);
         // In time rather than pixels: the drag has to cross the same musical
         // distance whatever width the track headers are given. A quarter second
         // plus a little lands on 0.25 once the sixteenth grid has snapped it.
@@ -158,7 +161,7 @@
         session.undo();
         require(close(session.pattern().getPosition().time.getStart().inSeconds(), 0.0), "Undo restores MIDI pattern move");
         view.sync();
-        view.selected = patternID;
+        view.setSelection({patternID}, patternID);
         const auto patternEnd = session.pattern().getPosition().time.getEnd().inSeconds();
         drag({static_cast<float>(view.xFor(patternEnd) - 2.0), view.lane(0).getCentreY()},
              {static_cast<float>(view.xFor(0.75)), view.lane(0).getCentreY()});
@@ -171,24 +174,38 @@
         session.undo();
         view.itemDropped({"rhino-browser:preset:MinimalKit", nullptr, {static_cast<int>(view.xFor(2.0)), 82}});
         auto* patternTrack = te::getAudioTracks(*session.edit)[0];
+        const auto findPatternClipAt = [&patternTrack](double start) -> te::Clip*
+        {
+            for (auto* candidate : patternTrack->getClips())
+                if (std::abs(candidate->getPosition().time.getStart().inSeconds() - start) < 0.01)
+                    return candidate;
+            return nullptr;
+        };
+        auto* blocking = findPatternClipAt(2.0);
+        require(blocking != nullptr, "The dropped preset occupies the space just after the pattern clip");
+        const auto blockingID = blocking->itemID;
         const auto blockedClipCount = patternTrack->getClips().size();
-        view.selected = patternID;
+        view.setSelection({patternID}, patternID);
         view.duplicateSelected();
-        require(patternTrack->getClips().size() == blockedClipCount + 1,
-                "Duplicate creates a MIDI copy when the adjacent space is occupied");
-        auto* gapCopy = patternTrack->getClips().getLast();
-        require(close(gapCopy->getPosition().time.getStart().inSeconds(), 4.0),
-                "Duplicate lands after the blocking clip when it cannot fit beside the source");
+        // Live's rule, and what replaced a hunt for the first free gap: the
+        // copy lands flush against the source and replaces what was there, so
+        // a duplicate can never appear bars away from the clip it came from.
+        require(patternTrack->getClips().size() == blockedClipCount,
+                "Duplicating over an occupied span replaces rather than adds");
+        require(session.findClip(blockingID) == nullptr, "The clip that was in the way is gone");
+        auto* adjacentCopy = findPatternClipAt(2.0);
+        require(adjacentCopy != nullptr, "Duplicate lands directly after the source even when that space is taken");
+        const auto adjacentCopyStart = adjacentCopy->getPosition().time.getStart().inSeconds();
         view.sync();
-        const auto clickX = static_cast<float>(view.xFor(gapCopy->getPosition().time.getStart().inSeconds() + 0.1));
+        const auto clickX = static_cast<float>(view.xFor(adjacentCopyStart + 0.1));
         const auto clickY = view.lane(0).getCentreY();
         view.mouseDown(event({clickX, clickY}, {clickX, clickY}, false));
         view.mouseUp(event({clickX, clickY}, {clickX, clickY}, false));
-        require(close(gapCopy->getPosition().time.getStart().inSeconds(), 4.0),
-                "Clicking a gap-placed duplicate does not move it to the track end");
+        require(close(adjacentCopy->getPosition().time.getStart().inSeconds(), adjacentCopyStart),
+                "Clicking a duplicate selects it without moving it");
         session.undo();
         session.undo();
-        view.selected = id;
+        view.setSelection({id}, id);
         juce::StringArray dropped;
         dropped.add(source.getFile().getFullPathName());
         view.filesDropped(dropped, static_cast<int>(view.xFor(1.0)), static_cast<int>(audioLaneY));

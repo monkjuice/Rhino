@@ -60,7 +60,22 @@ private:
     // What the last click selected, and therefore what Delete acts on. A track
     // is always highlighted as the working row, so "a track is selected" cannot
     // be inferred from selectedTrack - it has to be recorded.
-    enum class Focus { none, clip, track, automation };
+    enum class Focus { none, clip, track, automation, region };
+    // A rectangle of the timeline: a span of time across a run of tracks. It is
+    // what copy, cut, paste, duplicate and delete all act on, so the same rule
+    // covers a dragged-out region and a clicked clip - selecting a clip sets
+    // the region to that clip's span, which is what makes Ctrl+D put the copy
+    // flush against its end. A click that never drags leaves a zero-length
+    // region: an insert point, and nothing else, which is where a paste lands.
+    struct TimeSelection
+    {
+        double start = 0.0, end = 0.0;
+        int firstTrack = 0, lastTrack = 0;
+        bool active = false;
+        double length() const { return std::max(0.0, end - start); }
+        bool isRange() const { return end > start + 1.0e-7; }
+        bool covers(int track) const { return active && track >= firstTrack && track <= lastTrack; }
+    };
     // Automation is edited by dragging a point, or by lifting a lane that has
     // never been drawn off its resting line, which is what makes it active.
     enum class AutomationGesture { none, movePoint, moveLine };
@@ -91,10 +106,24 @@ private:
     void cancelDrag();
     bool isSelected(te::EditItemID) const;
     void setSelection(std::vector<te::EditItemID>, te::EditItemID primary = {});
+    void splitSelectedAtPlayhead();
+    // ArrangementSelection.cpp
+    void setTimeSelection(double start, double end, int firstTrack, int lastTrack);
+    void setInsertPoint(double seconds, int track);
+    void clearTimeSelection();
+    // The region a command acts on: the dragged-out one when there is one,
+    // otherwise the span of the selected clips, so both read the same way.
+    TimeSelection effectiveRegion() const;
+    void selectRegionContents();
+    void setRegionFromSelectedClips();
+    bool beginRegionGesture(const juce::MouseEvent&);
+    void dragRegionGesture(const juce::MouseEvent&);
+    void endRegionGesture();
+    void paintTimeSelection(juce::Graphics&);
     void copySelection();
+    void cutSelection();
     void pasteSelection();
     void deleteSelection();
-    void splitSelectedAtPlayhead();
     void duplicateSelected();
     void nudgeSelected(int direction, bool byBar);
     juce::Result applyBrowserDrop(const juce::String& description, int track, double startSeconds = 0.0, bool insertPreset = false);
@@ -210,7 +239,10 @@ private:
     double viewStart = 0.0, viewSpan = 8.0, songEnd = 2.0, trackScroll = 0.0;
     GridSettings gridSettings;
     te::EditItemID selected;
-    std::vector<te::EditItemID> selectedClips, clipboard;
+    std::vector<te::EditItemID> selectedClips;
+    // Snapshots rather than clip ids: a cut deletes its sources, and so does an
+    // undo made between the copy and the paste.
+    std::vector<Session::ClipSnapshot> clipboard;
     int selectedTrack = 0;
     // Grouping acts on several cards at once, so the working track is joined by
     // the set a shift-click has gathered. It always holds selectedTrack.
@@ -220,7 +252,13 @@ private:
     bool marqueeSelecting = false;
     juce::Rectangle<float> marqueeBounds;
     juce::Point<float> marqueeAnchor;
-    double pasteTime = 0.0;
+    TimeSelection timeSelection;
+    bool regionSelecting = false;
+    // The clip selection and the region are two views of one thing and each
+    // keeps the other in step; this stops the two updates chasing each other.
+    bool syncingSelection = false;
+    double regionAnchorTime = 0.0;
+    int regionAnchorTrack = 0;
     ClipGesture gesture = ClipGesture::move;
     ClipGeometry original, preview;
     int originalTrack = 0, previewTrack = 0;

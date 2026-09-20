@@ -297,6 +297,9 @@ void Arrangement::paint(juce::Graphics& g)
         g.setColour(juce::Colour(0xffc6d58c));
         g.fillRect(0.0f, y - 1.0f, static_cast<float>(getWidth()) - 14.0f, 2.0f);
     }
+    // Over the clips and under the marquee: the region is the thing the
+    // commands act on, so it has to read as covering what it contains.
+    paintTimeSelection(g);
     if (marqueeSelecting)
     {
         g.setColour(juce::Colour(0x285ab9d6));

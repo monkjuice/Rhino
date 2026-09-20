@@ -5,6 +5,12 @@
 #include <limits>
 
 // Selection commands, clipboard, and the subdivision and velocity tools.
+//
+// Copy, cut, paste and duplicate follow the arrangement's rule, in steps
+// instead of seconds: everything acts on a region, the region is either the
+// span dragged out in the grid or the span of the selected notes, paste lands
+// at the insert point and replaces what it covers, and duplicate pastes at the
+// region's own end and carries the region along with it.
 
 namespace rhino
 {
@@ -65,44 +71,136 @@ void StepGrid::clearSelection()
     repaint();
 }
 
+void StepGrid::setStepSelection(double start, double end)
+{
+    const auto limit = static_cast<double>(session.editorStepCount());
+    stepSelection.start = std::clamp(std::min(start, end), 0.0, limit);
+    stepSelection.end = std::clamp(std::max(start, end), 0.0, limit);
+    stepSelection.active = true;
+}
+
+void StepGrid::setStepInsertPoint(double step)
+{
+    setStepSelection(step, step);
+}
+
+void StepGrid::clearStepSelection()
+{
+    stepSelection = {};
+}
+
+StepGrid::StepSelection StepGrid::effectiveStepRegion() const
+{
+    if (stepSelection.active && stepSelection.isRange())
+        return stepSelection;
+    // Rounded out to whole steps: a sixteenth note occupies the step it sits
+    // in, so duplicating it puts the copy in the next step rather than a
+    // sixteenth of a step later.
+    StepSelection fromNotes;
+    // selectedStates rather than the raw list: a selected cell can stand for
+    // every retrigger inside it, and the region has to cover what copy would
+    // actually take.
+    for (const auto& state : selectedStates())
+        if (const auto* note = noteForState(state))
+        {
+            const auto start = std::floor(note->start);
+            const auto end = std::ceil(note->start + note->length);
+            if (!fromNotes.active)
+            {
+                fromNotes = {start, end, true};
+                continue;
+            }
+            fromNotes.start = std::min(fromNotes.start, start);
+            fromNotes.end = std::max(fromNotes.end, end);
+        }
+    return fromNotes.active ? fromNotes : stepSelection;
+}
+
+// The region follows whatever the selection has become, so the marquee, a
+// click, Ctrl+A and a paste all leave it saying the same thing.
+//
+// Selecting every note is the one case not read off the notes: after Ctrl+A
+// the region is the whole clip, because a bar whose last note stops at step
+// twelve is still a bar, and duplicating it has to land on step sixteen.
+void StepGrid::setStepRegionFromSelection()
+{
+    // Counted rather than listed: this runs on every selection change, a note
+    // drag included, and editorNotes builds a vector each time it is asked.
+    const auto noteCount = static_cast<size_t>(session.pattern().getSequence().getNumNotes());
+    if (noteCount > 0 && selectedStates().size() == noteCount)
+    {
+        setStepSelection(0.0, static_cast<double>(session.editorStepCount()));
+        return;
+    }
+    clearStepSelection();
+    const auto region = effectiveStepRegion();
+    if (region.active)
+        setStepSelection(region.start, region.end);
+}
+
+void StepGrid::paintStepSelection(juce::Graphics& g)
+{
+    if (!stepSelection.active)
+        return;
+    const auto left = labelWidth + static_cast<float>(stepSelection.start - stepScroll) * cellWidth();
+    const auto right = labelWidth + static_cast<float>(stepSelection.end - stepScroll) * cellWidth();
+    const auto top = headerHeight;
+    const auto bottom = headerHeight + rowAreaHeight();
+    juce::Graphics::ScopedSaveState scope(g);
+    g.reduceClipRegion(juce::Rectangle<float>(labelWidth, 0.0f, gridWidth(), bottom).getSmallestIntegerContainer());
+    if (stepSelection.isRange())
+    {
+        const juce::Rectangle<float> box {left, top, right - left, bottom - top};
+        g.setColour(juce::Colour(0x22c6d58c));
+        g.fillRect(box);
+        g.setColour(juce::Colour(0xffc6d58c));
+        g.drawRect(box, 1.0f);
+        // A tab along the ruler, so the span reads even where the lanes below
+        // it are dense with notes.
+        g.fillRect(left, headerHeight - 3.0f, right - left, 3.0f);
+    }
+    // The insert point: a region with no width is still where a paste lands.
+    g.setColour(juce::Colour(0xffc6d58c));
+    g.fillRect(left - 1.0f, top, 2.0f, bottom - top);
+    g.fillRect(left - 4.0f, top, 9.0f, 3.0f);
+    g.fillRect(left - 4.0f, bottom - 3.0f, 9.0f, 3.0f);
+}
+
+// What is copied is the region, not the notes' own bounding box: a rest at
+// either end of the selection has to survive the round trip, or pasting would
+// shorten the phrase.
 bool StepGrid::copySelection()
 {
-    noteClipboard.clear();
     const auto states = selectedStates();
-    if (states.empty())
+    const auto region = effectiveStepRegion();
+    if (states.empty() || !region.isRange())
         return false;
 
-    auto minStep = static_cast<double>(Session::steps);
     auto minPitch = 128;
     for (const auto& state : states)
         if (const auto* note = noteForState(state))
-        {
-            minStep = std::min(minStep, note->start);
             minPitch = std::min(minPitch, note->pitch);
-        }
-    if (minStep >= session.editorStepCount() || minPitch > 127)
+    if (minPitch > 127)
         return false;
-    clipboardBasePitch = minPitch;
 
+    noteClipboard.clear();
+    clipboardBasePitch = minPitch;
+    clipboardSpanSteps = region.length();
     for (const auto& state : states)
         if (const auto* note = noteForState(state))
-            noteClipboard.push_back({note->start - minStep, note->pitch - minPitch,
+            noteClipboard.push_back({note->start - region.start, note->pitch - minPitch,
                                      std::max(0.001, note->length), note->velocity});
     return !noteClipboard.empty();
 }
 
-bool StepGrid::canPasteAt(int step) const
+bool StepGrid::cutSelection()
 {
-    for (const auto& copied : noteClipboard)
-    {
-        const auto targetStep = step + copied.step;
-        const auto targetPitch = clipboardBasePitch + copied.pitch;
-        for (const auto& existing : visibleNotes)
-            if (existing.pitch == targetPitch
-                && targetStep < existing.start + existing.length - 0.0001
-                && existing.start < targetStep + copied.length - 0.0001)
-                return false;
-    }
+    const auto region = effectiveStepRegion();
+    if (!copySelection())
+        return false;
+    deleteSelection();
+    setStepInsertPoint(region.start);
+    repaint();
     return true;
 }
 
@@ -111,50 +209,79 @@ bool StepGrid::pasteSelection()
     if (noteClipboard.empty())
         return false;
 
-    auto requiredSteps = 0;
     auto minPitchOffset = 0;
     auto maxPitchOffset = 0;
+    auto contentEnd = 0.0;
     for (const auto& note : noteClipboard)
     {
-        requiredSteps = std::max(requiredSteps, static_cast<int>(std::ceil(note.step + note.length)));
         minPitchOffset = std::min(minPitchOffset, note.pitch);
         maxPitchOffset = std::max(maxPitchOffset, note.pitch);
+        contentEnd = std::max(contentEnd, note.step + note.length);
     }
-
-    const auto steps = session.editorStepCount();
-    if (requiredSteps > Session::steps || minPitchOffset < -127 || maxPitchOffset > 127)
+    if (minPitchOffset < -127 || maxPitchOffset > 127)
         return false;
 
-    auto anchorStep = steps;
-    for (int candidate = 0; candidate + requiredSteps <= steps; ++candidate)
-        if (canPasteAt(candidate))
-        {
-            anchorStep = candidate;
-            break;
-        }
+    const auto span = std::max(clipboardSpanSteps, contentEnd);
+    const auto region = effectiveStepRegion();
+    const auto anchorStep = std::max(0.0, stepSelection.active ? stepSelection.start
+                                                               : region.active ? region.start : 0.0);
+    const auto requiredSteps = static_cast<int>(std::ceil(anchorStep + span - 0.0001));
+    if (requiredSteps > Session::steps)
+        return false;
     const auto anchorPitch = juce::jlimit(-minPitchOffset, 127 - maxPitchOffset, clipboardBasePitch);
 
     session.beginNoteGesture("Paste notes");
-    if (!session.ensurePatternLengthSteps(anchorStep + requiredSteps))
+    if (!session.ensurePatternLengthSteps(requiredSteps))
     {
         session.endNoteGesture();
         return false;
     }
+    // Pasting replaces what it lands on, as it does in Live, so a paste is
+    // never refused and never slides off to somewhere that was not asked for.
+    // Only the lanes the paste writes to are cleared, and only where it writes.
+    constexpr double tolerance = 0.0001;
+    std::vector<juce::ValueTree> displaced;
+    const auto existing = session.editorNotes();
+    for (const auto& incoming : noteClipboard)
+    {
+        const auto step = anchorStep + incoming.step;
+        const auto pitch = anchorPitch + incoming.pitch;
+        for (const auto& note : existing)
+            if (note.pitch == pitch
+                && step < note.startSteps + note.lengthSteps - tolerance
+                && note.startSteps < step + incoming.length - tolerance
+                && std::find(displaced.begin(), displaced.end(), note.state) == displaced.end())
+                displaced.push_back(note.state);
+    }
+    if (!displaced.empty())
+        session.removeNotes(displaced);
+
     std::vector<juce::ValueTree> pasted;
     for (const auto& note : noteClipboard)
     {
-        const auto step = anchorStep + note.step;
-        const auto pitch = anchorPitch + note.pitch;
         juce::ValueTree state;
-        if (session.addNote(step, pitch, note.length, &state, note.velocity).wasOk())
+        if (session.addNote(anchorStep + note.step, anchorPitch + note.pitch, note.length, &state, note.velocity).wasOk())
             pasted.push_back(state);
     }
     session.endNoteGesture();
     rebuildVisibleNotes();
     setSelectedStates(std::move(pasted));
-    pasteAnchorIndex = indexForCell(std::min(session.editorStepCount() - 1, anchorStep + requiredSteps), anchorPitch);
+    // The region moves onto what was just pasted, so a second paste replaces
+    // it rather than stacking on it, and Ctrl+D carries on from there.
+    setStepSelection(anchorStep, anchorStep + span);
     repaint();
     return true;
+}
+
+// Live's rule: the copy lands flush against the end of the selection and the
+// selection moves onto it, so holding Ctrl+D turns one bar into four.
+bool StepGrid::duplicateSelection()
+{
+    const auto region = effectiveStepRegion();
+    if (!region.isRange() || !copySelection())
+        return false;
+    setStepInsertPoint(region.end);
+    return pasteSelection();
 }
 
 bool StepGrid::deleteSelection()

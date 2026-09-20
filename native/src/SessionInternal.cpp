@@ -192,38 +192,6 @@ bool isForgePlugin(const te::Plugin& plugin)
     return false;
 }
 
-tracktion::core::TimeRange firstFreeDuplicateRange(te::Clip& source)
-{
-    const auto old = source.getPosition().time;
-    const auto length = old.getLength();
-    auto start = old.getEnd();
-    auto* owner = source.getClipTrack();
-    if (owner == nullptr)
-        return {start, start + length};
-
-    bool moved = false;
-    do
-    {
-        moved = false;
-        const tracktion::core::TimeRange candidate {start, start + length};
-        for (auto* clip : owner->getClips())
-        {
-            if (clip == nullptr || clip == &source)
-                continue;
-            const auto occupied = clip->getPosition().time;
-            if (candidate.overlaps(occupied))
-            {
-                start = occupied.getEnd();
-                moved = true;
-                break;
-            }
-        }
-    }
-    while (moved);
-
-    return {start, start + length};
-}
-
 // A track has one instrument, as it does in Live and Logic. These two answer
 // "which plugin is it", and switchTrackInstrument below is the only thing that
 // changes the answer.

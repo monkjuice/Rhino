@@ -21,6 +21,11 @@ void Arrangement::sync()
     if (selectedTracks.empty())
         selectedTracks = {selectedTrack};
     trackSelectionAnchor = juce::jlimit(0, std::max(0, session.trackCount() - 1), trackSelectionAnchor);
+    // The region can outlive the tracks it was drawn over. Its time span stays
+    // where it was - a trim does not drag a selection with it - but the rows it
+    // covers have to be ones that still exist.
+    if (timeSelection.active)
+        setTimeSelection(timeSelection.start, timeSelection.end, timeSelection.firstTrack, timeSelection.lastTrack);
     songEnd = 0.0;
     for (int track = 0; track < tracks.size(); ++track)
     {

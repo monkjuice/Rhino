@@ -620,11 +620,30 @@ private:
             });
     }
 
+    // Cut, copy, paste and duplicate belong to whichever editor has the
+    // keyboard, and both of them already answer the shortcut, so the menu
+    // sends the shortcut rather than reaching into either one. Which editor
+    // that is has to be read before the menu opens, because opening it takes
+    // the focus away.
+    void sendClipboardShortcut(int keyCode, bool toNoteEditor)
+    {
+        auto& editor = toNoteEditor ? static_cast<juce::Component&>(grid)
+                                    : static_cast<juce::Component&>(arrangement);
+        editor.grabKeyboardFocus();
+        editor.keyPressed(juce::KeyPress(keyCode, juce::ModifierKeys::commandModifier, 0));
+    }
+
     void showEditMenu(juce::Component* target = nullptr)
     {
         juce::PopupMenu menu;
         menu.addItem(1, "Undo", session.edit->getUndoManager().canUndo(), false);
         menu.addItem(2, "Redo", session.edit->getUndoManager().canRedo(), false);
+        menu.addSeparator();
+        const auto noteEditorHasFocus = grid.isVisible() && grid.hasKeyboardFocus(true);
+        menu.addItem(6, "Cut       Ctrl+X");
+        menu.addItem(7, "Copy       Ctrl+C");
+        menu.addItem(8, "Paste       Ctrl+V");
+        menu.addItem(9, "Duplicate       Ctrl+D");
         menu.addSeparator();
         menu.addItem(3, "Clear pattern");
         menu.addSeparator();
@@ -632,9 +651,15 @@ private:
         menu.addSeparator();
         menu.addItem(4, "Audio settings...");
         menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(target != nullptr ? *target : editMenu),
-            [safe = juce::Component::SafePointer<ControlWindow>(this)](int result)
+            [safe = juce::Component::SafePointer<ControlWindow>(this), noteEditorHasFocus](int result)
             {
                 if (safe == nullptr) return;
+                if (result >= 6 && result <= 9)
+                {
+                    static constexpr int keys[] {'X', 'C', 'V', 'D'};
+                    safe->sendClipboardShortcut(keys[result - 6], noteEditorHasFocus);
+                    return;
+                }
                 if (result == 1) safe->session.undo();
                 else if (result == 2) safe->session.redo();
                 else if (result == 3) safe->session.clearPattern();
@@ -688,7 +713,10 @@ private:
                     juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon, "Keyboard shortcuts",
                         "Space  Play/Pause\nCtrl+N  New project\nCtrl+O  Open project\nCtrl+S  Save project\nCtrl+Shift+S  Save as\n"
                         "Ctrl+Shift+E  Export WAV\nCtrl+Z  Undo\nCtrl+Y / Ctrl+Shift+Z  Redo\nCtrl+F  Search browser\nCtrl+A  Add a clip to the focused track\nDouble-click a lane  Add a clip there\n"
-                        "Ctrl+T  Add a track\nF2  Rename the selected track or group\nCtrl+G  Group the selected tracks\nCtrl+Shift+G  Ungroup\n?  Show/hide Info View\nF12  Full screen");
+                        "Ctrl+T  Add a track\nF2  Rename the selected track or group\nCtrl+G  Group the selected tracks\nCtrl+Shift+G  Ungroup\n"
+                        "Drag an empty lane  Select a span of the timeline\nCtrl+X / Ctrl+C / Ctrl+V  Cut, copy and paste the selection\n"
+                        "Ctrl+D  Duplicate it directly after itself\nDelete  Empty the selection\n"
+                        "?  Show/hide Info View\nF12  Full screen");
                 else if (result == 2)
                     juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon, "About Rhino",
                         "Rhino\nA native desktop DAW for patterns, arrangement, and offline WAV export.");

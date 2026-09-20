@@ -114,6 +114,9 @@ void StepGrid::setSelectedStates(std::vector<juce::ValueTree> states)
             const auto index = note->row * Session::steps + static_cast<int>(std::floor(note->start));
             if (index >= 0) selectedNotes.set(static_cast<size_t>(index));
         }
+    // The region the clipboard commands act on follows the selection, so this
+    // is the one place it has to be kept in step.
+    setStepRegionFromSelection();
     if (getHeight() > 0)
         repaint(footerBounds().getSmallestIntegerContainer());
 }
@@ -281,10 +284,14 @@ bool StepGrid::keyPressed(const juce::KeyPress& key)
         return selectAllNotes();
     if (command && key.getKeyCode() == 'C')
         return copySelection();
+    if (command && key.getKeyCode() == 'X')
+        return cutSelection();
     if (command && key.getKeyCode() == 'E')
         return subdivisionActive || beginSubdivision();
     if (command && key.getKeyCode() == 'V')
         return pasteSelection();
+    if (command && key.getKeyCode() == 'D')
+        return duplicateSelection();
     if (key.getModifiers().isShiftDown()
         && (key.getKeyCode() == juce::KeyPress::leftKey || key.getKeyCode() == juce::KeyPress::rightKey))
     {
@@ -312,6 +319,8 @@ bool StepGrid::keyPressed(const juce::KeyPress& key)
     if (key.getKeyCode() == juce::KeyPress::escapeKey)
     {
         clearSelection();
+        clearStepSelection();
+        repaint();
         return true;
     }
     return false;

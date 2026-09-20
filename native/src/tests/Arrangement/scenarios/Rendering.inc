@@ -61,6 +61,8 @@
         session.undo();
         view.sync();
         const auto patternID = session.pattern().itemID;
+        // Named rather than selected: these checks count lime pixels outside a
+        // clip, and a time selection draws its edges in the same lime.
         view.selected = patternID;
         const auto patternPosition = session.pattern().getPosition();
         view.original = {patternPosition.time.getStart().inSeconds(), patternPosition.time.getEnd().inSeconds(),
@@ -91,7 +93,7 @@
         require(escapedMidiPixels == 0, "Short MIDI clips must clip note bars to the visible clip bounds");
         session.undo();
         view.sync();
-        view.selected = patternID;
+        view.setSelection({patternID}, patternID);
         view.duplicateSelected();
         require(te::getAudioTracks(*session.edit)[0]->getClips().size() == 2, "Duplicate creates a second MIDI pattern clip");
         session.undo();

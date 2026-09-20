@@ -172,12 +172,12 @@
         require(view.masterVolume.getX() >= 50, "The main controls start clear of the MAIN label");
 
         scenario("track management: duplicate move");
-        view.selected = id;
+        view.setSelection({id}, id);
         view.duplicateSelected();
         auto* movedDuplicate = te::getAudioTracks(*session.edit)[1]->getClips().getLast();
         const auto movedDuplicateID = movedDuplicate->itemID;
         view.sync();
-        view.selected = movedDuplicateID;
+        view.setSelection({movedDuplicateID}, movedDuplicateID);
         drag({view.xFor(movedDuplicate->getPosition().time.getStart().inSeconds() + 0.1), view.lane(1).getCentreY()},
              {view.xFor(0.5), view.lane(2).getCentreY()});
         require(te::getAudioTracks(*session.edit)[2]->findClipForID(movedDuplicateID) != nullptr,
@@ -190,7 +190,7 @@
                 "Undo restores the original audio clip after duplicate move regression");
         view.sync();
         scenario("track management: cross-track move");
-        view.selected = id;
+        view.setSelection({id}, id);
         drag({view.xFor(0.2), view.lane(1).getCentreY()}, {view.xFor(0.5), view.lane(2).getCentreY()});
         require(te::getAudioTracks(*session.edit)[1]->getClips().isEmpty(), "Dragging an audio clip to another lane removes it from the source track");
         require(te::getAudioTracks(*session.edit)[2]->findClipForID(id) != nullptr, "Dragging an audio clip to another lane preserves clip identity on the target track");
@@ -203,7 +203,7 @@
         scenario("track management: instrument-lane move");
         session.applyPatternPreset(Session::PatternPreset::WavePluck);
         view.sync();
-        view.selected = id;
+        view.setSelection({id}, id);
         drag({view.xFor(0.2), view.lane(1).getCentreY()}, {view.xFor(0.5), view.lane(0).getCentreY()});
         require(te::getAudioTracks(*session.edit)[0]->findClipForID(id) != nullptr,
                 "Dragging an audio clip onto an instrument lane moves it there");

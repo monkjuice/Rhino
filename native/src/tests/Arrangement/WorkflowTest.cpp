@@ -80,6 +80,8 @@ int runArrangementTest()
        #include "scenarios/Rendering.inc"
         scenario("audio clip editing");
        #include "scenarios/AudioClipEditing.inc"
+        scenario("region clipboard");
+       #include "scenarios/RegionClipboard.inc"
         scenario("track management");
        #include "scenarios/TrackManagement.inc"
         scenario("group bus routing");
@@ -106,6 +108,8 @@ int runArrangementTest()
         // downstream should be relying on the notes it replaces.
         scenario("note selection");
        #include "scenarios/NoteSelection.inc"
+        scenario("note clipboard");
+       #include "scenarios/NoteClipboard.inc"
         return 0;
     }
     catch (const std::exception& error)

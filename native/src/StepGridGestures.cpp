@@ -138,6 +138,9 @@ void StepGrid::mouseDown(const juce::MouseEvent& event)
         selectionBox = {};
         selectedNotes.reset();
         selectedNoteStates.clear();
+        // The drag is about to say what the region is, so whatever it was
+        // before goes now rather than flickering under the new box.
+        clearStepSelection();
         repaint();
         return;
     }
@@ -171,6 +174,9 @@ void StepGrid::mouseDown(const juce::MouseEvent& event)
             tracktion::core::BeatPosition::fromBeats(clipStartBeat - offsetBeat + localBeat)).inSeconds();
         const auto clippedTime = std::clamp(requestedTime, position.time.getStart().inSeconds(), position.time.getEnd().inSeconds());
         session.edit->getTransport().setPosition(tracktion::core::TimePosition::fromSeconds(clippedTime));
+        // The ruler carries the insert point with the playhead, so a paste
+        // after a seek lands where the transport was just put.
+        setStepInsertPoint(loopStepAt(event.position.x, event.mods.isAltDown()));
         updatePlayhead();
         loopDragActive = true;
         loopAnchorStep = loopStepAt(event.position.x, event.mods.isAltDown());
@@ -199,7 +205,11 @@ void StepGrid::mouseDown(const juce::MouseEvent& event)
     if (cellIndex < 0) return;
     grabKeyboardFocus();
     lastHit = cellIndex;
-    pasteAnchorIndex = cellIndex;
+    // A press in the lanes leaves the insert point on the step it landed on,
+    // which is where a paste goes when nothing is selected. Clicking a note
+    // selects it, and the selection sets the region instead.
+    if (noteIndex < 0)
+        setStepInsertPoint(std::floor(stepScroll + (event.position.x - labelWidth) / cellWidth()));
     if (isShortcutDown(event.mods) && noteIndex >= 0)
     {
         toggleSelection(noteIndex);
@@ -487,6 +497,10 @@ void StepGrid::updateMarqueeSelection()
     for (const auto& note : visibleNotes)
         if (boundsFor(note).intersects(selectionBox)) selectedNoteStates.push_back(note.state);
     setSelectedStates(selectedNoteStates);
+    // The box says what the region is, not the notes it happened to catch: a
+    // span dragged around two notes with a rest between them keeps the rest.
+    const auto stepAt = [this](float x) { return stepScroll + (x - labelWidth) / cellWidth(); };
+    setStepSelection(std::floor(stepAt(selectionBox.getX())), std::ceil(stepAt(selectionBox.getRight())));
 }
 
 void StepGrid::mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel)

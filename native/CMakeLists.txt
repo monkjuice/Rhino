@@ -56,6 +56,7 @@ target_sources(RhinoNative PRIVATE
     src/SessionSlots.cpp
     src/SessionMixer.cpp
     src/SessionClips.cpp
+    src/SessionRegion.cpp
     src/SessionSamples.cpp
     src/SessionPreview.cpp
     src/SessionAutomation.cpp
@@ -72,6 +73,7 @@ target_sources(RhinoNative PRIVATE
     src/ArrangementPainter.cpp
     src/ArrangementSync.cpp
     src/ArrangementGestures.cpp
+    src/ArrangementSelection.cpp
     src/ArrangementGroups.cpp
     src/ArrangementRename.cpp
     src/ArrangementAutomation.cpp

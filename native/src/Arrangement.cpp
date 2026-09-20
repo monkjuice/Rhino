@@ -285,6 +285,11 @@ bool Arrangement::keyPressed(const juce::KeyPress& key)
         copySelection();
         return true;
     }
+    if (key.getModifiers().isCommandDown() && key.getKeyCode() == 'X')
+    {
+        cutSelection();
+        return true;
+    }
     if (key.getModifiers().isCommandDown() && key.getKeyCode() == 'V')
     {
         pasteSelection();
@@ -296,9 +301,10 @@ bool Arrangement::keyPressed(const juce::KeyPress& key)
         if (result.failed() && status) status(result.getErrorMessage());
         return true;
     }
-    if (key.getKeyCode() == juce::KeyPress::escapeKey && dragging)
+    if (key.getKeyCode() == juce::KeyPress::escapeKey && (dragging || timeSelection.active))
     {
         cancelDrag();
+        clearTimeSelection();
         repaint();
         return true;
     }
@@ -327,7 +333,7 @@ bool Arrangement::keyPressed(const juce::KeyPress& key)
             if (status) status(result.wasOk() ? "Deleted " + name : result.getErrorMessage());
             return true;
         }
-        if (focus == Focus::clip)
+        if (focus == Focus::clip || focus == Focus::region)
             deleteSelection();
         return true;
     }
@@ -338,6 +344,7 @@ void Arrangement::cancelDrag()
 {
     dragging = false;
     marqueeSelecting = false;
+    regionSelecting = false;
     loopGesture = LoopGesture::none;
     automationGesture = AutomationGesture::none;
     automationRow = -1;
@@ -361,38 +368,11 @@ void Arrangement::setSelection(std::vector<te::EditItemID> ids, te::EditItemID p
     selected = primary;
     if (selected == te::EditItemID() || !isSelected(selected))
         selected = selectedClips.empty() ? te::EditItemID() : selectedClips.front();
-}
-
-void Arrangement::copySelection()
-{
-    if (selectedClips.empty() && selected != te::EditItemID()) selectedClips = {selected};
-    clipboard = selectedClips;
-    if (status) status(clipboard.empty() ? "Select clips to copy" : "Copied " + juce::String(clipboard.size()) + " clip" + (clipboard.size() == 1 ? "" : "s"));
-}
-
-void Arrangement::pasteSelection()
-{
-    if (clipboard.empty())
-    {
-        if (status) status("Copy one or more clips first");
-        return;
-    }
-    std::vector<te::EditItemID> pasted;
-    const auto result = session.pasteClips(clipboard, std::max(0.0, pasteTime), selectedTrack, pasted);
-    if (result.failed())
-    {
-        if (status) status(result.getErrorMessage());
-        return;
-    }
-    setSelection(std::move(pasted));
-    if (status) status("Pasted " + juce::String(selectedClips.size()) + " clip" + (selectedClips.size() == 1 ? "" : "s"));
-}
-
-void Arrangement::deleteSelection()
-{
-    if (selectedClips.empty() && selected != te::EditItemID()) selectedClips = {selected};
-    for (const auto id : selectedClips) session.deleteClip(id);
-    setSelection({});
+    // Selecting clips is also a time selection - that is what makes Ctrl+D on
+    // a clip and Ctrl+D on its span the same command - unless the region is
+    // what changed the selection in the first place.
+    if (!syncingSelection)
+        setRegionFromSelectedClips();
 }
 
 // Selecting one card collapses a gathered selection back to it, so this runs
@@ -412,25 +392,6 @@ void Arrangement::splitSelectedAtPlayhead()
 {
     cancelDrag();
     const auto result = session.splitClip(selected, playheadTime(session.edit->getTransport()));
-    if (result.failed() && status) status(result.getErrorMessage());
-}
-
-void Arrangement::duplicateSelected()
-{
-    cancelDrag();
-    if (selectedClips.size() > 1)
-    {
-        copySelection();
-        pasteTime = std::max(pasteTime, [&]
-        {
-            double end = 0.0;
-            for (const auto& clip : clips) if (isSelected(clip.id)) end = std::max(end, clip.position.end);
-            return end;
-        }());
-        pasteSelection();
-        return;
-    }
-    const auto result = session.duplicateClip(selected);
     if (result.failed() && status) status(result.getErrorMessage());
 }
 
@@ -478,6 +439,7 @@ void Arrangement::editWillChange()
     rowsHeight = 0.0f;
     focusedAutomation = {};
     setSelection({});
+    clearTimeSelection();
     focus = Focus::none;
 }
 void Arrangement::editDidChange() { sync(); fit(); }
@@ -526,7 +488,11 @@ void Arrangement::showClipMenu(te::EditItemID id)
     menu.addSectionHeader("CLIP");
     menu.addItem(1, "Copy to session slot");
     menu.addSeparator();
-    menu.addItem(2, "Duplicate");
+    menu.addItem(4, "Cut       Ctrl+X");
+    menu.addItem(5, "Copy       Ctrl+C");
+    menu.addItem(6, "Paste       Ctrl+V", !clipboard.empty());
+    menu.addItem(2, "Duplicate       Ctrl+D");
+    menu.addSeparator();
     menu.addItem(3, "Delete");
     menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this)
                            .withMousePosition(),
@@ -539,17 +505,17 @@ void Arrangement::showClipMenu(te::EditItemID id)
                 if (safe->status)
                     safe->status(outcome.failed() ? outcome.getErrorMessage()
                                                   : "Copied the clip into a session slot");
+                return;
             }
-            else if (result == 2)
-            {
-                safe->selected = id;
-                safe->duplicateSelected();
-            }
-            else if (result == 3)
-            {
+            // The commands act on a selection, so the clip the menu was opened
+            // on becomes one before any of them runs.
+            if (!safe->isSelected(id))
                 safe->setSelection({id}, id);
-                safe->deleteSelection();
-            }
+            if (result == 2) safe->duplicateSelected();
+            else if (result == 3) safe->deleteSelection();
+            else if (result == 4) safe->cutSelection();
+            else if (result == 5) safe->copySelection();
+            else if (result == 6) safe->pasteSelection();
         });
 }
 

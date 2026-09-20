@@ -29,7 +29,8 @@ The mechanism is the one `SessionTransport.cpp` already used: **one class define
 | `SessionPatches.cpp` | The 14 preset note tables, `presetPattern`, `fillMidiClip`, and the 4OSC/RhinoWave patch application |
 | `SessionDevices.cpp` | `addAudioEffect`, `addClipAudioEffect`, `addInstrument`, `addMidiEffect`, `deviceSlots`, `deviceParameters`, `begin`/`set`/`endDeviceParameterGesture`, `toggleDeviceEnabled`, `deleteDevice` |
 | `SessionTracks.cpp` | `trackCount`, `trackName`, `addAudioTrack`, `removeAudioTrack` |
-| `SessionClips.cpp` | `findClip`, `findAudioClip`, `shouldShowClipInArrangement`, `editClip`, `splitClip`, `duplicateClip`, `deleteClip`, `cycleClipColour`, `clipPluginCount`, `toggleTrackMute`, `toggleTrackSolo` |
+| `SessionClips.cpp` | `findClip`, `findAudioClip`, `shouldShowClipInArrangement`, `editClip`, `splitClip`, `duplicateClip`, `deleteClip`, `repairPatternClip`, `cycleClipColour`, `clipPluginCount`, `toggleTrackMute`, `toggleTrackSolo` |
+| `SessionRegion.cpp` | Added September 2026. The region edit that copy, cut, paste, duplicate and delete are all built on: `copyClipRegion`, `clearClipRegion`, `clearClipRegionInEdit`, `pasteClipSnapshots`, `snapshotSpanSeconds`, `snapshotTrackSpan`. `pasteClips` and `firstFreeDuplicateRange` are gone; `duplicateClip` now calls through here |
 | `SessionAutomation.cpp` | Automation. *Rewritten September 2026 — see "Automation moved from clips to tracks" below.* `trackAutomations`, `trackAutomationState`, `showTrackAutomation`, `hideTrackAutomation`, `setTrackAutomationPoints`, `clearTrackAutomationPoints`, `automationRuntimeFor`, `findAutomationRuntime`, `toggleParameterAutomationOverride`, `applyTrackAutomationAt` |
 | `DeviceMacros.cpp` | `activeParameterAt`, `fourOscMacroParameterAt`, `rhinoWaveMacroParameterAt`, the macro name/format helpers, `exposedParameterAt`, `exposedParameterMaximum` |
 | `SessionTransport.cpp` | Unchanged — transport, tempo, loop, audio import |
@@ -43,16 +44,17 @@ Pattern geometry lives with note editing rather than in `Session.cpp`, because t
 | `StepGrid.cpp` | Lifecycle, layout and geometry (`cell`, `boundsFor`, `cellWidth`, `gridWidth`, `visibleStepSpan`, `footerBounds`, `rowAreaHeight`), selection state, zoom, `keyPressed`, `timerCallback`, focus, `changeListenerCallback`, `rebuildVisibleNotes`, `updatePlayhead`, scrolling |
 | `StepGridPainter.cpp` | `paint` |
 | `StepGridGestures.cpp` | `cellHit`, `hit`, `resizeHit`, `updatePointer`, `mouseMove`/`Down`/`Drag`/`Up`/`WheelMove`, `apply`, `pitchForIndex`, `indexForCell`, `moveCurrentNotesBy`, `moveDraggedNotesAt`, `scrollDraggedNotes`, `resizeCurrentNoteTo`, `updateMarqueeSelection` |
-| `StepGridEditing.cpp` | Selection commands, clipboard (`copySelection`, `canPasteAt`, `pasteSelection`), `deleteSelection`, `fillSelectionToClipEnd`, and the subdivision and velocity modal tools |
+| `StepGridEditing.cpp` | Selection commands, the step region (`setStepSelection`, `effectiveStepRegion`, `setStepRegionFromSelection`, `paintStepSelection`), the clipboard (`copySelection`, `cutSelection`, `pasteSelection`, `duplicateSelection`), `deleteSelection`, `fillSelectionToClipEnd`, and the subdivision and velocity modal tools. `canPasteAt` is gone: a paste replaces what it lands on rather than looking for a free slot |
 
 ### `Arrangement.cpp` (1,197 → 277)
 
 | File | Contains |
 | --- | --- |
-| `Arrangement.cpp` | Constructor, `resized`, `fit`, `zoom`, `scrollBarMoved`, `keyPressed`, `cancelDrag`, `selectTrack`, `splitSelectedAtPlayhead`, `duplicateSelected`, `nudgeSelected`, `changeListenerCallback`, `editWillChange`/`editDidChange`, `updatePlayhead` |
+| `Arrangement.cpp` | Constructor, `resized`, `fit`, `zoom`, `scrollBarMoved`, `keyPressed`, `cancelDrag`, `selectTrack`, `splitSelectedAtPlayhead`, `nudgeSelected`, `changeListenerCallback`, `editWillChange`/`editDidChange`, `updatePlayhead` |
 | `ArrangementPainter.cpp` | `paint` |
 | `ArrangementSync.cpp` | `sync`, `syncTrackControls`, `updateScroll` |
 | `ArrangementGestures.cpp` | `mouseDown`/`Drag`/`Up`/`Move`/`WheelMove` |
+| `ArrangementSelection.cpp` | Added September 2026. The time selection and the clipboard commands on it: `setTimeSelection`, `setInsertPoint`, `effectiveRegion`, `setRegionFromSelectedClips`, `begin`/`drag`/`endRegionGesture`, `paintTimeSelection`, `copySelection`, `cutSelection`, `pasteSelection`, `duplicateSelected`, `deleteSelection` |
 | `ArrangementDrops.cpp` | `isInterestedInFileDrag`, `filesDropped`, `isInterestedInDragSource`, `itemDropped`, `applyBrowserDrop` |
 | `ArrangementGeometry.cpp` | Unchanged |
 

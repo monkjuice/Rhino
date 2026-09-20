@@ -319,9 +319,46 @@ public:
     juce::Result editClip(te::EditItemID, ClipGeometry, ClipGesture, int targetTrack = -1);
     juce::Result splitClip(te::EditItemID, double splitTimeSeconds);
     juce::Result duplicateClip(te::EditItemID);
-    juce::Result pasteClips(const std::vector<te::EditItemID>& source, double destinationStart,
-                            int destinationTrack, std::vector<te::EditItemID>& pasted);
     void deleteClip(te::EditItemID);
+    // A region is a span of time across a run of tracks - the rectangle the
+    // arrangement highlights - and it is what copy, cut, paste, duplicate and
+    // delete all act on. A clip crossing an edge of one is cut at that edge
+    // rather than taken whole, which is what makes a region an edit of the
+    // timeline instead of a selection of clips.
+    struct ClipSnapshot
+    {
+        struct Note
+        {
+            double startBeats = 0.0, lengthBeats = 0.0;
+            int pitch = 60, velocity = 100, colour = 0;
+        };
+        // Complete enough to be rebuilt without the clip it came from: cut
+        // deletes the source, and undo can take it away long after the copy
+        // was made. Nothing here is a pointer into the edit.
+        bool midi = false;
+        juce::String name;
+        juce::Colour colour;
+        juce::File sourceFile;                        // audio only
+        double speed = 1.0;                           // audio only
+        std::vector<Note> notes;                      // midi only
+        Instrument instrument = Instrument::Utility;  // midi only: what its track played
+        // Relative to the copied region's corner, so pasting is a translation
+        // and nothing else.
+        int track = 0;
+        double start = 0.0, end = 0.0, offset = 0.0;
+    };
+    std::vector<ClipSnapshot> copyClipRegion(double startSeconds, double endSeconds,
+                                             int firstTrack, int lastTrack) const;
+    // Empties the region: clips inside it go, clips crossing an edge are cut
+    // at that edge, and a clip spanning it is left with a hole.
+    juce::Result clearClipRegion(double startSeconds, double endSeconds, int firstTrack, int lastTrack);
+    // Drops a copied region at a new corner, replacing what is already there
+    // the way Live does, so what lands is what was copied and nothing else.
+    juce::Result pasteClipSnapshots(const std::vector<ClipSnapshot>&, double destinationStart,
+                                    int destinationTrack, std::vector<te::EditItemID>& pasted);
+    // How wide and how tall a copied region is, measured from its own corner.
+    static double snapshotSpanSeconds(const std::vector<ClipSnapshot>&);
+    static int snapshotTrackSpan(const std::vector<ClipSnapshot>&);
     juce::Result cycleClipColour(te::EditItemID);
     int clipPluginCount(te::EditItemID) const;
     void toggleTrackMute(int track);
@@ -430,6 +467,13 @@ private:
         te::AutomatableParameter::Ptr parameter;
         float restoreValue = 0.0f;
     };
+    // SessionRegion.cpp - the region edit itself, without a transaction or a
+    // notification, so paste can clear and insert inside one undo step.
+    bool clearClipRegionInEdit(double startSeconds, double endSeconds, int firstTrack, int lastTrack);
+    // Deleting clips can take the clip the note editor is pointed at. This puts
+    // the editor back on a clip of track one, making a starter one if the track
+    // has none left, and is what keeps `pattern()` safe to call.
+    void repairPatternClip();
     // SessionPreview.cpp
     static bool readPreviewPreference();
     void ensurePreviewAttached();

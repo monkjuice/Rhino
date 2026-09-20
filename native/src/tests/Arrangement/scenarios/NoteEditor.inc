@@ -244,9 +244,16 @@
         selectionGrid.changeListenerCallback(nullptr);
         require(session.hasNote(4, 55) && session.hasNote(8, 60),
                 "Undo restores a grouped note drag in one step");
-        selectionGrid.selectedNotes.reset();
-        selectionGrid.selectedNotes.set(static_cast<size_t>(selectionGrid.indexForCell(4, 55)));
-        selectionGrid.selectedNotes.set(static_cast<size_t>(selectionGrid.indexForCell(8, 60)));
+        const auto noteState = [&session](int step, int pitch)
+        {
+            for (const auto& note : session.editorNotes())
+                if (note.pitch == pitch && std::abs(note.startSteps - step) < 0.0001)
+                    return note.state;
+            return juce::ValueTree();
+        };
+        // Through setSelectedStates rather than the cell bitset, because that
+        // is what carries the selection into the region the clipboard reads.
+        selectionGrid.setSelectedStates({noteState(4, 55), noteState(8, 60)});
         const auto copiedStates = selectionGrid.selectedStates();
         session.beginNoteGesture("Set copied note velocity");
         require(session.adjustNoteVelocities({copiedStates.front()}, -10),
@@ -257,10 +264,14 @@
                 "The copied selection contains distinct velocities");
         require(selectionGrid.keyPressed(juce::KeyPress('C', juce::ModifierKeys::commandModifier, 'c')),
                 "Command-C copies selected notes");
+        // Paste lands on the insert point and keeps the shape's own spacing.
+        // It used to hunt for the first run of empty steps instead, which put
+        // the copy somewhere nobody had pointed at.
+        selectionGrid.setStepInsertPoint(0.0);
         require(selectionGrid.keyPressed(juce::KeyPress('V', juce::ModifierKeys::commandModifier, 'v')),
                 "Command-V pastes selected notes");
         require(session.hasNote(0, 55) && session.hasNote(4, 60),
-                "Paste places the selected shape at the first empty grid position");
+                "Paste places the copied shape at the insert point");
         require(selectionGrid.selectedVelocityPercent() == -1,
                 "Paste preserves each copied note's velocity");
         require(selectionGrid.keyPressed(juce::KeyPress('Z', juce::ModifierKeys::commandModifier, 'z')),

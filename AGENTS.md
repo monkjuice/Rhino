@@ -26,9 +26,10 @@ Application code, `native/src`:
 
 | Area | Files |
 | --- | --- |
-| Session model and engine ownership | `Session.h` declares everything; `Session.cpp` holds construction, project load/save and undo. Implementation is split across `Session*.cpp` by responsibility — notes, devices, automation, clips, presets, tracks, groups, transport. |
+| Session model and engine ownership | `Session.h` declares everything; `Session.cpp` holds construction, project load/save and undo. Implementation is split across `Session*.cpp` by responsibility — notes, devices, automation, clips, regions, presets, tracks, groups, transport. |
 | Note grid UI | `StepGrid.*` — the 16-step pattern editor |
 | Arrangement UI | `Arrangement.*`, `ArrangementGeometry.cpp`, `ClipGeometry.h` |
+| Selecting a span of the timeline, and cut/copy/paste/duplicate on it | `ArrangementSelection.cpp` in the UI, `SessionRegion.cpp` in the model. The note editor uses the same rule in steps, in `StepGridEditing.cpp` |
 | Track groups, which are bus tracks | `SessionGroups.cpp`, `ArrangementGroups.cpp` |
 | Renaming a track card or a group band in place | `ArrangementRename.cpp` |
 | Auditioning a library sound | `SessionPreview.cpp` |

@@ -33,6 +33,18 @@ private:
     static constexpr int minPitchRows = 8, maxPitchRows = 48;
     static constexpr float minimumRowHeight = 7.0f;
     struct CopiedNote { double step = 0.0; int pitch = 0; double length = 1.0; int velocity = 100; };
+    // The arrangement's time selection, in steps instead of seconds, and it
+    // drives the same four commands. A click leaves it zero-length - an insert
+    // point, which is where a paste lands - and selecting notes sets it to
+    // their span rounded out to whole steps, so a bar of notes duplicates as a
+    // bar rather than as the distance between its first and last note.
+    struct StepSelection
+    {
+        double start = 0.0, end = 0.0;
+        bool active = false;
+        double length() const { return std::max(0.0, end - start); }
+        bool isRange() const { return end > start + 1.0e-6; }
+    };
     struct MovingNote { juce::ValueTree state; double step = 0.0; int pitch = 0; };
     struct VisibleNote
     {
@@ -77,10 +89,19 @@ private:
     void toggleSelection(int index);
     bool selectAllNotes();
     bool transposeSelection(int semitones);
-    bool canPasteAt(int step) const;
     void clearSelection();
+    void setStepSelection(double start, double end);
+    void setStepInsertPoint(double step);
+    void clearStepSelection();
+    // What a command acts on: the dragged-out span when there is one, else the
+    // span of the selected notes.
+    StepSelection effectiveStepRegion() const;
+    void setStepRegionFromSelection();
+    void paintStepSelection(juce::Graphics&);
     bool copySelection();
+    bool cutSelection();
     bool pasteSelection();
+    bool duplicateSelection();
     bool deleteSelection();
     bool fillSelectionToClipEnd();
     juce::Result moveCurrentNotesBy(double stepDelta, int pitchDelta);
@@ -107,10 +128,14 @@ private:
     std::vector<VisibleNote> visibleNotes;
     std::vector<juce::ValueTree> selectedNoteStates;
     std::vector<CopiedNote> noteClipboard;
+    StepSelection stepSelection;
     std::vector<MovingNote> movingNotes;
     Gesture gesture = Gesture::none;
     bool adding = true, showingDrumLabels = false, noteMoved = false, manualPitchScroll = false, movingGroup = false, resizingFromLeft = false;
-    int lastHit = -1, pasteAnchorIndex = -1, clipboardBasePitch = 0;
+    int lastHit = -1, clipboardBasePitch = 0;
+    // How wide the copied region was, which is what a paste occupies and what
+    // a duplicate steps forward by.
+    double clipboardSpanSteps = 0.0;
     int moveGrabPitch = -1;
     int visibleStepCount = Session::defaultSteps;
     int lowestVisiblePitch = Session::lowestNote;

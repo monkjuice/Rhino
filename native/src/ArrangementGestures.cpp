@@ -93,7 +93,6 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
             repaint();
             return;
         }
-    pasteTime = snapped(std::max(0.0, timeAt(event.position.x)), event.mods.isAltDown());
     for (int track = 0; track < session.trackCount(); ++track)
         if (lane(track).withX(0.0f).contains(event.position))
         {
@@ -174,9 +173,16 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
     const auto index = hit(event.position);
     if (index < 0)
     {
+        // Empty lane space is where a region is dragged out, and a press that
+        // never moves leaves the insert point there. The header still selects
+        // the track itself.
+        if (beginRegionGesture(event))
+        {
+            repaint();
+            return;
+        }
         setSelection({});
-        // The header selects the track itself. Empty lane space selects
-        // nothing, so Delete has nothing to reach for.
+        clearTimeSelection();
         focus = event.position.x < headerWidth ? Focus::track : Focus::none;
         repaint();
         return;
@@ -228,6 +234,11 @@ void Arrangement::mouseDrag(const juce::MouseEvent& event)
         marqueeBounds = {std::min(marqueeAnchor.x, event.position.x), std::min(marqueeAnchor.y, event.position.y),
                          std::abs(event.position.x - marqueeAnchor.x), std::abs(event.position.y - marqueeAnchor.y)};
         repaint();
+        return;
+    }
+    if (regionSelecting)
+    {
+        dragRegionGesture(event);
         return;
     }
     if (automationGesture != AutomationGesture::none)
@@ -310,6 +321,12 @@ void Arrangement::mouseUp(const juce::MouseEvent& event)
         repaint();
         return;
     }
+    if (regionSelecting)
+    {
+        dragRegionGesture(event);
+        endRegionGesture();
+        return;
+    }
     if (automationGesture != AutomationGesture::none)
     {
         dragAutomationGesture(event);
@@ -329,7 +346,11 @@ void Arrangement::mouseUp(const juce::MouseEvent& event)
         }
         else
         {
-            session.edit->getTransport().setPosition(tracktion::core::TimePosition::fromSeconds(std::max(0.0, timeAt(event.position.x))));
+            const auto seconds = std::max(0.0, timeAt(event.position.x));
+            session.edit->getTransport().setPosition(tracktion::core::TimePosition::fromSeconds(seconds));
+            // The ruler carries the insert point with the playhead, so a paste
+            // after a seek lands where the transport was just put.
+            setInsertPoint(snapped(seconds, event.mods.isAltDown()), timeSelection.active ? timeSelection.firstTrack : selectedTrack);
             updatePlayhead();
         }
         repaint();

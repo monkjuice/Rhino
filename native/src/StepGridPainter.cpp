@@ -227,6 +227,9 @@ void StepGrid::paint(juce::Graphics& g)
         g.setColour(juce::Colour(0xff55c7eb));
         g.drawRect(getLocalBounds().toFloat().reduced(1.0f), 2.0f);
     }
+    // Over the notes and under the marquee: the region is what the clipboard
+    // commands act on, so it has to read as covering what it contains.
+    paintStepSelection(g);
     if (gesture == Gesture::select && !selectionBox.isEmpty())
     {
         g.setColour(juce::Colour(0x3355c7eb));

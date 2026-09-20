@@ -136,148 +136,62 @@ juce::Result Session::splitClip(te::EditItemID id, double splitTimeSeconds)
     return juce::Result::ok();
 }
 
+// One clip is the smallest region there is, so duplicating it is the region
+// command applied to its own span on its own track: the copy lands flush
+// against its end, replacing whatever was sitting there.
 juce::Result Session::duplicateClip(te::EditItemID id)
 {
     auto* clip = findClip(id);
     if (!clip) return juce::Result::fail("Select a clip to duplicate.");
-    const auto old = clip->getPosition();
-    auto* track = clip->getClipTrack();
-    if (track == nullptr) return juce::Result::fail("The selected clip is not on a track.");
-    edit->getUndoManager().beginNewTransaction("Duplicate clip");
-    const auto duplicateRange = firstFreeDuplicateRange(*clip);
-    te::Clip* copy = nullptr;
-    if (auto* audio = dynamic_cast<te::WaveAudioClip*>(clip))
-    {
-        copy = track->insertWaveClip(audio->getName() + " copy", audio->getSourceFileReference().getFile(),
-            {duplicateRange, old.offset}, false).get();
-        if (copy != nullptr)
-            copy->setColour(audio->getColour());
-    }
-    else if (auto* midi = dynamic_cast<te::MidiClip*>(clip))
-        if (auto midiCopy = track->insertMIDIClip(midi->getName() + " copy",
-            duplicateRange, nullptr))
-        {
-            midiCopy->cloneFrom(midi);
-            midiCopy->setPosition({duplicateRange, old.offset});
-            copy = midiCopy.get();
-        }
-    if (copy == nullptr)
-        return juce::Result::fail("The duplicate clip could not be created.");
-    refreshLoop();
-    edit->getUndoManager().beginNewTransaction();
-    markModified();
-    if (edit->getTransport().isPlaying())
-        edit->restartPlayback();
-    sendSynchronousChangeMessage();
-    return juce::Result::ok();
+    const auto tracks = te::getAudioTracks(*edit);
+    const auto track = tracks.indexOf(dynamic_cast<te::AudioTrack*>(clip->getClipTrack()));
+    if (track < 0) return juce::Result::fail("The selected clip is not on a track.");
+    const auto time = clip->getPosition().time;
+    const auto snapshots = copyClipRegion(time.getStart().inSeconds(), time.getEnd().inSeconds(), track, track);
+    if (snapshots.empty()) return juce::Result::fail("The duplicate clip could not be created.");
+    std::vector<te::EditItemID> pasted;
+    return pasteClipSnapshots(snapshots, time.getEnd().inSeconds(), track, pasted);
 }
 
-juce::Result Session::pasteClips(const std::vector<te::EditItemID>& source, double destinationStart,
-                                 int destinationTrack, std::vector<te::EditItemID>& pasted)
+// Deleting clips can take the one the note editor is pointed at, and pattern()
+// dereferences that pointer, so every path that removes a clip ends here. The
+// editor falls back to another MIDI clip on track one, or to a fresh starter
+// clip when the track has none left.
+void Session::repairPatternClip()
 {
-    struct SourceClip { te::Clip* clip; ClipGeometry position; int track; };
-    std::vector<SourceClip> originals;
-    auto tracks = te::getAudioTracks(*edit);
-    for (const auto id : source)
-    {
-        auto* clip = findClip(id);
-        if (clip == nullptr) continue;
-        const auto track = tracks.indexOf(dynamic_cast<te::AudioTrack*>(clip->getClipTrack()));
-        if (track < 0) continue;
-        const auto p = clip->getPosition();
-        originals.push_back({clip, {p.time.getStart().inSeconds(), p.time.getEnd().inSeconds(), p.offset.inSeconds()}, track});
-    }
-    if (originals.empty()) return juce::Result::fail("Copy one or more clips first.");
-    if (!std::isfinite(destinationStart) || destinationStart < 0.0 || destinationTrack < 0)
-        return juce::Result::fail("Choose a valid paste location.");
-
-    const auto firstTime = std::min_element(originals.begin(), originals.end(), [] (const auto& a, const auto& b) { return a.position.start < b.position.start; })->position.start;
-    const auto firstTrack = std::min_element(originals.begin(), originals.end(), [] (const auto& a, const auto& b) { return a.track < b.track; })->track;
-    const auto lastTrack = std::max_element(originals.begin(), originals.end(), [] (const auto& a, const auto& b) { return a.track < b.track; })->track;
-    const auto requiredTracks = destinationTrack + lastTrack - firstTrack + 1;
-
-    edit->getUndoManager().beginNewTransaction("Paste clips");
-    while (te::getAudioTracks(*edit).size() < requiredTracks)
-    {
-        const auto index = te::getAudioTracks(*edit).size();
-        auto newTrack = edit->insertNewAudioTrack(te::TrackInsertPoint::getEndOfTracks(*edit), nullptr, false);
-        if (newTrack == nullptr) return juce::Result::fail("Could not create a track for pasted clips.");
-        newTrack->setName("Audio " + juce::String(index));
-        newTrack->pluginList.insertPlugin(edit->getPluginCache().createNewPlugin(UtilityDevice::xmlTypeName, {}), 0, nullptr);
-    }
-
-    pasted.clear();
-    for (const auto& item : originals)
-    {
-        auto* target = te::getAudioTracks(*edit)[destinationTrack + item.track - firstTrack];
-        const auto start = destinationStart + item.position.start - firstTime;
-        const auto range = tracktion::core::TimeRange {tracktion::core::TimePosition::fromSeconds(start),
-                                                        tracktion::core::TimePosition::fromSeconds(start + item.position.end - item.position.start)};
-        te::Clip* copy = nullptr;
-        if (auto* audio = dynamic_cast<te::WaveAudioClip*>(item.clip))
+    if (patternClip != nullptr && findClip(patternClipID) == patternClip)
+        return;
+    patternClip = nullptr;
+    const auto tracks = te::getAudioTracks(*edit);
+    if (tracks.isEmpty())
+        return;
+    for (auto* existing : tracks[0]->getClips())
+        if (auto* midi = dynamic_cast<te::MidiClip*>(existing))
         {
-            copy = target->insertWaveClip(audio->getName() + " copy", audio->getSourceFileReference().getFile(),
-                                          {range, tracktion::core::TimeDuration::fromSeconds(item.position.offset)}, false).get();
-            if (copy != nullptr) copy->setColour(audio->getColour());
+            patternClip = midi;
+            break;
         }
-        else if (auto* midi = dynamic_cast<te::MidiClip*>(item.clip))
+    if (patternClip == nullptr)
+    {
+        const auto end = edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(4.0));
+        patternClip = tracks[0]->insertMIDIClip("Pattern 1", {{}, end}, nullptr).get();
+        if (patternClip != nullptr)
         {
-            bool instrumentChanged = false;
-            const auto sourceInstrument = activeTrackInstrument(*te::getAudioTracks(*edit)[item.track]);
-            const auto instrumentResult = switchTrackInstrument(*edit, *target, sourceInstrument, instrumentChanged,
-                                                                forgeDescription ? &*forgeDescription : nullptr);
-            if (instrumentResult.failed()) return instrumentResult;
-            if (auto midiCopy = target->insertMIDIClip(midi->getName() + " copy", range, nullptr))
-            {
-                midiCopy->cloneFrom(midi);
-                midiCopy->setPosition({range, tracktion::core::TimeDuration::fromSeconds(item.position.offset)});
-                copy = midiCopy.get();
-            }
+            patternClip->setColour(presetColour(PatternPreset::WarmPulse));
+            patternClip->state.setProperty(starterPlaceholderID, true, nullptr);
         }
-        if (copy == nullptr) return juce::Result::fail("The clip could not be pasted.");
-        pasted.push_back(copy->itemID);
     }
-    refreshLoop();
-    edit->getUndoManager().beginNewTransaction();
-    markModified();
-    if (edit->getTransport().isPlaying()) edit->restartPlayback();
-    sendSynchronousChangeMessage();
-    return juce::Result::ok();
+    if (patternClip != nullptr)
+        patternClipID = patternClip->itemID;
 }
 
 void Session::deleteClip(te::EditItemID id)
 {
     if (auto* clip = findClip(id))
     {
-        const auto deletingPattern = clip == patternClip;
         edit->getUndoManager().beginNewTransaction("Delete audio clip");
         clip->removeFromParent();
-        if (deletingPattern)
-        {
-            patternClip = nullptr;
-            const auto tracks = te::getAudioTracks(*edit);
-            if (!tracks.isEmpty())
-            {
-                for (auto* existing : tracks[0]->getClips())
-                    if (auto* midi = dynamic_cast<te::MidiClip*>(existing))
-                    {
-                        patternClip = midi;
-                        break;
-                    }
-                if (patternClip == nullptr)
-                {
-                    const auto end = edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(4.0));
-                    patternClip = tracks[0]->insertMIDIClip("Pattern 1", {{}, end}, nullptr).get();
-                    if (patternClip != nullptr)
-                    {
-                        patternClip->setColour(presetColour(PatternPreset::WarmPulse));
-                        patternClip->state.setProperty(starterPlaceholderID, true, nullptr);
-                    }
-                }
-                if (patternClip != nullptr)
-                    patternClipID = patternClip->itemID;
-            }
-        }
+        repairPatternClip();
         refreshLoop();
         edit->getUndoManager().beginNewTransaction();
         markModified();

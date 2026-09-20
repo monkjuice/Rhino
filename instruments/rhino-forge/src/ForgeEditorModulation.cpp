@@ -5,6 +5,15 @@
 
 namespace rhino::forge
 {
+namespace
+{
+// Menu ids. A slot's own actions start past everything else, so one number says
+// both "take a routing away" and which routing it was.
+constexpr int slotItemBase = 1000;
+constexpr int nothingRoutedItem = 1;
+constexpr int clearMacroItem = 2;
+}
+
 // A slot counts as live once it has both ends: something driving it and
 // somewhere to go. Depth is left out deliberately, so a slot parked at zero
 // still reads as a routing you set up rather than as an empty row.
@@ -29,6 +38,11 @@ void Editor::refreshModulationRings()
     std::array<int, destinationCount> slots {};
     std::array<int, destinationCount> only {};
     only.fill(-1);
+    // How many slots each macro is driving, tallied in the same pass and for
+    // the same reason the rings are: it is the one thing on the panel that
+    // cannot be read off the control it reaches, because a macro is never a
+    // destination itself.
+    std::array<int, macroCount> reach {};
     for (int slot = 0; slot < modSlotCount; ++slot)
     {
         const auto source = juce::roundToInt(value(slotParameter(slot, "Source").toRawUTF8()));
@@ -39,6 +53,19 @@ void Editor::refreshModulationRings()
         // dialled up by its ring rather than only in the matrix.
         ++slots[static_cast<size_t>(destination)];
         only[static_cast<size_t>(destination)] = slot;
+        if (const auto macro = macroIndexOf(source); macro >= 0)
+            ++reach[static_cast<size_t>(macro)];
+    }
+
+    for (auto& handle : handles)
+    {
+        auto* plate = dynamic_cast<ui::MacroPlate*>(handle.get());
+        if (plate == nullptr) continue;
+        const auto macro = macroIndexOf(plate->source);
+        if (macro < 0 || plate->destinations == reach[static_cast<size_t>(macro)]) continue;
+        plate->destinations = reach[static_cast<size_t>(macro)];
+        plate->setTooltip(macroTooltip(macro));
+        plate->repaint();
     }
 
     for (auto& module : moduleUis)
@@ -66,6 +93,118 @@ void Editor::refreshModulationRings()
             properties.set("modLive", live);
             control->slider.repaint();
         }
+}
+
+// --- A macro, from its own end ------------------------------------------------
+//
+// Everything below answers the question a knob's own ring cannot. Not "what is
+// moving this control", which showModulationMenu covers, but "what is this
+// macro moving" — and a macro is never a destination, so without this nothing
+// on the panel would say.
+
+int Editor::macroReach(int macro) const
+{
+    const auto source = static_cast<int>(ModSource::macro1) + macro;
+    auto found = 0;
+    for (int slot = 0; slot < modSlotCount; ++slot)
+    {
+        if (juce::roundToInt(value(slotParameter(slot, "Source").toRawUTF8())) != source) continue;
+        const auto destination = juce::roundToInt(value(slotParameter(slot, "Dest").toRawUTF8()));
+        if (destination > 0 && destination < destinationCount) ++found;
+    }
+    return found;
+}
+
+// The number is never dropped from this. It is what the matrix calls the macro
+// and what is printed on its plate, so a name that replaced it would leave the
+// panel and the matrix talking about two different things.
+juce::String Editor::macroLabel(int macro) const
+{
+    const auto number = "MACRO " + juce::String(macro + 1);
+    const auto given = processor.macroName(macro);
+    return given.isEmpty() ? number : given + " (" + number + ")";
+}
+
+juce::String Editor::macroTooltip(int macro) const
+{
+    const auto reach = macroReach(macro);
+    if (reach == 0)
+        return macroLabel(macro) + ". Drag the number onto a knob to point it there. "
+                                   "It is not driving anything yet";
+    return macroLabel(macro) + ". Driving " + juce::String(reach)
+         + (reach == 1 ? " control" : " controls")
+         + " — click the count to list them. Drag the number onto a knob to add another";
+}
+
+void Editor::showMacroMenu(int macro)
+{
+    const auto source = static_cast<int>(ModSource::macro1) + macro;
+    juce::PopupMenu menu;
+    menu.addSectionHeader(macroLabel(macro));
+
+    // The routings are readings rather than actions: a menu whose every line
+    // takes something away is a menu you cannot open merely to look. What acts
+    // sits at the foot, where it is read before it is reached.
+    juce::PopupMenu remove;
+    std::vector<int> live;
+    for (int slot = 0; slot < modSlotCount; ++slot)
+    {
+        if (juce::roundToInt(value(slotParameter(slot, "Source").toRawUTF8())) != source) continue;
+        const auto destination = juce::roundToInt(value(slotParameter(slot, "Dest").toRawUTF8()));
+        if (destination <= 0 || destination >= destinationCount) continue;
+        const auto depth = value(slotParameter(slot, "Depth").toRawUTF8());
+        const auto reading = juce::String(destinations()[static_cast<size_t>(destination)].label)
+                           + "    " + (depth > 0.0f ? "+" : "")
+                           + juce::String(juce::roundToInt(depth * 100.0f)) + "%";
+        menu.addItem(slotItemBase + slot, reading, false, false);
+        remove.addItem(slotItemBase + slot, reading);
+        live.push_back(slot);
+    }
+
+    if (live.empty())
+    {
+        menu.addItem(nothingRoutedItem, "Nothing is routed from here yet", false, false);
+    }
+    else
+    {
+        menu.addSeparator();
+        menu.addSubMenu("Remove", remove);
+        menu.addItem(clearMacroItem, "Remove all " + juce::String(static_cast<int>(live.size())));
+    }
+
+    const auto safe = juce::Component::SafePointer<Editor>(this);
+    menu.showMenuAsync(juce::PopupMenu::Options {}, [safe, live] (int choice)
+    {
+        if (safe == nullptr || choice == 0) return;
+        if (choice >= slotItemBase) safe->clearSlot(choice - slotItemBase);
+        else if (choice == clearMacroItem)
+            for (const auto slot : live) safe->clearSlot(slot);
+        safe->refreshModulationRings();
+    });
+}
+
+// Pushes what the state tree holds out onto the strips and the plates. A name
+// can move without this editor being touched — a preset loaded, a project
+// opened, a second editor on the same plugin — and is noticed on the timer the
+// same way a panel colour is.
+void Editor::applyMacroNames()
+{
+    macroNamesShown.clear();
+    for (int macro = 0; macro < macroCount; ++macro)
+        macroNamesShown << processor.macroName(macro) << "\n";
+
+    for (auto& module : moduleUis)
+        for (auto& control : module.controls)
+        {
+            if (control->macroName == nullptr) continue;
+            const auto given = processor.macroName(control->id.getTrailingIntValue() - 1);
+            if (control->macroName->getText() != given)
+                control->macroName->setText(given, juce::dontSendNotification);
+        }
+
+    for (auto& handle : handles)
+        if (auto* plate = dynamic_cast<ui::MacroPlate*>(handle.get()))
+            plate->setTooltip(macroTooltip(macroIndexOf(plate->source)));
 }
 
 void Editor::showModulationMenu(const juce::String& parameterId)

@@ -282,7 +282,10 @@ The standalone build at
 way to look at a change without a host.
 
 For a windowless visual review, the test binary also accepts
-`--snapshot output.png [width height [OSC|TABLE|MATRIX|MIX|FX [scale]]]`.
+`--snapshot output.png [width height [OSC|TABLE|MATRIX|MIX|FX [scale [preset.forgepreset]]]]`.
+A preset is opened before the editor is built, which is the only way to
+review anything the panel draws out of the patch rather than out of the
+layout — a modulation ring, a macro's destination count, the name under it.
 It captures the actual editor, including its controls and cached metal layer.
 `--profile [width height]` reports what a frame costs instead, and
 `--render out.raw [blocks]` writes a deliberately busy patch as raw interleaved

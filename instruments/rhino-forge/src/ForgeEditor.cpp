@@ -108,6 +108,13 @@ Editor::Editor(Processor& p)
     refreshWarpFields();
     applyEnableStates();
     applyTableCounts();
+    // Before the first layout pass, so a project that opens with named macros
+    // shows them rather than filling them in a tick later. The rings and the
+    // macro counts are read for the same reason: both used to wait for the
+    // first timer tick, which nobody sees live and which a headless snapshot
+    // never gets at all.
+    applyMacroNames();
+    refreshModulationRings();
     applyPage();
     startTimerHz(24);
 }
@@ -461,6 +468,30 @@ void Editor::buildModules()
                 // so its controls carry no label of their own.
                 if (descriptor.columnHeaderHeight == 0) addAndMakeVisible(control->label);
                 addAndMakeVisible(control->slider);
+
+                // A macro's number moved to the plate beside its knob, which
+                // leaves the strip under the knob free for the macro's own
+                // name. That name is not declared anywhere: it is given here,
+                // and kept on the state tree so a preset carries it.
+                if (juce::String(declared.id).startsWith("macro"))
+                {
+                    const auto macro = juce::String(declared.id).getTrailingIntValue() - 1;
+                    control->macroName = std::make_unique<ui::MacroName>();
+                    control->macroName->setTooltip(
+                        "Double-click to name this macro. The matrix goes on calling it MACRO "
+                        + juce::String(macro + 1));
+                    control->macroName->onTextChange = [this, macro, held = control->macroName.get()]
+                    {
+                        processor.setMacroName(macro, held->getText());
+                        // Read back rather than kept: the processor trims,
+                        // upper-cases and cuts what it was given, and the strip
+                        // should show what was actually stored rather than what
+                        // was typed at it.
+                        held->setText(processor.macroName(macro), juce::dontSendNotification);
+                        applyMacroNames();
+                    };
+                    addAndMakeVisible(*control->macroName);
+                }
                 module.controls.push_back(std::move(control));
             }
         }
@@ -546,8 +577,20 @@ void Editor::buildHandles()
             ui::electricBlue, true);
     for (int lfo = 0; lfo < lfoCount; ++lfo)
         add(static_cast<int>(ModSource::lfo1) + lfo, "LFO " + juce::String(lfo + 1), ui::signalViolet, true);
+    // A macro carries a plate instead of a tag: the number on top is the grip,
+    // and under it is how many slots this macro is driving. It is still a
+    // SourceHandle, because the drag that starts on it is the same drag, and
+    // the editor finds what is being dragged by that type.
     for (int macro = 0; macro < macroCount; ++macro)
-        add(static_cast<int>(ModSource::macro1) + macro, juce::String(macro + 1), ui::electricBlue);
+    {
+        auto plate = std::make_unique<ui::MacroPlate>(static_cast<int>(ModSource::macro1) + macro,
+                                                      juce::String(macro + 1));
+        plate->accent = ui::electricBlue;
+        plate->setTooltip(macroTooltip(macro));
+        plate->addMouseListener(this, false);
+        addAndMakeVisible(*plate);
+        handles.push_back(std::move(plate));
+    }
 }
 
 void Editor::choosePresetToLoad()

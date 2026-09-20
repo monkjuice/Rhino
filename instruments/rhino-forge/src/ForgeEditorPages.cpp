@@ -194,6 +194,11 @@ void Editor::applyEnableStates()
                 && (on || !ui::inSharedCell(*module.descriptor, control->row, control->index));
 
             control->label.setVisible(shown);
+            // A macro's name follows its knob on and off the panel, and is
+            // never greyed with it: a name is not a setting, and a macro sitting
+            // under a module that is switched off is still called what it is
+            // called.
+            if (control->macroName != nullptr) control->macroName->setVisible(shown);
             if (control->plate != nullptr)
             {
                 control->plate->setEnabled(on);

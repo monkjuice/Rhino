@@ -27,6 +27,16 @@ void Editor::mouseDown(const juce::MouseEvent& event)
 {
     if (auto* handle = dynamic_cast<ui::SourceHandle*>(event.eventComponent))
     {
+        // A macro's plate is two things in one small rectangle: the number is
+        // the grip, and the count under it is a door onto what this macro is
+        // driving. Which one the press meant is decided by where it landed,
+        // and the plate itself owns that geometry.
+        if (auto* plate = dynamic_cast<ui::MacroPlate*>(handle))
+            if (plate->opensMenu(event.getPosition(), event.mods.isPopupMenu()))
+            {
+                showMacroMenu(macroIndexOf(plate->source));
+                return;
+            }
         draggingHandle = handle;
         handle->dragging = true;
         dragPosition = event.getEventRelativeTo(this).getPosition();
@@ -273,11 +283,12 @@ void Editor::mouseUp(const juce::MouseEvent& event)
 void Editor::showValueBubble(Control& control)
 {
     bubbleControl = &control;
-    // A macro's label is its bare number, and it is hidden anyway — the drag
-    // handle stands in its place — so the bubble spells the name out. Same
-    // test as the one that puts the handle there in the first place.
-    valueBubble.caption = control.id.startsWith("macro")
-                              ? "MACRO " + juce::String(control.id.getTrailingIntValue())
+    // A macro's declared label is its bare number and is off the panel anyway —
+    // the plate carries the number now — so the bubble spells the macro out,
+    // including whatever it has been named. A control that has a name strip is
+    // a macro; nothing else on the panel has one.
+    valueBubble.caption = control.macroName != nullptr
+                              ? macroLabel(control.id.getTrailingIntValue() - 1)
                               : control.label.getText();
     valueBubble.reading = control.slider.getTextFromValue(control.slider.getValue());
     valueBubble.accent = control.slider.findColour(juce::Slider::rotarySliderFillColourId);
@@ -361,6 +372,14 @@ void Editor::timerCallback()
         panelColoursShown = colours;
         applyPanelColours();
     }
+
+    // A macro's name moves from the same places for the same reasons, and is
+    // noticed the same way. applyMacroNames writes what it found back into
+    // macroNamesShown, so a tick on which nothing moved costs eight property
+    // reads and a string compare.
+    juce::String names;
+    for (int macro = 0; macro < macroCount; ++macro) names << processor.macroName(macro) << "\n";
+    if (names != macroNamesShown) applyMacroNames();
 
     // A warp mode moves the same way a slot's type does, and from the same
     // places, so the field that reports it is refreshed on the same tick.

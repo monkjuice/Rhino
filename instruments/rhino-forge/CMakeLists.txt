@@ -106,6 +106,7 @@ set(forge_sources
     ui/ForgeLookAndFeel.h
     ui/ForgeDisplays.h
     ui/ForgeControls.h
+    ui/ForgeMacroCell.h
     ui/ForgeFxVisuals.h
     ui/ForgeEnvelopeVisuals.h
     ui/ForgeFilterVisuals.h

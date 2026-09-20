@@ -692,6 +692,54 @@ void layoutSuite()
                             }
                         }
                     }
+
+    // A macro is the one control laid out by geometry of its own rather than by
+    // controlBlock: a knob, the plate beside it carrying the number you drag
+    // and the count of what that number reaches, and the macro's name under
+    // both — three rectangles carved out of a cell that is 60 pixels wide at
+    // the smallest window the panel allows. Integer division over a cell that
+    // small is exactly where three rectangles quietly begin to touch, so this
+    // is swept rather than sampled at the corners.
+    const rhino::forge::ui::Module* macroModule = nullptr;
+    for (const auto& module : modules)
+        if (juce::String(module.id) == "macros") macroModule = &module;
+    require(macroModule != nullptr, "the panel declares its macros");
+    if (macroModule != nullptr)
+        for (int width = rhino::forge::ui::minPanelWidth; width <= rhino::forge::ui::maxPanelWidth; width += 20)
+            for (int height = rhino::forge::ui::minPanelHeight; height <= rhino::forge::ui::maxPanelHeight; height += 20)
+            {
+                using namespace rhino::forge::ui;
+                const auto panel = juce::Rectangle<int>(0, 0, width, height);
+                const auto area = moduleBounds(panel, *macroModule);
+                const auto shared = uniformKnobDiameter(panel);
+                for (int r = 0; r < static_cast<int>(macroModule->rows.size()); ++r)
+                {
+                    const auto& row = macroModule->rows[static_cast<size_t>(r)];
+                    for (int c = 0; c < static_cast<int>(row.controls.size()); ++c)
+                    {
+                        const auto cell = cellBounds(area, *macroModule, r, c);
+                        const auto knob = macroKnobBounds(cell, shared);
+                        const auto plate = macroPlateBounds(cell, shared);
+                        const auto name = macroNameBounds(cell, shared);
+                        juce::String fault;
+                        if (!cell.contains(knob) || !cell.contains(plate) || !cell.contains(name))
+                            fault = "a macro's knob, plate and name all stay inside its cell";
+                        else if (knob.intersects(plate) || knob.intersects(name)
+                                 || plate.intersects(name))
+                            fault = "nothing in a macro's cell sits on top of anything else in it";
+                        else if (knob.getWidth() < 24)
+                            fault = "a macro's knob stays usable at every allowed size";
+                        else if (knob.getWidth() > shared)
+                            fault = "a macro never outranks the knobs it drives";
+                        else if (plate.getWidth() < minMacroPlateWidth)
+                            fault = "a macro's plate stays big enough to take hold of";
+                        if (fault.isEmpty()) continue;
+                        require(false, fault.toRawUTF8());
+                        std::cerr << "       macro " << (r * 2 + c + 1) << " at "
+                                  << width << "x" << height << '\n';
+                    }
+                }
+            }
 }
 }
 

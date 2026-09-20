@@ -138,6 +138,32 @@ void Processor::setPanelColour(const juce::String& moduleId, int choice)
                             static_cast<int>(ui::panelColourFrom(choice)), nullptr);
 }
 
+// One property per macro, numbered as a player counts them, for the same reason
+// the plate colours are one property per module: a macro renamed does not shift
+// what the other seven are reading.
+static juce::Identifier macroNameProperty(int macro)
+{
+    return juce::Identifier("macroName_" + juce::String(macro + 1));
+}
+
+juce::String Processor::macroName(int macro) const
+{
+    if (macro < 0 || macro >= macroCount) return {};
+    // A state written before this existed carries no property, which is the
+    // ordinary case rather than an error: it opens unnamed.
+    return state.state.getProperty(macroNameProperty(macro)).toString();
+}
+
+void Processor::setMacroName(int macro, const juce::String& name)
+{
+    if (macro < 0 || macro >= macroCount) return;
+    const auto tag = name.trim().toUpperCase().substring(0, maxMacroNameLength);
+    // Removed rather than stored empty, so an unnamed macro leaves nothing
+    // behind in a preset and reads the same as one that was never named.
+    if (tag.isEmpty()) state.state.removeProperty(macroNameProperty(macro), nullptr);
+    else state.state.setProperty(macroNameProperty(macro), tag, nullptr);
+}
+
 void Processor::getStateInformation(juce::MemoryBlock& destination)
 {
     auto tree = state.copyState();

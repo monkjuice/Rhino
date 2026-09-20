@@ -230,8 +230,13 @@ private:
 // The tag beside a source that you drag onto a knob. It is deliberately not
 // the knob or the macro dial itself: dragging those has to keep meaning "turn
 // this", so the grab handle is a separate thing sitting next to the control.
-class SourceHandle final : public juce::Component,
-                          public juce::SettableTooltipClient
+//
+// Not final: a macro's handle is a plate of two storeys rather than a tag, and
+// it is a SourceHandle rather than a type of its own because the drag is the
+// editor's and the editor finds what is being dragged by this type. See
+// ForgeMacroCell.h.
+class SourceHandle : public juce::Component,
+                     public juce::SettableTooltipClient
 {
 public:
     SourceHandle(int sourceIndex, juce::String label)
@@ -249,7 +254,7 @@ public:
     // A handle in a module header is drawn as a card hanging from the module's
     // top edge, carrying the lit strip across itself: it is the module's name,
     // so it should look like part of the module. A macro's handle is not — it
-    // sits over a knob's label, where there is no edge to hang from.
+    // stands beside a knob, where there is no edge to hang from.
     bool card = false;
 
     void paint(juce::Graphics& g) override

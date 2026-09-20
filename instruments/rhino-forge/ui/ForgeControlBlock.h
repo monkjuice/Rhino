@@ -352,4 +352,107 @@ inline juce::Rectangle<int> rockerBounds(juce::Rectangle<int> knobArea)
     const auto width = juce::jmax(14, juce::roundToInt(area.getHeight() * 0.46f));
     return juce::Rectangle<int>(width, area.getHeight()).withCentre(area.getCentre());
 }
+
+// --- The macro cell -----------------------------------------------------------
+//
+// A macro is not a knob with a label over it. It is three things at once: a
+// knob to turn, a source to drag, and a set of routings to keep track of. So
+// the cell is a knob with a plate beside it carrying the second and the third,
+// and a name under it that you give it yourself.
+//
+// The plate is paid for out of the knob's width rather than out of the cell's
+// height, and the name strip costs a pixel less than the number strip it
+// replaces. What used to limit a macro's diameter was the height left over
+// under that strip; now it is the width left over beside the plate, and the
+// macros come out larger than before at every size the panel allows.
+
+// The name is a tag, not a sentence: the strip holds about fifteen characters
+// at the size the panel opens at, and ellipsises whatever will not fit. One
+// pixel taller than the text needs, because the strip is also what a name is
+// typed into and a text editor sized to exactly its font clips the descenders.
+inline constexpr int macroNameHeight = 14;
+// Between the knob's drawn circle and the plate. Enough to read as a gap rather
+// than as a seam at the size the cell is tightest.
+inline constexpr int macroPlateGap = 4;
+inline constexpr int macroCellInset = 3;
+
+// A plate never carries more than one digit per storey, so past a point more
+// width buys nothing and is simply width the knob did not get. Below the other
+// point it stops being a grip.
+inline constexpr int minMacroPlateWidth = 20;
+inline constexpr int maxMacroPlateWidth = 28;
+// A plate as tall as the widest knob the panel allows would be a stripe. It
+// stops here and stays centred on the knob's own middle.
+inline constexpr int maxMacroPlateHeight = 44;
+
+inline int macroPlateWidth(juce::Rectangle<int> cell)
+{
+    return juce::jlimit(minMacroPlateWidth, maxMacroPlateWidth, cell.getWidth() / 3);
+}
+
+// Everything below is measured against the knob's drawn circle rather than
+// against the rectangle the slider occupies. The look insets that rectangle by
+// knobOpticalInset on every side before it draws anything, so a plate lined up
+// with the rectangle's edge stands twice the gap clear of the metal and twice
+// the inset taller than it — which is the difference between a plate beside a
+// knob and a plate looming over one. Against the circle the pair read as one
+// piece of hardware.
+inline constexpr int macroCircleInset = knobOpticalInset * 2;
+
+// Whatever the cell has left once the plate, the gaps and the name have taken
+// theirs — and never more than the share of the panel's own diameter a compact
+// module is allowed. The macros drive the other controls; they do not outrank
+// them, and without that cap a wide window would make them the largest knobs
+// in Forge.
+inline int macroKnobDiameter(juce::Rectangle<int> cell, int shared)
+{
+    // No allowance for the inset here, though the group is measured in circles.
+    // Centring the group leaves the same slack on both sides, and the slider's
+    // rectangle spends exactly one inset of the left-hand slack reaching back
+    // past its own circle. Adding the inset to this budget spends that slack
+    // twice, and the rectangle then hangs a pixel outside the cell at the
+    // sizes where the width is what binds — which is a hit target reaching into
+    // the cell next door, not a mark on the panel, and so invisible until the
+    // swept layout check went looking for it.
+    const auto wide = cell.getWidth() - macroCellInset * 2 - macroPlateGap
+                    - macroPlateWidth(cell);
+    const auto tall = cell.getHeight() - macroNameHeight - macroCellInset * 2;
+    return juce::jmax(20, juce::jmin(wide, tall, maxKnobWidth,
+                                     juce::jmax(20, shared * compactKnobPercent / 100)));
+}
+
+// What the eye actually sees of the knob, which is what the plate is sized and
+// placed against.
+inline int macroCircleDiameter(juce::Rectangle<int> cell, int shared)
+{
+    return juce::jmax(8, macroKnobDiameter(cell, shared) - macroCircleInset);
+}
+
+// The circle and the plate stand as one group, centred across the cell. The
+// name takes the cell's full width underneath instead of the group's, because a
+// name wants every pixel the cell has and the group does not.
+inline juce::Rectangle<int> macroKnobBounds(juce::Rectangle<int> cell, int shared)
+{
+    const auto diameter = macroKnobDiameter(cell, shared);
+    const auto group = macroCircleDiameter(cell, shared) + macroPlateGap + macroPlateWidth(cell);
+    const auto top = cell.getY() + (cell.getHeight() - diameter - macroNameHeight) / 2;
+    // The slider's rectangle starts an inset left of where its circle does.
+    return {cell.getCentreX() - group / 2 - knobOpticalInset, top, diameter, diameter};
+}
+
+inline juce::Rectangle<int> macroPlateBounds(juce::Rectangle<int> cell, int shared)
+{
+    const auto knob = macroKnobBounds(cell, shared);
+    const auto circle = macroCircleDiameter(cell, shared);
+    const auto width = macroPlateWidth(cell);
+    const auto left = knob.getX() + knobOpticalInset + circle + macroPlateGap;
+    return juce::Rectangle<int>(width, juce::jmin(circle, maxMacroPlateHeight))
+        .withCentre({left + width / 2, knob.getCentreY()});
+}
+
+inline juce::Rectangle<int> macroNameBounds(juce::Rectangle<int> cell, int shared)
+{
+    const auto knob = macroKnobBounds(cell, shared);
+    return {cell.getX(), knob.getBottom(), cell.getWidth(), macroNameHeight};
+}
 }

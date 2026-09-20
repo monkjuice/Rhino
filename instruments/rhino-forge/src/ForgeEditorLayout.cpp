@@ -110,21 +110,25 @@ void Editor::resized()
             }
             auto block = ui::controlBlock(controlsArea, descriptor, control.row, control.index, diameter);
 
-            // A macro's drag handle replaces its numeric label: the number is
-            // the thing you grab, and the knob keeps its own drag gesture.
-            if (control.id.startsWith("macro"))
+            // A macro's cell is laid out as nothing else on the panel is: the
+            // knob, the plate beside it carrying the number you drag and the
+            // count of what that number reaches, and the macro's own name
+            // under both. The declared label — the bare number — is what the
+            // plate replaced, so it stays off the panel.
+            if (control.macroName != nullptr)
             {
                 const auto macro = control.id.getTrailingIntValue();
+                const auto cell = ui::cellBounds(controlsArea, descriptor,
+                                                 control.row, control.index);
                 if (auto* handle = handleFor(static_cast<int>(ModSource::macro1) + macro - 1))
                 {
                     handle->setVisible(visible && control.bank == module.bank);
-                    const auto labelRow = block.removeFromTop(ui::knobLabelHeight);
-                    handle->setBounds(juce::Rectangle<int>(26, ui::knobLabelHeight)
-                                          .withCentre(labelRow.getCentre()));
-                    control.label.setVisible(false);
-                    control.slider.setBounds(block);
-                    continue;
+                    handle->setBounds(ui::macroPlateBounds(cell, diameter));
                 }
+                control.label.setVisible(false);
+                control.macroName->setBounds(ui::macroNameBounds(cell, diameter));
+                control.slider.setBounds(ui::macroKnobBounds(cell, diameter));
+                continue;
             }
             switch (control.style)
             {

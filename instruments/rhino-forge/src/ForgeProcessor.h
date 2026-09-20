@@ -108,6 +108,24 @@ public:
     int panelColour(const juce::String& moduleId) const;
     void setPanelColour(const juce::String& moduleId, int choice);
 
+    // What a macro has been named, or an empty string for one that has not
+    // been. Not a parameter, for the same reasons a plate colour is not: it is
+    // text, it has no range, and a host offered it in an automation list would
+    // be offering to sweep a word. It rides on the state tree's properties, so
+    // a preset and a project carry it without a DAW being able to sequence it.
+    //
+    // The matrix goes on calling this macro by its number whatever it is named:
+    // a slot's SOURCE is a choice parameter whose list is fixed when the
+    // parameters are built, and text that followed a rename would move under
+    // every automation lane already pointed at it.
+    juce::String macroName(int macro) const;
+    // Trimmed, upper-cased and cut to maxMacroNameLength. Empty clears it.
+    void setMacroName(int macro, const juce::String& name);
+    // A name is a tag rather than a caption: the strip under a macro's knob
+    // holds about a dozen characters, and this is the point past which more
+    // text is only text nobody can read on the panel.
+    static constexpr int maxMacroNameLength = 24;
+
 private:
     // Not static: POSITION's readout closes over this Processor so it can name
     // the frame it is on in whichever table the oscillator is reading, and a

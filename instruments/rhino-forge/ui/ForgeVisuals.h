@@ -5,6 +5,7 @@
 #include "ForgeFilterVisuals.h"
 #include "ForgeFxVisuals.h"
 #include "ForgeLookAndFeel.h"
+#include "ForgeMacroCell.h"
 
 // The panel's look, in one include for whatever needs all of it — which is the
 // editor, and almost nothing else. Each piece is its own header and says at the
@@ -14,6 +15,7 @@
 //   ForgeLookAndFeel.h       the knob, slider and menu, as JUCE asks for them
 //   ForgeDisplays.h          the picture tube and the traces drawn on it
 //   ForgeControls.h          the components a module is built out of
+//   ForgeMacroCell.h         the plate beside a macro and the name under it
 //   ForgeFxVisuals.h         an effect's colour, mark, plate, shelf and row
 //   ForgeEnvelopeVisuals.h   the envelope and LFO displays
 //   ForgeFilterVisuals.h     the filter response

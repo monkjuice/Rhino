@@ -25,6 +25,21 @@ void presetSuite()
     processor.setPanelColour("oscA", static_cast<int>(rhino::forge::ui::PanelColour::red));
     processor.setPanelColour("oscB", static_cast<int>(rhino::forge::ui::PanelColour::orange));
 
+    // A macro's name rides on the same properties for the same reason, and is
+    // the other setting a preset could silently drop. It is text rather than a
+    // value, so what goes in is not necessarily what comes back: it is trimmed,
+    // upper-cased and cut to what the strip under the knob can hold.
+    require(processor.macroName(0).isEmpty(), "a macro opens unnamed");
+    processor.setMacroName(0, "  cutoff sweep  ");
+    requireText(processor.macroName(0), "CUTOFF SWEEP",
+                "a macro's name is trimmed and upper-cased on the way in");
+    processor.setMacroName(1, juce::String::repeatedString("X", 60));
+    require(processor.macroName(1).length() == rhino::forge::Processor::maxMacroNameLength,
+            "a macro's name is cut to what its strip can hold");
+    processor.setMacroName(2, "GRIT");
+    processor.setMacroName(2, "   ");
+    require(processor.macroName(2).isEmpty(), "naming a macro nothing takes its name away");
+
     setValue(processor, "cutoff", 1320.0f);
     setValue(processor, "env1Release", 2.5f);
     setValue(processor, "noiseEnable", 1.0f);
@@ -37,7 +52,12 @@ void presetSuite()
     setValue(processor, "oscBEnable", 1.0f);
     processor.setPanelColour("oscA", static_cast<int>(rhino::forge::ui::PanelColour::blue));
     processor.setPanelColour("oscB", static_cast<int>(rhino::forge::ui::PanelColour::blue));
+    processor.setMacroName(0, "SOMETHING ELSE");
+    processor.setMacroName(2, "GRIT");
     require(processor.loadPreset(preset).wasOk(), "preset loads");
+    requireText(processor.macroName(0), "CUTOFF SWEEP", "a preset restores a macro's name");
+    require(processor.macroName(2).isEmpty(),
+            "a preset puts a macro it left unnamed back to unnamed");
     require(processor.panelColour("oscA") == static_cast<int>(rhino::forge::ui::PanelColour::red)
                 && processor.panelColour("oscB") == static_cast<int>(rhino::forge::ui::PanelColour::orange),
             "a preset restores each oscillator's panel colour");

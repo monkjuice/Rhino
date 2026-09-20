@@ -282,7 +282,8 @@ inline juce::String tooltipFor(const juce::String& id)
     }
 
     if (id.startsWith("macro"))
-        return "A performance macro. Drag its number onto a knob, or right-click the knob";
+        return "A performance macro. Drag the number on the plate beside it onto a knob, "
+               "or right-click that knob and choose this macro as a source";
 
     // Matrix slots: eight of each, all reading the same way.
     if (id.startsWith("mod"))

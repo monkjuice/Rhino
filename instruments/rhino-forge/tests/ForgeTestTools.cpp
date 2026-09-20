@@ -13,6 +13,21 @@ namespace rhino::forge::tests
 int runSnapshot(int argc, char** argv)
 {
     auto processor = std::make_unique<rhino::forge::Processor>();
+    // Loaded before the editor is built, not after. A panel that draws what is
+    // in the patch — a modulation ring, a macro's destination count, the name
+    // under it — cannot be reviewed on an empty one, and the editor reads that
+    // state as it is constructed. Nothing here runs a message loop, so anything
+    // arriving after construction would never be noticed.
+    if (argc > 7)
+    {
+        const auto file = juce::File::getCurrentWorkingDirectory().getChildFile(argv[7]);
+        const auto opened = processor->loadPreset(file);
+        if (opened.failed())
+        {
+            std::cerr << "snapshot: " << opened.getErrorMessage() << '\n';
+            return 1;
+        }
+    }
     std::unique_ptr<juce::AudioProcessorEditor> editor(processor->createEditor());
     if (argc > 4) editor->setSize(juce::String(argv[3]).getIntValue(), juce::String(argv[4]).getIntValue());
     if (argc > 5)

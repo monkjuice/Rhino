@@ -55,6 +55,10 @@ private:
         // never shown.
         std::unique_ptr<ui::WaveGrid> waves;
         std::unique_ptr<ui::RockerSwitch> rocker;
+        // A macro's own name, under its knob. It is not `label`: `label` holds
+        // what the module declared, which for a macro is its number, and the
+        // number now lives on the plate beside the knob instead.
+        std::unique_ptr<ui::MacroName> macroName;
         std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> attachment;
         std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> buttonAttachment;
     };
@@ -358,6 +362,25 @@ private:
     bool keyPressed(const juce::KeyPress&) override;
     void shiftComputerKeyOctave(int delta);
     void buildHandles();
+    // What a macro is called on the panel: its number, and the name given to it
+    // where there is one. Used by the value bubble, the plate's tooltip and the
+    // head of its routings menu, so one macro reads the same way everywhere.
+    juce::String macroLabel(int macro) const;
+    juce::String macroTooltip(int macro) const;
+    // How many slots this macro is driving. The plates are told on every
+    // modulation refresh; this is the same count for anything else that asks.
+    int macroReach(int macro) const;
+    // What a macro is driving, from the macro's own end: the destinations it
+    // reaches and their depths, with the actions to take any of them away.
+    // showModulationMenu is the same list seen from the other side.
+    void showMacroMenu(int macro);
+    // Puts the names from the state tree onto the strips. Called on the way in
+    // and whenever a name arrives from outside this editor.
+    void applyMacroNames();
+    // The names on screen, so one changed by a preset load, a project opening
+    // or a second editor is noticed on the next tick — the same way a panel
+    // colour is.
+    juce::String macroNamesShown;
     void showModulationMenu(const juce::String& parameterId);
     void assignModulation(int source, int destination);
     void setSlotDepth(int slot, float depth);

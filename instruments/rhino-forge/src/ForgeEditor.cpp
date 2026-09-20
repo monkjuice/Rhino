@@ -33,8 +33,14 @@ bool isFxModule(const ui::Module& module)
 // The name over a control, wherever it sits. One size and one weight for all of
 // them: the reference draws the word over a stepper exactly as large as the one
 // over the knob beside it, and the two sizes this had drifted to only made a
-// row of mixed controls look unaligned. Semibold rather than medium, because at
-// this size Rajdhani Medium is a stop lighter than the reference's lettering.
+// row of mixed controls look unaligned.
+//
+// Medium, not semibold. Semibold was read off a close-up of the reference by
+// eye and it was the wrong call: measuring ink coverage against cap height
+// instead puts the reference's lettering at 1.71 and semibold at 2.14, a
+// quarter heavier. Rajdhani Medium is 23% lighter than semibold at every size
+// and barely a pixel narrower over a word, which lands at 1.64 — near enough
+// the reference, and without giving back any of the size.
 //
 // A label's text is rasterised once and blitted after. The panel repaints whole
 // at 24Hz, so without the buffer every label on it lays its glyphs out again
@@ -50,7 +56,7 @@ void dressControlLabel(juce::Label& label, const juce::String& caption)
     // swallow the drag that started on them.
     label.setInterceptsMouseClicks(false, false);
     label.setColour(juce::Label::textColourId, ui::labelText);
-    label.setFont(ui::panelFont(ui::Face::emphasis, ui::controlLabelSize));
+    label.setFont(ui::panelFont(ui::Face::label, ui::controlLabelSize));
     label.setBufferedToImage(true);
 }
 }

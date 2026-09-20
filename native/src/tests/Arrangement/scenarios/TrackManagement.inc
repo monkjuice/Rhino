@@ -93,6 +93,65 @@
         require(session.trackName(0) == beforeClick && view.selectedTrack == 0,
                 "A click on a card selects it without reordering anything");
 
+        // A card click is what the shell opens the Device View on, so it has to
+        // be told about every one of them - including the click on the card
+        // already selected, which is how the view is asked for again after it
+        // has been closed, and which selectTrack reports as nothing at all.
+        scenario("track cards: a card click asks for that track's devices");
+        {
+            int focusedTrack = -1, focusedCount = 0, movedCount = 0;
+            view.trackFocused = [&focusedTrack, &focusedCount](int track)
+            {
+                focusedTrack = track;
+                ++focusedCount;
+            };
+            view.trackSelected = [&movedCount](int) { ++movedCount; };
+            const auto clickCard = [&view, &cardEvent](juce::Point<float> at)
+            {
+                view.mouseDown(cardEvent(at, at, false));
+                view.mouseUp(cardEvent(at, at, false));
+            };
+            const auto secondCard = juce::Point<float>(90.0f, view.lane(1).getY() + 10.0f);
+            clickCard(secondCard);
+            require(focusedCount == 1 && focusedTrack == 1, "Clicking a card reports it as focused");
+            require(movedCount == 1, "and reports the working track moving with it");
+            clickCard(secondCard);
+            require(focusedCount == 2 && focusedTrack == 1,
+                    "Clicking the card already selected reports it again");
+            require(movedCount == 1, "though the working track did not move");
+            const auto mainRow = juce::Point<float>(90.0f, view.masterLane().getCentreY());
+            clickCard(mainRow);
+            require(focusedCount == 3 && focusedTrack == session.masterTrackIndex(),
+                    "The main row is a card like any other: it asks for its own effect chain");
+            // Grabbing a row's bottom edge is a resize. It lands on the card
+            // like a click does, and means something else entirely.
+            focusedCount = 0;
+            const auto rowEdge = juce::Point<float>(90.0f, view.lane(1).getBottom());
+            dragCard(rowEdge, rowEdge.translated(0.0f, 18.0f));
+            require(view.lane(1).getHeight() > 0.0f, "Dragging a row's edge resizes it");
+            require(focusedCount == 0, "and asks for no devices on the way");
+            require(session.setTrackLaneHeight(1, 0.0f).wasOk(), "The resized row is handed back");
+            view.sync();
+            view.resized();
+            // A clip click carries the working track with it, which is not a
+            // request for devices - it is a request for that clip's editor.
+            view.sync();
+            view.fit();
+            clickCard(restingCard);
+            const auto span = session.audioClipMix(id);
+            const auto onClip = juce::Point<float>(view.xFor((span.startSeconds + span.endSeconds) * 0.5),
+                                                   view.lane(1).getCentreY());
+            focusedCount = 0;
+            movedCount = 0;
+            view.mouseDown(cardEvent(onClip, onClip, false));
+            view.mouseUp(cardEvent(onClip, onClip, false));
+            require(view.selectedClipID() == id, "Clicking a clip selects it");
+            require(movedCount == 1, "and carries the working track to the clip's own");
+            require(focusedCount == 0, "but asks for no devices: a clip click is for the clip's editor");
+            view.trackFocused = nullptr;
+            view.trackSelected = nullptr;
+        }
+
         scenario("track cards: colour and reset");
         const auto colour = Session::trackColourPalette().front();
         require(session.trackColour(0).isTransparent(), "A track starts with no colour of its own");

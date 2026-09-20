@@ -198,7 +198,7 @@ void Arrangement::groupSelectedTracks()
         return;
     }
     selectTrack(first);
-    focus = Focus::track;
+    focusTrack();
     repaint();
     if (status)
         status("Grouped " + juce::String(count) + " track" + (count == 1 ? "" : "s")

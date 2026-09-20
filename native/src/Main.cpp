@@ -123,6 +123,11 @@ public:
             if (!sessionViewOpen) rack.selectTrack(track);
             refreshEditorPanes();
         };
+        // The two lower panes answer to two different things, and to nothing
+        // else: the clip editors to the selected clip, the Device View to a
+        // clicked track card. Clicking a clip moves the working track too, so
+        // this deliberately hangs off the card click rather than off the move.
+        arrangement.trackFocused = [this](int) { showDeviceView(); };
         // Which editor a clip opens in is decided here rather than in the
         // timeline: an audio clip brings up the audio editor, a MIDI clip the
         // note editor, and a selection that is neither closes the pane.
@@ -585,10 +590,10 @@ public:
         repaint();
     }
 
-    // The lower pane belongs to whatever is selected. The toggle closes it, or
-    // re-opens the editor the current selection calls for - there is no longer
-    // an "empty pane" to protect against, because an empty one is given back to
-    // the arrangement.
+    // The clip pane belongs to whatever clip is selected. The toggle closes it,
+    // or re-opens the editor the current selection calls for - there is no
+    // longer an "empty pane" to protect against, because an empty one is given
+    // back to the arrangement.
     void toggleClipEditor()
     {
         if (lowerPane != LowerPane::none)
@@ -598,7 +603,7 @@ public:
             audioClip.setClip(id);
             lowerPane = LowerPane::audio;
         }
-        else if (isMidiSelection())
+        else if (isMidiClipSelected())
             lowerPane = LowerPane::notes;
         else
         {
@@ -613,8 +618,19 @@ public:
     void toggleDeviceView()
     {
         rackOpen = !rackOpen;
-        rememberPaneSelection();
         applyPaneLayout();
+    }
+
+    // Clicking a track card asks for its devices. Every track has a chain -
+    // an audio track's effects and the main row's are as much a chain as an
+    // instrument track's - so this refuses nothing and consults no clip. The
+    // card click arrives from a mouse *down* that may be starting a card drag,
+    // so the layout waits for the button, as the clip panes do.
+    void showDeviceView()
+    {
+        if (rackOpen) return;
+        rackOpen = true;
+        requestPaneLayout();
     }
 
     // The clip a command would act on, when that clip is an audio clip.
@@ -624,34 +640,32 @@ public:
         return session.findAudioClip(id) != nullptr ? id : te::EditItemID();
     }
 
-    // What the note editor and the device rack are for: a MIDI clip, or a track
-    // that runs an instrument and could therefore hold one. Nothing else
-    // reveals either of them, which is what keeps them off an audio selection.
-    bool isMidiSelection() const
+    // What the note editor is for, and the whole of it: a selected MIDI or drum
+    // clip. A track that runs an instrument no longer counts, however likely it
+    // is to hold one - it may have no clip at all, and the notes of a clip
+    // nobody selected are not what the track click was asking to see.
+    bool isMidiClipSelected() const
     {
         const auto id = arrangement.selectedClipID();
-        if (session.findClip(id) != nullptr)
-            return session.findAudioClip(id) == nullptr;
-        return session.trackHasInstrument(arrangement.selectedTrackIndex());
+        return session.findClip(id) != nullptr && session.findAudioClip(id) == nullptr;
     }
 
     void rememberPaneSelection()
     {
         paneClip = arrangement.selectedClipID();
-        paneTrack = arrangement.selectedTrackIndex();
-        paneMidi = isMidiSelection();
+        paneMidi = isMidiClipSelected();
     }
 
     // Double-clicking a clip opens it: audio in the audio editor, MIDI in the
     // note editor. This is the only thing that reveals the audio editor, which
-    // is why a single click on a waveform still only selects it.
+    // is why a single click on a waveform still only selects it. Whether the
+    // Device View is showing is not this function's business either way.
     void openClip(te::EditItemID id)
     {
         if (session.findAudioClip(id) != nullptr)
         {
             audioClip.setClip(id);
             lowerPane = LowerPane::audio;
-            rackOpen = false;
             logStatus("Audio clip " + audioClip.clipName().quoted()
                       + ": gain, pan, pitch and fades here apply to this clip only");
         }
@@ -664,15 +678,16 @@ public:
         requestPaneLayout();
     }
 
-    // Selection drives the pane, but only when the selection actually moved: a
-    // toggle the user pressed while standing on one clip has to survive the
-    // next notification about that same clip.
+    // The clip selection drives the clip pane, but only when it actually moved:
+    // a toggle the user pressed while standing on one clip has to survive the
+    // next notification about that same clip. The Device View is not touched
+    // here at all - selecting a clip says nothing about whether its track's
+    // devices are wanted, and clicking a card is what answers that.
     void refreshEditorPanes()
     {
         const auto clipID = arrangement.selectedClipID();
-        const auto track = arrangement.selectedTrackIndex();
-        const auto midi = isMidiSelection();
-        if (clipID == paneClip && track == paneTrack && midi == paneMidi)
+        const auto midi = isMidiClipSelected();
+        if (clipID == paneClip && midi == paneMidi)
         {
             // The clip the audio editor was showing can still be deleted, or
             // taken away by an undo, without the selection moving at all.
@@ -684,17 +699,15 @@ public:
             return;
         }
         paneClip = clipID;
-        paneTrack = track;
         paneMidi = midi;
         // Once it is open the audio editor follows the audio clip selection,
-        // the way Live's clip view does. A MIDI selection hands the pane back
-        // to the note editor, and a selection that is neither closes it.
+        // the way Live's clip view does. A MIDI clip hands the pane back to the
+        // note editor, and selecting no clip at all - a track card, a region,
+        // empty space - closes it.
         if (const auto audio = selectedAudioClipID(); lowerPane == LowerPane::audio && audio != te::EditItemID())
             audioClip.setClip(audio);
         else
             lowerPane = midi ? LowerPane::notes : LowerPane::none;
-        if (!midi)
-            rackOpen = false;
         updateEditorLabel();
         requestPaneLayout();
     }
@@ -1072,17 +1085,18 @@ private:
     // Room under the arrangement for the Clip and Devices toggles, which stay
     // put whether or not the pane they open is showing.
     static constexpr int toggleStripHeight = 46;
-    // Which editor the lower pane is showing, if any. Both the note editor and
-    // the device rack start hidden: they are revealed by selecting a MIDI clip
-    // or a track that runs an instrument, and the audio editor by
-    // double-clicking an audio clip.
+    // The clip pane and the Device View are two independent panels that happen
+    // to stack in the same strip, and each answers to one thing: this says
+    // which clip editor the clip pane is showing, and rackOpen whether the
+    // Device View is up. Both start hidden - a MIDI or drum clip reveals the
+    // note editor, a double-clicked audio clip the audio editor, and a clicked
+    // track card the devices.
     enum class LowerPane { none, notes, audio };
     LowerPane lowerPane = LowerPane::none;
     bool lowerPaneVisible() const { return lowerPane != LowerPane::none || rackOpen; }
-    // The selection the pane state was chosen for, so a notification about the
-    // same selection does not overwrite a toggle the user just pressed.
+    // The clip selection the pane state was chosen for, so a notification about
+    // the same selection does not overwrite a toggle the user just pressed.
     te::EditItemID paneClip;
-    int paneTrack = -1;
     bool paneMidi = false;
     bool paneLayoutPending = false;
     bool browserOpen = true, rackOpen = false, infoVisible = true;

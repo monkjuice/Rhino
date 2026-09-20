@@ -65,7 +65,7 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
             if (!isTrackSelected(track))
                 selectTrack(track);
             setSelection({});
-            focus = Focus::track;
+            focusTrack();
             repaint();
             showTrackMenu(track);
             return;
@@ -77,7 +77,7 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
     {
         selectTrack(session.masterTrackIndex());
         setSelection({});
-        focus = Focus::track;
+        focusTrack();
         repaint();
         return;
     }
@@ -89,7 +89,7 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
             if (event.mods.isShiftDown()) selectTrackRange(trackSelectionAnchor, track);
             else toggleTrackSelection(track);
             setSelection({});
-            focus = Focus::track;
+            focusTrack();
             repaint();
             return;
         }
@@ -101,10 +101,16 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
         }
     // A card is the only place a track can be resized or carried from, and it
     // has already taken the selection a plain click on it would have made.
+    // Grabbing its bottom edge is a resize and nothing else: it takes the focus
+    // so Delete still means the track, but it is not a request to see that
+    // track's devices, and it is the one card gesture that can be told from a
+    // plain click before the pointer has moved.
+    const auto resizingEdge = cardResizeEdgeAt(event.position) >= 0;
     if (beginCardGesture(event))
     {
         setSelection({});
-        focus = Focus::track;
+        if (resizingEdge) focus = Focus::track;
+        else focusTrack();
         repaint();
         return;
     }
@@ -183,6 +189,9 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
         }
         setSelection({});
         clearTimeSelection();
+        // Header space with no card under it still focuses the track, so Delete
+        // keeps meaning the track, but it asks for no devices: nothing was
+        // clicked.
         focus = event.position.x < headerWidth ? Focus::track : Focus::none;
         repaint();
         return;

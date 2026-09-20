@@ -391,6 +391,16 @@ void Arrangement::selectTrack(int track)
     repaint();
 }
 
+// Selecting a card is what asks for its track's devices. selectTrack reports
+// only a move, so a second click on the card already selected would say
+// nothing at all; this says it every time, which is what lets that click bring
+// the Device View back after it has been closed.
+void Arrangement::focusTrack()
+{
+    focus = Focus::track;
+    if (trackFocused) trackFocused(selectedTrack);
+}
+
 void Arrangement::splitSelectedAtPlayhead()
 {
     cancelDrag();

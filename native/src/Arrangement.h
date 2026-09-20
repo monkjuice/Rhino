@@ -39,6 +39,11 @@ public:
     te::EditItemID selectedClipID() const { return selected; }
     std::function<void(juce::String)> status;
     std::function<void(int)> trackSelected;
+    // Clicking a card is what asks for that track's devices, and it is reported
+    // separately from trackSelected because it fires even when the working
+    // track did not move: clicking the card already selected is how the Device
+    // View is asked for again once it has been closed.
+    std::function<void(int)> trackFocused;
     // Selecting a clip says what is being worked on; double-clicking one says
     // to open it. The arrangement reports both and decides neither: which
     // editor a clip belongs in is the shell's business, not the timeline's.
@@ -116,6 +121,8 @@ private:
     bool isSelected(te::EditItemID) const;
     void setSelection(std::vector<te::EditItemID>, te::EditItemID primary = {});
     void splitSelectedAtPlayhead();
+    // Records that the last click landed on a track card, and reports it.
+    void focusTrack();
     // ArrangementSelection.cpp
     void setTimeSelection(double start, double end, int firstTrack, int lastTrack);
     void setInsertPoint(double seconds, int track);

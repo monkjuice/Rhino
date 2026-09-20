@@ -78,6 +78,15 @@
             require(command('V'), "What was cut can be pasted somewhere else");
             require(noteAt(12.0, 50).isValid(), "The cut note comes back where it was asked for");
 
+            // A region read off the notes is not drawn: the notes already show
+            // what is selected, and a band across every pitch row on top of
+            // them reads as a marquee still being dragged.
+            clipboardGrid.setSelectedStates({noteAt(0.0, 48)});
+            require(clipboardGrid.stepSelection.active && clipboardGrid.regionFromNotes,
+                    "Selecting notes sets the region but marks it as theirs");
+            clipboardGrid.setStepSelection(0.0, 4.0);
+            require(!clipboardGrid.regionFromNotes, "A span asked for by itself is not a note selection");
+
             // Escape drops the region as well as the selection, so the next
             // paste is not steered by a span nobody can see any more.
             clipboardGrid.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey));

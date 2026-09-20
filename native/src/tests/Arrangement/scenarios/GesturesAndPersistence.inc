@@ -63,7 +63,7 @@
         const auto* pasted = session.findAudioClip(pastedID);
         require(pasted != nullptr, "Ctrl-V creates an audio clip");
         require(close(pasted->getPosition().time.getStart().inSeconds(), 2.0), "Paste anchors the copied clip at the insert point");
-        require(close(view.timeSelection.start, 2.0) && close(view.timeSelection.end, 2.0 + view.clipboard.front().end),
+        require(close(view.timeSelection.start, 2.0) && close(view.timeSelection.end, 2.0 + view.clipboard.clips.front().end),
                 "Paste moves the time selection onto what it just pasted");
         session.deleteClip(pastedID);
         view.setSelection({id});

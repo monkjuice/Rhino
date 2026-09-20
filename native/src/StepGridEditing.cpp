@@ -77,6 +77,9 @@ void StepGrid::setStepSelection(double start, double end)
     stepSelection.start = std::clamp(std::min(start, end), 0.0, limit);
     stepSelection.end = std::clamp(std::max(start, end), 0.0, limit);
     stepSelection.active = true;
+    // Set here and re-set by setStepRegionFromSelection, so only a region
+    // actually read off the notes is marked as theirs.
+    regionFromNotes = false;
 }
 
 void StepGrid::setStepInsertPoint(double step)
@@ -130,17 +133,21 @@ void StepGrid::setStepRegionFromSelection()
     if (noteCount > 0 && selectedStates().size() == noteCount)
     {
         setStepSelection(0.0, static_cast<double>(session.editorStepCount()));
+        regionFromNotes = true;
         return;
     }
     clearStepSelection();
     const auto region = effectiveStepRegion();
     if (region.active)
         setStepSelection(region.start, region.end);
+    regionFromNotes = true;
 }
 
 void StepGrid::paintStepSelection(juce::Graphics& g)
 {
-    if (!stepSelection.active)
+    // Nothing to draw over selected notes: they are already drawn as selected,
+    // and a band over every pitch row would read as a marquee mid-drag.
+    if (!stepSelection.active || regionFromNotes)
         return;
     const auto left = labelWidth + static_cast<float>(stepSelection.start - stepScroll) * cellWidth();
     const auto right = labelWidth + static_cast<float>(stepSelection.end - stepScroll) * cellWidth();
@@ -150,13 +157,11 @@ void StepGrid::paintStepSelection(juce::Graphics& g)
     g.reduceClipRegion(juce::Rectangle<float>(labelWidth, 0.0f, gridWidth(), bottom).getSmallestIntegerContainer());
     if (stepSelection.isRange())
     {
-        const juce::Rectangle<float> box {left, top, right - left, bottom - top};
-        g.setColour(juce::Colour(0x22c6d58c));
-        g.fillRect(box);
+        // A tab on the ruler and a wash under the lanes, with no outline: the
+        // span has to be legible without competing with the notes inside it.
+        g.setColour(juce::Colour(0x18c6d58c));
+        g.fillRect(juce::Rectangle<float>(left, top, right - left, bottom - top));
         g.setColour(juce::Colour(0xffc6d58c));
-        g.drawRect(box, 1.0f);
-        // A tab along the ruler, so the span reads even where the lanes below
-        // it are dense with notes.
         g.fillRect(left, headerHeight - 3.0f, right - left, 3.0f);
     }
     // The insert point: a region with no width is still where a paste lands.

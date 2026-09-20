@@ -490,7 +490,7 @@ void Arrangement::showClipMenu(te::EditItemID id)
     menu.addSeparator();
     menu.addItem(4, "Cut       Ctrl+X");
     menu.addItem(5, "Copy       Ctrl+C");
-    menu.addItem(6, "Paste       Ctrl+V", !clipboard.empty());
+    menu.addItem(6, "Paste       Ctrl+V", !clipboard.isEmpty());
     menu.addItem(2, "Duplicate       Ctrl+D");
     menu.addSeparator();
     menu.addItem(3, "Delete");

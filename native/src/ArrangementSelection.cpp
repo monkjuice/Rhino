@@ -22,6 +22,9 @@ void Arrangement::setTimeSelection(double start, double end, int firstTrack, int
     timeSelection.lastTrack = juce::jlimit(timeSelection.firstTrack, std::max(0, session.trackCount() - 1),
                                            std::max(firstTrack, lastTrack));
     timeSelection.active = true;
+    // Set here and re-set by setRegionFromSelectedClips, so a region only
+    // follows clips when it was actually read off them.
+    regionFollowsClips = false;
 }
 
 // A click with no drag. Paste lands here, and so does the material a duplicate
@@ -94,6 +97,7 @@ void Arrangement::setRegionFromSelectedClips()
     const auto region = effectiveRegion();
     if (region.active)
         setTimeSelection(region.start, region.end, region.firstTrack, region.lastTrack);
+    regionFollowsClips = true;
 }
 
 bool Arrangement::beginRegionGesture(const juce::MouseEvent& event)
@@ -187,6 +191,18 @@ void Arrangement::paintTimeSelection(juce::Graphics& g)
     }
 }
 
+// "3.2" - the bar and beat something landed on, so the status line can say
+// where a paste went rather than only that it went somewhere.
+juce::String Arrangement::barPositionText(double seconds) const
+{
+    const auto beats = session.edit->tempoSequence
+        .toBeats(tracktion::core::TimePosition::fromSeconds(std::max(0.0, seconds))).inBeats();
+    const auto perBar = std::max(1.0, session.beatsPerBar());
+    const auto bar = std::floor(beats / perBar);
+    return juce::String(static_cast<int>(bar) + 1) + "."
+         + juce::String(static_cast<int>(std::floor(beats - bar * perBar)) + 1);
+}
+
 void Arrangement::copySelection()
 {
     const auto region = effectiveRegion();
@@ -197,16 +213,16 @@ void Arrangement::copySelection()
     }
     clipboard = session.copyClipRegion(region.start, region.end, region.firstTrack, region.lastTrack);
     if (status)
-        status(clipboard.empty() ? "There is nothing inside the selection to copy"
-                                 : "Copied " + juce::String(clipboard.size())
-                                       + (clipboard.size() == 1 ? " clip" : " clips"));
+        status(clipboard.clips.empty() ? "There is nothing inside the selection to copy"
+                                       : "Copied " + juce::String(clipboard.clips.size())
+                                             + (clipboard.clips.size() == 1 ? " clip" : " clips"));
 }
 
 void Arrangement::cutSelection()
 {
     const auto region = effectiveRegion();
     copySelection();
-    if (clipboard.empty())
+    if (clipboard.clips.empty())
         return;
     const auto result = session.clearClipRegion(region.start, region.end, region.firstTrack, region.lastTrack);
     if (result.failed())
@@ -215,15 +231,16 @@ void Arrangement::cutSelection()
         return;
     }
     setSelection({});
-    setInsertPoint(region.start, region.firstTrack);
+    setTimeSelection(region.start, region.end, region.firstTrack, region.lastTrack);
     focus = Focus::region;
-    if (status) status("Cut " + juce::String(clipboard.size()) + (clipboard.size() == 1 ? " clip" : " clips"));
+    if (status) status("Cut " + juce::String(clipboard.clips.size())
+                       + (clipboard.clips.size() == 1 ? " clip" : " clips"));
 }
 
 void Arrangement::pasteSelection()
 {
     cancelDrag();
-    if (clipboard.empty())
+    if (clipboard.isEmpty())
     {
         if (status) status("Copy one or more clips first");
         return;
@@ -232,26 +249,25 @@ void Arrangement::pasteSelection()
     // - dragged out, left by a click, or set by selecting a clip. Only when
     // there is no time selection at all does it fall back to the clips.
     const auto region = timeSelection.active ? timeSelection : effectiveRegion();
-    const auto start = region.active ? region.start : 0.0;
-    const auto track = region.active ? region.firstTrack : selectedTrack;
+    const auto start = std::max(0.0, region.active ? region.start : 0.0);
+    const auto track = juce::jlimit(0, std::max(0, session.trackCount() - 1),
+                                    region.active ? region.firstTrack : selectedTrack);
     std::vector<te::EditItemID> pasted;
-    const auto result = session.pasteClipSnapshots(clipboard, std::max(0.0, start),
-                                                   juce::jlimit(0, std::max(0, session.trackCount() - 1), track), pasted);
+    const auto result = session.pasteClipRegion(clipboard, start, track, pasted);
     if (result.failed())
     {
         if (status) status(result.getErrorMessage());
         return;
     }
-    // What was pasted becomes the selection, so a second paste replaces it
-    // rather than stacking on it, and Ctrl+D carries on from there. The clip
-    // views are already rebuilt: the session broadcast its change before it
-    // returned.
+    // The region the paste occupies becomes the selection - the rectangle that
+    // was copied, not the bounding box of the clips that happened to be in it,
+    // so a lane that was empty stays part of it. A second paste then replaces
+    // what the first one put down rather than stacking on it.
     setSelection(std::move(pasted));
-    setTimeSelection(start, start + Session::snapshotSpanSeconds(clipboard),
-                     track, track + Session::snapshotTrackSpan(clipboard));
+    setTimeSelection(start, start + clipboard.spanSeconds, track, track + clipboard.trackSpan);
     focus = Focus::region;
-    if (status) status("Pasted " + juce::String(selectedClips.size())
-                       + (selectedClips.size() == 1 ? " clip" : " clips"));
+    if (status) status("Pasted " + juce::String(clipboard.clips.size())
+                       + (clipboard.clips.size() == 1 ? " clip at " : " clips at ") + barPositionText(start));
     repaint();
 }
 
@@ -267,15 +283,15 @@ void Arrangement::duplicateSelected()
         if (status) status("Select a clip or a span of the timeline to duplicate");
         return;
     }
-    const auto snapshots = session.copyClipRegion(region.start, region.end, region.firstTrack, region.lastTrack);
-    if (snapshots.empty())
+    const auto copied = session.copyClipRegion(region.start, region.end, region.firstTrack, region.lastTrack);
+    if (copied.clips.empty())
     {
         if (status) status("There is nothing inside the selection to duplicate");
         return;
     }
     const auto destination = region.end;
     std::vector<te::EditItemID> pasted;
-    const auto result = session.pasteClipSnapshots(snapshots, destination, region.firstTrack, pasted);
+    const auto result = session.pasteClipRegion(copied, destination, region.firstTrack, pasted);
     if (result.failed())
     {
         if (status) status(result.getErrorMessage());

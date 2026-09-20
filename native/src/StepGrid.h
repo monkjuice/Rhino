@@ -129,6 +129,11 @@ private:
     std::vector<juce::ValueTree> selectedNoteStates;
     std::vector<CopiedNote> noteClipboard;
     StepSelection stepSelection;
+    // A region read off the selected notes is not drawn: the notes already
+    // show what is selected, and a band across every pitch row on top of them
+    // reads as a marquee that is still being dragged. Only a span the user
+    // asked for by itself - a marquee, a click, a paste - is worth drawing.
+    bool regionFromNotes = false;
     std::vector<MovingNote> movingNotes;
     Gesture gesture = Gesture::none;
     bool adding = true, showingDrumLabels = false, noteMoved = false, manualPitchScroll = false, movingGroup = false, resizingFromLeft = false;

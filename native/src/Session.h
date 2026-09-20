@@ -347,18 +347,25 @@ public:
         int track = 0;
         double start = 0.0, end = 0.0, offset = 0.0;
     };
-    std::vector<ClipSnapshot> copyClipRegion(double startSeconds, double endSeconds,
-                                             int firstTrack, int lastTrack) const;
+    // A copied region is its own size plus what was inside it. The size is
+    // carried rather than measured back off the clips, because an empty lane
+    // or a trailing rest is part of what was copied even though no clip
+    // records it - and pasting has to clear that part of the destination too.
+    struct ClipRegion
+    {
+        double spanSeconds = 0.0;
+        int trackSpan = 0;  // zero is one track
+        std::vector<ClipSnapshot> clips;
+        bool isEmpty() const { return spanSeconds <= 0.0; }
+    };
+    ClipRegion copyClipRegion(double startSeconds, double endSeconds, int firstTrack, int lastTrack) const;
     // Empties the region: clips inside it go, clips crossing an edge are cut
     // at that edge, and a clip spanning it is left with a hole.
     juce::Result clearClipRegion(double startSeconds, double endSeconds, int firstTrack, int lastTrack);
     // Drops a copied region at a new corner, replacing what is already there
     // the way Live does, so what lands is what was copied and nothing else.
-    juce::Result pasteClipSnapshots(const std::vector<ClipSnapshot>&, double destinationStart,
-                                    int destinationTrack, std::vector<te::EditItemID>& pasted);
-    // How wide and how tall a copied region is, measured from its own corner.
-    static double snapshotSpanSeconds(const std::vector<ClipSnapshot>&);
-    static int snapshotTrackSpan(const std::vector<ClipSnapshot>&);
+    juce::Result pasteClipRegion(const ClipRegion&, double destinationStart,
+                                 int destinationTrack, std::vector<te::EditItemID>& pasted);
     juce::Result cycleClipColour(te::EditItemID);
     int clipPluginCount(te::EditItemID) const;
     void toggleTrackMute(int track);

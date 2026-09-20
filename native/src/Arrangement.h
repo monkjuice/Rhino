@@ -120,6 +120,7 @@ private:
     void dragRegionGesture(const juce::MouseEvent&);
     void endRegionGesture();
     void paintTimeSelection(juce::Graphics&);
+    juce::String barPositionText(double seconds) const;
     void copySelection();
     void cutSelection();
     void pasteSelection();
@@ -240,9 +241,9 @@ private:
     GridSettings gridSettings;
     te::EditItemID selected;
     std::vector<te::EditItemID> selectedClips;
-    // Snapshots rather than clip ids: a cut deletes its sources, and so does an
-    // undo made between the copy and the paste.
-    std::vector<Session::ClipSnapshot> clipboard;
+    // A copied rectangle rather than clip ids: a cut deletes its sources, and
+    // so does an undo made between the copy and the paste.
+    Session::ClipRegion clipboard;
     int selectedTrack = 0;
     // Grouping acts on several cards at once, so the working track is joined by
     // the set a shift-click has gathered. It always holds selectedTrack.
@@ -257,6 +258,10 @@ private:
     // The clip selection and the region are two views of one thing and each
     // keeps the other in step; this stops the two updates chasing each other.
     bool syncingSelection = false;
+    // A region read off the selected clips belongs to those clips, so it has to
+    // travel with them when they are moved, trimmed or nudged. One dragged out
+    // over the lanes belongs to the timeline and stays where it was put.
+    bool regionFollowsClips = false;
     double regionAnchorTime = 0.0;
     int regionAnchorTrack = 0;
     ClipGesture gesture = ClipGesture::move;

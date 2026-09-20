@@ -147,10 +147,10 @@ juce::Result Session::duplicateClip(te::EditItemID id)
     const auto track = tracks.indexOf(dynamic_cast<te::AudioTrack*>(clip->getClipTrack()));
     if (track < 0) return juce::Result::fail("The selected clip is not on a track.");
     const auto time = clip->getPosition().time;
-    const auto snapshots = copyClipRegion(time.getStart().inSeconds(), time.getEnd().inSeconds(), track, track);
-    if (snapshots.empty()) return juce::Result::fail("The duplicate clip could not be created.");
+    const auto region = copyClipRegion(time.getStart().inSeconds(), time.getEnd().inSeconds(), track, track);
+    if (region.clips.empty()) return juce::Result::fail("The duplicate clip could not be created.");
     std::vector<te::EditItemID> pasted;
-    return pasteClipSnapshots(snapshots, time.getEnd().inSeconds(), track, pasted);
+    return pasteClipRegion(region, time.getEnd().inSeconds(), track, pasted);
 }
 
 // Deleting clips can take the one the note editor is pointed at, and pattern()

@@ -34,31 +34,21 @@ bool crossesEdge(tracktion::core::TimeRange clip, double edge)
 }
 }
 
-double Session::snapshotSpanSeconds(const std::vector<ClipSnapshot>& snapshots)
+Session::ClipRegion Session::copyClipRegion(double startSeconds, double endSeconds,
+                                            int firstTrack, int lastTrack) const
 {
-    auto span = 0.0;
-    for (const auto& snapshot : snapshots)
-        span = std::max(span, snapshot.end);
-    return span;
-}
-
-int Session::snapshotTrackSpan(const std::vector<ClipSnapshot>& snapshots)
-{
-    auto span = 0;
-    for (const auto& snapshot : snapshots)
-        span = std::max(span, snapshot.track);
-    return span;
-}
-
-std::vector<Session::ClipSnapshot> Session::copyClipRegion(double startSeconds, double endSeconds,
-                                                           int firstTrack, int lastTrack) const
-{
-    std::vector<ClipSnapshot> snapshots;
+    ClipRegion region;
     if (!std::isfinite(startSeconds) || !std::isfinite(endSeconds) || endSeconds <= startSeconds + regionTolerance)
-        return snapshots;
+        return region;
     const auto tracks = te::getAudioTracks(*edit);
     firstTrack = std::max(0, firstTrack);
     lastTrack = std::min(lastTrack, tracks.size() - 1);
+    if (firstTrack > lastTrack)
+        return region;
+    // The rectangle, recorded before anything inside it is looked at: a lane
+    // with nothing on it is still part of what was copied.
+    region.spanSeconds = endSeconds - startSeconds;
+    region.trackSpan = lastTrack - firstTrack;
     for (int track = firstTrack; track <= lastTrack; ++track)
         for (auto* clip : tracks[track]->getClips())
         {
@@ -101,9 +91,9 @@ std::vector<Session::ClipSnapshot> Session::copyClipRegion(double startSeconds, 
             {
                 continue;
             }
-            snapshots.push_back(std::move(snapshot));
+            region.clips.push_back(std::move(snapshot));
         }
-    return snapshots;
+    return region;
 }
 
 // Splitting at both edges first means the only question left is whether a whole
@@ -165,18 +155,17 @@ juce::Result Session::clearClipRegion(double startSeconds, double endSeconds, in
     return juce::Result::ok();
 }
 
-juce::Result Session::pasteClipSnapshots(const std::vector<ClipSnapshot>& snapshots, double destinationStart,
-                                         int destinationTrack, std::vector<te::EditItemID>& pasted)
+juce::Result Session::pasteClipRegion(const ClipRegion& region, double destinationStart,
+                                      int destinationTrack, std::vector<te::EditItemID>& pasted)
 {
     pasted.clear();
-    if (snapshots.empty())
+    if (region.isEmpty())
         return juce::Result::fail("Copy one or more clips first.");
     if (!std::isfinite(destinationStart) || destinationStart < 0.0 || destinationTrack < 0)
         return juce::Result::fail("Choose a valid paste location.");
-    const auto lastTrackOffset = snapshotTrackSpan(snapshots);
 
     edit->getUndoManager().beginNewTransaction("Paste clips");
-    while (te::getAudioTracks(*edit).size() < destinationTrack + lastTrackOffset + 1)
+    while (te::getAudioTracks(*edit).size() < destinationTrack + region.trackSpan + 1)
     {
         const auto index = te::getAudioTracks(*edit).size();
         auto newTrack = edit->insertNewAudioTrack(te::TrackInsertPoint::getEndOfTracks(*edit), nullptr, false);
@@ -188,14 +177,14 @@ juce::Result Session::pasteClipSnapshots(const std::vector<ClipSnapshot>& snapsh
 
     // Pasting replaces what it lands on, as it does in Live: what arrives is
     // what was copied rather than what was copied stacked on whatever was
-    // already there. Every span is cleared before anything is inserted, so a
-    // later snapshot's clear cannot reach an earlier snapshot's new clip.
-    for (const auto& snapshot : snapshots)
-        clearClipRegionInEdit(destinationStart + snapshot.start, destinationStart + snapshot.end,
-                              destinationTrack + snapshot.track, destinationTrack + snapshot.track);
+    // already there. The whole rectangle is cleared, not only the spans the
+    // clips occupy, so copying a lane that was empty empties the lane it lands
+    // on - and so no insert can be undone by a later snapshot's clear.
+    clearClipRegionInEdit(destinationStart, destinationStart + region.spanSeconds,
+                          destinationTrack, destinationTrack + region.trackSpan);
 
     const auto tracks = te::getAudioTracks(*edit);
-    for (const auto& snapshot : snapshots)
+    for (const auto& snapshot : region.clips)
     {
         const auto targetIndex = destinationTrack + snapshot.track;
         auto* target = tracks[targetIndex];

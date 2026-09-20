@@ -21,11 +21,6 @@ void Arrangement::sync()
     if (selectedTracks.empty())
         selectedTracks = {selectedTrack};
     trackSelectionAnchor = juce::jlimit(0, std::max(0, session.trackCount() - 1), trackSelectionAnchor);
-    // The region can outlive the tracks it was drawn over. Its time span stays
-    // where it was - a trim does not drag a selection with it - but the rows it
-    // covers have to be ones that still exist.
-    if (timeSelection.active)
-        setTimeSelection(timeSelection.start, timeSelection.end, timeSelection.firstTrack, timeSelection.lastTrack);
     songEnd = 0.0;
     for (int track = 0; track < tracks.size(); ++track)
     {
@@ -74,6 +69,18 @@ void Arrangement::sync()
     if (!masterPan.isMouseButtonDown())
         masterPan.setValue(session.masterPan(), juce::dontSendNotification);
     std::erase_if(waveforms, [&usedFiles](const auto& item) { return !usedFiles.contains(item.first); });
+    // Read off the rebuilt clips, so a region that belongs to a selection
+    // travels with it: moving, trimming or nudging a clip carries its
+    // highlight along instead of leaving it behind at the old position. A
+    // region dragged out over the lanes belongs to the timeline, so it only
+    // has its rows clamped to tracks that still exist.
+    if (regionFollowsClips && (!selectedClips.empty() || selected != te::EditItemID()))
+        setRegionFromSelectedClips();
+    else if (timeSelection.active)
+    {
+        const auto kept = timeSelection;
+        setTimeSelection(kept.start, kept.end, kept.firstTrack, kept.lastTrack);
+    }
     buildRows();
     // A name being typed on a track that has just gone is abandoned: committing
     // it would rename whatever took that index instead.

@@ -57,7 +57,7 @@
             // insert point and moves the region onto what it pasted.
             view.setTimeSelection(4.0, 5.0, 1, 1);
             view.keyPressed(juce::KeyPress('C', juce::ModifierKeys::commandModifier, 0));
-            require(view.clipboard.size() == 1, "Ctrl+C copies what is inside the region");
+            require(view.clipboard.clips.size() == 1, "Ctrl+C copies what is inside the region");
             view.setInsertPoint(8.0, 1);
             view.keyPressed(juce::KeyPress('V', juce::ModifierKeys::commandModifier, 0));
             require(clipAt(1, 8.0) != nullptr, "Ctrl+V lands the copy at the insert point");
@@ -82,10 +82,10 @@
             // them whole, and the crop carries the offset into the source.
             view.setTimeSelection(8.25, 8.75, 1, 1);
             view.keyPressed(juce::KeyPress('C', juce::ModifierKeys::commandModifier, 0));
-            require(view.clipboard.size() == 1, "Copying part of a clip copies that clip");
-            require(close(view.clipboard.front().end - view.clipboard.front().start, 0.5),
+            require(view.clipboard.clips.size() == 1, "Copying part of a clip copies that clip");
+            require(close(view.clipboard.clips.front().end - view.clipboard.clips.front().start, 0.5),
                     "Copying part of a clip copies only the part inside the region");
-            require(close(view.clipboard.front().offset, 0.25),
+            require(close(view.clipboard.clips.front().offset, 0.25),
                     "A cropped copy starts a quarter second into its source");
 
             // Ctrl+D puts the copy flush against the end of the selection and
@@ -109,6 +109,29 @@
                     "Duplicating over an occupied span replaces what was there");
             require(clipAt(1, 10.0) != nullptr, "The duplicate still lands flush against the selection");
 
+            // A region read off a clip belongs to that clip, so moving the
+            // clip carries the highlight along instead of leaving it behind at
+            // the position the clip used to have.
+            auto* toMove = clipAt(1, 10.0);
+            require(toMove != nullptr, "There is a clip to move");
+            const auto movedID = toMove->itemID;
+            view.setSelection({movedID}, movedID);
+            require(close(view.timeSelection.start, 10.0), "The region starts on the clip it was read from");
+            drag({view.xFor(10.5), audioY}, {view.xFor(14.5), audioY});
+            require(close(session.findClip(movedID)->getPosition().time.getStart().inSeconds(), 14.0),
+                    "The clip moved four seconds to the right");
+            require(close(view.timeSelection.start, 14.0) && close(view.timeSelection.end, 15.0),
+                    "A region read off a clip follows it when the clip is moved");
+            // A region dragged out over the lanes belongs to the timeline, so
+            // it stays where it was put whatever the clips under it do.
+            view.setTimeSelection(17.0, 18.0, 1, 1);
+            view.sync();
+            require(close(view.timeSelection.start, 17.0) && close(view.timeSelection.end, 18.0),
+                    "A region dragged over the lanes stays where it was put");
+            require(session.editClip(movedID, {10.0, 11.0, session.findClip(movedID)->getPosition().offset.inSeconds()},
+                                     ClipGesture::move).wasOk(), "Can put the moved clip back");
+            view.sync();
+
             // Delete on a region empties it, trimming the clips that cross its
             // edges and leaving a hole in one that spans it.
             view.setTimeSelection(8.5, 9.5, 1, 1);
@@ -129,7 +152,7 @@
             view.setTimeSelection(10.75, 11.0, 1, 1);
             view.keyPressed(juce::KeyPress('X', juce::ModifierKeys::commandModifier, 0));
             require(clipAt(1, 10.75) == nullptr, "Ctrl+X empties the region it took");
-            require(view.clipboard.size() == 1, "Ctrl+X keeps what it took");
+            require(view.clipboard.clips.size() == 1, "Ctrl+X keeps what it took");
             view.setInsertPoint(20.0, 1);
             view.keyPressed(juce::KeyPress('V', juce::ModifierKeys::commandModifier, 0));
             require(clipAt(1, 20.0) != nullptr, "What was cut can be pasted somewhere else");
@@ -144,13 +167,36 @@
             view.sync();
             view.setTimeSelection(4.0, 5.0, 0, 1);
             view.keyPressed(juce::KeyPress('C', juce::ModifierKeys::commandModifier, 0));
-            require(view.clipboard.size() == 2, "A region across two tracks copies from both");
+            require(view.clipboard.clips.size() == 2, "A region across two tracks copies from both");
             view.setInsertPoint(12.0, 0);
             view.keyPressed(juce::KeyPress('V', juce::ModifierKeys::commandModifier, 0));
             require(clipAt(0, 12.0) != nullptr, "The upper track's clip is pasted on the upper track");
             require(clipAt(1, 12.0) != nullptr, "The lower track's clip keeps its distance from it");
             require(dynamic_cast<te::MidiClip*>(clipAt(0, 12.0)) != nullptr, "A pasted MIDI clip is still a MIDI clip");
             require(session.findAudioClip(clipAt(1, 12.0)->itemID) != nullptr, "A pasted audio clip is still an audio clip");
+
+            // An empty lane inside a region is part of what was copied. The
+            // copy has to be the size of the rectangle, not the bounding box
+            // of the clips that happened to be inside it, or pasting it would
+            // neither occupy nor clear the lane that was empty.
+            require(session.importAudioAt(source.getFile(), 1, 16.0).wasOk(), "Can place a clip for the empty-lane copy");
+            view.sync();
+            view.setTimeSelection(16.0, 20.0, 0, 1);
+            view.keyPressed(juce::KeyPress('C', juce::ModifierKeys::commandModifier, 0));
+            require(view.clipboard.clips.size() == 1, "Only the lane with a clip on it contributes a clip");
+            require(close(view.clipboard.spanSeconds, 4.0) && view.clipboard.trackSpan == 1,
+                    "The copy is the size of the rectangle, not of the clip inside it");
+            require(session.createClip(0, 24.5).wasOk(), "Can place something for the empty lane to clear");
+            view.sync();
+            require(clipAt(0, 24.5) != nullptr, "The clip to be cleared is there first");
+            view.setInsertPoint(24.0, 0);
+            view.keyPressed(juce::KeyPress('V', juce::ModifierKeys::commandModifier, 0));
+            require(clipAt(0, 24.5) == nullptr,
+                    "Pasting a lane that was empty empties the lane it lands on");
+            require(clipAt(1, 24.0) != nullptr, "The lane that had a clip still gets one");
+            require(close(view.timeSelection.start, 24.0) && close(view.timeSelection.end, 28.0)
+                    && view.timeSelection.firstTrack == 0 && view.timeSelection.lastTrack == 1,
+                    "The region after a paste is the whole rectangle that was pasted");
 
             // Everything this scenario made lives past three seconds, so the
             // clean-up is one sweep and the counts prove it worked.

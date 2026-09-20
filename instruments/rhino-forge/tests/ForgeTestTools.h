@@ -10,4 +10,8 @@ namespace rhino::forge::tests
 {
 int runSnapshot(int argc, char** argv);
 int runProfile(int argc, char** argv);
+
+// Render a deliberately busy patch and write the samples raw, so two builds of
+// the engine can be compared byte for byte. See ForgeTestRender.cpp.
+int runRender(int argc, char** argv);
 }

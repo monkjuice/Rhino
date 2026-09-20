@@ -54,10 +54,11 @@ int main(int argc, char** argv)
     juce::ScopedJuceInitialiser_GUI initialiseJuce;
     const juce::String first = argc > 1 ? argv[1] : "";
 
-    // The two development tools, which open a real editor rather than check
-    // anything. Neither is a CTest case; both are documented in README.md.
+    // The development tools, which render something rather than check anything.
+    // None is a CTest case; all are documented in README.md.
     if (first == "--snapshot" && argc > 2) return runSnapshot(argc, argv);
     if (first == "--profile") return runProfile(argc, argv);
+    if (first == "--render") return runRender(argc, argv);
 
     if (first == "--list")
     {

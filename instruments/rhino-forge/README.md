@@ -202,22 +202,28 @@ which decisions are already settled. Read it before changing the synth.
 
 | File | Holds |
 | --- | --- |
-| `core/ForgeCore.h` | The voice engine. No AudioProcessor, UI, state tree, filesystem, or allocation in `renderSample`. |
+| `core/ForgeCore.h` | The voice engine. No AudioProcessor, UI, state tree, filesystem, or allocation in `renderSample`. Four headers under it, listed at the top of it. |
 | `core/ForgeFx.h` | What an effects rack is: the types, what each one's controls are called, and what a normalised knob means in each. No DSP. |
 | `core/ForgeFxDsp.h` | The racks, rendered. A slot carries every type's state, sized once at `prepare`, because a type changes while audio is running. |
 | `ui/ForgeFxDisplay.h` | What each effect draws of itself, from the same functions that render it. |
-| `src/ForgeProcessor.*` | Parameters, host automation, state, preset files. |
+| `src/ForgeProcessor.*` | What the host calls, and what it hands the engine. `ForgeParameters.cpp` declares every parameter; `ForgeProcessorState.cpp` carries state, presets and table files. |
 | `ui/ForgeLayout.h` | What modules exist, what each contains, and where it sits. Pure geometry and declaration; four headers, listed at the top of it. |
 | `ui/ForgeVisuals.h` | The knob look and the drawing primitives. Decides nothing about placement; seven headers, listed at the top of it. |
 | `ui/ForgePanels.h` | Static metal housings, chassis rails, hardware and decorative lettering. |
 | `src/ForgeEditor.*` | Walks the declared modules and builds the components. One class across eight files, by what each does. |
 | `tests/` | One file per area, one CTest case each. See **Tests** below. |
 
-Both `ForgeLayout.h` and `ForgeVisuals.h` are now lists of the headers they
-were split into, so every existing include still works and nothing had to
-move. Include the narrowest one that answers the question — a test that draws
-nothing, or a header that only needs to know what a `Module` is, should not be
-pulling in every knob look Forge has.
+`ForgeCore.h`, `ForgeLayout.h` and `ForgeVisuals.h` each include the headers
+they were split into and list them at the top, so every existing include still
+works and nothing had to move. Include the narrowest one that answers the
+question — a test that draws nothing, or a header that only needs to know what
+a `Module` is, should not be pulling in every knob look Forge has.
+
+The engine splits into headers and never into translation units. `renderSample`
+is compiled into the processor and stays inlined there; Release has no
+link-time code generation, so a call across a `.cpp` boundary on the audio path
+would be a real one. The panel is the opposite case and splits into translation
+units freely: a frame spends its time in Direct2D, not in call overhead.
 
 `src/ForgeEditor*.cpp` are one `Editor` defined across several translation
 units, the way `Session` and `Arrangement` already are in the DAW: no header
@@ -225,8 +231,8 @@ change, no call site change, and a new file needs only a line in
 `CMakeLists.txt`. `ForgeEditorInternal.h` carries what used to be the
 anonymous namespace and is private to those files.
 
-Adding a control means declaring the parameter in `ForgeProcessor.cpp` and
-naming it in a module in `ForgeLayout.h`. The layout test fails if the two
+Adding a control means declaring the parameter in `src/ForgeParameters.cpp` and
+naming it in a module in `ui/ForgeModules.h`. The layout test fails if the two
 disagree in either direction.
 
 ## Tests
@@ -278,8 +284,15 @@ way to look at a change without a host.
 For a windowless visual review, the test binary also accepts
 `--snapshot output.png [width height [OSC|TABLE|MATRIX|MIX|FX [scale]]]`.
 It captures the actual editor, including its controls and cached metal layer.
-`--profile [width height]` reports what a frame costs instead. Both live in
-`tests/ForgeTestTools.cpp`, and neither is a CTest case.
+`--profile [width height]` reports what a frame costs instead, and
+`--render out.raw [blocks]` writes a deliberately busy patch as raw interleaved
+floats. None is a CTest case; they live in `tests/ForgeTestTools.cpp` and
+`tests/ForgeTestRender.cpp`.
+
+`--render` is how a change to the engine is shown to have changed nothing: hash
+its output, build the other revision beside this one, hash that, and compare.
+The same trick works on the panel with `--snapshot`, which writes a PNG of the
+real editor. Both were what settled that splitting these files was free.
 
 Every Forge source compiles against `src/ForgePch.h`, which holds JUCE and the
 standard library and deliberately no Forge header. It roughly halves what a

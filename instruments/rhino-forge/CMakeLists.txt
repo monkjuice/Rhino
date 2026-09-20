@@ -81,6 +81,10 @@ juce_add_binary_data(RhinoForgeAssets SOURCES
 # Named once so the two cannot drift: a file the tests do not know about is a
 # file nothing checks.
 set(forge_sources
+    core/ForgeVoiceParts.h
+    core/ForgeShapes.h
+    core/ForgeMatrix.h
+    core/ForgePatch.h
     core/ForgeCore.h
     core/ForgeFx.h
     core/ForgeFxDsp.h
@@ -109,6 +113,8 @@ set(forge_sources
     src/ForgePch.h
     src/ForgeProcessor.cpp
     src/ForgeProcessor.h
+    src/ForgeParameters.cpp
+    src/ForgeProcessorState.cpp
     src/ForgeEditor.cpp
     src/ForgeEditor.h
     src/ForgeEditorInternal.h
@@ -173,6 +179,7 @@ if (BUILD_TESTING)
         tests/ForgeTestSupport.h
         tests/ForgeTestSpectrum.cpp
         tests/ForgeTestSpectrum.h
+        tests/ForgeTestRender.cpp
         tests/ForgeTestTools.cpp
         tests/ForgeTestTools.h
         tests/ForgeTestsLayout.cpp

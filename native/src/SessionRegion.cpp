@@ -99,22 +99,39 @@ Session::ClipRegion Session::copyClipRegion(double startSeconds, double endSecon
 // Splitting at both edges first means the only question left is whether a whole
 // clip is inside the region, which is also what leaves a clip spanning the
 // region with a hole rather than losing it.
-bool Session::clearClipRegionInEdit(double startSeconds, double endSeconds, int firstTrack, int lastTrack)
+bool Session::clearClipRegionInEdit(double startSeconds, double endSeconds, int firstTrack, int lastTrack,
+                                    const std::vector<te::EditItemID>& keep)
 {
     const auto tracks = te::getAudioTracks(*edit);
     firstTrack = std::max(0, firstTrack);
     lastTrack = std::min(lastTrack, tracks.size() - 1);
+    const auto kept = [&keep](const te::Clip& clip)
+    {
+        return std::find(keep.begin(), keep.end(), clip.itemID) != keep.end();
+    };
     auto changed = false;
     for (int track = firstTrack; track <= lastTrack; ++track)
     {
         auto* clipTrack = tracks[track];
+        // A hidden starter placeholder goes whole rather than being split into
+        // two hidden fragments, neither of which anything could ever address.
+        std::vector<te::Clip*> hidden;
+        for (auto* clip : clipTrack->getClips())
+            if (clip != nullptr && !kept(*clip) && !shouldShowClipInArrangement(*clip)
+                && overlapsRegion(clip->getPosition().time, startSeconds, endSeconds))
+                hidden.push_back(clip);
+        for (auto* clip : hidden)
+        {
+            clip->removeFromParent();
+            changed = true;
+        }
         for (const auto edge : {startSeconds, endSeconds})
         {
             // Collected before anything is split: splitting inserts into the
             // array being walked.
             std::vector<te::Clip*> crossing;
             for (auto* clip : clipTrack->getClips())
-                if (clip != nullptr && crossesEdge(clip->getPosition().time, edge))
+                if (clip != nullptr && !kept(*clip) && crossesEdge(clip->getPosition().time, edge))
                     crossing.push_back(clip);
             for (auto* clip : crossing)
                 if (clipTrack->splitClip(*clip, tracktion::core::TimePosition::fromSeconds(edge)) != nullptr)
@@ -122,7 +139,7 @@ bool Session::clearClipRegionInEdit(double startSeconds, double endSeconds, int 
         }
         std::vector<te::Clip*> inside;
         for (auto* clip : clipTrack->getClips())
-            if (clip != nullptr && overlapsRegion(clip->getPosition().time, startSeconds, endSeconds))
+            if (clip != nullptr && !kept(*clip) && overlapsRegion(clip->getPosition().time, startSeconds, endSeconds))
                 inside.push_back(clip);
         for (auto* clip : inside)
         {
@@ -131,6 +148,23 @@ bool Session::clearClipRegionInEdit(double startSeconds, double endSeconds, int 
         }
     }
     return changed;
+}
+
+// The clip that just arrived wins the ground it landed on. Splitting at its
+// edges before deleting what is under it is what leaves the neighbours either
+// side intact: a clip dropped into the middle of a long one cuts a hole and
+// fills it, rather than replacing the whole thing.
+void Session::makeRoomForClip(te::Clip& winner, const std::vector<te::EditItemID>& alsoKeep)
+{
+    const auto tracks = te::getAudioTracks(*edit);
+    const auto track = tracks.indexOf(dynamic_cast<te::AudioTrack*>(winner.getClipTrack()));
+    if (track < 0)
+        return;
+    auto keep = alsoKeep;
+    keep.push_back(winner.itemID);
+    const auto range = winner.getPosition().time;
+    if (clearClipRegionInEdit(range.getStart().inSeconds(), range.getEnd().inSeconds(), track, track, keep))
+        repairPatternClip();
 }
 
 juce::Result Session::clearClipRegion(double startSeconds, double endSeconds, int firstTrack, int lastTrack)

@@ -81,6 +81,7 @@ juce::Result Session::importAudioAt(const juce::File& file, int trackIndex, doub
     if (clip == nullptr)
         return juce::Result::fail("The audio clip could not be added.");
     clip->setColour(juce::Colour(0xff4d6975));
+    makeRoomForClip(*clip);
     refreshLoop();
     markModified();
     sendSynchronousChangeMessage();

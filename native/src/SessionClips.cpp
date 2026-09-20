@@ -29,7 +29,8 @@ bool Session::shouldShowClipInArrangement(te::Clip& clip) const
         || midi->getSequence().getNumNotes() > 0;
 }
 
-juce::Result Session::editClip(te::EditItemID id, ClipGeometry next, ClipGesture gesture, int targetTrack)
+juce::Result Session::editClip(te::EditItemID id, ClipGeometry next, ClipGesture gesture, int targetTrack,
+                               const std::vector<te::EditItemID>& movingWith)
 {
     auto* clip = findClip(id);
     if (!clip) return juce::Result::fail("Select a clip first.");
@@ -91,6 +92,10 @@ juce::Result Session::editClip(te::EditItemID id, ClipGeometry next, ClipGesture
     clip->setPosition({{tracktion::core::TimePosition::fromSeconds(next.start),
                        tracktion::core::TimePosition::fromSeconds(next.end)},
                        tracktion::core::TimeDuration::fromSeconds(std::max(0.0, next.offset))});
+    // Whatever it landed on gives way, and the clips still travelling with it
+    // are spared: a run carried one beat to the right must not have its
+    // leading clip delete the one behind it.
+    makeRoomForClip(*clip, movingWith);
     refreshLoop();
     edit->getUndoManager().beginNewTransaction();
     markModified();

@@ -438,6 +438,9 @@ juce::Result Session::copySlotClipToArrangement(int track, int scene, double sta
     // the slot clip's loop is dropped in the copy.
     copy->setLoopRangeBeats({});
     copy->state.removeProperty(starterPlaceholderID, &edit->getUndoManager());
+    // It lands on a timeline that may already have something there, and the
+    // clip that arrives is the one that wins that ground.
+    makeRoomForClip(*copy);
     refreshLoop();
     edit->getUndoManager().beginNewTransaction();
     markModified();

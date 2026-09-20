@@ -316,7 +316,11 @@ public:
     juce::Result moveNotes(const std::vector<juce::ValueTree>&, double stepDelta, int pitchDelta);
     juce::Result redistributeNotes(const std::vector<juce::ValueTree>&, int divisions,
                                    std::vector<juce::ValueTree>& replacementStates);
-    juce::Result editClip(te::EditItemID, ClipGeometry, ClipGesture, int targetTrack = -1);
+    // movingWith names the other clips travelling in the same gesture, so a
+    // clip carried onto ground another selected clip is still vacating cannot
+    // delete it on the way past.
+    juce::Result editClip(te::EditItemID, ClipGeometry, ClipGesture, int targetTrack = -1,
+                          const std::vector<te::EditItemID>& movingWith = {});
     juce::Result splitClip(te::EditItemID, double splitTimeSeconds);
     juce::Result duplicateClip(te::EditItemID);
     void deleteClip(te::EditItemID);
@@ -476,7 +480,13 @@ private:
     };
     // SessionRegion.cpp - the region edit itself, without a transaction or a
     // notification, so paste can clear and insert inside one undo step.
-    bool clearClipRegionInEdit(double startSeconds, double endSeconds, int firstTrack, int lastTrack);
+    bool clearClipRegionInEdit(double startSeconds, double endSeconds, int firstTrack, int lastTrack,
+                               const std::vector<te::EditItemID>& keep = {});
+    // Two clips may never overlap on one track. A clip that has just been
+    // dropped, dragged or trimmed is the one that wins the span it now covers:
+    // the clips already there are split at its edges and the part underneath
+    // it is removed. This is the only place that rule lives.
+    void makeRoomForClip(te::Clip&, const std::vector<te::EditItemID>& alsoKeep = {});
     // Deleting clips can take the clip the note editor is pointed at. This puts
     // the editor back on a clip of track one, making a starter one if the track
     // has none left, and is what keeps `pattern()` safe to call.

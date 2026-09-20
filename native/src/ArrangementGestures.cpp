@@ -204,6 +204,10 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
         selected = clip.id;
         focus = Focus::clip;
     }
+    // Whatever the region was before - a span dragged out, or the rectangle a
+    // paste left behind - the gesture starting here is about these clips, so
+    // the region becomes theirs and travels with them.
+    setRegionFromSelectedClips();
     selectTrack(clip.track);
     if (clip.waveform == nullptr)
     {
@@ -373,13 +377,18 @@ void Arrangement::mouseUp(const juce::MouseEvent& event)
             });
             const auto timeDelta = preview.start - original.start;
             const auto trackDelta = previewTrack - originalTrack;
+            // Every clip in the gesture is named to every move, so one landing
+            // on ground another has not vacated yet cannot delete it.
+            std::vector<te::EditItemID> travelling;
+            for (const auto& move : moves) travelling.push_back(move.id);
             juce::Result result = juce::Result::ok();
             for (const auto& move : moves)
             {
                 const auto length = move.position.end - move.position.start;
                 result = session.editClip(move.id, {std::max(0.0, move.position.start + timeDelta),
                                                     std::max(0.0, move.position.start + timeDelta) + length,
-                                                    move.position.offset}, ClipGesture::move, move.track + trackDelta);
+                                                    move.position.offset}, ClipGesture::move,
+                                          move.track + trackDelta, travelling);
                 if (result.failed()) break;
             }
             if (result.failed() && status) status(result.getErrorMessage());

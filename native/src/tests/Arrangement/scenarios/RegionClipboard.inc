@@ -65,6 +65,26 @@
                     "The pasted clip keeps the length it was copied with");
             require(close(view.timeSelection.start, 8.0) && close(view.timeSelection.end, 9.0),
                     "Paste moves the region onto what it just pasted");
+            // A paste leaves the region describing the rectangle it pasted,
+            // which is a span of the timeline rather than one read off clips.
+            // Taking hold of the pasted clip is what makes it one again, so the
+            // highlight follows the drag instead of staying where it was.
+            {
+                auto* justPasted = clipAt(1, 8.0);
+                require(justPasted != nullptr, "The pasted clip is there to take hold of");
+                const auto pastedID = justPasted->itemID;
+                view.mouseDown(event({view.xFor(8.5), audioY}, {view.xFor(8.5), audioY}, false));
+                view.mouseDrag(event({view.xFor(8.5), audioY}, {view.xFor(11.5), audioY}, true));
+                require(close(view.displayedTimeSelection().start, 11.0),
+                        "The region follows a clip dragged straight after it was pasted");
+                view.mouseUp(event({view.xFor(8.5), audioY}, {view.xFor(11.5), audioY}, true));
+                require(close(session.findClip(pastedID)->getPosition().time.getStart().inSeconds(), 11.0)
+                        && close(view.timeSelection.start, 11.0),
+                        "And is still on it after the drop");
+                require(session.editClip(pastedID, {8.0, 9.0, 0.0}, ClipGesture::move).wasOk(),
+                        "Can put the pasted clip back");
+                view.sync();
+            }
 
             // The clipboard is a snapshot, not a pointer at a clip, so it
             // outlives the thing it was taken from - which is what makes cut
@@ -207,6 +227,86 @@
             require(close(view.timeSelection.start, 24.0) && close(view.timeSelection.end, 28.0)
                     && view.timeSelection.firstTrack == 0 && view.timeSelection.lastTrack == 1,
                     "The region after a paste is the whole rectangle that was pasted");
+
+            // Two clips may never share ground on one track. The clip that
+            // arrives wins the span it lands on, and the one underneath is
+            // split at its edges so the parts either side survive.
+            const auto beat = 60.0 / session.tempo();
+            const auto placeAt = [&](double startBeats, double lengthBeats)
+            {
+                require(session.importAudioAt(source.getFile(), 1, startBeats * beat + 40.0).wasOk(),
+                        "Can place an overlap fixture");
+                view.sync();
+                auto* placed = clipAt(1, startBeats * beat + 40.0);
+                require(placed != nullptr, "The overlap fixture is where it was asked for");
+                require(session.editClip(placed->itemID, {startBeats * beat + 40.0,
+                                                          (startBeats + lengthBeats) * beat + 40.0, 0.0},
+                                         ClipGesture::trimRight).wasOk(), "Can size an overlap fixture");
+                view.sync();
+                return placed->itemID;
+            };
+            const auto clearTrackOne = [&]
+            {
+                std::vector<te::EditItemID> made;
+                for (auto* candidate : te::getAudioTracks(*session.edit)[1]->getClips())
+                    if (candidate->getPosition().time.getStart().inSeconds() > 39.0)
+                        made.push_back(candidate->itemID);
+                for (const auto doomed : made) session.deleteClip(doomed);
+                view.sync();
+            };
+            const auto beatsOf = [&](double seconds) { return (seconds - 40.0) / beat; };
+            const auto clipStartsInBeats = [&]
+            {
+                std::vector<double> starts;
+                for (auto* candidate : te::getAudioTracks(*session.edit)[1]->getClips())
+                    if (candidate->getPosition().time.getStart().inSeconds() > 39.0)
+                        starts.push_back(beatsOf(candidate->getPosition().time.getStart().inSeconds()));
+                std::sort(starts.begin(), starts.end());
+                return starts;
+            };
+            const auto moveTo = [&](te::EditItemID target, double startBeats, double lengthBeats)
+            {
+                require(session.editClip(target, {startBeats * beat + 40.0,
+                                                  (startBeats + lengthBeats) * beat + 40.0, 0.0},
+                                         ClipGesture::move).wasOk(), "Can carry a clip onto another");
+                view.sync();
+            };
+
+            // One beat dropped on the second beat of an eight-beat clip: the
+            // beat before it stands alone, and the six after it stay together.
+            clearTrackOne();
+            juce::ignoreUnused(placeAt(0.0, 8.0));
+            const auto oneBeat = placeAt(12.0, 1.0);
+            moveTo(oneBeat, 1.0, 1.0);
+            require(clipStartsInBeats() == std::vector<double>({0.0, 1.0, 2.0}),
+                    "A clip dropped inside another splits it either side of itself");
+            require(close(clipAt(1, 40.0)->getPosition().time.getEnd().inSeconds(), beat + 40.0),
+                    "The part before the dropped clip ends where it begins");
+            require(close(clipAt(1, 2.0 * beat + 40.0)->getPosition().time.getEnd().inSeconds(), 8.0 * beat + 40.0),
+                    "The part after it stays one clip to the original end");
+
+            // Three beats landing on the last two of a five-beat clip: three
+            // beats of the original survive, and the newcomer keeps all three.
+            clearTrackOne();
+            juce::ignoreUnused(placeAt(0.0, 5.0));
+            const auto threeBeats = placeAt(12.0, 3.0);
+            moveTo(threeBeats, 3.0, 3.0);
+            require(clipStartsInBeats() == std::vector<double>({0.0, 3.0}),
+                    "A clip overlapping the tail of another trims it rather than splitting it");
+            require(close(clipAt(1, 40.0)->getPosition().time.getEnd().inSeconds(), 3.0 * beat + 40.0),
+                    "The clip underneath is trimmed back to where the newcomer starts");
+            require(close(session.findClip(threeBeats)->getPosition().time.getEnd().inSeconds(), 6.0 * beat + 40.0),
+                    "The clip that arrived keeps its whole length");
+
+            // Two beats in the middle of an eight-beat clip: a hole is cut and
+            // filled, leaving three clips.
+            clearTrackOne();
+            juce::ignoreUnused(placeAt(0.0, 8.0));
+            const auto twoBeats = placeAt(12.0, 2.0);
+            moveTo(twoBeats, 3.0, 2.0);
+            require(clipStartsInBeats() == std::vector<double>({0.0, 3.0, 5.0}),
+                    "A clip dropped in the middle of another leaves one clip either side of it");
+            clearTrackOne();
 
             // Everything this scenario made lives past three seconds, so the
             // clean-up is one sweep and the counts prove it worked.

@@ -66,6 +66,7 @@ juce::Result Session::insertPatternPreset(PatternPreset preset, int trackIndex, 
         return juce::Result::fail("The pattern clip could not be added.");
     clip->setColour(presetColour(preset));
     fillMidiClip(*clip, data, edit->getUndoManager());
+    makeRoomForClip(*clip);
     refreshLoop();
     markModified();
     edit->getUndoManager().beginNewTransaction();

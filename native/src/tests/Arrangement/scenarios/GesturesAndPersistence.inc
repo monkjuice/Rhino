@@ -114,10 +114,20 @@
         const auto early = output.getRMSLevel(0, 2400, 4800);
         const auto late = output.getRMSLevel(0, 14400, 4800);
         require(early > 0.01f && late > early * 4.0f, "Rendered source window must match the visible trim");
-        const auto audioClipsBeforeSample = te::getAudioTracks(*session.edit)[1]->getClips().size();
+        // The whistle is longer than the clip already on that lane and lands
+        // over the whole of it. Nothing on a track may overlap anything else
+        // on it, and the clip that arrives is the one that wins, so the one
+        // underneath goes rather than being buried.
+        require(te::getAudioTracks(*session.edit)[1]->getClips().size() == 1, "One clip on the audio lane to cover");
         require(view.applyBrowserDrop("rhino-browser:sample:Whistle", 1, 0.5).wasOk(),
                 "Browser audio sample drop imports a whistle WAV");
-        require(te::getAudioTracks(*session.edit)[1]->getClips().size() == audioClipsBeforeSample + 1,
+        require(te::getAudioTracks(*session.edit)[1]->getClips().size() == 1,
+                "A dropped sample replaces a clip it covers completely rather than stacking on it");
+        auto* droppedSample = te::getAudioTracks(*session.edit)[1]->getClips().getFirst();
+        require(session.findAudioClip(droppedSample->itemID) != nullptr,
                 "Dropped browser sample creates an audio clip rather than MIDI notes");
+        require(close(droppedSample->getPosition().time.getStart().inSeconds(), 0.5),
+                "The dropped sample starts where it was dropped");
+        require(session.findAudioClip(id) == nullptr, "The clip it covered is gone rather than hidden under it");
         view.setLookAndFeel(nullptr);
         session.releaseAudioDevice();

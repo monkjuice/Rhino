@@ -89,17 +89,36 @@ set(forge_sources
     core/ForgeWavetable.h
     ui/ForgeChrome.h
     ui/ForgeFxDisplay.h
+    ui/ForgeModule.h
+    ui/ForgeModules.h
+    ui/ForgePlacement.h
+    ui/ForgeControlBlock.h
     ui/ForgeLayout.h
     ui/ForgePanels.h
     ui/ForgeTablePanel.h
     ui/ForgeTooltips.h
     ui/ForgeType.h
+    ui/ForgeStyle.h
+    ui/ForgeLookAndFeel.h
+    ui/ForgeDisplays.h
+    ui/ForgeControls.h
+    ui/ForgeFxVisuals.h
+    ui/ForgeEnvelopeVisuals.h
+    ui/ForgeFilterVisuals.h
     ui/ForgeVisuals.h
     src/ForgePch.h
     src/ForgeProcessor.cpp
     src/ForgeProcessor.h
     src/ForgeEditor.cpp
-    src/ForgeEditor.h)
+    src/ForgeEditor.h
+    src/ForgeEditorInternal.h
+    src/ForgeEditorFx.cpp
+    src/ForgeEditorInput.cpp
+    src/ForgeEditorLayout.cpp
+    src/ForgeEditorModulation.cpp
+    src/ForgeEditorPages.cpp
+    src/ForgeEditorPaint.cpp
+    src/ForgeEditorWarp.cpp)
 
 target_sources(RhinoForge PRIVATE ${forge_sources})
 forge_use_precompiled_header(RhinoForge)

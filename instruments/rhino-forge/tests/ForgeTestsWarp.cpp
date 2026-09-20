@@ -2,7 +2,7 @@
 // says it is, that each one changes the wave in the way its family means, and
 // that the cross-modulation sources reach the carrier.
 #include "ForgeTestSupport.h"
-#include "../ui/ForgeLayout.h"
+#include "../ui/ForgeModules.h"
 #include "../ui/ForgeTooltips.h"
 
 namespace rhino::forge::tests

@@ -1,7 +1,8 @@
 #pragma once
 
 #include "../core/ForgeFxDsp.h"
-#include "ForgeVisuals.h"
+#include "ForgeFilterVisuals.h"
+#include "ForgeFxVisuals.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <cmath>

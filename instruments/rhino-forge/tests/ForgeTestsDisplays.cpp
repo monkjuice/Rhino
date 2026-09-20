@@ -3,8 +3,10 @@
 // the engine runs, so a display cannot claim one thing while the voice does
 // another - these checks are what holds that.
 #include "ForgeTestSupport.h"
-#include "../ui/ForgeLayout.h"
-#include "../ui/ForgeVisuals.h"
+#include "../ui/ForgePlacement.h"
+#include "../ui/ForgeControls.h"
+#include "../ui/ForgeEnvelopeVisuals.h"
+#include "../ui/ForgeFilterVisuals.h"
 
 namespace rhino::forge::tests
 {

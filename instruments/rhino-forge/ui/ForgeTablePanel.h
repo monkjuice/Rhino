@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ForgeVisuals.h"
+#include "ForgeControls.h"
 #include "../core/ForgeTableStore.h"
 #include <functional>
 

@@ -4,7 +4,7 @@
 #include "../core/ForgeFxDsp.h"
 #include "../ui/ForgeFxDisplay.h"
 #include "../ui/ForgeLayout.h"
-#include "../ui/ForgeVisuals.h"
+#include "../ui/ForgeFxVisuals.h"
 
 namespace rhino::forge::tests
 {

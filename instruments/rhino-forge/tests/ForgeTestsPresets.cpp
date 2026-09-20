@@ -1,6 +1,6 @@
 ﻿// Saving, loading, and opening a preset written before the control set moved.
 #include "ForgeTestSupport.h"
-#include "../ui/ForgeVisuals.h"
+#include "../ui/ForgeStyle.h"
 
 namespace rhino::forge::tests
 {

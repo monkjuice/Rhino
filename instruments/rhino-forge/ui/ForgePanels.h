@@ -1,7 +1,7 @@
 #pragma once
 
 #include "ForgeChrome.h"
-#include "ForgeLayout.h"
+#include "ForgePlacement.h"
 #include "ForgeType.h"
 
 // Static chassis furniture. Editor caches this layer at the display's pixel

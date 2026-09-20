@@ -207,11 +207,23 @@ which decisions are already settled. Read it before changing the synth.
 | `core/ForgeFxDsp.h` | The racks, rendered. A slot carries every type's state, sized once at `prepare`, because a type changes while audio is running. |
 | `ui/ForgeFxDisplay.h` | What each effect draws of itself, from the same functions that render it. |
 | `src/ForgeProcessor.*` | Parameters, host automation, state, preset files. |
-| `ui/ForgeLayout.h` | What modules exist, what each contains, and where it sits. Pure geometry and declaration. |
-| `ui/ForgeVisuals.h` | The knob look and the drawing primitives. Decides nothing about placement. |
+| `ui/ForgeLayout.h` | What modules exist, what each contains, and where it sits. Pure geometry and declaration; four headers, listed at the top of it. |
+| `ui/ForgeVisuals.h` | The knob look and the drawing primitives. Decides nothing about placement; seven headers, listed at the top of it. |
 | `ui/ForgePanels.h` | Static metal housings, chassis rails, hardware and decorative lettering. |
-| `src/ForgeEditor.*` | Walks the declared modules and builds the components. |
+| `src/ForgeEditor.*` | Walks the declared modules and builds the components. One class across eight files, by what each does. |
 | `tests/` | One file per area, one CTest case each. See **Tests** below. |
+
+Both `ForgeLayout.h` and `ForgeVisuals.h` are now lists of the headers they
+were split into, so every existing include still works and nothing had to
+move. Include the narrowest one that answers the question — a test that draws
+nothing, or a header that only needs to know what a `Module` is, should not be
+pulling in every knob look Forge has.
+
+`src/ForgeEditor*.cpp` are one `Editor` defined across several translation
+units, the way `Session` and `Arrangement` already are in the DAW: no header
+change, no call site change, and a new file needs only a line in
+`CMakeLists.txt`. `ForgeEditorInternal.h` carries what used to be the
+anonymous namespace and is private to those files.
 
 Adding a control means declaring the parameter in `ForgeProcessor.cpp` and
 naming it in a module in `ForgeLayout.h`. The layout test fails if the two

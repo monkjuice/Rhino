@@ -947,19 +947,82 @@ void Editor::applyPage()
     repaint();
 }
 
+juce::Colour Editor::accentOf(const ui::Module& module) const
+{
+    if (module.display == ui::Display::oscillator)
+        return ui::panelColourOf(ui::panelColourFrom(processor.panelColour(module.id)));
+    return ui::accentFor(module);
+}
+
+void Editor::showPanelColourMenu(const ui::Module& module)
+{
+    auto menu = ui::panelColourMenu(processor.panelColour(module.id),
+                                    juce::String(module.title) + " colour");
+    const auto id = module.id;
+    const auto safe = juce::Component::SafePointer<Editor>(this);
+    menu.showMenuAsync(juce::PopupMenu::Options().withMinimumWidth(150),
+                       [safe, id] (int chosen)
+                       {
+                           if (safe == nullptr || chosen <= 0) return;
+                           safe->processor.setPanelColour(id, chosen - 1);
+                           safe->applyPanelColours();
+                       });
+}
+
+// Pushes each module's colour out to everything inside it. The plate and the
+// tube are drawn from accentOf on the next repaint, but a control holds its
+// colour as component state, so those have to be told.
+void Editor::applyPanelColours()
+{
+    for (auto& module : moduleUis)
+    {
+        const auto& descriptor = *module.descriptor;
+        if (descriptor.display != ui::Display::oscillator) continue;
+        const auto accent = accentOf(descriptor);
+
+        if (module.enable != nullptr)
+        {
+            module.enable->accent = accent;
+            module.enable->repaint();
+        }
+        for (auto& held : module.controls)
+        {
+            held->slider.setColour(juce::Slider::rotarySliderFillColourId, accent);
+            held->slider.setColour(juce::Slider::thumbColourId, accent);
+            if (held->chip != nullptr) held->chip->accent = accent;
+            if (held->rocker != nullptr) held->rocker->accent = accent;
+            if (held->waves != nullptr) held->waves->accent = accent;
+            if (held->selector != nullptr)
+            {
+                held->selector->accent = accent;
+                held->selector->repaint();
+            }
+        }
+        for (auto& card : module.bankButtons) card->accent = accent;
+    }
+    // The plates are in the cached layer, so this is what actually redraws
+    // them: the key carries every module's colour and has just changed.
+    repaint();
+}
+
 void Editor::buildModules()
 {
     for (const auto& descriptor : ui::modules())
     {
         ModuleUi module;
         module.descriptor = &descriptor;
-        const auto accent = ui::accentFor(descriptor);
+        const auto accent = accentOf(descriptor);
 
         if (descriptor.enableId != nullptr)
         {
             module.enable = std::make_unique<ui::EnableLed>();
             module.enable->accent = accent;
             module.enable->setTooltip(ui::tooltipFor(descriptor.enableId));
+            if (descriptor.display == ui::Display::oscillator)
+            {
+                const auto* held = &descriptor;
+                module.enable->onColourMenu = [this, held] { showPanelColourMenu(*held); };
+            }
             // Repaint the whole panel: switching a module off dims its shell,
             // its display and every knob inside it, not just the dot.
             module.enable->onClick = [this] { applyEnableStates(); repaint(); };
@@ -1244,7 +1307,7 @@ void Editor::buildBankButtons()
     {
         const auto banks = ui::bankCount(*module.descriptor);
         if (banks <= 1) continue;
-        const auto accent = ui::accentFor(*module.descriptor);
+        const auto accent = accentOf(*module.descriptor);
         // A bank is usually one of several numbered copies of one thing — ENV 3,
         // LFO 5 — and the card says the number. The rack's three banks are not
         // copies: they are the main output and the two busses, and a card
@@ -1438,7 +1501,13 @@ juce::String Editor::chromeKey(float scale) const
     // A module that has been switched off is drawn dimmer, and one the tab is
     // hiding is not drawn at all, so both belong in the key.
     for (const auto& module : moduleUis)
+    {
         key << (!moduleShown(*module.descriptor) ? '-' : module.on() ? '1' : '0');
+        // A plate is drawn in its module's colour, so a colour that has been
+        // changed has to throw the cached layer away like anything else.
+        if (module.descriptor->display == ui::Display::oscillator)
+            key << processor.panelColour(module.descriptor->id);
+    }
     return key;
 }
 
@@ -1450,7 +1519,7 @@ void Editor::paintChrome(juce::Graphics& g)
         const auto& descriptor = *module.descriptor;
         if (!moduleShown(descriptor)) continue;
         ui::drawModuleShell(g, moduleAreaFor(descriptor), descriptor, module.on(),
-                            ui::plateCode(descriptor, page));
+                            accentOf(descriptor), ui::plateCode(descriptor, page));
     }
 }
 
@@ -1503,7 +1572,7 @@ void Editor::paint(juce::Graphics& g)
 
         const auto display = ui::displayBounds(area, descriptor);
         if (display.isEmpty()) continue;
-        const auto accent = ui::accentFor(descriptor);
+        const auto accent = accentOf(descriptor);
         // An oscillator shows its wave on a picture tube; the other displays
         // stay flat wells, which is what keeps the tubes reading as screens.
         if (descriptor.display == ui::Display::oscillator)
@@ -1615,7 +1684,7 @@ bool Editor::slotIsLive(int slot) const
 // the gutter, against a band on alternate rows.
 void Editor::paintTable(juce::Graphics& g, juce::Rectangle<int> area, const ui::Module& descriptor)
 {
-    const auto accent = ui::accentFor(descriptor);
+    const auto accent = accentOf(descriptor);
     const auto titles = ui::columnTitleBounds(area, descriptor);
 
     ui::drawColumnTitle(g, titles.withWidth(descriptor.rowGutter), "#");
@@ -2347,6 +2416,22 @@ void Editor::timerCallback()
             }
 
     applyEnableStates();
+
+    // A panel colour can move without this editor being touched: a preset
+    // loaded, a project opened, a second editor on the same plugin. Noticed
+    // the same way a replaced wavetable is — by comparing against what is on
+    // screen — so the controls are recoloured only when one has actually
+    // changed rather than every tick.
+    juce::String colours;
+    for (const auto& module : moduleUis)
+        if (module.descriptor->display == ui::Display::oscillator)
+            colours << processor.panelColour(module.descriptor->id) << ',';
+    if (colours != panelColoursShown)
+    {
+        panelColoursShown = colours;
+        applyPanelColours();
+    }
+
     // A warp mode moves the same way a slot's type does, and from the same
     // places, so the field that reports it is refreshed on the same tick.
     refreshWarpFields();

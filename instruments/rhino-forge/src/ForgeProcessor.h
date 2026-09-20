@@ -98,6 +98,16 @@ public:
     // Which type a slot holds, and therefore what its controls are.
     const FxTypeInfo& fxSlotType(int rack, int slot) const;
 
+    // The colour a module's panel is drawn in, as a PanelColour's index.
+    //
+    // Not a parameter. Nothing about it is heard, nothing automates it, and a
+    // host that found it in the automation list would be offering to draw a
+    // curve that sweeps a plate from red to green. It rides on the state
+    // tree's own properties instead, which is what carries it into a preset
+    // and into a project without it becoming something a DAW can sequence.
+    int panelColour(const juce::String& moduleId) const;
+    void setPanelColour(const juce::String& moduleId, int choice);
+
 private:
     // Not static: POSITION's readout closes over this Processor so it can name
     // the frame it is on in whichever table the oscillator is reading, and a

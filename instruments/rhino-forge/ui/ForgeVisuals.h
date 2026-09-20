@@ -122,6 +122,82 @@ inline juce::Colour accentFor(const Module& module)
     return module.violet ? signalViolet : electricBlue;
 }
 
+// --- An oscillator's own colour ----------------------------------------------
+//
+// Every other module is the colour it was declared: the signal path is blue and
+// the modulators are violet. An oscillator is the exception — it carries a
+// colour you choose from its LED, so the two of them can be told apart at a
+// glance on a patch that has both running, which is what the colour is for.
+//
+// Four, not a wheel. A picker would let you land on something that cannot be
+// read against this chassis or told apart from the violet the modulators
+// already own; these four are each unmistakable at a tick mark's width, which
+// is the size the colour actually has to work at.
+enum class PanelColour { red, orange, green, blue };
+
+inline constexpr int panelColourCount = 4;
+
+// Where a new oscillator starts.
+inline constexpr PanelColour defaultPanelColour = PanelColour::green;
+
+inline const char* panelColourName(PanelColour choice)
+{
+    switch (choice)
+    {
+        case PanelColour::red:    return "Red";
+        case PanelColour::orange: return "Orange";
+        case PanelColour::green:  return "Green";
+        case PanelColour::blue:   return "Blue";
+    }
+    return "";
+}
+
+// Lifted off pure hues. A saturated red glows brown on a near-black chassis and
+// a pure green reads as an indicator lamp rather than as a panel colour, so
+// each of these is pulled toward white until it holds up both as a two-pixel
+// LED and as a trace across a tube.
+inline juce::Colour panelColourOf(PanelColour choice)
+{
+    switch (choice)
+    {
+        case PanelColour::red:    return juce::Colour(0xffff5c52);
+        case PanelColour::orange: return juce::Colour(0xffffa235);
+        case PanelColour::green:  return juce::Colour(0xff3ddc84);
+        // The blue the rest of the panel is drawn in, so an oscillator set to
+        // it is the panel's own colour rather than a fifth one close to it.
+        case PanelColour::blue:   return electricBlue;
+    }
+    return electricBlue;
+}
+
+// A stored choice, which may have come from a preset written by a build that
+// knew a different number of colours.
+inline PanelColour panelColourFrom(int stored)
+{
+    return static_cast<PanelColour>(juce::jlimit(0, panelColourCount - 1, stored));
+}
+
+// The menu a module's LED opens. Built here rather than inside the editor so a
+// test can read back what it offers: whether every colour is on it, whether the
+// one in use is the one ticked, and whether each row carries its swatch. Item
+// IDs are one-based, because a PopupMenu reports nothing chosen as zero.
+inline juce::PopupMenu panelColourMenu(int current, const juce::String& title)
+{
+    juce::PopupMenu menu;
+    if (title.isNotEmpty()) menu.addSectionHeader(title);
+    for (int choice = 0; choice < panelColourCount; ++choice)
+    {
+        juce::PopupMenu::Item item(panelColourName(panelColourFrom(choice)));
+        item.itemID = choice + 1;
+        item.isTicked = choice == current;
+        // The swatch is the point of the menu. The names are only there because
+        // a colour on its own is not something you can be sure you clicked.
+        item.colour = panelColourOf(panelColourFrom(choice));
+        menu.addItem(item);
+    }
+    return menu;
+}
+
 class LookAndFeel final : public juce::LookAndFeel_V4
 {
 public:
@@ -173,6 +249,32 @@ public:
 
         g.setColour((active ? accent : line).withAlpha(enabled ? 1.0f : 0.35f));
         g.drawRoundedRectangle(area, 3.0f, 1.0f);
+
+        // A dot on the top edge at the value's place in its range. The number
+        // says what the value is and the dot says where that is, which is the
+        // one thing a bare numeric field makes you work out for yourself —
+        // whether +7 st is most of the way up or barely off the bottom.
+        //
+        // Only on a field showing a number. The panel's other steppers show a
+        // name, and a position along a range means nothing for one of those, so
+        // the reading itself is what decides: a digit or a sign gets the tick.
+        const auto reading = slider.getTextFromValue(slider.getValue());
+        const auto numeric = reading.isNotEmpty()
+                             && (juce::CharacterFunctions::isDigit(reading[0])
+                                 || reading[0] == '-' || reading[0] == '+');
+        if (!horizontal && numeric)
+        {
+            const auto range = slider.getRange();
+            if (range.getLength() > 0.0)
+            {
+                const auto at = juce::jlimit(0.0, 1.0, (slider.getValue() - range.getStart())
+                                                           / range.getLength());
+                const auto x = area.getX() + 3.0f
+                               + static_cast<float>(at) * (area.getWidth() - 6.0f);
+                g.setColour(accent.withAlpha(enabled ? 0.9f : 0.25f));
+                g.fillEllipse(juce::Rectangle<float>(3.6f, 3.6f).withCentre({x, area.getY()}));
+            }
+        }
 
         drawModBar(g, area, slider, enabled);
 
@@ -304,51 +406,67 @@ public:
                                                 -std::cos(polarAngle) * distance);
         };
 
+        // A knob is two parts, not one disc: a dark collar with the scale
+        // engraved into it, and a smaller cap sitting proud in the middle. That
+        // separation is the whole of why a machined knob reads as machined —
+        // one disc with a rim around it reads as a circle of paint however well
+        // the gradient is chosen, which is what the first pass at this was.
+        //
+        // The collar's outer edge stays where the body always was, at 0.81 of
+        // the radius, because the modulation ring outside it and the band the
+        // ring is grabbed in are measured against that. Everything new here
+        // happens inside it.
+        const auto body = knob.reduced(radius * 0.19f);
+
+        // The shadow the whole knob throws onto the plate.
+        g.setColour(juce::Colours::black.withAlpha(enabled ? 0.45f : 0.16f));
+        g.fillEllipse(body.translated(0.0f, 2.0f).expanded(1.6f));
+
+        // The collar.
+        g.setColour(juce::Colour(0xff090b11).withAlpha(enabled ? 1.0f : 0.55f));
+        g.fillEllipse(body.expanded(1.0f));
+        juce::ColourGradient collar(plateEdgeLit.withAlpha(enabled ? 0.5f : 0.18f),
+                                    body.getCentreX(), body.getY(),
+                                    juce::Colours::black.withAlpha(0.0f),
+                                    body.getCentreX(), body.getCentreY(), false);
+        g.setGradientFill(collar);
+        g.drawEllipse(body.reduced(0.4f), 1.2f);
+
+        // The scale, engraved into the collar rather than printed on the plate
+        // around it. Every third mark is longer, so the travel can be read in
+        // thirds without counting.
         juce::Path ticks;
         for (int i = 0; i <= 18; ++i)
         {
             const auto tickAngle = juce::jmap(static_cast<float>(i) / 18.0f, startAngle, endAngle);
-            const auto inner = polar(radius * 0.82f, tickAngle);
-            const auto outer = polar(radius * (i % 3 == 0 ? 0.98f : 0.93f), tickAngle);
-            ticks.startNewSubPath(inner); ticks.lineTo(outer);
+            const auto inner = polar(radius * (i % 3 == 0 ? 0.64f : 0.68f), tickAngle);
+            ticks.startNewSubPath(inner); ticks.lineTo(polar(radius * 0.76f, tickAngle));
         }
-        g.setColour(line.withAlpha(enabled ? 1.0f : 0.4f));
+        g.setColour(plateEdgeLit.withAlpha(enabled ? 0.55f : 0.18f));
         g.strokePath(ticks, juce::PathStrokeType(1.0f));
 
-        auto body = knob.reduced(radius * 0.19f);
-
-        // A black ring all the way round the body, and the shadow it throws
-        // down onto the plate. The ring is what the rim highlight is read
-        // against -- without it the lit edge has nothing to be lit against and
-        // the knob flattens into a disc printed on the panel.
-        g.setColour(juce::Colours::black.withAlpha(enabled ? 0.9f : 0.4f));
-        g.fillEllipse(body.expanded(1.4f));
-        g.setColour(juce::Colours::black.withAlpha(enabled ? 0.4f : 0.15f));
-        g.fillEllipse(body.translated(0.0f, 2.0f).expanded(1.4f));
-
-        // A machined rim around an anodised cap. The rim is lit along its top
-        // edge and black along its foot -- the same bevel a plate has, bent
-        // into a circle -- and the cap inside it is domed rather than flat.
-        juce::ColourGradient rim(juce::Colour(0xff7b8397).withAlpha(enabled ? 1.0f : 0.4f),
-                                 body.getCentreX(), body.getY(),
-                                 juce::Colour(0xff05070e).withAlpha(enabled ? 1.0f : 0.4f),
-                                 body.getCentreX(), body.getBottom(), false);
+        // The cap. A machined rim lit along its top edge and black along its
+        // foot — the same bevel a plate has, bent into a circle — with an
+        // anodised dome inside it.
+        const auto cap = body.reduced(body.getWidth() * 0.5f - radius * 0.52f);
+        juce::ColourGradient rim(juce::Colour(0xff858da1).withAlpha(enabled ? 1.0f : 0.4f),
+                                 cap.getCentreX(), cap.getY(),
+                                 juce::Colour(0xff04060c).withAlpha(enabled ? 1.0f : 0.4f),
+                                 cap.getCentreX(), cap.getBottom(), false);
         g.setGradientFill(rim);
-        g.fillEllipse(body);
+        g.fillEllipse(cap.expanded(juce::jmax(2.2f, radius * 0.1f)));
 
-        const auto cap = body.reduced(juce::jmax(1.8f, radius * 0.13f));
-        juce::ColourGradient dome(juce::Colour(0xff3b4155), cap.getX() + cap.getWidth() * 0.28f,
+        juce::ColourGradient dome(juce::Colour(0xff32363f), cap.getX() + cap.getWidth() * 0.28f,
                                   cap.getY() + cap.getHeight() * 0.18f,
-                                  juce::Colour(0xff0d1019), cap.getRight(), cap.getBottom(), true);
-        dome.addColour(0.55, juce::Colour(0xff1c2130));
+                                  juce::Colour(0xff0a0c10), cap.getRight(), cap.getBottom(), true);
+        dome.addColour(0.55, juce::Colour(0xff171a21));
         g.setGradientFill(dome);
         g.fillEllipse(cap);
 
         // The specular: a sliver of the lamp above the desk, across the top of
-        // the dome. Clipped to the cap so it cannot spill over the rim.
-        // Sized to sit inside the cap rather than clipped to it. A clip push
-        // per knob per frame measured at seven points of one core on its own,
-        // and an ellipse that already fits needs no clip to stay inside.
+        // the dome. Sized to sit inside the cap rather than clipped to it — a
+        // clip push per knob per frame measured at seven points of one core on
+        // its own, and an ellipse that already fits needs no clip.
         {
             const auto gloss = cap.reduced(cap.getWidth() * 0.16f, cap.getHeight() * 0.3f)
                                   .translated(0.0f, -cap.getHeight() * 0.16f);
@@ -358,6 +476,23 @@ public:
                                        gloss.getCentreX(), gloss.getBottom(), false);
             g.setGradientFill(sheen);
             g.fillEllipse(gloss);
+        }
+
+        // The one hard highlight on the knob: a crisp line along the cap's top
+        // edge. Stroked with a gradient rather than a flat colour so it is
+        // brightest at twelve o'clock and gone by the sides, which is where the
+        // light on this panel comes from.
+        {
+            juce::Path crown;
+            crown.addCentredArc(centre.x, centre.y, cap.getWidth() * 0.5f, cap.getHeight() * 0.5f,
+                                0.0f, -juce::MathConstants<float>::halfPi,
+                                juce::MathConstants<float>::halfPi, true);
+            juce::ColourGradient light(juce::Colours::white.withAlpha(enabled ? 0.45f : 0.12f),
+                                       cap.getCentreX(), cap.getY(),
+                                       juce::Colours::white.withAlpha(0.0f),
+                                       cap.getCentreX(), cap.getCentreY(), false);
+            g.setGradientFill(light);
+            g.strokePath(crown, juce::PathStrokeType(1.3f));
         }
 
         // One lit LED where the pointer aims, rather than a strip filled from the
@@ -425,17 +560,21 @@ public:
         // cut into the cap rather than printed on it: a dark line a pixel below
         // the light one is the whole of that, and it is what stops the pointer
         // looking like a sticker on a dome.
+        // The indicator, cut into the cap and stopping inside it — the lit mark
+        // out on the scale is what says where the value is, and the line is
+        // what lets the angle be judged from across the panel. Nothing is drawn
+        // at the centre: the reference has no mark there, and with an LED
+        // already lit out on the collar a second accent dot in the middle was
+        // the knob saying the same thing twice.
         juce::Path pointer;
-        pointer.startNewSubPath(centre);
-        pointer.lineTo(polar(radius * 0.62f, angle));
+        pointer.startNewSubPath(polar(radius * 0.1f, angle));
+        pointer.lineTo(polar(radius * 0.44f, angle));
         const auto stroke = juce::PathStrokeType(2.2f, juce::PathStrokeType::curved,
                                                  juce::PathStrokeType::rounded);
         g.setColour(juce::Colours::black.withAlpha(enabled ? 0.6f : 0.2f));
         g.strokePath(pointer, stroke, juce::AffineTransform::translation(0.0f, 1.3f));
         g.setColour(text.withAlpha(enabled ? 1.0f : 0.35f));
         g.strokePath(pointer, stroke);
-        g.setColour(accent.withAlpha(enabled ? 1.0f : 0.3f));
-        g.fillEllipse(juce::Rectangle<float>(5.0f, 5.0f).withCentre(centre));
     }
 };
 
@@ -615,6 +754,30 @@ public:
 
     juce::Colour accent = electricBlue;
 
+    // Set only on the modules that have a colour to choose. Right-clicking the
+    // LED is how an oscillator's panel colour is set: the LED is already the
+    // module's identity on the panel — the one thing wearing its colour at all
+    // times — so it is where you would go looking to change it.
+    std::function<void()> onColourMenu;
+
+    // juce::Button triggers on any mouse button, so the menu gesture has to be
+    // taken out of both halves of the click or the right-click would toggle the
+    // module off on its way to opening the menu. The flag rather than a second
+    // test of the modifiers, because what is down at the release is not
+    // reliably what was down at the press.
+    void mouseDown(const juce::MouseEvent& event) override
+    {
+        menuGesture = event.mods.isPopupMenu() && onColourMenu != nullptr;
+        if (menuGesture) { onColourMenu(); return; }
+        juce::Button::mouseDown(event);
+    }
+
+    void mouseUp(const juce::MouseEvent& event) override
+    {
+        if (menuGesture) { menuGesture = false; return; }
+        juce::Button::mouseUp(event);
+    }
+
     void paintButton(juce::Graphics& g, bool highlighted, bool) override
     {
         const auto area = getLocalBounds().toFloat().reduced(getWidth() * 0.3f);
@@ -630,6 +793,9 @@ public:
                        : mutedText.withAlpha(highlighted ? 0.85f : 0.45f));
         g.drawEllipse(area, 1.0f);
     }
+
+private:
+    bool menuGesture = false;
 };
 
 // The tag beside a source that you drag onto a knob. It is deliberately not
@@ -1769,7 +1935,17 @@ inline void drawCrtScreen(juce::Graphics& g, juce::Rectangle<int> well,
         for (auto y = face.getY(); y < face.getBottom(); y += 3.0f)
             g.fillRect(face.getX(), y, face.getWidth(), 1.0f);
 
-        // The zero axis, as faint as a graticule etched on the glass.
+        // The graticule, as faint as one etched on the glass: six divisions
+        // across and quarters down. It is what makes the trace read as
+        // measured rather than drawn, and it is what the corner marks imply.
+        g.setColour(phosphor.withAlpha(0.06f * alpha));
+        for (int division = 1; division < 6; ++division)
+            g.fillRect(face.getX() + face.getWidth() * (float) division / 6.0f, face.getY(),
+                       1.0f, face.getHeight());
+        for (const auto share : {0.25f, 0.75f})
+            g.fillRect(face.getX(), face.getY() + face.getHeight() * share, face.getWidth(), 1.0f);
+
+        // The zero axis, brighter than the rest of the graticule.
         g.setColour(phosphor.withAlpha(0.16f * alpha));
         g.fillRect(face.getX() + 4.0f, cy, face.getWidth() - 8.0f, 1.0f);
 
@@ -2508,10 +2684,9 @@ inline void drawModuleDetail(juce::Graphics& g, juce::Rectangle<int> area, const
 }
 
 inline void drawModuleShell(juce::Graphics& g, juce::Rectangle<int> area, const Module& module, bool on,
-                            const juce::String& code = {})
+                            juce::Colour accent, const juce::String& code = {})
 {
     const auto box = area.toFloat();
-    const auto accent = accentFor(module);
     const auto alpha = on ? 1.0f : 0.45f;
     const auto cut = juce::jmax(0.0f, juce::jmin(plateCut, box.getWidth() * 0.5f,
                                                  box.getHeight() * 0.5f));
@@ -2523,19 +2698,25 @@ inline void drawModuleShell(juce::Graphics& g, juce::Rectangle<int> area, const 
     const auto capWidth = box.getWidth() - cut * 2.0f;
     if (capWidth > 0.0f)
     {
+        // Under the milled lip, not on top of it. The reference's plate edge is
+        // bare metal all the way round; an accent painted along the very top
+        // sat on the brightest part of the bevel and won, so the plates read as
+        // cards with a coloured border instead of as metal. Set a couple of
+        // pixels in, it says which module this is without taking the edge.
         const auto capLeft = box.getX() + cut;
-        // A wash under the line, so the accent looks like light coming off the
-        // edge rather than a stripe painted along it.
-        juce::ColourGradient wash(accent.withAlpha(0.16f * alpha), capLeft, box.getY(),
-                                  accent.withAlpha(0.0f), capLeft, box.getY() + 9.0f, false);
+        const auto top = box.getY() + 4.0f;
+        juce::ColourGradient wash(accent.withAlpha(0.13f * alpha), capLeft, top,
+                                  accent.withAlpha(0.0f), capLeft, top + 8.0f, false);
         g.setGradientFill(wash);
-        g.fillRect(capLeft, box.getY() + 1.0f, capWidth, 9.0f);
-        g.setColour(accent.withAlpha(alpha));
-        g.fillRect(capLeft, box.getY() + 1.0f, capWidth, 2.0f);
+        g.fillRect(capLeft, top, capWidth, 8.0f);
+        g.setColour(accent.withAlpha(0.72f * alpha));
+        g.fillRect(capLeft, top, capWidth, 1.4f);
     }
 
-    // One rivet, at the corner the legend runs out to. A plate stamped at every
-    // corner reads as a pattern; a single one reads as hardware.
+    // Two rivets on the diagonal: one under the corner the light lands on, one
+    // at the corner the legend runs out to. A plate stamped at every corner
+    // reads as a pattern; a pair on opposite corners reads as hardware.
+    drawRivet(g, {box.getX() + cut * 0.55f, box.getY() + cut * 0.55f + 6.0f}, 1.5f, alpha);
     drawRivet(g, {box.getRight() - cut * 0.5f - 1.0f, box.getBottom() - cut * 0.5f - 1.0f},
               1.7f, alpha);
 

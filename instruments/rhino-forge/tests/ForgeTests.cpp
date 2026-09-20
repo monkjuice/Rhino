@@ -558,6 +558,82 @@ void layoutSuite()
                     "a tab's part numbers run left to right without gaps");
     }
 
+    // An oscillator's colour is chosen by right-clicking its LED, and a
+    // juce::Button triggers on *any* mouse button — so without the gesture
+    // being taken out of both halves of the click, reaching for the menu would
+    // switch the oscillator off on the way. That is the whole reason EnableLed
+    // overrides mouseDown and mouseUp, and it is what this holds.
+    {
+        std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+        require(editor != nullptr, "the panel opens");
+        if (editor != nullptr)
+        {
+            editor->setSize(rhino::forge::ui::defaultPanelWidth, rhino::forge::ui::defaultPanelHeight);
+            std::vector<rhino::forge::ui::EnableLed*> leds;
+            for (auto* child : editor->getChildren())
+                if (auto* led = dynamic_cast<rhino::forge::ui::EnableLed*>(child)) leds.push_back(led);
+            require(!leds.empty(), "the panel builds an enable LED for the modules that switch off");
+
+            auto withMenu = 0;
+            for (auto* led : leds) if (led->onColourMenu != nullptr) ++withMenu;
+            auto oscillators = 0;
+            for (const auto& module : modules)
+                if (module.display == rhino::forge::ui::Display::oscillator
+                    && module.enableId != nullptr) ++oscillators;
+            require(withMenu == oscillators,
+                    "a colour menu is attached to every oscillator's LED and to nothing else");
+
+            // What the menu actually offers. Every colour on it once, the one
+            // in use ticked, and a swatch on each row — the swatch being the
+            // part you choose by, so a row without one is a broken menu even
+            // though it still reads correctly.
+            {
+                const auto current = processor.panelColour("oscA");
+                auto menu = rhino::forge::ui::panelColourMenu(current, "OSC A colour");
+                auto rows = 0, ticked = 0, swatches = 0;
+                juce::PopupMenu::MenuItemIterator walk(menu);
+                while (walk.next())
+                {
+                    const auto& item = walk.getItem();
+                    if (item.itemID == 0) continue;   // the section header
+                    ++rows;
+                    if (item.isTicked) ++ticked;
+                    if (!item.colour.isTransparent()) ++swatches;
+                    require(item.itemID == rows, "the menu's colours are offered in order");
+                    require(item.text == rhino::forge::ui::panelColourName(
+                                rhino::forge::ui::panelColourFrom(rows - 1)),
+                            "each row of the menu is named for the colour it sets");
+                }
+                require(rows == rhino::forge::ui::panelColourCount,
+                        "the menu offers every colour and no others");
+                require(ticked == 1, "the menu ticks exactly the colour in use");
+                require(swatches == rows, "every row of the menu carries its swatch");
+            }
+
+            auto* led = leds.front();
+            for (auto* candidate : leds) if (candidate->onColourMenu != nullptr) led = candidate;
+            if (led->onColourMenu != nullptr)
+            {
+                auto opened = 0;
+                const auto restore = led->onColourMenu;
+                led->onColourMenu = [&opened] { ++opened; };
+                const auto before = led->getToggleState();
+
+                auto mouse = juce::Desktop::getInstance().getMainMouseSource();
+                const juce::MouseEvent click(mouse, {}, juce::ModifierKeys::rightButtonModifier,
+                                             1.0f, 0.0f, 0.0f, 0.0f, 0.0f, led, led,
+                                             juce::Time::getCurrentTime(), {},
+                                             juce::Time::getCurrentTime(), 1, false);
+                led->mouseDown(click);
+                led->mouseUp(click);
+                require(opened == 1, "right-clicking an oscillator's LED opens the colour menu");
+                require(led->getToggleState() == before,
+                        "right-clicking the LED leaves the module switched as it was");
+                led->onColourMenu = restore;
+            }
+        }
+    }
+
     // The chassis and the module plates are cached between frames, so the panel
     // now has a way of being wrong it did not have before: a change that moves
     // a plate but does not reach the cache's key would leave the old picture on
@@ -1622,6 +1698,17 @@ void presetSuite()
     require(directory.createDirectory(), "temporary preset directory can be created");
     const auto preset = directory.getChildFile("Round Trip.forgepreset");
 
+    // An oscillator's panel colour is not a parameter — it rides on the state
+    // tree's own properties — so it is the one setting a preset could silently
+    // drop, and nothing else in this suite would notice.
+    require(processor.panelColour("oscA") == static_cast<int>(rhino::forge::ui::defaultPanelColour),
+            "an oscillator opens on the default colour");
+    require(rhino::forge::ui::panelColourFrom(99) == rhino::forge::ui::panelColourFrom(
+                rhino::forge::ui::panelColourCount - 1),
+            "a colour saved by a build that knew more of them clamps rather than wrapping");
+    processor.setPanelColour("oscA", static_cast<int>(rhino::forge::ui::PanelColour::red));
+    processor.setPanelColour("oscB", static_cast<int>(rhino::forge::ui::PanelColour::orange));
+
     setValue(processor, "cutoff", 1320.0f);
     setValue(processor, "env1Release", 2.5f);
     setValue(processor, "noiseEnable", 1.0f);
@@ -1632,7 +1719,12 @@ void presetSuite()
     setValue(processor, "env1Release", 0.1f);
     setValue(processor, "noiseEnable", 0.0f);
     setValue(processor, "oscBEnable", 1.0f);
+    processor.setPanelColour("oscA", static_cast<int>(rhino::forge::ui::PanelColour::blue));
+    processor.setPanelColour("oscB", static_cast<int>(rhino::forge::ui::PanelColour::blue));
     require(processor.loadPreset(preset).wasOk(), "preset loads");
+    require(processor.panelColour("oscA") == static_cast<int>(rhino::forge::ui::PanelColour::red)
+                && processor.panelColour("oscB") == static_cast<int>(rhino::forge::ui::PanelColour::orange),
+            "a preset restores each oscillator's panel colour");
     requireClose(value(processor, "cutoff"), 1320.0f, 1.0f, "preset restores cutoff");
     requireClose(value(processor, "env1Release"), 2.5f, 0.001f, "preset restores release");
     requireClose(value(processor, "noiseEnable"), 1.0f, 0.001f, "preset restores an enabled module");

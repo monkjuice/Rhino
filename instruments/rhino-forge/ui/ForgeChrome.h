@@ -23,24 +23,27 @@ namespace rhino::forge::ui
 // something raised rather than a rectangle of paint — a lit rim along the top
 // and a black one along the bottom is the whole of the trick.
 //
-// The numbers are measured off the reference rather than chosen: the chassis
-// there sits at about RGB 3, a plate's face at about 20, and the lit rim along
-// its top edge peaks near 160. That spread is the whole effect — an earlier
-// pass had the chassis as light as the plates and every plate disappeared into
-// it, which no amount of bevel could rescue.
-inline const auto chassis        = juce::Colour(0xff030408);
-inline const auto chassisLit     = juce::Colour(0xff0b0d15);
-inline const auto plateFaceTop   = juce::Colour(0xff1e222b);
-inline const auto plateFaceFoot  = juce::Colour(0xff0e1117);
-inline const auto plateEdgeLit   = juce::Colour(0xff9aa2b4);
-inline const auto plateEdgeDark  = juce::Colour(0xff030509);
+// The numbers are measured off the reference rather than chosen, by sampling a
+// column straight down through a plate in both and comparing: its chassis sits
+// at about RGB 3, its face at (17,19,23), and the lit band along its top edge
+// peaks near 100. Two passes were needed. The first had the chassis as light as
+// the plates and every plate disappeared into it, which no amount of bevel
+// could rescue; the second left the face at (26,30,38) — half a stop light and
+// noticeably bluer than the reference's neutral gunmetal — with a rim
+// overshooting at 117.
+inline const auto chassis        = juce::Colour(0xff020304);
+inline const auto chassisLit     = juce::Colour(0xff05060a);
+inline const auto plateFaceTop   = juce::Colour(0xff1a1c22);
+inline const auto plateFaceFoot  = juce::Colour(0xff0d0e12);
+inline const auto plateEdgeLit   = juce::Colour(0xff868d9c);
+inline const auto plateEdgeDark  = juce::Colour(0xff020407);
 // Stamped legends: a part number, a plate's long name, the markings on a decal.
 // Dimmer than mutedText, because a legend is read once and then ignored.
 inline const auto legendText     = juce::Colour(0xff6c7386);
 
 // The corner cut every plate shares. Machined, not rounded: the panel reads as
 // something assembled out of parts, and a 45 degree corner is what says so.
-inline constexpr float plateCut = 8.0f;
+inline constexpr float plateCut = 11.0f;
 
 // Which corners a chamfer actually cuts. The module plates cut all four; the
 // chassis frame cuts only the outer ones, because its inner corners are not
@@ -222,6 +225,25 @@ inline void strokeBevel(juce::Graphics& g, const juce::Path& outline, juce::Rect
     g.strokePath(outline, juce::PathStrokeType(thickness));
 }
 
+// And the left-hand edge, which the stroke above cannot reach.
+//
+// The light on this panel comes from above *and to the left*. A gradient
+// running straight down lights the top edge and leaves the left one as dark as
+// the right, and a plate then reads as a flat card with a line along its top
+// rather than as a part standing off the chassis. This is the second half of
+// the bevel: bright at the left edge, gone by a third of the way across, laid
+// over the first so the top-left corner is where the two meet and is the
+// brightest thing on the plate.
+inline void strokeSideLight(juce::Graphics& g, const juce::Path& outline, juce::Rectangle<float> box,
+                            float alpha, float thickness)
+{
+    juce::ColourGradient side(plateEdgeLit.withAlpha(0.85f * alpha), box.getX(), box.getCentreY(),
+                              plateEdgeLit.withAlpha(0.0f),
+                              box.getX() + box.getWidth() * 0.34f, box.getCentreY(), false);
+    g.setGradientFill(side);
+    g.strokePath(outline, juce::PathStrokeType(thickness));
+}
+
 // The shadow a plate casts on the chassis. Three strokes rather than a blur:
 // a blurred drop shadow per module per repaint is a frame cost this panel will
 // not spend, and at this radius the difference cannot be seen.
@@ -261,10 +283,19 @@ inline void drawPlate(juce::Graphics& g, juce::Rectangle<float> box, float alpha
 
     // Two edges with a dark gap between them, which is what the reference's top
     // edge actually is: an outer rim, a shadow, and the milled lip inside it.
-    // The lip is the brighter of the two -- that inversion is what stops the
-    // plate reading as a rectangle with a line drawn round it.
-    strokeBevel(g, outline, box, alpha, 1.1f, 0.55f);
-    strokeBevel(g, chamferedPath(box.reduced(2.6f), cut - 1.8f, corners), box, alpha, 1.1f, 1.0f);
+    // The lip is the brighter and the wider of the two -- that inversion is
+    // what stops the plate reading as a rectangle with a line drawn round it.
+    // Three lines in the top few pixels, not one: the outer rim, the milled lip,
+    // and a step inside that. Sampling the reference's top edge gives bright
+    // bands at +0, +4 and +6 with dark between them, and it is that repetition
+    // — rather than any single line's brightness — that reads as machined.
+    strokeBevel(g, outline, box, alpha, 1.1f, 0.6f);
+    const auto lip = chamferedPath(box.reduced(2.4f), cut - 1.6f, corners);
+    strokeBevel(g, lip, box, alpha, 1.6f, 1.0f);
+    strokeSideLight(g, lip, box, alpha, 1.6f);
+    const auto step = chamferedPath(box.reduced(4.8f), cut - 3.4f, corners);
+    strokeBevel(g, step, box, alpha, 1.0f, 0.62f);
+    strokeSideLight(g, step, box, alpha * 0.6f, 1.0f);
 }
 
 // A well: the inverse of a plate. Sunk into the face rather than raised off it,

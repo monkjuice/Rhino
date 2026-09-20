@@ -281,6 +281,18 @@ private:
     void buildBankButtons();
     void showBank(ModuleUi&, int bank);
     void applyEnableStates();
+
+    // The colour a module is drawn in. Everything that draws one asks this
+    // rather than ui::accentFor, because an oscillator's colour is a choice
+    // the module descriptor cannot answer for itself.
+    juce::Colour accentOf(const ui::Module&) const;
+    // Opens the colour menu on an oscillator's LED, and pushes the choice out
+    // to every control in that module afterwards.
+    void showPanelColourMenu(const ui::Module&);
+    void applyPanelColours();
+    // What the controls on screen are currently coloured with, so a colour
+    // changed from outside this editor is noticed on the next tick.
+    juce::String panelColoursShown;
     float value(const juce::String& id) const;
     void mouseDown(const juce::MouseEvent&) override;
     void mouseDrag(const juce::MouseEvent&) override;

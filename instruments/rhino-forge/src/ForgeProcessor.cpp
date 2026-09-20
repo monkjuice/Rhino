@@ -881,6 +881,28 @@ Modulation Processor::modulation() const
 
 juce::AudioProcessorEditor* Processor::createEditor() { return new Editor(*this); }
 
+// One property per module rather than one list, so a module that gains or loses
+// a colour does not shift what the others are reading.
+static juce::Identifier panelColourProperty(const juce::String& moduleId)
+{
+    return juce::Identifier("panelColour_" + moduleId);
+}
+
+int Processor::panelColour(const juce::String& moduleId) const
+{
+    const auto stored = state.state.getProperty(panelColourProperty(moduleId));
+    // A state written before this existed has no property at all, and that is
+    // the ordinary case rather than an error: it opens on the default.
+    return stored.isVoid() ? static_cast<int>(ui::defaultPanelColour)
+                           : static_cast<int>(ui::panelColourFrom(static_cast<int>(stored)));
+}
+
+void Processor::setPanelColour(const juce::String& moduleId, int choice)
+{
+    state.state.setProperty(panelColourProperty(moduleId),
+                            static_cast<int>(ui::panelColourFrom(choice)), nullptr);
+}
+
 void Processor::getStateInformation(juce::MemoryBlock& destination)
 {
     auto tree = state.copyState();

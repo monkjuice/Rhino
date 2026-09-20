@@ -1578,6 +1578,24 @@ inline juce::Rectangle<int> controlBlock(juce::Rectangle<int> moduleArea, const 
 // applies, so the gap under the label is identical for both.
 inline constexpr int knobOpticalInset = 4;
 
+// The label strip over a knob, seated on the circle rather than on the box
+// around it.
+//
+// A knob's look insets its circle by knobOpticalInset, so the top of the area
+// handed to the slider is empty by construction. A label that stops at the
+// boundary instead of at the metal therefore floats: measured against the
+// reference, the gap under the word came out at 12 pixels where the reference
+// draws 8, and the gap above it at 8 where the reference draws 16 — the word
+// read as belonging to the row above rather than to the knob it names.
+//
+// The strip keeps its height and moves down into that empty margin, so nothing
+// about the knob's own size or position changes. The labels are click-through,
+// which is what keeps the overlap from costing the knob the start of a drag.
+inline juce::Rectangle<int> knobLabelBounds(juce::Rectangle<int> block)
+{
+    return block.withHeight(knobLabelHeight).translated(0, knobOpticalInset);
+}
+
 inline juce::Rectangle<int> rockerBounds(juce::Rectangle<int> knobArea)
 {
     const auto area = knobArea.reduced(0, knobOpticalInset);

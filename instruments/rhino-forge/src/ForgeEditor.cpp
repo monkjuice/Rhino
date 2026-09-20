@@ -44,6 +44,11 @@ void dressControlLabel(juce::Label& label, const juce::String& caption)
 {
     label.setText(caption, juce::dontSendNotification);
     label.setJustificationType(juce::Justification::centred);
+    // A label names the control under it and is never clicked itself. Saying so
+    // matters now that a knob's label is seated over the empty margin its look
+    // leaves above the circle: without this, the top few pixels of a knob would
+    // swallow the drag that started on them.
+    label.setInterceptsMouseClicks(false, false);
     label.setColour(juce::Label::textColourId, ui::labelText);
     label.setFont(ui::panelFont(ui::Face::emphasis, ui::controlLabelSize));
     label.setBufferedToImage(true);
@@ -1849,8 +1854,8 @@ void Editor::resized()
                 case ui::Style::fader:
                     // The same label line a knob's sits on, so a row of faders
                     // and a row of knobs line up across the mixer.
-                    control.label.setBounds(block.removeFromTop(ui::knobLabelHeight));
-                    control.slider.setBounds(block);
+                    control.label.setBounds(ui::knobLabelBounds(block));
+                    control.slider.setBounds(block.withTrimmedTop(ui::knobLabelHeight));
                     break;
                 case ui::Style::stepper:
                     // Inside a table the column title is the label, so the
@@ -1863,12 +1868,12 @@ void Editor::resized()
                 case ui::Style::rocker:
                     // Same label line as the knobs either side, so the switch
                     // sits exactly where their circles do.
-                    control.label.setBounds(block.removeFromTop(ui::knobLabelHeight));
-                    control.rocker->setBounds(ui::rockerBounds(block));
+                    control.label.setBounds(ui::knobLabelBounds(block));
+                    control.rocker->setBounds(ui::rockerBounds(block.withTrimmedTop(ui::knobLabelHeight)));
                     break;
                 case ui::Style::knob:
-                    control.label.setBounds(block.removeFromTop(ui::knobLabelHeight));
-                    control.slider.setBounds(block);
+                    control.label.setBounds(ui::knobLabelBounds(block));
+                    control.slider.setBounds(block.withTrimmedTop(ui::knobLabelHeight));
                     break;
             }
         }

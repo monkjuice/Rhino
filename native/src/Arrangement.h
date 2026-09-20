@@ -114,6 +114,14 @@ private:
     // The region a command acts on: the dragged-out one when there is one,
     // otherwise the span of the selected clips, so both read the same way.
     TimeSelection effectiveRegion() const;
+    // Where the region is drawn. While a clip drag previews, the engine has
+    // not moved anything yet, so the region follows the previewed geometry the
+    // clips are being drawn at. Display only: the commands read the region the
+    // edit is actually in.
+    TimeSelection displayedTimeSelection() const;
+    // The bounding rectangle of the selected clips, taken either from the edit
+    // or from what is currently being previewed.
+    TimeSelection regionOfSelectedClips(bool previewed) const;
     void selectRegionContents();
     void setRegionFromSelectedClips();
     bool beginRegionGesture(const juce::MouseEvent&);

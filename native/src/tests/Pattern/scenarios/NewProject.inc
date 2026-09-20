@@ -17,6 +17,22 @@
         require(session.pattern().getSequence().getNumNotes() == 0, "A new project's pattern is empty");
         require(session.trackAutomations(0).empty(), "A new project carries no automation lanes");
         require(!session.edit->getUndoManager().canUndo(), "A new project has nothing to undo");
+        // The starter Pattern 1 is a placeholder: empty, and hidden from the
+        // arrangement until it is told where it goes. Double-clicking the first
+        // bar of the starter track used to be refused as though a clip were in
+        // the way, which made the first track of a document behave differently
+        // from every track added after it.
+        require(session.addInstrument(Session::Instrument::FourOsc, 0).wasOk(),
+                "Can drop an instrument on the starter track");
+        const auto starterClips = te::getAudioTracks(*session.edit)[0]->getClips().size();
+        require(!session.shouldShowClipInArrangement(session.pattern()),
+                "The starter clip is hidden until it is placed");
+        require(session.createClip(0, 0.0).wasOk(), "The first bar of the starter track accepts a clip");
+        require(te::getAudioTracks(*session.edit)[0]->getClips().size() == starterClips,
+                "Placing it carries the hidden starter clip rather than adding a second one");
+        require(session.shouldShowClipInArrangement(session.pattern()),
+                "The placed clip is drawn in the arrangement");
+        require(session.createClip(0, 0.0).failed(), "A clip that is really there still refuses a second one");
         // The swapped-in edit has to be the one the session now edits, not a
         // detached copy: notes must land in it and dirty the document.
         require(session.addNote(0.0, Session::lowestNote, 1.0).wasOk(), "Draw a note into a new project");

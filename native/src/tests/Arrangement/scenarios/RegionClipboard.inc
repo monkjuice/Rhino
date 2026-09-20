@@ -117,7 +117,17 @@
             const auto movedID = toMove->itemID;
             view.setSelection({movedID}, movedID);
             require(close(view.timeSelection.start, 10.0), "The region starts on the clip it was read from");
-            drag({view.xFor(10.5), audioY}, {view.xFor(14.5), audioY});
+            // A drag previews rather than editing, so the highlight has to
+            // preview with it: waiting for the drop left it sitting at the
+            // position the clip was being carried away from.
+            view.mouseDown(event({view.xFor(10.5), audioY}, {view.xFor(10.5), audioY}, false));
+            view.mouseDrag(event({view.xFor(10.5), audioY}, {view.xFor(14.5), audioY}, true));
+            require(close(view.displayedTimeSelection().start, 14.0)
+                    && close(view.displayedTimeSelection().end, 15.0),
+                    "The region previews with a clip drag instead of waiting for the drop");
+            require(close(view.timeSelection.start, 10.0),
+                    "What the commands read is still where the edit actually has the clip");
+            view.mouseUp(event({view.xFor(10.5), audioY}, {view.xFor(14.5), audioY}, true));
             require(close(session.findClip(movedID)->getPosition().time.getStart().inSeconds(), 14.0),
                     "The clip moved four seconds to the right");
             require(close(view.timeSelection.start, 14.0) && close(view.timeSelection.end, 15.0),

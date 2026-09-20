@@ -87,6 +87,24 @@
             clipboardGrid.setStepSelection(0.0, 4.0);
             require(!clipboardGrid.regionFromNotes, "A span asked for by itself is not a note selection");
 
+            // An explicit span draws its insert point and nothing else. The
+            // marquee and the notes it catches are already two ways of showing
+            // a selection; a band behind either of them read as a third.
+            clipboardGrid.setStepSelection(44.0, 48.0);
+            clipboardGrid.stepScroll = 32.0;
+            const auto emptySpanPicture = clipboardGrid.createComponentSnapshot(clipboardGrid.getLocalBounds());
+            const auto spanX = [&clipboardGrid](double step)
+            {
+                return static_cast<int>(clipboardGrid.labelWidth
+                    + static_cast<float>(step - clipboardGrid.stepScroll) * clipboardGrid.cellWidth());
+            };
+            int bandPixels = 0;
+            for (int y = static_cast<int>(clipboardGrid.headerHeight) - 3;
+                 y <= static_cast<int>(clipboardGrid.headerHeight) + 3; ++y)
+                for (int x = spanX(44.0) + 8; x < spanX(48.0) - 8; ++x)
+                    if (isMidiNotePixel(emptySpanPicture.getPixelAt(x, y))) ++bandPixels;
+            require(bandPixels == 0, "A step span draws no band across the lanes it covers");
+
             // Escape drops the region as well as the selection, so the next
             // paste is not steered by a span nobody can see any more.
             clipboardGrid.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey));

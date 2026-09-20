@@ -143,28 +143,20 @@ void StepGrid::setStepRegionFromSelection()
     regionFromNotes = true;
 }
 
+// Only ever the insert point, and only when the region is one the user asked
+// for by itself. The grid already has two ways of showing a selection - the
+// marquee while it is being dragged, and the notes it caught afterwards - and
+// a band behind either of them reads as a third. What neither of them says is
+// where a paste would land, which is the one mark worth keeping.
 void StepGrid::paintStepSelection(juce::Graphics& g)
 {
-    // Nothing to draw over selected notes: they are already drawn as selected,
-    // and a band over every pitch row would read as a marquee mid-drag.
     if (!stepSelection.active || regionFromNotes)
         return;
     const auto left = labelWidth + static_cast<float>(stepSelection.start - stepScroll) * cellWidth();
-    const auto right = labelWidth + static_cast<float>(stepSelection.end - stepScroll) * cellWidth();
     const auto top = headerHeight;
     const auto bottom = headerHeight + rowAreaHeight();
     juce::Graphics::ScopedSaveState scope(g);
     g.reduceClipRegion(juce::Rectangle<float>(labelWidth, 0.0f, gridWidth(), bottom).getSmallestIntegerContainer());
-    if (stepSelection.isRange())
-    {
-        // A tab on the ruler and a wash under the lanes, with no outline: the
-        // span has to be legible without competing with the notes inside it.
-        g.setColour(juce::Colour(0x18c6d58c));
-        g.fillRect(juce::Rectangle<float>(left, top, right - left, bottom - top));
-        g.setColour(juce::Colour(0xffc6d58c));
-        g.fillRect(left, headerHeight - 3.0f, right - left, 3.0f);
-    }
-    // The insert point: a region with no width is still where a paste lands.
     g.setColour(juce::Colour(0xffc6d58c));
     g.fillRect(left - 1.0f, top, 2.0f, bottom - top);
     g.fillRect(left - 4.0f, top, 9.0f, 3.0f);

@@ -99,18 +99,38 @@ juce::Result Session::createClip(int trackIndex, double startSeconds)
     const auto start = tracktion::core::TimePosition::fromSeconds(startSeconds);
     const auto startBeat = edit->tempoSequence.toBeats(start).inBeats();
     const auto end = edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(startBeat + beatsPerBar()));
+    // A new document's Pattern 1 is a placeholder: empty, hidden from the
+    // arrangement, and waiting to be told where it goes. Double-clicking a lane
+    // is the user saying where, so it is carried there and revealed rather than
+    // refusing as though a clip were in the way - which is what made the very
+    // first track behave differently from every track added after it.
+    te::MidiClip* placeholder = nullptr;
     for (auto* existing : track->getClips())
     {
         const auto range = existing->getPosition().time;
-        if (range.getEnd() > start && range.getStart() < end)
+        if (range.getEnd() <= start || range.getStart() >= end)
+            continue;
+        auto* midi = dynamic_cast<te::MidiClip*>(existing);
+        if (placeholder != nullptr || midi == nullptr || shouldShowClipInArrangement(*midi))
             return juce::Result::fail("There is already a clip here.");
+        placeholder = midi;
     }
     edit->getUndoManager().beginNewTransaction("Add clip");
-    auto clip = track->insertMIDIClip("Clip", {start, end}, nullptr);
-    if (clip == nullptr)
-        return juce::Result::fail("The clip could not be created.");
-    clip->setColour(instrumentColour(activeTrackInstrument(*track)));
-    patternClip = clip.get();
+    if (placeholder != nullptr)
+    {
+        placeholder->setPosition({{start, end}, {}});
+        placeholder->state.removeProperty(starterPlaceholderID, &edit->getUndoManager());
+        placeholder->setColour(instrumentColour(activeTrackInstrument(*track)));
+        patternClip = placeholder;
+    }
+    else
+    {
+        auto clip = track->insertMIDIClip("Clip", {start, end}, nullptr);
+        if (clip == nullptr)
+            return juce::Result::fail("The clip could not be created.");
+        clip->setColour(instrumentColour(activeTrackInstrument(*track)));
+        patternClip = clip.get();
+    }
     patternClipID = patternClip->itemID;
     refreshLoop();
     edit->getUndoManager().beginNewTransaction();

@@ -43,27 +43,46 @@ void Arrangement::clearTimeSelection()
 // Selected clips stand in for a region that was never dragged out, so clicking
 // a clip and pressing Ctrl+D does exactly what dragging its span and pressing
 // Ctrl+D does.
-Arrangement::TimeSelection Arrangement::effectiveRegion() const
+Arrangement::TimeSelection Arrangement::regionOfSelectedClips(bool previewed) const
 {
-    if (timeSelection.active && timeSelection.isRange())
-        return timeSelection;
-    TimeSelection fromClips;
+    TimeSelection bounds;
     for (const auto& clip : clips)
         // The primary clip counts even when the gathered list is empty: a menu
         // and a keyboard command can both name one clip without gathering it.
         if (isSelected(clip.id) || (selectedClips.empty() && clip.id == selected))
         {
-            if (!fromClips.active)
+            const auto position = previewed ? displayedPosition(clip) : clip.position;
+            const auto track = previewed ? displayedTrack(clip) : clip.track;
+            if (!bounds.active)
             {
-                fromClips = {clip.position.start, clip.position.end, clip.track, clip.track, true};
+                bounds = {position.start, position.end, track, track, true};
                 continue;
             }
-            fromClips.start = std::min(fromClips.start, clip.position.start);
-            fromClips.end = std::max(fromClips.end, clip.position.end);
-            fromClips.firstTrack = std::min(fromClips.firstTrack, clip.track);
-            fromClips.lastTrack = std::max(fromClips.lastTrack, clip.track);
+            bounds.start = std::min(bounds.start, position.start);
+            bounds.end = std::max(bounds.end, position.end);
+            bounds.firstTrack = std::min(bounds.firstTrack, track);
+            bounds.lastTrack = std::max(bounds.lastTrack, track);
         }
+    return bounds;
+}
+
+Arrangement::TimeSelection Arrangement::effectiveRegion() const
+{
+    if (timeSelection.active && timeSelection.isRange())
+        return timeSelection;
+    const auto fromClips = regionOfSelectedClips(false);
     return fromClips.active ? fromClips : timeSelection;
+}
+
+// A drag previews rather than editing, so the region has to preview with it:
+// waiting for the drop would leave the highlight sitting at the position the
+// clip is being carried away from.
+Arrangement::TimeSelection Arrangement::displayedTimeSelection() const
+{
+    if (!dragging || !regionFollowsClips)
+        return timeSelection;
+    const auto previewed = regionOfSelectedClips(true);
+    return previewed.active ? previewed : timeSelection;
 }
 
 // Dragging a region also selects the clips it touches, so Delete, the clip
@@ -152,13 +171,14 @@ void Arrangement::paintTimeSelection(juce::Graphics& g)
 {
     if (!timeSelection.active)
         return;
-    const auto left = std::max(headerWidth, xFor(timeSelection.start));
-    const auto right = std::min(static_cast<float>(getWidth() - 14), xFor(timeSelection.end));
+    const auto shown = displayedTimeSelection();
+    const auto left = std::max(headerWidth, xFor(shown.start));
+    const auto right = std::min(static_cast<float>(getWidth() - 14), xFor(shown.end));
     // A track folded into a collapsed group is laid out at no height, so the
     // band is measured from the rows that are actually drawn.
     auto top = 0.0f, bottom = 0.0f;
     auto measured = false;
-    for (int track = timeSelection.firstTrack; track <= timeSelection.lastTrack; ++track)
+    for (int track = shown.firstTrack; track <= shown.lastTrack; ++track)
     {
         const auto row = lane(track);
         if (row.getHeight() <= 0.0f) continue;
@@ -172,7 +192,7 @@ void Arrangement::paintTimeSelection(juce::Graphics& g)
     g.reduceClipRegion(juce::Rectangle<int>(static_cast<int>(headerWidth), static_cast<int>(lanesTop),
                                             std::max(1, getWidth() - static_cast<int>(headerWidth) - 14),
                                             std::max(1, static_cast<int>(laneContentHeight()))));
-    if (timeSelection.isRange() && right > left)
+    if (shown.isRange() && right > left)
     {
         const juce::Rectangle<float> box {left, top, right - left, bottom - top};
         g.setColour(juce::Colour(0x2ac6d58c));
@@ -181,7 +201,7 @@ void Arrangement::paintTimeSelection(juce::Graphics& g)
         g.drawRect(box, 1.0f);
     }
     // The insert point is the region with no width: where a paste would land.
-    const auto marker = xFor(timeSelection.start);
+    const auto marker = xFor(shown.start);
     if (marker >= headerWidth && marker <= static_cast<float>(getWidth() - 14))
     {
         g.setColour(juce::Colour(0xffc6d58c));

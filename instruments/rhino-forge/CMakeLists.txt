@@ -14,6 +14,31 @@ endif()
 
 add_subdirectory("${RHINO_JUCE_DIR}" juce EXCLUDE_FROM_ALL)
 
+# Forge's own sources compile against a precompiled header, so splitting a file
+# in two costs roughly what the new code costs rather than another full parse of
+# JUCE. See src/ForgePch.h for what is in it and what is deliberately not.
+#
+# Two things have to be kept away from it. JUCE compiles its module .cpp files
+# straight into every target that links it, and each one refuses to build if a
+# JUCE module header has already been included — which a forced-include
+# precompiled header does by definition. And the header is generated once per
+# enabled language: JUCE enables C here, so without the CXX guard CMake builds a
+# C one too, which fails JUCE's own "requires C++17" check.
+#
+# The module sources arrive through the JUCE targets' INTERFACE_SOURCES rather
+# than through target_sources, so they are named here by where they live: one
+# unity file per module directory, which is JUCE's own layout.
+file(GLOB _juce_unity_sources
+    "${RHINO_JUCE_DIR}/modules/*/*.cpp"
+    "${RHINO_JUCE_DIR}/modules/*/*.c"
+    "${RHINO_JUCE_DIR}/modules/*/*.mm")
+set_source_files_properties(${_juce_unity_sources} PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
+
+function(forge_use_precompiled_header target)
+    target_precompile_headers(${target} PRIVATE
+        "$<$<COMPILE_LANGUAGE:CXX>:${CMAKE_CURRENT_SOURCE_DIR}/src/ForgePch.h>")
+endfunction()
+
 juce_add_plugin(RhinoForge
     COMPANY_NAME "Rhino"
     BUNDLE_ID "com.rhino.forge"
@@ -52,24 +77,32 @@ juce_add_binary_data(RhinoForgeAssets SOURCES
     ui/assets/fonts/RajdhaniSemiBold.ttf
     ui/assets/fonts/IBMPlexMonoMedium.ttf)
 
-target_sources(RhinoForge PRIVATE
+# The synth itself, compiled into the plugin and into the test binary alike.
+# Named once so the two cannot drift: a file the tests do not know about is a
+# file nothing checks.
+set(forge_sources
     core/ForgeCore.h
-    core/ForgeTableStore.h
-    core/ForgeWavetable.h
     core/ForgeFx.h
     core/ForgeFxDsp.h
+    core/ForgeTableStore.h
     core/ForgeWarp.h
-    ui/ForgeLayout.h
+    core/ForgeWavetable.h
     ui/ForgeChrome.h
-    ui/ForgePanels.h
-    ui/ForgeType.h
-    ui/ForgeTablePanel.h
-    ui/ForgeVisuals.h
     ui/ForgeFxDisplay.h
+    ui/ForgeLayout.h
+    ui/ForgePanels.h
+    ui/ForgeTablePanel.h
+    ui/ForgeTooltips.h
+    ui/ForgeType.h
+    ui/ForgeVisuals.h
+    src/ForgePch.h
     src/ForgeProcessor.cpp
     src/ForgeProcessor.h
     src/ForgeEditor.cpp
     src/ForgeEditor.h)
+
+target_sources(RhinoForge PRIVATE ${forge_sources})
+forge_use_precompiled_header(RhinoForge)
 target_link_libraries(RhinoForge PRIVATE
     RhinoForgeAssets
     juce::juce_audio_utils
@@ -88,25 +121,57 @@ include(CTest)
 if (BUILD_TESTING)
     juce_add_console_app(RhinoForgeTests PRODUCT_NAME "Rhino Forge Tests")
     set_target_properties(RhinoForgeTests PROPERTIES EXCLUDE_FROM_ALL FALSE)
+
+    # One area per file, and the file's name is the argument that selects it and
+    # the CTest case that runs it. Working on the effects means editing
+    # tests/ForgeTestsFx.cpp and running `ctest -R forge_fx`: one translation
+    # unit rebuilt, one area run. A milestone runs the lot, and `ctest -j 8`
+    # runs them at once because no two areas share a Processor.
+    #
+    # Keep this list in step with tests/ForgeSuites.h, which declares each entry
+    # point, and with the table in tests/ForgeTestMain.cpp, which maps a name to
+    # a function. Adding an area is those three lines and the new file.
+    set(forge_test_areas
+        layout
+        displays
+        presets
+        engine
+        oscillator
+        warp
+        filter
+        mixer
+        fx
+        modulation
+        envelope
+        lfo
+        table
+        voicing)
+
     target_sources(RhinoForgeTests PRIVATE
-        tests/ForgeTests.cpp
-        core/ForgeCore.h
-        core/ForgeTableStore.h
-        core/ForgeWavetable.h
-    core/ForgeFx.h
-    core/ForgeFxDsp.h
-    core/ForgeWarp.h
-        ui/ForgeLayout.h
-        ui/ForgeChrome.h
-        ui/ForgePanels.h
-        ui/ForgeType.h
-        ui/ForgeTablePanel.h
-        ui/ForgeVisuals.h
-    ui/ForgeFxDisplay.h
-        src/ForgeProcessor.cpp
-        src/ForgeProcessor.h
-        src/ForgeEditor.cpp
-        src/ForgeEditor.h)
+        tests/ForgeTestMain.cpp
+        tests/ForgeSuites.h
+        tests/ForgeTestSupport.cpp
+        tests/ForgeTestSupport.h
+        tests/ForgeTestSpectrum.cpp
+        tests/ForgeTestSpectrum.h
+        tests/ForgeTestTools.cpp
+        tests/ForgeTestTools.h
+        tests/ForgeTestsLayout.cpp
+        tests/ForgeTestsDisplays.cpp
+        tests/ForgeTestsPresets.cpp
+        tests/ForgeTestsEngine.cpp
+        tests/ForgeTestsOscillator.cpp
+        tests/ForgeTestsWarp.cpp
+        tests/ForgeTestsFilter.cpp
+        tests/ForgeTestsMixer.cpp
+        tests/ForgeTestsFx.cpp
+        tests/ForgeTestsModulation.cpp
+        tests/ForgeTestsEnvelope.cpp
+        tests/ForgeTestsLfo.cpp
+        tests/ForgeTestsTable.cpp
+        tests/ForgeTestsVoicing.cpp
+        ${forge_sources})
+    forge_use_precompiled_header(RhinoForgeTests)
     target_link_libraries(RhinoForgeTests PRIVATE
         RhinoForgeAssets
         juce::juce_audio_utils
@@ -118,8 +183,8 @@ if (BUILD_TESTING)
         JUCE_USE_CURL=0
         RHINO_FORGE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
         JUCE_IGNORE_VST3_MISMATCHED_PARAMETER_ID_WARNING=1)
-    # One binary, three cases selected by argument, as Rhino's own tests do.
-    add_test(NAME forge_layout COMMAND RhinoForgeTests --layout)
-    add_test(NAME forge_presets COMMAND RhinoForgeTests --presets)
-    add_test(NAME forge_engine COMMAND RhinoForgeTests --engine)
+
+    foreach(area IN LISTS forge_test_areas)
+        add_test(NAME forge_${area} COMMAND RhinoForgeTests --${area})
+    endforeach()
 endif()

@@ -1325,15 +1325,19 @@ These are the north star, not this plan. They come after the synth is finished.
 
 ```powershell
 cmake -S instruments/rhino-forge -B instruments/rhino-forge/build -G "Visual Studio 17 2022" -A x64
-cmake --build instruments/rhino-forge/build --config Release --parallel 2
-ctest --test-dir instruments/rhino-forge/build -C Release --output-on-failure
+cmake --build instruments/rhino-forge/build --config Release --parallel 2 -- /p:BuildInParallel=false
+ctest --test-dir instruments/rhino-forge/build -C Release -j 8 --output-on-failure
 ```
 
-Three CTest cases run from one binary, selected by argument, as Rhino's own
-tests do: `forge_layout` checks the panel geometry and that the declared layout
-and the parameter list agree, `forge_presets` checks saving, loading and
-reconciliation, and `forge_engine` renders audio and checks the module enables,
-the filter bypass, and that output stays finite and inside full scale.
+One CTest case per area, all from one binary, selected by argument. The name of
+the case is the name of the file it runs and of the argument that selects it,
+so working on one module means rebuilding one translation unit and running one
+case: `ctest -R forge_fx` while the effects are being changed, plain `ctest` at
+a milestone. `RhinoForgeTests --list` prints them. No two areas share a
+`Processor`, so `ctest -j 8` runs them at once.
+
+See the **Tests** section of [README.md](README.md) for where the registry
+lives and what is shared between areas.
 
 The standalone build at
 `build/RhinoForge_artefacts/Release/Standalone/Rhino Forge.exe` is the quickest

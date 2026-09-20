@@ -211,11 +211,40 @@ which decisions are already settled. Read it before changing the synth.
 | `ui/ForgeVisuals.h` | The knob look and the drawing primitives. Decides nothing about placement. |
 | `ui/ForgePanels.h` | Static metal housings, chassis rails, hardware and decorative lettering. |
 | `src/ForgeEditor.*` | Walks the declared modules and builds the components. |
-| `tests/ForgeTests.cpp` | Three CTest cases from one binary: `--layout`, `--presets`, `--engine`. |
+| `tests/` | One file per area, one CTest case each. See **Tests** below. |
 
 Adding a control means declaring the parameter in `ForgeProcessor.cpp` and
 naming it in a module in `ForgeLayout.h`. The layout test fails if the two
 disagree in either direction.
+
+## Tests
+
+One binary, one file per area, one CTest case per file. The area's name is the
+argument that selects it and the case that runs it, so an afternoon on the
+effects is `tests/ForgeTestsFx.cpp`, `--fx` and `ctest -R forge_fx` — one
+translation unit rebuilt and one second of checks — while a milestone is plain
+`ctest`, which runs the lot.
+
+```powershell
+cmake --build instruments/rhino-forge/build --config Release --target RhinoForgeTests --parallel 2 -- /p:BuildInParallel=false
+ctest --test-dir instruments/rhino-forge/build -C Release -j 8 --output-on-failure
+ctest --test-dir instruments/rhino-forge/build -C Release -R forge_fx --output-on-failure
+```
+
+No two areas share a `Processor`, so `-j 8` is safe, and it is what makes the
+full run about five seconds rather than seventeen.
+
+`RhinoForgeTests --list` prints the areas. Three places hold the registry and
+are edited together: `tests/ForgeSuites.h` declares each area's entry point,
+the table in `tests/ForgeTestMain.cpp` maps a name to a function, and
+`forge_test_areas` in `CMakeLists.txt` turns each name into a case. Nothing
+self-registers and nothing is globbed.
+
+Checks, parameter access, rendering a note and measuring what came back are
+shared in `tests/ForgeTestSupport.*`; the FFT that settles pitch and timbre is
+in `tests/ForgeTestSpectrum.*`. An area that draws nothing includes neither
+`ForgeLayout.h` nor `ForgeVisuals.h`, which is most of why a one-file rebuild
+costs what it does.
 
 ## Build on Windows
 
@@ -237,6 +266,14 @@ way to look at a change without a host.
 For a windowless visual review, the test binary also accepts
 `--snapshot output.png [width height [OSC|TABLE|MATRIX|MIX|FX [scale]]]`.
 It captures the actual editor, including its controls and cached metal layer.
+`--profile [width height]` reports what a frame costs instead. Both live in
+`tests/ForgeTestTools.cpp`, and neither is a CTest case.
+
+Every Forge source compiles against `src/ForgePch.h`, which holds JUCE and the
+standard library and deliberately no Forge header. It roughly halves what a
+translation unit costs, which is what makes one file per area cheaper than one
+file for everything: twenty translation units now build in less time than
+three did before it.
 
 The VST3 is emitted below `build/RhinoForge_artefacts/Release/VST3`. Install or
 copy it only after validating it in a host; do not add generated plugin bundles

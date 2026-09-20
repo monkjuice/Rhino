@@ -361,6 +361,7 @@ bool Arrangement::isSelected(te::EditItemID id) const
 // something else set the focus themselves, after this has cleared it.
 void Arrangement::setSelection(std::vector<te::EditItemID> ids, te::EditItemID primary)
 {
+    const auto previous = selected;
     focus = ids.empty() ? Focus::none : Focus::clip;
     selectedClips.clear();
     for (const auto id : ids)
@@ -373,6 +374,8 @@ void Arrangement::setSelection(std::vector<te::EditItemID> ids, te::EditItemID p
     // what changed the selection in the first place.
     if (!syncingSelection)
         setRegionFromSelectedClips();
+    if (selected != previous && clipSelected)
+        clipSelected(selected);
 }
 
 // Selecting one card collapses a gathered selection back to it, so this runs

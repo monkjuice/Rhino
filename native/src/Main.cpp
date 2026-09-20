@@ -6,6 +6,7 @@
 #include "SessionView.h"
 #include "BrowserPanel.h"
 #include "DeviceRack.h"
+#include "AudioClipPanel.h"
 #include "Playhead.h"
 #include "StartupScreen.h"
 #include "TransportDisplay.h"
@@ -111,13 +112,23 @@ class ControlWindow final : public juce::Component,
                             private juce::Timer
 {
 public:
-    explicit ControlWindow(Session& s) : session(s), browser(s), grid(s), arrangement(s), sessionView(s), rack(s), files(s)
+    explicit ControlWindow(Session& s) : session(s), browser(s), grid(s), arrangement(s), sessionView(s), rack(s), audioClip(s), files(s)
     {
         setOpaque(true);
         files.status = [this](const juce::String& message) { logStatus(message); };
         files.loadingChanged = [this](bool loading) { setEnabled(!loading); };
         arrangement.status = files.status;
-        arrangement.trackSelected = [this](int track) { if (!sessionViewOpen) rack.selectTrack(track); };
+        arrangement.trackSelected = [this](int track)
+        {
+            if (!sessionViewOpen) rack.selectTrack(track);
+            refreshEditorPanes();
+        };
+        // Which editor a clip opens in is decided here rather than in the
+        // timeline: an audio clip brings up the audio editor, a MIDI clip the
+        // note editor, and a selection that is neither closes the pane.
+        arrangement.clipSelected = [this](te::EditItemID) { refreshEditorPanes(); };
+        arrangement.clipOpened = [this](te::EditItemID id) { openClip(id); };
+        audioClip.status = files.status;
         sessionView.status = files.status;
         sessionView.trackSelected = [this](int track) { if (sessionViewOpen) rack.selectTrack(track); };
         sessionToggle.setButtonText("Session");
@@ -245,7 +256,7 @@ public:
         panic.setTooltip("Panic reset audio");
         for (auto* component : std::initializer_list<juce::Component*>{
                  &infoView, &position, &play, &stop, &panic,
-                 &browser, &browserToggle, &editorToggle, &rackToggle, &grid, &arrangement, &sessionView,
+                 &browser, &browserToggle, &editorToggle, &rackToggle, &grid, &audioClip, &arrangement, &sessionView,
                  &sessionToggle, &arrangementToggle, &backToArrangement, &rack, &tempo, &timeSignature, &undo, &redo, &clear, &metronome, &metronomeMenu, &hint,
                  &patternLabel, &editorResolution, &editorZoomOut, &editorZoomIn, &scaleHighlight})
             addAndMakeVisible(component);
@@ -257,6 +268,10 @@ public:
         patternLabel.setColour(juce::Label::textColourId, juce::Colour(0xffb8c4aa));
         setSize(1280, 900);
         changeListenerCallback(nullptr);
+        // Records the selection the pane state belongs to, so the first real
+        // selection change is recognised as one.
+        refreshEditorPanes();
+        applyPaneLayout();
         // This updates a text readout only. Pointer events and control painting
         // are not throttled to this timer; there is no full-window repaint loop.
         startTimerHz(30);
@@ -291,12 +306,8 @@ public:
             g.setFont(juce::FontOptions(11.0f));
             g.drawText("INFO VIEW   ?  HIDE", area.withTrimmedLeft(10).withHeight(24), juce::Justification::centredLeft);
         }
-        if (clipEditorOpen && rackOpen)
-        {
-            g.setColour(juce::Colour(0xff3a434b));
-            g.fillRect(deviceSplitterBounds());
-        }
         g.setColour(juce::Colour(0xff3a434b));
+        g.fillRect(deviceSplitterBounds());
         g.fillRect(arrangementSplitterBounds());
     }
 
@@ -309,10 +320,19 @@ public:
         // The transport is a full-width bar. Both the browser and arrangement
         // begin below it, so their top edges remain aligned.
         const auto arrangementTop = browserTop;
-        arrangementHeight = juce::jlimit(150, std::max(150, getHeight() - 350), arrangementHeight);
-        const auto arrangementBottom = arrangementTop + arrangementHeight;
+        // Nothing selected means nothing to edit, so the lower pane is not
+        // reserved at all and the arrangement runs to the foot of the window.
+        // The toggle strip stays where it is, which is what makes the pane
+        // reachable again once something is selected.
+        auto arrangementH = std::max(150, getHeight() - arrangementTop - toggleStripHeight);
+        if (lowerPaneVisible())
+        {
+            arrangementHeight = juce::jlimit(150, std::max(150, getHeight() - 350), arrangementHeight);
+            arrangementH = arrangementHeight;
+        }
+        const auto arrangementBottom = arrangementTop + arrangementH;
         const auto lowerTop = arrangementBottom + 34;
-        const auto lowerH = std::max(112, getHeight() - lowerTop - 12);
+        const auto lowerH = std::max(0, getHeight() - lowerTop - 12);
         const auto displayWidth = juce::jlimit(240, 320, getWidth() / 4);
         const auto displayX = getWidth() / 2 - displayWidth / 2;
         // Keep the control bar as one visual cluster. The browser may resize,
@@ -361,43 +381,53 @@ public:
         browserToggle.setBounds(0, 40, 44, 50);
         arrangement.setVisible(!sessionViewOpen);
         sessionView.setVisible(sessionViewOpen);
-        arrangement.setBounds(editorX, arrangementTop, editorW, arrangementHeight);
-        sessionView.setBounds(editorX, arrangementTop, editorW, arrangementHeight);
-        editorToggle.setToggleState(clipEditorOpen, juce::dontSendNotification);
+        arrangement.setBounds(editorX, arrangementTop, editorW, arrangementH);
+        sessionView.setBounds(editorX, arrangementTop, editorW, arrangementH);
+        const auto notes = lowerPane == LowerPane::notes;
+        const auto audio = lowerPane == LowerPane::audio;
+        editorToggle.setToggleState(notes || audio, juce::dontSendNotification);
+        editorToggle.setButtonText(audio ? "Audio" : "Clip");
         rackToggle.setToggleState(rackOpen, juce::dontSendNotification);
         editorToggle.setBounds(editorX, arrangementBottom + 10, 48, 22);
         rackToggle.setBounds(editorX + 54, arrangementBottom + 10, 72, 22);
-        patternLabel.setVisible(clipEditorOpen);
+        patternLabel.setVisible(notes || audio);
         patternLabel.setBounds(editorX + 136, arrangementBottom + 10, std::max(80, editorW - 500), 24);
-        scaleHighlight.setVisible(clipEditorOpen && !session.isPatternDrums());
-        if (clipEditorOpen && !session.isPatternDrums())
+        // The scale, zoom and resolution controls belong to the note editor and
+        // mean nothing over a waveform, so they follow it rather than the pane.
+        scaleHighlight.setVisible(notes && !session.isPatternDrums());
+        if (notes && !session.isPatternDrums())
             scaleHighlight.setBounds(editorX + std::max(260, editorW - 328), arrangementBottom + 12, 146, 20);
-        editorZoomOut.setVisible(clipEditorOpen);
-        editorZoomIn.setVisible(clipEditorOpen);
-        editorResolution.setVisible(clipEditorOpen);
+        editorZoomOut.setVisible(notes);
+        editorZoomIn.setVisible(notes);
+        editorResolution.setVisible(notes);
         editorZoomOut.setBounds(editorX + std::max(414, editorW - 174), arrangementBottom + 12, 25, 20);
         editorZoomIn.setBounds(editorX + std::max(443, editorW - 145), arrangementBottom + 12, 25, 20);
         editorResolution.setBounds(editorX + std::max(510, editorW - 78), arrangementBottom + 12, 70, 20);
 
-        grid.setVisible(clipEditorOpen);
+        grid.setVisible(notes);
+        audioClip.setVisible(audio);
         rack.setVisible(rackOpen);
-        if (clipEditorOpen && rackOpen)
+        // The note editor and the audio editor are two faces of one pane, so
+        // they share its rectangle and only one of them is ever visible in it.
+        auto editorBounds = juce::Rectangle<int>(editorX, lowerTop, editorW, 0);
+        if (lowerPane != LowerPane::none && rackOpen)
         {
             deviceViewHeight = juce::jlimit(112, std::max(112, lowerH - 112), deviceViewHeight);
             const auto clipHeight = std::max(0, lowerH - deviceViewHeight - 8);
-            grid.setBounds(editorX, lowerTop, editorW, clipHeight);
+            editorBounds = {editorX, lowerTop, editorW, clipHeight};
             rack.setBounds(editorX, lowerTop + clipHeight + 8, editorW, deviceViewHeight);
         }
-        else if (clipEditorOpen)
+        else if (lowerPane != LowerPane::none)
         {
-            grid.setBounds(editorX, lowerTop, editorW, lowerH);
+            editorBounds = {editorX, lowerTop, editorW, lowerH};
             rack.setBounds(editorX, lowerTop + lowerH, editorW, 0);
         }
         else
         {
-            grid.setBounds(editorX, lowerTop, editorW, 0);
-            rack.setBounds(editorX, lowerTop, editorW, lowerH);
+            rack.setBounds(editorX, lowerTop, editorW, rackOpen ? lowerH : 0);
         }
+        grid.setBounds(editorBounds);
+        audioClip.setBounds(editorBounds);
         browserToggle.toFront(false);
         editorToggle.toFront(false);
         rackToggle.toFront(false);
@@ -434,7 +464,8 @@ public:
         }
         else if (resizingDeviceView)
         {
-            const auto available = std::max(112, grid.getHeight() + rack.getHeight() + 8);
+            const auto editorHeight = lowerPane == LowerPane::audio ? audioClip.getHeight() : grid.getHeight();
+            const auto available = std::max(112, editorHeight + rack.getHeight() + 8);
             deviceViewHeight = juce::jlimit(112, std::max(112, available - 112),
                                             resizeStartDeviceViewHeight - (event.y - resizeStartY));
             resized();
@@ -554,22 +585,140 @@ public:
         repaint();
     }
 
-    // The clip editor and the device view share one pane, so hiding the last
-    // one open would leave it empty. The other takes the pane over instead.
+    // The lower pane belongs to whatever is selected. The toggle closes it, or
+    // re-opens the editor the current selection calls for - there is no longer
+    // an "empty pane" to protect against, because an empty one is given back to
+    // the arrangement.
     void toggleClipEditor()
     {
-        clipEditorOpen = !clipEditorOpen;
-        if (!clipEditorOpen && !rackOpen) rackOpen = true;
-        resized();
-        repaint();
+        if (lowerPane != LowerPane::none)
+            lowerPane = LowerPane::none;
+        else if (const auto id = selectedAudioClipID(); id != te::EditItemID())
+        {
+            audioClip.setClip(id);
+            lowerPane = LowerPane::audio;
+        }
+        else if (isMidiSelection())
+            lowerPane = LowerPane::notes;
+        else
+        {
+            logStatus("Select a clip first: a MIDI clip opens the note editor, an audio clip the audio editor");
+            return;
+        }
+        rememberPaneSelection();
+        updateEditorLabel();
+        applyPaneLayout();
     }
 
     void toggleDeviceView()
     {
         rackOpen = !rackOpen;
-        if (!rackOpen && !clipEditorOpen) clipEditorOpen = true;
+        rememberPaneSelection();
+        applyPaneLayout();
+    }
+
+    // The clip a command would act on, when that clip is an audio clip.
+    te::EditItemID selectedAudioClipID() const
+    {
+        const auto id = arrangement.selectedClipID();
+        return session.findAudioClip(id) != nullptr ? id : te::EditItemID();
+    }
+
+    // What the note editor and the device rack are for: a MIDI clip, or a track
+    // that runs an instrument and could therefore hold one. Nothing else
+    // reveals either of them, which is what keeps them off an audio selection.
+    bool isMidiSelection() const
+    {
+        const auto id = arrangement.selectedClipID();
+        if (session.findClip(id) != nullptr)
+            return session.findAudioClip(id) == nullptr;
+        return session.trackHasInstrument(arrangement.selectedTrackIndex());
+    }
+
+    void rememberPaneSelection()
+    {
+        paneClip = arrangement.selectedClipID();
+        paneTrack = arrangement.selectedTrackIndex();
+        paneMidi = isMidiSelection();
+    }
+
+    // Double-clicking a clip opens it: audio in the audio editor, MIDI in the
+    // note editor. This is the only thing that reveals the audio editor, which
+    // is why a single click on a waveform still only selects it.
+    void openClip(te::EditItemID id)
+    {
+        if (session.findAudioClip(id) != nullptr)
+        {
+            audioClip.setClip(id);
+            lowerPane = LowerPane::audio;
+            rackOpen = false;
+            logStatus("Audio clip " + audioClip.clipName().quoted()
+                      + ": gain, pan, pitch and fades here apply to this clip only");
+        }
+        else if (session.findClip(id) != nullptr)
+            lowerPane = LowerPane::notes;
+        else
+            return;
+        rememberPaneSelection();
+        updateEditorLabel();
+        requestPaneLayout();
+    }
+
+    // Selection drives the pane, but only when the selection actually moved: a
+    // toggle the user pressed while standing on one clip has to survive the
+    // next notification about that same clip.
+    void refreshEditorPanes()
+    {
+        const auto clipID = arrangement.selectedClipID();
+        const auto track = arrangement.selectedTrackIndex();
+        const auto midi = isMidiSelection();
+        if (clipID == paneClip && track == paneTrack && midi == paneMidi)
+        {
+            // The clip the audio editor was showing can still be deleted, or
+            // taken away by an undo, without the selection moving at all.
+            if (lowerPane == LowerPane::audio && !audioClip.hasClip())
+            {
+                lowerPane = LowerPane::none;
+                requestPaneLayout();
+            }
+            return;
+        }
+        paneClip = clipID;
+        paneTrack = track;
+        paneMidi = midi;
+        // Once it is open the audio editor follows the audio clip selection,
+        // the way Live's clip view does. A MIDI selection hands the pane back
+        // to the note editor, and a selection that is neither closes it.
+        if (const auto audio = selectedAudioClipID(); lowerPane == LowerPane::audio && audio != te::EditItemID())
+            audioClip.setClip(audio);
+        else
+            lowerPane = midi ? LowerPane::notes : LowerPane::none;
+        if (!midi)
+            rackOpen = false;
+        updateEditorLabel();
+        requestPaneLayout();
+    }
+
+    // Opening or closing the pane changes the arrangement's height, and the
+    // selection that asks for it arrives from a mouse *down* - the same press
+    // that may be starting a clip drag. Resizing the lanes underneath that
+    // gesture would move the clip out from under the pointer, so the layout
+    // waits until the button comes up; the 30 Hz timer applies it.
+    void requestPaneLayout() { paneLayoutPending = true; }
+
+    void applyPaneLayout()
+    {
+        paneLayoutPending = false;
         resized();
         repaint();
+    }
+
+    void updateEditorLabel()
+    {
+        patternLabel.setText(lowerPane == LowerPane::audio
+                                 ? "AUDIO CLIP  /  " + audioClip.clipName().toUpperCase()
+                                 : session.isPatternDrums() ? "PATTERN 1  /  DRUM EDITOR" : "PATTERN 1  /  NOTE EDITOR",
+                             juce::dontSendNotification);
     }
 
     // The Info View sits at the foot of the browser column, so it has nowhere
@@ -678,7 +827,8 @@ private:
     {
         juce::PopupMenu menu;
         menu.addItem(1, "Browser", true, browserOpen);
-        menu.addItem(2, "Clip Editor", true, clipEditorOpen);
+        menu.addItem(2, lowerPane == LowerPane::audio ? "Audio Editor" : "Clip Editor",
+                     true, lowerPane != LowerPane::none);
         menu.addItem(3, "Device View", true, rackOpen);
         menu.addItem(4, "Info View", browserOpen, infoVisible && browserOpen);
         menu.addSeparator();
@@ -808,9 +958,12 @@ private:
         metronome.setToggleState(session.clickTrackEnabled(), juce::dontSendNotification);
         undo.setEnabled(session.edit->getUndoManager().canUndo());
         redo.setEnabled(session.edit->getUndoManager().canRedo());
-        patternLabel.setText(session.isPatternDrums() ? "PATTERN 1  /  DRUM EDITOR" : "PATTERN 1  /  NOTE EDITOR",
-                             juce::dontSendNotification);
-        scaleHighlight.setVisible(!session.isPatternDrums());
+        updateEditorLabel();
+        scaleHighlight.setVisible(lowerPane == LowerPane::notes && !session.isPatternDrums());
+        // Dropping an instrument turns a bare track into a MIDI one without
+        // moving the selection, and deleting or undoing a clip can take the one
+        // the audio editor is showing. Both change which pane belongs here.
+        refreshEditorPanes();
         {
             const juce::ScopedValueSetter<bool> scope(updatingEditorResolution, true);
             editorResolution.setSelectedId(session.editorStepResolution(), juce::dontSendNotification);
@@ -822,6 +975,8 @@ private:
 
     void timerCallback() override
     {
+        if (paneLayoutPending && !juce::ModifierKeys::getCurrentModifiers().isAnyMouseButtonDown())
+            applyPaneLayout();
         // The engine raises a track's slot-override flag from the audio thread
         // without broadcasting, so this is polled rather than event-driven.
         if constexpr (sessionViewEnabled)
@@ -848,12 +1003,16 @@ private:
 
     juce::Rectangle<int> deviceSplitterBounds() const
     {
-        if (!clipEditorOpen || !rackOpen) return {};
-        return {grid.getX(), grid.getBottom() + 2, grid.getWidth(), 4};
+        if (lowerPane == LowerPane::none || !rackOpen) return {};
+        const auto& editor = lowerPane == LowerPane::audio ? static_cast<const juce::Component&>(audioClip)
+                                                           : static_cast<const juce::Component&>(grid);
+        return {editor.getX(), editor.getBottom() + 2, editor.getWidth(), 4};
     }
 
+    // Nothing to drag when the arrangement already has the whole window.
     juce::Rectangle<int> arrangementSplitterBounds() const
     {
+        if (!lowerPaneVisible()) return {};
         return {arrangement.getX(), arrangement.getBottom() + 3, arrangement.getWidth(), 4};
     }
 
@@ -876,8 +1035,8 @@ private:
 
     bool isOverDeviceSplitter(juce::Point<float> point) const
     {
-        if (!clipEditorOpen || !rackOpen) return false;
-        return deviceSplitterBounds().expanded(0, 4).toFloat().contains(point);
+        const auto splitter = deviceSplitterBounds();
+        return !splitter.isEmpty() && splitter.expanded(0, 4).toFloat().contains(point);
     }
 
     Session& session;
@@ -889,6 +1048,7 @@ private:
     Arrangement arrangement;
     SessionView sessionView;
     DeviceRack rack;
+    AudioClipPanel audioClip;
     juce::Slider tempo;
     juce::ComboBox timeSignature;
     juce::TextButton metronome, metronomeMenu;
@@ -909,7 +1069,23 @@ private:
     int resizeStartArrangementHeight = 246, resizeStartDeviceViewHeight = 220;
     static constexpr int browserTop = 94;
     static constexpr int infoViewHeight = 132;
-    bool browserOpen = true, clipEditorOpen = true, rackOpen = false, infoVisible = true;
+    // Room under the arrangement for the Clip and Devices toggles, which stay
+    // put whether or not the pane they open is showing.
+    static constexpr int toggleStripHeight = 46;
+    // Which editor the lower pane is showing, if any. Both the note editor and
+    // the device rack start hidden: they are revealed by selecting a MIDI clip
+    // or a track that runs an instrument, and the audio editor by
+    // double-clicking an audio clip.
+    enum class LowerPane { none, notes, audio };
+    LowerPane lowerPane = LowerPane::none;
+    bool lowerPaneVisible() const { return lowerPane != LowerPane::none || rackOpen; }
+    // The selection the pane state was chosen for, so a notification about the
+    // same selection does not overwrite a toggle the user just pressed.
+    te::EditItemID paneClip;
+    int paneTrack = -1;
+    bool paneMidi = false;
+    bool paneLayoutPending = false;
+    bool browserOpen = true, rackOpen = false, infoVisible = true;
     bool sessionViewOpen = false;
     bool resizingBrowser = false, resizingDeviceView = false, resizingArrangement = false;
     bool updatingEditorResolution = false;

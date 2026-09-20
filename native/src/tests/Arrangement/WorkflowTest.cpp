@@ -5,6 +5,7 @@
 #include "instruments/RhinoWaveDevice.h"
 #include "../../Theme.h"
 #include "../../StepGrid.h"
+#include "../../AudioClipPanel.h"
 #include "../../SessionView.h"
 #include "../../Playhead.h"
 #include <functional>
@@ -80,6 +81,8 @@ int runArrangementTest()
        #include "scenarios/Rendering.inc"
         scenario("audio clip editing");
        #include "scenarios/AudioClipEditing.inc"
+        scenario("audio clip mixing");
+       #include "scenarios/AudioClipMixing.inc"
         scenario("region clipboard");
        #include "scenarios/RegionClipboard.inc"
         scenario("track management");

@@ -3,6 +3,7 @@
 // header: what Session needs is a device's identity and metadata, not its DSP.
 #include "DeviceCatalog.h"
 #include "ClipGeometry.h"
+#include <functional>
 #include <optional>
 #include <vector>
 
@@ -372,6 +373,40 @@ public:
                                  int destinationTrack, std::vector<te::EditItemID>& pasted);
     juce::Result cycleClipColour(te::EditItemID);
     int clipPluginCount(te::EditItemID) const;
+    // An audio clip's own mix. Gain, pan, pitch, the two fades, mute and
+    // reverse all live on the clip's state rather than its track, so they
+    // travel with the clip, are undone with it, and leave every other clip on
+    // that track alone - which is what makes this a clip editor and not a
+    // second track mixer. Serves AudioClipPanel.
+    struct AudioClipMix
+    {
+        bool valid = false;
+        juce::String name;
+        juce::File sourceFile;
+        double startSeconds = 0.0, endSeconds = 0.0, offsetSeconds = 0.0;
+        // The source material, and how fast the clip reads it. A clip plays
+        // the span [offset, offset + length) of the source, scaled by speed.
+        double sourceLengthSeconds = 0.0, speedRatio = 1.0;
+        double fadeInSeconds = 0.0, fadeOutSeconds = 0.0;
+        float gainDb = 0.0f, pan = 0.0f, pitchSemitones = 0.0f;
+        bool muted = false, reversed = false;
+        double lengthSeconds() const { return endSeconds > startSeconds ? endSeconds - startSeconds : 0.0; }
+    };
+    static constexpr float minimumClipGainDb = -60.0f, maximumClipGainDb = 24.0f;
+    static constexpr float maximumClipPitchSemitones = 24.0f;
+    AudioClipMix audioClipMix(te::EditItemID) const;
+    juce::Result setAudioClipGainDb(te::EditItemID, float decibels);
+    juce::Result setAudioClipPan(te::EditItemID, float pan);
+    juce::Result setAudioClipPitch(te::EditItemID, float semitones);
+    juce::Result setAudioClipFadeIn(te::EditItemID, double seconds);
+    juce::Result setAudioClipFadeOut(te::EditItemID, double seconds);
+    juce::Result setAudioClipMuted(te::EditItemID, bool muted);
+    juce::Result setAudioClipReversed(te::EditItemID, bool reversed);
+    // A slider drag is one undo step and one notification, not one per pixel:
+    // the panel brackets the drag with these and the setters in between stay
+    // quiet. Nested calls are counted, so a caller cannot end another's.
+    void beginAudioClipGesture(const juce::String& actionName);
+    void endAudioClipGesture();
     void toggleTrackMute(int track);
     void toggleTrackSolo(int track);
     // The mixer. Session view and the arrangement are two presentations of
@@ -478,6 +513,10 @@ private:
         te::AutomatableParameter::Ptr parameter;
         float restoreValue = 0.0f;
     };
+    // SessionAudioClips.cpp - find the clip, open a transaction unless a
+    // gesture already has one open, apply, and notify once it is over.
+    juce::Result applyAudioClipEdit(te::EditItemID, const juce::String& actionName,
+                                    const std::function<void(te::WaveAudioClip&)>&);
     // SessionRegion.cpp - the region edit itself, without a transaction or a
     // notification, so paste can clear and insert inside one undo step.
     bool clearClipRegionInEdit(double startSeconds, double endSeconds, int firstTrack, int lastTrack,
@@ -531,6 +570,7 @@ private:
     // Engine initialization also changes its edit flag asynchronously. Track
     // user commands separately so startup cannot dirty an untouched document.
     juce::int64 changeRevision = 0, savedRevision = 0;
+    int audioClipGestureDepth = 0;
     bool manualLoop = false;
     tracktion::core::TimeRange manualLoopRange;
     DeviceTarget lastTouchedParameter;

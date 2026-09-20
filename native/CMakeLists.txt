@@ -56,6 +56,7 @@ target_sources(RhinoNative PRIVATE
     src/SessionSlots.cpp
     src/SessionMixer.cpp
     src/SessionClips.cpp
+    src/SessionAudioClips.cpp
     src/SessionRegion.cpp
     src/SessionSamples.cpp
     src/SessionPreview.cpp
@@ -82,6 +83,7 @@ target_sources(RhinoNative PRIVATE
     src/SessionViewPainter.cpp
     src/SessionViewGestures.cpp
     src/BrowserPanel.cpp
+    src/AudioClipPanel.cpp
     src/DeviceEditorPanel.cpp
     src/DeviceRack.cpp
     src/Playhead.cpp

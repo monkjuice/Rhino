@@ -33,8 +33,17 @@ public:
     void fit();
     void selectTrack(int track);
     int selectedTrackIndex() const { return selectedTrack; }
+    // The clip a command would act on, or an invalid id when the selection is
+    // a track, a region or nothing. The shell reads it to decide which editor
+    // the lower pane should be showing.
+    te::EditItemID selectedClipID() const { return selected; }
     std::function<void(juce::String)> status;
     std::function<void(int)> trackSelected;
+    // Selecting a clip says what is being worked on; double-clicking one says
+    // to open it. The arrangement reports both and decides neither: which
+    // editor a clip belongs in is the shell's business, not the timeline's.
+    std::function<void(te::EditItemID)> clipSelected;
+    std::function<void(te::EditItemID)> clipOpened;
 private:
     friend int runArrangementTest();
     struct Waveform;

@@ -199,11 +199,14 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
     }
     else if (!isSelected(clip.id))
         setSelection({clip.id}, clip.id);
-    else
+    else if (selected != clip.id)
     {
         selected = clip.id;
         focus = Focus::clip;
+        if (clipSelected) clipSelected(selected);
     }
+    else
+        focus = Focus::clip;
     // Whatever the region was before - a span dragged out, or the rectangle a
     // paste left behind - the gesture starting here is about these clips, so
     // the region becomes theirs and travels with them.
@@ -214,6 +217,11 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
         const auto result = session.selectPatternClip(selected);
         if (result.failed() && status) status(result.getErrorMessage());
     }
+    // Double-clicking a clip opens it. A drag can still start from the same
+    // press, so this reports and returns nothing: the gesture below is set up
+    // either way, and a double-click that never moves simply never drags.
+    if (event.getNumberOfClicks() == 2 && clipOpened)
+        clipOpened(clip.id);
     repaint();
     original = preview = clip.position;
     originalTrack = previewTrack = clip.track;

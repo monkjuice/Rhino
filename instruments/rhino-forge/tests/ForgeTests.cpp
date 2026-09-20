@@ -1,4 +1,4 @@
-#include "../src/ForgeProcessor.h"
+﻿#include "../src/ForgeProcessor.h"
 #include "../ui/ForgeLayout.h"
 #include "../ui/ForgeTooltips.h"
 #include "../ui/ForgeVisuals.h"
@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <iostream>
 #include <memory>
+#include <numeric>
 #include <vector>
 
 // One binary, three CTest cases selected by argv, matching Rhino's own test
@@ -253,7 +254,7 @@ void layoutSuite()
 
     // Two controls in one cell are two readings of one setting, and only one of
     // them may ever be on screen. That holds only if they are gated against each
-    // other by the same parameter, one each way round â€” otherwise they would be
+    // other by the same parameter, one each way round Ã¢â‚¬â€ otherwise they would be
     // drawn on top of one another.
     for (const auto& module : modules)
     {
@@ -286,7 +287,7 @@ void layoutSuite()
     }
 
     // A module declared in banks shows one at a time, in the same cells, so
-    // every bank has to declare the same controls in the same order — otherwise
+    // every bank has to declare the same controls in the same order â€” otherwise
     // which cell a control lands in would depend on which bank was showing.
     for (const auto& module : modules)
     {
@@ -312,7 +313,7 @@ void layoutSuite()
                 }
         }
         // A banked module with no drag handle draws its own title, and its
-        // cards start just past it — so that title has to be short enough to
+        // cards start just past it â€” so that title has to be short enough to
         // fit the gutter they leave. Three characters at the header's font is
         // what bankTitleGutter covers.
         if (banks > 1 && module.handleSource == 0)
@@ -387,7 +388,7 @@ void layoutSuite()
 
         // A row that has reserved a strip for a display must not have put a
         // control on top of it. The strip and the cells are worked out from
-        // one total, so this is what holds that arithmetic honest — and it is
+        // one total, so this is what holds that arithmetic honest â€” and it is
         // checked at every size further down as well, because integer division
         // is exactly where the two would drift apart.
         for (int r = 0; r < static_cast<int>(modules[i].rows.size()); ++r)
@@ -484,7 +485,7 @@ void layoutSuite()
     }
 
     // A wave grid is painted cell by cell and hit-tested cell by cell, against
-    // the same arithmetic — so what that arithmetic has to guarantee is that
+    // the same arithmetic â€” so what that arithmetic has to guarantee is that
     // the cells tile the box: no gap a click could fall into, no overlap where
     // two shapes would answer for one point, and nothing outside the component
     // the pointer is being measured against. Checked over the range of sizes
@@ -514,7 +515,7 @@ void layoutSuite()
 
     // The picker, built by the editor the panel actually opens with rather than
     // by this test. Everything above holds the declaration to its parameters;
-    // this holds the component to its declaration — that the sub's six shapes
+    // this holds the component to its declaration â€” that the sub's six shapes
     // reached it, that choosing one writes the parameter a host reads, and that
     // the cell lit afterwards is the cell chosen. Nothing else on the panel
     // drives a parameter from a picture, so nothing else was covering this.
@@ -567,7 +568,7 @@ void layoutSuite()
     }
 
     // An oscillator's colour is chosen by right-clicking its LED, and a
-    // juce::Button triggers on *any* mouse button — so without the gesture
+    // juce::Button triggers on *any* mouse button â€” so without the gesture
     // being taken out of both halves of the click, reaching for the menu would
     // switch the oscillator off on the way. That is the whole reason EnableLed
     // overrides mouseDown and mouseUp, and it is what this holds.
@@ -592,7 +593,7 @@ void layoutSuite()
                     "a colour menu is attached to every oscillator's LED and to nothing else");
 
             // What the menu actually offers. Every colour on it once, the one
-            // in use ticked, and a swatch on each row — the swatch being the
+            // in use ticked, and a swatch on each row â€” the swatch being the
             // part you choose by, so a row without one is a broken menu even
             // though it still reads correctly.
             {
@@ -646,7 +647,7 @@ void layoutSuite()
     // now has a way of being wrong it did not have before: a change that moves
     // a plate but does not reach the cache's key would leave the old picture on
     // screen. The strip along the foot of the top row carries the plates'
-    // stamped legends and nothing else — no control is ever laid out in it — so
+    // stamped legends and nothing else â€” no control is ever laid out in it â€” so
     // a difference there is a difference in the cached layer, and changing tab
     // has to produce one.
     {
@@ -707,7 +708,7 @@ void layoutSuite()
                     // A compact module opts out of the shared size on purpose,
                     // but its knobs still have to be smaller, not larger, and
                     // still have to be usable. Its block is wider than the
-                    // circle in it — the readout needs the room — so the circle
+                    // circle in it â€” the readout needs the room â€” so the circle
                     // is read back from the block's height, not its width.
                     const auto circle = rhino::forge::ui::knobDiameterOf(block);
                     require(circle <= diameter, "a compact knob is no larger than the shared diameter");
@@ -851,8 +852,57 @@ void layoutSuite()
 // what the effect usually looks like.
 //
 // It is the same standard the filter module's display is held to below, and for
-// the same reason — a display that is merely plausible is worse than none,
+// the same reason â€” a display that is merely plausible is worse than none,
 // because it is believed.
+// The panel's chassis and module plates are cached as an image, and the layer
+// the previous tab was showing is held whole so that going back to it is a swap
+// rather than a redraw. Everything the layer is drawn from therefore has to be
+// in Editor::chromeKey. One that has forgotten an input does not fail anywhere
+// else: it puts the previous tab's metal under the current tab's controls, and
+// only a pair of eyes on the running plugin would catch it.
+//
+// So: render a page on an editor that has been walked around the panel and had
+// its layer swapped back, and require it to match the same page on an editor
+// seeing it for the first time.
+void chromeCacheSuite()
+{
+    const auto render = [] (std::initializer_list<const char*> pages)
+    {
+        auto processor = std::make_unique<rhino::forge::Processor>();
+        std::unique_ptr<juce::AudioProcessorEditor> editor(processor->createEditor());
+        juce::Image canvas(juce::Image::ARGB, editor->getWidth(), editor->getHeight(), true);
+        for (const auto* page : pages)
+        {
+            for (auto* child : editor->getChildren())
+                if (auto* tab = dynamic_cast<rhino::forge::ui::PageTab*>(child))
+                    if (tab->getButtonText() == juce::String(page) && tab->onClick) tab->onClick();
+            juce::Graphics g(canvas);
+            editor->paint(g);
+        }
+        return canvas;
+    };
+
+    const auto same = [] (const juce::Image& a, const juce::Image& b)
+    {
+        if (a.getWidth() != b.getWidth() || a.getHeight() != b.getHeight()) return false;
+        const juce::Image::BitmapData left(a, juce::Image::BitmapData::readOnly);
+        const juce::Image::BitmapData right(b, juce::Image::BitmapData::readOnly);
+        for (int y = 0; y < a.getHeight(); ++y)
+            for (int x = 0; x < a.getWidth(); ++x)
+                if (left.getPixelColour(x, y) != right.getPixelColour(x, y)) return false;
+        return true;
+    };
+
+    // The last step returns to a page whose layer is the one being held, which
+    // is the swap this is here to check.
+    require(same(render({"MATRIX"}), render({"OSC", "MIX", "MATRIX", "OSC", "MATRIX"})),
+            "a tab returned to draws what it drew the first time");
+    // And a page reached the long way round, whose layer has been thrown away
+    // and drawn again rather than swapped back.
+    require(same(render({"FX"}), render({"OSC", "TABLE", "MATRIX", "MIX", "FX"})),
+            "a tab reached after every other one draws what it draws on its own");
+}
+
 void fxDisplaySuite()
 {
     namespace ui = rhino::forge::ui;
@@ -861,7 +911,7 @@ void fxDisplaySuite()
     // --- The equaliser ---------------------------------------------------------
     //
     // A band's magnitude is read off the coefficients setBand built, so a band
-    // asked for no gain at all has to measure as no gain at all — at every
+    // asked for no gain at all has to measure as no gain at all â€” at every
     // frequency, not only at its corner. This is what would catch a shelf built
     // from the wrong cookbook formula: it would still look like a shelf.
     {
@@ -901,7 +951,7 @@ void fxDisplaySuite()
     // --- The distortion --------------------------------------------------------
     //
     // The transfer curve is fxShape called per pixel, so the two cannot disagree
-    // by construction — what is worth checking is that the shapes behave the way
+    // by construction â€” what is worth checking is that the shapes behave the way
     // a curve drawn from them would be read: passing through the origin, odd
     // about it where they claim to be, and never leaving the box.
     {
@@ -957,7 +1007,7 @@ void fxDisplaySuite()
     //
     // The envelope is decay raised to the number of comb round trips. A longer
     // decay setting therefore has to give a longer tail, and a hall a longer one
-    // than a plate at the same setting — which is the whole of what the two
+    // than a plate at the same setting â€” which is the whole of what the two
     // types differ by in renderReverb.
     {
         const auto& info = rhino::forge::fxTypes()[static_cast<size_t>(FxType::reverb)];
@@ -977,7 +1027,7 @@ void fxDisplaySuite()
     // caught up. This is why: that atomic is kept up to date by one of the
     // parameter's own listeners, and JUCE calls listeners in the reverse of the
     // order they registered. A panel attachment registers after the state does,
-    // so it is called first — and reads the value from before the change it is
+    // so it is called first â€” and reads the value from before the change it is
     // being told about.
     //
     // What the panel reads now is the parameter itself, which stores its value
@@ -1706,8 +1756,8 @@ void presetSuite()
     require(directory.createDirectory(), "temporary preset directory can be created");
     const auto preset = directory.getChildFile("Round Trip.forgepreset");
 
-    // An oscillator's panel colour is not a parameter — it rides on the state
-    // tree's own properties — so it is the one setting a preset could silently
+    // An oscillator's panel colour is not a parameter â€” it rides on the state
+    // tree's own properties â€” so it is the one setting a preset could silently
     // drop, and nothing else in this suite would notice.
     require(processor.panelColour("oscA") == static_cast<int>(rhino::forge::ui::defaultPanelColour),
             "an oscillator opens on the default colour");
@@ -1742,7 +1792,7 @@ void presetSuite()
     // parameter state. A preset that carries one has to give back the frames
     // that were drawn, and a preset that carries none has to put the oscillator
     // back on the built-in ten rather than leave the previous patch's table
-    // behind â€” the same rule an omitted parameter follows.
+    // behind Ã¢â‚¬â€ the same rule an omitted parameter follows.
     {
         rhino::forge::Processor drawn;
         drawn.tableStore().edit(0).draw(0, 0.0f, -1.0f, 1.0f, 1.0f);
@@ -2287,9 +2337,9 @@ void mixerSuite()
 // or a type that silently does nothing all look perfectly correct in the
 // parameters.
 //
-// These lean on what each type *provably* does rather than on how it sounds — a
+// These lean on what each type *provably* does rather than on how it sounds â€” a
 // delay puts energy where there was none, a filter takes brightness away, a
-// distortion adds harmonics — because those are the claims that would be wrong
+// distortion adds harmonics â€” because those are the claims that would be wrong
 // if the wiring were wrong.
 // Defined with the modulation suite further down, which is where the rest of
 // the matrix checks live; declared here because the rack is reached the same
@@ -2386,8 +2436,8 @@ void fxSuite()
     require(tailAfterNote(sentToBus) > silence * 4.0f + 0.0001f,
             "a source sent to a bus is heard through that bus's rack");
 
-    // A reverb is the type most easily broken into silence — a comb read past
-    // the end of its own line answers nothing and the bank stays quiet — so it
+    // A reverb is the type most easily broken into silence â€” a comb read past
+    // the end of its own line answers nothing and the bank stays quiet â€” so it
     // is held to the same claim the delay is: sound after the note is gone.
     auto reverbedOwner = std::make_unique<rhino::forge::Processor>();
     auto& reverbed = *reverbedOwner;
@@ -2418,7 +2468,7 @@ void fxSuite()
     requireClose(tailAfterNote(bypassed), silence, silence + 0.0001f,
                  "bypassing the whole rack takes every slot in it out at once");
 
-    // A slot left at OFF is not a slot that does nothing quietly — it must be
+    // A slot left at OFF is not a slot that does nothing quietly â€” it must be
     // exactly the same signal as no slot at all.
     auto emptySlotOwner = std::make_unique<rhino::forge::Processor>();
     auto& emptySlot = *emptySlotOwner;
@@ -3018,7 +3068,7 @@ void auxEnvelopeSuite()
     enum Stage { idle, attack, decay, sustain, release };
 
     // Nothing routed: an auxiliary envelope may not colour the sound at all,
-    // whatever its knobs are set to. Bit-identical rather than nearly so — a
+    // whatever its knobs are set to. Bit-identical rather than nearly so â€” a
     // second envelope leaking into the signal path is exactly the hardwired
     // filter envelope this design set out to remove.
     juce::AudioBuffer<float> plain(2, samples), moved(2, samples);
@@ -3150,7 +3200,7 @@ void lfoSuite()
 
     // Sine and triangle join up at the cycle boundary. A saw and a square jump
     // a full swing there instead, and that jump is the shape rather than a
-    // fault â€” checked so neither can be quietly smoothed away.
+    // fault Ã¢â‚¬â€ checked so neither can be quietly smoothed away.
     for (const auto continuous : {LfoShape::sine, LfoShape::triangle})
         requireClose(rhino::forge::lfoWave(continuous, 0.0f, 0.0f),
                      rhino::forge::lfoWave(continuous, 1.0f, 0.0f), 0.0001f,
@@ -3204,7 +3254,7 @@ void lfoSuite()
         first.mode = static_cast<float>(mode);
         // One voice, so the phase the Core publishes is that voice's own. An
         // LFO that answers the keyboard lives inside the voice now, and what
-        // reaches the panel is the loudest voice's copy of it — which is the
+        // reaches the panel is the loudest voice's copy of it â€” which is the
         // point of the per-voice check further down, but here it would only get
         // in the way of asking what one note does.
         patch.polyphony = 1.0f;
@@ -3311,7 +3361,7 @@ void lfoSuite()
     }
 
     // A legato note in mono did not lift a key, so it does not restart the
-    // shape â€” the same rule the amp envelope already follows.
+    // shape Ã¢â‚¬â€ the same rule the amp envelope already follows.
     {
         rhino::forge::Core core;
         core.initialise(48000.0);
@@ -3349,7 +3399,7 @@ void lfoSuite()
         core.noteOn(57, 1.0f, patch);
         runCore(core, patch, 64);
         // What reaches the panel is the loudest voice's copy, and that is still
-        // the note that has been sounding — so its own cycle carried straight on
+        // the note that has been sounding â€” so its own cycle carried straight on
         // across the new one.
         const auto after = core.lfoPosition(0);
         require(after > before, "a second note leaves the first note's LFO running");
@@ -3454,7 +3504,7 @@ void lfoSuite()
 
     // The phase the display draws has to be the one the voice is reading, and
     // it has to move.
-    // In OFF, because that is the mode that runs with nothing playing — which
+    // In OFF, because that is the mode that runs with nothing playing â€” which
     // is the case this check is about: the phase reaching the panel is the one
     // the voice is reading, and it moves.
     rhino::forge::Processor running;
@@ -3552,7 +3602,7 @@ void bandLimitSuite()
                 "a band-limited frame keeps the harmonics below its limit");
         // Everything above the cut, swept up to the stored Nyquist rather than
         // sampled at one harmonic. Past the stored Nyquist a probe measures the
-        // interpolator's images and not the band-limiting, so it stops there —
+        // interpolator's images and not the band-limiting, so it stops there â€”
         // and a single probe at twice the limit, which is what this used to be,
         // sat on the stored frame's DC image and so read near zero whatever the
         // transform had done.
@@ -3786,7 +3836,7 @@ void voiceStealSuite()
 
     // Four voices for ten notes: six of them have to take a voice that is still
     // sounding. Sixteen voices for the same ten notes never steals at all, so
-    // it is the same music with the steals taken out — which makes it the
+    // it is the same music with the steals taken out â€” which makes it the
     // reference for how large a step this material legitimately contains.
     const auto stealing = worstStep(4.0f);
     const auto roomy = worstStep(16.0f);
@@ -3798,7 +3848,7 @@ void voiceStealSuite()
 
     // And a voice is only ever taken when one genuinely has to be. A note that
     // has finished leaves a voice free, and the next note has to take that one
-    // rather than whichever slot a rotation had reached — strict rotation would
+    // rather than whichever slot a rotation had reached â€” strict rotation would
     // silence a note still under the player's finger while a dead voice sat
     // beside it. The invariant that says so: while no more notes sound at once
     // than the patch has voices, raising the polyphony cannot change a sample.
@@ -3932,7 +3982,7 @@ void tableEditSuite()
     WavetableStore store;
 
     // A fresh store is the built-in ten, and what the editor draws is exactly
-    // what the oscillator has been playing â€” the M9a guarantee, now that the
+    // what the oscillator has been playing Ã¢â‚¬â€ the M9a guarantee, now that the
     // display reads the editable frames rather than the formulas.
     require(store.edit(0).frameCount() == rhino::forge::waveShapeCount,
             "a fresh table holds the built-in frames");
@@ -4027,7 +4077,7 @@ void tableEditSuite()
     require(agreed, "rebuilding one frame gives what rebuilding the whole table gives");
 
     // The hand-over. A block that has already picked up a table goes on reading
-    // it while the message thread publishes over the top â€” which is the case
+    // it while the message thread publishes over the top Ã¢â‚¬â€ which is the case
     // that would be a use-after-free if a replaced table were freed on the spot.
     // Reading it afterwards is a canary rather than a proof: it is what a debug
     // allocator or a sanitiser has to be given something to catch.
@@ -4116,7 +4166,7 @@ void tableFileSuite()
 
     // And the table reaches the voice. With everything else switched off and
     // POSITION parked on the first frame, flattening that frame has to silence
-    // the oscillator â€” which it can only do if the voice is reading the frames
+    // the oscillator Ã¢â‚¬â€ which it can only do if the voice is reading the frames
     // the editor changed.
     rhino::forge::Processor voice;
     for (const auto* id : {"oscBEnable", "subEnable", "noiseEnable"}) setValue(voice, id, 0.0f);
@@ -4823,7 +4873,7 @@ void engineSuite()
 // The first question a player asks and the one the panel cannot answer for
 // itself: does a note come out at the pitch it names? Measured off the rendered
 // signal rather than off the phase accumulator, so nothing here can agree with
-// the oscillator by construction — a transposed table, a mis-scaled frame or a
+// the oscillator by construction â€” a transposed table, a mis-scaled frame or a
 // phase increment that is off by a ratio all show up as cents.
 //
 // The same window answers what a shape is as well as where it sits, which is
@@ -4869,7 +4919,7 @@ std::vector<double> renderedSpectrum(const rhino::forge::Patch& patch, int note,
 
 // Where a peak really sits between two bins, and how tall it really is. A
 // partial almost never lands on a bin centre, and a Hann window spreads it
-// across three — so taking the tallest bin alone misreads the frequency by up
+// across three â€” so taking the tallest bin alone misreads the frequency by up
 // to half a bin and the amplitude by up to 1.4 dB. Fitting a parabola through
 // the logs of the three recovers both, which is what lets one partial be
 // compared against another closely enough to name a waveform.
@@ -5115,12 +5165,98 @@ int main(int argc, char** argv)
         return juce::PNGImageFormat().writeImageToStream(snapshot, *stream) ? 0 : 1;
     }
 
+    // What a frame actually costs. --snapshot answers "does it look right";
+    // this answers "how long did that take", which is the only honest way to
+    // talk about resize and tab pacing. Software-rendered, so the absolute
+    // numbers are not the window's -- the comparison between two builds of the
+    // same panel is what it is for, and the way to take one is to build the
+    // other binary aside and run them alternately, because the machine drifts
+    // by more than some of these differences over a few minutes.
+    if (suite == "--profile")
+    {
+        auto processor = std::make_unique<rhino::forge::Processor>();
+        std::unique_ptr<juce::AudioProcessorEditor> editor(processor->createEditor());
+        const auto width = argc > 2 ? juce::String(argv[2]).getIntValue() : editor->getWidth();
+        const auto height = argc > 3 ? juce::String(argv[3]).getIntValue() : editor->getHeight();
+        editor->setSize(width, height);
+
+        juce::Image canvas(juce::Image::ARGB, editor->getWidth(), editor->getHeight(), true);
+        const auto paintOnce = [&editor, &canvas]
+        {
+            juce::Graphics g(canvas);
+            editor->paint(g);
+        };
+        // The median frame, not the mean: one rebuild in a run of otherwise
+        // cached frames is a thirty-millisecond outlier, and averaging it in
+        // reports a cost no frame actually paid. That mistake read as a
+        // regression in the idle frame here once already.
+        const auto median = [] (int reps, auto&& body)
+        {
+            std::vector<double> times;
+            for (int i = 0; i < reps; ++i)
+            {
+                const auto start = juce::Time::getHighResolutionTicks();
+                body(i);
+                times.push_back(juce::Time::highResolutionTicksToSeconds(
+                                    juce::Time::getHighResolutionTicks() - start) * 1000.0);
+            }
+            std::sort(times.begin(), times.end());
+            return times[times.size() / 2];
+        };
+
+        paintOnce();
+        std::cout << "panel          " << editor->getWidth() << "x" << editor->getHeight() << "\n";
+        // What the 24Hz timer costs when nothing has moved.
+        std::cout << "idle frame     " << median(40, [&] (int) { paintOnce(); }) << " ms\n";
+        // And what one frame of a drag on a window edge costs.
+        std::cout << "resize frame   " << median(40, [&] (int i)
+        {
+            editor->setSize(width - (i % 2), height);
+            paintOnce();
+        }) << " ms\n";
+        editor->setSize(width, height);
+        paintOnce();
+
+        std::vector<rhino::forge::ui::EnableLed*> leds;
+        for (auto* child : editor->getChildren())
+            if (auto* led = dynamic_cast<rhino::forge::ui::EnableLed*>(child)) leds.push_back(led);
+        if (!leds.empty())
+            std::cout << "module on/off  " << median(20, [&] (int i)
+            {
+                auto* led = leds[static_cast<size_t>(i) % leds.size()];
+                led->setToggleState(!led->getToggleState(), juce::sendNotificationSync);
+                paintOnce();
+            }) << " ms\n";
+        paintOnce();
+
+        std::vector<rhino::forge::ui::PageTab*> pageTabs;
+        for (auto* child : editor->getChildren())
+            if (auto* tab = dynamic_cast<rhino::forge::ui::PageTab*>(child))
+                pageTabs.push_back(tab);
+        // Walking every tab in turn, and flipping between two of them, which is
+        // what the hand actually does and the case the held layer is for.
+        if (!pageTabs.empty())
+            std::cout << "tab walk       " << median(20, [&] (int i)
+            {
+                if (auto& click = pageTabs[static_cast<size_t>(i) % pageTabs.size()]->onClick) click();
+                paintOnce();
+            }) << " ms\n";
+        if (pageTabs.size() > 2)
+            std::cout << "tab flip       " << median(20, [&] (int i)
+            {
+                if (auto& click = pageTabs[static_cast<size_t>(i) % 2 == 0 ? 0 : 2]->onClick) click();
+                paintOnce();
+            }) << " ms\n";
+        return 0;
+    }
+
     if (suite.isEmpty() || suite == "--layout")
     {
         layoutSuite();
         envelopeDisplaySuite();
         filterDisplaySuite();
         fxDisplaySuite();
+        chromeCacheSuite();
     }
     if (suite.isEmpty() || suite == "--presets") { presetSuite(); legacyStateSuite(); }
     if (suite.isEmpty() || suite == "--engine") engineSuite();
@@ -5133,3 +5269,5 @@ int main(int argc, char** argv)
     std::cout << "Rhino Forge checks passed" << (suite.isEmpty() ? "" : " (" + suite + ")") << '\n';
     return 0;
 }
+
+

@@ -9,6 +9,12 @@ The command-line suite deliberately has two layers:
 
 **Anything that renders has to come before `scenarios/GesturesAndPersistence.inc`.** That scenario calls `Session::releaseAudioDevice`, and an offline render attempted afterwards never returns - `RenderTask::runJob` simply never reports `jobHasFinished`, so the symptom is the whole runner timing out rather than a failed assertion. `scenarios/GroupBusRouting.inc` sits where it does for exactly this reason.
 
+**Every scenario shares the runner function's stack frame, so a large local is a stack overflow waiting for the deepest call in the suite.** A `StepGrid` carries about 200 KB of row-addressed note caches, and the third one declared across the scenarios put the runner past the 1 MB Windows stack - the crash landed in the middle of `scenarios/Rendering.inc`, nowhere near the scenario that added the object, and reported only as `SegFault` with exception code `0xC00000FD`. Declare a `StepGrid`, an `Arrangement` or anything else of that size with `std::make_unique` rather than by value. The Windows event log names the exception code, which is what separates this from an ordinary null dereference:
+
+```powershell
+Get-WinEvent -FilterHashtable @{LogName='Application'; ProviderName='Application Error'; StartTime=(Get-Date).AddMinutes(-20)}
+```
+
 Add a unit-style test when behavior can be exercised without a complete `Session`, audio render, desktop peer, or pointer sequence. Add a workflow scenario when the contract crosses those boundaries. Prefer extending the narrowest existing file; create a new scenario once a file approaches roughly 200 lines or mixes unrelated behavior.
 
 CTest entry points:

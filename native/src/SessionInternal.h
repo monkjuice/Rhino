@@ -78,6 +78,12 @@ te::AutomatableParameter* exposedParameterAt(te::Plugin& plugin, int index);
 float exposedParameterMaximum(te::Plugin& plugin, int index, float maximum);
 
 // Engine and model helpers (SessionInternal.cpp)
+// The pattern track is the first track that plays, which is not the same as
+// the first track in the stack: a group's bus is an ordinary te::AudioTrack
+// and keeps its place in getAudioTracks(), so a document whose stack opens
+// with a group has a bus at index zero. A bus runs no instrument and holds no
+// clips, so everything that used to index track zero asks this instead.
+te::AudioTrack* patternTrackOf(te::Edit& edit);
 void panicMidiOnTrack(te::ClipTrack* clipTrack);
 juce::Colour presetColour(Session::PatternPreset preset);
 juce::Colour instrumentColour(const DeviceDescriptor& device);

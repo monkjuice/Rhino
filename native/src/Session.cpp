@@ -142,9 +142,9 @@ void Session::ensureEditablePatternClip()
         return;
     }
 
-    const auto tracks = te::getAudioTracks(*edit);
-    if (!tracks.isEmpty())
-        for (auto* clip : tracks[0]->getClips())
+    auto* track = patternTrackOf(*edit);
+    if (track != nullptr)
+        for (auto* clip : track->getClips())
             if (auto* midi = dynamic_cast<te::MidiClip*>(clip))
             {
                 patternClip = midi;
@@ -152,10 +152,10 @@ void Session::ensureEditablePatternClip()
                 return;
             }
 
-    if (!tracks.isEmpty())
+    if (track != nullptr)
     {
         const auto end = edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(beatsPerBar()));
-        patternClip = tracks[0]->insertMIDIClip("Pattern 1", {{}, end}, nullptr).get();
+        patternClip = track->insertMIDIClip("Pattern 1", {{}, end}, nullptr).get();
         if (patternClip != nullptr)
         {
             patternClip->setColour(presetColour(PatternPreset::WarmPulse));
@@ -192,14 +192,16 @@ juce::Result Session::restoreProject(const juce::ValueTree& state, const juce::F
     // A group bus is a track in this list, and it holds neither clips nor a
     // utility. The pattern track and the audio track are therefore the first
     // two tracks that are not buses, rather than indices 0 and 1.
-    std::vector<te::AudioTrack*> playable;
-    for (auto* track : tracks)
-        if (static_cast<int>(track->state.getProperty(trackGroupBusID, 0)) == 0)
-            playable.push_back(track);
-    if (playable.empty())
+    auto* patternTrack = patternTrackOf(*candidate);
+    if (patternTrack == nullptr)
         return juce::Result::fail("This project has no playable tracks.");
-    auto* patternTrack = playable.front();
-    auto* audioTrack = playable.size() > 1 ? playable[1] : nullptr;
+    te::AudioTrack* audioTrack = nullptr;
+    for (auto* track : tracks)
+        if (track != patternTrack && static_cast<int>(track->state.getProperty(trackGroupBusID, 0)) == 0)
+        {
+            audioTrack = track;
+            break;
+        }
     te::MidiClip* nextPattern = nullptr;
     UtilityDevice* nextUtility = nullptr;
     UtilityDevice* nextAudioUtility = nullptr;
@@ -215,13 +217,9 @@ juce::Result Session::restoreProject(const juce::ValueTree& state, const juce::F
         return juce::Result::fail("The project is missing its pattern track devices.");
     // Documents written when a track could stack instruments collapse here.
     collapseStackedInstruments(*candidate);
-    if (trackInstrument(*patternTrack) == nullptr)
-    {
-        auto device = candidate->getPluginCache().createNewPlugin(te::FourOscPlugin::xmlTypeName, {});
-        if (device == nullptr)
-            return juce::Result::fail("The pattern track instrument could not be created.");
-        patternTrack->pluginList.insertPlugin(device, 0, nullptr);
-    }
+    // Nothing is added here. A track that ran no instrument is a track that
+    // plays audio, and an instrument put in front of its clips replaces them
+    // with a synth that has no notes to play.
     // Positional, exactly like the pointer it fills: the audio utility belongs to
     // track 1, so a project saved with nothing but the pattern track has nowhere
     // to put one. The read above already asks whether that track exists; without
@@ -243,21 +241,23 @@ juce::Result Session::restoreProject(const juce::ValueTree& state, const juce::F
     patternClipID = patternClip->itemID;
     utility = nextUtility;
     audioUtility = nextAudioUtility;
+    // Reopening restores what the document records; it never decides what a
+    // track ought to run. The property names the instrument the pattern track
+    // was last given, so switching to it is a no-op for a track that already
+    // carries it and a rebuild for one whose plugin had to be recreated. A
+    // document that never named one - every track of it holding audio rather
+    // than notes - is left exactly as it was saved.
     const auto patternInstrument = edit->state.getProperty("rhinoPatternInstrument").toString();
-    if (patternInstrument == "wave")
+    if (patternInstrument.isNotEmpty())
     {
         bool instrumentChanged = false;
-        juce::ignoreUnused(switchTrackInstrument(*edit, *patternTrack, Instrument::RhinoWave, instrumentChanged));
-    }
-    else if (patternInstrument == "forge")
-    {
-        bool instrumentChanged = false;
-        juce::ignoreUnused(switchTrackInstrument(*edit, *patternTrack, Instrument::RhinoForge, instrumentChanged,
-                                                 forgeDescription ? &*forgeDescription : nullptr));
-    }
-    else
-    {
-        setPatternInstrument(patternInstrument == "drums");
+        if (patternInstrument == "wave")
+            juce::ignoreUnused(switchTrackInstrument(*edit, *patternTrack, Instrument::RhinoWave, instrumentChanged));
+        else if (patternInstrument == "forge")
+            juce::ignoreUnused(switchTrackInstrument(*edit, *patternTrack, Instrument::RhinoForge, instrumentChanged,
+                                                     forgeDescription ? &*forgeDescription : nullptr));
+        else
+            setPatternInstrument(patternInstrument == "drums");
     }
     ensureSceneSlots();
     ensureTrackMixers();

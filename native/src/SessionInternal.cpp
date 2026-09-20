@@ -229,6 +229,14 @@ juce::Result ensurePlugin(te::Edit& edit, te::AudioTrack& track, const juce::Str
 
 // Projects written while a track could stack several instruments keep the
 // enabled one and lose the rest. Whichever was audible stays audible.
+te::AudioTrack* patternTrackOf(te::Edit& edit)
+{
+    for (auto* track : te::getAudioTracks(edit))
+        if (track != nullptr && static_cast<int>(track->state.getProperty(trackGroupBusID, 0)) == 0)
+            return track;
+    return nullptr;
+}
+
 void collapseStackedInstruments(te::Edit& edit)
 {
     for (auto* track : te::getAudioTracks(edit))

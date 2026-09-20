@@ -91,6 +91,11 @@ int runArrangementTest()
        #include "scenarios/GroupBusRouting.inc"
         scenario("note editor");
        #include "scenarios/NoteEditor.inc"
+        // After the note editor, because reopening a project replaces the
+        // document the editor is pointed at, and before "gestures and
+        // persistence", which closes the audio device this has to render with.
+        scenario("group bus reload");
+       #include "scenarios/GroupBusReload.inc"
         scenario("gestures and persistence");
        #include "scenarios/GesturesAndPersistence.inc"
         scenario("session view");

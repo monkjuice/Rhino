@@ -167,10 +167,10 @@ void Session::repairPatternClip()
     if (patternClip != nullptr && findClip(patternClipID) == patternClip)
         return;
     patternClip = nullptr;
-    const auto tracks = te::getAudioTracks(*edit);
-    if (tracks.isEmpty())
+    auto* track = patternTrackOf(*edit);
+    if (track == nullptr)
         return;
-    for (auto* existing : tracks[0]->getClips())
+    for (auto* existing : track->getClips())
         if (auto* midi = dynamic_cast<te::MidiClip*>(existing))
         {
             patternClip = midi;
@@ -179,7 +179,7 @@ void Session::repairPatternClip()
     if (patternClip == nullptr)
     {
         const auto end = edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(4.0));
-        patternClip = tracks[0]->insertMIDIClip("Pattern 1", {{}, end}, nullptr).get();
+        patternClip = track->insertMIDIClip("Pattern 1", {{}, end}, nullptr).get();
         if (patternClip != nullptr)
         {
             patternClip->setColour(presetColour(PatternPreset::WarmPulse));

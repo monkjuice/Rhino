@@ -144,10 +144,13 @@ juce::Result Session::createClip(int trackIndex, double startSeconds)
 
 void Session::setPatternInstrument(bool useDrums)
 {
-    const auto tracks = te::getAudioTracks(*edit);
-    if (tracks.isEmpty()) return;
+    // Never the bus a group at the top of the stack puts at index zero: an
+    // instrument there has nothing to play and replaces the sum of every
+    // member feeding it, which is a whole project reopening into silence.
+    auto* track = patternTrackOf(*edit);
+    if (track == nullptr) return;
     bool changed = false;
-    juce::ignoreUnused(switchTrackInstrument(*edit, *tracks[0],
+    juce::ignoreUnused(switchTrackInstrument(*edit, *track,
                                              useDrums ? Instrument::Drums : Instrument::FourOsc, changed));
     edit->state.setProperty("rhinoPatternInstrument", useDrums ? "drums" : "synth", &edit->getUndoManager());
 }
@@ -159,11 +162,8 @@ te::Plugin* Session::patternInstrument() const
     auto* track = patternClip != nullptr ? patternClip->getClipTrack() : nullptr;
     auto* audioTrack = dynamic_cast<te::AudioTrack*>(track);
     if (audioTrack == nullptr)
-    {
-        const auto tracks = te::getAudioTracks(*edit);
-        if (tracks.isEmpty()) return nullptr;
-        audioTrack = tracks[0];
-    }
+        audioTrack = patternTrackOf(*edit);
+    if (audioTrack == nullptr) return nullptr;
     return trackInstrument(*audioTrack);
 }
 

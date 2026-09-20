@@ -18,12 +18,17 @@ the same key. An LFO set to TRIG or ENV runs inside each voice too, so a new not
 starts its own copy and leaves the notes already sounding alone; one set to OFF
 is a single free-running cycle shared by every voice and by the panel.
 
-The panel is two rows of modules, the same height as each other, over an
+The panel is two rows of modules, with a taller signal row, over an
 eighty-eight key keyboard, and it is wider than it is tall at every size it
 allows. The top row is the signal path read left to right — sub and noise, the
 two oscillators, the filter. The bottom row is what shapes it, in the same
 order: global voicing as a narrow column, then the envelopes, the LFOs and the
 macros.
+
+The metal chassis follows the reference's assembled construction: interlocking
+header plates, segmented rails, a shared Sub/Noise housing, recessed legends,
+and keyboard end plates. `ui/ForgePanels.h` draws that static furniture; the
+editor caches it at the display scale, independently of the live controls.
 
 The filter shows its own response: the band it is passing filled under the
 curve, the band it is taking out washed in above it, decade lines across the
@@ -204,6 +209,7 @@ which decisions are already settled. Read it before changing the synth.
 | `src/ForgeProcessor.*` | Parameters, host automation, state, preset files. |
 | `ui/ForgeLayout.h` | What modules exist, what each contains, and where it sits. Pure geometry and declaration. |
 | `ui/ForgeVisuals.h` | The knob look and the drawing primitives. Decides nothing about placement. |
+| `ui/ForgePanels.h` | Static metal housings, chassis rails, hardware and decorative lettering. |
 | `src/ForgeEditor.*` | Walks the declared modules and builds the components. |
 | `tests/ForgeTests.cpp` | Three CTest cases from one binary: `--layout`, `--presets`, `--engine`. |
 
@@ -217,13 +223,20 @@ First fetch the parent project's dependencies, then configure this directory:
 
 ```powershell
 cmake -S instruments/rhino-forge -B instruments/rhino-forge/build -G "Visual Studio 17 2022" -A x64
-cmake --build instruments/rhino-forge/build --config Release --parallel 2
+cmake --build instruments/rhino-forge/build --config Release --parallel 2 -- /p:BuildInParallel=false
 ctest --test-dir instruments/rhino-forge/build -C Release --output-on-failure
 ```
+
+The MSBuild property serializes project-reference resolution to avoid the
+toolchain's silent `GetTargetPath` failure; compilation still uses two jobs.
 
 The standalone build at
 `build/RhinoForge_artefacts/Release/Standalone/Rhino Forge.exe` is the quickest
 way to look at a change without a host.
+
+For a windowless visual review, the test binary also accepts
+`--snapshot output.png [width height [OSC|TABLE|MATRIX|MIX|FX [scale]]]`.
+It captures the actual editor, including its controls and cached metal layer.
 
 The VST3 is emitted below `build/RhinoForge_artefacts/Release/VST3`. Install or
 copy it only after validating it in a host; do not add generated plugin bundles

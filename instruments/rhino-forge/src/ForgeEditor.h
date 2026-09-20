@@ -144,7 +144,7 @@ private:
     // by a preset load or by the host is noticed rather than only one changed
     // by the panel itself.
     std::array<int, oscillatorCount> tableRevisions {-1, -1};
-    juce::TextButton loadPreset {"LOAD"}, savePreset {"SAVE"};
+    ui::PresetButton loadPreset {"LOAD"}, savePreset {"SAVE"};
     juce::Label presetName;
     std::unique_ptr<juce::FileChooser> fileChooser;
 

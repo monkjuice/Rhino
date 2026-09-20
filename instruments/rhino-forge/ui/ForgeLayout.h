@@ -224,14 +224,14 @@ inline int bankWidthOf(const Module& module)
 // modules actually want — a half-column of error is an eighth of SUB.
 inline constexpr int gridColumns = 24;
 inline constexpr int moduleGap = 8;
-inline constexpr int headerHeight = 28;
+inline constexpr int headerHeight = 34;
 
 // The strip along a plate's foot carrying its stamped legend: the module's
 // long name on the left and its part number on the right, the way a piece of
 // equipment is marked rather than labelled. It is reserved out of the module's
 // interior rather than drawn over it, so no control can ever land on top of
 // it, and it costs every module the same few pixels at every window size.
-inline constexpr int plateFooterHeight = 13;
+inline constexpr int plateFooterHeight = 20;
 
 // Row weights, top to bottom. Two rows, not three: the signal path across the
 // top — sources, the two oscillators, the filter — and everything that moves it
@@ -239,13 +239,11 @@ inline constexpr int plateFooterHeight = 13;
 // wavetable editor without disturbing either end of the row, which is what lets
 // SUB, NOISE and FILTER stay put whichever tab is open.
 //
-// The two rows are the same height. Nothing in either of them wants the other's
-// room more than its own does, and a panel cut in half across the middle is
-// read as one thing where two unequal bands are read as a main part and a
-// remainder.
+// The signal row has the taller housings in the reference; the modulation row
+// keeps enough height for its displays and controls at the minimum window size.
 inline const std::vector<int>& rowWeights()
 {
-    static const std::vector<int> weights {50, 50};
+    static const std::vector<int> weights {56, 44};
     return weights;
 }
 
@@ -345,24 +343,16 @@ inline constexpr int maxTableBarWidth = 460;
 
 // The tabs sit in the title bar, clear of the wordmark on the left and of the
 // preset controls on the right.
-inline constexpr int tabTop = 24;
-inline constexpr int tabHeight = 28;
-// Narrowed when the rack made a fifth tab. Five at the old width reached within
-// a hair of the preset field at the narrowest window the panel allows, and the
-// layout test now holds the strip clear of it rather than only holding the tabs
-// clear of each other.
-inline constexpr int tabWidth = 86;
+inline constexpr int tabTop = 42;
+inline constexpr int tabHeight = 30;
 inline constexpr int tabGap = 6;
-inline constexpr int tabStripLeft = 252;
+inline int headerSplit(int width) { return width * 615 / 1000; }
 
-// How much of the right-hand end of the title bar the preset name and buttons
-// take. The editor lays those out from the right edge; this is the same figure,
-// named here so the layout test can check the tabs never reach it.
-inline constexpr int presetStripWidth = 350;
-
-inline juce::Rectangle<int> tabBounds(int index)
+inline juce::Rectangle<int> tabBounds(int index, int panelWidth = 1440)
 {
-    return {tabStripLeft + index * (tabWidth + tabGap), tabTop, tabWidth, tabHeight};
+    const auto left = panelWidth * 248 / 1000;
+    const auto width = (headerSplit(panelWidth) - left - 30 - (tabCount - 1) * tabGap) / tabCount;
+    return {left + index * (width + tabGap), tabTop, width, tabHeight};
 }
 
 // Slots five onward repeat the exact host-facing controls of the original
@@ -938,8 +928,8 @@ inline constexpr int windowMargin = 12;
 
 // Measured from the top of the window rather than from the margin, so the
 // header keeps its own spacing when the margin changes.
-inline constexpr int titleBarHeight = 92;
-inline constexpr int keyboardGap = 26;
+inline constexpr int titleBarHeight = 104;
+inline constexpr int keyboardGap = 22;
 
 // The full width the keyboard and the two decals beside it share.
 inline juce::Rectangle<int> keyboardStrip(juce::Rectangle<int> bounds)
@@ -981,34 +971,41 @@ inline juce::Rectangle<int> keyboardBounds(juce::Rectangle<int> bounds)
 
 // --- The title bar's right-hand end -----------------------------------------
 //
-// The preset controls sit on the lower line of the title bar, under the unit
-// mark, with the identity plate filling the run between the last tab and them.
+// The preset controls sit in the lower-right cut-out of the maker assembly,
+// with the red unit mark on a separate plate above them.
 inline constexpr int presetButtonWidth = 62;
 inline constexpr int presetButtonHeight = 26;
-inline constexpr int presetRowTop = 52;
-// Wide enough for the longest thing the panel ever puts here, which is not a
-// preset name but a refusal: "THAT CONTROL CANNOT BE MODULATED".
-inline constexpr int presetNameWidth = 212;
+inline constexpr int presetRowTop = 58;
+
+inline juce::Rectangle<int> presetButtonBounds(juce::Rectangle<int> bounds, bool save)
+{
+    const auto right = bounds.getRight() - 30;
+    return {right - presetButtonWidth - (save ? 0 : presetButtonWidth + 8),
+            presetRowTop, presetButtonWidth, presetButtonHeight};
+}
+
+inline juce::Rectangle<int> presetLabelBounds(juce::Rectangle<int> bounds)
+{
+    const auto left = headerSplit(bounds.getWidth());
+    const auto nameLeft = left + (bounds.getWidth() - left) * 49 / 100;
+    return {nameLeft, presetRowTop, presetButtonBounds(bounds, false).getX() - 8 - nameLeft,
+            presetButtonHeight};
+}
 
 // The mark at the very top right: what this unit is, in the two lines a plate
 // riveted to a machine would carry.
 inline juce::Rectangle<int> unitMarkBounds(juce::Rectangle<int> bounds)
 {
-    const auto right = bounds.getRight() - windowMargin;
-    return juce::Rectangle<int>(right - 140, 14, 140, 32);
+    const auto right = bounds.getRight() - 42;
+    return juce::Rectangle<int>(right - 110, 13, 110, 32);
 }
 
-// The identity plate: everything between the tab strip and the preset
-// controls. It stretches rather than sitting at a fixed width, because what it
-// has to fit between moves with the window — and it is the one piece of the
-// panel that can absorb that slack without anything else shifting.
+// The complete right-hand assembly contains the maker's plate, unit cap and
+// preset shelf. Its seam moves with the left header plate when resized.
 inline juce::Rectangle<int> identityPlateBounds(juce::Rectangle<int> bounds)
 {
-    const auto left = tabBounds(tabCount - 1).getRight() + 18;
-    const auto right = bounds.getRight() - windowMargin
-                       - presetButtonWidth * 2 - presetNameWidth - 18;
-    return right - left < 90 ? juce::Rectangle<int>()
-                             : juce::Rectangle<int>(left, 12, right - left, 68);
+    const auto left = headerSplit(bounds.getWidth());
+    return {left, 10, bounds.getWidth() - left - 12, 80};
 }
 
 // The area the modules are laid out inside: below the title bar, above the

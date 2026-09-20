@@ -442,14 +442,22 @@ void layoutSuite()
     for (int i = 1; i < rhino::forge::ui::tabCount; ++i)
         require(!rhino::forge::ui::tabBounds(i - 1).intersects(rhino::forge::ui::tabBounds(i)),
                 "no two tabs overlap");
-    // The strip grows by a tab every time a page is added, and the preset name
-    // and buttons are laid out from the right edge — so the two meet in the
-    // middle at the narrowest window the panel allows, and nowhere else. The
-    // fifth tab came within a hair of this, which is why the check exists.
-    require(rhino::forge::ui::tabBounds(rhino::forge::ui::tabCount - 1).getRight()
-                < rhino::forge::ui::minPanelWidth - rhino::forge::ui::windowMargin
-                  - rhino::forge::ui::presetStripWidth,
-            "the tab strip stays clear of the preset controls at the narrowest window");
+    for (const auto width : {rhino::forge::ui::minPanelWidth, rhino::forge::ui::defaultPanelWidth,
+                             rhino::forge::ui::maxPanelWidth})
+    {
+        using namespace rhino::forge::ui;
+        const juce::Rectangle<int> headerBounds(0, 0, width, defaultPanelHeight);
+        const auto identity = identityPlateBounds(headerBounds);
+        const auto preset = presetLabelBounds(headerBounds);
+        require(tabBounds(tabCount - 1, width).getRight() < identity.getX(),
+                "tabs stay inside the left header plate at every window width");
+        require(identity.contains(preset) && preset.getWidth() >= 60,
+                "the maker plate leaves readable space for the preset name");
+        require(!preset.intersects(presetButtonBounds(headerBounds, false)),
+                "the preset name stays clear of the load button");
+        require(identity.contains(presetButtonBounds(headerBounds, true)),
+                "the save button stays inside its plate");
+    }
 
     // A table names its columns once, above its rows, so every row has to have
     // the same controls in the same order as the first or the titles lie.
@@ -5085,6 +5093,27 @@ int main(int argc, char** argv)
 {
     juce::ScopedJuceInitialiser_GUI initialiseJuce;
     const juce::String suite = argc > 1 ? argv[1] : "";
+
+    // Render the real editor without opening a window, for visual review.
+    if (suite == "--snapshot" && argc > 2)
+    {
+        auto processor = std::make_unique<rhino::forge::Processor>();
+        std::unique_ptr<juce::AudioProcessorEditor> editor(processor->createEditor());
+        if (argc > 4) editor->setSize(juce::String(argv[3]).getIntValue(), juce::String(argv[4]).getIntValue());
+        if (argc > 5)
+            for (auto* child : editor->getChildren())
+                if (auto* tab = dynamic_cast<rhino::forge::ui::PageTab*>(child))
+                    if (tab->getButtonText() == juce::String(argv[5]).toUpperCase() && tab->onClick)
+                        tab->onClick();
+        const auto scale = argc > 6 ? juce::String(argv[6]).getFloatValue() : 1.0f;
+        const auto snapshot = editor->createComponentSnapshot(editor->getLocalBounds(), true, scale);
+        const auto file = juce::File::getCurrentWorkingDirectory().getChildFile(argv[2]);
+        auto stream = file.createOutputStream();
+        if (stream == nullptr) return 1;
+        stream->setPosition(0);
+        stream->truncate();
+        return juce::PNGImageFormat().writeImageToStream(snapshot, *stream) ? 0 : 1;
+    }
 
     if (suite.isEmpty() || suite == "--layout")
     {

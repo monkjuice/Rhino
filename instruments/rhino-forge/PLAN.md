@@ -51,7 +51,8 @@ arithmetic; modules declare their contents.
 | [==================== eighty-eight keys ============================ ] |
 +----------------------------------------------------------------------+
 
-Both rows are the same height. The MATRIX tab puts the matrix in the
+The signal row is taller than the modulation row to match the metal chassis
+reference. The MATRIX tab puts the matrix in the
 oscillators' columns, and the TABLE tab puts the wavetable editor there. SUB,
 NOISE and FILTER hold their places either side of it, and nothing in the lower
 row moves.

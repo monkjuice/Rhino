@@ -3,6 +3,7 @@
 #include "ForgeLayout.h"
 #include "ForgeChrome.h"
 #include "ForgeType.h"
+#include "ForgePanels.h"
 #include <functional>
 #include <vector>
 #include <BinaryData.h>
@@ -15,13 +16,9 @@
 // ForgeChrome.h, so a module and a decal are made of the same metal.
 namespace rhino::forge::ui
 {
-inline const auto electricBlue = juce::Colour(0xff45a8ff);
-inline const auto signalViolet = juce::Colour(0xff9a6cff);
 inline const auto panel = juce::Colour(0xff111522);
 inline const auto panelRaised = juce::Colour(0xff191d2d);
 inline const auto line = juce::Colour(0xff34394e);
-inline const auto text = juce::Colour(0xffe8eaff);
-inline const auto mutedText = juce::Colour(0xff8f95ad);
 
 inline constexpr int handleWidth = 70;
 
@@ -1426,9 +1423,25 @@ public:
     }
 };
 
-// A tab in the title bar. Only the top row of the panel follows it, so it is
-// drawn as a chip that lights along its bottom edge rather than as a folder tab
-// joined to the whole window: the edge points down at the one row that changes.
+// Preset buttons sit flush in the black inset of the maker assembly.
+class PresetButton final : public juce::TextButton
+{
+public:
+    using juce::TextButton::TextButton;
+
+    void paintButton(juce::Graphics& g, bool highlighted, bool down) override
+    {
+        const auto box = getLocalBounds().toFloat().reduced(0.7f);
+        drawWell(g, box, juce::Colour(down ? 0xff151c26 : 0xff070b10), 1.0f, 2);
+        g.setColour((highlighted ? electricBlue : juce::Colour(0xff657389)).withAlpha(0.85f));
+        g.strokePath(chamferedPath(box, 2), juce::PathStrokeType(0.8f));
+        g.setColour(rhino::forge::ui::text.withAlpha(0.85f));
+        g.setFont(panelFont(Face::emphasis, 14));
+        g.drawText(getButtonText(), box, juce::Justification::centred);
+    }
+};
+
+// A tab's lit bottom edge points toward the signal row that follows it.
 class PageTab final : public juce::Button
 {
 public:
@@ -1441,16 +1454,20 @@ public:
         const auto area = getLocalBounds().toFloat().reduced(0.5f);
         const auto on = getToggleState();
 
-        g.setColour(on ? panelRaised : juce::Colour(0xff0d1120));
-        g.fillRoundedRectangle(area, 4.0f);
+        g.setGradientFill(juce::ColourGradient(on ? juce::Colour(0xff163554) : juce::Colour(0xff0c131b),
+                                               area.getX(), area.getY(), juce::Colour(0xff04080d),
+                                               area.getX(), area.getBottom(), false));
+        g.fillRoundedRectangle(area, 2.0f);
         g.setColour((on ? accent : line).withAlpha(on ? 1.0f : (highlighted ? 0.9f : 0.6f)));
-        g.drawRoundedRectangle(area, 4.0f, 1.0f);
+        g.drawRoundedRectangle(area, 2.0f, 1.0f);
         if (on)
         {
-            g.setColour(accent.withAlpha(0.25f));
-            g.fillRoundedRectangle(area.reduced(1.0f), 3.5f);
-            g.setColour(accent);
-            g.fillRoundedRectangle(area.withTop(area.getBottom() - 2.5f).reduced(3.0f, 0.0f), 1.25f);
+            for (const auto thickness : {8.0f, 4.0f, 1.6f})
+            {
+                g.setColour(accent.withAlpha(thickness > 2.0f ? 0.13f : 1.0f));
+                g.drawLine(area.getX() + 3, area.getBottom() - 2,
+                           area.getRight() - 3, area.getBottom() - 2, thickness);
+            }
         }
         // Qualified: Button has a private `text` member of its own that would
         // otherwise win the lookup here.
@@ -2626,341 +2643,4 @@ inline void drawFilterResponse(juce::Graphics& g, juce::Rectangle<int> area, rhi
                right ? juce::Justification::centredLeft : juce::Justification::centredRight);
 }
 
-// --- What the panel is badged with ------------------------------------------
-//
-// The markings, gathered in one place. None of them is information — nothing on
-// the panel is found by reading them — so they are decoration, and re-badging
-// the unit is editing this block and nothing else.
-inline const juce::String unitMark = juce::String::fromUTF8("\xe5\x88\x9d\xe5\x8f\xb7\xe6\xa9\x9f");
-inline constexpr const char* unitNumber = "UNIT 01";
-inline constexpr const char* makerName  = "RHINO FORGE";
-inline constexpr const char* makerModel = "SYNTHESIZER UNIT 01";
-inline constexpr const char* makerHouse = "TOKYO-3 AUDIO RESEARCH";
-inline constexpr const char* deckMark   = "NERV";
-inline constexpr const char* deckRole   = "SYNTH INTERFACE";
-inline constexpr const char* deckPlace  = "TOKYO-3";
-inline constexpr const char* deckMotto  = "FOR A MORE";
-inline constexpr const char* deckMotto2 = "HUMAN TOMORROW";
-inline const auto markRed = juce::Colour(0xffe0453a);
-
-// The legend along a plate's foot: what the module is called in full on the
-// left, its part number on the right. Stamped rather than printed — small,
-// wide-tracked and dim — so it is there to be found and never read by accident
-// while a knob is being turned.
-inline void drawPlateLegend(juce::Graphics& g, juce::Rectangle<int> area, const Module& module,
-                            const juce::String& code, float alpha)
-{
-    const auto footer = plateFooterBounds(area).toFloat();
-    if (footer.getHeight() < 6.0f || footer.getWidth() < 30.0f) return;
-
-    // The score the legend hangs under: a dark line with a lit one beneath it,
-    // which is the same two-line trick the plate's own bevel is made of.
-    const auto rule = juce::roundToInt(footer.getY() - 1.0f);
-    g.setColour(plateEdgeDark.withAlpha(0.75f * alpha));
-    g.drawHorizontalLine(rule, footer.getX(), footer.getRight());
-    g.setColour(plateEdgeLit.withAlpha(0.2f * alpha));
-    g.drawHorizontalLine(rule + 1, footer.getX(), footer.getRight());
-
-    g.setFont(panelFont(Face::label, 9.0f));
-    g.setColour(legendText.withAlpha(alpha));
-    if (module.plateName != nullptr)
-        drawTrackedText(g, module.plateName, footer, 1.5f, juce::Justification::left);
-    drawTrackedText(g, code, footer, 1.5f, juce::Justification::right);
-}
-
-// The module plate: a machined part, an accent along its top edge, a header
-// strip reserved for the title, and the legend stamped along its foot.
-//
-// Everything material about it comes from drawPlate, so a module, a decal and
-// the chassis are visibly the same metal cut to different shapes. What is left
-// here is only what makes it this module rather than any other — its accent,
-// its name and its number.
-// The one part of a module's header that changes from frame to frame: the
-// right-hand reading. An envelope names the stage it is in and an LFO the rate
-// it is actually running at, so this cannot be cached with the plate -- which
-// is exactly why it is a function of its own. Everything else about the shell
-// is still where it was a second ago.
-inline void drawModuleDetail(juce::Graphics& g, juce::Rectangle<int> area, const Module& module,
-                             bool on, const juce::String& detailOverride, int detailRightInset)
-{
-    const auto detail = detailOverride.isNotEmpty() ? detailOverride : juce::String(module.detail);
-    if (detail.isEmpty()) return;
-
-    auto header = area.withHeight(headerHeight).reduced(10, 0);
-    if (module.enableId != nullptr) header.removeFromLeft(headerHeight);
-    header.removeFromRight(juce::jlimit(0, header.getWidth(), detailRightInset));
-
-    g.setColour(mutedText.withAlpha(on ? 1.0f : 0.45f));
-    g.setFont(panelFont(Face::label, 9.0f));
-    g.drawText(detail, header, juce::Justification::centredRight);
-}
-
-inline void drawModuleShell(juce::Graphics& g, juce::Rectangle<int> area, const Module& module, bool on,
-                            juce::Colour accent, const juce::String& code = {})
-{
-    const auto box = area.toFloat();
-    const auto alpha = on ? 1.0f : 0.45f;
-    const auto cut = juce::jmax(0.0f, juce::jmin(plateCut, box.getWidth() * 0.5f,
-                                                 box.getHeight() * 0.5f));
-
-    const auto grouped = module.group != nullptr;
-    if (grouped)
-        // Stopping short of the legend strip, which belongs to the plate
-        // underneath: run the panel the full height of the module and it
-        // covers the very text the plate is carrying for it.
-        drawInnerPanel(g, box.withTrimmedBottom(plateFooterHeight)
-                              .reduced(static_cast<float>(innerPanelInset)),
-                       on ? 1.0f : 0.72f);
-    else
-        drawPlate(g, box, on ? 1.0f : 0.72f);
-
-    // The accent runs between the two top corner cuts rather than across the
-    // full width, so it stops where the chamfer does instead of overhanging it.
-    const auto capWidth = box.getWidth() - cut * 2.0f;
-    if (capWidth > 0.0f)
-    {
-        // Under the milled lip, not on top of it. The reference's plate edge is
-        // bare metal all the way round; an accent painted along the very top
-        // sat on the brightest part of the bevel and won, so the plates read as
-        // cards with a coloured border instead of as metal. Set a couple of
-        // pixels in, it says which module this is without taking the edge.
-        const auto capLeft = box.getX() + cut;
-        const auto top = box.getY() + 4.0f;
-        juce::ColourGradient wash(accent.withAlpha(0.13f * alpha), capLeft, top,
-                                  accent.withAlpha(0.0f), capLeft, top + 8.0f, false);
-        g.setGradientFill(wash);
-        g.fillRect(capLeft, top, capWidth, 8.0f);
-        g.setColour(accent.withAlpha(0.72f * alpha));
-        g.fillRect(capLeft, top, capWidth, 1.4f);
-    }
-
-    // Two rivets on the diagonal: one under the corner the light lands on, one
-    // at the corner the legend runs out to. A plate stamped at every corner
-    // reads as a pattern; a pair on opposite corners reads as hardware. A
-    // module inside a shared plate carries neither — the plate it sits on has
-    // its own, and hardware on both would say the panel is screwed together
-    // twice in the same place.
-    if (!grouped)
-    {
-        drawRivet(g, {box.getX() + cut * 0.55f, box.getY() + cut * 0.55f + 6.0f}, 3.2f, alpha);
-        drawRivet(g, {box.getRight() - cut * 0.5f - 1.0f, box.getBottom() - cut * 0.5f - 1.0f},
-                  3.4f, alpha);
-    }
-
-    auto header = area.withHeight(headerHeight).reduced(10, 0);
-    // The enable LED sits at the far left of the header; leave room for it.
-    if (module.enableId != nullptr) header.removeFromLeft(headerHeight);
-    // A source module's drag handle carries the module's name, so the title is
-    // not drawn again beside it.
-    if (module.handleSource == 0)
-    {
-        g.setColour(text.withAlpha(alpha));
-        g.setFont(panelFont(Face::header, 11.0f));
-        g.drawText(module.title, header, juce::Justification::centredLeft);
-    }
-    if (!grouped) drawPlateLegend(g, area, module, code, alpha);
-}
-
-// The plate a group of modules shares: the metal, its fasteners and the legend
-// along its foot. Its members draw their own panels on top of it.
-inline void drawGroupPlate(juce::Graphics& g, juce::Rectangle<int> area, const juce::String& legend,
-                           const juce::String& code)
-{
-    const auto box = area.toFloat();
-    drawPlate(g, box);
-
-    const auto cut = juce::jmax(0.0f, juce::jmin(plateCut, box.getWidth() * 0.5f,
-                                                 box.getHeight() * 0.5f));
-    drawRivet(g, {box.getX() + cut * 0.55f, box.getY() + cut * 0.55f + 6.0f}, 3.2f, 1.0f);
-    drawRivet(g, {box.getRight() - cut * 0.5f - 1.0f, box.getBottom() - cut * 0.5f - 1.0f},
-              3.4f, 1.0f);
-
-    const auto footer = plateFooterBounds(area).toFloat();
-    if (footer.getHeight() < 6.0f || footer.getWidth() < 30.0f) return;
-    const auto rule = juce::roundToInt(footer.getY() - 1.0f);
-    g.setColour(plateEdgeDark.withAlpha(0.75f));
-    g.drawHorizontalLine(rule, footer.getX(), footer.getRight());
-    g.setColour(plateEdgeLit.withAlpha(0.2f));
-    g.drawHorizontalLine(rule + 1, footer.getX(), footer.getRight());
-
-    g.setFont(panelFont(Face::label, 9.0f));
-    g.setColour(legendText);
-    drawTrackedText(g, legend, footer, 1.5f, juce::Justification::left);
-    drawTrackedText(g, code, footer, 1.5f, juce::Justification::right);
-}
-
-// The FORGE wordmark, drawn at its own aspect ratio against the left edge of
-// the area given. ImageCache keeps the decoded PNG, so a repaint is a blit.
-inline void drawWordmark(juce::Graphics& g, juce::Rectangle<float> area)
-{
-    const auto logo = juce::ImageCache::getFromMemory(BinaryData::forge_logo_png,
-                                                      BinaryData::forge_logo_pngSize);
-    if (logo.isNull())
-    {
-        // Binary data missing is a build fault, not a runtime state, but the
-        // panel should still name itself rather than show a gap.
-        g.setColour(text);
-        g.setFont(panelFont(Face::header, 30.0f));
-        g.drawText("FORGE", area.toNearestInt(), juce::Justification::centredLeft);
-        return;
-    }
-
-    const auto width = area.getHeight() * (float) logo.getWidth() / (float) logo.getHeight();
-    juce::Graphics::ScopedSaveState state(g);
-    g.setImageResamplingQuality(juce::Graphics::highResamplingQuality);
-    g.drawImage(logo, area.withWidth(juce::jmin(width, area.getWidth())),
-                juce::RectanglePlacement::stretchToFit);
-}
-
-// The plate in the title bar that says what this is: the maker, the model and
-// the house, with the rest of its face given over to hatching. It stretches to
-// fill whatever the tab strip and the preset controls leave between them, which
-// is why the hatching is worth having — it is the part that absorbs the slack.
-inline void drawIdentityPlate(juce::Graphics& g, juce::Rectangle<int> area)
-{
-    if (area.isEmpty()) return;
-    const auto box = area.toFloat();
-    drawPlate(g, box, 1.0f, 12.0f, topLeft | topRight | bottomLeft | bottomRight);
-
-    auto face = box.reduced(14.0f, 10.0f);
-    const auto lines = face.removeFromLeft(juce::jmin(face.getWidth(), 210.0f));
-
-    g.setColour(text.withAlpha(0.92f));
-    g.setFont(panelFont(Face::header, 15.0f));
-    drawTrackedText(g, makerName, lines.withHeight(17.0f), 2.2f, juce::Justification::left);
-
-    g.setFont(panelFont(Face::label, 8.0f));
-    g.setColour(electricBlue.withAlpha(0.75f));
-    drawTrackedText(g, makerModel, lines.withTop(lines.getY() + 19.0f).withHeight(11.0f),
-                    1.4f, juce::Justification::left);
-    g.setColour(mutedText.withAlpha(0.8f));
-    drawTrackedText(g, makerHouse, lines.withTop(lines.getY() + 31.0f).withHeight(11.0f),
-                    1.4f, juce::Justification::left);
-
-    // Whatever is left over, hatched. Below a certain width there is no room
-    // for a run of stripes that reads as one, so it is left bare instead.
-    face.removeFromLeft(16.0f);
-    if (face.getWidth() > 40.0f)
-        drawHatch(g, face.withSizeKeepingCentre(face.getWidth(), 20.0f),
-                  plateEdgeLit.withAlpha(0.32f), 3.0f, 10.0f);
-}
-
-// The unit's own mark, at the very top corner: the one red thing on the panel,
-// and the only place any colour but the two accents is used.
-inline void drawUnitMark(juce::Graphics& g, juce::Rectangle<int> area)
-{
-    const auto box = area.toFloat();
-    g.setColour(markRed.withAlpha(0.95f));
-    g.setFont(fallbackFont(17.0f, true));
-    drawTrackedText(g, unitMark, box.withHeight(19.0f), 2.0f, juce::Justification::right);
-    g.setFont(panelFont(Face::label, 8.0f));
-    g.setColour(markRed.withAlpha(0.7f));
-    drawTrackedText(g, unitNumber, box.withTop(box.getY() + 20.0f).withHeight(11.0f),
-                    2.0f, juce::Justification::right);
-}
-
-// The two decals either side of the keyboard. Both are plates like any other,
-// which is the point: the keys sit in a cut-out in the same piece of metal the
-// modules are bolted to, rather than on a strip of their own.
-inline void drawDeckPlates(juce::Graphics& g, juce::Rectangle<int> bounds)
-{
-    const auto left = deckLeftBounds(bounds).toFloat();
-    drawPlate(g, left, 1.0f, 10.0f);
-    {
-        auto face = left.reduced(10.0f, 8.0f);
-        g.setColour(text.withAlpha(0.85f));
-        g.setFont(panelFont(Face::header, 15.0f));
-        drawTrackedText(g, deckMark, face.withHeight(17.0f), 2.6f, juce::Justification::left);
-        g.setFont(panelFont(Face::label, 7.0f));
-        g.setColour(electricBlue.withAlpha(0.6f));
-        drawTrackedText(g, deckRole, face.withTop(face.getY() + 19.0f).withHeight(10.0f),
-                        1.2f, juce::Justification::left);
-        g.setColour(legendText.withAlpha(0.9f));
-        drawTrackedText(g, deckPlace, face.withTop(face.getY() + 30.0f).withHeight(10.0f),
-                        1.2f, juce::Justification::left);
-        const auto strip = face.withTop(face.getBottom() - 12.0f);
-        if (strip.getWidth() > 30.0f)
-            drawHatch(g, strip, plateEdgeLit.withAlpha(0.3f), 2.5f, 8.0f);
-    }
-
-    const auto right = deckRightBounds(bounds).toFloat();
-    drawPlate(g, right, 1.0f, 10.0f);
-    {
-        const auto face = right.reduced(10.0f, 8.0f);
-        g.setFont(panelFont(Face::label, 8.0f));
-        g.setColour(legendText.withAlpha(0.95f));
-        drawTrackedText(g, deckMotto, face.withHeight(11.0f).translated(0.0f, 16.0f),
-                        1.3f, juce::Justification::left);
-        drawTrackedText(g, deckMotto2, face.withHeight(11.0f).translated(0.0f, 28.0f),
-                        1.3f, juce::Justification::left);
-        // The cross that closes the marking off, in the same red as the mark in
-        // the opposite corner — the two of them bracket the panel.
-        const auto arm = 4.0f;
-        const auto at = juce::Point<float>(face.getRight() - arm, face.getY() + 22.0f);
-        g.setColour(markRed.withAlpha(0.85f));
-        g.fillRect(at.x - arm, at.y - 0.75f, arm * 2.0f, 1.5f);
-        g.fillRect(at.x - 0.75f, at.y - arm, 1.5f, arm * 2.0f);
-    }
-}
-
-// The chassis: the metal every plate on the panel is bolted to, the frame
-// around it, and the hardware holding the two together.
-inline void drawBackdrop(juce::Graphics& g, juce::Rectangle<int> componentBounds)
-{
-    const auto bounds = componentBounds.toFloat();
-
-    juce::ColourGradient base(chassisLit, bounds.getCentreX(), 0.0f,
-                              chassis, bounds.getCentreX(), bounds.getBottom(), false);
-    // The light is all in the top third, the way it would be under a lamp above
-    // the desk rather than one shining evenly at the panel.
-    base.addColour(0.34, chassis.interpolatedWith(chassisLit, 0.35f));
-    g.setGradientFill(base);
-    g.fillRect(bounds);
-
-    juce::Path whole;
-    whole.addRectangle(bounds);
-    fillGrain(g, whole, 0.09f);
-
-    // The frame. Cut back from the window edge so the panel reads as a part
-    // with a border rather than as a picture filling a window.
-    const auto frame = bounds.reduced(4.0f);
-    constexpr auto frameCut = 18.0f;
-    const auto outline = chamferedPath(frame, frameCut);
-    strokeBevel(g, outline, frame, 1.0f, 1.6f, 0.85f);
-    g.setColour(electricBlue.withAlpha(0.05f));
-    g.strokePath(chamferedPath(frame.reduced(3.5f), frameCut - 2.5f), juce::PathStrokeType(1.0f));
-
-    // Four screws, sat in the room the chamfered corners make for them.
-    constexpr auto screwInset = 12.0f;
-    const juce::Point<float> screws[] {
-        {frame.getX() + screwInset,     frame.getY() + screwInset},
-        {frame.getRight() - screwInset, frame.getY() + screwInset},
-        {frame.getX() + screwInset,     frame.getBottom() - screwInset},
-        {frame.getRight() - screwInset, frame.getBottom() - screwInset}};
-    for (const auto& at : screws) drawScrew(g, at, 5.5f, 1.0f);
-
-    // The tab strip sits in a well sunk into the chassis, so the tab that is
-    // lit reads as a switch standing proud of it.
-    const auto strip = juce::Rectangle<int>(tabStripLeft - 9, tabTop - 6,
-                                            tabCount * (tabWidth + tabGap) - tabGap + 18,
-                                            tabHeight + 12).toFloat();
-    drawWell(g, strip, juce::Colour(0xff090b12), 0.9f, 7.0f);
-
-    const auto margin = static_cast<float>(windowMargin);
-    drawWordmark(g, {margin + 22.0f, 18.0f, 196.0f, 32.0f});
-    g.setColour(signalViolet);
-    g.setFont(panelFont(Face::label, 9.0f));
-    drawTrackedText(g, "SYNTHETIC SIGNAL FORGE // UNIT 01",
-                    {margin + 24.0f, 52.0f, 240.0f, 12.0f}, 0.6f, juce::Justification::left);
-
-    // The keys sit in a cut-out between the two decals rather than on top of
-    // the chassis, so a rim of shadow shows around them the way it would round
-    // anything dropped into a panel.
-    drawWell(g, keyboardBounds(componentBounds).toFloat().expanded(3.0f, 2.0f),
-             juce::Colour(0xff05070d), 1.0f, 5.0f);
-
-    drawIdentityPlate(g, identityPlateBounds(componentBounds));
-    drawUnitMark(g, unitMarkBounds(componentBounds));
-    drawDeckPlates(g, componentBounds);
-}
 }

@@ -1733,15 +1733,12 @@ void Editor::resized()
     clampFxScroll();
     applyEnableStates();
 
-    const auto right = getWidth() - ui::windowMargin;
-    const auto button = ui::presetButtonWidth;
-    savePreset.setBounds(right - button, ui::presetRowTop, button, ui::presetButtonHeight);
-    loadPreset.setBounds(right - button * 2 - 6, ui::presetRowTop, button, ui::presetButtonHeight);
-    presetName.setBounds(right - button * 2 - 6 - ui::presetNameWidth - 8, ui::presetRowTop,
-                         ui::presetNameWidth, ui::presetButtonHeight);
+    savePreset.setBounds(ui::presetButtonBounds(getLocalBounds(), true));
+    loadPreset.setBounds(ui::presetButtonBounds(getLocalBounds(), false));
+    presetName.setBounds(ui::presetLabelBounds(getLocalBounds()));
 
     for (int i = 0; i < ui::tabCount && i < static_cast<int>(tabs.size()); ++i)
-        tabs[static_cast<size_t>(i)]->setBounds(ui::tabBounds(i));
+        tabs[static_cast<size_t>(i)]->setBounds(ui::tabBounds(i, getWidth()));
 
     const auto keys = ui::keyboardBounds(getLocalBounds());
     // Sized so the full eighty-eight keys span the panel exactly, rather than

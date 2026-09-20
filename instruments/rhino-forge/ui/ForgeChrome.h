@@ -6,18 +6,15 @@
 
 // Forge's material, drawn rather than blitted.
 //
-// Everything the panel is built out of — a plate, the chassis it sits on, the
-// bevel around a well, a screw, a rivet, a run of hatching — is defined once
-// here as a path and a gradient, so it is the same material wherever it is used
-// and it holds at every size the window allows. Nothing in this file reads a
-// pixel from an image: the one raster it does use is a small tile of grain it
-// generates itself, which is the one effect a gradient genuinely cannot carry.
-//
-// This is deliberately not a screenshot cut into slices. The panel resizes over
-// a 1.7x span, so a sliced plate would stretch its chamfers and its legend at
-// every size but one; a path does not.
+// Shared metal surfaces, grain, bevels and fasteners. Structural parts are
+// paths so their cuts stay sharp when resized; the fasteners use small assets.
 namespace rhino::forge::ui
 {
+inline const auto electricBlue = juce::Colour(0xff45a8ff);
+inline const auto signalViolet = juce::Colour(0xff9a6cff);
+inline const auto text = juce::Colour(0xffe8eaff);
+inline const auto mutedText = juce::Colour(0xff8f95ad);
+
 // --- The material's palette -------------------------------------------------
 //
 // A plate is gunmetal lit from above: the top of its face catches the light,
@@ -35,8 +32,8 @@ namespace rhino::forge::ui
 // overshooting at 117.
 inline const auto chassis        = juce::Colour(0xff020304);
 inline const auto chassisLit     = juce::Colour(0xff05060a);
-inline const auto plateFaceTop   = juce::Colour(0xff1a1c22);
-inline const auto plateFaceFoot  = juce::Colour(0xff0d0e12);
+inline const auto plateFaceTop   = juce::Colour(0xff191b1e);
+inline const auto plateFaceFoot  = juce::Colour(0xff0b0d10);
 inline const auto plateEdgeLit   = juce::Colour(0xff868d9c);
 inline const auto plateEdgeDark  = juce::Colour(0xff020407);
 // Stamped legends: a part number, a plate's long name, the markings on a decal.
@@ -209,8 +206,10 @@ inline const juce::Image& fastenerImage(Fastener kind)
 {
     static const juce::Image cross = juce::ImageCache::getFromMemory(
         BinaryData::screw_cross_png, BinaryData::screw_cross_pngSize);
+    // The dome asset has a wide transparent gutter. Trim it in the cached view
+    // so the requested radius describes the hardware, as it does for the screw.
     static const juce::Image dome = juce::ImageCache::getFromMemory(
-        BinaryData::screw_dome_png, BinaryData::screw_dome_pngSize);
+        BinaryData::screw_dome_png, BinaryData::screw_dome_pngSize).getClippedImage({20, 19, 28, 28});
     return kind == Fastener::cross ? cross : dome;
 }
 
@@ -320,7 +319,7 @@ inline void drawPlateShadow(juce::Graphics& g, juce::Rectangle<float> box, float
 // lines, which is the point of having them in one place — a module that drew
 // its own background would drift away from this the first time either changed.
 inline void drawPlate(juce::Graphics& g, juce::Rectangle<float> box, float alpha = 1.0f,
-                      float cut = plateCut, int corners = everyCorner, float grain = 0.11f)
+                      float cut = plateCut, int corners = everyCorner, float grain = 0.035f)
 {
     if (box.getWidth() < 2.0f || box.getHeight() < 2.0f) return;
     const auto outline = chamferedPath(box, cut, corners);
@@ -365,7 +364,7 @@ inline void drawInnerPanel(juce::Graphics& g, juce::Rectangle<float> box, float 
                               plateFaceFoot.withAlpha(alpha), box.getCentreX(), box.getBottom(), false);
     g.setGradientFill(face);
     g.fillPath(outline);
-    fillGrain(g, outline, 0.09f * alpha);
+    fillGrain(g, outline, 0.035f * alpha);
 
     strokeBevel(g, outline, box, alpha * 0.8f, 1.1f, 0.8f);
     strokeSideLight(g, outline, box, alpha * 0.7f, 1.1f);
@@ -387,6 +386,79 @@ inline void drawWell(juce::Graphics& g, juce::Rectangle<float> box, juce::Colour
                               plateEdgeLit.withAlpha(0.45f * alpha), box.getCentreX(), box.getBottom(), false);
     g.setGradientFill(wall);
     g.strokePath(outline, juce::PathStrokeType(1.2f));
+}
+
+// Nonrectangular parts use the same finish as the rectangular plates. Insets
+// follow the outline, including the long diagonal cuts on the fascia pieces.
+inline juce::Path metalPolygon(std::initializer_list<juce::Point<float>> points)
+{
+    juce::Path shape;
+    auto first = true;
+    for (const auto point : points)
+    {
+        if (first) shape.startNewSubPath(point); else shape.lineTo(point);
+        first = false;
+    }
+    shape.closeSubPath();
+    return shape;
+}
+
+inline void drawMetalPiece(juce::Graphics& g, const juce::Path& shape, float alpha = 1.0f,
+                           float grain = 0.035f)
+{
+    const auto box = shape.getBounds();
+    if (box.getWidth() < 2.0f || box.getHeight() < 2.0f) return;
+    g.setColour(juce::Colours::black.withAlpha(0.95f * alpha));
+    g.strokePath(shape, juce::PathStrokeType(5.0f));
+    juce::ColourGradient face(plateFaceTop.withAlpha(alpha), box.getX(), box.getY(),
+                              plateFaceFoot.withAlpha(alpha), box.getRight(), box.getBottom(), false);
+    face.addColour(0.25, juce::Colour(0xff121518).withAlpha(alpha));
+    g.setGradientFill(face);
+    g.fillPath(shape);
+    fillGrain(g, shape, grain * alpha);
+    strokeBevel(g, shape, box, alpha, 1.0f, 0.75f);
+    for (const auto inset : {2.0f, 4.3f})
+    {
+        if (box.getWidth() <= inset * 2.0f || box.getHeight() <= inset * 2.0f) continue;
+        auto lip = shape;
+        lip.applyTransform(shape.getTransformToScaleToFit(box.reduced(inset), false));
+        g.setColour(juce::Colours::black.withAlpha(0.9f * alpha));
+        g.strokePath(lip, juce::PathStrokeType(2.4f));
+        strokeBevel(g, lip, box, alpha, 0.9f, inset < 3.0f ? 0.95f : 0.35f);
+        strokeSideLight(g, lip, box, alpha * 0.42f, 0.8f);
+    }
+}
+
+// A shallow folded strip with a stepped end, used on the module rims and the
+// long chassis rails. These are separate pieces, not an unbroken bright border.
+inline void drawMetalRail(juce::Graphics& g, juce::Rectangle<float> box, bool reverse = false)
+{
+    const auto x = box.getX(), y = box.getY(), r = box.getRight(), b = box.getBottom();
+    auto shape = metalPolygon({{x + 5, y}, {r, y}, {r - 5, b}, {x, b}});
+    if (reverse) shape.applyTransform(juce::AffineTransform::verticalFlip(y + b));
+    g.setGradientFill(juce::ColourGradient(juce::Colour(0xff51575f), x, y,
+                                          juce::Colour(0xff16191c), x, b, false));
+    g.fillPath(shape);
+    g.setColour(juce::Colour(0xff080a0c));
+    g.strokePath(shape, juce::PathStrokeType(0.8f));
+    g.setColour(plateEdgeLit.withAlpha(0.7f));
+    g.drawLine(x + 6, y + 0.7f, r - 2, y + 0.7f, 0.7f);
+}
+
+inline void drawEdgeWear(juce::Graphics& g, juce::Rectangle<float> box, int seed)
+{
+    juce::Random random(seed);
+    const auto count = juce::jmax(3, static_cast<int>(box.getWidth() / 30.0f));
+    for (int i = 0; i < count; ++i)
+    {
+        const auto x = box.getX() + 10.0f + random.nextFloat() * (box.getWidth() - 20.0f);
+        const auto y = i % 3 == 0 ? box.getBottom() - 3.0f : box.getY() + 3.0f;
+        const auto length = 0.8f + random.nextFloat() * 3.4f;
+        g.setColour(plateEdgeLit.withAlpha(0.15f + random.nextFloat() * 0.26f));
+        g.drawLine(x, y, x + length, y + random.nextFloat() * 0.6f, 0.6f);
+        g.setColour(juce::Colours::black.withAlpha(0.7f));
+        g.drawLine(x, y + 0.8f, x + length, y + 0.8f, 0.65f);
+    }
 }
 
 // --- Legends ----------------------------------------------------------------

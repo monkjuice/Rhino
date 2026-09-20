@@ -14,6 +14,11 @@ inline const auto electricBlue = juce::Colour(0xff45a8ff);
 inline const auto signalViolet = juce::Colour(0xff9a6cff);
 inline const auto text = juce::Colour(0xffe8eaff);
 inline const auto mutedText = juce::Colour(0xff8f95ad);
+// The name of a control: POSITION, CUTOFF, RATE. Its own colour rather than
+// mutedText, which every dimmed or secondary piece of lettering shares — the
+// label on the knob under your hand is primary text, and sampling the reference
+// puts it at RGB (192,213,235), well clear of the legends stamped beside it.
+inline const auto labelText = juce::Colour(0xffc0d5eb);
 
 // --- The material's palette -------------------------------------------------
 //

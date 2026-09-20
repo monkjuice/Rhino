@@ -67,6 +67,13 @@ inline juce::Typeface::Ptr typefaceFor(Face face)
 // the size it means rather than a corrected one.
 inline constexpr float panelFontScale = 1.28f;
 
+// The one size named here rather than at the place that draws it, because more
+// than one file sets a control's name and they had drifted apart: a stepper's
+// was drawn a point smaller than the knob's beside it, which is visible as a
+// wobble along a row of mixed controls. Measured off the reference, where a
+// knob's name stands 9 pixels tall at the width the panel opens at.
+inline constexpr float controlLabelSize = 12.5f;
+
 // Kept, not rebuilt.
 //
 // Constructing a juce::Font from a FontOptions resolves the face's metrics, and

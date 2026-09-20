@@ -49,8 +49,8 @@ inline void drawLegendRecess(juce::Graphics& g, juce::Rectangle<int> area,
     g.setColour(juce::Colour(0xff363c45));
     g.drawLine(x - 3, y, r - 13, y, 0.7f);
     footer.removeFromRight(21);
-    stamp(g, name, footer, 11, 0.9f);
-    stamp(g, code, footer, 11, 0.5f, juce::Justification::centredRight);
+    stamp(g, name, footer, 12.5f, 0.9f);
+    stamp(g, code, footer, 12.5f, 0.5f, juce::Justification::centredRight);
 }
 
 inline void drawModuleDetail(juce::Graphics& g, juce::Rectangle<int> area, const Module& module,
@@ -66,7 +66,7 @@ inline void drawModuleDetail(juce::Graphics& g, juce::Rectangle<int> area, const
     if (module.display == Display::envelope || module.display == Display::lfo) detailRightInset += 48;
     header.removeFromRight(juce::jlimit(0, header.getWidth(), detailRightInset));
     g.setColour(mutedText.withAlpha(on ? 1.0f : 0.45f));
-    g.setFont(panelFont(Face::label, 10.0f));
+    g.setFont(panelFont(Face::label, 11.5f));
     g.drawText(detail, header, secondary && juce::String(module.id) == "global"
                                   ? juce::Justification::centredLeft : juce::Justification::centredRight);
 }
@@ -104,7 +104,7 @@ inline void drawModuleShell(juce::Graphics& g, juce::Rectangle<int> area, const 
         auto header = area.withHeight(headerHeight).reduced(grouped ? 8 : 12, 0);
         if (module.enableId != nullptr) header.removeFromLeft(headerHeight);
         g.setColour(text.withAlpha(on ? 1.0f : 0.55f));
-        g.setFont(panelFont(Face::header, 13.0f));
+        g.setFont(panelFont(Face::header, 14.5f));
         g.drawFittedText(module.title, header, juce::Justification::centredLeft, 1, 0.85f);
     }
 
@@ -114,7 +114,7 @@ inline void drawModuleShell(juce::Graphics& g, juce::Rectangle<int> area, const 
             drawLegendRecess(g, area, module.plateName, code);
         else if (lower || id == "filter")
         {
-            stamp(g, code, box.withHeight(headerHeight).reduced(14, 0), 11, 0.7f,
+            stamp(g, code, box.withHeight(headerHeight).reduced(14, 0), 12.5f, 0.7f,
                   juce::Justification::centredRight);
             if (id == "filter")
             {
@@ -253,7 +253,14 @@ inline void drawBackdrop(juce::Graphics& g, juce::Rectangle<int> componentBounds
     drawWell(g, tabs.expanded(6, 5), juce::Colour(0xff030609), 1.0f, 6);
     const auto wordmarkWidth = tabs.getX() - 68;
     drawWordmark(g, {48, 21, wordmarkWidth, 43});
-    stamp(g, "SYNTHETIC SIGNAL FORGE // UNIT 01", {49, 67, wordmarkWidth + 3, 14}, 11.5f, 0.9f);
+    // Not stamped: the line under the wordmark is the product saying its own
+    // name, and the reference draws it as brightly as anything on the panel.
+    // stamp() is for a part number engraved into a plate, which is the opposite
+    // kind of lettering and the opposite colour.
+    g.setFont(panelFont(Face::label, 13.5f));
+    g.setColour(labelText);
+    drawTrackedText(g, "SYNTHETIC SIGNAL FORGE // UNIT 01", {49, 67, wordmarkWidth + 3, 14}, 0.9f,
+                    juce::Justification::centredLeft);
     drawIdentityPlate(g, identityPlateBounds(componentBounds));
     drawUnitMark(g, unitMarkBounds(componentBounds));
 

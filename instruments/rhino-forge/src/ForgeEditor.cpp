@@ -29,6 +29,25 @@ bool isFxModule(const ui::Module& module)
 {
     return module.id != nullptr && module.id[0] == 'f' && module.id[1] == 'x' && module.id[2] == '\0';
 }
+
+// The name over a control, wherever it sits. One size and one weight for all of
+// them: the reference draws the word over a stepper exactly as large as the one
+// over the knob beside it, and the two sizes this had drifted to only made a
+// row of mixed controls look unaligned. Semibold rather than medium, because at
+// this size Rajdhani Medium is a stop lighter than the reference's lettering.
+//
+// A label's text is rasterised once and blitted after. The panel repaints whole
+// at 24Hz, so without the buffer every label on it lays its glyphs out again
+// every frame for a string that has not changed — and setText still repaints,
+// so a label that does change is still right.
+void dressControlLabel(juce::Label& label, const juce::String& caption)
+{
+    label.setText(caption, juce::dontSendNotification);
+    label.setJustificationType(juce::Justification::centred);
+    label.setColour(juce::Label::textColourId, ui::labelText);
+    label.setFont(ui::panelFont(ui::Face::emphasis, ui::controlLabelSize));
+    label.setBufferedToImage(true);
+}
 }
 
 Editor::Editor(Processor& p)
@@ -1084,16 +1103,7 @@ void Editor::buildModules()
                     control->attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
                         processor.state, declared.id, control->slider);
 
-                    control->label.setText(declared.label, juce::dontSendNotification);
-                    control->label.setJustificationType(juce::Justification::centred);
-                    control->label.setColour(juce::Label::textColourId, ui::mutedText);
-                    control->label.setFont(ui::panelFont(ui::Face::label, 9.0f));
-                    // A label's text is rasterised once and blitted after. The
-                    // panel repaints whole at 24Hz, so without this every label
-                    // on it lays its glyphs out again every frame for a string
-                    // that has not changed — and setText still repaints, so a
-                    // label that does change is still right.
-                    control->label.setBufferedToImage(true);
+                    dressControlLabel(control->label, declared.label);
                     addAndMakeVisible(control->label);
                     addAndMakeVisible(*control->selector);
                     module.controls.push_back(std::move(control));
@@ -1177,11 +1187,7 @@ void Editor::buildModules()
                     continue;
                 }
 
-                control->label.setText(declared.label, juce::dontSendNotification);
-                control->label.setJustificationType(juce::Justification::centred);
-                control->label.setColour(juce::Label::textColourId, ui::mutedText);
-                control->label.setFont(ui::panelFont(ui::Face::label, declared.style == ui::Style::stepper ? 9.0f : 10.0f));
-                control->label.setBufferedToImage(true);
+                dressControlLabel(control->label, declared.label);
 
                 if (declared.style == ui::Style::rocker)
                 {
@@ -1474,7 +1480,7 @@ void Editor::applyEnableStates()
                                           ui::text.withAlpha(on ? 1.0f : 0.4f));
             }
             control->label.setColour(juce::Label::textColourId,
-                                     ui::mutedText.withAlpha(on ? 1.0f : 0.4f));
+                                     ui::labelText.withAlpha(on ? 1.0f : 0.4f));
         }
     }
 }

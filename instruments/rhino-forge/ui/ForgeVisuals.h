@@ -289,7 +289,7 @@ public:
 
         // Over a fill, the value is read against the accent rather than in it.
         g.setColour((horizontal || !active ? text : accent).withAlpha(enabled ? 1.0f : 0.35f));
-        g.setFont(panelFont(Face::reading, 11.0f));
+        g.setFont(panelFont(Face::reading, 13.5f));
         g.drawText(slider.getTextFromValue(slider.getValue()), area, juce::Justification::centred);
     }
 
@@ -976,7 +976,7 @@ public:
         g.setColour((on ? accent : line).withAlpha(enabled ? (highlighted ? 1.0f : 0.85f) : 0.3f));
         g.drawRoundedRectangle(area, 3.0f, 1.0f);
         g.setColour((on ? accent : mutedText).withAlpha(enabled ? 1.0f : 0.35f));
-        g.setFont(panelFont(Face::emphasis, 10.0f));
+        g.setFont(panelFont(Face::emphasis, controlLabelSize));
         g.drawText(getName(), area, juce::Justification::centred);
     }
 };
@@ -1180,8 +1180,11 @@ public:
     static constexpr int arrowWidth = 20;
 
     // The height a single row of the list style wants, centred in a box that is
-    // tall enough to stack three.
-    static constexpr int listHeight = 24;
+    // tall enough to stack three. The reference draws this field as the largest
+    // thing in its row — the one place on the panel where a choice is read at a
+    // glance rather than looked for — so it is taller than the line of text in
+    // it strictly needs.
+    static constexpr int listHeight = 30;
 
     // A field with this many or fewer shows them all; past it, a list.
     static constexpr int inlineLimit = 3;
@@ -1232,7 +1235,7 @@ public:
                 g.setColour((live ? accent : line).withAlpha(alpha * (live ? 1.0f : 0.7f)));
                 g.drawRoundedRectangle(box, 3.0f, 1.0f);
                 g.setColour((live ? accent : mutedText).withAlpha(alpha));
-                g.setFont(panelFont(Face::emphasis, 10.0f));
+                g.setFont(panelFont(Face::emphasis, 12.0f));
                 g.drawText(choices[static_cast<size_t>(i)], box, juce::Justification::centred);
             }
             return;
@@ -1243,7 +1246,7 @@ public:
         g.fillRoundedRectangle(area, 3.0f);
         g.setColour(accent.withAlpha(alpha));
         g.drawRoundedRectangle(area, 3.0f, 1.0f);
-        g.setFont(panelFont(Face::emphasis, 10.0f));
+        g.setFont(panelFont(Face::emphasis, 13.5f));
         g.drawText(choices[static_cast<size_t>(juce::jlimit(0, count() - 1, chosen))],
                    area.reduced(static_cast<float>(arrowWidth), 0.0f), juce::Justification::centred);
 
@@ -1254,12 +1257,12 @@ public:
             juce::Path path;
             const auto middle = box.getCentreY();
             const auto x = box.getCentreX();
-            if (pointingLeft) { path.startNewSubPath(x + 2.5f, middle - 4.0f);
-                                path.lineTo(x - 2.5f, middle); path.lineTo(x + 2.5f, middle + 4.0f); }
-            else              { path.startNewSubPath(x - 2.5f, middle - 4.0f);
-                                path.lineTo(x + 2.5f, middle); path.lineTo(x - 2.5f, middle + 4.0f); }
+            if (pointingLeft) { path.startNewSubPath(x + 3.4f, middle - 5.5f);
+                                path.lineTo(x - 3.4f, middle); path.lineTo(x + 3.4f, middle + 5.5f); }
+            else              { path.startNewSubPath(x - 3.4f, middle - 5.5f);
+                                path.lineTo(x + 3.4f, middle); path.lineTo(x - 3.4f, middle + 5.5f); }
             g.setColour((live ? accent : line).withAlpha(alpha * (live ? 0.9f : 0.5f)));
-            g.strokePath(path, juce::PathStrokeType(1.4f));
+            g.strokePath(path, juce::PathStrokeType(1.8f));
         };
         arrow(area.withWidth(static_cast<float>(arrowWidth)), true, chosen > 0);
         arrow(area.withLeft(area.getRight() - arrowWidth), false, chosen < count() - 1);
@@ -1472,7 +1475,7 @@ public:
         // Qualified: Button has a private `text` member of its own that would
         // otherwise win the lookup here.
         g.setColour(on ? rhino::forge::ui::text : mutedText.withAlpha(highlighted ? 1.0f : 0.8f));
-        g.setFont(panelFont(Face::header, 11.0f));
+        g.setFont(panelFont(Face::header, 13.0f));
         g.drawText(getName(), getLocalBounds(), juce::Justification::centred);
     }
 };
@@ -1648,7 +1651,7 @@ inline void drawColumnTitle(juce::Graphics& g, juce::Rectangle<int> area, const 
 {
     if (title.isEmpty()) return;
     g.setColour(mutedText.withAlpha(0.8f));
-    g.setFont(panelFont(Face::label, 9.0f));
+    g.setFont(panelFont(Face::label, 11.0f));
     g.drawText(title, area, juce::Justification::centred);
 }
 

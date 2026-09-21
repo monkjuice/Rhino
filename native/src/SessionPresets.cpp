@@ -85,7 +85,7 @@ bool Session::trackHasInstrument(int trackIndex) const
 
 // An empty one-bar MIDI clip at the position the user asked for. Only tracks
 // with an instrument can hold one; an audio track takes recordings and files.
-juce::Result Session::createClip(int trackIndex, double startSeconds)
+juce::Result Session::createClip(int trackIndex, double startSeconds, te::EditItemID* created)
 {
     if (!std::isfinite(startSeconds) || startSeconds < 0.0)
         return juce::Result::fail("Invalid clip position.");
@@ -133,6 +133,7 @@ juce::Result Session::createClip(int trackIndex, double startSeconds)
         patternClip = clip.get();
     }
     patternClipID = patternClip->itemID;
+    if (created != nullptr) *created = patternClipID;
     refreshLoop();
     edit->getUndoManager().beginNewTransaction();
     markModified();

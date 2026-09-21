@@ -121,6 +121,7 @@ private:
     bool isSelected(te::EditItemID) const;
     void setSelection(std::vector<te::EditItemID>, te::EditItemID primary = {});
     void splitSelectedAtPlayhead();
+    void openCreatedClip(te::EditItemID created);
     // Records that the last click landed on a track card, and reports it.
     void focusTrack();
     // ArrangementSelection.cpp

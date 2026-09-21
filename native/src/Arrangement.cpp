@@ -249,9 +249,11 @@ bool Arrangement::keyPressed(const juce::KeyPress& key)
         // Adds a clip to the focused track at the playhead, the keyboard
         // equivalent of double-clicking the lane.
         const auto start = snapped(std::max(0.0, playheadTime(session.edit->getTransport())), false);
-        const auto result = session.createClip(selectedTrack, start);
+        te::EditItemID created;
+        const auto result = session.createClip(selectedTrack, start, &created);
         if (status) status(result.failed() ? result.getErrorMessage()
                                            : "Added a clip to " + session.trackName(selectedTrack));
+        if (result.wasOk()) openCreatedClip(created);
         return true;
     }
     if (key.getModifiers().isCommandDown() && key.getKeyCode() == 'Z')
@@ -389,6 +391,17 @@ void Arrangement::selectTrack(int track)
     trackSelectionAnchor = track;
     if (changed && trackSelected) trackSelected(track);
     repaint();
+}
+
+// Making a clip is the same gesture as opening one - a double-click on the
+// lane, or the Ctrl+A that stands in for it - so the clip it just made is
+// selected and reported open, and lands in the editor exactly as a
+// double-click on a clip already there would have put it.
+void Arrangement::openCreatedClip(te::EditItemID created)
+{
+    if (created == te::EditItemID()) return;
+    setSelection({created}, created);
+    if (clipOpened) clipOpened(created);
 }
 
 // Selecting a card is what asks for its track's devices. selectTrack reports

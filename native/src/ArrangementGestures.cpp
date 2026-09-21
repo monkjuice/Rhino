@@ -163,8 +163,10 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
         {
             selectTrack(track);
             const auto start = snapped(std::max(0.0, timeAt(event.position.x)), event.mods.isAltDown());
-            const auto result = session.createClip(track, start);
+            te::EditItemID created;
+            const auto result = session.createClip(track, start, &created);
             if (status) status(result.failed() ? result.getErrorMessage() : "Added a clip to " + session.trackName(track));
+            if (result.wasOk()) openCreatedClip(created);
         }
         return;
     }

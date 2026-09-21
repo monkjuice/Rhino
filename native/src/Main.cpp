@@ -657,9 +657,10 @@ public:
     }
 
     // Double-clicking a clip opens it: audio in the audio editor, MIDI in the
-    // note editor. This is the only thing that reveals the audio editor, which
-    // is why a single click on a waveform still only selects it. Whether the
-    // Device View is showing is not this function's business either way.
+    // note editor. This is the only thing that reveals either of them, which is
+    // why a single click on a clip - on a waveform or on a bar of notes - still
+    // only selects it. Whether the Device View is showing is not this
+    // function's business either way.
     void openClip(te::EditItemID id)
     {
         if (session.findAudioClip(id) != nullptr)
@@ -678,7 +679,7 @@ public:
         requestPaneLayout();
     }
 
-    // The clip selection drives the clip pane, but only when it actually moved:
+    // The clip selection moves the clip pane, but only when it actually moved:
     // a toggle the user pressed while standing on one clip has to survive the
     // next notification about that same clip. The Device View is not touched
     // here at all - selecting a clip says nothing about whether its track's
@@ -700,14 +701,22 @@ public:
         }
         paneClip = clipID;
         paneMidi = midi;
-        // Once it is open the audio editor follows the audio clip selection,
-        // the way Live's clip view does. A MIDI clip hands the pane back to the
-        // note editor, and selecting no clip at all - a track card, a region,
-        // empty space - closes it.
-        if (const auto audio = selectedAudioClipID(); lowerPane == LowerPane::audio && audio != te::EditItemID())
-            audioClip.setClip(audio);
-        else
-            lowerPane = midi ? LowerPane::notes : LowerPane::none;
+        // Selecting a clip never reveals the pane: opening one is a
+        // double-click, for a MIDI clip exactly as for an audio clip, so a
+        // single click is only ever a selection. What an open pane does is
+        // follow that selection the way Live's clip view does - onto the next
+        // clip, whichever editor that clip calls for - and close when what was
+        // selected is not a clip at all.
+        if (lowerPane != LowerPane::none)
+        {
+            if (const auto audio = selectedAudioClipID(); audio != te::EditItemID())
+            {
+                audioClip.setClip(audio);
+                lowerPane = LowerPane::audio;
+            }
+            else
+                lowerPane = midi ? LowerPane::notes : LowerPane::none;
+        }
         updateEditorLabel();
         requestPaneLayout();
     }
@@ -1088,9 +1097,8 @@ private:
     // The clip pane and the Device View are two independent panels that happen
     // to stack in the same strip, and each answers to one thing: this says
     // which clip editor the clip pane is showing, and rackOpen whether the
-    // Device View is up. Both start hidden - a MIDI or drum clip reveals the
-    // note editor, a double-clicked audio clip the audio editor, and a clicked
-    // track card the devices.
+    // Device View is up. Both start hidden - double-clicking a clip reveals the
+    // editor that clip belongs in, and clicking a track card the devices.
     enum class LowerPane { none, notes, audio };
     LowerPane lowerPane = LowerPane::none;
     bool lowerPaneVisible() const { return lowerPane != LowerPane::none || rackOpen; }

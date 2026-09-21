@@ -10,6 +10,18 @@ juce::File lfoFolder()
         .getChildFile("Rhino Forge").getChildFile("LFO Tables");
 }
 
+std::vector<juce::File> savedLfoShapes()
+{
+    juce::Array<juce::File> found;
+    lfoFolder().findChildFiles(found, juce::File::findFiles, false, "*.forgelfo");
+    std::vector<juce::File> sorted;
+    sorted.reserve(static_cast<size_t>(found.size()));
+    for (const auto& file : found) sorted.push_back(file);
+    std::sort(sorted.begin(), sorted.end(), [] (const auto& a, const auto& b)
+    { return a.getFileName().compareIgnoreCase(b.getFileName()) < 0; });
+    return sorted;
+}
+
 float pointValue(juce::Rectangle<int> plot, int y, int rows, bool snap)
 {
     const auto raw = 1.0f - 2.0f * (y - plot.getY()) / static_cast<float>(plot.getHeight());
@@ -119,70 +131,102 @@ void Editor::removeLfoPoint(int lfo, int point)
 void Editor::showLfoMenu()
 {
     const auto bank = shownLfo();
-    juce::PopupMenu menu, basics;
+    const auto custom = processor.lfoTableIsCustom(bank);
+    const auto currentName = processor.lfoTableName(bank);
+    juce::PopupMenu menu;
+    menu.addSectionHeader("Default shapes");
     for (int i = 0; i < lfoShapeCount; ++i)
-        basics.addItem(i + 1, lfoShapeName(i), true,
-                       !processor.lfoTable(bank).custom
-                           && juce::roundToInt(value(lfoParameterId(bank, "Shape"))) == i);
-    menu.addSubMenu("Default", basics);
-    menu.addItem(20, "Custom", false, processor.lfoTable(bank).custom);
+        menu.addItem(i + 1, lfoFullShapeName(i), true,
+                     !custom
+                         && juce::roundToInt(value(lfoParameterId(bank, "Shape"))) == i);
     menu.addSeparator();
-    menu.addItem(100, "Load Table...");
-    menu.addItem(101, "Save Table...", processor.lfoTable(bank).custom);
-    juce::Array<juce::File> saved;
-    lfoFolder().findChildFiles(saved, juce::File::findFiles, false, "*.forgelfo");
-    if (!saved.isEmpty())
+    menu.addItem(100, "Load shape from file...");
+    menu.addItem(101, "Save current shape...", custom);
+    const auto saved = savedLfoShapes();
+    if (!saved.empty())
     {
         juce::PopupMenu library;
-        for (int i = 0; i < saved.size(); ++i)
-            library.addItem(200 + i, saved[static_cast<size_t>(i)].getFileNameWithoutExtension());
-        menu.addSubMenu("Saved Tables", library);
+        for (int i = 0; i < static_cast<int>(saved.size()); ++i)
+        {
+            const auto title = saved[static_cast<size_t>(i)].getFileNameWithoutExtension();
+            library.addItem(200 + i, title, true, custom && currentName == title);
+        }
+        menu.addSubMenu("Saved shapes", library);
     }
     const auto safe = juce::Component::SafePointer<Editor>(this);
     menu.showMenuAsync(juce::PopupMenu::Options(), [safe, bank, saved] (int choice)
     {
         if (safe == nullptr || choice == 0) return;
         if (choice >= 1 && choice <= lfoShapeCount)
-        {
-            safe->processor.setLfoTable(bank, {});
-            if (auto* parameter = safe->processor.state.getParameter(lfoParameterId(bank, "Shape")))
-            {
-                parameter->beginChangeGesture();
-                parameter->setValueNotifyingHost(parameter->convertTo0to1(static_cast<float>(choice - 1)));
-                parameter->endChangeGesture();
-            }
-        }
+            safe->selectLfoBasicShape(bank, choice - 1);
         else if (choice == 100) safe->chooseLfoTableFile(false);
         else if (choice == 101) safe->chooseLfoTableFile(true);
-        else if (choice >= 200 && choice < 200 + saved.size())
+        else if (choice >= 200 && choice < 200 + static_cast<int>(saved.size()))
         {
             const auto result = safe->processor.loadLfoTable(bank, saved[static_cast<size_t>(choice - 200)]);
             if (result.failed())
                 juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon,
                                                         "LFO table", result.getErrorMessage());
         }
+        safe->applyEnableStates();
         safe->repaint(safe->lfoDisplayBounds());
     });
 }
 
-void Editor::showLfoGridMenu(bool columns)
+void Editor::selectLfoBasicShape(int lfo, int shape)
+{
+    if (lfo < 0 || lfo >= lfoCount || shape < 0 || shape >= lfoShapeCount) return;
+    auto table = processor.lfoTable(lfo);
+    table.custom = false;
+    table.count = 0;
+    processor.setLfoTable(lfo, table);
+    if (auto* parameter = processor.state.getParameter(lfoParameterId(lfo, "Shape")))
+    {
+        parameter->beginChangeGesture();
+        parameter->setValueNotifyingHost(parameter->convertTo0to1(static_cast<float>(shape)));
+        parameter->endChangeGesture();
+    }
+    applyEnableStates();
+    repaint(lfoDisplayBounds());
+}
+
+void Editor::stepLfoShape(int direction)
 {
     const auto bank = shownLfo();
-    const auto table = processor.lfoTable(bank);
-    juce::PopupMenu menu;
-    menu.addSectionHeader(columns ? "Columns" : "Rows");
-    for (int count = 2; count <= 32; ++count)
-        menu.addItem(count, juce::String(count), true, (columns ? table.columns : table.rows) == count);
-    const auto safe = juce::Component::SafePointer<Editor>(this);
-    menu.showMenuAsync(juce::PopupMenu::Options(), [safe, bank, columns] (int choice)
+    const auto saved = savedLfoShapes();
+    auto current = juce::jlimit(0, lfoShapeCount - 1,
+        juce::roundToInt(value(lfoParameterId(bank, "Shape"))));
+    if (processor.lfoTableIsCustom(bank))
     {
-        if (safe == nullptr || choice == 0) return;
-        auto next = safe->processor.lfoTable(bank);
-        if (columns) next.columns = choice;
-        else next.rows = choice;
-        safe->processor.setLfoTable(bank, next);
-        safe->repaint(safe->lfoDisplayBounds());
-    });
+        const auto currentName = processor.lfoTableName(bank);
+        for (int i = 0; i < static_cast<int>(saved.size()); ++i)
+            if (currentName == saved[static_cast<size_t>(i)].getFileNameWithoutExtension())
+            { current = lfoShapeCount + i; break; }
+    }
+    const auto total = lfoShapeCount + static_cast<int>(saved.size());
+    const auto next = (current + direction + total) % total;
+    if (next < lfoShapeCount) selectLfoBasicShape(bank, next);
+    else
+    {
+        const auto result = processor.loadLfoTable(bank, saved[static_cast<size_t>(next - lfoShapeCount)]);
+        if (result.failed())
+            juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon,
+                                                    "LFO table", result.getErrorMessage());
+        applyEnableStates();
+        repaint(lfoDisplayBounds());
+    }
+}
+
+void Editor::setLfoGridCount(int lfo, bool columns, int count)
+{
+    if (lfo < 0 || lfo >= lfoCount) return;
+    auto table = processor.lfoTable(lfo);
+    const auto bounded = juce::jlimit(2, 32, count);
+    auto& target = columns ? table.columns : table.rows;
+    if (target == bounded) return;
+    target = bounded;
+    processor.setLfoTable(lfo, table, processor.lfoTableName(lfo));
+    repaint(lfoDisplayBounds());
 }
 
 void Editor::chooseLfoTableFile(bool save)

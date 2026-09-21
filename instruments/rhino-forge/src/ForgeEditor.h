@@ -158,6 +158,11 @@ private:
     int lfoDragPoint = -1;
     int lfoDragBank = -1;
     juce::Point<int> lfoDragStart;
+    int lfoGridDragAxis = -1;
+    int lfoGridDragBank = -1;
+    int lfoGridStartCount = 8;
+    int lfoGridStartY = 0;
+    std::array<float, 2> lfoGridWheel {};
 
     void buildModules();
     void buildTablePanel();
@@ -218,7 +223,9 @@ private:
     void addLfoPoint(int lfo, juce::Point<int> at);
     void removeLfoPoint(int lfo, int point);
     void showLfoMenu();
-    void showLfoGridMenu(bool columns);
+    void selectLfoBasicShape(int lfo, int shape);
+    void stepLfoShape(int direction);
+    void setLfoGridCount(int lfo, bool columns, int count);
     void chooseLfoTableFile(bool save);
     // Which envelope the panel is showing: the ENV module's chosen bank, and so
     // also the one its display draws, its knobs drive and its handle drags.
@@ -350,6 +357,7 @@ private:
     // changed from outside this editor is noticed on the next tick.
     juce::String panelColoursShown;
     float value(const juce::String& id) const;
+    void mouseMove(const juce::MouseEvent&) override;
     void mouseDown(const juce::MouseEvent&) override;
     void mouseDrag(const juce::MouseEvent&) override;
     void mouseUp(const juce::MouseEvent&) override;

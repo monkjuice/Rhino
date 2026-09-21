@@ -206,16 +206,18 @@ remains independent and continues to use the VST3 state API.
 ## LFO tables
 
 Each of the six LFOs starts on **Default**, which contains the existing sine,
-triangle, saw, square and sample and hold shapes. Choose a basic shape with the
-SHAPE control or from the name menu below the graph. Drag a point to make a
-**Custom** table; double-click empty space to add a point, double-click a point
-to remove it, or right-click an interior point to remove it. Hold Alt while
-dragging to snap to the grid. The two numbers below the graph set its column
-and row counts independently, from 2 to 32.
+triangle, saw, square and sample and hold shapes. The name below the graph
+opens the shape menu; the arrows beside it step through the basic and saved
+shapes. Drag a point to make a **Custom** table; double-click empty space to add
+a point, double-click a point to remove it, or right-click an interior point to
+remove it. Hold Alt while dragging to snap to the grid. The two numbered fields
+below the graph set columns and rows independently, from 2 to 32. Click an
+arrow to change by one, drag a number vertically or use the wheel for larger
+changes, and double-click a number to restore 8.
 
 The name menu loads and saves `.forgelfo` tables. The save dialog starts in
 `Documents/Rhino Forge/LFO Tables`, and tables in that folder appear under
-**Saved Tables**. Custom tables also travel inside Forge presets and host
+**Saved shapes**. Custom tables also travel inside Forge presets and host
 project state, so the project does not depend on the saved file.
 
 ## The arpeggiator

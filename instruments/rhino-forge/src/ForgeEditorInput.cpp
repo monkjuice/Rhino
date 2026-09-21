@@ -23,6 +23,26 @@ Editor::Control* Editor::controlAt(juce::Point<int> panelPosition)
     return nullptr;
 }
 
+void Editor::mouseMove(const juce::MouseEvent& event)
+{
+    if (event.eventComponent != this) return;
+    const auto at = event.getEventRelativeTo(this).getPosition();
+    const auto display = lfoDisplayBounds();
+    const auto column = ui::lfoColumnBounds(display);
+    const auto row = ui::lfoRowBounds(display);
+    const auto overGridStep = ui::lfoGridStepBounds(column, true).contains(at)
+        || ui::lfoGridStepBounds(column, false).contains(at)
+        || ui::lfoGridStepBounds(row, true).contains(at)
+        || ui::lfoGridStepBounds(row, false).contains(at);
+    const auto overShapeControl = ui::lfoNameBounds(display).contains(at)
+        || ui::lfoPreviousBounds(display).contains(at)
+        || ui::lfoNextBounds(display).contains(at)
+        || (ui::lfoPlotBounds(display).contains(at) && lfoPointAt(at) >= 0);
+    if (overGridStep || overShapeControl) setMouseCursor(juce::MouseCursor::PointingHandCursor);
+    else if (column.contains(at) || row.contains(at)) setMouseCursor(juce::MouseCursor::UpDownResizeCursor);
+    else setMouseCursor(juce::MouseCursor::NormalCursor);
+}
+
 void Editor::mouseDown(const juce::MouseEvent& event)
 {
     if (event.eventComponent == this)
@@ -33,8 +53,29 @@ void Editor::mouseDown(const juce::MouseEvent& event)
         {
             if (ui::lfoNameBounds(display).contains(at) && !event.mods.isPopupMenu())
             { showLfoMenu(); return; }
-            if (ui::lfoGridBounds(display).contains(at) && !event.mods.isPopupMenu())
-            { showLfoGridMenu(at.x < ui::lfoGridBounds(display).getCentreX()); return; }
+            if (ui::lfoPreviousBounds(display).contains(at) && !event.mods.isPopupMenu())
+            { stepLfoShape(-1); return; }
+            if (ui::lfoNextBounds(display).contains(at) && !event.mods.isPopupMenu())
+            { stepLfoShape(1); return; }
+            for (int axis = 0; axis < 2; ++axis)
+            {
+                const auto field = axis == 0 ? ui::lfoColumnBounds(display) : ui::lfoRowBounds(display);
+                if (!field.contains(at) || event.mods.isPopupMenu()) continue;
+                const auto bank = shownLfo();
+                const auto table = processor.lfoTable(bank);
+                const auto current = axis == 0 ? table.columns : table.rows;
+                if (ui::lfoGridStepBounds(field, true).contains(at))
+                { setLfoGridCount(bank, axis == 0, current + 1); return; }
+                if (ui::lfoGridStepBounds(field, false).contains(at))
+                { setLfoGridCount(bank, axis == 0, current - 1); return; }
+                if (event.getNumberOfClicks() >= 2)
+                { setLfoGridCount(bank, axis == 0, 8); return; }
+                lfoGridDragAxis = axis;
+                lfoGridDragBank = bank;
+                lfoGridStartCount = current;
+                lfoGridStartY = at.y;
+                return;
+            }
             if (ui::lfoPlotBounds(display).expanded(5, 0).contains(at))
             {
                 const auto point = lfoPointAt(at);
@@ -215,7 +256,8 @@ void Editor::shiftComputerKeyOctave(int delta)
     repaint();
 }
 
-// The wheel over the envelope display changes how much time it spans. Up
+// The wheel over an LFO grid field changes its divisions; over the envelope
+// display it changes how much time that display spans. Up
 // shortens the window, so the shape grows: up is in, the way round every other
 // zoom works. The notches are accumulated because a trackpad sends a stream of small
 // deltas where a mouse sends one large one, and without this a flick would run
@@ -223,6 +265,23 @@ void Editor::shiftComputerKeyOctave(int delta)
 void Editor::mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel)
 {
     const auto at = event.getEventRelativeTo(this).getPosition();
+    const auto lfoDisplay = lfoDisplayBounds();
+    for (int axis = 0; axis < 2; ++axis)
+    {
+        const auto field = axis == 0 ? ui::lfoColumnBounds(lfoDisplay) : ui::lfoRowBounds(lfoDisplay);
+        if (!field.contains(at)) continue;
+        auto& travel = lfoGridWheel[static_cast<size_t>(axis)];
+        travel += wheel.isReversed ? -wheel.deltaY : wheel.deltaY;
+        const auto notches = static_cast<int>(travel / wheelPerZoomStep);
+        if (notches != 0)
+        {
+            travel -= static_cast<float>(notches) * wheelPerZoomStep;
+            const auto table = processor.lfoTable(shownLfo());
+            setLfoGridCount(shownLfo(), axis == 0,
+                            (axis == 0 ? table.columns : table.rows) + notches);
+        }
+        return;
+    }
     if (page == ui::Page::fx)
         for (const auto& module : ui::modules())
         {
@@ -254,6 +313,13 @@ void Editor::mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWhee
 
 void Editor::mouseDrag(const juce::MouseEvent& event)
 {
+    if (lfoGridDragAxis >= 0)
+    {
+        const auto at = event.getEventRelativeTo(this).getPosition();
+        setLfoGridCount(lfoGridDragBank, lfoGridDragAxis == 0,
+                        lfoGridStartCount + (lfoGridStartY - at.y) / 8);
+        return;
+    }
     if (lfoDragPoint >= 0)
     {
         const auto at = event.getEventRelativeTo(this).getPosition();
@@ -295,6 +361,11 @@ void Editor::mouseDrag(const juce::MouseEvent& event)
 
 void Editor::mouseUp(const juce::MouseEvent& event)
 {
+    if (lfoGridDragAxis >= 0)
+    {
+        lfoGridDragAxis = lfoGridDragBank = -1;
+        return;
+    }
     if (lfoDragBank >= 0)
     {
         lfoDragPoint = lfoDragBank = -1;

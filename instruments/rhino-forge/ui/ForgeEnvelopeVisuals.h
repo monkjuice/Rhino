@@ -343,14 +343,41 @@ inline juce::Rectangle<int> lfoPlotBounds(juce::Rectangle<int> area)
     return area.reduced(1, 8).withTrimmedBottom(19);
 }
 
-inline juce::Rectangle<int> lfoNameBounds(juce::Rectangle<int> area)
+inline juce::Rectangle<int> lfoFooterBounds(juce::Rectangle<int> area)
 {
-    return {area.getX() + 6, area.getBottom() - 23, area.getWidth() / 2, 19};
+    return area.withTop(area.getBottom() - 25);
 }
 
-inline juce::Rectangle<int> lfoGridBounds(juce::Rectangle<int> area)
+inline juce::Rectangle<int> lfoColumnBounds(juce::Rectangle<int> area)
 {
-    return {area.getRight() - 86, area.getBottom() - 23, 80, 19};
+    return {area.getRight() - 126, area.getBottom() - 23, 56, 20};
+}
+
+inline juce::Rectangle<int> lfoRowBounds(juce::Rectangle<int> area)
+{
+    return {area.getRight() - 64, area.getBottom() - 23, 56, 20};
+}
+
+inline juce::Rectangle<int> lfoNameBounds(juce::Rectangle<int> area)
+{
+    return {area.getX() + 6, area.getBottom() - 23,
+            juce::jmax(55, juce::jmin(200, lfoColumnBounds(area).getX() - area.getX() - 68)), 20};
+}
+
+inline juce::Rectangle<int> lfoPreviousBounds(juce::Rectangle<int> area)
+{
+    return {lfoNameBounds(area).getRight() + 4, area.getBottom() - 23, 22, 20};
+}
+
+inline juce::Rectangle<int> lfoNextBounds(juce::Rectangle<int> area)
+{
+    return lfoPreviousBounds(area).translated(24, 0);
+}
+
+inline juce::Rectangle<int> lfoGridStepBounds(juce::Rectangle<int> field, bool increase)
+{
+    auto arrows = field.withLeft(field.getRight() - 14);
+    return increase ? arrows.removeFromTop(arrows.getHeight() / 2) : arrows.withTrimmedTop(arrows.getHeight() / 2);
 }
 
 inline void drawLfo(juce::Graphics& g, juce::Rectangle<int> area, rhino::forge::LfoShape shape,
@@ -425,12 +452,62 @@ inline void drawLfo(juce::Graphics& g, juce::Rectangle<int> area, rhino::forge::
     g.setColour(colour);
     g.fillEllipse(juce::Rectangle<float>(4.0f, 4.0f).withCentre({x, y}));
 
+    const auto footer = lfoFooterBounds(area);
     g.setColour(juce::Colour(0xff0a0d16));
-    g.fillRect(area.withTop(area.getBottom() - 25));
+    g.fillRect(footer);
+    g.setColour(colour.withAlpha(0.24f * alpha));
+    g.drawHorizontalLine(footer.getY(), area.getX(), area.getRight());
+
+    const auto nameBox = lfoNameBounds(area);
+    g.setColour(juce::Colour(0xff151925));
+    g.fillRoundedRectangle(nameBox.toFloat(), 3.0f);
+    g.setColour(colour.withAlpha(0.28f * alpha));
+    g.drawRoundedRectangle(nameBox.toFloat().reduced(0.5f), 3.0f, 1.0f);
     g.setColour(colour.withAlpha(alpha));
     g.setFont(juce::FontOptions(12.0f));
-    g.drawText(name + "  \xe2\x96\xbe", lfoNameBounds(area), juce::Justification::centredLeft, true);
-    g.drawText(juce::String(table.columns) + "  |  " + juce::String(table.rows),
-               lfoGridBounds(area), juce::Justification::centredRight, true);
+    const auto label = table.custom ? name : "Default / " + juce::String(rhino::forge::lfoFullShapeName(static_cast<int>(shape)));
+    g.drawText(label, nameBox.reduced(8, 0).withTrimmedRight(13), juce::Justification::centredLeft, true);
+    juce::Path down;
+    down.addTriangle(static_cast<float>(nameBox.getRight() - 14), static_cast<float>(nameBox.getCentreY() - 2),
+                     static_cast<float>(nameBox.getRight() - 6), static_cast<float>(nameBox.getCentreY() - 2),
+                     static_cast<float>(nameBox.getRight() - 10), static_cast<float>(nameBox.getCentreY() + 2));
+    g.fillPath(down);
+
+    const auto chevron = [&] (juce::Rectangle<int> button, bool right)
+    {
+        const auto cx = static_cast<float>(button.getCentreX());
+        const auto cy = static_cast<float>(button.getCentreY());
+        const auto direction = right ? 1.0f : -1.0f;
+        g.drawLine(cx - direction * 2.0f, cy - 4.0f, cx + direction * 2.0f, cy, 1.5f);
+        g.drawLine(cx + direction * 2.0f, cy, cx - direction * 2.0f, cy + 4.0f, 1.5f);
+    };
+    chevron(lfoPreviousBounds(area), false);
+    chevron(lfoNextBounds(area), true);
+
+    const auto gridField = [&] (juce::Rectangle<int> field, int count, bool columns)
+    {
+        g.setColour(juce::Colour(0xff151925));
+        g.fillRoundedRectangle(field.toFloat(), 3.0f);
+        g.setColour(colour.withAlpha(0.28f * alpha));
+        g.drawRoundedRectangle(field.toFloat().reduced(0.5f), 3.0f, 1.0f);
+        g.setColour(colour.withAlpha(alpha));
+        for (int i = 0; i < 3; ++i)
+            if (columns) g.drawVerticalLine(field.getX() + 7 + i * 3, field.getY() + 5, field.getBottom() - 5);
+            else g.drawHorizontalLine(field.getY() + 6 + i * 3, field.getX() + 5, field.getX() + 13);
+        g.drawText(juce::String(count), field.withTrimmedLeft(17).withTrimmedRight(13),
+                   juce::Justification::centred, true);
+        for (const auto increase : {true, false})
+        {
+            const auto step = lfoGridStepBounds(field, increase);
+            const auto cx = static_cast<float>(step.getCentreX());
+            const auto cy = static_cast<float>(step.getCentreY());
+            juce::Path triangle;
+            if (increase) triangle.addTriangle(cx - 3.0f, cy + 1.0f, cx + 3.0f, cy + 1.0f, cx, cy - 2.0f);
+            else triangle.addTriangle(cx - 3.0f, cy - 1.0f, cx + 3.0f, cy - 1.0f, cx, cy + 2.0f);
+            g.fillPath(triangle);
+        }
+    };
+    gridField(lfoColumnBounds(area), table.columns, true);
+    gridField(lfoRowBounds(area), table.rows, false);
 }
 }

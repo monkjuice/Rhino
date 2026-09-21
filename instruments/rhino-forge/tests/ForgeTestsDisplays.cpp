@@ -446,6 +446,81 @@ void envelopeDisplaySuite()
             }
     }
 }
+
+void lfoFooterSuite()
+{
+    auto processor = std::make_unique<rhino::forge::Processor>();
+    std::unique_ptr<juce::AudioProcessorEditor> editor(processor->createEditor());
+    const ui::Module* lfo = nullptr;
+    for (const auto& module : ui::modules())
+        if (module.display == ui::Display::lfo) lfo = &module;
+    require(lfo != nullptr, "the LFO module has a display");
+    if (lfo == nullptr) return;
+
+    const auto displayAt = [&]
+    {
+        return ui::displayBounds(ui::moduleBounds(editor->getLocalBounds(), *lfo), *lfo);
+    };
+    for (const auto width : {ui::minPanelWidth, ui::defaultPanelWidth})
+    {
+        editor->setSize(width, ui::minPanelHeight);
+        const auto display = displayAt();
+        const auto name = ui::lfoNameBounds(display);
+        const auto previous = ui::lfoPreviousBounds(display);
+        const auto next = ui::lfoNextBounds(display);
+        const auto columns = ui::lfoColumnBounds(display);
+        const auto rows = ui::lfoRowBounds(display);
+        require(display.contains(name) && display.contains(previous) && display.contains(next)
+                && display.contains(columns) && display.contains(rows),
+                "LFO footer controls remain inside the display at both widths");
+        require(!name.intersects(previous) && !previous.intersects(next)
+                && !next.intersects(columns) && !columns.intersects(rows),
+                "LFO footer targets do not overlap");
+    }
+
+    const auto display = displayAt();
+    const auto mouse = juce::Desktop::getInstance().getMainMouseSource();
+    const auto when = juce::Time::getCurrentTime();
+    const auto eventAt = [&] (juce::Point<int> at, bool dragged = false, int clicks = 1)
+    {
+        return juce::MouseEvent(mouse, at.toFloat(), juce::ModifierKeys(),
+                                1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+                                editor.get(), editor.get(), when, at.toFloat(), when, clicks, dragged);
+    };
+    editor->mouseDown(eventAt(ui::lfoNextBounds(display).getCentre()));
+    requireClose(value(*processor, "lfo1Shape"), 1.0f, 0.001f,
+                 "the next arrow switches to the next basic shape");
+    editor->mouseDown(eventAt(ui::lfoPreviousBounds(display).getCentre()));
+    requireClose(value(*processor, "lfo1Shape"), 0.0f, 0.001f,
+                 "the previous arrow switches back");
+
+    const auto columns = ui::lfoColumnBounds(display);
+    const auto rows = ui::lfoRowBounds(display);
+    editor->mouseDown(eventAt(ui::lfoGridStepBounds(columns, true).getCentre()));
+    editor->mouseDown(eventAt(ui::lfoGridStepBounds(rows, false).getCentre()));
+    require(processor->lfoTable(0).columns == 9 && processor->lfoTable(0).rows == 7,
+            "the grid arrows adjust columns and rows independently");
+    editor->mouseDown(eventAt(ui::lfoGridStepBounds(columns, true).getCentre(), false, 2));
+    require(processor->lfoTable(0).columns == 10,
+            "quick repeated clicks on a grid arrow keep stepping");
+
+    const auto grip = juce::Point<int>(columns.getX() + 25, columns.getCentreY());
+    editor->mouseDown(eventAt(grip));
+    editor->mouseDrag(eventAt(grip.translated(0, -16), true));
+    editor->mouseUp(eventAt(grip.translated(0, -16), true));
+    require(processor->lfoTable(0).columns == 12,
+            "dragging the grid number adjusts its count");
+    editor->mouseDown(eventAt(grip, false, 2));
+    require(processor->lfoTable(0).columns == 8,
+            "double-clicking a grid number restores eight divisions");
+
+    juce::MouseWheelDetails wheel;
+    wheel.deltaY = 0.2f;
+    wheel.isReversed = false;
+    editor->mouseWheelMove(eventAt(rows.getCentre()), wheel);
+    require(processor->lfoTable(0).rows == 8 && !processor->lfoTable(0).custom,
+            "the wheel adjusts the grid without entering Custom mode");
+}
 }
 
 void displayTests()
@@ -454,5 +529,6 @@ void displayTests()
     resizeSharpnessSuite();
     filterDisplaySuite();
     envelopeDisplaySuite();
+    lfoFooterSuite();
 }
 }

@@ -123,6 +123,19 @@ inline const char* lfoShapeName(int shape)
     return "SINE";
 }
 
+inline const char* lfoFullShapeName(int shape)
+{
+    switch (shape)
+    {
+        case 1: return "Triangle";
+        case 2: return "Saw";
+        case 3: return "Square";
+        case 4: return "Sample & Hold";
+        default: break;
+    }
+    return "Sine";
+}
+
 // The shape at a point in its cycle. `held` is the sample-and-hold's current
 // step, the one shape that cannot be worked out from the phase alone. A free
 // function so the panel draws the very curve the voice is reading, the way the

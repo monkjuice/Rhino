@@ -254,8 +254,21 @@ public:
             session.sendMidiInputNote(midiNote, velocity, isNoteOn);
         };
         computerKeyboard.status = [this](const juce::String& message) { logStatus(message); };
-        for (auto* component : std::initializer_list<juce::Component*>{this, &arrangement, &grid, &audioClip, &rack})
+        // Every panel that can hold focus, because a key is offered to the
+        // listeners of the focused component and then of each of its parents
+        // in turn - so a listener has to be on the branch the focus is on. The
+        // editors are named individually to get first refusal ahead of their
+        // own letter shortcuts; the shell catches whatever reaches it, and the
+        // window itself is added later as the backstop for the moment nothing
+        // holds focus at all.
+        for (auto* component : std::initializer_list<juce::Component*>{this, &browser, &arrangement, &grid,
+                                                                       &audioClip, &rack})
             computerKeyboard.listenTo(*component);
+        // Nothing here takes focus on its own, and a window with no focused
+        // component hands its keys to the window rather than to its content -
+        // which is what made every shortcut, Space and F9 included, do nothing
+        // at all until something had been clicked.
+        setWantsKeyboardFocus(true);
         logStatus("PATTERN 1  /  4OSC     Draw notes, then press Play");
         infoView.setMultiLine(true, true);
         infoView.setReadOnly(true);
@@ -849,6 +862,10 @@ public:
     void showEditMenuFrom(juce::Component& target) { showEditMenu(&target); }
     void showViewMenuFrom(juce::Component& target) { showViewMenu(&target); }
     void showHelpMenuFrom(juce::Component& target) { showHelpMenu(&target); }
+    // The typing keyboard has to be heard wherever focus is, including where
+    // it is nowhere: keys then go to the window, which is above this component
+    // and so is never reached by walking up from here.
+    void listenForKeysOn(juce::Component& component) { computerKeyboard.listenTo(component); }
     std::function<void(const juce::String&)> projectTitleChanged;
     // Full screen is the window's business, not its content's: the shell wires
     // these to the document window that owns this component.
@@ -1427,6 +1444,10 @@ private:
                         if (safeWindow != nullptr) safeWindow->setProjectTitle(title);
                     };
                     window->setProjectTitle("Untitled");
+                    controls->listenForKeysOn(*window);
+                    // Give the content the focus it never takes for itself, so
+                    // the shortcuts answer from the first frame.
+                    controls->grabKeyboardFocus();
                 }
                 if (projectToOpen != juce::File{})
                     if (auto* controls = dynamic_cast<ControlWindow*>(window->getContentComponent()))

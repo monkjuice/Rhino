@@ -743,8 +743,114 @@ void layoutSuite()
 }
 }
 
+// What the hand does to a stepper: the field that steps through a list — a
+// shape, a division, a modulation source, a tuning in cents.
+//
+// Built here rather than found in the panel, because what is being measured is
+// the gesture: a ModKnob dressed the way the editor dresses a stepper is that
+// gesture exactly, with no panel to lay out first.
+namespace
+{
+struct SteppedField
+{
+    explicit SteppedField(int entries)
+    {
+        knob.setSliderStyle(juce::Slider::LinearBarVertical);
+        knob.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+        knob.setRange(0.0, entries - 1.0, 1.0);
+        knob.setValue(0.0, juce::dontSendNotification);
+        // The size a stepper is actually drawn at. It matters: a bar slider
+        // left to itself maps the pointer onto its own height, and this is the
+        // height that used to be the whole of a list's travel.
+        knob.setSize(rhino::forge::ui::maxStepperWidth, rhino::forge::ui::stepperHeight);
+    }
+
+    juce::MouseEvent eventAt(juce::Point<int> at, bool dragged, bool fine)
+    {
+        const auto mods = fine ? juce::ModifierKeys(juce::ModifierKeys::shiftModifier)
+                               : juce::ModifierKeys();
+        return {juce::Desktop::getInstance().getMainMouseSource(), at.toFloat(), mods,
+                1.0f, 0.0f, 0.0f, 0.0f, 0.0f, &knob, &knob, when,
+                knob.getLocalBounds().getCentre().toFloat(), when, 1, dragged};
+    }
+
+    // Entries crossed by dragging this many pixels upwards from the middle of
+    // the field.
+    int movedBy(int pixels, bool fine = false)
+    {
+        const auto centre = knob.getLocalBounds().getCentre();
+        const auto before = knob.getValue();
+        knob.mouseDown(eventAt(centre, false, fine));
+        knob.mouseDrag(eventAt(centre.translated(0, -pixels), true, fine));
+        knob.mouseUp(eventAt(centre.translated(0, -pixels), true, fine));
+        return juce::roundToInt(knob.getValue() - before);
+    }
+
+    // What a press alone does, which must be nothing.
+    double movedByPressAlone()
+    {
+        const auto before = knob.getValue();
+        const auto at = knob.getLocalBounds().getCentre();
+        knob.mouseDown(eventAt(at, false, false));
+        knob.mouseUp(eventAt(at, false, false));
+        return knob.getValue() - before;
+    }
+
+    juce::Time when = juce::Time::getCurrentTime();
+    rhino::forge::ui::ModKnob knob;
+};
+
+void steppedFieldSuite()
+{
+    // A stepper is a bar slider one line tall, and a bar left to itself maps
+    // the pointer straight onto its own height — so the whole of an eighteen
+    // entry list was crossed by dragging twenty-one pixels, and a five pixel
+    // twitch moved four entries. Drag sensitivity does not reach it, because
+    // JUCE spends that on rotary sliders, so ModKnob owns the gesture instead.
+    {
+        SteppedField shapes(18);
+        require(shapes.movedBy(5) == 0, "a twitch on a list field moves nothing");
+        require(shapes.movedBy(10) <= 1, "ten pixels is at most one entry");
+        const auto hundred = SteppedField(18).movedBy(100);
+        require(hundred >= 3 && hundred <= 7,
+                "a hundred pixels is a handful of entries, not the whole list");
+    }
+
+    // A press must not move it. A bar slider jumps to wherever the pointer
+    // landed unless it is told not to, so clicking a field to read it would
+    // change it.
+    for (const auto entries : {2, 7, 18, 201})
+    {
+        SteppedField field(entries);
+        requireClose(static_cast<float>(field.movedByPressAlone()), 0.0f, 0.0001f,
+                     "pressing a stepper leaves it where it was");
+    }
+
+    // A two-state field still flips readily: twenty pixels an entry is the
+    // weight of one entry whatever the field, and a switch has only one to
+    // cross.
+    require(SteppedField(2).movedBy(30) == 1, "a two-state field flips with a short drag");
+
+    // A long numeric field shares a fixed travel out instead, so a tuning in
+    // cents stays crossable in one gesture rather than needing four thousand
+    // pixels of desk.
+    {
+        SteppedField cents(201);
+        require(cents.movedBy(rhino::forge::ui::ModKnob::maxSteppedDragTravel) >= 200,
+                "a long field is crossed end to end inside the capped travel");
+        require(SteppedField(201).movedBy(5) <= 3,
+                "and a twitch on it still moves only a little");
+    }
+
+    // The fine modifier slows whichever of the two applies.
+    require(SteppedField(18).movedBy(100, true) < SteppedField(18).movedBy(100),
+            "the fine modifier makes a list field slower, not faster");
+}
+}
+
 void layoutTests()
 {
     layoutSuite();
+    steppedFieldSuite();
 }
 }

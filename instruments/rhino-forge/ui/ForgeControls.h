@@ -26,8 +26,29 @@ public:
     // Pixels of travel for a whole range, ordinarily and while a modifier asks
     // for a slower hand. Shift or Ctrl, because different hosts have trained
     // people on different ones and there is no cost to taking both.
+    //
+    // These reach the knobs. They do not reach a stepper: JUCE applies drag
+    // sensitivity to rotary sliders, and a stepper is a bar — see below.
     static constexpr int normalDragPixels = 250;
     static constexpr int fineDragPixels = 1400;
+
+    // What a stepper costs per entry, and the longest a whole field may take.
+    //
+    // A stepper is a bar slider one line tall, and a bar maps the pointer
+    // straight onto its own height — so the entire list was crossed by dragging
+    // the height of the field. Measured on an eighteen-entry shape field, a
+    // five-pixel twitch moved four entries; a tuning field's 201 cents moved
+    // fifty-seven. Drag sensitivity does not help, because JUCE spends it on
+    // rotary sliders and this is not one, which is why the bar owns its own
+    // drag below rather than asking for a bigger number.
+    //
+    // The cap is what keeps a long numeric field reachable: twenty pixels an
+    // entry is the right weight for a list of shapes and would be four thousand
+    // pixels for a field of cents, so a field longer than the cap shares the cap
+    // out instead. The fine modifier stretches whichever of the two applies.
+    static constexpr int steppedDragPixelsPerEntry = 20;
+    static constexpr int maxSteppedDragTravel = 600;
+    static constexpr int fineSteppedDragMultiplier = 5;
 
     static bool fineDrag(const juce::MouseEvent& event)
     {
@@ -90,12 +111,36 @@ public:
         // Set per gesture rather than once, so the modifier is read at the
         // moment the hand goes down on the control.
         setMouseDragSensitivity(fineDrag(event) ? fineDragPixels : normalDragPixels);
+        if (steppedField())
+        {
+            valueAtDragStart = getValue();
+            // A press on a field that steps through a list must not move it.
+            // Left to itself a bar slider jumps to wherever the pointer landed,
+            // so clicking one to read it would change it.
+            setSliderSnapsToMousePosition(false);
+        }
         juce::Slider::mouseDown(event);
     }
 
     void mouseDrag(const juce::MouseEvent& event) override
     {
-        if (!draggingRing) { juce::Slider::mouseDrag(event); return; }
+        if (draggingRing)
+        {
+            dragRing(event);
+            return;
+        }
+        if (steppedField())
+        {
+            const auto perEntry = steppedDragPixels(fineDrag(event));
+            const auto moved = -static_cast<double>(event.getDistanceFromDragStartY()) / perEntry;
+            setValue(valueAtDragStart + moved * getInterval(), juce::sendNotificationSync);
+            return;
+        }
+        juce::Slider::mouseDrag(event);
+    }
+
+    void dragRing(const juce::MouseEvent& event)
+    {
         // Up is more, down is less, and the whole bipolar range is 200 pixels
         // of travel, so a depth can be crossed from one sign to the other
         // without letting go. A modifier stretches that the same way it
@@ -103,6 +148,24 @@ public:
         const auto pixels = fineDrag(event) ? 560.0f : 100.0f;
         const auto moved = -static_cast<float>(event.getDistanceFromDragStartY()) / pixels;
         if (onRingDrag) onRingDrag(juce::jlimit(-1.0f, 1.0f, depthAtDragStart + moved));
+    }
+
+    // Whether this control is one of the fields that steps through a list. A
+    // stepper is the only thing drawn as a vertical bar; the matrix's amount is
+    // a horizontal one and a fader is a genuine slider with a thumb, and both
+    // of those are read as a position and so are dragged to one.
+    bool steppedField() const
+    {
+        return getSliderStyle() == juce::Slider::LinearBarVertical && getInterval() > 0.0
+            && getMaximum() > getMinimum();
+    }
+
+    double steppedDragPixels(bool fine) const
+    {
+        const auto entries = juce::jmax(1.0, (getMaximum() - getMinimum()) / getInterval());
+        const auto perEntry = juce::jmin(static_cast<double>(steppedDragPixelsPerEntry),
+                                         maxSteppedDragTravel / entries);
+        return juce::jmax(1.0, fine ? perEntry * fineSteppedDragMultiplier : perEntry);
     }
 
     void mouseUp(const juce::MouseEvent& event) override
@@ -138,6 +201,9 @@ public:
 private:
     bool draggingRing = false;
     float depthAtDragStart = 0.0f;
+    // Where a stepper stood when the hand went down, because its drag is
+    // counted from there rather than from the pointer's position in the field.
+    double valueAtDragStart = 0.0;
 
     // Stepping is off while the fine modifier is held, which is how the places
     // between two steps are reached deliberately rather than by accident.

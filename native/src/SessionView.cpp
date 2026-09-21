@@ -53,11 +53,24 @@ SessionView::SessionView(Session& s) : session(s)
             session.setLaunchQuantisation(quantiseOptions[index].type);
     };
     addTrackButton.setButtonText("+ Track");
-    addTrackButton.setTooltip("Add an audio track");
+    addTrackButton.setTooltip("Add a track: pick audio or MIDI");
+    // The same choice the arrangement's + button offers, because the two views
+    // share one set of tracks and a track made here is the same track there.
     addTrackButton.onClick = [this]
     {
-        const auto result = session.addAudioTrack();
-        if (result.failed() && status) status(result.getErrorMessage());
+        juce::PopupMenu menu;
+        menu.addSectionHeader("NEW TRACK");
+        menu.addItem(1, "MIDI Track");
+        menu.addItem(2, "Audio Track");
+        menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(addTrackButton),
+            [safe = juce::Component::SafePointer<SessionView>(this)](int choice)
+            {
+                if (safe == nullptr || choice == 0) return;
+                const auto type = choice == 2 ? Session::TrackType::audio : Session::TrackType::midi;
+                Session::setLastAddedTrackType(type);
+                const auto result = safe->session.addTrack(type);
+                if (result.failed() && safe->status) safe->status(result.getErrorMessage());
+            });
     };
     mixerButton.setButtonText("Mixer");
     mixerButton.setTooltip("Show or hide the mixer strip");

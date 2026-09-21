@@ -60,10 +60,12 @@ juce::Result Session::importAudioAt(const juce::File& file, int trackIndex, doub
         return juce::Result::fail("Invalid audio drop position.");
     if (isGroupBusTrack(trackIndex))
         return juce::Result::fail("A group track carries its members' audio, so it takes no clips.");
-    // Audio belongs on a track without an instrument. Dropping a sample onto an
-    // instrument track is the one drop Rhino refuses outright.
-    if (trackHasInstrument(trackIndex))
-        return juce::Result::fail("That track runs an instrument. Drop audio on an audio track instead.");
+    // Audio belongs on an audio track. Dropping a sample onto a MIDI track is
+    // the one drop Rhino refuses outright.
+    if (trackType(trackIndex) == TrackType::midi)
+        return juce::Result::fail(trackHasInstrument(trackIndex)
+            ? "That track runs an instrument. Drop audio on an audio track instead."
+            : "That is a MIDI track. Drop audio on an audio track instead.");
     const auto tracks = te::getAudioTracks(*edit);
     if (!juce::isPositiveAndBelow(trackIndex, tracks.size()))
         return juce::Result::fail("Drop audio on an audio track.");

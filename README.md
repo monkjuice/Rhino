@@ -14,7 +14,8 @@ Research deliverables: [open-source DAW and Ableton study](research/DAW-STUDY.md
 - One-bar, 16-step note grid covering MIDI notes 48-59.
 - Playback through Tracktion's 4OSC synth and Rhino's internal Utility gain device.
 - Five drum kits under Instruments / Drum Rack, one matching each drum pattern. A kit is the drum instrument with its pads retuned, shortened and rebalanced, and the Clap kit puts the clap on the backbeat rather than the snare.
-- One instrument per track, as in Live and Logic. Dropping an instrument on a track replaces the one already there and renames the track after it. The track's clips are untouched, so the pattern stays and the sound changes. Audio samples and files are refused on a track that runs an instrument.
+- One instrument per track, as in Live and Logic. Dropping an instrument on a track replaces the one already there and renames the track after it. The track's clips are untouched, so the pattern stays and the sound changes. Dropping one also makes the track a MIDI track for good. Audio samples and files are refused on a MIDI track.
+- **A new track is audio or MIDI, and you say which.** The `+` button above the track cards asks: a **MIDI track** holds clips and records what you play, an **audio track** takes files, samples and the audio input. **Ctrl+T** skips the question and adds whichever kind you picked last, MIDI to begin with. A MIDI track holds clips straight away, before anything is dropped on it - the notes wait for an instrument - and an audio track refuses them, which is the same rule under another name.
 - Clips are created deliberately: double-click an empty part of a lane to add a one-bar clip starting where you clicked, or press **Ctrl+A** to add one to the focused track at the playhead.
 - Drawing and erasing notes, grouped undo/redo, and tempo control from 40-240 BPM.
 - Play, pause, stop, looping, and audio hardware settings.
@@ -96,7 +97,7 @@ The loop covers both the pattern and imported audio. If audio extends beyond one
 | Ctrl+S | Save |
 | Ctrl+Shift+S | Save as |
 | Ctrl+O | Open |
-| Ctrl+T | Add a track |
+| Ctrl+T | Add a track of the kind last picked from the + menu, MIDI to begin with |
 | F2 | Rename the selected track card or group |
 | Ctrl+G | Group the selected track cards |
 | Ctrl+Shift+G | Ungroup the selected group |

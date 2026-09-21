@@ -22,7 +22,7 @@ Arrangement::Arrangement(Session& s) : session(s), vblank(this, [this] { updateP
     snap.setButtonText(L"\u2317");
     automationButton.setButtonText("A");
     duplicateButton.setTooltip("Duplicate selected clip");
-    addTrack.setTooltip("Add track (Ctrl+T)");
+    addTrack.setTooltip("Add a track: pick audio or MIDI (Ctrl+T repeats the last kind)");
     snap.setTooltip("Toggle clip snap");
     gridControl.setTooltip("Arrangement grid settings");
     automationButton.setTooltip("Automation edit mode: drag lanes instead of clips");
@@ -44,11 +44,7 @@ Arrangement::Arrangement(Session& s) : session(s), vblank(this, [this] { updateP
                 : "Clip edit: right-click a device knob to show its automation");
         repaint();
     };
-    addTrack.onClick = [this]
-    {
-        const auto result = session.addAudioTrack();
-        if (result.failed() && status) status(result.getErrorMessage());
-    };
+    addTrack.onClick = [this] { showAddTrackMenu(); };
     snapSize.addItem("1/16", 1);
     snapSize.addItem("1/8", 2);
     snapSize.addItem("1/4", 3);
@@ -549,6 +545,36 @@ void Arrangement::showClipMenu(te::EditItemID id)
             else if (result == 5) safe->copySelection();
             else if (result == 6) safe->pasteSelection();
         });
+}
+
+// Which kind of track this is decides what the lane accepts for the rest of
+// the project, so the button asks rather than guessing. Ctrl+T is the shortcut
+// for people who already know which one they want every time.
+void Arrangement::showAddTrackMenu()
+{
+    const auto last = Session::lastAddedTrackType();
+    juce::PopupMenu menu;
+    menu.addSectionHeader("NEW TRACK");
+    menu.addItem(1, "MIDI Track" + juce::String(last == Session::TrackType::midi ? "       Ctrl+T" : ""));
+    menu.addItem(2, "Audio Track" + juce::String(last == Session::TrackType::audio ? "       Ctrl+T" : ""));
+    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(addTrack),
+        [safe = juce::Component::SafePointer<Arrangement>(this)](int choice)
+        {
+            if (safe == nullptr || choice == 0) return;
+            safe->addTrackOfType(choice == 2 ? Session::TrackType::audio : Session::TrackType::midi);
+        });
+}
+
+// Choosing here is also what Ctrl+T will do next time: the menu is the only
+// place the kind is ever chosen deliberately, so it is the only place that
+// records it. A track made by a drop below the last lane does not count.
+void Arrangement::addTrackOfType(Session::TrackType type)
+{
+    Session::setLastAddedTrackType(type);
+    const auto result = session.addTrack(type);
+    if (status)
+        status(result.failed() ? result.getErrorMessage()
+                               : "Added " + session.trackName(session.trackCount() - 1));
 }
 
 void Arrangement::showGridMenu()

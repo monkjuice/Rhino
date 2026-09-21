@@ -28,6 +28,10 @@ const juce::Identifier legacyTrackGroupColourID {"colour"};
 // engine's own input destinations are rebuilt from it rather than being a
 // second copy of the same answer.
 const juce::Identifier trackArmedID {"rhinoArmed"};
+// What the track was made for, so a MIDI track can hold a clip before it
+// runs anything. Only "midi" is ever written: a track with no answer is an
+// audio track, which is what every document written before this contains.
+const juce::Identifier trackTypeID {"rhinoTrackType"};
 // The count-in lives beside the other metronome settings, on the edit.
 const juce::Identifier countInBarsID {"rhinoCountInBars"};
 
@@ -366,6 +370,15 @@ juce::Result switchTrackInstrument(te::Edit& edit, te::AudioTrack& track, const 
     if (const auto name = selected->getName(); name.isNotEmpty() && track.getName() != name)
     {
         track.setName(name);
+        changed = true;
+    }
+
+    // An instrument settles what the track is for good. Taking it off again
+    // leaves a track that holds notes and is waiting for another instrument,
+    // not one that has quietly turned into an audio track with clips on it.
+    if (track.state.getProperty(trackTypeID).toString() != "midi")
+    {
+        track.state.setProperty(trackTypeID, "midi", &edit.getUndoManager());
         changed = true;
     }
 

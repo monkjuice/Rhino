@@ -570,10 +570,12 @@ public:
             return true;
         }
         // Adding a track is a document command rather than an arrangement one,
-        // so it answers wherever the focus is, the way New and Open do.
+        // so it answers wherever the focus is, the way New and Open do. The
+        // arrangement's + button is where the kind is chosen; the shortcut
+        // repeats that choice instead of asking again, and starts on MIDI.
         if (key.getModifiers().isCommandDown() && key.getKeyCode() == 'T')
         {
-            const auto result = session.addAudioTrack();
+            const auto result = session.addTrack(Session::lastAddedTrackType());
             logStatus(result.failed() ? result.getErrorMessage()
                                       : "Added " + session.trackName(session.trackCount() - 1));
             return true;
@@ -985,7 +987,7 @@ private:
                     juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon, "Keyboard shortcuts",
                         "Space  Play/Pause\nCtrl+N  New project\nCtrl+O  Open project\nCtrl+S  Save project\nCtrl+Shift+S  Save as\n"
                         "Ctrl+Shift+E  Export WAV\nCtrl+Z  Undo\nCtrl+Y / Ctrl+Shift+Z  Redo\nCtrl+F  Search browser\nCtrl+A  Add a clip to the focused track\nDouble-click a lane  Add a clip there\n"
-                        "F9  Record into the armed tracks / Click the dot on a track card to arm it\nCtrl+T  Add a track\nF2  Rename the selected track or group\nCtrl+G  Group the selected tracks\nCtrl+Shift+G  Ungroup\n"
+                        "F9  Record into the armed tracks / Click the dot on a track card to arm it\nCtrl+T  Add a track of the kind last picked from the + menu\nF2  Rename the selected track or group\nCtrl+G  Group the selected tracks\nCtrl+Shift+G  Ungroup\n"
                         "Drag an empty lane  Select a span of the timeline\nCtrl+X / Ctrl+C / Ctrl+V  Cut, copy and paste the selection\n"
                         "Ctrl+D  Duplicate it directly after itself\nDelete  Empty the selection\n"
                         "?  Show/hide Info View\nF12  Full screen");

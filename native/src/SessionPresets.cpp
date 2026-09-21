@@ -83,8 +83,11 @@ bool Session::trackHasInstrument(int trackIndex) const
     return trackInstrument(*tracks[trackIndex]) != nullptr;
 }
 
-// An empty one-bar MIDI clip at the position the user asked for. Only tracks
-// with an instrument can hold one; an audio track takes recordings and files.
+// An empty one-bar MIDI clip at the position the user asked for. Only MIDI
+// tracks hold one; an audio track takes recordings and files. A MIDI track
+// that runs no instrument still takes clips - the notes are there waiting for
+// one, which is what every other DAW does and what the forced choice at
+// creation time promises.
 juce::Result Session::createClip(int trackIndex, double startSeconds, te::EditItemID* created)
 {
     if (!std::isfinite(startSeconds) || startSeconds < 0.0)
@@ -94,8 +97,8 @@ juce::Result Session::createClip(int trackIndex, double startSeconds, te::EditIt
         return juce::Result::fail("Select a track first.");
     if (isGroupBusTrack(trackIndex))
         return juce::Result::fail("A group track carries its members' audio, so it takes no clips.");
-    if (!trackHasInstrument(trackIndex))
-        return juce::Result::fail("Drop an instrument on this track before adding clips to it.");
+    if (trackType(trackIndex) != TrackType::midi)
+        return juce::Result::fail("That is an audio track. Add a MIDI track, or drop an instrument here.");
     auto* track = tracks[trackIndex];
     const auto start = tracktion::core::TimePosition::fromSeconds(startSeconds);
     const auto startBeat = edit->tempoSequence.toBeats(start).inBeats();

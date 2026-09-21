@@ -332,3 +332,74 @@
         view.sync();
         view.selected = te::getAudioTracks(*session.edit)[2]->getClips().getLast()->itemID;
         require(session.selectPatternClip(view.selected).wasOk(), "Selecting a non-first MIDI clip makes it editable in the note editor");
+
+        // A track now says what it is for when it is created, instead of
+        // waiting to find out. The block is self-contained - two tracks at the
+        // bottom, both removed again - so the stack is left as it was found.
+        scenario("track management: audio or MIDI, chosen when the track is made");
+        {
+            const auto before = session.trackCount();
+            // Making a clip below also makes it the one the note editor is on,
+            // and removing its track hands that job to whichever clip is left.
+            // The scenarios after this one read the editor, so the clip they
+            // were left with is put back at the end.
+            const auto editedBefore = session.patternClipID;
+            require(session.addTrack(Session::TrackType::midi).wasOk(), "A MIDI track can be added");
+            const auto midiTrack = session.trackCount() - 1;
+            require(session.trackName(midiTrack) == "MIDI " + juce::String(before),
+                    "and is named for what it is");
+            require(session.trackType(midiTrack) == Session::TrackType::midi,
+                    "The track reads back as a MIDI track");
+            require(!session.trackHasInstrument(midiTrack),
+                    "though nothing has been dropped on it yet");
+
+            // The whole point of declaring it: a clip before an instrument.
+            te::EditItemID onEmptyMidi;
+            require(session.createClip(midiTrack, 0.0, &onEmptyMidi).wasOk(),
+                    "A MIDI track holds a clip before it runs anything");
+            require(session.importAudioAt(source.getFile(), midiTrack, 4.0).failed(),
+                    "and refuses audio, the way an instrument track does");
+            require(session.trackRecordInput(midiTrack) == Session::RecordInput::midi,
+                    "Arming it records MIDI rather than the audio input");
+
+            require(session.addTrack(Session::TrackType::audio).wasOk(), "An audio track can be added");
+            const auto audioTrack = session.trackCount() - 1;
+            require(session.trackName(audioTrack) == "Audio " + juce::String(before + 1),
+                    "and is named for what it is");
+            require(session.trackType(audioTrack) == Session::TrackType::audio,
+                    "The track reads back as an audio track");
+            require(session.createClip(audioTrack, 0.0).failed(),
+                    "An audio track takes no MIDI clip");
+            require(session.importAudioAt(source.getFile(), audioTrack, 0.0).wasOk(),
+                    "but takes audio");
+            require(session.trackRecordInput(audioTrack) == Session::RecordInput::audio,
+                    "and records the audio input");
+
+            // The kind travels with the document, so reopening does not hand
+            // the MIDI track back as an audio one.
+            {
+                const std::function<bool(const juce::ValueTree&)> holdsMidiType =
+                    [&holdsMidiType](const juce::ValueTree& tree) -> bool
+                {
+                    if (tree.getProperty("rhinoTrackType").toString() == "midi") return true;
+                    for (int i = 0; i < tree.getNumChildren(); ++i)
+                        if (holdsMidiType(tree.getChild(i))) return true;
+                    return false;
+                };
+                require(holdsMidiType(session.projectSnapshot()),
+                        "The MIDI track writes its kind into the saved project");
+            }
+
+            // Ctrl+T repeats the last choice from the menu. A test run never
+            // reads a developer's settings, so what it sees is the default the
+            // shortcut starts on.
+            require(Session::lastAddedTrackType() == Session::TrackType::midi,
+                    "Ctrl+T adds a MIDI track until the menu is used to say otherwise");
+
+            require(session.removeAudioTrack(audioTrack).wasOk(), "The audio track can be removed again");
+            require(session.removeAudioTrack(midiTrack).wasOk(), "and so can the MIDI track");
+            require(session.trackCount() == before, "leaving the stack as it was found");
+            require(session.selectPatternClip(editedBefore).wasOk(),
+                    "and the note editor back on the clip it was editing");
+            view.sync();
+        }

@@ -223,8 +223,29 @@ public:
     juce::Result addMidiEffect(MidiEffect, int track);
     int trackCount() const;
     juce::String trackName(int track) const;
-    juce::Result addAudioTrack();
+    // What a track is for. A track used to become one or the other only when
+    // something landed on it, which left a new track unable to hold a clip
+    // until an instrument had been dropped on it. A track now says which it is
+    // from the moment it is created, and the arrangement makes the person
+    // choose rather than guessing on their behalf.
+    //
+    // The declaration is a starting point, not a cage: a track that runs an
+    // instrument reads as MIDI whatever it was created as, which is what keeps
+    // every track written before this - and the document's own first track -
+    // behaving exactly as it did.
+    enum class TrackType { audio, midi };
+    TrackType trackType(int track) const;
+    juce::Result addTrack(TrackType);
+    // Shorthand for addTrack(TrackType::audio), kept because most callers - an
+    // import, a drop below the last lane - want a track for audio and say so.
+    juce::Result addAudioTrack() { return addTrack(TrackType::audio); }
     juce::Result removeAudioTrack(int track);
+    // What Ctrl+T adds: the kind last chosen from the add-track menu, MIDI
+    // until one has been. It describes how the person works rather than the
+    // song, so it is a preference of this machine and not part of a document.
+    static TrackType lastAddedTrackType();
+    static void setLastAddedTrackType(TrackType);
+    static juce::String trackTypeName(TrackType);
     // How tall the track's row is drawn. Zero means the arrangement is still
     // choosing, so a project that has never been resized keeps following the
     // panel height; dragging a card's edge pins a height that outlives reopen.

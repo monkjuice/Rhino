@@ -271,14 +271,17 @@ void Arrangement::paint(juce::Graphics& g)
             }
         }
     }
-    // The hint belongs on the first track that could take audio, which is any
-    // empty track without an instrument rather than a fixed lane index.
+    // The hint belongs on the first empty track, and says what that track is
+    // for rather than assuming audio: a MIDI track wants an instrument.
     for (int track = 0; track < session.trackCount(); ++track)
         if (!tracksWithClips.contains(track) && !session.trackHasInstrument(track) && !isTrackHidden(track)
             && !session.isGroupBusTrack(track))
         {
             g.setColour(juce::Colour(0xff75828e));
-            g.drawText("Drop audio here", lane(track).reduced(16, 0), juce::Justification::centredLeft);
+            g.drawText(session.trackType(track) == Session::TrackType::midi
+                           ? "Double-click to add a clip, or drop an instrument here"
+                           : "Drop audio here",
+                       lane(track).reduced(16, 0), juce::Justification::centredLeft);
             break;
         }
     // Curves sit on top of the clips they modulate, and are clipped to the

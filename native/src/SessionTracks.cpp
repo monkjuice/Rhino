@@ -20,14 +20,58 @@ juce::String Session::trackName(int track) const
     return tracks[track]->getName();
 }
 
-juce::Result Session::addAudioTrack()
+juce::String Session::trackTypeName(TrackType type)
+{
+    return type == TrackType::midi ? "MIDI" : "Audio";
+}
+
+// A track that runs an instrument is a MIDI track whatever it was created as:
+// the instrument is the stronger statement, and it is the answer every track
+// written before the type existed gives.
+Session::TrackType Session::trackType(int track) const
+{
+    if (trackHasInstrument(track))
+        return TrackType::midi;
+    const auto tracks = te::getAudioTracks(*edit);
+    if (!juce::isPositiveAndBelow(track, tracks.size()))
+        return TrackType::audio;
+    return tracks[track]->state.getProperty(trackTypeID).toString() == "midi" ? TrackType::midi
+                                                                              : TrackType::audio;
+}
+
+// MIDI until the person picks otherwise, because a track they will play is the
+// one they are most often after; the add-track menu is what remembers.
+Session::TrackType Session::lastAddedTrackType()
+{
+    if (isCommandLineTestMode())
+        return TrackType::midi;
+    juce::PropertiesFile properties(rhinoSettingsOptions());
+    return properties.getValue("lastAddedTrackType", "midi") == "audio" ? TrackType::audio
+                                                                        : TrackType::midi;
+}
+
+void Session::setLastAddedTrackType(TrackType type)
+{
+    if (isCommandLineTestMode())
+        return;
+    juce::PropertiesFile properties(rhinoSettingsOptions());
+    properties.setValue("lastAddedTrackType", type == TrackType::audio ? "audio" : "midi");
+    properties.saveIfNeeded();
+}
+
+juce::Result Session::addTrack(TrackType type)
 {
     const auto tracks = te::getAudioTracks(*edit);
-    edit->getUndoManager().beginNewTransaction("Add audio track");
+    const auto kind = trackTypeName(type);
+    edit->getUndoManager().beginNewTransaction("Add " + kind.toLowerCase() + " track");
     auto newTrack = edit->insertNewAudioTrack(te::TrackInsertPoint::getEndOfTracks(*edit), nullptr, false);
     if (newTrack == nullptr)
-        return juce::Result::fail("Could not create audio track.");
-    newTrack->setName("Audio " + juce::String(tracks.size()));
+        return juce::Result::fail("Could not create " + kind.toLowerCase() + " track.");
+    newTrack->setName(kind + " " + juce::String(tracks.size()));
+    // Only MIDI is written down: audio is what a track with nothing to say is,
+    // so an audio track needs no property and no document needs migrating.
+    if (type == TrackType::midi)
+        newTrack->state.setProperty(trackTypeID, "midi", &edit->getUndoManager());
     auto audioDevice = edit->getPluginCache().createNewPlugin(UtilityDevice::xmlTypeName, {});
     newTrack->pluginList.insertPlugin(audioDevice, 0, nullptr);
     refreshUtilityPointers();

@@ -74,7 +74,7 @@ Session::RecordInput Session::trackRecordInput(int trackIndex) const
         return RecordInput::none;
     if (isGroupBusTrack(trackIndex))
         return RecordInput::none;
-    return trackHasInstrument(trackIndex) ? RecordInput::midi : RecordInput::audio;
+    return trackType(trackIndex) == TrackType::midi ? RecordInput::midi : RecordInput::audio;
 }
 
 bool Session::isTrackArmed(int trackIndex) const

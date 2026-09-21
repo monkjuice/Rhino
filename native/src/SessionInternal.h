@@ -40,6 +40,10 @@ extern const juce::Identifier legacyTrackGroupIdID;
 extern const juce::Identifier legacyTrackGroupNameID;
 extern const juce::Identifier legacyTrackGroupColourID;
 extern const juce::Identifier trackArmedID;
+// Written only for a track created as a MIDI track. Absent means audio,
+// which is what every track written before this says and what an audio
+// track still says - so the property never has to be migrated in.
+extern const juce::Identifier trackTypeID;
 extern const juce::Identifier countInBarsID;
 
 // True while the app is running a --self-test style command line. Persistent

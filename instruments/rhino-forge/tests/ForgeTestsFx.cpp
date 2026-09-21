@@ -412,13 +412,18 @@ void fxDisplaySuite()
                 if (tab->getButtonText() == "FX" && tab->onClick) tab->onClick();
 
         auto mixes = 0, bypasses = 0;
-        for (auto* child : editor->getChildren())
+        const auto countControls = [&] (auto&& self, juce::Component& parent) -> void
         {
-            if (auto* label = dynamic_cast<juce::Label*>(child))
-                if (label->isVisible() && label->getText() == "MIX") ++mixes;
-            if (auto* chip = dynamic_cast<rhino::forge::ui::ToggleChip*>(child))
-                if (chip->isVisible() && chip->getButtonText() == "BYP") ++bypasses;
-        }
+            for (auto* child : parent.getChildren())
+            {
+                if (auto* label = dynamic_cast<juce::Label*>(child))
+                    if (label->isVisible() && label->getText() == "MIX") ++mixes;
+                if (auto* chip = dynamic_cast<rhino::forge::ui::ToggleChip*>(child))
+                    if (chip->isVisible() && chip->getButtonText() == "BYP") ++bypasses;
+                self(self, *child);
+            }
+        };
+        countControls(countControls, *editor);
         const auto* fxModule = [&]() -> const ui::Module*
         {
             for (const auto& module : ui::modules())
@@ -426,13 +431,16 @@ void fxDisplaySuite()
             return nullptr;
         }();
         require(fxModule != nullptr, "the FX display test finds the rack module");
-        const auto visible = fxModule == nullptr ? 0 : juce::jmin(
-            static_cast<int>(types.size()), ui::fxVisibleSlotCount(
-                ui::fxModuleBounds(editor->getLocalBounds(), *fxModule, false)));
+        const auto moduleArea = fxModule == nullptr ? juce::Rectangle<int>()
+            : ui::fxModuleBounds(editor->getLocalBounds(), *fxModule, false);
+        const auto visible = juce::jmin(static_cast<int>(types.size()),
+                                        ui::fxIntersectingSlotCount(moduleArea));
+        require(ui::fxIntersectingSlotCount(moduleArea) > ui::fxVisibleSlotCount(moduleArea),
+                "the rack control test includes a row crossing the viewport edge");
         require(mixes == visible,
-                "every visible effect strip keeps its common MIX control");
+                "every fully or partly visible effect strip keeps its common MIX control");
         require(bypasses == visible,
-                "every visible effect strip keeps its common bypass control");
+                "every fully or partly visible effect strip keeps its common bypass control");
     }
 
     // --- The equaliser ---------------------------------------------------------
@@ -507,6 +515,42 @@ void fxDisplaySuite()
         for (const auto in : {-0.9f, -0.3f, 0.3f, 0.9f})
             requireClose(rhino::forge::fxShape(2, in, 0.0f), in, 0.001f,
                          "hard clipping at no drive is the identity the faint diagonal stands for");
+
+        // OFF / PRE / POST used to be the whole selector at 0 / .5 / 1.
+        // The expanded LP/HP choices keep those saved values on the old
+        // low-pass placements, while the choices between them select HP.
+        rhino::forge::FxSlot filtered;
+        filtered.type = static_cast<float>(FxType::distortion);
+        filtered.modeB = 0.5f;
+        require(rhino::forge::fxDistortionFilterPlacement(filtered) == 1
+                    && !rhino::forge::fxDistortionFilterHighPass(filtered),
+                "an old PRE distortion-filter value remains PRE LP");
+        filtered.modeB = 1.0f;
+        require(rhino::forge::fxDistortionFilterPlacement(filtered) == 2
+                    && !rhino::forge::fxDistortionFilterHighPass(filtered),
+                "an old POST distortion-filter value remains POST LP");
+        filtered.modeB = 0.25f;
+        require(rhino::forge::fxDistortionFilterPlacement(filtered) == 1
+                    && rhino::forge::fxDistortionFilterHighPass(filtered),
+                "the distortion filter offers a pre-shaper high-pass tap");
+
+        const auto draw = [&] (float mode)
+        {
+            filtered.modeB = mode;
+            filtered.knobs = rhino::forge::fxTypes()[static_cast<size_t>(FxType::distortion)].init;
+            juce::Image image(juce::Image::ARGB, 220, 60, true);
+            juce::Graphics graphics(image);
+            ui::drawFxDistortion(graphics, image.getBounds().toFloat(), filtered,
+                                 ui::fxTypeColour(static_cast<int>(FxType::distortion)), 1.0f);
+            return image;
+        };
+        const auto lp = draw(0.5f), hp = draw(0.25f);
+        auto differentFilterPixels = 0;
+        for (int y = 0; y < lp.getHeight(); ++y)
+            for (int x = 0; x < lp.getWidth() / 2; ++x)
+                if (lp.getPixelAt(x, y) != hp.getPixelAt(x, y)) ++differentFilterPixels;
+        require(differentFilterPixels > 20,
+                "the distortion display visibly distinguishes its LP and HP responses");
     }
 
     // --- The delay -------------------------------------------------------------

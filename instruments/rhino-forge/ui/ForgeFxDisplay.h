@@ -170,23 +170,69 @@ inline void drawFxChorus(juce::Graphics& g, juce::Rectangle<float> box, const Fx
 
 // --- Distortion ---------------------------------------------------------------
 //
-// The transfer curve: what comes out for what goes in, `fxShape` called once
-// per pixel. The faint diagonal is what no distortion at all would look like,
-// so how far the curve has bent away from it is the drive, read without a
-// number.
+// The filter response beside the transfer curve. The former is the same
+// low/high state-variable tap renderDistortion selects; the latter is what
+// comes out for what goes in, `fxShape` called once per pixel. PRE/POST does
+// not change the response itself, so its short label carries that part.
 inline void drawFxDistortion(juce::Graphics& g, juce::Rectangle<float> box, const FxSlot& slot,
                              juce::Colour colour, float alpha)
 {
     const auto& info = fxTypes()[static_cast<size_t>(FxType::distortion)];
     const auto shape = fxModeOf(info.modeA, slot.modeA);
     const auto drive = juce::jlimit(0.0f, 1.0f, slot.knobs[0]);
+    const auto placement = fxDistortionFilterPlacement(slot);
+    const auto highPass = fxDistortionFilterHighPass(slot);
+
+    auto filterBox = box.removeFromLeft(box.getWidth() * 0.56f).withTrimmedRight(5.0f);
+    auto transferBox = box.withTrimmedLeft(5.0f);
+    g.setColour(line.withAlpha(alpha * 0.45f));
+    g.fillRect(filterBox.getRight() + 4.5f, filterBox.getY(), 1.0f, filterBox.getHeight());
+
+    const auto unityY = filterDbToY(filterBox, 0.0f);
+    g.setColour(line.withAlpha(alpha * 0.32f));
+    g.fillRect(filterBox.getX(), unityY, filterBox.getWidth(), 1.0f);
+
+    if (placement != 0)
+    {
+        const auto cutoff = fxHertz(slot.knobs[1], 40.0f, 16000.0f);
+        const auto q = fxScaled(slot.knobs[2], 0.4f, 8.0f);
+        juce::Path response;
+        const auto points = juce::jlimit(36, 192, juce::roundToInt(filterBox.getWidth()));
+        for (int i = 0; i <= points; ++i)
+        {
+            const auto x = filterBox.getX() + filterBox.getWidth()
+                * static_cast<float>(i) / static_cast<float>(points);
+            const auto ratio = filterXToHz(filterBox, x) / cutoff;
+            const auto real = 1.0f - ratio * ratio;
+            const auto imaginary = ratio / juce::jmax(0.05f, q);
+            const auto denominator = std::sqrt(real * real + imaginary * imaginary);
+            const auto numerator = highPass ? ratio * ratio : 1.0f;
+            const auto gain = denominator <= 1.0e-9f ? 8.0f : numerator / denominator;
+            const auto db = gain <= 1.0e-6f ? filterBottomDb
+                                             : 20.0f * std::log10(gain);
+            const auto y = filterDbToY(filterBox, db);
+            if (i == 0) response.startNewSubPath(x, y); else response.lineTo(x, y);
+        }
+        g.setColour(colour.withAlpha(alpha));
+        g.strokePath(response, juce::PathStrokeType(1.5f));
+    }
+
+    auto badge = filterBox.toNearestInt().removeFromTop(10);
+    g.setFont(panelFont(Face::emphasis, 7.5f));
+    g.setColour((placement == 0 ? mutedText : colour).withAlpha(alpha * 0.9f));
+    g.drawFittedText(placement == 0 ? "FILTER OFF"
+                                     : juce::String(highPass ? "HP" : "LP")
+                                           + (placement == 1 ? "  PRE" : "  POST"),
+                     badge, juce::Justification::topLeft, 1);
 
     g.setColour(line.withAlpha(alpha * 0.45f));
-    g.drawLine(box.getX(), box.getBottom(), box.getRight(), box.getY(), 1.0f);
-    g.fillRect(box.getX(), box.getCentreY() - 0.5f, box.getWidth(), 1.0f);
+    g.drawLine(transferBox.getX(), transferBox.getBottom(),
+               transferBox.getRight(), transferBox.getY(), 1.0f);
+    g.fillRect(transferBox.getX(), transferBox.getCentreY() - 0.5f,
+               transferBox.getWidth(), 1.0f);
 
     juce::Path curve;
-    const auto points = juce::jlimit(48, 256, juce::roundToInt(box.getWidth()));
+    const auto points = juce::jlimit(36, 192, juce::roundToInt(transferBox.getWidth()));
     for (int i = 0; i <= points; ++i)
     {
         const auto at = static_cast<float>(i) / static_cast<float>(points);
@@ -195,8 +241,8 @@ inline void drawFxDistortion(juce::Graphics& g, juce::Rectangle<float> box, cons
         // shape to draw: it passes what it is given between the moments it
         // holds. The diagonal is the honest answer for it.
         const auto out = shape == 7 ? in : juce::jlimit(-1.0f, 1.0f, fxShape(shape, in, drive));
-        const auto x = box.getX() + at * box.getWidth();
-        const auto y = box.getCentreY() - out * box.getHeight() * 0.5f;
+        const auto x = transferBox.getX() + at * transferBox.getWidth();
+        const auto y = transferBox.getCentreY() - out * transferBox.getHeight() * 0.5f;
         if (i == 0) curve.startNewSubPath(x, y); else curve.lineTo(x, y);
     }
     g.setColour(colour.withAlpha(alpha));

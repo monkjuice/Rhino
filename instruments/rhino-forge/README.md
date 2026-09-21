@@ -134,7 +134,7 @@ not have at all, which comes off the panel entirely — "not just now" against
 Each slot draws itself in a strip beside its mode fields: a reverb's decay
 envelope, a delay's repeats falling away across the two channels, a chorus's two
 taps swinging across one cycle, a distortion's transfer curve against the
-diagonal that no distortion would be, an equaliser's response, a filter's
+diagonal that no distortion would be alongside its PRE/POST LP/HP response, an equaliser's response, a filter's
 corner, a compressor's transfer curve, or a phaser's moving notches. Every one
 is computed from the arithmetic the engine actually runs — the
 distortion curve is `fxShape` called per pixel, the equaliser's is the magnitude

@@ -238,7 +238,7 @@ void Editor::mouseDrag(const juce::MouseEvent& event)
             const auto first = fxFirstVisibleSlot();
             const auto rack = shownRack();
             const auto end = juce::jmin(fxActiveSlotCount(rack),
-                                         first + ui::fxVisibleSlotCount(area));
+                                         first + ui::fxIntersectingSlotCount(area));
             auto nearest = fxSlotAtDisplayRow(rack, first);
             auto distance = std::numeric_limits<int>::max();
             for (int row = first; row < end; ++row)
@@ -302,7 +302,10 @@ void Editor::showValueBubble(Control& control)
     valueBubble.reading = control.slider.getTextFromValue(control.slider.getValue());
     valueBubble.accent = control.slider.findColour(juce::Slider::rotarySliderFillColourId);
 
-    const auto knob = control.slider.getBounds();
+    // Rack controls live inside their clipped viewport, while every other
+    // control is a direct child. Convert either case into editor coordinates
+    // before placing the editor-owned bubble.
+    const auto knob = getLocalArea(&control.slider, control.slider.getLocalBounds());
     const auto size = juce::Rectangle<int>(valueBubble.widthFor(), ui::ValueBubble::heightFor());
     juce::Rectangle<int> placed;
     if (control.style == ui::Style::fader)

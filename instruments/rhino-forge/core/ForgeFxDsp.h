@@ -543,7 +543,8 @@ private:
     {
         const auto& info = fxTypes()[static_cast<size_t>(FxType::distortion)];
         const auto shape = fxModeOf(info.modeA, slot.modeA);
-        const auto placement = fxModeOf(info.modeB, slot.modeB);
+        const auto placement = fxDistortionFilterPlacement(slot);
+        const auto highPass = fxDistortionFilterHighPass(slot);
 
         const auto drive = juce::jlimit(0.0f, 1.0f, slot.knobs[0]);
         const auto hz = fxHertz(slot.knobs[1], 40.0f, 16000.0f);
@@ -568,9 +569,11 @@ private:
         for (int channel = 0; channel < 2; ++channel)
         {
             const auto index = static_cast<size_t>(channel);
-            if (placement == 1) sample[index] = band(state, channel, sample[index], hz, q);
+            if (placement == 1)
+                sample[index] = distortionFilter(state, channel, sample[index], hz, q, highPass);
             sample[index] = downsample ? state.held[index] : fxShape(shape, sample[index], drive);
-            if (placement == 2) sample[index] = band(state, channel, sample[index], hz, q);
+            if (placement == 2)
+                sample[index] = distortionFilter(state, channel, sample[index], hz, q, highPass);
         }
         left = sample[0];
         right = sample[1];
@@ -579,7 +582,8 @@ private:
     // The distortion's own filter: Core's state-variable topology rather than a
     // biquad, so a filter placed in front of a distortion sounds like the one
     // the synth already has.
-    float band(FxSlotState& state, int channel, float input, float hz, float q)
+    float distortionFilter(FxSlotState& state, int channel, float input, float hz, float q,
+                           bool highPass)
     {
         const auto index = static_cast<size_t>(channel);
         const auto g = std::tan(juce::MathConstants<float>::pi
@@ -592,7 +596,7 @@ private:
         const auto low = g * band + state.svfLow[index];
         state.svfBand[index] = g * high + band;
         state.svfLow[index] = g * band + low;
-        return low;
+        return highPass ? high : low;
     }
 
     // --- Equaliser ------------------------------------------------------------

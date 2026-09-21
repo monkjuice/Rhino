@@ -666,9 +666,12 @@ void layoutSuite()
                                     && area.contains(rhino::forge::ui::fxListButtonBounds(area)),
                                 "both FX view buttons stay in the rack header");
                         const auto visible = rhino::forge::ui::fxVisibleSlotCount(area);
+                        const auto intersecting = rhino::forge::ui::fxIntersectingSlotCount(area);
                         const auto lastFirst = rhino::forge::ui::fxMaxFirstSlot(area);
                         require(visible >= 1 && visible <= rhino::forge::fxSlotCount,
                                 "the FX viewport always exposes at least one whole slot");
+                        require(intersecting >= visible && intersecting <= visible + 1,
+                                "the FX viewport includes at most one clipped edge row");
                         for (const auto first : {0, lastFirst})
                         {
                             const auto scrolledRack = rhino::forge::ui::fxScrolledRackBounds(

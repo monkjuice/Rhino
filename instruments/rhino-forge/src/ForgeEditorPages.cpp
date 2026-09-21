@@ -192,7 +192,8 @@ void Editor::applyEnableStates()
                     const auto row = fxDisplayRow(rack, slot);
                     const auto first = fxFirstVisibleSlots[static_cast<size_t>(rack)];
                     inFxViewport = row >= first
-                        && row < first + ui::fxVisibleSlotCount(moduleAreaFor(*module.descriptor));
+                        && row < first + ui::fxIntersectingSlotCount(
+                            moduleAreaFor(*module.descriptor));
                 }
             }
             // A control is live when its module is on and nothing else has

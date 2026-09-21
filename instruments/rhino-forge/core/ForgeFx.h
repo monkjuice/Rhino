@@ -168,7 +168,10 @@ inline const std::array<FxTypeInfo, fxTypeCount>& fxTypes()
 
         {"DIST", {"DRIVE", "FREQ", "Q", nullptr, nullptr, nullptr},
          {"SHAPE", {"TUBE", "SOFT", "HARD", "DIODE", "FOLD", "SINE", "CRUSH", "DOWNSMP"}, 8},
-         {"FILTER", {"OFF", "PRE", "POST"}, 3},
+         // The old OFF / PRE / POST values landed at normalised 0 / .5 / 1.
+         // Keep PRE LP and POST LP at indices 2 and 4 so those saved values
+         // retain both their placement and the low-pass sound they had.
+         {"FILTER", {"OFF", "PRE HP", "PRE LP", "POST HP", "POST LP"}, 5},
          // Enough drive to hear, all wet: an insert, not a send.
          {0.3f, 0.5f, 0.3f, 0.5f, 0.5f, 0.5f}, 1.0f},
 
@@ -218,6 +221,23 @@ inline const char* fxModeName(const FxModeInfo& mode, float value)
     return mode.count <= 0 ? "" : mode.choices[static_cast<size_t>(fxModeOf(mode, value))];
 }
 
+inline int fxDistortionFilterChoice(const FxSlot& slot)
+{
+    return fxModeOf(fxTypes()[static_cast<size_t>(FxType::distortion)].modeB, slot.modeB);
+}
+
+inline int fxDistortionFilterPlacement(const FxSlot& slot)
+{
+    const auto choice = fxDistortionFilterChoice(slot);
+    return choice == 0 ? 0 : choice <= 2 ? 1 : 2;
+}
+
+inline bool fxDistortionFilterHighPass(const FxSlot& slot)
+{
+    const auto choice = fxDistortionFilterChoice(slot);
+    return choice == 1 || choice == 3;
+}
+
 // Whether a knob does anything, given the modes its slot is set to.
 //
 // This is a different thing from a knob the type does not have at all. A delay
@@ -235,7 +255,7 @@ inline bool fxKnobLive(const FxSlot& slot, int knob)
         // FREQ and Q belong to the distortion's filter, and there is no filter
         // to set when it is switched out of the path.
         case FxType::distortion:
-            return knob < 1 || fxModeOf(info.modeB, slot.modeB) != 0;
+            return knob < 1 || fxDistortionFilterPlacement(slot) != 0;
 
         // A pass shape has no gain to give. Serum says the same of its own
         // equaliser: the gain knob has no effect once the band is a high pass.

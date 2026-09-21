@@ -74,6 +74,11 @@ void Editor::resized()
         const auto& descriptor = *module.descriptor;
         const auto visible = moduleShown(descriptor);
         const auto area = moduleAreaFor(descriptor);
+        const auto rackModule = isFxModule(descriptor);
+
+        if (rackModule)
+            fxControlViewport.setBounds(
+                ui::fxSlotViewportBounds(area).getIntersection(ui::fxRackBounds(area, fxListOpen)));
 
         if (module.enable != nullptr)
         {
@@ -105,13 +110,15 @@ void Editor::resized()
         {
             auto& control = *held;
             auto controlsArea = area;
-            if (isFxModule(descriptor))
+            if (rackModule)
             {
                 int rack = 0, slot = 0;
                 if (fxControlAt(control.id, rack, slot))
                     controlsArea = fxRackAreaFor(area, rack, slot);
             }
             auto block = ui::controlBlock(controlsArea, descriptor, control.row, control.index, diameter);
+            if (rackModule)
+                block = block.translated(-fxControlViewport.getX(), -fxControlViewport.getY());
 
             // A macro's cell is laid out as nothing else on the panel is: the
             // knob, the plate beside it carrying the number you drag and the

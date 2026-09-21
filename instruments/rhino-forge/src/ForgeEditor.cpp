@@ -44,6 +44,10 @@ Editor::Editor(Processor& p)
     : AudioProcessorEditor(&p), processor(p),
       keyboard(p.keyboardState, juce::MidiKeyboardComponent::horizontalKeyboard)
 {
+    // The viewport itself is transparent to the rack background and list; its
+    // children remain interactive and JUCE clips them to these bounds.
+    fxControlViewport.setInterceptsMouseClicks(false, true);
+    addAndMakeVisible(fxControlViewport);
     buildModules();
     buildHandles();
     buildTabs();
@@ -198,6 +202,12 @@ void Editor::buildModules()
         ModuleUi module;
         module.descriptor = &descriptor;
         const auto accent = accentOf(descriptor);
+        const auto rackModule = isFxModule(descriptor);
+        const auto addControl = [this, rackModule] (juce::Component& component)
+        {
+            if (rackModule) fxControlViewport.addAndMakeVisible(component);
+            else addAndMakeVisible(component);
+        };
 
         if (descriptor.enableId != nullptr)
         {
@@ -271,8 +281,8 @@ void Editor::buildModules()
                         processor.state, declared.id, control->slider);
 
                     dressControlLabel(control->label, declared.label);
-                    addAndMakeVisible(control->label);
-                    addAndMakeVisible(*control->selector);
+                    addControl(control->label);
+                    addControl(*control->selector);
                     module.controls.push_back(std::move(control));
                     continue;
                 }
@@ -311,7 +321,7 @@ void Editor::buildModules()
                     // not move it, so the grid is told once outright.
                     control->waves->chosen = juce::jlimit(0, subShapeCount - 1,
                                                           juce::roundToInt(control->slider.getValue()));
-                    addAndMakeVisible(*control->waves);
+                    addControl(*control->waves);
                     module.controls.push_back(std::move(control));
                     continue;
                 }
@@ -337,7 +347,7 @@ void Editor::buildModules()
                     control->slider.onValueChange = [this] { refreshFxSlots(); resized(); repaint(); };
                     control->attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
                         processor.state, declared.id, control->slider);
-                    addAndMakeVisible(*control->plate);
+                    addControl(*control->plate);
                     module.controls.push_back(std::move(control));
                     continue;
                 }
@@ -349,7 +359,7 @@ void Editor::buildModules()
                     control->chip->setTooltip(ui::tooltipFor(declared.id));
                     control->buttonAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
                         processor.state, declared.id, *control->chip);
-                    addAndMakeVisible(*control->chip);
+                    addControl(*control->chip);
                     module.controls.push_back(std::move(control));
                     continue;
                 }
@@ -366,8 +376,8 @@ void Editor::buildModules()
                     control->buttonAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
                         processor.state, declared.id, *control->rocker);
 
-                    addAndMakeVisible(*control->rocker);
-                    addAndMakeVisible(control->label);
+                    addControl(*control->rocker);
+                    addControl(control->label);
                     module.controls.push_back(std::move(control));
                     continue;
                 }
@@ -466,8 +476,8 @@ void Editor::buildModules()
                 };
                 // A table names its columns once, in the strip above its rows,
                 // so its controls carry no label of their own.
-                if (descriptor.columnHeaderHeight == 0) addAndMakeVisible(control->label);
-                addAndMakeVisible(control->slider);
+                if (descriptor.columnHeaderHeight == 0) addControl(control->label);
+                addControl(control->slider);
 
                 // A macro's number moved to the plate beside its knob, which
                 // leaves the strip under the knob free for the macro's own
@@ -490,7 +500,7 @@ void Editor::buildModules()
                         held->setText(processor.macroName(macro), juce::dontSendNotification);
                         applyMacroNames();
                     };
-                    addAndMakeVisible(*control->macroName);
+                    addControl(*control->macroName);
                 }
                 module.controls.push_back(std::move(control));
             }

@@ -279,6 +279,16 @@ inline int fxVisibleSlotCount(juce::Rectangle<int> moduleArea)
     return juce::jlimit(1, fxSlotCount, fxSlotViewportBounds(moduleArea).getHeight() / fxSlotHeight);
 }
 
+// Controls in the row crossing the bottom edge still belong on screen. The
+// viewport clips them at its boundary; this count is only about intersection,
+// whereas fxVisibleSlotCount deliberately remains the number of complete rows
+// used by scrolling and its thumb.
+inline int fxIntersectingSlotCount(juce::Rectangle<int> moduleArea)
+{
+    const auto height = fxSlotViewportBounds(moduleArea).getHeight();
+    return juce::jlimit(1, fxSlotCount, (height + fxSlotHeight - 1) / fxSlotHeight);
+}
+
 inline int fxMaxFirstSlot(juce::Rectangle<int> moduleArea, int slotCount = fxSlotCount)
 {
     return juce::jmax(0, slotCount - fxVisibleSlotCount(moduleArea));

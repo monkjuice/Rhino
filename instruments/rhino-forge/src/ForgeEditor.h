@@ -82,6 +82,10 @@ private:
 
     Processor& processor;
     ui::LookAndFeel lookAndFeel;
+    // Rack controls are real children of this clipped viewport. A fixed-height
+    // row crossing the bottom edge therefore keeps its knobs and selectors,
+    // but their lower part cannot paint or receive clicks over the next plate.
+    juce::Component fxControlViewport;
     std::vector<ModuleUi> moduleUis;
     // Which tab is showing. Only the modules that declare a page follow it;
     // everything else stays on screen whichever tab is chosen.
@@ -213,8 +217,8 @@ private:
     // in — including for the banks that are not showing, so a slot is right the
     // moment it is revealed rather than a repaint later.
     void refreshFxSlots();
-    // Whether a rack control is one the type in its slot actually has. A reverb
-    // has no fourth knob at all, so the knob declared there is taken off the
+    // Whether a rack control is one the type in its slot actually has. A delay
+    // has no sixth knob at all, so the knob declared there is taken off the
     // panel rather than greyed: greying says "not just now", and this is "not
     // ever, while that type is in this slot". Everything else answers true.
     bool fxControlUsed(const Control&) const;

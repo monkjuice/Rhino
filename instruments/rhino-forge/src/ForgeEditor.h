@@ -183,13 +183,6 @@ private:
     // rather than drawing the whole chassis again for a change it cannot see.
     juce::Image chassisLayer;
     juce::String chassisState;
-    // When it was last drawn, and how stale it is allowed to get while the
-    // window is being dragged. In between rebuilds the layer from the previous
-    // size is blitted stretched onto the new one -- the plates over it are
-    // still drawn at the true size, so everything that has to line up with a
-    // control still does, and what stretches is the frame around the outside.
-    juce::uint32 chassisDrawnMs = 0;
-    static constexpr juce::uint32 chassisHoldMs = 90;
     // The layer the tab before this one was showing, kept whole.
     //
     // Flipping back and forth between two tabs is most of what tab switching
@@ -202,28 +195,6 @@ private:
     // Just the size and the raster scale, which is the whole of what the
     // chassis is drawn from.
     juce::String chassisKey(float scale) const;
-    // The raster scale the cached layers are drawn at: the display's own, or
-    // half of it while the window is being dragged. The geometry is worked out
-    // at the panel's real size either way, so nothing shifts against the live
-    // controls drawn over it -- only the sharpness of the metal changes, and
-    // only while an edge is under the pointer.
-    float chromeScale(float physical) const;
-    // True while a hand is on a window edge.
-    //
-    // Counting size changes does not answer this: setResizeLimits, the
-    // constructor and a host restoring a stored size each deliver one, and a
-    // snapshot rendered at a given size would come back soft. What a drag
-    // actually looks like is a size change landing on a layer that was rebuilt
-    // moments ago and is about to be rebuilt again -- so that, and not the
-    // count, is what this asks.
-    bool sizeIsMoving() const;
-    juce::Point<int> lastSize;
-    juce::uint32 lastResizeMs = 0;
-    // When the cached layer was last built, whatever caused it.
-    juce::uint32 lastRebuildMs = 0;
-    // Long enough to cover the gap between two frames of a slow drag, short
-    // enough that letting go and reading the panel does not wait on it.
-    static constexpr juce::uint32 resizeSettleMs = 180;
     bool slotIsLive(int slot) const;
     juce::String lfoHeaderDetail() const;
     // What the envelope module's header says: the stage the envelope showing is

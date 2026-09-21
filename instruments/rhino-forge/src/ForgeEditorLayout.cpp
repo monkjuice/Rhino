@@ -31,17 +31,6 @@ juce::Rectangle<int> Editor::moduleAreaFor(const ui::Module& module) const
 
 void Editor::resized()
 {
-    // A drag on a window edge arrives as a stream of size changes, and the
-    // cached chrome is redrawn from paths for each one. When that last happened
-    // is what tells the paint below whether to rasterise it coarsely until the
-    // pointer stops -- see sizeIsMoving.
-    const auto size = juce::Point<int>(getWidth(), getHeight());
-    if (size != lastSize)
-    {
-        lastResizeMs = juce::Time::getMillisecondCounter();
-        lastSize = size;
-    }
-
     // A taller expanded rack may reveal every slot; a later compact resize can
     // reduce the window again. Keep each rack's remembered top slot legal and
     // refresh visibility before positioning the child controls.

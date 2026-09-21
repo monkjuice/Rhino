@@ -295,7 +295,13 @@ inline void drawBackdrop(juce::Graphics& g, juce::Rectangle<int> componentBounds
     g.fillAll(chassis);
     // Outer shell: a narrow silver lip, black gasket, and a separate inside rail.
     const auto frame = chamferedPath(bounds.reduced(3), 13);
-    drawMetalPiece(g, frame, 1.0f, 0.018f);
+    {
+        juce::Graphics::ScopedSaveState state(g);
+        // The opaque well below covers this interior completely. Avoid
+        // rasterising hidden grain when rebuilding the frame during resizing.
+        g.excludeClipRegion(componentBounds.reduced(24));
+        drawMetalPiece(g, frame, 1.0f, 0.018f);
+    }
     drawWell(g, bounds.reduced(9), juce::Colour(0xff050709), 1.0f, 13);
     drawMetalRail(g, {22, 3, w * 0.23f, 5});
     drawMetalRail(g, {w * 0.25f, 3, w * 0.49f, 4});

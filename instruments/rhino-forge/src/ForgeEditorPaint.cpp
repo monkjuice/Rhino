@@ -6,39 +6,6 @@
 
 namespace rhino::forge
 {
-bool Editor::sizeIsMoving() const
-{
-    // Nothing has been drawn yet, so nothing is being dragged: an editor opened
-    // at a size a host remembered, or a snapshot rendered at one, gets the full
-    // treatment rather than the drag's.
-    if (lastRebuildMs == 0) return false;
-    // A rebuild since the last size change means the panel has caught up and
-    // is sitting still, whatever it was doing before. Asked explicitly because
-    // these are unsigned and the subtraction below would wrap into a very large
-    // number that happens to give the same answer for the wrong reason.
-    if (lastRebuildMs > lastResizeMs) return false;
-    return juce::Time::getMillisecondCounter() - lastResizeMs < resizeSettleMs
-        // The size moved while the layer was still warm from the last rebuild.
-        // One resize on a panel that has been sitting still does not qualify,
-        // and neither does the first frame of a drag -- it is the second and
-        // everything after it that cannot afford the full redraw.
-        && lastResizeMs - lastRebuildMs < resizeSettleMs;
-}
-
-// Half resolution while an edge is under the pointer.
-//
-// A drag throws the cached layer away on every frame -- the size is in its key
-// -- so the chassis and the plates are redrawn from paths each time, and at full
-// resolution that measured 58ms a frame against 8ms at rest. Rasterising a
-// quarter of the pixels is what brings it back inside a frame; the geometry is
-// still worked out at the panel's true size, so the metal only softens, it does
-// not move under the controls. The sharp layer comes back on the first tick
-// after the pointer stops.
-float Editor::chromeScale(float physical) const
-{
-    return sizeIsMoving() ? juce::jmax(0.5f, physical * 0.5f) : physical;
-}
-
 juce::String Editor::chassisKey(float scale) const
 {
     juce::String key;
@@ -92,8 +59,8 @@ void Editor::paint(juce::Graphics& g)
 {
     // Rendered at the display's own pixel scale rather than at the panel's
     // logical size, so the cached layer is as sharp on a scaled monitor as it
-    // would be drawn straight onto the window.
-    const auto scale = chromeScale(g.getInternalContext().getPhysicalPixelScaleFactor());
+    // would be drawn straight onto the window, including during a resize.
+    const auto scale = g.getInternalContext().getPhysicalPixelScaleFactor();
     const auto key = chromeKey(scale);
     // The tab that was showing a moment ago is still in hand: going back to it
     // is a swap, and the panel it left takes the place this one had.
@@ -104,15 +71,12 @@ void Editor::paint(juce::Graphics& g)
     }
     if (chrome.isNull() || key != chromeState)
     {
-        const auto pixelWidth = juce::jmax(1, juce::roundToInt(getWidth() * scale));
-        const auto pixelHeight = juce::jmax(1, juce::roundToInt(getHeight() * scale));
-        const auto now = juce::Time::getMillisecondCounter();
-
+        const auto pixelWidth = juce::jmax(1, static_cast<int>(std::ceil(getWidth() * scale)));
+        const auto pixelHeight = juce::jmax(1, static_cast<int>(std::ceil(getHeight() * scale)));
         // Whatever is being replaced becomes the one held, so the way back is
-        // the cheap direction whichever way the tabs are walked. Not while the
-        // window is being dragged: every frame is a size nothing will return
-        // to, and holding one would be a second full-panel image for nothing.
-        if (!chrome.isNull() && chromeState.isNotEmpty() && !sizeIsMoving())
+        // the cheap direction whichever way the tabs are walked. A layer at a
+        // different size cannot be reused and is discarded below.
+        if (!chrome.isNull() && chromeState.isNotEmpty())
         {
             previousChrome = chrome;
             previousChromeState = chromeState;
@@ -127,32 +91,28 @@ void Editor::paint(juce::Graphics& g)
         // The chassis first, and only when its own key has moved: a tab switch,
         // a module switched off and an oscillator recoloured all leave the metal
         // exactly as it was, and it is the more expensive half of the layer.
-        // During a drag it is held a moment longer still -- see chassisHoldMs.
         const auto backdrop = chassisKey(scale);
-        const auto stale = chassisLayer.isNull() || backdrop != chassisState;
-        if (stale && !(sizeIsMoving() && now - chassisDrawnMs < chassisHoldMs))
+        if (chassisLayer.isNull() || backdrop != chassisState)
         {
             chassisLayer = juce::Image(juce::Image::ARGB, pixelWidth, pixelHeight, true);
             juce::Graphics into(chassisLayer);
             into.addTransform(juce::AffineTransform::scale(scale));
             ui::drawBackdrop(into, getLocalBounds());
             chassisState = backdrop;
-            chassisDrawnMs = now;
         }
 
         // And the page's own plates onto the metal.
         {
             juce::Graphics into(chrome);
-            into.drawImage(chassisLayer,
-                           juce::Rectangle<int>(pixelWidth, pixelHeight).toFloat(),
-                           juce::RectanglePlacement::stretchToFit);
+            into.drawImageAt(chassisLayer, 0, 0);
             into.addTransform(juce::AffineTransform::scale(scale));
             paintPlates(into);
         }
         chromeState = key;
-        lastRebuildMs = juce::jmax(1u, now);
     }
-    g.drawImage(chrome, getLocalBounds().toFloat(), juce::RectanglePlacement::stretchToFit);
+    // Undo only the raster scale. Fitting the rounded image dimensions back
+    // into the logical bounds would resample it at fractional display scales.
+    g.drawImageTransformed(chrome, juce::AffineTransform::scale(1.0f / scale));
 
     // Only the plate's state, over the cached chassis that already carries its
     // metal: the lamp follows arpEnable and the face follows whether the panes

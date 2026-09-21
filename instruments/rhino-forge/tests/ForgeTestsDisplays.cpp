@@ -71,6 +71,71 @@ void chromeCacheSuite()
             "a tab reached after every other one draws what it draws on its own");
 }
 
+// Compare consecutive resize frames with opening the editor at each size.
+// The parent's cached headings and chassis must retain their resolution even
+// when changes arrive faster than the old resize-quality timeout.
+void resizeSharpnessSuite()
+{
+    const auto paint = [] (juce::AudioProcessorEditor& editor, float scale)
+    {
+        juce::Image image(juce::Image::ARGB,
+                          static_cast<int>(std::ceil(editor.getWidth() * scale)),
+                          static_cast<int>(std::ceil(editor.getHeight() * scale)), true);
+        juce::Graphics g(image);
+        g.addTransform(juce::AffineTransform::scale(scale));
+        // Live oscillator traces have subpixel raster differences independent
+        // of the static layer being tested. Keep all headings and frame edges.
+        for (const auto& module : ui::modules())
+            if (module.display == ui::Display::oscillator)
+                g.excludeClipRegion(ui::displayBounds(ui::moduleBounds(editor.getLocalBounds(), module), module));
+        editor.paint(g);
+        return image;
+    };
+    const auto same = [] (const juce::Image& a, const juce::Image& b)
+    {
+        if (a.getBounds() != b.getBounds()) return false;
+        const juce::Image::BitmapData left(a, juce::Image::BitmapData::readOnly);
+        const juce::Image::BitmapData right(b, juce::Image::BitmapData::readOnly);
+        for (int y = 0; y < a.getHeight(); ++y)
+            for (int x = 0; x < a.getWidth(); ++x)
+            {
+                const auto l = left.getPixelColour(x, y), r = right.getPixelColour(x, y);
+                // Native raster/compositing can differ by one quantization
+                // step at an edge. Larger changes, including blur, fail.
+                if (std::abs(int(l.getRed()) - int(r.getRed())) > 1
+                    || std::abs(int(l.getGreen()) - int(r.getGreen())) > 1
+                    || std::abs(int(l.getBlue()) - int(r.getBlue())) > 1
+                    || std::abs(int(l.getAlpha()) - int(r.getAlpha())) > 1) return false;
+            }
+        return true;
+    };
+    const juce::Point<int> sizes[] {{1181, 821}, {1243, 853}, {1220, 847}, {1181, 821}};
+    auto processor = std::make_unique<Processor>();
+    std::unique_ptr<juce::AudioProcessorEditor> editor(processor->createEditor());
+    for (const auto scale : {1.0f, 1.25f, 2.0f})
+    {
+        std::vector<juce::Image> expected;
+        for (const auto size : sizes)
+        {
+            auto freshProcessor = std::make_unique<Processor>();
+            std::unique_ptr<juce::AudioProcessorEditor> fresh(freshProcessor->createEditor());
+            fresh->setSize(size.x, size.y);
+            expected.push_back(paint(*fresh, scale));
+        }
+        editor->setSize(ui::minPanelWidth, ui::minPanelHeight);
+        paint(*editor, scale);
+        std::vector<juce::Image> frames;
+        for (const auto size : sizes)
+        {
+            editor->setSize(size.x, size.y);
+            frames.push_back(paint(*editor, scale));
+        }
+        for (size_t i = 0; i < frames.size(); ++i)
+            require(same(frames[i], expected[i]),
+                    "a resize frame keeps the same sharp chassis and headings as a fresh editor");
+    }
+}
+
 // ---------------------------------------------------------- filter display ---
 
 // The filter display claims to say which frequencies are being taken out, so
@@ -386,6 +451,7 @@ void envelopeDisplaySuite()
 void displayTests()
 {
     chromeCacheSuite();
+    resizeSharpnessSuite();
     filterDisplaySuite();
     envelopeDisplaySuite();
 }

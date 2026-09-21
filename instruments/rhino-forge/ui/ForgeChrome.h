@@ -1,6 +1,8 @@
 #pragma once
 
+#include <algorithm>
 #include <array>
+#include <vector>
 #include <BinaryData.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -477,14 +479,37 @@ inline void drawTrackedText(juce::Graphics& g, const juce::String& textToDraw,
 {
     if (textToDraw.isEmpty()) return;
     const auto font = g.getCurrentFont();
-    const auto widthOf = [&font] (const juce::String& glyph)
+    // Resizing moves fixed legends without changing their metrics. Keep the
+    // widths so a full-resolution redraw need not shape each character twice.
+    // This bounded cache is used on the message thread, like panelFont.
+    struct Metrics
     {
-        return juce::GlyphArrangement::getStringWidth(font, glyph);
+        juce::Font font;
+        juce::String lettering;
+        std::vector<float> widths;
+    };
+    static std::vector<Metrics> cached;
+    auto found = std::find_if(cached.begin(), cached.end(), [&] (const auto& entry)
+    {
+        return entry.font == font && entry.lettering == textToDraw;
+    });
+    if (found == cached.end())
+    {
+        if (cached.size() == 128) cached.erase(cached.begin());
+        Metrics entry {font, textToDraw, {}};
+        for (int i = 0; i < textToDraw.length(); ++i)
+            entry.widths.push_back(juce::GlyphArrangement::getStringWidth(font, textToDraw.substring(i, i + 1)));
+        cached.push_back(std::move(entry));
+        found = cached.end() - 1;
+    }
+    const auto widthOf = [&found] (int i)
+    {
+        return found->widths[static_cast<size_t>(i)];
     };
 
     auto total = 0.0f;
     for (int i = 0; i < textToDraw.length(); ++i)
-        total += widthOf(textToDraw.substring(i, i + 1)) + tracking;
+        total += widthOf(i) + tracking;
     total -= tracking;
 
     auto x = area.getX();
@@ -497,7 +522,7 @@ inline void drawTrackedText(juce::Graphics& g, const juce::String& textToDraw,
     for (int i = 0; i < textToDraw.length(); ++i)
     {
         const auto glyph = textToDraw.substring(i, i + 1);
-        const auto glyphWidth = widthOf(glyph);
+        const auto glyphWidth = widthOf(i);
         g.drawText(glyph, juce::Rectangle<float>(x, y, glyphWidth + 1.0f, font.getHeight()),
                    juce::Justification::centredLeft);
         x += glyphWidth + tracking;

@@ -36,6 +36,9 @@ The metal chassis follows the reference's assembled construction: interlocking
 header plates, segmented rails, a shared Sub/Noise housing, recessed legends,
 and keyboard end plates. `ui/ForgePanels.h` draws that static furniture; the
 editor caches it at the display scale, independently of the live controls.
+Resizing rebuilds that layer at the current size and full display resolution;
+headings and artwork are never temporarily downsampled or stretched from an
+earlier frame. Fractional display scales preserve the cache's physical pixels.
 
 The filter shows its own response: the band it is passing filled under the
 curve, the band it is taking out washed in above it, decade lines across the

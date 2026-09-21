@@ -60,6 +60,7 @@ target_sources(RhinoNative PRIVATE
     src/SessionRegion.cpp
     src/SessionSamples.cpp
     src/SessionPreview.cpp
+    src/SessionRecording.cpp
     src/SessionAutomation.cpp
     src/SessionTransport.cpp
     src/SessionExternalPlugins.cpp
@@ -87,6 +88,7 @@ target_sources(RhinoNative PRIVATE
     src/DeviceEditorPanel.cpp
     src/DeviceRack.cpp
     src/Playhead.cpp
+    src/CountInClick.cpp
     # App
     src/Main.cpp
     src/TransportDisplay.cpp

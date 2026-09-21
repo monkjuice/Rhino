@@ -96,6 +96,12 @@ int runArrangementTest()
         // persistence", which closes the audio device this has to render with.
         scenario("group bus reload");
        #include "scenarios/GroupBusReload.inc"
+        // After everything that renders and before the audio device closes:
+        // arming allocates a playback context to hang its input destinations
+        // off, and the offline renders above run a RenderTask directly against
+        // an edit that has none.
+        scenario("recording");
+       #include "scenarios/Recording.inc"
         scenario("gestures and persistence");
        #include "scenarios/GesturesAndPersistence.inc"
         scenario("session view");

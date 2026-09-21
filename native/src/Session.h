@@ -12,6 +12,9 @@ namespace rhino
 struct PresetPattern;
 // Held only as a pointer here, so the definition stays in the device library.
 class UtilityDevice;
+// Likewise: the count-in click is an audio callback of Rhino's own, and only
+// SessionRecording.cpp needs to see how it works.
+class CountInClick;
 
 // Message-thread facade. The engine owns scheduling, streaming and playback.
 // Member order keeps the engine alive until its edit and devices are released.
@@ -290,6 +293,43 @@ public:
     void setClickTrackEnabled(bool enabled);
     void setClickTrackEmphasiseBars(bool enabled);
     void setClickTrackGain(float gainDb);
+    // Recording. A track is armed, not an input: what a track records is
+    // decided by what the track already is, so there is nothing to choose and
+    // nothing that can disagree with the rest of the document. A track running
+    // an instrument takes the MIDI input, a track without one takes the audio
+    // input chosen in Audio settings, and a group bus or the main row takes
+    // neither.
+    enum class RecordInput { none, midi, audio };
+    RecordInput trackRecordInput(int track) const;
+    bool isTrackArmed(int track) const;
+    juce::Result setTrackArmed(int track, bool armed);
+    void toggleTrackArmed(int track);
+    bool anyTrackArmed() const;
+    bool isRecording() const;
+    // Where the recording started, so the arrangement can draw the span being
+    // recorded. Negative when nothing is being recorded.
+    double recordingStartSeconds() const { return recordingStart; }
+    // The count-in, in bars: zero is off and four is the longest. It counts
+    // with the playhead standing still, so the transport starts on the beat
+    // after the last one counted rather than rolling in from before it.
+    static constexpr int maximumCountInBars = 4;
+    int countInBars() const;
+    void setCountInBars(int bars);
+    bool isCountingIn() const;
+    // Bars still to count, from the full count down to one. Zero when idle.
+    int countInBarsRemaining() const;
+    void cancelCountIn();
+    // The record button and F9. Starts the count-in, or the recording when
+    // there is no count-in, or stops the one already running.
+    juce::Result toggleRecording();
+    void stopRecording();
+    // Polled by the shell: the engine starts and finishes a recording without
+    // broadcasting either, so the clips it created have to be tidied and
+    // announced once the transport has actually come to rest.
+    void recordingStopped();
+    // Recorded audio is written here: beside the project once it has been
+    // saved, and in the application's own folder until then.
+    juce::File recordingDirectory() const;
     void undo();
     void redo();
     juce::Result setLoopRange(double startSeconds, double endSeconds);
@@ -532,6 +572,24 @@ private:
     // the editor back on a clip of track one, making a starter one if the track
     // has none left, and is what keeps `pattern()` safe to call.
     void repairPatternClip();
+    // SessionRecording.cpp - arming is Rhino's state, held on the track, and
+    // the engine's input destinations are rebuilt from it rather than being a
+    // second place the answer lives.
+    juce::Result applyRecordArming();
+    void clearRecordArming();
+    void beginTransportRecording();
+    // The tidy-up and the notification, with no question about whether the
+    // transport has got there yet. recordingStopped is the polled entry.
+    void finishRecording();
+    // makeRoomForClip over whatever the recording just added. The engine
+    // inserts a recorded clip on top of what is already on the track; Rhino's
+    // rule is that the newcomer wins the ground it landed on.
+    bool tidyRecordedClips();
+    CountInClick& countInClick();
+    // Attaching is separate from building, so a count is configured while
+    // nothing is registered on the device and no block can be in flight
+    // through the state start() is rewriting.
+    void attachCountIn();
     // SessionPreview.cpp
     static bool readPreviewPreference();
     void ensurePreviewAttached();
@@ -588,6 +646,19 @@ private:
     std::unique_ptr<juce::AudioFormatReaderSource> previewReader;
     bool browserPreview = readPreviewPreference();
     bool previewAttached = false;
+    // Built on first use and, like the preview, detached before the device it
+    // is registered with goes.
+    std::unique_ptr<CountInClick> countIn;
+    bool countInAttached = false;
+    // The clips the armed tracks held when recording started, so the ones the
+    // engine adds afterwards can be told apart from the ones already there.
+    std::vector<te::EditItemID> clipsBeforeRecording;
+    double recordingStart = -1.0;
+    // record() is asked for on the message thread and begins on the audio
+    // thread, so there is a window in which a recording has been started and
+    // the transport still reports that it is not recording. Without this the
+    // poll would read that window as a recording that had already finished.
+    bool recordingStarted = false;
 };
 int runSelfTest();
 int runPatternTest();

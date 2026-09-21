@@ -91,19 +91,33 @@ juce::Result Session::importAudioAt(const juce::File& file, int trackIndex, doub
 void Session::togglePlayback()
 {
     auto& transport = edit->getTransport();
+    // A count-in is the transport about to start, so the play button stands in
+    // for the record button that began it and calls the whole thing off.
+    if (isCountingIn())
+    {
+        cancelCountIn();
+        sendSynchronousChangeMessage();
+        return;
+    }
     if (transport.isPlaying())
     {
+        const auto wasRecording = transport.isRecording();
         transport.stop(false, false);
         releasePlayingNotes();
+        if (wasRecording) finishRecording();
     }
     else transport.play(false);
 }
 
 void Session::stop()
 {
-    edit->getTransport().stop(false, false);
-    edit->getTransport().setPosition({});
+    auto& transport = edit->getTransport();
+    cancelCountIn();
+    const auto wasRecording = transport.isRecording();
+    transport.stop(false, false);
+    transport.setPosition({});
     releasePlayingNotes();
+    if (wasRecording) finishRecording();
 }
 
 void Session::releasePlayingNotes()
@@ -118,8 +132,10 @@ void Session::releasePlayingNotes()
 
 void Session::releaseAudioDevice()
 {
-    // The preview is a callback on the device that is about to close, so it
-    // comes off first rather than being left pointing at a shut device.
+    // The preview and the count-in are callbacks on the device that is about
+    // to close, so they come off first rather than being left pointing at a
+    // shut device.
+    cancelCountIn();
     releasePreview();
     te::TransportControl::stopAllTransports(engine, false, true);
     if (edit != nullptr)
@@ -170,7 +186,16 @@ juce::Result Session::setTimeSignature(int numerator, int denominator)
 
 bool Session::clickTrackEnabled() const { return edit->clickTrackEnabled; }
 bool Session::clickTrackEmphasiseBars() const { return edit->clickTrackEmphasiseBars; }
-float Session::clickTrackGain() const { return edit->clickTrackGain; }
+
+// Rhino talks about levels in decibels and the engine stores this one as a
+// linear gain, which it then clamps to 0.2 - 1.0. Storing the decibels
+// directly put every setting the menu offers below that floor, so all three of
+// them came out at the same volume. The conversion belongs here, at the one
+// boundary between the two units.
+float Session::clickTrackGain() const
+{
+    return juce::Decibels::gainToDecibels(juce::jlimit(0.0001f, 4.0f, edit->clickTrackGain.get()), -60.0f);
+}
 
 void Session::setClickTrackEnabled(bool enabled)
 {
@@ -192,7 +217,7 @@ void Session::setClickTrackGain(float gainDb)
 {
     gainDb = juce::jlimit(-60.0f, 6.0f, gainDb);
     if (std::abs(clickTrackGain() - gainDb) < 0.001f) return;
-    edit->clickTrackGain = gainDb;
+    edit->clickTrackGain = juce::Decibels::decibelsToGain(gainDb, -60.0f);
     markModified();
     sendSynchronousChangeMessage();
 }

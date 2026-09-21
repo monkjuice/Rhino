@@ -46,6 +46,13 @@ void Arrangement::paint(juce::Graphics& g)
         g.setColour(juce::Colour(0xff39434b));
         g.fillRect(indent + cardControlsWidth, row.getY(), cardDividerWidth, row.getHeight());
         paintGroupGutter(g, track, row);
+        if (isTrackArmed(track))
+        {
+            // A card too short to show its buttons still has to say it is
+            // armed, so the edge of the header carries it too.
+            g.setColour(juce::Colour(0xffb5453b));
+            g.fillRect(row.withX(headerWidth - 3.0f).withWidth(3.0f));
+        }
         if (isTrackSelected(track))
         {
             // Highlighted and selected are the same state: every card in the
@@ -296,6 +303,31 @@ void Arrangement::paint(juce::Graphics& g)
         const auto y = moveDestination > movingTrack ? target.getBottom() : target.getY();
         g.setColour(juce::Colour(0xffc6d58c));
         g.fillRect(0.0f, y - 1.0f, static_cast<float>(getWidth()) - 14.0f, 2.0f);
+    }
+    // What is being recorded, while it is being recorded. The engine writes no
+    // clip until the transport stops, so without this the armed lane would sit
+    // empty through the take and the whole thing would appear at the end. The
+    // band runs from where recording started to the playhead, on the tracks
+    // that are actually capturing.
+    if (session.isRecording() && session.recordingStartSeconds() >= 0.0)
+    {
+        juce::Graphics::ScopedSaveState scope(g);
+        g.reduceClipRegion(juce::Rectangle<int>(static_cast<int>(headerWidth), static_cast<int>(lanesTop),
+                                                std::max(1, getWidth() - static_cast<int>(headerWidth) - 14),
+                                                std::max(1, static_cast<int>(laneContentHeight()))));
+        const auto x1 = xFor(session.recordingStartSeconds());
+        const auto x2 = std::max(x1, playhead);
+        for (int track = 0; track < session.trackCount(); ++track)
+        {
+            if (!isTrackArmed(track) || isTrackHidden(track)) continue;
+            const auto row = lane(track);
+            if (row.getHeight() <= 0.0f) continue;
+            const juce::Rectangle<float> band {x1, row.getY(), std::max(2.0f, x2 - x1), row.getHeight() - 1.0f};
+            g.setColour(juce::Colour(0x38e4443a));
+            g.fillRect(band);
+            g.setColour(juce::Colour(0xffe4443a));
+            g.fillRect(band.withWidth(2.0f));
+        }
     }
     // Over the clips and under the marquee: the region is the thing the
     // commands act on, so it has to read as covering what it contains.

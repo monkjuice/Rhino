@@ -64,6 +64,11 @@ float Arrangement::trackIndent(int track) const
     return groupContaining(track) != nullptr ? groupIndent : 0.0f;
 }
 
+bool Arrangement::isTrackArmed(int track) const
+{
+    return track >= 0 && track < static_cast<int>(armedTracks.size()) && armedTracks[static_cast<size_t>(track)];
+}
+
 bool Arrangement::isTrackSelected(int track) const
 {
     return std::find(selectedTracks.begin(), selectedTracks.end(), track) != selectedTracks.end();

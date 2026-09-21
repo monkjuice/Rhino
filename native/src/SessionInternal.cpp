@@ -23,6 +23,13 @@ const juce::Identifier legacyTrackGroupID {"rhinoTrackGroup"};
 const juce::Identifier legacyTrackGroupIdID {"id"};
 const juce::Identifier legacyTrackGroupNameID {"name"};
 const juce::Identifier legacyTrackGroupColourID {"colour"};
+// Arming is a property of the track, so it travels with the track when it is
+// reordered and is saved with the document, the way mute and solo are. The
+// engine's own input destinations are rebuilt from it rather than being a
+// second copy of the same answer.
+const juce::Identifier trackArmedID {"rhinoArmed"};
+// The count-in lives beside the other metronome settings, on the edit.
+const juce::Identifier countInBarsID {"rhinoCountInBars"};
 
 void panicMidiOnTrack(te::ClipTrack* clipTrack)
 {

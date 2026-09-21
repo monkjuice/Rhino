@@ -99,6 +99,54 @@ public:
     }
 };
 
+// The record button paints its own dot rather than borrowing a glyph. It has
+// three things to say - nothing is armed, something is armed, and the transport
+// is rolling or counting into it - and a colour on a circle says all three at a
+// glance where a character would need a legend.
+class RecordButton final : public juce::TextButton
+{
+public:
+    enum class State { idle, armed, countingIn, recording };
+
+    RecordButton() : juce::TextButton("Record") {}
+
+    void setState(State next)
+    {
+        if (state == next) return;
+        state = next;
+        repaint();
+    }
+
+    void paintButton(juce::Graphics& g, bool highlighted, bool pressed) override
+    {
+        const auto bounds = getLocalBounds().toFloat();
+        g.setColour(juce::Colour(0xff343a40));
+        g.fillRoundedRectangle(bounds, 3.0f);
+        if (highlighted || pressed)
+        {
+            g.setColour(juce::Colour(0x1affffff));
+            g.fillRoundedRectangle(bounds, 3.0f);
+        }
+        const auto dot = bounds.withSizeKeepingCentre(12.0f, 12.0f);
+        const auto colour = state == State::recording  ? juce::Colour(0xffe4443a)
+                          : state == State::countingIn ? juce::Colour(0xffe0a03c)
+                          : state == State::armed      ? juce::Colour(0xffbb5349)
+                                                       : juce::Colour(0xff70797f);
+        g.setColour(colour);
+        g.fillEllipse(dot);
+        // A ring while it is actually capturing, so a rolling recording cannot
+        // be mistaken for a track merely sitting armed.
+        if (state == State::recording || state == State::countingIn)
+        {
+            g.setColour(colour.withAlpha(0.45f));
+            g.drawEllipse(dot.expanded(3.0f), 1.6f);
+        }
+    }
+
+private:
+    State state = State::idle;
+};
+
 // Session view development is paused; see SESSION-VIEW.md for what exists, what
 // is missing, and how to pick it up. The view and its model are still built and
 // tested, but nothing in the shell reaches them. Setting this to true restores
@@ -248,6 +296,8 @@ public:
         metronomeMenu.onClick = [this] { showMetronomeMenu(); };
         play.onClick = [this] { session.togglePlayback(); };
         stop.onClick = [this] { session.stop(); };
+        record.onClick = [this] { toggleRecording(); };
+        record.setTooltip("Record into the armed tracks  (F9)");
         panic.onClick = [this]
         {
             session.panicReset();
@@ -260,7 +310,7 @@ public:
         stop.setTooltip("Stop and return to start");
         panic.setTooltip("Panic reset audio");
         for (auto* component : std::initializer_list<juce::Component*>{
-                 &infoView, &position, &play, &stop, &panic,
+                 &infoView, &position, &play, &stop, &record, &panic,
                  &browser, &browserToggle, &editorToggle, &rackToggle, &grid, &audioClip, &arrangement, &sessionView,
                  &sessionToggle, &arrangementToggle, &backToArrangement, &rack, &tempo, &timeSignature, &undo, &redo, &clear, &metronome, &metronomeMenu, &hint,
                  &patternLabel, &editorResolution, &editorZoomOut, &editorZoomIn, &scaleHighlight})
@@ -343,7 +393,7 @@ public:
         // Keep the control bar as one visual cluster. The browser may resize,
         // but transport should remain beside the display rather than drifting
         // to the arrangement's left edge.
-        const auto transportX = std::max(152, displayX - 294);
+        const auto transportX = std::max(152, displayX - 352);
         sessionToggle.setVisible(sessionViewEnabled);
         arrangementToggle.setVisible(sessionViewEnabled);
         if constexpr (sessionViewEnabled)
@@ -357,7 +407,8 @@ public:
             backToArrangement.setBounds(48, 66, 124, 22);
         play.setBounds(transportX, 34, 38, 30);
         stop.setBounds(transportX + 58, 34, 38, 30);
-        panic.setBounds(transportX + 116, 34, 38, 30);
+        record.setBounds(transportX + 116, 34, 38, 30);
+        panic.setBounds(transportX + 174, 34, 38, 30);
         position.setBounds(displayX, 21, displayWidth, 56);
         constexpr int rightControlsWidth = 356;
         auto rightX = std::min(displayX + displayWidth + 52, getWidth() - 24 - rightControlsWidth);
@@ -546,6 +597,11 @@ public:
         if (key.getKeyCode() == juce::KeyPress::spaceKey)
         {
             session.togglePlayback();
+            return true;
+        }
+        if (key.getKeyCode() == juce::KeyPress::F9Key)
+        {
+            toggleRecording();
             return true;
         }
         if (key.getModifiers().isCommandDown() && key.getKeyCode() == 'Z')
@@ -753,6 +809,26 @@ public:
         repaint();
     }
 
+    // Record is one button for three things - start the count-in, start
+    // recording, stop what is running - because that is one idea to the person
+    // pressing it. Session decides which of them it is.
+    void toggleRecording()
+    {
+        const auto result = session.toggleRecording();
+        if (result.failed())
+        {
+            logStatus(result.getErrorMessage());
+            return;
+        }
+        if (session.isCountingIn())
+            logStatus("Counting in " + juce::String(session.countInBars())
+                      + (session.countInBars() == 1 ? " bar..." : " bars..."));
+        else if (session.isRecording())
+            logStatus("Recording into the armed tracks");
+        else
+            logStatus("Recording stopped");
+    }
+
     void requestClose() { files.confirmUnsaved([] { juce::JUCEApplication::getInstance()->quit(); }); }
     void openProjectFile(const juce::File& file) { files.openFile(file); }
     void showFileMenuFrom(juce::Component& target) { showFileMenu(&target); }
@@ -885,7 +961,7 @@ private:
                     juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon, "Keyboard shortcuts",
                         "Space  Play/Pause\nCtrl+N  New project\nCtrl+O  Open project\nCtrl+S  Save project\nCtrl+Shift+S  Save as\n"
                         "Ctrl+Shift+E  Export WAV\nCtrl+Z  Undo\nCtrl+Y / Ctrl+Shift+Z  Redo\nCtrl+F  Search browser\nCtrl+A  Add a clip to the focused track\nDouble-click a lane  Add a clip there\n"
-                        "Ctrl+T  Add a track\nF2  Rename the selected track or group\nCtrl+G  Group the selected tracks\nCtrl+Shift+G  Ungroup\n"
+                        "F9  Record into the armed tracks / Click the dot on a track card to arm it\nCtrl+T  Add a track\nF2  Rename the selected track or group\nCtrl+G  Group the selected tracks\nCtrl+Shift+G  Ungroup\n"
                         "Drag an empty lane  Select a span of the timeline\nCtrl+X / Ctrl+C / Ctrl+V  Cut, copy and paste the selection\n"
                         "Ctrl+D  Duplicate it directly after itself\nDelete  Empty the selection\n"
                         "?  Show/hide Info View\nF12  Full screen");
@@ -905,12 +981,29 @@ private:
         menu.addItem(10, "-12 dB", true, std::abs(session.clickTrackGain() + 12.0f) < 0.1f);
         menu.addItem(11, "-6 dB", true, std::abs(session.clickTrackGain() + 6.0f) < 0.1f);
         menu.addItem(12, "0 dB", true, std::abs(session.clickTrackGain()) < 0.1f);
+        menu.addSeparator();
+        // The count-in is a metronome setting: it is the click, counted before
+        // the transport moves, so it belongs in the metronome's own menu rather
+        // than in a preferences dialog nobody would look in.
+        menu.addSectionHeader("Count-in");
+        menu.addItem(20, "Off", true, session.countInBars() == 0);
+        for (int bars = 1; bars <= Session::maximumCountInBars; ++bars)
+            menu.addItem(20 + bars, juce::String(bars) + (bars == 1 ? " bar" : " bars"),
+                         true, session.countInBars() == bars);
         menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(metronomeMenu),
             [safe = juce::Component::SafePointer<ControlWindow>(this)] (int result)
             {
                 if (safe == nullptr) return;
                 if (result == 1) safe->session.setClickTrackEmphasiseBars(!safe->session.clickTrackEmphasiseBars());
                 else if (result >= 10 && result <= 12) safe->session.setClickTrackGain(static_cast<float>((result - 12) * 6));
+                else if (result >= 20 && result <= 20 + Session::maximumCountInBars)
+                {
+                    const auto bars = result - 20;
+                    safe->session.setCountInBars(bars);
+                    safe->logStatus(bars == 0 ? "Recording starts immediately"
+                                              : "Recording counts in " + juce::String(bars)
+                                                    + (bars == 1 ? " bar" : " bars"));
+                }
             });
     }
 
@@ -974,6 +1067,7 @@ private:
         const auto playing = session.edit->getTransport().isPlaying();
         play.setButtonText(playing ? juce::String(L"\u275a\u275a") : juce::String(L"\u25b6"));
         play.setTooltip(playing ? "Pause" : "Play");
+        updateRecordButton();
         tempo.setValue(session.tempo(), juce::dontSendNotification);
         const auto signature = session.timeSignature();
         timeSignature.setSelectedId(signature.numerator * 100 + signature.denominator, juce::dontSendNotification);
@@ -995,10 +1089,35 @@ private:
         if (projectTitleChanged) projectTitleChanged(displayName);
     }
 
+    void updateRecordButton()
+    {
+        const auto state = session.isRecording()   ? RecordButton::State::recording
+                         : session.isCountingIn()  ? RecordButton::State::countingIn
+                         : session.anyTrackArmed() ? RecordButton::State::armed
+                                                   : RecordButton::State::idle;
+        // A count-in starts the transport itself, so the button press that
+        // began it is long over by the time recording actually starts. This is
+        // what says so, rather than leaving the count-in message standing while
+        // the take is being made.
+        if (state != recordState)
+        {
+            if (state == RecordButton::State::recording && recordState == RecordButton::State::countingIn)
+                logStatus("Recording into the armed tracks");
+            recordState = state;
+        }
+        record.setState(state);
+    }
+
     void timerCallback() override
     {
         if (paneLayoutPending && !juce::ModifierKeys::getCurrentModifiers().isAnyMouseButtonDown())
             applyPaneLayout();
+        // The engine both starts and finishes a recording on the audio thread
+        // and broadcasts neither, so the clips it wrote are collected here -
+        // the same reason the slot override below is polled rather than
+        // listened for.
+        session.recordingStopped();
+        updateRecordButton();
         // The engine raises a track's slot-override flag from the audio thread
         // without broadcasting, so this is polled rather than event-driven.
         if constexpr (sessionViewEnabled)
@@ -1009,6 +1128,11 @@ private:
             }
         if (session.edit->getTransport().isPlaying())
             session.applyTrackAutomationAt(playheadTime(session.edit->getTransport()));
+        if (session.isCountingIn())
+        {
+            position.setDisplayText("COUNT-IN     " + juce::String(session.countInBarsRemaining()));
+            return;
+        }
         const auto seconds = session.edit->getTransport().getPosition().inSeconds();
         const auto beat = session.edit->tempoSequence.toBeats(tracktion::core::TimePosition::fromSeconds(seconds)).inBeats();
         const auto signature = session.timeSignature();
@@ -1076,6 +1200,7 @@ private:
     juce::TextButton metronome, metronomeMenu;
     juce::TextButton undo {"Undo"}, redo {"Redo"}, clear {"Clear"};
     juce::TextButton play {"Play"}, stop {"Stop"}, panic {"Panic"};
+    RecordButton record;
     BrowserToggleButton browserToggle;
     juce::TextButton editorToggle {"Clip"}, rackToggle {"Devices"};
     juce::TextButton sessionToggle {"Session"}, arrangementToggle {"Arrange"};
@@ -1112,6 +1237,7 @@ private:
     bool resizingBrowser = false, resizingDeviceView = false, resizingArrangement = false;
     bool updatingEditorResolution = false;
     bool displayPosition = true, displayTempo = true, displayTimeSignature = true;
+    RecordButton::State recordState = RecordButton::State::idle;
 };
 
 class Application final : public juce::JUCEApplication, private juce::Timer
@@ -1216,7 +1342,10 @@ private:
             else if (startupStage == 1)
             {
                 avoidLegacyDirectSound(session->engine);
-                session->engine.getDeviceManager().initialise(0, 2);
+                // Two inputs as well as two outputs: a device opened with no
+                // input channels leaves the engine with no wave input device,
+                // and recording has nothing to arm.
+                session->engine.getDeviceManager().initialise(2, 2);
                 avoidLegacyDirectSound(session->engine);
             }
             else

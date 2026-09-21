@@ -158,10 +158,16 @@ void Arrangement::resized()
         const auto visible = row.getHeight() > 1.0f && row.getBottom() > lanesTop && row.getY() < lanesBottom;
         mute[index]->setVisible(visible);
         solo[index]->setVisible(visible);
+        // A group bus records nothing of its own, so it is given no dot to
+        // press rather than one that refuses.
+        const auto armable = session.trackRecordInput(i) != Session::RecordInput::none;
+        arm[index]->setVisible(visible && armable);
         volume[index]->setVisible(visible && mixerVisible);
         pan[index]->setVisible(visible && mixerVisible);
-        mute[index]->setBounds(left, top, cardControlWidth, 18);
-        solo[index]->setBounds(right, top, cardControlWidth, 18);
+        const auto buttonStep = cardButtonWidth + cardControlGap;
+        mute[index]->setBounds(left, top, cardButtonWidth, 18);
+        solo[index]->setBounds(left + buttonStep, top, cardButtonWidth, 18);
+        arm[index]->setBounds(left + 2 * buttonStep, top, cardButtonWidth, 18);
         volume[index]->setBounds(left, top + 23, cardControlWidth, 16);
         pan[index]->setBounds(right, top + 23, cardControlWidth, 16);
     }

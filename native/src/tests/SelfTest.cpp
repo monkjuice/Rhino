@@ -1,5 +1,6 @@
 #include "../Session.h"
 #include "../BrowserPanel.h"
+#include "../CountInClick.h"
 #include "ContentLibrary.h"
 // A test drives the DSP directly, so unlike the rest of the app it needs the
 // device definitions rather than their catalog entries.
@@ -252,6 +253,73 @@ int runSelfTest()
         }
         require(sweepPeak > 0.0001f && sweepPeak < 1.0f && maxJump < 0.9f);
         wave->deinitialise();
+
+        // The count-in generator, driven directly rather than through a device.
+        // It is a pure function of tempo, meter and sample rate, so the whole
+        // of it is checkable here: the right number of clicks, in the right
+        // places, and a count that ends on the beat the transport starts on.
+        {
+            CountInClick click;
+            constexpr double rate = 48000.0;
+            CountInClick::Settings settings;
+            settings.tempoBpm = 120.0;   // half a second a beat
+            settings.beatsPerBar = 4.0;
+            settings.bars = 3;
+            settings.gainDb = 0.0f;
+            settings.emphasiseBars = true;
+            auto finished = false;
+            click.start(settings, rate, [&finished] { finished = true; });
+            require(click.isRunning());
+            require(click.beatsTotal() == 12);
+            require(click.barsRemaining() == 3);
+
+            constexpr int blockSize = 512;
+            juce::AudioBuffer<float> block(1, blockSize);
+            std::vector<int> onsets;
+            auto rendered = 0;
+            const auto samplesPerBeat = static_cast<int>(rate * 60.0 / settings.tempoBpm);
+            const auto countInSamples = samplesPerBeat * click.beatsTotal();
+            // A click is a decaying sine, so it crosses zero many times on the
+            // way down: an onset is the first loud sample after a gap, not
+            // every loud sample after a quiet one.
+            const auto minimumGap = samplesPerBeat / 2;
+            // A generous ceiling on the loop, so a generator that never stops
+            // fails here rather than hanging the runner.
+            for (auto guard = 0; click.isRunning() && guard < 4000; ++guard)
+            {
+                block.clear();
+                auto* channels = block.getArrayOfWritePointers();
+                click.renderBlock(channels, 1, blockSize);
+                for (int i = 0; i < blockSize; ++i)
+                    if (std::abs(block.getSample(0, i)) > 0.05f
+                        && (onsets.empty() || rendered + i - onsets.back() > minimumGap))
+                        onsets.push_back(rendered + i);
+                rendered += blockSize;
+            }
+            require(!click.isRunning());
+            require(rendered >= countInSamples && rendered < countInSamples + blockSize);
+            require(static_cast<int>(onsets.size()) == click.beatsTotal());
+            // Every click lands on its beat, within the block the transient
+            // takes to rise past the threshold.
+            for (int beat = 0; beat < static_cast<int>(onsets.size()); ++beat)
+            {
+                const auto beatSample = static_cast<double>(beat) * rate * 60.0 / settings.tempoBpm;
+                require(std::abs(onsets[static_cast<size_t>(beat)] - beatSample) < 64.0);
+            }
+            require(click.barsRemaining() == 0);
+            // The finished callback is posted to the message thread, so it has
+            // not run yet; cancelling before it does must not leave it armed.
+            require(!finished);
+            click.cancel();
+
+            // Off means off: no clicks, and the caller is told at once so a
+            // count-in of nothing and a count-in that has ended take one path.
+            auto immediate = false;
+            CountInClick::Settings none = settings;
+            none.bars = 0;
+            click.start(none, rate, [&immediate] { immediate = true; });
+            require(immediate && !click.isRunning() && click.barsRemaining() == 0);
+        }
 
         session.releaseAudioDevice();
         return 0;

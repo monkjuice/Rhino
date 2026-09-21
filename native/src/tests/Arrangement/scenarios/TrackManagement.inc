@@ -195,18 +195,24 @@
             require(!view.mute[card]->getBounds().isEmpty() && !view.volume[card]->getBounds().isEmpty(),
                     "A new card is placed as soon as its track exists");
             require(view.mute[card]->getRight() <= static_cast<int>(view.cardControlsWidth)
+                        && view.arm[card]->getRight() <= static_cast<int>(view.cardControlsWidth)
                         && view.volume[card]->getRight() <= static_cast<int>(view.cardControlsWidth)
                         && view.pan[card]->getRight() <= static_cast<int>(view.cardControlsWidth),
                     "Every control stays in the controls column, clear of the name");
             require(view.volume[card]->getWidth() == view.pan[card]->getWidth(),
                     "The two faders are the same width");
-            require(view.mute[card]->getWidth() == view.volume[card]->getWidth()
-                        && view.mute[card]->getX() == view.volume[card]->getX()
-                        && view.solo[card]->getX() == view.pan[card]->getX(),
-                    "The buttons sit squarely over the faders");
+            require(view.mute[card]->getWidth() == view.solo[card]->getWidth()
+                        && view.solo[card]->getWidth() == view.arm[card]->getWidth(),
+                    "and the three buttons are the same width as each other");
+            require(view.mute[card]->getX() == view.volume[card]->getX(),
+                    "The button line and the fader line share a left edge");
+            require(view.mute[card]->getRight() <= view.solo[card]->getX()
+                        && view.solo[card]->getRight() <= view.arm[card]->getX(),
+                    "Mute, solo and the record dot run left to right without overlapping");
             require(view.mute[card]->getBottom() <= view.volume[card]->getY()
-                        && view.mute[card]->getY() == view.solo[card]->getY(),
-                    "Mute and solo share the line above the faders");
+                        && view.mute[card]->getY() == view.solo[card]->getY()
+                        && view.solo[card]->getY() == view.arm[card]->getY(),
+                    "and all three share the line above the faders");
             require(session.removeAudioTrack(before).wasOk(), "The added card can be removed again");
             view.sync();
         }

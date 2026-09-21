@@ -39,11 +39,30 @@ extern const juce::Identifier legacyTrackGroupID;
 extern const juce::Identifier legacyTrackGroupIdID;
 extern const juce::Identifier legacyTrackGroupNameID;
 extern const juce::Identifier legacyTrackGroupColourID;
+extern const juce::Identifier trackArmedID;
+extern const juce::Identifier countInBarsID;
 
 // True while the app is running a --self-test style command line. Persistent
 // preferences are neither read nor written then, so a developer's settings
 // cannot decide what the suite does.
 bool isCommandLineTestMode();
+
+// The one thing Rhino tells the engine about itself.
+//
+// Left to its own devices the engine names a recorded file from a pattern whose
+// %projectdir% resolves to nothing for a document that has never been saved,
+// which lands the take in the process's working directory. getFileForNewAudioRecording
+// is checked before any of that and short-circuits it, so Rhino simply says
+// where the file goes. The folder is asked for through a callback because the
+// behaviour is built with the engine, before there is a Session to ask.
+struct RhinoEngineBehaviour final : te::EngineBehaviour
+{
+    juce::File getFileForNewAudioRecording(te::Track& track, const juce::String& fileExtension) override;
+    // A recording covers what is under it - the same rule every other clip
+    // here follows - so the material it replaces is silent while it is made.
+    bool muteTrackContentsWhilstRecording() override { return true; }
+    std::function<juce::File()> recordingDirectory;
+};
 
 struct PresetNote { int step, pitch, length; };
 

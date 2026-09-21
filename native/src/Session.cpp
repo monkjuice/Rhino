@@ -1,4 +1,7 @@
 #include "SessionInternal.h"
+// The count-in is held by unique_ptr, so the destructor here needs its
+// definition even though nothing in this file drives it.
+#include "CountInClick.h"
 #include <algorithm>
 #include <set>
 
@@ -19,17 +22,24 @@ bool isCommandLineTestMode()
     return commandLineTestMode;
 }
 
-Session::Session() : engine(commandLineTestMode ? "Rhino Native Tests" : "Theda Native")
+Session::Session() : engine(commandLineTestMode ? "Rhino Native Tests" : "Theda Native",
+                            nullptr, std::make_unique<RhinoEngineBehaviour>())
 {
+    // The behaviour is built with the engine, before there is a Session to ask
+    // where a recording goes, so it is handed the question rather than the
+    // answer. This is the only thing Rhino tells the engine about itself.
+    if (auto* behaviour = dynamic_cast<RhinoEngineBehaviour*>(&engine.getEngineBehaviour()))
+        behaviour->recordingDirectory = [this] { return recordingDirectory(); };
     DeviceCatalog::registerBuiltInTypes(engine);
     initialiseExternalPlugins();
     buildStarterEdit();
 }
 
-// The preview holds an audio callback on the engine's device manager, so it has
-// to come off before either of them goes.
+// The preview and the count-in each hold an audio callback on the engine's
+// device manager, so both have to come off before either of them goes.
 Session::~Session()
 {
+    cancelCountIn();
     releasePreview();
 }
 
@@ -41,7 +51,7 @@ void Session::buildStarterEdit()
     edit->state.setProperty("rhinoFormatVersion", 1, nullptr);
     edit->clickTrackEnabled = false;
     edit->clickTrackEmphasiseBars = true;
-    edit->clickTrackGain = -6.0f;
+    edit->clickTrackGain = juce::Decibels::decibelsToGain(-6.0f);
     edit->tempoSequence.getTempo(0)->setBpm(120.0);
     // One empty track, as a new document should be. It runs no instrument, so
     // it is neither a MIDI nor an audio track until something is dropped on it:
@@ -71,9 +81,13 @@ void Session::buildStarterEdit()
 void Session::newProject()
 {
     listeners.call(&Listener::editWillChange);
+    cancelCountIn();
     stop();
     // Everything cached from the outgoing edit goes with it: these point at
     // plugins and parameters the starter edit is about to replace.
+    clipsBeforeRecording.clear();
+    recordingStart = -1.0;
+    recordingStarted = false;
     audioUtility = nullptr;
     lastTouchedParameter = {};
     automationRuntime.clear();
@@ -91,6 +105,10 @@ void Session::newProject()
 
 void Session::panicReset(bool restartAudioDevice)
 {
+    cancelCountIn();
+    clipsBeforeRecording.clear();
+    recordingStart = -1.0;
+    recordingStarted = false;
     te::TransportControl::stopAllTransports(engine, false, true);
     auto& transport = edit->getTransport();
     transport.stop(false, true);
@@ -235,7 +253,12 @@ juce::Result Session::restoreProject(const juce::ValueTree& state, const juce::F
         audioTrack->pluginList.insertPlugin(device, 0, nullptr);
     }
     listeners.call(&Listener::editWillChange);
+    cancelCountIn();
     stop();
+    // Held against the outgoing edit's clips, so they go with it.
+    clipsBeforeRecording.clear();
+    recordingStart = -1.0;
+    recordingStarted = false;
     edit = std::move(candidate);
     patternClip = nextPattern;
     patternClipID = patternClip->itemID;

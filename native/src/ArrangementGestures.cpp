@@ -671,6 +671,10 @@ juce::String Arrangement::controlDescription(juce::Component* component) const
             return "Mute " + name + " - silences this track while the rest keeps playing.";
         if (component == solo[index].get())
             return "Solo " + name + " - silences every track that is not soloed.";
+        if (component == arm[index].get())
+            return session.trackRecordInput(track) == Session::RecordInput::midi
+                       ? "Arm " + name + " - records what you play on the MIDI input into a new clip."
+                       : "Arm " + name + " - records the audio input from Audio settings into a new clip.";
         if (component == volume[index].get())
             return "Volume of " + name + " - drag to set the level, double-click for 0.0 dB.";
         if (component == pan[index].get())

@@ -12,6 +12,7 @@ namespace rhino
 void Arrangement::sync()
 {
     clips.clear();
+    armedTracks.clear();
     std::set<juce::String> usedFiles;
     const auto tracks = te::getAudioTracks(*session.edit);
     syncTrackControls();
@@ -28,6 +29,14 @@ void Arrangement::sync()
         const auto index = static_cast<size_t>(track);
         mute[index]->setToggleState(mixer.muted, juce::dontSendNotification);
         solo[index]->setToggleState(mixer.soloed, juce::dontSendNotification);
+        armedTracks.push_back(session.isTrackArmed(track));
+        arm[index]->setToggleState(armedTracks.back(), juce::dontSendNotification);
+        // The dot is the same whatever the track records, because the track
+        // already says which that is. What it would capture goes in the
+        // tooltip, which follows the track as an instrument lands on it.
+        arm[index]->setTooltip(session.trackRecordInput(track) == Session::RecordInput::midi
+                                   ? "Arm " + session.trackName(track) + " to record the MIDI input"
+                                   : "Arm " + session.trackName(track) + " to record the audio input");
         if (!volume[index]->isMouseButtonDown())
             volume[index]->setValue(mixer.volumeDb, juce::dontSendNotification);
         if (!pan[index]->isMouseButtonDown())
@@ -108,12 +117,29 @@ void Arrangement::syncTrackControls()
         const auto track = static_cast<int>(mute.size());
         auto muteButton = std::make_unique<juce::TextButton>("M");
         auto soloButton = std::make_unique<juce::TextButton>("S");
+        // The record dot, as in Live and Logic. The transport symbols in the
+        // control bar already reach the system fallback face for their glyphs.
+        auto armButton = std::make_unique<juce::TextButton>(juce::String::charToString(0x25cf));
         muteButton->setTooltip("Mute track");
         soloButton->setTooltip("Solo track");
         muteButton->onClick = [this, track] { session.toggleTrackMute(track); };
         soloButton->onClick = [this, track] { session.toggleTrackSolo(track); };
+        // Arming reports twice: whether the track can be armed at all, and
+        // whether the input behind it is actually there to record from.
+        armButton->onClick = [this, track]
+        {
+            const auto wanted = !session.isTrackArmed(track);
+            const auto result = session.setTrackArmed(track, wanted);
+            if (status)
+            {
+                if (result.failed()) status(result.getErrorMessage());
+                else status(wanted ? session.trackName(track) + " is armed: press Record or F9"
+                                   : session.trackName(track) + " is no longer armed");
+            }
+        };
         muteButton->setColour(juce::TextButton::buttonOnColourId, juce::Colour(0xff97634c));
         soloButton->setColour(juce::TextButton::buttonOnColourId, juce::Colour(0xff657440));
+        armButton->setColour(juce::TextButton::buttonOnColourId, juce::Colour(0xffb5453b));
         auto volumeSlider = std::make_unique<juce::Slider>();
         volumeSlider->setSliderStyle(juce::Slider::LinearBar);
         // The bar paints the value itself, in a colour picked for whichever of
@@ -156,14 +182,17 @@ void Arrangement::syncTrackControls()
         // The Info View explains a control while the pointer rests on it, so
         // every one of them reports its enter and exit to the arrangement.
         for (auto* control : std::initializer_list<juce::Component*>{muteButton.get(), soloButton.get(),
+                                                                     armButton.get(),
                                                                      volumeSlider.get(), panSlider.get()})
             control->addMouseListener(this, false);
         laneHeaders.addAndMakeVisible(*muteButton);
         laneHeaders.addAndMakeVisible(*soloButton);
+        laneHeaders.addAndMakeVisible(*armButton);
         laneHeaders.addAndMakeVisible(*volumeSlider);
         laneHeaders.addAndMakeVisible(*panSlider);
         mute.push_back(std::move(muteButton));
         solo.push_back(std::move(soloButton));
+        arm.push_back(std::move(armButton));
         volume.push_back(std::move(volumeSlider));
         pan.push_back(std::move(panSlider));
     }
@@ -171,6 +200,7 @@ void Arrangement::syncTrackControls()
     {
         mute.pop_back();
         solo.pop_back();
+        arm.pop_back();
         volume.pop_back();
         pan.pop_back();
     }

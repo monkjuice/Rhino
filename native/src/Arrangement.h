@@ -206,6 +206,8 @@ private:
     bool isTrackHidden(int track) const;
     float trackIndent(int track) const;
     bool isTrackSelected(int track) const;
+    // The cached arm flag, so the painter never has to ask the session.
+    bool isTrackArmed(int track) const;
     void selectTrackRange(int from, int to);
     void toggleTrackSelection(int track);
     juce::Rectangle<float> busDisclosureBounds(juce::Rectangle<float> row) const;
@@ -241,6 +243,9 @@ private:
     std::vector<std::vector<Session::TrackAutomation>> trackLanes;
     std::vector<LaneRow> rows;
     std::vector<Session::TrackGroup> groups;
+    // Read once per sync rather than per repaint: answering it costs the
+    // engine's track list, and the painter asks for every visible row.
+    std::vector<bool> armedTracks;
     std::vector<int> trackRowIndex;
     float rowsHeight = 0.0f;
     juce::TextButton duplicateButton, addTrack, snap, automationButton, gridControl;
@@ -256,7 +261,10 @@ private:
     // is a child of laneHeaders so a row scrolled half out of view crops it.
     juce::TextEditor nameEditor;
     int renamingTrack = -1;
-    std::vector<std::unique_ptr<juce::TextButton>> mute, solo;
+    // Mute, solo and the record dot share the card's button line. Arming is
+    // last, as it is in Live's track header, so the two that shape playback
+    // stay together on the left.
+    std::vector<std::unique_ptr<juce::TextButton>> mute, solo, arm;
     // The same mixer values the session view shows, laid out horizontally.
     std::vector<std::unique_ptr<juce::Slider>> volume, pan;
     juce::Slider masterVolume, masterPan;
@@ -322,7 +330,11 @@ private:
     // divider between them is the same grey the row separators use. Both lines
     // of controls share one left edge and one width, so the buttons sit
     // squarely over the faders.
-    static constexpr float cardControlsWidth = 116.0f, cardDividerWidth = 4.0f;
-    static constexpr int cardControlsTop = 7, cardControlLeft = 10, cardControlWidth = 48, cardControlGap = 4;
+    static constexpr float cardControlsWidth = 124.0f, cardDividerWidth = 4.0f;
+    // The buttons are narrower than the faders under them: three of them share
+    // the line the two faders split, and a single letter needs far less room
+    // than a level bar does.
+    static constexpr int cardControlsTop = 7, cardControlLeft = 10, cardControlWidth = 52,
+                         cardControlGap = 4, cardButtonWidth = 34;
 };
 }

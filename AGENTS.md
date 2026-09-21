@@ -29,6 +29,7 @@ Application code, `native/src`:
 | Session model and engine ownership | `Session.h` declares everything; `Session.cpp` holds construction, project load/save and undo. Implementation is split across `Session*.cpp` by responsibility — notes, devices, automation, clips, regions, presets, tracks, groups, transport. |
 | Note grid UI | `StepGrid.*` — the 16-step pattern editor |
 | Arrangement UI | `Arrangement.*`, `ArrangementGeometry.cpp`, `ClipGeometry.h` |
+| Recording: arming a track, the count-in, and the clip a take becomes | `SessionRecording.cpp` in the model, `CountInClick.*` for the count-in click, the record button in `Main.cpp` and the record dot in `ArrangementSync.cpp` |
 | Audio clip editor: one clip's own gain, pan, pitch, fades, mute and reverse | `AudioClipPanel.*` in the UI, `SessionAudioClips.cpp` in the model |
 | Selecting a span of the timeline, and cut/copy/paste/duplicate on it | `ArrangementSelection.cpp` in the UI, `SessionRegion.cpp` in the model. The note editor uses the same rule in steps, in `StepGridEditing.cpp` |
 | Track groups, which are bus tracks | `SessionGroups.cpp`, `ArrangementGroups.cpp` |

@@ -196,9 +196,16 @@ void Arrangement::paint(juce::Graphics& g)
         g.fillRect(box.withHeight(4.0f));
         g.setColour(juce::Colour(isSelected(clip.id) ? 0xffdce9b1 : 0xff617985));
         g.drawRect(box.reduced(0.5f), isSelected(clip.id) ? 2.0f : 1.0f);
+        // The two rows the pointer reads, drawn so they can be seen: the strip
+        // along the top is the clip itself and carries its name, and the row
+        // under the line belongs to the timeline.
+        const auto headerHeight = clipHeaderHeight(box.getHeight());
+        g.setColour(label.darker(0.75f));
+        g.fillRect(visible.getX(), box.getY() + headerHeight, visible.getWidth(), 1.0f);
         g.setColour(juce::Colour(0xffe0e7ec));
         if (visible.getWidth() >= 24.0f)
-            g.drawText(clip.name, visible.reduced(6.0f, 0).withHeight(23.0f), juce::Justification::centredLeft, true);
+            g.drawText(clip.name, visible.reduced(6.0f, 0).withHeight(headerHeight),
+                       juce::Justification::centredLeft, true);
         if (clip.clipPlugins > 0)
         {
             const auto badge = visible.withSizeKeepingCentre(28.0f, 16.0f).withRightX(visible.getRight() - 5.0f).withY(visible.getY() + 5.0f);

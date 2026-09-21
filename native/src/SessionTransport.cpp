@@ -111,13 +111,21 @@ void Session::togglePlayback()
     else transport.play(false);
 }
 
+void Session::setPlaybackStart(double seconds)
+{
+    playbackStartSeconds = std::isfinite(seconds) ? std::max(0.0, seconds) : 0.0;
+}
+
 void Session::stop()
 {
     auto& transport = edit->getTransport();
     cancelCountIn();
     const auto wasRecording = transport.isRecording();
     transport.stop(false, false);
-    transport.setPosition({});
+    // Back to the line the arrangement's selection is on rather than to zero,
+    // so stopping and playing again repeats the passage that was being worked
+    // on. A document nothing has been clicked on still starts at the top.
+    transport.setPosition(tracktion::core::TimePosition::fromSeconds(playbackStartSeconds));
     releasePlayingNotes();
     if (wasRecording) finishRecording();
 }

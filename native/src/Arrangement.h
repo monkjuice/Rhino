@@ -71,6 +71,13 @@ private:
         int clipPlugins = 0;
     };
     enum class LoopGesture { none, create, move, trimStart, trimEnd };
+    // A clip is two rows. The strip along its top is the clip itself: clicking
+    // it selects, dragging it carries. Everything below belongs to the
+    // timeline, so a press there puts the selection line down and a drag
+    // sweeps out a region, exactly as over an empty lane. The left and right
+    // edges trim at any height, because a trim is about the clip's own bounds
+    // rather than about which of its two rows the pointer is in.
+    enum class ClipZone { trimStart, trimEnd, header, body };
     // What the last click selected, and therefore what Delete acts on. A track
     // is always highlighted as the working row, so "a track is selected" cannot
     // be inferred from selectedTrack - it has to be recorded.
@@ -128,6 +135,10 @@ private:
     void setTimeSelection(double start, double end, int firstTrack, int lastTrack);
     void setInsertPoint(double seconds, int track);
     void clearTimeSelection();
+    // The line the region starts at is where playback begins, so putting it
+    // down moves the transport onto it and tells the session where Stop should
+    // return to.
+    void moveTransportToSelectionStart();
     // The region a command acts on: the dragged-out one when there is one,
     // otherwise the span of the selected clips, so both read the same way.
     TimeSelection effectiveRegion() const;
@@ -171,6 +182,16 @@ private:
     float xFor(double seconds) const;
     double timeAt(float x) const;
     double snapped(double seconds, bool bypass) const;
+    // A pointer position lands inside a grid cell, and which edge of that cell
+    // it takes depends on what it is for. The selection line takes the cell it
+    // is inside, so clicking anywhere in a bar puts the line on the bar; a
+    // region's edges grow outwards from the anchor, so a drag covers whole
+    // cells rather than stopping halfway through the one it ended in.
+    double snappedDown(double seconds, bool bypass) const;
+    double snappedUp(double seconds, bool bypass) const;
+    static float clipHeaderHeight(float boxHeight);
+    juce::Rectangle<float> clipHeaderBounds(const ClipView&) const;
+    ClipZone clipZoneAt(juce::Point<float>, const ClipView&) const;
     double snappedClipMoveStart(double desiredStart, double length, int targetTrack, bool bypass) const;
     LoopGesture loopGestureAt(juce::Point<float>) const;
     // ArrangementAutomation.cpp
@@ -302,6 +323,9 @@ private:
     // travel with them when they are moved, trimmed or nudged. One dragged out
     // over the lanes belongs to the timeline and stays where it was put.
     bool regionFollowsClips = false;
+    // Unsnapped: which cell each edge of a dragged region takes depends on
+    // which side of the anchor the pointer ended up, so the anchor has to be
+    // re-snapped on every move rather than fixed when the press landed.
     double regionAnchorTime = 0.0;
     int regionAnchorTrack = 0;
     ClipGesture gesture = ClipGesture::move;

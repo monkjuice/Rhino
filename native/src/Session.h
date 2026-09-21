@@ -169,6 +169,12 @@ public:
     void setPreviewEnabled(bool enabled);
     void togglePlayback();
     void stop();
+    // Where playback starts from: the line the arrangement's selection sits on.
+    // Stop returns the transport here rather than to the top of the song, so
+    // play after stop picks up where the last click put the line. The view
+    // sets it; nothing here knows how it was chosen.
+    void setPlaybackStart(double seconds);
+    double playbackStart() const { return playbackStartSeconds; }
     void releasePlayingNotes();
     void panicReset(bool restartAudioDevice = true);
     void releaseAudioDevice();
@@ -735,6 +741,9 @@ private:
     std::vector<std::vector<RecordingNote>> liveNotes;
     juce::int64 liveNoteRevision = 0;
     double recordingStart = -1.0;
+    // Where Stop puts the transport back to. A fresh document has never had a
+    // line placed on it, so it is the top of the song until something moves it.
+    double playbackStartSeconds = 0.0;
     // record() is asked for on the message thread and begins on the audio
     // thread, so there is a window in which a recording has been started and
     // the transport still reports that it is not recording. Without this the

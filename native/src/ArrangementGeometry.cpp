@@ -87,6 +87,55 @@ double Arrangement::snapped(double seconds, bool bypass) const
     return session.edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(snappedBeat)).inSeconds();
 }
 
+// Rounding to the nearest line is what a clip edge wants; the selection line
+// and a region edge want the cell the pointer is inside, which is a floor and
+// a ceiling of the same division.
+double Arrangement::snappedDown(double seconds, bool bypass) const
+{
+    if ((gridSettings.mode != GridMode::off) == bypass)
+        return seconds;
+    const auto beat = session.edit->tempoSequence.toBeats(tracktion::core::TimePosition::fromSeconds(seconds)).inBeats();
+    const auto grid = resolvedGridBeats();
+    // Nudged by a thousandth of a cell so a pointer sitting exactly on a line
+    // takes that line rather than the one before it, which floating point
+    // would otherwise decide either way.
+    const auto cell = std::floor(beat / grid + 1.0e-3);
+    return session.edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(cell * grid)).inSeconds();
+}
+
+double Arrangement::snappedUp(double seconds, bool bypass) const
+{
+    if ((gridSettings.mode != GridMode::off) == bypass)
+        return seconds;
+    const auto beat = session.edit->tempoSequence.toBeats(tracktion::core::TimePosition::fromSeconds(seconds)).inBeats();
+    const auto grid = resolvedGridBeats();
+    const auto cell = std::ceil(beat / grid - 1.0e-3);
+    return session.edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(cell * grid)).inSeconds();
+}
+
+// Half of a short clip rather than a fixed strip: a row dragged right down
+// still has to have both of its rows, and the name has to fit on the one that
+// carries it.
+float Arrangement::clipHeaderHeight(float boxHeight)
+{
+    return juce::jlimit(8.0f, 22.0f, boxHeight * 0.5f);
+}
+
+juce::Rectangle<float> Arrangement::clipHeaderBounds(const ClipView& clip) const
+{
+    const auto box = bounds(clip);
+    return box.withHeight(clipHeaderHeight(box.getHeight()));
+}
+
+Arrangement::ClipZone Arrangement::clipZoneAt(juce::Point<float> point, const ClipView& clip) const
+{
+    const auto box = bounds(clip);
+    const auto handle = std::min(7.0f, box.getWidth() * 0.25f);
+    if (point.x - box.getX() < handle) return ClipZone::trimStart;
+    if (box.getRight() - point.x < handle) return ClipZone::trimEnd;
+    return point.y < box.getY() + clipHeaderHeight(box.getHeight()) ? ClipZone::header : ClipZone::body;
+}
+
 double Arrangement::snappedClipMoveStart(double desiredStart, double length, int targetTrack, bool bypass) const
 {
     if ((gridSettings.mode != GridMode::off) == bypass)

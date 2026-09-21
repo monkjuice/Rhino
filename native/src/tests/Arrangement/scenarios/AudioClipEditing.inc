@@ -56,8 +56,12 @@
         session.undo();
 
         // Lane heights depend on the panel size, so gestures take their y from
-        // the lane rather than assuming one.
-        const auto audioLaneY = view.lane(1).getCentreY();
+        // the lane rather than assuming one. A clip is two rows and only the
+        // upper one is the clip itself, so a gesture that means to select or
+        // carry one aims at that strip; the row below it puts the selection
+        // line down instead.
+        const auto clipRowY = [&view](int track) { return view.lane(track).getY() + 10.0f; };
+        const auto audioLaneY = clipRowY(1);
         const auto event = [&view](juce::Point<float> down, juce::Point<float> point, bool dragged,
                                    juce::ModifierKeys mods = juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier))
         {
@@ -78,7 +82,7 @@
                 "Can add automation before exercising clip gestures");
         view.sync();
         view.fit();
-        drag({view.xFor(0.5), view.lane(1).getCentreY()}, {view.xFor(0.75), view.lane(1).getCentreY()});
+        drag({view.xFor(0.5), clipRowY(1)}, {view.xFor(0.75), clipRowY(1)});
         require(close(session.findAudioClip(id)->getPosition().time.getStart().inSeconds(), 0.25),
                 "Automation overlays do not block a clip move gesture");
         session.undo();
@@ -93,7 +97,7 @@
                 "Can move duplicate away before testing clip-edge snap");
         view.sync();
         view.setSelection({snapDuplicateID}, snapDuplicateID);
-        drag({view.xFor(1.85), view.lane(1).getCentreY()}, {view.xFor(1.46), view.lane(1).getCentreY()});
+        drag({view.xFor(1.85), clipRowY(1)}, {view.xFor(1.46), clipRowY(1)});
         require(close(session.findAudioClip(snapDuplicateID)->getPosition().time.getStart().inSeconds(), originalEnd),
                 "Dragging a clip near a neighbor edge snaps it flush instead of overlapping");
         session.undo();
@@ -112,7 +116,7 @@
                 "Can move trimmed duplicate away before testing edge snap");
         view.sync();
         view.setSelection({trimmedDuplicateID}, trimmedDuplicateID);
-        drag({view.xFor(1.6), view.lane(1).getCentreY()}, {view.xFor(0.77), view.lane(1).getCentreY()});
+        drag({view.xFor(1.6), clipRowY(1)}, {view.xFor(0.77), clipRowY(1)});
         require(close(session.findAudioClip(trimmedDuplicateID)->getPosition().time.getStart().inSeconds(), 0.5),
                 "Dragging a trimmed clip near a neighbor edge snaps it flush instead of overlapping");
         session.undo();
@@ -156,7 +160,7 @@
         // In time rather than pixels: the drag has to cross the same musical
         // distance whatever width the track headers are given. A quarter second
         // plus a little lands on 0.25 once the sixteenth grid has snapped it.
-        drag({view.xFor(0.05), 82}, {view.xFor(0.33), 82});
+        drag({view.xFor(0.05), clipRowY(0)}, {view.xFor(0.33), clipRowY(0)});
         require(close(session.pattern().getPosition().time.getStart().inSeconds(), 0.25), "Pointer drag moves MIDI pattern clips");
         session.undo();
         require(close(session.pattern().getPosition().time.getStart().inSeconds(), 0.0), "Undo restores MIDI pattern move");
@@ -198,7 +202,7 @@
         const auto adjacentCopyStart = adjacentCopy->getPosition().time.getStart().inSeconds();
         view.sync();
         const auto clickX = static_cast<float>(view.xFor(adjacentCopyStart + 0.1));
-        const auto clickY = view.lane(0).getCentreY();
+        const auto clickY = clipRowY(0);
         view.mouseDown(event({clickX, clickY}, {clickX, clickY}, false));
         view.mouseUp(event({clickX, clickY}, {clickX, clickY}, false));
         require(close(adjacentCopy->getPosition().time.getStart().inSeconds(), adjacentCopyStart),

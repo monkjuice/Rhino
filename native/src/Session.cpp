@@ -88,6 +88,7 @@ void Session::newProject()
     clipsBeforeRecording.clear();
     recordingStart = -1.0;
     recordingStarted = false;
+    playbackStartSeconds = 0.0;
     audioUtility = nullptr;
     lastTouchedParameter = {};
     automationRuntime.clear();
@@ -259,6 +260,7 @@ juce::Result Session::restoreProject(const juce::ValueTree& state, const juce::F
     clipsBeforeRecording.clear();
     recordingStart = -1.0;
     recordingStarted = false;
+    playbackStartSeconds = 0.0;
     edit = std::move(candidate);
     patternClip = nextPattern;
     patternClipID = patternClip->itemID;

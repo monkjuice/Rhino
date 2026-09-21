@@ -179,7 +179,13 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
         return;
     }
     const auto index = hit(event.position);
-    if (index < 0)
+    // A clip is two rows, and only the upper one is the clip. The lower row is
+    // timeline like any empty lane: a press there puts the selection line down
+    // and a drag sweeps out a region across whatever it covers, clips
+    // included. A double-click still reaches the clip from either row, because
+    // opening one is worth more than a second way of placing the line.
+    const auto zone = index < 0 ? ClipZone::body : clipZoneAt(event.position, clips[static_cast<size_t>(index)]);
+    if (index < 0 || (zone == ClipZone::body && event.getNumberOfClicks() < 2))
     {
         // Empty lane space is where a region is dragged out, and a press that
         // never moves leaves the insert point there. The header still selects
@@ -222,6 +228,9 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
     // paste left behind - the gesture starting here is about these clips, so
     // the region becomes theirs and travels with them.
     setRegionFromSelectedClips();
+    // Selecting a clip puts the line on its start, and the transport follows
+    // the line, so hitting play after picking a clip starts at that clip.
+    moveTransportToSelectionStart();
     selectTrack(clip.track);
     if (clip.waveform == nullptr)
     {
@@ -237,10 +246,8 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
     original = preview = clip.position;
     originalTrack = previewTrack = clip.track;
     sourceDuration = clip.sourceDuration;
-    const auto box = bounds(clip);
-    const auto handleWidth = std::min(7.0f, box.getWidth() * 0.25f);
-    gesture = event.position.x - box.getX() < handleWidth ? ClipGesture::trimLeft
-        : box.getRight() - event.position.x < handleWidth ? ClipGesture::trimRight : ClipGesture::move;
+    gesture = zone == ClipZone::trimStart ? ClipGesture::trimLeft
+        : zone == ClipZone::trimEnd ? ClipGesture::trimRight : ClipGesture::move;
     dragTime = timeAt(event.position.x);
     dragging = true;
 }
@@ -254,8 +261,16 @@ void Arrangement::mouseDrag(const juce::MouseEvent& event)
     }
     if (marqueeSelecting)
     {
-        marqueeBounds = {std::min(marqueeAnchor.x, event.position.x), std::min(marqueeAnchor.y, event.position.y),
-                         std::abs(event.position.x - marqueeAnchor.x), std::abs(event.position.y - marqueeAnchor.y)};
+        // The same rule a region drag follows: the rectangle covers whole grid
+        // cells, so what it catches is decided by the grid rather than by
+        // where inside a cell the pointer happened to stop.
+        const auto bypass = event.mods.isAltDown();
+        const auto anchorTime = std::max(0.0, timeAt(marqueeAnchor.x));
+        const auto pointerTime = std::max(0.0, timeAt(event.position.x));
+        const auto left = xFor(snappedDown(std::min(anchorTime, pointerTime), bypass));
+        const auto right = xFor(snappedUp(std::max(anchorTime, pointerTime), bypass));
+        marqueeBounds = {left, std::min(marqueeAnchor.y, event.position.y),
+                         std::max(1.0f, right - left), std::abs(event.position.y - marqueeAnchor.y)};
         repaint();
         return;
     }
@@ -369,11 +384,14 @@ void Arrangement::mouseUp(const juce::MouseEvent& event)
         }
         else
         {
-            const auto seconds = std::max(0.0, timeAt(event.position.x));
+            // The ruler puts down the same line the lanes do, so it snaps the
+            // same way and the transport follows it rather than the raw
+            // pointer: the playhead and the line the paste lands on cannot
+            // disagree about where the click was.
+            const auto seconds = snappedDown(std::max(0.0, timeAt(event.position.x)), event.mods.isAltDown());
+            setInsertPoint(seconds, timeSelection.active ? timeSelection.firstTrack : selectedTrack);
+            session.setPlaybackStart(seconds);
             session.edit->getTransport().setPosition(tracktion::core::TimePosition::fromSeconds(seconds));
-            // The ruler carries the insert point with the playhead, so a paste
-            // after a seek lands where the transport was just put.
-            setInsertPoint(snapped(seconds, event.mods.isAltDown()), timeSelection.active ? timeSelection.firstTrack : selectedTrack);
             updatePlayhead();
         }
         repaint();
@@ -450,10 +468,16 @@ void Arrangement::mouseMove(const juce::MouseEvent& event)
         pointerStyle = juce::MouseCursor::UpDownResizeCursor;
     else if (index >= 0)
     {
-        const auto box = bounds(clips[static_cast<size_t>(index)]);
-        const auto handle = std::min(7.0f, box.getWidth() * 0.25f);
-        pointerStyle = event.position.x - box.getX() < handle || box.getRight() - event.position.x < handle
-            ? juce::MouseCursor::LeftRightResizeCursor : juce::MouseCursor::DraggingHandCursor;
+        // The pointer says which of a clip's rows it is over: a hand on the
+        // strip that carries the clip, and the ruler's crosshair on the row
+        // that places the line, because that is the same gesture.
+        switch (clipZoneAt(event.position, clips[static_cast<size_t>(index)]))
+        {
+            case ClipZone::trimStart:
+            case ClipZone::trimEnd: pointerStyle = juce::MouseCursor::LeftRightResizeCursor; break;
+            case ClipZone::header: pointerStyle = juce::MouseCursor::DraggingHandCursor; break;
+            case ClipZone::body: pointerStyle = juce::MouseCursor::CrosshairCursor; break;
+        }
     }
     setMouseCursor(pointerStyle);
 }

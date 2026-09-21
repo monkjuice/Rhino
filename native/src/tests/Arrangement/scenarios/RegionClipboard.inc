@@ -37,6 +37,8 @@
 
             // Dragging empty lane space selects a span of it rather than
             // clearing the selection and doing nothing.
+            // The lower of a clip's two rows, which is also plain lane space
+            // wherever there is no clip: both sweep out a region.
             const auto audioY = view.lane(1).getCentreY();
             drag({view.xFor(6.0), audioY}, {view.xFor(7.0), audioY});
             require(view.timeSelection.active && view.timeSelection.isRange(),
@@ -52,6 +54,48 @@
             require(view.timeSelection.active && !view.timeSelection.isRange()
                     && close(view.timeSelection.start, 6.5),
                     "A click that never drags leaves an insert point where it landed");
+
+            // A clip is two rows, and only the upper one is the clip. The row
+            // under it is timeline like any empty lane, so the same press that
+            // puts the line down on an empty lane puts it down through a clip.
+            // A sixteenth is an eighth of a second here, so a click at 4.45
+            // tells taking the cell the pointer is inside from rounding to the
+            // line nearest it.
+            {
+                const auto lowerRow = view.lane(1).getBottom() - 8.0f;
+                drag({view.xFor(4.45), lowerRow}, {view.xFor(4.45), lowerRow});
+                require(view.selectedClipID() == te::EditItemID(),
+                        "A press on a clip's lower row selects no clip");
+                require(view.timeSelection.active && !view.timeSelection.isRange()
+                        && close(view.timeSelection.start, 4.375),
+                        "and leaves the line on the start of the cell it landed in");
+                require(close(playheadTime(session.edit->getTransport()), 4.375),
+                        "The playhead moves to the line the click put down");
+                require(clipAt(1, 4.0) != nullptr, "and the clip under the pointer has not moved");
+
+                // The same drag sweeps out a region, and it covers whole cells:
+                // each edge grows outwards from the cell the pointer is inside.
+                drag({view.xFor(4.45), lowerRow}, {view.xFor(4.7), lowerRow});
+                require(close(view.timeSelection.start, 4.375) && close(view.timeSelection.end, 4.75),
+                        "A drag across a clip's lower row covers the whole cells it touched");
+                require(view.isSelected(fixtureID), "and takes in the clip it ran across");
+
+                // Stop returns the transport to the line rather than to the top
+                // of the song, so playing again repeats the passage being
+                // worked on rather than the whole arrangement.
+                session.stop();
+                require(close(playheadTime(session.edit->getTransport()), 4.375),
+                        "Stop returns the playhead to the line the selection is on");
+
+                // The upper row is the clip: it selects, and the line goes to
+                // the clip's own start so play begins with it.
+                drag({view.xFor(4.45), clipRowY(1)}, {view.xFor(4.45), clipRowY(1)});
+                require(view.selectedClipID() == fixtureID, "A press on a clip's upper row selects the clip");
+                require(close(view.timeSelection.start, 4.0) && close(playheadTime(session.edit->getTransport()), 4.0),
+                        "and puts the line, and the playhead, on that clip's start");
+                require(close(clipAt(1, 4.0)->getPosition().time.getStart().inSeconds(), 4.0),
+                        "without moving it");
+            }
 
             // Copy takes what is inside the region; paste puts it at the
             // insert point and moves the region onto what it pasted.
@@ -73,11 +117,12 @@
                 auto* justPasted = clipAt(1, 8.0);
                 require(justPasted != nullptr, "The pasted clip is there to take hold of");
                 const auto pastedID = justPasted->itemID;
-                view.mouseDown(event({view.xFor(8.5), audioY}, {view.xFor(8.5), audioY}, false));
-                view.mouseDrag(event({view.xFor(8.5), audioY}, {view.xFor(11.5), audioY}, true));
+                const auto grabY = clipRowY(1);
+                view.mouseDown(event({view.xFor(8.5), grabY}, {view.xFor(8.5), grabY}, false));
+                view.mouseDrag(event({view.xFor(8.5), grabY}, {view.xFor(11.5), grabY}, true));
                 require(close(view.displayedTimeSelection().start, 11.0),
                         "The region follows a clip dragged straight after it was pasted");
-                view.mouseUp(event({view.xFor(8.5), audioY}, {view.xFor(11.5), audioY}, true));
+                view.mouseUp(event({view.xFor(8.5), grabY}, {view.xFor(11.5), grabY}, true));
                 require(close(session.findClip(pastedID)->getPosition().time.getStart().inSeconds(), 11.0)
                         && close(view.timeSelection.start, 11.0),
                         "And is still on it after the drop");
@@ -140,14 +185,14 @@
             // A drag previews rather than editing, so the highlight has to
             // preview with it: waiting for the drop left it sitting at the
             // position the clip was being carried away from.
-            view.mouseDown(event({view.xFor(10.5), audioY}, {view.xFor(10.5), audioY}, false));
-            view.mouseDrag(event({view.xFor(10.5), audioY}, {view.xFor(14.5), audioY}, true));
+            view.mouseDown(event({view.xFor(10.5), clipRowY(1)}, {view.xFor(10.5), clipRowY(1)}, false));
+            view.mouseDrag(event({view.xFor(10.5), clipRowY(1)}, {view.xFor(14.5), clipRowY(1)}, true));
             require(close(view.displayedTimeSelection().start, 14.0)
                     && close(view.displayedTimeSelection().end, 15.0),
                     "The region previews with a clip drag instead of waiting for the drop");
             require(close(view.timeSelection.start, 10.0),
                     "What the commands read is still where the edit actually has the clip");
-            view.mouseUp(event({view.xFor(10.5), audioY}, {view.xFor(14.5), audioY}, true));
+            view.mouseUp(event({view.xFor(10.5), clipRowY(1)}, {view.xFor(14.5), clipRowY(1)}, true));
             require(close(session.findClip(movedID)->getPosition().time.getStart().inSeconds(), 14.0),
                     "The clip moved four seconds to the right");
             require(close(view.timeSelection.start, 14.0) && close(view.timeSelection.end, 15.0),

@@ -40,6 +40,25 @@ void Arrangement::clearTimeSelection()
     regionSelecting = false;
 }
 
+// Where the line is put is where playback starts from. The transport follows
+// it only while it is stopped: a click made during playback would otherwise
+// jump the song out from under whoever made it. The session is told either
+// way, because Stop returns there rather than to the top of the song.
+void Arrangement::moveTransportToSelectionStart()
+{
+    if (!timeSelection.active)
+        return;
+    const auto seconds = std::max(0.0, timeSelection.start);
+    session.setPlaybackStart(seconds);
+    auto& transport = session.edit->getTransport();
+    if (transport.isPlaying() || session.isCountingIn())
+        return;
+    if (std::abs(transport.getPosition().inSeconds() - seconds) < 1.0e-9)
+        return;
+    transport.setPosition(tracktion::core::TimePosition::fromSeconds(seconds));
+    updatePlayhead();
+}
+
 // Selected clips stand in for a region that was never dragged out, so clicking
 // a clip and pressing Ctrl+D does exactly what dragging its span and pressing
 // Ctrl+D does.
@@ -126,10 +145,12 @@ bool Arrangement::beginRegionGesture(const juce::MouseEvent& event)
     const auto track = trackAt(event.position.y);
     if (track < 0)
         return false;
-    const auto time = snapped(std::max(0.0, timeAt(event.position.x)), event.mods.isAltDown());
+    const auto time = std::max(0.0, timeAt(event.position.x));
+    const auto bypass = event.mods.isAltDown();
     // Shift drags the existing region's far edge rather than starting a new
     // one, which is how a selection is widened without redoing it.
-    if (!event.mods.isShiftDown() || !timeSelection.active)
+    const auto extending = event.mods.isShiftDown() && timeSelection.active;
+    if (!extending)
     {
         regionAnchorTime = time;
         regionAnchorTrack = track;
@@ -137,20 +158,35 @@ bool Arrangement::beginRegionGesture(const juce::MouseEvent& event)
     // Cleared first: clearing the clip selection clears the region with it.
     setSelection({});
     regionSelecting = true;
-    setTimeSelection(regionAnchorTime, time, regionAnchorTrack, track);
-    selectRegionContents();
+    // A press that has not moved yet is a line, not a span, so both edges take
+    // the cell the pointer is inside; a shift-click is already a span, because
+    // the region it is widening was there before the press.
+    const auto start = snappedDown(std::min(regionAnchorTime, time), bypass);
+    setTimeSelection(start, extending ? snappedUp(std::max(regionAnchorTime, time), bypass) : start,
+                     regionAnchorTrack, track);
+    if (extending)
+        selectRegionContents();
     focus = Focus::region;
+    moveTransportToSelectionStart();
     return true;
 }
 
 void Arrangement::dragRegionGesture(const juce::MouseEvent& event)
 {
-    const auto time = snapped(std::max(0.0, timeAt(event.position.x)), event.mods.isAltDown());
+    const auto time = std::max(0.0, timeAt(event.position.x));
     auto track = trackAt(event.position.y);
     if (track < 0)
         track = event.position.y < lanesTop ? 0 : std::max(0, session.trackCount() - 1);
-    setTimeSelection(regionAnchorTime, time, regionAnchorTrack, track);
+    const auto bypass = event.mods.isAltDown();
+    // Until the pointer has actually travelled, the gesture is still the click
+    // that started it and leaves a line rather than a one-cell span.
+    const auto dragged = event.getDistanceFromDragStart() >= 3;
+    const auto first = std::min(regionAnchorTime, time);
+    const auto last = std::max(regionAnchorTime, time);
+    const auto start = snappedDown(first, bypass);
+    setTimeSelection(start, dragged ? snappedUp(last, bypass) : start, regionAnchorTrack, track);
     selectRegionContents();
+    moveTransportToSelectionStart();
     repaint();
 }
 
@@ -158,6 +194,7 @@ void Arrangement::endRegionGesture()
 {
     regionSelecting = false;
     selectRegionContents();
+    moveTransportToSelectionStart();
     if (status && timeSelection.isRange())
     {
         const auto tracks = timeSelection.lastTrack - timeSelection.firstTrack + 1;
@@ -195,8 +232,15 @@ void Arrangement::paintTimeSelection(juce::Graphics& g)
     if (shown.isRange() && right > left)
     {
         const juce::Rectangle<float> box {left, top, right - left, bottom - top};
+        // The wash covers a clip's lower row and stops at its header, so the
+        // strip that names the clip and carries it stays legible under a
+        // selection that runs across it.
+        juce::RectangleList<float> wash(box);
+        for (const auto& clip : clips)
+            if (shown.covers(displayedTrack(clip)))
+                wash.subtract(clipHeaderBounds(clip));
         g.setColour(juce::Colour(0x2ac6d58c));
-        g.fillRect(box);
+        g.fillRectList(wash);
         g.setColour(juce::Colour(0xffc6d58c));
         g.drawRect(box, 1.0f);
     }

@@ -140,7 +140,7 @@
             clickCard(restingCard);
             const auto span = session.audioClipMix(id);
             const auto onClip = juce::Point<float>(view.xFor((span.startSeconds + span.endSeconds) * 0.5),
-                                                   view.lane(1).getCentreY());
+                                                   clipRowY(1));
             focusedCount = 0;
             movedCount = 0;
             view.mouseDown(cardEvent(onClip, onClip, false));
@@ -243,8 +243,8 @@
         const auto movedDuplicateID = movedDuplicate->itemID;
         view.sync();
         view.setSelection({movedDuplicateID}, movedDuplicateID);
-        drag({view.xFor(movedDuplicate->getPosition().time.getStart().inSeconds() + 0.1), view.lane(1).getCentreY()},
-             {view.xFor(0.5), view.lane(2).getCentreY()});
+        drag({view.xFor(movedDuplicate->getPosition().time.getStart().inSeconds() + 0.1), clipRowY(1)},
+             {view.xFor(0.5), clipRowY(2)});
         require(te::getAudioTracks(*session.edit)[2]->findClipForID(movedDuplicateID) != nullptr,
                 "Dragging a duplicated audio clip to a newly-created track preserves clip identity");
         require(renderClipRms(*session.findAudioClip(movedDuplicateID)) > 0.01f,
@@ -256,7 +256,7 @@
         view.sync();
         scenario("track management: cross-track move");
         view.setSelection({id}, id);
-        drag({view.xFor(0.2), view.lane(1).getCentreY()}, {view.xFor(0.5), view.lane(2).getCentreY()});
+        drag({view.xFor(0.2), clipRowY(1)}, {view.xFor(0.5), clipRowY(2)});
         require(te::getAudioTracks(*session.edit)[1]->getClips().isEmpty(), "Dragging an audio clip to another lane removes it from the source track");
         require(te::getAudioTracks(*session.edit)[2]->findClipForID(id) != nullptr, "Dragging an audio clip to another lane preserves clip identity on the target track");
         require(close(session.findAudioClip(id)->getPosition().time.getStart().inSeconds(), 0.25), "Cross-track audio drag also updates the clip time");
@@ -269,7 +269,7 @@
         session.applyPatternPreset(Session::PatternPreset::WavePluck);
         view.sync();
         view.setSelection({id}, id);
-        drag({view.xFor(0.2), view.lane(1).getCentreY()}, {view.xFor(0.5), view.lane(0).getCentreY()});
+        drag({view.xFor(0.2), clipRowY(1)}, {view.xFor(0.5), clipRowY(0)});
         require(te::getAudioTracks(*session.edit)[0]->findClipForID(id) != nullptr,
                 "Dragging an audio clip onto an instrument lane moves it there");
         require(renderClipRms(*session.findAudioClip(id)) > 0.01f,
@@ -282,13 +282,13 @@
         scenario("track management: move during playback");
         session.togglePlayback();
         require(session.edit->getTransport().isPlaying(), "Transport starts before cross-track clip drag");
-        drag({view.xFor(0.2), view.lane(1).getCentreY()}, {view.xFor(0.5), view.lane(2).getCentreY()});
+        drag({view.xFor(0.2), clipRowY(1)}, {view.xFor(0.5), clipRowY(2)});
         require(session.edit->getTransport().isPlaying(), "Cross-track clip drag keeps playback running");
         session.stop();
         session.undo();
         view.sync();
         scenario("track management: drop-created track");
-        drag({view.xFor(0.2), view.lane(1).getCentreY()}, {view.xFor(0.5), view.lane(session.trackCount() - 1).getBottom() + 12.0f});
+        drag({view.xFor(0.2), clipRowY(1)}, {view.xFor(0.5), view.lane(session.trackCount() - 1).getBottom() + 12.0f});
         require(session.trackCount() == 4, "Dragging an audio clip below the last lane creates a new track");
         require(te::getAudioTracks(*session.edit)[3]->findClipForID(id) != nullptr, "Drop-created track receives the dragged audio clip");
         require(renderClipRms(*session.findAudioClip(id)) > 0.01f, "Drop-created track moved clip still renders audible audio");

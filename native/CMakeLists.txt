@@ -96,6 +96,7 @@ target_sources(RhinoNative PRIVATE
     src/ProjectFiles.cpp
     # Tests
     src/tests/SelfTest.cpp
+    src/tests/AutoTuneTest.cpp
     src/tests/Pattern/DeviceRackTest.cpp
     src/tests/Pattern/WorkflowTest.cpp
     src/tests/Arrangement/ClipGeometryTest.cpp

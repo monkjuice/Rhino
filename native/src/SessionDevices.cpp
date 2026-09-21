@@ -285,6 +285,19 @@ juce::Result Session::addDrumKit(DrumKit kit, int trackIndex)
     return juce::Result::ok();
 }
 
+// A device with a face of its own needs the device itself, not a copy of its
+// numbers: a meter reads what the DSP is doing right now, and a scale is a
+// dozen booleans that no parameter list has a shape for.  Callers cast to the
+// device they know about and cope with a null, which is what they get for a
+// slot holding something else or nothing.
+te::Plugin* Session::devicePlugin(int track, int slot) const
+{
+    auto* list = pluginListForTrack(track);
+    if (list == nullptr || !juce::isPositiveAndBelow(slot, list->size()))
+        return nullptr;
+    return (*list)[slot];
+}
+
 std::vector<Session::DeviceSlot> Session::deviceSlots(int track) const
 {
     std::vector<DeviceSlot> slots;

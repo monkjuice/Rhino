@@ -297,6 +297,9 @@ public:
     juce::Result setTrackGroupCollapsed(int groupId, bool collapsed);
     std::vector<DeviceSlot> deviceSlots(int track) const;
     std::vector<DeviceParameter> deviceParameters(int track, int slot) const;
+    // For a device whose editor needs more than a list of knobs -- a live
+    // meter, or a scale. Null unless that slot holds a plugin.
+    te::Plugin* devicePlugin(int track, int slot) const;
     DeviceTarget lastTouchedDeviceParameter() const { return lastTouchedParameter; }
     juce::Result beginDeviceParameterGesture(int track, int slot, int parameter);
     juce::Result setDeviceParameter(int track, int slot, int parameter, float value);
@@ -742,4 +745,9 @@ int runSelfTest();
 int runPatternTest();
 int runArrangementTest();
 int runArrangementGeometryTest();
+// Rhino Tune's checks are their own translation unit because they measure
+// rendered audio rather than reading state back, and that needs a page of
+// scaffolding -- a transform, a tone generator -- that nothing else wants.
+// runSelfTest calls it.
+void checkAutoTuneDsp(Session&);
 }

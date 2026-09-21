@@ -386,6 +386,8 @@ int runSelfTest()
             require(played.empty());
         }
 
+        checkAutoTuneDsp(session);
+
         session.releaseAudioDevice();
         return 0;
     }

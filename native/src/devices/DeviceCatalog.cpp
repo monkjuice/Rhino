@@ -4,6 +4,7 @@
 #include "audio/UtilityDevice.h"
 #include "audio/RhinoSpaceDevice.h"
 #include "audio/RhinoBloomDevice.h"
+#include "audio/AutoTuneDevice.h"
 #include "midi/RhinoArpDevice.h"
 
 namespace rhino
@@ -70,6 +71,10 @@ std::vector<DeviceDescriptor> buildCatalog()
          DeviceKind::AudioEffect, "Rhino", "Chorus, clouds, plate, colour",
          0, {}, true, false, false});
 
+    add({"RhinoTune", AutoTuneDevice::xmlTypeName, "Rhino Tune", "Rhino Tune (auto-tune)",
+         DeviceKind::AudioEffect, "Rhino", "Vocal pitch correction, formants and vibrato",
+         0xffb2739c, {}, true, false, false});
+
     // ---- MIDI FX -----------------------------------------------------------
     add({"RhinoArp", RhinoArpDevice::xmlTypeName, "Rhino Arp", {},
          DeviceKind::MidiEffect, {}, "Drop before an instrument to arpeggiate it",
@@ -129,6 +134,7 @@ void DeviceCatalog::registerBuiltInTypes(te::Engine& engine)
     plugins.createBuiltInType<DrumDevice>();
     plugins.createBuiltInType<RhinoSpaceDevice>();
     plugins.createBuiltInType<RhinoBloomDevice>();
+    plugins.createBuiltInType<AutoTuneDevice>();
     plugins.createBuiltInType<RhinoArpDevice>();
     plugins.createBuiltInType<RhinoWaveDevice>();
 }

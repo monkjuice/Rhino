@@ -67,6 +67,42 @@ juce::File Session::recordingDirectory() const
         .getChildFile("Rhino").getChildFile("Recordings");
 }
 
+te::MidiInputDevice* Session::midiInputDevice() const
+{
+    auto& deviceManager = engine.getDeviceManager();
+    if (auto* chosen = deviceManager.getDefaultMidiInDevice())
+        return chosen;
+    // Nothing chosen: the first that is switched on, and failing that the
+    // first there is. On a machine with one keyboard those are the same thing.
+    for (const auto& candidate : deviceManager.getMidiInDevices())
+        if (candidate != nullptr && candidate->isEnabled())
+            return candidate.get();
+    for (const auto& candidate : deviceManager.getMidiInDevices())
+        if (candidate != nullptr)
+            return candidate.get();
+    return nullptr;
+}
+
+bool Session::hasMidiInput() const
+{
+    return midiInputDevice() != nullptr;
+}
+
+// The engine's own keyboard state is the entry a MIDI device's notes take, so
+// a note put in here is indistinguishable from a played one by the time it
+// reaches a track.
+void Session::sendMidiInputNote(int midiNote, int velocity, bool isNoteOn)
+{
+    jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
+    auto* device = midiInputDevice();
+    if (device == nullptr || !juce::isPositiveAndBelow(midiNote, 128))
+        return;
+    if (isNoteOn)
+        device->keyboardState.noteOn(1, midiNote, juce::jlimit(0.0f, 1.0f, velocity / 127.0f));
+    else
+        device->keyboardState.noteOff(1, midiNote, 0.0f);
+}
+
 Session::RecordInput Session::trackRecordInput(int trackIndex) const
 {
     const auto tracks = te::getAudioTracks(*edit);
@@ -163,17 +199,7 @@ juce::Result Session::applyRecordArming()
             for (auto* candidate : deviceManager.getWaveInputDevices())
                 if (candidate != nullptr) { wave = candidate; break; }
     }
-    te::MidiInputDevice* midi = nullptr;
-    if (wantsMidi)
-    {
-        midi = deviceManager.getDefaultMidiInDevice();
-        if (midi == nullptr)
-            for (const auto& candidate : deviceManager.getMidiInDevices())
-                if (candidate != nullptr && candidate->isEnabled()) { midi = candidate.get(); break; }
-        if (midi == nullptr)
-            for (const auto& candidate : deviceManager.getMidiInDevices())
-                if (candidate != nullptr) { midi = candidate.get(); break; }
-    }
+    te::MidiInputDevice* midi = wantsMidi ? midiInputDevice() : nullptr;
 
     // Monitoring is decided before anything is armed, because the engine makes
     // a live input audible as soon as a destination is record-enabled and the

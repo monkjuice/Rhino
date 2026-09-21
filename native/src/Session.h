@@ -327,6 +327,14 @@ public:
     void toggleTrackArmed(int track);
     bool anyTrackArmed() const;
     bool isRecording() const;
+    // Plays a note into the MIDI input, exactly where a controller's would
+    // arrive. Everything downstream therefore treats it as one: arming decides
+    // which track hears it, monitoring whether it is audible, and recording
+    // captures it. Serves the computer keyboard, and would serve anything else
+    // that wants to play without being a MIDI device.
+    void sendMidiInputNote(int midiNote, int velocity, bool isNoteOn);
+    // True when there is a MIDI input to send to at all.
+    bool hasMidiInput() const;
     // Hearing yourself. These are Live's three Monitor settings under another
     // spelling, and the engine happens to carry exactly the same three.
     //
@@ -616,6 +624,10 @@ private:
     // the engine's input destinations are rebuilt from it rather than being a
     // second place the answer lives.
     juce::Result applyRecordArming();
+    // The MIDI input Rhino records from and plays into: the one chosen in
+    // Audio settings, or the first that is there. One rule, so what a note is
+    // played into is what a recording is captured from.
+    te::MidiInputDevice* midiInputDevice() const;
     void clearRecordArming();
     void beginTransportRecording();
     // The tidy-up and the notification, with no question about whether the

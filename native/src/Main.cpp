@@ -8,6 +8,7 @@
 #include "DeviceRack.h"
 #include "AudioClipPanel.h"
 #include "Playhead.h"
+#include "ComputerKeyboard.h"
 #include "StartupScreen.h"
 #include "TransportDisplay.h"
 #include <cmath>
@@ -244,6 +245,17 @@ public:
             toggle->setColour(juce::TextButton::textColourOffId, juce::Colour(0xffaeb8c1));
             toggle->setColour(juce::TextButton::textColourOnId, juce::Colour(0xffdce5ea));
         }
+        // The typing keyboard plays the MIDI input, so it is caught wherever
+        // the focus happens to be. A text editor with focus consumes its own
+        // keys and never reaches a listener, which is what keeps typing a
+        // track name from playing a chord.
+        computerKeyboard.note = [this](int midiNote, int velocity, bool isNoteOn)
+        {
+            session.sendMidiInputNote(midiNote, velocity, isNoteOn);
+        };
+        computerKeyboard.status = [this](const juce::String& message) { logStatus(message); };
+        for (auto* component : std::initializer_list<juce::Component*>{this, &arrangement, &grid, &audioClip, &rack})
+            computerKeyboard.listenTo(*component);
         logStatus("PATTERN 1  /  4OSC     Draw notes, then press Play");
         infoView.setMultiLine(true, true);
         infoView.setReadOnly(true);
@@ -896,6 +908,7 @@ private:
         menu.addSeparator();
         menu.addItem(3, "Clear pattern");
         menu.addSeparator();
+        menu.addItem(11, "Computer keyboard plays MIDI       M", true, computerKeyboard.isEnabled());
         menu.addItem(5, "Preview library sounds", true, session.previewEnabled());
         juce::PopupMenu monitoring;
         for (const auto mode : {Session::InputMonitoring::off, Session::InputMonitoring::automatic,
@@ -931,6 +944,7 @@ private:
                     safe->logStatus(on ? "Clicking a library sound plays it"
                                        : "Library sounds are no longer played when clicked");
                 }
+                else if (result == 11) safe->computerKeyboard.toggle();
                 else if (result >= 20 && result <= 22)
                 {
                     const auto mode = static_cast<Session::InputMonitoring>(result - 20);
@@ -987,7 +1001,7 @@ private:
                     juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon, "Keyboard shortcuts",
                         "Space  Play/Pause\nCtrl+N  New project\nCtrl+O  Open project\nCtrl+S  Save project\nCtrl+Shift+S  Save as\n"
                         "Ctrl+Shift+E  Export WAV\nCtrl+Z  Undo\nCtrl+Y / Ctrl+Shift+Z  Redo\nCtrl+F  Search browser\nCtrl+A  Add a clip to the focused track\nDouble-click a lane  Add a clip there\n"
-                        "F9  Record into the armed tracks / Click the dot on a track card to arm it\nCtrl+T  Add a track of the kind last picked from the + menu\nF2  Rename the selected track or group\nCtrl+G  Group the selected tracks\nCtrl+Shift+G  Ungroup\n"
+                        "F9  Record into the armed tracks / Click the dot on a track card to arm it\nM  Play MIDI from the typing keyboard: A-P are notes, Z/X octave, C/V velocity\nCtrl+T  Add a track of the kind last picked from the + menu\nF2  Rename the selected track or group\nCtrl+G  Group the selected tracks\nCtrl+Shift+G  Ungroup\n"
                         "Drag an empty lane  Select a span of the timeline\nCtrl+X / Ctrl+C / Ctrl+V  Cut, copy and paste the selection\n"
                         "Ctrl+D  Duplicate it directly after itself\nDelete  Empty the selection\n"
                         "?  Show/hide Info View\nF12  Full screen");
@@ -1234,6 +1248,7 @@ private:
     juce::ComboBox editorResolution;
     juce::TextButton editorZoomOut, editorZoomIn;
     juce::ComboBox scaleHighlight;
+    ComputerKeyboard computerKeyboard;
     juce::Component::SafePointer<juce::DialogWindow> audioSettings;
     juce::TextButton fileMenu {"File"}, editMenu {"Edit"}, viewMenu {"View"}, helpMenu {"Help"};
     ProjectFiles files;

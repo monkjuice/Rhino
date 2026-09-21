@@ -1,6 +1,7 @@
 #include "../Session.h"
 #include "../BrowserPanel.h"
 #include "../CountInClick.h"
+#include "../ComputerKeyboard.h"
 #include "ContentLibrary.h"
 // A test drives the DSP directly, so unlike the rest of the app it needs the
 // device definitions rather than their catalog entries.
@@ -319,6 +320,59 @@ int runSelfTest()
             none.bars = 0;
             click.start(none, rate, [&immediate] { immediate = true; });
             require(immediate && !click.isRunning() && click.barsRemaining() == 0);
+        }
+
+        // The computer keyboard, as far as it goes without a keyboard being
+        // held down. Which notes sound is read from the real key state and is
+        // not reachable here; the toggle, the octave, the velocity and which
+        // keys it takes are all decisions it makes on its own.
+        {
+            ComputerKeyboard keys;
+            std::vector<std::pair<int, bool>> played;
+            keys.note = [&played](int midiNote, int, bool on) { played.emplace_back(midiNote, on); };
+            const auto press = [&keys](int code, juce::ModifierKeys mods = {})
+            {
+                return keys.keyPressed(juce::KeyPress(code, mods, 0), nullptr);
+            };
+            require(!keys.isEnabled());
+            // Off, it takes the toggle and nothing else, so every letter
+            // shortcut still belongs to the editor underneath.
+            require(press('M'));
+            require(keys.isEnabled());
+            require(!press('Q'));
+
+            const auto octave = keys.octave();
+            const auto velocity = keys.velocity();
+            require(press('X') && keys.octave() == octave + 1);
+            require(press('Z') && keys.octave() == octave);
+            require(press('V') && keys.velocity() > velocity);
+            require(press('C') && keys.velocity() == velocity);
+            // A note key is swallowed so the letter cannot also reach the
+            // shortcut it carries; the note itself comes from the key state.
+            for (const auto held : {'A', 'W', 'S', 'E', 'D', 'F', 'T', 'G', 'Y', 'H', 'U', 'J', 'K', 'O', 'L', 'P'})
+                require(press(held));
+            require(!press('Q') && !press('R'));
+            // A shortcut is still a shortcut: Ctrl+C has to copy, not drop the
+            // velocity, or the keyboard would make the editor unusable.
+            require(!press('C', juce::ModifierKeys::commandModifier));
+            require(!press('V', juce::ModifierKeys::commandModifier));
+            require(keys.velocity() == velocity);
+
+            // Neither end runs away.
+            for (int i = 0; i < 40; ++i) press('X');
+            require(keys.octave() == ComputerKeyboard::highestOctave);
+            for (int i = 0; i < 40; ++i) press('Z');
+            require(keys.octave() == ComputerKeyboard::lowestOctave);
+            for (int i = 0; i < 40; ++i) press('V');
+            require(keys.velocity() == ComputerKeyboard::maximumVelocity);
+            for (int i = 0; i < 40; ++i) press('C');
+            require(keys.velocity() == ComputerKeyboard::minimumVelocity);
+
+            require(press('M') && !keys.isEnabled());
+            // Switched off, the letters go back to being shortcuts.
+            require(!press('A'));
+            // Nothing was ever sounded, so nothing should have been released.
+            require(played.empty());
         }
 
         session.releaseAudioDevice();

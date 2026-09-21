@@ -89,6 +89,7 @@ target_sources(RhinoNative PRIVATE
     src/DeviceRack.cpp
     src/Playhead.cpp
     src/CountInClick.cpp
+    src/ComputerKeyboard.cpp
     # App
     src/Main.cpp
     src/TransportDisplay.cpp

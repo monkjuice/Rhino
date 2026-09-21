@@ -447,6 +447,66 @@ juce::Result Session::toggleRecording()
     return juce::Result::ok();
 }
 
+// The engine keeps a short fifo of incoming notes per recording target,
+// timestamped in edit time, precisely so a UI can draw a take while it is
+// being made. This drains it and turns the note on/off pairs into spans. A
+// note whose key is still down has no end yet and is left open, so the
+// arrangement can draw it out to the playhead.
+void Session::pollRecordingNotes()
+{
+    if (recordingStart < 0.0)
+        return;
+    auto* context = edit->getCurrentPlaybackContext();
+    if (context == nullptr)
+        return;
+    const auto tracks = te::getAudioTracks(*edit);
+    liveNotes.resize(static_cast<size_t>(tracks.size()));
+    for (int track = 0; track < tracks.size(); ++track)
+    {
+        if (!isTrackArmed(track) || trackRecordInput(track) != RecordInput::midi)
+            continue;
+        auto& notes = liveNotes[static_cast<size_t>(track)];
+        for (auto* input : context->getAllInputs())
+        {
+            if (input == nullptr)
+                continue;
+            auto fifo = input->getRecordingNotes(tracks[track]->itemID);
+            if (fifo == nullptr)
+                continue;
+            juce::MidiMessage message;
+            while (fifo->pop(message))
+            {
+                const auto time = message.getTimeStamp();
+                if (message.isNoteOn())
+                {
+                    notes.push_back({time, -1.0, message.getNoteNumber()});
+                    ++liveNoteRevision;
+                }
+                else if (message.isNoteOff())
+                {
+                    // The most recent still-open note of that pitch, so a
+                    // repeated note closes the one it belongs to.
+                    for (auto note = notes.rbegin(); note != notes.rend(); ++note)
+                        if (note->pitch == message.getNoteNumber() && note->isHeld())
+                        {
+                            note->endSeconds = std::max(time, note->startSeconds);
+                            ++liveNoteRevision;
+                            break;
+                        }
+                }
+            }
+        }
+    }
+}
+
+const std::vector<Session::RecordingNote>& Session::recordingNotes(int track) const
+{
+    static const std::vector<RecordingNote> none;
+    if (!juce::isPositiveAndBelow(track, static_cast<int>(liveNotes.size())))
+        return none;
+    return liveNotes[static_cast<size_t>(track)];
+}
+
 void Session::beginTransportRecording()
 {
     auto& transport = edit->getTransport();
@@ -460,6 +520,8 @@ void Session::beginTransportRecording()
             clipsBeforeRecording.push_back(clip->itemID);
     recordingStart = std::max(0.0, transport.getPosition().inSeconds());
     recordingStarted = false;
+    liveNotes.clear();
+    ++liveNoteRevision;
     edit->getUndoManager().beginNewTransaction("Record");
     transport.record(false, false);
 }
@@ -498,6 +560,9 @@ void Session::finishRecording()
         return;
     const auto changed = tidyRecordedClips();
     clipsBeforeRecording.clear();
+    // The clips the engine just wrote say the same thing these did, and better.
+    liveNotes.clear();
+    ++liveNoteRevision;
     recordingStart = -1.0;
     recordingStarted = false;
     refreshLoop();

@@ -29,10 +29,21 @@ namespace rhino
 class ComputerKeyboard final : public juce::KeyListener
 {
 public:
-    // Live's layout: the home row is the white keys and the row above it the
-    // black ones, so the shape of a piano is visible in the shape of the keys.
-    // A through P is sixteen semitones, an octave and a fourth.
-    static constexpr int lowestOctave = 0, highestOctave = 7;
+    // The mapping is juce::MidiKeyboardComponent's default - "awsedftgyhujkolp;",
+    // the home row as the white keys and the row above as the black ones -
+    // which is exactly what Forge's own on-screen keyboard plays from. That is
+    // deliberate: a part played into Forge's window and a part recorded through
+    // Rhino have to come out in the same key, and the surest way to keep two
+    // mappings identical is not to write a second one.
+    //
+    // The octave numbering and its limits come from Forge too. A note is
+    // 12 * octave + offset, so octave 5 starts on middle C, and the reach is
+    // clamped to the octaves whose whole seventeen-key span lands inside the
+    // keys Forge draws (A1 to C8).
+    static constexpr int lowestOctave = 3, highestOctave = 7, defaultOctave = 5;
+    // Velocity is Rhino's own addition. Forge has no key for it, but C and V
+    // are not in the mapping, so nothing collides and a take is worth being
+    // able to play quietly.
     static constexpr int minimumVelocity = 1, maximumVelocity = 127;
 
     // Note on and note off, in MIDI note numbers.
@@ -66,9 +77,7 @@ private:
     int noteFor(int semitone) const;
 
     bool enabled = false;
-    // Octave 3 puts the lowest key on C3, which is where the note editor's own
-    // lowest row sits.
-    int baseOctave = 3;
+    int baseOctave = defaultOctave;
     int noteVelocity = 100;
     std::set<int> sounding;
 };

@@ -337,21 +337,32 @@ int runSelfTest()
             require(!keys.isEnabled());
             // Off, it takes the toggle and nothing else, so every letter
             // shortcut still belongs to the editor underneath.
-            require(press('M'));
+            require(press('m'));
             require(keys.isEnabled());
-            require(!press('Q'));
+            require(!press('q'));
 
+            // The octave numbering is Forge's, so the two keyboards agree on
+            // what a key plays rather than being a semitone or an octave apart.
+            require(keys.octave() == ComputerKeyboard::defaultOctave);
             const auto octave = keys.octave();
             const auto velocity = keys.velocity();
-            require(press('X') && keys.octave() == octave + 1);
-            require(press('Z') && keys.octave() == octave);
-            require(press('V') && keys.velocity() > velocity);
-            require(press('C') && keys.velocity() == velocity);
+            require(press('x') && keys.octave() == octave + 1);
+            require(press('z') && keys.octave() == octave);
+            require(press('v') && keys.velocity() > velocity);
+            require(press('c') && keys.velocity() == velocity);
             // A note key is swallowed so the letter cannot also reach the
             // shortcut it carries; the note itself comes from the key state.
-            for (const auto held : {'A', 'W', 'S', 'E', 'D', 'F', 'T', 'G', 'Y', 'H', 'U', 'J', 'K', 'O', 'L', 'P'})
+            for (const auto held : {'a', 'w', 's', 'e', 'd', 'f', 't', 'g', 'y', 'h', 'u', 'j', 'k', 'o', 'l', 'p', ';'})
                 require(press(held));
-            require(!press('Q') && !press('R'));
+            require(!press('q') && !press('r'));
+            // A function key must never fold onto a letter. F9's code is
+            // 0x10078, and squeezing that into a character gives 'x', which
+            // would turn the record key into an octave shift.
+            const auto beforeFunctionKeys = keys.octave();
+            require(!press(juce::KeyPress::F9Key));
+            require(!press(juce::KeyPress::F2Key));
+            require(!press(juce::KeyPress::F12Key));
+            require(keys.octave() == beforeFunctionKeys);
             // A shortcut is still a shortcut: Ctrl+C has to copy, not drop the
             // velocity, or the keyboard would make the editor unusable.
             require(!press('C', juce::ModifierKeys::commandModifier));
@@ -359,18 +370,18 @@ int runSelfTest()
             require(keys.velocity() == velocity);
 
             // Neither end runs away.
-            for (int i = 0; i < 40; ++i) press('X');
+            for (int i = 0; i < 40; ++i) press('x');
             require(keys.octave() == ComputerKeyboard::highestOctave);
-            for (int i = 0; i < 40; ++i) press('Z');
+            for (int i = 0; i < 40; ++i) press('z');
             require(keys.octave() == ComputerKeyboard::lowestOctave);
-            for (int i = 0; i < 40; ++i) press('V');
+            for (int i = 0; i < 40; ++i) press('v');
             require(keys.velocity() == ComputerKeyboard::maximumVelocity);
-            for (int i = 0; i < 40; ++i) press('C');
+            for (int i = 0; i < 40; ++i) press('c');
             require(keys.velocity() == ComputerKeyboard::minimumVelocity);
 
-            require(press('M') && !keys.isEnabled());
+            require(press('m') && !keys.isEnabled());
             // Switched off, the letters go back to being shortcuts.
-            require(!press('A'));
+            require(!press('a'));
             // Nothing was ever sounded, so nothing should have been released.
             require(played.empty());
         }

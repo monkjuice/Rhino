@@ -330,6 +330,36 @@ void Arrangement::paint(juce::Graphics& g)
             g.fillRect(band);
             g.setColour(juce::Colour(0xffe4443a));
             g.fillRect(band.withWidth(2.0f));
+            // The notes as they are played. They are drawn in the colour and
+            // the layout the clip will use, so the take does not change
+            // appearance at the moment it becomes a clip.
+            const auto& live = session.recordingNotes(track);
+            if (live.empty() || band.getHeight() < 10.0f)
+                continue;
+            auto lowPitch = Session::lowestNote;
+            auto highPitch = Session::lowestNote + Session::pitches - 1;
+            for (const auto& note : live)
+            {
+                lowPitch = std::min(lowPitch, note.pitch);
+                highPitch = std::max(highPitch, note.pitch);
+            }
+            const auto noteArea = band.withTrimmedTop(std::min(14.0f, band.getHeight() * 0.25f)).reduced(0.0f, 3.0f);
+            const auto noteHeight = std::max(3.0f, noteArea.getHeight() / Session::pitches - 1.0f);
+            for (const auto& note : live)
+            {
+                const auto noteLeft = xFor(note.startSeconds);
+                const auto noteRight = note.isHeld() ? std::max(noteLeft + 2.0f, x2)
+                                                     : std::max(noteLeft + 2.0f, xFor(note.endSeconds));
+                const auto pitchScale = static_cast<float>(note.pitch - lowPitch)
+                    / static_cast<float>(std::max(1, highPitch - lowPitch));
+                const juce::Rectangle<float> noteBox {
+                    noteLeft, noteArea.getBottom() - noteHeight - pitchScale * (noteArea.getHeight() - noteHeight),
+                    noteRight - noteLeft, noteHeight};
+                if (!noteBox.intersects(dirty))
+                    continue;
+                g.setColour(juce::Colour(0xffc6d58c));
+                g.fillRect(noteBox);
+            }
         }
     }
     // Over the clips and under the marquee: the region is the thing the

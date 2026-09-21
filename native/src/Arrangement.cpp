@@ -486,6 +486,54 @@ void Arrangement::updatePlayhead()
     }
     movePlayhead(*this, playhead, next,
                  getLocalBounds().withTrimmedTop(static_cast<int>(rulerTop)).withTrimmedBottom(18));
+    // A MIDI take has no clip until the transport stops, so what is being
+    // played is read from the engine's live note fifo and drawn where the clip
+    // will be. Draining it is lock-free and costs nothing when idle.
+    if (session.isRecording() && session.recordingStartSeconds() >= 0.0)
+    {
+        session.pollRecordingNotes();
+        repaintRecordingBand();
+    }
+    else if (recordingPaintedTo >= 0.0f)
+    {
+        recordingPaintedTo = -1.0f;
+        paintedNoteRevision = -1;
+    }
+}
+
+void Arrangement::repaintRecordingBand()
+{
+    const auto right = xFor(playheadTime(session.edit->getTransport()));
+    const auto revision = session.recordingNotesRevision();
+    // A note arrives stamped with the time the audio thread saw it, which can
+    // be slightly behind the line being drawn, and a note still held grows
+    // backwards from nothing. Either way the picture changes behind the
+    // playhead as well as at it, so a note starting or ending repaints the
+    // whole band. That happens at the rate a person plays; every other frame
+    // repaints only what the band has grown by.
+    const auto notesChanged = revision != paintedNoteRevision;
+    const auto from = notesChanged || recordingPaintedTo < 0.0f
+                          ? xFor(session.recordingStartSeconds())
+                          : recordingPaintedTo;
+    paintedNoteRevision = revision;
+    recordingPaintedTo = right;
+    if (right < from)
+        return;
+    const juce::Rectangle<float> span {from - 2.0f, 0.0f, right - from + 4.0f, 0.0f};
+    for (int track = 0; track < session.trackCount(); ++track)
+    {
+        if (!isTrackArmed(track) || isTrackHidden(track))
+            continue;
+        const auto row = lane(track);
+        if (row.getHeight() <= 0.0f)
+            continue;
+        const auto damage = span.withY(row.getY()).withHeight(row.getHeight())
+                                .getIntersection({headerWidth, lanesTop,
+                                                  static_cast<float>(getWidth()) - headerWidth - 14.0f,
+                                                  laneContentHeight()});
+        if (!damage.isEmpty())
+            repaint(damage.getSmallestIntegerContainer());
+    }
 }
 
 GridDivision Arrangement::resolvedGridDivision() const

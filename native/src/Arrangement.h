@@ -154,6 +154,11 @@ private:
     void nudgeSelected(int direction, bool byBar);
     juce::Result applyBrowserDrop(const juce::String& description, int track, double startSeconds = 0.0, bool insertPreset = false);
     void updatePlayhead();
+    // A take is drawn as it is played, so the band has to be repainted as it
+    // grows. The playhead's own damage is two narrow strips at its old and new
+    // positions and not the span between them, so it cannot be relied on to
+    // fill the band in.
+    void repaintRecordingBand();
     void showGridMenu();
     void showAddTrackMenu();
     void addTrackOfType(Session::TrackType);
@@ -312,6 +317,11 @@ private:
     int automationRow = -1, automationPoint = -1;
     std::vector<Session::AutomationPoint> automationPoints;
     float playhead = -1.0f;
+    // How far the recording band has been painted, and the note revision it
+    // was painted at, so an ordinary frame repaints only the sliver the band
+    // has grown by. Negative means nothing is being recorded.
+    float recordingPaintedTo = -1.0f;
+    juce::int64 paintedNoteRevision = -1;
     // Card gestures. The bottom edge resizes the row it belongs to; the body
     // of the card carries the track to a new place in the stack. Only one of
     // them can be running, and both preview before they touch the session.

@@ -357,6 +357,27 @@ public:
     // Where the recording started, so the arrangement can draw the span being
     // recorded. Negative when nothing is being recorded.
     double recordingStartSeconds() const { return recordingStart; }
+    // What is being played, while it is being played. The engine writes no
+    // clip until the transport stops, so a take would otherwise be invisible
+    // until it was over; it does keep a small fifo of the incoming notes for
+    // exactly this purpose, and these turn that into something drawable.
+    struct RecordingNote
+    {
+        double startSeconds = 0.0;
+        // Negative while the key is still down, so a note being held is drawn
+        // out to the playhead rather than given an end it does not have yet.
+        double endSeconds = -1.0;
+        int pitch = 0;
+        bool isHeld() const { return endSeconds < 0.0; }
+    };
+    // Drains the engine's fifo into the lists below. Cheap, lock-free, and
+    // safe to call when nothing is recording - the arrangement calls it once
+    // a frame while a take is running.
+    void pollRecordingNotes();
+    const std::vector<RecordingNote>& recordingNotes(int track) const;
+    // Bumped whenever a note starts or ends, so a view can tell that the
+    // picture changed without comparing the lists.
+    juce::int64 recordingNotesRevision() const { return liveNoteRevision; }
     // The count-in, in bars: zero is off and four is the longest. It counts
     // with the playhead standing still, so the transport starts on the beat
     // after the last one counted rather than rolling in from before it.
@@ -707,6 +728,9 @@ private:
     // The clips the armed tracks held when recording started, so the ones the
     // engine adds afterwards can be told apart from the ones already there.
     std::vector<te::EditItemID> clipsBeforeRecording;
+    // One list per track, filled only for the tracks actually recording MIDI.
+    std::vector<std::vector<RecordingNote>> liveNotes;
+    juce::int64 liveNoteRevision = 0;
     double recordingStart = -1.0;
     // record() is asked for on the message thread and begins on the audio
     // thread, so there is a window in which a recording has been started and

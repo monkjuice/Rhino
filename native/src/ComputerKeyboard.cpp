@@ -4,31 +4,35 @@ namespace rhino
 {
 namespace
 {
-struct KeyNote { int keyCode; int semitone; };
-
-// A W S E D F T G Y H U J K O L P. The home row is the white keys and the row
-// above it the black ones, so the layout reads as a keyboard. The semicolon
-// Live also uses is left out deliberately: it is an OEM key whose code is not
-// the character on every layout, and isKeyCurrentlyDown would miss it.
-constexpr KeyNote keyNotes[] {
-    {'A', 0}, {'W', 1}, {'S', 2}, {'E', 3}, {'D', 4}, {'F', 5}, {'T', 6}, {'G', 7},
-    {'Y', 8}, {'H', 9}, {'U', 10}, {'J', 11}, {'K', 12}, {'O', 13}, {'L', 14}, {'P', 15}
-};
+// juce::MidiKeyboardComponent's own default mapping, which is what Forge's
+// on-screen keyboard plays from. Copying it rather than inventing one is the
+// whole point: the same seventeen keys make the same notes in the plugin and
+// in the host, so a part played into Forge's own window and a part recorded
+// through Rhino cannot come out in different keys.
+constexpr const char* noteKeys = "awsedftgyhujkolp;";
+constexpr int noteKeyCount = 17;
 
 constexpr int velocityStep = 10;
 
-int semitoneFor(int keyCode)
+juce::KeyPress plain(char character)
 {
-    for (const auto& mapped : keyNotes)
-        if (mapped.keyCode == keyCode)
-            return mapped.semitone;
+    return {character, {}, 0};
+}
+
+int semitoneFor(const juce::KeyPress& key)
+{
+    for (int i = 0; i < noteKeyCount; ++i)
+        if (key == plain(noteKeys[i]))
+            return i;
     return -1;
 }
 }
 
 int ComputerKeyboard::noteFor(int semitone) const
 {
-    return juce::jlimit(0, 127, 12 * (baseOctave + 1) + semitone);
+    // Forge's own arithmetic: MidiKeyboardComponent puts the first key at
+    // 12 * baseOctave, so octave 5 starts on middle C.
+    return juce::jlimit(0, 127, 12 * baseOctave + semitone);
 }
 
 void ComputerKeyboard::setEnabled(bool shouldBeEnabled)
@@ -45,7 +49,7 @@ void ComputerKeyboard::setEnabled(bool shouldBeEnabled)
 
 juce::String ComputerKeyboard::describe() const
 {
-    return "A-P play, octave " + juce::String(baseOctave) + " (Z/X), velocity "
+    return "A-; play, octave " + juce::String(baseOctave) + " (Z/X), velocity "
          + juce::String(noteVelocity) + " (C/V)";
 }
 
@@ -59,18 +63,17 @@ void ComputerKeyboard::releaseAll()
     const auto held = sounding;
     sounding.clear();
     if (note)
-        for (const auto held_note : held)
-            note(held_note, 0, false);
+        for (const auto heldNote : held)
+            note(heldNote, 0, false);
 }
 
 void ComputerKeyboard::refreshHeldNotes()
 {
     std::set<int> wanted;
-    if (enabled && !juce::ModifierKeys::getCurrentModifiers().isCommandDown()
-        && !juce::ModifierKeys::getCurrentModifiers().isAltDown())
-        for (const auto& mapped : keyNotes)
-            if (juce::KeyPress::isKeyCurrentlyDown(mapped.keyCode))
-                wanted.insert(noteFor(mapped.semitone));
+    if (enabled)
+        for (int i = 0; i < noteKeyCount; ++i)
+            if (plain(noteKeys[i]).isCurrentlyDown())
+                wanted.insert(noteFor(i));
 
     if (note)
     {
@@ -86,45 +89,44 @@ void ComputerKeyboard::refreshHeldNotes()
 
 bool ComputerKeyboard::keyPressed(const juce::KeyPress& key, juce::Component*)
 {
-    const auto mods = key.getModifiers();
-    // A shortcut is a shortcut. Only unmodified keys ever become notes, so
-    // Ctrl+C still copies while the keyboard is on.
-    if (mods.isCommandDown() || mods.isAltDown())
-        return false;
-    const auto code = juce::CharacterFunctions::toUpperCase(
-        static_cast<juce::juce_wchar>(key.getKeyCode() > 0 ? key.getKeyCode() : key.getTextCharacter()));
-    // The toggle answers whether or not the keyboard is on; it is the only way
-    // back out of it.
-    if (code == 'M')
+    // Every comparison below is juce::KeyPress's own, which is what Forge uses
+    // and what keeps this honest about what was actually pressed. It requires
+    // the modifiers to match exactly, so Ctrl+C still copies, and it refuses to
+    // fold a key code above the ASCII range onto a letter - without that, F9
+    // (0x10078) squeezed into a character is 'x', and the record key would
+    // quietly shift the octave instead.
+    if (key == plain('m'))
     {
         toggle();
         return true;
     }
     if (!enabled)
         return false;
-    if (code == 'Z' || code == 'X')
+    if (key == plain('z') || key == plain('x'))
     {
-        const auto moved = juce::jlimit(lowestOctave, highestOctave, baseOctave + (code == 'X' ? 1 : -1));
+        const auto moved = juce::jlimit(lowestOctave, highestOctave,
+                                        baseOctave + (key == plain('x') ? 1 : -1));
         if (moved != baseOctave)
         {
             // Whatever is sounding was started in the octave being left, so it
-            // is released rather than stranded a note that never ends.
+            // is released rather than stranded a note that never ends. Forge
+            // does the same thing for the same reason.
             releaseAll();
             baseOctave = moved;
         }
         if (status) status(describe());
         return true;
     }
-    if (code == 'C' || code == 'V')
+    if (key == plain('c') || key == plain('v'))
     {
         noteVelocity = juce::jlimit(minimumVelocity, maximumVelocity,
-                                    noteVelocity + (code == 'V' ? velocityStep : -velocityStep));
+                                    noteVelocity + (key == plain('v') ? velocityStep : -velocityStep));
         if (status) status(describe());
         return true;
     }
     // Swallowed so the letter does not also reach the editor's own shortcut.
     // The note itself is started by keyStateChanged, which does not repeat.
-    return semitoneFor(static_cast<int>(code)) >= 0;
+    return semitoneFor(key) >= 0;
 }
 
 bool ComputerKeyboard::keyStateChanged(bool, juce::Component*)

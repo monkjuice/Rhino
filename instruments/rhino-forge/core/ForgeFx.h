@@ -49,8 +49,8 @@ inline const char* rackName(int rack)
 
 // The order is saved inside every patch, because a slot stores its type as an
 // index into it. Append; never insert.
-enum class FxType { off, reverb, delay, chorus, distortion, equaliser, filter };
-inline constexpr int fxTypeCount = 7;
+enum class FxType { off, reverb, delay, chorus, distortion, equaliser, filter, compressor, phaser };
+inline constexpr int fxTypeCount = 9;
 
 inline const char* fxTypeName(int type)
 {
@@ -62,6 +62,8 @@ inline const char* fxTypeName(int type)
         case 4: return "DIST";
         case 5: return "EQ";
         case 6: return "FILTER";
+        case 7: return "COMP";
+        case 8: return "PHASER";
         default: break;
     }
     return "OFF";
@@ -88,7 +90,7 @@ struct FxSlot
     float modeA = 0.0f, modeB = 0.0f;
     float bypass = 0.0f;
     std::array<float, fxKnobCount> knobs {};
-    // 100% wet by default. Four of the six types are inserts that want all of
+    // 100% wet by default. Most types are inserts that want all of
     // it, and a bus is fed by a send and wants all of it too — a reverb or a
     // delay placed on MAIN is the case that wants this pulled back.
     float mix = 1.0f;
@@ -127,7 +129,7 @@ struct FxTypeInfo
     FxModeInfo modeA, modeB;
     // Where the knobs and the wet/dry sit when this type is put into a slot.
     //
-    // A parameter has one default and a slot's knobs serve seven types, so the
+    // A parameter has one default and a slot's knobs serve eight effect types, so the
     // default cannot be right for all of them — 100% wet is what an equaliser,
     // a filter and a distortion want and exactly what a reverb on the main
     // output does not. So the panel applies these when a type is chosen, which
@@ -143,16 +145,12 @@ inline const std::array<FxTypeInfo, fxTypeCount>& fxTypes()
         {"OFF", {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr}, {}, {},
          {0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f}, 1.0f},
 
-        // Serum's reverb carries a high cut as well as damping. Damping is the
-        // one that shapes a tail rather than trimming it, so it is the one kept
-        // here; PRE-DLY earns its place instead, because separating a transient
-        // from its tail is what a reverb is usually reached for.
-        {"REVERB", {"SIZE", "DECAY", "DAMP", "WIDTH", "PRE-DLY", "LO CUT"},
+        {"REVERB", {"SIZE", "PRE-DLY", "DAMP", "WIDTH", "LO CUT", "HI CUT"},
          {"TYPE", {"PLATE", "HALL"}, 2}, {},
          // A medium plate, wide, with the bottom kept out of the tail. Barely
          // a third wet, because this is the type most often placed on the main
          // output rather than on a send.
-         {0.55f, 0.5f, 0.45f, 0.8f, 0.1f, 0.25f}, 0.3f},
+         {0.55f, 0.1f, 0.45f, 0.8f, 0.25f, 0.82f}, 0.3f},
 
         // OFFSET is the right-hand delay as a share of the left, so the pair is
         // one control and a spread rather than two times to keep in step. Past
@@ -181,10 +179,24 @@ inline const std::array<FxTypeInfo, fxTypeCount>& fxTypes()
          // does nothing until it is asked to.
          {0.5f, 0.5f, 0.5f, 0.5f, 0.5f, 0.5f}, 1.0f},
 
-        {"FILTER", {"CUTOFF", "RES", "DRIVE", nullptr, nullptr, nullptr},
-         {"TYPE", {"LP", "HP", "BP"}, 3}, {},
+        {"FILTER", {"CUTOFF", "RES", "DRIVE", "FAT", "PAN", nullptr},
+         // The old LP / HP / BP choices landed at normalised 0 / .5 / 1.
+         // Their expanded equivalents stay at indices 0 / 4 / 7, so an older
+         // preset or automation lane keeps the same filter family.
+         {"MODEL", {"MG LOW 12", "MG LOW 6", "MG LOW 24", "NOTCH 12",
+                     "MG HIGH 12", "MG HIGH 6", "PEAK 12", "MG BAND 12"}, 8}, {},
          // Open, so it is heard as a filter to close rather than as a mute.
-         {0.8f, 0.2f, 0.0f, 0.5f, 0.5f, 0.5f}, 1.0f},
+         {0.8f, 0.2f, 0.0f, 0.25f, 0.5f, 0.5f}, 1.0f},
+
+        {"COMP", {"THRESH", "RATIO", "ATTACK", "RELEASE", "MAKEUP", "KNEE"},
+         {"DETECT", {"PEAK", "RMS"}, 2}, {"GAIN", {"MANUAL", "AUTO"}, 2},
+         // Moderate control with enough attack left for a transient to speak.
+         {0.62f, 0.35f, 0.28f, 0.42f, 0.0f, 0.35f}, 1.0f},
+
+        {"PHASER", {"RATE", "DEPTH", "FREQ", "FEEDBACK", "SPREAD", "WIDTH"},
+         {"UNIT", {"HZ", "BPM"}, 2}, {"STAGES", {"4", "6", "8", "12"}, 4},
+         // A slow six-stage sweep, broad enough to read without swallowing the source.
+         {0.22f, 0.58f, 0.46f, 0.58f, 0.5f, 0.75f}, 0.7f},
     }};
     return table;
 }
@@ -208,13 +220,13 @@ inline const char* fxModeName(const FxModeInfo& mode, float value)
 
 // Whether a knob does anything, given the modes its slot is set to.
 //
-// This is a different thing from a knob the type does not have at all. A reverb
-// has no fourth knob ever, and the panel takes that one off the panel; these
+// This is a different thing from a knob the type does not have at all. A delay
+// has no sixth knob ever, and the panel takes that one off the panel; these
 // come back the moment the mode beside them moves, so they are greyed instead —
 // which is the difference between "not here" and "not just now".
 //
-// There are only three of them, and each is a fact about the effect rather than
-// about the panel, so they live here beside the types rather than in the editor.
+// Each rule is a fact about the effect rather than about the panel, so it lives
+// here beside the types rather than in the editor.
 inline bool fxKnobLive(const FxSlot& slot, int knob)
 {
     const auto& info = fxTypeInfo(slot.type);
@@ -231,6 +243,11 @@ inline bool fxKnobLive(const FxSlot& slot, int knob)
             if (knob == 2) return fxModeOf(info.modeA, slot.modeA) != 2;
             if (knob == 5) return fxModeOf(info.modeB, slot.modeB) != 2;
             return true;
+
+        // Automatic gain computes its own compensation, so the manual makeup
+        // setting stays visible for the next switch back but is not editable.
+        case FxType::compressor:
+            return knob != 4 || fxModeOf(info.modeB, slot.modeB) == 0;
 
         default: break;
     }
@@ -319,5 +336,52 @@ inline float fxChorusRate(const FxSlot& slot, double bpm)
         return static_cast<float>(tempo / 60.0) / juce::jmax(0.001f, fxDivisionAt(slot.knobs[0]).beats);
     }
     return fxScaled(slot.knobs[0], 0.02f, 8.0f, 2.0f);
+}
+
+inline float fxReverbDecay(const FxSlot& slot)
+{
+    const auto& info = fxTypes()[static_cast<size_t>(FxType::reverb)];
+    const auto hall = fxModeOf(info.modeA, slot.modeA) == 1;
+    // SIZE is both the room scale and its natural decay. This keeps the panel
+    // faithful to the reference's six controls instead of inventing a seventh.
+    return fxScaled(slot.knobs[0], 0.66f, hall ? 0.965f : 0.92f);
+}
+
+inline float fxCompressorThreshold(float knob) { return fxScaled(knob, -60.0f, 0.0f); }
+inline float fxCompressorRatio(float knob) { return fxScaled(knob, 1.0f, 20.0f, 1.7f); }
+inline float fxCompressorAttack(float knob) { return fxScaled(knob, 0.0001f, 0.1f, 2.0f); }
+inline float fxCompressorRelease(float knob) { return fxScaled(knob, 0.01f, 1.0f, 2.0f); }
+inline float fxCompressorMakeup(float knob) { return fxScaled(knob, 0.0f, 24.0f); }
+inline float fxCompressorKnee(float knob) { return fxScaled(knob, 0.0f, 24.0f); }
+
+inline float fxCompressorOutputDb(float inputDb, float thresholdDb, float ratio, float kneeDb)
+{
+    const auto slope = 1.0f / juce::jmax(1.0f, ratio) - 1.0f;
+    if (kneeDb <= 0.001f)
+        return inputDb <= thresholdDb ? inputDb : inputDb + slope * (inputDb - thresholdDb);
+    const auto below = thresholdDb - kneeDb * 0.5f;
+    const auto above = thresholdDb + kneeDb * 0.5f;
+    if (inputDb <= below) return inputDb;
+    if (inputDb >= above) return inputDb + slope * (inputDb - thresholdDb);
+    const auto across = inputDb - below;
+    return inputDb + slope * across * across / (2.0f * kneeDb);
+}
+
+inline float fxPhaserRate(const FxSlot& slot, double bpm)
+{
+    const auto& info = fxTypes()[static_cast<size_t>(FxType::phaser)];
+    if (fxModeOf(info.modeA, slot.modeA) == 1)
+    {
+        const auto tempo = bpm > 0.0 ? bpm : 120.0;
+        return static_cast<float>(tempo / 60.0) / juce::jmax(0.001f, fxDivisionAt(slot.knobs[0]).beats);
+    }
+    return fxScaled(slot.knobs[0], 0.02f, 8.0f, 2.0f);
+}
+
+inline int fxPhaserStages(const FxSlot& slot)
+{
+    static constexpr std::array<int, 4> stages {4, 6, 8, 12};
+    const auto& mode = fxTypes()[static_cast<size_t>(FxType::phaser)].modeB;
+    return stages[static_cast<size_t>(fxModeOf(mode, slot.modeB))];
 }
 }

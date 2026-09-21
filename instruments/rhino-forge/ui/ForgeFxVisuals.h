@@ -22,7 +22,7 @@ namespace rhino::forge::ui
 // edge.
 //
 // The colours are chosen to separate on this panel rather than to mean
-// anything: six hues far enough apart to tell apart at a glance, none of them
+// anything: eight hues far enough apart to tell apart at a glance, none of them
 // the electric blue the signal path uses or the violet the modulators do, so an
 // effect never reads as either.
 inline juce::Colour fxTypeColour(int type)
@@ -35,6 +35,8 @@ inline juce::Colour fxTypeColour(int type)
         case 4: return juce::Colour(0xffff6f4a);   // DIST, the one that burns
         case 5: return juce::Colour(0xffffc24d);   // EQ
         case 6: return juce::Colour(0xff6fdc5a);   // FILTER
+        case 7: return juce::Colour(0xfff09a55);   // COMP
+        case 8: return juce::Colour(0xffb58cff);   // PHASER
         default: break;
     }
     return line;                                   // OFF: an empty shelf
@@ -150,6 +152,32 @@ inline void drawFxMark(juce::Graphics& g, juce::Rectangle<float> box, int type, 
                 const auto peak = std::exp(-std::pow((along - 0.6f) * 9.0f, 2.0f)) * 0.55f;
                 const auto fall = along < 0.6f ? 0.0f : (along - 0.6f) * 2.6f;
                 const auto y = middle + (fall - peak) * height * 0.62f - height * 0.12f;
+                const auto x = box.getX() + along * box.getWidth();
+                if (i == 0) curve.startNewSubPath(x, y); else curve.lineTo(x, y);
+            }
+            g.strokePath(curve, juce::PathStrokeType(1.8f));
+            return;
+        }
+        // A transfer line bending below unity: what compression does above
+        // its threshold.
+        case 7:
+        {
+            juce::Path curve;
+            curve.startNewSubPath(box.getX(), box.getBottom());
+            curve.lineTo(box.getCentreX(), middle);
+            curve.lineTo(box.getRight(), middle - height * 0.2f);
+            g.strokePath(curve, juce::PathStrokeType(1.8f));
+            return;
+        }
+        // A row of moving notches, the shape made by dry plus an allpass bank.
+        case 8:
+        {
+            juce::Path curve;
+            for (int i = 0; i <= 48; ++i)
+            {
+                const auto along = static_cast<float>(i) / 48.0f;
+                const auto notches = std::abs(std::sin(along * juce::MathConstants<float>::pi * 4.0f));
+                const auto y = box.getY() + height * (0.16f + notches * 0.62f);
                 const auto x = box.getX() + along * box.getWidth();
                 if (i == 0) curve.startNewSubPath(x, y); else curve.lineTo(x, y);
             }

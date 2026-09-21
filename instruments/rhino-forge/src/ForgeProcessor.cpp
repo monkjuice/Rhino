@@ -301,8 +301,9 @@ juce::String Processor::fxKnobText(int rack, int slot, int knob, float value) co
     switch (fxTypeOf(state.getRawParameterValue(fxParameterId(rack, slot, "Type"))->load()))
     {
         case FxType::reverb:
-            if (knob == 4) return asMilliseconds(fxScaled(value, 0.0f, 0.2f));
-            if (knob == 5) return hertz(fxHertz(value, 20.0f, 1200.0f));
+            if (knob == 1) return asMilliseconds(fxScaled(value, 0.0f, 0.2f));
+            if (knob == 4) return hertz(fxHertz(value, 20.0f, 1200.0f));
+            if (knob == 5) return hertz(fxHertz(value, 1200.0f, 20000.0f));
             return percent();
 
         case FxType::delay:
@@ -360,6 +361,40 @@ juce::String Processor::fxKnobText(int rack, int slot, int knob, float value) co
 
         case FxType::filter:
             if (knob == 0) return hertz(fxHertz(value, 30.0f, 18000.0f));
+            if (knob == 4) return juce::String(fxScaled(value, -100.0f, 100.0f), 0)
+                                 + (value < 0.5f ? " L" : value > 0.5f ? " R" : " C");
+            return percent();
+
+        case FxType::compressor:
+            if (knob == 0) return juce::String(fxCompressorThreshold(value), 1) + " dB";
+            if (knob == 1) return juce::String(fxCompressorRatio(value), 1) + " : 1";
+            if (knob == 2) return asMilliseconds(fxCompressorAttack(value));
+            if (knob == 3) return asMilliseconds(fxCompressorRelease(value));
+            if (knob == 4)
+            {
+                const auto automatic = fxModeOf(fxTypes()[static_cast<size_t>(FxType::compressor)].modeB,
+                                                 state.getRawParameterValue(
+                                                     fxParameterId(rack, slot, "ModeB"))->load()) == 1;
+                return automatic ? juce::String("AUTO")
+                                 : juce::String(fxCompressorMakeup(value), 1) + " dB";
+            }
+            if (knob == 5) return juce::String(fxCompressorKnee(value), 1) + " dB";
+            break;
+
+        case FxType::phaser:
+            if (knob == 0)
+            {
+                const auto synced = fxModeOf(fxTypes()[static_cast<size_t>(FxType::phaser)].modeA,
+                                             state.getRawParameterValue(
+                                                 fxParameterId(rack, slot, "ModeA"))->load()) == 1;
+                if (synced) return juce::String(fxDivisionAt(value).label);
+                return juce::String(fxScaled(value, 0.02f, 8.0f, 2.0f), 2) + " Hz";
+            }
+            if (knob == 1) return juce::String(fxScaled(value, 0.0f, 4.0f), 2) + " oct";
+            if (knob == 2) return hertz(fxHertz(value, 80.0f, 8000.0f));
+            if (knob == 3) return juce::String(fxScaled(value, -100.0f, 100.0f), 0) + " %";
+            if (knob == 4) return juce::String(fxScaled(value, -180.0f, 180.0f), 0)
+                                 + juce::String::fromUTF8("\xc2\xb0");
             return percent();
 
         case FxType::off:

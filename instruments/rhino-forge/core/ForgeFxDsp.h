@@ -85,6 +85,21 @@ struct OnePole
     void reset() { state = 0.0f; }
 };
 
+struct AllpassStage
+{
+    float previousInput = 0.0f, previousOutput = 0.0f;
+
+    float process(float input, float coefficient)
+    {
+        const auto output = -coefficient * input + previousInput + coefficient * previousOutput;
+        previousInput = input;
+        previousOutput = output;
+        return output;
+    }
+
+    void reset() { previousInput = previousOutput = 0.0f; }
+};
+
 // How far a one-pole has to travel per sample to sit at a given corner.
 inline float onePoleCoefficient(float hz, double sampleRate)
 {
@@ -229,14 +244,24 @@ struct FxSlotState
     std::array<std::array<OnePole, combCount>, 2> combDamp;
     std::array<std::array<DelayLine, allpassCount>, 2> allpasses;
     std::array<DelayLine, 2> preDelay;
-    std::array<OnePole, 2> reverbLoCut;
+    std::array<OnePole, 2> reverbLoCut, reverbHiCut;
 
     // Equaliser and the distortion's own filter.
     std::array<Biquad, 2> low, high;
     std::array<float, 2> svfLow {}, svfBand {};
+    std::array<std::array<float, 2>, 2> filterLow {}, filterBand {};
+    std::array<OnePole, 2> filterPole;
     // Downsampling holds a sample for several of them.
     std::array<float, 2> held {};
     float holdPhase = 0.0f;
+
+    // Compressor and phaser. Both are deliberately fixed-size; changing a
+    // type or stage count while audio runs never allocates.
+    float compressorEnvelope = 0.0f, compressorGain = 1.0f;
+    static constexpr int phaserStageCount = 12;
+    std::array<std::array<AllpassStage, phaserStageCount>, 2> phaser;
+    std::array<float, 2> phaserFeedback {};
+    float phaserPhase = 0.0f;
 
     void reset()
     {
@@ -249,12 +274,21 @@ struct FxSlotState
         for (auto& channel : allpasses) for (auto& allpass : channel) allpass.reset();
         for (auto& line : preDelay) line.reset();
         for (auto& filter : reverbLoCut) filter.reset();
+        for (auto& filter : reverbHiCut) filter.reset();
         for (auto& filter : low) filter.reset();
         for (auto& filter : high) filter.reset();
         svfLow = {};
         svfBand = {};
+        filterLow = {};
+        filterBand = {};
+        for (auto& filter : filterPole) filter.reset();
         held = {};
         holdPhase = 0.0f;
+        compressorEnvelope = 0.0f;
+        compressorGain = 1.0f;
+        for (auto& channel : phaser) for (auto& stage : channel) stage.reset();
+        phaserFeedback = {};
+        phaserPhase = 0.0f;
     }
 };
 
@@ -352,6 +386,8 @@ private:
             case FxType::distortion: renderDistortion(state, slot, left, right); return;
             case FxType::equaliser:  renderEqualiser(state, slot, left, right); return;
             case FxType::filter:     renderFilter(state, slot, left, right); return;
+            case FxType::compressor: renderCompressor(state, slot, left, right); return;
+            case FxType::phaser:     renderPhaser(state, slot, bpm, left, right); return;
             case FxType::off:        break;
         }
     }
@@ -363,17 +399,15 @@ private:
     // rather than one reverb heard twice.
     void renderReverb(FxSlotState& state, const FxSlot& slot, float& left, float& right)
     {
-        const auto& info = fxTypes()[static_cast<size_t>(FxType::reverb)];
-        const auto hall = fxModeOf(info.modeA, slot.modeA) == 1;
-
         const auto size = fxScaled(slot.knobs[0], 0.35f, 1.0f);
         // A hall holds its energy longer than a plate at the same setting, which
         // is most of what separates the two here.
-        const auto decay = fxScaled(slot.knobs[1], 0.62f, hall ? 0.96f : 0.9f);
+        const auto decay = fxReverbDecay(slot);
         const auto damp = onePoleCoefficient(fxHertz(1.0f - slot.knobs[2], 800.0f, 16000.0f), sampleRate);
         const auto width = juce::jlimit(0.0f, 1.0f, slot.knobs[3]);
-        const auto preDelay = fxScaled(slot.knobs[4], 0.0f, 0.2f) * static_cast<float>(sampleRate);
-        const auto loCut = onePoleCoefficient(fxHertz(slot.knobs[5], 20.0f, 1200.0f), sampleRate);
+        const auto preDelay = fxScaled(slot.knobs[1], 0.0f, 0.2f) * static_cast<float>(sampleRate);
+        const auto loCut = onePoleCoefficient(fxHertz(slot.knobs[4], 20.0f, 1200.0f), sampleRate);
+        const auto hiCut = onePoleCoefficient(fxHertz(slot.knobs[5], 1200.0f, 20000.0f), sampleRate);
 
         std::array<float, 2> input {left, right}, output {};
         for (int channel = 0; channel < 2; ++channel)
@@ -414,7 +448,8 @@ private:
                 combined = delayed - fedBack * 0.5f;
             }
 
-            output[index] = state.reverbLoCut[index].highPass(combined, loCut);
+            const auto withoutLow = state.reverbLoCut[index].highPass(combined, loCut);
+            output[index] = state.reverbHiCut[index].lowPass(withoutLow, hiCut);
         }
 
         // Width spreads the pair apart through their own mid and side rather
@@ -596,6 +631,8 @@ private:
         const auto hz = fxHertz(slot.knobs[0], 30.0f, 18000.0f);
         const auto resonance = juce::jlimit(0.0f, 0.98f, slot.knobs[1]);
         const auto drive = juce::jlimit(0.0f, 1.0f, slot.knobs[2]);
+        const auto fat = juce::jlimit(0.0f, 1.0f, slot.knobs[3]);
+        const auto pan = juce::jlimit(-1.0f, 1.0f, slot.knobs[4] * 2.0f - 1.0f);
 
         const auto g = std::tan(juce::MathConstants<float>::pi
                                 * juce::jmin(hz, static_cast<float>(sampleRate * 0.45))
@@ -609,16 +646,109 @@ private:
             const auto driven = drive > 0.0f
                 ? std::tanh(sample[index] * (1.0f + drive * 12.0f)) / std::tanh(1.0f + drive * 12.0f)
                 : sample[index];
-            const auto denominator = 1.0f + g * (g + damping);
-            const auto high = (driven - (damping + g) * state.svfBand[index] - state.svfLow[index]) / denominator;
-            const auto band = g * high + state.svfBand[index];
-            const auto low = g * band + state.svfLow[index];
-            state.svfBand[index] = g * high + band;
-            state.svfLow[index] = g * band + low;
-            sample[index] = type == 1 ? high : type == 2 ? band : low;
+            const auto poleCoefficient = onePoleCoefficient(hz, sampleRate);
+            if (type == 1 || type == 5)
+            {
+                const auto low = state.filterPole[index].lowPass(driven, poleCoefficient);
+                sample[index] = type == 1 ? low : driven - low;
+            }
+            else
+            {
+                const auto runStage = [&] (float input, int stage)
+                {
+                    auto& lowState = state.filterLow[index][static_cast<size_t>(stage)];
+                    auto& bandState = state.filterBand[index][static_cast<size_t>(stage)];
+                    const auto denominator = 1.0f + g * (g + damping);
+                    const auto high = (input - (damping + g) * bandState - lowState) / denominator;
+                    const auto band = g * high + bandState;
+                    const auto low = g * band + lowState;
+                    bandState = g * high + band;
+                    lowState = g * band + low;
+                    return std::array<float, 3> {low, band, high};
+                };
+                const auto first = runStage(driven, 0);
+                if (type == 0) sample[index] = first[0];
+                else if (type == 2) sample[index] = runStage(first[0], 1)[0];
+                else if (type == 4) sample[index] = first[2];
+                else if (type == 3) sample[index] = first[0] + first[2];
+                else if (type == 6)
+                    sample[index] = juce::jlimit(-1.0f, 1.0f, driven + first[1] * (0.5f + fat * 1.5f));
+                else sample[index] = first[1];
+            }
+            // FAT is a parallel warm path rather than another drive control:
+            // it keeps body under a resonant or steep shape.
+            if (type != 6)
+                sample[index] = juce::jmap(fat * 0.35f, sample[index], std::tanh(driven));
         }
-        left = sample[0];
-        right = sample[1];
+        left = sample[0] * (pan > 0.0f ? 1.0f - pan : 1.0f);
+        right = sample[1] * (pan < 0.0f ? 1.0f + pan : 1.0f);
+    }
+
+    // --- Compressor -----------------------------------------------------------
+    void renderCompressor(FxSlotState& state, const FxSlot& slot, float& left, float& right)
+    {
+        const auto& info = fxTypes()[static_cast<size_t>(FxType::compressor)];
+        const auto rms = fxModeOf(info.modeA, slot.modeA) == 1;
+        const auto automatic = fxModeOf(info.modeB, slot.modeB) == 1;
+        const auto threshold = fxCompressorThreshold(slot.knobs[0]);
+        const auto ratio = fxCompressorRatio(slot.knobs[1]);
+        const auto attack = fxCompressorAttack(slot.knobs[2]);
+        const auto release = fxCompressorRelease(slot.knobs[3]);
+        const auto knee = fxCompressorKnee(slot.knobs[5]);
+
+        const auto peak = juce::jmax(std::abs(left), std::abs(right));
+        const auto detected = rms ? peak * peak : peak;
+        const auto attackCoefficient = std::exp(-1.0f / static_cast<float>(sampleRate * attack));
+        const auto releaseCoefficient = std::exp(-1.0f / static_cast<float>(sampleRate * release));
+        const auto coefficient = detected > state.compressorEnvelope ? attackCoefficient : releaseCoefficient;
+        state.compressorEnvelope = coefficient * state.compressorEnvelope + (1.0f - coefficient) * detected;
+        const auto amplitude = rms ? std::sqrt(juce::jmax(0.0f, state.compressorEnvelope))
+                                   : state.compressorEnvelope;
+        const auto inputDb = juce::Decibels::gainToDecibels(amplitude, -100.0f);
+        const auto outputDb = fxCompressorOutputDb(inputDb, threshold, ratio, knee);
+        const auto reduction = outputDb - inputDb;
+        const auto makeup = automatic ? juce::jlimit(0.0f, 18.0f, -threshold * (1.0f - 1.0f / ratio) * 0.5f)
+                                      : fxCompressorMakeup(slot.knobs[4]);
+        const auto targetGain = juce::Decibels::decibelsToGain(reduction + makeup);
+        state.compressorGain += (targetGain - state.compressorGain) * (targetGain < state.compressorGain ? 0.2f : 0.02f);
+        left = juce::jlimit(-1.0f, 1.0f, left * state.compressorGain);
+        right = juce::jlimit(-1.0f, 1.0f, right * state.compressorGain);
+    }
+
+    // --- Phaser ---------------------------------------------------------------
+    void renderPhaser(FxSlotState& state, const FxSlot& slot, double bpm, float& left, float& right)
+    {
+        const auto rate = fxPhaserRate(slot, bpm);
+        const auto depth = fxScaled(slot.knobs[1], 0.0f, 4.0f);
+        const auto centre = fxHertz(slot.knobs[2], 80.0f, 8000.0f);
+        const auto feedback = fxScaled(slot.knobs[3], -0.85f, 0.85f);
+        const auto spread = fxScaled(slot.knobs[4], -0.5f, 0.5f);
+        const auto width = juce::jlimit(0.0f, 1.0f, slot.knobs[5]);
+        const auto stages = fxPhaserStages(slot);
+        const auto phase = state.phaserPhase * juce::MathConstants<float>::twoPi;
+
+        const std::array<float, 2> input {left, right};
+        std::array<float, 2> wet {};
+        for (int channel = 0; channel < 2; ++channel)
+        {
+            const auto index = static_cast<size_t>(channel);
+            const auto channelPhase = phase + (channel == 0 ? -spread : spread) * juce::MathConstants<float>::pi;
+            const auto sweep = std::sin(channelPhase);
+            const auto hz = juce::jlimit(20.0f, static_cast<float>(sampleRate * 0.45),
+                                         centre * std::pow(2.0f, depth * sweep));
+            const auto tangent = std::tan(juce::MathConstants<float>::pi * hz / static_cast<float>(sampleRate));
+            const auto coefficient = (1.0f - tangent) / (1.0f + tangent);
+            auto sample = input[index] + state.phaserFeedback[index] * feedback;
+            for (int stage = 0; stage < stages; ++stage)
+                sample = state.phaser[index][static_cast<size_t>(stage)].process(sample, coefficient);
+            state.phaserFeedback[index] = sample;
+            wet[index] = (input[index] + sample) * 0.5f;
+        }
+        const auto mono = (wet[0] + wet[1]) * 0.5f;
+        left = juce::jmap(width, mono, wet[0]);
+        right = juce::jmap(width, mono, wet[1]);
+        state.phaserPhase += rate / static_cast<float>(sampleRate);
+        while (state.phaserPhase >= 1.0f) state.phaserPhase -= 1.0f;
     }
 };
 }

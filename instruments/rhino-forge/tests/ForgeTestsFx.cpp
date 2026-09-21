@@ -118,8 +118,9 @@ void fxSuite()
     setValue(reverbed, "env1Release", 0.02f);
     place(reverbed, 0, 0, FxType::reverb);
     knob(reverbed, 0, 0, 0, 0.8f);   // size
-    knob(reverbed, 0, 0, 1, 0.9f);   // decay
+    knob(reverbed, 0, 0, 1, 0.0f);   // no pre-delay
     knob(reverbed, 0, 0, 2, 0.1f);   // very little damping, so the tail carries
+    knob(reverbed, 0, 0, 5, 1.0f);   // high cut open
     require(tailAfterNote(reverbed) > silence * 4.0f + 0.0001f,
             "a reverb leaves a tail behind the note");
     require(allSamplesFinite(buffer), "a reverb renders finite audio");
@@ -160,6 +161,7 @@ void fxSuite()
     place(blended, 0, 0, FxType::filter);
     knob(blended, 0, 0, 0, 0.05f);   // a low cutoff, so the effect is obvious
     knob(blended, 0, 0, 1, 0.0f);
+    knob(blended, 0, 0, 3, 0.0f);
     renderNote(blended, buffer);
     const auto filtered = rms(buffer, 0, 1024);
     require(filtered < plain * 0.7f, "a filter in the rack takes the level down");
@@ -186,12 +188,14 @@ void fxSuite()
     place(ordered, 0, 0, FxType::filter);
     knob(ordered, 0, 0, 0, 0.1f);
     knob(ordered, 0, 0, 1, 0.0f);
+    knob(ordered, 0, 0, 3, 0.0f);
     renderNote(ordered, buffer);
     const auto afterFirst = brightness(buffer, 0, 1024);
     require(afterFirst < open * 0.8f, "a low pass in the rack takes the top off");
     place(ordered, 0, 1, FxType::filter);
     knob(ordered, 0, 1, 0, 1.0f);
     knob(ordered, 0, 1, 1, 0.0f);
+    knob(ordered, 0, 1, 3, 0.0f);
     renderNote(ordered, buffer);
     require(brightness(buffer, 0, 1024) < open * 0.8f,
             "a filter wide open after a closed one cannot put back what the first took out");
@@ -255,8 +259,15 @@ void fxSuite()
     // A knob the type does not use says so rather than showing a number that
     // means nothing.
     place(reading, 0, 0, FxType::filter);
-    requireText(textFor(reading, rhino::forge::fxParameterId(0, 0, "Knob5").toRawUTF8(), 0.5f),
+    requireText(textFor(reading, rhino::forge::fxParameterId(0, 0, "Knob6").toRawUTF8(), 0.5f),
                 "-", "a knob the type does not use reads as nothing");
+    place(reading, 0, 0, FxType::compressor);
+    requireText(textFor(reading, rhino::forge::fxParameterId(0, 0, "Knob2").toRawUTF8(), 0.0f),
+                "1.0 : 1", "a compressor's ratio reads the ratio its curve and detector use");
+    place(reading, 0, 0, FxType::phaser);
+    setValue(reading, rhino::forge::fxParameterId(0, 0, "ModeA").toRawUTF8(), 1.0f);
+    requireText(textFor(reading, rhino::forge::fxParameterId(0, 0, "Knob1").toRawUTF8(), 1.0f),
+                "2/1", "a synced phaser's RATE reads the division its LFO uses");
 
     // --- What a type opens on --------------------------------------------------
     //
@@ -290,6 +301,64 @@ void fxSuite()
         require(rhino::forge::fxTypes()[static_cast<size_t>(type)].initMix < 0.5f,
                 "a reverb and a delay open mostly dry, because they are usually placed on MAIN");
 
+    // The two new families have real behaviour rather than only menu entries.
+    // Compression bends levels above threshold, while unity ratio leaves them.
+    requireClose(rhino::forge::fxCompressorOutputDb(-6.0f, -18.0f, 1.0f, 0.0f), -6.0f, 0.001f,
+                 "a compressor at unity ratio leaves a level alone");
+    require(rhino::forge::fxCompressorOutputDb(-6.0f, -18.0f, 8.0f, 0.0f) < -15.0f,
+            "a high compressor ratio bends a level above threshold down");
+
+    {
+        rhino::forge::Rack compressed;
+        auto& slot = compressed.slots[0];
+        slot.type = static_cast<float>(FxType::compressor);
+        slot.knobs = rhino::forge::fxTypes()[static_cast<size_t>(FxType::compressor)].init;
+        slot.knobs[0] = 0.5f;  // -30 dB
+        slot.knobs[1] = 1.0f;  // 20:1
+        slot.knobs[2] = 0.0f;  // fastest attack
+        slot.knobs[4] = 0.0f;  // no makeup
+        slot.knobs[5] = 0.0f;  // hard knee
+        rhino::forge::FxRack rack;
+        rack.prepare(48000.0);
+        auto tailMagnitude = 0.0f;
+        for (int sample = 0; sample < 4096; ++sample)
+        {
+            auto left = 0.6f, right = 0.6f;
+            rack.process(compressed, 120.0, left, right);
+            if (sample >= 3072) tailMagnitude += std::abs(left);
+        }
+        require(tailMagnitude / 1024.0f < 0.12f,
+                "the compressor's detector and gain stage reduce sustained audio above threshold");
+    }
+
+    rhino::forge::FxSlot staged;
+    staged.type = static_cast<float>(FxType::phaser);
+    for (int choice = 0; choice < 4; ++choice)
+    {
+        staged.modeB = static_cast<float>(choice) / 3.0f;
+        require(rhino::forge::fxPhaserStages(staged) == std::array<int, 4>{4, 6, 8, 12}[static_cast<size_t>(choice)],
+                "a phaser stage choice reaches the cascade it names");
+    }
+    {
+        rhino::forge::Rack phased;
+        auto& slot = phased.slots[0];
+        slot.type = static_cast<float>(FxType::phaser);
+        slot.knobs = rhino::forge::fxTypes()[static_cast<size_t>(FxType::phaser)].init;
+        rhino::forge::FxRack rack;
+        rack.prepare(48000.0);
+        auto difference = 0.0f;
+        for (int sample = 0; sample < 2048; ++sample)
+        {
+            const auto drySample = std::sin(juce::MathConstants<float>::twoPi * 440.0f
+                                            * static_cast<float>(sample) / 48000.0f) * 0.4f;
+            auto left = drySample, right = drySample;
+            rack.process(phased, 120.0, left, right);
+            difference += std::abs(left - drySample) + std::abs(right - drySample);
+        }
+        require(difference > 1.0f,
+                "the phaser's allpass cascade changes the signal rather than only filling a menu row");
+    }
+
     // --- The matrix reaches the rack ------------------------------------------
     //
     // FX run on the summed voices, so a per-voice source has to resolve to one
@@ -302,6 +371,7 @@ void fxSuite()
     place(modulated, 0, 0, FxType::filter);
     knob(modulated, 0, 0, 0, 0.05f);
     knob(modulated, 0, 0, 1, 0.0f);
+    knob(modulated, 0, 0, 3, 0.0f);   // no parallel FAT path hiding the cutoff sweep
     const auto cutoffSlot = rhino::forge::fxDestinationOf(0, 0, 0);
     require(cutoffSlot > 0 && cutoffSlot < rhino::forge::destinationCount,
             "a rack knob has a destination index inside the list");
@@ -324,6 +394,46 @@ void fxDisplaySuite()
 {
     namespace ui = rhino::forge::ui;
     using rhino::forge::FxType;
+
+    // Every active strip keeps its common controls. A type with only three
+    // named knobs still needs MIX, LEVEL and BYP; hiding unused general knobs
+    // must not make the common tail of the row disappear with them.
+    {
+        rhino::forge::Processor processor;
+        const std::array<FxType, 6> types {FxType::chorus, FxType::distortion, FxType::reverb,
+                                           FxType::equaliser, FxType::delay, FxType::filter};
+        for (int slot = 0; slot < static_cast<int>(types.size()); ++slot)
+            setValue(processor, rhino::forge::fxParameterId(0, slot, "Type").toRawUTF8(),
+                     static_cast<float>(types[static_cast<size_t>(slot)]));
+        std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+        editor->setSize(1440, 1200);
+        for (auto* child : editor->getChildren())
+            if (auto* tab = dynamic_cast<rhino::forge::ui::PageTab*>(child))
+                if (tab->getButtonText() == "FX" && tab->onClick) tab->onClick();
+
+        auto mixes = 0, bypasses = 0;
+        for (auto* child : editor->getChildren())
+        {
+            if (auto* label = dynamic_cast<juce::Label*>(child))
+                if (label->isVisible() && label->getText() == "MIX") ++mixes;
+            if (auto* chip = dynamic_cast<rhino::forge::ui::ToggleChip*>(child))
+                if (chip->isVisible() && chip->getButtonText() == "BYP") ++bypasses;
+        }
+        const auto* fxModule = [&]() -> const ui::Module*
+        {
+            for (const auto& module : ui::modules())
+                if (juce::String(module.id) == "fx") return &module;
+            return nullptr;
+        }();
+        require(fxModule != nullptr, "the FX display test finds the rack module");
+        const auto visible = fxModule == nullptr ? 0 : juce::jmin(
+            static_cast<int>(types.size()), ui::fxVisibleSlotCount(
+                ui::fxModuleBounds(editor->getLocalBounds(), *fxModule, false)));
+        require(mixes == visible,
+                "every visible effect strip keeps its common MIX control");
+        require(bypasses == visible,
+                "every visible effect strip keeps its common bypass control");
+    }
 
     // --- The equaliser ---------------------------------------------------------
     //
@@ -422,19 +532,40 @@ void fxDisplaySuite()
 
     // --- The reverb ------------------------------------------------------------
     //
-    // The envelope is decay raised to the number of comb round trips. A longer
-    // decay setting therefore has to give a longer tail, and a hall a longer one
-    // than a plate at the same setting — which is the whole of what the two
-    // types differ by in renderReverb.
+    // The envelope is decay raised to the number of comb round trips. SIZE sets
+    // the room and its natural decay, and a hall holds longer than a plate.
     {
         const auto& info = rhino::forge::fxTypes()[static_cast<size_t>(FxType::reverb)];
-        const auto plate = rhino::forge::fxScaled(0.5f, 0.62f, 0.9f);
-        const auto hall = rhino::forge::fxScaled(0.5f, 0.62f, 0.96f);
+        rhino::forge::FxSlot room;
+        room.type = static_cast<float>(FxType::reverb);
+        room.knobs = info.init;
+        room.modeA = 0.0f;
+        const auto plate = rhino::forge::fxReverbDecay(room);
+        room.modeA = 1.0f;
+        const auto hall = rhino::forge::fxReverbDecay(room);
         require(hall > plate, "a hall holds its energy longer than a plate at the same setting");
-        require(rhino::forge::fxScaled(1.0f, 0.62f, 0.9f) > rhino::forge::fxScaled(0.0f, 0.62f, 0.9f),
-                "turning the decay up lengthens the tail");
-        require(info.init[1] > 0.0f && info.init[1] < 1.0f,
-                "a reverb opens somewhere a decay can be read from");
+        room.modeA = 0.0f;
+        room.knobs[0] = 0.0f;
+        const auto small = rhino::forge::fxReverbDecay(room);
+        room.knobs[0] = 1.0f;
+        require(rhino::forge::fxReverbDecay(room) > small,
+                "turning reverb size up lengthens the room's natural tail");
+        require(info.knobs[4] != nullptr && juce::String(info.knobs[4]) == "LO CUT"
+                    && info.knobs[5] != nullptr && juce::String(info.knobs[5]) == "HI CUT",
+                "the reverb exposes both ends of its tail filter");
+    }
+
+    // Expanding the filter list must not reinterpret an old LP / HP / BP
+    // automation value. Those were stored at 0 / .5 / 1, so their richer
+    // equivalents deliberately still occupy those normalised positions.
+    {
+        const auto& models = rhino::forge::fxTypes()[static_cast<size_t>(FxType::filter)].modeA;
+        require(juce::String(rhino::forge::fxModeName(models, 0.0f)).contains("LOW"),
+                "an old low-pass value still chooses a low-pass model");
+        require(juce::String(rhino::forge::fxModeName(models, 0.5f)).contains("HIGH"),
+                "an old high-pass value still chooses a high-pass model");
+        require(juce::String(rhino::forge::fxModeName(models, 1.0f)).contains("BAND"),
+                "an old band-pass value still chooses a band-pass model");
     }
 
     // --- Reading a parameter back while it is still being announced ------------
@@ -613,9 +744,21 @@ void fxDisplaySuite()
         require(!rhino::forge::fxKnobLive(eq, 5), "a low pass has no gain to set");
         juce::ignoreUnused(bands);
 
+        rhino::forge::FxSlot compressor;
+        compressor.type = static_cast<float>(FxType::compressor);
+        compressor.modeB = 0.0f;   // MANUAL
+        require(rhino::forge::fxKnobLive(compressor, 4),
+                "manual compressor gain leaves MAKEUP live");
+        compressor.modeB = 1.0f;   // AUTO
+        require(!rhino::forge::fxKnobLive(compressor, 4),
+                "automatic compressor gain greys its unused MAKEUP knob");
+        require(rhino::forge::fxKnobLive(compressor, 0),
+                "automatic gain does not disable the compressor threshold");
+
         // Every other type leaves every knob alone, so a rule added by accident
         // to one of them is caught rather than merely unnoticed.
-        for (const auto type : {FxType::reverb, FxType::delay, FxType::chorus, FxType::filter})
+        for (const auto type : {FxType::reverb, FxType::delay, FxType::chorus, FxType::filter,
+                                FxType::phaser})
         {
             rhino::forge::FxSlot other;
             other.type = static_cast<float>(type);

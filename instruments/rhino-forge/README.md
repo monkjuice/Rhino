@@ -85,7 +85,7 @@ tab, so a send reaches the ordered chain selected by its BUS card.
 
 `FX` is three racks — one on the main output and one on each bus — chosen by the
 named cards in the module's header. A rack is eight slots and the signal runs
-down them, top to bottom. A slot holds any of six types, the same type can sit
+down them, top to bottom. A slot holds any of eight types, the same type can sit
 in two slots, and every slot declares the same twelve controls whatever is in
 it: a type, two mode fields, six general knobs, a bypass, a mix and a level.
 
@@ -135,13 +135,14 @@ Each slot draws itself in a strip beside its mode fields: a reverb's decay
 envelope, a delay's repeats falling away across the two channels, a chorus's two
 taps swinging across one cycle, a distortion's transfer curve against the
 diagonal that no distortion would be, an equaliser's response, a filter's
-corner. Every one is computed from the arithmetic the engine actually runs — the
+corner, a compressor's transfer curve, or a phaser's moving notches. Every one
+is computed from the arithmetic the engine actually runs — the
 distortion curve is `fxShape` called per pixel, the equaliser's is the magnitude
 of the very biquads `setBand` builds — so a display cannot claim one thing while
 the slot does another.
 
 Choosing a type also sets that type up, the way adding a module in Serum loads
-its default preset. One parameter default cannot serve seven types — 100% wet is
+its default preset. One parameter default cannot serve eight effect types — 100% wet is
 right for an equaliser and wrong for a reverb on the main output — so what a
 type opens on lives beside the type. A type arriving from a preset or from a
 host's automation lane is left exactly as it came.

@@ -6,6 +6,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <cmath>
+#include <complex>
 
 // What each effect draws of itself.
 //
@@ -45,11 +46,9 @@ inline float fxAmplitudeToY(juce::Rectangle<float> box, float amplitude)
 inline void drawFxReverb(juce::Graphics& g, juce::Rectangle<float> box, const FxSlot& slot,
                          juce::Colour colour, float alpha)
 {
-    const auto& info = fxTypes()[static_cast<size_t>(FxType::reverb)];
-    const auto hall = fxModeOf(info.modeA, slot.modeA) == 1;
     const auto size = fxScaled(slot.knobs[0], 0.35f, 1.0f);
-    const auto decay = fxScaled(slot.knobs[1], 0.62f, hall ? 0.96f : 0.9f);
-    const auto preDelay = fxScaled(slot.knobs[4], 0.0f, 0.2f);
+    const auto decay = fxReverbDecay(slot);
+    const auto preDelay = fxScaled(slot.knobs[1], 0.0f, 0.2f);
 
     // The mean comb length, in seconds, which is the round trip the decay is
     // applied once per.
@@ -278,17 +277,100 @@ inline void drawFxFilter(juce::Graphics& g, juce::Rectangle<float> box, const Fx
     {
         const auto x = box.getX() + box.getWidth() * static_cast<float>(i) / static_cast<float>(points);
         const auto ratio = juce::jmax(1.0e-4f, filterXToHz(box, x)) / juce::jmax(1.0e-4f, cutoff);
-        const auto real = 1.0f - ratio * ratio;
-        const auto imaginary = damping * ratio;
-        const auto bottom = std::sqrt(real * real + imaginary * imaginary);
-        const auto top = type == 1 ? ratio * ratio : type == 2 ? ratio : 1.0f;
-        const auto gain = bottom <= 1.0e-9f ? 8.0f : top / bottom;
+        float gain = 1.0f;
+        if (type == 1 || type == 5)
+        {
+            const auto bottom = std::sqrt(1.0f + ratio * ratio);
+            gain = type == 1 ? 1.0f / bottom : ratio / bottom;
+        }
+        else
+        {
+            const auto real = 1.0f - ratio * ratio;
+            const auto imaginary = damping * ratio;
+            const auto bottom = std::sqrt(real * real + imaginary * imaginary);
+            const auto top = type == 4 ? ratio * ratio
+                           : type == 7 ? ratio
+                           : type == 3 ? std::abs(real)
+                           : type == 6 ? std::sqrt(real * real + 2.25f * ratio * ratio)
+                                       : 1.0f;
+            gain = bottom <= 1.0e-9f ? 8.0f : top / bottom;
+            if (type == 2) gain *= gain;
+        }
         const auto db = gain <= 1.0e-6f ? -36.0f : juce::jlimit(-36.0f, 18.0f, 20.0f * std::log10(gain));
         const auto y = box.getBottom() - (db + 36.0f) / 54.0f * box.getHeight();
         if (i == 0) curve.startNewSubPath(x, y); else curve.lineTo(x, y);
     }
     g.setColour(colour.withAlpha(alpha));
     g.strokePath(curve, juce::PathStrokeType(1.6f));
+}
+
+// --- Compressor --------------------------------------------------------------
+//
+// A static transfer curve. It is not a gain-reduction meter: the rack publishes
+// no live level yet, so drawing one would pretend to know something it does not.
+inline void drawFxCompressor(juce::Graphics& g, juce::Rectangle<float> box, const FxSlot& slot,
+                             juce::Colour colour, float alpha)
+{
+    const auto threshold = fxCompressorThreshold(slot.knobs[0]);
+    const auto ratio = fxCompressorRatio(slot.knobs[1]);
+    const auto knee = fxCompressorKnee(slot.knobs[5]);
+    g.setColour(line.withAlpha(alpha * 0.45f));
+    g.drawLine(box.getX(), box.getBottom(), box.getRight(), box.getY(), 1.0f);
+
+    juce::Path curve;
+    const auto points = juce::jlimit(48, 256, juce::roundToInt(box.getWidth()));
+    for (int i = 0; i <= points; ++i)
+    {
+        const auto at = static_cast<float>(i) / static_cast<float>(points);
+        const auto inputDb = -60.0f + at * 60.0f;
+        const auto outputDb = fxCompressorOutputDb(inputDb, threshold, ratio, knee);
+        const auto x = box.getX() + at * box.getWidth();
+        const auto y = box.getBottom() - juce::jlimit(0.0f, 1.0f, (outputDb + 60.0f) / 60.0f) * box.getHeight();
+        if (i == 0) curve.startNewSubPath(x, y); else curve.lineTo(x, y);
+    }
+    g.setColour(colour.withAlpha(alpha));
+    g.strokePath(curve, juce::PathStrokeType(1.6f));
+}
+
+// --- Phaser ------------------------------------------------------------------
+//
+// The notches of dry plus the actual allpass cascade, at the two ends of the
+// LFO sweep. An allpass alone is flat, so drawing only it would be a straight
+// line and conceal the thing a phaser does.
+inline void drawFxPhaser(juce::Graphics& g, juce::Rectangle<float> box, const FxSlot& slot,
+                         double sampleRate, juce::Colour colour, float alpha)
+{
+    const auto stages = fxPhaserStages(slot);
+    const auto centre = fxHertz(slot.knobs[2], 80.0f, 8000.0f);
+    const auto depth = fxScaled(slot.knobs[1], 0.0f, 4.0f);
+    g.setColour(line.withAlpha(alpha * 0.35f));
+    g.fillRect(box.getX(), box.getY() + 1.0f, box.getWidth(), 1.0f);
+
+    for (int sweepIndex = 0; sweepIndex < 2; ++sweepIndex)
+    {
+        const auto corner = juce::jlimit(20.0f, static_cast<float>(sampleRate * 0.45),
+                                         centre * std::pow(2.0f, sweepIndex == 0 ? -depth : depth));
+        const auto tangent = std::tan(juce::MathConstants<float>::pi * corner / static_cast<float>(sampleRate));
+        const auto coefficient = (1.0f - tangent) / (1.0f + tangent);
+        juce::Path curve;
+        const auto points = juce::jlimit(48, 256, juce::roundToInt(box.getWidth()));
+        for (int i = 0; i <= points; ++i)
+        {
+            const auto x = box.getX() + box.getWidth() * static_cast<float>(i) / static_cast<float>(points);
+            const auto hz = filterXToHz(box, x);
+            const auto omega = juce::MathConstants<float>::twoPi * hz / static_cast<float>(sampleRate);
+            const std::complex<float> z(std::cos(omega), -std::sin(omega));
+            const auto stage = (z - coefficient) / (1.0f - coefficient * z);
+            auto allpass = std::complex<float>(1.0f, 0.0f);
+            for (int stageIndex = 0; stageIndex < stages; ++stageIndex) allpass *= stage;
+            const auto gain = std::abs((std::complex<float>(1.0f, 0.0f) + allpass) * 0.5f);
+            const auto db = gain <= 1.0e-6f ? -36.0f : juce::jmax(-36.0f, 20.0f * std::log10(gain));
+            const auto y = box.getBottom() - (db + 36.0f) / 36.0f * box.getHeight();
+            if (i == 0) curve.startNewSubPath(x, y); else curve.lineTo(x, y);
+        }
+        g.setColour(colour.withAlpha(alpha * (sweepIndex == 0 ? 0.48f : 1.0f)));
+        g.strokePath(curve, juce::PathStrokeType(1.4f));
+    }
 }
 
 // --- The well, and whichever of the above belongs in it -----------------------
@@ -317,6 +399,8 @@ inline void drawFxDisplay(juce::Graphics& g, juce::Rectangle<int> area, const Fx
         case FxType::distortion: drawFxDistortion(g, box, slot, colour, alpha); return;
         case FxType::equaliser:  drawFxEqualiser(g, box, slot, sampleRate, colour, alpha); return;
         case FxType::filter:     drawFxFilter(g, box, slot, colour, alpha); return;
+        case FxType::compressor: drawFxCompressor(g, box, slot, colour, alpha); return;
+        case FxType::phaser:     drawFxPhaser(g, box, slot, sampleRate, colour, alpha); return;
         case FxType::off:        break;
     }
 }

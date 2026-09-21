@@ -995,8 +995,8 @@ heap.
   all of these; a slot is set by its TYPE field for now.
 - `DIRECT` is still absent. The rack is what it was waiting for, so it is the
   next thing rather than a later one.
-- Seven of Serum's types are not here: Bode, Compressor, Convolve, Flanger,
-  Hyper/Dimension, Phaser, and the three splitters. Each is now DSP and a row in
+- Seven of Serum's types are not here: Bode, Convolve, Flanger,
+  Hyper/Dimension, and the three splitters. Each is now DSP and a row in
   one table rather than any new machinery.
 - A slot has no display of its own — no delay filter curve, no EQ response. The
   filter module's own display is the model for what those should be.
@@ -1024,7 +1024,7 @@ all.
   the colour, and clicking it opens the list. A slot's identity and its one
   structural choice are now the same object rather than a badge beside a field.
 - **An opening setting.** A parameter has one default and a slot's knobs serve
-  seven types, so the default cannot be right for all of them — 100% wet is what
+  eight effect types, so the default cannot be right for all of them — 100% wet is what
   an equaliser wants and exactly what a reverb on the main output does not. What
   a type opens on lives beside the type in `ForgeFx.h` and the panel applies it
   when a type is chosen, which is what Serum's per-module default preset does.

@@ -3,6 +3,8 @@
 # those can link it without depending on each other.
 add_library(RhinoCore STATIC
     ContentLibrary.cpp
+    EqEngine.cpp
+    SpectrumAnalyser.cpp
     PitchTracker.cpp
     PsolaShifter.cpp
     AutoTuneEngine.cpp)

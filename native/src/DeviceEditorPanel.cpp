@@ -1,6 +1,7 @@
 #include "DeviceEditorPanel.h"
 #include "audio/RhinoSpaceDevice.h"
 #include "audio/AutoTuneDevice.h"
+#include "audio/RhinoEqDevice.h"
 #include <algorithm>
 #include <cmath>
 
@@ -57,13 +58,21 @@ void DeviceEditorPanel::setTarget(int nextTrack, const Session::DeviceSlot& devi
     isSelected = nextSelected;
     face = device.type == RhinoSpaceDevice::xmlTypeName ? Face::RhinoSpace
          : device.type == AutoTuneDevice::xmlTypeName ? Face::AutoTune
+         : device.type == RhinoEqDevice::xmlTypeName ? Face::Eq
          : Face::Generic;
-    // Only the tuner has anything that moves on its own, so only the tuner
-    // asks for frames.
-    if (face == Face::AutoTune)
+    // The tuner's meter and the EQ's spectrum are the only things on any face
+    // that move on their own, so they are the only devices that ask for
+    // frames. The EQ stops asking when its analyser is switched off.
+    const auto* eqDevice = face == Face::Eq
+        ? dynamic_cast<RhinoEqDevice*>(session.devicePlugin(track, pluginSlot)) : nullptr;
+    const auto eqAnalysing = eqDevice != nullptr && device.enabled
+        && eqDevice->analyserMode() != EqEngine::AnalyserMode::Off;
+    if (face == Face::AutoTune || eqAnalysing)
         startTimerHz(24);
     else
         stopTimer();
+    if (face == Face::Eq && spectrum == nullptr)
+        spectrum = std::make_unique<SpectrumReader>();
     parameters = session.deviceParameters(track, pluginSlot);
     title.setText(deviceName, juce::dontSendNotification);
     power.setButtonText(device.enabled ? juce::String::fromUTF8("\xe2\x97\x8f") : juce::String::fromUTF8("\xe2\x97\x8b"));
@@ -79,6 +88,8 @@ int DeviceEditorPanel::preferredWidth() const
 {
     if (face == Face::AutoTune)
         return 712;
+    if (face == Face::Eq)
+        return 660;
     if (face == Face::RhinoSpace)
         return 460;
     const auto columns = std::max(2, std::min(6, visibleParameterCount()));
@@ -100,8 +111,55 @@ void DeviceEditorPanel::mouseDown(const juce::MouseEvent& event)
                 return;
             }
     if (selected) selected();
-    if (face == Face::AutoTune && event.eventComponent == this)
+    // The EQ face hit-tests its own children as well as itself: its knobs
+    // follow the selected band, so which parameter a right-click means is
+    // not known until the click happens.
+    if (face == Face::Eq)
+    {
+        handleEqMouseDown(event);
+        return;
+    }
+    if (event.eventComponent != this)
+        return;
+    if (face == Face::AutoTune)
         handleAutoTuneClick(event);
+}
+
+// The EQ display is dragged, wheeled and double-clicked; nothing else on any
+// face is. Each of these asks the face first and does nothing otherwise, so a
+// generic panel behaves exactly as it did.
+void DeviceEditorPanel::mouseDrag(const juce::MouseEvent& event)
+{
+    if (face == Face::Eq && event.eventComponent == this)
+        handleEqDrag(event);
+}
+
+void DeviceEditorPanel::mouseUp(const juce::MouseEvent& event)
+{
+    if (face != Face::Eq || !eqDragging)
+        return;
+    juce::ignoreUnused(event);
+    if (eqDragBand >= 0)
+    {
+        session.endDeviceParameterGesture(track, pluginSlot, RhinoEqDevice::frequencyParameter(eqDragBand));
+        session.endDeviceParameterGesture(track, pluginSlot, RhinoEqDevice::gainParameter(eqDragBand));
+    }
+    eqDragging = false;
+    eqDragBand = -1;
+}
+
+void DeviceEditorPanel::mouseDoubleClick(const juce::MouseEvent& event)
+{
+    if (face == Face::Eq && event.eventComponent == this)
+        handleEqDoubleClick(event);
+}
+
+void DeviceEditorPanel::mouseWheelMove(const juce::MouseEvent& event,
+                                       const juce::MouseWheelDetails& wheel)
+{
+    if (face == Face::Eq && event.eventComponent == this && handleEqWheel(event, wheel))
+        return;
+    Component::mouseWheelMove(event, wheel);
 }
 
 // "Show automation" reveals the lane over the track itself; "on new lane"
@@ -121,7 +179,11 @@ void DeviceEditorPanel::showParameterMenu(int index)
     menu.addSeparator();
     menu.addItem(3, "Hide automation", lane.visible);
     menu.addItem(4, "Delete automation", lane.active);
-    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(parameterSliders[index]),
+    // The EQ face has more parameters than the generic grid has knobs, so the
+    // menu falls back to the panel when there is no slider to point at.
+    auto* anchor = index < parameterSliders.size()
+        ? static_cast<juce::Component*>(parameterSliders[index]) : this;
+    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(anchor),
         [safe = juce::Component::SafePointer<DeviceEditorPanel>(this), target, name] (int result)
         {
             if (safe == nullptr || result == 0) return;
@@ -247,6 +309,11 @@ void DeviceEditorPanel::paint(juce::Graphics& g)
         paintAutoTune(g);
         return;
     }
+    if (face == Face::Eq)
+    {
+        paintEq(g);
+        return;
+    }
     if (face != Face::RhinoSpace)
         return;
 
@@ -281,8 +348,15 @@ void DeviceEditorPanel::resized()
     power.setBounds(3, 2, 20, 19);
     title.setBounds(27, 1, getWidth() - 32, 21);
     contentArea = getLocalBounds().withTrimmedTop(24).reduced(4);
+    // A panel can be retargeted from one device to another without being
+    // rebuilt, so the EQ's own knobs go away when the face does.
+    if (face != Face::Eq)
+        for (auto* slider : eqSliders)
+            slider->setVisible(false);
     if (face == Face::AutoTune && contentArea.getWidth() >= 620 && contentArea.getHeight() >= 120)
         layoutAutoTune();
+    else if (face == Face::Eq && contentArea.getWidth() >= 560 && contentArea.getHeight() >= 110)
+        layoutEq();
     else if (face == Face::RhinoSpace && contentArea.getWidth() >= 350 && contentArea.getHeight() >= 80)
         layoutRhinoSpace();
     else

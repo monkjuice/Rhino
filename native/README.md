@@ -106,6 +106,52 @@ The latency is real and is reported through `getLatencySeconds`. It is half the 
 
 Its editor is `DeviceEditorPanelAutoTune.cpp`, a second translation unit of `DeviceEditorPanel`. Everything on it that is not a knob -- the cents meter, the scale keyboard, the two choosers, the range toggles -- is drawn and hit-tested by rectangle rather than made into child components, because the rack destroys and rebuilds every panel whenever anything about a track changes. It is the only face that needs the device itself rather than its parameter list, which is what `Session::devicePlugin` is for.
 
+## Rhino EQ
+
+Eight bands, the eight filter types EQ Eight offers, and a live spectrum
+behind the curve. Like Rhino Tune it is split between `src/core/` and
+`src/devices/audio/RhinoEqDevice.cpp`, and almost all of it is in core.
+
+- **`EqFilter.h`** is a pure header with no JUCE, the way `ScaleQuantizer.h`
+  is. It holds the eight types, the RBJ coefficients for each, and
+  `eqBandMagnitudeDbAt`. **The curve on screen is drawn from this file, not
+  from a second set of formulas.** A response drawn from its own arithmetic is
+  a drawing of what someone believed the filter does; drawn from the
+  coefficients the samples go through, it cannot be wrong about the audio
+  except by arithmetic. `EqTest.cpp` holds the two against each other by
+  sweeping a sine through the engine and measuring what comes out, which is
+  the one defect an EQ display can really have.
+- The steep cuts are a four-biquad Butterworth cascade, which is where the
+  48 dB an octave comes from and why the band Q does not reach them: their
+  stage Qs are constants of the design. The gentle cuts are one biquad and do
+  take the band Q, so they can resonate at the corner.
+- **`EqEngine`** smooths frequency in the log domain, gain and Q linearly, at
+  block rate, and recomputes coefficients only for a band that moved. Two
+  things are crossfaded sample by sample instead, because block granularity is
+  what makes a click: a band switching on or off, and a band changing type.
+  The second needs the filter it is leaving to keep running on a copy of its
+  own state, so the blend starts at exactly what the band was already
+  producing. That is the whole reason `StageState` carries two pairs of delays.
+- **`SpectrumAnalyser`** splits along the thread boundary. `SpectrumTap` is
+  the audio side and does nothing but copy a mono sum into a ring -- no
+  transform, no allocation, no lock. `SpectrumReader` is the message side and
+  does the window, the transform and the fold into log bins in the panel's
+  timer callback. A spectrum is a thing a person is looking at; it should not
+  be able to cost a dropout when nobody is.
+
+Its editor is `DeviceEditorPanelEq.cpp`, a second translation unit of
+`DeviceEditorPanel`. The display is the control: a band is dragged where it is
+wanted, the wheel widens or narrows it, a double-click switches it off and a
+right-click changes what kind of filter it is. The three knobs beside it
+follow whichever band is in hand rather than standing for one each, which is
+why they are not the generic grid's sliders. The response is cached as a
+`juce::Path` and rebuilt only when a parameter moves; the frame path strokes
+it and repaints the display rectangle alone, not the panel.
+
+Not yet matched to EQ Eight: the Stereo / L-R / M-S channel modes, adaptive Q
+and oversampling. The bands, the types, the analyser and the drag-the-curve
+editing are there.
+
 ## Dependencies
 
 Pinned to the source-study Tracktion revision and its exact JUCE submodule revision. See `scripts/fetch-dependencies.py` for hashes. Upstream licence files are retained inside `.deps`; this does not change the licensing findings in the research.

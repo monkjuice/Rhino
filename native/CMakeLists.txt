@@ -87,6 +87,7 @@ target_sources(RhinoNative PRIVATE
     src/AudioClipPanel.cpp
     src/DeviceEditorPanel.cpp
     src/DeviceEditorPanelAutoTune.cpp
+    src/DeviceEditorPanelEq.cpp
     src/DeviceRack.cpp
     src/Playhead.cpp
     src/CountInClick.cpp
@@ -98,6 +99,7 @@ target_sources(RhinoNative PRIVATE
     # Tests
     src/tests/SelfTest.cpp
     src/tests/AutoTuneTest.cpp
+    src/tests/EqTest.cpp
     src/tests/Pattern/DeviceRackTest.cpp
     src/tests/Pattern/WorkflowTest.cpp
     src/tests/Arrangement/ClipGeometryTest.cpp

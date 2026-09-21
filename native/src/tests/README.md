@@ -19,12 +19,16 @@ Get-WinEvent -FilterHashtable @{LogName='Application'; ProviderName='Application
 
 Two of its checks were wrong before they were right, and both mistakes generalise. One asserted that C# corrects to C in C major: C# is the same distance from C and from D, so which way a tie falls is not a property worth testing, and a tracker landing a hundredth of a semitone either side flips it. The other measured a formant shift by the tallest partial, which moved from the sixth harmonic to the second when the envelope rose — the shift was working and the measurement said the opposite. Where a spectrum is being compared, prefer a statistic over the whole of it, such as the harmonic below which most of the magnitude lies, to any single peak.
 
+`EqTest.cpp` is the same idea pointed at a different risk. An EQ display can be wrong in exactly one interesting way -- the curve saying something the audio does not do -- so the test sweeps a sine through `EqEngine`, measures the level that comes out with a windowed single-frequency transform, and compares it against `EqEngine::responseDbAt` at the same frequency. The two reach the same coefficients by completely different routes, one sample by sample through a difference equation and the other by evaluating a transfer function, so they cannot agree by construction.
+
+Its click check earned its place immediately: asserting that no two consecutive samples differ by more than 0.2 caught the engine swapping filter coefficients instantly on a type change, which the crossfade in `EqEngine::process` now covers. A test that fails the first time it runs is worth more than one written to pass.
+
 Add a unit-style test when behavior can be exercised without a complete `Session`, audio render, desktop peer, or pointer sequence. Add a workflow scenario when the contract crosses those boundaries. Prefer extending the narrowest existing file; create a new scenario once a file approaches roughly 200 lines or mixes unrelated behavior.
 
 CTest entry points:
 
 - `native_arrangement_geometry`: clip edit bounds and playhead damage calculations
-- `native_device_correctness`: device DSP and state restoration, including Rhino Tune's measured checks in `AutoTuneTest.cpp`
+- `native_device_correctness`: device DSP and state restoration, including Rhino Tune's and Rhino EQ's measured checks in `AutoTuneTest.cpp` and `EqTest.cpp`
 - `native_pattern_workflow`: notes, presets, automation, renders, and project persistence
 - `native_arrangement_workflow`: browser drops, drawing, editing, tracks, and arrangement persistence
 - `native_startup_lifecycle`: application startup

@@ -387,6 +387,7 @@ int runSelfTest()
         }
 
         checkAutoTuneDsp(session);
+        checkRhinoEqDsp(session);
 
         session.releaseAudioDevice();
         return 0;

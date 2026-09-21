@@ -754,9 +754,10 @@ int runSelfTest();
 int runPatternTest();
 int runArrangementTest();
 int runArrangementGeometryTest();
-// Rhino Tune's checks are their own translation unit because they measure
-// rendered audio rather than reading state back, and that needs a page of
-// scaffolding -- a transform, a tone generator -- that nothing else wants.
-// runSelfTest calls it.
+// Rhino Tune's and Rhino EQ's checks are their own translation units because
+// they measure rendered audio rather than reading state back, and that needs
+// a page of scaffolding -- a transform, a tone generator -- that nothing else
+// wants. runSelfTest calls both.
 void checkAutoTuneDsp(Session&);
+void checkRhinoEqDsp(Session&);
 }

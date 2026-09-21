@@ -4,6 +4,7 @@
 #include "audio/UtilityDevice.h"
 #include "audio/RhinoSpaceDevice.h"
 #include "audio/RhinoBloomDevice.h"
+#include "audio/RhinoEqDevice.h"
 #include "audio/AutoTuneDevice.h"
 #include "midi/RhinoArpDevice.h"
 
@@ -41,9 +42,12 @@ std::vector<DeviceDescriptor> buildCatalog()
          0xff738044, "drums", false, false, false});
 
     // ---- Audio FX ----------------------------------------------------------
-    add({"Equaliser", te::EqualiserPlugin::xmlTypeName, "EQ", {},
-         DeviceKind::AudioEffect, "EQ and Filters", "Tracktion 4-band EQ",
-         0, {}, true, false, false});
+    // Keeps the id the Tracktion four-band EQ had: presets, browser drops
+    // and Session::AudioEffect all name a device by id, and this is the same
+    // slot in the chain with eight bands and a display behind them.
+    add({"Equaliser", RhinoEqDevice::xmlTypeName, "Rhino EQ", "EQ",
+         DeviceKind::AudioEffect, "EQ and Filters", "Eight bands over a live spectrum",
+         0xff6f9ec4, {}, true, false, false});
 
     add({"Compressor", te::CompressorPlugin::xmlTypeName, "Compressor", {},
          DeviceKind::AudioEffect, "Dynamics", "Tracktion compressor",
@@ -134,6 +138,7 @@ void DeviceCatalog::registerBuiltInTypes(te::Engine& engine)
     plugins.createBuiltInType<DrumDevice>();
     plugins.createBuiltInType<RhinoSpaceDevice>();
     plugins.createBuiltInType<RhinoBloomDevice>();
+    plugins.createBuiltInType<RhinoEqDevice>();
     plugins.createBuiltInType<AutoTuneDevice>();
     plugins.createBuiltInType<RhinoArpDevice>();
     plugins.createBuiltInType<RhinoWaveDevice>();

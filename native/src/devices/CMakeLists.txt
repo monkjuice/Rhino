@@ -15,6 +15,7 @@ add_library(RhinoDevices STATIC
     audio/UtilityDevice.cpp
     audio/RhinoSpaceDevice.cpp
     audio/RhinoBloomDevice.cpp
+    audio/RhinoEqDevice.cpp
     audio/AutoTuneDevice.cpp
     midi/RhinoArpDevice.cpp)
 # Only the devices/ root is public, so an include names the kind it wants:

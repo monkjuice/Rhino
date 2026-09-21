@@ -455,6 +455,11 @@ bool DeviceEditorPanel::handleAutoTuneClick(const juce::MouseEvent& event)
 
 void DeviceEditorPanel::timerCallback()
 {
+    if (face == Face::Eq)
+    {
+        tickEqSpectrum();
+        return;
+    }
     if (face != Face::AutoTune)
     {
         stopTimer();

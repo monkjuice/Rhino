@@ -1,5 +1,7 @@
 #pragma once
 #include "Session.h"
+#include "SpectrumAnalyser.h"
+#include <memory>
 #include <vector>
 
 namespace rhino
@@ -18,11 +20,15 @@ public:
     void paint(juce::Graphics&) override;
     void resized() override;
     void mouseDown(const juce::MouseEvent&) override;
+    void mouseDrag(const juce::MouseEvent&) override;
+    void mouseUp(const juce::MouseEvent&) override;
+    void mouseDoubleClick(const juce::MouseEvent&) override;
+    void mouseWheelMove(const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
     std::function<void(juce::String)> status;
     std::function<void()> selected;
 
 private:
-    enum class Face { Generic, RhinoSpace, AutoTune };
+    enum class Face { Generic, RhinoSpace, AutoTune, Eq };
     void ensureControls();
     void styleControls();
     void layoutGeneric();
@@ -34,6 +40,21 @@ private:
     void layoutAutoTune();
     void paintAutoTune(juce::Graphics&);
     bool handleAutoTuneClick(const juce::MouseEvent&);
+    // Rhino EQ's face is DeviceEditorPanelEq.cpp, for the same reason: a
+    // curve over a live spectrum, eight handles sitting on it, and three
+    // knobs that follow whichever band is in hand. None of that is parameter
+    // grid arithmetic either.
+    void layoutEq();
+    void paintEq(juce::Graphics&);
+    void ensureEqControls();
+    void styleEqControls();
+    bool handleEqMouseDown(const juce::MouseEvent&);
+    bool handleEqDrag(const juce::MouseEvent&);
+    bool handleEqDoubleClick(const juce::MouseEvent&);
+    bool handleEqWheel(const juce::MouseEvent&, const juce::MouseWheelDetails&);
+    void showEqTypeMenu(int band);
+    void rebuildEqCurve();
+    void tickEqSpectrum();
     // Only the meter, the detected note and the target key repaint; the rest
     // of the face is static and stays out of the frame path.
     void timerCallback() override;
@@ -55,5 +76,20 @@ private:
     // What the meter last drew, so an idle device asks for no frames at all.
     float lastDrawnCents = 0.0f, lastDrawnNote = 0.0f;
     int lastDrawnBand = -2;
+
+    // ---- Rhino EQ ---------------------------------------------------------
+    // The reader is heap-allocated because it carries the transform tables
+    // and a 2048-point frame, and only one panel in a rack is ever an EQ.
+    std::unique_ptr<SpectrumReader> spectrum;
+    // Five knobs, not twenty-six: three follow the selected band and two are
+    // the global pair. The generic grid cannot do that, because the parameter
+    // behind a control there is fixed when the control is made.
+    juce::OwnedArray<juce::Slider> eqSliders;
+    // The response only moves when a parameter does, so it is built once per
+    // change and the frame path just strokes it.
+    juce::Path eqCurve, eqBandCurve;
+    juce::Rectangle<int> eqDisplay;
+    int eqDragBand = -1;
+    bool eqDragging = false;
 };
 }

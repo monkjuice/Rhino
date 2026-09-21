@@ -1309,6 +1309,118 @@ moves.
   table only takes the edge off it. They are the two modes that would most
   repay oversampling the oscillator, which nothing in Forge does yet.
 
+### M13 — the arpeggiator — done
+
+Serum's ARP module, pp. 244-266 of the manual, as one arpeggiator. The twelve
+launchable slots, the arp banks and the custom pattern editor are deliberately
+left for M13b and M13c; everything else on those pages is here.
+
+**Where it lives, and why it is not a tab.** The panel gave up the keyboard's
+bottom octave and put the **ARP** plate there, between the left-hand decal and
+the keys — where Serum puts its own ARP switch, and where the hand already is.
+The plate is sized as exactly the octave that came off, so every key is the
+width it always was: the keys are still divided out of the span they had, and
+only the range changed. The decal outboard of it was left alone on purpose;
+that is where the pitch and modulation wheels go when they arrive, and its
+lettering is the thing they replace.
+
+The settings are an **overlay on ENV and LFO**, not a sixth tab. A patch is
+adjusted at the macros while a pattern runs, and the oscillators and the filter
+are what you want to keep watching while it does — so the arp covers the two
+modules you are least likely to be reading at that moment and leaves GLOBAL and
+the macros on either side of it. It opens over whichever tab is showing, and the
+tabs are untouched.
+
+It is still declared as a page. `Page::arp` is a bit like the five tabs but is
+never what `page` is set to, and `everyPage` deliberately means *every tab*
+rather than every page — so ENV and LFO, which declare `everyPage`, share no page
+with the arp. That is what keeps the layout test's "no two modules shown
+together overlap" check true through an overlay that is, by construction, on top
+of two modules. What the overlay covers is worked out from the declarations
+rather than named: `coveredByArp` asks which modules' grid cells the arp's own
+panes occupy, so moving a pane a column moves what it hides with it.
+
+**Six panes, one plate,** in the manual's own grouping, sharing a group plate the
+way SUB and NOISE do. The first is called ARP rather than GLOBAL, which is the
+manual's name for it: Forge already has a GLOBAL standing immediately beside it,
+and two plates a centimetre apart carrying the same word is worse than departing
+from the manual by one heading. It is also the pane wearing the arp's power
+lamp, so its own name is the one that belongs on it.
+
+**Eighteen shapes, and one list serving twice.** Serum's SHAPE field and its
+transpose-range menu offer the same vocabulary — Up, Thumb Up, Converge, the
+random four — and mean the same thing by it: an order to visit a set of things
+in. So `arpOrder` is written over indices rather than over notes, and is called
+once for the keys held down and once for the transposition stages, knowing which
+it is doing neither time. The turning points are where these go wrong, and the
+tests say so explicitly: Up/Down sounds the top note once and Up+Down sounds it
+twice, which is the whole difference between the two pairs.
+
+**The arp is not part of Core.** It stands in front of the voices rather than
+inside one — it decides which notes Core is asked to play — so `Core` knows
+nothing about it and the Processor owns and drives it. It emits through two
+callbacks, which is what lets the whole of it be exercised by a pair of lambdas
+with no `Processor`, no `Core` and no audio device: what the arp did is a list of
+note numbers rather than a waveform to be measured, and an expectation can be
+written down rather than measured out. `tests/ForgeTestsArp.cpp` is mostly that,
+with one suite at the end going through a `Processor` because the one thing
+lambdas cannot check is that the notes reach the voices.
+
+Nothing in it allocates. The held keys, the order they are visited in and the
+notes still sounding are fixed arrays, because `advance` runs once per sample.
+
+**TRIP and DOT scale the division rather than being entries in it,** which is
+what keeps the rate list seven long instead of twenty-one, and is what Serum
+does. Both at once is a dotted triplet, which is a real if unusual rate, so
+neither switch cancels the other.
+
+**What the tests caught.** `arp.advance` was handed
+`AudioProcessor::getSampleRate()`, which is set by the host calling
+`setRateAndBufferSizeDetails` and is therefore zero whenever `prepareToPlay` is
+called directly — as every test does, and as the standalone does. The arp
+divided by it, stepped once per sample, and stacked every voice the synth had
+into a continuous tone. The rate `prepareToPlay` was given is kept instead. The
+check that found it is deliberately worded as *silence between the notes*
+measured over a window shorter than one step: the first version of it averaged
+over a window longer than a step, and passed on a build where the arp was doing
+nothing recognisable at all.
+
+**Known interaction.** Core allocates a voice per note number, so a key passed
+through by THRU and the same pitch played by the arp are one voice rather than
+two, and the arp's gate releases it. Untransposed, the arp is always playing a
+note that is being held, so THRU reads as a shortened root under a plain pattern
+and as intended under a transposing one. Giving the two paths separate voices
+means keying allocation on something other than the note, which is a change to
+the voice allocator rather than to the arp, and is not worth making until
+something else wants it.
+
+### M13b — the twelve arp slots — not started
+
+The ARP module holds twelve arpeggiators per bank, launchable from the computer
+keyboard or from MIDI, plus the bank field, `EDIT ALL`, and bank presets that
+save and load. It is a clip-launcher-shaped feature in its own right, which is
+why it is not in M13. `LAUNCH QUANT` already exists and already means what it
+will mean then — it holds a started arp to the next division of the host's bar.
+
+### M13c — the custom pattern editor — not started
+
+`SHAPE` set to Pattern opens a graph editor: a piano roll of note events with
+accent and strum lanes, pattern length, play mode, step mode and wrap, and
+patterns that save and load. The manual (p. 253) says outright that it "offers
+capabilities very similarly to the piano roll in the CLIP module".
+
+**The intent is to reuse Rhino's own note editor rather than write a second
+one.** That is not a straight lift: `StepGrid` takes a `Session&` and reaches
+into it about a hundred times across four files, and `Session.h` pulls in
+Tracktion — which Forge deliberately owns none of. Reusing it means first
+extracting the part that is genuinely about a grid of notes from the part that
+is about a Rhino track, the way `ClipGeometry.h` was extracted: a header with no
+Session or engine dependency, holding what a note is, where it lands, and what a
+drag does to it, with `StepGrid` and the arp editor as two readers of it. Doing
+that is most of this milestone, and it improves the DAW side as much as it
+enables the synth side — which is the only reason it is worth doing at all
+rather than writing a small editor here.
+
 ## Out of scope for now
 
 These are the north star, not this plan. They come after the synth is finished.
@@ -1317,7 +1429,8 @@ These are the north star, not this plan. They come after the synth is finished.
   copy and paste between racks, and the seven Serum types M11a left out. Plus
   the `DIRECT` output, which needed effects to bypass before it could mean
   anything.
-- **M13 — Second filter,** with the serial/parallel routing Serum exposes.
+- **M15 — Second filter,** with the serial/parallel routing Serum exposes.
+  (Renumbered: M13 is the arpeggiator, which landed first.)
 - **M14 — Preset browser** with tags and search.
 - **Later still:** MPE, sample and granular sources, spectral oscillators.
 
@@ -1386,3 +1499,7 @@ way to look at a change.
 | M11b The rack, by eye | **done** — ready to test by eye |
 | M11c A display per slot | **done** — ready to test by eye |
 | M11d Controls that fit what they choose | **done** — ready to test by hand |
+| M12 Warp on both oscillators | **done** — ready to test by ear |
+| M13 The arpeggiator | **done** — ready to test by ear and by hand |
+| M13b The twelve arp slots | not started |
+| M13c The custom pattern editor | not started |

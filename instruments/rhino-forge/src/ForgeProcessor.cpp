@@ -19,6 +19,8 @@ Processor::Processor()
 void Processor::prepareToPlay(double sampleRate, int)
 {
     core.initialise(sampleRate);
+    arp.reset();
+    preparedSampleRate = juce::jmax(1.0, sampleRate);
     // Hand the engine each destination's range so modulation happens in the
     // same normalised space the knob moves in. Taken from the parameters
     // themselves, so there is only ever one definition of a range.
@@ -52,6 +54,90 @@ float Processor::lfoRateHz(int lfo) const
     return static_cast<float>(tempo / 60.0) / juce::jmax(0.0001f, beats);
 }
 
+// How long one arp step lasts. The same division of labour the LFOs use: the
+// tempo is resolved into seconds here, and ForgeArp.h never sees a BPM.
+//
+// TRIP and DOT scale whichever division is chosen rather than being entries in
+// the list, which is what keeps that list seven long instead of twenty-one. Both
+// at once is a dotted triplet, which is a real if unusual rate, so neither
+// switch cancels the other.
+float Processor::arpStepSeconds() const
+{
+    const auto value = [this] (const char* id) { return state.getRawParameterValue(id)->load(); };
+    if (value("arpRateUnit") < 0.5f)
+        return 1.0f / juce::jmax(0.01f, value("arpRate"));
+
+    const auto beats = arpDivisions()[static_cast<size_t>(
+        juce::jlimit(0, arpDivisionCount - 1, juce::roundToInt(value("arpDivision"))))].beats;
+    const auto bpm = hostBpm.load(std::memory_order_relaxed);
+    // Standing in for a host that reports no tempo, so a synced arp still runs
+    // at a musical rate in a standalone rather than stopping dead.
+    const auto tempo = bpm > 0.0 ? bpm : 120.0;
+    auto scale = 1.0f;
+    if (value("arpTriplet") >= 0.5f) scale *= 2.0f / 3.0f;
+    if (value("arpDotted") >= 0.5f) scale *= 1.5f;
+    return static_cast<float>(60.0 / tempo) * beats * scale;
+}
+
+// Everything the arp reads, gathered once per block the way the Patch is, so
+// `advance` touches no parameter object on the audio thread.
+ArpSettings Processor::arpSettings() const
+{
+    const auto value = [this] (const char* id) { return state.getRawParameterValue(id)->load(); };
+    const auto on = [&value] (const char* id) { return value(id) >= 0.5f; };
+    const auto shape = [&value] (const char* id)
+    {
+        return static_cast<ArpShape>(juce::jlimit(0, arpShapeCount - 1, juce::roundToInt(value(id))));
+    };
+
+    ArpSettings settings;
+    settings.enabled = on("arpEnable");
+    settings.shape = shape("arpShape");
+    settings.stepSeconds = arpStepSeconds();
+    settings.offset = juce::roundToInt(value("arpOffset"));
+    settings.repeats = juce::roundToInt(value("arpRepeats"));
+    settings.gate = value("arpGate");
+    settings.chance = value("arpChance");
+    settings.chancePre = on("arpChancePre");
+    settings.latch = on("arpLatch");
+    settings.thru = on("arpThru");
+    settings.shift = juce::roundToInt(value("arpShift"));
+    settings.range = juce::roundToInt(value("arpRange"));
+    settings.rangeShape = shape("arpRangeShape");
+    settings.retriggerOnNote = on("arpRetrigNote");
+    settings.retriggerFirstOnly = on("arpRetrigFirst");
+    settings.retriggerOnRate = on("arpRetrigRateOn");
+    settings.retriggerSeconds = arpDivisions()[static_cast<size_t>(
+        juce::jlimit(0, arpDivisionCount - 1, juce::roundToInt(value("arpRetrigRate"))))].beats
+        * static_cast<float>(60.0 / (hostBpm.load(std::memory_order_relaxed) > 0.0
+                                         ? hostBpm.load(std::memory_order_relaxed) : 120.0));
+    // OFF is the first entry, so the divisions start at one.
+    const auto quant = juce::jlimit(0, arpDivisionCount, juce::roundToInt(value("arpLaunchQuant")));
+    settings.launchQuantBeats = quant <= 0
+        ? 0.0f : arpDivisions()[static_cast<size_t>(quant - 1)].beats;
+    settings.velocityOn = on("arpVelEnable");
+    settings.velocityRetrigger = on("arpVelRetrig");
+    settings.velocityDecay = value("arpVelDecay");
+    settings.velocityTarget = value("arpVelTarget");
+    return settings;
+}
+
+// Where the next division of the bar falls, as a delay in samples. Off, or a
+// host that is not rolling, is no delay at all: quantising against a transport
+// that is not moving would hold the first note for ever.
+void Processor::quantiseArpStart(int sampleIndex, const ArpSettings& settings)
+{
+    if (settings.launchQuantBeats <= 0.0f || !hostPlaying) return;
+    const auto bpm = hostBpm.load(std::memory_order_relaxed);
+    if (bpm <= 0.0) return;
+
+    const auto beatsPerSample = bpm / 60.0 / preparedSampleRate;
+    const auto ppq = hostPpq + sampleIndex * beatsPerSample;
+    const auto quant = static_cast<double>(settings.launchQuantBeats);
+    const auto next = std::ceil(ppq / quant) * quant;
+    arp.delayFirstStep((next - ppq) / juce::jmax(1.0e-9, beatsPerSample));
+}
+
 void Processor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
     juce::ScopedNoDenormals noDenormals;
@@ -64,8 +150,12 @@ void Processor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
     // against it.
     if (auto* playHead = getPlayHead())
         if (const auto position = playHead->getPosition())
+        {
             if (const auto bpm = position->getBpm())
                 hostBpm.store(*bpm, std::memory_order_relaxed);
+            hostPlaying = position->getIsPlaying();
+            if (const auto ppq = position->getPpqPosition()) hostPpq = *ppq;
+        }
 
     // Anything played on the editor's keyboard joins the host's own notes
     // before a single sample is rendered.
@@ -76,6 +166,25 @@ void Processor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
     core.setTempo(hostBpm.load(std::memory_order_relaxed));
     const auto values = patch();
     const auto mods = modulation();
+    const auto arpValues = arpSettings();
+
+    // The arp holds its notes on a gate clock of its own, so switching it off
+    // mid-phrase is the one moment nothing else would ever come back to stop
+    // them. Releasing the latch is the same kind of edge: the chord it was
+    // holding has to go when no finger is on it.
+    if (arpWasEnabled && !arpValues.enabled)
+    {
+        arp.flush([this] (int note) { core.noteOff(note); });
+        arp.allNotesOff();
+    }
+    if (arpWasLatched && !arpValues.latch) arp.releaseLatch();
+    // LAUNCH: the arp switched on starts its pattern from the beginning rather
+    // than from wherever the last one left off.
+    if (!arpWasEnabled && arpValues.enabled && state.getRawParameterValue("arpRetrigLaunch")->load() >= 0.5f)
+        arp.restart(arpValues);
+    arpWasEnabled = arpValues.enabled;
+    arpWasLatched = arpValues.latch;
+
     auto event = midi.cbegin();
     const auto end = midi.cend();
     for (int i = 0; i < buffer.getNumSamples(); ++i)
@@ -85,11 +194,54 @@ void Processor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
             const auto metadata = *event;
             if (metadata.samplePosition > i) break;
             const auto message = metadata.getMessage();
-            if (message.isNoteOn()) core.noteOn(message.getNoteNumber(), message.getFloatVelocity(), values);
-            else if (message.isNoteOff()) core.noteOff(message.getNoteNumber());
-            else if (message.isAllNotesOff()) core.allNotesOff();
+            // With the arp on, the keys feed the pattern rather than the
+            // voices, and THRU is what decides whether they also reach the
+            // voices directly — the MIDI THRU port the manual likens it to.
+            //
+            // Core allocates a voice per note number, so a key passed through
+            // and the same pitch played by the arp are one voice rather than
+            // two, and the arp's gate releases it. That is audible only where
+            // the arp is playing the very note being held — untransposed, it
+            // always is — so THRU is heard as it is meant to be under a
+            // transposing pattern and as a shortened root under a plain one.
+            // Giving the two paths separate voices means keying allocation on
+            // something other than the note, which is a change to the voice
+            // allocator rather than to the arp.
+            if (arpValues.enabled)
+            {
+                const auto wasPlaying = arp.isPlaying();
+                if (message.isNoteOn())
+                {
+                    arp.noteOn(message.getNoteNumber(), message.getFloatVelocity(), arpValues);
+                    // A pattern that has just started from nothing is the one
+                    // moment LAUNCH QUANT applies: it holds the first step back
+                    // to the host's grid, and says nothing about the steps after
+                    // it, which the rate already spaces.
+                    if (!wasPlaying && arp.isPlaying()) quantiseArpStart(i, arpValues);
+                }
+                else if (message.isNoteOff()) arp.noteOff(message.getNoteNumber(), arpValues);
+                else if (message.isAllNotesOff()) arp.allNotesOff();
+                // While the arp is on, CC64 works the latch rather than
+                // sustaining notes, which is what the manual says Serum does
+                // and what a pedal under an arpeggio is actually wanted for.
+                else if (message.isSustainPedalOn()) arp.sustain(true);
+                else if (message.isSustainPedalOff()) arp.sustain(false);
+            }
+
+            if (!arpValues.enabled || arpValues.thru)
+            {
+                if (message.isNoteOn()) core.noteOn(message.getNoteNumber(), message.getFloatVelocity(), values);
+                else if (message.isNoteOff()) core.noteOff(message.getNoteNumber());
+                else if (message.isAllNotesOff()) core.allNotesOff();
+            }
             ++event;
         }
+        // Between the events and the render, so a note the arp starts on this
+        // sample is sounding in this sample rather than the next one.
+        arp.advance(arpValues, preparedSampleRate,
+                    [this, &values] (int note, float velocity) { core.noteOn(note, velocity, values); },
+                    [this] (int note) { core.noteOff(note); });
+
         float left, right; core.renderSample(values, mods, left, right);
         buffer.addSample(0, i, left);
         if (buffer.getNumChannels() > 1) buffer.addSample(1, i, right);

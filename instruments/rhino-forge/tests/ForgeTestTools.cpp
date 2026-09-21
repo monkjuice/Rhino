@@ -30,7 +30,20 @@ int runSnapshot(int argc, char** argv)
     }
     std::unique_ptr<juce::AudioProcessorEditor> editor(processor->createEditor());
     if (argc > 4) editor->setSize(juce::String(argv[3]).getIntValue(), juce::String(argv[4]).getIntValue());
-    if (argc > 5)
+    // ARP is not one of the tabs — it is the plate beside the keyboard, and it
+    // opens over whichever tab is showing. There is no button to reach for, so
+    // the review takes the same route a hand does and presses the plate.
+    if (argc > 5 && juce::String(argv[5]).equalsIgnoreCase("ARP"))
+    {
+        const auto at = rhino::forge::ui::arpPlateBounds(editor->getLocalBounds())
+                            .getCentre().toFloat();
+        const juce::MouseEvent click(juce::Desktop::getInstance().getMainMouseSource(), at,
+                                     juce::ModifierKeys(), 1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+                                     editor.get(), editor.get(), juce::Time::getCurrentTime(),
+                                     at, juce::Time::getCurrentTime(), 1, false);
+        editor->mouseDown(click);
+    }
+    else if (argc > 5)
         for (auto* child : editor->getChildren())
             if (auto* tab = dynamic_cast<rhino::forge::ui::PageTab*>(child))
                 if (tab->getButtonText() == juce::String(argv[5]).toUpperCase() && tab->onClick)

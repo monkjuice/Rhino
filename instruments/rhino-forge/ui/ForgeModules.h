@@ -489,9 +489,84 @@ inline const std::vector<Module>& modules()
           {25, {{"macro3", "3"}, {"macro4", "4"}}},
           {25, {{"macro5", "5"}, {"macro6", "6"}}},
           {25, {{"macro7", "7"}, {"macro8", "8"}}}}},
+
+        // --- The arpeggiator ---------------------------------------------------
+        //
+        // Six panes, in the order the manual names them, sharing one plate: the
+        // same arrangement SUB and NOISE use, because this is one piece of
+        // hardware with six groups of controls on it rather than six modules.
+        //
+        // They stand exactly on ENV and LFO — columns 3 to 21 of the lower row,
+        // which is what those two occupy between them — so opening the arp
+        // covers the modulators and leaves GLOBAL and the macros either side of
+        // it on screen. That is the point of putting it there rather than over
+        // the signal row: a patch is adjusted at the macros while the arp runs,
+        // and the oscillators and the filter are what you want to keep watching
+        // while a pattern plays.
+        //
+        // Every one of them declares only(Page::arp), which is not a tab. It is
+        // the plate beside the keyboard that opens them, and nothing else on
+        // the panel moves when it does.
+        // The manual calls this pane GLOBAL. It is called ARP here because
+        // Forge already has a GLOBAL — the voicing column — and the arp stands
+        // immediately beside it, so two plates a centimetre apart would both
+        // have carried the same word. This is also the pane wearing the arp's
+        // power lamp, so its own name is the one that belongs on it.
+        //
+        // The bank field and EDIT ALL the manual puts here belong to the twelve
+        // launchable slots and arrive with them.
+        {"arpGlobal", "ARP", "", "arpEnable", true, Display::none, 1, 3, 2, true,
+         {{100, {{"arpLaunchQuant", "LAUNCH QUANT", Style::stepper}}}},
+         0, only(Page::arp), 1, 0, 0, 0, 0, nullptr, "ARPEGGIATOR"},
+
+        // RATE is one knob in one place and UNIT says what it counts in, the
+        // pair sharing a cell exactly as an LFO's rate does. TRIP and DOT scale
+        // whichever division is chosen rather than being entries in it.
+        {"arpPattern", "PATTERN", "", nullptr, true, Display::none, 1, 5, 4, true,
+         {{34, {{"arpShape", "SHAPE", Style::stepper}}},
+          {36, {{"arpRate", "RATE", Style::knob, "arpRateUnit"},
+                {"arpDivision", "RATE", Style::knob, nullptr, 1, "arpRateUnit", true},
+                {"arpRateUnit", "UNIT", Style::stepper}}},
+          {30, {{"arpTriplet", "TRIP", Style::chip}, {"arpDotted", "DOT", Style::chip}}}},
+         0, only(Page::arp), 1, 0, 0, 0, 0, nullptr, "ARPEGGIATOR"},
+
+        // SHIFT is how far each repetition moves and RANGE is how many there
+        // are; the shape of the range is the same vocabulary the pattern uses,
+        // because ordering four transpositions and ordering four keys are the
+        // same question asked twice.
+        {"arpTranspose", "TRANSPOSE", "", nullptr, true, Display::none, 1, 9, 3, true,
+         {{42, {{"arpRangeShape", "SHAPE", Style::stepper}}},
+          {58, {{"arpShift", "SHIFT"}, {"arpRange", "RANGE"}}}},
+         0, only(Page::arp), 1, 0, 0, 0, 0, nullptr, "ARPEGGIATOR"},
+
+        {"arpPlayback", "PLAYBACK", "", nullptr, true, Display::none, 1, 12, 4, true,
+         {{28, {{"arpLatch", "LATCH", Style::chip}, {"arpThru", "THRU", Style::chip},
+                {"arpChancePre", "PRE", Style::chip}}},
+          {36, {{"arpOffset", "OFFSET"}, {"arpRepeats", "REPEATS"}}},
+          {36, {{"arpGate", "GATE"}, {"arpChance", "CHANCE"}}}},
+         0, only(Page::arp), 1, 0, 0, 0, 0, nullptr, "ARPEGGIATOR"},
+
+        // FIRST means nothing until NOTE is on, and the division means nothing
+        // until RATE is, so both say so rather than sitting there live and
+        // doing nothing.
+        {"arpRetrigger", "RETRIGGER", "", nullptr, true, Display::none, 1, 16, 3, true,
+         {{34, {{"arpRetrigLaunch", "LAUNCH", Style::chip}}},
+          {33, {{"arpRetrigNote", "NOTE", Style::chip},
+                {"arpRetrigFirst", "FIRST", Style::chip, nullptr, 1, "arpRetrigNote"}}},
+          {33, {{"arpRetrigRateOn", "RATE", Style::chip},
+                {"arpRetrigRate", "EVERY", Style::stepper, nullptr, 2, "arpRetrigRateOn"}}}},
+         0, only(Page::arp), 1, 0, 0, 0, 0, nullptr, "ARPEGGIATOR"},
+
+        {"arpVelocity", "VELOCITY", "", nullptr, true, Display::none, 1, 19, 2, true,
+         {{25, {{"arpVelEnable", "VEL", Style::chip}}},
+          {25, {{"arpVelRetrig", "RETRIG", Style::chip, nullptr, 1, "arpVelEnable"}}},
+          {50, {{"arpVelDecay", "DECAY", Style::knob, nullptr, 1, "arpVelEnable"},
+                {"arpVelTarget", "TARGET", Style::knob, nullptr, 1, "arpVelEnable"}}}},
+         0, only(Page::arp), 1, 0, 0, 0, 0, nullptr, "ARPEGGIATOR"},
     };
     return declared;
 }
+
 
 // How many banks a module's controls are declared in. One unless it says
 // otherwise, and the rows all have to agree — the layout test holds them to it.
@@ -525,6 +600,24 @@ inline juce::Rectangle<int> bankButtonBounds(juce::Rectangle<int> moduleArea, co
 inline bool onPage(const Module& module, Page page)
 {
     return (module.pages & only(page)) != 0;
+}
+
+// The modules the arp overlay stands on: the ones whose grid cells its own
+// panes cover. Worked out from the declarations rather than named, so moving a
+// pane a column moves what it hides with it.
+inline bool coveredByArp(const Module& module)
+{
+    if (onPage(module, Page::arp)) return false;
+    for (const auto& other : modules())
+    {
+        if (!onPage(other, Page::arp)) continue;
+        const auto rowsMeet = module.row < other.row + other.rowSpan
+                           && other.row < module.row + module.rowSpan;
+        const auto columnsMeet = module.column < other.column + other.columnSpan
+                              && other.column < module.column + module.columnSpan;
+        if (rowsMeet && columnsMeet) return true;
+    }
+    return false;
 }
 
 // The part number stamped on a plate's foot: the grid row it sits in as a

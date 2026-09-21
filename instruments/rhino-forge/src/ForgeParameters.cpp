@@ -439,6 +439,90 @@ juce::AudioProcessorValueTreeState::ParameterLayout Processor::parameterLayout()
         // still means "nothing happening" until the switch says otherwise.
         result.push_back(toggle(id("Bipolar"), name("Polarity"), false, "UNI", "BI"));
     }
+
+    // --- The arpeggiator ------------------------------------------------------
+    //
+    // Six panes, grouped exactly as the manual groups them, because that is the
+    // order the settings are reached for: what the whole arp does, the pattern,
+    // how far it is transposed, how it is played back, what restarts it, and
+    // what happens to the velocity as it runs.
+    //
+    // Everything here is a plain parameter with a name, unlike a rack slot's
+    // twelve anonymous knobs: there is one arpeggiator rather than a slot that
+    // could hold any of seven types, so a host's lane can say ARP GATE and
+    // mean it.
+    juce::StringArray arpShapeNames;
+    for (int i = 0; i < arpShapeCount; ++i) arpShapeNames.add(arpShapeName(i));
+    juce::StringArray arpDivisionNames;
+    for (const auto& division : arpDivisions()) arpDivisionNames.add(division.label);
+    juce::StringArray arpQuantNames {"OFF"};
+    for (const auto& division : arpDivisions()) arpQuantNames.add(division.label);
+
+    result.push_back(toggle("arpEnable", "Arp Enable", false));
+    // GLOBAL. The bank field and EDIT ALL belong to the twelve launchable slots
+    // and arrive with them; what is real without slots is the interval the arp
+    // waits for before it starts, which is what LAUNCH QUANT means.
+    result.push_back(std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID {"arpLaunchQuant", 1}, "Arp Launch Quant", arpQuantNames, 0));
+
+    // PATTERN. RATE is one knob in one place and UNIT decides what it counts
+    // in, the pair sharing a cell exactly as an LFO's rate does. TRIP and DOT
+    // scale whichever division is chosen rather than being entries in it, which
+    // is what keeps the list seven long instead of twenty-one.
+    result.push_back(std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID {"arpShape", 1}, "Arp Shape", arpShapeNames, 0));
+    result.push_back(parameter("arpRate", "Arp Rate", {0.1f, 50.0f, 0.0f, 0.35f}, 8.0f, asRate));
+    result.push_back(std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID {"arpRateUnit", 1}, "Arp Rate Unit",
+        juce::StringArray {lfoRateUnitName(0), lfoRateUnitName(1)}, 1));
+    result.push_back(std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID {"arpDivision", 1}, "Arp Division", arpDivisionNames, arpDefaultDivision));
+    result.push_back(toggle("arpTriplet", "Arp Triplet", false));
+    result.push_back(toggle("arpDotted", "Arp Dotted", false));
+
+    // TRANSPOSE. SHIFT is how far each repetition moves and RANGE is how many
+    // repetitions there are; the shape of the range is the same vocabulary the
+    // pattern uses, because ordering four transpositions and ordering four keys
+    // are the same question asked twice.
+    result.push_back(parameter("arpShift", "Arp Shift", {-24.0f, 24.0f, 1.0f}, 0.0f, asSemitones));
+    result.push_back(parameter("arpRange", "Arp Range",
+                               {1.0f, static_cast<float>(arpMaxRange), 1.0f}, 1.0f, asCount));
+    result.push_back(std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID {"arpRangeShape", 1}, "Arp Range Shape", arpShapeNames, 0));
+
+    // PLAYBACK.
+    result.push_back(toggle("arpLatch", "Arp Latch", false));
+    result.push_back(toggle("arpThru", "Arp Thru", false));
+    result.push_back(parameter("arpOffset", "Arp Offset",
+                               {0.0f, static_cast<float>(arpMaxHeld - 1), 1.0f}, 0.0f, asCount));
+    // Zero is forever, and forever is what an arpeggio nearly always wants, so
+    // that is where the knob opens and what it reads there.
+    result.push_back(parameter("arpRepeats", "Arp Repeats", {0.0f, 64.0f, 1.0f}, 0.0f,
+                               [] (float value)
+                               {
+                                   const auto count = juce::roundToInt(value);
+                                   return count <= 0 ? juce::String("inf") : juce::String(count);
+                               }));
+    result.push_back(parameter("arpGate", "Arp Gate", {0.01f, 2.0f}, 1.0f, asPercent));
+    result.push_back(parameter("arpChance", "Arp Chance", {0.0f, 1.0f}, 1.0f, asPercent));
+    result.push_back(toggle("arpChancePre", "Arp Chance Timing", false, "POST", "PRE"));
+
+    // RETRIGGER.
+    result.push_back(toggle("arpRetrigLaunch", "Arp Retrigger On Launch", true));
+    result.push_back(toggle("arpRetrigRateOn", "Arp Retrigger On Rate", false));
+    result.push_back(std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID {"arpRetrigRate", 1}, "Arp Retrigger Rate", arpDivisionNames, 0));
+    result.push_back(toggle("arpRetrigNote", "Arp Retrigger On Note", false));
+    result.push_back(toggle("arpRetrigFirst", "Arp Retrigger First Only", false));
+
+    // VELOCITY. Off by default, which is the arp playing every note at the
+    // velocity its key was struck at — the behaviour anything written before
+    // this existed would expect.
+    result.push_back(toggle("arpVelEnable", "Arp Velocity Enable", false));
+    result.push_back(toggle("arpVelRetrig", "Arp Velocity Retrigger", false));
+    result.push_back(parameter("arpVelDecay", "Arp Velocity Decay", {0.0f, 1.0f}, 0.15f, asPercent));
+    result.push_back(parameter("arpVelTarget", "Arp Velocity Target", {0.0f, 1.0f}, 0.0f, asPercent));
+
     return {result.begin(), result.end()};
 }
 }

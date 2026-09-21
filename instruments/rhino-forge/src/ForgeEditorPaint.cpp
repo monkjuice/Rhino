@@ -75,8 +75,8 @@ void Editor::paintPlates(juce::Graphics& g)
         if (descriptor.group == nullptr || !moduleShown(descriptor)) continue;
         if (drawn.contains(descriptor.group)) continue;
         drawn.add(descriptor.group);
-        ui::drawGroupPlate(g, ui::groupBounds(getLocalBounds(), descriptor.group, page),
-                           descriptor.group, ui::plateCode(descriptor, page));
+        ui::drawGroupPlate(g, ui::groupBounds(getLocalBounds(), descriptor.group, pageOf(descriptor)),
+                           descriptor.group, ui::plateCode(descriptor, pageOf(descriptor)));
     }
 
     for (const auto& module : moduleUis)
@@ -84,7 +84,7 @@ void Editor::paintPlates(juce::Graphics& g)
         const auto& descriptor = *module.descriptor;
         if (!moduleShown(descriptor)) continue;
         ui::drawModuleShell(g, moduleAreaFor(descriptor), descriptor, module.on(),
-                            accentOf(descriptor), ui::plateCode(descriptor, page));
+                            accentOf(descriptor), ui::plateCode(descriptor, pageOf(descriptor)));
     }
 }
 
@@ -153,6 +153,11 @@ void Editor::paint(juce::Graphics& g)
         lastRebuildMs = juce::jmax(1u, now);
     }
     g.drawImage(chrome, getLocalBounds().toFloat(), juce::RectanglePlacement::stretchToFit);
+
+    // Only the plate's state, over the cached chassis that already carries its
+    // metal: the lamp follows arpEnable and the face follows whether the panes
+    // are showing, and neither of those is something the metal knows about.
+    ui::drawArpPlateState(g, getLocalBounds(), value("arpEnable") >= 0.5f, arpOpen);
 
     for (const auto& module : moduleUis)
     {

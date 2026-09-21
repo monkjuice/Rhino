@@ -82,6 +82,7 @@ juce_add_binary_data(RhinoForgeAssets SOURCES
 # file nothing checks.
 set(forge_sources
     core/ForgeVoiceParts.h
+    core/ForgeArp.h
     core/ForgeShapes.h
     core/ForgeMatrix.h
     core/ForgePatch.h
@@ -171,7 +172,8 @@ if (BUILD_TESTING)
         envelope
         lfo
         table
-        voicing)
+        voicing
+        arp)
 
     target_sources(RhinoForgeTests PRIVATE
         tests/ForgeTestMain.cpp
@@ -197,6 +199,7 @@ if (BUILD_TESTING)
         tests/ForgeTestsLfo.cpp
         tests/ForgeTestsTable.cpp
         tests/ForgeTestsVoicing.cpp
+        tests/ForgeTestsArp.cpp
         ${forge_sources})
     forge_use_precompiled_header(RhinoForgeTests)
     target_link_libraries(RhinoForgeTests PRIVATE

@@ -36,6 +36,32 @@ void Editor::applyPage()
     repaint();
 }
 
+// The plate beside the keyboard puts the arp's panes up and takes them away.
+// The expanded rack and the arp both want the lower row, so opening one closes
+// the other: two overlays on one field would leave whichever lost hidden behind
+// the winner with its switch still lit.
+void Editor::toggleArpOpen()
+{
+    arpOpen = !arpOpen;
+    if (arpOpen) fxExpanded = false;
+    applyPage();
+}
+
+// The lamp on that same plate. This one is a parameter — whether the arp runs
+// saves with the patch and automates — so it goes through the host the way
+// every other switch on the panel does rather than being set behind its back.
+void Editor::toggleArpEnabled()
+{
+    auto* parameter = processor.state.getParameter("arpEnable");
+    if (parameter == nullptr) return;
+    const auto on = parameter->getValue() >= 0.5f;
+    parameter->beginChangeGesture();
+    parameter->setValueNotifyingHost(on ? 0.0f : 1.0f);
+    parameter->endChangeGesture();
+    applyEnableStates();
+    repaint();
+}
+
 juce::Colour Editor::accentOf(const ui::Module& module) const
 {
     if (module.display == ui::Display::oscillator)

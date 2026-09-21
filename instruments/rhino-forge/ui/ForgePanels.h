@@ -224,6 +224,70 @@ inline void drawDeckPlates(juce::Graphics& g, juce::Rectangle<int> bounds)
     g.drawLine(at.x, at.y - 5, at.x, at.y + 5, 1.2f);
 }
 
+// The ARP switch on the shelf beside the keys, standing in the octave the
+// keyboard gave up for it.
+//
+// One plate doing two jobs, exactly as Serum's is: the circle switches the
+// arpeggiator on, and the rest of it opens the six panes over the modulators.
+// The two are drawn as different things — a lit lamp against a raised face —
+// because an arp running with its settings put away and an arp on screen that
+// is switched off are both ordinary states, and a single highlight covering
+// both would leave you unable to tell which you were in.
+//
+// It is drawn in two halves, for the same reason the chassis and the module
+// plates are two layers. The metal never changes and goes into the cached
+// chassis with the rest of the furniture; only the lamp, the lit face and the
+// word under the name follow the arp's state, and only those are on the frame
+// path. Drawn whole in the live pass it cost about three milliseconds a frame
+// — `drawMetalPiece` and `drawEdgeWear` are the expensive primitives here, and
+// they are exactly what the cached layer exists to pay for once.
+inline void drawArpPlateHousing(juce::Graphics& g, juce::Rectangle<int> componentBounds)
+{
+    const auto plate = arpPlateBounds(componentBounds).toFloat();
+    drawMetalPiece(g, housingOutline(plate, 12.0f));
+    drawEdgeWear(g, plate, 137);
+    drawRivet(g, {plate.getRight() - 9, plate.getY() + 9}, 3.2f, 0.9f);
+    drawRivet(g, {plate.getX() + 8, plate.getBottom() - 9}, 2.4f, 0.8f);
+    drawWell(g, plate.reduced(7.0f, 9.0f), juce::Colour(0xff05070c), 1.0f, 5);
+}
+
+inline void drawArpPlateState(juce::Graphics& g, juce::Rectangle<int> componentBounds,
+                              bool on, bool open)
+{
+    const auto face = arpPlateBounds(componentBounds).toFloat().reduced(7.0f, 9.0f);
+    // Lit while the panes are showing, which is what makes the plate read as
+    // the door it is rather than as a second power switch.
+    if (open)
+    {
+        g.setColour(signalViolet.withAlpha(0.16f));
+        g.fillRoundedRectangle(face, 5.0f);
+        g.setColour(signalViolet.withAlpha(0.75f));
+        g.drawRoundedRectangle(face.reduced(0.5f), 5.0f, 1.0f);
+    }
+
+    // The same lamp the module headers wear, drawn here rather than borrowed,
+    // because this one is on the chassis instead of on a module and has no
+    // component of its own to carry it.
+    const auto led = arpPlateLedBounds(componentBounds).toFloat().reduced(5.0f);
+    if (on)
+    {
+        g.setColour(signalViolet.withAlpha(0.22f));
+        g.fillEllipse(led.expanded(3.5f));
+    }
+    g.setColour(on ? signalViolet : juce::Colour(0xff232838));
+    g.fillEllipse(led);
+    g.setColour(on ? juce::Colours::white.withAlpha(0.5f) : mutedText.withAlpha(0.45f));
+    g.drawEllipse(led, 1.0f);
+
+    auto name = face.withTrimmedLeft(arpPlateLedBounds(componentBounds).toFloat().getRight()
+                                     - face.getX() + 6.0f);
+    g.setFont(panelFont(Face::header, 14.0f));
+    g.setColour(on ? text : mutedText);
+    drawTrackedText(g, "ARP", name.removeFromTop(name.getHeight() * 0.62f), 1.8f,
+                    juce::Justification::centredLeft);
+    stamp(g, open ? "CLOSE" : "SETTINGS", name, 8.0f, 0.7f);
+}
+
 inline void drawBackdrop(juce::Graphics& g, juce::Rectangle<int> componentBounds)
 {
     const auto bounds = componentBounds.toFloat();
@@ -280,6 +344,7 @@ inline void drawBackdrop(juce::Graphics& g, juce::Rectangle<int> componentBounds
     }
     drawWell(g, keyboardBounds(componentBounds).toFloat().expanded(4, 3), juce::Colour(0xff010203), 1, 4);
     drawDeckPlates(g, componentBounds);
+    drawArpPlateHousing(g, componentBounds);
     for (const auto point : {juce::Point<float>(16, 16), {w - 16, 16}, {16, h - 15}, {w - 16, h - 15}})
         drawScrew(g, point, 7.0f, 1.0f);
 }

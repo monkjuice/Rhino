@@ -48,6 +48,15 @@ void Editor::mouseDown(const juce::MouseEvent& event)
     if (event.eventComponent == this && !event.mods.isPopupMenu())
     {
         const auto at = event.getEventRelativeTo(this).getPosition();
+        // The plate beside the keys, before anything a tab owns: it is on the
+        // chassis rather than on a page, and it is reachable from every one of
+        // them.
+        if (ui::arpPlateBounds(getLocalBounds()).contains(at))
+        {
+            if (ui::arpPlateLedBounds(getLocalBounds()).contains(at)) toggleArpEnabled();
+            else toggleArpOpen();
+            return;
+        }
         if (page == ui::Page::fx)
             for (const auto& module : ui::modules())
             {

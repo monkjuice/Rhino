@@ -311,6 +311,11 @@ private:
     void removeFxSlot(int rack, int slot);
     void moveFxSlot(int rack, int from, int to);
     bool moduleShown(const ui::Module&) const;
+    // Which page a module is drawn as belonging to, which is the tab for
+    // everything except the arp's panes: those are on a page of their own that
+    // is never the tab showing, and the plate legend and part number are worked
+    // out against the page a module is actually on.
+    ui::Page pageOf(const ui::Module&) const;
     juce::Rectangle<int> moduleAreaFor(const ui::Module&) const;
     juce::Rectangle<int> fxRackAreaFor(juce::Rectangle<int> moduleArea, int rack, int slot) const;
     int fxActiveSlotCount(int rack) const;
@@ -319,6 +324,15 @@ private:
     int fxFirstVisibleSlot() const;
     void setFxFirstVisibleSlot(int slot);
     void clampFxScroll();
+
+    // Whether the arp's six panes are standing on the modulators. View state,
+    // not a parameter: whether the arpeggiator is *running* is `arpEnable` and
+    // saves with the patch, while whether you are looking at it is no more part
+    // of the sound than which tab is open. The two are deliberately separate,
+    // which is why the plate beside the keyboard carries both.
+    bool arpOpen = false;
+    void toggleArpOpen();
+    void toggleArpEnabled();
 
     // View state only. Expansion hides the lower synth row and lets the rack
     // use it; folding the list leaves a mark-only rail. Neither belongs in a

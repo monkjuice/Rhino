@@ -212,6 +212,44 @@ inline juce::String tooltipFor(const juce::String& id)
         {"bus1Level", "Set the level of everything arriving at BUS 1"},
         {"bus2Level", "Set the level of everything arriving at BUS 2"},
 
+        // The arpeggiator. Every one of these says what it does to the notes
+        // being held, because that is the only thing the arp acts on.
+        {"arpEnable", "Play the keys being held as a sequence rather than as a chord"},
+        {"arpLaunchQuant", "Wait for the next division of the host's bar before starting, "
+                           "so an arp switched on mid-phrase still lands on the grid"},
+        {"arpShape", "The order the held notes are played in: up, down, and the "
+                     "thumb, pinky, converging and random patterns beside them"},
+        {"arpRate", "How fast the pattern steps, in cycles per second"},
+        {"arpDivision", "How fast the pattern steps, as a division of the host's beat"},
+        {"arpRateUnit", "Count the rate in Hertz, free-running, or in divisions of the host's beat"},
+        {"arpTriplet", "Make each step two thirds of the division, for triplets"},
+        {"arpDotted", "Make each step half again as long as the division, for dotted notes"},
+        {"arpShift", "How far each repetition of the pattern is transposed"},
+        {"arpRange", "How many times the pattern is transposed by SHIFT before it starts over"},
+        {"arpRangeShape", "The order the transpositions are visited in, "
+                          "from the same list the pattern itself uses"},
+        {"arpLatch", "Keep playing once the keys are let go. While the arp is on, "
+                     "a sustain pedal works this rather than sustaining notes"},
+        {"arpThru", "Pass the keys straight to the voices as well, the way a MIDI THRU port does. "
+                    "Off, the arp consumes what it is given"},
+        {"arpOffset", "Start the pattern somewhere other than its first note"},
+        {"arpRepeats", "How many complete passes to play before falling silent. Zero is forever"},
+        {"arpGate", "How long each note lasts against one step. Above 100% they overlap"},
+        {"arpChance", "How likely each step is to sound at all"},
+        {"arpChancePre", "PRE rolls for a note before the pattern moves on, so a note that was "
+                         "skipped is the one played next time rather than being missed"},
+        {"arpRetrigLaunch", "Start the pattern from its beginning when the arp is switched on"},
+        {"arpRetrigRateOn", "Start the pattern from its beginning at a fixed interval"},
+        {"arpRetrigRate", "How often the pattern is restarted"},
+        {"arpRetrigNote", "Start the pattern from its beginning whenever a key goes down"},
+        {"arpRetrigFirst", "Restart only on the first key of a chord, not on every "
+                           "note of one played together"},
+        {"arpVelEnable", "Let the played velocity drift as the arp runs, rather than "
+                         "every note sounding at the velocity its key was struck at"},
+        {"arpVelRetrig", "Return the velocity to the incoming one whenever the pattern restarts"},
+        {"arpVelDecay", "How far towards the target one step moves the velocity"},
+        {"arpVelTarget", "The velocity the decay moves towards"},
+
         {"polyphony", "Limit simultaneous notes"},
         {"mono", "Collapse to one voice for basses and leads"},
         {"legato", "Keep the envelope running across overlapping mono notes"},

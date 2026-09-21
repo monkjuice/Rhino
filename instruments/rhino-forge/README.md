@@ -18,12 +18,19 @@ the same key. An LFO set to TRIG or ENV runs inside each voice too, so a new not
 starts its own copy and leaves the notes already sounding alone; one set to OFF
 is a single free-running cycle shared by every voice and by the panel.
 
-The panel is two rows of modules, with a taller signal row, over an
-eighty-eight key keyboard, and it is wider than it is tall at every size it
+The panel is two rows of modules, with a taller signal row, over a
+seventy-six key keyboard, and it is wider than it is tall at every size it
 allows. The top row is the signal path read left to right — sub and noise, the
 two oscillators, the filter. The bottom row is what shapes it, in the same
 order: global voicing as a narrow column, then the envelopes, the LFOs and the
 macros.
+
+The keyboard was eighty-eight keys until the arpeggiator arrived and gave up
+its bottom octave for the **ARP** plate, which stands between the left-hand
+decal and the keys. Every key is the width it always was: the plate is sized as
+the octave that came off, so the keys are still divided out of the span they
+had. The decal outboard of it is untouched, which is where the pitch and
+modulation wheels belong when they arrive.
 
 The metal chassis follows the reference's assembled construction: interlocking
 header plates, segmented rails, a shared Sub/Noise housing, recessed legends,
@@ -192,6 +199,49 @@ self-contained when it moves between machines.
 The editor saves and loads versioned `.forgepreset` files; host project state
 remains independent and continues to use the VST3 state API.
 
+## The arpeggiator
+
+The **ARP** plate beside the keys does two things, exactly as Serum's does: the
+circle switches the arpeggiator on, and the rest of the plate puts its settings
+up. They are drawn differently — a lit lamp against a raised face — because an
+arp running with its settings away and an arp on screen that is switched off are
+both ordinary states.
+
+Its settings are an **overlay, not a tab**. They stand on ENV and LFO, so
+opening them covers the modulators and leaves GLOBAL and the macros either side
+on screen: a patch is adjusted at the macros while the arp runs, and the
+oscillators and the filter are what you want to keep watching while a pattern
+plays. The five tabs are unaffected, and the arp opens over whichever of them is
+showing. It is declared as a page all the same — `Page::arp`, which is never
+what a tab is set to — because "which modules does this show" is the same
+question for it as for a tab, and answering it the same way is what keeps the
+no-two-modules-overlap check honest.
+
+Six panes share one plate, in the order the manual groups them: the arp's own
+switch and launch quantisation, the PATTERN, the TRANSPOSE range, PLAYBACK,
+RETRIGGER and VELOCITY. The first is called ARP rather than GLOBAL, which is the
+manual's name for it, because Forge already has a GLOBAL standing immediately
+beside it.
+
+Eighteen shapes, and **one list serves twice**: the order the held keys are
+played in, and the order the transposition stages are visited in. Serum's SHAPE
+field and its transpose-range menu offer the same vocabulary and mean the same
+thing by it — an order to visit a set of things in — so `arpOrder` is called
+once for the chord and once for the stages, and knows which it is doing neither
+time.
+
+The arp is **upstream of every voice rather than inside one**, so it is not part
+of `Core` and `Core` knows nothing about it. It is fed the notes the host and
+the panel's keyboard send, and it hands notes back through two callbacks — which
+is what lets the whole of it be tested against a pair of lambdas with no
+`Processor`, no `Core` and no audio device, so what the arp did is a list of
+note numbers rather than a waveform to be measured.
+
+Still to come, and each its own piece of work: the twelve launchable arp slots
+per bank with their `EDIT ALL` and their bank presets, and the custom pattern
+editor. `LAUNCH QUANT` is already real without the slots — it holds a started
+arp to the next division of the host's bar.
+
 It takes inspiration from the fast, visual sound-design workflow of modern
 hybrid synths. It does not reuse Serum code, assets, names, presets, or UI.
 
@@ -203,6 +253,7 @@ which decisions are already settled. Read it before changing the synth.
 | File | Holds |
 | --- | --- |
 | `core/ForgeCore.h` | The voice engine. No AudioProcessor, UI, state tree, filesystem, or allocation in `renderSample`. Four headers under it, listed at the top of it. |
+| `core/ForgeArp.h` | The arpeggiator: the shapes, the clock, and the notes a held chord becomes. Stands in front of Core rather than inside it, and emits through callbacks so it can be driven without either. |
 | `core/ForgeFx.h` | What an effects rack is: the types, what each one's controls are called, and what a normalised knob means in each. No DSP. |
 | `core/ForgeFxDsp.h` | The racks, rendered. A slot carries every type's state, sized once at `prepare`, because a type changes while audio is running. |
 | `ui/ForgeFxDisplay.h` | What each effect draws of itself, from the same functions that render it. |
@@ -252,6 +303,12 @@ ctest --test-dir instruments/rhino-forge/build -C Release -R forge_fx --output-o
 No two areas share a `Processor`, so `-j 8` is safe, and it is what makes the
 full run about five seconds rather than seventeen.
 
+The arpeggiator's area is mostly not a render at all: `Arp` emits through
+callbacks, so its shapes and its clock are checked against a pair of lambdas
+that write note numbers into a vector, and only the last suite goes through a
+`Processor` — because the one thing lambdas cannot check is that the notes reach
+the voices.
+
 `RhinoForgeTests --list` prints the areas. Three places hold the registry and
 are edited together: `tests/ForgeSuites.h` declares each area's entry point,
 the table in `tests/ForgeTestMain.cpp` maps a name to a function, and
@@ -282,7 +339,9 @@ The standalone build at
 way to look at a change without a host.
 
 For a windowless visual review, the test binary also accepts
-`--snapshot output.png [width height [OSC|TABLE|MATRIX|MIX|FX [scale [preset.forgepreset]]]]`.
+`--snapshot output.png [width height [OSC|TABLE|MATRIX|MIX|FX|ARP [scale [preset.forgepreset]]]]`.
+`ARP` is not one of the tabs — it presses the plate beside the keyboard, which
+is the only way in, so the review takes the same route a hand does.
 A preset is opened before the editor is built, which is the only way to
 review anything the panel draws out of the patch rather than out of the
 layout — a modulation ring, a macro's destination count, the name under it.

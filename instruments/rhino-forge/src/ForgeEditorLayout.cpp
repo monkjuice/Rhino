@@ -7,8 +7,19 @@ namespace rhino::forge
 {
 bool Editor::moduleShown(const ui::Module& module) const
 {
+    // The arp is an overlay rather than a tab. Its panes appear when it is
+    // opened, whichever tab is showing, and the modules they stand on step
+    // aside for exactly as long as they are there — which is why this is asked
+    // before the page is consulted at all.
+    if (ui::onPage(module, ui::Page::arp)) return arpOpen;
+    if (arpOpen && ui::coveredByArp(module)) return false;
     if (!ui::onPage(module, page)) return false;
     return page != ui::Page::fx || !fxExpanded || isFxModule(module);
+}
+
+ui::Page Editor::pageOf(const ui::Module& module) const
+{
+    return ui::onPage(module, ui::Page::arp) ? ui::Page::arp : page;
 }
 
 juce::Rectangle<int> Editor::moduleAreaFor(const ui::Module& module) const
@@ -45,9 +56,12 @@ void Editor::resized()
         tabs[static_cast<size_t>(i)]->setBounds(ui::tabBounds(i, getWidth()));
 
     const auto keys = ui::keyboardBounds(getLocalBounds());
-    // Sized so the full eighty-eight keys span the panel exactly, rather than
-    // running out partway and leaving a blank stretch.
-    keyboard.setKeyWidth(static_cast<float>(keys.getWidth()) / 52.0f);
+    // Sized so the seventy-six keys span what is left of the shelf exactly,
+    // rather than running out partway and leaving a blank stretch. The divisor
+    // is the count actually drawn: the octave the ARP plate took is gone from
+    // the range as well as from the width, so a key is the size it always was.
+    keyboard.setKeyWidth(static_cast<float>(keys.getWidth())
+                         / static_cast<float>(ui::keyboardWhiteKeys));
     keyboard.setBounds(keys);
 
     // Handles are positioned after their modules, because a macro's handle sits

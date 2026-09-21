@@ -122,6 +122,9 @@ void Editor::toggleFxExpanded()
 {
     if (page != ui::Page::fx) return;
     fxExpanded = !fxExpanded;
+    // The rack and the arp both want the lower row; whichever was opened last
+    // has it.
+    if (fxExpanded) arpOpen = false;
     fxDragSlot = fxDropSlot = -1;
     clampFxScroll();
     applyPage();

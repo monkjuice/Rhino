@@ -66,12 +66,56 @@ inline juce::Rectangle<int> deckRightBounds(juce::Rectangle<int> bounds)
     return strip.withLeft(strip.getRight() - deckPlateWidth(bounds));
 }
 
-// The keys themselves: what the strip has left once both decals have taken
-// theirs.
-inline juce::Rectangle<int> keyboardBounds(juce::Rectangle<int> bounds)
+// What the strip has left once both decals have taken theirs: the ARP plate and
+// the keys share this between them.
+inline juce::Rectangle<int> keyboardShelf(juce::Rectangle<int> bounds)
 {
     const auto flank = deckPlateWidth(bounds) + deckPlateGap;
     return keyboardStrip(bounds).withTrimmedLeft(flank).withTrimmedRight(flank);
+}
+
+// The keyboard was eighty-eight keys and is now seventy-six: the bottom octave
+// came off, and the ARP plate stands where it was. Both counts are kept because
+// the plate is sized as the difference between them — the keys are divided out
+// of the span they always had, so every key is exactly the width it was before
+// the arp existed and the octave is what actually pays for the plate.
+inline constexpr int keyboardWhiteKeys = 45;       // A1 to C8
+inline constexpr int keyboardWhiteKeysWithoutArp = 52; // A0 to C8, as it was
+inline constexpr int keyboardLowestNote = 33;      // A1
+inline constexpr int keyboardHighestNote = 108;    // C8
+inline constexpr int arpPlateGap = 8;
+
+inline int arpPlateWidth(juce::Rectangle<int> bounds)
+{
+    const auto octave = keyboardShelf(bounds).getWidth()
+        * (keyboardWhiteKeysWithoutArp - keyboardWhiteKeys) / keyboardWhiteKeysWithoutArp;
+    return juce::jmax(48, octave - arpPlateGap);
+}
+
+// Serum puts the ARP switch immediately left of the keys, and so does this: it
+// is a thing you reach for with the hand that is already on the keyboard. The
+// decal outboard of it is left alone, which is where the pitch and modulation
+// wheels belong when they arrive.
+inline juce::Rectangle<int> arpPlateBounds(juce::Rectangle<int> bounds)
+{
+    return keyboardShelf(bounds).withWidth(arpPlateWidth(bounds));
+}
+
+// The power circle on that plate. Pressing it switches the arp on; pressing the
+// rest of the plate opens its settings. Two things one plate, exactly as
+// Serum's is, because "is it running" and "let me see it" are different
+// questions and a patch asks them at different times.
+inline juce::Rectangle<int> arpPlateLedBounds(juce::Rectangle<int> bounds)
+{
+    const auto plate = arpPlateBounds(bounds);
+    return juce::Rectangle<int>(plate.getX() + 13, plate.getCentreY() - 9, 18, 18);
+}
+
+// The keys themselves: what the shelf has left once the ARP plate has taken
+// its octave.
+inline juce::Rectangle<int> keyboardBounds(juce::Rectangle<int> bounds)
+{
+    return keyboardShelf(bounds).withTrimmedLeft(arpPlateWidth(bounds) + arpPlateGap);
 }
 
 // --- The title bar's right-hand end -----------------------------------------

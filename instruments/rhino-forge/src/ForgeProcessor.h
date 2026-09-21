@@ -74,6 +74,13 @@ public:
     // a division of the host's tempo when it is set in beats.
     float lfoRateHz(int lfo) const;
 
+    // How long one arp step lasts, in seconds. Worked out rather than
+    // published, exactly as an LFO's rate is: it depends only on parameters and
+    // the tempo, both of which the message thread can read for itself, so the
+    // panel and the arp cannot end up quoting different rates. The triplet and
+    // dotted switches are applied here, which is the one place they are.
+    float arpStepSeconds() const;
+
     // The tempo as of the last block. A synced delay draws its repeats where
     // they will actually land, which needs the same tempo the engine divides.
     double hostTempo() const { return hostBpm.load(std::memory_order_relaxed); }
@@ -132,6 +139,31 @@ private:
     // rack knob's closes over it for the same reason.
     juce::AudioProcessorValueTreeState::ParameterLayout parameterLayout();
     Core core;
+    // In front of the voices rather than inside them: it consumes the notes
+    // arriving and hands Core the ones the pattern actually plays.
+    Arp arp;
+    ArpSettings arpSettings() const;
+    // What the arp was doing last block, so the two transitions that need
+    // acting on can be spotted: switched off mid-phrase, which has to let go of
+    // the notes its own gate clock was still holding, and the latch released,
+    // which has to drop the chord no finger is on.
+    bool arpWasEnabled = false;
+    bool arpWasLatched = false;
+    // The rate prepareToPlay was given, kept rather than read back from
+    // AudioProcessor::getSampleRate(). That one is set by the host calling
+    // setRateAndBufferSizeDetails, which nothing does when prepareToPlay is
+    // called directly — so it reads zero, and an arp dividing by it stepped
+    // once per sample and stacked every voice the synth had.
+    double preparedSampleRate = 44100.0;
+    // Where the host's transport is, for LAUNCH QUANT. An arp started off the
+    // grid waits for the next division of the bar, and the only way to know
+    // where that is is the position the host reports.
+    double hostPpq = 0.0;
+    bool hostPlaying = false;
+    // Hold the arp's first step until the next LAUNCH QUANT boundary. Worked
+    // out here rather than in the arp, which counts in steps and knows nothing
+    // about bars.
+    void quantiseArpStart(int sampleIndex, const ArpSettings&);
     std::array<std::atomic<float>, envCount> meterLevel {};
     std::array<std::atomic<int>, envCount> meterStage {};
     std::array<std::atomic<float>, lfoCount> meterLfoPhase {};

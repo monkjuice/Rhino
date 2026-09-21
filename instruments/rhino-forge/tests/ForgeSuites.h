@@ -51,6 +51,9 @@ void tableTests();
 // ForgeTestsVoicing.cpp — polyphony, mono, stealing and the voice tail.
 void voicingTests();
 
+// ForgeTestsArp.cpp — the shapes, the clock, and the notes the arp emits.
+void arpTests();
+
 // ForgeTestsEngine.cpp — every source audible on its own, and an extreme patch
 // that stays finite and inside full scale.
 void engineTests();

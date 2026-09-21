@@ -56,7 +56,14 @@ inline constexpr bool showsModulation(Style style)
 // than a single answer — which is what the mixer needs: it takes the whole
 // signal row, so SUB, NOISE and FILTER have to be absent from that one tab
 // while staying put on the other three.
-enum class Page { oscillators = 1, table = 2, matrix = 4, mix = 8, fx = 16 };
+// The five tabs, and the arp. The arp is a page without being a tab: it is an
+// overlay that stands on the modules it covers while everything else keeps its
+// place, so it is never what `page` is set to and never appears in the title
+// bar. It is in this enum because "which modules does this show" is the same
+// question for it as for a tab, and answering it the same way is what lets the
+// no-two-modules-overlap check go on being true — the arp shares a page with
+// nothing, so nothing it covers is ever declared as showing beside it.
+enum class Page { oscillators = 1, table = 2, matrix = 4, mix = 8, fx = 16, arp = 32 };
 
 inline constexpr Page tabPages[] {Page::oscillators, Page::table, Page::matrix, Page::mix, Page::fx};
 inline constexpr int tabCount = 5;
@@ -67,6 +74,9 @@ using PageSet = int;
 
 inline constexpr PageSet only(Page page) { return static_cast<PageSet>(page); }
 
+// Every tab — which is deliberately not every page. The arp is left out, so a
+// module declaring `everyPage` stays on all five tabs and is still something
+// the arp overlay may cover.
 inline constexpr PageSet everyPage =
     only(Page::oscillators) | only(Page::table) | only(Page::matrix) | only(Page::mix) | only(Page::fx);
 
@@ -90,6 +100,7 @@ inline const char* pageName(Page page)
         case Page::table:       return "TABLE";
         case Page::mix:         return "MIX";
         case Page::fx:          return "FX";
+        case Page::arp:         return "ARP";
     }
     return "";
 }

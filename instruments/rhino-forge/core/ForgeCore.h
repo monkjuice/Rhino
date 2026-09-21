@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ForgeArp.h"
 #include "ForgePatch.h"
 
 #include <algorithm>
@@ -17,6 +18,12 @@
 //   ForgeShapes.h      the ten waves, the six sub shapes, and their tables
 //   ForgeMatrix.h      what can modulate what, and the eight slots
 //   ForgePatch.h       the whole patch, and the arithmetic that reads it
+//   ForgeArp.h         the arpeggiator, which is upstream of every voice
+//
+// The arp is the one of those this class never calls. It stands in front of
+// Core rather than inside it — it turns the keys being held into the notes
+// Core is asked to play — so the Processor owns it and drives it, and nothing
+// below this line knows it exists.
 //
 // Headers rather than translation units, all of it inline, because
 // renderSample() is compiled into the processor and there is no link-time code

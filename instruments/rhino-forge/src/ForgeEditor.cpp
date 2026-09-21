@@ -49,8 +49,8 @@ Editor::Editor(Processor& p)
     buildTabs();
     buildTablePanel();
 
-    keyboard.setAvailableRange(21, 108);
-    keyboard.setLowestVisibleKey(21);
+    keyboard.setAvailableRange(ui::keyboardLowestNote, ui::keyboardHighestNote);
+    keyboard.setLowestVisibleKey(ui::keyboardLowestNote);
     // Middle C is C3, which is what Ableton, Serum, FL and Logic all call MIDI
     // 60. Rhino's own grid says the same — see StepGridPainter, which was moved
     // with this — so the panel, the grid driving it and the DAW next to it all

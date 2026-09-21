@@ -895,6 +895,17 @@ private:
         menu.addItem(3, "Clear pattern");
         menu.addSeparator();
         menu.addItem(5, "Preview library sounds", true, session.previewEnabled());
+        juce::PopupMenu monitoring;
+        for (const auto mode : {Session::InputMonitoring::off, Session::InputMonitoring::automatic,
+                                Session::InputMonitoring::on})
+            monitoring.addItem(20 + static_cast<int>(mode),
+                               Session::inputMonitoringName(mode)
+                                   + (mode == Session::InputMonitoring::automatic ? "   (while armed)"
+                                    : mode == Session::InputMonitoring::on        ? "   (always)"
+                                                                                  : ""),
+                               true, session.inputMonitoring() == mode);
+        menu.addSubMenu("Monitor the audio input: " + Session::inputMonitoringName(session.inputMonitoring()),
+                        monitoring);
         menu.addSeparator();
         menu.addItem(4, "Audio settings...");
         menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(target != nullptr ? *target : editMenu),
@@ -917,6 +928,19 @@ private:
                     safe->session.setPreviewEnabled(on);
                     safe->logStatus(on ? "Clicking a library sound plays it"
                                        : "Library sounds are no longer played when clicked");
+                }
+                else if (result >= 20 && result <= 22)
+                {
+                    const auto mode = static_cast<Session::InputMonitoring>(result - 20);
+                    safe->session.setInputMonitoring(mode);
+                    // Said plainly, because hearing the input on a machine with
+                    // its own microphone and speakers is a feedback loop.
+                    safe->logStatus(mode == Session::InputMonitoring::off
+                                        ? "The audio input is not played back"
+                                        : "The audio input is played back"
+                                          + juce::String(mode == Session::InputMonitoring::automatic
+                                                             ? " while a track is armed" : " at all times")
+                                          + ". Use headphones: a built-in microphone and speakers will feed back.");
                 }
             });
     }

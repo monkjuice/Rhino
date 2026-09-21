@@ -47,6 +47,11 @@ extern const juce::Identifier countInBarsID;
 // cannot decide what the suite does.
 bool isCommandLineTestMode();
 
+// The application's own preferences - what belongs to this machine rather than
+// to the project. Named here rather than in one feature's .cpp now that the
+// browser preview and input monitoring both read it.
+juce::PropertiesFile::Options rhinoSettingsOptions();
+
 // The one thing Rhino tells the engine about itself.
 //
 // Left to its own devices the engine names a recorded file from a pattern whose

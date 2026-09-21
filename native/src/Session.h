@@ -306,6 +306,25 @@ public:
     void toggleTrackArmed(int track);
     bool anyTrackArmed() const;
     bool isRecording() const;
+    // Hearing yourself. These are Live's three Monitor settings under another
+    // spelling, and the engine happens to carry exactly the same three.
+    //
+    // Two things about it are Rhino's rather than Live's. The default is off,
+    // not automatic: the engine makes a live input audible the moment a track
+    // is *armed*, and the machine most people run this on has a microphone at
+    // one end and speakers at the other, so the default Live ships would mean
+    // a feedback tone that lasts as long as the track stays armed.
+    //
+    // And it belongs to the audio *input*, not to one track. Live can differ
+    // per track because each track chooses its own input; every audio track
+    // here records the one input, and the engine carries a single mode per
+    // input device, so the setting shows the same on every card because it is
+    // the same setting. MIDI is always monitored: a MIDI input cannot feed
+    // back, and an armed instrument track you could not hear would be useless.
+    enum class InputMonitoring { off, automatic, on };
+    InputMonitoring inputMonitoring() const { return monitorAudioInput; }
+    void setInputMonitoring(InputMonitoring);
+    static juce::String inputMonitoringName(InputMonitoring);
     // Where the recording started, so the arrangement can draw the span being
     // recorded. Negative when nothing is being recorded.
     double recordingStartSeconds() const { return recordingStart; }
@@ -592,6 +611,7 @@ private:
     void attachCountIn();
     // SessionPreview.cpp
     static bool readPreviewPreference();
+    static InputMonitoring readInputMonitoringPreference();
     void ensurePreviewAttached();
     void releasePreview();
     void buildStarterEdit();
@@ -645,6 +665,7 @@ private:
     juce::AudioSourcePlayer previewPlayer;
     std::unique_ptr<juce::AudioFormatReaderSource> previewReader;
     bool browserPreview = readPreviewPreference();
+    InputMonitoring monitorAudioInput = readInputMonitoringPreference();
     bool previewAttached = false;
     // Built on first use and, like the preview, detached before the device it
     // is registered with goes.

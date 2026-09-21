@@ -175,6 +175,18 @@ juce::Result Session::applyRecordArming()
                 if (candidate != nullptr) { midi = candidate.get(); break; }
     }
 
+    // Monitoring is decided before anything is armed, because the engine makes
+    // a live input audible as soon as a destination is record-enabled and the
+    // mode is the one it defaults to. Audio follows the preference, which is
+    // off; MIDI is always monitored, or playing an armed instrument track would
+    // be silent.
+    if (wave != nullptr)
+        wave->setMonitorMode(monitorAudioInput == InputMonitoring::on        ? te::InputDevice::MonitorMode::on
+                             : monitorAudioInput == InputMonitoring::automatic ? te::InputDevice::MonitorMode::automatic
+                                                                              : te::InputDevice::MonitorMode::off);
+    if (midi != nullptr)
+        midi->setMonitorMode(te::InputDevice::MonitorMode::automatic);
+
     // An input instance is built when the playback context is, and only for
     // devices that were enabled at the time. Enabling comes first for that
     // reason, and a context that predates it is rebuilt so the instance exists.
@@ -252,6 +264,49 @@ void Session::clearRecordArming()
         for (auto* input : context->getAllInputs())
             if (input != nullptr)
                 (void) te::clearFromTargets(*input, nullptr);
+}
+
+juce::String Session::inputMonitoringName(InputMonitoring mode)
+{
+    return mode == InputMonitoring::on          ? "In"
+         : mode == InputMonitoring::automatic   ? "Auto"
+                                                : "Off";
+}
+
+// Changing this has to reach a track that is already armed, so the arming is
+// reapplied rather than waiting for the next time it is touched.
+void Session::setInputMonitoring(InputMonitoring mode)
+{
+    if (monitorAudioInput == mode)
+        return;
+    monitorAudioInput = mode;
+    // It describes the hardware in front of you rather than the song, so it is
+    // a preference of this machine and not a property of the document.
+    if (!isCommandLineTestMode())
+    {
+        juce::PropertiesFile properties(rhinoSettingsOptions());
+        properties.setValue("monitorAudioInput", static_cast<int>(mode));
+        properties.saveIfNeeded();
+    }
+    // Changing the monitor mode restarts the transports, so a take in progress
+    // would be cut in half by it. The setting takes hold at the next arm
+    // instead, which is the next moment it could matter.
+    if (!isRecording() && !isCountingIn())
+        juce::ignoreUnused(applyRecordArming());
+    sendSynchronousChangeMessage();
+}
+
+// Off unless asked for - see the note on the enum. A developer's setting
+// cannot decide what the suite does, so the test runs always read the default.
+Session::InputMonitoring Session::readInputMonitoringPreference()
+{
+    if (isCommandLineTestMode())
+        return InputMonitoring::off;
+    juce::PropertiesFile properties(rhinoSettingsOptions());
+    const auto stored = properties.getIntValue("monitorAudioInput", static_cast<int>(InputMonitoring::off));
+    return stored == static_cast<int>(InputMonitoring::on)        ? InputMonitoring::on
+         : stored == static_cast<int>(InputMonitoring::automatic) ? InputMonitoring::automatic
+                                                                  : InputMonitoring::off;
 }
 
 int Session::countInBars() const

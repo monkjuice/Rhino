@@ -121,9 +121,13 @@ add_test(NAME native_arrangement_geometry COMMAND RhinoNative --arrangement-geom
 set_tests_properties(native_arrangement_geometry PROPERTIES TIMEOUT 10)
 add_test(NAME native_device_correctness COMMAND RhinoNative --self-test)
 set_tests_properties(native_device_correctness PROPERTIES TIMEOUT 30)
+# The two workflow runs take 20-26 seconds each on this machine, so a 30 second
+# limit is a 15% margin and a busy machine trips it. The limit is here to catch
+# a render that never returns - which hangs outright rather than running slowly -
+# so it can be generous without giving that up.
 add_test(NAME native_pattern_workflow COMMAND RhinoNative --pattern-test)
-set_tests_properties(native_pattern_workflow PROPERTIES TIMEOUT 30)
+set_tests_properties(native_pattern_workflow PROPERTIES TIMEOUT 120)
 add_test(NAME native_arrangement_workflow COMMAND RhinoNative --arrangement-test)
-set_tests_properties(native_arrangement_workflow PROPERTIES TIMEOUT 30)
+set_tests_properties(native_arrangement_workflow PROPERTIES TIMEOUT 120)
 add_test(NAME native_startup_lifecycle COMMAND RhinoNative --startup-test)
 set_tests_properties(native_startup_lifecycle PROPERTIES TIMEOUT 30)

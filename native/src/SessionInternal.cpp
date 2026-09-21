@@ -31,6 +31,16 @@ const juce::Identifier trackArmedID {"rhinoArmed"};
 // The count-in lives beside the other metronome settings, on the edit.
 const juce::Identifier countInBarsID {"rhinoCountInBars"};
 
+juce::PropertiesFile::Options rhinoSettingsOptions()
+{
+    juce::PropertiesFile::Options options;
+    options.applicationName = "Rhino";
+    options.filenameSuffix = "settings";
+    options.folderName = "Rhino";
+    options.osxLibrarySubFolder = "Application Support";
+    return options;
+}
+
 void panicMidiOnTrack(te::ClipTrack* clipTrack)
 {
     auto* track = dynamic_cast<te::AudioTrack*>(clipTrack);

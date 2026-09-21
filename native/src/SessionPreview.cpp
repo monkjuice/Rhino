@@ -18,16 +18,6 @@ namespace rhino
 {
 namespace
 {
-juce::PropertiesFile::Options previewSettingsOptions()
-{
-    juce::PropertiesFile::Options options;
-    options.applicationName = "Rhino";
-    options.filenameSuffix = "settings";
-    options.folderName = "Rhino";
-    options.osxLibrarySubFolder = "Application Support";
-    return options;
-}
-
 const char* previewSettingKey = "browserPreview";
 }
 
@@ -39,7 +29,7 @@ bool Session::readPreviewPreference()
 {
     if (isCommandLineTestMode())
         return true;
-    juce::PropertiesFile properties(previewSettingsOptions());
+    juce::PropertiesFile properties(rhinoSettingsOptions());
     return properties.getBoolValue(previewSettingKey, true);
 }
 
@@ -52,7 +42,7 @@ void Session::setPreviewEnabled(bool enabled)
         stopPreview();
     if (!isCommandLineTestMode())
     {
-        juce::PropertiesFile properties(previewSettingsOptions());
+        juce::PropertiesFile properties(rhinoSettingsOptions());
         properties.setValue(previewSettingKey, enabled);
         properties.saveIfNeeded();
     }

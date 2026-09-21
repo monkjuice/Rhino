@@ -75,6 +75,22 @@
             require(session.toggleRecording().failed(), "and recording refuses rather than rolling silently");
             require(!session.isRecording() && !session.isCountingIn(), "Nothing started");
 
+            scenario("recording: the audio input is not monitored unless it is asked for");
+            // Monitoring an armed audio track through the machine's own
+            // speakers is a feedback loop, so it is off until it is chosen.
+            require(session.inputMonitoring() == Session::InputMonitoring::off, "Monitoring starts off");
+            session.setInputMonitoring(Session::InputMonitoring::automatic);
+            require(session.inputMonitoring() == Session::InputMonitoring::automatic,
+                    "and can follow the arm, as Live's Auto does");
+            session.setInputMonitoring(Session::InputMonitoring::on);
+            require(session.inputMonitoring() == Session::InputMonitoring::on, "or stay on");
+            require(Session::inputMonitoringName(Session::InputMonitoring::on) == "In"
+                        && Session::inputMonitoringName(Session::InputMonitoring::automatic) == "Auto"
+                        && Session::inputMonitoringName(Session::InputMonitoring::off) == "Off",
+                    "and the three are named the way every other DAW names them");
+            session.setInputMonitoring(Session::InputMonitoring::off);
+            require(session.inputMonitoring() == Session::InputMonitoring::off, "and off again");
+
             scenario("recording: the count-in is one to four bars, or off");
             session.setCountInBars(2);
             require(session.countInBars() == 2, "Two bars can be chosen");

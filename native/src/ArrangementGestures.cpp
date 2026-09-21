@@ -601,6 +601,26 @@ void Arrangement::showTrackMenu(int track)
     menu.addSeparator();
     menu.addItem(3, "Rename " + session.trackName(track) + "...       F2");
     menu.addSeparator();
+    // Hearing yourself, in Live's three settings. It belongs to the audio input
+    // rather than to this card - every audio track records the one input - so
+    // the header says so and every card shows the same answer.
+    if (session.trackRecordInput(track) == Session::RecordInput::audio)
+    {
+        juce::PopupMenu monitoring;
+        monitoring.addSectionHeader("Audio input");
+        for (const auto mode : {Session::InputMonitoring::off, Session::InputMonitoring::automatic,
+                                Session::InputMonitoring::on})
+            monitoring.addItem(200 + static_cast<int>(mode),
+                               Session::inputMonitoringName(mode)
+                                   + (mode == Session::InputMonitoring::automatic ? "   (while armed)"
+                                    : mode == Session::InputMonitoring::on        ? "   (always)"
+                                                                                  : ""),
+                               true, session.inputMonitoring() == mode);
+        menu.addSubMenu("Monitor: " + Session::inputMonitoringName(session.inputMonitoring()), monitoring);
+    }
+    else if (session.trackRecordInput(track) == Session::RecordInput::midi)
+        menu.addItem(210, "Monitor: always, on an instrument track", false, false);
+    menu.addSeparator();
     // A bus is the group, so what it offers is what happens to the group. The
     // cards under it offer what happens to their membership.
     if (const auto busOf = session.trackGroupBusId(track); busOf > 0)
@@ -643,6 +663,19 @@ void Arrangement::showTrackMenu(int track)
             {
                 safe->selectTrack(track);
                 safe->ungroupSelection();
+            }
+            else if (choice >= 200 && choice <= 202)
+            {
+                const auto mode = static_cast<Session::InputMonitoring>(choice - 200);
+                safe->session.setInputMonitoring(mode);
+                if (safe->status)
+                    safe->status(mode == Session::InputMonitoring::off
+                                     ? "The audio input is not played back"
+                                 : mode == Session::InputMonitoring::automatic
+                                     ? "An armed track plays its audio input back. Use headphones: a built-in "
+                                       "microphone and speakers will feed back."
+                                     : "The audio input is played back at all times. Use headphones: a built-in "
+                                       "microphone and speakers will feed back.");
             }
             else if (choice >= 100 && choice - 100 < static_cast<int>(safe->groups.size()))
             {

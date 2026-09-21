@@ -643,7 +643,12 @@ void Arrangement::showTrackMenu(int track)
         menu.addSubMenu("Monitor: " + Session::inputMonitoringName(session.inputMonitoring()), monitoring);
     }
     else if (session.trackRecordInput(track) == Session::RecordInput::midi)
+    {
+        // The card carries this too, but only on a row tall enough for a third
+        // line - so the menu is where a short row reaches it.
+        menu.addItem(211, "MIDI From: " + session.trackMidiInputName(track) + "...");
         menu.addItem(210, "Monitor: always, on an instrument track", false, false);
+    }
     menu.addSeparator();
     // A bus is the group, so what it offers is what happens to the group. The
     // cards under it offer what happens to their membership.
@@ -681,6 +686,7 @@ void Arrangement::showTrackMenu(int track)
                 if (safe->status)
                     safe->status(done.failed() ? done.getErrorMessage() : subject + " left the group");
             }
+            else if (choice == 211) safe->showMidiInputMenu(track);
             else if (choice == 5) safe->groupSelectedTracks();
             else if (choice == 6) safe->toggleGroupCollapsed(safe->session.trackGroupBusId(track));
             else if (choice == 7)
@@ -711,6 +717,54 @@ void Arrangement::showTrackMenu(int track)
         });
 }
 
+// Live's MIDI From chooser, opened from the card and from the track menu.
+//
+// The list is built when the menu opens rather than held anywhere, because it
+// describes the machine: a keyboard plugged in while Rhino was running should
+// be in it, and one unplugged should not.
+void Arrangement::showMidiInputMenu(int track)
+{
+    if (session.trackRecordInput(track) != Session::RecordInput::midi)
+    {
+        if (status)
+            status(session.trackName(track) + " is an audio track. Drop an instrument on it to play it from MIDI.");
+        return;
+    }
+    const auto choices = session.midiInputChoices();
+    const auto current = session.trackMidiInput(track);
+
+    juce::PopupMenu menu;
+    menu.addSectionHeader("MIDI FROM");
+    for (size_t i = 0; i < choices.size(); ++i)
+    {
+        // A separator before the hardware and another before None, so the three
+        // kinds of answer read apart rather than as one long list.
+        if (choices[i].token.startsWith("device:") && (i == 0 || !choices[i - 1].token.startsWith("device:")))
+            menu.addSeparator();
+        if (choices[i].token == Session::midiInputNoneToken())
+            menu.addSeparator();
+        menu.addItem(static_cast<int>(i) + 1, choices[i].name, choices[i].available,
+                     choices[i].token == current);
+    }
+    juce::Component* anchor = this;
+    if (juce::isPositiveAndBelow(track, static_cast<int>(midiInput.size())))
+        anchor = midiInput[static_cast<size_t>(track)].get();
+    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(anchor),
+        [safe = juce::Component::SafePointer<Arrangement>(this), track, choices] (int result)
+        {
+            if (safe == nullptr || result == 0) return;
+            const auto& chosen = choices[static_cast<size_t>(result - 1)];
+            const auto done = safe->session.setTrackMidiInput(track, chosen.token);
+            if (safe->status == nullptr) return;
+            if (done.failed())
+                safe->status(done.getErrorMessage());
+            else
+                safe->status(safe->session.trackName(track) + " plays from " + chosen.name
+                             + (chosen.token == Session::midiInputKeyboardToken()
+                                    ? ". Switch the typing keyboard on with K." : ""));
+        });
+}
+
 // What the Info View says while the pointer rests on a header control. The
 // controls are the same objects the session view drives, so the text names the
 // track rather than leaving the reader to work out which card it came from.
@@ -732,6 +786,9 @@ juce::String Arrangement::controlDescription(juce::Component* component) const
             return session.trackRecordInput(track) == Session::RecordInput::midi
                        ? "Arm " + name + " - records what you play on the MIDI input into a new clip."
                        : "Arm " + name + " - records the audio input from Audio settings into a new clip.";
+        if (component == midiInput[index].get())
+            return "MIDI From on " + name + " - which input plays it. All Ins is every keyboard plus "
+                   "the typing keyboard; Computer Keyboard is the typing keyboard alone.";
         if (component == volume[index].get())
             return "Volume of " + name + " - drag to set the level, double-click for 0.0 dB.";
         if (component == pan[index].get())

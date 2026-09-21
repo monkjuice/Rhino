@@ -76,6 +76,27 @@ A class may be defined across several translation units. `Session` is implemente
 
 - `DrumDevice` has one parameter, `kit`, selecting a table of per-voice shapes: playback rate, an optional decay in seconds, and a level. It is read on the audio thread as a plain lookup with no allocation, and the Clap kit additionally routes the backbeat note to the clap pad. Kits are the same sample set reshaped, which is how a drum rack preset differs from another.
 
+## MIDI From
+
+Which MIDI input plays a track is a property of the *track*, as it is in Live:
+`SessionMidiInput.cpp` stores a token on the track state, and
+`applyRecordArming` resolves a device per armed track rather than one for the
+document. Absent means All Ins, so nothing written before this has to be
+migrated.
+
+The engine already had both devices this needs. **"All MIDI Ins"** is a
+virtual device the device manager always makes, merging every physical input
+that is *open* -- which is why choosing All Ins opens them all rather than
+just the default one. The typing keyboard gets a virtual device of its own,
+created the first time a track asks for it, with no physical sources, so it
+carries the notes `sendMidiInputNote` puts into its keyboard state and nothing
+else. Creating one rescans the whole MIDI device list and rebuilds every
+device object, so it happens before anything has resolved a device to a
+pointer, and never at startup.
+
+`sendMidiInputNote` writes to both virtual devices, because the typing
+keyboard is one of the things All Ins means: a track on either has to hear it.
+
 ## Adding a device
 
 Devices derive from `te::Plugin` and follow a fixed shape: a stable `xmlTypeName` (`rhino.<name>.v1`), the `getName`/`getPluginType`/`getVendor` overrides, and parameters wired through `referTo` / `addParam` / `attachToCurrentValue`, detached in the destructor and refreshed in `restorePluginStateFromValueTree`.
@@ -151,6 +172,65 @@ it and repaints the display rectangle alone, not the panel.
 Not yet matched to EQ Eight: the Stereo / L-R / M-S channel modes, adaptive Q
 and oversampling. The bands, the types, the analyser and the drag-the-curve
 editing are there.
+
+## Rhino Vocoder
+
+A channel vocoder in the one mode Live calls External: the audio on the track
+is the voice, and the carrier is another track's output. Split the same way
+as Rhino Tune and Rhino EQ -- `src/core/VocoderEngine.cpp` is the bank and the
+followers, `src/devices/audio/VocoderDevice.cpp` reads parameters and hands
+them over -- so `--self-test` measures it by building a carrier out of four
+tones five octaves apart, putting one tone through as the modulator, and
+asking which of the four came out.
+
+**The carrier arrives as a sidechain, and declaring four input channels is the
+whole of what that takes.** `Plugin::canSidechain` is true for a plugin whose
+`getChannelNames` reports more inputs than outputs, and `EditNodeBuilder` then
+puts a `SendNode` on the source track and a `ReturnNode` in front of this
+plugin, summing the two into one wider buffer. Channels nought and one are the
+track's own; two and three are the carrier. Nothing in the device knows what a
+track is, and `Session` never touches the graph: `SessionSidechain.cpp` writes
+the source track's id onto the plugin and rebuilds playback.
+
+**The send sits before the source track's mute.** That is what makes the
+workflow work at all, and it is worth knowing it is the engine's doing rather
+than something Rhino arranged: muting the synth so you are not hearing it
+alongside the vocoder leaves the carrier running. Changing the source rebuilds
+the graph immediately rather than at the next transport start, because the
+point of the device is to sing into an armed track and hear the result with
+the transport standing still.
+
+- **The carrier is normalised before the bank sees it.** A vocoder's output is
+  a product of two amplitudes, so left alone its level follows whatever the
+  source track happens to be doing. Held at a fixed RMS, the output level
+  tracks the *voice* instead, which is what the ear expects. **Enhance**
+  divides each band by its own energy on top of that, which is what makes a
+  carrier with a strong fundamental and little else speak.
+- **The modulator is analysed in mono; the carrier is filtered per channel.**
+  A voice arrives mono on a stereo track nearly always, and the band gains are
+  shared, so a stereo carrier keeps its image.
+- **The bank is walked band-outer and sample-inner** -- forty passes over a
+  block rather than a block-long walk through forty filters. Everything the
+  inner loop needs that is not per-band is computed into scratch first.
+- **Depth measures each band against the average of the bank**, and that
+  average is taken from where the envelopes stood at the end of the previous
+  block. A block of lag on the *reference* is inaudible and it saves a second
+  pass over the bank; the modulation itself is never delayed.
+- **Unvoiced** mixes noise into the carrier while the modulator is sibilant,
+  measured as the energy above 3.5 kHz against the whole. An `s` has no pitch,
+  so no carrier can play it.
+
+Its editor is `DeviceEditorPanelVocoder.cpp`, a second translation unit of
+`DeviceEditorPanel`. The **Audio From** chooser is the only control on any
+face that edits *routing* rather than a parameter, which is why it is drawn
+and hit-tested rather than made a knob. With no source chosen the voice passes
+through dry and the face says what to do about it, rather than a silent device
+being left to be puzzled over.
+
+Not offered: Live's Noise, Modulator and Pitch Tracking carriers, its
+Mono / Stereo / Precise modes, and its Attack/Release being per-band. Each of
+the other three carriers is a way of making a carrier when you have not got
+one, and Rhino has a track full of synths.
 
 ## Dependencies
 

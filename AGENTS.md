@@ -46,6 +46,9 @@ Application code, `native/src`:
 | Playhead rendering | `Playhead.*` |
 | Built-in devices | `native/src/devices/`, split `instruments/`, `audio/`, `midi/`. Declared once in `DeviceCatalog.cpp` |
 | Eight-band EQ with a live spectrum (Rhino EQ) | The DSP is in `core/`: `EqFilter.h` (a pure header; the curve and the audio both read it), `EqEngine.*`, `SpectrumAnalyser.*`. The device is `devices/audio/RhinoEqDevice.*` and its face is `DeviceEditorPanelEq.cpp`. See the Rhino EQ section of [native/README.md](native/README.md) |
+| Routing one track's audio into another track's device (a sidechain) | `SessionSidechain.cpp`. The device declares four input channels; the engine's graph builder does the rest |
+| Which MIDI input plays a track | `SessionMidiInput.cpp` in the model, the chooser on the track card in `ArrangementSync.cpp` and `ArrangementGestures.cpp` |
+| Vocoder (Rhino Vocoder) | The DSP is `core/VocoderEngine.*`. The device is `devices/audio/VocoderDevice.*` and its face is `DeviceEditorPanelVocoder.cpp`. See the Rhino Vocoder section of [native/README.md](native/README.md) |
 | Vocal pitch correction (Rhino Tune) | The DSP is in `core/`: `PitchTracker.*`, `PsolaShifter.*`, `ScaleQuantizer.h`, `AutoTuneEngine.*`. The device is `devices/audio/AutoTuneDevice.*` and its face is `DeviceEditorPanelAutoTune.cpp`. See the Rhino Tune section of [native/README.md](native/README.md) |
 | Sample and content library | `library/` at the repository root, found by `native/src/core/ContentLibrary.h` |
 | Theme | `Theme.h` |

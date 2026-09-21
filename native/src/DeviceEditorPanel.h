@@ -28,7 +28,7 @@ public:
     std::function<void()> selected;
 
 private:
-    enum class Face { Generic, RhinoSpace, AutoTune, Eq };
+    enum class Face { Generic, RhinoSpace, AutoTune, Eq, Vocoder };
     void ensureControls();
     void styleControls();
     void layoutGeneric();
@@ -55,6 +55,15 @@ private:
     void showEqTypeMenu(int band);
     void rebuildEqCurve();
     void tickEqSpectrum();
+    // Rhino Vocoder's face is DeviceEditorPanelVocoder.cpp: a chooser that
+    // decides where the carrier comes from, a bar per band of the filter bank,
+    // and two lamps that say whether either signal is arriving. The chooser is
+    // the one control on any face that edits the *routing* rather than a
+    // parameter, which is why it is drawn rather than made a knob.
+    void layoutVocoder();
+    void paintVocoder(juce::Graphics&);
+    bool handleVocoderClick(const juce::MouseEvent&);
+    void tickVocoder();
     // Only the meter, the detected note and the target key repaint; the rest
     // of the face is static and stays out of the frame path.
     void timerCallback() override;
@@ -76,6 +85,11 @@ private:
     // What the meter last drew, so an idle device asks for no frames at all.
     float lastDrawnCents = 0.0f, lastDrawnNote = 0.0f;
     int lastDrawnBand = -2;
+    // The vocoder's display asks for a frame only when the bank has moved:
+    // the sum of the band envelopes stands in for all forty of them, and the
+    // two lamps are a pair of bits.
+    float lastDrawnBandSum = -1.0f;
+    int lastDrawnLamps = -1;
 
     // ---- Rhino EQ ---------------------------------------------------------
     // The reader is heap-allocated because it carries the transform tables

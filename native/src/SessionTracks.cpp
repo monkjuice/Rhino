@@ -123,6 +123,11 @@ juce::Result Session::removeAudioTrack(int track)
     // that currently holds its clip re-homes the clip rather than refusing.
     const auto removingEditedPatternTrack = patternClip != nullptr && patternClip->getClipTrack() == tracks[track];
     edit->getUndoManager().beginNewTransaction("Remove track");
+    // Anything taking this track's audio as a sidechain loses its source. The
+    // id is cleared inside the same transaction as the deletion, so undo puts
+    // both back; left behind, it would route a device to a bus nothing sends
+    // to, which is a device that has gone silent for no visible reason.
+    clearSidechainSourcesNaming(tracks[track]->itemID);
     edit->deleteTrack(tracks[track]);
     if (removingEditedPatternTrack)
     {

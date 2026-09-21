@@ -388,6 +388,7 @@ int runSelfTest()
 
         checkAutoTuneDsp(session);
         checkRhinoEqDsp(session);
+        checkVocoderDsp(session);
 
         session.releaseAudioDevice();
         return 0;

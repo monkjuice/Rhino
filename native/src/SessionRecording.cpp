@@ -1,6 +1,7 @@
 #include "SessionInternal.h"
 #include "CountInClick.h"
 #include <set>
+#include <vector>
 
 // Recording.
 //
@@ -88,21 +89,6 @@ bool Session::hasMidiInput() const
     return midiInputDevice() != nullptr;
 }
 
-// The engine's own keyboard state is the entry a MIDI device's notes take, so
-// a note put in here is indistinguishable from a played one by the time it
-// reaches a track.
-void Session::sendMidiInputNote(int midiNote, int velocity, bool isNoteOn)
-{
-    jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
-    auto* device = midiInputDevice();
-    if (device == nullptr || !juce::isPositiveAndBelow(midiNote, 128))
-        return;
-    if (isNoteOn)
-        device->keyboardState.noteOn(1, midiNote, juce::jlimit(0.0f, 1.0f, velocity / 127.0f));
-    else
-        device->keyboardState.noteOff(1, midiNote, 0.0f);
-}
-
 Session::RecordInput Session::trackRecordInput(int trackIndex) const
 {
     const auto tracks = te::getAudioTracks(*edit);
@@ -187,6 +173,16 @@ juce::Result Session::applyRecordArming()
     }
 
     auto& deviceManager = engine.getDeviceManager();
+    // Creating the typing keyboard's device rescans the MIDI device list and
+    // rebuilds every device object with it, so it happens before anything here
+    // has resolved a device to a pointer.
+    if (wantsMidi)
+        for (int track = 0; track < tracks.size(); ++track)
+            if (isTrackArmed(track) && trackMidiInput(track) == midiInputKeyboardToken())
+            {
+                ensureComputerKeyboardDevice();
+                break;
+            }
     // The audio input is the one Audio settings made the default, or the first
     // one the device offers when nothing has been chosen. Arming turns it on:
     // an input nobody had enabled is exactly the one the user has just asked
@@ -199,7 +195,22 @@ juce::Result Session::applyRecordArming()
             for (auto* candidate : deviceManager.getWaveInputDevices())
                 if (candidate != nullptr) { wave = candidate; break; }
     }
-    te::MidiInputDevice* midi = wantsMidi ? midiInputDevice() : nullptr;
+    // Every armed MIDI track names its own input, so this is a device per
+    // track rather than one for the document. All Ins resolves to the engine's
+    // merge of the physical inputs, and a physical input only feeds that merge
+    // while it is open - so enabling them is part of what All Ins means.
+    std::vector<te::MidiInputDevice*> trackMidi(static_cast<size_t>(tracks.size()), nullptr);
+    auto wantsAllIns = false;
+    for (int track = 0; track < tracks.size(); ++track)
+    {
+        if (!isTrackArmed(track) || trackRecordInput(track) != RecordInput::midi)
+            continue;
+        trackMidi[static_cast<size_t>(track)] = midiInputDeviceForTrack(track);
+        if (trackMidiInput(track) == midiInputAllInsToken())
+            wantsAllIns = true;
+    }
+    if (wantsAllIns)
+        enablePhysicalMidiInputs();
 
     // Monitoring is decided before anything is armed, because the engine makes
     // a live input audible as soon as a destination is record-enabled and the
@@ -210,8 +221,9 @@ juce::Result Session::applyRecordArming()
         wave->setMonitorMode(monitorAudioInput == InputMonitoring::on        ? te::InputDevice::MonitorMode::on
                              : monitorAudioInput == InputMonitoring::automatic ? te::InputDevice::MonitorMode::automatic
                                                                               : te::InputDevice::MonitorMode::off);
-    if (midi != nullptr)
-        midi->setMonitorMode(te::InputDevice::MonitorMode::automatic);
+    for (auto* midi : trackMidi)
+        if (midi != nullptr)
+            midi->setMonitorMode(te::InputDevice::MonitorMode::automatic);
 
     // An input instance is built when the playback context is, and only for
     // devices that were enabled at the time. Enabling comes first for that
@@ -222,11 +234,12 @@ juce::Result Session::applyRecordArming()
         deviceManager.setDeviceEnabled(*wave, true);
         enabledSomething = true;
     }
-    if (midi != nullptr && !midi->isEnabled())
-    {
-        midi->setEnabled(true);
-        enabledSomething = true;
-    }
+    for (auto* midi : trackMidi)
+        if (midi != nullptr && !midi->isEnabled())
+        {
+            midi->setEnabled(true);
+            enabledSomething = true;
+        }
     // Nothing to arm against while the device is shut. Saying so is better
     // than allocating a playback context that has no input to give it.
     if (engine.getDeviceManager().deviceManager.getCurrentAudioDevice() == nullptr)
@@ -250,12 +263,18 @@ juce::Result Session::applyRecordArming()
         if (!isTrackArmed(track))
             continue;
         const auto wanted = trackRecordInput(track);
-        te::InputDevice* device = wanted == RecordInput::midi ? static_cast<te::InputDevice*>(midi)
-                                                              : static_cast<te::InputDevice*>(wave);
+        te::InputDevice* device = wanted == RecordInput::midi
+                                      ? static_cast<te::InputDevice*>(trackMidi[static_cast<size_t>(track)])
+                                      : static_cast<te::InputDevice*>(wave);
         if (device == nullptr)
         {
+            // A track set to None is doing exactly what it was asked to, so it
+            // is not a problem to report. Anything else is.
+            if (wanted == RecordInput::midi && trackMidiInput(track) == midiInputNoneToken())
+                continue;
             problem = wanted == RecordInput::midi
-                          ? "No MIDI input is available. Connect a keyboard, then enable it in Audio settings."
+                          ? trackName(track) + " has no MIDI input to record from. Pick one on its card, "
+                            "or connect a keyboard and enable it in Audio settings."
                           : "No audio input is available. Choose one in Audio settings.";
             continue;
         }

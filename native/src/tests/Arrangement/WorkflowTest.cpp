@@ -3,6 +3,7 @@
 // rather than their catalog entries.
 #include "instruments/DrumDevice.h"
 #include "instruments/RhinoWaveDevice.h"
+#include "audio/VocoderDevice.h"
 #include "../../Theme.h"
 #include "../../StepGrid.h"
 #include "../../AudioClipPanel.h"
@@ -104,6 +105,8 @@ int runArrangementTest()
         // an edit that has none.
         scenario("recording");
        #include "scenarios/Recording.inc"
+        scenario("vocoder carrier and midi input");
+       #include "scenarios/VocoderCarrier.inc"
         scenario("gestures and persistence");
        #include "scenarios/GesturesAndPersistence.inc"
         scenario("session view");

@@ -37,6 +37,11 @@ void Arrangement::sync()
         arm[index]->setTooltip(session.trackRecordInput(track) == Session::RecordInput::midi
                                    ? "Arm " + session.trackName(track) + " to record the MIDI input"
                                    : "Arm " + session.trackName(track) + " to record the audio input");
+        // Whatever the card shows here is what an armed track actually listens
+        // to: the name comes from the session rather than from anything the
+        // menu remembered.
+        midiInput[index]->setButtonText(session.trackMidiInputName(track) + "  v");
+        midiInput[index]->setTooltip("MIDI input for " + session.trackName(track));
         if (!volume[index]->isMouseButtonDown())
             volume[index]->setValue(mixer.volumeDb, juce::dontSendNotification);
         if (!pan[index]->isMouseButtonDown())
@@ -140,6 +145,13 @@ void Arrangement::syncTrackControls()
         muteButton->setColour(juce::TextButton::buttonOnColourId, juce::Colour(0xff97634c));
         soloButton->setColour(juce::TextButton::buttonOnColourId, juce::Colour(0xff657440));
         armButton->setColour(juce::TextButton::buttonOnColourId, juce::Colour(0xffb5453b));
+        // Live's MIDI From chooser. The list is the machine's devices at the
+        // moment it is opened, so it is a menu rather than a ComboBox holding
+        // a snapshot of them.
+        auto inputButton = std::make_unique<juce::TextButton>("All Ins  v");
+        inputButton->onClick = [this, track] { showMidiInputMenu(track); };
+        inputButton->setColour(juce::TextButton::buttonColourId, juce::Colour(0xff222a30));
+        inputButton->setColour(juce::TextButton::textColourOffId, juce::Colour(0xffaebbc3));
         auto volumeSlider = std::make_unique<juce::Slider>();
         volumeSlider->setSliderStyle(juce::Slider::LinearBar);
         // The bar paints the value itself, in a colour picked for whichever of
@@ -182,17 +194,19 @@ void Arrangement::syncTrackControls()
         // The Info View explains a control while the pointer rests on it, so
         // every one of them reports its enter and exit to the arrangement.
         for (auto* control : std::initializer_list<juce::Component*>{muteButton.get(), soloButton.get(),
-                                                                     armButton.get(),
+                                                                     armButton.get(), inputButton.get(),
                                                                      volumeSlider.get(), panSlider.get()})
             control->addMouseListener(this, false);
         laneHeaders.addAndMakeVisible(*muteButton);
         laneHeaders.addAndMakeVisible(*soloButton);
         laneHeaders.addAndMakeVisible(*armButton);
+        laneHeaders.addAndMakeVisible(*inputButton);
         laneHeaders.addAndMakeVisible(*volumeSlider);
         laneHeaders.addAndMakeVisible(*panSlider);
         mute.push_back(std::move(muteButton));
         solo.push_back(std::move(soloButton));
         arm.push_back(std::move(armButton));
+        midiInput.push_back(std::move(inputButton));
         volume.push_back(std::move(volumeSlider));
         pan.push_back(std::move(panSlider));
     }
@@ -201,6 +215,7 @@ void Arrangement::syncTrackControls()
         mute.pop_back();
         solo.pop_back();
         arm.pop_back();
+        midiInput.pop_back();
         volume.pop_back();
         pan.pop_back();
     }

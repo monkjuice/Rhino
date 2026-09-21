@@ -17,6 +17,7 @@ add_library(RhinoDevices STATIC
     audio/RhinoBloomDevice.cpp
     audio/RhinoEqDevice.cpp
     audio/AutoTuneDevice.cpp
+    audio/VocoderDevice.cpp
     midi/RhinoArpDevice.cpp)
 # Only the devices/ root is public, so an include names the kind it wants:
 # #include "instruments/DrumDevice.h".

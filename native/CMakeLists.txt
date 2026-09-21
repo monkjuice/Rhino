@@ -61,6 +61,8 @@ target_sources(RhinoNative PRIVATE
     src/SessionSamples.cpp
     src/SessionPreview.cpp
     src/SessionRecording.cpp
+    src/SessionMidiInput.cpp
+    src/SessionSidechain.cpp
     src/SessionAutomation.cpp
     src/SessionTransport.cpp
     src/SessionExternalPlugins.cpp
@@ -88,6 +90,7 @@ target_sources(RhinoNative PRIVATE
     src/DeviceEditorPanel.cpp
     src/DeviceEditorPanelAutoTune.cpp
     src/DeviceEditorPanelEq.cpp
+    src/DeviceEditorPanelVocoder.cpp
     src/DeviceRack.cpp
     src/Playhead.cpp
     src/CountInClick.cpp
@@ -100,6 +103,7 @@ target_sources(RhinoNative PRIVATE
     src/tests/SelfTest.cpp
     src/tests/AutoTuneTest.cpp
     src/tests/EqTest.cpp
+    src/tests/VocoderTest.cpp
     src/tests/Pattern/DeviceRackTest.cpp
     src/tests/Pattern/WorkflowTest.cpp
     src/tests/Arrangement/ClipGeometryTest.cpp

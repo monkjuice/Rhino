@@ -312,6 +312,25 @@ public:
     juce::Result endDeviceParameterGesture(int track, int slot, int parameter);
     juce::Result toggleDeviceEnabled(int track, int slot);
     juce::Result deleteDevice(int track, int slot);
+    // A device that takes audio from another track as well as from its own -
+    // a sidechain. Rhino Vocoder is the one that does today: the voice is on
+    // the track and the carrier is whatever synth is chosen here. The tap sits
+    // after the source track's devices and mixer and before its mute, so the
+    // usual move of muting the synth leaves the carrier running.
+    struct SidechainSource
+    {
+        int track = -1;
+        juce::String name;
+    };
+    // Empty for a device that takes no sidechain. Never includes the track the
+    // device is on: a track cannot play itself.
+    std::vector<SidechainSource> deviceSidechainSources(int track, int slot) const;
+    // The chosen source track, or -1 for none - which is also the answer once
+    // the source track has been deleted.
+    int deviceSidechainSource(int track, int slot) const;
+    juce::Result setDeviceSidechainSource(int track, int slot, int sourceTrack);
+    juce::Result clearDeviceSidechainSource(int track, int slot);
+
     double tempo() const;
     void setTempo(double bpm);
     TimeSignature timeSignature() const;
@@ -344,6 +363,29 @@ public:
     void sendMidiInputNote(int midiNote, int velocity, bool isNoteOn);
     // True when there is a MIDI input to send to at all.
     bool hasMidiInput() const;
+    // Which MIDI input a track listens to, as Live's MIDI From chooser does.
+    // It is a property of the track, so it travels with the track and is saved
+    // with the project; absent means All Ins, which is what every document
+    // written before this says and what a new track gets.
+    //
+    // The token is what is stored. All Ins is the empty string so that the
+    // default writes nothing at all, and a named device is prefixed so that a
+    // keyboard called "None" cannot mean anything but itself.
+    struct MidiInputChoice
+    {
+        juce::String token;
+        juce::String name;
+        bool available = true;
+    };
+    std::vector<MidiInputChoice> midiInputChoices() const;
+    juce::String trackMidiInput(int track) const;
+    // What the card and the menu show: the device's name rather than its token.
+    juce::String trackMidiInputName(int track) const;
+    juce::Result setTrackMidiInput(int track, const juce::String& token);
+    static juce::String midiInputAllInsToken();
+    static juce::String midiInputKeyboardToken();
+    static juce::String midiInputNoneToken();
+    static juce::String midiInputDeviceToken(const juce::String& deviceName);
     // Hearing yourself. These are Live's three Monitor settings under another
     // spelling, and the engine happens to carry exactly the same three.
     //
@@ -658,6 +700,17 @@ private:
     // Audio settings, or the first that is there. One rule, so what a note is
     // played into is what a recording is captured from.
     te::MidiInputDevice* midiInputDevice() const;
+    // SessionMidiInput.cpp - what a track's MIDI From setting resolves to.
+    // Both virtual devices are the engine's own: it always makes the merge of
+    // the physical inputs, and Rhino makes the typing keyboard's the first
+    // time a track asks for it, because creating one rescans the device list.
+    te::MidiInputDevice* allMidiInsDevice() const;
+    te::MidiInputDevice* computerKeyboardDevice() const;
+    te::MidiInputDevice* ensureComputerKeyboardDevice();
+    te::MidiInputDevice* midiInputDeviceForTrack(int track) const;
+    // A physical input only feeds the All Ins merge while it is open, so
+    // opening them is part of what All Ins means rather than a side effect.
+    void enablePhysicalMidiInputs();
     void clearRecordArming();
     void beginTransportRecording();
     // The tidy-up and the notification, with no question about whether the
@@ -680,6 +733,9 @@ private:
     void buildStarterEdit();
     void refreshAfterUndoRedo(bool changed);
     te::PluginList* pluginListForTrack(int track) const;
+    // SessionSidechain.cpp - called as a track is deleted, so nothing is left
+    // pointing at it. Inside the caller's transaction, so undo restores both.
+    void clearSidechainSourcesNaming(te::EditItemID sourceTrack);
     te::ClipSlot* clipSlotAt(int track, int scene) const;
     te::VolumeAndPanPlugin* trackVolumePlugin(int track) const;
     void ensureTrackMixers();
@@ -760,4 +816,5 @@ int runArrangementGeometryTest();
 // wants. runSelfTest calls both.
 void checkAutoTuneDsp(Session&);
 void checkRhinoEqDsp(Session&);
+void checkVocoderDsp(Session&);
 }

@@ -2,6 +2,7 @@
 #include "audio/RhinoSpaceDevice.h"
 #include "audio/AutoTuneDevice.h"
 #include "audio/RhinoEqDevice.h"
+#include "audio/VocoderDevice.h"
 #include <algorithm>
 #include <cmath>
 
@@ -59,6 +60,7 @@ void DeviceEditorPanel::setTarget(int nextTrack, const Session::DeviceSlot& devi
     face = device.type == RhinoSpaceDevice::xmlTypeName ? Face::RhinoSpace
          : device.type == AutoTuneDevice::xmlTypeName ? Face::AutoTune
          : device.type == RhinoEqDevice::xmlTypeName ? Face::Eq
+         : device.type == VocoderDevice::xmlTypeName ? Face::Vocoder
          : Face::Generic;
     // The tuner's meter and the EQ's spectrum are the only things on any face
     // that move on their own, so they are the only devices that ask for
@@ -67,7 +69,7 @@ void DeviceEditorPanel::setTarget(int nextTrack, const Session::DeviceSlot& devi
         ? dynamic_cast<RhinoEqDevice*>(session.devicePlugin(track, pluginSlot)) : nullptr;
     const auto eqAnalysing = eqDevice != nullptr && device.enabled
         && eqDevice->analyserMode() != EqEngine::AnalyserMode::Off;
-    if (face == Face::AutoTune || eqAnalysing)
+    if (face == Face::AutoTune || face == Face::Vocoder || eqAnalysing)
         startTimerHz(24);
     else
         stopTimer();
@@ -88,6 +90,8 @@ int DeviceEditorPanel::preferredWidth() const
 {
     if (face == Face::AutoTune)
         return 712;
+    if (face == Face::Vocoder)
+        return 752;
     if (face == Face::Eq)
         return 660;
     if (face == Face::RhinoSpace)
@@ -123,6 +127,8 @@ void DeviceEditorPanel::mouseDown(const juce::MouseEvent& event)
         return;
     if (face == Face::AutoTune)
         handleAutoTuneClick(event);
+    else if (face == Face::Vocoder)
+        handleVocoderClick(event);
 }
 
 // The EQ display is dragged, wheeled and double-clicked; nothing else on any
@@ -206,7 +212,8 @@ int DeviceEditorPanel::visibleParameterCount() const
     // Twelve is what the generic grid can lay out and stay readable. Rhino
     // Tune's own face has room for its thirteenth, and the device lists its
     // parameters so the twelve a fallback panel would show come first.
-    return std::min(face == Face::AutoTune ? 13 : 12, static_cast<int>(parameters.size()));
+    return std::min(face == Face::AutoTune || face == Face::Vocoder ? 13 : 12,
+                    static_cast<int>(parameters.size()));
 }
 
 void DeviceEditorPanel::ensureControls()
@@ -268,6 +275,7 @@ void DeviceEditorPanel::styleControls()
         const auto& parameter = parameters[static_cast<size_t>(i)];
         const auto accent = face == Face::RhinoSpace ? juce::Colour(0xff75b9cc)
             : face == Face::AutoTune ? juce::Colour(0xffb2739c)
+            : face == Face::Vocoder ? juce::Colour(0xff7d8fc4)
             : juce::Colour(0xffc6d58c);
         parameterLabels[i]->setText(parameter.name, juce::dontSendNotification);
         parameterLabels[i]->setColour(juce::Label::textColourId, juce::Colour(0xffdfe6ea));
@@ -314,6 +322,11 @@ void DeviceEditorPanel::paint(juce::Graphics& g)
         paintEq(g);
         return;
     }
+    if (face == Face::Vocoder)
+    {
+        paintVocoder(g);
+        return;
+    }
     if (face != Face::RhinoSpace)
         return;
 
@@ -357,6 +370,8 @@ void DeviceEditorPanel::resized()
         layoutAutoTune();
     else if (face == Face::Eq && contentArea.getWidth() >= 560 && contentArea.getHeight() >= 110)
         layoutEq();
+    else if (face == Face::Vocoder && contentArea.getWidth() >= 660 && contentArea.getHeight() >= 120)
+        layoutVocoder();
     else if (face == Face::RhinoSpace && contentArea.getWidth() >= 350 && contentArea.getHeight() >= 80)
         layoutRhinoSpace();
     else

@@ -460,6 +460,11 @@ void DeviceEditorPanel::timerCallback()
         tickEqSpectrum();
         return;
     }
+    if (face == Face::Vocoder)
+    {
+        tickVocoder();
+        return;
+    }
     if (face != Face::AutoTune)
     {
         stopTimer();

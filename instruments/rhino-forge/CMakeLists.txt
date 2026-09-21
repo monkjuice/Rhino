@@ -82,6 +82,7 @@ juce_add_binary_data(RhinoForgeAssets SOURCES
 # file nothing checks.
 set(forge_sources
     core/ForgeVoiceParts.h
+    core/ForgeLfoTable.h
     core/ForgeArp.h
     core/ForgeShapes.h
     core/ForgeMatrix.h
@@ -117,12 +118,14 @@ set(forge_sources
     src/ForgeProcessor.h
     src/ForgeParameters.cpp
     src/ForgeProcessorState.cpp
+    src/ForgeProcessorLfo.cpp
     src/ForgeEditor.cpp
     src/ForgeEditor.h
     src/ForgeEditorInternal.h
     src/ForgeEditorFx.cpp
     src/ForgeEditorInput.cpp
     src/ForgeEditorLayout.cpp
+    src/ForgeEditorLfo.cpp
     src/ForgeEditorModulation.cpp
     src/ForgeEditorPages.cpp
     src/ForgeEditorPaint.cpp

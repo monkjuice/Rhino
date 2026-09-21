@@ -228,7 +228,7 @@ public:
             const auto& setting = patch.lfos[index];
             const auto free = lfoModeOf(setting) == LfoMode::free;
             if (free && used[index])
-                freeValue[index] = lfoWave(lfoShapeOf(setting), freePhase[index], freeHeld[index]);
+                freeValue[index] = lfoValue(setting, freePhase[index], freeHeld[index]);
 
             // What the panel is shown, before any voice has had its say: the
             // free-running phase for an LFO in OFF, and the start of the shape
@@ -317,8 +317,7 @@ public:
                     continue;
                 }
                 if (used[index])
-                    lfoValues[index] = lfoWave(lfoShapeOf(setting),
-                                               voice.lfoPhase[index], voice.lfoHeld[index]);
+                    lfoValues[index] = lfoValue(setting, voice.lfoPhase[index], voice.lfoHeld[index]);
                 // The panel follows the loudest voice, exactly as ENV 1's
                 // display does and for the same reason: that is the note a
                 // player is listening to.
@@ -412,8 +411,8 @@ public:
         // read back out of its phase, so it has to be carried this far.
         for (int i = 0; i < lfoCount; ++i)
             meterLfoValue[static_cast<size_t>(i)] =
-                lfoWave(lfoShapeOf(patch.lfos[static_cast<size_t>(i)]),
-                        meterLfoPhase[static_cast<size_t>(i)], meterLfoHeld[static_cast<size_t>(i)]);
+                lfoValue(patch.lfos[static_cast<size_t>(i)],
+                         meterLfoPhase[static_cast<size_t>(i)], meterLfoHeld[static_cast<size_t>(i)]);
 
         const auto gain = juce::jlimit(0.0f, 1.25f, patch.output) * 0.28f;
         left = softClip(left * gain);

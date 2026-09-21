@@ -500,6 +500,7 @@ Patch Processor::patch() const
         setting.rate = lfoRateHz(lfo);
         setting.shape = value(lfoParameterId(lfo, "Shape"));
         setting.mode = value(lfoParameterId(lfo, "Mode"));
+        setting.table = lfoTable(lfo);
     }
     for (int rack = 0; rack < rackCount; ++rack)
     {

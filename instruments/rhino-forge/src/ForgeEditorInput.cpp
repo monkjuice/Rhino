@@ -25,6 +25,33 @@ Editor::Control* Editor::controlAt(juce::Point<int> panelPosition)
 
 void Editor::mouseDown(const juce::MouseEvent& event)
 {
+    if (event.eventComponent == this)
+    {
+        const auto at = event.getEventRelativeTo(this).getPosition();
+        const auto display = lfoDisplayBounds();
+        if (display.contains(at))
+        {
+            if (ui::lfoNameBounds(display).contains(at) && !event.mods.isPopupMenu())
+            { showLfoMenu(); return; }
+            if (ui::lfoGridBounds(display).contains(at) && !event.mods.isPopupMenu())
+            { showLfoGridMenu(at.x < ui::lfoGridBounds(display).getCentreX()); return; }
+            if (ui::lfoPlotBounds(display).expanded(5, 0).contains(at))
+            {
+                const auto point = lfoPointAt(at);
+                if (event.mods.isPopupMenu()) { removeLfoPoint(shownLfo(), point); return; }
+                if (event.getNumberOfClicks() >= 2)
+                {
+                    if (point >= 0) removeLfoPoint(shownLfo(), point);
+                    else addLfoPoint(shownLfo(), at);
+                    return;
+                }
+                lfoDragPoint = point;
+                lfoDragBank = shownLfo();
+                lfoDragStart = at;
+                return;
+            }
+        }
+    }
     if (auto* handle = dynamic_cast<ui::SourceHandle*>(event.eventComponent))
     {
         // A macro's plate is two things in one small rectangle: the number is
@@ -227,6 +254,13 @@ void Editor::mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWhee
 
 void Editor::mouseDrag(const juce::MouseEvent& event)
 {
+    if (lfoDragPoint >= 0)
+    {
+        const auto at = event.getEventRelativeTo(this).getPosition();
+        if (at.getDistanceFrom(lfoDragStart) >= 2.0f)
+            editLfoPoint(lfoDragBank, lfoDragPoint, at, event.mods.isAltDown());
+        return;
+    }
     if (fxDragSlot >= 0)
     {
         const auto at = event.getEventRelativeTo(this).getPosition();
@@ -261,6 +295,11 @@ void Editor::mouseDrag(const juce::MouseEvent& event)
 
 void Editor::mouseUp(const juce::MouseEvent& event)
 {
+    if (lfoDragBank >= 0)
+    {
+        lfoDragPoint = lfoDragBank = -1;
+        return;
+    }
     if (fxDragSlot >= 0)
     {
         const auto from = fxDragSlot;

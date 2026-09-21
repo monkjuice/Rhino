@@ -200,6 +200,7 @@ void Editor::paint(juce::Graphics& g)
                 ui::drawLfo(g, display,
                             static_cast<LfoShape>(juce::jlimit(0, lfoShapeCount - 1,
                                                                juce::roundToInt(value(lfoParameterId(lfo, "Shape"))))),
+                            processor.lfoTable(lfo), processor.lfoTableName(lfo),
                             processor.lfoPhase(lfo), processor.lfoValue(lfo), accent, alpha);
                 break;
             }

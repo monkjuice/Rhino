@@ -202,6 +202,9 @@ void Editor::applyEnableStates()
             const auto on = module.on()
                 && (control->disabledBy == nullptr || value(control->disabledBy) < 0.5f)
                 && (control->enabledBy == nullptr || value(control->enabledBy) >= 0.5f)
+                && !(module.descriptor->display == ui::Display::lfo
+                     && control->id.endsWith("Shape")
+                     && processor.lfoTableIsCustom(control->bank))
                 // A rack knob its modes have made meaningless greys out, the
                 // same way polyphony does under mono. It is still here; it just
                 // has nothing to do until the mode beside it moves.

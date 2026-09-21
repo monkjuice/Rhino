@@ -69,6 +69,16 @@ public:
     // exactly as ENV 1's display follows that voice.
     float lfoPhase(int lfo) const { return meter(meterLfoPhase, lfo); }
     float lfoValue(int lfo) const { return meter(meterLfoValue, lfo); }
+    LfoTable lfoTable(int lfo) const;
+    bool lfoTableIsCustom(int lfo) const
+    {
+        return lfo >= 0 && lfo < lfoCount
+            && lfoCustom[static_cast<size_t>(lfo)].load(std::memory_order_relaxed);
+    }
+    void setLfoTable(int lfo, const LfoTable&, const juce::String& name = "Custom");
+    juce::String lfoTableName(int lfo) const;
+    juce::Result saveLfoTable(int lfo, const juce::File&) const;
+    juce::Result loadLfoTable(int lfo, const juce::File&);
 
     // The rate an LFO actually runs at: the rate knob when it is set in Hertz,
     // a division of the host's tempo when it is set in beats.
@@ -168,6 +178,14 @@ private:
     std::array<std::atomic<int>, envCount> meterStage {};
     std::array<std::atomic<float>, lfoCount> meterLfoPhase {};
     std::array<std::atomic<float>, lfoCount> meterLfoValue {};
+    std::array<std::array<std::atomic<float>, maxLfoPoints>, lfoCount> lfoPointX {};
+    std::array<std::array<std::atomic<float>, maxLfoPoints>, lfoCount> lfoPointY {};
+    std::array<std::atomic<int>, lfoCount> lfoPointCount {};
+    std::array<std::atomic<int>, lfoCount> lfoColumns {};
+    std::array<std::atomic<int>, lfoCount> lfoRows {};
+    std::array<std::atomic<bool>, lfoCount> lfoCustom {};
+    mutable juce::CriticalSection lfoNameLock;
+    std::array<juce::String, lfoCount> lfoNames {};
     // One reader for every bank of published meters, whatever it is a bank of:
     // an index outside the bank reads as nothing rather than off the end.
     template <size_t count>
@@ -190,5 +208,7 @@ private:
     // default rather than keeping the previous patch's value.
     void appendTables(juce::ValueTree& tree) const;
     void applyTables(const juce::ValueTree& tree);
+    void appendLfoTables(juce::ValueTree& tree) const;
+    void applyLfoTables(const juce::ValueTree& tree);
 };
 }

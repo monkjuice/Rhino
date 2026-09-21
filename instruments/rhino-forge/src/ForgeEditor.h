@@ -155,6 +155,9 @@ private:
     ui::PresetButton loadPreset {"LOAD"}, savePreset {"SAVE"};
     juce::Label presetName;
     std::unique_ptr<juce::FileChooser> fileChooser;
+    int lfoDragPoint = -1;
+    int lfoDragBank = -1;
+    juce::Point<int> lfoDragStart;
 
     void buildModules();
     void buildTablePanel();
@@ -207,6 +210,16 @@ private:
     // Which LFO the panel is showing: the LFO module's chosen bank, and so also
     // the one its display draws, its header reports and its handle drags.
     int shownLfo() const;
+    juce::Rectangle<int> lfoDisplayBounds() const;
+    LfoShape shownLfoShape() const;
+    LfoTable editableLfoTable(int lfo) const;
+    int lfoPointAt(juce::Point<int> at) const;
+    void editLfoPoint(int lfo, int point, juce::Point<int> at, bool snap);
+    void addLfoPoint(int lfo, juce::Point<int> at);
+    void removeLfoPoint(int lfo, int point);
+    void showLfoMenu();
+    void showLfoGridMenu(bool columns);
+    void chooseLfoTableFile(bool save);
     // Which envelope the panel is showing: the ENV module's chosen bank, and so
     // also the one its display draws, its knobs drive and its handle drags.
     int shownEnv() const;

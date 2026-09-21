@@ -168,6 +168,7 @@ void Processor::getStateInformation(juce::MemoryBlock& destination)
 {
     auto tree = state.copyState();
     appendTables(tree);
+    appendLfoTables(tree);
     if (const auto xml = tree.createXml())
         copyXmlToBinary(*xml, destination);
 }
@@ -184,6 +185,7 @@ void Processor::setStateInformation(const void* data, int size)
             // Read before migrated() strips the table nodes back out, so the
             // live parameter state stays parameters only.
             applyTables(saved);
+            applyLfoTables(saved);
             state.replaceState(migrated(saved));
         }
 }
@@ -197,6 +199,7 @@ juce::Result Processor::savePreset(const juce::File& destination, const juce::St
                                                         : destination.getFileNameWithoutExtension(), nullptr);
     auto tree = state.copyState();
     appendTables(tree);
+    appendLfoTables(tree);
     preset.addChild(tree, -1, nullptr);
     const auto xml = preset.createXml();
     if (xml == nullptr) return juce::Result::fail("Forge could not create the preset data.");
@@ -223,6 +226,7 @@ juce::Result Processor::loadPreset(const juce::File& source)
     if (!savedState.isValid())
         return juce::Result::fail("The preset does not contain Forge parameter state.");
     applyTables(savedState);
+    applyLfoTables(savedState);
     state.replaceState(migrated(savedState));
     return juce::Result::ok();
 }
@@ -331,7 +335,8 @@ juce::ValueTree Processor::migrated(const juce::ValueTree& savedState) const
     {
         // A table is data rather than a parameter and is applied separately, so
         // it is taken out here and never reaches the parameter state.
-        if (result.getChild(i).hasType(tableNodeType)) { result.removeChild(i, nullptr); continue; }
+        if (result.getChild(i).hasType(tableNodeType) || result.getChild(i).hasType("ForgeLfoTable"))
+        { result.removeChild(i, nullptr); continue; }
         const auto id = result.getChild(i).getProperty("id").toString();
         if (id.isNotEmpty() && state.getParameter(id) == nullptr)
             result.removeChild(i, nullptr);

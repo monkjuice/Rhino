@@ -203,6 +203,21 @@ self-contained when it moves between machines.
 The editor saves and loads versioned `.forgepreset` files; host project state
 remains independent and continues to use the VST3 state API.
 
+## LFO tables
+
+Each of the six LFOs starts on **Default**, which contains the existing sine,
+triangle, saw, square and sample and hold shapes. Choose a basic shape with the
+SHAPE control or from the name menu below the graph. Drag a point to make a
+**Custom** table; double-click empty space to add a point, double-click a point
+to remove it, or right-click an interior point to remove it. Hold Alt while
+dragging to snap to the grid. The two numbers below the graph set its column
+and row counts independently, from 2 to 32.
+
+The name menu loads and saves `.forgelfo` tables. The save dialog starts in
+`Documents/Rhino Forge/LFO Tables`, and tables in that folder appear under
+**Saved Tables**. Custom tables also travel inside Forge presets and host
+project state, so the project does not depend on the saved file.
+
 ## The arpeggiator
 
 The **ARP** plate beside the keys does two things, exactly as Serum's does: the

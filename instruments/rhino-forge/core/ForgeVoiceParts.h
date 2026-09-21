@@ -2,6 +2,7 @@
 
 #include "ForgeWavetable.h"
 #include "ForgeWarp.h"
+#include "ForgeLfoTable.h"
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <array>
 #include <cmath>
@@ -173,6 +174,7 @@ struct LfoSetting
     float rate = 0.5f;
     float shape = 0.0f;
     float mode = 0.0f;
+    LfoTable table;
 };
 
 // The mode and the shape a setting names, clamped, so one reading serves the
@@ -195,6 +197,12 @@ inline juce::String lfoParameterId(int lfo, const char* suffix)
 inline LfoShape lfoShapeOf(const LfoSetting& lfo)
 {
     return static_cast<LfoShape>(juce::jlimit(0, lfoShapeCount - 1, juce::roundToInt(lfo.shape)));
+}
+
+inline float lfoValue(const LfoSetting& setting, float phase, float held)
+{
+    return setting.table.custom ? setting.table.sample(phase)
+                                : lfoWave(lfoShapeOf(setting), phase, held);
 }
 
 // Tempo-synced rates, as the length of one LFO cycle in beats. A beat is a

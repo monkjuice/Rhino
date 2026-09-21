@@ -64,6 +64,59 @@ void lfoSuite()
         requireClose(rhino::forge::lfoWave(LfoShape::sampleHold, phase, -0.4f), -0.4f, 0.0001f,
                      "sample and hold holds its step for the whole cycle");
 
+    // Drawn points replace the built-in shape in the signal path. Their data
+    // belongs to one LFO and survives both host state and a saved table file.
+    {
+        rhino::forge::LfoTable drawn;
+        drawn.custom = true;
+        drawn.count = 3;
+        drawn.columns = 8;
+        drawn.rows = 6;
+        drawn.points[0] = {0.0f, -1.0f};
+        drawn.points[1] = {0.25f, 1.0f};
+        drawn.points[2] = {1.0f, 0.0f};
+        require(drawn.valid(), "a drawn LFO table accepts ordered points");
+        requireClose(drawn.sample(0.125f), 0.0f, 0.0001f,
+                     "the LFO interpolates between drawn points");
+        rhino::forge::LfoSetting setting;
+        setting.shape = static_cast<float>(LfoShape::square);
+        setting.table = drawn;
+        requireClose(rhino::forge::lfoValue(setting, 0.25f, 0.0f), 1.0f, 0.0001f,
+                     "a custom table overrides the basic shape");
+
+        auto source = std::make_unique<rhino::forge::Processor>();
+        source->setLfoTable(2, drawn, "My Curve");
+        rhino::forge::LfoTable gridOnly;
+        gridOnly.columns = 12;
+        gridOnly.rows = 7;
+        source->setLfoTable(1, gridOnly);
+        require(!source->lfoTable(0).custom, "drawing LFO 3 leaves LFO 1 on Default");
+        juce::MemoryBlock state;
+        source->getStateInformation(state);
+        auto restored = std::make_unique<rhino::forge::Processor>();
+        restored->setStateInformation(state.getData(), static_cast<int>(state.getSize()));
+        require(restored->lfoTable(2).custom && restored->lfoTable(2).rows == 6,
+                "host state restores custom LFO geometry and grid");
+        requireClose(restored->lfoTable(2).sample(0.25f), 1.0f, 0.0001f,
+                     "host state restores the actual curve");
+        require(restored->lfoTableName(2) == "My Curve", "host state restores the table name");
+        require(!restored->lfoTable(1).custom && restored->lfoTable(1).columns == 12
+                && restored->lfoTable(1).rows == 7,
+                "the Default table can keep a different grid without becoming Custom");
+
+        const auto file = juce::File::getSpecialLocation(juce::File::tempDirectory)
+            .getNonexistentChildFile("rhino-lfo-test", ".forgelfo", false);
+        require(source->saveLfoTable(2, file).wasOk(), "a custom LFO table saves to a file");
+        auto loaded = std::make_unique<rhino::forge::Processor>();
+        require(loaded->loadLfoTable(4, file).wasOk(), "a saved LFO table loads into another LFO");
+        requireClose(loaded->lfoTable(4).sample(0.25f), 1.0f, 0.0001f,
+                     "a saved table retains its curve");
+        file.deleteFile();
+
+        drawn.points[1].x = 0.0f;
+        require(!drawn.valid(), "colliding points are rejected");
+    }
+
     // Shape is a real choice, not a relabelled sine: the four continuous shapes
     // have to differ from each other somewhere.
     for (int a = 0; a < 4; ++a)

@@ -322,15 +322,11 @@ inline void drawBackdrop(juce::Graphics& g, juce::Rectangle<int> componentBounds
         tabBounds(tabCount - 1, componentBounds.getWidth())).toFloat();
     drawWell(g, tabs.expanded(6, 5), juce::Colour(0xff030609), 1.0f, 6);
     const auto wordmarkWidth = tabs.getX() - 68;
-    drawWordmark(g, {48, 21, wordmarkWidth, 43});
-    // Not stamped: the line under the wordmark is the product saying its own
-    // name, and the reference draws it as brightly as anything on the panel.
-    // stamp() is for a part number engraved into a plate, which is the opposite
-    // kind of lettering and the opposite colour.
-    g.setFont(panelFont(Face::label, 13.5f));
-    g.setColour(labelText);
-    drawTrackedText(g, "SYNTHETIC SIGNAL FORGE // UNIT 01", {49, 67, wordmarkWidth + 3, 14}, 0.9f,
-                    juce::Justification::centredLeft);
+    // The wordmark is the only thing on this plate now that the tagline under
+    // it is gone, so it sits on the plate's own centre line rather than in the
+    // upper half of a two-line block: the plate runs y 11..90 below, and a
+    // 43-tall wordmark centred in it starts at 29.
+    drawWordmark(g, {48, 29, wordmarkWidth, 43});
     drawIdentityPlate(g, identityPlateBounds(componentBounds));
     drawUnitMark(g, unitMarkBounds(componentBounds));
 

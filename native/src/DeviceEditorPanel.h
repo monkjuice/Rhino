@@ -6,7 +6,8 @@ namespace rhino
 {
 // Hosts Rhino's native device faces. Unknown and third-party devices retain a
 // generic parameter surface; plug-in-owned editors remain available via Edit.
-class DeviceEditorPanel final : public juce::Component
+class DeviceEditorPanel final : public juce::Component,
+                                private juce::Timer
 {
 public:
     static constexpr int standardHeight = 176;
@@ -21,11 +22,21 @@ public:
     std::function<void()> selected;
 
 private:
-    enum class Face { Generic, RhinoSpace };
+    enum class Face { Generic, RhinoSpace, AutoTune };
     void ensureControls();
     void styleControls();
     void layoutGeneric();
     void layoutRhinoSpace();
+    // Rhino Tune's face is its own translation unit, DeviceEditorPanelAutoTune.cpp:
+    // it is a meter, a keyboard and two choosers on top of the knobs, and it is
+    // the only face that needs the device itself rather than its parameters.
+    // Nothing about it belongs in this file's layout arithmetic.
+    void layoutAutoTune();
+    void paintAutoTune(juce::Graphics&);
+    bool handleAutoTuneClick(const juce::MouseEvent&);
+    // Only the meter, the detected note and the target key repaint; the rest
+    // of the face is static and stays out of the frame path.
+    void timerCallback() override;
     void showParameterMenu(int index);
     int visibleParameterCount() const;
 
@@ -41,5 +52,8 @@ private:
     juce::Label title;
     juce::TextButton power;
     juce::Rectangle<int> contentArea, visualArea;
+    // What the meter last drew, so an idle device asks for no frames at all.
+    float lastDrawnCents = 0.0f, lastDrawnNote = 0.0f;
+    int lastDrawnBand = -2;
 };
 }

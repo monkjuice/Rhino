@@ -45,6 +45,7 @@ Application code, `native/src`:
 | Project files | `ProjectFiles.*` |
 | Playhead rendering | `Playhead.*` |
 | Built-in devices | `native/src/devices/`, split `instruments/`, `audio/`, `midi/`. Declared once in `DeviceCatalog.cpp` |
+| Vocal pitch correction (Rhino Tune) | The DSP is in `core/`: `PitchTracker.*`, `PsolaShifter.*`, `ScaleQuantizer.h`, `AutoTuneEngine.*`. The device is `devices/audio/AutoTuneDevice.*` and its face is `DeviceEditorPanelAutoTune.cpp`. See the Rhino Tune section of [native/README.md](native/README.md) |
 | Sample and content library | `library/` at the repository root, found by `native/src/core/ContentLibrary.h` |
 | Theme | `Theme.h` |
 

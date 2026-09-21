@@ -118,6 +118,19 @@ void AutoTuneDevice::reset()
     engine.reset();
 }
 
+AutoTuneEngine::Readout AutoTuneDevice::readout() const
+{
+    auto snapshot = engine.readout();
+    // A device that has never been given a graph has no measured latency, and
+    // a panel reading "0.0 ms" for a corrector that cannot be free of delay
+    // reads as broken rather than as idle. What the current settings will
+    // cost is arithmetic, so answer that until playback replaces it.
+    if (snapshot.latencyMs <= 0.0f)
+        snapshot.latencyMs = 1000.0f
+            * static_cast<float>(AutoTuneEngine::latencyFor(trackingRange(), live.get(), 48000.0)) / 48000.0f;
+    return snapshot;
+}
+
 PitchClassMask AutoTuneDevice::scaleMask() const
 {
     const auto bits = notes.get();

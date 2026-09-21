@@ -8,7 +8,7 @@ How the native application works internally. For what Rhino is, how to build and
 
 | Target | Holds | May depend on |
 | --- | --- | --- |
-| `RhinoCore` (`src/core/`) | Foundation with no engine or UI: `ContentLibrary` | JUCE only |
+| `RhinoCore` (`src/core/`) | Foundation with no engine or UI: `ContentLibrary`, and the pitch-correction DSP (`PitchTracker`, `PsolaShifter`, `ScaleQuantizer`, `AutoTuneEngine`) | JUCE only |
 | `RhinoDevices` (`src/devices/`) | Rhino's plugins, under `instruments/`, `audio/`, `midi/`, plus `DeviceCatalog` | Tracktion, `RhinoCore` |
 | `RhinoNative` (`src/`) | `Session`, the UI, the app shell | both of the above |
 
@@ -85,6 +85,20 @@ The catalog entry carries the device's id, engine type name, display name, kind,
 Do not make a device self-register from a static initialiser. Objects in a static library that nothing references are dropped by the linker, and the registration would vanish silently.
 
 `Session::addDevice(id, track)` is the one way to add a device. `Session`'s `Instrument`, `AudioEffect` and `MidiEffect` enums remain as a typed shorthand for the devices that predate the catalog — presets and tests name instruments with them — and `DeviceIds.h` is the only place they become catalog ids. A device added from now on needs no enum.
+
+## Rhino Tune
+
+The pitch corrector is split between `src/core/` and `src/devices/audio/AutoTuneDevice.cpp`, and almost all of it is in core. `AutoTuneDevice` only reads parameters and hands them to `AutoTuneEngine`; the tracking, the correction law and the shifting are plain C++ over a buffer, so `--self-test` drives them with a synthesised vowel and measures what comes back instead of reading the DSP.
+
+- **`PitchTracker`** is YIN. Its difference function goes through a small radix-2 transform written into the file: computed directly it is window x lag multiply-adds per analysis, which at 48 kHz is hundreds of millions of operations a second for one voice. The cumulative-mean normalisation is what makes it report a fundamental rather than the loudest partial, and taking the *first* lag under the threshold rather than the deepest is what stops it answering an octave low on a rich voice.
+- **`PsolaShifter`** is time-domain pitch-synchronous overlap-add, not a phase vocoder. It preserves formants by construction, and shifting them then falls out of resampling a grain without moving where the grains are placed. It is monophonic by construction: on a chord it picks one note and smears the rest, which is why the device says vocals.
+- **`ScaleQuantizer`** is a pure header with no JUCE, the way `ClipGeometry.h` is, so every answer in it can be checked exhaustively.
+
+Correction is smoothed on the *offset* between the detected note and its target, never on the target itself. That is the whole reason a slow retune still lets a singer's vibrato through: vibrato swings the offset at 5-7 Hz and a slow filter cannot follow it, while the drift underneath moves slowly enough to be taken out. Smoothing the target instead chases the vibrato and irons it flat.
+
+The latency is real and is reported through `getLatencySeconds`. It is half the analysis frame -- which puts the pitch estimate at the middle of the window it was measured over -- plus three and a half of the longest period the range can track, which is what the grain scheduler needs to have in hand. That is 34 ms in the High range and 120 ms in Bass; Live Mode trades the framing term away for roughness at note onsets. Changing the range or Live Mode moves that number, and the graph only reads it when it is built, so `DeviceEditorPanelAutoTune.cpp` restarts playback when either is switched.
+
+Its editor is `DeviceEditorPanelAutoTune.cpp`, a second translation unit of `DeviceEditorPanel`. Everything on it that is not a knob -- the cents meter, the scale keyboard, the two choosers, the range toggles -- is drawn and hit-tested by rectangle rather than made into child components, because the rack destroys and rebuilds every panel whenever anything about a track changes. It is the only face that needs the device itself rather than its parameter list, which is what `Session::devicePlugin` is for.
 
 ## Dependencies
 

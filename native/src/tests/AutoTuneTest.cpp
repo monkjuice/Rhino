@@ -1,4 +1,5 @@
 #include "../Session.h"
+#include "../DeviceEditorPanel.h"
 #include "AutoTuneEngine.h"
 #include "audio/AutoTuneDevice.h"
 #include <algorithm>
@@ -454,6 +455,53 @@ void checkRangeSwitchIsSilentAndSafe()
     }
 }
 
+// The face is drawn rather than assembled from child components, so what a
+// test can check is that the knobs it does own land inside the panel and off
+// each other, and that painting the rest of it runs at all.
+void checkEditorFace(Session& session)
+{
+    require(session.addDevice("RhinoTune", 0).wasOk());
+    const auto slots = session.deviceSlots(0);
+    require(!slots.empty());
+    const auto tuneSlot = std::find_if(slots.begin(), slots.end(),
+        [] (const Session::DeviceSlot& slot) { return slot.type == AutoTuneDevice::xmlTypeName; });
+    require(tuneSlot != slots.end());
+
+    // A scale with notes missing, so the keyboard has both states to draw and
+    // the mask is proved to reach the paint path rather than just the DSP.
+    auto* tune = dynamic_cast<AutoTuneDevice*>(session.devicePlugin(0, tuneSlot->pluginIndex));
+    require(tune != nullptr);
+    tune->applyScale(2, MusicalScale::Minor);
+    require(tune->readout().latencyMs > 1.0f);
+
+    auto panel = std::make_unique<DeviceEditorPanel>(session);
+    panel->setTarget(0, *tuneSlot, true);
+    require(panel->preferredWidth() > 600);
+    panel->setSize(panel->preferredWidth(), DeviceEditorPanel::standardHeight);
+
+    std::vector<juce::Rectangle<int>> knobs;
+    for (auto* child : panel->getChildren())
+    {
+        require(panel->getLocalBounds().contains(child->getBounds()));
+        if (child->isVisible() && dynamic_cast<juce::Slider*>(child) != nullptr)
+            knobs.push_back(child->getBounds());
+    }
+    // Thirteen, because the face has room for input gain as well as the
+    // twelve the generic panel would show.
+    require(knobs.size() == 13);
+    for (size_t i = 0; i < knobs.size(); ++i)
+        for (auto j = i + 1; j < knobs.size(); ++j)
+            require(!knobs[i].intersects(knobs[j]));
+
+    // Painting reaches the device through Session::devicePlugin and reads a
+    // meter off it; if that path is wrong this is where it shows.
+    const auto snapshot = panel->createComponentSnapshot(panel->getLocalBounds());
+    require(snapshot.getWidth() == panel->getWidth());
+    require(snapshot.getHeight() == DeviceEditorPanel::standardHeight);
+
+    require(session.deleteDevice(0, tuneSlot->pluginIndex).wasOk());
+}
+
 void checkDevice(Session& session)
 {
     auto plugin = session.edit->getPluginCache().createNewPlugin(AutoTuneDevice::xmlTypeName, {});
@@ -541,5 +589,6 @@ void checkAutoTuneDsp(Session& session)
     checkDryWet();
     checkRangeSwitchIsSilentAndSafe();
     checkDevice(session);
+    checkEditorFace(session);
 }
 }

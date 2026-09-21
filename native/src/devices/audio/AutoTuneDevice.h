@@ -39,7 +39,7 @@ public:
     double getLatencySeconds() override { return engine.latencySeconds(); }
 
     // ---- what the editor reads and writes ---------------------------------
-    AutoTuneEngine::Readout readout() const { return engine.readout(); }
+    AutoTuneEngine::Readout readout() const;
 
     PitchClassMask scaleMask() const;
     void setScaleMask(const PitchClassMask&);

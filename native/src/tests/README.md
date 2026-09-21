@@ -15,12 +15,16 @@ The command-line suite deliberately has two layers:
 Get-WinEvent -FilterHashtable @{LogName='Application'; ProviderName='Application Error'; StartTime=(Get-Date).AddMinutes(-20)}
 ```
 
+**A claim about pitch, level or timbre is settled by measuring rendered audio, not by reading the DSP.** `AutoTuneTest.cpp` is the pattern: it pushes a synthesised saw or vowel through the engine and finds the fundamental with a windowed transform scanned across a band. That transform never looks for a period, so it cannot agree with the pitch tracker by construction — which is exactly what makes it worth having. Its pitch assertions report what they measured and what they wanted, because a bare line number on a number that came out of a transform costs a second run to learn anything at all.
+
+Two of its checks were wrong before they were right, and both mistakes generalise. One asserted that C# corrects to C in C major: C# is the same distance from C and from D, so which way a tie falls is not a property worth testing, and a tracker landing a hundredth of a semitone either side flips it. The other measured a formant shift by the tallest partial, which moved from the sixth harmonic to the second when the envelope rose — the shift was working and the measurement said the opposite. Where a spectrum is being compared, prefer a statistic over the whole of it, such as the harmonic below which most of the magnitude lies, to any single peak.
+
 Add a unit-style test when behavior can be exercised without a complete `Session`, audio render, desktop peer, or pointer sequence. Add a workflow scenario when the contract crosses those boundaries. Prefer extending the narrowest existing file; create a new scenario once a file approaches roughly 200 lines or mixes unrelated behavior.
 
 CTest entry points:
 
 - `native_arrangement_geometry`: clip edit bounds and playhead damage calculations
-- `native_device_correctness`: device DSP and state restoration
+- `native_device_correctness`: device DSP and state restoration, including Rhino Tune's measured checks in `AutoTuneTest.cpp`
 - `native_pattern_workflow`: notes, presets, automation, renders, and project persistence
 - `native_arrangement_workflow`: browser drops, drawing, editing, tracks, and arrangement persistence
 - `native_startup_lifecycle`: application startup

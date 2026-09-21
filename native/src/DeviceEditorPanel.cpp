@@ -1,5 +1,6 @@
 #include "DeviceEditorPanel.h"
 #include "audio/RhinoSpaceDevice.h"
+#include "audio/AutoTuneDevice.h"
 #include <algorithm>
 #include <cmath>
 
@@ -54,7 +55,15 @@ void DeviceEditorPanel::setTarget(int nextTrack, const Session::DeviceSlot& devi
     pluginSlot = device.pluginIndex;
     deviceName = device.name;
     isSelected = nextSelected;
-    face = device.type == RhinoSpaceDevice::xmlTypeName ? Face::RhinoSpace : Face::Generic;
+    face = device.type == RhinoSpaceDevice::xmlTypeName ? Face::RhinoSpace
+         : device.type == AutoTuneDevice::xmlTypeName ? Face::AutoTune
+         : Face::Generic;
+    // Only the tuner has anything that moves on its own, so only the tuner
+    // asks for frames.
+    if (face == Face::AutoTune)
+        startTimerHz(24);
+    else
+        stopTimer();
     parameters = session.deviceParameters(track, pluginSlot);
     title.setText(deviceName, juce::dontSendNotification);
     power.setButtonText(device.enabled ? juce::String::fromUTF8("\xe2\x97\x8f") : juce::String::fromUTF8("\xe2\x97\x8b"));
@@ -68,6 +77,8 @@ void DeviceEditorPanel::setTarget(int nextTrack, const Session::DeviceSlot& devi
 
 int DeviceEditorPanel::preferredWidth() const
 {
+    if (face == Face::AutoTune)
+        return 712;
     if (face == Face::RhinoSpace)
         return 460;
     const auto columns = std::max(2, std::min(6, visibleParameterCount()));
@@ -89,6 +100,8 @@ void DeviceEditorPanel::mouseDown(const juce::MouseEvent& event)
                 return;
             }
     if (selected) selected();
+    if (face == Face::AutoTune && event.eventComponent == this)
+        handleAutoTuneClick(event);
 }
 
 // "Show automation" reveals the lane over the track itself; "on new lane"
@@ -128,7 +141,10 @@ void DeviceEditorPanel::showParameterMenu(int index)
 
 int DeviceEditorPanel::visibleParameterCount() const
 {
-    return std::min(12, static_cast<int>(parameters.size()));
+    // Twelve is what the generic grid can lay out and stay readable. Rhino
+    // Tune's own face has room for its thirteenth, and the device lists its
+    // parameters so the twelve a fallback panel would show come first.
+    return std::min(face == Face::AutoTune ? 13 : 12, static_cast<int>(parameters.size()));
 }
 
 void DeviceEditorPanel::ensureControls()
@@ -188,7 +204,9 @@ void DeviceEditorPanel::styleControls()
         if (!visible) continue;
 
         const auto& parameter = parameters[static_cast<size_t>(i)];
-        const auto accent = face == Face::RhinoSpace ? juce::Colour(0xff75b9cc) : juce::Colour(0xffc6d58c);
+        const auto accent = face == Face::RhinoSpace ? juce::Colour(0xff75b9cc)
+            : face == Face::AutoTune ? juce::Colour(0xffb2739c)
+            : juce::Colour(0xffc6d58c);
         parameterLabels[i]->setText(parameter.name, juce::dontSendNotification);
         parameterLabels[i]->setColour(juce::Label::textColourId, juce::Colour(0xffdfe6ea));
         parameterValues[i]->setText(parameter.valueText, juce::dontSendNotification);
@@ -224,6 +242,11 @@ void DeviceEditorPanel::paint(juce::Graphics& g)
         return;
     }
 
+    if (face == Face::AutoTune)
+    {
+        paintAutoTune(g);
+        return;
+    }
     if (face != Face::RhinoSpace)
         return;
 
@@ -258,7 +281,9 @@ void DeviceEditorPanel::resized()
     power.setBounds(3, 2, 20, 19);
     title.setBounds(27, 1, getWidth() - 32, 21);
     contentArea = getLocalBounds().withTrimmedTop(24).reduced(4);
-    if (face == Face::RhinoSpace && contentArea.getWidth() >= 350 && contentArea.getHeight() >= 80)
+    if (face == Face::AutoTune && contentArea.getWidth() >= 620 && contentArea.getHeight() >= 120)
+        layoutAutoTune();
+    else if (face == Face::RhinoSpace && contentArea.getWidth() >= 350 && contentArea.getHeight() >= 80)
         layoutRhinoSpace();
     else
         layoutGeneric();

@@ -113,6 +113,37 @@
             require(session.recordingDirectory().getParentDirectory() == savedProject.getFile().getParentDirectory(),
                     "Recordings are written beside the project once it has one");
 
+            scenario("recording: two armed tracks share the input rather than taking it from each other");
+            require(session.addAudioTrack().wasOk(), "One audio track for the pair");
+            const auto pairFirst = session.trackCount() - 1;
+            require(session.addAudioTrack().wasOk(), "and a second beside it");
+            const auto pairSecond = session.trackCount() - 1;
+            juce::ignoreUnused(session.setTrackArmed(pairFirst, true));
+            juce::ignoreUnused(session.setTrackArmed(pairSecond, true));
+            require(session.isTrackArmed(pairFirst) && session.isTrackArmed(pairSecond),
+                    "Both take the arm");
+            // Both audio tracks record from the one input, so both have to be
+            // destinations of it at once. The engine's setTarget can either add
+            // a destination or move the input onto one, clearing the rest; the
+            // second reading would leave only the track armed last recording
+            // anything. Whether there is an input to be a destination of is the
+            // machine's business, so this is checked only where one turned up.
+            if (auto* context = session.edit->getCurrentPlaybackContext())
+            {
+                const auto armedTracks = te::getAudioTracks(*session.edit);
+                for (auto* input : context->getAllInputs())
+                {
+                    if (input == nullptr || dynamic_cast<te::WaveInputDevice*>(&input->getInputDevice()) == nullptr)
+                        continue;
+                    const auto targets = input->getTargets();
+                    if (targets.isEmpty())
+                        continue;
+                    require(targets.contains(armedTracks[pairFirst]->itemID)
+                                && targets.contains(armedTracks[pairSecond]->itemID),
+                            "The audio input records into both armed tracks, not only the one armed last");
+                }
+            }
+
             scenario("recording: putting the session back");
             require(session.restoreProject(entryState, entryProject.getFile()).wasOk(),
                     "The stack this scenario borrowed is put back for the ones below");

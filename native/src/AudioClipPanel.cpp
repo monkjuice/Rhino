@@ -1,5 +1,6 @@
 #include "AudioClipPanel.h"
 #include "Theme.h"
+#include "WaveformLanes.h"
 #include <cmath>
 
 namespace rhino
@@ -359,8 +360,8 @@ void AudioClipPanel::paintWaveform(juce::Graphics& g, juce::Rectangle<int> area)
         if (mix.reversed)
             g.addTransform(juce::AffineTransform::scale(-1.0f, 1.0f)
                                .translated(static_cast<float>(inner.getRight() + inner.getX()), 0.0f));
-        g.setColour(juce::Colour(waveColour).withAlpha(mix.muted ? 0.32f : 1.0f));
-        thumbnail->drawChannels(g, inner, sourceStart, sourceEnd, 1.45f);
+        paintWaveformLanes(g, *thumbnail, inner, sourceStart, sourceEnd, 1.45f,
+                           juce::Colour(waveColour).withAlpha(mix.muted ? 0.32f : 1.0f));
     }
 
     const auto length = mix.lengthSeconds();

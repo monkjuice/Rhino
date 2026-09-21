@@ -272,7 +272,12 @@ juce::Result Session::applyRecordArming()
             midiDevice->mergeRecordings = false;
             midiDevice->replaceExistingClips = true;
         }
-        auto destination = instance->setTarget(tracks[track]->itemID, true, nullptr);
+        // The input is *added* to this track rather than moved onto it: the
+        // engine's move flag clears every other destination first, so arming a
+        // second track would quietly disarm the first and only the last one
+        // armed would capture anything. Every destination is cleared above, so
+        // adding is the whole of what is wanted here.
+        auto destination = instance->setTarget(tracks[track]->itemID, false, nullptr);
         if (!destination)
         {
             problem = destination.error();

@@ -167,6 +167,11 @@ public:
         files.status = [this](const juce::String& message) { logStatus(message); };
         files.loadingChanged = [this](bool loading) { setEnabled(!loading); };
         arrangement.status = files.status;
+        // The typing keyboard lives here, but the card is where a MIDI track is
+        // armed and where its input is chosen, so the arrangement is given the
+        // two questions it needs to ask about it.
+        arrangement.typingKeyboardEnabled = [this] { return computerKeyboard.isEnabled(); };
+        arrangement.enableTypingKeyboard = [this] { computerKeyboard.setEnabled(true); };
         arrangement.trackSelected = [this](int track)
         {
             if (!sessionViewOpen) rack.selectTrack(track);

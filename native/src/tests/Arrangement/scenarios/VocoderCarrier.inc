@@ -118,6 +118,51 @@
             require(session.trackMidiInput(voiceTrack) == Session::midiInputAllInsToken(),
                     "and is left alone by the refusal");
 
+            scenario("midi input: hasHardwareMidiInput agrees with what the chooser offers");
+            require(session.hasHardwareMidiInput()
+                        == std::any_of(choices.begin(), choices.end(), [](const auto& choice)
+                                       { return choice.token.startsWith("device:"); }),
+                    "A keyboard you can play is exactly a chooser entry that is not one of the virtual devices");
+
+            scenario("midi input: asking for the typing keyboard waits for its device rather than failing");
+            // The engine makes the virtual device on a timer, so it does not
+            // exist when the call that asked for it returns. Arming has to
+            // wait for it; before it did, choosing Computer Keyboard reported
+            // that there was no MIDI input and then quietly worked next time.
+            juce::ignoreUnused(session.setTrackArmed(carrierTrack, true));
+            const auto choseKeyboard = session.setTrackMidiInput(carrierTrack, Session::midiInputKeyboardToken());
+            require(!choseKeyboard.getErrorMessage().contains("no MIDI input to record from"),
+                    "so it does not complain about the device it has just asked for");
+            require(session.trackMidiInputName(carrierTrack) == "Computer Keyboard",
+                    "and the card says so at once");
+            juce::ignoreUnused(session.setTrackArmed(carrierTrack, false));
+            juce::ignoreUnused(session.setTrackMidiInput(carrierTrack, Session::midiInputNoneToken()));
+
+            scenario("midi input: arming a track nothing can play says so");
+            // The most confusing state the app has: a track that is armed,
+            // correct, and silent. On a machine with no keyboard plugged in
+            // the typing keyboard is the only thing that can play it.
+            {
+                juce::String armMessage;
+                auto savedStatus = view.status;
+                view.status = [&armMessage](juce::String text) { armMessage = std::move(text); };
+                view.typingKeyboardEnabled = [] { return false; };
+                view.sync();
+                view.arm[static_cast<size_t>(carrierTrack)]->onClick();
+                if (!session.hasHardwareMidiInput())
+                    require(armMessage.contains("no MIDI keyboard is plugged in"),
+                            "Arming a MIDI track with nothing to play it explains itself");
+                view.typingKeyboardEnabled = [] { return true; };
+                armMessage.clear();
+                view.arm[static_cast<size_t>(carrierTrack)]->onClick();
+                view.arm[static_cast<size_t>(carrierTrack)]->onClick();
+                require(armMessage.contains("press Record or F9"),
+                        "and with the typing keyboard on it is the ordinary message again");
+                juce::ignoreUnused(session.setTrackArmed(carrierTrack, false));
+                view.typingKeyboardEnabled = nullptr;
+                view.status = std::move(savedStatus);
+            }
+
             scenario("midi input: it is saved with the project, and follows the track");
             const auto routed = session.projectSnapshot();
             juce::TemporaryFile routedProject(".rhinoedit");

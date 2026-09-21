@@ -67,13 +67,63 @@ te::MidiInputDevice* Session::computerKeyboardDevice() const
 // Made on demand rather than at startup: creating one rescans the MIDI device
 // list, which rebuilds every device object, and a document that never asks for
 // the typing keyboard should not pay for it or carry it in Audio settings.
+//
+// **The rescan is asynchronous**, so the device does not exist when this
+// returns -- it arrives a few milliseconds later, on the message thread. That
+// is what awaitingMidiDeviceScan is for: arming does not report a missing
+// input during that window, and MidiDeviceWatcher arms again once the rebuilt
+// list has landed. Without it, choosing Computer Keyboard failed the first
+// time with a message saying there was no MIDI input, and quietly worked on
+// the second.
 te::MidiInputDevice* Session::ensureComputerKeyboardDevice()
 {
     jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
     if (auto* existing = computerKeyboardDevice())
         return existing;
     engine.getDeviceManager().createVirtualMidiDevice(computerKeyboardDeviceName);
-    return computerKeyboardDevice();
+    auto* created = computerKeyboardDevice();
+    awaitingMidiDeviceScan = created == nullptr;
+    return created;
+}
+
+// Anything that is not one of the two virtual devices: a keyboard you can
+// actually play. On a machine with none, an armed MIDI track can only be
+// played from the typing keyboard, and nothing else would say so.
+bool Session::hasHardwareMidiInput() const
+{
+    for (const auto& candidate : engine.getDeviceManager().getMidiInDevices())
+        if (candidate != nullptr && dynamic_cast<te::VirtualMidiInputDevice*>(candidate.get()) == nullptr)
+            return true;
+    return false;
+}
+
+void Session::MidiDeviceWatcher::changeListenerCallback(juce::ChangeBroadcaster*)
+{
+    session.midiDevicesChanged();
+}
+
+// The device list has been rebuilt. Anything armed was armed against the old
+// one, so it is armed again against this one - which is both how a device
+// created a moment ago finally takes effect and how a keyboard plugged in
+// mid-session starts playing without a relaunch.
+void Session::midiDevicesChanged()
+{
+    if (reapplyingArming)
+        return;
+    auto listening = false;
+    const auto tracks = te::getAudioTracks(*edit);
+    for (int track = 0; track < tracks.size(); ++track)
+        if (isTrackArmed(track) && trackRecordInput(track) == RecordInput::midi)
+        {
+            listening = true;
+            break;
+        }
+    awaitingMidiDeviceScan = false;
+    if (!listening)
+        return;
+    const juce::ScopedValueSetter<bool> guard(reapplyingArming, true);
+    juce::ignoreUnused(applyRecordArming());
+    sendSynchronousChangeMessage();
 }
 
 std::vector<Session::MidiInputChoice> Session::midiInputChoices() const

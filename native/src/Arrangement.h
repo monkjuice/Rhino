@@ -38,6 +38,13 @@ public:
     // the lower pane should be showing.
     te::EditItemID selectedClipID() const { return selected; }
     std::function<void(juce::String)> status;
+    // The typing keyboard belongs to the shell, not to the arrangement, but the
+    // card is where a MIDI track is armed and where its input is chosen - and
+    // on a machine with no keyboard plugged in, those are exactly the two
+    // moments when whether the typing keyboard is on decides whether anything
+    // happens at all. Asking the shell is cheaper than moving it down here.
+    std::function<bool()> typingKeyboardEnabled;
+    std::function<void()> enableTypingKeyboard;
     std::function<void(int)> trackSelected;
     // Clicking a card is what asks for that track's devices, and it is reported
     // separately from trackSelected because it fires even when the working

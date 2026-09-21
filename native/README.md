@@ -97,6 +97,27 @@ pointer, and never at startup.
 `sendMidiInputNote` writes to both virtual devices, because the typing
 keyboard is one of the things All Ins means: a track on either has to hear it.
 
+**The rescan is asynchronous, and that is a trap.** `createVirtualMidiDevice`
+starts a 5 ms timer; the device does not exist when the call returns, so
+resolving it immediately gives null. Choosing Computer Keyboard therefore
+failed the first time with a message saying there was no MIDI input, and
+worked on the second. `awaitingMidiDeviceScan` suppresses that complaint while
+a device Rhino has just asked for is on its way, and `MidiDeviceWatcher` --
+a listener on the engine's `DeviceManager` -- arms again once the rebuilt list
+lands. The same watcher is what makes a keyboard plugged in while Rhino is
+running start playing without a relaunch.
+
+**Armed is not the same as playable.** On a machine with no MIDI keyboard the
+typing keyboard is the only thing that can play a MIDI track, and it is off
+until it is switched on -- so an armed, correctly routed track makes no sound
+and nothing says why. `Session::hasHardwareMidiInput` is what the arrangement
+asks to know that, and the arm message says so instead of "press Record".
+Choosing Computer Keyboard from the chooser switches the typing keyboard on
+outright, because asking for the typing keyboard is asking for the typing
+keyboard; the arrangement reaches it through `typingKeyboardEnabled` and
+`enableTypingKeyboard`, which the shell sets, because the keyboard belongs to
+`Main.cpp` and the card is merely where the question is asked.
+
 ## Adding a device
 
 Devices derive from `te::Plugin` and follow a fixed shape: a stable `xmlTypeName` (`rhino.<name>.v1`), the `getName`/`getPluginType`/`getVendor` overrides, and parameters wired through `referTo` / `addParam` / `attachToCurrentValue`, detached in the destructor and refreshed in `restorePluginStateFromValueTree`.

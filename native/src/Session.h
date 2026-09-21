@@ -386,6 +386,11 @@ public:
     static juce::String midiInputKeyboardToken();
     static juce::String midiInputNoneToken();
     static juce::String midiInputDeviceToken(const juce::String& deviceName);
+    // True when there is a MIDI keyboard on the machine - something other than
+    // the two virtual devices Rhino and the engine make for themselves. False
+    // means the typing keyboard is the only way to play a MIDI track, which is
+    // worth saying out loud at the moment a track is armed.
+    bool hasHardwareMidiInput() const;
     // Hearing yourself. These are Live's three Monitor settings under another
     // spelling, and the engine happens to carry exactly the same three.
     //
@@ -711,6 +716,23 @@ private:
     // A physical input only feeds the All Ins merge while it is open, so
     // opening them is part of what All Ins means rather than a side effect.
     void enablePhysicalMidiInputs();
+    // The engine rebuilds its MIDI device list on a timer, so a device created
+    // here does not exist yet when the call that asked for it returns. This
+    // watches for the rebuild and arms against what is then there - which also
+    // means a keyboard plugged in while Rhino is running is picked up.
+    struct MidiDeviceWatcher final : juce::ChangeListener
+    {
+        explicit MidiDeviceWatcher(Session& owner) : session(owner) {}
+        void changeListenerCallback(juce::ChangeBroadcaster*) override;
+        Session& session;
+    };
+    void midiDevicesChanged();
+    std::unique_ptr<MidiDeviceWatcher> midiDeviceWatcher;
+    // Set while a virtual device has been asked for and the rebuild that will
+    // produce it has not landed. Arming does not complain about a missing
+    // device in that window: it is on its way.
+    bool awaitingMidiDeviceScan = false;
+    bool reapplyingArming = false;
     void clearRecordArming();
     void beginTransportRecording();
     // The tidy-up and the notification, with no question about whether the

@@ -31,6 +31,11 @@ Session::Session() : engine(commandLineTestMode ? "Rhino Native Tests" : "Theda 
     if (auto* behaviour = dynamic_cast<RhinoEngineBehaviour*>(&engine.getEngineBehaviour()))
         behaviour->recordingDirectory = [this] { return recordingDirectory(); };
     DeviceCatalog::registerBuiltInTypes(engine);
+    // The MIDI device list is built on a timer and rebuilt whenever a device
+    // is enabled or a keyboard is plugged in, so what a track listens to has
+    // to be re-resolved when it changes rather than once at arming time.
+    midiDeviceWatcher = std::make_unique<MidiDeviceWatcher>(*this);
+    engine.getDeviceManager().addChangeListener(midiDeviceWatcher.get());
     initialiseExternalPlugins();
     buildStarterEdit();
 }
@@ -39,6 +44,8 @@ Session::Session() : engine(commandLineTestMode ? "Rhino Native Tests" : "Theda 
 // device manager, so both have to come off before either of them goes.
 Session::~Session()
 {
+    if (midiDeviceWatcher != nullptr)
+        engine.getDeviceManager().removeChangeListener(midiDeviceWatcher.get());
     cancelCountIn();
     releasePreview();
 }

@@ -757,11 +757,23 @@ void Arrangement::showMidiInputMenu(int track)
             const auto done = safe->session.setTrackMidiInput(track, chosen.token);
             if (safe->status == nullptr) return;
             if (done.failed())
+            {
                 safe->status(done.getErrorMessage());
-            else
-                safe->status(safe->session.trackName(track) + " plays from " + chosen.name
-                             + (chosen.token == Session::midiInputKeyboardToken()
-                                    ? ". Switch the typing keyboard on with K." : ""));
+                return;
+            }
+            // Asking for the typing keyboard is asking for the typing keyboard,
+            // so it is switched on rather than explained. It takes the letter
+            // keys while it is on, which is why it has a toggle at all - and
+            // the same toggle switches it back off.
+            auto note = juce::String();
+            if (chosen.token == Session::midiInputKeyboardToken()
+                && safe->enableTypingKeyboard
+                && (!safe->typingKeyboardEnabled || !safe->typingKeyboardEnabled()))
+            {
+                safe->enableTypingKeyboard();
+                note = ". The typing keyboard is now on: A-; play, Z/X change octave, M turns it off";
+            }
+            safe->status(safe->session.trackName(track) + " plays from " + chosen.name + note);
         });
 }
 

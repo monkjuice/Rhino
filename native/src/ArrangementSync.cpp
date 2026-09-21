@@ -138,8 +138,17 @@ void Arrangement::syncTrackControls()
             if (status)
             {
                 if (result.failed()) status(result.getErrorMessage());
-                else status(wanted ? session.trackName(track) + " is armed: press Record or F9"
-                                   : session.trackName(track) + " is no longer armed");
+                else if (!wanted) status(session.trackName(track) + " is no longer armed");
+                // Armed is not the same as playable. With no keyboard plugged
+                // in, the typing keyboard is the only thing that can play the
+                // track, and an armed track that makes no sound is the most
+                // confusing state the app has.
+                else if (session.trackRecordInput(track) == Session::RecordInput::midi
+                         && !session.hasHardwareMidiInput()
+                         && (!typingKeyboardEnabled || !typingKeyboardEnabled()))
+                    status(session.trackName(track) + " is armed, but no MIDI keyboard is plugged in. "
+                           "Turn on Edit > Computer keyboard plays MIDI (M) to play it from the typing keyboard.");
+                else status(session.trackName(track) + " is armed: press Record or F9");
             }
         };
         muteButton->setColour(juce::TextButton::buttonOnColourId, juce::Colour(0xff97634c));

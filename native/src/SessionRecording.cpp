@@ -269,8 +269,10 @@ juce::Result Session::applyRecordArming()
         if (device == nullptr)
         {
             // A track set to None is doing exactly what it was asked to, so it
-            // is not a problem to report. Anything else is.
-            if (wanted == RecordInput::midi && trackMidiInput(track) == midiInputNoneToken())
+            // is not a problem to report, and neither is one whose device the
+            // engine is still building - the watcher arms again when it lands.
+            if (wanted == RecordInput::midi
+                && (trackMidiInput(track) == midiInputNoneToken() || awaitingMidiDeviceScan))
                 continue;
             problem = wanted == RecordInput::midi
                           ? trackName(track) + " has no MIDI input to record from. Pick one on its card, "

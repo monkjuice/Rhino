@@ -21,7 +21,8 @@ namespace rhino
 // while it runs.
 //
 // renderBlock is the whole of the generator and is driven directly by the
-// tests; the audio callback only hands it the output buffer.
+// tests. It mixes into the buffer it is given, so the caller owns clearing it -
+// see the note in the audio callback, which is not given a buffer it can trust.
 class CountInClick final : public juce::AudioIODeviceCallback,
                            private juce::AsyncUpdater
 {
@@ -53,6 +54,7 @@ public:
     // Which bar of the count is being played, from 1. Zero when idle.
     int barsRemaining() const;
 
+    // Mixes the count into the buffer. The caller clears it first.
     void renderBlock(float* const* channels, int numChannels, int numSamples);
 
     void audioDeviceIOCallbackWithContext(const float* const*, int, float* const* outputChannelData,

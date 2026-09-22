@@ -747,6 +747,10 @@ private:
     // nothing is registered on the device and no block can be in flight
     // through the state start() is rewriting.
     void attachCountIn();
+    // And detaching is separate from cancelling, because a count that reached
+    // its last beat has nothing left to cancel and still has to come off the
+    // device: anything left registered there is rendered every block.
+    void detachCountIn();
     // SessionPreview.cpp
     static bool readPreviewPreference();
     static InputMonitoring readInputMonitoringPreference();

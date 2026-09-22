@@ -406,20 +406,27 @@ int Session::countInBarsRemaining() const
     return countIn != nullptr ? countIn->barsRemaining() : 0;
 }
 
-// Also the teardown: nothing is left registered on the device while no count is
-// running, so a session that never records never touches the audio callback
-// list. Called from the destructor and before the device closes, either of
-// which can come first.
+// Nothing is left registered on the device while no count is running, so a
+// session that never records never touches the audio callback list - and a
+// count that has ended stops costing a block. Both ways out of a count come
+// through here: cancelCountIn for one abandoned, and the completion callback
+// for one that reached its last beat.
+void Session::detachCountIn()
+{
+    if (countIn == nullptr || !countInAttached)
+        return;
+    engine.getDeviceManager().deviceManager.removeAudioCallback(countIn.get());
+    countInAttached = false;
+}
+
+// Also the teardown. Called from the destructor and before the device closes,
+// either of which can come first.
 void Session::cancelCountIn()
 {
     if (countIn == nullptr)
         return;
     countIn->cancel();
-    if (countInAttached)
-    {
-        engine.getDeviceManager().deviceManager.removeAudioCallback(countIn.get());
-        countInAttached = false;
-    }
+    detachCountIn();
 }
 
 juce::Result Session::toggleRecording()
@@ -461,6 +468,10 @@ juce::Result Session::toggleRecording()
         cancelCountIn();
         countInClick().start(settings, rate > 0.0 ? rate : 44100.0, [this]
         {
+            // This runs on the message thread, after the last beat has been
+            // played out, so the click has no more work and comes off the
+            // device before the transport takes over.
+            detachCountIn();
             beginTransportRecording();
             sendSynchronousChangeMessage();
         });

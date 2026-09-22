@@ -115,8 +115,19 @@ void CountInClick::audioDeviceIOCallbackWithContext(const float* const*, int, fl
                                                     int numOutputChannels, int numSamples,
                                                     const juce::AudioIODeviceCallbackContext&)
 {
-    // The device manager sums its callbacks, so this adds to whatever the
-    // transport has already put in the buffer rather than clearing it.
+    // The device manager sums its callbacks, but it does not hand the second
+    // and later ones the mix: it hands each a scratch buffer, adds what comes
+    // back to the output, and never clears that scratch between blocks. So the
+    // buffer arriving here holds this callback's own previous block, and a
+    // generator that only mixed into it would add every block to the last one -
+    // a count-in that grows all the way to the ceiling and then, once the count
+    // is over and renderBlock returns early, goes on emitting that accumulated
+    // block forever. Clearing first is what makes this a source rather than an
+    // insert; renderBlock keeps mixing, because a caller that owns its buffer
+    // is exactly what the tests are.
+    for (int channel = 0; channel < numOutputChannels; ++channel)
+        if (outputChannelData[channel] != nullptr)
+            juce::FloatVectorOperations::clear(outputChannelData[channel], numSamples);
     renderBlock(outputChannelData, numOutputChannels, numSamples);
 }
 

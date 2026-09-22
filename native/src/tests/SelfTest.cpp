@@ -322,6 +322,60 @@ int runSelfTest()
             require(immediate && !click.isRunning() && click.barsRemaining() == 0);
         }
 
+        // The same generator through the interface the device actually calls.
+        // The device manager gives its second and later callbacks a scratch
+        // buffer rather than the mix, adds what comes back, and never clears
+        // that scratch between blocks - so what arrives is this callback's own
+        // previous block. Mixing into it without clearing summed every block
+        // onto the last one and then, the count over and renderBlock returning
+        // early, emitted the total on every block for as long as it stayed
+        // registered: the loud tone that followed pressing Record.
+        {
+            CountInClick click;
+            constexpr double rate = 48000.0;
+            constexpr int blockSize = 480, channels = 2;
+            CountInClick::Settings settings;
+            settings.tempoBpm = 120.0;
+            settings.beatsPerBar = 4.0;
+            settings.bars = 2;
+            settings.gainDb = 0.0f;
+            settings.emphasiseBars = true;
+            const juce::AudioIODeviceCallbackContext callbackContext {};
+            // One buffer, reused and never cleared by the caller, exactly as
+            // the device manager reuses its own.
+            juce::AudioBuffer<float> scratch(channels, blockSize);
+            const auto dirty = [&scratch]
+            {
+                for (int channel = 0; channel < channels; ++channel)
+                    juce::FloatVectorOperations::fill(scratch.getWritePointer(channel), 1.0f, blockSize);
+            };
+            // Idle, and holding the loudest thing a previous block could have
+            // left behind. What the callback owes is silence, not that.
+            dirty();
+            click.audioDeviceIOCallbackWithContext(nullptr, 0, scratch.getArrayOfWritePointers(),
+                                                   channels, blockSize, callbackContext);
+            require(scratch.getMagnitude(0, blockSize) == 0.0f);
+
+            auto done = false;
+            click.start(settings, rate, [&done] { done = true; });
+            auto peak = 0.0f;
+            for (auto guard = 0; click.isRunning() && guard < 4000; ++guard)
+            {
+                click.audioDeviceIOCallbackWithContext(nullptr, 0, scratch.getArrayOfWritePointers(),
+                                                       channels, blockSize, callbackContext);
+                peak = juce::jmax(peak, scratch.getMagnitude(0, blockSize));
+            }
+            require(!click.isRunning());
+            // A click at 0 dB peaks at one. Block summed onto block it would
+            // have passed that inside the first bar and gone on climbing.
+            require(peak > 0.5f && peak <= 1.0f);
+            // And the count being over is not a licence to play one more.
+            click.audioDeviceIOCallbackWithContext(nullptr, 0, scratch.getArrayOfWritePointers(),
+                                                   channels, blockSize, callbackContext);
+            require(scratch.getMagnitude(0, blockSize) == 0.0f);
+            click.cancel();
+        }
+
         // The computer keyboard, as far as it goes without a keyboard being
         // held down. Which notes sound is read from the real key state and is
         // not reachable here; the toggle, the octave, the velocity and which

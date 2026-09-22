@@ -101,6 +101,42 @@ public:
     }
 };
 
+// Stop parks the playhead on the line the arrangement is working from, which
+// is what makes play-stop-play repeat a passage. Double-clicking it means the
+// top of the song instead. The second click is told apart here, where the
+// system's own click counting is already available, rather than by timing
+// clicks in the handler.
+class StopButton final : public juce::TextButton
+{
+public:
+    StopButton() : juce::TextButton("Stop") {}
+
+    std::function<void()> onStop, onReturnToStart;
+
+    void mouseDown(const juce::MouseEvent& event) override
+    {
+        secondClick = event.getNumberOfClicks() > 1;
+        juce::TextButton::mouseDown(event);
+    }
+
+    void clicked() override
+    {
+        // Cleared as it is read: a click arriving from the keyboard or from
+        // triggerClick has no mouse event behind it and must not inherit the
+        // last one's count.
+        if (secondClick)
+        {
+            secondClick = false;
+            if (onReturnToStart) onReturnToStart();
+            return;
+        }
+        if (onStop) onStop();
+    }
+
+private:
+    bool secondClick = false;
+};
+
 // The record button paints its own dot rather than borrowing a glyph. It has
 // three things to say - nothing is armed, something is armed, and the transport
 // is rolling or counting into it - and a colour on a circle says all three at a
@@ -349,7 +385,8 @@ public:
         metronome.onClick = [this] { session.setClickTrackEnabled(metronome.getToggleState()); };
         metronomeMenu.onClick = [this] { showMetronomeMenu(); };
         play.onClick = [this] { session.togglePlayback(); };
-        stop.onClick = [this] { session.stop(); };
+        stop.onStop = [this] { session.stop(); };
+        stop.onReturnToStart = [this] { session.returnToStart(); };
         record.onClick = [this] { toggleRecording(); };
         record.setTooltip("Record into the armed tracks  (F9)");
         panic.onClick = [this]
@@ -361,7 +398,7 @@ public:
         stop.setButtonText(L"\u25a0");
         panic.setButtonText("!");
         play.setTooltip("Play or pause");
-        stop.setTooltip("Stop and return to start");
+        stop.setTooltip("Stop and return to the selected line  (double-click for the start of the song)");
         panic.setTooltip("Panic reset audio");
         for (auto* component : std::initializer_list<juce::Component*>{
                  &infoView, &position, &play, &stop, &record, &panic,
@@ -1319,7 +1356,8 @@ private:
     juce::ComboBox timeSignature;
     juce::TextButton metronome, metronomeMenu;
     juce::TextButton undo {"Undo"}, redo {"Redo"}, clear {"Clear"};
-    juce::TextButton play {"Play"}, stop {"Stop"}, panic {"Panic"};
+    juce::TextButton play {"Play"}, panic {"Panic"};
+    StopButton stop;
     RecordButton record;
     BrowserToggleButton browserToggle;
     juce::TextButton editorToggle {"Clip"}, rackToggle {"Devices"};

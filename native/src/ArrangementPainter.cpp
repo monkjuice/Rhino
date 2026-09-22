@@ -415,7 +415,10 @@ void Arrangement::paint(juce::Graphics& g)
     if (playhead >= headerWidth)
     {
         g.setColour(playheadColour);
-        g.fillRect(playhead, rulerTop, 2.0f, getHeight() - rulerTop - 18.0f);
+        // Only a running transport draws through the lanes. Stopped, the line
+        // is a mark in the bar ruler saying where play would start from.
+        const auto bottom = playheadSweepsLanes ? getHeight() - 18.0f : lanesTop;
+        g.fillRect(playhead, rulerTop, 2.0f, bottom - rulerTop);
     }
 }
 

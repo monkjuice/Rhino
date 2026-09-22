@@ -488,13 +488,26 @@ void Arrangement::updatePlayhead()
     // attached to a peer.  Zoom and fit can be invoked before the next vblank.
     const auto x = xFor(playheadTime(session.edit->getTransport()));
     if (x >= headerWidth && x < getWidth()) next = x;
+    // Rolling, the line sweeps the lanes. Parked - which is every click that
+    // moves the insert line - it shows only in the bar ruler.
+    const auto sweeps = session.edit->getTransport().isPlaying();
     if (!isShowing())
     {
         playhead = next;
+        playheadSweepsLanes = sweeps;
         return;
     }
-    movePlayhead(*this, playhead, next,
-                 getLocalBounds().withTrimmedTop(static_cast<int>(rulerTop)).withTrimmedBottom(18));
+    const auto area = getLocalBounds().withTrimmedTop(static_cast<int>(rulerTop)).withTrimmedBottom(18);
+    if (sweeps != playheadSweepsLanes)
+    {
+        // Starting and stopping change the line's length, and stopping on the
+        // line it was already on changes nothing else, so the damage cannot be
+        // left to movePlayhead - it repaints nothing when the position holds.
+        playheadSweepsLanes = sweeps;
+        const auto damage = playheadDamage(playhead, next, area);
+        if (!damage.isEmpty()) repaint(damage);
+    }
+    movePlayhead(*this, playhead, next, area);
     // A MIDI take has no clip until the transport stops, so what is being
     // played is read from the engine's live note fifo and drawn where the clip
     // will be. Draining it is lock-free and costs nothing when idle.

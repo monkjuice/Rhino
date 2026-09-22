@@ -169,6 +169,11 @@ public:
     void setPreviewEnabled(bool enabled);
     void togglePlayback();
     void stop();
+    // The way back to the top of the song without first clicking there. It
+    // takes the playback start with it, so the next stop lands at zero too
+    // rather than jumping back to a selection that is no longer where the
+    // transport is.
+    void returnToStart();
     // Where playback starts from: the line the arrangement's selection sits on.
     // Stop returns the transport here rather than to the top of the song, so
     // play after stop picks up where the last click put the line. The view

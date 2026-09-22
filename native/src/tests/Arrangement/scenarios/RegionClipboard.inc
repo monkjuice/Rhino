@@ -87,6 +87,31 @@
                 require(close(playheadTime(session.edit->getTransport()), 4.375),
                         "Stop returns the playhead to the line the selection is on");
 
+                // The line only reaches the lanes while the transport is
+                // actually moving. Parked - which is what every click leaves
+                // behind - it shows in the bar ruler alone.
+                view.updatePlayhead();
+                require(!view.playheadSweepsLanes,
+                        "A stopped playhead is a mark in the ruler, not a line down the lanes");
+                session.togglePlayback();
+                view.updatePlayhead();
+                require(view.playheadSweepsLanes, "and it sweeps the lanes once the transport rolls");
+                session.stop();
+                view.updatePlayhead();
+                require(!view.playheadSweepsLanes, "and goes back to the ruler when it stops");
+
+                // Double-clicking stop goes past that line to the top of the
+                // song, and takes the playback start with it so a later stop
+                // agrees with where the transport already is.
+                session.returnToStart();
+                require(close(playheadTime(session.edit->getTransport()), 0.0) && close(session.playbackStart(), 0.0),
+                        "Returning to start puts the playhead at the top of the song whatever the selection is on");
+                require(close(view.timeSelection.start, 4.375),
+                        "and leaves the selection it ignored where it was");
+                session.stop();
+                require(close(playheadTime(session.edit->getTransport()), 0.0),
+                        "so a stop after it holds at the top rather than jumping back to the line");
+
                 // The upper row is the clip: it selects, and the line goes to
                 // the clip's own start so play begins with it.
                 drag({view.xFor(4.45), clipRowY(1)}, {view.xFor(4.45), clipRowY(1)});

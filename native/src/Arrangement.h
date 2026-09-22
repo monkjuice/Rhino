@@ -359,6 +359,12 @@ private:
     int automationRow = -1, automationPoint = -1;
     std::vector<Session::AutomationPoint> automationPoints;
     float playhead = -1.0f;
+    // A parked playhead is a marker, not a sweep: it stays in the ruler so the
+    // lanes are not cut in two by a line that is not going anywhere. Held here
+    // as well as read from the transport, because the line changes length
+    // without necessarily moving and the strip it used to fill still has to be
+    // repainted.
+    bool playheadSweepsLanes = false;
     // How far the recording band has been painted, and the note revision it
     // was painted at, so an ordinary frame repaints only the sliver the band
     // has grown by. Negative means nothing is being recorded.

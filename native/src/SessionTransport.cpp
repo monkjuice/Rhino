@@ -130,6 +130,17 @@ void Session::stop()
     if (wasRecording) finishRecording();
 }
 
+void Session::returnToStart()
+{
+    stop();
+    // Stop parks the transport on the line the arrangement is working from;
+    // this overrides that for good rather than for one press, so what the next
+    // stop does agrees with where the transport already is. A click in the
+    // arrangement picks a new line and takes it back.
+    playbackStartSeconds = 0.0;
+    edit->getTransport().setPosition({});
+}
+
 void Session::releasePlayingNotes()
 {
     for (auto* track : te::getAudioTracks(*edit))

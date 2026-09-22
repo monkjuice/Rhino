@@ -59,7 +59,7 @@ juce_add_plugin(RhinoForge
     EDITOR_WANTS_KEYBOARD_FOCUS FALSE)
 
 # What the panel needs before it can read anything from disk: its wordmark, its
-# four typefaces and the two pieces of hardware it is screwed together with.
+# four typefaces, the screws and the performance wheel skin.
 #
 # forge_logo.png is stored at the size the panel draws it so paint() blits
 # rather than rescaling a master on every repaint; the full-resolution
@@ -72,6 +72,7 @@ juce_add_binary_data(RhinoForgeAssets SOURCES
     ui/assets/forge_logo.png
     ui/assets/screw_cross.png
     ui/assets/screw_dome.png
+    ui/assets/performance_wheel.png
     ui/assets/fonts/ChakraPetchSemiBold.ttf
     ui/assets/fonts/RajdhaniMedium.ttf
     ui/assets/fonts/RajdhaniSemiBold.ttf
@@ -101,6 +102,7 @@ set(forge_sources
     ui/ForgeControlBlock.h
     ui/ForgeLayout.h
     ui/ForgePanels.h
+    ui/ForgePerformanceWheel.h
     ui/ForgeTablePanel.h
     ui/ForgeTooltips.h
     ui/ForgeType.h

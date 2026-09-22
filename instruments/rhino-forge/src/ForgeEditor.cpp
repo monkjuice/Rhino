@@ -77,6 +77,18 @@ Editor::Editor(Processor& p)
     keyboard.setColour(juce::MidiKeyboardComponent::upDownButtonBackgroundColourId, ui::panelRaised);
     keyboard.setColour(juce::MidiKeyboardComponent::upDownButtonArrowColourId, ui::mutedText);
     addAndMakeVisible(keyboard);
+    pitchWheel.onChange = [this] (float value)
+    {
+        processor.setPitchWheel(juce::roundToInt(value * 16383.0f));
+    };
+    modulationWheel.onChange = [this] (float value)
+    {
+        processor.setModWheel(juce::roundToInt(value * 127.0f));
+    };
+    pitchWheel.setDisplayValue(processor.pitchWheelValue() / 16383.0f);
+    modulationWheel.setDisplayValue(processor.modWheelValue() / 127.0f);
+    addAndMakeVisible(pitchWheel);
+    addAndMakeVisible(modulationWheel);
 
     for (auto* button : {&loadPreset, &savePreset})
     {

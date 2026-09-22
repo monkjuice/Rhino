@@ -461,6 +461,8 @@ void Editor::fadeValueBubble()
 void Editor::timerCallback()
 {
     fadeValueBubble();
+    pitchWheel.setDisplayValue(processor.pitchWheelValue() / 16383.0f);
+    modulationWheel.setDisplayValue(processor.modWheelValue() / 127.0f);
     // Cheap to re-apply every tick, and it catches a dependency changing from
     // host automation as well as from the panel. Both of these only repaint
     // when something has actually changed.

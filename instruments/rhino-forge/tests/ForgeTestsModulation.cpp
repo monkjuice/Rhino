@@ -229,8 +229,8 @@ void modulationSuite()
     // the matrix.
     const auto firstMacro = static_cast<float>(rhino::forge::ModSource::macro1);
     require(rhino::forge::modSourceCount == static_cast<int>(rhino::forge::ModSource::macro1)
-                + rhino::forge::macroCount,
-            "every macro is offered as a source");
+                + rhino::forge::macroCount + 1,
+            "every macro and the appended modulation wheel are offered as sources");
 
     auto byMacroOwner = std::make_unique<rhino::forge::Processor>();
     auto& byMacro = *byMacroOwner;
@@ -260,6 +260,46 @@ void modulationSuite()
     require(!identical(plain, modulated), "the note source reaches its destination");
     require(rms(modulated, 0, settled) > rms(plain, 0, settled),
             "note-driven modulation adds the sub it was pointed at");
+
+    // A panel gesture and a host CC1 message must drive the same matrix source.
+    auto modWheelOwner = std::make_unique<rhino::forge::Processor>();
+    auto& modWheel = *modWheelOwner;
+    closedFilterOnA(modWheel);
+    setSlot(modWheel, 1, static_cast<float>(ModSource::modWheel), destCutoff, 1.0f);
+    renderNote(modWheel, plain);
+    const auto atRest = rms(plain, 0, settled);
+    modWheel.setModWheel(127);
+    renderNote(modWheel, modulated);
+    require(rms(modulated, 0, settled) > atRest * 1.2f,
+            "the modulation wheel opens its matrix destination");
+    requireClose(modWheel.modulationOffset(destCutoff), 1.0f, 0.001f,
+                 "the matrix meter follows the modulation wheel");
+    modWheel.prepareToPlay(48000.0, samples);
+    juce::MidiBuffer cc;
+    cc.addEvent(juce::MidiMessage::controllerEvent(1, 1, 37), 0);
+    cc.addEvent(juce::MidiMessage::noteOn(1, 57, 1.0f), 0);
+    modWheel.processBlock(modulated, cc);
+    require(modWheel.modWheelValue() == 37, "host CC1 updates the panel wheel");
+
+    // Bend is heard on an already specified note, across the whole voice.
+    auto pitchOwner = std::make_unique<rhino::forge::Processor>();
+    auto& pitch = *pitchOwner;
+    soloSineOnA(pitch);
+    renderNote(pitch, plain);
+    const auto straightCrossings = zeroCrossings(plain, 0, settled);
+    pitch.setPitchWheel(16383);
+    renderNote(pitch, modulated);
+    requireClose(static_cast<float>(zeroCrossings(modulated, 0, settled)),
+                 straightCrossings * std::pow(2.0f, 2.0f / 12.0f),
+                 straightCrossings * 0.04f, "the pitch wheel bends by two semitones");
+    pitch.prepareToPlay(48000.0, samples);
+    juce::MidiBuffer bend;
+    bend.addEvent(juce::MidiMessage::pitchWheel(1, 0), 0);
+    bend.addEvent(juce::MidiMessage::noteOn(1, 57, 1.0f), 0);
+    pitch.processBlock(modulated, bend);
+    require(pitch.pitchWheelValue() == 0, "host pitch bend updates the panel wheel");
+    require(zeroCrossings(modulated, 0, settled) < straightCrossings,
+            "host pitch bend lowers the rendered note");
 }
 }
 

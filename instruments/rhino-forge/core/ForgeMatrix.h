@@ -20,10 +20,11 @@ enum class ModSource
     lfo1 = env1 + envCount,          // 5, and lfo2..lfo6 up to 10
     velocity = lfo1 + lfoCount,      // 11
     note,                            // 12
-    macro1                           // 13, and one per macro after it
+    macro1,                          // 13, and one per macro after it
+    modWheel = macro1 + macroCount   // appended: saved source indices stay stable
 };
 
-inline constexpr int modSourceCount = static_cast<int>(ModSource::macro1) + macroCount;
+inline constexpr int modSourceCount = static_cast<int>(ModSource::modWheel) + 1;
 
 inline int macroIndexOf(int source)
 {
@@ -58,6 +59,7 @@ inline const char* modSourceName(int source)
 {
     if (source == static_cast<int>(ModSource::velocity)) return "VELOCITY";
     if (source == static_cast<int>(ModSource::note)) return "NOTE";
+    if (source == static_cast<int>(ModSource::modWheel)) return "MOD WHEEL";
 
     static const std::array<const char*, envCount> envs {
         "ENV 1", "ENV 2", "ENV 3", "ENV 4"};

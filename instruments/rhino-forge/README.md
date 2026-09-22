@@ -26,11 +26,13 @@ order: global voicing as a narrow column, then the envelopes, the LFOs and the
 macros.
 
 The keyboard was eighty-eight keys until the arpeggiator arrived and gave up
-its bottom octave for the **ARP** plate, which stands between the left-hand
-decal and the keys. Every key is the width it always was: the plate is sized as
+its bottom octave for the **ARP** plate, which stands between the performance
+wheels and the keys. Every key is the width it always was: the plate is sized as
 the octave that came off, so the keys are still divided out of the span they
-had. The decal outboard of it is untouched, which is where the pitch and
-modulation wheels belong when they arrive.
+had. Pitch and modulation wheels share the metal plate at the lower left.
+Drag up to raise either wheel. Pitch springs back to center with a two semitone
+range; modulation holds its position and is available as **MOD WHEEL** in the
+matrix. Host MIDI pitch bend and CC1 drive the same controls.
 
 The metal chassis follows the reference's assembled construction: interlocking
 header plates, segmented rails, a shared Sub/Noise housing, recessed legends,

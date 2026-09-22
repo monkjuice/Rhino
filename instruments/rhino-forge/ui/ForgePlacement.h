@@ -36,7 +36,7 @@ inline constexpr int windowMargin = 12;
 inline constexpr int titleBarHeight = 104;
 inline constexpr int keyboardGap = 22;
 
-// The full width the keyboard and the two decals beside it share.
+// The full width the keyboard and the two end plates beside it share.
 inline juce::Rectangle<int> keyboardStrip(juce::Rectangle<int> bounds)
 {
     return bounds.reduced(windowMargin, 0)
@@ -44,10 +44,9 @@ inline juce::Rectangle<int> keyboardStrip(juce::Rectangle<int> bounds)
         .withHeight(keyboardHeight);
 }
 
-// The decals either side of the keyboard. They are the panel's markings rather
-// than controls, so they give up width before the keys do: at the narrowest
-// window the panel allows they come down to the point where they carry their
-// own lettering and nothing else, and the keys keep the rest.
+// The plates either side of the keyboard. The left holds the performance
+// wheels, while the right carries the maker's marking. Both give up width
+// before the keys do, keeping the keyboard's scale consistent on resize.
 inline constexpr int deckPlateGap = 8;
 
 inline int deckPlateWidth(juce::Rectangle<int> bounds)
@@ -66,7 +65,7 @@ inline juce::Rectangle<int> deckRightBounds(juce::Rectangle<int> bounds)
     return strip.withLeft(strip.getRight() - deckPlateWidth(bounds));
 }
 
-// What the strip has left once both decals have taken theirs: the ARP plate and
+// What the strip has left once both end plates have taken theirs: the ARP plate and
 // the keys share this between them.
 inline juce::Rectangle<int> keyboardShelf(juce::Rectangle<int> bounds)
 {
@@ -94,8 +93,7 @@ inline int arpPlateWidth(juce::Rectangle<int> bounds)
 
 // Serum puts the ARP switch immediately left of the keys, and so does this: it
 // is a thing you reach for with the hand that is already on the keyboard. The
-// decal outboard of it is left alone, which is where the pitch and modulation
-// wheels belong when they arrive.
+// plate outboard of it holds the pitch and modulation wheels.
 inline juce::Rectangle<int> arpPlateBounds(juce::Rectangle<int> bounds)
 {
     return keyboardShelf(bounds).withWidth(arpPlateWidth(bounds));

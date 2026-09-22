@@ -51,6 +51,14 @@ public:
     // the voice the same way notes from the host do.
     juce::MidiKeyboardState keyboardState;
 
+    // Shared between panel gestures and incoming MIDI. Controller state is
+    // performance state, so opening a second editor or changing a preset does
+    // not create a second wheel position.
+    void setPitchWheel(int value) { pitchWheel.store(juce::jlimit(0, 16383, value), std::memory_order_relaxed); }
+    void setModWheel(int value) { modWheel.store(juce::jlimit(0, 127, value), std::memory_order_relaxed); }
+    int pitchWheelValue() const { return pitchWheel.load(std::memory_order_relaxed); }
+    int modWheelValue() const { return modWheel.load(std::memory_order_relaxed); }
+
     // An envelope's live position, published once per block for the editor to
     // draw. The audio thread writes, the message thread reads; nothing else
     // crosses. All four report the loudest voice's copy of themselves, so the
@@ -149,6 +157,8 @@ private:
     // rack knob's closes over it for the same reason.
     juce::AudioProcessorValueTreeState::ParameterLayout parameterLayout();
     Core core;
+    std::atomic<int> pitchWheel {8192};
+    std::atomic<int> modWheel {0};
     // In front of the voices rather than inside them: it consumes the notes
     // arriving and hands Core the ones the pattern actually plays.
     Arp arp;

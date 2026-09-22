@@ -200,6 +200,14 @@ public:
     // the rack needs the tempo itself rather than a rate worked out from it.
     void setTempo(double bpm) { tempo = bpm; }
 
+    // Performance wheels are global MIDI controls. Pitch bends every source in
+    // a voice by the conventional two semitones; modulation is a matrix source.
+    void setPitchWheel(float position)
+    {
+        pitchRatio = std::pow(2.0f, juce::jlimit(-1.0f, 1.0f, position) * (2.0f / 12.0f));
+    }
+    void setModWheel(float position) { modWheel = juce::jlimit(0.0f, 1.0f, position); }
+
     void renderSample(const Patch& patch, const Modulation& modulation, float& left, float& right)
     {
         left = right = 0.0f;
@@ -587,6 +595,7 @@ private:
             {
                 case ModSource::velocity: amount = voice.velocity; break;
                 case ModSource::note:     amount = static_cast<float>(voice.note) / 127.0f; break;
+                case ModSource::modWheel: amount = modWheel; break;
                 case ModSource::off:      continue;
                 default:
                 {
@@ -934,7 +943,7 @@ private:
         if (glide <= 0.0001f) voice.currentHz = voice.targetHz;
         else voice.currentHz += (voice.targetHz - voice.currentHz)
             * (1.0f - std::exp(-1.0f / (static_cast<float>(sampleRate) * glide)));
-        const auto hz = voice.currentHz;
+        const auto hz = voice.currentHz * pitchRatio;
 
         // Every source is rendered on its own before it is handed anywhere,
         // because a channel's sends are taken from that channel rather than
@@ -1089,6 +1098,8 @@ private:
 
     std::array<Voice, 16> voices {};
     double sampleRate = 48000.0;
+    float pitchRatio = 1.0f;
+    float modWheel = 0.0f;
     size_t nextVoice = 0;
     // One over the length of the tail fade in samples, worked out when the
     // sample rate is known rather than per sample.

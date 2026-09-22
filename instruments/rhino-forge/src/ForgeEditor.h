@@ -4,6 +4,7 @@
 #include "../ui/ForgeLayout.h"
 #include "../ui/ForgeTablePanel.h"
 #include "../ui/ForgeVisuals.h"
+#include "../ui/ForgePerformanceWheel.h"
 #include "../ui/ForgeFxDisplay.h"
 #include <memory>
 #include <vector>
@@ -115,6 +116,8 @@ private:
     ui::SourceHandle* draggingHandle = nullptr;
     juce::Point<int> dragPosition;
     juce::MidiKeyboardComponent keyboard;
+    ui::PerformanceWheel pitchWheel {true};
+    ui::PerformanceWheel modulationWheel {false};
     // Which octave the computer keys play. The keyboard's own mapping is 17
     // notes wide starting at the C of this octave; z and x walk it, and the
     // keys it can reach are washed in on the piano so you can see where you

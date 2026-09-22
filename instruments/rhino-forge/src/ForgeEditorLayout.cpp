@@ -52,6 +52,13 @@ void Editor::resized()
     keyboard.setKeyWidth(static_cast<float>(keys.getWidth())
                          / static_cast<float>(ui::keyboardWhiteKeys));
     keyboard.setBounds(keys);
+    const auto plate = ui::deckLeftBounds(getLocalBounds());
+    const auto wheelWidth = juce::jlimit(27, 37, (plate.getWidth() - 34) / 2);
+    const auto gap = juce::jmax(8, (plate.getWidth() - 2 * wheelWidth) / 4);
+    const auto wheelX = plate.getCentreX() - wheelWidth - gap / 2;
+    pitchWheel.setBounds(wheelX, plate.getY() + 1, wheelWidth, plate.getHeight() - 2);
+    modulationWheel.setBounds(wheelX + wheelWidth + gap, plate.getY() + 1,
+                              wheelWidth, plate.getHeight() - 2);
 
     // Handles are positioned after their modules, because a macro's handle sits
     // on top of its knob's label.

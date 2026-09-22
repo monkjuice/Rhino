@@ -164,6 +164,8 @@ void Processor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
     // into Hertz before the patch is built, but a delay's division has to be
     // read against the tempo at the moment it is rendered.
     core.setTempo(hostBpm.load(std::memory_order_relaxed));
+    core.setPitchWheel((pitchWheelValue() - 8192) / 8192.0f);
+    core.setModWheel(modWheelValue() / 127.0f);
     const auto values = patch();
     const auto mods = modulation();
     const auto arpValues = arpSettings();
@@ -194,6 +196,16 @@ void Processor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
             const auto metadata = *event;
             if (metadata.samplePosition > i) break;
             const auto message = metadata.getMessage();
+            if (message.isPitchWheel())
+            {
+                setPitchWheel(message.getPitchWheelValue());
+                core.setPitchWheel((pitchWheelValue() - 8192) / 8192.0f);
+            }
+            else if (message.isController() && message.getControllerNumber() == 1)
+            {
+                setModWheel(message.getControllerValue());
+                core.setModWheel(modWheelValue() / 127.0f);
+            }
             // With the arp on, the keys feed the pattern rather than the
             // voices, and THRU is what decides whether they also reach the
             // voices directly — the MIDI THRU port the manual likens it to.

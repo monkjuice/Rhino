@@ -208,13 +208,6 @@ inline void drawDeckPlates(juce::Graphics& g, juce::Rectangle<int> bounds)
     drawRivet(g, {right.getRight() - 12, y + 7}, 4.2f, 1.0f);
     drawEdgeWear(g, left, 41);
     drawEdgeWear(g, right, 63);
-    const auto face = left.reduced(13, 0).translated(0, 23);
-    g.setColour(legendText);
-    g.setFont(panelFont(Face::header, 14));
-    drawTrackedText(g, "NERV", face.withHeight(16), 0.8f, juce::Justification::centredLeft);
-    stamp(g, "SYNTH INTERFACE", face.translated(0, 19).withHeight(10), 8, 0.7f);
-    stamp(g, "TOKYO-3  //  TC003", face.translated(0, 29).withHeight(10), 7, 0.6f);
-    drawHatch(g, {x + 16, b - 10, left.getWidth() - 30, 13}, legendText.withAlpha(0.7f), 4, 9);
     const auto motto = right.reduced(12, 0).translated(0, 34);
     stamp(g, "FOR A MORE", motto.withHeight(12), 9, 0.7f);
     stamp(g, "HUMAN TOMORROW", motto.translated(0, 13).withHeight(12), 8, 0.6f);

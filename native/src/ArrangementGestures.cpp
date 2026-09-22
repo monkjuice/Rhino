@@ -6,6 +6,11 @@
 
 // Pointer gestures: loop range and clip move/trim. Automation gestures live in
 // ArrangementAutomation.cpp and are offered the pointer first.
+//
+// The pointer obeys the rule in SelectionInput.h, which the note editor reads
+// too: a plain press on a clip takes that clip and drops the rest, a press on
+// empty lane sweeps out a region, Ctrl and Shift gather, and a clip is put
+// down by double-clicking a lane.
 
 namespace rhino
 {
@@ -19,6 +24,12 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
     movingTrack = -1;
     moveDestination = -1;
     moveStarted = false;
+    collapseSelectionOnRelease = false;
+    collapseSelectionTo = {};
+    dragTravelled = false;
+    dragOrigin = event.position;
+    dragPointer = event.position;
+    dragModifiers = event.mods;
     if (event.mods.isRightButtonDown() && loopGestureAt(event.position) != LoopGesture::none)
     {
         session.clearManualLoopRange();
@@ -82,11 +93,13 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
         return;
     }
     // Shift and Ctrl on a card gather cards instead of carrying one: that is the
-    // selection Ctrl+G groups, and the one a group command reaches.
-    if (event.position.x < headerWidth && (event.mods.isShiftDown() || event.mods.isCommandDown()))
+    // selection Ctrl+G groups, and the one a group command reaches. A card is
+    // the one place the two modifiers differ, because cards are a list and a
+    // list has a range between two of them.
+    if (event.position.x < headerWidth && isMultiSelectModifier(event.mods))
         if (const auto track = cardAt(event.position); track >= 0)
         {
-            if (event.mods.isShiftDown()) selectTrackRange(trackSelectionAnchor, track);
+            if (isExtendSelectionModifier(event.mods)) selectTrackRange(trackSelectionAnchor, track);
             else toggleTrackSelection(track);
             setSelection({});
             focusTrack();
@@ -170,14 +183,6 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
         }
         return;
     }
-    if (juce::KeyPress::isKeyCurrentlyDown('S') && event.position.x >= headerWidth && event.position.y >= lanesTop)
-    {
-        marqueeSelecting = true;
-        marqueeAnchor = event.position;
-        marqueeBounds = {event.position.x, event.position.y, 0.0f, 0.0f};
-        repaint();
-        return;
-    }
     const auto index = hit(event.position);
     // A clip is two rows, and only the upper one is the clip. The lower row is
     // timeline like any empty lane: a press there puts the selection line down
@@ -205,25 +210,52 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
         return;
     }
     const auto& clip = clips[static_cast<size_t>(index)];
-    if (event.mods.isShiftDown())
+    // Ctrl or Shift gathers: the clip joins the selection or leaves it, the
+    // rest is untouched, and the press is over. It must not also start
+    // carrying, or every attempt to add one clip to a group would nudge the
+    // whole group.
+    if (isMultiSelectModifier(event.mods))
     {
         auto next = selectedClips;
         if (isSelected(clip.id))
+        {
+            // Shift extends, so it never takes anything back out; Ctrl is the
+            // one that toggles.
+            if (isExtendSelectionModifier(event.mods))
+                return;
             next.erase(std::remove(next.begin(), next.end(), clip.id), next.end());
+        }
         else
             next.push_back(clip.id);
+        // setSelection derives the region from what is now selected, so the
+        // gathered set is what a clipboard command will act on.
         setSelection(std::move(next), clip.id);
+        // The working row follows the pointer even while a group is being
+        // gathered, so the card highlight cannot lag behind the clips.
+        selectTrack(clip.track);
+        repaint();
+        return;
     }
-    else if (!isSelected(clip.id))
+    // A plain press takes the clip and drops everything else - unless the clip
+    // is already part of a group, in which case the group is kept so the drag
+    // can carry all of it. A press on a group that never travels was a click
+    // after all, and collapses onto this clip on release.
+    if (!isSelected(clip.id))
         setSelection({clip.id}, clip.id);
-    else if (selected != clip.id)
-    {
-        selected = clip.id;
-        focus = Focus::clip;
-        if (clipSelected) clipSelected(selected);
-    }
     else
+    {
+        if (selectedClips.size() > 1)
+        {
+            collapseSelectionOnRelease = true;
+            collapseSelectionTo = clip.id;
+        }
+        if (selected != clip.id)
+        {
+            selected = clip.id;
+            if (clipSelected) clipSelected(selected);
+        }
         focus = Focus::clip;
+    }
     // Whatever the region was before - a span dragged out, or the rectangle a
     // paste left behind - the gesture starting here is about these clips, so
     // the region becomes theirs and travels with them.
@@ -254,24 +286,14 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
 
 void Arrangement::mouseDrag(const juce::MouseEvent& event)
 {
+    // Recorded before anything acts on it, so the frame clock can carry the
+    // gesture on while the pointer sits still past the edge of the panel.
+    dragPointer = event.position;
+    dragModifiers = event.mods;
+    dragTravelled = dragTravelled || event.getDistanceFromDragStart() >= 3;
     if (resizingTrack >= 0 || movingTrack >= 0)
     {
         dragCardGesture(event);
-        return;
-    }
-    if (marqueeSelecting)
-    {
-        // The same rule a region drag follows: the rectangle covers whole grid
-        // cells, so what it catches is decided by the grid rather than by
-        // where inside a cell the pointer happened to stop.
-        const auto bypass = event.mods.isAltDown();
-        const auto anchorTime = std::max(0.0, timeAt(marqueeAnchor.x));
-        const auto pointerTime = std::max(0.0, timeAt(event.position.x));
-        const auto left = xFor(snappedDown(std::min(anchorTime, pointerTime), bypass));
-        const auto right = xFor(snappedUp(std::max(anchorTime, pointerTime), bypass));
-        marqueeBounds = {left, std::min(marqueeAnchor.y, event.position.y),
-                         std::max(1.0f, right - left), std::abs(event.position.y - marqueeAnchor.y)};
-        repaint();
         return;
     }
     if (regionSelecting)
@@ -346,17 +368,6 @@ void Arrangement::mouseUp(const juce::MouseEvent& event)
     if (resizingTrack >= 0 || movingTrack >= 0)
     {
         endCardGesture();
-        return;
-    }
-    if (marqueeSelecting)
-    {
-        mouseDrag(event);
-        std::vector<te::EditItemID> hits;
-        for (const auto& clip : clips)
-            if (bounds(clip).intersects(marqueeBounds)) hits.push_back(clip.id);
-        marqueeSelecting = false;
-        setSelection(std::move(hits));
-        repaint();
         return;
     }
     if (regionSelecting)
@@ -439,7 +450,69 @@ void Arrangement::mouseUp(const juce::MouseEvent& event)
                 selectTrack(juce::jlimit(0, std::max(0, session.trackCount() - 1), previewTrack));
         }
     }
+    // A press inside a group that never travelled was a click, and a click
+    // takes the one thing under it. Deciding it here rather than on the press
+    // is what lets the same press also carry the whole group.
+    else if (collapseSelectionOnRelease && collapseSelectionTo != te::EditItemID())
+        setSelection({collapseSelectionTo}, collapseSelectionTo);
     cancelDrag();
+    repaint();
+}
+
+// The live drag, re-posed against the view it is now looking at. The pointer
+// has not moved, so the position and the modifiers are the ones last seen; the
+// press position is carried so the handlers that ask how far the drag has come
+// still get a true answer.
+juce::MouseEvent Arrangement::resumedDrag() const
+{
+    auto* self = const_cast<Arrangement*>(this);
+    return {juce::Desktop::getInstance().getMainMouseSource(), dragPointer, dragModifiers,
+            1.0f, 0.0f, 0.0f, 0.0f, 0.0f, self, self,
+            juce::Time::getCurrentTime(), dragOrigin, juce::Time::getCurrentTime(), 1, true};
+}
+
+// Called once a frame. A drag that has reached the edge of the lanes pulls the
+// view after it and then re-runs itself, so a region can be swept across more
+// of the song than fits on screen and a clip can be carried to a track that is
+// not shown yet.
+void Arrangement::autoScrollDrag()
+{
+    if (!dragTravelled)
+        return;
+    const auto live = dragging || regionSelecting || loopGesture != LoopGesture::none
+                   || automationGesture != AutomationGesture::none || movingTrack >= 0;
+    if (!live)
+        return;
+
+    auto scrolled = false;
+    if (const auto push = autoScrollPush(dragPointer.x, headerWidth, static_cast<float>(getWidth()) - 14.0f);
+        push != 0.0f)
+    {
+        const auto before = viewStart;
+        // A share of what is on screen rather than a fixed number of seconds,
+        // so the view travels at the same apparent speed at every zoom.
+        viewStart = std::max(0.0, viewStart + push * viewSpan * 0.012);
+        updateScroll();
+        scrolled = viewStart != before;
+    }
+    // The loop gesture and an automation drag live on rows that do not scroll
+    // under them, so only the gestures that span tracks travel vertically.
+    if (dragging || regionSelecting || movingTrack >= 0)
+        if (const auto push = autoScrollPush(dragPointer.y, lanesTop, masterLane().getY()); push != 0.0f)
+        {
+            const auto before = trackScroll;
+            trackScroll += push * laneHeight() * 0.1;
+            updateScroll();
+            if (trackScroll != before)
+            {
+                resized();
+                scrolled = true;
+            }
+        }
+    if (!scrolled)
+        return;
+    mouseDrag(resumedDrag());
+    updatePlayhead();
     repaint();
 }
 

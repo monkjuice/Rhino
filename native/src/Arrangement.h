@@ -232,6 +232,15 @@ private:
     void showTrackMenu(int track);
     // The MIDI From menu for one card, and for the same card in the track menu.
     void showMidiInputMenu(int track);
+    // A drag that reaches the edge of the lanes pulls the view after it, so a
+    // selection or a clip can be dragged somewhere that is not on screen yet.
+    // Driven by the frame clock rather than by pointer movement: a pointer
+    // held still outside the panel sends no more drags.
+    void autoScrollDrag();
+    // The live drag, re-posed against the view it is now looking at. Building
+    // one is what lets the scroll re-run the gesture without every handler
+    // having to be rewritten to take a position instead of an event.
+    juce::MouseEvent resumedDrag() const;
     // ArrangementRename.cpp
     void configureNameEditor();
     juce::Rectangle<int> trackNameBounds(int track) const;
@@ -329,9 +338,19 @@ private:
     std::vector<int> selectedTracks {0};
     int trackSelectionAnchor = 0;
     bool dragging = false;
-    bool marqueeSelecting = false;
-    juce::Rectangle<float> marqueeBounds;
-    juce::Point<float> marqueeAnchor;
+    // A plain press inside a group of selected clips keeps the group, so the
+    // drag carries all of it. If the press turns out never to have been a
+    // drag, it was a click, and a click takes the one clip under it - which is
+    // what every list in the OS does, and can only be decided on release.
+    bool collapseSelectionOnRelease = false;
+    te::EditItemID collapseSelectionTo;
+    // Where the live drag is, so the frame clock can carry it on while the
+    // pointer sits still past the edge of the panel. Only a drag that has
+    // actually travelled is recorded: a press near the edge is a click, not a
+    // request to scroll to the end of the song.
+    bool dragTravelled = false;
+    juce::Point<float> dragPointer, dragOrigin;
+    juce::ModifierKeys dragModifiers;
     TimeSelection timeSelection;
     bool regionSelecting = false;
     // The clip selection and the region are two views of one thing and each

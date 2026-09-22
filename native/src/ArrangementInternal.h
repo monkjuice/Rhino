@@ -1,11 +1,15 @@
 #pragma once
 #include "Arrangement.h"
+#include "SelectionInput.h"
 
 // Shared internals of the Arrangement implementation, which spans
 // Arrangement.cpp, ArrangementGeometry.cpp, ArrangementPainter.cpp,
 // ArrangementSync.cpp, ArrangementGestures.cpp and ArrangementDrops.cpp.
 // Waveform lives here because sync() creates them and Arrangement destroys
 // them, so both translation units need the complete type.
+//
+// The pointer rules come from SelectionInput.h, which the note editor reads
+// too. Only what is peculiar to a timeline lives here.
 
 namespace rhino
 {

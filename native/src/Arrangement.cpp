@@ -6,7 +6,10 @@
 namespace rhino
 {
 
-Arrangement::Arrangement(Session& s) : session(s), vblank(this, [this] { updatePlayhead(); })
+// One frame clock for both: a drag that has reached the edge pulls the view
+// after it on the same tick the playhead is advanced on.
+Arrangement::Arrangement(Session& s)
+    : session(s), vblank(this, [this] { autoScrollDrag(); updatePlayhead(); })
 {
     configureMasterControls();
     setOpaque(true);
@@ -356,7 +359,9 @@ bool Arrangement::keyPressed(const juce::KeyPress& key)
 void Arrangement::cancelDrag()
 {
     dragging = false;
-    marqueeSelecting = false;
+    dragTravelled = false;
+    collapseSelectionOnRelease = false;
+    collapseSelectionTo = {};
     regionSelecting = false;
     loopGesture = LoopGesture::none;
     automationGesture = AutomationGesture::none;

@@ -129,6 +129,10 @@ int runArrangementTest()
        #include "scenarios/NoteSelection.inc"
         scenario("note clipboard");
        #include "scenarios/NoteClipboard.inc"
+        // After the clipboard, because it clears the pattern to build a
+        // fixture of its own and leaves the clip longer than it found it.
+        scenario("note gestures");
+       #include "scenarios/NoteGestures.inc"
         // Last, because it points the note editor at a clip of its own and
         // nothing after it would expect that.
         scenario("clip window");

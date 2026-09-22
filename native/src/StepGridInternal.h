@@ -1,16 +1,22 @@
 #pragma once
 #include "StepGrid.h"
+#include "SelectionInput.h"
 
 // Shared internals of the StepGrid implementation, which is defined across
 // StepGrid.cpp, StepGridPainter.cpp, StepGridGestures.cpp and
 // StepGridEditing.cpp. Internal: nothing outside those files should include it.
+//
+// The pointer rules come from SelectionInput.h, which the arrangement reads
+// too. Only what is peculiar to a grid of notes lives here.
 
 namespace rhino
 {
 
+// Ctrl or Command, asked of a keystroke rather than of a press. It is the same
+// chord the selection modifier uses, so it is the same answer.
 inline bool isShortcutDown(const juce::ModifierKeys& mods)
 {
-    return mods.isCommandDown() || mods.isCtrlDown();
+    return isCommandModifier(mods);
 }
 
 inline int pitchClassOf(int pitch)

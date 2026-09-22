@@ -175,12 +175,24 @@
                 ++startsInFirstCell;
         require(startsInFirstCell > 1,
                 "Multiple retriggers remain visible inside one unchanged editor cell");
+        // A plain click selects, exactly as it does on a clip in the
+        // arrangement: it never edits what it landed on.
         const auto splitPoint = selectionGrid.cell(3, rowForPitch(48)).getCentre();
         selectionGrid.mouseDown(gridEvent(splitPoint, splitPoint, false));
         selectionGrid.mouseUp(gridEvent(splitPoint, splitPoint, false));
         selectionGrid.changeListenerCallback(nullptr);
+        require(session.hasNote(1, 48), "Clicking a note leaves it alone");
+        require(selectionGrid.selectedStates().size() == 1
+                && selectionGrid.isSelected(selectionGrid.selectedStates().front()),
+                "Clicking a note selects it and nothing else");
+        // The right button is the eraser, in either mode, and it takes the
+        // whole note however far into it the press landed.
+        const auto rightButton = juce::ModifierKeys(juce::ModifierKeys::rightButtonModifier);
+        selectionGrid.mouseDown(gridEvent(splitPoint, splitPoint, false, rightButton));
+        selectionGrid.mouseUp(gridEvent(splitPoint, splitPoint, false, rightButton));
+        selectionGrid.changeListenerCallback(nullptr);
         require(!session.hasNote(1, 48) && !session.hasNote(3, 48),
-                "Clicking inside a sustained note erases the complete note body");
+                "Right-clicking inside a sustained note erases the complete note body");
         session.undo();
         session.undo();
         selectionGrid.changeListenerCallback(nullptr);
@@ -192,8 +204,11 @@
         selectionGrid.changeListenerCallback(nullptr);
         require(!session.hasNote(1, 48) && session.hasNote(2, 48),
                 "Dragging a note body moves it without requiring a modifier");
+        require(selectionGrid.selectedStates().size() == 1,
+                "A dragged note stays selected, so the next command reaches what was just moved");
         session.undo();
         selectionGrid.changeListenerCallback(nullptr);
+        selectionGrid.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey));
         const auto commandLeft = juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier | juce::ModifierKeys::commandModifier);
         selectionGrid.mouseDown(gridEvent(selectionGrid.cell(4, rowForPitch(55)).getCentre(),
                                           selectionGrid.cell(4, rowForPitch(55)).getCentre(), false, commandLeft));
@@ -313,15 +328,49 @@
         selectionGrid.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey));
         const auto sourceCell = selectionGrid.cell(1, rowForPitch(48)).getCentre();
         const auto targetCell = selectionGrid.cell(1, rowForPitch(50)).getCentre();
-        const auto shiftLeft = juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier | juce::ModifierKeys::shiftModifier);
-        selectionGrid.mouseDown(gridEvent(sourceCell, sourceCell, false, shiftLeft));
-        selectionGrid.mouseDrag(gridEvent(sourceCell, targetCell, true, shiftLeft));
-        selectionGrid.mouseUp(gridEvent(sourceCell, targetCell, true, shiftLeft));
+        selectionGrid.mouseDown(gridEvent(sourceCell, sourceCell, false));
+        selectionGrid.mouseDrag(gridEvent(sourceCell, targetCell, true));
+        selectionGrid.mouseUp(gridEvent(sourceCell, targetCell, true));
         require(!session.hasNote(1, 48) && session.hasNote(1, 50),
-                "Shift-dragging an existing note vertically changes its pitch");
+                "Dragging a note vertically changes its pitch, with no modifier held");
         session.undo();
         require(session.hasNote(1, 48) && !session.hasNote(1, 50),
                 "Undo restores note pitch after a grid drag");
+        selectionGrid.changeListenerCallback(nullptr);
+
+        // Gathering: Shift and Ctrl both add a note to the selection and carry
+        // nothing, and a plain click afterwards drops the group and takes the
+        // one note under it. This is the arrangement's rule, in notes.
+        selectionGrid.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey));
+        juce::ValueTree gatherState;
+        require(session.addNote(1.0, 51, 1.0, &gatherState).wasOk(), "Can place a second note to gather");
+        selectionGrid.changeListenerCallback(nullptr);
+        const auto* gatherNote = selectionGrid.noteForState(gatherState);
+        require(gatherNote != nullptr, "The gathering fixture is on screen");
+        const auto gatherPoint = selectionGrid.boundsFor(*gatherNote).getCentre();
+        const auto shiftLeft = juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier | juce::ModifierKeys::shiftModifier);
+        selectionGrid.mouseDown(gridEvent(sourceCell, sourceCell, false));
+        selectionGrid.mouseUp(gridEvent(sourceCell, sourceCell, false));
+        require(selectionGrid.selectedStates().size() == 1, "A plain click selects the one note under it");
+        selectionGrid.mouseDown(gridEvent(gatherPoint, gatherPoint, false, shiftLeft));
+        selectionGrid.mouseUp(gridEvent(gatherPoint, gatherPoint, false, shiftLeft));
+        require(selectionGrid.selectedStates().size() == 2, "Shift-click adds a note to the selection");
+        require(session.hasNote(1, 48) && session.hasNote(1, 51), "Gathering with Shift carries nothing");
+        selectionGrid.mouseDown(gridEvent(gatherPoint, gatherPoint, false, ctrlLeft));
+        selectionGrid.mouseUp(gridEvent(gatherPoint, gatherPoint, false, ctrlLeft));
+        require(selectionGrid.selectedStates().size() == 1, "Ctrl-click takes a note back out of the selection");
+        selectionGrid.mouseDown(gridEvent(gatherPoint, gatherPoint, false, shiftLeft));
+        selectionGrid.mouseUp(gridEvent(gatherPoint, gatherPoint, false, shiftLeft));
+        require(selectionGrid.selectedStates().size() == 2, "The group can be gathered again");
+        selectionGrid.mouseDown(gridEvent(gatherPoint, gatherPoint, false));
+        require(selectionGrid.selectedStates().size() == 2,
+                "A press inside a group keeps it, so the drag can carry all of it");
+        selectionGrid.mouseUp(gridEvent(gatherPoint, gatherPoint, false));
+        require(selectionGrid.selectedStates().size() == 1,
+                "A press inside a group that never travelled collapses onto the note it landed on");
+        require(session.hasNote(1, 48) && session.hasNote(1, 51), "A click inside a group moves nothing");
+        require(session.removeNotes({gatherState}), "Can clear the gathering fixture");
+        selectionGrid.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey));
         selectionGrid.changeListenerCallback(nullptr);
         const auto eraseCellA = selectionGrid.cell(1, rowForPitch(48)).getCentre();
         const auto eraseCellB = selectionGrid.cell(3, rowForPitch(48)).getCentre();

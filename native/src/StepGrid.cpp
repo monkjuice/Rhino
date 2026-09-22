@@ -12,8 +12,21 @@ StepGrid::StepGrid(Session& s) : session(s), vblank(this, [this] { updatePlayhea
     setOpaque(true);
     setWantsKeyboardFocus(true);
     setTitle("Pattern notes");
-    setDescription("One bar step editor. Drag to draw or erase notes. "
+    setDescription("Step editor. Drag to select, double-click a cell for a note, B for draw mode. "
                    "Drag the piano keys sideways to resize the lanes, up and down to scroll them.");
+    drawButton.setButtonText("Draw");
+    drawButton.setTooltip("Draw mode (B). Drag to paint notes; with it off, drag selects and "
+                          "double-clicking a cell adds one note. The right button always erases.");
+    drawButton.setClickingTogglesState(true);
+    drawButton.setWantsKeyboardFocus(false);
+    drawButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff30373e));
+    drawButton.setColour(juce::TextButton::buttonOnColourId, juce::Colour(0xff397f94));
+    drawButton.onClick = [this]
+    {
+        setDrawMode(drawButton.getToggleState());
+        grabKeyboardFocus();
+    };
+    addAndMakeVisible(drawButton);
     loopButton.setButtonText(juce::String::charToString(0x27f3));
     loopButton.setTooltip("Loop the entire edited clip (Ctrl+L). Drag on the ruler to draw a loop; right-click to clear it.");
     loopButton.setWantsKeyboardFocus(false);
@@ -176,6 +189,24 @@ void StepGrid::scrollPitchBy(int semitones)
     rebuildVisibleNotes();
 }
 
+void StepGrid::setDrawMode(bool shouldDraw)
+{
+    if (drawMode == shouldDraw)
+        return;
+    drawMode = shouldDraw;
+    drawButton.setToggleState(drawMode, juce::dontSendNotification);
+    setDescription(drawMode
+        ? "Step editor, draw mode. Drag to paint notes, right-drag to erase, B to go back to selecting."
+        : "Step editor. Drag to select, double-click a cell for a note, B for draw mode. "
+          "Drag the piano keys sideways to resize the lanes, up and down to scroll them.");
+    repaint(footerBounds().getSmallestIntegerContainer());
+}
+
+void StepGrid::toggleDrawMode()
+{
+    setDrawMode(!drawMode);
+}
+
 void StepGrid::setScaleHighlight(int selection)
 {
     if (scaleHighlight != selection)
@@ -243,8 +274,20 @@ void StepGrid::timerCallback()
         if (!isShortcutDown(juce::ModifierKeys::getCurrentModifiersRealtime())) finishSubdivision();
         return;
     }
-    scrollDraggedNotes();
-    moveDraggedNotesAt(dragPosition);
+    // A pointer held still past the edge of the grid sends no more drags, so
+    // the gesture is carried on from here: the view scrolls, and whatever is
+    // being dragged is re-read against the music that has come into view.
+    if (!dragTravelled || dragPosition.x < 0.0f)
+        return;
+    autoScrollDrag();
+    switch (gesture)
+    {
+        case Gesture::move:   moveDraggedNotesAt(dragPosition); break;
+        case Gesture::select: updateMarqueeSelection(); repaint(); break;
+        case Gesture::resize: resizeCurrentNoteTo(dragPosition, false); break;
+        case Gesture::draw:   apply(cellHit(dragPosition)); break;
+        default: break;
+    }
 }
 
 bool StepGrid::keyPressed(const juce::KeyPress& key)
@@ -311,6 +354,13 @@ bool StepGrid::keyPressed(const juce::KeyPress& key)
     {
         const auto direction = key.getKeyCode() == juce::KeyPress::upKey ? 1 : -1;
         return transposeSelection(direction * (key.getModifiers().isShiftDown() ? 12 : 1));
+    }
+    // Live's key for the same mode, so the hand that already knows one knows
+    // the other.
+    if (!command && key.getKeyCode() == 'B')
+    {
+        toggleDrawMode();
+        return true;
     }
     if (key.getKeyCode() == 'F')
         return fillSelectionToClipEnd();
@@ -505,6 +555,11 @@ void StepGrid::scrollBarMoved(juce::ScrollBar* bar, double start)
 void StepGrid::resized()
 {
     loopButton.setBounds(4, 2, static_cast<int>(labelWidth) - 8, static_cast<int>(headerHeight) - 4);
+    // In the footer beside the velocity readout: it is a mode the pointer is
+    // in, so it belongs where the editor's own state is reported rather than
+    // in the shell's toolbar above it.
+    drawButton.setBounds(6, getHeight() - static_cast<int>(footerHeight) + 3,
+                         56, static_cast<int>(footerHeight) - 6);
     syncHorizontalScroll();
     horizontalScroll.setBounds(static_cast<int>(labelWidth),
                                getHeight() - static_cast<int>(footerHeight + scrollHeight),

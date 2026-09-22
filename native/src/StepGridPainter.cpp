@@ -265,12 +265,17 @@ void StepGrid::paint(juce::Graphics& g)
         g.setFont(juce::FontOptions(11.5f).withStyle("Bold"));
         g.setColour(velocityAdjustActive ? juce::Colour(0xffe9a84a) : juce::Colour(0xffb8c4aa));
         g.drawText("VELOCITY  " + value, footer.reduced(9.0f, 2.0f), juce::Justification::centredRight);
-        if (velocity >= -1)
-        {
-            g.setFont(juce::FontOptions(10.5f));
-            g.setColour(juce::Colour(0xff78818a));
-            g.drawText("Hold V + Up/Down or wheel", footer.reduced(9.0f, 2.0f), juce::Justification::centredLeft);
-        }
+        // The draw toggle sits at the left of the footer, so the hint starts
+        // past it rather than underneath it.
+        const auto hint = footer.withTrimmedLeft(68.0f).reduced(9.0f, 2.0f);
+        g.setFont(juce::FontOptions(10.5f));
+        g.setColour(juce::Colour(0xff78818a));
+        if (drawMode)
+            g.drawText("Drag paints notes  -  B to select", hint, juce::Justification::centredLeft);
+        else if (velocity >= -1)
+            g.drawText("Hold V + Up/Down or wheel", hint, juce::Justification::centredLeft);
+        else
+            g.drawText("Drag to select  -  double-click a cell for a note", hint, juce::Justification::centredLeft);
     }
 }
 

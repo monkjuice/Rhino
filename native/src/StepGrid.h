@@ -21,6 +21,12 @@ public:
     void zoomIn();
     void zoomOut();
     void setScaleHighlight(int selection);
+    // Draw mode: the pointer becomes a pencil, so a press paints notes and a
+    // drag paints a run of them. With it off the pointer selects, which is
+    // what it does in the arrangement, and a note is put down by
+    // double-clicking a cell. B toggles it, as it does in Live.
+    void setDrawMode(bool shouldDraw);
+    bool isDrawMode() const { return drawMode; }
     void focusGained(juce::Component::FocusChangeType) override;
     void focusLost(juce::Component::FocusChangeType) override;
     void resized() override;
@@ -68,8 +74,19 @@ private:
     double visibleStepSpan() const;
     void syncHorizontalScroll();
     void zoomAt(double factor, float pointerX);
-    void scrollDraggedNotes();
+    // A drag that reaches the edge of the grid pulls the view after it, so a
+    // selection, a move or a stroke can run past what is on screen. Driven by
+    // the gesture timer rather than by pointer movement, because a pointer
+    // held still outside the panel sends no more drags.
+    void autoScrollDrag();
     void moveDraggedNotesAt(juce::Point<float>);
+    // Pointer position to musical position and back. The marquee keeps its
+    // anchor in these rather than in pixels: the view scrolls under a drag
+    // that reaches the edge, and a pixel anchor would slide with it.
+    double stepAtX(float x) const;
+    float xForStep(double step) const;
+    double pitchAtY(float y) const;
+    float yForPitch(double pitch) const;
     int cellHit(juce::Point<float>) const;
     int hit(juce::Point<float>) const;
     int resizeHit(juce::Point<float>) const;
@@ -108,7 +125,9 @@ private:
     juce::Result resizeCurrentNoteTo(int index);
     juce::Result resizeCurrentNoteTo(juce::Point<float>, bool freeLength);
     void updatePointer(juce::Point<float>, const juce::ModifierKeys&);
+    void beginMarquee(const juce::MouseEvent&);
     void updateMarqueeSelection();
+    void toggleDrawMode();
     juce::Result loopEditedClip();
     double loopStepAt(float x, bool free) const;
     double timelineTimeForLoopStep(double step) const;
@@ -137,6 +156,17 @@ private:
     std::vector<MovingNote> movingNotes;
     Gesture gesture = Gesture::none;
     bool adding = true, showingDrumLabels = false, noteMoved = false, manualPitchScroll = false, movingGroup = false, resizingFromLeft = false;
+    bool drawMode = false;
+    // A plain press inside a group of selected notes keeps the group, so the
+    // drag carries all of it. If the press turns out never to have been a
+    // drag, it was a click, and a click takes the one note under it - which is
+    // what every list in the OS does, and can only be decided on release.
+    bool collapseSelectionOnRelease = false;
+    juce::ValueTree clickedNoteState;
+    // Only a drag that has actually travelled may pull the view after it: a
+    // press a few pixels from the right edge is a click, not a request to
+    // scroll to the end of the clip.
+    bool dragTravelled = false;
     int lastHit = -1, clipboardBasePitch = 0;
     // How wide the copied region was, which is what a paste occupies and what
     // a duplicate steps forward by.
@@ -158,12 +188,18 @@ private:
     int scaleHighlight = 1;
     float verticalAutoScroll = 0.0f;
     juce::Point<float> dragPosition {-1.0f, -1.0f};
-    juce::Point<float> selectionAnchor {-1.0f, -1.0f};
+    // Where the marquee was started, in steps and in pitch rather than in
+    // pixels, so the box keeps covering the same music while a drag at the
+    // edge scrolls the view out from under it.
+    double selectionAnchorStep = 0.0, selectionAnchorPitch = 0.0;
     juce::Rectangle<float> selectionBox;
+    // What a marquee begun with Ctrl or Shift is adding to. A plain marquee
+    // starts from nothing, so this is empty.
+    std::vector<juce::ValueTree> selectionBase;
     float playhead = -1.0f;
     bool loopDragActive = false;
     double loopAnchorStep = 0.0, loopPreviewStartStep = 0.0, loopPreviewEndStep = 0.0;
-    juce::TextButton loopButton;
+    juce::TextButton loopButton, drawButton;
     juce::ScrollBar horizontalScroll {false};
     juce::VBlankAttachment vblank;
     static constexpr float labelWidth = 54.0f, headerHeight = 26.0f, scrollHeight = 14.0f, footerHeight = 24.0f;

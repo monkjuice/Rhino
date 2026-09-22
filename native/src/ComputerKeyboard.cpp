@@ -134,8 +134,8 @@ bool ComputerKeyboard::keyStateChanged(bool, juce::Component*)
     if (!enabled && sounding.empty())
         return false;
     refreshHeldNotes();
-    // Never claimed: a key state change is a notification, and other things -
-    // the region drag that watches for a held S, for one - are entitled to it.
+    // Never claimed: a key state change is a notification, and anything else
+    // watching for a held key is entitled to see it too.
     return false;
 }
 }

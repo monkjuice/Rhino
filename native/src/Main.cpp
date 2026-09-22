@@ -334,7 +334,7 @@ public:
         // which is what made every shortcut, Space and F9 included, do nothing
         // at all until something had been clicked.
         setWantsKeyboardFocus(true);
-        logStatus("PATTERN 1  /  4OSC     Draw notes, then press Play");
+        logStatus("PATTERN 1  /  4OSC     Double-click a cell for a note, or press B to draw, then press Play");
         infoView.setMultiLine(true, true);
         infoView.setReadOnly(true);
         infoView.setScrollbarsShown(false);
@@ -1088,7 +1088,11 @@ private:
                         "Space  Play/Pause\nCtrl+N  New project\nCtrl+O  Open project\nCtrl+S  Save project\nCtrl+Shift+S  Save as\n"
                         "Ctrl+Shift+E  Export WAV\nCtrl+Z  Undo\nCtrl+Y / Ctrl+Shift+Z  Redo\nCtrl+F  Search browser\nCtrl+A  Add a clip to the focused track\nDouble-click a lane  Add a clip there\n"
                         "F9  Record into the armed tracks / Click the dot on a track card to arm it\nM  Play MIDI from the typing keyboard: A-P are notes, Z/X octave, C/V velocity\nCtrl+T  Add a track of the kind last picked from the + menu\nF2  Rename the selected track or group\nCtrl+G  Group the selected tracks\nCtrl+Shift+G  Ungroup\n"
-                        "Drag an empty lane  Select a span of the timeline\nCtrl+X / Ctrl+C / Ctrl+V  Cut, copy and paste the selection\n"
+                        "Drag an empty lane or cell  Select what it sweeps\nClick  Select that one clip or note\n"
+                        "Ctrl+click  Add one or take it back out / Shift+click  Add one\n"
+                        "Double-click a cell  Add a note there\nB  Draw mode in the MIDI editor: drag paints notes\n"
+                        "Right-drag in the MIDI editor  Erase notes\n"
+                        "Ctrl+X / Ctrl+C / Ctrl+V  Cut, copy and paste the selection\n"
                         "Ctrl+D  Duplicate it directly after itself\nDelete  Empty the selection\n"
                         "?  Show/hide Info View\nF12  Full screen");
                 else if (result == 2)

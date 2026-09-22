@@ -122,6 +122,86 @@
                         "without moving it");
             }
 
+            // The pointer rule the note editor shares, in clips: a plain press
+            // takes what is under it and drops the rest, Ctrl gathers, and a
+            // press inside a group that never travels collapses onto the one
+            // clip it landed on.
+            {
+                require(session.importAudioAt(source.getFile(), 1, 6.0).wasOk(), "Can place a clip to gather with");
+                view.sync();
+                auto* second = clipAt(1, 6.0);
+                require(second != nullptr, "The gathering fixture is where it was asked for");
+                const auto secondID = second->itemID;
+                const juce::Point<float> firstPoint {view.xFor(4.45), clipRowY(1)};
+                const juce::Point<float> secondPoint {view.xFor(6.45), clipRowY(1)};
+                const auto ctrlLeft = juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier
+                                                       | juce::ModifierKeys::ctrlModifier);
+                const auto ctrlClick = [&view, &event, ctrlLeft](juce::Point<float> at)
+                {
+                    view.mouseDown(event(at, at, false, ctrlLeft));
+                    view.mouseUp(event(at, at, false, ctrlLeft));
+                };
+                drag(firstPoint, firstPoint);
+                require(view.selectedClips == std::vector<te::EditItemID>({fixtureID}),
+                        "A plain click selects the one clip under it");
+                ctrlClick(secondPoint);
+                require(view.selectedClips.size() == 2, "Ctrl-click adds a clip to the selection");
+                require(close(clipAt(1, 6.0)->getPosition().time.getStart().inSeconds(), 6.0),
+                        "Gathering with Ctrl carries nothing");
+                ctrlClick(secondPoint);
+                require(view.selectedClips.size() == 1, "Ctrl-click takes a clip back out of the selection");
+                ctrlClick(secondPoint);
+                require(view.selectedClips.size() == 2, "The group can be gathered again");
+                view.mouseDown(event(secondPoint, secondPoint, false));
+                require(view.selectedClips.size() == 2,
+                        "A press inside a group keeps it, so the drag can carry all of it");
+                view.mouseUp(event(secondPoint, secondPoint, false));
+                require(view.selectedClips == std::vector<te::EditItemID>({secondID}),
+                        "A press inside a group that never travelled collapses onto the clip it landed on");
+                require(close(clipAt(1, 6.0)->getPosition().time.getStart().inSeconds(), 6.0),
+                        "and moves nothing");
+                session.deleteClip(secondID);
+                view.sync();
+                view.setSelection({});
+                view.clearTimeSelection();
+            }
+
+            // A drag that reaches the right edge pulls the view after it, and
+            // goes on pulling while the pointer is held there - the pointer
+            // sends no more drags once it stops moving, so the frame clock is
+            // what carries the gesture.
+            {
+                // Narrow enough that there is song left to scroll into: the
+                // view is not allowed past the end of the arrangement.
+                view.viewStart = 0.0;
+                view.viewSpan = 4.0;
+                view.updateScroll();
+                view.resized();
+                const auto rightEdgeAtStart = view.viewStart + view.viewSpan;
+                const auto sweepY = view.lane(1).getBottom() - 8.0f;
+                const juce::Point<float> sweepFrom {view.xFor(1.0), sweepY};
+                const juce::Point<float> heldPastRight {static_cast<float>(view.getWidth()) + 30.0f, sweepY};
+                view.mouseDown(event(sweepFrom, sweepFrom, false));
+                view.mouseDrag(event(sweepFrom, heldPastRight, true));
+                require(close(view.viewStart, 0.0),
+                        "The pointer itself does not scroll: a drag that stops moving still has to travel");
+                view.autoScrollDrag();
+                const auto afterOneFrame = view.viewStart;
+                require(afterOneFrame > 0.0, "One frame of a drag held past the right edge scrolls the view");
+                for (int frame = 0; frame < 10; ++frame) view.autoScrollDrag();
+                require(view.viewStart > afterOneFrame,
+                        "and it keeps scrolling while the pointer is held there, with no further drags");
+                view.mouseUp(event(sweepFrom, heldPastRight, true));
+                require(view.timeSelection.end > rightEdgeAtStart,
+                        "so the selection reaches past what was on screen when the drag began");
+                view.viewStart = 0.0;
+                view.viewSpan = 24.0;
+                view.updateScroll();
+                view.resized();
+                view.setSelection({});
+                view.clearTimeSelection();
+            }
+
             // Copy takes what is inside the region; paste puts it at the
             // insert point and moves the region onto what it pasted.
             view.setTimeSelection(4.0, 5.0, 1, 1);

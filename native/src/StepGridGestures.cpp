@@ -5,6 +5,12 @@
 #include <limits>
 
 // Hit testing, pointer gestures, note drag/resize and the wheel.
+//
+// The pointer obeys the rule in SelectionInput.h, which is the arrangement's
+// rule as well: a press on a note takes that note and drops the rest, a press
+// on empty space sweeps out a marquee, Ctrl and Shift gather, and a note is
+// put down by double-clicking a cell. Painting a run of notes by dragging is
+// what draw mode is for, and the right button erases in either mode.
 
 namespace rhino
 {
@@ -40,6 +46,29 @@ float StepGrid::loopXForTimelineTime(double seconds) const
         return -1.0f;
     const auto step = (seconds - start) / duration * session.editorStepCount();
     return labelWidth + static_cast<float>(step - stepScroll) * cellWidth();
+}
+
+double StepGrid::stepAtX(float x) const
+{
+    return stepScroll + (x - labelWidth) / cellWidth();
+}
+
+float StepGrid::xForStep(double step) const
+{
+    return labelWidth + static_cast<float>(step - stepScroll) * cellWidth();
+}
+
+// Continuous pitch rather than a row index: whole numbers land on the line
+// between two lanes, so a lane for pitch p covers [p, p + 1). That is what
+// lets a marquee say which lanes it touches without rounding twice.
+double StepGrid::pitchAtY(float y) const
+{
+    return lowestVisiblePitch + visiblePitchRows() - (y - headerHeight) / rowHeight();
+}
+
+float StepGrid::yForPitch(double pitch) const
+{
+    return headerHeight + static_cast<float>(lowestVisiblePitch + visiblePitchRows() - pitch) * rowHeight();
 }
 
 bool StepGrid::isOverKeyboard(juce::Point<float> point) const
@@ -110,14 +139,18 @@ void StepGrid::updatePointer(juce::Point<float> position, const juce::ModifierKe
         return;
     }
     const auto note = hit(position);
-    if (isShortcutDown(modifiers) && note >= 0)
+    if (cellHit(position) < 0)
+        setMouseCursor(juce::MouseCursor::NormalCursor);
+    else if (drawMode)
+        setMouseCursor(juce::MouseCursor::CrosshairCursor);
+    else if (isMultiSelectModifier(modifiers) && note >= 0)
         setMouseCursor(juce::MouseCursor::NormalCursor);
     else if (!modifiers.isRightButtonDown() && resizeHit(position) >= 0)
         setMouseCursor(juce::MouseCursor::LeftRightResizeCursor);
-    else if (cellHit(position) >= 0)
-        setMouseCursor(juce::MouseCursor::CrosshairCursor);
+    else if (note >= 0)
+        setMouseCursor(juce::MouseCursor::DraggingHandCursor);
     else
-        setMouseCursor(juce::MouseCursor::NormalCursor);
+        setMouseCursor(juce::MouseCursor::CrosshairCursor);
 }
 
 void StepGrid::mouseMove(const juce::MouseEvent& event)
@@ -129,21 +162,9 @@ void StepGrid::mouseDown(const juce::MouseEvent& event)
 {
     finishSubdivision();
     finishVelocityAdjustment();
-    if (!event.mods.isRightButtonDown() && juce::KeyPress::isKeyCurrentlyDown('S')
-        && event.position.x >= labelWidth && event.position.y >= headerHeight)
-    {
-        grabKeyboardFocus();
-        gesture = Gesture::select;
-        selectionAnchor = event.position;
-        selectionBox = {};
-        selectedNotes.reset();
-        selectedNoteStates.clear();
-        // The drag is about to say what the region is, so whatever it was
-        // before goes now rather than flickering under the new box.
-        clearStepSelection();
-        repaint();
-        return;
-    }
+    collapseSelectionOnRelease = false;
+    clickedNoteState = {};
+    dragTravelled = false;
     if (!event.mods.isRightButtonDown() && isOverKeyboard(event.position))
     {
         grabKeyboardFocus();
@@ -183,7 +204,10 @@ void StepGrid::mouseDown(const juce::MouseEvent& event)
         loopPreviewStartStep = loopPreviewEndStep = loopAnchorStep;
         return;
     }
-    if (!event.mods.isRightButtonDown() && !isShortcutDown(event.mods))
+    // A resize handle is the one part of a note that is not the note: it is
+    // offered first, and only to the plain pointer. A pencil has no handles,
+    // and a gathering press is about the selection rather than the shape.
+    if (!drawMode && !event.mods.isRightButtonDown() && !isMultiSelectModifier(event.mods))
     {
         const auto resizeIndex = resizeHit(event.position);
         if (resizeIndex >= 0)
@@ -195,8 +219,10 @@ void StepGrid::mouseDown(const juce::MouseEvent& event)
             const auto bounds = boundsFor(note);
             resizingFromLeft = event.position.x < bounds.getCentreX();
             resizingStartStep = note.start;
+            dragPosition = event.position;
             noteMoved = false;
             session.beginNoteGesture("Resize note");
+            startTimerHz(60);
             return;
         }
     }
@@ -209,29 +235,75 @@ void StepGrid::mouseDown(const juce::MouseEvent& event)
     // which is where a paste goes when nothing is selected. Clicking a note
     // selects it, and the selection sets the region instead.
     if (noteIndex < 0)
-        setStepInsertPoint(std::floor(stepScroll + (event.position.x - labelWidth) / cellWidth()));
-    if (isShortcutDown(event.mods) && noteIndex >= 0)
+        setStepInsertPoint(std::floor(stepAtX(event.position.x)));
+
+    // The right button erases in either mode, which is the one gesture that
+    // never had to be learned twice.
+    if (event.mods.isRightButtonDown())
     {
-        toggleSelection(noteIndex);
+        gesture = Gesture::draw;
+        adding = false;
+        visited.reset();
+        dragPosition = event.position;
+        session.beginNoteGesture("Erase notes");
+        if (noteIndex >= 0)
+            session.removeNotes({visibleNotes[static_cast<size_t>(noteIndex)].state});
+        startTimerHz(60);
         return;
     }
-    if (!event.mods.isRightButtonDown() && noteIndex >= 0)
+
+    // Draw mode is a pencil: empty space takes a note, a note under the point
+    // goes away, and dragging carries on doing whichever of those the press
+    // started. Nothing here selects, because a pencil does not select.
+    if (drawMode)
+    {
+        gesture = Gesture::draw;
+        adding = noteIndex < 0;
+        visited.reset();
+        dragPosition = event.position;
+        session.beginNoteGesture(adding ? "Draw notes" : "Erase notes");
+        if (adding) apply(cellIndex);
+        else session.removeNotes({visibleNotes[static_cast<size_t>(noteIndex)].state});
+        startTimerHz(60);
+        return;
+    }
+
+    if (noteIndex >= 0)
     {
         const auto& clicked = visibleNotes[static_cast<size_t>(noteIndex)];
+        // Ctrl or Shift gathers: the note joins the selection or leaves it,
+        // the rest is untouched, and the press is over. It must not also start
+        // carrying the selection, or every attempt to add one note to a group
+        // would nudge the whole group.
+        if (isMultiSelectModifier(event.mods))
+        {
+            if (isExtendSelectionModifier(event.mods) && isSelected(clicked.state))
+                return;
+            toggleSelection(noteIndex);
+            return;
+        }
+        // A plain press takes the note and drops everything else - unless the
+        // note is already part of a group, in which case the group is kept so
+        // the drag can carry all of it. A press on a group that never travels
+        // was a click after all, and collapses onto this note on release.
+        clickedNoteState = clicked.state;
+        if (!isSelected(clicked.state))
+            setSelectedStates({clicked.state});
+        else if (selectedNoteStates.size() > 1)
+            collapseSelectionOnRelease = true;
         gesture = Gesture::move;
         movingNoteState = clicked.state;
         movingNotes.clear();
-        movingGroup = isSelected(clicked.state);
-        if (movingGroup)
-            for (const auto& state : selectedStates())
-                if (const auto* note = noteForState(state))
-                    movingNotes.push_back({state, note->start, note->pitch});
+        movingGroup = true;
+        for (const auto& state : selectedStates())
+            if (const auto* note = noteForState(state))
+                movingNotes.push_back({state, note->start, note->pitch});
         if (movingNotes.empty())
             movingNotes.push_back({clicked.state, clicked.start, clicked.pitch});
         // Where the group began, and where the pointer grabbed it. Every drag
         // position is measured against these, never against the previous one.
         moveGrabPitch = pitchForIndex(cellHit(event.position));
-        dragStartStep = stepScroll + (event.position.x - labelWidth) / cellWidth();
+        dragStartStep = stepAtX(event.position.x);
         dragPosition = event.position;
         verticalAutoScroll = 0.0f;
         noteMoved = false;
@@ -240,14 +312,49 @@ void StepGrid::mouseDown(const juce::MouseEvent& event)
         return;
     }
 
-    gesture = Gesture::draw;
-    adding = !event.mods.isRightButtonDown() && noteIndex < 0;
-    visited.reset();
-    session.beginNoteGesture(adding ? "Draw notes" : "Erase notes");
-    if (!adding && noteIndex >= 0)
-        session.removeNotes({visibleNotes[static_cast<size_t>(noteIndex)].state});
-    else
+    // Empty space. Double-clicking it puts a note there - the deliberate way
+    // to add one, matching the arrangement, where double-clicking a lane adds
+    // a clip. Anything else sweeps out a marquee.
+    if (event.getNumberOfClicks() >= 2)
+    {
+        clearSelection();
+        adding = true;
+        visited.reset();
+        session.beginNoteGesture("Draw note");
         apply(cellIndex);
+        session.endNoteGesture();
+        gesture = Gesture::none;
+        return;
+    }
+    beginMarquee(event);
+}
+
+// The marquee. Its anchor is kept in steps and pitch rather than in pixels,
+// because a drag that reaches the edge scrolls the view and a pixel anchor
+// would travel with it.
+void StepGrid::beginMarquee(const juce::MouseEvent& event)
+{
+    gesture = Gesture::select;
+    selectionAnchorStep = stepAtX(event.position.x);
+    selectionAnchorPitch = pitchAtY(event.position.y);
+    dragPosition = event.position;
+    selectionBox = {};
+    verticalAutoScroll = 0.0f;
+    // Ctrl or Shift adds to what was already there, exactly as it does on one
+    // note. A plain drag starts from nothing, and says so now rather than
+    // leaving the old selection flickering under the new box.
+    selectionBase = isMultiSelectModifier(event.mods) ? selectedStates() : std::vector<juce::ValueTree>{};
+    if (selectionBase.empty())
+    {
+        selectedNotes.reset();
+        selectedNoteStates.clear();
+        // A press that never travels is a click, and a click leaves the insert
+        // point where it landed - so the region collapses onto this step
+        // rather than disappearing. The drag replaces it the moment it moves.
+        setStepInsertPoint(std::floor(selectionAnchorStep));
+    }
+    startTimerHz(60);
+    repaint();
 }
 
 void StepGrid::apply(int index)
@@ -310,23 +417,24 @@ void StepGrid::moveDraggedNotesAt(juce::Point<float> position)
                        anchor.pitch + pitchForIndex(index) - moveGrabPitch - placed->pitch);
 }
 
-void StepGrid::scrollDraggedNotes()
+// Every drag scrolls, not only a note being carried: a marquee that reaches
+// the right edge has to be able to sweep the rest of a clip that is wider than
+// the panel, which is the whole point of dragging past the edge.
+void StepGrid::autoScrollDrag()
 {
-    if (gesture != Gesture::move || dragPosition.x < 0.0f)
+    if (gesture == Gesture::none || gesture == Gesture::keyboard || dragPosition.x < 0.0f)
         return;
 
-    constexpr auto edge = 28.0f;
     const auto maximumStart = std::max(0.0, static_cast<double>(session.editorStepCount()) - visibleStepSpan());
-    const auto horizontalDirection = dragPosition.x < labelWidth + edge ? -1.0
-        : dragPosition.x > gridRight() - edge ? 1.0 : 0.0;
-    const auto nextStepScroll = std::clamp(stepScroll + horizontalDirection * 0.28, 0.0, maximumStart);
+    const auto horizontal = autoScrollPush(dragPosition.x, labelWidth, gridRight());
+    const auto nextStepScroll = std::clamp(stepScroll + horizontal * 0.3, 0.0, maximumStart);
     auto changed = nextStepScroll != stepScroll;
     stepScroll = nextStepScroll;
     if (!session.isPatternDrums())
     {
-        const auto verticalDirection = dragPosition.y < headerHeight + edge ? 1.0f
-            : dragPosition.y > headerHeight + rowAreaHeight() - edge ? -1.0f : 0.0f;
-        verticalAutoScroll += verticalDirection * 0.18f;
+        // Upwards on screen is a higher pitch, so the sign flips here: the
+        // lanes move the opposite way to the view along the timeline.
+        verticalAutoScroll -= autoScrollPush(dragPosition.y, headerHeight, headerHeight + rowAreaHeight()) * 0.2f;
         const auto pitchSteps = static_cast<int>(verticalAutoScroll);
         if (pitchSteps != 0)
         {
@@ -404,6 +512,7 @@ void StepGrid::mouseDrag(const juce::MouseEvent& event)
     }
     if (gesture == Gesture::none) return;
     dragPosition = event.position;
+    dragTravelled = dragTravelled || event.getDistanceFromDragStart() >= 3;
     if (gesture == Gesture::keyboard)
     {
         // Ableton's piano strip: sideways resizes the lanes, up and down drags
@@ -418,21 +527,27 @@ void StepGrid::mouseDrag(const juce::MouseEvent& event)
         scrollPitchBy(semitones);
         return;
     }
+    // Scrolling is the gesture clock's business, not the pointer's: it has to
+    // go on happening while the pointer is held still past the edge, so it
+    // happens in one place rather than in two that would race.
     if (gesture == Gesture::select)
     {
-        selectionBox = juce::Rectangle<float>(selectionAnchor, event.position).getIntersection(
-            {labelWidth, headerHeight, gridWidth(), rowAreaHeight()});
-        updateMarqueeSelection();
-        repaint();
+        // Until the pointer has actually travelled the gesture is still the
+        // click that started it, and a click leaves an insert point rather
+        // than a one-cell span - the rule the arrangement's region follows.
+        if (dragTravelled)
+        {
+            updateMarqueeSelection();
+            repaint();
+        }
         return;
     }
     const auto index = cellHit(event.position);
     if (gesture == Gesture::move)
     {
-        scrollDraggedNotes();
-        // Notes now travel in fractions of a step, so a click that shakes by a
-        // pixel must not count as a move and cost the click its erase.
-        if (noteMoved || event.getDistanceFromDragStart() >= 3)
+        // Notes travel in fractions of a step, so a press that shakes by a
+        // pixel must not count as a move and undo a click's selection.
+        if (noteMoved || dragTravelled)
             moveDraggedNotesAt(event.position);
         return;
     }
@@ -468,12 +583,18 @@ void StepGrid::mouseUp(const juce::MouseEvent& event)
         repaint();
         return;
     }
-    if (gesture == Gesture::move && !movingGroup && !noteMoved && movingNoteState.isValid())
-        session.removeNotes({movingNoteState});
+    // A press inside a group that never travelled was a click, and a click
+    // takes the one thing under it. Deciding it here rather than on the press
+    // is what lets the same press also carry the whole group.
+    if (gesture == Gesture::move && collapseSelectionOnRelease && !noteMoved && clickedNoteState.isValid())
+        setSelectedStates({clickedNoteState});
     if (gesture != Gesture::none && gesture != Gesture::keyboard) session.endNoteGesture();
     gesture = Gesture::none;
-    selectionAnchor = {-1.0f, -1.0f};
+    collapseSelectionOnRelease = false;
+    clickedNoteState = {};
+    dragTravelled = false;
     selectionBox = {};
+    selectionBase.clear();
     lastHit = -1;
     movingNoteState = {};
     movingNotes.clear();
@@ -491,16 +612,32 @@ void StepGrid::mouseUp(const juce::MouseEvent& event)
 
 void StepGrid::updateMarqueeSelection()
 {
-    selectedNotes.reset();
-    selectedNoteStates.clear();
-    if (selectionBox.isEmpty()) return;
-    for (const auto& note : visibleNotes)
-        if (boundsFor(note).intersects(selectionBox)) selectedNoteStates.push_back(note.state);
-    setSelectedStates(selectedNoteStates);
-    // The box says what the region is, not the notes it happened to catch: a
+    const auto pointerStep = stepAtX(dragPosition.x);
+    const auto pointerPitch = pitchAtY(dragPosition.y);
+    const auto firstStep = std::min(selectionAnchorStep, pointerStep);
+    const auto lastStep = std::max(selectionAnchorStep, pointerStep);
+    const auto lowPitch = std::min(selectionAnchorPitch, pointerPitch);
+    const auto highPitch = std::max(selectionAnchorPitch, pointerPitch);
+    // The box is only what is drawn; what it catches is decided in steps and
+    // pitches. A drag at the edge scrolls the grid, so measuring against
+    // pixels would quietly drop every note that had left the panel - which is
+    // exactly the material a drag past the edge is reaching for.
+    selectionBox = juce::Rectangle<float>({xForStep(selectionAnchorStep), yForPitch(selectionAnchorPitch)},
+                                          dragPosition)
+                       .getIntersection({labelWidth, headerHeight, gridWidth(), rowAreaHeight()});
+    // Asked of the clip rather than of the rows on screen, for the same
+    // reason: a note the pitch window has scrolled past is still inside the
+    // span the pointer has swept.
+    auto caught = selectionBase;
+    for (const auto& note : session.editorNotes())
+        if (note.startSteps < lastStep && note.startSteps + note.lengthSteps > firstStep
+            && note.pitch < highPitch && note.pitch + 1.0 > lowPitch
+            && std::find(caught.begin(), caught.end(), note.state) == caught.end())
+            caught.push_back(note.state);
+    setSelectedStates(std::move(caught));
+    // The span says what the region is, not the notes it happened to catch: a
     // span dragged around two notes with a rest between them keeps the rest.
-    const auto stepAt = [this](float x) { return stepScroll + (x - labelWidth) / cellWidth(); };
-    setStepSelection(std::floor(stepAt(selectionBox.getX())), std::ceil(stepAt(selectionBox.getRight())));
+    setStepSelection(std::floor(firstStep), std::ceil(lastStep));
 }
 
 void StepGrid::mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel)

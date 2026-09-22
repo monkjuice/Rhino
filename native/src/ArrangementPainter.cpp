@@ -402,16 +402,9 @@ void Arrangement::paint(juce::Graphics& g)
             }
         }
     }
-    // Over the clips and under the marquee: the region is the thing the
-    // commands act on, so it has to read as covering what it contains.
+    // Over the clips: the region is the thing the commands act on, so it has
+    // to read as covering what it contains.
     paintTimeSelection(g);
-    if (marqueeSelecting)
-    {
-        g.setColour(juce::Colour(0x285ab9d6));
-        g.fillRect(marqueeBounds);
-        g.setColour(juce::Colour(0xff5ab9d6));
-        g.drawRect(marqueeBounds, 1.0f);
-    }
     if (playhead >= headerWidth)
     {
         g.setColour(playheadColour);

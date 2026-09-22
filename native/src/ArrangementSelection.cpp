@@ -148,8 +148,10 @@ bool Arrangement::beginRegionGesture(const juce::MouseEvent& event)
     const auto time = std::max(0.0, timeAt(event.position.x));
     const auto bypass = event.mods.isAltDown();
     // Shift drags the existing region's far edge rather than starting a new
-    // one, which is how a selection is widened without redoing it.
-    const auto extending = event.mods.isShiftDown() && timeSelection.active;
+    // one, which is how a selection is widened without redoing it. A region is
+    // one rectangle, so there is nothing for Ctrl to add a second of: it
+    // starts a new region like a plain drag.
+    const auto extending = isExtendSelectionModifier(event.mods) && timeSelection.active;
     if (!extending)
     {
         regionAnchorTime = time;

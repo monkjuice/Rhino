@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../core/ForgeWarp.h"
+#include "../core/ForgeFilter.h"
 
 #include <juce_core/juce_core.h>
 #include <map>
@@ -139,6 +140,151 @@ inline juce::String warpTooltipFor(int mode)
     return "No warp. Click to choose one; the arrows step through the list without opening it";
 }
 
+// What one filter type does, keyed by the type rather than by the parameter for
+// the same reason the warp's is: the field it is shown on is thirty-four things
+// depending on where it is set, so the explanation follows the setting.
+inline juce::String filterTooltipFor(int type)
+{
+    switch (filterTypeOf(static_cast<float>(type)))
+    {
+        case FilterType::highPass:
+            return "Take the bottom off: everything under the cutoff goes";
+        case FilterType::bandPass:
+            return "Keep a band around the cutoff and drop what is either side of it";
+        case FilterType::notch:
+            return "Take out a narrow band at the cutoff and leave the rest. RES is how narrow";
+        case FilterType::peak:
+            return "Lift a band at the cutoff without taking anything out either side of it, "
+                   "which is a bell rather than a filter. RES is how much lift";
+
+        case FilterType::lowHigh:
+            return "A low pass at the cutoff and a high pass at FREQ, so the band that gets "
+                   "through has an edge you can place at each end";
+        case FilterType::lowBand:
+            return "A low pass at the cutoff, then a band pass at FREQ inside what it left";
+        case FilterType::lowPeak:
+            return "A low pass at the cutoff with a bell lifted at FREQ under it";
+        case FilterType::lowNotch:
+            return "A low pass at the cutoff with a notch cut out of it at FREQ";
+        case FilterType::highBand:
+            return "A high pass at the cutoff, then a band pass at FREQ inside what it left";
+        case FilterType::highPeak:
+            return "A high pass at the cutoff with a bell lifted at FREQ above it";
+        case FilterType::highNotch:
+            return "A high pass at the cutoff with a notch cut out of it at FREQ";
+        case FilterType::bandPeak:
+            return "A band pass at the cutoff with a bell lifted at FREQ inside it";
+        case FilterType::bandNotch:
+            return "A band pass at the cutoff with a notch taken out of it at FREQ";
+        case FilterType::peakPeak:
+            return "Two bells, one at the cutoff and one at FREQ, sharing the RES knob";
+        case FilterType::peakNotch:
+            return "A bell at the cutoff and a notch at FREQ: lift one band and lose another, "
+                   "which is a lot of a vocal sound in two controls";
+        case FilterType::notchNotch:
+            return "Two notches, one at the cutoff and one at FREQ";
+
+        case FilterType::morphLowBandHigh:
+            return "One filter swept from low pass through band pass to high pass by MORPH. "
+                   "Point an LFO at MORPH and the whole response moves rather than the corner";
+        case FilterType::morphLowPeakHigh:
+            return "Low pass to a bell to high pass, swept by MORPH";
+        case FilterType::morphLowNotchHigh:
+            return "Low pass to a notch to high pass, swept by MORPH";
+        case FilterType::morphBandPeakNotch:
+            return "Band pass to a bell to a notch, swept by MORPH: from one band only to "
+                   "everything but that band";
+
+        case FilterType::ladder:
+            return "A four-pole transistor ladder: the poles in a chain and the last one fed "
+                   "back round them through a saturator. Warm, and its resonance limits itself";
+        case FilterType::acid:
+            return "A three-pole diode ladder, leaned one way the way a diode conducts. "
+                   "Squelchy, and the sound a 303 makes";
+        case FilterType::dirtyLadder:
+            return "The transistor ladder driven hard inside its own loop. PAIN is how much "
+                   "more; DRIVE in front of it is what feeds the whole thing";
+        case FilterType::ems:
+            return "A three-pole ladder that keeps a little of the signal past the poles, so "
+                   "the body is still there with the resonance up rather than swallowed by it";
+
+        case FilterType::comb:
+            return "A delay tuned to the cutoff and fed back, which is a row of peaks on its "
+                   "harmonics rather than a corner. RES is how sharp; DAMP darkens the ring";
+        case FilterType::flanger:
+            return "The same delay against the dry signal, so its teeth are nulls instead of "
+                   "peaks. Sweep the cutoff for the classic sound";
+        case FilterType::phaser:
+            return "All-pass stages against the dry signal: nulls that move with the cutoff "
+                   "and none of a comb's fixed spacing. STAGES is how many, so how deep";
+
+        case FilterType::formant:
+            return "Three resonators on a vowel's own formants. The cutoff moves the mouth "
+                   "from A to U and SHIFT moves the whole voice in pitch";
+        case FilterType::ringMod:
+            return "Multiply the signal by a sine at the cutoff, which replaces its harmonics "
+                   "with sums and differences. SPREAD opens a second modulator above the first";
+        case FilterType::sampleHold:
+            return "Freeze the signal at the cutoff rate, which is aliasing used on purpose. "
+                   "DIFF crosses to the difference between what is held and what came in";
+        case FilterType::diffusor:
+            return "All-pass stages in series: the magnitude is untouched and the phase is "
+                   "smeared, so a transient spreads out. STAGES is how far";
+        case FilterType::scream:
+            return "A low pass with the damping taken out from under it until it oscillates, "
+                   "held only by the saturation on its own resonant path. FEED is how far";
+        case FilterType::reverb:
+            return "The delay loop with all-pass stages inside it, so each pass scatters "
+                   "instead of repeating. Resonant rather than roomy; DAMP darkens the tail";
+
+        case FilterType::lowPass:
+            break;
+    }
+    return "Take the top off: everything above the cutoff goes";
+}
+
+// What the one field beside TYPE does, which is a different question for every
+// family. Read off the same table the label is, so the two cannot disagree.
+inline juce::String filterSecondTooltipFor(int type)
+{
+    const auto chosen = filterTypeOf(static_cast<float>(type));
+    switch (chosen)
+    {
+        case FilterType::dirtyLadder:
+            return "How hard the ladder's own loop is driven, on top of the saturation it "
+                   "always has";
+        case FilterType::formant:
+            return "Move the whole formant set in pitch, an octave either way: the same vowel "
+                   "in a bigger or a smaller mouth";
+        case FilterType::ringMod:
+            return "Open a second modulator above the first, up to an octave apart. At nothing "
+                   "there is one";
+        case FilterType::sampleHold:
+            return "Cross from the held steps to the difference between them and the signal";
+        case FilterType::phaser:
+        case FilterType::diffusor:
+            return "How many all-pass stages are in the chain, which is how deep it goes";
+        case FilterType::scream:
+            return "How much damping is taken out from under the filter, and so how readily "
+                   "it screams";
+        case FilterType::comb:
+        case FilterType::flanger:
+        case FilterType::reverb:
+            return "Where the one-pole in the feedback path sits: low is a thud, high is a "
+                   "bright ring";
+        default:
+            break;
+    }
+    if (filterCategoryOf(chosen) == FilterCategory::dual)
+        return "Where the second filter sits, as an offset from the cutoff in octaves — so "
+               "sweeping the cutoff moves the pair together";
+    if (filterCategoryOf(chosen) == FilterCategory::morph)
+        return "Sweep the response through the three the type names. The middle of the knob "
+               "is the middle one on its own";
+    return "Saturate the path the resonance comes back through, which rounds a sharp peak off "
+           "and puts harmonics where it was";
+}
+
 inline juce::String tooltipFor(const juce::String& id)
 {
     // Both oscillators expose the same controls, so their tooltips are keyed by
@@ -179,10 +325,14 @@ inline juce::String tooltipFor(const juce::String& id)
         {"noiseEnable", "Switch the noise source on or off"},
         {"noiseLevel", "Blend in broadband noise"},
         {"filterEnable", "Switch the filter out of the voice, drive and all"},
-        {"cutoff", "Open or close the filter"},
+        {"cutoff", "Open or close the filter. On a comb or a ring modulator this sets the "
+                   "frequency they are tuned to, and on a formant filter it moves the vowel"},
         {"resonance", "Emphasise the filter edge"},
         {"drive", "Saturate what is routed into the filter"},
-        {"filterType", "Low pass, high pass or band pass"},
+        {"filterType", "Which filter this is. Click for the list, grouped by family, or step "
+                       "through it with the arrows"},
+        {"filterFreq", "The one control the filter type decides the meaning of: a second corner, "
+                       "a morph position, a damping. Its label says which"},
         // One switch with two drawings: a lettered chip on the FILTER module,
         // and the TO field at the top of the channel's mixer strip.
         {"routeA", "Send oscillator A through the filter, or straight to the main output"},

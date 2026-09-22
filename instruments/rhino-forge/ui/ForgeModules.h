@@ -173,14 +173,43 @@ inline const std::vector<Module>& modules()
         // in its own height.
         //
         // The routing chips name their source the way Serum's do: A, B, S, N.
-        // TYPE is given twice a chip's width, because it is the one field here
-        // that spells a word out.
+        //
+        // TYPE takes a line to itself and wears the field the warp modes wear:
+        // thirty-four types will not fit in a stepper that is dragged through
+        // them, and dragging is the wrong gesture for a list whose neighbours
+        // are unrelated. The arrows step and the name opens the menu.
+        //
+        // Two knobs a line rather than three, which is what Serum does with
+        // the same set and what lets a fourth control in without every knob
+        // getting smaller: CUTOFF and RES are the pair a hand moves together,
+        // and DRIVE sits with FREQ because FREQ is the one field whose meaning
+        // the type decides — see filterSecondLabel in ForgeFilter.h.
+        //
+        // Four rows and a smaller share for the display, which is what pays
+        // for them. Two things decide the weights and neither is taste. Every
+        // knob on the panel is drawn at one diameter, taken from whichever cell
+        // is tightest, so a knob row here that crowded itself would shrink the
+        // oscillators' knobs as well — these cells stay roomier than the
+        // oscillators' 74x68, which is what keeps the oscillators the module
+        // that sets that diameter. And a selector has to be tall enough to
+        // stack three choices even where it never will, because that is the
+        // standard every mode field on the panel is held to — which is held at
+        // the *smallest* window rather than at the default, and so is the
+        // tighter of the two.
+        //
+        // Both of those are satisfied by the display giving up height, and it
+        // gives up a lot: the curve is a wide strip here rather than the tall
+        // well it was when the module held one knob row and three types. That
+        // is the price of the fourth row, and the row is worth it — a filter
+        // whose FREQ knob had nowhere to go would be thirty-four types with
+        // eleven of the families unreachable.
         {"filter", "FILTER", "", "filterEnable", false, Display::filter, 0, 20, 4, false,
-         {{26, {{"filterType", "TYPE", Style::stepper, nullptr, 2}, {"routeA", "A", Style::chip},
-                {"routeB", "B", Style::chip}, {"routeSub", "S", Style::chip},
-                {"routeNoise", "N", Style::chip}}},
-          {74, {{"cutoff", "CUTOFF"}, {"resonance", "RES"}, {"drive", "DRIVE"}}}},
-         0, everyPageBut(Page::mix, Page::fx)},
+         {{28, {{"filterType", "TYPE", Style::selector}}},
+          {10, {{"routeA", "A", Style::chip}, {"routeB", "B", Style::chip},
+                {"routeSub", "S", Style::chip}, {"routeNoise", "N", Style::chip}}},
+          {31, {{"cutoff", "CUTOFF"}, {"resonance", "RES"}}},
+          {31, {{"drive", "DRIVE"}, {"filterFreq", "FREQ"}}}},
+         0, everyPageBut(Page::mix, Page::fx), 1, 0, 0, 24},
         // GLOBAL is a narrow column rather than a wide box, and it opens the
         // lower row: what the voice is, before anything that shapes it. Five
         // controls in a row want more width than this panel has to give beside

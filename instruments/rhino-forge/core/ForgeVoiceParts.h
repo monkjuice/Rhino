@@ -3,6 +3,7 @@
 #include "ForgeWavetable.h"
 #include "ForgeWarp.h"
 #include "ForgeLfoTable.h"
+#include "ForgeFilter.h"
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <array>
 #include <cmath>
@@ -99,9 +100,8 @@ struct Oscillator
     const Wavetable* table = nullptr;
 };
 
-// Which of the filter's three taps reaches the output.
-enum class FilterType { lowPass, highPass, bandPass };
-
+// How many LFOs a voice has. Six, as Serum has eight: enough that a patch
+// never has to choose between movement in one place and movement in
 // another, and the panel shows one at a time rather than six at once.
 inline constexpr int lfoCount = 6;
 

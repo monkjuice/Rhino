@@ -159,7 +159,16 @@ inline constexpr int extendedFxSlotCount = fxSlotCount - legacyFxSlotCount;
 inline constexpr int extendedFxDestinationCount =
     rackCount * extendedFxSlotCount * fxDestinationsPerSlot;
 inline constexpr int fxDestinationCount = legacyFxDestinationCount + extendedFxDestinationCount;
-inline constexpr int destinationCount = extendedFxDestinationBase + extendedFxDestinationCount;
+
+// The filter's second field, which arrived with the thirty-four filter types
+// and had to land at the end of the list for the same reason the extra rack
+// slots did: a slot stores its destination as an index, and everything past an
+// insertion would mean something else inside every preset already saved. It is
+// worth a destination because MORPH is the one filter control a patch most
+// wants an LFO on — a filter sweeping LP to BP to HP is not a thing any of the
+// other twenty destinations can ask for.
+inline constexpr int filterDestination = extendedFxDestinationBase + extendedFxDestinationCount;
+inline constexpr int destinationCount = filterDestination + 1;
 inline constexpr int modSlotCount = 8;
 
 // A parameter id belonging to one rack slot: fxParameterId(0, 1, "Mix") is
@@ -230,6 +239,8 @@ inline const std::vector<DestinationInfo>& destinations()
         for (int rack = 0; rack < rackCount; ++rack)
             for (int slot = legacyFxSlotCount; slot < fxSlotCount; ++slot)
                 appendSlot(rack, slot);
+
+        built.push_back({"filterFreq", "FLT FREQ"});
         return built;
     }();
     return table;

@@ -149,14 +149,20 @@ void resizeSharpnessSuite()
 // ---------------------------------------------------------- filter display ---
 
 // The filter display claims to say which frequencies are being taken out, so
-// what it draws has to be the response Core actually has rather than a picture
-// of a filter in general. These check the curve through the geometry it is
-// drawn from: gain read back at a frequency, and frequency read back off the
+// what it draws has to be the response the engine actually has rather than a
+// picture of a filter in general. These check the curve through the geometry it
+// is drawn from: gain read back at a frequency, and frequency read back off the
 // axis it is plotted against.
+//
+// The arithmetic is shared with the engine rather than copied, so what is being
+// held here is the claim that the shared function says the right things. What
+// binds it to the audio is ForgeTestsFilter.cpp, which measures the render
+// against this very curve.
 void filterDisplaySuite()
 {
     namespace ui = rhino::forge::ui;
     using rhino::forge::FilterType;
+    using rhino::forge::FilterShape;
     const auto box = juce::Rectangle<float>(0.0f, 0.0f, 300.0f, 120.0f);
 
     // The axis is logarithmic, so a frequency put on it and read back off it
@@ -171,54 +177,216 @@ void filterDisplaySuite()
     requireClose(octaveLow, octaveHigh, 0.01f, "every octave is the same width on the axis");
 
     // The panel and the engine have to agree about what the resonance knob
-    // does, or the curve is of some other filter.
-    requireClose(ui::filterDamping(0.0f), 1.0f, 0.0001f, "no resonance is full damping");
-    requireClose(ui::filterDamping(1.0f), 1.0f / 16.0f, 0.0001f, "full resonance is Core's least damping");
+    // does, or the curve is of some other filter. One function now, so this is
+    // holding the value rather than the agreement.
+    requireClose(rhino::forge::filterDamping(0.0f), 1.0f, 0.0001f, "no resonance is full damping");
+    requireClose(rhino::forge::filterDamping(1.0f), 1.0f / 16.0f, 0.0001f,
+                 "full resonance is the engine's least damping");
 
     const auto cutoff = 1000.0f;
     const auto quiet = 0.0f;
+    const auto shapeAt = [] (FilterType type, float corner, float resonance)
+    {
+        return FilterShape {type, corner, resonance, 0.0f, 48000.0};
+    };
+    const auto shape = [cutoff] (FilterType type, float resonance, float second)
+    {
+        return FilterShape {type, cutoff, resonance, second, 48000.0};
+    };
+    const auto db = [&shape] (FilterType type, float resonance, float second, float hz)
+    {
+        return ui::filterMagnitudeDb(shape(type, resonance, second), hz);
+    };
 
     // Each tap passes its own end of the band and stops the other. Two decades
     // either side of the corner, which is well clear of the knee.
-    require(ui::filterMagnitudeDb(FilterType::lowPass, cutoff, quiet, 10.0f) > -3.0f,
+    require(db(FilterType::lowPass, quiet, 0.0f, 10.0f) > -3.0f,
             "a low pass leaves the bottom of the band alone");
-    require(ui::filterMagnitudeDb(FilterType::lowPass, cutoff, quiet, 100000.0f) < -40.0f,
+    require(db(FilterType::lowPass, quiet, 0.0f, 100000.0f) < -40.0f,
             "a low pass takes the top of the band out");
-    require(ui::filterMagnitudeDb(FilterType::highPass, cutoff, quiet, 100000.0f) > -3.0f,
+    require(db(FilterType::highPass, quiet, 0.0f, 100000.0f) > -3.0f,
             "a high pass leaves the top of the band alone");
-    require(ui::filterMagnitudeDb(FilterType::highPass, cutoff, quiet, 10.0f) < -40.0f,
+    require(db(FilterType::highPass, quiet, 0.0f, 10.0f) < -40.0f,
             "a high pass takes the bottom of the band out");
-    require(ui::filterMagnitudeDb(FilterType::bandPass, cutoff, quiet, 10.0f) < -20.0f
-                && ui::filterMagnitudeDb(FilterType::bandPass, cutoff, quiet, 100000.0f) < -20.0f,
+    require(db(FilterType::bandPass, quiet, 0.0f, 10.0f) < -20.0f
+                && db(FilterType::bandPass, quiet, 0.0f, 100000.0f) < -20.0f,
             "a band pass takes both ends out");
 
     // A second-order response, so it falls twelve decibels an octave away from
     // the corner. Measured two octaves out, where the knee is long behind it.
-    const auto atFour = ui::filterMagnitudeDb(FilterType::lowPass, cutoff, quiet, cutoff * 4.0f);
-    const auto atEight = ui::filterMagnitudeDb(FilterType::lowPass, cutoff, quiet, cutoff * 8.0f);
+    const auto atFour = db(FilterType::lowPass, quiet, 0.0f, cutoff * 4.0f);
+    const auto atEight = db(FilterType::lowPass, quiet, 0.0f, cutoff * 8.0f);
     requireClose(atFour - atEight, 12.0f, 0.6f, "the skirt falls twelve decibels an octave");
 
     // Resonance is a peak at the corner, and it only ever adds.
     for (const auto type : {FilterType::lowPass, FilterType::highPass, FilterType::bandPass})
     {
-        const auto flat = ui::filterMagnitudeDb(type, cutoff, 0.0f, cutoff);
-        const auto peaked = ui::filterMagnitudeDb(type, cutoff, 0.9f, cutoff);
+        const auto flat = db(type, 0.0f, 0.0f, cutoff);
+        const auto peaked = db(type, 0.9f, 0.0f, cutoff);
         require(peaked > flat + 6.0f, "resonance lifts the corner");
         require(peaked <= ui::filterTopDb, "a resonant peak stays inside the window it is drawn in");
     }
     // And the peak of a band pass is the corner itself, not somewhere else.
-    const auto atCorner = ui::filterMagnitudeDb(FilterType::bandPass, cutoff, 0.5f, cutoff);
-    require(atCorner > ui::filterMagnitudeDb(FilterType::bandPass, cutoff, 0.5f, cutoff * 1.5f)
-                && atCorner > ui::filterMagnitudeDb(FilterType::bandPass, cutoff, 0.5f, cutoff / 1.5f),
+    const auto atCorner = db(FilterType::bandPass, 0.5f, 0.0f, cutoff);
+    require(atCorner > db(FilterType::bandPass, 0.5f, 0.0f, cutoff * 1.5f)
+                && atCorner > db(FilterType::bandPass, 0.5f, 0.0f, cutoff / 1.5f),
             "a band pass peaks at the frequency the knob is holding");
 
-    // Nothing the knobs can reach may draw outside the well, at any size the
-    // panel allows. The curve is clipped to the display when it is painted, but
-    // a curve that needed clipping to stay inside would be one the window is
-    // the wrong shape for.
+    // NOTCH and PEAK are the two new basic taps, and they are opposites: one
+    // is a hole at the corner with the band either side of it untouched, the
+    // other is a lift at the corner with the band either side of it untouched.
+    require(db(FilterType::notch, 0.3f, 0.0f, cutoff) < -20.0f,
+            "a notch cuts at the corner");
+    require(db(FilterType::notch, 0.3f, 0.0f, 20.0f) > -1.0f
+                && db(FilterType::notch, 0.3f, 0.0f, 20000.0f) > -1.0f,
+            "a notch leaves both ends of the band alone");
+    require(db(FilterType::peak, 0.5f, 0.0f, cutoff) > 6.0f,
+            "a peak lifts the corner");
+    require(db(FilterType::peak, 0.5f, 0.0f, 20.0f) > -1.0f
+                && db(FilterType::peak, 0.5f, 0.0f, 20000.0f) > -1.0f,
+            "a peak takes nothing out either side of what it lifts");
+
+    // A dual filter has a second corner, and FREQ is where it is. Two
+    // readings: it moves, and it moves the way the knob says — 0.625 is an
+    // octave above the cutoff, so the notch in LP+NT lands on 2 kHz.
+    {
+        const auto octaveUp = shape(FilterType::lowNotch, 0.2f, 0.625f);
+        requireClose(rhino::forge::filterSecondHz(octaveUp), cutoff * 2.0f, 1.0f,
+                     "FREQ at 0.625 is an octave above the cutoff");
+        require(ui::filterMagnitudeDb(octaveUp, cutoff * 2.0f) < -20.0f,
+                "the second filter of a dual cuts where FREQ puts it");
+        // And nowhere near where it is not: an octave below the cutoff is
+        // inside the low pass and outside the notch.
+        require(ui::filterMagnitudeDb(octaveUp, cutoff * 0.5f) > -3.0f,
+                "a dual filter leaves the band neither of its halves touches");
+        // LP+HP passes what is between its two corners and stops what is
+        // outside them, which is the whole reason the family exists.
+        const auto band = shape(FilterType::lowHigh, 0.0f, 0.25f);
+        const auto between = ui::filterMagnitudeDb(band, cutoff * 0.35f);
+        require(between > ui::filterMagnitudeDb(band, cutoff * 16.0f) + 20.0f
+                    && between > ui::filterMagnitudeDb(band, cutoff / 64.0f) + 20.0f,
+                "LP+HP passes the band between its two corners");
+    }
+
+    // A morph type's middle is the middle response on its own, not a blend of
+    // the outer two: at 0.5, LP-BP-HP is a band pass and reads like one.
+    {
+        const auto middle = shape(FilterType::morphLowBandHigh, 0.4f, 0.5f);
+        const auto plainBand = shape(FilterType::bandPass, 0.4f, 0.0f);
+        for (const auto hz : {100.0f, 500.0f, 1000.0f, 4000.0f, 12000.0f})
+            requireClose(ui::filterMagnitudeDb(middle, hz), ui::filterMagnitudeDb(plainBand, hz),
+                         0.01f, "the middle of a morph is the middle response on its own");
+        // The ends are the outer two, and they are not each other.
+        const auto low = shape(FilterType::morphLowBandHigh, 0.4f, 0.0f);
+        const auto high = shape(FilterType::morphLowBandHigh, 0.4f, 1.0f);
+        require(ui::filterMagnitudeDb(low, 100.0f) > ui::filterMagnitudeDb(high, 100.0f) + 20.0f,
+                "a morph swept to one end is the low pass and to the other is the high pass");
+    }
+
+    // A ladder is steeper than one state-variable filter because it has more
+    // poles: 24 dB an octave on the four-pole ones and 18 on the diode ones.
+    //
+    // Measured off the gain rather than off the drawn decibels: a four-pole
+    // skirt is already past the bottom of the display window two octaves out,
+    // so the drawn curve is clamped there and its slope reads as nothing. The
+    // window is right for a display and wrong for measuring a slope.
+    {
+        const auto slope = [] (FilterType type)
+        {
+            const FilterShape held {type, cutoff, 0.0f, 0.0f, 48000.0};
+            const auto near = rhino::forge::filterMagnitude(held, cutoff * 4.0f);
+            const auto far = rhino::forge::filterMagnitude(held, cutoff * 8.0f);
+            return 20.0f * std::log10(near / far);
+        };
+        requireClose(slope(FilterType::ladder), 24.0f, 1.0f,
+                     "a four-pole ladder falls twenty-four decibels an octave");
+        requireClose(slope(FilterType::dirtyLadder), 24.0f, 1.0f, "and so does the dirty one");
+        requireClose(slope(FilterType::acid), 18.0f, 1.0f,
+                     "a three-pole diode ladder falls eighteen");
+    }
+
+    // A comb is a row of peaks on the harmonics of its own tuning, so the
+    // troughs between them sit halfway up in frequency.
+    {
+        const auto comb = shape(FilterType::comb, 0.8f, 1.0f);
+        const auto tuning = rhino::forge::filterCombHz(comb);
+        require(ui::filterMagnitudeDb(comb, tuning) > ui::filterMagnitudeDb(comb, tuning * 1.5f) + 6.0f,
+                "a comb peaks on its own tuning and not between");
+        require(ui::filterMagnitudeDb(comb, tuning * 2.0f)
+                    > ui::filterMagnitudeDb(comb, tuning * 2.5f) + 6.0f,
+                "and on the harmonics of it");
+    }
+
+    // The two types with no magnitude response at all say so, and draw the
+    // only honest line there is: unity. A flat curve means something quite
+    // different from a broken one, which is why the display labels these.
+    for (const auto type : {FilterType::ringMod, FilterType::diffusor})
+    {
+        require(!rhino::forge::filterHasResponse(type),
+                "a type whose curve is not its own transfer function is marked as such");
+        for (const auto hz : {50.0f, 1000.0f, 15000.0f})
+            requireClose(ui::filterMagnitudeDb(shape(type, 0.5f, 0.5f), hz), 0.0f, 0.01f,
+                         "a phase-only type draws unity rather than a shape it does not have");
+    }
+    for (int type = 0; type < rhino::forge::filterTypeCount; ++type)
+    {
+        const auto chosen = rhino::forge::filterTypeOf(static_cast<float>(type));
+        if (chosen == FilterType::ringMod || chosen == FilterType::diffusor) continue;
+        require(rhino::forge::filterHasResponse(chosen),
+                "every other type draws its own response");
+    }
+
+    // Every type, at the extremes of every knob that shapes it, has to give a
+    // finite gain inside the window. A NaN here is a curve that disappears.
+    for (int type = 0; type < rhino::forge::filterTypeCount; ++type)
+        for (const auto corner : {30.0f, 1000.0f, 18000.0f})
+            for (const auto resonance : {0.0f, 0.5f, 1.0f})
+                for (const auto second : {0.0f, 0.5f, 1.0f})
+                {
+                    const FilterShape held {rhino::forge::filterTypeOf(static_cast<float>(type)),
+                                            corner, resonance, second, 48000.0};
+                    for (const auto hz : {20.0f, 200.0f, 2000.0f, 20000.0f})
+                    {
+                        const auto reading = ui::filterMagnitudeDb(held, hz);
+                        if (!std::isfinite(reading) || reading < ui::filterBottomDb
+                            || reading > ui::filterTopDb)
+                        {
+                            require(false, "every type reads a finite gain inside the window");
+                            std::cerr << "       " << rhino::forge::filterTypeName(type) << " at "
+                                      << hz << " Hz, corner " << corner << " res " << resonance
+                                      << " freq " << second << " read " << reading << '\n';
+                        }
+                    }
+                }
+
+    // Every type's curve stays inside the well it is drawn in, at the size the
+    // panel opens at. The three original taps are then swept across every size
+    // the panel allows, which is the expensive half and the one that catches a
+    // window of the wrong shape rather than a curve of the wrong height.
     for (const auto& module : ui::modules())
     {
         if (module.display != ui::Display::filter) continue;
+
+        const auto opened = ui::displayBounds(
+            ui::moduleBounds({0, 0, ui::defaultPanelWidth, ui::defaultPanelHeight}, module),
+            module).toFloat().reduced(0.0f, 6.0f);
+        for (int type = 0; type < rhino::forge::filterTypeCount; ++type)
+            for (const auto corner : {30.0f, 1000.0f, 18000.0f})
+                for (const auto resonance : {0.0f, 1.0f})
+                    for (const auto second : {0.0f, 0.5f, 1.0f})
+                    {
+                        const FilterShape held {rhino::forge::filterTypeOf(static_cast<float>(type)),
+                                                corner, resonance, second, 48000.0};
+                        const auto bounds = ui::filterResponsePath(opened, held).getBounds();
+                        if (!opened.expanded(0.5f).contains(bounds))
+                        {
+                            require(false, "every type's response stays inside the well");
+                            std::cerr << "       " << rhino::forge::filterTypeName(type)
+                                      << " corner " << corner << " res " << resonance
+                                      << " freq " << second << '\n';
+                        }
+                    }
+
         for (int width = ui::minPanelWidth; width <= ui::maxPanelWidth; width += 40)
             for (int height = ui::minPanelHeight; height <= ui::maxPanelHeight; height += 40)
             {
@@ -235,8 +403,9 @@ void filterDisplaySuite()
                     for (const auto corner : {30.0f, 1000.0f, 18000.0f})
                         for (const auto resonance : {0.0f, 0.5f, 1.0f})
                         {
-                            const auto bounds = ui::filterResponsePath(plot, type, corner, resonance)
-                                                    .getBounds();
+                            const auto bounds =
+                                ui::filterResponsePath(plot, shapeAt(type, corner, resonance))
+                                    .getBounds();
                             if (!plot.expanded(0.5f).contains(bounds))
                             {
                                 require(false, "the response stays inside the well it is drawn in");
@@ -252,6 +421,14 @@ void filterDisplaySuite()
     require(ui::filterHzText(440.0f) == "440 Hz", "a corner under a kilohertz is named in hertz");
     require(ui::filterHzText(7800.0f) == "7.80 kHz", "a corner over a kilohertz is named in kilohertz");
     require(ui::filterHzText(18000.0f) == "18.0 kHz", "a corner over ten kilohertz drops a decimal");
+
+    // Except on a formant filter, which has no corner: the knob moves the
+    // mouth, so the marker says which vowel rather than inventing a frequency.
+    requireText(ui::filterCornerText(shape(FilterType::formant, 0.3f, 0.5f)),
+                juce::String("VOWEL ") + rhino::forge::filterVowelName(cutoff),
+                "a formant filter's marker names the vowel");
+    requireText(ui::filterCornerText(shape(FilterType::lowPass, 0.3f, 0.0f)), "1.00 kHz",
+                "every other type's marker names the frequency");
 }
 
 // ------------------------------------------------------- envelope display ---

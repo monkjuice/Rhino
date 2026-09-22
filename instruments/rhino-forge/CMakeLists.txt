@@ -86,6 +86,7 @@ set(forge_sources
     core/ForgeLfoTable.h
     core/ForgeArp.h
     core/ForgeShapes.h
+    core/ForgeFilter.h
     core/ForgeMatrix.h
     core/ForgePatch.h
     core/ForgeCore.h
@@ -124,6 +125,7 @@ set(forge_sources
     src/ForgeEditor.cpp
     src/ForgeEditor.h
     src/ForgeEditorInternal.h
+    src/ForgeEditorFilter.cpp
     src/ForgeEditorFx.cpp
     src/ForgeEditorInput.cpp
     src/ForgeEditorLayout.cpp
@@ -153,6 +155,25 @@ include(CTest)
 if (BUILD_TESTING)
     juce_add_console_app(RhinoForgeTests PRODUCT_NAME "Rhino Forge Tests")
     set_target_properties(RhinoForgeTests PROPERTIES EXCLUDE_FROM_ALL FALSE)
+
+    # Eight megabytes of stack, against the one megabyte a Windows console app
+    # gets by default.
+    #
+    # A Processor carries a Core, a Core carries sixteen voices, and a voice
+    # carries a filter per channel — tens of kilobytes all told. That is
+    # nothing to a host, which allocates the Processor, but a suite here builds
+    # its cases as locals and several hold eight of them alive on one frame to
+    # compare their measurements. At the default that suite sat a few kilobytes
+    # from the edge, and adding the filter's per-voice state pushed it over: a
+    # STATUS_STACK_OVERFLOW, which CTest reports as SegFault and which says
+    # nothing at all about where it came from.
+    #
+    # The plugin is unaffected either way. This is a property of a console
+    # binary that builds synths as local variables, so it is fixed where that
+    # binary is declared rather than by making every suite allocate.
+    if (MSVC)
+        target_link_options(RhinoForgeTests PRIVATE /STACK:8388608)
+    endif()
 
     # One area per file, and the file's name is the argument that selects it and
     # the CTest case that runs it. Working on the effects means editing

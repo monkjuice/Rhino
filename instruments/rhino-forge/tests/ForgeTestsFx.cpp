@@ -737,6 +737,16 @@ void fxDisplaySuite()
                             const auto segment = selector.segmentBounds(i);
                             require(segment.getHeight() >= 14,
                                     "a stacked choice stays tall enough to read");
+                            // Which field, because the answer is always a row
+                            // weight somewhere and the message alone does not
+                            // say whose.
+                            if (segment.getHeight() < 14 && i == 0)
+                                std::cerr << "       " << module.id << " row " << r << " cell " << c
+                                          << ": " << count << " choices in a field "
+                                          << field.getHeight() << " tall (block "
+                                          << block.getHeight() << ", cell "
+                                          << rhino::forge::ui::cellBounds(area, module, r, c).getHeight()
+                                          << ")" << '\n';
                             require(segment.getWidth() == field.getWidth(),
                                     "a stacked choice takes the whole width of its field");
                             covered += segment.getHeight();

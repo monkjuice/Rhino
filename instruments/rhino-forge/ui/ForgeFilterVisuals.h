@@ -1,28 +1,21 @@
 #pragma once
 
 #include "ForgeDisplays.h"
+#include "../core/ForgeFilter.h"
 
-// The filter's own response, drawn from the transfer functions of Core's
-// state-variable filter rather than from a generic curve — so what the
-// display claims is being removed is what is being removed, including the
-// peak resonance puts back at the corner.
+// The filter's own response, drawn from the transfer functions in
+// ForgeFilter.h rather than from a generic curve — so what the display claims
+// is being removed is what is being removed, including the peak resonance puts
+// back at the corner.
 namespace rhino::forge::ui
 {
 // --- The filter ---------------------------------------------------------------
 //
-// What the filter is taking out, drawn as the response it actually has. Core's
-// filter is a zero-delay state variable, so all three taps come off one
-// topology and the curves below are that topology's own transfer functions
-// rather than a picture of a filter in general. With x the frequency in units
-// of the cutoff and R Core's own damping term:
-//
-//     D  = (1 - x^2) + j 2R x
-//     LP = 1 / D      BP = x / D      HP = x^2 / D
-//
-// The prototype is the analogue one. Core prewarps its cutoff, so the knee sits
-// at the frequency the knob says whatever the sample rate is, and carrying the
-// warp through the rest of the curve would move it by less than a pixel across
-// the band the panel draws.
+// What the filter is taking out, drawn as the response it actually has. The
+// arithmetic is not here: `filterMagnitude` in ForgeFilter.h is the same
+// function the engine's coefficients are worked out beside, so a curve on this
+// display cannot be a reading of a filter the voice is not running. This file
+// is the window it is drawn in — the axes, the grid, the fill and the marker.
 
 // The window every filter display is drawn against: the audible band, and a
 // decibel range with room above unity for a resonant peak to rise into.
@@ -54,46 +47,34 @@ inline float filterDbToY(juce::Rectangle<float> box, float db)
     return box.getY() + at * box.getHeight();
 }
 
-// Core's own damping term, named here so the two cannot drift apart.
-inline float filterDamping(float resonance)
+// The gain a shape has at one frequency, clipped into the window it is drawn
+// in. The gain itself comes from ForgeFilter.h; all this adds is the decibels
+// and the ceiling.
+inline float filterMagnitudeDb(const rhino::forge::FilterShape& shape, float hz)
 {
-    return 1.0f / (1.0f + juce::jlimit(0.0f, 1.0f, resonance) * 15.0f);
-}
-
-// The gain this filter has at one frequency, in decibels.
-inline float filterMagnitudeDb(rhino::forge::FilterType type, float cutoff, float resonance, float hz)
-{
-    const auto x = juce::jmax(1.0e-4f, hz) / juce::jmax(1.0e-4f, cutoff);
-    const auto damping = filterDamping(resonance);
-    const auto real = 1.0f - x * x;
-    const auto imaginary = 2.0f * damping * x;
-    const auto denominator = std::sqrt(real * real + imaginary * imaginary);
-    if (denominator <= 0.0f) return filterTopDb;
-
-    auto numerator = 1.0f;
-    switch (type)
-    {
-        case rhino::forge::FilterType::highPass: numerator = x * x; break;
-        case rhino::forge::FilterType::bandPass: numerator = x; break;
-        case rhino::forge::FilterType::lowPass: break;
-    }
-    const auto gain = numerator / denominator;
-    if (gain <= 1.0e-6f) return filterBottomDb;
+    const auto gain = rhino::forge::filterMagnitude(shape, hz);
+    if (!std::isfinite(gain) || gain <= 1.0e-6f) return filterBottomDb;
     return juce::jlimit(filterBottomDb, filterTopDb, 20.0f * std::log10(gain));
 }
 
 // The response across the whole window. Sampled per pixel of width rather than
 // at a fixed count, so a resonant spike is not stepped over on a wide panel and
 // no time is spent oversampling a narrow one.
-inline juce::Path filterResponsePath(juce::Rectangle<float> box, rhino::forge::FilterType type,
-                                     float cutoff, float resonance)
+//
+// A comb tuned high has more teeth than the panel has pixels, and no sampled
+// curve can draw those. What is drawn is one tooth per pixel, which reads as
+// the band the teeth live in — the honest limit of a curve this wide, and part
+// of why a comb is set by ear at the bottom of the knob rather than by eye at
+// the top of it.
+inline juce::Path filterResponsePath(juce::Rectangle<float> box,
+                                     const rhino::forge::FilterShape& shape)
 {
     juce::Path path;
     const auto points = juce::jlimit(48, 512, juce::roundToInt(box.getWidth()));
     for (int i = 0; i <= points; ++i)
     {
         const auto x = box.getX() + box.getWidth() * static_cast<float>(i) / static_cast<float>(points);
-        const auto y = filterDbToY(box, filterMagnitudeDb(type, cutoff, resonance, filterXToHz(box, x)));
+        const auto y = filterDbToY(box, filterMagnitudeDb(shape, filterXToHz(box, x)));
         if (i == 0) path.startNewSubPath(x, y);
         else path.lineTo(x, y);
     }
@@ -104,6 +85,16 @@ inline juce::String filterHzText(float hz)
 {
     if (hz >= 1000.0f) return juce::String(hz / 1000.0f, hz >= 10000.0f ? 1 : 2) + " kHz";
     return juce::String(juce::roundToInt(hz)) + " Hz";
+}
+
+// What the corner marker is called. A formant filter has no corner — the knob
+// moves the mouth instead — so it says which vowel rather than inventing a
+// frequency for one.
+inline juce::String filterCornerText(const rhino::forge::FilterShape& shape)
+{
+    if (shape.type == rhino::forge::FilterType::formant)
+        return juce::String("VOWEL ") + rhino::forge::filterVowelName(shape.cutoff);
+    return filterHzText(shape.cutoff);
 }
 
 // A short label for a decade line, which has no room for a unit.
@@ -136,8 +127,9 @@ inline void drawFilterGrid(juce::Graphics& g, juce::Rectangle<float> box, float 
 // out washed in above it. The two regions meet along the curve, so the band the
 // filter is removing is a shape on the display rather than something to be
 // inferred from where the line happens to fall.
-inline void drawFilterResponse(juce::Graphics& g, juce::Rectangle<int> area, rhino::forge::FilterType type,
-                               float cutoff, float resonance, juce::Colour colour, float alpha)
+inline void drawFilterResponse(juce::Graphics& g, juce::Rectangle<int> area,
+                               const rhino::forge::FilterShape& shape,
+                               juce::Colour colour, float alpha)
 {
     juce::Graphics::ScopedSaveState clip(g);
     g.reduceClipRegion(displayClip(area));
@@ -145,7 +137,7 @@ inline void drawFilterResponse(juce::Graphics& g, juce::Rectangle<int> area, rhi
     const auto box = area.toFloat().reduced(0.0f, 6.0f);
     drawFilterGrid(g, box, alpha);
 
-    const auto path = filterResponsePath(box, type, cutoff, resonance);
+    const auto path = filterResponsePath(box, shape);
     const auto unity = filterDbToY(box, 0.0f);
 
     // Everything under the curve: the part of the band that is getting through.
@@ -176,13 +168,22 @@ inline void drawFilterResponse(juce::Graphics& g, juce::Rectangle<int> area, rhi
 
     // The corner itself, marked and named: the display is here to say which
     // frequencies are going, and this is the one the knob is holding.
-    const auto x = filterHzToX(box, cutoff);
+    const auto x = filterHzToX(box, shape.cutoff);
     g.setColour(colour.withAlpha(0.45f * alpha));
     g.drawVerticalLine(juce::roundToInt(x), box.getY(), box.getBottom());
+    // The second corner, where the type has one, marked more faintly than the
+    // first: a dual filter has two frequencies and only one of them is under
+    // the CUTOFF knob, so the display has to say where the other one went.
+    if (rhino::forge::filterCategoryOf(shape.type) == rhino::forge::FilterCategory::dual)
+    {
+        const auto second = filterHzToX(box, rhino::forge::filterSecondHz(shape));
+        g.setColour(colour.withAlpha(0.22f * alpha));
+        g.drawVerticalLine(juce::roundToInt(second), box.getY(), box.getBottom());
+    }
     g.setColour(colour.withAlpha(alpha));
     const auto readingFont = panelFont(Face::reading, 10.0f);
     g.setFont(readingFont);
-    const auto reading = filterHzText(cutoff);
+    const auto reading = filterCornerText(shape);
     const auto width = juce::jmax(46.0f, juce::GlyphArrangement::getStringWidth(readingFont, reading) + 8.0f);
     // Beside the marker, on whichever side of it there is room for.
     const auto right = x + 4.0f + width <= box.getRight();
@@ -190,5 +191,17 @@ inline void drawFilterResponse(juce::Graphics& g, juce::Rectangle<int> area, rhi
                juce::Rectangle<float>(right ? x + 4.0f : x - 4.0f - width, box.getY() + 2.0f, width, 12.0f)
                    .toNearestInt(),
                right ? juce::Justification::centredLeft : juce::Justification::centredRight);
+
+    // A type whose curve is not its own transfer function says so, because a
+    // flat line means two quite different things: on the diffusor it means
+    // "this moves the phase and not the magnitude", and on a low pass it would
+    // mean the filter was broken.
+    if (!rhino::forge::filterHasResponse(shape.type))
+    {
+        g.setColour(mutedText.withAlpha(0.7f * alpha));
+        g.setFont(panelFont(Face::reading, 9.0f));
+        g.drawText("PHASE ONLY", box.withTrimmedBottom(box.getHeight() * 0.5f).toNearestInt(),
+                   juce::Justification::centredTop);
+    }
 }
 }

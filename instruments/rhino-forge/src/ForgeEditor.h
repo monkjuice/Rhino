@@ -281,6 +281,18 @@ private:
     // One oscillator's two warp stages, resolved as the engine resolves them,
     // so the display draws the warp the voice is rendering.
     std::array<WarpStage, warpSlots> warpStagesOf(const char* prefix) const;
+    // The filter's TYPE field wears the same component for the same reason the
+    // warp does, and is driven the same way: thirty-four types are a fixed
+    // list, so the parameter is a real choice and its value is the index.
+    void setFilterType(int choice);
+    // What TYPE is showing and what FREQ is called, refreshed when either has
+    // moved - from the panel, from a preset or from a host.
+    void refreshFilterFields();
+    // The type list, grouped by family.
+    void showFilterMenu(Control&);
+    // The four settings the filter display is drawn from, read off the
+    // parameters the voice will render from.
+    FilterShape filterShape() const;
     // The shelves the slots sit on, drawn behind their controls.
     void paintFxShelves(juce::Graphics&, juce::Rectangle<int> area, const ui::Module&);
     // The compact signal-flow overview at the left of the rack. It is a

@@ -205,8 +205,7 @@ void Editor::paint(juce::Graphics& g)
                 break;
             }
             case ui::Display::filter:
-                ui::drawFilterResponse(g, display, filterTypeOf(value("filterType")),
-                                       value("cutoff"), value("resonance"), accent, alpha);
+                ui::drawFilterResponse(g, display, filterShape(), accent, alpha);
                 break;
             case ui::Display::none:
                 break;

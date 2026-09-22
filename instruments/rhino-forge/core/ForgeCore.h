@@ -51,12 +51,23 @@ public:
         // may be: a slot's type changes while audio is running, so each slot
         // carries every type's state and none of it can be built on demand.
         for (auto& rack : racks) rack.prepare(sampleRate);
+        // And the filter's, for the same reason and in the same place: the
+        // type in the module changes while audio is running, so every voice
+        // carries the comb's line whether or not a comb is what is selected.
+        // They live here rather than in the voice because a fresh note resets
+        // a voice by assigning over it — see FilterDelays in ForgeFilter.h.
+        for (auto& voice : filterDelays)
+            for (auto& channel : voice)
+                channel.prepare(sampleRate);
         reset();
     }
 
     void reset()
     {
         voices = {};
+        for (auto& voice : filterDelays)
+            for (auto& channel : voice)
+                channel.reset();
         nextVoice = 0;
         freePhase = {};
         freeHeld = {};
@@ -272,8 +283,12 @@ public:
         // resolved once after it.
         std::array<float, busCount> busLeft {}, busRight {};
 
-        for (auto& voice : voices)
+        // By index rather than by reference, because a voice's delay lines sit
+        // beside it in Core rather than inside it and are reached by the same
+        // index. Nothing else in the loop cares which voice it is on.
+        for (size_t voiceIndex = 0; voiceIndex < voices.size(); ++voiceIndex)
         {
+            auto& voice = voices[voiceIndex];
             if (!voice.active) continue;
             // All four, whether or not anything reads them. An envelope's value
             // is its state rather than something worked out from a phase, so
@@ -364,13 +379,18 @@ public:
             // module or a route back on does not click.
             const auto inputLeft = buses.wetLeft, inputRight = buses.wetRight;
             auto routedLeft = inputLeft, routedRight = inputRight;
-            const auto type = filterTypeOf(active);
+            // Worked out once for the voice and read by both its channels. The
+            // corners are per voice because the matrix is — a modulated cutoff
+            // is a different frequency in every note — so this cannot move up
+            // out of the loop, but it can and does stop being computed twice.
+            const auto coefficients = filterCoefficientsFor(filterShapeOf(active, sampleRate));
+            auto& delays = filterDelays[voiceIndex];
             if (on(active.filterEnable))
             {
-                routedLeft = filter(saturate(routedLeft, active.drive),
-                                    voice.lowLeft, voice.bandLeft, active.cutoff, active.resonance, type);
-                routedRight = filter(saturate(routedRight, active.drive),
-                                     voice.lowRight, voice.bandRight, active.cutoff, active.resonance, type);
+                routedLeft = filterSample(voice.filters[0], delays[0],
+                                          saturate(routedLeft, active.drive), coefficients);
+                routedRight = filterSample(voice.filters[1], delays[1],
+                                           saturate(routedRight, active.drive), coefficients);
                 // MIX blends what came out against what went in. With the
                 // module switched off there is nothing to blend — the two are
                 // the same signal — so the knob is skipped rather than applied
@@ -381,8 +401,8 @@ public:
             }
             else
             {
-                filter(routedLeft, voice.lowLeft, voice.bandLeft, active.cutoff, active.resonance, type);
-                filter(routedRight, voice.lowRight, voice.bandRight, active.cutoff, active.resonance, type);
+                filterSample(voice.filters[0], delays[0], routedLeft, coefficients);
+                filterSample(voice.filters[1], delays[1], routedRight, coefficients);
             }
 
             // The rest of the filter's channel: its place in the image and its
@@ -551,7 +571,12 @@ private:
         // cut off. It is also what guarantees the voice comes back: a filter
         // pushed hard would otherwise ring for a long time.
         float tail = 1.0f;
-        float lowLeft = 0.0f, bandLeft = 0.0f, lowRight = 0.0f, bandRight = 0.0f;
+        // One filter per channel. Both run whatever the type is, so switching
+        // the module or a route back on never starts a filter from silence —
+        // and a comb keeps its line, which is the one type where starting from
+        // silence would be audible for several milliseconds rather than one
+        // sample. See ForgeFilter.h for what is in each of them.
+        std::array<FilterState, 2> filters {};
         std::array<EnvelopeStage, envCount> envStage {};
         // Every LFO that answers the keyboard runs a copy of itself inside each
         // voice, which is what makes TRIG and ENV mean anything: a new note
@@ -1069,34 +1094,16 @@ private:
         voice.phaseSub = wrap(voice.phaseSub + hzSub * dt);
     }
 
-    // A state-variable filter computes all three responses anyway, so the type
-    // is a choice of which tap to return rather than a second filter.
-    float filter(float input, float& low, float& band, float cutoff, float resonance, FilterType type) const
-    {
-        // The ceiling is here because the prewarp runs away as the cutoff
-        // approaches Nyquist, not because the topology is fragile — a
-        // zero-delay state variable filter is stable whatever g is. At 0.3 it
-        // was landing at 13.2 kHz on a 44.1 kHz stream, so the top quarter of a
-        // knob that goes to 18 kHz did nothing and a patch with the filter
-        // wide open was still being darkened by it. 0.45 leaves tan() well
-        // behaved and puts the whole of the knob's range in reach at both of
-        // the rates Forge is ever asked to run at.
-        const auto limitedCutoff = juce::jlimit(25.0f, static_cast<float>(sampleRate * 0.45), cutoff);
-        const auto g = std::tan(juce::MathConstants<float>::pi * limitedCutoff / static_cast<float>(sampleRate));
-        const auto damping = 1.0f / (1.0f + juce::jlimit(0.0f, 1.0f, resonance) * 15.0f);
-        const auto high = (input - 2.0f * damping * band - low) / (1.0f + 2.0f * damping * g + g * g);
-        band += g * high;
-        low += g * band;
-        switch (type)
-        {
-            case FilterType::highPass: return high;
-            case FilterType::bandPass: return band;
-            case FilterType::lowPass: break;
-        }
-        return low;
-    }
-
     std::array<Voice, 16> voices {};
+    // One set of filter delay lines per voice, per channel. Sized in
+    // initialise() and never afterwards; held here rather than in the voice so
+    // a fresh note cannot reallocate one from the audio thread.
+    //
+    // Inline rather than behind a vector of its own, so every entry exists
+    // whether or not initialise() has run: an unprepared one holds empty lines
+    // and reports itself not ready, which the four types that read a line
+    // check. A vector would instead have to be size-checked per sample.
+    std::array<std::array<FilterDelays, 2>, 16> filterDelays {};
     double sampleRate = 48000.0;
     float pitchRatio = 1.0f;
     float modWheel = 0.0f;

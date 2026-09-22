@@ -44,10 +44,18 @@ earlier frame. Fractional display scales preserve the cache's physical pixels.
 
 The filter shows its own response: the band it is passing filled under the
 curve, the band it is taking out washed in above it, decade lines across the
-audible range and the corner frequency marked and named. It is drawn from the
-transfer functions of Core's own state-variable filter rather than from a
-generic curve, so what the display claims is being removed is what is being
-removed — including the peak resonance puts back at the corner.
+audible range and the corner frequency marked and named — plus the second
+corner, more faintly, on a type that has one. It is drawn from the transfer
+functions in `core/ForgeFilter.h`, which is the same header the engine's
+coefficients are worked out in, so what the display claims is being removed is
+what is being removed — including the peak resonance puts back at the corner.
+
+Three of the types are not linear and so have no transfer function to draw. Each
+of those draws the truest thing that can be said about it instead: unity for the
+ring modulator and the diffusor, which take nothing out, and a hold's own sinc
+for the sample and hold, which genuinely is what freezing a value does to a
+spectrum. The first two are labelled PHASE ONLY on the display, because a flat
+line means one thing on a diffusor and quite another on a low pass.
 
 No knob prints its value. A readout under every knob costs the panel a line of
 height each, whether or not anyone is reading it, and it was the readout rather
@@ -159,6 +167,37 @@ after the synth does. A per-voice source pointed at a rack knob therefore has to
 resolve to a single value, and Core takes the loudest voice's — the voice the
 envelope and LFO displays already follow. An LFO in OFF, which free-runs and is
 shared by every voice, is the source that drives a rack cleanly.
+
+The **filter** is thirty-four types across six families, chosen from a menu
+grouped the way that menu is actually read — you know you want a ladder before
+you know which one. BASIC is the five taps of one state-variable filter: low,
+high, band, notch and peak. DUAL is twelve pairs of those in series, the first
+on CUTOFF and the second offset from it, so LP+HP has an edge you can place at
+each end and LP+NT is a low pass with a hole in it. MORPH is four sweeps through
+three responses, which is the one filter movement no corner can give you.
+ANALOG is four chains of poles with the last one's output fed back round them
+through a saturator — a four-pole transistor ladder, a three-pole diode ladder
+leaned the way a diode conducts, that ladder driven hard inside its own loop,
+and a three-pole that keeps a little of the signal past the poles so the body
+survives the resonance. RESONATORS are a tuned delay fed back, the same delay
+against the dry signal so its teeth are nulls instead of peaks, and a chain of
+all-passes. CHARACTER is the six that are filters only by where they sit: a
+vowel bank the cutoff moves the mouth of, a ring modulator, a sample and hold,
+an all-pass diffusor, a low pass with the damping taken out from under it until
+it screams, and the delay loop with the diffusor inside it.
+
+One knob beside TYPE carries whatever that type needs, the way a rack slot's
+knobs carry whatever is in the slot: FREQ on a dual, MORPH on a morph, FAT on
+the basic five and the clean ladders, PAIN, DAMP, STAGES, SHIFT, SPREAD, DIFF or
+FEED on the rest. Its label, its readout and its double-click all come from the
+type's own row in `filterTypes()`, so it cannot be labelled as one thing and
+rendered as another. Choosing a type from the menu moves that knob to what the
+new type opens on, but only when the type has changed what the knob is *for* —
+stepping LOW to HIGH leaves it alone, and stepping LOW to LP+HP does not.
+
+LOW, HIGH and BAND are still types 0, 1 and 2, and FREQ opens at nothing, which
+is FAT off. A patch saved before any of the rest of this existed therefore loads
+on the filter it was saved on and sounds the way it did, to the bit.
 
 Each oscillator carries two **warp** stages under its knobs, applied in the
 order they are drawn: a mode chosen from a menu grouped the way the Serum
@@ -279,12 +318,14 @@ which decisions are already settled. Read it before changing the synth.
 | `core/ForgeArp.h` | The arpeggiator: the shapes, the clock, and the notes a held chord becomes. Stands in front of Core rather than inside it, and emits through callbacks so it can be driven without either. |
 | `core/ForgeFx.h` | What an effects rack is: the types, what each one's controls are called, and what a normalised knob means in each. No DSP. |
 | `core/ForgeFxDsp.h` | The racks, rendered. A slot carries every type's state, sized once at `prepare`, because a type changes while audio is running. |
+| `core/ForgeFilter.h` | The filter: the thirty-four types, what each holds between samples, the one function that runs any of them, and the response the panel draws. Depends on nothing of Forge's, so the curve and the audio are read out of one file. |
 | `ui/ForgeFxDisplay.h` | What each effect draws of itself, from the same functions that render it. |
+| `ui/ForgeFilterVisuals.h` | The window the filter's response is drawn in: the axes, the grid, the fill and the corner markers. The arithmetic is `core/ForgeFilter.h`'s. |
 | `src/ForgeProcessor.*` | What the host calls, and what it hands the engine. `ForgeParameters.cpp` declares every parameter; `ForgeProcessorState.cpp` carries state, presets and table files. |
 | `ui/ForgeLayout.h` | What modules exist, what each contains, and where it sits. Pure geometry and declaration; four headers, listed at the top of it. |
 | `ui/ForgeVisuals.h` | The knob look and the drawing primitives. Decides nothing about placement; seven headers, listed at the top of it. |
 | `ui/ForgePanels.h` | Static metal housings, chassis rails, hardware and decorative lettering. |
-| `src/ForgeEditor.*` | Walks the declared modules and builds the components. One class across eight files, by what each does. |
+| `src/ForgeEditor.*` | Walks the declared modules and builds the components. One class across nine files, by what each does. |
 | `tests/` | One file per area, one CTest case each. See **Tests** below. |
 
 `ForgeCore.h`, `ForgeLayout.h` and `ForgeVisuals.h` each include the headers

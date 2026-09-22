@@ -29,6 +29,7 @@ void Editor::applyPage()
     // running it twice per tab switch walks every control on the panel twice.
     refreshFxSlots();
     refreshWarpFields();
+    refreshFilterFields();
     if (tablePanel != nullptr) tablePanel->setVisible(page == ui::Page::table);
     // Last, because a macro's handle takes the place of its label and the
     // layout pass is what decides that.

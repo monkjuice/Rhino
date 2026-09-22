@@ -281,6 +281,84 @@ const FxTypeInfo& Processor::fxSlotType(int rack, int slot) const
     return fxTypeInfo(state.getRawParameterValue(fxParameterId(rack, slot, "Type"))->load());
 }
 
+float Processor::filterTypeValue() const
+{
+    return state.getRawParameterValue("filterType")->load();
+}
+
+// The filter's second field is a plain 0..1 and means whatever the type says it
+// means, so this is where a number becomes a reading. Every line of it runs the
+// arithmetic the engine runs, out of ForgeFilter.h rather than copied, which is
+// what binds "+1.00 oct" in the bubble to the corner that is actually there.
+juce::String Processor::filterFreqText(float value) const
+{
+    const auto type = filterTypeOf(filterTypeValue());
+    const auto held = juce::jlimit(0.0f, 1.0f, value);
+    const FilterShape shape {type, state.getRawParameterValue("cutoff")->load(),
+                             state.getRawParameterValue("resonance")->load(), held,
+                             getSampleRate() > 0.0 ? getSampleRate() : 48000.0};
+    const auto percent = [held] { return juce::String(juce::roundToInt(held * 100.0f)) + " %"; };
+    const auto hertz = [] (float hz)
+    {
+        return hz >= 1000.0f ? juce::String(hz / 1000.0f, 2) + " kHz"
+                             : juce::String(juce::roundToInt(hz)) + " Hz";
+    };
+
+    switch (filterCategoryOf(type))
+    {
+        case FilterCategory::dual:
+            // Both readings, because both are the question being asked: an
+            // offset says what the pair will keep doing as the cutoff sweeps,
+            // and a frequency says where the second corner is right now.
+            return juce::String((held - 0.5f) * 8.0f, 2) + " oct  " + hertz(filterSecondHz(shape));
+
+        case FilterCategory::morph:
+        {
+            const auto weights = filterMorphWeights(held);
+            const auto& taps = filterInfo(type).taps;
+            const auto name = [] (FilterTap tap)
+            {
+                switch (tap)
+                {
+                    case FilterTap::high:  return "HP";
+                    case FilterTap::band:  return "BP";
+                    case FilterTap::notch: return "NT";
+                    case FilterTap::peak:  return "PK";
+                    case FilterTap::low:   break;
+                }
+                return "LP";
+            };
+            // Which response it is on, or the two it is between — the same
+            // treatment an oscillator's POSITION gets, and for the same
+            // reason: "where in the morph am I?" is not a percentage.
+            for (int i = 0; i < 3; ++i)
+                if (weights[static_cast<size_t>(i)] >= 0.999f) return name(taps[static_cast<size_t>(i)]);
+            const auto first = held < 0.5f ? 0 : 1;
+            return juce::String(name(taps[static_cast<size_t>(first)])) + ">"
+                 + name(taps[static_cast<size_t>(first + 1)]) + " " + percent();
+        }
+
+        case FilterCategory::resonator:
+        case FilterCategory::character:
+            if (type == FilterType::comb || type == FilterType::flanger || type == FilterType::reverb)
+                return hertz(filterDampHz(shape));
+            if (type == FilterType::phaser || type == FilterType::diffusor)
+                return juce::String(filterStagesOf(shape));
+            if (type == FilterType::formant)
+                return juce::String((held - 0.5f) * 2.0f, 2) + " oct";
+            if (type == FilterType::ringMod)
+                return held <= 0.0f ? juce::String("OFF")
+                                    : hertz(filterClampHz(shape.cutoff, shape.sampleRate)
+                                            * std::exp2(held));
+            return percent();
+
+        case FilterCategory::basic:
+        case FilterCategory::analog:
+            break;
+    }
+    return percent();
+}
+
 // A slot's knobs are plain 0..1 and mean whatever the type in that slot says
 // they mean, so this is where a number becomes a reading. It is the same
 // arithmetic the DSP runs — taken from the same helpers in ForgeFx.h rather
@@ -470,6 +548,7 @@ Patch Processor::patch() const
     result.cutoff = value("cutoff");
     result.resonance = value("resonance");
     result.drive = value("drive");
+    result.filterFreq = value("filterFreq");
     result.filterPan = value("filterPan");
     result.filterMix = value("filterMix");
     result.filterLevel = value("filterLevel");

@@ -536,9 +536,31 @@ void layoutSuite()
         }
     }
 
-    // Every knob on the panel is the same size, whichever module it sits in.
+    // Every knob on the panel is the same size, whichever module it sits in —
+    // so one module's control row crowding itself shrinks every knob on the
+    // panel. When that happens, the useful thing to know is which cell is the
+    // one doing it, because that is the row whose weights have to give.
     const auto diameter = rhino::forge::ui::uniformKnobDiameter(bounds);
     require(diameter >= 48, "the shared knob diameter stays usable");
+    if (diameter < 48)
+        for (const auto& module : rhino::forge::ui::modules())
+        {
+            if (module.compactKnobs) continue;
+            const auto area = rhino::forge::ui::moduleBounds(bounds, module);
+            for (int r = 0; r < static_cast<int>(module.rows.size()); ++r)
+                for (int i = 0; i < static_cast<int>(module.rows[static_cast<size_t>(r)].controls.size()); ++i)
+                {
+                    if (module.rows[static_cast<size_t>(r)].controls[static_cast<size_t>(i)].style
+                        != rhino::forge::ui::Style::knob) continue;
+                    const auto cell = rhino::forge::ui::cellBounds(area, module, r, i);
+                    const auto limit = juce::jmin(cell.getWidth() - 6,
+                                                  cell.getHeight() - rhino::forge::ui::knobLabelHeight);
+                    if (limit < 48)
+                        std::cerr << "       " << module.id << " row " << r << " cell " << i
+                                  << " allows " << limit << " (" << cell.getWidth() << "x"
+                                  << cell.getHeight() << ")\n";
+                }
+        }
     for (const auto& module : modules)
     {
         const auto area = rhino::forge::ui::moduleBounds(bounds, module);

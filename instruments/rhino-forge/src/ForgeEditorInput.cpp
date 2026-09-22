@@ -506,8 +506,10 @@ void Editor::timerCallback()
     if (names != macroNamesShown) applyMacroNames();
 
     // A warp mode moves the same way a slot's type does, and from the same
-    // places, so the field that reports it is refreshed on the same tick.
+    // places, so the field that reports it is refreshed on the same tick. The
+    // filter's type and the field whose label it decides go with them.
     refreshWarpFields();
+    refreshFilterFields();
     refreshModulationRings();
 
     // A table replaced from outside the panel — a preset loaded, a project

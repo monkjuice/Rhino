@@ -202,18 +202,41 @@ juce::AudioProcessorValueTreeState::ParameterLayout Processor::parameterLayout()
     result.push_back(toggle("noiseEnable", "Noise Enable", false));
     result.push_back(parameter("noiseLevel", "Noise Level", {0.0f, 1.0f}, 0.35f, asDecibels));
     result.push_back(toggle("filterEnable", "Filter Enable", true));
+    // The thirty-four types, in the order ForgeFilter.h declares them, so the
+    // index a host writes is the filter the voice runs. LOW, HIGH and BAND are
+    // still 0, 1 and 2, which is what keeps a preset written before the rest
+    // of the list arrived on the type it was saved on.
+    juce::StringArray filterTypeNames;
+    for (int type = 0; type < filterTypeCount; ++type) filterTypeNames.add(filterTypeName(type));
     result.push_back(std::make_unique<juce::AudioParameterChoice>(
-        juce::ParameterID {"filterType", 1}, "Filter Type",
-        juce::StringArray {"LP", "HP", "BP"}, 0));
+        juce::ParameterID {"filterType", 1}, "Filter Type", filterTypeNames, 0));
     // Where a source goes. One switch, two readings: the FILTER module draws it
     // as a lettered chip, the mixer as a field that says the destination out.
     result.push_back(toggle("routeA", "Filter Route Osc A", true, "MAIN", "FILTER"));
     result.push_back(toggle("routeB", "Filter Route Osc B", true, "MAIN", "FILTER"));
     result.push_back(toggle("routeSub", "Filter Route Sub", true, "MAIN", "FILTER"));
     result.push_back(toggle("routeNoise", "Filter Route Noise", true, "MAIN", "FILTER"));
-    result.push_back(parameter("cutoff", "Cutoff", {30.0f, 18000.0f, 0.0f, 0.25f}, 7800.0f, asHertz));
+    // CUTOFF reads as a vowel while a formant filter is in charge, because
+    // that is what the knob is doing there: a formant filter has no corner to
+    // set and the knob moves the mouth instead. Read out of the same function
+    // the engine tunes the resonators from.
+    result.push_back(parameter("cutoff", "Cutoff", {30.0f, 18000.0f, 0.0f, 0.25f}, 7800.0f,
+                               [this] (float value)
+                               {
+                                   if (filterTypeOf(filterTypeValue()) == FilterType::formant)
+                                       return juce::String("VOWEL ") + filterVowelName(value);
+                                   return asHertz(value);
+                               }));
     result.push_back(parameter("resonance", "Resonance", {0.0f, 1.0f}, 0.12f, asPercent));
     result.push_back(parameter("drive", "Drive", {0.0f, 1.0f}, 0.08f, asPercent));
+    // The filter's second field. A plain 0..1, for the same reason a rack
+    // slot's knobs are: what it means is a property of the type, and a host's
+    // parameter list is fixed when the parameter is made. The type is what
+    // turns 0.625 into an octave above the cutoff or into three all-pass
+    // stages — filterFreqText below, reading the same table the engine does,
+    // so a field cannot be labelled as one thing and rendered as another.
+    result.push_back(parameter("filterFreq", "Filter Freq", {0.0f, 1.0f}, 0.0f,
+                               [this] (float value) { return filterFreqText(value); }));
 
     // --- The mixer ------------------------------------------------------------
     //

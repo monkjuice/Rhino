@@ -50,6 +50,12 @@ struct Patch
     // why they are not the 0.12 and 0.25 they were before the mixer.
     float subPan = 0.0f, noisePan = 0.0f;
     float filterEnable = 1.0f, filterType = 0.0f;
+    // The one field whose meaning is the type's: the second corner on a dual
+    // filter, the position on a morph, the damping on a comb. Nothing, because
+    // nothing is what a patch written before it existed loads it at, and on the
+    // five basic types nothing is the setting that leaves the filter doing
+    // exactly what it always did. See filterSecondLabel in ForgeFilter.h.
+    float filterFreq = 0.0f;
     // Each source either passes through the filter or bypasses it straight to
     // the voice sum, exactly as Serum's per-source routing buttons work.
     float routeA = 1.0f, routeB = 1.0f, routeSub = 1.0f, routeNoise = 1.0f;
@@ -119,6 +125,7 @@ inline float* destinationField(Patch& patch, int destination)
         case 20: return &patch.filterLevel;
         default: break;
     }
+    if (destination == filterDestination) return &patch.filterFreq;
     // Past the racks are the four warp depths, which are named rather than
     // generated and so are read back the same way.
     const auto warp = destination - warpDestinationBase;
@@ -148,15 +155,15 @@ inline float* destinationField(Patch& patch, int destination)
     return control < fxKnobCount ? &held.knobs[static_cast<size_t>(control)] : &held.mix;
 }
 
-// Taken as a bare value as well as from a patch, because the panel draws the
-// filter's response from the parameter and has to land on the same tap the
-// engine will run.
-inline FilterType filterTypeOf(float filterType)
-{
-    return static_cast<FilterType>(juce::jlimit(0, 2, juce::roundToInt(filterType)));
-}
-
 inline FilterType filterTypeOf(const Patch& patch) { return filterTypeOf(patch.filterType); }
+
+// The four settings that decide the filter's shape, pulled out of a patch. One
+// reading, so the curve the panel draws and the audio the voice renders can
+// never be two different filters — see ForgeFilter.h.
+inline FilterShape filterShapeOf(const Patch& patch, double sampleRate)
+{
+    return {filterTypeOf(patch), patch.cutoff, patch.resonance, patch.filterFreq, sampleRate};
+}
 
 // Drive at zero is genuinely clean: the saturation is skipped rather than run
 // at unity, which would still compress the peaks.

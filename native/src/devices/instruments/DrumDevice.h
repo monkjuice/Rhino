@@ -2,6 +2,7 @@
 #include "DeviceCatalog.h"
 #include <tracktion_engine/tracktion_engine.h>
 #include <array>
+#include <limits>
 
 namespace rhino
 {
@@ -52,7 +53,10 @@ private:
         int samplePosition = 0;
     };
 
-    void trigger(int note, float velocity);
+    // frame is this note's position on the device's own running sample count,
+    // which is what lets one pad refuse to be struck twice in a millisecond.
+    // See the note on the guard in trigger.
+    void trigger(int note, float velocity, juce::int64 frame);
     float render(Voice&);
     float nextNoise(Voice&) noexcept;
     void loadSamples();
@@ -79,5 +83,10 @@ private:
     double sampleRate = 48000.0;
     double clapSampleRate = 44100.0;
     size_t nextVoice = 0;
+    juce::int64 framesProcessed = 0;
+    static constexpr juce::int64 never = std::numeric_limits<juce::int64>::min() / 2;
+    // Long enough ago that the first hit of a session is never guarded.
+    std::array<juce::int64, 8> lastStruck { never, never, never, never,
+                                            never, never, never, never };
 };
 }

@@ -107,6 +107,7 @@ void DrumDevice::reset()
 {
     for (auto& voice : voices)
         voice.active = false;
+    lastStruck.fill(never);
 }
 
 void DrumDevice::midiPanic()
@@ -129,7 +130,7 @@ bool DrumDevice::hasNameForMidiNoteNumber(int note, int midiChannel, juce::Strin
     return true;
 }
 
-void DrumDevice::trigger(int note, float velocity)
+void DrumDevice::trigger(int note, float velocity, juce::int64 frame)
 {
     VoiceType type;
     switch (note)
@@ -144,6 +145,19 @@ void DrumDevice::trigger(int note, float velocity)
         case 59: type = VoiceType::openHat; break;
         default: return;
     }
+
+    // One pad cannot be struck twice in a millisecond, so a second strike that
+    // close is the same written note arriving twice rather than two hits. The
+    // engine delivers one that way whenever a clip starts a hair before a block
+    // boundary: once at the end of that block and once a few samples into the
+    // next. Summed, the two read as a single hit at twice the level - an accent
+    // on the first beat of that clip and nowhere else. Nothing a pattern or a
+    // player can write comes near the window: a flam is tens of milliseconds,
+    // and a sixty-fourth at 200 bpm is nineteen.
+    auto& struck = lastStruck[static_cast<size_t>(type)];
+    if (frame - struck < static_cast<juce::int64>(sampleRate / 1000.0))
+        return;
+    struck = frame;
 
     if (type == VoiceType::closedHat)
         for (auto& existing : voices)
@@ -247,6 +261,7 @@ void DrumDevice::applyToBuffer(const te::PluginRenderContext& context)
     {
         for (int localFrame = 0; localFrame < context.bufferNumSamples; ++localFrame)
             renderFrame(localFrame);
+        framesProcessed += context.bufferNumSamples;
         return;
     }
 
@@ -254,18 +269,36 @@ void DrumDevice::applyToBuffer(const te::PluginRenderContext& context)
         midiPanic();
     auto midi = midiMessages->begin();
     const auto midiEnd = midiMessages->end();
+    // Which frame of this block a message plays on. The engine hands over only
+    // the messages that belong to the block, but the timestamps saying so are
+    // floating point, and a note that lands on a block boundary can arrive a
+    // fraction of a sample short of the end rather than at the start of the
+    // next block. That is not a rare accident: at 48 kHz in 480 sample blocks,
+    // every beat at 120 bpm falls exactly on a boundary, so whether a note is
+    // a hair under or a hair over decides which block it is delivered in - and
+    // a clip whose start carries a residue from being dragged (1.999999999999999
+    // rather than 2.0) puts every note it holds on the under side. Rounding
+    // such a note to bufferNumSamples and then never reaching it is what
+    // silently dropped it. The last frame of the block is where anything at or
+    // past the end plays instead: a sample early at the very worst.
+    const auto frameFor = [this, &context](const auto& message)
+    {
+        return std::clamp(juce::roundToInt(message.getTimeStamp() * sampleRate),
+                          0, context.bufferNumSamples - 1);
+    };
     for (int localFrame = 0; localFrame < context.bufferNumSamples; ++localFrame)
     {
-        while (midi != midiEnd && juce::roundToInt(midi->getTimeStamp() * sampleRate) <= localFrame)
+        while (midi != midiEnd && frameFor(*midi) <= localFrame)
         {
             if (midi->isNoteOn())
-                trigger(midi->getNoteNumber(), midi->getFloatVelocity());
+                trigger(midi->getNoteNumber(), midi->getFloatVelocity(), framesProcessed + localFrame);
             else if (midi->isAllNotesOff())
                 midiPanic();
             ++midi;
         }
         renderFrame(localFrame);
     }
+    framesProcessed += context.bufferNumSamples;
 }
 
 void DrumDevice::loadSample(juce::AudioBuffer<float>& destination, double& sourceRate,

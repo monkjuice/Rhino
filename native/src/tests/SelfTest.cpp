@@ -149,6 +149,73 @@ int runSelfTest()
             for (int i = 4 + eventOffset; i < 4 + 512; ++i)
                 offsetKickPeak = std::max(offsetKickPeak, std::abs(drumBuffer.getSample(c, i)));
         require(offsetKickPeak > 0.0001f);
+
+        // A note that lands on a block boundary. The engine hands the block
+        // only the messages that belong to it, but the timestamps saying so
+        // are floating point, and a note sitting exactly on a boundary can
+        // arrive at the end of the block before rather than the start of the
+        // one after - stamped at the block's whole length. Rounding that to
+        // the sample past the end and then never reaching it dropped the note
+        // outright. Live this is not an edge case: at 48 kHz in 480 sample
+        // blocks every beat at 120 bpm falls on a boundary, and a clip whose
+        // start carries a residue from being dragged puts every note it holds
+        // on the wrong side of one.
+        constexpr int liveBlock = 480;
+        const auto blockEnergy = [&](std::initializer_list<double> stamps)
+        {
+            drumBuffer.clear();
+            midi.clear();
+            for (const auto stamp : stamps)
+                midi.addMidiMessage(juce::MidiMessage::noteOn(1, 48, 1.0f), stamp, {});
+            te::PluginRenderContext boundary(&drumBuffer, 0, liveBlock, &midi, 0.0, {}, true, false, true, false);
+            drums->applyToBuffer(boundary);
+            // Energy, not peak: two strikes a few samples apart barely move the
+            // peak, because the first is already past its own by then, but they
+            // plainly double what the block carries.
+            auto energy = 0.0f;
+            for (int i = 0; i < liveBlock; ++i)
+                energy += std::abs(drumBuffer.getSample(0, i));
+            return energy;
+        };
+        const auto struckOnce = [&](std::initializer_list<double> stamps)
+        {
+            drums->reset();
+            return blockEnergy(stamps);
+        };
+        const auto onTheBeat = struckOnce({0.0});
+        require(onTheBeat > 0.0001f);
+        // Stamped at the block's whole length - the case that was dropped - and
+        // inside its last sample, which rounds to the same place. Either plays
+        // on the final sample of its own block, so the block after it is where
+        // the hit is plainly there or plainly missing.
+        for (const auto lateStamp : {liveBlock / 48000.0, (liveBlock - 0.25) / 48000.0})
+        {
+            drums->reset();
+            blockEnergy({lateStamp});
+            require(blockEnergy({}) > onTheBeat * 0.5f);
+        }
+
+        // One written note can also arrive twice that way: once at the end of
+        // the block it straddles and once a few samples into the next. Two
+        // strikes on one pad that close are not two hits, they are one at twice
+        // the level, so the pad refuses the second. Whether it did is read off
+        // the block itself rather than off its level: two kicks a few samples
+        // apart cancel as readily as they add, so a sum says little.
+        const auto blockAfter = [&](std::initializer_list<double> stamps)
+        {
+            drums->reset();
+            juce::ignoreUnused(blockEnergy(stamps));
+            std::vector<float> rendered(static_cast<size_t>(liveBlock));
+            for (int i = 0; i < liveBlock; ++i)
+                rendered[static_cast<size_t>(i)] = drumBuffer.getSample(0, i);
+            return rendered;
+        };
+        const auto oneStrike = blockAfter({0.0});
+        require(blockAfter({0.0, 4.8 / 48000.0}) == oneStrike);
+        // A hit outside the guard is a hit of its own. Two milliseconds is
+        // already far closer than a pattern can write: the shortest thing the
+        // grid offers, a sixty-fourth at 200 bpm, is nineteen.
+        require(blockAfter({0.0, 96.0 / 48000.0}) != oneStrike);
         drums->deinitialise();
 
         auto bloomPlugin = session.edit->getPluginCache().createNewPlugin(RhinoBloomDevice::xmlTypeName, {});

@@ -13,7 +13,7 @@ bool Session::hasNote(int step, int pitch) const
     const auto gridSteps = editorStepCount();
     if (step < 0 || step >= gridSteps || pitch < 0 || pitch > 127)
         return false;
-    const auto beat = step * stepDurationBeats(editorStepResolution());
+    const auto beat = beatForStep(step);
     for (auto* note : pattern().getSequence().getNotes())
         if (note->getNoteNumber() == pitch
             && std::abs(note->getStartBeat().inBeats() - beat) < 0.0001)
@@ -28,7 +28,7 @@ std::vector<Session::EditorNote> Session::editorNotes() const
     result.reserve(static_cast<size_t>(pattern().getSequence().getNumNotes()));
     for (auto* note : pattern().getSequence().getNotes())
         result.push_back({note->state,
-                          note->getStartBeat().inBeats() / stepBeats,
+                          stepForBeat(note->getStartBeat().inBeats()),
                           note->getLengthBeats().inBeats() / stepBeats,
                           note->getNoteNumber(), note->getVelocity(), note->getColour()});
     return result;
@@ -51,7 +51,7 @@ juce::Result Session::addNote(double startSteps, int pitch, double lengthSteps,
 
     auto& sequence = pattern().getSequence();
     const auto stepBeats = stepDurationBeats(editorStepResolution());
-    auto* added = sequence.addNote(pitch, tracktion::core::BeatPosition::fromBeats(startSteps * stepBeats),
+    auto* added = sequence.addNote(pitch, tracktion::core::BeatPosition::fromBeats(beatForStep(startSteps)),
                                    tracktion::core::BeatDuration::fromBeats(lengthSteps * stepBeats),
                                    juce::jlimit(0, 127, velocity), 0, &edit->getUndoManager());
     if (added == nullptr)
@@ -71,7 +71,8 @@ bool Session::removeNotes(const std::vector<juce::ValueTree>& states)
     auto& transport = edit->getTransport();
     const auto playing = transport.isPlaying();
     const auto clipStartBeat = edit->tempoSequence.toBeats(pattern().getPosition().time.getStart()).inBeats();
-    const auto playheadBeat = edit->tempoSequence.toBeats(transport.getPosition()).inBeats() - clipStartBeat;
+    const auto playheadBeat = edit->tempoSequence.toBeats(transport.getPosition()).inBeats()
+                            - clipStartBeat + patternOffsetBeats();
     auto removedActiveNote = false;
     auto changed = false;
     for (const auto& state : states)
@@ -155,6 +156,30 @@ double Session::patternLengthBeats() const
     return std::max(0.0001, endBeat - startBeat);
 }
 
+// A clip offset is how far into its own source the clip starts, and a MIDI
+// clip source is its whole sequence: splitting a clip, or copying a region
+// that begins part-way through one, leaves every note where it was and moves
+// this instead. Step 0 of the grid is therefore the offset, not beat zero.
+double Session::clipOffsetBeats(const te::Clip& clip) const
+{
+    return clip.getPosition().offset.inSeconds() * tempo() / 60.0;
+}
+
+double Session::patternOffsetBeats() const
+{
+    return patternClip == nullptr ? 0.0 : clipOffsetBeats(*patternClip);
+}
+
+double Session::beatForStep(double step) const
+{
+    return patternOffsetBeats() + step * stepDurationBeats(editorStepResolution());
+}
+
+double Session::stepForBeat(double beat) const
+{
+    return (beat - patternOffsetBeats()) / stepDurationBeats(editorStepResolution());
+}
+
 void Session::setEditorStepCount(int newSteps)
 {
     const auto clamped = juce::jlimit(defaultSteps, 64, newSteps);
@@ -172,7 +197,7 @@ void Session::setNote(int step, int pitch, bool enabled)
     const auto stepBeats = stepDurationBeats(editorStepResolution());
     if (step < 0 || step >= gridSteps || pitch < 0 || pitch > 127)
         return;
-    const auto beat = step * stepBeats;
+    const auto beat = beatForStep(step);
     auto& sequence = pattern().getSequence();
     auto* undoManager = &edit->getUndoManager();
     const auto restartLivePlayback = [this]
@@ -202,12 +227,12 @@ void Session::setNote(int step, int pitch, bool enabled)
             if (note->getNoteNumber() != pitch)
                 continue;
 
-            const auto noteStartStep = juce::roundToInt(note->getStartBeat().inBeats() / stepBeats);
+            const auto noteStartStep = juce::roundToInt(stepForBeat(note->getStartBeat().inBeats()));
             const auto noteLengthSteps = std::max(1, static_cast<int>(std::ceil(note->getLengthBeats().inBeats()
                                                                                 / stepBeats)));
             if (noteStartStep < step && step < noteStartStep + noteLengthSteps)
             {
-                const auto start = tracktion::core::BeatPosition::fromBeats(noteStartStep * stepBeats);
+                const auto start = tracktion::core::BeatPosition::fromBeats(beatForStep(noteStartStep));
                 const auto length = tracktion::core::BeatDuration::fromBeats((step - noteStartStep) * stepBeats);
                 note->setStartAndLength(start, length, undoManager);
                 markModified();
@@ -231,7 +256,7 @@ int Session::noteLengthSteps(int step, int pitch) const
     const auto stepBeats = stepDurationBeats(editorStepResolution());
     if (step < 0 || step >= gridSteps || pitch < 0 || pitch > 127)
         return 0;
-    const auto beat = step * stepBeats;
+    const auto beat = beatForStep(step);
     for (auto* note : pattern().getSequence().getNotes())
         if (note->getNoteNumber() == pitch
             && std::abs(note->getStartBeat().inBeats() - beat) < 0.0001)
@@ -252,13 +277,13 @@ juce::Result Session::resizeNote(int step, int pitch, double lengthSteps)
     if (step < 0 || step >= gridSteps || pitch < 0 || pitch > 127)
         return juce::Result::fail("Resize notes inside the visible grid.");
     lengthSteps = std::clamp(lengthSteps, 0.0625, static_cast<double>(gridSteps - step));
-    const auto beat = step * stepBeats;
+    const auto beat = beatForStep(step);
     auto& sequence = pattern().getSequence();
     auto* undoManager = &edit->getUndoManager();
     auto nextNoteStep = static_cast<double>(gridSteps);
     for (auto* note : sequence.getNotes())
         if (note->getNoteNumber() == pitch && note->getStartBeat().inBeats() > beat + 0.0001)
-            nextNoteStep = std::min(nextNoteStep, note->getStartBeat().inBeats() / stepBeats);
+            nextNoteStep = std::min(nextNoteStep, stepForBeat(note->getStartBeat().inBeats()));
     lengthSteps = std::min(lengthSteps, std::max(0.0625, nextNoteStep - step));
 
     for (auto* note : sequence.getNotes())
@@ -283,13 +308,13 @@ juce::Result Session::resizeNote(const juce::ValueTree& state, double lengthStep
     if (note == nullptr)
         return juce::Result::fail("Select a note to resize.");
     const auto stepBeats = stepDurationBeats(editorStepResolution());
-    const auto startStep = note->getStartBeat().inBeats() / stepBeats;
+    const auto startStep = stepForBeat(note->getStartBeat().inBeats());
     lengthSteps = std::clamp(lengthSteps, 0.001, static_cast<double>(editorStepCount()) - startStep);
     auto nextStart = static_cast<double>(editorStepCount());
     for (auto* other : sequence.getNotes())
         if (other != note && other->getNoteNumber() == note->getNoteNumber()
             && other->getStartBeat() > note->getStartBeat())
-            nextStart = std::min(nextStart, other->getStartBeat().inBeats() / stepBeats);
+            nextStart = std::min(nextStart, stepForBeat(other->getStartBeat().inBeats()));
     lengthSteps = std::min(lengthSteps, std::max(0.001, nextStart - startStep));
     note->setStartAndLength(note->getStartBeat(),
                             tracktion::core::BeatDuration::fromBeats(lengthSteps * stepBeats),
@@ -303,7 +328,7 @@ juce::Result Session::resizeNoteFromLeft(double startStep, int pitch, double new
 {
     jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
     const auto stepBeats = stepDurationBeats(editorStepResolution());
-    const auto startBeat = startStep * stepBeats;
+    const auto startBeat = beatForStep(startStep);
     auto& sequence = pattern().getSequence();
     auto* undoManager = &edit->getUndoManager();
     for (auto* note : sequence.getNotes())
@@ -313,9 +338,9 @@ juce::Result Session::resizeNoteFromLeft(double startStep, int pitch, double new
             auto previousEnd = 0.0;
             for (auto* other : sequence.getNotes())
                 if (other->getNoteNumber() == pitch && other != note && other->getStartBeat().inBeats() < startBeat)
-                    previousEnd = std::max(previousEnd, (other->getStartBeat().inBeats() + other->getLengthBeats().inBeats()) / stepBeats);
+                    previousEnd = std::max(previousEnd, stepForBeat(other->getEndBeat().inBeats()));
             newStartStep = std::clamp(newStartStep, previousEnd, endStep - 0.0625);
-            note->setStartAndLength(tracktion::core::BeatPosition::fromBeats(newStartStep * stepBeats),
+            note->setStartAndLength(tracktion::core::BeatPosition::fromBeats(beatForStep(newStartStep)),
                                     tracktion::core::BeatDuration::fromBeats((endStep - newStartStep) * stepBeats), undoManager);
             markModified();
             sendSynchronousChangeMessage();
@@ -332,14 +357,14 @@ juce::Result Session::resizeNoteFromLeft(const juce::ValueTree& state, double ne
     if (note == nullptr)
         return juce::Result::fail("Select a note to resize.");
     const auto stepBeats = stepDurationBeats(editorStepResolution());
-    const auto endStep = note->getEndBeat().inBeats() / stepBeats;
+    const auto endStep = stepForBeat(note->getEndBeat().inBeats());
     auto previousEnd = 0.0;
     for (auto* other : sequence.getNotes())
         if (other != note && other->getNoteNumber() == note->getNoteNumber()
             && other->getStartBeat() < note->getStartBeat())
-            previousEnd = std::max(previousEnd, other->getEndBeat().inBeats() / stepBeats);
+            previousEnd = std::max(previousEnd, stepForBeat(other->getEndBeat().inBeats()));
     newStartStep = std::clamp(newStartStep, previousEnd, endStep - 0.001);
-    note->setStartAndLength(tracktion::core::BeatPosition::fromBeats(newStartStep * stepBeats),
+    note->setStartAndLength(tracktion::core::BeatPosition::fromBeats(beatForStep(newStartStep)),
                             tracktion::core::BeatDuration::fromBeats((endStep - newStartStep) * stepBeats),
                             &edit->getUndoManager());
     markModified();
@@ -370,12 +395,11 @@ juce::Result Session::fillNoteToClipEnd(int step, int pitch)
 {
     jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
     const auto gridSteps = editorStepCount();
-    const auto stepBeats = stepDurationBeats(editorStepResolution());
     if (step < 0 || step >= gridSteps || pitch < 0 || pitch > 127)
         return juce::Result::fail("Select a note inside the visible grid.");
 
-    const auto beat = step * stepBeats;
-    const auto endBeat = patternLengthBeats();
+    const auto beat = beatForStep(step);
+    const auto endBeat = patternOffsetBeats() + patternLengthBeats();
     if (endBeat <= beat + 0.0001)
         return juce::Result::fail("The selected note already starts at the clip end.");
 
@@ -407,7 +431,7 @@ juce::Result Session::fillNoteToClipEnd(const juce::ValueTree& state)
     if (note == nullptr)
         return juce::Result::fail("Select a note to fill.");
     const auto stepBeats = stepDurationBeats(editorStepResolution());
-    const auto startStep = note->getStartBeat().inBeats() / stepBeats;
+    const auto startStep = stepForBeat(note->getStartBeat().inBeats());
     return resizeNote(state, patternLengthBeats() / stepBeats - startStep);
 }
 
@@ -415,7 +439,6 @@ juce::Result Session::moveNote(int sourceStep, int sourcePitch, int targetStep, 
 {
     jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
     const auto gridSteps = editorStepCount();
-    const auto stepBeats = stepDurationBeats(editorStepResolution());
     if (sourceStep < 0 || sourceStep >= gridSteps || targetStep < 0 || targetStep >= gridSteps
         || sourcePitch < 0 || sourcePitch > 127
         || targetPitch < 0 || targetPitch > 127)
@@ -426,8 +449,8 @@ juce::Result Session::moveNote(int sourceStep, int sourcePitch, int targetStep, 
     auto& sequence = pattern().getSequence();
     auto* undoManager = &edit->getUndoManager();
     auto* moving = static_cast<te::MidiNote*>(nullptr);
-    const auto sourceBeat = sourceStep * stepBeats;
-    const auto targetBeat = targetStep * stepBeats;
+    const auto sourceBeat = beatForStep(sourceStep);
+    const auto targetBeat = beatForStep(targetStep);
     for (auto* note : sequence.getNotes())
     {
         const auto noteBeat = note->getStartBeat().inBeats();
@@ -440,7 +463,8 @@ juce::Result Session::moveNote(int sourceStep, int sourcePitch, int targetStep, 
         return juce::Result::fail("Select a note to move.");
 
     const auto targetStart = tracktion::core::BeatPosition::fromBeats(targetBeat);
-    const auto maximumLength = tracktion::core::BeatDuration::fromBeats(patternLengthBeats() - targetStart.inBeats());
+    const auto maximumLength = tracktion::core::BeatDuration::fromBeats(
+        patternOffsetBeats() + patternLengthBeats() - targetStart.inBeats());
     if (maximumLength <= tracktion::core::BeatDuration())
         return juce::Result::fail("Move notes inside the clip.");
     moving->setStartAndLength(targetStart, std::min(moving->getLengthBeats(), maximumLength), undoManager);
@@ -475,7 +499,7 @@ juce::Result Session::moveNotes(const std::vector<std::pair<int, int>>& sources,
 
     for (auto* note : pattern().getSequence().getNotes())
     {
-        const auto step = juce::roundToInt(note->getStartBeat().inBeats() / stepBeats);
+        const auto step = juce::roundToInt(stepForBeat(note->getStartBeat().inBeats()));
         const auto cell = std::pair {step, note->getNoteNumber()};
         if (sourceCells.contains(cell))
         {
@@ -498,7 +522,7 @@ juce::Result Session::moveNotes(const std::vector<std::pair<int, int>>& sources,
         panicMidiOnTrack(pattern().getClipTrack());
     auto* undoManager = &edit->getUndoManager();
     for (const auto& move : moves)
-        move.note->setStartAndLength(tracktion::core::BeatPosition::fromBeats(move.targetStep * stepBeats),
+        move.note->setStartAndLength(tracktion::core::BeatPosition::fromBeats(beatForStep(move.targetStep)),
                                      move.note->getLengthBeats(), undoManager);
     for (const auto& move : moves)
         move.note->setNoteNumber(move.targetPitch, undoManager);
@@ -524,7 +548,7 @@ juce::Result Session::moveNotes(const std::vector<juce::ValueTree>& states, doub
         auto* note = sequence.getNoteFor(state);
         if (note == nullptr)
             return juce::Result::fail("Select notes to move.");
-        moves.push_back({note, note->getStartBeat().inBeats() / stepBeats,
+        moves.push_back({note, stepForBeat(note->getStartBeat().inBeats()),
                          note->getLengthBeats().inBeats() / stepBeats,
                          note->getNoteNumber()});
     }
@@ -554,8 +578,8 @@ juce::Result Session::moveNotes(const std::vector<juce::ValueTree>& states, doub
             {
                 if (other->getNoteNumber() != targetPitch || isMoving(*other))
                     continue;
-                const auto otherStart = other->getStartBeat().inBeats() / stepBeats;
-                const auto otherEnd = other->getEndBeat().inBeats() / stepBeats;
+                const auto otherStart = stepForBeat(other->getStartBeat().inBeats());
+                const auto otherEnd = stepForBeat(other->getEndBeat().inBeats());
                 if (otherEnd <= move.start + tolerance)
                     lowest = std::max(lowest, otherEnd - move.start);
                 else if (otherStart >= move.start + move.length - tolerance)
@@ -587,7 +611,7 @@ juce::Result Session::moveNotes(const std::vector<juce::ValueTree>& states, doub
     auto* undoManager = &edit->getUndoManager();
     for (const auto& move : moves)
     {
-        move.note->setStartAndLength(tracktion::core::BeatPosition::fromBeats((move.start + resolvedDelta) * stepBeats),
+        move.note->setStartAndLength(tracktion::core::BeatPosition::fromBeats(beatForStep(move.start + resolvedDelta)),
                                      move.note->getLengthBeats(), undoManager);
         move.note->setNoteNumber(move.pitch + pitchDelta, undoManager);
     }

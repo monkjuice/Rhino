@@ -129,6 +129,10 @@ int runArrangementTest()
        #include "scenarios/NoteSelection.inc"
         scenario("note clipboard");
        #include "scenarios/NoteClipboard.inc"
+        // Last, because it points the note editor at a clip of its own and
+        // nothing after it would expect that.
+        scenario("clip window");
+       #include "scenarios/ClipWindow.inc"
         return 0;
     }
     catch (const std::exception& error)

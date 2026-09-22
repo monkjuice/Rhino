@@ -67,10 +67,18 @@ void Arrangement::sync()
             else if (auto* midi = dynamic_cast<te::MidiClip*>(clip))
             {
                 view.sourceDuration = te::Edit::getMaximumEditEnd().inSeconds();
+                // The sequence is the whole recording; the clip shows a window
+                // into it that opens at the offset. Drawing from the sequence
+                // start instead puts a left-trimmed clip - one made by a split,
+                // or by pasting a region that began part-way through a clip -
+                // full of notes it never plays, with the ones it does play
+                // pushed off the right-hand end.
                 for (auto* note : midi->getSequence().getNotes())
                 {
-                    const auto noteStart = session.edit->tempoSequence.toTime(note->getStartBeat()).inSeconds();
-                    const auto noteEnd = session.edit->tempoSequence.toTime(note->getStartBeat() + note->getLengthBeats()).inSeconds();
+                    const auto noteStart = session.edit->tempoSequence.toTime(note->getStartBeat()).inSeconds()
+                                         - p.offset.inSeconds();
+                    const auto noteEnd = session.edit->tempoSequence.toTime(note->getStartBeat() + note->getLengthBeats()).inSeconds()
+                                       - p.offset.inSeconds();
                     view.midiNotes.push_back({view.position.start + noteStart, view.position.start + noteEnd, note->getNoteNumber()});
                 }
             }

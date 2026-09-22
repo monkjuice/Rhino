@@ -51,8 +51,14 @@ void fillMidiClip(te::MidiClip& clip, const PresetPattern& preset, juce::UndoMan
     clip.state.removeProperty(starterPlaceholderID, &undoManager);
     auto& sequence = clip.getSequence();
     sequence.removeAllNotes(&undoManager);
+    // Step 0 is where the clip starts showing its sequence, which is its
+    // offset rather than the sequence start: a preset dropped on a clip that
+    // was trimmed from the left would otherwise land outside what it plays.
+    const auto offsetBeats = clip.getPosition().offset.inSeconds()
+                           * clip.edit.tempoSequence.getTempo(0)->getBpm() / 60.0;
     for (int i = 0; i < preset.count; ++i)
-        sequence.addNote(preset.notes[i].pitch, tracktion::core::BeatPosition::fromBeats(preset.notes[i].step * 0.25),
+        sequence.addNote(preset.notes[i].pitch,
+                         tracktion::core::BeatPosition::fromBeats(offsetBeats + preset.notes[i].step * 0.25),
                          tracktion::core::BeatDuration::fromBeats(std::max(1, preset.notes[i].length) * 0.225), 100, 0,
                          &undoManager);
     clip.setName(preset.name);

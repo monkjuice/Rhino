@@ -188,6 +188,17 @@ public:
     int editorStepResolution() const;
     int editorStepCount() const;
     double patternLengthBeats() const;
+    // A clip trimmed from its left edge - by a split, or by the region a copy
+    // was taken from - keeps its whole sequence and shows a window into it.
+    // These say where that window starts, in the sequence's own beats, and
+    // every step-to-beat conversion in the note editor goes through them.
+    // Without that the editor reads the sequence from its own zero and shows
+    // notes the clip never plays, which is what the step grid's playhead has
+    // always known and the notes beside it did not.
+    double clipOffsetBeats(const te::Clip&) const;
+    double patternOffsetBeats() const;
+    double beatForStep(double step) const;
+    double stepForBeat(double beat) const;
     void setEditorStepCount(int newSteps);
     bool hasNote(int step, int pitch) const;
     std::vector<EditorNote> editorNotes() const;

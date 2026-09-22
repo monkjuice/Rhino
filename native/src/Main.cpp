@@ -15,6 +15,7 @@
 #include <cmath>
 #include <functional>
 #include <stdexcept>
+#include <utility>
 
 #if JUCE_WINDOWS
  #ifndef NOMINMAX
@@ -1144,10 +1145,12 @@ private:
         menu.addItem(1, "Musical position", true, displayPosition);
         menu.addItem(2, "Tempo", true, displayTempo);
         menu.addItem(3, "Time signature", true, displayTimeSignature);
+        menu.addItem(4, "Loop range", true, displayLoop);
         menu.addSeparator();
-        menu.addItem(4, "Time and song length", true, displayTime);
-        menu.addItem(5, "CPU", true, displayCpu);
-        menu.addItem(6, "Memory", true, displayMemory);
+        menu.addItem(5, "Time and song length", true, displayTime);
+        menu.addItem(6, "CPU", true, displayCpu);
+        menu.addItem(7, "Memory", true, displayMemory);
+        menu.addItem(8, "Audio device", true, displayAudio);
         menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(position),
             [safe = juce::Component::SafePointer<ControlWindow>(this)] (int result)
             {
@@ -1155,9 +1158,11 @@ private:
                 if (result == 1) safe->displayPosition = !safe->displayPosition;
                 else if (result == 2) safe->displayTempo = !safe->displayTempo;
                 else if (result == 3) safe->displayTimeSignature = !safe->displayTimeSignature;
-                else if (result == 4) safe->displayTime = !safe->displayTime;
-                else if (result == 5) safe->displayCpu = !safe->displayCpu;
-                else if (result == 6) safe->displayMemory = !safe->displayMemory;
+                else if (result == 4) safe->displayLoop = !safe->displayLoop;
+                else if (result == 5) safe->displayTime = !safe->displayTime;
+                else if (result == 6) safe->displayCpu = !safe->displayCpu;
+                else if (result == 7) safe->displayMemory = !safe->displayMemory;
+                else if (result == 8) safe->displayAudio = !safe->displayAudio;
                 safe->timerCallback();
             });
     }
@@ -1267,20 +1272,21 @@ private:
             session.applyTrackAutomationAt(playheadTime(session.edit->getTransport()));
         const auto seconds = session.edit->getTransport().getPosition().inSeconds();
         updateReadings(seconds);
-        // A count-in owns the first line while it runs, but the clock and the
-        // load meters keep reading, which is why they are updated above this.
+        // The loop is where the transport will turn, so it belongs beside the
+        // position rather than under it.
+        position.setTrailingText(displayLoop ? loopText() : juce::String());
+        // A count-in owns the first line while it runs, but the clock, the
+        // load meters and the loop keep reading, which is why all of them are
+        // updated above this.
         if (session.isCountingIn())
         {
             position.setDisplayText("COUNT-IN     " + juce::String(session.countInBarsRemaining()));
             return;
         }
-        const auto beat = session.edit->tempoSequence.toBeats(tracktion::core::TimePosition::fromSeconds(seconds)).inBeats();
+        const auto place = barAndBeat(seconds);
         const auto signature = session.timeSignature();
-        const auto barLength = session.beatsPerBar();
-        const auto bar = static_cast<int>(std::floor(beat / barLength)) + 1;
-        const auto beatInBar = static_cast<int>(std::floor(beat - (bar - 1) * barLength)) + 1;
         juce::StringArray parts;
-        if (displayPosition) parts.add(juce::String(bar).paddedLeft('0', 3) + "  " + juce::String(beatInBar));
+        if (displayPosition) parts.add(juce::String(place.first).paddedLeft('0', 3) + "  " + juce::String(place.second));
         if (displayTempo) parts.add(juce::String(session.tempo(), 0));
         if (displayTimeSignature) parts.add(juce::String(signature.numerator) + "/" + juce::String(signature.denominator));
         const auto text = parts.joinIntoString("     ");
@@ -1298,6 +1304,7 @@ private:
             readingSample = 0;
             cpuLoad = SystemUsage::processCpuLoad();
             memoryBytes = SystemUsage::processMemoryBytes();
+            audioDescription = audioDeviceText();
         }
         juce::StringArray readings;
         if (displayTime)
@@ -1306,6 +1313,50 @@ private:
         if (displayCpu) readings.add("CPU " + juce::String(juce::roundToInt(cpuLoad * 100.0)) + "%");
         if (displayMemory) readings.add("RAM " + formatMemory(memoryBytes));
         position.setSecondaryText(readings.joinIntoString("   "));
+        position.setSecondaryTrailingText(displayAudio ? audioDescription : juce::String());
+    }
+
+    // Bars and beats at a point on the timeline, both counted from one, which
+    // is how the position readout and the loop beside it are both written.
+    std::pair<int, int> barAndBeat(double seconds) const
+    {
+        const auto beats = session.edit->tempoSequence
+                               .toBeats(tracktion::core::TimePosition::fromSeconds(seconds)).inBeats();
+        const auto barLength = session.beatsPerBar();
+        const auto bar = static_cast<int>(std::floor(beats / barLength)) + 1;
+        return {bar, static_cast<int>(std::floor(beats - (bar - 1) * barLength)) + 1};
+    }
+
+    // The loop, in the bars the position is counted in. Looping is always on:
+    // with no span dragged on the ruler it is the whole arrangement, so until
+    // someone narrows it this reads as the length of the project. The beat is
+    // left off a loop that begins and ends on a downbeat, which is nearly all
+    // of them.
+    juce::String loopText() const
+    {
+        const auto range = session.loopRange();
+        auto place = [] (std::pair<int, int> point)
+        {
+            return juce::String(point.first).paddedLeft('0', 3)
+                 + (point.second == 1 ? juce::String() : "." + juce::String(point.second));
+        };
+        return "LOOP  " + place(barAndBeat(range.getStart().inSeconds()))
+             + " - " + place(barAndBeat(range.getEnd().inSeconds()));
+    }
+
+    // What the engine is actually running on. Sampled with the load meters
+    // rather than read every frame, because it changes only when the audio
+    // settings do. The milliseconds are the block's own latency: the figure
+    // that moves when the buffer size is changed to chase a crackle.
+    juce::String audioDeviceText() const
+    {
+        auto* device = session.engine.getDeviceManager().deviceManager.getCurrentAudioDevice();
+        if (device == nullptr) return "NO AUDIO DEVICE";
+        const auto rate = device->getCurrentSampleRate();
+        const auto block = device->getCurrentBufferSizeSamples();
+        if (rate <= 0.0 || block <= 0) return device->getName().toUpperCase();
+        return juce::String(rate / 1000.0, 1) + " kHz   " + juce::String(block)
+             + "   " + juce::String(block * 1000.0 / rate, 1) + " ms";
     }
 
     juce::Rectangle<int> deviceSplitterBounds() const
@@ -1399,10 +1450,11 @@ private:
     bool sessionViewOpen = false;
     bool resizingBrowser = false, resizingDeviceView = false, resizingArrangement = false;
     bool updatingEditorResolution = false;
-    bool displayPosition = true, displayTempo = true, displayTimeSignature = true;
-    bool displayTime = true, displayCpu = true, displayMemory = true;
+    bool displayPosition = true, displayTempo = true, displayTimeSignature = true, displayLoop = true;
+    bool displayTime = true, displayCpu = true, displayMemory = true, displayAudio = true;
     double cpuLoad = 0.0;
     juce::uint64 memoryBytes = 0;
+    juce::String audioDescription;
     int readingSample = 15;
     RecordButton::State recordState = RecordButton::State::idle;
 };

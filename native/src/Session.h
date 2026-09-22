@@ -476,6 +476,9 @@ public:
     juce::Result setLoopRange(double startSeconds, double endSeconds);
     void clearManualLoopRange();
     bool hasManualLoopRange() const { return manualLoop; }
+    // What the transport will actually turn at, whether or not a span was
+    // dragged on the ruler. refreshLoop is what puts it on the transport.
+    tracktion::core::TimeRange loopRange() const;
     void refreshLoop();
     te::Clip* findClip(te::EditItemID) const;
     te::WaveAudioClip* findAudioClip(te::EditItemID) const;

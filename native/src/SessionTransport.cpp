@@ -272,23 +272,27 @@ void Session::setTempo(double bpm)
     sendSynchronousChangeMessage();
 }
 
-void Session::refreshLoop()
+// Looping is always on, so this always answers: the span dragged on the ruler
+// when there is one, and otherwise everything up to the last clip. The readout
+// in the control bar asks the same question the transport does, which is why
+// the answer lives here rather than being recomputed beside it.
+tracktion::core::TimeRange Session::loopRange() const
 {
     if (manualLoop)
-    {
-        edit->getTransport().setLoopRange(manualLoopRange);
-        edit->getTransport().looping = true;
-        return;
-    }
+        return manualLoopRange;
 
     auto end = tracktion::core::TimePosition::fromSeconds(0.0);
-    const auto tracks = te::getAudioTracks(*edit);
-    for (auto* track : tracks)
+    for (auto* track : te::getAudioTracks(*edit))
         for (auto* clip : track->getClips())
             end = std::max(end, clip->getPosition().time.getEnd());
     if (end <= tracktion::core::TimePosition::fromSeconds(0.0))
         end = edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(beatsPerBar()));
-    edit->getTransport().setLoopRange({{}, end});
+    return {{}, end};
+}
+
+void Session::refreshLoop()
+{
+    edit->getTransport().setLoopRange(loopRange());
     edit->getTransport().looping = true;
 }
 

@@ -5,6 +5,7 @@
 #include "instruments/RhinoWaveDevice.h"
 #include "audio/VocoderDevice.h"
 #include "../../Theme.h"
+#include "../../TransportDisplay.h"
 #include "../../StepGrid.h"
 #include "../../AudioClipPanel.h"
 #include "../../SessionView.h"
@@ -74,6 +75,8 @@ int runArrangementTest()
                     "Bold text is drawn with the bundled face");
             require(plain != bold, "Bold is a cut of its own rather than a synthesised weight");
         }
+        scenario("transport readout");
+       #include "scenarios/TransportReadout.inc"
         scenario("browser drops");
        #include "scenarios/BrowserDrops.inc"
         scenario("library preview");

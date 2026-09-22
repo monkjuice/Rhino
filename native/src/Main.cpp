@@ -11,6 +11,7 @@
 #include "ComputerKeyboard.h"
 #include "StartupScreen.h"
 #include "TransportDisplay.h"
+#include "SystemUsage.h"
 #include <cmath>
 #include <functional>
 #include <stdexcept>
@@ -147,6 +148,29 @@ public:
 private:
     State state = State::idle;
 };
+
+// Wall-clock readings for the control bar. Minutes are padded to two digits
+// rather than widened past an hour: an arrangement that long would push the
+// load meters out of the box, and the bar number above is the reading that
+// matters at that length anyway.
+static juce::String formatClock(double seconds, bool withMilliseconds)
+{
+    if (!std::isfinite(seconds) || seconds < 0.0) seconds = 0.0;
+    const auto totalMs = static_cast<juce::int64>(seconds * 1000.0 + 0.5);
+    const auto milliseconds = static_cast<int>(totalMs % 1000);
+    const auto totalSeconds = totalMs / 1000;
+    auto text = juce::String(static_cast<int>(totalSeconds / 60)).paddedLeft('0', 2)
+              + ":" + juce::String(static_cast<int>(totalSeconds % 60)).paddedLeft('0', 2);
+    if (withMilliseconds) text += ":" + juce::String(milliseconds).paddedLeft('0', 3);
+    return text;
+}
+
+static juce::String formatMemory(juce::uint64 bytes)
+{
+    const auto megabytes = static_cast<double>(bytes) / (1024.0 * 1024.0);
+    if (megabytes >= 1024.0) return juce::String(megabytes / 1024.0, 2) + " GB";
+    return juce::String(juce::roundToInt(megabytes)) + " MB";
+}
 
 // Session view development is paused; see SESSION-VIEW.md for what exists, what
 // is missing, and how to pick it up. The view and its model are still built and
@@ -418,7 +442,10 @@ public:
         const auto arrangementBottom = arrangementTop + arrangementH;
         const auto lowerTop = arrangementBottom + 34;
         const auto lowerH = std::max(0, getHeight() - lowerTop - 12);
-        const auto displayWidth = juce::jlimit(240, 320, getWidth() / 4);
+        // Wide enough for the clock pair and both meters on the second line;
+        // the transport and the right-hand controls are placed from this, so
+        // widening it moves them rather than overlapping them.
+        const auto displayWidth = juce::jlimit(300, 400, getWidth() / 3);
         const auto displayX = getWidth() / 2 - displayWidth / 2;
         // Keep the control bar as one visual cluster. The browser may resize,
         // but transport should remain beside the display rather than drifting
@@ -1076,6 +1103,10 @@ private:
         menu.addItem(1, "Musical position", true, displayPosition);
         menu.addItem(2, "Tempo", true, displayTempo);
         menu.addItem(3, "Time signature", true, displayTimeSignature);
+        menu.addSeparator();
+        menu.addItem(4, "Time and song length", true, displayTime);
+        menu.addItem(5, "CPU", true, displayCpu);
+        menu.addItem(6, "Memory", true, displayMemory);
         menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(position),
             [safe = juce::Component::SafePointer<ControlWindow>(this)] (int result)
             {
@@ -1083,6 +1114,9 @@ private:
                 if (result == 1) safe->displayPosition = !safe->displayPosition;
                 else if (result == 2) safe->displayTempo = !safe->displayTempo;
                 else if (result == 3) safe->displayTimeSignature = !safe->displayTimeSignature;
+                else if (result == 4) safe->displayTime = !safe->displayTime;
+                else if (result == 5) safe->displayCpu = !safe->displayCpu;
+                else if (result == 6) safe->displayMemory = !safe->displayMemory;
                 safe->timerCallback();
             });
     }
@@ -1190,12 +1224,15 @@ private:
             }
         if (session.edit->getTransport().isPlaying())
             session.applyTrackAutomationAt(playheadTime(session.edit->getTransport()));
+        const auto seconds = session.edit->getTransport().getPosition().inSeconds();
+        updateReadings(seconds);
+        // A count-in owns the first line while it runs, but the clock and the
+        // load meters keep reading, which is why they are updated above this.
         if (session.isCountingIn())
         {
             position.setDisplayText("COUNT-IN     " + juce::String(session.countInBarsRemaining()));
             return;
         }
-        const auto seconds = session.edit->getTransport().getPosition().inSeconds();
         const auto beat = session.edit->tempoSequence.toBeats(tracktion::core::TimePosition::fromSeconds(seconds)).inBeats();
         const auto signature = session.timeSignature();
         const auto barLength = session.beatsPerBar();
@@ -1207,6 +1244,27 @@ private:
         if (displayTimeSignature) parts.add(juce::String(signature.numerator) + "/" + juce::String(signature.denominator));
         const auto text = parts.joinIntoString("     ");
         position.setDisplayText(text);
+    }
+
+    // The second line of the display. The clock follows the playhead at the
+    // timer's own rate, but both load meters are sampled a few times a second:
+    // each one walks kernel structures, and a figure that changed thirty times
+    // a second could not be read anyway.
+    void updateReadings(double seconds)
+    {
+        if (++readingSample >= 15)
+        {
+            readingSample = 0;
+            cpuLoad = SystemUsage::processCpuLoad();
+            memoryBytes = SystemUsage::processMemoryBytes();
+        }
+        juce::StringArray readings;
+        if (displayTime)
+            readings.add(formatClock(seconds, true) + " / "
+                         + formatClock(session.edit->getLength().inSeconds(), true));
+        if (displayCpu) readings.add("CPU " + juce::String(juce::roundToInt(cpuLoad * 100.0)) + "%");
+        if (displayMemory) readings.add("RAM " + formatMemory(memoryBytes));
+        position.setSecondaryText(readings.joinIntoString("   "));
     }
 
     juce::Rectangle<int> deviceSplitterBounds() const
@@ -1300,6 +1358,10 @@ private:
     bool resizingBrowser = false, resizingDeviceView = false, resizingArrangement = false;
     bool updatingEditorResolution = false;
     bool displayPosition = true, displayTempo = true, displayTimeSignature = true;
+    bool displayTime = true, displayCpu = true, displayMemory = true;
+    double cpuLoad = 0.0;
+    juce::uint64 memoryBytes = 0;
+    int readingSample = 15;
     RecordButton::State recordState = RecordButton::State::idle;
 };
 

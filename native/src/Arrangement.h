@@ -163,6 +163,10 @@ private:
     void dragRegionGesture(const juce::MouseEvent&);
     void endRegionGesture();
     void paintTimeSelection(juce::Graphics&);
+    // The ruler reads in bars whatever the snap grid is set to, so its
+    // numbering is stepped by what stays legible at this zoom rather than
+    // by the grid division. Changing the grid must not renumber the bars.
+    void paintBarNumbers(juce::Graphics&, double firstBeat, double lastBeat);
     juce::String barPositionText(double seconds) const;
     void copySelection();
     void cutSelection();

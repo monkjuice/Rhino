@@ -35,6 +35,13 @@ void TransportDisplay::setDisplayText(const juce::String& next)
     repaint();
 }
 
+void TransportDisplay::setSecondaryText(const juce::String& next)
+{
+    if (secondary == next) return;
+    secondary = next;
+    repaint();
+}
+
 void TransportDisplay::paint(juce::Graphics& g)
 {
     auto bounds = getLocalBounds().toFloat();
@@ -42,9 +49,22 @@ void TransportDisplay::paint(juce::Graphics& g)
     g.fillRoundedRectangle(bounds, 3.0f);
     g.setColour(juce::Colour(0xff3f4c55));
     g.drawRoundedRectangle(bounds.reduced(0.5f), 3.0f, 1.0f);
+    auto area = getLocalBounds().reduced(8, 1).withTrimmedRight(20);
+    if (secondary.isNotEmpty())
+    {
+        // Two rows in a box sized for one line of 13px: the split is by weight
+        // rather than in half, so the readings sit under the position instead
+        // of beside a gap.
+        const auto primaryHeight = juce::roundToInt(area.getHeight() * 0.58f);
+        const auto lower = area.withTrimmedTop(primaryHeight);
+        area = area.withHeight(primaryHeight);
+        g.setColour(juce::Colour(0xff8fa08c));
+        g.setFont(juce::FontOptions(10.0f));
+        g.drawText(secondary, lower, juce::Justification::centredLeft, true);
+    }
     g.setColour(juce::Colour(0xffd6e6a7));
     g.setFont(juce::FontOptions(13.0f).withStyle("Bold"));
-    g.drawText(text, getLocalBounds().reduced(8, 1).withTrimmedRight(20), juce::Justification::centredLeft, true);
+    g.drawText(text, area, juce::Justification::centredLeft, true);
 }
 
 void TransportDisplay::resized()

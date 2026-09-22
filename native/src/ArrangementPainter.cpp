@@ -10,6 +10,45 @@
 namespace rhino
 {
 
+// Bar numbers, drawn from the bars themselves rather than from whichever grid
+// line happened to land on one. Stepping by the snap division made the ruler
+// read in whatever the grid was set to; stepping by bars keeps the numbering
+// consecutive and the reading musical at every zoom.
+void Arrangement::paintBarNumbers(juce::Graphics& g, double firstBeat, double lastBeat)
+{
+    const auto barLength = std::max(0.25, session.beatsPerBar());
+    const auto timeOfBar = [this, barLength](double bar)
+    {
+        return session.edit->tempoSequence
+            .toTime(tracktion::core::BeatPosition::fromBeats((bar - 1.0) * barLength)).inSeconds();
+    };
+    const auto firstBar = std::max(1.0, std::floor(firstBeat / barLength) + 1.0);
+    const auto lastBar = std::floor(lastBeat / barLength) + 1.0;
+    if (lastBar < firstBar) return;
+    // A tempo ramp makes bars unequal in pixels, so the step is picked from the
+    // width of the first one on screen and the labels simply thin out or crowd
+    // a little where the tempo moves.
+    const auto pixelsPerBar = std::max(0.01f, xFor(timeOfBar(firstBar + 1.0)) - xFor(timeOfBar(firstBar)));
+    double step = 1.0;
+    while (step * pixelsPerBar < 44.0f && step < 4096.0) step *= 2.0;
+    const auto start = std::floor((firstBar - 1.0) / step) * step + 1.0;
+    const auto right = static_cast<float>(getWidth()) - 14.0f;
+    int painted = 0;
+    for (auto bar = start; bar <= lastBar + step && painted < 512; bar += step)
+    {
+        const auto x = xFor(timeOfBar(bar));
+        if (x < headerWidth - 1.0f) continue;
+        if (x > right) break;
+        ++painted;
+        g.setColour(juce::Colour(0xff4a5862));
+        g.drawVerticalLine(static_cast<int>(x), rulerTop + 2.0f, lanesTop);
+        g.setColour(juce::Colour(0xff8c99a4));
+        g.setFont(uiFont(10.0f));
+        drawSnappedText(g, juce::String(static_cast<juce::int64>(bar)),
+                        {static_cast<int>(x) + 4, static_cast<int>(rulerTop), 64, 24});
+    }
+}
+
 void Arrangement::paint(juce::Graphics& g)
 {
     g.fillAll(juce::Colour(0xff1d2228));
@@ -144,15 +183,8 @@ void Arrangement::paint(juce::Graphics& g)
             g.setColour(bar ? juce::Colour(0xff42515c) : wholeBeat ? juce::Colour(0xff35404a) : juce::Colour(0xff29323a));
             g.drawVerticalLine(static_cast<int>(x), static_cast<int>(lanesTop), masterLane().getBottom());
         }
-        if (bar)
-        {
-            const auto barNumber = static_cast<int>(std::floor(beat / session.beatsPerBar())) + 1;
-            g.setColour(juce::Colour(0xff8c99a4));
-            g.setFont(uiFont(10.0f));
-            drawSnappedText(g, juce::String(barNumber) + ".1",
-                            {static_cast<int>(x) + 4, static_cast<int>(rulerTop), 64, 24});
-        }
     }
+    paintBarNumbers(g, firstBeat, lastBeat);
     {
         const auto loopRange = session.edit->getTransport().getLoopRange();
         auto start = loopGesture != LoopGesture::none ? loopPreviewStart : loopRange.getStart().inSeconds();

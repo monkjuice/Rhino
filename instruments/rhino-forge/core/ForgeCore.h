@@ -47,6 +47,11 @@ public:
         // the synth, never lazily on the first note from the audio thread.
         builtInWavetable();
         subWavetable();
+        // The noise sources' poles, and the level each of them is measured
+        // back to. Here for the same reason the tables are: it walks a few
+        // seconds of every generator to settle their levels, which is work for
+        // whichever thread prepares the synth and never for the audio one.
+        noiseCoefficients.prepare(sampleRate);
         // Every rack's delay lines are sized here, which is the one place they
         // may be: a slot's type changes while audio is running, so each slot
         // carries every type's state and none of it can be built on demand.
@@ -75,6 +80,7 @@ public:
         meterLfoHeld = {};
         meterLfoValue = {};
         noiseState = 0x9e3779b9u;
+        noiseSeed = 0;
         heldCount = 0;
         monoMode = false;
         meterEnvelope = {};
@@ -561,6 +567,12 @@ private:
         // answer for a twelfth of the work.
         std::array<WarpDcBlocker, 2> dcA {}, dcB {};
         float phaseSub = 0.0f;
+        // The noise module's generators, which belong to the voice rather than
+        // to the synth: a chord is several notes and each of them hisses on its
+        // own. Seeded in startVoice, and only on a voice that was silent -- a
+        // stolen voice keeps the stream it was on, exactly as its envelopes
+        // keep the levels they were at. See ForgeNoise.h.
+        NoiseVoice noise {};
         float currentHz = 0.0f, targetHz = 0.0f;
         // ENV 1 at index zero is the amplitude this voice is rendered at and
         // the one that says when it is finished; ENV 2-4 are carried for the
@@ -802,6 +814,12 @@ private:
                 voice.phaseA[i] = unitFromHash(seed);
                 voice.phaseB[i] = unitFromHash(seed + 2654435741u);
             }
+            // Two notes struck together must not hiss identically, and the same
+            // phrase rendered twice must. A counter mixed with the note number
+            // gives both: every voice gets a stream of its own, and the counter
+            // is reset with the engine, so an offline render repeated over the
+            // same project is the same file.
+            voice.noise.start(static_cast<std::uint32_t>(note) * 2654435761u + ++noiseSeed);
         }
         voice.active = true;
         voice.tail = 1.0f;
@@ -1070,10 +1088,22 @@ private:
             distribute(sub * sourcePanLeft(patch.subPan), sub * sourcePanRight(patch.subPan),
                        on(patch.routeSub), patch.sendSub, buses);
         }
-        if (on(patch.noiseEnable))
+        // The noise module, which is a small oscillator rather than a hiss
+        // knob: four sources, a tilt across them and a decorrelation between
+        // the channels, all of it in state this voice owns. Still rendered for
+        // a moment after the module is switched off, because its power switch
+        // is a ramp rather than a step -- see NoiseVoice::audible.
+        if (on(patch.noiseEnable) || voice.noise.audible())
         {
-            const auto hiss = noise() * patch.noiseLevel;
-            distribute(hiss * sourcePanLeft(patch.noisePan), hiss * sourcePanRight(patch.noisePan),
+            const auto hiss = voice.noise.render(noiseCoefficients, on(patch.noiseEnable),
+                                                 juce::roundToInt(patch.noiseSource),
+                                                 patch.noiseTone, patch.noiseStereo);
+            // Level and pan are applied out here, on a pair the module has
+            // already placed: the same source pan law the sub is spread with,
+            // so a source reading a given level is that loud whichever it is.
+            const auto level = patch.noiseLevel;
+            distribute(hiss.left * level * sourcePanLeft(patch.noisePan),
+                       hiss.right * level * sourcePanRight(patch.noisePan),
                        on(patch.routeNoise), patch.sendNoise, buses);
         }
 
@@ -1127,6 +1157,10 @@ private:
     std::array<float, lfoCount> meterLfoHeld {};
     std::array<float, lfoCount> meterLfoValue {};
     std::uint32_t noiseState = 0x9e3779b9u;
+    // The noise module's poles and levels, worked out once in initialise(), and
+    // the counter that gives every new voice a stream of its own.
+    NoiseCoefficients noiseCoefficients {};
+    std::uint32_t noiseSeed = 0;
     std::array<juce::NormalisableRange<float>, destinationCount> destinationRanges {};
     // Reused every voice and every sample so a modulated render allocates
     // nothing; only touched when at least one slot is live.

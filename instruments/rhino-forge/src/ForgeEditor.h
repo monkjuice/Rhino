@@ -293,6 +293,12 @@ private:
     // The four settings the filter display is drawn from, read off the
     // parameters the voice will render from.
     FilterShape filterShape() const;
+    // The noise module's SOURCE field, which wears the same component again and
+    // is the plainest of the four: the value is the index and nothing else
+    // moves with it.
+    void setNoiseSource(int choice);
+    void refreshNoiseField();
+    void showNoiseMenu(Control&);
     // The shelves the slots sit on, drawn behind their controls.
     void paintFxShelves(juce::Graphics&, juce::Rectangle<int> area, const ui::Module&);
     // The compact signal-flow overview at the left of the rack. It is a

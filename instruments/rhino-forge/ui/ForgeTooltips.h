@@ -2,6 +2,7 @@
 
 #include "../core/ForgeWarp.h"
 #include "../core/ForgeFilter.h"
+#include "../core/ForgeNoise.h"
 
 #include <juce_core/juce_core.h>
 #include <map>
@@ -143,6 +144,29 @@ inline juce::String warpTooltipFor(int mode)
 // What one filter type does, keyed by the type rather than by the parameter for
 // the same reason the warp's is: the field it is shown on is thirty-four things
 // depending on where it is set, so the explanation follows the setting.
+// What one noise source sounds like, keyed by the source rather than by the
+// parameter, for the same reason a warp mode's and a filter type's are: the
+// field it is shown on is four things depending on where it is set, so the
+// explanation follows the setting.
+inline juce::String noiseSourceTooltipFor(int source)
+{
+    switch (noiseSourceOf(static_cast<float>(source)))
+    {
+        case NoiseSource::pink:
+            return "Flat per octave rather than per hertz -- 3 dB an octave down. The one "
+                   "that sits under a pad without hissing over it";
+        case NoiseSource::brown:
+            return "6 dB an octave down: rumble, wind and weather rather than air";
+        case NoiseSource::geiger:
+            return "Sparse clicks at random intervals rather than a spectrum. Crackle, "
+                   "vinyl and grit";
+        case NoiseSource::white:
+            break;
+    }
+    return "Flat across the band: the brightest of the four, and what air, hats and "
+           "snare tops are made of";
+}
+
 inline juce::String filterTooltipFor(int type)
 {
     switch (filterTypeOf(static_cast<float>(type)))
@@ -323,6 +347,12 @@ inline juce::String tooltipFor(const juce::String& id)
                       "which is where a sub belongs and where it has always been"},
         {"subLevel", "Blend in the sub oscillator, an octave or more below the note"},
         {"noiseEnable", "Switch the noise source on or off"},
+        {"noiseSource", "Which generator the module reads: flat white, pink at 3 dB an "
+                        "octave, brown at 6, or geiger's sparse clicks"},
+        {"noiseTone", "Tilt the noise dark or bright about 1 kHz. Twelve o'clock is the "
+                      "source exactly as it is generated"},
+        {"noiseStereo", "Pull the two channels apart. At nothing both ears hear the same "
+                        "samples; at the top they share no state at all"},
         {"noiseLevel", "Blend in broadband noise"},
         {"filterEnable", "Switch the filter out of the voice, drive and all"},
         {"cutoff", "Open or close the filter. On a comb or a ring modulator this sets the "

@@ -159,8 +159,31 @@ inline const std::vector<Module>& modules()
           {20, {{"subOctave", "OCT", Style::stepper}}},
           {30, {{"subLevel", "LEVEL"}}}},
          0, everyPageBut(Page::mix, Page::fx), 1, 0, 0, 0, 0, nullptr, "SUB / NOISE"},
+        // Four rows where there was one knob floating in an empty column. The
+        // source is the module's display -- what it says is the whole answer to
+        // what this module is doing -- so it takes the top of the plate, and
+        // the two controls that shape the source come between it and the level
+        // it is mixed in at. That is the signal's own order again: what it is,
+        // what colour it is, how wide it is, how much of it there is.
+        //
+        // One control a row rather than the pairs a narrower plate would force.
+        // The column is about a hundred pixels across, so a row of two would
+        // put every knob cell near fifty -- and the shared diameter is the
+        // minimum over every knob on the panel, so a pair here would have taken
+        // the oscillators' knobs down with it. Stacked, the tightest cell in
+        // this module is still roomier than an oscillator's, which is what
+        // keeps the oscillators the module that sets that size.
+        //
+        // SOURCE wears the field the filter's TYPE and the warp modes wear.
+        // Four choices is one past what stacks, so it draws as a name between
+        // two arrows: the arrows step through the sources and the name opens
+        // the list, which is exactly the previous/next-and-browse the module
+        // wants.
         {"noise", "NOISE", "", "noiseEnable", true, Display::none, 0, 2, 2, false,
-         {{100, {{"noiseLevel", "LEVEL"}}}},
+         {{25, {{"noiseSource", "SOURCE", Style::selector}}},
+          {25, {{"noiseTone", "TONE"}}},
+          {25, {{"noiseStereo", "STEREO"}}},
+          {25, {{"noiseLevel", "LEVEL"}}}},
          0, everyPageBut(Page::mix, Page::fx), 1, 0, 0, 0, 0, nullptr, "SUB / NOISE"},
         // Four columns for three knobs, against the oscillators' eight for six:
         // the same width per knob, so nothing in the row is drawn at a size its

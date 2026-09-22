@@ -30,6 +30,10 @@ void warpTests();
 // ForgeTestsFilter.cpp — filter routing.
 void filterTests();
 
+// ForgeTestsNoise.cpp — the four noise sources, the width, the tilt, and that
+// nothing about changing one of them clicks.
+void noiseTests();
+
 // ForgeTestsMixer.cpp — the eight channels, the sends and the two busses.
 void mixerTests();
 

@@ -132,7 +132,12 @@ actually is. Two or three named states — `PLATE / HALL`, `NORMAL / PING-PONG`,
 very different lengths, and a column gives each of them the field's full width
 rather than cropping the long ones. More than three, as with the distortion's
 eight shapes, is a name between two arrows: the arrows step, the name opens the
-list. Each carries the label the
+list. That field shrinks its name, and the padding around its arrows, rather
+than cropping either: an ellipsis is the one thing it must never show, because
+the whole of its job is to say which choice you are on and `BRO...` does not.
+The rack's fields and the filter's are wide enough that nothing happens. The
+noise module's, on a plate two columns of twenty-four wide, is where it earns
+its keep. Each carries the label the
 type gives it, so the field says what it is choosing as well as what is chosen.
 
 A knob a mode has made meaningless greys out rather than disappearing: the
@@ -200,6 +205,40 @@ stepping LOW to HIGH leaves it alone, and stepping LOW to LP+HP does not.
 LOW, HIGH and BAND are still types 0, 1 and 2, and FREQ opens at nothing, which
 is FAT off. A patch saved before any of the rest of this existed therefore loads
 on the filter it was saved on and sounds the way it did, to the bit.
+
+The **noise** module is a small oscillator rather than a hiss knob. SOURCE
+names one of four generators — WHITE flat across the band, PINK falling at 3 dB
+an octave, BROWN at 6, and GEIGER, which is not a spectrum at all but sparse
+shaped clicks at random intervals. It wears the same field the filter's TYPE
+and the warp modes wear, so the arrows step through the sources and the name
+opens the list.
+
+TONE tilts whichever source is selected about 1 kHz, dark one way and bright
+the other, and is genuinely out of the way at twelve o'clock: the two halves of
+the spectrum are scaled against each other, so at nothing they add back up to
+the generator untouched. STEREO is decorrelation and not width — at nothing
+both channels are the same samples, so the module sums to mono without
+cancelling anything, and at the top they share no state at all. The correlation
+between them falls off as the square root of what is left, at constant power.
+PAN, LEVEL and where the module is routed are the mixer's, where they have been
+since the MIX tab, and the module shows the same parameters the mixer's NOISE
+strip does.
+
+The state is **per voice**: every note hisses on its own, so a chord thickens
+rather than doubling one stream shared out. Every source runs every sample
+whether or not it is the one selected, which is what lets a source change cross
+over between two streams that are both already warm — six milliseconds, the
+same ramp the module's own power switch uses, because hiss arriving at full
+level in one sample is a click whichever source it is. The generators are
+seeded from a counter reset with the engine, so two notes are different and the
+same phrase rendered twice is the same file.
+
+The DSP is [core/ForgeNoise.h](core/ForgeNoise.h), which depends on nothing of
+Forge's for the reason `ForgeFilter.h` does not: the engine renders from it and
+`tests/ForgeTestsNoise.cpp` measures what came back — the slopes fitted through
+six octave bands, the correlation between the channels, and the step at a
+source change against the steps either side of it. Nothing in that file asks
+the filter what its slope is.
 
 Each oscillator carries two **warp** stages under its knobs, applied in the
 order they are drawn: a mode chosen from a menu grouped the way the Serum
@@ -321,6 +360,7 @@ which decisions are already settled. Read it before changing the synth.
 | `core/ForgeFx.h` | What an effects rack is: the types, what each one's controls are called, and what a normalised knob means in each. No DSP. |
 | `core/ForgeFxDsp.h` | The racks, rendered. A slot carries every type's state, sized once at `prepare`, because a type changes while audio is running. |
 | `core/ForgeFilter.h` | The filter: the thirty-four types, what each holds between samples, the one function that runs any of them, and the response the panel draws. Depends on nothing of Forge's, so the curve and the audio are read out of one file. |
+| `core/ForgeNoise.h` | The noise module: the four sources, the state one voice holds of each, the tilt after them and the decorrelation between the channels. Depends on nothing of Forge's either, so what a colour *is* is written down once and measured rather than asserted. |
 | `ui/ForgeFxDisplay.h` | What each effect draws of itself, from the same functions that render it. |
 | `ui/ForgeFilterVisuals.h` | The window the filter's response is drawn in: the axes, the grid, the fill and the corner markers. The arithmetic is `core/ForgeFilter.h`'s. |
 | `src/ForgeProcessor.*` | What the host calls, and what it hands the engine. `ForgeParameters.cpp` declares every parameter; `ForgeProcessorState.cpp` carries state, presets and table files. |

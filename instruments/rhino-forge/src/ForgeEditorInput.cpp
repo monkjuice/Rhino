@@ -510,6 +510,7 @@ void Editor::timerCallback()
     // filter's type and the field whose label it decides go with them.
     refreshWarpFields();
     refreshFilterFields();
+    refreshNoiseField();
     refreshModulationRings();
 
     // A table replaced from outside the panel — a preset loaded, a project

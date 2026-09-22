@@ -29,6 +29,7 @@ constexpr Area areas[] {
     {"oscillator", oscillatorTests},
     {"warp", warpTests},
     {"filter", filterTests},
+    {"noise", noiseTests},
     {"mixer", mixerTests},
     {"fx", fxTests},
     {"modulation", modulationTests},

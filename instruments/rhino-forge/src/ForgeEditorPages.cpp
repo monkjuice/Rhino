@@ -30,6 +30,7 @@ void Editor::applyPage()
     refreshFxSlots();
     refreshWarpFields();
     refreshFilterFields();
+    refreshNoiseField();
     if (tablePanel != nullptr) tablePanel->setVisible(page == ui::Page::table);
     // Last, because a macro's handle takes the place of its label and the
     // layout pass is what decides that.

@@ -232,7 +232,22 @@ public:
     // Opens the list, for a field with too many choices to show at once.
     std::function<void()> onOpenList;
 
+    // What each arrow is given at a field with room for it. It is mostly
+    // padding: the chevron itself is seven pixels across, and the rest is there
+    // so the two ends are comfortable to hit.
     static constexpr int arrowWidth = 20;
+
+    // How much of *this* field each arrow actually takes. A fixed twenty either
+    // side is nothing on the filter's field and most of the noise module's,
+    // whose plate is two columns of twenty-four and narrower still at the
+    // smallest window — forty pixels of padding around a word that then has no
+    // room to be read. So the padding comes off first and the chevron is the
+    // last thing to go: a fifth of the field each, never less than the chevron
+    // plus a margin, never more than the twenty a roomy field gets.
+    //
+    // Paint and hit-testing both read this, so what the arrows are drawn at is
+    // what clicking them steps at.
+    int arrowSpan() const { return juce::jlimit(12, arrowWidth, getWidth() / 5); }
 
     // The height a single row of the list style wants, centred in a box that is
     // tall enough to stack three. The reference draws this field as the largest
@@ -240,6 +255,13 @@ public:
     // glance rather than looked for — so it is taller than the line of text in
     // it strictly needs.
     static constexpr int listHeight = 30;
+
+    // The size the chosen name is drawn at, and the smallest it may be squeezed
+    // to before the field gives up and lets it crop. Nine points is about where
+    // this face stops being readable at a glance, which is the only thing this
+    // field is for.
+    static constexpr float listTextHeight = 13.5f;
+    static constexpr float minimumListTextHeight = 8.5f;
 
     // A field with this many or fewer shows them all; past it, a list.
     static constexpr int inlineLimit = 3;
@@ -301,9 +323,26 @@ public:
         g.fillRoundedRectangle(area, 3.0f);
         g.setColour(accent.withAlpha(alpha));
         g.drawRoundedRectangle(area, 3.0f, 1.0f);
-        g.setFont(panelFont(Face::emphasis, 13.5f));
-        g.drawText(choices[static_cast<size_t>(juce::jlimit(0, count() - 1, chosen))],
-                   area.reduced(static_cast<float>(arrowWidth), 0.0f), juce::Justification::centred);
+        // The name at the size it is meant to be read at, or as much smaller
+        // as it takes to fit between the arrows.
+        //
+        // Ellipsising is what JUCE does when it does not fit, and an ellipsis
+        // is the one thing a field like this must never show: the whole of its
+        // job is to say which of the choices you are on, and BRO... does not.
+        // A field wide enough for its longest name is unaffected -- the filter
+        // and the warp both are -- so this only ever costs a point or two on a
+        // narrow one. The noise module's is narrow because its plate is two
+        // columns of twenty-four, and two of its four sources are longer words
+        // than that plate is wide.
+        const auto& name = choices[static_cast<size_t>(juce::jlimit(0, count() - 1, chosen))];
+        const auto text = area.reduced(static_cast<float>(arrowSpan()), 0.0f);
+        auto font = panelFont(Face::emphasis, listTextHeight);
+        const auto needed = juce::GlyphArrangement::getStringWidth(font, name);
+        if (needed > text.getWidth() && needed > 0.0f)
+            font = font.withHeight(juce::jmax(minimumListTextHeight,
+                                              listTextHeight * text.getWidth() / needed));
+        g.setFont(font);
+        g.drawText(name, text, juce::Justification::centred);
 
         // The two arrows, greyed at the end they cannot go past — a list that
         // does not wrap should say so before it is clicked.
@@ -319,8 +358,9 @@ public:
             g.setColour((live ? accent : line).withAlpha(alpha * (live ? 0.9f : 0.5f)));
             g.strokePath(path, juce::PathStrokeType(1.8f));
         };
-        arrow(area.withWidth(static_cast<float>(arrowWidth)), true, chosen > 0);
-        arrow(area.withLeft(area.getRight() - arrowWidth), false, chosen < count() - 1);
+        arrow(area.withWidth(static_cast<float>(arrowSpan())), true, chosen > 0);
+        arrow(area.withLeft(area.getRight() - static_cast<float>(arrowSpan())), false,
+              chosen < count() - 1);
     }
 
     void mouseDown(const juce::MouseEvent& event) override
@@ -337,8 +377,8 @@ public:
             return;
         }
         if (!listBounds().contains(event.getPosition())) return;
-        if (event.x < arrowWidth) { if (chosen > 0 && onChoose) onChoose(chosen - 1); return; }
-        if (event.x > getWidth() - arrowWidth)
+        if (event.x < arrowSpan()) { if (chosen > 0 && onChoose) onChoose(chosen - 1); return; }
+        if (event.x > getWidth() - arrowSpan())
         {
             if (chosen < count() - 1 && onChoose) onChoose(chosen + 1);
             return;

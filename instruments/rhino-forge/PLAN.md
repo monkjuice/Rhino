@@ -1421,6 +1421,82 @@ that is most of this milestone, and it improves the DAW side as much as it
 enables the synth side — which is the only reason it is worth doing at all
 rather than writing a small editor here.
 
+### M14 — the noise module becomes an oscillator — done
+
+NOISE was a power switch and a LEVEL knob standing in a tall empty column. It
+becomes a small source with a character of its own, in the shape the rest of
+the panel already uses.
+
+**Four sources**, chosen from the field the filter's TYPE and the warp modes
+wear: WHITE flat across the band, PINK at 3 dB an octave, BROWN at 6, and
+GEIGER — sparse shaped clicks rather than a spectrum. Four is one past what
+that field stacks, so it draws as a name between two arrows, which is the
+previous/next-and-browse the module wants and cost nothing to get.
+
+**TONE** tilts the selected source about 1 kHz. A first-order tilt rather than
+a filter with a cutoff, because the plate has room for one knob and "darker or
+brighter" is the question a noise source is actually asked. It returns its
+input exactly at twelve o'clock — taken as an early return, so a patch that
+leaves the knob alone is hearing the generator and not the generator plus an
+ulp. What tilting does to the level of a flat spectrum is measured at prepare
+and divided back out, so the knob changes the colour rather than the loudness.
+
+**STEREO** is decorrelation, not width. At nothing both channels are the same
+samples; at the top they share no state. The blend between is equal-power, so
+the correlation falls off as the square root of what is left while the level
+holds. Two generators per voice rather than three: the left channel is one of
+them outright and the right is the equal-power mix, which is exact at both ends
+of the knob and costs a third less state than a shared-plus-two-independent
+arrangement would.
+
+**Per voice.** The old generator was one stream on the Core shared out across
+the voices. Every note now hisses on its own, which is what makes a chord
+thicken rather than double, and it is seeded from a counter reset with the
+engine — so two notes differ and the same phrase rendered twice is the same
+file. The LFOs' sample-and-hold keeps the Core's own generator and is
+unaffected, which also means switching the noise on no longer changes what an
+S&H steps to.
+
+Every source runs every sample whether or not it is selected. That is what lets
+a source change cross over between two streams that are both already warm,
+rather than fading one in from whatever its filter was left holding — six
+milliseconds, the same ramp the module's power switch now uses.
+
+PAN, LEVEL, the filter route and the two sends are untouched: they are the
+mixer's, they already modulate, and the module shows the same parameters the
+MIX tab's NOISE strip does. TONE and STEREO are appended to the destination
+list after the filter's second field, so no index already written into a preset
+moves. The source is deliberately not a destination, for the reason the warp
+modes are not.
+
+The DSP is [core/ForgeNoise.h](core/ForgeNoise.h), depending on nothing of
+Forge's the way `ForgeFilter.h` does not, and `tests/ForgeTestsNoise.cpp` is a
+new area: the slopes fitted through six octave bands of a rendered second, the
+correlation between the channels at three widths, two voices adding as powers
+rather than as amplitudes, and the step at a source change measured against the
+steps either side of it.
+
+### M14b — sample sources — not started
+
+Serum's noise oscillator also plays short samples, and the module was built to
+take them: the source field is a list that can grow, the per-voice state is
+already where a sample cursor would live, and the parameter set survives a
+control being hidden. What it needs is the machinery — decoding off the audio
+thread, a stable asset id in the preset, loop and one-shot, START and RAND,
+PITCH and FINE, interpolation, a loop crossfade, user import and a recoverable
+missing-sample state — and a curated factory library to point it at.
+
+The library is the part that is not code. Recognisable analog noise means
+recordings of the hardware or properly licensed ones; nothing of Serum's is
+usable. Until those exist the browser would be categories with nothing in them,
+which is why this is separated out rather than half-built.
+
+GEIGER's density is fixed at 45 events a second, which is the one control the
+first release leaves out. It belongs with this work rather than before it: a
+second knob on the plate is cheap, but "the knob beside SOURCE means whatever
+SOURCE is" is the filter's arrangement and is worth adopting once there is more
+than one source that wants it.
+
 ## Out of scope for now
 
 These are the north star, not this plan. They come after the synth is finished.
@@ -1432,7 +1508,9 @@ These are the north star, not this plan. They come after the synth is finished.
 - **M15 — Second filter,** with the serial/parallel routing Serum exposes.
   (Renumbered: M13 is the arpeggiator, which landed first.)
 - **M14 — Preset browser** with tags and search.
-- **Later still:** MPE, sample and granular sources, spectral oscillators.
+- **Later still:** MPE, granular sources, spectral oscillators. The noise
+  module's sample sources are nearer than those and have a milestone of their
+  own — M14b above.
 
 ## Building and testing
 
@@ -1502,4 +1580,6 @@ way to look at a change.
 | M12 Warp on both oscillators | **done** — ready to test by ear |
 | M13 The arpeggiator | **done** — ready to test by ear and by hand |
 | M13b The twelve arp slots | not started |
+| M14 The noise module becomes an oscillator | **done** — ready to test by ear |
+| M14b Sample noise sources | not started |
 | M13c The custom pattern editor | not started |

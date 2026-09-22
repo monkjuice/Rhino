@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ForgeMatrix.h"
+#include "ForgeNoise.h"
 
 // Everything the engine is told, in one struct, plus the arithmetic that reads
 // it. A Patch is a snapshot of the parameters as of one block: the processor
@@ -44,6 +45,13 @@ struct Patch
     // octave down -- so a patch written before either existed is unchanged.
     float subWave = 0.0f, subOctave = 0.0f;
     float noiseEnable = 0.0f, noiseLevel = 0.35f;
+    // The noise module is a small oscillator rather than a hiss knob: which of
+    // the four sources it is reading, how the tilt either side of a pivot is
+    // set, and how far the two channels have been pulled apart. All three open
+    // where the module has always stood -- white, flat, and one stream in both
+    // ears -- so a patch written before any of them existed sounds as it did.
+    // See ForgeNoise.h.
+    float noiseSource = 0.0f, noiseTone = 0.0f, noiseStereo = 0.0f;
     // SUB and NOISE are panned with the same equal-power law the oscillators
     // use, so a source reading a given level is that loud whichever source it
     // is. Their levels above carry the 3 dB that law costs at centre, which is
@@ -126,6 +134,8 @@ inline float* destinationField(Patch& patch, int destination)
         default: break;
     }
     if (destination == filterDestination) return &patch.filterFreq;
+    if (destination == noiseToneDestination) return &patch.noiseTone;
+    if (destination == noiseStereoDestination) return &patch.noiseStereo;
     // Past the racks are the four warp depths, which are named rather than
     // generated and so are read back the same way.
     const auto warp = destination - warpDestinationBase;

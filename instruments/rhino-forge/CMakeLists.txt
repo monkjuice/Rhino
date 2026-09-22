@@ -88,6 +88,7 @@ set(forge_sources
     core/ForgeShapes.h
     core/ForgeFilter.h
     core/ForgeMatrix.h
+    core/ForgeNoise.h
     core/ForgePatch.h
     core/ForgeCore.h
     core/ForgeFx.h
@@ -131,6 +132,7 @@ set(forge_sources
     src/ForgeEditorLayout.cpp
     src/ForgeEditorLfo.cpp
     src/ForgeEditorModulation.cpp
+    src/ForgeEditorNoise.cpp
     src/ForgeEditorPages.cpp
     src/ForgeEditorPaint.cpp
     src/ForgeEditorWarp.cpp)
@@ -192,6 +194,7 @@ if (BUILD_TESTING)
         oscillator
         warp
         filter
+        noise
         mixer
         fx
         modulation
@@ -218,6 +221,7 @@ if (BUILD_TESTING)
         tests/ForgeTestsOscillator.cpp
         tests/ForgeTestsWarp.cpp
         tests/ForgeTestsFilter.cpp
+        tests/ForgeTestsNoise.cpp
         tests/ForgeTestsMixer.cpp
         tests/ForgeTestsFx.cpp
         tests/ForgeTestsModulation.cpp

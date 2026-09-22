@@ -168,7 +168,19 @@ inline constexpr int fxDestinationCount = legacyFxDestinationCount + extendedFxD
 // wants an LFO on — a filter sweeping LP to BP to HP is not a thing any of the
 // other twenty destinations can ask for.
 inline constexpr int filterDestination = extendedFxDestinationBase + extendedFxDestinationCount;
-inline constexpr int destinationCount = filterDestination + 1;
+
+// The noise module's two shaping controls, landing at the end for the same
+// reason the filter's second field did: a slot stores its destination as an
+// index, and anything past an insertion would mean something else inside every
+// preset already saved. Its LEVEL and PAN are not here — they are at 12 and 17,
+// where they have been since the mixer, and they stay there.
+//
+// The source itself is deliberately absent, exactly as the warp modes are. A
+// sweep through four unrelated generators is a stutter rather than a
+// modulation; the two continuous controls beside it are the ones worth playing.
+inline constexpr int noiseToneDestination = filterDestination + 1;
+inline constexpr int noiseStereoDestination = noiseToneDestination + 1;
+inline constexpr int destinationCount = noiseStereoDestination + 1;
 inline constexpr int modSlotCount = 8;
 
 // A parameter id belonging to one rack slot: fxParameterId(0, 1, "Mix") is
@@ -241,6 +253,8 @@ inline const std::vector<DestinationInfo>& destinations()
                 appendSlot(rack, slot);
 
         built.push_back({"filterFreq", "FLT FREQ"});
+        built.push_back({"noiseTone", "NOISE TONE"});
+        built.push_back({"noiseStereo", "NOISE WIDTH"});
         return built;
     }();
     return table;

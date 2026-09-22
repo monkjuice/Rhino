@@ -535,6 +535,9 @@ Patch Processor::patch() const
     result.subLevel = value("subLevel");
     result.subPan = value("subPan");
     result.noiseEnable = value("noiseEnable");
+    result.noiseSource = value("noiseSource");
+    result.noiseTone = value("noiseTone");
+    result.noiseStereo = value("noiseStereo");
     result.noiseLevel = value("noiseLevel");
     result.noisePan = value("noisePan");
     result.filterEnable = value("filterEnable");

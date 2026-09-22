@@ -123,6 +123,7 @@ Editor::Editor(Processor& p)
     addChildComponent(valueBubble);
     refreshWarpFields();
     refreshFilterFields();
+    refreshNoiseField();
     applyEnableStates();
     applyTableCounts();
     // Before the first layout pass, so a project that opens with named macros
@@ -283,6 +284,14 @@ void Editor::buildModules()
                         control->selector->onChoose = [this] (int choice) { setFilterType(choice); };
                         control->selector->onOpenList = [this, held] { showFilterMenu(*held); };
                     }
+                    // The noise module's source: a fixed list like the two
+                    // above, and unlike them it moves nothing but itself.
+                    else if (juce::String(declared.id) == "noiseSource")
+                    {
+                        control->selector->accent = accent;
+                        control->selector->onChoose = [this] (int choice) { setNoiseSource(choice); };
+                        control->selector->onOpenList = [this, held] { showNoiseMenu(*held); };
+                    }
                     else
                     {
                         control->selector->onChoose = [this, held] (int choice)
@@ -300,6 +309,8 @@ void Editor::buildModules()
                         control->slider.onValueChange = [this] { refreshWarpFields(); repaint(); };
                     else if (juce::String(declared.id) == "filterType")
                         control->slider.onValueChange = [this] { refreshFilterFields(); repaint(); };
+                    else if (juce::String(declared.id) == "noiseSource")
+                        control->slider.onValueChange = [this] { refreshNoiseField(); repaint(); };
                     else
                         control->slider.onValueChange = [this] { refreshFxSlots(); repaintFxDisplays(); };
                     control->attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(

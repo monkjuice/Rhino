@@ -74,6 +74,16 @@ juce::String asCents(float value)
     return cents == 0 ? juce::String("0") : (cents > 0 ? "+" : "") + juce::String(cents) + " ct";
 }
 
+// The noise module's tilt. Bipolar and neutral in the middle, so what the field
+// has to say is which way it is leaning as well as how far — and that the
+// middle is genuinely nothing rather than a filter that happens to be flat.
+juce::String asTilt(float value)
+{
+    const auto amount = juce::roundToInt(std::abs(value) * 100.0f);
+    if (amount == 0) return "FLAT";
+    return juce::String(value < 0.0f ? "DARK " : "BRIGHT ") + juce::String(amount) + " %";
+}
+
 juce::String asPan(float value)
 {
     const auto amount = juce::roundToInt(std::abs(value) * 100.0f);
@@ -200,6 +210,24 @@ juce::AudioProcessorValueTreeState::ParameterLayout Processor::parameterLayout()
     result.push_back(parameter("subOctave", "Sub Octave", {-2.0f, 2.0f, 1.0f}, 0.0f, asOctaves));
     result.push_back(parameter("subLevel", "Sub Level", {0.0f, 1.0f}, 0.17f, asDecibels));
     result.push_back(toggle("noiseEnable", "Noise Enable", false));
+    // Which generator the module is reading, as a choice rather than a stepped
+    // float, so a host's lane reads BROWN instead of 0.67 — the same treatment
+    // the filter type, the sub's wave and the warp modes get. The names are the
+    // engine's own, in the engine's order, so the index a host writes is the
+    // source that is rendered.
+    juce::StringArray noiseSourceNames;
+    for (int source = 0; source < noiseSourceCount; ++source)
+        noiseSourceNames.add(noiseSourceName(source));
+    result.push_back(std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID {"noiseSource", 1}, "Noise Source", noiseSourceNames, 0));
+    // Bipolar, and neutral in the middle to the bit: the two halves of the
+    // spectrum are scaled against each other, so at nothing they add back up to
+    // the generator untouched. See ForgeNoise.h.
+    result.push_back(parameter("noiseTone", "Noise Tone", {-1.0f, 1.0f}, 0.0f, asTilt));
+    // Decorrelation rather than width. At nothing both channels are the same
+    // samples, so the module is mono to the bit and a patch written before this
+    // existed is unchanged; at the top they share no state at all.
+    result.push_back(parameter("noiseStereo", "Noise Stereo", {0.0f, 1.0f}, 0.0f, asPercent));
     result.push_back(parameter("noiseLevel", "Noise Level", {0.0f, 1.0f}, 0.35f, asDecibels));
     result.push_back(toggle("filterEnable", "Filter Enable", true));
     // The thirty-four types, in the order ForgeFilter.h declares them, so the

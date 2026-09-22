@@ -246,26 +246,72 @@ void filterDisplaySuite()
                 && db(FilterType::peak, 0.5f, 0.0f, 20000.0f) > -1.0f,
             "a peak takes nothing out either side of what it lifts");
 
-    // A dual filter has a second corner, and FREQ is where it is. Two
-    // readings: it moves, and it moves the way the knob says — 0.625 is an
-    // octave above the cutoff, so the notch in LP+NT lands on 2 kHz.
+    // A dual filter's second corner is a frequency of its own, on the same
+    // travel the cutoff knob has — not an interval from the cutoff. That is
+    // what the Serum manual says FREQ is, and it is what lets the notch in
+    // PK+NT sit several kilohertz above a cutoff parked at the bottom of its
+    // range, which is the setting the manual's own screenshots use.
     {
-        const auto octaveUp = shape(FilterType::lowNotch, 0.2f, 0.625f);
-        requireClose(rhino::forge::filterSecondHz(octaveUp), cutoff * 2.0f, 1.0f,
-                     "FREQ at 0.625 is an octave above the cutoff");
-        require(ui::filterMagnitudeDb(octaveUp, cutoff * 2.0f) < -20.0f,
+        for (const auto hz : {60.0f, 440.0f, 2000.0f, 12000.0f})
+        {
+            const auto at = rhino::forge::filterSecondAt(hz);
+            const auto placed = shape(FilterType::lowNotch, 0.2f, at);
+            requireClose(rhino::forge::filterSecondHz(placed), hz, hz * 0.001f,
+                         "FREQ lands the second filter on the frequency it names");
+            // And it does not move when the cutoff does, which is the whole
+            // difference from an interval.
+            const rhino::forge::FilterShape elsewhere {FilterType::lowNotch, 9000.0f, 0.2f,
+                                                       at, 48000.0};
+            requireClose(rhino::forge::filterSecondHz(elsewhere), hz, hz * 0.001f,
+                         "and stays there when the cutoff moves");
+        }
+
+        const auto notchAt2k = shape(FilterType::lowNotch, 0.2f,
+                                     rhino::forge::filterSecondAt(2000.0f));
+        require(ui::filterMagnitudeDb(notchAt2k, 2000.0f) < -20.0f,
                 "the second filter of a dual cuts where FREQ puts it");
-        // And nowhere near where it is not: an octave below the cutoff is
-        // inside the low pass and outside the notch.
-        require(ui::filterMagnitudeDb(octaveUp, cutoff * 0.5f) > -3.0f,
+        // And nowhere near where it is not: below the cutoff is inside the low
+        // pass and outside the notch.
+        require(ui::filterMagnitudeDb(notchAt2k, cutoff * 0.5f) > -3.0f,
                 "a dual filter leaves the band neither of its halves touches");
         // LP+HP passes what is between its two corners and stops what is
         // outside them, which is the whole reason the family exists.
-        const auto band = shape(FilterType::lowHigh, 0.0f, 0.25f);
-        const auto between = ui::filterMagnitudeDb(band, cutoff * 0.35f);
-        require(between > ui::filterMagnitudeDb(band, cutoff * 16.0f) + 20.0f
-                    && between > ui::filterMagnitudeDb(band, cutoff / 64.0f) + 20.0f,
+        const auto band = shape(FilterType::lowHigh, 0.0f,
+                                rhino::forge::filterSecondAt(120.0f));
+        const auto between = ui::filterMagnitudeDb(band, 350.0f);
+        require(between > ui::filterMagnitudeDb(band, 16000.0f) + 20.0f
+                    && between > ui::filterMagnitudeDb(band, 20.0f) + 20.0f,
                 "LP+HP passes the band between its two corners");
+    }
+
+    // The reference case, read off the Serum 2 manual's own PN 12 screenshot:
+    // CUTOFF at the bottom of its range, RES at half, FREQ a few kilohertz up.
+    // What that draws is a flat band with one deep notch in it and no visible
+    // peak at all — the peak is at the bottom of the knob, below the left edge
+    // of the display, and only its shoulder reaches the band.
+    //
+    // This is the check that would have caught FREQ being an interval: with one
+    // the notch could not have been up there at all.
+    {
+        const rhino::forge::FilterShape reference {FilterType::peakNotch,
+                                                   rhino::forge::filterCutoffLowHz, 0.5f,
+                                                   rhino::forge::filterSecondAt(3000.0f),
+                                                   48000.0};
+        requireClose(rhino::forge::filterSecondHz(reference), 3000.0f, 3.0f,
+                     "the notch sits where FREQ put it, four octaves above the cutoff");
+        require(ui::filterMagnitudeDb(reference, 3000.0f) < -18.0f,
+                "and it is a deep notch there");
+        // Flat either side of it, and never far above unity anywhere in the
+        // band: the peak is off the bottom of the knob.
+        for (const auto hz : {100.0f, 400.0f, 1000.0f, 12000.0f})
+        {
+            const auto reading = ui::filterMagnitudeDb(reference, hz);
+            if (!(reading > -3.0f && reading < 3.0f))
+            {
+                require(false, "the rest of the band is flat, as the reference draws it");
+                std::cerr << "       " << hz << " Hz read " << reading << " dB\n";
+            }
+        }
     }
 
     // A morph type's middle is the middle response on its own, not a blend of

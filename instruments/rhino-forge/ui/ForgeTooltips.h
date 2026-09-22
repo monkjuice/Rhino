@@ -276,8 +276,8 @@ inline juce::String filterSecondTooltipFor(int type)
             break;
     }
     if (filterCategoryOf(chosen) == FilterCategory::dual)
-        return "Where the second filter sits, as an offset from the cutoff in octaves — so "
-               "sweeping the cutoff moves the pair together";
+        return "The second filter's own cutoff, on the same scale as CUTOFF. It stays put while "
+               "CUTOFF sweeps past it; point a modulator at it to move the pair together";
     if (filterCategoryOf(chosen) == FilterCategory::morph)
         return "Sweep the response through the three the type names. The middle of the knob "
                "is the middle one on its own";

@@ -159,6 +159,28 @@ void filterListSuite()
         }
     }
 
+    // ForgeFilter.h declares the cutoff knob's range itself, because it
+    // depends on nothing of Forge's — so it has to agree with the parameter
+    // that actually has that range. FREQ reads off the same travel, and a
+    // formant filter's vowel is a position on it.
+    {
+        rhino::forge::Processor processor;
+        const auto* cutoff = processor.state.getParameter("cutoff");
+        require(cutoff != nullptr, "the cutoff parameter exists");
+        if (cutoff != nullptr)
+        {
+            const auto range = cutoff->getNormalisableRange();
+            requireClose(range.start, rhino::forge::filterCutoffLowHz, 0.01f,
+                         "the filter header knows where the cutoff knob starts");
+            requireClose(range.end, rhino::forge::filterCutoffHighHz, 0.01f,
+                         "and where it ends");
+        }
+        // The two directions of the travel are inverses of each other.
+        for (const auto hz : {30.0f, 220.0f, 3000.0f, 18000.0f})
+            requireClose(rhino::forge::filterCutoffAt(rhino::forge::filterCutoffPosition(hz)),
+                         hz, hz * 0.001f, "a frequency read off the knob's travel and back is itself");
+    }
+
     // Every family holds something, and every type belongs to exactly one — so
     // a type added to the list cannot be left out of the menu.
     std::array<int, static_cast<size_t>(rhino::forge::filterCategoryCount)> held {};
@@ -452,17 +474,17 @@ void filterSecondSuite()
         }
     }
 
-    // On a dual filter it is the second corner, in octaves off the first. A
-    // high pass swept up from four octaves below the cutoff to the cutoff
-    // itself has to take more and more of a note sitting between them.
+    // On a dual filter it is the second filter's own corner. LP+HP with its
+    // high pass down at 30 Hz passes a 440 Hz note; brought up to 900 Hz, above
+    // the note and above the low pass, it takes it.
     {
         const auto note = 69;   // 440 Hz, inside a 700 Hz low pass
         const auto wide = render(static_cast<int>(rhino::forge::FilterType::lowHigh),
-                                 700.0f, 0.0f, 0.0f, note);
+                                 700.0f, 0.0f, rhino::forge::filterSecondAt(30.0f), note);
         const auto narrow = render(static_cast<int>(rhino::forge::FilterType::lowHigh),
-                                   700.0f, 0.0f, 0.5f, note);
+                                   700.0f, 0.0f, rhino::forge::filterSecondAt(900.0f), note);
         require(narrow < wide * 0.6f,
-                "bringing a dual filter's high pass up to the cutoff closes the band on the note");
+                "bringing a dual filter's high pass over the note closes the band on it");
     }
 
     // On a morph type it is the response itself, and the ends are the two
@@ -494,9 +516,8 @@ void filterSecondSuite()
     setValue(processor, "cutoff", 1000.0f);
     setValue(processor, "filterType",
              static_cast<float>(rhino::forge::FilterType::lowNotch));
-    require(textFor(processor, "filterFreq", 0.625f).contains("oct")
-                && textFor(processor, "filterFreq", 0.625f).contains("2.00 kHz"),
-            "a dual filter's FREQ reads as an offset and as the corner it lands on");
+    requireText(textFor(processor, "filterFreq", rhino::forge::filterSecondAt(2000.0f)),
+                "2.00 kHz", "a dual filter's FREQ reads as the corner it lands on");
     setValue(processor, "filterType",
              static_cast<float>(rhino::forge::FilterType::morphLowBandHigh));
     requireText(textFor(processor, "filterFreq", 0.5f), "BP",

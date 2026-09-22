@@ -172,8 +172,10 @@ The **filter** is thirty-four types across six families, chosen from a menu
 grouped the way that menu is actually read — you know you want a ladder before
 you know which one. BASIC is the five taps of one state-variable filter: low,
 high, band, notch and peak. DUAL is twelve pairs of those in series, the first
-on CUTOFF and the second offset from it, so LP+HP has an edge you can place at
-each end and LP+NT is a low pass with a hole in it. MORPH is four sweeps through
+on CUTOFF and the second on FREQ — its own frequency on the same scale, not an
+interval, so a sweep drags one filter past a stationary other exactly as Serum's
+does. LP+HP therefore has an edge you can place at each end, and LP+NT is a low
+pass with a hole in it wherever you put it. MORPH is four sweeps through
 three responses, which is the one filter movement no corner can give you.
 ANALOG is four chains of poles with the last one's output fed back round them
 through a saturator — a four-pole transistor ladder, a three-pole diode ladder

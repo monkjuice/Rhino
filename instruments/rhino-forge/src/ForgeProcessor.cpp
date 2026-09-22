@@ -289,7 +289,7 @@ float Processor::filterTypeValue() const
 // The filter's second field is a plain 0..1 and means whatever the type says it
 // means, so this is where a number becomes a reading. Every line of it runs the
 // arithmetic the engine runs, out of ForgeFilter.h rather than copied, which is
-// what binds "+1.00 oct" in the bubble to the corner that is actually there.
+// what binds "2.00 kHz" in the bubble to the corner that is actually there.
 juce::String Processor::filterFreqText(float value) const
 {
     const auto type = filterTypeOf(filterTypeValue());
@@ -307,10 +307,8 @@ juce::String Processor::filterFreqText(float value) const
     switch (filterCategoryOf(type))
     {
         case FilterCategory::dual:
-            // Both readings, because both are the question being asked: an
-            // offset says what the pair will keep doing as the cutoff sweeps,
-            // and a frequency says where the second corner is right now.
-            return juce::String((held - 0.5f) * 8.0f, 2) + " oct  " + hertz(filterSecondHz(shape));
+            // The second filter's own corner, in the unit a corner is read in.
+            return hertz(filterSecondHz(shape));
 
         case FilterCategory::morph:
         {

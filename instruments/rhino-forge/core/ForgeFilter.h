@@ -28,6 +28,39 @@
 // still 0, 1 and 2.
 namespace rhino::forge
 {
+// --- The cutoff knob's own travel --------------------------------------------
+//
+// The ends of the CUTOFF parameter's range, and the exponential sweep between
+// them. Three things read this and all three have to agree: the second corner
+// of a dual filter, which is a frequency on the same scale; the vowel a formant
+// filter's knob is pointing at, which is a position on it; and the readouts.
+//
+// Declared here rather than taken from the parameter, because ForgeFilter.h
+// depends on nothing of Forge's — so the one thing to keep in step is this pair
+// against the range in ForgeParameters.cpp, and filterListSuite checks it.
+inline constexpr float filterCutoffLowHz = 30.0f;
+inline constexpr float filterCutoffHighHz = 18000.0f;
+
+// A position on the knob, 0..1, as a frequency — and back again.
+inline float filterCutoffAt(float position)
+{
+    return filterCutoffLowHz
+         * std::pow(filterCutoffHighHz / filterCutoffLowHz, juce::jlimit(0.0f, 1.0f, position));
+}
+
+inline float filterCutoffPosition(float hz)
+{
+    const auto at = std::log(juce::jlimit(filterCutoffLowHz, filterCutoffHighHz, hz)
+                             / filterCutoffLowHz)
+                  / std::log(filterCutoffHighHz / filterCutoffLowHz);
+    return juce::jlimit(0.0f, 1.0f, at);
+}
+
+// Where FREQ has to sit for the second filter to land on a given frequency.
+// Used by the table below so a default can be written as the frequency it means
+// rather than as the number that happens to produce it.
+inline float filterSecondAt(float hz) { return filterCutoffPosition(hz); }
+
 // --- The list ----------------------------------------------------------------
 
 enum class FilterCategory { basic, dual, morph, analog, resonator, character };
@@ -53,11 +86,25 @@ enum class FilterType
     // the whole of what Forge had before this file existed.
     lowPass, highPass, bandPass, notch, peak,
     // Dual: two state-variable filters in series. CUTOFF is the first one's
-    // corner and FREQ offsets the second one from it, so a sweep moves the
-    // pair together instead of dragging one past a stationary other. In series
-    // rather than in parallel because that is what the names read as — LP+NT
-    // is a low pass with a notch in it — and because it is what gives LP+HP
-    // two independently placed edges, which is the one thing BAND cannot do.
+    // corner and FREQ is the second one's — a frequency of its own, across the
+    // same span the cutoff knob covers, which is what the Serum manual says it
+    // is: "FREQ: set the cutoff frequency of the second SVF filter". RES
+    // applies equally to both, which it also says.
+    //
+    // An offset from the cutoff was tried first, on the reasoning that a pair
+    // set an octave apart should stay an octave apart across a sweep. It is the
+    // wrong call: it makes the notch in PK+NT unreachable while the cutoff is
+    // low, which is exactly the setting the manual's own screenshots use — a
+    // peak parked at the bottom of the knob and a notch several kilohertz up.
+    // An absolute second corner is what lets a sweep drag one filter past a
+    // stationary other, and pointing the matrix at FREQ is what moves them
+    // together.
+    //
+    // In series rather than in parallel because that is what the names read as
+    // — LP+NT is a low pass with a notch in it — and because it is what gives
+    // LP+HP two independently placed edges, which is the one thing BAND cannot
+    // do. Parallel would also mean no true notch: the other path would fill it
+    // in, and the manual's screenshots show a notch that goes to nothing.
     lowHigh, lowBand, lowPeak, lowNotch,
     highBand, highPeak, highNotch,
     bandPeak, bandNotch,
@@ -117,21 +164,24 @@ inline const std::array<FilterInfo, filterTypeCount>& filterTypes()
         {"NOTCH",    C::basic, "FAT", 0.0f, {T::notch}},
         {"PEAK",     C::basic, "FAT", 0.0f, {T::peak}},
 
-        // LP+HP opens with its high pass two octaves under the low pass, so it
-        // passes a band rather than the sliver a pair on one frequency would.
-        // Everything else opens an octave apart.
-        {"LP+HP",    C::dual, "FREQ", 0.250f, {T::low,   T::high}},
-        {"LP+BP",    C::dual, "FREQ", 0.625f, {T::low,   T::band}},
-        {"LP+PK",    C::dual, "FREQ", 0.625f, {T::low,   T::peak}},
-        {"LP+NT",    C::dual, "FREQ", 0.625f, {T::low,   T::notch}},
-        {"HP+BP",    C::dual, "FREQ", 0.625f, {T::high,  T::band}},
-        {"HP+PK",    C::dual, "FREQ", 0.625f, {T::high,  T::peak}},
-        {"HP+NT",    C::dual, "FREQ", 0.625f, {T::high,  T::notch}},
-        {"BP+PK",    C::dual, "FREQ", 0.625f, {T::band,  T::peak}},
-        {"BP+NT",    C::dual, "FREQ", 0.625f, {T::band,  T::notch}},
-        {"PK+PK",    C::dual, "FREQ", 0.625f, {T::peak,  T::peak}},
-        {"PK+NT",    C::dual, "FREQ", 0.625f, {T::peak,  T::notch}},
-        {"NT+NT",    C::dual, "FREQ", 0.625f, {T::notch, T::notch}},
+        // FREQ is an absolute frequency now, so these are positions on the
+        // cutoff knob's own travel rather than intervals. LP+HP opens with its
+        // high pass at 120 Hz, under anything the low pass is likely to be set
+        // to, so the pair passes a band rather than nothing. The rest open
+        // their second filter at 2 kHz, where a notch or a peak is audible on
+        // almost any patch.
+        {"LP+HP",    C::dual, "FREQ", filterSecondAt(120.0f),  {T::low,   T::high}},
+        {"LP+BP",    C::dual, "FREQ", filterSecondAt(2000.0f), {T::low,   T::band}},
+        {"LP+PK",    C::dual, "FREQ", filterSecondAt(2000.0f), {T::low,   T::peak}},
+        {"LP+NT",    C::dual, "FREQ", filterSecondAt(2000.0f), {T::low,   T::notch}},
+        {"HP+BP",    C::dual, "FREQ", filterSecondAt(2000.0f), {T::high,  T::band}},
+        {"HP+PK",    C::dual, "FREQ", filterSecondAt(2000.0f), {T::high,  T::peak}},
+        {"HP+NT",    C::dual, "FREQ", filterSecondAt(2000.0f), {T::high,  T::notch}},
+        {"BP+PK",    C::dual, "FREQ", filterSecondAt(2000.0f), {T::band,  T::peak}},
+        {"BP+NT",    C::dual, "FREQ", filterSecondAt(2000.0f), {T::band,  T::notch}},
+        {"PK+PK",    C::dual, "FREQ", filterSecondAt(2000.0f), {T::peak,  T::peak}},
+        {"PK+NT",    C::dual, "FREQ", filterSecondAt(2000.0f), {T::peak,  T::notch}},
+        {"NT+NT",    C::dual, "FREQ", filterSecondAt(2000.0f), {T::notch, T::notch}},
 
         {"LP-BP-HP", C::morph, "MORPH", 0.5f, {T::low,  T::band,  T::high}},
         {"LP-PK-HP", C::morph, "MORPH", 0.5f, {T::low,  T::peak,  T::high}},
@@ -312,6 +362,7 @@ inline float filterDamping(float resonance)
     return 1.0f / (1.0f + juce::jlimit(0.0f, 1.0f, resonance) * 15.0f);
 }
 
+
 // The four settings that decide the shape, as one value. The panel draws from
 // this and the engine renders from it, so a curve is never a reading of
 // something the voice is not running.
@@ -327,14 +378,13 @@ struct FilterShape
     double sampleRate = 48000.0;
 };
 
-// The second corner, as an offset from the first in octaves rather than as a
-// frequency of its own. Four octaves either way, so a pair set an octave apart
-// stays an octave apart across the whole sweep — which is the difference
-// between a dual filter and two filters.
+// The second corner: a frequency of its own, read off the same travel the
+// cutoff knob has, so FREQ at a given position means the same frequency CUTOFF
+// would mean there.
 inline float filterSecondHz(const FilterShape& shape)
 {
-    const auto octaves = (juce::jlimit(0.0f, 1.0f, shape.second) - 0.5f) * 8.0f;
-    return filterClampHz(shape.cutoff * std::exp2(octaves), shape.sampleRate);
+    return filterClampHz(filterCutoffAt(juce::jlimit(0.0f, 1.0f, shape.second)),
+                         shape.sampleRate);
 }
 
 // Where a comb is tuned: the cutoff, and nothing else. The line is sized from
@@ -431,19 +481,13 @@ inline const std::array<std::array<float, filterFormantBands>, 5>& filterVowelGa
 }
 
 // Where the cutoff knob puts the mouth. A formant filter has no corner to set,
-// so the knob moves through the vowels instead — the same thing Serum does
-// with it, and the reason FORMANT's cutoff readout is a vowel rather than a
-// frequency. Read off the knob's own logarithmic travel, so the five vowels
-// are evenly spaced across it.
-inline constexpr float filterVowelLowHz = 30.0f;
-inline constexpr float filterVowelHighHz = 18000.0f;
-
+// so the knob moves through the vowels instead — the same thing Serum does with
+// it ("with just a couple exceptions, such as vowels for formant filters"), and
+// the reason FORMANT's cutoff readout is a vowel rather than a frequency. Read
+// off the knob's own travel, so the five vowels are evenly spaced across it.
 inline float filterVowelPosition(float cutoff)
 {
-    const auto at = std::log(juce::jlimit(filterVowelLowHz, filterVowelHighHz, cutoff)
-                             / filterVowelLowHz)
-                  / std::log(filterVowelHighHz / filterVowelLowHz);
-    return juce::jlimit(0.0f, 1.0f, at) * 4.0f;
+    return filterCutoffPosition(cutoff) * 4.0f;
 }
 
 inline const char* filterVowelName(float cutoff)

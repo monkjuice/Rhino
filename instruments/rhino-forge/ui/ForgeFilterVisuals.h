@@ -97,30 +97,128 @@ inline juce::String filterCornerText(const rhino::forge::FilterShape& shape)
     return filterHzText(shape.cutoff);
 }
 
-// A short label for a decade line, which has no room for a unit.
+// A short label for a scale mark, which has no room for a unit.
 inline juce::String filterDecadeText(float hz)
 {
     if (hz >= 1000.0f) return juce::String(juce::roundToInt(hz / 1000.0f)) + "k";
     return juce::String(juce::roundToInt(hz));
 }
 
-// Decade lines across the band, and unity across it. Without them the curve is
-// a shape; with them it is a reading.
+// The strip along the foot of the display where the frequencies are named, and
+// the box the response itself is drawn in above it.
+//
+// The names sit outside the box rather than along the bottom of it, which is
+// where they used to be. A label inside the box is something the curve has to
+// be read *through*, and the one place a low pass is most often read — the last
+// octave, where the skirt is heading for the floor — is exactly where they sat.
+inline constexpr int filterScaleHeight = 12;
+
+inline juce::Rectangle<int> filterCurveBounds(juce::Rectangle<int> plot)
+{
+    return plot.withTrimmedBottom(filterScaleHeight);
+}
+
+inline juce::Rectangle<int> filterScaleBounds(juce::Rectangle<int> plot)
+{
+    return plot.withTop(plot.getBottom() - filterScaleHeight);
+}
+
+// The frequencies the axis is marked at: the ends of the band and the decades
+// between them. Five is what fits without the labels touching at the narrowest
+// the module ever is.
+inline const std::array<float, 5>& filterScaleMarks()
+{
+    static const std::array<float, 5> marks {20.0f, 100.0f, 1000.0f, 10000.0f, 20000.0f};
+    return marks;
+}
+
+// The rulings: decades across, and a few lines of gain down. Without them the
+// curve is a shape; with them it is a reading.
+//
+// Between the decades sit the 2, 3, 5 and 7 of each — the marks of a log scale,
+// faint enough to read as ruling rather than as content. They are what makes
+// the spacing legible as logarithmic: three evenly spaced lines say nothing
+// about what is between them, and the ear hears an octave, not a decade.
 inline void drawFilterGrid(juce::Graphics& g, juce::Rectangle<float> box, float alpha)
 {
-    g.setFont(panelFont(Face::reading, 9.0f));
+    for (const auto decade : {10.0f, 100.0f, 1000.0f, 10000.0f})
+        for (const auto step : {2.0f, 3.0f, 5.0f, 7.0f})
+        {
+            const auto hz = decade * step;
+            if (hz <= filterLowHz || hz >= filterHighHz) continue;
+            g.setColour(line.withAlpha(0.20f * alpha));
+            g.drawVerticalLine(juce::roundToInt(filterHzToX(box, hz)), box.getY(), box.getBottom());
+        }
     for (const auto hz : {100.0f, 1000.0f, 10000.0f})
     {
-        const auto x = filterHzToX(box, hz);
-        g.setColour(line.withAlpha(0.5f * alpha));
-        g.drawVerticalLine(juce::roundToInt(x), box.getY(), box.getBottom());
-        g.setColour(mutedText.withAlpha(0.55f * alpha));
-        g.drawText(filterDecadeText(hz),
-                   juce::Rectangle<float>(x + 3.0f, box.getBottom() - 12.0f, 30.0f, 11.0f).toNearestInt(),
-                   juce::Justification::centredLeft);
+        g.setColour(line.withAlpha(0.45f * alpha));
+        g.drawVerticalLine(juce::roundToInt(filterHzToX(box, hz)), box.getY(), box.getBottom());
     }
-    g.setColour(line.withAlpha(0.35f * alpha));
+    // Gain, every twelve decibels: one line an octave of a twelve-decibel
+    // skirt, so a slope can be counted off the grid rather than guessed at.
+    for (const auto db : {12.0f, -12.0f, -24.0f, -36.0f})
+    {
+        const auto y = filterDbToY(box, db);
+        if (y <= box.getY() + 1.0f || y >= box.getBottom() - 1.0f) continue;
+        g.setColour(line.withAlpha(0.16f * alpha));
+        g.drawHorizontalLine(juce::roundToInt(y), box.getX(), box.getRight());
+    }
+    g.setColour(line.withAlpha(0.38f * alpha));
     g.drawHorizontalLine(juce::roundToInt(filterDbToY(box, 0.0f)), box.getX(), box.getRight());
+}
+
+// The axis, named — laid out from the two ends inwards rather than by putting
+// every mark where its ruling is.
+//
+// The two ends are what say how far the axis reaches, so they are drawn first
+// and pulled inside the box: centred on their own marks they would hang half of
+// each over the edge of the display. Every decade between them is then drawn
+// only where it clears what is already down.
+//
+// That rule is here because 10k and 20k are a tenth of this axis apart — the
+// last decade is one octave wide — and their labels are not. Laid out
+// independently they overlap into a smear at every width the module is ever
+// drawn at, which is exactly what a fixed set of marks did.
+inline void drawFilterScale(juce::Graphics& g, juce::Rectangle<int> plot, float alpha)
+{
+    const auto strip = filterScaleBounds(plot).toFloat();
+    const auto box = filterCurveBounds(plot).toFloat();
+    const auto font = panelFont(Face::reading, 9.0f);
+    g.setColour(mutedText.withAlpha(0.6f * alpha));
+    g.setFont(font);
+
+    const auto& marks = filterScaleMarks();
+    const auto widthOf = [&font] (const juce::String& text)
+    {
+        return juce::GlyphArrangement::getStringWidth(font, text);
+    };
+    const auto put = [&g, strip] (const juce::String& text, float at, float width)
+    {
+        g.drawText(text, juce::Rectangle<float>(at, strip.getY(), width, strip.getHeight()).toNearestInt(),
+                   juce::Justification::centred);
+    };
+
+    const auto low = filterDecadeText(marks.front());
+    const auto high = filterDecadeText(marks.back());
+    const auto lowWidth = widthOf(low);
+    const auto highWidth = widthOf(high);
+    put(low, box.getX(), lowWidth);
+    put(high, box.getRight() - highWidth, highWidth);
+
+    // Clear of the mark before it and of the one at the far end. Six pixels,
+    // which is about a character: two numbers a hair apart read as one number.
+    constexpr float clearance = 6.0f;
+    auto taken = box.getX() + lowWidth;
+    const auto ceiling = box.getRight() - highWidth;
+    for (size_t i = 1; i + 1 < marks.size(); ++i)
+    {
+        const auto text = filterDecadeText(marks[i]);
+        const auto width = widthOf(text);
+        const auto at = filterHzToX(box, marks[i]) - width * 0.5f;
+        if (at < taken + clearance || at + width > ceiling - clearance) continue;
+        put(text, at, width);
+        taken = at + width;
+    }
 }
 
 // The response, with what passes filled under the curve and what is being taken
@@ -132,9 +230,20 @@ inline void drawFilterResponse(juce::Graphics& g, juce::Rectangle<int> area,
                                juce::Colour colour, float alpha)
 {
     juce::Graphics::ScopedSaveState clip(g);
-    g.reduceClipRegion(displayClip(area));
+    g.reduceClipRegion(area);
 
-    const auto box = area.toFloat().reduced(0.0f, 6.0f);
+    drawFilterScale(g, area, alpha);
+    const auto plot = filterCurveBounds(area);
+    const auto box = plot.toFloat().reduced(1.0f);
+    // The curve has a box of its own inside the well, as the reference draws
+    // it: the well now holds the selector and the routing strip as well, and
+    // without a frame the response reads as floating between them rather than
+    // as the thing they are attached to.
+    g.setColour(juce::Colour(0xff070a12).withAlpha(0.55f * alpha));
+    g.fillRect(plot);
+    g.setColour(line.withAlpha(0.45f * alpha));
+    g.drawRect(plot, 1);
+    g.reduceClipRegion(plot.reduced(1));
     drawFilterGrid(g, box, alpha);
 
     const auto path = filterResponsePath(box, shape);

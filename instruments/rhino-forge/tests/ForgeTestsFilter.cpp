@@ -670,6 +670,79 @@ void filterRingModSuite()
             "and the first modulator is still where it was");
 }
 
+// --- KEY ----------------------------------------------------------------------
+//
+// The corner follows the note, an octave for an octave, measured from middle C.
+// Checked twice: the arithmetic on its own, where it can be read exactly, and
+// then a rendered note, because the arithmetic being right is no use if the
+// voice is not the thing asking.
+void filterKeyTrackSuite()
+{
+    rhino::forge::Patch patch;
+    patch.cutoff = 1000.0f;
+    patch.filterKeyTrack = 1.0f;
+    const auto cornerAt = [&patch] (float voiceHz)
+    {
+        return rhino::forge::filterShapeOf(patch, 48000.0, voiceHz).cutoff;
+    };
+
+    requireClose(cornerAt(rhino::forge::filterKeyTrackHz), 1000.0f, 0.5f,
+                 "at middle C the corner is the one the knob is holding");
+    requireClose(cornerAt(rhino::forge::filterKeyTrackHz * 2.0f), 2000.0f, 1.0f,
+                 "an octave up takes the corner an octave up");
+    requireClose(cornerAt(rhino::forge::filterKeyTrackHz * 0.5f), 500.0f, 0.5f,
+                 "and an octave down takes it an octave down");
+    // Nobody asking on behalf of a note is the panel drawing the curve, and
+    // what it draws is the knob's own corner.
+    requireClose(rhino::forge::filterShapeOf(patch, 48000.0).cutoff, 1000.0f, 0.5f,
+                 "with no voice asking, the corner is the one on the knob");
+    // Never past the ends of the knob's own travel, whichever way it is pushed.
+    require(cornerAt(rhino::forge::filterKeyTrackHz * 32.0f) <= rhino::forge::filterCutoffHighHz,
+            "tracking cannot push the corner past the top of the range");
+    require(cornerAt(rhino::forge::filterKeyTrackHz / 64.0f) >= rhino::forge::filterCutoffLowHz,
+            "nor drag it under the bottom of it");
+
+    patch.filterKeyTrack = 0.0f;
+    requireClose(cornerAt(rhino::forge::filterKeyTrackHz * 4.0f), 1000.0f, 0.5f,
+                 "and with KEY off the note moves nothing");
+
+    // Now the voice. A sine through a low pass parked on middle C: two octaves
+    // above it the note is well down the skirt, and with the corner following
+    // the note it is sitting on the corner instead.
+    constexpr int samples = 8192;
+    constexpr int settled = 1024;
+    juce::AudioBuffer<float> buffer(2, samples);
+    const auto level = [&buffer] (bool tracking, int note)
+    {
+        rhino::forge::Processor processor;
+        soloSineOnA(processor);
+        setValue(processor, "filterEnable", 1.0f);
+        setValue(processor, "filterType", 0.0f);
+        setValue(processor, "resonance", 0.0f);
+        setValue(processor, "drive", 0.0f);
+        setValue(processor, "cutoff", rhino::forge::filterKeyTrackHz);
+        setValue(processor, "filterKeyTrack", tracking ? 1.0f : 0.0f);
+        renderNote(processor, buffer, note);
+        return rms(buffer, 0, settled);
+    };
+
+    // Middle C is the pitch the tracking is measured from, so it is the one
+    // note that sounds the same either way. This is what makes KEY safe to
+    // switch on: it moves everything relative to a note you chose, rather than
+    // opening the filter.
+    const auto middleOff = level(false, 60);
+    require(middleOff > 0.0f, "the note being measured is audible at all");
+    requireClose(level(true, 60), middleOff, middleOff * 0.02f,
+                 "at the note it is measured from, KEY changes nothing");
+
+    // Two octaves up: untracked, the note is two octaves past the corner and
+    // most of it is gone; tracked, the corner went with it.
+    const auto highOff = level(false, 84);
+    const auto highOn = level(true, 84);
+    require(highOff < middleOff * 0.5f, "untracked, a note two octaves up is well down the skirt");
+    require(highOn > highOff * 3.0f, "tracked, it keeps the brightness the corner was set for");
+}
+
 void filterTests()
 {
     filterRoutingSuite();
@@ -679,5 +752,6 @@ void filterTests()
     filterSecondSuite();
     filterCombTuningSuite();
     filterRingModSuite();
+    filterKeyTrackSuite();
 }
 }

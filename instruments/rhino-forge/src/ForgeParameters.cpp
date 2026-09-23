@@ -255,6 +255,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout Processor::parameterLayout()
                                        return juce::String("VOWEL ") + filterVowelName(value);
                                    return asHertz(value);
                                }));
+    // Off by default: every patch written before this switch existed was
+    // played with a corner that stayed where it was put.
+    result.push_back(toggle("filterKeyTrack", "Filter Key Track", false));
     result.push_back(parameter("resonance", "Resonance", {0.0f, 1.0f}, 0.12f, asPercent));
     result.push_back(parameter("drive", "Drive", {0.0f, 1.0f}, 0.08f, asPercent));
     // The filter's second field. A plain 0..1, for the same reason a rack

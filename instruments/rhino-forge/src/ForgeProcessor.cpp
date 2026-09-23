@@ -547,6 +547,7 @@ Patch Processor::patch() const
     result.routeSub = value("routeSub");
     result.routeNoise = value("routeNoise");
     result.cutoff = value("cutoff");
+    result.filterKeyTrack = value("filterKeyTrack");
     result.resonance = value("resonance");
     result.drive = value("drive");
     result.filterFreq = value("filterFreq");

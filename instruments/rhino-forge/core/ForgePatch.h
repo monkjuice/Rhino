@@ -68,6 +68,10 @@ struct Patch
     // the voice sum, exactly as Serum's per-source routing buttons work.
     float routeA = 1.0f, routeB = 1.0f, routeSub = 1.0f, routeNoise = 1.0f;
     float cutoff = 7800.0f, resonance = 0.12f, drive = 0.08f;
+    // Whether the corner follows the note. Off, because a patch written before
+    // this existed was played with a corner that stayed where it was put, and
+    // that is what it has to keep sounding like.
+    float filterKeyTrack = 0.0f;
     // The filter's own channel in the mixer: where its output sits in the
     // image, how much of it is the filtered signal rather than what went in,
     // and how loud the whole channel is. The defaults leave the filter exactly
@@ -167,12 +171,34 @@ inline float* destinationField(Patch& patch, int destination)
 
 inline FilterType filterTypeOf(const Patch& patch) { return filterTypeOf(patch.filterType); }
 
+// The pitch key tracking is measured from: middle C, so a patch set up around
+// the middle of the keyboard sounds where it was set and the tracking is what
+// happens either side of it.
+inline constexpr float filterKeyTrackHz = 261.6256f;
+
 // The four settings that decide the filter's shape, pulled out of a patch. One
 // reading, so the curve the panel draws and the audio the voice renders can
 // never be two different filters — see ForgeFilter.h.
-inline FilterShape filterShapeOf(const Patch& patch, double sampleRate)
+//
+// `voiceHz` is the pitch the voice asking is actually sounding, and it is the
+// one thing here that is not a setting: with KEY on, the corner rides it, so a
+// patch keeps its brightness up the keyboard instead of getting duller with
+// every octave. It is the sounding pitch rather than the note number, so a
+// glide takes the filter with it. Zero means nobody is asking on behalf of a
+// note — the panel drawing the curve, a test reading the response — and the
+// corner is then the one the knob is holding, which is what the knob says it
+// is and what the display can honestly draw.
+//
+// Clamped to the cutoff knob's own travel, so tracking can neither push the
+// corner past the top of the range nor drag it under the bottom: five octaves
+// up from a corner already at 10 kHz is not a filter, it is silence.
+inline FilterShape filterShapeOf(const Patch& patch, double sampleRate, float voiceHz = 0.0f)
 {
-    return {filterTypeOf(patch), patch.cutoff, patch.resonance, patch.filterFreq, sampleRate};
+    auto cutoff = patch.cutoff;
+    if (on(patch.filterKeyTrack) && voiceHz > 0.0f)
+        cutoff = juce::jlimit(filterCutoffLowHz, filterCutoffHighHz,
+                              cutoff * voiceHz / filterKeyTrackHz);
+    return {filterTypeOf(patch), cutoff, patch.resonance, patch.filterFreq, sampleRate};
 }
 
 // Drive at zero is genuinely clean: the saturation is skipped rather than run

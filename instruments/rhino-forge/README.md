@@ -42,13 +42,26 @@ Resizing rebuilds that layer at the current size and full display resolution;
 headings and artwork are never temporarily downsampled or stretched from an
 earlier frame. Fractional display scales preserve the cache's physical pixels.
 
-The filter shows its own response: the band it is passing filled under the
-curve, the band it is taking out washed in above it, decade lines across the
-audible range and the corner frequency marked and named — plus the second
-corner, more faintly, on a type that has one. It is drawn from the transfer
-functions in `core/ForgeFilter.h`, which is the same header the engine's
-coefficients are worked out in, so what the display claims is being removed is
-what is being removed — including the peak resonance puts back at the corner.
+The filter shows its own response, and that display is most of the module. The
+type selector lies along the top edge of the well and the five buttons — the
+four source routings and KEY — along its foot, each a pixel inside the frame,
+with the response between them and the frequencies named underneath it. Both
+rows are ordinary declared controls that happen to be *seated* in the display
+rather than in the body below it; see `Seat` in `ui/ForgeModule.h`. It is the
+one module built that way. The two rows those controls used to take are what
+pays for the rest: the body holds nothing but knobs now, two rows of three where
+it was two rows of two, and the display took the height they gave up — 74 pixels
+to 171 at the size the panel opens at, with the curve inside it going from 62 to
+about 105.
+
+Inside it: the band the filter is passing filled under the curve, the band it is
+taking out washed in above it, the decades ruled across the audible range with
+the log marks between them, and the corner frequency marked and named — plus the
+second corner, more faintly, on a type that has one. It is drawn from the
+transfer functions in `core/ForgeFilter.h`, which is the same header the
+engine's coefficients are worked out in, so what the display claims is being
+removed is what is being removed — including the peak resonance puts back at the
+corner.
 
 Three of the types are not linear and so have no transfer function to draw. Each
 of those draws the truest thing that can be said about it instead: unity for the
@@ -193,7 +206,15 @@ vowel bank the cutoff moves the mouth of, a ring modulator, a sample and hold,
 an all-pass diffusor, a low pass with the damping taken out from under it until
 it screams, and the delay loop with the diffusor inside it.
 
-One knob beside TYPE carries whatever that type needs, the way a rack slot's
+Six knobs under the display, in two rows of three: CUTOFF, RES and DRIVE are the
+filter, and the type's own control, PAN and MIX are what happens to the result —
+where it sits in the image and how much of what comes out is the filtered signal
+rather than what went in. Those last two are the same parameters the mixer's
+FILTER channel carries, reached from the module they belong to as well as from
+the strip; the channel's fader stays on the mixer, because a level belongs with
+the other levels.
+
+The fourth of those knobs carries whatever the type needs, the way a rack slot's
 knobs carry whatever is in the slot: FREQ on a dual, MORPH on a morph, FAT on
 the basic five and the clean ladders, PAIN, DAMP, STAGES, SHIFT, SPREAD, DIFF or
 FEED on the rest. Its label, its readout and its double-click all come from the
@@ -201,6 +222,16 @@ type's own row in `filterTypes()`, so it cannot be labelled as one thing and
 rendered as another. Choosing a type from the menu moves that knob to what the
 new type opens on, but only when the type has changed what the knob is *for* —
 stepping LOW to HIGH leaves it alone, and stepping LOW to LP+HP does not.
+
+**KEY**, the fifth button under the response, makes the corner follow the note:
+an octave up takes it an octave up, measured from middle C, so the note it is
+measured from sounds exactly as it did and a patch keeps its brightness across
+the keyboard instead of getting duller with every octave. It follows the pitch
+the voice is actually sounding rather than the note number, so a glide takes the
+filter with it. Off by default, because a patch written before it existed was
+played with a corner that stayed where it was put. The display draws the corner
+the knob is holding whatever KEY is doing, since a curve cannot honestly be
+drawn for eight voices at eight pitches.
 
 LOW, HIGH and BAND are still types 0, 1 and 2, and FREQ opens at nothing, which
 is FAT off. A patch saved before any of the rest of this existed therefore loads

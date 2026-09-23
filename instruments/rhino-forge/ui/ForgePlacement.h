@@ -346,6 +346,45 @@ inline juce::Rectangle<int> displayBounds(juce::Rectangle<int> moduleArea, const
     return body.removeFromTop(body.getHeight() * displayShareOf(module) / 100);
 }
 
+// --- What a display is divided into ------------------------------------------
+//
+// A display with seated rows is three things stacked: the strips along its top
+// edge, the plot, and the strips along its foot. One walk carves all of them
+// out of the one rectangle, so the plot cannot disagree with a strip about
+// where either ends — which is what the layout test intersects them to check.
+//
+// `wanted` is the row whose strip is being asked for, or -1 for the plot, which
+// is simply whatever the strips left.
+inline juce::Rectangle<int> displayCarve(juce::Rectangle<int> moduleArea, const Module& module,
+                                         int wanted)
+{
+    if (module.display == Display::none) return {};
+    auto inner = displayBounds(moduleArea, module).reduced(displaySeatInset);
+    for (int i = 0; i < static_cast<int>(module.rows.size()); ++i)
+    {
+        const auto& row = module.rows[static_cast<size_t>(i)];
+        if (row.seat == Seat::body) continue;
+        const auto atTop = row.seat == Seat::displayTop;
+        // Never more than the display has: a window small enough to make the
+        // plot vanish should take the plot, not hand a strip a negative height
+        // and let it wander out of the well.
+        const auto height = juce::jlimit(0, juce::jmax(0, inner.getHeight()), row.weight);
+        const auto strip = atTop ? inner.removeFromTop(height) : inner.removeFromBottom(height);
+        if (i == wanted) return strip;
+        if (atTop) inner.removeFromTop(displaySeatGap);
+        else       inner.removeFromBottom(displaySeatGap);
+    }
+    return wanted < 0 ? inner : juce::Rectangle<int>();
+}
+
+// What the display has left for the thing it is a display *of*. Everything that
+// draws into a display asks for this rather than for displayBounds, so a curve
+// can never be plotted underneath the controls seated on top of it.
+inline juce::Rectangle<int> displayPlotBounds(juce::Rectangle<int> moduleArea, const Module& module)
+{
+    return displayCarve(moduleArea, module, -1);
+}
+
 // The parameter an oscillator's display draws: the first knob of the module,
 // which is POSITION by declaration in both oscillators.
 inline const char* displaySourceId(const Module& module)
@@ -377,17 +416,25 @@ inline juce::Rectangle<int> controlArea(juce::Rectangle<int> moduleArea, const M
 
 inline juce::Rectangle<int> rowBounds(juce::Rectangle<int> moduleArea, const Module& module, int rowIndex)
 {
+    // A seated row is laid out in the display rather than in the body, and is
+    // absent from the division below — which is what lets the body's rows be
+    // declared as shares of what is actually theirs.
+    if (module.rows[static_cast<size_t>(rowIndex)].seat != Seat::body)
+        return displayCarve(moduleArea, module, rowIndex);
+
     const auto area = controlArea(moduleArea, module);
     if (juce::String(module.id) == "fx")
         return {area.getX(), area.getY() + rowIndex * fxSlotHeight, area.getWidth(), fxSlotHeight};
 
     auto total = 0;
-    for (const auto& row : module.rows) total += row.weight;
+    for (const auto& row : module.rows)
+        if (row.seat == Seat::body) total += row.weight;
     if (total <= 0) return area;
 
     auto y = area.getY();
     for (int i = 0; i < rowIndex; ++i)
-        y += area.getHeight() * module.rows[static_cast<size_t>(i)].weight / total;
+        if (module.rows[static_cast<size_t>(i)].seat == Seat::body)
+            y += area.getHeight() * module.rows[static_cast<size_t>(i)].weight / total;
     const auto height = area.getHeight() * module.rows[static_cast<size_t>(rowIndex)].weight / total;
     return {area.getX(), y, area.getWidth(), height};
 }

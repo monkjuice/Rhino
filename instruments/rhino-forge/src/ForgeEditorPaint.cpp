@@ -159,7 +159,11 @@ void Editor::paint(juce::Graphics& g)
             // this one, and draws it with the curve.
             ui::drawDisplayWell(g, ui::envelopePlotBounds(display));
         else
-            ui::drawDisplayWell(g, display);
+            // The filter's well holds its selector and its routing strip as
+            // well as the curve, and the curve has a frame of its own inside
+            // it, so the well's own baseline would be a line through the
+            // middle of a picture rather than under one.
+            ui::drawDisplayWell(g, display, descriptor.display != ui::Display::filter);
         switch (descriptor.display)
         {
             case ui::Display::oscillator:
@@ -205,7 +209,12 @@ void Editor::paint(juce::Graphics& g)
                 break;
             }
             case ui::Display::filter:
-                ui::drawFilterResponse(g, display, filterShape(), accent, alpha);
+                // What the seated rows left: the selector along the top edge of
+                // this well and the routing buttons along its foot are inside
+                // the display, so the response is plotted in what remains
+                // rather than underneath them.
+                ui::drawFilterResponse(g, ui::displayPlotBounds(area, descriptor), filterShape(),
+                                       accent, alpha);
                 break;
             case ui::Display::none:
                 break;

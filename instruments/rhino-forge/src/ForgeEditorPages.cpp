@@ -225,7 +225,12 @@ void Editor::applyEnableStates()
                 && fxControlUsed(*control)
                 && (on || !ui::inSharedCell(*module.descriptor, control->row, control->index));
 
-            control->label.setVisible(shown);
+            // A control seated inside a display carries no label strip. It is
+            // inside the thing it would have named — the filter's TYPE field
+            // lies along the top edge of the response it chooses — and a
+            // caption over it would be a word where the curve should be.
+            control->label.setVisible(
+                shown && !ui::seatedInDisplay(*module.descriptor, control->row));
             // A macro's name follows its knob on and off the panel, and is
             // never greyed with it: a name is not a setting, and a macro sitting
             // under a module that is switched off is still called what it is

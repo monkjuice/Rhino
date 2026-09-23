@@ -389,7 +389,8 @@ public:
             // corners are per voice because the matrix is — a modulated cutoff
             // is a different frequency in every note — so this cannot move up
             // out of the loop, but it can and does stop being computed twice.
-            const auto coefficients = filterCoefficientsFor(filterShapeOf(active, sampleRate));
+            const auto coefficients =
+                filterCoefficientsFor(filterShapeOf(active, sampleRate, voice.currentHz));
             auto& delays = filterDelays[voiceIndex];
             if (on(active.filterEnable))
             {

@@ -255,6 +255,30 @@ void layoutSuite()
                         "no control sits on top of its row's display strip");
         }
 
+        // A row seated inside a display is laid out in the display rather than
+        // in the body, so what holds it is the plot's own arithmetic: it has to
+        // stay inside the well, and it has to leave the thing the display is a
+        // display *of* somewhere to be drawn. Both are the same walk in
+        // displayCarve, and this is what keeps the two ends of it honest.
+        const auto plot = rhino::forge::ui::displayPlotBounds(area, modules[i]);
+        for (int r = 0; r < static_cast<int>(modules[i].rows.size()); ++r)
+        {
+            if (modules[i].rows[static_cast<size_t>(r)].seat == rhino::forge::ui::Seat::body)
+                continue;
+            const auto seat = rhino::forge::ui::rowBounds(area, modules[i], r);
+            require(modules[i].display != rhino::forge::ui::Display::none,
+                    "a row seated in a display belongs to a module that has one");
+            require(rhino::forge::ui::displayBounds(area, modules[i]).contains(seat),
+                    "a seated row stays inside the display it is seated in");
+            require(!seat.intersects(plot), "a seated row leaves the plot alone");
+            require(!seat.intersects(controls),
+                    "a seated row stays out of the body, which is what pays for it");
+            require(seat.getHeight() > 0, "a seated row is given the height it asked for");
+        }
+        if (modules[i].display != rhino::forge::ui::Display::none)
+            require(plot.getHeight() > 20 && plot.getWidth() > 20,
+                    "a display keeps room to draw in once its seated rows have taken theirs");
+
         // Rows within a module must tile their area without overlapping either.
         for (int r = 0; r < static_cast<int>(modules[i].rows.size()); ++r)
         {
@@ -262,6 +286,8 @@ void layoutSuite()
             if (juce::String(modules[i].id) == "fx")
                 require(row.getHeight() == rhino::forge::ui::fxSlotHeight,
                         "every FX control row has the fixed rack height");
+            else if (modules[i].rows[static_cast<size_t>(r)].seat != rhino::forge::ui::Seat::body)
+                require(area.contains(row), "a seated row stays inside its module");
             else
                 require(controls.contains(row), "a control row stays inside its module");
             for (int s = r + 1; s < static_cast<int>(modules[i].rows.size()); ++s)
@@ -620,6 +646,16 @@ void layoutSuite()
                 if (!area.contains(box))
                 {
                     require(false, "a module stays inside the content area at every allowed size");
+                    std::cerr << "       " << modules[i].id << " at " << width << "x" << height << '\n';
+                }
+                // The strips seated in a display are fixed heights and the well
+                // they are seated in is not, so a small window is where the two
+                // can drift apart -- and the way it shows is a plot with nothing
+                // left to draw in.
+                if (modules[i].display != rhino::forge::ui::Display::none
+                    && rhino::forge::ui::displayPlotBounds(box, modules[i]).getHeight() <= 20)
+                {
+                    require(false, "a display keeps room to draw in at every allowed size");
                     std::cerr << "       " << modules[i].id << " at " << width << "x" << height << '\n';
                 }
                 if (rhino::forge::ui::controlArea(box, modules[i]).getHeight() <= 24)

@@ -259,6 +259,9 @@ void Editor::buildModules()
                 if (declared.style == ui::Style::selector)
                 {
                     control->selector = std::make_unique<ui::FxSelector>();
+                    // Everything but a rack slot's mode steps on the wheel;
+                    // see wheelSteps for why the rack's is the exception.
+                    control->selector->wheelSteps = !isFxModule(descriptor);
                     auto* held = control.get();
                     // Two fields wear the same component. A rack slot's mode
                     // means whatever the type in that slot says it means, so it
@@ -392,6 +395,7 @@ void Editor::buildModules()
                 {
                     control->chip = std::make_unique<ui::ToggleChip>(declared.label);
                     control->chip->accent = accent;
+                    control->chip->glyph = ui::chipGlyphFor(declared.id);
                     control->chip->setTooltip(ui::tooltipFor(declared.id));
                     control->buttonAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment>(
                         processor.state, declared.id, *control->chip);

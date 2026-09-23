@@ -456,21 +456,39 @@ public:
     explicit ToggleChip(const juce::String& label) : juce::Button(label) { setClickingTogglesState(true); }
 
     juce::Colour accent = electricBlue;
+    ChipGlyph glyph = ChipGlyph::caption;
 
     void paintButton(juce::Graphics& g, bool highlighted, bool) override
     {
         const auto area = getLocalBounds().toFloat().reduced(1.0f);
         const auto on = getToggleState();
         const auto enabled = isEnabled();
-        g.setColour(on ? accent.withAlpha(enabled ? 0.24f : 0.08f) : juce::Colour(0xff0b0e18));
+        const auto fill = on ? accent.withAlpha(enabled ? 0.24f : 0.08f) : juce::Colour(0xff0b0e18);
+        g.setColour(fill);
         g.fillRoundedRectangle(area, 3.0f);
         g.setColour((on ? accent : line).withAlpha(enabled ? (highlighted ? 1.0f : 0.85f) : 0.3f));
         g.drawRoundedRectangle(area, 3.0f, 1.0f);
-        g.setColour((on ? accent : mutedText).withAlpha(enabled ? 1.0f : 0.35f));
+        const auto mark = (on ? accent : mutedText).withAlpha(enabled ? 1.0f : 0.35f);
+        if (glyph == ChipGlyph::keyboard)
+        {
+            // Against the chip's own fill rather than against the panel: the
+            // cuts have to disappear into the button, and the button is lit
+            // while the switch is on.
+            drawKeyboardGlyph(g, area, mark, fill.withAlpha(1.0f).overlaidWith(panel));
+            return;
+        }
+        g.setColour(mark);
         g.setFont(panelFont(Face::emphasis, controlLabelSize));
         g.drawText(getName(), area, juce::Justification::centred);
     }
 };
+
+// Which chips carry a picture instead of their caption. One switch does, and it
+// is the one that stands in a row of routing buttons without being a routing.
+inline ChipGlyph chipGlyphFor(const juce::String& id)
+{
+    return id == "filterKeyTrack" ? ChipGlyph::keyboard : ChipGlyph::caption;
+}
 
 class BankCard final : public juce::Button
 {

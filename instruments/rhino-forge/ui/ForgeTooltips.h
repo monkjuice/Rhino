@@ -365,6 +365,9 @@ inline juce::String tooltipFor(const juce::String& id)
                        "a morph position, a damping. Its label says which"},
         // One switch with two drawings: a lettered chip on the FILTER module,
         // and the TO field at the top of the channel's mixer strip.
+        {"filterKeyTrack", "Make the cutoff follow the note, an octave for an octave, "
+                           "measured from middle C. Off, the corner stays where CUTOFF puts it "
+                           "whatever is played"},
         {"routeA", "Send oscillator A through the filter, or straight to the main output"},
         {"routeB", "Send oscillator B through the filter, or straight to the main output"},
         {"routeSub", "Send the sub through the filter, or straight to the main output"},

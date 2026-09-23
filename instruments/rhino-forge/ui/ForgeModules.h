@@ -185,54 +185,48 @@ inline const std::vector<Module>& modules()
           {25, {{"noiseStereo", "STEREO"}}},
           {25, {{"noiseLevel", "LEVEL"}}}},
          0, everyPageBut(Page::mix, Page::fx), 1, 0, 0, 0, 0, nullptr, "SUB / NOISE"},
-        // Four columns for three knobs, against the oscillators' eight for six:
-        // the same width per knob, so nothing in the row is drawn at a size its
-        // neighbours are not.
+        // The display *is* the module, and the two rows that used to sit under
+        // it are now inside it. Which filter it is and what is routed into it
+        // are readings of the curve rather than settings beside it — the shape
+        // on screen is that type, plotted for those sources — so the selector
+        // lies along the top edge of the well and the routing buttons along its
+        // foot, each a pixel inside the frame. See Seat in ForgeModule.h.
         //
-        // Built like an oscillator, and for the same reason: a display of what
-        // it is doing, a row of short controls under it, then its knobs. The
-        // weights below are the oscillators' own, so the two kinds of module
-        // line up down the whole of the top row instead of each being centred
-        // in its own height.
+        // Those two rows are what pays for the rest of it. The body holds
+        // nothing but knobs now — two rows of three where it was two rows of
+        // two — and the display took the height they gave up: 74 pixels to 171
+        // at the default window, with the curve inside it going from 62 to
+        // about 105. That is the whole point of the change. A response you can
+        // read is worth more than a caption saying TYPE.
         //
-        // The routing chips name their source the way Serum's do: A, B, S, N.
+        // Three across rather than the two Serum uses, because this module is
+        // four columns of twenty-four and the arithmetic is unforgiving: every
+        // knob on the panel is drawn at one diameter, so three rows of two here
+        // would have held the shared diameter down at the size two rows of
+        // three leaves the display. At three across the cells come out 69x68 at
+        // the default window against the oscillators' 74x68 — the same 54, set
+        // by the same height, so nothing else on the panel moves.
         //
-        // TYPE takes a line to itself and wears the field the warp modes wear:
-        // thirty-four types will not fit in a stepper that is dragged through
-        // them, and dragging is the wrong gesture for a list whose neighbours
-        // are unrelated. The arrows step and the name opens the menu.
+        // Shaping on the first row and placing on the second: CUTOFF, RES and
+        // DRIVE are the filter, and the type's own control, its position in the
+        // image and how much of it is heard are what happens to the result.
+        // FAT leads the second row so it stays beside the DRIVE above it, which
+        // is the knob it is most often moved with.
         //
-        // Two knobs a line rather than three, which is what Serum does with
-        // the same set and what lets a fourth control in without every knob
-        // getting smaller: CUTOFF and RES are the pair a hand moves together,
-        // and DRIVE sits with FREQ because FREQ is the one field whose meaning
-        // the type decides — see filterSecondLabel in ForgeFilter.h.
-        //
-        // Four rows and a smaller share for the display, which is what pays
-        // for them. Two things decide the weights and neither is taste. Every
-        // knob on the panel is drawn at one diameter, taken from whichever cell
-        // is tightest, so a knob row here that crowded itself would shrink the
-        // oscillators' knobs as well — these cells stay roomier than the
-        // oscillators' 74x68, which is what keeps the oscillators the module
-        // that sets that diameter. And a selector has to be tall enough to
-        // stack three choices even where it never will, because that is the
-        // standard every mode field on the panel is held to — which is held at
-        // the *smallest* window rather than at the default, and so is the
-        // tighter of the two.
-        //
-        // Both of those are satisfied by the display giving up height, and it
-        // gives up a lot: the curve is a wide strip here rather than the tall
-        // well it was when the module held one knob row and three types. That
-        // is the price of the fourth row, and the row is worth it — a filter
-        // whose FREQ knob had nowhere to go would be thirty-four types with
-        // eleven of the families unreachable.
+        // The five buttons: four sources, and KEY, which makes the corner
+        // follow the note. The fifth is the one that is not a routing, so it
+        // sits at the end of the strip rather than among them, and it carries a
+        // keyboard rather than a letter.
         {"filter", "FILTER", "", "filterEnable", false, Display::filter, 0, 20, 4, false,
-         {{28, {{"filterType", "TYPE", Style::selector}}},
-          {10, {{"routeA", "A", Style::chip}, {"routeB", "B", Style::chip},
-                {"routeSub", "S", Style::chip}, {"routeNoise", "N", Style::chip}}},
-          {31, {{"cutoff", "CUTOFF"}, {"resonance", "RES"}}},
-          {31, {{"drive", "DRIVE"}, {"filterFreq", "FREQ"}}}},
-         0, everyPageBut(Page::mix, Page::fx), 1, 0, 0, 24},
+         {{displaySelectorHeight, {{"filterType", "TYPE", Style::selector}},
+           1, 0, 0, Seat::displayTop},
+          {displayButtonHeight, {{"routeA", "A", Style::chip}, {"routeB", "B", Style::chip},
+                                 {"routeSub", "S", Style::chip}, {"routeNoise", "N", Style::chip},
+                                 {"filterKeyTrack", "KEY", Style::chip}},
+           1, 0, 0, Seat::displayFoot},
+          {50, {{"cutoff", "CUTOFF"}, {"resonance", "RES"}, {"drive", "DRIVE"}}},
+          {50, {{"filterFreq", "FREQ"}, {"filterPan", "PAN"}, {"filterMix", "MIX"}}}},
+         0, everyPageBut(Page::mix, Page::fx), 1, 0, 0, filterDisplayPercent},
         // GLOBAL is a narrow column rather than a wide box, and it opens the
         // lower row: what the voice is, before anything that shapes it. Five
         // controls in a row want more width than this panel has to give beside

@@ -130,9 +130,26 @@ struct Control
     bool sharesCell = false;
 };
 
+// Where a row is laid out. Almost every row sits in the module's body, under
+// the display and above the plate's legend. A seated row sits *inside* the
+// display instead, along its top edge or its foot.
+//
+// The filter's two are the reason this exists. Which filter it is and what is
+// routed into it are readings of the display rather than settings beside it —
+// the curve on screen is that type, plotted for those sources — and a row of
+// the body each is two rows the knobs do not get. Seated, they cost the plot a
+// strip and the body nothing.
+//
+// A seated row's weight is its height in pixels, not a share of anything: what
+// it holds is text at a size that does not scale, so neither does the room it
+// needs. Everything else about it is ordinary — the same cells, the same
+// blocks, the same components, the same attachments.
+enum class Seat { body, displayTop, displayFoot };
+
 struct Row
 {
-    // Share of the module's control area, against the module's other rows.
+    // Share of the module's control area, against the module's other rows —
+    // or, in a row seated inside the display, its height in pixels.
     int weight;
     std::vector<Control> controls;
     // How many identical sets of controls this row holds, one behind another in
@@ -154,6 +171,9 @@ struct Row
     // which every row but the rack's is.
     int displayWeight = 0;
     int displayAfter = 0;
+    // Inside the module's display rather than under it. Last, so the rows that
+    // are not seated need not mention it.
+    Seat seat = Seat::body;
 };
 
 struct Module
@@ -266,6 +286,14 @@ inline const std::vector<int>& rowWeights()
 // no longer needs.
 inline constexpr int displayPercent = 55;
 
+// What the filter gives its own display, which is the largest share any module
+// takes. Everything the module is set by except its six knobs is seated inside
+// that display, so the share is buying the selector and the routing strip as
+// well as the curve; what is left over is two knob rows of 68 pixels at the
+// default window, which is exactly the height the panel's shared diameter is
+// already set at by the oscillators.
+inline constexpr int filterDisplayPercent = 55;
+
 // What an oscillator gives its own display, which is less than the share it
 // used to take. The warp row had to come from somewhere, and the choice was
 // between a smaller picture and smaller knobs: the picture is still the
@@ -288,6 +316,19 @@ inline constexpr int stepperHeight = 21;
 inline constexpr int maxStepperWidth = 122;
 inline constexpr int chipHeight = 20;
 inline constexpr int maxChipWidth = 44;
+
+// The two strips a display seats a row in, and the room around them. The
+// selector is taller than a chip because it is the one field on the module
+// read at a glance rather than looked for, and it carries two arrows.
+//
+// The inset is one pixel, off the display's own inner edge: a seated control
+// is part of the instrument's face, not a button lying on it, so it meets the
+// frame rather than floating inside it. The gap is what separates a strip from
+// the plot, and it is the only slack in the display's height.
+inline constexpr int displaySelectorHeight = 26;
+inline constexpr int displayButtonHeight = chipHeight;
+inline constexpr int displaySeatInset = 1;
+inline constexpr int displaySeatGap = 3;
 
 // A fader is read as a distance, so it takes the whole height of its cell and
 // only as much width as the track and its thumb need. The label sits above it

@@ -706,6 +706,7 @@ void fxDisplaySuite()
         const auto tightest = juce::Rectangle<int>(0, 0, rhino::forge::ui::minPanelWidth,
                                                    rhino::forge::ui::minPanelHeight);
         const auto shared = rhino::forge::ui::uniformKnobDiameter(tightest);
+        rhino::forge::Processor processor;
         for (const auto& module : rhino::forge::ui::modules())
         {
             const auto area = rhino::forge::ui::moduleBounds(tightest, module);
@@ -717,7 +718,13 @@ void fxDisplaySuite()
                     if (controls[static_cast<size_t>(c)].style != rhino::forge::ui::Style::selector)
                         continue;
                     const auto block = rhino::forge::ui::controlBlock(area, module, r, c, shared);
-                    const auto field = block.withTrimmedTop(rhino::forge::ui::stepperLabelHeight);
+                    // A field seated inside a display has no label strip over
+                    // it — it is inside the thing it names — so the strip it
+                    // was given is the whole field.
+                    const auto seated = rhino::forge::ui::seatedInDisplay(module, r);
+                    const auto field = seated
+                        ? block
+                        : block.withTrimmedTop(rhino::forge::ui::stepperLabelHeight);
 
                     rhino::forge::ui::FxSelector selector;
                     selector.setBounds(field);
@@ -727,6 +734,33 @@ void fxDisplaySuite()
                     {
                         selector.choices.assign(static_cast<size_t>(howMany), "X");
                     };
+
+                    // A seated field is held to a different standard, and a
+                    // lower one: the strip it sits in is declared at the height
+                    // of a single line, so it is asked to be readable as a line
+                    // rather than to divide into three. What makes that safe is
+                    // that it cannot be given a stack in the first place — a
+                    // field is only ever seated where the parameter behind it
+                    // has more choices than fit inline, which is what this
+                    // pins. Seat a two-state parameter in a display and the
+                    // component would stack it into slivers, and this is what
+                    // would say so.
+                    if (seated)
+                    {
+                        const auto* choices = dynamic_cast<const juce::AudioParameterChoice*>(
+                            processor.state.getParameter(controls[static_cast<size_t>(c)].id));
+                        require(choices != nullptr
+                                    && choices->choices.size()
+                                           > rhino::forge::ui::FxSelector::inlineLimit,
+                                "a field seated in a display has too many choices to stack");
+                        if (choices != nullptr)
+                            holding(choices->choices.size());
+                        require(field.getHeight() >= 18,
+                                "a seated field stays tall enough to read a line in");
+                        require(field.withZeroOrigin().contains(selector.listBounds()),
+                                "a seated field draws its line inside the strip it was given");
+                        continue;
+                    }
                     // Every mode field that stacks its choices, at its widest.
                     for (int count = 2; count <= rhino::forge::ui::FxSelector::inlineLimit; ++count)
                     {

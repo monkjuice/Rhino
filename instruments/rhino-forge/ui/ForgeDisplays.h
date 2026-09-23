@@ -248,10 +248,15 @@ inline juce::Path displayClip(juce::Rectangle<int> area)
     return clip;
 }
 
-inline void drawDisplayWell(juce::Graphics& g, juce::Rectangle<int> area)
+// The rule across the middle is a baseline — it is what a wave is drawn either
+// side of — so a display whose contents carry their own frame asks for the well
+// without it. The filter's does: the middle of that well is the middle of the
+// response, and a line through it reads as a reading.
+inline void drawDisplayWell(juce::Graphics& g, juce::Rectangle<int> area, bool baseline = true)
 {
     const auto box = area.toFloat();
     drawWell(g, box, juce::Colour(0xff0a0d16), 1.0f, displayCorner);
+    if (!baseline) return;
     g.setColour(line.withAlpha(0.45f));
     g.drawHorizontalLine(area.getCentreY(), box.getX(), box.getRight());
 }

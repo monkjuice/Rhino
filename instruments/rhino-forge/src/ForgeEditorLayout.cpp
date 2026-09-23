@@ -162,7 +162,11 @@ void Editor::resized()
                     control.waves->setBounds(block);
                     break;
                 case ui::Style::selector:
-                    control.label.setBounds(block.removeFromTop(ui::stepperLabelHeight));
+                    // Seated, the field is the whole strip it was given and
+                    // has no caption above it; everywhere else it wears the
+                    // label line a stepper does.
+                    if (!ui::seatedInDisplay(descriptor, control.row))
+                        control.label.setBounds(block.removeFromTop(ui::stepperLabelHeight));
                     control.selector->setBounds(block);
                     break;
                 case ui::Style::fader:

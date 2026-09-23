@@ -53,6 +53,47 @@ inline float faderProportion(juce::Range<double> range, double plain)
 }
 
 // A card is square where it meets the module's top edge and round at its foot.
+// What a chip draws in place of its caption. A routing button says which source
+// it is in one letter; the switch standing at the end of that same strip is not
+// a routing at all, and a picture is how it says so at a glance. Everything
+// whose name fits in the button stays a word.
+enum class ChipGlyph { caption, keyboard };
+
+// A piano, drawn as one body with the blacks cut out of it rather than as five
+// separate keys: at fourteen pixels across it is the gaps that read, and five
+// shapes at that size come out as a smear. `behind` is what the chip is filled
+// with, so the cuts are the button showing through rather than a colour of
+// their own.
+inline void drawKeyboardGlyph(juce::Graphics& g, juce::Rectangle<float> box,
+                              juce::Colour keys, juce::Colour behind)
+{
+    // Sized from the button rather than from whatever box it was handed: a
+    // keyboard is read by its proportions, so the height is taken first and the
+    // width follows it. Two thirds of the button, because at half — which is
+    // where this started — the whites come out narrower than the blacks and the
+    // picture reads as three bars.
+    const auto tall = juce::jmin(box.getHeight() * 0.72f, 15.0f);
+    const auto body = juce::Rectangle<float>(juce::jmin(box.getWidth(), tall * 1.5f), tall)
+                          .withCentre(box.getCentre());
+    g.setColour(keys);
+    g.fillRoundedRectangle(body, 1.2f);
+
+    g.setColour(behind);
+    const auto black = juce::jmax(1.6f, body.getWidth() * 0.13f);
+    const auto seam = juce::jmax(1.0f, body.getWidth() * 0.06f);
+    for (const auto at : {0.31f, 0.69f})
+    {
+        const auto x = body.getX() + body.getWidth() * at;
+        g.fillRect(juce::Rectangle<float>(x - black * 0.5f, body.getY(), black,
+                                          body.getHeight() * 0.62f));
+        // The seam between two whites, carrying on from the foot of the black
+        // above it — without it the lower half is one bar and the picture is a
+        // battery rather than a keyboard.
+        g.fillRect(juce::Rectangle<float>(x - seam * 0.5f, body.getY() + body.getHeight() * 0.62f,
+                                          seam, body.getHeight() * 0.38f));
+    }
+}
+
 inline juce::Path cardOutline(juce::Rectangle<float> area)
 {
     juce::Path path;

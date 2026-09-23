@@ -363,6 +363,37 @@ public:
               chosen < count() - 1);
     }
 
+    // Whether the wheel steps this field. A rack slot's mode says no: the
+    // wheel over the rack scrolls the rack, and a field inside it swallowing
+    // that would make the chain unscrollable wherever a mode happened to be
+    // under the pointer. The three fields whose list is a fixed one of their
+    // own — the filter's type, an oscillator's warp, the noise source — sit in
+    // nothing that scrolls, and a list of thirty-four is exactly what a wheel
+    // is for.
+    bool wheelSteps = false;
+
+    // One notch is one step. A mouse sends about 0.2 a notch and a trackpad a
+    // drizzle of much smaller deltas, so the travel adds up until it is worth a
+    // step rather than each delta being one — the same threshold the envelope's
+    // zoom is stepped on, and for the same reason.
+    static constexpr float wheelPerStep = 0.15f;
+
+    void mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel) override
+    {
+        if (!wheelSteps || !isEnabled() || count() <= 0 || onChoose == nullptr)
+        {
+            juce::Component::mouseWheelMove(event, wheel);
+            return;
+        }
+        wheelTravel += wheel.isReversed ? -wheel.deltaY : wheel.deltaY;
+        if (std::abs(wheelTravel) < wheelPerStep) return;
+        // Up is along the list, the way up is more on every knob beside it.
+        const auto step = wheelTravel > 0.0f ? 1 : -1;
+        wheelTravel = 0.0f;
+        const auto next = juce::jlimit(0, count() - 1, chosen + step);
+        if (next != chosen) onChoose(next);
+    }
+
     void mouseDown(const juce::MouseEvent& event) override
     {
         if (!isEnabled() || count() <= 0) return;
@@ -385,6 +416,10 @@ public:
         }
         if (onOpenList) onOpenList();
     }
+
+private:
+    // Wheel travel not yet spent on a step.
+    float wheelTravel = 0.0f;
 };
 
 // One slot's name plate: the type's mark, its name, and the colour both are in.

@@ -1,4 +1,4 @@
-// The noise module: what each of the four sources actually is, that a voice
+// The noise module: what each of the nineteen sources actually is, that a voice
 // hisses on its own, and that nothing about changing one of them clicks.
 //
 // Everything here is measured off rendered audio rather than read out of
@@ -98,6 +98,57 @@ double largestStep(const std::vector<float>& data, int from, int to)
     return worst;
 }
 
+// How many different numbers came back. Everything between the generator and
+// here is a scalar multiply, so a source that puts out sixteen levels still
+// puts out sixteen once it has been panned, levelled and summed -- which is
+// what makes this a fair way to ask whether something is quantised.
+int distinctValues(const std::vector<float>& data)
+{
+    std::vector<float> sorted(data);
+    std::sort(sorted.begin(), sorted.end());
+    sorted.erase(std::unique(sorted.begin(), sorted.end()), sorted.end());
+    return static_cast<int>(sorted.size());
+}
+
+// The tallest bin within a few per cent of a frequency. Not peakAt, which wants
+// a bin and trusts it: a resonator does not land where the arithmetic says to
+// the bin, and a partial missed by two bins reads as no partial at all.
+double partialAt(const std::vector<double>& magnitude, double hz, double sampleRate)
+{
+    const auto scale = static_cast<double>(spectrumSize) / sampleRate;
+    const auto first = std::max(1, static_cast<int>(hz * 0.96 * scale));
+    const auto last = std::min(static_cast<int>(magnitude.size()) - 1,
+                               static_cast<int>(hz * 1.04 * scale));
+    auto best = 0.0;
+    for (int bin = first; bin <= last; ++bin) best = std::max(best, magnitude[static_cast<size_t>(bin)]);
+    return best;
+}
+
+// How many separate excursions past a threshold there are: the number of
+// events, rather than how tall they are.
+//
+// This exists because crest could not tell the two event sources apart, and
+// measured them the wrong way round. Crackle's clicks are a fifth the length of
+// geiger's, so a crackle event stands further above its own average even though
+// there are twenty-five times as many of them -- crest read 5.0 against 4.7 and
+// called the dense one sparser. Counting is the thing the claim was always
+// about.
+//
+// Hysteresis, so one event with a ripple on it is one event.
+int burstCount(const std::vector<float>& data, double level)
+{
+    const auto open = level * 1.5, close = level * 0.5;
+    auto bursts = 0;
+    auto inside = false;
+    for (const auto sample : data)
+    {
+        const auto magnitude = std::abs(static_cast<double>(sample));
+        if (!inside && magnitude > open) { inside = true; ++bursts; }
+        else if (inside && magnitude < close) inside = false;
+    }
+    return bursts;
+}
+
 double correlationOf(const std::vector<float>& a, const std::vector<float>& b)
 {
     auto sa = 0.0, sb = 0.0, sab = 0.0;
@@ -154,7 +205,7 @@ double slopeDbPerOctave(const std::vector<double>& magnitude, double sampleRate)
     return (points * sxy - sx * sy) / (points * sxx - sx * sx);
 }
 
-// --- The four sources ---------------------------------------------------------
+// --- The colours --------------------------------------------------------------
 
 void spectrumSuite()
 {
@@ -171,9 +222,33 @@ void spectrumSuite()
     requireClose(static_cast<float>(pink), -3.0f, 0.6f, "pink noise falls at 3 dB an octave");
     requireClose(static_cast<float>(brown), -6.0f, 0.8f, "brown noise falls at 6 dB an octave");
 
+    // The two that go the other way. Differentiating lifts a spectrum by 6 dB
+    // an octave, so white becomes violet and pink becomes blue -- which is a
+    // claim about arithmetic that either holds in the rendered audio or does
+    // not.
+    const auto blue = slopeDbPerOctave(
+        renderedSpectrum(noiseOnly(static_cast<int>(NoiseSource::blue)), 57, rate), rate);
+    const auto violet = slopeDbPerOctave(
+        renderedSpectrum(noiseOnly(static_cast<int>(NoiseSource::violet)), 57, rate), rate);
+    requireClose(static_cast<float>(blue), 3.0f, 0.6f, "blue noise rises at 3 dB an octave");
+    requireClose(static_cast<float>(violet), 6.0f, 0.8f, "violet noise rises at 6 dB an octave");
+
     // And that they are ordered, which is the thing that would still be wrong
-    // if all three slopes drifted together.
-    require(white > pink && pink > brown, "the three colours are ordered by slope");
+    // if all five slopes drifted together.
+    require(violet > blue && blue > white && white > pink && pink > brown,
+            "the five sloped colours are ordered");
+
+    // Grey is the one colour that is not a slope. It is weighted to sound flat
+    // rather than measure flat, which means lifting both ends of the band
+    // against the middle -- so what it is held to is that shape, not a line
+    // through it.
+    const auto greyBand = renderedSpectrum(
+        noiseOnly(static_cast<int>(NoiseSource::grey)), 57, rate);
+    const auto greyLow = bandDensityDb(greyBand, 80.0, 200.0, rate);
+    const auto greyMid = bandDensityDb(greyBand, 1500.0, 3500.0, rate);
+    const auto greyHigh = bandDensityDb(greyBand, 8000.0, 14000.0, rate);
+    require(greyLow > greyMid + 4.0 && greyHigh > greyMid + 1.0,
+            "grey lifts both ends of the band against the middle");
 
     // The slope holds at another rate too. The published pink coefficients are
     // for 44.1 kHz, so a filter that used them as printed would sit at the
@@ -182,14 +257,180 @@ void spectrumSuite()
     requireClose(static_cast<float>(pinkAt96), -3.0f, 0.6f,
                  "pink noise keeps its slope at another sample rate");
 
-    // Every source comes out at about the level of the one before it, so
-    // changing the source changes the colour and not the loudness.
-    const auto reference = rmsOf(renderNoise(noiseOnly(0), 48000).left);
-    for (int source = 1; source < noiseSourceCount; ++source)
+}
+
+// --- Every source, whatever it is ---------------------------------------------
+//
+// The checks that have to hold for all nineteen. A source that fails one of
+// these is broken however good it sounds, and a loop is the only way to be sure
+// the nineteenth got the same attention as the first.
+void everySourceSuite()
+{
+    const auto reference = rmsOf(renderNoise(noiseOnly(static_cast<int>(NoiseSource::white)),
+                                             48000).left);
+
+    for (int source = 0; source < noiseSourceCount; ++source)
     {
-        const auto level = rmsOf(renderNoise(noiseOnly(source), 48000).left);
+        const auto name = juce::String(noiseSourceFullName(source));
+        const auto rendered = renderNoise(noiseOnly(source), 48000);
+
+        require(peakOf(rendered.left) > 0.0, (name + " makes sound at all").toRawUTF8());
+        require(peakOf(rendered.left) < 1.0, (name + " stays inside full scale").toRawUTF8());
+
+        auto finite = true;
+        for (const auto sample : rendered.left)
+            if (!std::isfinite(sample)) { finite = false; break; }
+        require(finite, (name + " renders finite samples").toRawUTF8());
+
+        // Changing source changes the colour, not the loudness. The table that
+        // holds this is measured at prepare rather than derived, so this is
+        // also the check that the measurement happened and landed.
+        const auto level = rmsOf(rendered.left);
         require(level > reference * 0.7 && level < reference * 1.4,
-                "every source is rendered at about white's level");
+                (name + " is rendered at about white's level").toRawUTF8());
+
+        // Mono to the bit at no width, for every source and not only for the
+        // ones built symmetrically.
+        require(rendered.left == rendered.right,
+                (name + " is the same in both channels at no width").toRawUTF8());
+    }
+}
+
+// --- The characters -----------------------------------------------------------
+//
+// One check each for the thing a source exists to do, chosen so that a source
+// which had quietly become an ordinary hiss would fail it.
+void characterSuite()
+{
+    constexpr double rate = 48000.0;
+
+    // BIT holds and quantises at once. Quantising is the half that is easy to
+    // lose -- a decimator alone still puts out thousands of distinct values --
+    // so what is counted is how many different numbers came back.
+    const auto bit = renderNoise(noiseOnly(static_cast<int>(NoiseSource::bit)), 24000);
+    const auto white = renderNoise(noiseOnly(static_cast<int>(NoiseSource::white)), 24000);
+    require(distinctValues(bit.left) < 64, "bit crush quantises to a handful of levels");
+    require(distinctValues(white.left) > 1000, "white is not quantised, which is the contrast");
+
+    // ALPHA is a shift register: one bit, held. Two values and no more.
+    const auto alpha = renderNoise(noiseOnly(static_cast<int>(NoiseSource::alpha)), 24000);
+    require(distinctValues(alpha.left) <= 4, "alpha is a shift register's two levels");
+
+    // HUM is mains, so the tallest thing in it is the mains frequency and not
+    // the note being played.
+    const auto hum = renderedSpectrum(noiseOnly(static_cast<int>(NoiseSource::hardwareHum)),
+                                      57, rate);
+    const auto mains = loudestPeak(hum, rate);
+    requireClose(static_cast<float>(mains.frequency), 50.0f, 2.0f,
+                 "hardware hum peaks at the mains frequency");
+
+    // METAL is a struck object rather than a note, which is a claim about where
+    // its partials sit: a harmonic series would put one at twice the first.
+    const auto metal = renderedSpectrum(noiseOnly(static_cast<int>(NoiseSource::metallic)),
+                                        57, rate);
+    const auto first = loudestPeak(metal, rate);
+    require(first.frequency > 400.0 && first.frequency < 1000.0,
+            "the metallic bank rings where it is tuned");
+    const auto inharmonic = partialAt(metal, first.frequency * 1.71, rate);
+    const auto octave = partialAt(metal, first.frequency * 2.0, rate);
+    require(inharmonic > octave * 2.0,
+            "the metallic bank's partials are inharmonic rather than an octave apart");
+
+    // POLY HP takes the body out at the source rather than turning it down, so
+    // the difference between it and POLY is in the bottom of the band and not
+    // across the whole of it. That is the brief's requirement that the two be
+    // separate sources rather than one source and the tone knob.
+    const auto poly = renderedSpectrum(noiseOnly(static_cast<int>(NoiseSource::vintagePoly)),
+                                       57, rate);
+    const auto polyHp = renderedSpectrum(noiseOnly(static_cast<int>(NoiseSource::vintagePolyHp)),
+                                         57, rate);
+    const auto lowGap = bandDensityDb(poly, 60.0, 180.0, rate)
+                      - bandDensityDb(polyHp, 60.0, 180.0, rate);
+    const auto topGap = std::abs(bandDensityDb(poly, 3000.0, 6000.0, rate)
+                                 - bandDensityDb(polyHp, 3000.0, 6000.0, rate));
+    require(lowGap > 12.0, "the high-passed poly drops the body rather than the lot");
+    require(topGap < lowGap * 0.5, "and leaves the top where the plain one has it");
+
+    // The two event sources are the same process at settings far enough apart
+    // to be two sources. Both are sparser than hiss; only one is countable.
+    const auto geiger = renderNoise(noiseOnly(static_cast<int>(NoiseSource::geiger)), 48000);
+    const auto crackle = renderNoise(noiseOnly(static_cast<int>(NoiseSource::crackle)), 48000);
+    const auto crest = [] (const std::vector<float>& data)
+    {
+        return peakOf(data) / std::max(1.0e-9, rmsOf(data));
+    };
+    //
+    // Both stand far above continuous hiss, which is what makes them events
+    // rather than a spectrum: white's crest is about 1.7 and each of these is
+    // nearer 5.
+    const auto hiss = crest(white.left);
+    require(crest(geiger.left) > hiss * 2.0, "geiger is events where white is continuous");
+    require(crest(crackle.left) > hiss * 2.0, "so is crackle");
+
+    // What tells the two apart is how many of them there are, which is the one
+    // thing crest does not measure. A second of audio, so a count is a rate.
+    const auto geigerRate = burstCount(geiger.left, rmsOf(geiger.left));
+    const auto crackleRate = burstCount(crackle.left, rmsOf(crackle.left));
+    require(crackleRate > geigerRate * 4,
+            "crackle is a surface where geiger is countable");
+
+    // And geiger strikes at about the rate it says it does. Counting the events
+    // in the rendered audio is the only check that the process runs at the rate
+    // the constant names rather than at some multiple of it.
+    require(geigerRate > noiseGeigerEventsPerSecond * 0.5
+                && geigerRate < noiseGeigerEventsPerSecond * 1.5,
+            "geiger strikes at about the rate it declares");
+}
+
+// --- What the panel lists -----------------------------------------------------
+//
+// The stored order and the shown order are two different orders, and the only
+// place they meet is a pair of functions. These are the checks that keep that
+// pair honest; they render nothing.
+void orderSuite()
+{
+    std::array<int, noiseSourceCount> seen {};
+    for (int position = 0; position < noiseSourceCount; ++position)
+    {
+        const auto source = noiseSourceAt(position);
+        require(source >= 0 && source < noiseSourceCount,
+                "every position in the shown order names a real source");
+        ++seen[static_cast<size_t>(source)];
+        requireClose(static_cast<float>(noiseSourcePosition(source)),
+                     static_cast<float>(position), 0.0001f,
+                     "a source's position round-trips back to the source");
+    }
+    for (int source = 0; source < noiseSourceCount; ++source)
+        require(seen[static_cast<size_t>(source)] == 1,
+                (juce::String(noiseSourceFullName(source))
+                 + " appears exactly once in the shown order").toRawUTF8());
+
+    // A family is a run. If it were not, the arrows would walk out of a family
+    // and back into it, and the menu's groups would not be the same thing as
+    // the field's neighbours.
+    auto changes = 0;
+    for (int position = 1; position < noiseSourceCount; ++position)
+        if (noiseCategoryOf(static_cast<NoiseSource>(noiseSourceAt(position)))
+            != noiseCategoryOf(static_cast<NoiseSource>(noiseSourceAt(position - 1))))
+            ++changes;
+    require(changes == noiseCategoryCount - 1,
+            "each family is one unbroken run of the shown order");
+
+    // The four this module opened with have not moved, which is the whole of
+    // what a preset written before the other fifteen existed depends on.
+    requireText(noiseSourceName(0), "WHITE", "white is still nothing");
+    requireText(noiseSourceName(1), "PINK", "pink is still one");
+    requireText(noiseSourceName(2), "BROWN", "brown is still two");
+    requireText(noiseSourceName(3), "GEIGER", "geiger is still three");
+
+    // Every source has both names and neither is empty, because a field with a
+    // blank on it is a source nobody can choose.
+    for (int source = 0; source < noiseSourceCount; ++source)
+    {
+        require(juce::String(noiseSourceName(source)).isNotEmpty(),
+                "every source has a short name");
+        require(juce::String(noiseSourceFullName(source)).isNotEmpty(),
+                "every source has a long name");
     }
 }
 
@@ -387,6 +628,33 @@ void clickSuite()
     require(largestStep(started.left, half - 200, half + 600)
                 < largestStep(started.left, half + 2000, static_cast<int>(started.left.size())) * 1.5,
             "switching the module on ramps up rather than starting dead");
+
+    // And then every source, both ways, against white. Nineteen sources make
+    // three hundred and forty-two possible changes and there is no sense in
+    // rendering all of them, but a source that steps will step against anything
+    // -- so each one is entered and left once, which catches it either way.
+    //
+    // A source arriving is the harder direction: its stage is reset as it comes
+    // in, so anything that started from its own silence rather than from the
+    // colour feeding it would show up here as a join steeper than the settled
+    // signal either side.
+    for (int source = 1; source < noiseSourceCount; ++source)
+    {
+        const auto name = juce::String(noiseSourceFullName(source));
+        for (int direction = 0; direction < 2; ++direction)
+        {
+            const auto from = direction == 0 ? 0 : source;
+            const auto to = direction == 0 ? source : 0;
+            const auto moved = renderChange(noiseOnly(from), noiseOnly(to), half);
+            const auto steady = std::max(largestStep(moved.left, 1500, half - 1500),
+                                         largestStep(moved.left, half + 1500,
+                                                     static_cast<int>(moved.left.size())));
+            const auto seam = largestStep(moved.left, half - 200, half + 600);
+            require(seam < steady * 3.0,
+                    (name + (direction == 0 ? " arrives without a step"
+                                            : " departs without a step")).toRawUTF8());
+        }
+    }
 }
 
 // --- What the panel and the host see ------------------------------------------
@@ -405,8 +673,12 @@ void parameterSuite()
     {
         require(parameter->choices.size() == noiseSourceCount,
                 "the source field offers every source the engine has");
+        // In the engine's order, and by the long name. The order matters
+        // because the value a host writes is the index the engine renders; the
+        // name matters because a lane with room for "Vintage Poly HP" should
+        // not be reading "POLY HP".
         for (int source = 0; source < noiseSourceCount; ++source)
-            requireText(parameter->choices[source], noiseSourceName(source),
+            requireText(parameter->choices[source], noiseSourceFullName(source),
                         "the source field names the engine's own sources");
     }
 
@@ -440,7 +712,10 @@ void parameterSuite()
 
 void noiseTests()
 {
+    orderSuite();
     spectrumSuite();
+    everySourceSuite();
+    characterSuite();
     geigerSuite();
     stereoSuite();
     voiceSuite();

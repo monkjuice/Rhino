@@ -146,8 +146,12 @@ inline juce::String warpTooltipFor(int mode)
 // depending on where it is set, so the explanation follows the setting.
 // What one noise source sounds like, keyed by the source rather than by the
 // parameter, for the same reason a warp mode's and a filter type's are: the
-// field it is shown on is four things depending on where it is set, so the
+// field it is shown on is nineteen things depending on where it is set, so the
 // explanation follows the setting.
+//
+// The analog five say what they are modelled on without claiming to be it.
+// Every source here is generated; none is a recording, and the tooltips are
+// written so nobody reads one and expects otherwise.
 inline juce::String noiseSourceTooltipFor(int source)
 {
     switch (noiseSourceOf(static_cast<float>(source)))
@@ -157,14 +161,59 @@ inline juce::String noiseSourceTooltipFor(int source)
                    "that sits under a pad without hissing over it";
         case NoiseSource::brown:
             return "6 dB an octave down: rumble, wind and weather rather than air";
+        case NoiseSource::blue:
+            return "3 dB an octave UP, which is pink turned over. Air and sibilance with "
+                   "nothing underneath it";
+        case NoiseSource::violet:
+            return "6 dB an octave up, the brightest thing here. Cymbal tops, tape hiss "
+                   "caricatured, and dither";
+        case NoiseSource::grey:
+            return "Weighted so it sounds flat rather than measures flat: both ends of the "
+                   "band lifted against the middle, where hearing is sharpest";
+        case NoiseSource::vintagePoly:
+            return "Full-bodied vintage polysynth hiss with a soft top. Pads, brass and "
+                   "anything that wants weight under the noise";
+        case NoiseSource::vintagePolyHp:
+            return "The same soft top with the body taken out at the source, not turned "
+                   "down. Leads, plucks and hats that must not thicken the low end";
+        case NoiseSource::mono101:
+            return "Raw monosynth noise: a focused low-mid band leaned on until it grits. "
+                   "Bass attacks, percussion and old-school sweeps";
+        case NoiseSource::tapeHiss:
+            return "Pink with the top lifted and a slow breathing wobble over it, the way "
+                   "a tape machine's floor moves";
+        case NoiseSource::hardwareHum:
+            return "Mains hum: fifty cycles and the partials above it, over a quiet floor. "
+                   "Power-supply bleed as an instrument";
+        case NoiseSource::bright:
+            return "The bottom taken off and a resonant gloss over what is left. Air, "
+                   "sheen and the top of a snare";
+        case NoiseSource::bit:
+            return "Held and quantised at once -- a converter out of both kinds of "
+                   "resolution. Crunchy, aliased and deliberately cheap";
+        case NoiseSource::alpha:
+            return "A short shift register clocked inside the band: flat, but stepping "
+                   "rather than random. Glassy and hollow";
+        case NoiseSource::metallic:
+            return "Five resonators at ratios that are not a harmonic series, so what "
+                   "rings is a struck object rather than a note";
+        case NoiseSource::vinyl:
+            return "A record rather than a spectrum: the surface, the dirt on it and the "
+                   "rumble of the table under both";
+        case NoiseSource::wind:
+            return "A band that moves. Two slow cycles beating against each other sweep "
+                   "it, which is what tells wind from filtered hiss";
         case NoiseSource::geiger:
-            return "Sparse clicks at random intervals rather than a spectrum. Crackle, "
-                   "vinyl and grit";
+            return "Sparse clicks at random intervals rather than a spectrum. Glitch, "
+                   "crackle and experimental percussion";
+        case NoiseSource::crackle:
+            return "The same clicks packed close enough to read as a surface. Fire, "
+                   "static and grit";
         case NoiseSource::white:
             break;
     }
-    return "Flat across the band: the brightest of the four, and what air, hats and "
-           "snare tops are made of";
+    return "Flat across the band: the reference the other eighteen are measured against, "
+           "and what air, hats and snare tops are made of";
 }
 
 inline juce::String filterTooltipFor(int type)

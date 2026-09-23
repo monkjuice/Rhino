@@ -238,11 +238,33 @@ is FAT off. A patch saved before any of the rest of this existed therefore loads
 on the filter it was saved on and sounds the way it did, to the bit.
 
 The **noise** module is a small oscillator rather than a hiss knob. SOURCE
-names one of four generators — WHITE flat across the band, PINK falling at 3 dB
-an octave, BROWN at 6, and GEIGER, which is not a spectrum at all but sparse
-shaped clicks at random intervals. It wears the same field the filter's TYPE
-and the warp modes wear, so the arrows step through the sources and the name
-opens the list.
+names one of nineteen generators, grouped into six families the way the
+filter's thirty-four types are, and wears the same field the filter's TYPE and
+the warp modes wear: the arrows step through the list and the name opens it.
+
+COLOUR is the six spectra — WHITE flat across the band, PINK falling at 3 dB an
+octave, BROWN at 6, BLUE rising at 3 and VIOLET at 6, and GREY, which is
+weighted to *sound* flat rather than to measure flat. ANALOG is five noise
+floors: POLY and POLY HP, the same soft-topped vintage polysynth hiss with and
+without its body, MONO's focused low-mid grit, TAPE's lifted top and slow
+breathing wobble, and HUM's mains fundamental over a quiet floor. DIGITAL is
+BRIGHT's resonant sheen, BIT held and quantised at once, and ALPHA's shift
+register. INHARMONIC is METAL, five resonators at ratios that are deliberately
+not a harmonic series, so what rings is a struck object rather than a note.
+ORGANIC is VINYL — a surface, the dirt on it and the rumble under both — and
+WIND, a band swept by two slow cycles beating against each other. TRANSIENT is
+GEIGER's countable clicks and CRACKLE's twenty-five times as many.
+
+Every one of them is generated. None is a recording, and the analog five are
+named for what they sound like rather than for the hardware whose character
+they borrow.
+
+Two orders are in play and it is worth knowing which is which. The **stored**
+order is the enum, which is appended to and never reordered, so a preset keeps
+naming the source it named — which is why GEIGER is third, among the colours,
+and a host's automation lane reads it there. The **shown** order is by family,
+and it is what the field steps through and what the menu groups. They meet at
+`noiseSourceAt` and `noiseSourcePosition` and nowhere else.
 
 TONE tilts whichever source is selected about 1 kHz, dark one way and bright
 the other, and is genuinely out of the way at twelve o'clock: the two halves of
@@ -256,20 +278,40 @@ since the MIX tab, and the module shows the same parameters the mixer's NOISE
 strip does.
 
 The state is **per voice**: every note hisses on its own, so a chord thickens
-rather than doubling one stream shared out. Every source runs every sample
-whether or not it is the one selected, which is what lets a source change cross
-over between two streams that are both already warm — six milliseconds, the
-same ramp the module's own power switch uses, because hiss arriving at full
-level in one sample is a click whichever source it is. The generators are
-seeded from a counter reset with the engine, so two notes are different and the
-same phrase rendered twice is the same file.
+rather than doubling one stream shared out. The generators are seeded from a
+counter reset with the engine, so two notes are different and the same phrase
+rendered twice is the same file.
+
+A source is **a colour through a character**. White, pink and brown are the
+three spectra every other source is built from, and they are the slow part —
+brown's pole sits at 8 Hz — so those three run every sample whatever is
+selected. What sits on top of them is fast, so only the live one runs plus the
+one being faded out of. That split is what lets the list grow: nineteen sources
+all running at once would be nineteen times the arithmetic to hear one of them,
+where nineteen sources sharing three warm colours is two character stages
+however long the list gets. A stage is reset as it comes in, which costs
+nothing because what feeds it never went cold; METAL is the one that audibly
+blooms, over about the time its own resonators take to ring up.
+
+The crossover is six milliseconds, the same ramp the module's own power switch
+uses, because hiss arriving at full level in one sample is a click whichever
+source it is.
 
 The DSP is [core/ForgeNoise.h](core/ForgeNoise.h), which depends on nothing of
 Forge's for the reason `ForgeFilter.h` does not: the engine renders from it and
-`tests/ForgeTestsNoise.cpp` measures what came back — the slopes fitted through
-six octave bands, the correlation between the channels, and the step at a
-source change against the steps either side of it. Nothing in that file asks
-the filter what its slope is.
+`tests/ForgeTestsNoise.cpp` measures what came back — the five slopes fitted
+through six octave bands each, the correlation between the channels, where
+METAL's second partial sits against where an octave would be, and the step at
+every one of the thirty-six source changes it renders against the steps either
+side of it. Nothing in that file asks the filter what its slope is.
+
+What each source has to be multiplied by to arrive at white's level is measured
+rather than derived, by rendering a few seconds of each at prepare: nearly all
+of them are white through something, and what that something does to the level
+depends on the poles it was just given, on where a difference of two decays
+happens to peak, and on how hard a saturator is being leaned on. It depends on
+nothing but the sample rate, so it is done once and shared — a second plugin
+instance pays nothing, and neither do the Cores a test run builds.
 
 Each oscillator carries two **warp** stages under its knobs, applied in the
 order they are drawn: a mode chosen from a menu grouped the way the Serum
@@ -391,7 +433,7 @@ which decisions are already settled. Read it before changing the synth.
 | `core/ForgeFx.h` | What an effects rack is: the types, what each one's controls are called, and what a normalised knob means in each. No DSP. |
 | `core/ForgeFxDsp.h` | The racks, rendered. A slot carries every type's state, sized once at `prepare`, because a type changes while audio is running. |
 | `core/ForgeFilter.h` | The filter: the thirty-four types, what each holds between samples, the one function that runs any of them, and the response the panel draws. Depends on nothing of Forge's, so the curve and the audio are read out of one file. |
-| `core/ForgeNoise.h` | The noise module: the four sources, the state one voice holds of each, the tilt after them and the decorrelation between the channels. Depends on nothing of Forge's either, so what a colour *is* is written down once and measured rather than asserted. |
+| `core/ForgeNoise.h` | The noise module: the nineteen sources and the six families they group into, the three colours the rest are built from, the state one voice holds, the tilt after them and the decorrelation between the channels. Depends on nothing of Forge's either, so what a source *is* is written down once and measured rather than asserted. |
 | `ui/ForgeFxDisplay.h` | What each effect draws of itself, from the same functions that render it. |
 | `ui/ForgeFilterVisuals.h` | The window the filter's response is drawn in: the axes, the grid, the fill and the corner markers. The arithmetic is `core/ForgeFilter.h`'s. |
 | `src/ForgeProcessor.*` | What the host calls, and what it hands the engine. `ForgeParameters.cpp` declares every parameter; `ForgeProcessorState.cpp` carries state, presets and table files. |

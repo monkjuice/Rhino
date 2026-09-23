@@ -1476,7 +1476,62 @@ correlation between the channels at three widths, two voices adding as powers
 rather than as amplitudes, and the step at a source change measured against the
 steps either side of it.
 
-### M14b — sample sources — not started
+### M14b — nineteen sources, in families — done
+
+The four M14 shipped were the brief's Color group and nothing else. The rest of
+its groups — Analog, Digital, Inharmonic, Organic, Transient — were written up
+as needing recordings, and most of them do not: what makes a Juno's noise floor
+sound unlike an SH-101's is a couple of corners and a little saturation, and
+what makes vinyl sound like vinyl is a surface, some dirt and a rumble. All
+fifteen new sources are generated. Nothing is sampled, nothing is licensed and
+nothing claims to be a recording of hardware it is not.
+
+**Six families.** COLOUR gains BLUE and VIOLET — pink and white differentiated,
+which lifts a spectrum by 6 dB an octave — and GREY, weighted to sound flat
+rather than measure flat. ANALOG is POLY, POLY HP, MONO, TAPE and HUM. DIGITAL
+is BRIGHT, BIT and ALPHA. INHARMONIC is METAL. ORGANIC is VINYL and WIND.
+TRANSIENT is GEIGER and the new CRACKLE.
+
+POLY HP is a separate source rather than POLY with the tone knob up, which the
+brief asks for explicitly: it keeps the roll-off above the corner instead of
+brightening the whole, and the test holds it to that — more than 12 dB between
+them at the bottom of the band and less than half of that at the top.
+
+**The architecture had to change to take them.** M14 ran every source every
+sample so that a source change crossed between two warm streams. Nineteen of
+those would be nineteen times the arithmetic to hear one. A source is now a
+*colour* through a *character*: white, pink and brown are the slow part and go
+on running whatever is selected, and only the live character stage runs plus
+the one fading out. Cost is two stages however long the list gets. A stage is
+reset as it comes in, which is free because what feeds it never went cold.
+
+**Two orders.** Values are appended to and never reordered, so GEIGER is still
+3 and a preset keeps naming what it named. The panel lists by family instead,
+and the two meet only at `noiseSourceAt` and `noiseSourcePosition`. A host's
+lane reads the stored order and the long names; the plate reads the shown order
+and short ones, because two columns of twenty-four will not hold "Vintage Poly
+HP".
+
+**Levels are measured, not derived.** Nearly every source is white through
+something, and what that something costs depends on its poles, on where a
+difference of two decays peaks and on how hard a saturator is leaned on. Each
+is rendered for a few seconds at prepare and scaled to white's level. It
+depends only on the sample rate, so it is cached and shared.
+
+Two things were settled by measuring rather than by choosing. CRACKLE at 320
+events a second — a reasonable-looking number — overlapped about as much as
+GEIGER's longer tails and came out just as peaky; it is 1200 now. And the check
+that told them apart was crest, which measures peakiness rather than density
+and had them the wrong way round: crackle's clicks are a fifth as long, so it
+is *more* peaky despite there being twenty-five times as many. The test counts
+events now.
+
+Still deliberately absent: GEIGER's and CRACKLE's density as a control. A knob
+beside SOURCE that means whatever SOURCE is, the way the filter's second knob
+does, is the right shape for it and is worth adopting once more than two
+sources want one.
+
+### M14c — sample sources — not started
 
 Serum's noise oscillator also plays short samples, and the module was built to
 take them: the source field is a list that can grow, the per-voice state is
@@ -1491,11 +1546,10 @@ recordings of the hardware or properly licensed ones; nothing of Serum's is
 usable. Until those exist the browser would be categories with nothing in them,
 which is why this is separated out rather than half-built.
 
-GEIGER's density is fixed at 45 events a second, which is the one control the
-first release leaves out. It belongs with this work rather than before it: a
-second knob on the plate is cheap, but "the knob beside SOURCE means whatever
-SOURCE is" is the filter's arrangement and is worth adopting once there is more
-than one source that wants it.
+The event sources' densities are fixed, which is the one control still left
+out. A knob beside SOURCE that means whatever SOURCE is — the filter's
+arrangement — is the right shape for it, and it belongs with this work rather
+than before it.
 
 ## Out of scope for now
 
@@ -1510,7 +1564,7 @@ These are the north star, not this plan. They come after the synth is finished.
 - **M14 — Preset browser** with tags and search.
 - **Later still:** MPE, granular sources, spectral oscillators. The noise
   module's sample sources are nearer than those and have a milestone of their
-  own — M14b above.
+  own — M14c above.
 
 ## Building and testing
 
@@ -1581,5 +1635,6 @@ way to look at a change.
 | M13 The arpeggiator | **done** — ready to test by ear and by hand |
 | M13b The twelve arp slots | not started |
 | M14 The noise module becomes an oscillator | **done** — ready to test by ear |
-| M14b Sample noise sources | not started |
+| M14b Nineteen sources, in families | **done** — ready to test by ear |
+| M14c Sample noise sources | not started |
 | M13c The custom pattern editor | not started |

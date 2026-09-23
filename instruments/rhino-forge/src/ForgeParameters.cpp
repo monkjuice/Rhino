@@ -211,13 +211,17 @@ juce::AudioProcessorValueTreeState::ParameterLayout Processor::parameterLayout()
     result.push_back(parameter("subLevel", "Sub Level", {0.0f, 1.0f}, 0.17f, asDecibels));
     result.push_back(toggle("noiseEnable", "Noise Enable", false));
     // Which generator the module is reading, as a choice rather than a stepped
-    // float, so a host's lane reads BROWN instead of 0.67 — the same treatment
-    // the filter type, the sub's wave and the warp modes get. The names are the
-    // engine's own, in the engine's order, so the index a host writes is the
-    // source that is rendered.
+    // float, so a host's lane reads "Tape Hiss" instead of 0.53 — the same
+    // treatment the filter type, the sub's wave and the warp modes get.
+    //
+    // In the engine's order, which is the order the values are stored in, so
+    // the index a host writes is the source that is rendered. That is *not* the
+    // order the panel lists them in — a lane reading Geiger between Brown and
+    // Blue is the price of never moving a value a preset already holds. The
+    // long names, because a lane has room for them and the plate does not.
     juce::StringArray noiseSourceNames;
     for (int source = 0; source < noiseSourceCount; ++source)
-        noiseSourceNames.add(noiseSourceName(source));
+        noiseSourceNames.add(noiseSourceFullName(source));
     result.push_back(std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID {"noiseSource", 1}, "Noise Source", noiseSourceNames, 0));
     // Bipolar, and neutral in the middle to the bit: the two halves of the

@@ -292,7 +292,14 @@ void Editor::buildModules()
                     else if (juce::String(declared.id) == "noiseSource")
                     {
                         control->selector->accent = accent;
-                        control->selector->onChoose = [this] (int choice) { setNoiseSource(choice); };
+                        // The field is listed in family order and the parameter
+                        // stores an enum index, so what the arrows hand back is
+                        // a position and has to be turned back into a source.
+                        // See ForgeEditorNoise.cpp.
+                        control->selector->onChoose = [this] (int choice)
+                        {
+                            setNoiseSource(noiseSourceAt(choice));
+                        };
                         control->selector->onOpenList = [this, held] { showNoiseMenu(*held); };
                     }
                     else

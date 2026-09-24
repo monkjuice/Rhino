@@ -383,9 +383,15 @@ inline constexpr int fxViewButtonGap = 5;
 // viewport decides how many fit; it never stretches four effects into whatever
 // height happens to be available.
 inline constexpr int fxSlotHeight = 76;
+// A list row is one line of text tall, not a slot tall: the list is read down
+// by name, and a full rack of eight fits beside the first two strips instead of
+// beside all eight.
+inline constexpr int fxListRowHeight = 26;
 // The add action is furniture, not a rack slot: it stays pinned above the
 // scrolling chain and empty space begins immediately below it.
 inline constexpr int fxListAddHeight = 28;
+// The strip down the rack's right edge its scroll thumb runs in.
+inline constexpr int fxRackScrollGutter = 8;
 
 inline constexpr int rowNumberGutter = 34;
 inline constexpr int columnTitleHeight = 18;

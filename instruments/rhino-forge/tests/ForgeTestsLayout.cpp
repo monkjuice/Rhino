@@ -713,16 +713,42 @@ void layoutSuite()
                         const auto list = rhino::forge::ui::fxListBounds(area, listOpen);
                         const auto rack = rhino::forge::ui::fxRackBounds(area, listOpen);
                         const auto add = rhino::forge::ui::fxAddButtonBounds(area, listOpen);
-                        const auto slots = rhino::forge::ui::fxSlotViewportBounds(area);
+                        const auto slots = rhino::forge::ui::fxSlotViewportBounds(area, listOpen);
+                        const auto rows = rhino::forge::ui::fxListViewportBounds(area, listOpen);
+                        const auto rail = rhino::forge::ui::fxRackScrollBounds(area);
                         require(rhino::forge::ui::contentBounds(panel).contains(area),
                                 "either FX height stays inside the module field");
                         require(area.contains(list) && area.contains(rack) && !list.intersects(rack),
                                 "the FX list and editor divide the rack without overlap");
-                        require(list.contains(add) && area.contains(slots) && !add.intersects(slots),
-                                "the fixed FX add action stays above the scrolling slots");
+                        require(list.contains(add) && list.contains(rows) && !add.intersects(rows),
+                                "the fixed FX add action stays above the scrolling list");
+                        require(rack.contains(slots) && !slots.intersects(list),
+                                "the rack's slots scroll beside the list, not under it");
+                        require(area.contains(rail) && !rail.intersects(rack) && !rail.intersects(list),
+                                "the rack's scroll rail has a strip of its own");
                         require(area.contains(rhino::forge::ui::fxExpandButtonBounds(area))
                                     && area.contains(rhino::forge::ui::fxListButtonBounds(area)),
                                 "both FX view buttons stay in the rack header");
+
+                        const auto listVisible = rhino::forge::ui::fxListVisibleRowCount(area);
+                        const auto listIntersecting = rhino::forge::ui::fxListIntersectingRowCount(area);
+                        require(listVisible >= 1 && listIntersecting >= listVisible
+                                    && listIntersecting <= listVisible + 1,
+                                "the FX list shows at least one whole row and at most one clipped one");
+                        for (const auto first : {0, rhino::forge::ui::fxListMaxFirstRow(area)})
+                            for (int row = first; row < first + listVisible; ++row)
+                            {
+                                const auto item = rhino::forge::ui::fxListItemBounds(
+                                    area, row, listOpen, first);
+                                require(rows.contains(item), "every visible FX list row stays in the list");
+                                require(item.getHeight() == rhino::forge::ui::fxListRowHeight,
+                                        "an FX list row is one line tall in every view");
+                                require(!rhino::forge::ui::fxListBypassBounds(item)
+                                             .intersects(rhino::forge::ui::fxListRemoveBounds(item))
+                                            && item.contains(rhino::forge::ui::fxListRemoveBounds(item)),
+                                        "a list row's bypass and remove stay apart and inside it");
+                            }
+
                         const auto visible = rhino::forge::ui::fxVisibleSlotCount(area);
                         const auto intersecting = rhino::forge::ui::fxIntersectingSlotCount(area);
                         const auto lastFirst = rhino::forge::ui::fxMaxFirstSlot(area);
@@ -736,13 +762,11 @@ void layoutSuite()
                                 area, listOpen, first);
                             for (int slot = first; slot < first + visible; ++slot)
                             {
-                                const auto item = rhino::forge::ui::fxListItemBounds(
-                                    area, *fxModule, slot, listOpen, first);
-                                require(list.contains(item), "every visible FX list item stays in the list");
-                                require(slots.contains(item), "every visible FX item stays below the add action");
-                                require(item.getHeight() == rhino::forge::ui::fxSlotHeight,
-                                        "an FX slot keeps its fixed height in every view");
                                 const auto& row = fxModule->rows[static_cast<size_t>(slot)];
+                                const auto strip = rhino::forge::ui::rowBounds(scrolledRack, *fxModule, slot);
+                                require(slots.contains(strip), "every whole FX strip stays in the rack's window");
+                                require(strip.getHeight() == rhino::forge::ui::fxSlotHeight,
+                                        "an FX slot keeps its fixed height in every view");
                                 for (int control = 0; control < static_cast<int>(row.controls.size()); ++control)
                                 {
                                     const auto block = rhino::forge::ui::controlBlock(

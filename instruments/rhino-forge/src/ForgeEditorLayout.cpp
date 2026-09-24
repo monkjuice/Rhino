@@ -84,8 +84,7 @@ void Editor::resized()
         const auto rackModule = isFxModule(descriptor);
 
         if (rackModule)
-            fxControlViewport.setBounds(
-                ui::fxSlotViewportBounds(area).getIntersection(ui::fxRackBounds(area, fxListOpen)));
+            fxControlViewport.setBounds(ui::fxSlotViewportBounds(area, fxListOpen));
 
         if (module.enable != nullptr)
         {

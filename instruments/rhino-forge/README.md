@@ -113,17 +113,23 @@ in two slots, and every slot declares the same twelve controls whatever is in
 it: a type, two mode fields, six general knobs, a bypass, a mix and a level.
 
 The rack has a signal-flow list down its left side. A fixed **+ ADD EFFECT** at
-its top fills the next slot; only assigned effects occupy rows below it. The
-list repeats each effect's colour and mark, lets a module be bypassed or
-removed, and reorders the chain by dragging. Removing one closes the chain
+its top fills the next slot; only assigned effects occupy rows below it. Each
+row is one line of text: the effect's colour as a tick, its mark drawn no
+bigger than the name beside it, the name, and a bypass and a remove at the
+right. Dragging a row reorders the chain. Removing one closes the chain
 around it, leaving clean empty space after the final effect instead of an OFF
-placeholder. The list folds to a mark-only rail when the editor needs the
-width. The expand button at the right of the rack
+placeholder. The list folds to a rail of ticks and marks when the editor needs
+the width. The expand button at the right of the rack
 header — or **Alt+F** on Windows — grows the rack through both module rows, so
 more of the chain is visible without changing the keyboard or the title bar.
-Every effect strip keeps a fixed, slightly roomier height in both views; the wheel over the list
-scrolls by slots when all eight do not fit. Each rack remembers its own scroll
-position. These are views of the same slot parameters, not copies of the rack,
+
+The list and the rack scroll separately. The list is a line per effect, so a
+full chain of eight is usually all on screen beside the first two strips. The
+rack is a fixed-height strip per effect in both views, and the wheel over it
+steps through them a strip at a time; over a knob the wheel still turns the
+knob. Clicking a row in the list brings its strip into view, and a newly added
+effect is brought into view in both. Each rack remembers both of its scroll
+positions. These are views of the same slot parameters, not copies of the rack,
 and none of the view settings are saved in a preset.
 
 What those six knobs *mean* belongs to the type, declared once in

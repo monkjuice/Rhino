@@ -133,14 +133,14 @@ void Editor::mouseDown(const juce::MouseEvent& event)
                 if (ui::fxExpandButtonBounds(area).contains(at)) { toggleFxExpanded(); return; }
                 if (ui::fxListButtonBounds(area).contains(at)) { toggleFxList(); return; }
                 if (ui::fxAddButtonBounds(area, fxListOpen).contains(at)) { addFxSlot(); return; }
-                const auto list = ui::fxListBounds(area, fxListOpen);
+                const auto list = ui::fxListViewportBounds(area, fxListOpen);
                 const auto rack = shownRack();
                 for (int slot = 0; slot < fxSlotCount; ++slot)
                 {
                     const auto displayRow = fxDisplayRow(rack, slot);
                     if (displayRow < 0) continue;
-                    const auto item = ui::fxListItemBounds(area, module, displayRow, fxListOpen,
-                                                            fxFirstVisibleSlot());
+                    const auto item = ui::fxListItemBounds(area, displayRow, fxListOpen,
+                                                            fxListFirstRow());
                     if (!list.contains(at) || !item.contains(at)) continue;
                     if (fxListOpen && ui::fxListBypassBounds(item).contains(at))
                     {
@@ -156,6 +156,10 @@ void Editor::mouseDown(const juce::MouseEvent& event)
                         return;
                     }
                     fxSelectedSlot = slot;
+                    // On the press rather than the release, so the strip is
+                    // already in front of you by the time the button comes
+                    // up. Before the drag starts, because scrolling ends one.
+                    revealFxSlot(slot);
                     fxDragSlot = fxDropSlot = slot;
                     fxDragStart = at;
                     repaintFxDisplays();
@@ -282,17 +286,26 @@ void Editor::mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWhee
         }
         return;
     }
+    // The list and the rack each scroll whichever one is under the pointer, and
+    // only that one. Over the rack, a knob keeps the wheel for itself: this
+    // hears about it because it listens to every knob, and the event then
+    // names the knob rather than the panel. A mode field or an empty stretch
+    // of shelf hands the wheel up, and that arrives naming the panel.
     if (page == ui::Page::fx)
         for (const auto& module : ui::modules())
         {
             if (!isFxModule(module)) continue;
             const auto area = moduleAreaFor(module);
-            if (!ui::fxListBounds(area, fxListOpen).contains(at)) break;
-            fxWheel += wheel.isReversed ? -wheel.deltaY : wheel.deltaY;
-            const auto notches = static_cast<int>(fxWheel / wheelPerZoomStep);
+            const auto overList = ui::fxListBounds(area, fxListOpen).contains(at);
+            if (!overList && !ui::fxSlotViewportBounds(area, fxListOpen).contains(at)) break;
+            if (!overList && event.eventComponent != this) return;
+            auto& travel = overList ? fxListWheel : fxWheel;
+            travel += wheel.isReversed ? -wheel.deltaY : wheel.deltaY;
+            const auto notches = static_cast<int>(travel / wheelPerZoomStep);
             if (notches == 0) return;
-            fxWheel -= static_cast<float>(notches) * wheelPerZoomStep;
-            setFxFirstVisibleSlot(fxFirstVisibleSlot() - notches);
+            travel -= static_cast<float>(notches) * wheelPerZoomStep;
+            if (overList) setFxListFirstRow(fxListFirstRow() - notches);
+            else setFxFirstVisibleSlot(fxFirstVisibleSlot() - notches);
             return;
         }
 
@@ -335,17 +348,17 @@ void Editor::mouseDrag(const juce::MouseEvent& event)
         {
             if (!isFxModule(module)) continue;
             const auto area = moduleAreaFor(module);
-            const auto first = fxFirstVisibleSlot();
+            const auto first = fxListFirstRow();
             const auto rack = shownRack();
             const auto end = juce::jmin(fxActiveSlotCount(rack),
-                                         first + ui::fxIntersectingSlotCount(area));
+                                         first + ui::fxListIntersectingRowCount(area));
             auto nearest = fxSlotAtDisplayRow(rack, first);
             auto distance = std::numeric_limits<int>::max();
             for (int row = first; row < end; ++row)
             {
                 const auto slot = fxSlotAtDisplayRow(rack, row);
                 if (slot < 0) continue;
-                const auto centre = ui::fxListItemBounds(area, module, row, fxListOpen, first).getCentreY();
+                const auto centre = ui::fxListItemBounds(area, row, fxListOpen, first).getCentreY();
                 const auto next = std::abs(at.y - centre);
                 if (next < distance) { distance = next; nearest = slot; }
             }
@@ -377,7 +390,11 @@ void Editor::mouseUp(const juce::MouseEvent& event)
         const auto to = fxDropSlot;
         const auto moved = event.getEventRelativeTo(this).getPosition().getDistanceFrom(fxDragStart) >= 4.0f;
         fxDragSlot = fxDropSlot = -1;
-        if (moved && to >= 0 && to != from) moveFxSlot(shownRack(), from, to);
+        if (moved && to >= 0 && to != from)
+        {
+            moveFxSlot(shownRack(), from, to);
+            revealFxSlot(to);
+        }
         else repaintFxDisplays();
         return;
     }

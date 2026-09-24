@@ -443,6 +443,85 @@ void fxDisplaySuite()
                 "every fully or partly visible effect strip keeps its common bypass control");
     }
 
+    // The list and the rack scroll separately. A full chain is eight rows of
+    // list beside four strips of rack at the size the panel opens at, so this
+    // is where the two would be seen moving together if they still did.
+    {
+        rhino::forge::Processor processor;
+        const std::array<FxType, 8> types {FxType::distortion, FxType::delay, FxType::distortion,
+                                           FxType::delay, FxType::reverb, FxType::equaliser,
+                                           FxType::compressor, FxType::chorus};
+        for (int slot = 0; slot < static_cast<int>(types.size()); ++slot)
+            setValue(processor, rhino::forge::fxParameterId(0, slot, "Type").toRawUTF8(),
+                     static_cast<float>(types[static_cast<size_t>(slot)]));
+        std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+        editor->setSize(ui::defaultPanelWidth, ui::defaultPanelHeight);
+        for (auto* child : editor->getChildren())
+            if (auto* tab = dynamic_cast<ui::PageTab*>(child))
+                if (tab->getButtonText() == "FX" && tab->onClick) tab->onClick();
+
+        const auto plateShown = [&] (const juce::String& name)
+        {
+            auto found = false;
+            const auto search = [&] (auto&& self, juce::Component& parent) -> void
+            {
+                for (auto* child : parent.getChildren())
+                {
+                    if (auto* plate = dynamic_cast<ui::FxPlate*>(child))
+                        if (plate->isVisible() && plate->getName() == name) found = true;
+                    self(self, *child);
+                }
+            };
+            search(search, *editor);
+            return found;
+        };
+        const ui::Module* fxModule = nullptr;
+        for (const auto& module : ui::modules())
+            if (juce::String(module.id) == "fx") fxModule = &module;
+        require(fxModule != nullptr, "the scrolling test finds the rack module");
+        const auto area = fxModule == nullptr ? juce::Rectangle<int>()
+            : ui::fxModuleBounds(editor->getLocalBounds(), *fxModule, false);
+        require(ui::fxListVisibleRowCount(area) >= fxSlotCount,
+                "a full chain fits the list at the size the panel opens at");
+        require(ui::fxVisibleSlotCount(area) < fxSlotCount,
+                "and does not fit the rack, so the rack has somewhere to scroll");
+
+        const auto mouse = juce::Desktop::getInstance().getMainMouseSource();
+        const auto when = juce::Time::getCurrentTime();
+        const auto eventAt = [&] (juce::Point<int> at, juce::Component* on)
+        {
+            return juce::MouseEvent(mouse, at.toFloat(), juce::ModifierKeys(),
+                                    1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+                                    on, on, when, at.toFloat(), when, 1, false);
+        };
+        juce::MouseWheelDetails down;
+        down.deltaY = -0.6f;
+        juce::MouseWheelDetails up = down;
+        up.deltaY = 1.2f;
+
+        require(plateShown("DIST") && !plateShown("CHORUS"), "the rack opens on the top of the chain");
+        editor->mouseWheelMove(eventAt(ui::fxListViewportBounds(area, true).getCentre(), editor.get()), down);
+        require(plateShown("DIST") && !plateShown("CHORUS"),
+                "the wheel over the list leaves the rack where it was");
+
+        const auto last = ui::fxListItemBounds(area, fxSlotCount - 1, true).getCentre();
+        editor->mouseDown(eventAt(last, editor.get()));
+        editor->mouseUp(eventAt(last, editor.get()));
+        require(plateShown("CHORUS") && !plateShown("DIST"),
+                "picking the last row brings its strip into view");
+
+        // A knob keeps the wheel: the panel hears of it only as a listener, and
+        // the event then names the knob.
+        const auto rackPoint = ui::fxSlotViewportBounds(area, true).getCentre();
+        juce::Slider knob;
+        editor->mouseWheelMove(eventAt(rackPoint, &knob), up);
+        require(plateShown("CHORUS") && !plateShown("DIST"),
+                "the wheel turning a rack knob does not also scroll the rack");
+        editor->mouseWheelMove(eventAt(rackPoint, editor.get()), up);
+        require(plateShown("DIST") && !plateShown("CHORUS"),
+                "the wheel over the rack itself scrolls the rack");
+    }
+
     // --- The equaliser ---------------------------------------------------------
     //
     // A band's magnitude is read off the coefficients setBand built, so a band

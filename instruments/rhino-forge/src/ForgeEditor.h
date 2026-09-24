@@ -337,8 +337,14 @@ private:
     int fxActiveSlotCount(int rack) const;
     int fxDisplayRow(int rack, int slot) const;
     int fxSlotAtDisplayRow(int rack, int row) const;
+    // The rack and the list beside it scroll separately: the rack by whole
+    // strips, the list by rows. Picking a row brings its strip into view, which
+    // is the one thing that moves the two together.
     int fxFirstVisibleSlot() const;
     void setFxFirstVisibleSlot(int slot);
+    int fxListFirstRow() const;
+    void setFxListFirstRow(int row);
+    void revealFxSlot(int slot);
     void clampFxScroll();
 
     // Whether the arp's six panes are standing on the modulators. View state,
@@ -356,7 +362,9 @@ private:
     bool fxExpanded = false;
     bool fxListOpen = true;
     std::array<int, rackCount> fxFirstVisibleSlots {};
+    std::array<int, rackCount> fxListFirstRows {};
     float fxWheel = 0.0f;
+    float fxListWheel = 0.0f;
     int fxSelectedSlot = 0;
     int fxDragSlot = -1;
     int fxDropSlot = -1;

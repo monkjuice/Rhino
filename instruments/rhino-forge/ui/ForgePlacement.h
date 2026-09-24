@@ -249,22 +249,33 @@ inline juce::Rectangle<int> fxListBounds(juce::Rectangle<int> moduleArea, bool o
 
 // A synthetic module rectangle for the controls on the right of the list. It
 // retains the real header position, so all existing row/control geometry can
-// be reused without teaching it about the sidebar.
+// be reused without teaching it about the sidebar. The strip down its right
+// edge is the rack's own scroll rail, kept whether or not there is anything to
+// scroll so the knobs do not move when a ninth row would have been needed.
 inline juce::Rectangle<int> fxRackBounds(juce::Rectangle<int> moduleArea, bool listOpen)
 {
-    return moduleArea.withTrimmedLeft(fxListWidth(listOpen) + fxListGap);
+    return moduleArea.withTrimmedLeft(fxListWidth(listOpen) + fxListGap)
+        .withTrimmedRight(fxRackScrollGutter);
 }
 
-// The shared vertical viewport for the overview and the editable rack. The
-// horizontal pieces differ, but their slot edges must remain on one baseline.
+// Everything between the header and the legend. The list and the rack each cut
+// their own window from it and scroll it separately, so nothing across the two
+// has to share a baseline.
 inline juce::Rectangle<int> fxViewportBounds(juce::Rectangle<int> moduleArea)
 {
     return moduleInterior(moduleArea).reduced(0, 6);
 }
 
-inline juce::Rectangle<int> fxSlotViewportBounds(juce::Rectangle<int> moduleArea)
+// The rack's window onto its slots: beside the list, the full height.
+inline juce::Rectangle<int> fxSlotViewportBounds(juce::Rectangle<int> moduleArea, bool listOpen)
 {
-    return fxViewportBounds(moduleArea).withTrimmedTop(fxListAddHeight);
+    return fxViewportBounds(moduleArea).getIntersection(fxRackBounds(moduleArea, listOpen));
+}
+
+inline juce::Rectangle<int> fxRackScrollBounds(juce::Rectangle<int> moduleArea)
+{
+    return fxViewportBounds(moduleArea)
+        .withLeft(moduleArea.getRight() - fxRackScrollGutter).withWidth(3).reduced(0, 4);
 }
 
 inline juce::Rectangle<int> fxAddButtonBounds(juce::Rectangle<int> moduleArea, bool listOpen)
@@ -272,9 +283,43 @@ inline juce::Rectangle<int> fxAddButtonBounds(juce::Rectangle<int> moduleArea, b
     return fxListBounds(moduleArea, listOpen).withHeight(fxListAddHeight).reduced(4, 3);
 }
 
+// The list's window onto its rows, under the add action that stays put above
+// them.
+inline juce::Rectangle<int> fxListViewportBounds(juce::Rectangle<int> moduleArea, bool listOpen)
+{
+    return fxListBounds(moduleArea, listOpen).withTrimmedTop(fxListAddHeight).withTrimmedBottom(3);
+}
+
+inline int fxListVisibleRowCount(juce::Rectangle<int> moduleArea)
+{
+    return juce::jlimit(1, fxSlotCount,
+                        fxListViewportBounds(moduleArea, true).getHeight() / fxListRowHeight);
+}
+
+inline int fxListIntersectingRowCount(juce::Rectangle<int> moduleArea)
+{
+    const auto height = fxListViewportBounds(moduleArea, true).getHeight();
+    return juce::jlimit(1, fxSlotCount, (height + fxListRowHeight - 1) / fxListRowHeight);
+}
+
+inline int fxListMaxFirstRow(juce::Rectangle<int> moduleArea, int rowCount = fxSlotCount)
+{
+    return juce::jmax(0, rowCount - fxListVisibleRowCount(moduleArea));
+}
+
+// One row of the list, inset from its border so a selected row's outline is
+// not drawn on top of the list's own.
+inline juce::Rectangle<int> fxListItemBounds(juce::Rectangle<int> moduleArea, int displayRow,
+                                             bool listOpen, int firstRow = 0)
+{
+    const auto viewport = fxListViewportBounds(moduleArea, listOpen).reduced(4, 0);
+    return {viewport.getX(), viewport.getY() + (displayRow - firstRow) * fxListRowHeight,
+            viewport.getWidth(), fxListRowHeight};
+}
+
 inline int fxVisibleSlotCount(juce::Rectangle<int> moduleArea)
 {
-    return juce::jlimit(1, fxSlotCount, fxSlotViewportBounds(moduleArea).getHeight() / fxSlotHeight);
+    return juce::jlimit(1, fxSlotCount, fxViewportBounds(moduleArea).getHeight() / fxSlotHeight);
 }
 
 // Controls in the row crossing the bottom edge still belong on screen. The
@@ -283,7 +328,7 @@ inline int fxVisibleSlotCount(juce::Rectangle<int> moduleArea)
 // used by scrolling and its thumb.
 inline int fxIntersectingSlotCount(juce::Rectangle<int> moduleArea)
 {
-    const auto height = fxSlotViewportBounds(moduleArea).getHeight();
+    const auto height = fxViewportBounds(moduleArea).getHeight();
     return juce::jlimit(1, fxSlotCount, (height + fxSlotHeight - 1) / fxSlotHeight);
 }
 
@@ -295,8 +340,7 @@ inline int fxMaxFirstSlot(juce::Rectangle<int> moduleArea, int slotCount = fxSlo
 inline juce::Rectangle<int> fxScrolledRackBounds(juce::Rectangle<int> moduleArea, bool listOpen,
                                                  int firstSlot)
 {
-    return fxRackBounds(moduleArea, listOpen)
-        .translated(0, fxListAddHeight - firstSlot * fxSlotHeight);
+    return fxRackBounds(moduleArea, listOpen).translated(0, -firstSlot * fxSlotHeight);
 }
 
 // View controls live at the far right of the rack header: the outer one grows
@@ -437,16 +481,6 @@ inline juce::Rectangle<int> rowBounds(juce::Rectangle<int> moduleArea, const Mod
             y += area.getHeight() * module.rows[static_cast<size_t>(i)].weight / total;
     const auto height = area.getHeight() * module.rows[static_cast<size_t>(rowIndex)].weight / total;
     return {area.getX(), y, area.getWidth(), height};
-}
-
-inline juce::Rectangle<int> fxListItemBounds(juce::Rectangle<int> moduleArea, const Module& module,
-                                             int displayRow, bool listOpen, int firstSlot = 0)
-{
-    juce::ignoreUnused(module);
-    const auto list = fxListBounds(moduleArea, listOpen);
-    const auto viewport = fxSlotViewportBounds(moduleArea);
-    return {list.getX(), viewport.getY() + (displayRow - firstSlot) * fxSlotHeight,
-            list.getWidth(), fxSlotHeight};
 }
 
 // The strip to the left of a table row, where its number is drawn.

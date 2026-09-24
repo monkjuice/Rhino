@@ -493,51 +493,53 @@ inline void drawFxShelf(juce::Graphics& g, juce::Rectangle<int> area, int type, 
 }
 
 // The list at the left of the rack is deliberately quieter than the editors
-// beside it: it is the signal-flow map, not a second copy of the controls. Each
-// row repeats the type's own mark and colour, then keeps only the two structural
-// actions Serum's rack establishes as useful at this level -- auditioning a
-// bypass and removing the module. Folded, the word and actions leave but the
-// marks stay in their exact vertical positions.
-inline void drawFxListItem(juce::Graphics& g, juce::Rectangle<int> area, int slot, int type,
+// beside it: it is the signal-flow map, not a second copy of the controls, and
+// it is read down by name. Each row is one line: the type's colour as a tick,
+// its mark drawn no bigger than the name beside it, the name itself in the
+// panel's text colour so a column of them reads at a glance, and only the two
+// structural actions Serum's rack establishes as useful at this level --
+// auditioning a bypass and removing the module. Folded, the name and actions
+// leave and the tick and mark stay on the row they were on.
+inline void drawFxListItem(juce::Graphics& g, juce::Rectangle<int> area, int type,
                            bool bypassed, bool selected, bool open)
 {
+    constexpr auto nameSize = 12.5f;
     const auto filled = type != 0;
     const auto colour = fxTypeColour(type);
-    const auto box = area.toFloat().reduced(0.0f, 2.0f);
+    const auto box = area.toFloat().reduced(0.0f, 1.0f);
+    const auto dim = bypassed ? 0.4f : 1.0f;
 
-    g.setColour(selected ? colour.withAlpha(filled ? 0.16f : 0.08f)
-                         : juce::Colour(0xff090c15));
-    g.fillRoundedRectangle(box, 4.0f);
-    g.setColour((selected ? colour : line).withAlpha(selected ? 0.9f : 0.55f));
-    g.drawRoundedRectangle(box, 4.0f, selected ? 1.4f : 1.0f);
+    if (selected)
+    {
+        g.setColour(colour.withAlpha(filled ? 0.16f : 0.08f));
+        g.fillRoundedRectangle(box, 3.0f);
+        g.setColour(colour.withAlpha(0.85f));
+        g.drawRoundedRectangle(box.reduced(0.5f), 3.0f, 1.1f);
+    }
+
+    auto body = box.reduced(6.0f, 0.0f);
     if (filled)
     {
-        g.setColour(colour.withAlpha(bypassed ? 0.35f : 1.0f));
-        g.fillRoundedRectangle(box.withWidth(moduleEdgeHeight), 1.5f);
+        g.setColour(colour.withAlpha(dim));
+        g.fillRoundedRectangle(body.removeFromLeft(3.0f).reduced(0.0f, 6.0f), 1.0f);
     }
+    else
+        body.removeFromLeft(3.0f);
+    body.removeFromLeft(open ? 6.0f : 0.0f);
 
-    auto icon = juce::Rectangle<float>(open ? 44.0f : box.getWidth(), box.getHeight())
-                    .withPosition(box.getX(), box.getY()).reduced(8.0f, 9.0f);
-    drawFxMark(g, icon, type, filled ? colour : mutedText, bypassed ? 0.35f : 0.95f);
+    // As tall as the name's capitals, so the mark sits in the line of text
+    // rather than above it.
+    constexpr auto markWidth = 18.0f;
+    const auto markArea = open ? body.removeFromLeft(markWidth) : body;
+    drawFxMark(g, juce::Rectangle<float>(markWidth, nameSize * 0.8f).withCentre(markArea.getCentre()),
+               type, filled ? colour : mutedText, 0.95f * dim);
+    if (!open) return;
 
-    if (!open)
-    {
-        g.setColour((filled ? colour : mutedText).withAlpha(0.9f));
-        g.setFont(panelFont(Face::reading, 8.0f));
-        g.drawText(juce::String(slot + 1), area.reduced(4).withHeight(12),
-                   juce::Justification::topLeft);
-        return;
-    }
-
-    auto textArea = area.withTrimmedLeft(50).withTrimmedRight(54);
-    g.setColour((filled ? colour : mutedText).withAlpha(bypassed ? 0.42f : 1.0f));
-    g.setFont(panelFont(Face::emphasis, 11.0f));
-    g.drawText(fxTypeName(type), textArea.withTrimmedBottom(textArea.getHeight() / 2 - 2),
-               juce::Justification::centredLeft);
-    g.setColour(mutedText.withAlpha(0.65f));
-    g.setFont(panelFont(Face::label, 8.5f));
-    g.drawText("SLOT " + juce::String(slot + 1), textArea.withTrimmedTop(textArea.getHeight() / 2),
-               juce::Justification::centredLeft);
+    body.removeFromLeft(7.0f);
+    body.removeFromRight(static_cast<float>(area.getRight()) - fxListBypassBounds(area).toFloat().getX());
+    g.setColour((filled ? text : mutedText).withAlpha(bypassed ? 0.42f : 0.95f));
+    g.setFont(panelFont(Face::emphasis, nameSize));
+    g.drawFittedText(fxTypeName(type), body.toNearestInt(), juce::Justification::centredLeft, 1, 0.8f);
 
     const auto bypass = fxListBypassBounds(area).toFloat();
     const auto centre = bypass.getCentre();

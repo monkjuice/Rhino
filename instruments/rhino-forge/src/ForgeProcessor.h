@@ -1,12 +1,20 @@
 #pragma once
 
 #include "../core/ForgeCore.h"
+#include "../core/ForgeMidiMap.h"
 #include "../core/ForgeTableStore.h"
 #include <juce_audio_utils/juce_audio_utils.h>
+#include <map>
 
 namespace rhino::forge
 {
-class Processor final : public juce::AudioProcessor
+// The Timer is what applies a learned controller. A parameter may only be
+// written from the message thread, and the MIDI that drives it only exists on
+// the audio thread, so the crossing needs something on this side to drain it —
+// and it has to be the Processor's own, not the editor's, or a knob would stop
+// working the moment the window was closed.
+class Processor final : public juce::AudioProcessor,
+                        private juce::Timer
 {
     // Declared before `state`, and deliberately first in the class. Members are
     // initialised in declaration order, and POSITION's value formatter reads the
@@ -160,7 +168,74 @@ public:
     // text is only text nobody can read on the panel.
     static constexpr int maxMacroNameLength = 24;
 
+    // Binding a controller to the panel. All of this is message thread only:
+    // the panel calls it, and the audio thread's half of the arrangement is in
+    // ForgeMidiMap.h. Parameters are named by id here rather than by index
+    // because an index is a position in a list that moves whenever a control is
+    // added, and these bindings outlive the build that made them.
+    //
+    // Arms a control. The next controller or pad the keyboard moves is bound to
+    // it; arming a second control before the first has learned abandons the
+    // first, since nobody is waiting on two at once.
+    void learnMidi(const juce::String& parameterId);
+    void cancelMidiLearn();
+    bool isLearningMidi() const { return midiMap.isLearning(); }
+    // The id being learned, or empty. The panel draws this control as
+    // listening, which is the only feedback there is until the knob moves.
+    juce::String midiLearnTarget() const;
+    // What drives this control, as the panel prints it — "CC 21", "Note C1" —
+    // or empty where nothing does.
+    juce::String midiSourceLabel(const juce::String& parameterId) const;
+    void forgetMidi(const juce::String& parameterId);
+    void clearMidiMap();
+    int midiBindingCount() const { return midiMap.boundCount(); }
+    // Knobs 1-8 onto the eight macros, on the controller numbers the General
+    // MIDI convention leaves free and nearly every controller ships sending.
+    // Offered rather than imposed: it is written on a first run, and from the
+    // panel's menu, and never over bindings that already exist.
+    void applyDefaultMidiMap();
+    static constexpr int firstDefaultMacroCc = 21;
+    // Applies everything the audio thread has handed over since the last tick,
+    // and completes a learn if one is pending. The timer calls this sixty times
+    // a second; it is public so a test can drive the crossing directly rather
+    // than by spinning a message loop and hoping.
+    void drainMidiControl();
+    // Where the bindings file is. One file serves every instance on a machine,
+    // so a test that bound anything would write over the bindings belonging to
+    // whoever ran it — which is what this exists to prevent.
+    static void setMidiMapFile(const juce::File&);
+
 private:
+    // Audio thread, inside processBlock. Takes the bound messages out of the
+    // block and leaves the rest, before the panel's keyboard is merged in.
+    void applyMidiMap(juce::MidiBuffer&);
+    // Notices one message while a learn is armed, hands a bound one to the
+    // message thread, and answers whether the rest of the block should go on
+    // seeing it.
+    bool consumedByMidiMap(const juce::MidiMessage&);
+    void timerCallback() override;
+    // A parameter's position in getParameters(), or -1. The bindings hold this
+    // because the audio thread cannot compare strings, and it is resolved from
+    // the id on the way in and back to the id on the way out.
+    int parameterIndexFor(const juce::String& parameterId) const;
+    juce::String parameterIdAt(int index) const;
+    // Where the bindings are kept, and why they are not in the preset.
+    //
+    // A binding describes the hardware on the desk, not the sound. Carrying it
+    // in a preset would mean a patch from someone else's machine silently
+    // repointing your knobs, and carrying it in the plugin state would mean
+    // every project remembering a keyboard that may not be plugged in. It goes
+    // beside the standalone's own settings instead, so one file serves every
+    // instance and every project on this machine.
+    static juce::File midiMapFile();
+    void loadMidiMap();
+    void saveMidiMap() const;
+    MidiMap midiMap;
+    MidiControlQueue midiQueue;
+    // What a control read before a pad was held down, so releasing the pad can
+    // put it back. Only continuous controls are in here — a pad on a switch
+    // flips it and leaves it flipped.
+    std::map<int, float> heldByPad;
     // Not static: POSITION's readout closes over this Processor so it can name
     // the frame it is on in whichever table the oscillator is reading, and a
     // rack knob's closes over it for the same reason.

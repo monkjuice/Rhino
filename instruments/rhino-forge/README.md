@@ -430,19 +430,73 @@ hybrid synths. It does not reuse Serum code, assets, names, presets, or UI.
 **[PLAN.md](PLAN.md) is the build-out plan**: what is done, what is next, and
 which decisions are already settled. Read it before changing the synth.
 
+## Binding a MIDI controller
+
+Right-click any control and choose **MIDI learn**, then move a knob or hit a pad
+on the keyboard. That control is now driven by it. Right-click again to forget
+it; the menu names what is bound in its header, so a control says what is on it
+before it offers to change anything.
+
+Learning **replaces at both ends**. The knob lets go of whatever it drove
+before, so one knob never quietly does two things, and the control lets go of
+whatever drove it, because a control with two masters jumps when either one
+moves and nothing on the panel would say which. That is what the menu means when
+it offers to replace what is already there.
+
+A pad and a key are the same message, so there is no pad handling and no device
+detection — no table of known hardware anywhere in this. What a press does is
+read off the control it is pointed at: a **switch** is flipped and left flipped,
+and a **knob** is held up for as long as the pad is down and put back on
+release, as far as the velocity of the hit. Moving the same pad from one to the
+other needs nothing said.
+
+A bound message is taken out of the stream before anything else sees it, so a
+pad bound to a switch does not also sound a note and a bound CC 1 stops reaching
+the mod wheel. The exception is a note **release**, which is always passed
+through: a pad bound while it was already held has a note sounding that was
+never consumed, and swallowing its note-off would hang that note forever.
+
+Out of the box, **CC 21–28 drive the eight macros** — the numbers the General
+MIDI convention leaves free and most controllers ship sending. That is written
+on a machine with no bindings file and never over a binding that already exists,
+so a default taken off stays off.
+
+The bindings live in `%APPDATA%\Rhino Forge\MidiMap.xml`, not in the preset and
+not in the plugin state. A binding describes the hardware on the desk rather
+than the sound: in a preset it would let a patch from another machine silently
+repoint your knobs, and in the plugin state every project would remember a
+keyboard that may not be plugged in. One file serves every instance, which is
+also why `Processor::setMidiMapFile` exists — the tests redirect it rather than
+writing over the bindings of whoever runs them.
+
+Two threads meet here, and the split is the whole design. `core/ForgeMidiMap.h`
+is a flat array of atomics indexed by channel and number, so the audio thread
+can ask "is this bound" without locking or allocating. It never writes a
+parameter — writing one means telling the host, which takes locks — so a bound
+message is pushed onto a lock-free queue and applied by the Processor's own
+60 Hz timer in `ForgeProcessorMidi.cpp`. The timer is the Processor's and not
+the editor's, or a knob would stop working the moment the window was closed.
+
+**In the standalone, tick the keyboard first.** JUCE auto-enables MIDI inputs on
+iOS and Android only; on Windows and macOS the default is off, so Options →
+Audio/MIDI Settings → *Active MIDI inputs* has to be ticked once. It is then
+remembered in `Rhino Forge.settings`. In a host there is nothing to do — the
+host routes MIDI in.
+
 ## Layout
 
 | File | Holds |
 | --- | --- |
 | `core/ForgeCore.h` | The voice engine. No AudioProcessor, UI, state tree, filesystem, or allocation in `renderSample`. Four headers under it, listed at the top of it. |
 | `core/ForgeArp.h` | The arpeggiator: the shapes, the clock, and the notes a held chord becomes. Stands in front of Core rather than inside it, and emits through callbacks so it can be driven without either. |
+| `core/ForgeMidiMap.h` | Which knob or pad drives which control. A flat array of atomics so the audio thread can ask without locking, plus the queue that carries a bound message to the thread allowed to write a parameter. Knows nothing of the Processor, so the table and the learn are tested by calling them. |
 | `core/ForgeFx.h` | What an effects rack is: the types, what each one's controls are called, and what a normalised knob means in each. No DSP. |
 | `core/ForgeFxDsp.h` | The racks, rendered. A slot carries every type's state, sized once at `prepare`, because a type changes while audio is running. |
 | `core/ForgeFilter.h` | The filter: the thirty-four types, what each holds between samples, the one function that runs any of them, and the response the panel draws. Depends on nothing of Forge's, so the curve and the audio are read out of one file. |
 | `core/ForgeNoise.h` | The noise module: the nineteen sources and the six families they group into, the three colours the rest are built from, the state one voice holds, the tilt after them and the decorrelation between the channels. Depends on nothing of Forge's either, so what a source *is* is written down once and measured rather than asserted. |
 | `ui/ForgeFxDisplay.h` | What each effect draws of itself, from the same functions that render it. |
 | `ui/ForgeFilterVisuals.h` | The window the filter's response is drawn in: the axes, the grid, the fill and the corner markers. The arithmetic is `core/ForgeFilter.h`'s. |
-| `src/ForgeProcessor.*` | What the host calls, and what it hands the engine. `ForgeParameters.cpp` declares every parameter; `ForgeProcessorState.cpp` carries state, presets and table files. |
+| `src/ForgeProcessor.*` | What the host calls, and what it hands the engine. `ForgeParameters.cpp` declares every parameter; `ForgeProcessorState.cpp` carries state, presets and table files. `ForgeProcessorMidi.cpp` is the message thread's half of MIDI learn. |
 | `ui/ForgeLayout.h` | What modules exist, what each contains, and where it sits. Pure geometry and declaration; four headers, listed at the top of it. |
 | `ui/ForgeVisuals.h` | The knob look and the drawing primitives. Decides nothing about placement; seven headers, listed at the top of it. |
 | `ui/ForgePanels.h` | Static metal housings, chassis rails, hardware and decorative lettering. |

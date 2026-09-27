@@ -88,6 +88,7 @@ set(forge_sources
     core/ForgeShapes.h
     core/ForgeFilter.h
     core/ForgeMatrix.h
+    core/ForgeMidiMap.h
     core/ForgeNoise.h
     core/ForgePatch.h
     core/ForgeCore.h
@@ -123,6 +124,7 @@ set(forge_sources
     src/ForgeParameters.cpp
     src/ForgeProcessorState.cpp
     src/ForgeProcessorLfo.cpp
+    src/ForgeProcessorMidi.cpp
     src/ForgeEditor.cpp
     src/ForgeEditor.h
     src/ForgeEditorInternal.h
@@ -203,7 +205,8 @@ if (BUILD_TESTING)
         lfo
         table
         voicing
-        arp)
+        arp
+        midi)
 
     target_sources(RhinoForgeTests PRIVATE
         tests/ForgeTestMain.cpp
@@ -231,6 +234,7 @@ if (BUILD_TESTING)
         tests/ForgeTestsTable.cpp
         tests/ForgeTestsVoicing.cpp
         tests/ForgeTestsArp.cpp
+        tests/ForgeTestsMidi.cpp
         ${forge_sources})
     forge_use_precompiled_header(RhinoForgeTests)
     target_link_libraries(RhinoForgeTests PRIVATE

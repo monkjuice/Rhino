@@ -193,7 +193,7 @@ void Editor::mouseDown(const juce::MouseEvent& event)
         for (const auto& control : module.controls)
             if (event.eventComponent == &control->slider)
             {
-                showModulationMenu(control->id);
+                showControlMenu(control->id);
                 return;
             }
 }
@@ -529,6 +529,7 @@ void Editor::timerCallback()
     refreshFilterFields();
     refreshNoiseField();
     refreshModulationRings();
+    refreshMidiLearn();
 
     // A table replaced from outside the panel — a preset loaded, a project
     // opened, a second editor on the same plugin — bumps its revision, and this

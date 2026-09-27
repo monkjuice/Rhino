@@ -58,6 +58,10 @@ void voicingTests();
 // ForgeTestsArp.cpp — the shapes, the clock, and the notes the arp emits.
 void arpTests();
 
+// ForgeTestsMidi.cpp — binding a controller's knobs and pads to the panel: the
+// table, the learn, and what a bound message stops reaching.
+void midiTests();
+
 // ForgeTestsEngine.cpp — every source audible on its own, and an extreme patch
 // that stays finite and inside full scale.
 void engineTests();

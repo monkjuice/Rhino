@@ -411,7 +411,7 @@ private:
     int macroReach(int macro) const;
     // What a macro is driving, from the macro's own end: the destinations it
     // reaches and their depths, with the actions to take any of them away.
-    // showModulationMenu is the same list seen from the other side.
+    // showControlMenu is the same list seen from the other side.
     void showMacroMenu(int macro);
     // Puts the names from the state tree onto the strips. Called on the way in
     // and whenever a name arrives from outside this editor.
@@ -420,7 +420,22 @@ private:
     // or a second editor is noticed on the next tick — the same way a panel
     // colour is.
     juce::String macroNamesShown;
-    void showModulationMenu(const juce::String& parameterId);
+    void showControlMenu(const juce::String& parameterId);
+    // Binding a control to a knob or a pad on a keyboard. The Processor holds
+    // the bindings and does the learning; these are the panel's side of it —
+    // arming a control, and saying on the status line what happened, since a
+    // control waiting to be learned looks no different from one that is not.
+    void beginMidiLearn(const juce::String& parameterId);
+    void cancelMidiLearn();
+    // Noticed on the tick, because the binding is completed by the Processor's
+    // own timer and that timer runs whether or not an editor exists.
+    void refreshMidiLearn();
+    // The control this panel armed, so the tick knows whose learn to report.
+    // Empty when nothing is waiting.
+    juce::String midiLearnShown;
+    // The status line over the preset name, which is where every transient
+    // message on this panel goes.
+    void announce(const juce::String& message);
     void assignModulation(int source, int destination);
     void setSlotDepth(int slot, float depth);
     void clearSlot(int slot);

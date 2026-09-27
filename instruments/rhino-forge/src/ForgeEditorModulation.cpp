@@ -12,6 +12,11 @@ namespace
 constexpr int slotItemBase = 1000;
 constexpr int nothingRoutedItem = 1;
 constexpr int clearMacroItem = 2;
+// Past the slot actions, so the control menu can carry both without either
+// having to know how many of the other there are.
+constexpr int learnItem = 2000;
+constexpr int learnCancelItem = 2001;
+constexpr int learnForgetItem = 2002;
 }
 
 // A slot counts as live once it has both ends: something driving it and
@@ -98,7 +103,7 @@ void Editor::refreshModulationRings()
 // --- A macro, from its own end ------------------------------------------------
 //
 // Everything below answers the question a knob's own ring cannot. Not "what is
-// moving this control", which showModulationMenu covers, but "what is this
+// moving this control", which showControlMenu covers, but "what is this
 // macro moving" — and a macro is never a destination, so without this nothing
 // on the panel would say.
 
@@ -207,41 +212,114 @@ void Editor::applyMacroNames()
             plate->setTooltip(macroTooltip(macroIndexOf(plate->source)));
 }
 
-void Editor::showModulationMenu(const juce::String& parameterId)
+// Right-clicking a control. Two things hang off it, and which of them appear
+// depends on the control: anything at all can be bound to a knob or a pad on a
+// keyboard, but only a modulation destination can be pointed at by the matrix.
+//
+// The macros are the reason this had to stop refusing non-destinations. A macro
+// is a source and never a destination, so the old menu declined to open on the
+// one control most likely to want a knob on it.
+void Editor::showControlMenu(const juce::String& parameterId)
 {
+    auto* parameter = processor.state.getParameter(parameterId);
+    if (parameter == nullptr) return;
+
     const auto destination = destinationFor(parameterId);
-    if (destination == 0) return;
-    const auto label = juce::String(destinations()[static_cast<size_t>(destination)].label);
+    const auto bound = processor.midiSourceLabel(parameterId);
+    const auto listening = processor.midiLearnTarget() == parameterId;
 
     juce::PopupMenu menu;
-    menu.addSectionHeader("Modulate " + label);
+    // What is already on it is said in the header rather than as a line of its
+    // own, so the menu opens reading as a statement about this control before
+    // it offers to change anything.
+    menu.addSectionHeader(parameter->getName(32).toUpperCase()
+                          + (bound.isEmpty() ? juce::String() : "  ·  " + bound));
 
-    // Anything already pointed here can be taken away from the same menu, so a
-    // routing can be undone where it was made rather than only in the matrix.
-    juce::PopupMenu existing;
-    auto found = 0;
-    for (int slot = 0; slot < modSlotCount; ++slot)
+    if (listening) menu.addItem(learnCancelItem, "Listening — click to stop");
+    else menu.addItem(learnItem, bound.isEmpty() ? "MIDI learn"
+                                                 : "MIDI learn (replaces " + bound + ")");
+    if (!bound.isEmpty()) menu.addItem(learnForgetItem, "Forget " + bound);
+
+    if (destination != 0)
     {
-        const auto source = juce::roundToInt(value(slotParameter(slot, "Source").toRawUTF8()));
-        if (source <= 0 || juce::roundToInt(value(slotParameter(slot, "Dest").toRawUTF8())) != destination)
-            continue;
-        existing.addItem(1000 + slot, juce::String(modSourceName(source)));
-        ++found;
+        menu.addSeparator();
+
+        // Anything already pointed here can be taken away from the same menu, so
+        // a routing can be undone where it was made rather than only in the
+        // matrix.
+        juce::PopupMenu existing;
+        auto found = 0;
+        for (int slot = 0; slot < modSlotCount; ++slot)
+        {
+            const auto source = juce::roundToInt(value(slotParameter(slot, "Source").toRawUTF8()));
+            if (source <= 0
+                || juce::roundToInt(value(slotParameter(slot, "Dest").toRawUTF8())) != destination)
+                continue;
+            existing.addItem(slotItemBase + slot, juce::String(modSourceName(source)));
+            ++found;
+        }
+
+        juce::PopupMenu sources;
+        for (int source = 1; source < modSourceCount; ++source)
+            sources.addItem(source, modSourceName(source));
+        menu.addSubMenu("Add source", sources);
+        if (found > 0) menu.addSubMenu("Remove", existing);
     }
 
-    juce::PopupMenu sources;
-    for (int source = 1; source < modSourceCount; ++source)
-        sources.addItem(source, modSourceName(source));
-    menu.addSubMenu("Add source", sources);
-    if (found > 0) menu.addSubMenu("Remove", existing);
-
     const auto safe = juce::Component::SafePointer<Editor>(this);
-    menu.showMenuAsync(juce::PopupMenu::Options {}, [safe, destination] (int choice)
+    menu.showMenuAsync(juce::PopupMenu::Options {}, [safe, destination, parameterId] (int choice)
     {
         if (safe == nullptr || choice == 0) return;
-        if (choice >= 1000) safe->clearSlot(choice - 1000);
+        if (choice == learnItem) { safe->beginMidiLearn(parameterId); return; }
+        if (choice == learnCancelItem) { safe->cancelMidiLearn(); return; }
+        if (choice == learnForgetItem)
+        {
+            safe->processor.forgetMidi(parameterId);
+            safe->announce("FORGOTTEN");
+            return;
+        }
+        if (choice >= slotItemBase) safe->clearSlot(choice - slotItemBase);
         else safe->assignModulation(choice, destination);
     });
+}
+
+// Arming is invisible on the panel — the control being learned looks exactly as
+// it did — so the status line is the whole of the feedback until the knob moves,
+// and it says which control is waiting rather than only that something is.
+void Editor::beginMidiLearn(const juce::String& parameterId)
+{
+    processor.learnMidi(parameterId);
+    if (auto* parameter = processor.state.getParameter(parameterId))
+        announce("LEARNING " + parameter->getName(24).toUpperCase() + " — MOVE A KNOB OR HIT A PAD");
+    midiLearnShown = parameterId;
+}
+
+void Editor::cancelMidiLearn()
+{
+    processor.cancelMidiLearn();
+    announce("LEARN CANCELLED");
+    midiLearnShown = {};
+}
+
+// Noticed on the tick rather than reported by the learn itself: the binding is
+// made on the Processor's own timer, which knows nothing about an editor and
+// may well be running without one.
+void Editor::refreshMidiLearn()
+{
+    if (midiLearnShown.isEmpty() || processor.isLearningMidi()) return;
+    const auto learned = processor.midiSourceLabel(midiLearnShown);
+    auto* parameter = processor.state.getParameter(midiLearnShown);
+    midiLearnShown = {};
+    if (learned.isEmpty() || parameter == nullptr) return;
+    announce(learned.toUpperCase() + " → " + parameter->getName(24).toUpperCase());
+}
+
+// The status line over the preset name. Every other transient message on this
+// panel is written the same way and stays until something replaces it.
+void Editor::announce(const juce::String& message)
+{
+    presetName.setText(message, juce::dontSendNotification);
+    presetName.setColour(juce::Label::textColourId, ui::signalViolet);
 }
 
 void Editor::assignModulation(int source, int destination)

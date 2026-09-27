@@ -38,6 +38,7 @@ constexpr Area areas[] {
     {"table", tableTests},
     {"voicing", voicingTests},
     {"arp", arpTests},
+    {"midi", midiTests},
 };
 
 void listAreas(std::ostream& out)

@@ -14,6 +14,16 @@ Processor::Processor()
     : AudioProcessor(BusesProperties().withOutput("Output", juce::AudioChannelSet::stereo(), true)),
       state(*this, nullptr, "RhinoForgeState", parameterLayout())
 {
+    // After the parameters exist, because a binding is stored as a name and has
+    // to be resolved against the list to become an index.
+    loadMidiMap();
+    // Sixty a second. This is what carries a learned knob onto its control, so
+    // it is the rate that turning one feels like; a knob sweep arrives as MIDI
+    // far faster than that, and the queue is what keeps the values between
+    // ticks rather than dropping them. Guarded because a Timer wants a message
+    // thread, and a test that forgot to start one should fail in its own
+    // assertion rather than here.
+    if (juce::MessageManager::getInstanceWithoutCreating() != nullptr) startTimerHz(60);
 }
 
 void Processor::prepareToPlay(double sampleRate, int)
@@ -156,6 +166,17 @@ void Processor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
             hostPlaying = position->getIsPlaying();
             if (const auto ppq = position->getPpqPosition()) hostPpq = *ppq;
         }
+
+    // Bound knobs and pads are taken out here, before the panel's own keyboard
+    // is merged in — and that order is the whole point of doing it here rather
+    // than beside the note handling below.
+    //
+    // Once the two are merged they are indistinguishable: the on-screen keyboard
+    // sends ordinary note messages on channel 1, which is exactly what a pad
+    // sends. A pad bound to a switch would then be fired by clicking the key of
+    // the same number on the panel, which is not a thing anyone asked for. The
+    // map only ever sees what actually arrived from outside.
+    applyMidiMap(midi);
 
     // Anything played on the editor's keyboard joins the host's own notes
     // before a single sample is rendered.

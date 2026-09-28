@@ -192,7 +192,9 @@ private:
     // Every other bar group washed a shade lighter, so the beats read as bars
     // without counting grid lines. Painted under the clips: a clip is drawn
     // translucent, so the band shows through it the way Live's does.
-    void paintBarBands(juce::Graphics&, double firstBeat, double lastBeat);
+    // Returns how many bars one band covers, so the grid lines drawn over the
+    // bands can tell which of them they land in.
+    int paintBarBands(juce::Graphics&, double firstBeat, double lastBeat);
     juce::String barPositionText(double seconds) const;
     void copySelection();
     void cutSelection();

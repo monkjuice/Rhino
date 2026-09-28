@@ -57,6 +57,17 @@ int runArrangementGeometryTest()
         fixed.triplet = true;
         if (!close(resolvedGridBeats(fixed, 100.0, 4.0), 1.0 / 3.0))
             throw std::runtime_error("Triplet grid is two thirds of straight duration");
+
+        // The wash alternates from bar zero, so a grid line can ask which shade
+        // of lane it is about to be drawn on without repeating the band maths.
+        if (isWashedBar(0.0, 1) || !isWashedBar(1.0, 1) || isWashedBar(2.0, 1))
+            throw std::runtime_error("One bar to a band washes every other bar");
+        if (isWashedBar(3.0, 4) || !isWashedBar(4.0, 4) || !isWashedBar(7.0, 4) || isWashedBar(8.0, 4))
+            throw std::runtime_error("A wider band washes whole groups of bars");
+        if (!isWashedBar(-1.0, 1) || isWashedBar(-2.0, 1))
+            throw std::runtime_error("Bars before the start alternate the same way");
+        if (isWashedBar(1.0, 0))
+            throw std::runtime_error("A band of no bars washes nothing");
         return 0;
     }
     catch (const std::exception& error)

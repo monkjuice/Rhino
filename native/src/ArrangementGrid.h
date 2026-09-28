@@ -110,6 +110,11 @@ inline const char* gridDivisionLabel(GridDivision division)
 // same zoom bands one.
 inline constexpr double barBandMinimumPixels = 120.0;
 
+// How much lighter a washed band is than the lane under it. Anything drawn
+// over a lane has to know this: a grid line picked to read against the base
+// shade disappears against the wash unless it is lifted by the same amount.
+inline constexpr float barBandWash = 10.0f / 255.0f;
+
 inline int barsPerBand(double pixelsPerBar)
 {
     int bars = 1;
@@ -118,6 +123,16 @@ inline int barsPerBand(double pixelsPerBar)
     while (bars < 256 && pixelsPerBar * bars < barBandMinimumPixels)
         bars *= 2;
     return bars;
+}
+
+// Whether the wash covers a given bar. Counted from bar zero and in whole
+// bands, exactly as the painting counts, so the answer is a property of the
+// music and does not flip as the arrangement is scrolled.
+inline bool isWashedBar(double bar, int bandBars)
+{
+    if (bandBars <= 0) return false;
+    const auto band = std::floor(bar / static_cast<double>(bandBars));
+    return std::fmod(std::fmod(band, 2.0) + 2.0, 2.0) >= 1.0;
 }
 
 inline bool isGridLine(double beat, double interval)

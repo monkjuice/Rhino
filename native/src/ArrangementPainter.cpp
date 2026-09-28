@@ -18,7 +18,7 @@ namespace rhino
 // project read as threes and a 4/4 as fours - the beat lines alone look the
 // same in both. The wash goes on before the clips rather than over them: a
 // clip is filled translucent, so it picks the band up through its own colour.
-void Arrangement::paintBarBands(juce::Graphics& g, double firstBeat, double lastBeat)
+int Arrangement::paintBarBands(juce::Graphics& g, double firstBeat, double lastBeat)
 {
     const auto barLength = std::max(0.25, session.beatsPerBar());
     const auto timeOfBar = [this, barLength](double bar)
@@ -39,11 +39,11 @@ void Arrangement::paintBarBands(juce::Graphics& g, double firstBeat, double last
     const auto right = static_cast<float>(getWidth()) - 14.0f;
     const auto top = lanesTop;
     const auto bottom = masterLane().getBottom();
-    if (right <= headerWidth || bottom <= top) return;
+    if (right <= headerWidth || bottom <= top) return static_cast<int>(band);
     juce::Graphics::ScopedSaveState scope(g);
     g.reduceClipRegion(juce::Rectangle<float>(headerWidth, top, right - headerWidth, bottom - top)
                            .getSmallestIntegerContainer());
-    g.setColour(juce::Colour(0x0affffff));
+    g.setColour(juce::Colours::white.withAlpha(barBandWash));
     int painted = 0;
     for (auto bar = std::floor(firstBar / pair) * pair; bar <= lastBar + pair && painted < 512; bar += pair)
     {
@@ -54,6 +54,7 @@ void Arrangement::paintBarBands(juce::Graphics& g, double firstBeat, double last
         if (x1 > right) break;
         g.fillRect(juce::Rectangle<float>(x1, top, x2 - x1, bottom - top));
     }
+    return static_cast<int>(band);
 }
 
 void Arrangement::paintBarNumbers(juce::Graphics& g, double firstBeat, double lastBeat)
@@ -208,7 +209,8 @@ void Arrangement::paint(juce::Graphics& g)
 
     const auto firstBeat = session.edit->tempoSequence.toBeats(tracktion::core::TimePosition::fromSeconds(viewStart)).inBeats();
     const auto lastBeat = session.edit->tempoSequence.toBeats(tracktion::core::TimePosition::fromSeconds(viewStart + viewSpan)).inBeats();
-    paintBarBands(g, firstBeat, lastBeat);
+    const auto bandBars = paintBarBands(g, firstBeat, lastBeat);
+    const auto barLength = std::max(0.25, session.beatsPerBar());
     const auto gridBeat = resolvedGridBeats();
     const auto firstGrid = std::floor(firstBeat / gridBeat) * gridBeat;
     int paintedTicks = 0;
@@ -223,7 +225,16 @@ void Arrangement::paint(juce::Graphics& g)
         // in the track headers, which the row before them has already painted.
         if ((gridSettings.mode != GridMode::off || bar) && x >= headerWidth)
         {
-            g.setColour(bar ? juce::Colour(0xff42515c) : wholeBeat ? juce::Colour(0xff35404a) : juce::Colour(0xff29323a));
+            // A line inside a washed band is lifted by the wash, so it keeps
+            // the contrast it was picked for. Held flat, the subdivisions
+            // matched the washed lane almost exactly and the alternating bands
+            // read as columns with nothing in them. The epsilon keeps a line
+            // sitting on a bar boundary in the bar it opens rather than in the
+            // one before it, which floating point otherwise decides at random.
+            const auto line = juce::Colour(bar ? 0xff45545f : wholeBeat ? 0xff39434d : 0xff2f3941);
+            g.setColour(isWashedBar(std::floor(beat / barLength + 0.000001), bandBars)
+                            ? line.interpolatedWith(juce::Colours::white, barBandWash)
+                            : line);
             g.drawVerticalLine(static_cast<int>(x), static_cast<int>(lanesTop), masterLane().getBottom());
         }
     }
@@ -317,13 +328,12 @@ void Arrangement::paint(juce::Graphics& g)
             juce::Graphics::ScopedSaveState clipContentScope(g);
             g.reduceClipRegion(visible.getSmallestIntegerContainer());
             const auto noteArea = box.withTop(box.getY() + 28.0f).reduced(6.0f, 5.0f);
-            g.setColour(juce::Colour(0x553f4837));
-            for (int step = 1; step < Session::steps; ++step)
-            {
-                const auto x = xFor(position.start + step * (position.end - position.start) / Session::steps);
-                if (x > noteArea.getX() && x < noteArea.getRight())
-                    g.drawVerticalLine(static_cast<int>(x), noteArea.getY(), noteArea.getBottom());
-            }
+            // No grid of its own. A clip used to rule itself into sixteen equal
+            // steps, which agreed with the timeline only when the clip happened
+            // to be one bar long at a 1/16 grid and crossed it everywhere else.
+            // The clip is filled translucent, so the arrangement's own lines
+            // carry through it and a MIDI clip reads in the same columns as the
+            // audio beside it.
             auto lowPitch = Session::lowestNote;
             auto highPitch = Session::lowestNote + Session::pitches - 1;
             for (const auto& note : clip.midiNotes)

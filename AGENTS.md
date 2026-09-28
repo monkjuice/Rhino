@@ -35,6 +35,7 @@ Application code, `native/src`:
 | Selecting a span of the timeline, and cut/copy/paste/duplicate on it | `ArrangementSelection.cpp` in the UI, `SessionRegion.cpp` in the model. The note editor uses the same rule in steps, in `StepGridEditing.cpp` |
 | Track groups, which are bus tracks | `SessionGroups.cpp`, `ArrangementGroups.cpp` |
 | Renaming a track card or a group band in place | `ArrangementRename.cpp` |
+| Merging audio clips into one, Ctrl+J | `SessionMerge.cpp` in the model, `Arrangement::mergeSelected` in the UI. It renders, so it is the one clip command that writes a file |
 | Auditioning a library sound | `SessionPreview.cpp` |
 | Session view (clip launcher) UI, paused, see [SESSION-VIEW.md](SESSION-VIEW.md) | `SessionView.h`, `SessionView.cpp`, `SessionViewPainter.cpp`, `SessionViewGestures.cpp` |
 | Scenes, clip slots and launching | `SessionSlots.cpp` |

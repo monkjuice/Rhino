@@ -269,6 +269,11 @@ bool Arrangement::keyPressed(const juce::KeyPress& key)
         splitSelectedAtPlayhead();
         return true;
     }
+    if (key.getModifiers().isCommandDown() && key.getKeyCode() == 'J')
+    {
+        mergeSelected();
+        return true;
+    }
     if (key.getModifiers().isCommandDown() && key.getKeyCode() == 'D')
     {
         duplicateSelected();
@@ -466,6 +471,38 @@ void Arrangement::reverseSelected()
     repaint();
 }
 
+// Merging is a command about a run of clips rather than about one, so it acts
+// on the whole selection the way reverse and delete do. The selection then
+// moves onto what it made: the clips it was pointing at are gone, and leaving
+// it naming them would make the next key press say "select a clip first".
+void Arrangement::mergeSelected()
+{
+    cancelDrag();
+    auto chosen = selectedClips;
+    if (chosen.empty() && selected != te::EditItemID()) chosen = {selected};
+    Session::MergeResult result;
+    const auto outcome = session.mergeClips(chosen, &result);
+    if (outcome.failed())
+    {
+        if (status) status(outcome.getErrorMessage());
+        return;
+    }
+    const auto made = static_cast<int>(result.clips.size());
+    setSelection(result.clips);
+    if (status)
+    {
+        // The count is the clips that went in, not the ones that were picked:
+        // a clip the span reached is merged whether it was selected or not,
+        // and saying so is how that stops being a surprise.
+        auto message = "Merged " + juce::String(result.sourceCount) + " clips into "
+            + (made == 1 ? juce::String("one clip") : juce::String(made) + " clips");
+        if (result.lostClipEffects)
+            message += ", without the clip effects they carried";
+        status(message);
+    }
+    repaint();
+}
+
 void Arrangement::nudgeSelected(int direction, bool byBar)
 {
     cancelDrag();
@@ -647,6 +684,9 @@ void Arrangement::showClipMenu(te::EditItemID id)
     menu.addItem(6, "Paste       Ctrl+V", !clipboard.isEmpty());
     menu.addItem(2, "Duplicate       Ctrl+D");
     menu.addItem(7, "Split at Playhead       Ctrl+E");
+    // Enabled from the selection rather than from the clip the menu was opened
+    // on: merging needs two, and one clip can never be merged with itself.
+    menu.addItem(9, "Merge       Ctrl+J", selectedClips.size() > 1);
     // Ticked from the clip the menu was opened on, which is the one under the
     // pointer whether or not the rest of the selection agrees with it.
     menu.addItem(8, "Reverse       R", session.audioClipMix(id).valid, session.audioClipMix(id).reversed);
@@ -676,6 +716,7 @@ void Arrangement::showClipMenu(te::EditItemID id)
             else if (result == 6) safe->pasteSelection();
             else if (result == 7) safe->splitSelectedAtPlayhead();
             else if (result == 8) safe->reverseSelected();
+            else if (result == 9) safe->mergeSelected();
         });
 }
 

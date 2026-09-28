@@ -58,6 +58,7 @@ target_sources(RhinoNative PRIVATE
     src/SessionClips.cpp
     src/SessionAudioClips.cpp
     src/SessionRegion.cpp
+    src/SessionMerge.cpp
     src/SessionSamples.cpp
     src/SessionPreview.cpp
     src/SessionRecording.cpp

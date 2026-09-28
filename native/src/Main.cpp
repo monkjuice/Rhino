@@ -694,6 +694,14 @@ public:
             arrangement.splitSelectedAtPlayhead();
             return true;
         }
+        // Merge reaches the shell for the same reason: the clips being folded
+        // together are usually the ones the audio editor is open on, and it
+        // still means the same thing wherever the keyboard happens to be.
+        if (key.getModifiers().isCommandDown() && key.getKeyCode() == 'J')
+        {
+            arrangement.mergeSelected();
+            return true;
+        }
         // Reverse reaches the shell for the same reason, and more often: the
         // clip you want to hear backwards is usually the one already open in
         // the audio editor, with the keyboard on one of its knobs. A plain
@@ -1120,6 +1128,7 @@ private:
                         "Right-drag in the MIDI editor  Erase notes\n"
                         "Ctrl+X / Ctrl+C / Ctrl+V  Cut, copy and paste the selection\n"
                         "Ctrl+D  Duplicate it directly after itself\nCtrl+E  Split the selected clip at the playhead\n"
+                        "Ctrl+J  Merge the selected audio clips into one audio file\n"
                         "R  Play the selected audio clips backwards\nDelete  Empty the selection\n"
                         "?  Show/hide Info View\nF12  Full screen");
                 else if (result == 2)

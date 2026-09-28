@@ -91,6 +91,8 @@ int runArrangementTest()
        #include "scenarios/AudioClipMixing.inc"
         scenario("audio channels");
        #include "scenarios/AudioChannels.inc"
+        scenario("clip merge");
+       #include "scenarios/ClipMerge.inc"
         scenario("region clipboard");
        #include "scenarios/RegionClipboard.inc"
         scenario("track management");

@@ -471,6 +471,9 @@ public:
     // Recorded audio is written here: beside the project once it has been
     // saved, and in the application's own folder until then.
     juce::File recordingDirectory() const;
+    // Merged audio follows the same rule, in a folder of its own: a take and a
+    // flattened clip are different things to go looking for.
+    juce::File mergedAudioDirectory() const;
     void undo();
     void redo();
     juce::Result setLoopRange(double startSeconds, double endSeconds);
@@ -510,6 +513,30 @@ public:
                           const std::vector<te::EditItemID>& movingWith = {});
     juce::Result splitClip(te::EditItemID, double splitTimeSeconds);
     juce::Result duplicateClip(te::EditItemID);
+    // What a merge did, so the gesture that asked for it can select the clips
+    // it made and say what went into them.
+    struct MergeResult
+    {
+        // One per track merged, in the order the tracks were reached.
+        std::vector<te::EditItemID> clips;
+        // How many clips went in, which is not the size of the selection: a
+        // clip the span reached is merged whether or not it was selected.
+        int sourceCount = 0;
+        // True when a source carried clip-local effects, which the engine
+        // cannot render apart from the track's own - see SessionMerge.cpp.
+        bool lostClipEffects = false;
+    };
+    // Flattens the selected audio clips down to one clip per track. The span
+    // from the first clip's start to the last one's end is rendered to a new
+    // audio file - gaps included, because the silence between two clips is
+    // part of what is being merged - and everything inside that span is
+    // replaced by a single clip reading that file.
+    //
+    // What the render carries is the clips and nothing else: each clip's own
+    // gain, pan, pitch, fades, mute and reverse are applied, because those are
+    // properties of the clip, while the track's devices and its fader are not,
+    // because the merged clip still plays through them.
+    juce::Result mergeClips(const std::vector<te::EditItemID>&, MergeResult* = nullptr);
     void deleteClip(te::EditItemID);
     // A region is a span of time across a run of tracks - the rectangle the
     // arrangement highlights - and it is what copy, cut, paste, duplicate and

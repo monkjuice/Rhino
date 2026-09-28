@@ -46,6 +46,10 @@ public:
     // split above: R is a shell shortcut, because the clip you want to hear
     // backwards is usually the one open in the audio editor.
     void reverseSelected();
+    // Renders the selected audio clips down to one clip per track. Public for
+    // the same reason again: Ctrl+J is a shell shortcut, and the selection it
+    // acts on is usually the one the audio editor is looking at.
+    void mergeSelected();
     std::function<void(juce::String)> status;
     // The typing keyboard belongs to the shell, not to the arrangement, but the
     // card is where a MIDI track is armed and where its input is chosen - and

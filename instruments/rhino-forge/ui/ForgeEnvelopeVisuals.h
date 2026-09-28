@@ -428,6 +428,23 @@ inline void drawLfo(juce::Graphics& g, juce::Rectangle<int> area, rhino::forge::
     }
     strokeGlow(g, path, colour, alpha);
 
+    // Two kinds of node, told apart by weight rather than by colour: a solid
+    // dot is a position, and the ring in each gap between two of them is that
+    // segment's bend. The ring rides the curve it describes, so a straight
+    // segment shows it sitting exactly on the line, and it is drawn first so a
+    // handle pushed up against a point reads as being behind it — which is also
+    // the order the pointer resolves them in.
+    if (table.custom)
+        for (int i = 0; i + 1 < table.count; ++i)
+        {
+            const auto handle = table.curveHandle(i);
+            const juce::Point<float> centre {box.getX() + handle.x * box.getWidth(), plot(handle.y)};
+            g.setColour(juce::Colour(0xff0a0d16).withAlpha(0.9f * alpha));
+            g.fillEllipse(juce::Rectangle<float>(7.0f, 7.0f).withCentre(centre));
+            g.setColour(juce::Colours::white.withAlpha(0.7f * alpha));
+            g.drawEllipse(juce::Rectangle<float>(6.0f, 6.0f).withCentre(centre), 1.4f);
+        }
+
     const auto pointCount = table.custom ? table.count : 9;
     for (int i = 0; i < pointCount; ++i)
     {

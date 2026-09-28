@@ -274,6 +274,12 @@ private:
     std::array<std::atomic<float>, lfoCount> meterLfoValue {};
     std::array<std::array<std::atomic<float>, maxLfoPoints>, lfoCount> lfoPointX {};
     std::array<std::array<std::atomic<float>, maxLfoPoints>, lfoCount> lfoPointY {};
+    // The bend of the segment leaving each point, and where its handle sits
+    // along that segment. Stored beside the point rather than in a list of
+    // their own so one count covers all four and the audio path reads a bend
+    // without a second lookup.
+    std::array<std::array<std::atomic<float>, maxLfoPoints>, lfoCount> lfoPointCurve {};
+    std::array<std::array<std::atomic<float>, maxLfoPoints>, lfoCount> lfoPointCurveAt {};
     std::array<std::atomic<int>, lfoCount> lfoPointCount {};
     std::array<std::atomic<int>, lfoCount> lfoColumns {};
     std::array<std::atomic<int>, lfoCount> lfoRows {};

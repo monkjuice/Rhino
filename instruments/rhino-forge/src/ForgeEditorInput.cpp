@@ -37,7 +37,8 @@ void Editor::mouseMove(const juce::MouseEvent& event)
     const auto overShapeControl = ui::lfoNameBounds(display).contains(at)
         || ui::lfoPreviousBounds(display).contains(at)
         || ui::lfoNextBounds(display).contains(at)
-        || (ui::lfoPlotBounds(display).contains(at) && lfoPointAt(at) >= 0);
+        || (ui::lfoPlotBounds(display).contains(at)
+            && (lfoPointAt(at) >= 0 || lfoCurveHandleAt(at) >= 0));
     if (overGridStep || overShapeControl) setMouseCursor(juce::MouseCursor::PointingHandCursor);
     else if (column.contains(at) || row.contains(at)) setMouseCursor(juce::MouseCursor::UpDownResizeCursor);
     else setMouseCursor(juce::MouseCursor::NormalCursor);
@@ -78,15 +79,27 @@ void Editor::mouseDown(const juce::MouseEvent& event)
             }
             if (ui::lfoPlotBounds(display).expanded(5, 0).contains(at))
             {
+                // A position node first, then the curve handle of the gap it
+                // would otherwise sit in, then the empty well. Straightening a
+                // segment is to a curve handle what removing is to a point, so
+                // the right-click and the double-click read the same either way.
                 const auto point = lfoPointAt(at);
-                if (event.mods.isPopupMenu()) { removeLfoPoint(shownLfo(), point); return; }
+                const auto curve = point >= 0 ? -1 : lfoCurveHandleAt(at);
+                if (event.mods.isPopupMenu())
+                {
+                    if (curve >= 0) resetLfoCurve(shownLfo(), curve);
+                    else removeLfoPoint(shownLfo(), point);
+                    return;
+                }
                 if (event.getNumberOfClicks() >= 2)
                 {
-                    if (point >= 0) removeLfoPoint(shownLfo(), point);
+                    if (curve >= 0) resetLfoCurve(shownLfo(), curve);
+                    else if (point >= 0) removeLfoPoint(shownLfo(), point);
                     else addLfoPoint(shownLfo(), at);
                     return;
                 }
                 lfoDragPoint = point;
+                lfoDragCurve = curve;
                 lfoDragBank = shownLfo();
                 lfoDragStart = at;
                 return;
@@ -333,6 +346,13 @@ void Editor::mouseDrag(const juce::MouseEvent& event)
                         lfoGridStartCount + (lfoGridStartY - at.y) / 8);
         return;
     }
+    if (lfoDragCurve >= 0)
+    {
+        const auto at = event.getEventRelativeTo(this).getPosition();
+        if (at.getDistanceFrom(lfoDragStart) >= 2.0f)
+            editLfoCurve(lfoDragBank, lfoDragCurve, at, event.mods.isAltDown());
+        return;
+    }
     if (lfoDragPoint >= 0)
     {
         const auto at = event.getEventRelativeTo(this).getPosition();
@@ -381,7 +401,7 @@ void Editor::mouseUp(const juce::MouseEvent& event)
     }
     if (lfoDragBank >= 0)
     {
-        lfoDragPoint = lfoDragBank = -1;
+        lfoDragPoint = lfoDragCurve = lfoDragBank = -1;
         return;
     }
     if (fxDragSlot >= 0)

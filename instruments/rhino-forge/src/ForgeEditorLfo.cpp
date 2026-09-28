@@ -27,6 +27,14 @@ float pointValue(juce::Rectangle<int> plot, int y, int rows, bool snap)
     const auto raw = 1.0f - 2.0f * (y - plot.getY()) / static_cast<float>(plot.getHeight());
     return std::clamp(snap ? std::round(raw * rows / 2.0f) * 2.0f / rows : raw, -1.0f, 1.0f);
 }
+
+// One spelling of where a table coordinate lands in the well. The painter draws
+// from the same numbers, so what is grabbed is what is seen.
+juce::Point<float> plotPosition(juce::Rectangle<int> plot, LfoPoint point)
+{
+    return {plot.getX() + point.x * plot.getWidth(),
+            plot.getCentreY() - point.y * plot.getHeight() * 0.48f};
+}
 }
 
 juce::Rectangle<int> Editor::lfoDisplayBounds() const
@@ -67,12 +75,66 @@ int Editor::lfoPointAt(juce::Point<int> at) const
     const auto table = editableLfoTable(shownLfo());
     for (int i = 0; i < table.count; ++i)
     {
-        const auto& point = table.points[static_cast<size_t>(i)];
-        const auto x = plot.getX() + point.x * plot.getWidth();
-        const auto y = plot.getCentreY() - point.y * plot.getHeight() * 0.48f;
-        if (std::hypot(at.x - x, at.y - y) <= 9.0f) return i;
+        const auto centre = plotPosition(plot, table.points[static_cast<size_t>(i)]);
+        if (std::hypot(at.x - centre.x, at.y - centre.y) <= 9.0f) return i;
     }
     return -1;
+}
+
+// The other kind of node: one per gap, carrying the bend of the segment it sits
+// on and nothing else. A position node under the same pointer wins, so a handle
+// dragged up against a point never takes a grab meant for the point.
+int Editor::lfoCurveHandleAt(juce::Point<int> at) const
+{
+    const auto plot = ui::lfoPlotBounds(lfoDisplayBounds());
+    if (!plot.expanded(8).contains(at)) return -1;
+    // Only a drawn table has them. A Default shape's dots sit on a sine or a
+    // saw, and a chord's handle would be drawn off the very curve it claims to
+    // bend; dragging a dot makes the table Custom and the handles appear.
+    if (!processor.lfoTableIsCustom(shownLfo()) || lfoPointAt(at) >= 0) return -1;
+    const auto table = editableLfoTable(shownLfo());
+    for (int i = 0; i + 1 < table.count; ++i)
+    {
+        const auto centre = plotPosition(plot, table.curveHandle(i));
+        if (std::hypot(at.x - centre.x, at.y - centre.y) <= 8.0f) return i;
+    }
+    return -1;
+}
+
+// Dragging a curve handle reads both axes of the drop. Its height is how far the
+// segment stands off its straight line; its position along the segment is where
+// that stand-off is measured, so the same height nearer one end is a harder
+// bend leaning that way.
+void Editor::editLfoCurve(int lfo, int segment, juce::Point<int> at, bool snap)
+{
+    auto table = editableLfoTable(lfo);
+    if (segment < 0 || segment + 1 >= table.count) return;
+    const auto plot = ui::lfoPlotBounds(lfoDisplayBounds());
+    if (plot.isEmpty()) return;
+    auto& left = table.points[static_cast<size_t>(segment)];
+    const auto right = table.points[static_cast<size_t>(segment + 1)];
+    const auto width = right.x - left.x;
+    if (width <= 0.0f) return;
+    const auto rawX = std::clamp((at.x - plot.getX()) / static_cast<float>(plot.getWidth()), 0.0f, 1.0f);
+    const auto x = snap ? std::round(rawX * table.columns) / table.columns : rawX;
+    const auto along = std::clamp((x - left.x) / width, minLfoCurveAt, maxLfoCurveAt);
+    left.curve = LfoTable::curveThrough(left, right, along,
+                                        pointValue(plot, at.y, table.rows, snap));
+    left.curveAt = along;
+    processor.setLfoTable(lfo, table);
+    repaint(lfoDisplayBounds());
+}
+
+// Straightening a segment is the curve handle's equivalent of removing a point,
+// and it puts the handle back in the middle where it is found again.
+void Editor::resetLfoCurve(int lfo, int segment)
+{
+    auto table = editableLfoTable(lfo);
+    if (segment < 0 || segment + 1 >= table.count) return;
+    table.points[static_cast<size_t>(segment)].curve = 0.0f;
+    table.points[static_cast<size_t>(segment)].curveAt = 0.5f;
+    processor.setLfoTable(lfo, table);
+    repaint(lfoDisplayBounds());
 }
 
 void Editor::editLfoPoint(int lfo, int point, juce::Point<int> at, bool snap)
@@ -92,7 +154,12 @@ void Editor::editLfoPoint(int lfo, int point, juce::Point<int> at, bool snap)
         const auto gap = std::min(0.001f, (right - left) / 3.0f);
         x = std::clamp(x, left + gap, right - gap);
     }
-    table.points[static_cast<size_t>(point)] = {x, pointValue(plot, at.y, table.rows, snap)};
+    // Only the position moves: the bend either side is held in coordinates
+    // normalised to its own segment, so it follows the point rather than being
+    // flattened by it.
+    auto& moved = table.points[static_cast<size_t>(point)];
+    moved.x = x;
+    moved.y = pointValue(plot, at.y, table.rows, snap);
     processor.setLfoTable(lfo, table);
     repaint(lfoDisplayBounds());
 }
@@ -112,6 +179,10 @@ void Editor::addLfoPoint(int lfo, juce::Point<int> at)
     std::move_backward(table.points.begin() + insert, table.points.begin() + table.count,
                        table.points.begin() + table.count + 1);
     table.points[static_cast<size_t>(insert)] = {x, pointValue(plot, at.y, table.rows, false)};
+    // A parabola does not cut into two parabolas, so the halves of a bent
+    // segment come back straight rather than approximately wrong.
+    table.points[static_cast<size_t>(insert - 1)].curve = 0.0f;
+    table.points[static_cast<size_t>(insert - 1)].curveAt = 0.5f;
     ++table.count;
     processor.setLfoTable(lfo, table);
     repaint(lfoDisplayBounds());
@@ -124,6 +195,9 @@ void Editor::removeLfoPoint(int lfo, int point)
     std::move(table.points.begin() + point + 1, table.points.begin() + table.count,
               table.points.begin() + point);
     --table.count;
+    // The two segments either side become one, and neither bend describes it.
+    table.points[static_cast<size_t>(point - 1)].curve = 0.0f;
+    table.points[static_cast<size_t>(point - 1)].curveAt = 0.5f;
     processor.setLfoTable(lfo, table);
     repaint(lfoDisplayBounds());
 }

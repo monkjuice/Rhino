@@ -117,6 +117,93 @@ void lfoSuite()
         require(!drawn.valid(), "colliding points are rejected");
     }
 
+    // The second kind of node. A point says where the line passes through; the
+    // handle in the gap between two points says how it gets there. It belongs to
+    // the segment, not to a place in the ordered array, which is what keeps one
+    // count, one binary search and one rule about x.
+    {
+        rhino::forge::LfoTable bent;
+        bent.custom = true;
+        bent.count = 3;
+        bent.points[0] = {0.0f, -1.0f};
+        bent.points[1] = {0.5f, 1.0f};
+        bent.points[2] = {1.0f, 1.0f};
+        require(bent.valid(), "a table drawn with no bend is a valid table");
+        requireClose(bent.sample(0.25f), 0.0f, 0.0001f, "an unbent segment is a straight line");
+
+        // The bend is placed by a drop, exactly as the panel places it, and the
+        // curve then runs through where the handle was let go.
+        bent.points[0].curveAt = 0.25f;
+        bent.points[0].curve = rhino::forge::LfoTable::curveThrough(
+            bent.points[0], bent.points[1], 0.25f, 0.4f);
+        require(bent.valid(), "a bend inside its limit keeps the table valid");
+        requireClose(bent.sample(0.125f), 0.4f, 0.001f,
+                     "a bent segment passes through its curve handle");
+        requireClose(bent.sample(0.0f), -1.0f, 0.0001f, "a bend leaves the point on its left where it is");
+        requireClose(bent.sample(0.5f), 1.0f, 0.0001f, "a bend leaves the point on its right where it is");
+
+        // The handle rides the curve it describes, which is what lets the panel
+        // draw it and hit-test it from the two numbers the table already stores.
+        const auto handle = bent.curveHandle(0);
+        requireClose(bent.sample(handle.x), handle.y, 0.001f, "a curve handle sits on its own curve");
+
+        // Both axes of the handle count. The same height a quarter of the way
+        // along and three quarters along are different bends, which is the whole
+        // reason it moves between its two points instead of only up and down.
+        const auto nearLeft = rhino::forge::LfoTable::curveThrough(
+            bent.points[0], bent.points[1], 0.25f, 0.4f);
+        const auto nearRight = rhino::forge::LfoTable::curveThrough(
+            bent.points[0], bent.points[1], 0.75f, 0.4f);
+        require(std::abs(nearLeft - nearRight) > 0.1f,
+                "where a curve handle sits along a segment is part of the bend");
+
+        // A flat segment bows. Warping the time of one instead would leave it
+        // flat whatever was done to it, and a handle that cannot move the line
+        // it sits on is a control that does nothing.
+        bent.points[1].curve = -0.5f;
+        requireClose(bent.sample(0.75f), 0.5f, 0.001f, "a bend bows a segment that is level");
+
+        bent.points[1].curve = rhino::forge::maxLfoCurve + 0.5f;
+        require(!bent.valid(), "a bend past its limit is rejected");
+        bent.points[1].curve = -0.5f;
+        bent.points[1].curveAt = 0.99f;
+        require(!bent.valid(), "a curve handle crowded against a point is rejected");
+        bent.points[1].curveAt = 0.5f;
+        require(bent.valid(), "the bent table is valid again once its handle is back in range");
+
+        auto host = std::make_unique<rhino::forge::Processor>();
+        host->setLfoTable(3, bent, "Bent");
+        juce::MemoryBlock state;
+        host->getStateInformation(state);
+        auto back = std::make_unique<rhino::forge::Processor>();
+        back->setStateInformation(state.getData(), static_cast<int>(state.getSize()));
+        requireClose(back->lfoTable(3).sample(0.125f), 0.4f, 0.001f,
+                     "host state restores a segment's bend");
+        requireClose(back->lfoTable(3).points[0].curveAt, 0.25f, 0.0001f,
+                     "host state restores where a curve handle was left");
+
+        const auto file = juce::File::getSpecialLocation(juce::File::tempDirectory)
+            .getNonexistentChildFile("rhino-lfo-bend", ".forgelfo", false);
+        require(host->saveLfoTable(3, file).wasOk(), "a bent table saves to a file");
+        auto loaded = std::make_unique<rhino::forge::Processor>();
+        require(loaded->loadLfoTable(0, file).wasOk(), "a bent table loads into another LFO");
+        requireClose(loaded->lfoTable(0).sample(0.125f), 0.4f, 0.001f, "a saved table keeps its bends");
+        file.deleteFile();
+
+        // A table written before curves existed carries no bend on any point and
+        // has to read back as the straight lines it was drawn as, rather than as
+        // a file the reader now refuses.
+        const auto legacy = juce::File::getSpecialLocation(juce::File::tempDirectory)
+            .getNonexistentChildFile("rhino-lfo-legacy", ".forgelfo", false);
+        legacy.replaceWithText("<ForgeLfoTable index=\"0\" name=\"Legacy\" custom=\"1\" "
+                               "columns=\"8\" rows=\"8\"><Point x=\"0\" y=\"-1\"/>"
+                               "<Point x=\"0.5\" y=\"1\"/><Point x=\"1\" y=\"-1\"/></ForgeLfoTable>");
+        require(loaded->loadLfoTable(1, legacy).wasOk(), "a table saved before curves existed still loads");
+        requireClose(loaded->lfoTable(1).sample(0.25f), 0.0f, 0.001f,
+                     "a table with no bends on it is read as straight lines");
+        legacy.deleteFile();
+    }
+
     // Shape is a real choice, not a relabelled sine: the four continuous shapes
     // have to differ from each other somewhere.
     for (int a = 0; a < 4; ++a)

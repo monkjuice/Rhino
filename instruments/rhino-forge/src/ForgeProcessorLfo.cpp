@@ -14,9 +14,15 @@ juce::ValueTree lfoNode(int index, const LfoTable& table, const juce::String& na
     node.setProperty("rows", table.rows, nullptr);
     for (int i = 0; i < table.count; ++i)
     {
+        const auto& source = table.points[static_cast<size_t>(i)];
         juce::ValueTree point("Point");
-        point.setProperty("x", table.points[static_cast<size_t>(i)].x, nullptr);
-        point.setProperty("y", table.points[static_cast<size_t>(i)].y, nullptr);
+        point.setProperty("x", source.x, nullptr);
+        point.setProperty("y", source.y, nullptr);
+        // A straight segment writes nothing, so a table drawn before curves
+        // existed and one drawn since with no bend are the same file, and a
+        // table read here by eye still shows only what was actually bent.
+        if (source.curve != 0.0f) point.setProperty("curve", source.curve, nullptr);
+        if (source.curveAt != 0.5f) point.setProperty("curveAt", source.curveAt, nullptr);
         node.addChild(point, -1, nullptr);
     }
     return node;
@@ -35,7 +41,9 @@ bool readLfoNode(const juce::ValueTree& node, LfoTable& table)
         const auto point = node.getChild(i);
         if (!point.hasType("Point") || !point.hasProperty("x") || !point.hasProperty("y")) return false;
         next.points[static_cast<size_t>(i)] = {static_cast<float>(point.getProperty("x")),
-                                                static_cast<float>(point.getProperty("y"))};
+                                                static_cast<float>(point.getProperty("y")),
+                                                static_cast<float>(point.getProperty("curve", 0.0f)),
+                                                static_cast<float>(point.getProperty("curveAt", 0.5f))};
     }
     if (next.custom ? !next.valid() : next.count != 0 || next.columns < 2 || next.columns > 32
                                           || next.rows < 2 || next.rows > 32) return false;
@@ -58,7 +66,9 @@ LfoTable Processor::lfoTable(int lfo) const
     for (int i = 0; i < result.count; ++i)
         result.points[static_cast<size_t>(i)] = {
             lfoPointX[index][static_cast<size_t>(i)].load(std::memory_order_relaxed),
-            lfoPointY[index][static_cast<size_t>(i)].load(std::memory_order_relaxed)};
+            lfoPointY[index][static_cast<size_t>(i)].load(std::memory_order_relaxed),
+            lfoPointCurve[index][static_cast<size_t>(i)].load(std::memory_order_relaxed),
+            lfoPointCurveAt[index][static_cast<size_t>(i)].load(std::memory_order_relaxed)};
     result.custom = lfoCustom[index].load(std::memory_order_relaxed);
     return result;
 }
@@ -74,6 +84,10 @@ void Processor::setLfoTable(int lfo, const LfoTable& table, const juce::String& 
                                                        std::memory_order_relaxed);
         lfoPointY[index][static_cast<size_t>(i)].store(table.points[static_cast<size_t>(i)].y,
                                                        std::memory_order_relaxed);
+        lfoPointCurve[index][static_cast<size_t>(i)].store(table.points[static_cast<size_t>(i)].curve,
+                                                          std::memory_order_relaxed);
+        lfoPointCurveAt[index][static_cast<size_t>(i)].store(table.points[static_cast<size_t>(i)].curveAt,
+                                                            std::memory_order_relaxed);
     }
     lfoPointCount[index].store(table.count, std::memory_order_relaxed);
     lfoColumns[index].store(table.columns, std::memory_order_relaxed);

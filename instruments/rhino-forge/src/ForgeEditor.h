@@ -159,6 +159,9 @@ private:
     juce::Label presetName;
     std::unique_ptr<juce::FileChooser> fileChooser;
     int lfoDragPoint = -1;
+    // The segment whose bend is being dragged, when a curve handle rather than a
+    // point was grabbed. Only ever one of the two is set.
+    int lfoDragCurve = -1;
     int lfoDragBank = -1;
     juce::Point<int> lfoDragStart;
     int lfoGridDragAxis = -1;
@@ -222,7 +225,10 @@ private:
     LfoShape shownLfoShape() const;
     LfoTable editableLfoTable(int lfo) const;
     int lfoPointAt(juce::Point<int> at) const;
+    int lfoCurveHandleAt(juce::Point<int> at) const;
     void editLfoPoint(int lfo, int point, juce::Point<int> at, bool snap);
+    void editLfoCurve(int lfo, int segment, juce::Point<int> at, bool snap);
+    void resetLfoCurve(int lfo, int segment);
     void addLfoPoint(int lfo, juce::Point<int> at);
     void removeLfoPoint(int lfo, int point);
     void showLfoMenu();

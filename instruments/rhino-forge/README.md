@@ -376,6 +376,34 @@ below the graph set columns and rows independently, from 2 to 32. Click an
 arrow to change by one, drag a number vertically or use the wheel for larger
 changes, and double-click a number to restore 8.
 
+A drawn table has two kinds of node, and they do different jobs. A solid dot is
+a **position**: where the line passes through. The hollow ring in each gap
+between two dots is that segment's **curve**, and it rides the line it bends, so
+a straight segment shows its ring sitting exactly on it. Drag a ring to bend the
+segment; double-click or right-click one to straighten it again.
+
+Both axes of a ring count. Its height is how far the segment stands off its
+straight line, and how far along the segment it sits is where that stand-off is
+measured — so the same height a quarter of the way along and three quarters
+along are different bends, leaning towards the end the ring is nearest. That is
+why the ring moves between its two dots rather than only up and down. A ring
+stays inside the middle four fifths of its segment, where it is always
+grabbable and where a point under the same pointer never loses a grab meant for
+it.
+
+The bend is a parabola standing off the chord, which costs two multiplies on a
+path that runs per sample per voice per LFO, and which bows a level segment as
+readily as a sloped one — a time warp, the more usual choice, cannot move a
+level segment at all. It may also push past the two dots it joins, and a bend
+hard enough to leave the plus and minus one the LFO promises is flattened
+against that rail. The graph draws the same function the voice reads, so what
+rails on screen is what rails in the sound. Adding a point to a bent segment, or
+removing one between two, straightens what is left: a parabola does not cut into
+two parabolas, and an approximation would be quietly wrong. Rings appear once a
+table is **Custom** — a Default shape's dots sit on a real sine or saw, and a
+ring drawn on the chord between two of them would stand off the very curve it
+claims to bend.
+
 The name menu loads and saves `.forgelfo` tables. The save dialog starts in
 `Documents/Rhino Forge/LFO Tables`, and tables in that folder appear under
 **Saved shapes**. Custom tables also travel inside Forge presets and host

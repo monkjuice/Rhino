@@ -165,8 +165,12 @@ void Arrangement::resized()
         masterPan.setBounds(122, controlsY, 62, 16);
     }
     layoutNameEditor();
-    scroll.setBounds(static_cast<int>(headerWidth), getHeight() - 14, getWidth() - static_cast<int>(headerWidth) - 14, 14);
-    trackScrollBar.setBounds(getWidth() - 12, static_cast<int>(lanesTop), 12, getHeight() - static_cast<int>(lanesTop) - 18);
+    // Both scrollbars stop at the top of whatever covers the foot of the panel,
+    // so the pane floating over the arrangement never buries them.
+    const auto foot = getHeight() - static_cast<int>(bottomInset);
+    scroll.setBounds(static_cast<int>(headerWidth), foot - 14, getWidth() - static_cast<int>(headerWidth) - 14, 14);
+    trackScrollBar.setBounds(getWidth() - 12, static_cast<int>(lanesTop), 12,
+                             std::max(1, foot - static_cast<int>(lanesTop) - 18));
     updateScroll();
     updatePlayhead();
 }
@@ -591,7 +595,8 @@ void Arrangement::updatePlayhead()
         playheadSweepsLanes = sweeps;
         return;
     }
-    const auto area = getLocalBounds().withTrimmedTop(static_cast<int>(rulerTop)).withTrimmedBottom(18);
+    const auto area = getLocalBounds().withTrimmedTop(static_cast<int>(rulerTop))
+                                      .withTrimmedBottom(18 + static_cast<int>(bottomInset));
     if (sweeps != playheadSweepsLanes)
     {
         // Starting and stopping change the line's length, and stopping on the

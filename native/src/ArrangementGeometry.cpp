@@ -5,7 +5,25 @@ namespace rhino
 {
 float Arrangement::laneContentHeight() const
 {
-    return std::max(1.0f, getHeight() - lanesTop - 18.0f - masterLaneHeight);
+    return std::max(1.0f, getHeight() - bottomInset - lanesTop - 18.0f - masterLaneHeight);
+}
+
+// Measured against the default main row and the whole panel, so neither the
+// pane floating over the foot of the arrangement nor a dragged main row can
+// change it. A lane that resized as the pane was dragged made every clip on
+// the timeline grow and shrink under the pointer.
+float Arrangement::fullLaneContentHeight() const
+{
+    return std::max(1.0f, getHeight() - lanesTop - 18.0f - defaultMasterLaneHeight);
+}
+
+void Arrangement::setBottomInset(float inset)
+{
+    inset = std::max(0.0f, inset);
+    if (std::abs(inset - bottomInset) < 0.5f) return;
+    bottomInset = inset;
+    resized();
+    repaint();
 }
 
 juce::Rectangle<float> Arrangement::masterLane() const
@@ -20,7 +38,7 @@ bool Arrangement::isMasterSelected() const
 
 float Arrangement::laneHeight() const
 {
-    return std::max(mixerLaneHeight + 8.0f, std::min(96.0f, laneContentHeight() / 2.0f));
+    return std::max(mixerLaneHeight + 8.0f, std::min(96.0f, fullLaneContentHeight() / 2.0f));
 }
 
 float Arrangement::laneHeightFor(int track) const

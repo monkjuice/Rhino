@@ -215,6 +215,31 @@ static juce::String formatMemory(juce::uint64 bytes)
 // the control-bar switch and the Tab shortcut.
 static constexpr bool sessionViewEnabled = false;
 
+// The clip and device panes float over the foot of the arrangement, so the
+// split between them has to be a component of its own: the arrangement is
+// underneath it and would take every press meant for the handle. Positions are
+// read in screen coordinates because the bar moves with the drag, and a
+// position relative to a component that is being moved chases itself.
+class SplitterBar final : public juce::Component
+{
+public:
+    SplitterBar() { setMouseCursor(juce::MouseCursor::UpDownResizeCursor); }
+    void paint(juce::Graphics& g) override
+    {
+        g.setColour(juce::Colour(0xff3a434b));
+        g.fillRect(getLocalBounds().withSizeKeepingCentre(getWidth(), 4));
+    }
+    void mouseDown(const juce::MouseEvent& event) override
+    {
+        if (dragStarted) dragStarted(event.getScreenPosition().y);
+    }
+    void mouseDrag(const juce::MouseEvent& event) override
+    {
+        if (dragged) dragged(event.getScreenPosition().y);
+    }
+    std::function<void(int)> dragStarted, dragged;
+};
+
 class ControlWindow final : public juce::Component,
                             public juce::DragAndDropContainer,
                             private Session::Listener,
@@ -412,8 +437,22 @@ public:
                  &infoView, &position, &play, &stop, &record, &panic,
                  &browser, &browserToggle, &editorToggle, &rackToggle, &grid, &audioClip, &arrangement, &sessionView,
                  &sessionToggle, &arrangementToggle, &backToArrangement, &rack, &tempo, &timeSignature, &undo, &redo, &clear, &metronome, &metronomeMenu, &hint,
-                 &patternLabel, &editorResolution, &editorZoomOut, &editorZoomIn, &scaleHighlight})
+                 &patternLabel, &editorResolution, &editorZoomOut, &editorZoomIn, &scaleHighlight, &lowerSplitter})
             addAndMakeVisible(component);
+        lowerSplitter.dragStarted = [this] (int screenY)
+        {
+            resizeStartY = screenY;
+            resizeStartLowerPaneHeight = lowerPaneHeight;
+        };
+        lowerSplitter.dragged = [this] (int screenY)
+        {
+            // Dragging the handle up grows the pane, which is the direction the
+            // pane's own top edge moves. resized() does the clamping, so the
+            // value carried here is free to run past the limits and come back.
+            lowerPaneHeight = resizeStartLowerPaneHeight - (screenY - resizeStartY);
+            resized();
+            repaint();
+        };
         session.edit->getTransport().addChangeListener(this);
         session.addChangeListener(this);
         session.listeners.add(this);
@@ -460,9 +499,15 @@ public:
             g.setFont(juce::FontOptions(11.0f));
             g.drawText("INFO VIEW   ?  HIDE", area.withTrimmedLeft(10).withHeight(24), juce::Justification::centredLeft);
         }
+    }
+
+    // The lower pane is layered over the arrangement, so the gap between the
+    // clip editor and the Device View is arrangement, not window: the handle
+    // between them has to be drawn after the children rather than behind them.
+    void paintOverChildren(juce::Graphics& g) override
+    {
         g.setColour(juce::Colour(0xff3a434b));
         g.fillRect(deviceSplitterBounds());
-        g.fillRect(arrangementSplitterBounds());
     }
 
     void resized() override
@@ -474,19 +519,36 @@ public:
         // The transport is a full-width bar. Both the browser and arrangement
         // begin below it, so their top edges remain aligned.
         const auto arrangementTop = browserTop;
-        // Nothing selected means nothing to edit, so the lower pane is not
-        // reserved at all and the arrangement runs to the foot of the window.
-        // The toggle strip stays where it is, which is what makes the pane
-        // reachable again once something is selected.
-        auto arrangementH = std::max(150, getHeight() - arrangementTop - toggleStripHeight);
+        // The clip and device panes float over the foot of the arrangement
+        // rather than pushing it up. The arrangement therefore always has the
+        // whole window and keeps the lane heights it was laid out with, and
+        // dragging the split moves only the pane: the clips it slides over do
+        // not grow and shrink under the pointer, which is what pushing the
+        // panel up used to do to every one of them.
+        const auto arrangementH = std::max(150, getHeight() - arrangementTop);
+        // Nothing selected means nothing to edit, so the pane takes no room at
+        // all and only the toggle strip is reserved. That strip stays where it
+        // is, which is what makes the pane reachable again.
+        auto paneH = 0;
         if (lowerPaneVisible())
         {
-            arrangementHeight = juce::jlimit(150, std::max(150, getHeight() - 350), arrangementHeight);
-            arrangementH = arrangementHeight;
+            // A fifth of the window the first time the pane is opened: enough
+            // for a clip editor without the timeline giving up its half of the
+            // screen to it, which a pane sized from the foot of the window was
+            // doing on every machine with a tall display.
+            if (lowerPaneHeight <= 0)
+                lowerPaneHeight = getHeight() / 5;
+            lowerPaneHeight = juce::jlimit(minimumPaneHeight,
+                                           std::max(minimumPaneHeight, getHeight() - arrangementTop - 150 - toggleStripHeight),
+                                           lowerPaneHeight);
+            paneH = lowerPaneHeight;
         }
-        const auto arrangementBottom = arrangementTop + arrangementH;
-        const auto lowerTop = arrangementBottom + 34;
-        const auto lowerH = std::max(0, getHeight() - lowerTop - 12);
+        const auto lowerH = paneH;
+        const auto lowerTop = getHeight() - 12 - lowerH;
+        // Where the arrangement is covered from: the toggle strip sits in the
+        // band between the lanes and the pane, exactly as it did when the two
+        // were stacked rather than layered.
+        const auto arrangementBottom = lowerTop - 34;
         // Wide enough for the clock pair and both meters on the second line;
         // the transport and the right-hand controls are placed from this, so
         // widening it moves them rather than overlapping them.
@@ -540,7 +602,13 @@ public:
         arrangement.setVisible(!sessionViewOpen);
         sessionView.setVisible(sessionViewOpen);
         arrangement.setBounds(editorX, arrangementTop, editorW, arrangementH);
-        sessionView.setBounds(editorX, arrangementTop, editorW, arrangementH);
+        // The arrangement spans the window, so it is told how much of its own
+        // foot the pane covers: its main row and its scrollbars ride up to sit
+        // above the pane while the lanes behind it stay where they are.
+        arrangement.setBottomInset(static_cast<float>(std::max(0, arrangementTop + arrangementH - arrangementBottom)));
+        // The session view has no such inset, so it simply stops at the strip.
+        sessionView.setBounds(editorX, arrangementTop, editorW,
+                              std::max(150, arrangementBottom - arrangementTop));
         const auto notes = lowerPane == LowerPane::notes;
         const auto audio = lowerPane == LowerPane::audio;
         editorToggle.setToggleState(notes || audio, juce::dontSendNotification);
@@ -570,7 +638,7 @@ public:
         auto editorBounds = juce::Rectangle<int>(editorX, lowerTop, editorW, 0);
         if (lowerPane != LowerPane::none && rackOpen)
         {
-            deviceViewHeight = juce::jlimit(112, std::max(112, lowerH - 112), deviceViewHeight);
+            deviceViewHeight = juce::jlimit(minimumPaneHeight, std::max(minimumPaneHeight, lowerH - minimumPaneHeight), deviceViewHeight);
             const auto clipHeight = std::max(0, lowerH - deviceViewHeight - 8);
             editorBounds = {editorX, lowerTop, editorW, clipHeight};
             rack.setBounds(editorX, lowerTop + clipHeight + 8, editorW, deviceViewHeight);
@@ -586,6 +654,12 @@ public:
         }
         grid.setBounds(editorBounds);
         audioClip.setBounds(editorBounds);
+        // Everything in the lower pane is layered over the arrangement, which
+        // is a sibling that covers the same ground.
+        lowerSplitter.setVisible(lowerPaneVisible());
+        lowerSplitter.setBounds(editorX, arrangementBottom - 2, editorW, 8);
+        for (auto* component : std::initializer_list<juce::Component*>{&grid, &audioClip, &rack, &lowerSplitter})
+            component->toFront(false);
         browserToggle.toFront(false);
         editorToggle.toFront(false);
         rackToggle.toFront(false);
@@ -594,7 +668,7 @@ public:
 
     void mouseMove(const juce::MouseEvent& event) override
     {
-        setMouseCursor((isOverArrangementSplitter(event.position) || isOverDeviceSplitter(event.position))
+        setMouseCursor(isOverDeviceSplitter(event.position)
             ? juce::MouseCursor::UpDownResizeCursor
             : isOverSplitter(event.position) ? juce::MouseCursor::LeftRightResizeCursor
             : juce::MouseCursor::NormalCursor);
@@ -604,12 +678,10 @@ public:
     {
         resizingBrowser = browserOpen && std::abs(event.x - browserWidth) <= 5 && event.y >= browserTop;
         resizingDeviceView = isOverDeviceSplitter(event.position);
-        resizingArrangement = isOverArrangementSplitter(event.position);
         resizeStartX = event.x;
         resizeStartY = event.y;
         resizeStartBrowserWidth = browserWidth;
         resizeStartDeviceViewHeight = deviceViewHeight;
-        resizeStartArrangementHeight = arrangementHeight;
     }
 
     void mouseDrag(const juce::MouseEvent& event) override
@@ -623,15 +695,9 @@ public:
         else if (resizingDeviceView)
         {
             const auto editorHeight = lowerPane == LowerPane::audio ? audioClip.getHeight() : grid.getHeight();
-            const auto available = std::max(112, editorHeight + rack.getHeight() + 8);
-            deviceViewHeight = juce::jlimit(112, std::max(112, available - 112),
+            const auto available = std::max(minimumPaneHeight, editorHeight + rack.getHeight() + 8);
+            deviceViewHeight = juce::jlimit(minimumPaneHeight, std::max(minimumPaneHeight, available - minimumPaneHeight),
                                             resizeStartDeviceViewHeight - (event.y - resizeStartY));
-            resized();
-            repaint();
-        }
-        else if (resizingArrangement)
-        {
-            arrangementHeight = juce::jlimit(150, std::max(150, getHeight() - 350), resizeStartArrangementHeight + event.y - resizeStartY);
             resized();
             repaint();
         }
@@ -641,7 +707,6 @@ public:
     {
         resizingBrowser = false;
         resizingDeviceView = false;
-        resizingArrangement = false;
     }
 
     bool keyPressed(const juce::KeyPress& key) override
@@ -1405,13 +1470,6 @@ private:
         return {editor.getX(), editor.getBottom() + 2, editor.getWidth(), 4};
     }
 
-    // Nothing to drag when the arrangement already has the whole window.
-    juce::Rectangle<int> arrangementSplitterBounds() const
-    {
-        if (!lowerPaneVisible()) return {};
-        return {arrangement.getX(), arrangement.getBottom() + 3, arrangement.getWidth(), 4};
-    }
-
     juce::Rectangle<int> infoViewArea() const
     {
         if (!infoVisible || !browserOpen) return {};
@@ -1422,11 +1480,6 @@ private:
     {
         return browserOpen && std::abs(point.x - static_cast<float>(browserWidth)) <= 5.0f
             && point.y >= static_cast<float>(browserTop);
-    }
-
-    bool isOverArrangementSplitter(juce::Point<float> point) const
-    {
-        return arrangementSplitterBounds().expanded(0, 4).toFloat().contains(point);
     }
 
     bool isOverDeviceSplitter(juce::Point<float> point) const
@@ -1463,10 +1516,17 @@ private:
     juce::Component::SafePointer<juce::DialogWindow> audioSettings;
     juce::TextButton fileMenu {"File"}, editMenu {"Edit"}, viewMenu {"View"}, helpMenu {"Help"};
     ProjectFiles files;
-    int browserWidth = 244, arrangementHeight = 246, deviceViewHeight = 220;
+    SplitterBar lowerSplitter;
+    // Zero until the pane is opened for the first time, which is what asks for
+    // a fifth of the window rather than a number chosen here: the right height
+    // depends on the display and cannot be known at construction.
+    int browserWidth = 244, lowerPaneHeight = 0, deviceViewHeight = 220;
     int resizeStartX = 0, resizeStartY = 0, resizeStartBrowserWidth = 244;
-    int resizeStartArrangementHeight = 246, resizeStartDeviceViewHeight = 220;
+    int resizeStartLowerPaneHeight = 0, resizeStartDeviceViewHeight = 220;
     static constexpr int browserTop = 94;
+    // A pane shorter than this shows neither a usable editor nor a device, so
+    // it is the floor for both the pane and the Device View inside it.
+    static constexpr int minimumPaneHeight = 112;
     static constexpr int infoViewHeight = 132;
     // Room under the arrangement for the Clip and Devices toggles, which stay
     // put whether or not the pane they open is showing.
@@ -1486,7 +1546,7 @@ private:
     bool paneLayoutPending = false;
     bool browserOpen = true, rackOpen = false, infoVisible = true;
     bool sessionViewOpen = false;
-    bool resizingBrowser = false, resizingDeviceView = false, resizingArrangement = false;
+    bool resizingBrowser = false, resizingDeviceView = false;
     bool updatingEditorResolution = false;
     bool displayPosition = true, displayTempo = true, displayTimeSignature = true, displayLoop = true;
     bool displayTime = true, displayCpu = true, displayMemory = true, displayAudio = true;

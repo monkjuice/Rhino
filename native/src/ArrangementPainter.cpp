@@ -92,13 +92,15 @@ void Arrangement::paintBarNumbers(juce::Graphics& g, double firstBeat, double la
     }
 }
 
-void Arrangement::paint(juce::Graphics& g)
+// Every row's band and its card. The clip region is the whole point: a row
+// dragged tall enough to reach past the bottom of the lanes used to paint its
+// card the full height it was given, so the track colour ran on down through
+// the main row and the scrollbar strip under it.
+void Arrangement::paintTrackCards(juce::Graphics& g)
 {
-    g.fillAll(juce::Colour(0xff1d2228));
-    g.setFont(uiFont(10.0f));
-    g.setColour(juce::Colour(0xff8a969f));
-    drawSnappedText(g, "Drop browser items or files / drag clips to move / trim edges",
-                    {360, 0, getWidth() - 370, 30});
+    juce::Graphics::ScopedSaveState scope(g);
+    g.reduceClipRegion(juce::Rectangle<int>(0, static_cast<int>(lanesTop), getWidth() - 14,
+                                            std::max(1, static_cast<int>(laneContentHeight()))));
     for (int index = 0; index < static_cast<int>(rows.size()); ++index)
     {
         const auto row = rowBounds(index);
@@ -166,6 +168,16 @@ void Arrangement::paint(juce::Graphics& g)
         }
         g.setFont(uiFont(10.0f));
     }
+}
+
+void Arrangement::paint(juce::Graphics& g)
+{
+    g.fillAll(juce::Colour(0xff1d2228));
+    g.setFont(uiFont(10.0f));
+    g.setColour(juce::Colour(0xff8a969f));
+    drawSnappedText(g, "Drop browser items or files / drag clips to move / trim edges",
+                    {360, 0, getWidth() - 370, 30});
+    paintTrackCards(g);
 
     // Every row is bounded, header and timeline alike, so a track reads as one
     // band across the whole panel rather than as a card beside loose lanes.
@@ -181,27 +193,41 @@ void Arrangement::paint(juce::Graphics& g)
             if (row.getBottom() < lanesTop || row.getY() > laneBottom) continue;
             const auto ownRow = rows[static_cast<size_t>(index)].automation < 0;
             g.setColour(juce::Colour(ownRow ? 0xff39434b : 0xff2c353c));
-            g.drawHorizontalLine(static_cast<int>(row.getBottom()) - 1, 0.0f, static_cast<float>(getWidth()) - 14.0f);
+            // Two pixels rather than one: at a single pixel the divisions read
+            // as a tone change between lanes rather than as a line ruled
+            // between them, and the bands stopped separating at a glance.
+            g.fillRect(0.0f, row.getBottom() - trackDividerThickness,
+                       static_cast<float>(getWidth()) - 14.0f, trackDividerThickness);
         }
         g.setColour(juce::Colour(0xff39434b));
-        g.drawVerticalLine(static_cast<int>(headerWidth) - 1, lanesTop, laneBottom);
+        g.fillRect(headerWidth - trackDividerThickness, lanesTop, trackDividerThickness, laneBottom - lanesTop);
     }
 
     // The master row is pinned below the lanes. It takes no clips, so its lane
     // is empty; only its header carries anything.
     {
         const auto master = masterLane();
+        // The row owns everything from its top edge to the foot of the panel,
+        // scrollbar strip included, and fills all of it. Filling only the row
+        // itself left an eighteen pixel gap that nothing else painted, so
+        // whatever the last lane happened to be showing came through it.
+        const juce::Rectangle<float> band {0.0f, master.getY(), static_cast<float>(getWidth()),
+                                           std::max(master.getHeight(),
+                                                    getHeight() - bottomInset - master.getY())};
         g.setColour(juce::Colour(0xff191f24));
-        g.fillRect(master);
-        g.setColour(juce::Colour(0xff3a434b));
-        g.drawHorizontalLine(static_cast<int>(master.getY()), 0.0f, master.getRight());
+        g.fillRect(band);
         g.setColour(juce::Colour(isMasterSelected() ? 0xff343f47 : 0xff222930));
-        g.fillRect(master.withWidth(headerWidth));
+        g.fillRect(band.withWidth(headerWidth));
         if (isMasterSelected())
         {
             g.setColour(juce::Colour(0xffc6d58c));
-            g.fillRect(master.withWidth(3.0f));
+            g.fillRect(band.withWidth(3.0f));
         }
+        // Last, so it rules the whole width: drawn before the header column it
+        // stopped at the cards and the main row read as closed off over the
+        // lanes and open beside them.
+        g.setColour(juce::Colour(0xff3a434b));
+        g.fillRect(band.withHeight(trackDividerThickness));
         g.setColour(juce::Colour(0xffc4cbd1));
         g.setFont(uiFontBold(9.0f));
         drawSnappedText(g, "MAIN", {10, static_cast<int>(master.getY()) + 5, 44, 16});
@@ -250,7 +276,7 @@ void Arrangement::paint(juce::Graphics& g)
             const auto x2 = xFor(end);
             juce::Rectangle<float> loopBounds {std::max(headerWidth, std::min(x1, x2)), rulerTop,
                                                std::max(0.0f, std::min(std::max(x1, x2), static_cast<float>(getWidth() - 14)) - std::max(headerWidth, std::min(x1, x2))),
-                                               getHeight() - rulerTop - 18.0f};
+                                               getHeight() - bottomInset - rulerTop - 18.0f};
             if (!loopBounds.isEmpty())
             {
                 g.setColour(juce::Colour(0x245ab9d6));
@@ -474,8 +500,17 @@ void Arrangement::paint(juce::Graphics& g)
         g.setColour(playheadColour);
         // Only a running transport draws through the lanes. Stopped, the line
         // is a mark in the bar ruler saying where play would start from.
-        const auto bottom = playheadSweepsLanes ? getHeight() - 18.0f : lanesTop;
+        const auto bottom = playheadSweepsLanes ? getHeight() - bottomInset - 18.0f : lanesTop;
         g.fillRect(playhead, rulerTop, 2.0f, bottom - rulerTop);
+    }
+    // The strip the clip and device panes float over, in the shell's own
+    // background. The panel spans the window so that its lanes keep their
+    // height, which leaves it painting the ground the toggle strip and the
+    // gaps inside the pane stand on - and those belong to the shell.
+    if (bottomInset > 0.0f)
+    {
+        g.setColour(juce::Colour(0xff171a1e));
+        g.fillRect(0.0f, getHeight() - bottomInset, static_cast<float>(getWidth()), bottomInset);
     }
 }
 

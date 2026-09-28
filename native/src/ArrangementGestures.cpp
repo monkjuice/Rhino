@@ -24,6 +24,7 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
     movingTrack = -1;
     moveDestination = -1;
     moveStarted = false;
+    resizingMaster = false;
     collapseSelectionOnRelease = false;
     collapseSelectionTo = {};
     dragTravelled = false;
@@ -82,6 +83,16 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
             return;
         }
     if (!event.mods.isLeftButtonDown()) return;
+    // The main row is pinned at the bottom, so its top edge is the handle its
+    // height is dragged from. It is answered before the row itself, or a grab
+    // on the edge would simply select the main output.
+    if (masterResizeEdgeAt(event.position))
+    {
+        resizingMaster = true;
+        masterResizeStart = masterLaneHeight;
+        masterResizeAnchor = event.position.y;
+        return;
+    }
     // The master row selects but takes no clips, so it is handled before the
     // lane hit tests rather than inside them.
     if (masterLane().contains(event.position))
@@ -291,6 +302,16 @@ void Arrangement::mouseDrag(const juce::MouseEvent& event)
     dragPointer = event.position;
     dragModifiers = event.mods;
     dragTravelled = dragTravelled || event.getDistanceFromDragStart() >= 3;
+    if (resizingMaster)
+    {
+        // Pulling the edge up makes the row taller, which is the same sense a
+        // card's bottom edge has read from the other side.
+        masterLaneHeight = juce::jlimit(minimumMasterLaneHeight, maximumMasterLaneHeight,
+                                        masterResizeStart - (event.position.y - masterResizeAnchor));
+        resized();
+        repaint();
+        return;
+    }
     if (resizingTrack >= 0 || movingTrack >= 0)
     {
         dragCardGesture(event);
@@ -365,6 +386,11 @@ void Arrangement::mouseDrag(const juce::MouseEvent& event)
 
 void Arrangement::mouseUp(const juce::MouseEvent& event)
 {
+    if (resizingMaster)
+    {
+        resizingMaster = false;
+        return;
+    }
     if (resizingTrack >= 0 || movingTrack >= 0)
     {
         endCardGesture();
@@ -518,6 +544,11 @@ void Arrangement::autoScrollDrag()
 
 void Arrangement::mouseMove(const juce::MouseEvent& event)
 {
+    if (masterResizeEdgeAt(event.position))
+    {
+        setMouseCursor(juce::MouseCursor::UpDownResizeCursor);
+        return;
+    }
     if (cardResizeEdgeAt(event.position) >= 0)
     {
         setMouseCursor(juce::MouseCursor::UpDownResizeCursor);
@@ -553,6 +584,17 @@ void Arrangement::mouseMove(const juce::MouseEvent& event)
         }
     }
     setMouseCursor(pointerStyle);
+}
+
+// The main row's top edge, across the whole width of the panel: the row spans
+// it and there is nothing above the edge but the last lane, whose own bottom
+// edge lies below the main row whenever the stack is tall enough to scroll.
+bool Arrangement::masterResizeEdgeAt(juce::Point<float> point) const
+{
+    constexpr auto grab = 4.0f;
+    const auto master = masterLane();
+    return point.y >= master.getY() - grab && point.y <= master.getY() + grab
+        && point.x >= 0.0f && point.x < master.getRight();
 }
 
 // A card bottom edge is a resize handle; the rest of the card carries the

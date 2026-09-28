@@ -53,6 +53,11 @@ public:
     // the same reason again: Ctrl+J is a shell shortcut, and the selection it
     // acts on is usually the one the audio editor is looking at.
     void mergeSelected();
+    // How much of the foot of the panel the clip and device panes cover. They
+    // float over the arrangement rather than pushing it up, so the panel keeps
+    // the full height of the window and the lanes keep the size they had; only
+    // the pinned main row and the scrollbars move, up to sit above the pane.
+    void setBottomInset(float);
     std::function<void(juce::String)> status;
     // The typing keyboard belongs to the shell, not to the arrangement, but the
     // card is where a MIDI track is armed and where its input is chosen - and
@@ -253,6 +258,10 @@ private:
     void endAutomationGesture(const juce::MouseEvent&);
     void paintAutomationRow(juce::Graphics&, int row);
     void paintGhostRow(juce::Graphics&, int row);
+    // Every row's band and its card, clipped to the lanes: a row that straddles
+    // the bottom edge has to stop at it rather than paint the height it was
+    // given, which is what used to run a track's colour through the main row.
+    void paintTrackCards(juce::Graphics&);
     void showAutomationMenu(Session::DeviceTarget);
     // ArrangementGestures.cpp
     int cardResizeEdgeAt(juce::Point<float>) const;
@@ -308,6 +317,11 @@ private:
     // ahead of the session so the drag does not rewrite the edit per pixel.
     float laneHeightFor(int track) const;
     float laneContentHeight() const;
+    // What the lanes would have if nothing covered the foot of the panel. The
+    // fitted lane height follows this rather than the visible height, so a
+    // clip keeps its size while the pane over it is dragged.
+    float fullLaneContentHeight() const;
+    bool masterResizeEdgeAt(juce::Point<float>) const;
     ClipGeometry displayedPosition(const ClipView&) const;
     int displayedTrack(const ClipView&) const;
     juce::Rectangle<float> bounds(const ClipView&) const;
@@ -432,8 +446,25 @@ private:
     int resizingTrack = -1, movingTrack = -1, moveDestination = -1;
     float resizePreview = 0.0f, resizeAnchor = 0.0f, resizeStartHeight = 0.0f, moveAnchor = 0.0f;
     bool moveStarted = false;
-    static constexpr float headerWidth = 228.0f, rulerTop = 32.0f, lanesTop = 56.0f, masterLaneHeight = 26.0f;
+    // The main row's own resize, which is the same gesture read from the other
+    // side: the row is pinned at the bottom, so its top edge is its handle and
+    // dragging up makes it taller.
+    bool resizingMaster = false;
+    float masterResizeAnchor = 0.0f, masterResizeStart = 0.0f;
+    static constexpr float headerWidth = 228.0f, rulerTop = 32.0f, lanesTop = 56.0f;
+    // The main row is dragged from its top edge like any other, so its height
+    // is a value rather than a constant. It is a view setting and lives here
+    // beside the zoom: the fitted lane height is measured against the default
+    // instead, so dragging the main row taller never resizes the lanes above
+    // it. minimum is one control line plus the margin it sits on.
+    static constexpr float defaultMasterLaneHeight = 28.0f, minimumMasterLaneHeight = 26.0f,
+                           maximumMasterLaneHeight = 120.0f;
+    float masterLaneHeight = defaultMasterLaneHeight;
+    float bottomInset = 0.0f;
     static constexpr float automationRowHeight = 44.0f;
+    // What rules one track off from the next, header and lane alike, and the
+    // line the main row is closed off with.
+    static constexpr float trackDividerThickness = 2.0f;
     // A group's members are pushed right by groupIndent, and the gap that opens
     // up is filled with the bus's colour; the bus itself keeps that column for
     // its disclosure arrow. The step in the left edge is what tells a card

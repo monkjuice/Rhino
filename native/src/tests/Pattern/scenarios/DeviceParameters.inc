@@ -1,6 +1,6 @@
         {
             Session parameterSession;
-            require(parameterSession.addAudioTrack().wasOk(), "A document adds the audio track these checks need");
+            // The second starter track is the audio lane these checks work on.
             auto* parameterTrack = te::getAudioTracks(*parameterSession.edit)[1];
             require(parameterSession.addAudioEffect(Session::AudioEffect::Reverb, 1).wasOk(), "Audio FX browser action inserts Reverb");
             const auto reverbDevices = parameterSession.deviceSlots(1);

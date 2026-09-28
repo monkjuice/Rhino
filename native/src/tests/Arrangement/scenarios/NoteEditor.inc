@@ -471,11 +471,15 @@
                 "A track without an instrument takes no MIDI clips");
         session.undo();
         session.undo();
+        const auto tracksBeforeRemoval = session.trackCount();
         require(session.removeAudioTrack(2).wasOk(), "Can remove the extra audio track");
-        require(session.trackCount() == 2, "Removing the extra audio track leaves the pattern and audio tracks");
+        require(session.trackCount() == tracksBeforeRemoval - 1,
+                "Removing the extra audio track leaves the rest of the stack");
+        const auto tracksBeforeDrop = session.trackCount();
         view.filesDropped(dropped, static_cast<int>(view.xFor(1.0)), view.getHeight() - 3);
-        require(session.trackCount() == 3, "Dropping audio below the lanes creates a new audio track");
-        require(te::getAudioTracks(*session.edit)[2]->getClips().size() == 1, "Drop-created track receives the audio clip");
+        require(session.trackCount() == tracksBeforeDrop + 1, "Dropping audio below the lanes creates a new audio track");
+        require(te::getAudioTracks(*session.edit)[tracksBeforeDrop]->getClips().size() == 1,
+                "Drop-created track receives the audio clip");
         session.undo();
         session.undo();
-        require(session.trackCount() == 2, "Undo removes the drop-created audio track");
+        require(session.trackCount() == tracksBeforeDrop, "Undo removes the drop-created audio track");

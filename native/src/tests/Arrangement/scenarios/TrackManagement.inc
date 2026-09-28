@@ -1,5 +1,6 @@
         require(session.addAudioTrack().wasOk(), "Can create an audio track");
-        require(session.trackCount() == 3 && session.trackName(2) == "Audio 2", "New audio track is visible in the arrangement model");
+        require(session.trackCount() == 5 && session.trackName(4) == "Audio 5",
+                "New audio track is visible in the arrangement model, named for where it sits");
         view.sync();
         view.resized();
         require(view.trackScrollBar.isVisible(), "Adding tracks makes the arrangement lanes vertically scrollable");
@@ -153,8 +154,9 @@
         }
 
         scenario("track cards: colour and reset");
-        const auto colour = Session::trackColourPalette().front();
-        require(session.trackColour(0).isTransparent(), "A track starts with no colour of its own");
+        const auto colour = Session::trackColourPalette().back();
+        require(!session.trackColour(0).isTransparent(), "A track is created with a colour from the palette");
+        require(session.trackColour(0) != colour, "and the one this check picks is not the one it was given");
         require(session.setTrackColour(0, colour).wasOk(), "A card takes a colour from the palette");
         require(session.trackColour(0) == colour, "The card keeps the colour it was given");
         require(session.setTrackColour(session.masterTrackIndex(), colour).failed(),
@@ -357,12 +359,25 @@
         session.undo();
         view.sync();
         scenario("track management: drop-created track");
-        drag({view.xFor(0.2), clipRowY(1)}, {view.xFor(0.5), view.lane(session.trackCount() - 1).getBottom() + 12.0f});
-        require(session.trackCount() == 4, "Dragging an audio clip below the last lane creates a new track");
-        require(te::getAudioTracks(*session.edit)[3]->findClipForID(id) != nullptr, "Drop-created track receives the dragged audio clip");
-        require(renderClipRms(*session.findAudioClip(id)) > 0.01f, "Drop-created track moved clip still renders audible audio");
-        session.undo();
-        require(session.trackCount() == 3, "Undo removes the track created by a clip drag");
+        {
+            // The bare strip between the last lane and the main row, whatever
+            // the stack is: reading it off the panel rather than counting
+            // lanes is what keeps this working as the starter stack grows.
+            const auto tracksBeforeDrop = session.trackCount();
+            const auto lastLaneBottom = view.lane(tracksBeforeDrop - 1).getBottom();
+            require(lastLaneBottom < view.masterLane().getY(),
+                    "There is bare lane strip under the last track to drop into");
+            const auto belowLanes = (lastLaneBottom + view.masterLane().getY()) * 0.5f;
+            drag({view.xFor(0.2), clipRowY(1)}, {view.xFor(0.5), belowLanes});
+            require(session.trackCount() == tracksBeforeDrop + 1,
+                    "Dragging an audio clip below the last lane creates a new track");
+            require(te::getAudioTracks(*session.edit)[tracksBeforeDrop]->findClipForID(id) != nullptr,
+                    "Drop-created track receives the dragged audio clip");
+            require(renderClipRms(*session.findAudioClip(id)) > 0.01f,
+                    "Drop-created track moved clip still renders audible audio");
+            session.undo();
+            require(session.trackCount() == tracksBeforeDrop, "Undo removes the track created by a clip drag");
+        }
         require(te::getAudioTracks(*session.edit)[1]->findClipForID(id) != nullptr, "Undo restores the clip after a drag-created track");
         view.sync();
         scenario("track management: preset drops");
@@ -415,7 +430,7 @@
             const auto editedBefore = session.patternClipID;
             require(session.addTrack(Session::TrackType::midi).wasOk(), "A MIDI track can be added");
             const auto midiTrack = session.trackCount() - 1;
-            require(session.trackName(midiTrack) == "MIDI " + juce::String(before),
+            require(session.trackName(midiTrack) == "MIDI " + juce::String(before + 1),
                     "and is named for what it is");
             require(session.trackType(midiTrack) == Session::TrackType::midi,
                     "The track reads back as a MIDI track");
@@ -433,7 +448,7 @@
 
             require(session.addTrack(Session::TrackType::audio).wasOk(), "An audio track can be added");
             const auto audioTrack = session.trackCount() - 1;
-            require(session.trackName(audioTrack) == "Audio " + juce::String(before + 1),
+            require(session.trackName(audioTrack) == "Audio " + juce::String(before + 2),
                     "and is named for what it is");
             require(session.trackType(audioTrack) == Session::TrackType::audio,
                     "The track reads back as an audio track");

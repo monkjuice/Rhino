@@ -6,10 +6,13 @@
         view.sync();
         {
             view.setSize(1000, 246);
-            // A lane of its own with nothing on it: a clip is drawn over the
-            // wash, so sampling a track that carries one measures the clip.
-            require(session.addAudioTrack().wasOk(), "Add an empty lane to read the wash off");
-            const auto bandTrack = session.trackCount() - 1;
+            // A lane with nothing on it: a clip is drawn over the wash, so
+            // sampling a track that carries one measures the clip. The
+            // starter stack's second lane is empty and, unlike a track added
+            // at the bottom, on screen at this panel height.
+            const auto bandTrack = 1;
+            require(te::getAudioTracks(*session.edit)[bandTrack]->getClips().isEmpty(),
+                    "The lane the wash is read off carries no clips");
             view.sync();
             // A known zoom, so pixels per bar is arithmetic rather than
             // whatever the last scenario left the view fitted to.
@@ -75,7 +78,6 @@
                                                  false, false, false, false};
             require(bandsOf(1, 4) == expectedOne, "Four one-beat bars make the band a 4/4 bar would have had");
             require(session.setTimeSignature(4, 4).wasOk(), "Leave the document in four four");
-            require(session.removeAudioTrack(bandTrack).wasOk(), "Leave the document the size it was found");
             view.sync();
             view.fit();
         }

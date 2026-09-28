@@ -68,10 +68,15 @@
         // Duplicating moves the selection onto the copy, as it does in Live, so
         // undoing it leaves the selection naming a clip that is no longer there.
         view.setSelection({id}, id);
-        const auto originalColour = clip->getColour();
+        // A clip is drawn in its track's colour until someone gives it one of
+        // its own, so the cycle starts from nothing and undo puts it back.
+        require(Session::clipColour(*clip).isTransparent(),
+                "An imported clip wears its track's colour rather than one of its own");
         view.keyPressed(juce::KeyPress('C'));
-        require(clip->getColour() != originalColour, "C cycles the selected clip colour label");
+        require(!Session::clipColour(*clip).isTransparent(),
+                "C cycles the selected clip onto a colour label of its own");
         session.undo();
+        require(Session::clipColour(*clip).isTransparent(), "and undo hands it back to its track");
         const auto audioTrackSlots = static_cast<int>(session.deviceSlots(1).size());
         const auto clipSlots = session.clipPluginCount(id);
         view.sync();
@@ -245,4 +250,4 @@
         require(te::getAudioTracks(*session.edit)[1]->getClips().size() == 2, "Dropping an audio file on the audio lane imports a clip");
         session.undo();
         require(te::getAudioTracks(*session.edit)[1]->getClips().size() == 1, "Undo restores dropped audio import");
-        require(session.trackCount() == 2, "The starter track plus the one the audio import created");
+        require(session.trackCount() == 4, "An import onto a free starter lane creates no track");

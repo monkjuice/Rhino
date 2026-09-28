@@ -39,6 +39,25 @@ inline void drawSnappedText(juce::Graphics& g, const juce::String& text, juce::R
     g.drawSingleLineText(text, x, baseline);
 }
 
+// Inter ships here in two cuts, Regular and SemiBold, so anything heavier than
+// SemiBold has to be synthesised. Striking the same line twice is the way to do
+// it: the glyphs land on exactly the same pixels, and each pass composites the
+// text colour again, so a half-covered edge pixel goes from 50% to 75% and the
+// line gains weight without gaining width. Nothing moves, so it stays crisp.
+//
+// The obvious alternatives are both wrong here. Offsetting the second pass by a
+// pixel reads as a double strike at ten pixels per em. Outlining the glyphs and
+// stroking the outline looks right in a full repaint and is not stable under a
+// clipped one - a stroke rasterised against a damage rectangle does not land on
+// the values a full repaint gives, so playing back leaves stale pixels along
+// every name the playhead sweeps past.
+inline void drawSnappedTextHeavy(juce::Graphics& g, const juce::String& text, juce::Rectangle<int> area,
+                                 juce::Justification justification = juce::Justification::centredLeft)
+{
+    drawSnappedText(g, text, area, justification);
+    drawSnappedText(g, text, area, justification);
+}
+
 class Theme final : public juce::LookAndFeel_V4
 {
 public:

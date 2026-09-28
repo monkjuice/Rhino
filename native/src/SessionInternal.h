@@ -22,6 +22,12 @@ namespace rhino
 
 // ValueTree property identifiers owned by the session document.
 extern const juce::Identifier starterPlaceholderID;
+// A clip the person has coloured by hand. Absent means the clip wears its
+// track's colour, which is what every clip does until someone says otherwise.
+// It is Rhino's own property because the engine has no way to say "no colour":
+// te::Clip::getColour substitutes a default per clip type for anything unset
+// or transparent, so a clip can never be asked whether it was ever coloured.
+extern const juce::Identifier clipColourID;
 extern const juce::Identifier editorStepsID;
 extern const juce::Identifier trackAutomationID;
 extern const juce::Identifier automationPointID;
@@ -117,6 +123,7 @@ juce::Colour presetColour(Session::PatternPreset preset);
 juce::Colour instrumentColour(const DeviceDescriptor& device);
 juce::Colour instrumentColour(Session::Instrument instrument);
 juce::Colour nextClipColour(juce::Colour current);
+void setClipColour(te::Clip& clip, juce::Colour colour, juce::UndoManager* undoManager);
 const DeviceDescriptor* audioEffectDescriptor(Session::AudioEffect effect);
 void resetPluginList(te::PluginList* list);
 double stepDurationBeats(int steps);

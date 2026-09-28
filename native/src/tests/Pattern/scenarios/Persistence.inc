@@ -1,5 +1,8 @@
         require(session.importAudio(output.getFile()).wasOk(), "Import rendered audio");
-        auto* audioTrack = te::getAudioTracks(*session.edit)[1];
+        // An import with no target fills the first free audio lane, which is
+        // the second track of the starter stack.
+        const auto importedTrack = 1;
+        auto* audioTrack = te::getAudioTracks(*session.edit)[importedTrack];
         require(audioTrack->getClips().size() == 1, "Import creates an audio clip");
         require(audioTrack->getClips()[0]->getPosition().time.getStart().inSeconds() == 0.0, "First audio import starts at zero");
 
@@ -42,8 +45,8 @@
                     "A restored automation curve keeps its points");
         }
         require(!session.hasUnsavedChanges(), "Opened project is clean");
-        require(te::getAudioTracks(*session.edit)[1]->getClips().size() == 1, "Audio clip survives project reopen");
-        require(te::getAudioTracks(*session.edit)[1]->getClips()[0]->getSourceFileReference().getFile() == output.getFile(),
+        require(te::getAudioTracks(*session.edit)[importedTrack]->getClips().size() == 1, "Audio clip survives project reopen");
+        require(te::getAudioTracks(*session.edit)[importedTrack]->getClips()[0]->getSourceFileReference().getFile() == output.getFile(),
                 "Imported audio path survives project reopen");
         const auto patternTrack = te::getAudioTracks(*session.edit)[0];
         session.deleteClip(session.pattern().itemID);

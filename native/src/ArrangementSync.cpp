@@ -52,7 +52,7 @@ void Arrangement::sync()
                 continue;
             const auto p = clip->getPosition();
             ClipView view {clip->itemID, clip->getName(), {p.time.getStart().inSeconds(), p.time.getEnd().inSeconds(), p.offset.inSeconds()}, nullptr, {}, clip->getSpeedRatio(),
-                           p.offset.inSeconds() + p.time.getLength().inSeconds(), track, clip->getColour(),
+                           p.offset.inSeconds() + p.time.getLength().inSeconds(), track, Session::clipColour(*clip),
                            session.clipPluginCount(clip->itemID)};
             if (auto* audio = dynamic_cast<te::WaveAudioClip*>(clip))
             {

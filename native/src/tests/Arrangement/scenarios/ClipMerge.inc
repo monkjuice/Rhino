@@ -22,7 +22,8 @@
             Session merge;
             scratchProject(merge, "merge");
             require(merge.importAudio(source.getFile()).wasOk(), "A file imports for the merge fixture");
-            const auto mergeTrack = merge.trackCount() - 1;
+            // An untargeted import fills the first free audio lane.
+            const auto mergeTrack = 1;
             auto* lane = te::getAudioTracks(*merge.edit)[mergeTrack];
             require(lane != nullptr && lane->getClips().size() == 1, "The import lands as one clip");
             const auto firstID = lane->getClips().getFirst()->itemID;
@@ -104,7 +105,7 @@
             Session between;
             scratchProject(between, "between");
             require(between.importAudio(source.getFile()).wasOk(), "A file imports for the middle-clip fixture");
-            const auto betweenTrack = between.trackCount() - 1;
+            const auto betweenTrack = 1;
             auto* lane = te::getAudioTracks(*between.edit)[betweenTrack];
             const auto leftID = lane->getClips().getFirst()->itemID;
             require(between.importAudioAt(source.getFile(), betweenTrack, 1.5).wasOk(), "A clip in the middle");
@@ -131,7 +132,7 @@
             Session keyed;
             scratchProject(keyed, "keyed");
             require(keyed.importAudio(source.getFile()).wasOk(), "A file imports for the shortcut fixture");
-            const auto keyedTrack = keyed.trackCount() - 1;
+            const auto keyedTrack = 1;
             auto* lane = te::getAudioTracks(*keyed.edit)[keyedTrack];
             const auto leftID = lane->getClips().getFirst()->itemID;
             require(keyed.importAudioAt(source.getFile(), keyedTrack, 1.0).wasOk(), "A clip flush against it");

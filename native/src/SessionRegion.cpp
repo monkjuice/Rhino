@@ -62,7 +62,7 @@ Session::ClipRegion Session::copyClipRegion(double startSeconds, double endSecon
             const auto visibleEnd = std::min(position.time.getEnd().inSeconds(), endSeconds);
             ClipSnapshot snapshot;
             snapshot.name = clip->getName();
-            snapshot.colour = clip->getColour();
+            snapshot.colour = clipColour(*clip);
             snapshot.speed = clip->getSpeedRatio();
             snapshot.track = track - firstTrack;
             snapshot.start = visibleStart - startSeconds;
@@ -205,7 +205,8 @@ juce::Result Session::pasteClipRegion(const ClipRegion& region, double destinati
         auto newTrack = edit->insertNewAudioTrack(te::TrackInsertPoint::getEndOfTracks(*edit), nullptr, false);
         if (newTrack == nullptr)
             return juce::Result::fail("Could not create a track for pasted clips.");
-        newTrack->setName("Audio " + juce::String(index));
+        newTrack->setName("Audio " + juce::String(index + 1));
+        newTrack->setColour(pickTrackColour());
         newTrack->pluginList.insertPlugin(edit->getPluginCache().createNewPlugin(UtilityDevice::xmlTypeName, {}), 0, nullptr);
     }
 
@@ -267,7 +268,7 @@ juce::Result Session::pasteClipRegion(const ClipRegion& region, double destinati
         if (copy == nullptr)
             return juce::Result::fail("The clip could not be pasted.");
         if (!snapshot.colour.isTransparent())
-            copy->setColour(snapshot.colour);
+            setClipColour(*copy, snapshot.colour, &edit->getUndoManager());
         pasted.push_back(copy->itemID);
     }
     // Clearing the destination can have taken the clip the note editor is

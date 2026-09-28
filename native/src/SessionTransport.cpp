@@ -45,8 +45,15 @@ juce::Result Session::importAudio(const juce::File& file)
     if (duration <= 0.0)
         return juce::Result::fail("This file could not be read as audio.");
 
-    // No track is an audio track by default, so an import with no target gets
-    // one of its own rather than landing on whatever happens to be first.
+    // A document opens with audio lanes waiting for something, so an import
+    // with no target fills the first free one rather than stacking a track on
+    // top of it. Free means empty: a lane with a clip on it is never landed
+    // on, and if none is free the import still brings a track of its own.
+    const auto tracks = te::getAudioTracks(*edit);
+    for (int track = 0; track < tracks.size(); ++track)
+        if (trackType(track) == TrackType::audio && !isGroupBusTrack(track)
+            && tracks[track]->getClips().isEmpty())
+            return importAudioAt(file, track, 0.0);
     const auto added = addAudioTrack();
     if (added.failed())
         return added;
@@ -82,7 +89,6 @@ juce::Result Session::importAudioAt(const juce::File& file, int trackIndex, doub
         {{start, start + tracktion::core::TimeDuration::fromSeconds(duration)}, {}}, false);
     if (clip == nullptr)
         return juce::Result::fail("The audio clip could not be added.");
-    clip->setColour(juce::Colour(0xff4d6975));
     makeRoomForClip(*clip);
     refreshLoop();
     markModified();

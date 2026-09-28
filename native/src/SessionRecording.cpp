@@ -629,14 +629,9 @@ bool Session::tidyRecordedClips()
         auto* clip = findClip(id);
         if (clip == nullptr)
             continue;
-        // A take is a clip like any other, so it is coloured the way the path
-        // that would otherwise have made it colours one: the engine's own
-        // green for a recording would be the only clip in the document
-        // wearing it.
-        if (dynamic_cast<te::WaveAudioClip*>(clip) != nullptr)
-            clip->setColour(juce::Colour(0xff4d6975));
-        else if (auto* track = dynamic_cast<te::AudioTrack*>(clip->getTrack()))
-            clip->setColour(instrumentColour(activeTrackInstrument(*track)));
+        // A take is a clip like any other, so it wears its track's colour
+        // like one: nothing is stamped on it, which is what leaves it
+        // matching the lane it was recorded onto.
         makeRoomForClip(*clip, added);
     }
     repairPatternClip();

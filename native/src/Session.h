@@ -274,10 +274,16 @@ public:
     float trackLaneHeight(int track) const;
     juce::Result setTrackLaneHeight(int track, float height);
     juce::Result setTrackName(int track, const juce::String& name);
-    // The card's own colour. Clips keep the colours they were given.
+    // The card's own colour, and the colour its clips take unless one of them
+    // has been given a colour of its own.
     juce::Colour trackColour(int track) const;
     juce::Result setTrackColour(int track, juce::Colour);
     static const std::vector<juce::Colour>& trackColourPalette();
+    // What a track created right now would be coloured: a palette entry picked
+    // at random from the ones no track is already wearing. Every path that
+    // makes a track calls it, so a stack is legible the moment it exists
+    // rather than after someone has coloured it by hand.
+    juce::Colour pickTrackColour() const;
     juce::Result moveTrack(int track, int destination);
     // A group is a bus. Its own track carries the group's name, colour, fader,
     // mute, solo and devices, and every member's output is routed into it. That
@@ -591,6 +597,10 @@ public:
     // the way Live does, so what lands is what was copied and nothing else.
     juce::Result pasteClipRegion(const ClipRegion&, double destinationStart,
                                  int destinationTrack, std::vector<te::EditItemID>& pasted);
+    // What a clip was coloured with by hand, or nothing, in which case it is
+    // drawn in its track's colour. Cycling runs through the palette and then
+    // back to nothing, so a clip can always rejoin its lane.
+    static juce::Colour clipColour(const te::Clip&);
     juce::Result cycleClipColour(te::EditItemID);
     int clipPluginCount(te::EditItemID) const;
     // An audio clip's own mix. Gain, pan, pitch, the two fades, mute and

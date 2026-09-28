@@ -5,6 +5,7 @@ namespace rhino
 {
 
 const juce::Identifier starterPlaceholderID {"rhinoStarterPlaceholder"};
+const juce::Identifier clipColourID {"rhinoClipColour"};
 const juce::Identifier editorStepsID {"rhinoEditorSteps"};
 const juce::Identifier trackAutomationID {"rhinoTrackAutomation"};
 const juce::Identifier automationPointID {"point"};
@@ -95,14 +96,14 @@ juce::Colour nextClipColour(juce::Colour current)
         0xff3d6f8b, 0xff738044, 0xff8d5f42, 0xff7a5b8f,
         0xff9b4f67, 0xff4b7f68, 0xff8a7a42, 0xff56636c
     };
-    int closest = -1;
-    for (int i = 0; i < static_cast<int>(std::size(palette)); ++i)
+    constexpr auto count = static_cast<int>(std::size(palette));
+    for (int i = 0; i < count; ++i)
         if (current == juce::Colour(palette[i]))
-        {
-            closest = i;
-            break;
-        }
-    return juce::Colour(palette[static_cast<size_t>((closest + 1) % static_cast<int>(std::size(palette)))]);
+            // Past the last entry the clip is handed back to no colour of its
+            // own, which is what makes it follow its track again: without that
+            // step a clip coloured once could never rejoin its lane.
+            return i + 1 < count ? juce::Colour(palette[static_cast<size_t>(i + 1)]) : juce::Colour();
+    return juce::Colour(palette[0]);
 }
 
 const DeviceDescriptor* audioEffectDescriptor(Session::AudioEffect effect)

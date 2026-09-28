@@ -42,7 +42,6 @@
 
         {
             Session repeatedDrums;
-            require(repeatedDrums.addAudioTrack().wasOk(), "Repeated drum regression adds the track it renders");
             require(repeatedDrums.insertPatternPreset(Session::PatternPreset::BreakKit, 1, 2.0).wasOk(),
                     "Repeated drum regression creates the first clip after silence");
             auto* drumTrack = te::getAudioTracks(*repeatedDrums.edit)[1];
@@ -163,14 +162,16 @@
         {
             Session fxSession;
             require(fxSession.importAudio(output.getFile()).wasOk(), "Rhino Space test imports rendered audio");
-            require(fxSession.addAudioEffect(Session::AudioEffect::RhinoSpace, 1).wasOk(), "Rhino Space can be inserted for render stability");
-            auto* fxTrack = te::getAudioTracks(*fxSession.edit)[1];
-            const auto fxDevices = fxSession.deviceSlots(1);
+            // An untargeted import fills the first free audio lane.
+            const auto fxIndex = 1;
+            require(fxSession.addAudioEffect(Session::AudioEffect::RhinoSpace, fxIndex).wasOk(), "Rhino Space can be inserted for render stability");
+            auto* fxTrack = te::getAudioTracks(*fxSession.edit)[fxIndex];
+            const auto fxDevices = fxSession.deviceSlots(fxIndex);
             const auto rhinoSlot = fxDevices.empty() ? -1 : fxDevices.back().pluginIndex;
             auto* rhinoSpace = dynamic_cast<RhinoSpaceDevice*>(fxTrack->pluginList[rhinoSlot]);
             require(rhinoSpace != nullptr, "Inserted effect is Rhino Space");
-            require(fxSession.setDeviceParameter(1, rhinoSlot, 0, 1.0f).wasOk(), "Rhino Space test sets wet mix");
-            require(fxSession.setDeviceParameter(1, rhinoSlot, 2, 0.9f).wasOk(), "Rhino Space test sets feedback");
+            require(fxSession.setDeviceParameter(fxIndex, rhinoSlot, 0, 1.0f).wasOk(), "Rhino Space test sets wet mix");
+            require(fxSession.setDeviceParameter(fxIndex, rhinoSlot, 2, 0.9f).wasOk(), "Rhino Space test sets feedback");
             auto params = rhinoSpace->getAutomatableParameters();
             require(params.size() >= 2 && params[1] != nullptr, "Rhino Space size parameter is automatable");
             auto& sizeCurve = params[1]->getCurve();

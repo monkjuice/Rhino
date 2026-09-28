@@ -63,7 +63,8 @@ juce::Result Session::editClip(te::EditItemID id, ClipGeometry next, ClipGesture
         auto newTrack = edit->insertNewAudioTrack(te::TrackInsertPoint::getEndOfTracks(*edit), nullptr, false);
         if (newTrack == nullptr)
             return juce::Result::fail("Could not create a track for the moved clip.");
-        newTrack->setName("Audio " + juce::String(tracks.size()));
+        newTrack->setName("Audio " + juce::String(tracks.size() + 1));
+        newTrack->setColour(pickTrackColour());
         auto audioDevice = edit->getPluginCache().createNewPlugin(UtilityDevice::xmlTypeName, {});
         newTrack->pluginList.insertPlugin(audioDevice, 0, nullptr);
         targetTrack = tracks.size();
@@ -202,7 +203,6 @@ void Session::repairPatternClip()
         patternClip = track->insertMIDIClip("Pattern 1", {{}, end}, nullptr).get();
         if (patternClip != nullptr)
         {
-            patternClip->setColour(presetColour(PatternPreset::WarmPulse));
             patternClip->state.setProperty(starterPlaceholderID, true, nullptr);
         }
     }
@@ -224,13 +224,27 @@ void Session::deleteClip(te::EditItemID id)
     }
 }
 
+juce::Colour Session::clipColour(const te::Clip& clip)
+{
+    const auto own = clip.state.getProperty(clipColourID).toString();
+    return own.isEmpty() ? juce::Colour() : juce::Colour::fromString(own);
+}
+
+void setClipColour(te::Clip& clip, juce::Colour colour, juce::UndoManager* undoManager)
+{
+    if (colour.isTransparent())
+        clip.state.removeProperty(clipColourID, undoManager);
+    else
+        clip.state.setProperty(clipColourID, colour.toString(), undoManager);
+}
+
 juce::Result Session::cycleClipColour(te::EditItemID id)
 {
     auto* clip = findClip(id);
     if (clip == nullptr)
         return juce::Result::fail("Select a clip first.");
     edit->getUndoManager().beginNewTransaction("Color clip");
-    clip->setColour(nextClipColour(clip->getColour()));
+    setClipColour(*clip, nextClipColour(clipColour(*clip)), &edit->getUndoManager());
     edit->getUndoManager().beginNewTransaction();
     markModified();
     sendSynchronousChangeMessage();

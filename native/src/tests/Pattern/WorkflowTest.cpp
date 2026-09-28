@@ -20,13 +20,24 @@ int runPatternTest()
         {
             if (!valid) throw std::runtime_error(message);
         };
+        const auto scenario = [](const char* name)
+        {
+            std::fprintf(stderr, "Pattern scenario: %s\n", name);
+            std::fflush(stderr);
+        };
+        scenario("device rack");
         runPatternDeviceRackTest();
         Session session;
 
+        scenario("device parameters");
        #include "scenarios/DeviceParameters.inc"
+        scenario("editing and automation");
        #include "scenarios/EditingAndAutomation.inc"
+        scenario("rendering");
        #include "scenarios/Rendering.inc"
+        scenario("persistence");
        #include "scenarios/Persistence.inc"
+        scenario("new project");
        #include "scenarios/NewProject.inc"
         return 0;
     }

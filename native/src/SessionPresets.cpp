@@ -64,7 +64,6 @@ juce::Result Session::insertPatternPreset(PatternPreset preset, int trackIndex, 
     auto clip = track->insertMIDIClip(data.name, {start, end}, nullptr);
     if (clip == nullptr)
         return juce::Result::fail("The pattern clip could not be added.");
-    clip->setColour(presetColour(preset));
     fillMidiClip(*clip, data, edit->getUndoManager());
     makeRoomForClip(*clip);
     refreshLoop();
@@ -124,7 +123,6 @@ juce::Result Session::createClip(int trackIndex, double startSeconds, te::EditIt
     {
         placeholder->setPosition({{start, end}, {}});
         placeholder->state.removeProperty(starterPlaceholderID, &edit->getUndoManager());
-        placeholder->setColour(instrumentColour(activeTrackInstrument(*track)));
         patternClip = placeholder;
     }
     else
@@ -132,7 +130,6 @@ juce::Result Session::createClip(int trackIndex, double startSeconds, te::EditIt
         auto clip = track->insertMIDIClip("Clip", {start, end}, nullptr);
         if (clip == nullptr)
             return juce::Result::fail("The clip could not be created.");
-        clip->setColour(instrumentColour(activeTrackInstrument(*track)));
         patternClip = clip.get();
     }
     patternClipID = patternClip->itemID;

@@ -213,7 +213,7 @@ juce::Result Session::mergeClips(const std::vector<te::EditItemID>& ids, MergeRe
             // clip is all of them, and the first one's name would read as a
             // claim about what is in the file.
             rendered.name = trackName(group.track);
-            rendered.colour = group.clips.front()->getColour();
+            rendered.colour = clipColour(*group.clips.front());
             rendered.file = nextMergeFile(folder, rendered.name);
             if (rendered.file == juce::File{})
             {
@@ -279,7 +279,7 @@ juce::Result Session::mergeClips(const std::vector<te::EditItemID>& ids, MergeRe
         auto clip = track->insertWaveClip(rendered.name, rendered.file, {{start, end}, {}}, false);
         if (clip == nullptr)
             return juce::Result::fail("The merged clip could not be added.");
-        clip->setColour(rendered.colour);
+        setClipColour(*clip, rendered.colour, &edit->getUndoManager());
         // Only the invisible starter clips can be left in the span by now, but
         // the rule that a clip owns the ground it lands on lives in one place
         // and this is not the file to make an exception in.

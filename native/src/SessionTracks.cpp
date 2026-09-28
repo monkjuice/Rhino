@@ -67,7 +67,8 @@ juce::Result Session::addTrack(TrackType type)
     auto newTrack = edit->insertNewAudioTrack(te::TrackInsertPoint::getEndOfTracks(*edit), nullptr, false);
     if (newTrack == nullptr)
         return juce::Result::fail("Could not create " + kind.toLowerCase() + " track.");
-    newTrack->setName(kind + " " + juce::String(tracks.size()));
+    newTrack->setName(kind + " " + juce::String(tracks.size() + 1));
+    newTrack->setColour(pickTrackColour());
     // Only MIDI is written down: audio is what a track with nothing to say is,
     // so an audio track needs no property and no document needs migrating.
     if (type == TrackType::midi)
@@ -225,6 +226,28 @@ const std::vector<juce::Colour>& Session::trackColourPalette()
         juce::Colour(0xff2f7fb8), juce::Colour(0xff3f9a68), juce::Colour(0xffb8862f), juce::Colour(0xffb04a6a)
     };
     return palette;
+}
+
+juce::Colour Session::pickTrackColour() const
+{
+    const auto& palette = trackColourPalette();
+    std::vector<juce::Colour> unused = palette;
+    for (auto* track : te::getAudioTracks(*edit))
+    {
+        const auto worn = track->getColour();
+        unused.erase(std::remove(unused.begin(), unused.end(), worn), unused.end());
+    }
+    // Once every entry is on screen the palette starts again, which is what
+    // keeps a stack of twenty tracks coloured rather than half coloured.
+    const auto& choices = unused.empty() ? palette : unused;
+    // A run of scenarios that renders and compares pixels cannot be asked to
+    // agree with a dice roll, so under --self-test the choice is the first
+    // unused entry. Tracks still come out distinct, and in the same order
+    // every time.
+    const auto index = isCommandLineTestMode()
+                           ? 0
+                           : juce::Random::getSystemRandom().nextInt(static_cast<int>(choices.size()));
+    return choices[static_cast<size_t>(index)];
 }
 
 // The reorder on its own. The group calls move several tracks inside one

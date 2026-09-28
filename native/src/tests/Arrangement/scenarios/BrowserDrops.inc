@@ -6,14 +6,27 @@
         view.fit();
         view.sync();
         require(view.clips.empty(), "Fresh startup hides the internal empty Pattern 1 placeholder");
-        // A new document is one empty track and the main row, nothing else.
-        require(session.trackCount() == 1 && session.trackName(0) == "Track 1",
-                "A new document opens with a single track called Track 1");
+        // A new document is four empty tracks and the main row, nothing else:
+        // MIDI and audio alternating, so there is somewhere to play and
+        // somewhere to drop a file without building the stack first.
+        require(session.trackCount() == 4, "A new document opens with four tracks");
+        require(session.trackName(0) == "MIDI 1" && session.trackName(1) == "Audio 2"
+                && session.trackName(2) == "MIDI 3" && session.trackName(3) == "Audio 4",
+                "and each is named for what it is and where it sits");
         require(!session.trackHasInstrument(0) && session.patternInstrument() == nullptr,
                 "The starter track runs no instrument until one is dropped on it");
         require(session.deviceSlots(0).empty(), "The starter track shows no devices of its own");
-        require(view.rows.size() == 1, "The arrangement draws one lane for a new document");
-        require(session.removeAudioTrack(0).failed(), "The last remaining track cannot be removed");
+        require(view.rows.size() == 4, "The arrangement draws a lane for each of them");
+        {
+            // The stack this run works on has to survive, so the rule that a
+            // document keeps at least one track is read off a document of its
+            // own rather than by emptying this one.
+            Session lastTrack;
+            while (lastTrack.trackCount() > 1)
+                require(lastTrack.removeAudioTrack(lastTrack.trackCount() - 1).wasOk(),
+                        "A starter track can be removed");
+            require(lastTrack.removeAudioTrack(0).failed(), "The last remaining track cannot be removed");
+        }
         session.setNote(0, 48, true);
         view.sync();
         require(view.clips.size() == 1, "Drawing the first note makes the startup pattern clip visible");

@@ -60,20 +60,37 @@ void Session::buildStarterEdit()
     edit->clickTrackEmphasiseBars = true;
     edit->clickTrackGain = juce::Decibels::decibelsToGain(-6.0f);
     edit->tempoSequence.getTempo(0)->setBpm(120.0);
-    // One empty track, as a new document should be. It runs no instrument, so
-    // it is neither a MIDI nor an audio track until something is dropped on it:
-    // an instrument makes it one and renames it, a sample makes it the other.
-    edit->ensureNumberOfAudioTracks(1);
-    auto* track = te::getAudioTracks(*edit)[0];
-    track->setName("Track 1");
-    auto device = edit->getPluginCache().createNewPlugin(UtilityDevice::xmlTypeName, {});
-    utility = dynamic_cast<UtilityDevice*>(device.get());
-    track->pluginList.insertPlugin(device, track->pluginList.size(), nullptr);
+    // Four empty tracks, MIDI and audio alternating, which is the stack most
+    // songs start from: somewhere to play and somewhere to drop a file, twice
+    // over, without anyone having to build it first. Each one says what it is
+    // at creation, so a MIDI lane takes a clip straight away and an audio lane
+    // refuses one, exactly as a track added later does.
+    static constexpr TrackType starterTypes[] {TrackType::midi, TrackType::audio,
+                                               TrackType::midi, TrackType::audio};
+    static constexpr int starterTrackCount = 4;
+    edit->ensureNumberOfAudioTracks(starterTrackCount);
+    const auto starterTracks = te::getAudioTracks(*edit);
+    for (int i = 0; i < starterTrackCount; ++i)
+    {
+        auto* starter = starterTracks[i];
+        const auto type = starterTypes[static_cast<size_t>(i)];
+        starter->setName(trackTypeName(type) + " " + juce::String(i + 1));
+        // Only MIDI is written down: audio is what a track with nothing to say
+        // is, so an audio track needs no property.
+        if (type == TrackType::midi)
+            starter->state.setProperty(trackTypeID, "midi", nullptr);
+        starter->setColour(pickTrackColour());
+        starter->pluginList.insertPlugin(edit->getPluginCache().createNewPlugin(UtilityDevice::xmlTypeName, {}),
+                                         starter->pluginList.size(), nullptr);
+    }
+    // Both utility pointers are positional, so they are read off the finished
+    // stack rather than kept from the loop that built it.
+    refreshUtilityPointers();
+    auto* track = starterTracks[0];
     const auto end = edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(beatsPerBar()));
     patternClip = track->insertMIDIClip("Pattern 1", {{}, end}, nullptr).get();
     if (patternClip != nullptr)
     {
-        patternClip->setColour(presetColour(PatternPreset::WarmPulse));
         patternClip->state.setProperty(starterPlaceholderID, true, nullptr);
         patternClip->state.setProperty(editorStepsID, defaultSteps, nullptr);
     }
@@ -184,7 +201,6 @@ void Session::ensureEditablePatternClip()
         patternClip = track->insertMIDIClip("Pattern 1", {{}, end}, nullptr).get();
         if (patternClip != nullptr)
         {
-            patternClip->setColour(presetColour(PatternPreset::WarmPulse));
             patternClip->state.setProperty(starterPlaceholderID, true, nullptr);
             patternClipID = patternClip->itemID;
         }

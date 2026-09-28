@@ -400,7 +400,10 @@ te::Clip* copyClipInto(te::ClipOwner& destination, te::Clip& source, tracktion::
         auto copy = te::insertWaveClip(destination, name, audio->getSourceFileReference().getFile(),
                                        {range, offset}, te::DeleteExistingClips::no);
         if (copy != nullptr)
+        {
             copy->setColour(source.getColour());
+            setClipColour(*copy, Session::clipColour(source), nullptr);
+        }
         return copy.get();
     }
     if (auto* midi = dynamic_cast<te::MidiClip*>(&source))
@@ -411,6 +414,7 @@ te::Clip* copyClipInto(te::ClipOwner& destination, te::Clip& source, tracktion::
         copy->cloneFrom(midi);
         copy->setPosition({range, offset});
         copy->setColour(source.getColour());
+        setClipColour(*copy, Session::clipColour(source), nullptr);
         return copy.get();
     }
     return nullptr;

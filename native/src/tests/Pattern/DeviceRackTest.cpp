@@ -1,6 +1,7 @@
 #include "DeviceRackTest.h"
 #include "../../DeviceRack.h"
 #include "../../Session.h"
+#include "audio/UtilityDevice.h"
 #include <stdexcept>
 
 namespace rhino
@@ -13,14 +14,28 @@ void runPatternDeviceRackTest()
     };
     Session session;
     require(session.utility != nullptr, "Session creates the Utility device on the starter track");
-    require(session.trackCount() == 1 && !session.trackHasInstrument(0),
-            "A new document opens with one empty track and nothing else");
+    require(session.trackCount() == 4 && !session.trackHasInstrument(0),
+            "A new document opens with four empty tracks and nothing else");
+    require(session.trackType(0) == Session::TrackType::midi
+            && session.trackType(1) == Session::TrackType::audio
+            && session.trackType(2) == Session::TrackType::midi
+            && session.trackType(3) == Session::TrackType::audio,
+            "The starter stack alternates MIDI and audio");
+    require(session.audioUtility != nullptr,
+            "The starter audio track brings its own Utility device");
     require(session.patternInstrument() == nullptr,
             "The starter track runs no instrument until one is dropped on it");
     require(session.addInstrument(Session::Instrument::FourOsc, 0).wasOk(),
             "The starter track takes an instrument");
-    require(session.addAudioTrack().wasOk() && session.audioUtility != nullptr,
-            "An added track brings its own Utility device");
+    {
+        const auto added = session.trackCount();
+        require(session.addAudioTrack().wasOk(), "A track can be added to the starter stack");
+        auto* addedTrack = te::getAudioTracks(*session.edit)[added];
+        auto carriesUtility = false;
+        for (auto* plugin : addedTrack->pluginList)
+            carriesUtility = carriesUtility || dynamic_cast<UtilityDevice*>(plugin) != nullptr;
+        require(carriesUtility, "An added track brings its own Utility device");
+    }
     require(session.patternInstrument() != nullptr
             && session.patternInstrumentKind() == Session::Instrument::FourOsc,
             "The pattern track carries one instrument, 4OSC");

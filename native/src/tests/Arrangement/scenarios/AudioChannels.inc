@@ -35,7 +35,9 @@
             writeFixture(monoSource.getFile(), 1, 0.5f);
             Session mono;
             require(mono.importAudio(monoSource.getFile()).wasOk(), "A mono file imports");
-            auto* monoTrack = te::getAudioTracks(*mono.edit)[mono.trackCount() - 1];
+            // An untargeted import fills the first free audio lane, which in a
+            // new document is the second track.
+            auto* monoTrack = te::getAudioTracks(*mono.edit)[1];
             require(monoTrack != nullptr && !monoTrack->getClips().isEmpty(), "and lands on a track");
             juce::TemporaryFile rendered(".wav");
             te::Renderer::Parameters parameters(*mono.edit);
@@ -101,7 +103,7 @@
             {
                 Session drawn;
                 require(drawn.importAudio(file).wasOk(), "The fixture imports for drawing");
-                const auto drawnTrack = drawn.trackCount() - 1;
+                const auto drawnTrack = 1;
                 require(drawn.setTrackLaneHeight(drawnTrack, 150.0f).wasOk(), "Its row is given room for two lanes");
                 Arrangement drawnView(drawn);
                 drawnView.setSize(1200, 400);
@@ -124,6 +126,7 @@
                     // Below the header strip, which carries the clip's own
                     // colour and would read as a band of its own.
                     bands = bandsDown(picture, box.getCentreX(), box.getY() + 26, box.getBottom() - 2);
+
                     if (bands > 0)
                         break;
                 }

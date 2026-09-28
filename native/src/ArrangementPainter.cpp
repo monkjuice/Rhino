@@ -164,7 +164,10 @@ void Arrangement::paintTrackCards(juce::Graphics& g)
             const auto nameArea = trackNameBounds(track);
             juce::Graphics::ScopedSaveState scope(g);
             g.reduceClipRegion(nameArea);
-            drawSnappedText(g, juce::String(track + 1).paddedLeft('0', 2) + "  " + session.trackName(track), nameArea);
+            // A shade heavier than the SemiBold cut the rest of the card uses:
+            // the name is the one thing on a card that has to be findable
+            // while the eye is moving down the stack.
+            drawSnappedTextHeavy(g, juce::String(track + 1).paddedLeft('0', 2) + "  " + session.trackName(track), nameArea);
         }
         g.setFont(uiFont(10.0f));
     }
@@ -289,6 +292,22 @@ void Arrangement::paint(juce::Graphics& g)
         }
     }
     const auto dirty = g.getClipBounds().toFloat();
+    // A clip wears the colour of the lane it is drawn on, so the two read as
+    // one band; a clip that has been coloured by hand keeps its own. Darkened,
+    // because a card is a solid block behind dark text and a clip is a
+    // translucent fill behind light text, and the same value cannot do both.
+    // Read per paint rather than per clip: trackColour walks the edit's track
+    // list, and a busy arrangement asks this hundreds of times a frame.
+    std::vector<juce::Colour> laneColours;
+    laneColours.reserve(static_cast<size_t>(session.trackCount()));
+    for (int track = 0; track < session.trackCount(); ++track)
+        laneColours.push_back(session.trackColour(track));
+    const auto laneTint = [&laneColours](int track)
+    {
+        const auto own = juce::isPositiveAndBelow(track, static_cast<int>(laneColours.size()))
+                             ? laneColours[static_cast<size_t>(track)] : juce::Colour();
+        return own.isTransparent() ? juce::Colour(track == 0 ? 0xff414c34 : 0xff284b59) : own.darker(0.5f);
+    };
     std::set<int> tracksWithClips;
     for (const auto& clip : clips)
     {
@@ -301,8 +320,7 @@ void Arrangement::paint(juce::Graphics& g)
         juce::Graphics::ScopedSaveState scope(g);
         g.reduceClipRegion(juce::Rectangle<int>(0, static_cast<int>(lanesTop), getWidth() - 14,
                                                 std::max(1, static_cast<int>(laneContentHeight()))));
-        const auto fallback = juce::Colour(clip.track == 0 ? 0xff414c34 : 0xff284b59);
-        const auto label = clip.colour.isTransparent() ? fallback : clip.colour;
+        const auto label = clip.colour.isTransparent() ? laneTint(paintTrack) : clip.colour;
         g.setColour(label.withAlpha(isSelected(clip.id) ? 0.82f : 0.68f));
         g.fillRect(box);
         g.setColour(label.brighter(0.55f));

@@ -10,6 +10,19 @@ struct ClipGeometry
 };
 enum class ClipGesture { move, trimLeft, trimRight };
 
+// A cut has to leave something playable on both sides, so a line sitting on a
+// clip's edge - or within a hair of it - is not a split at all. Both the
+// timeline, deciding which clips a line is drawn through, and the model, doing
+// the cutting, ask this, which is what stops them disagreeing about whether a
+// clip is splittable.
+inline constexpr double minimumSplitSeconds = 0.01;
+inline bool canSplitClipAt(ClipGeometry clip, double seconds)
+{
+    return std::isfinite(seconds)
+        && seconds > clip.start + minimumSplitSeconds
+        && seconds < clip.end - minimumSplitSeconds;
+}
+
 inline ClipGeometry previewClipEdit(ClipGeometry original, ClipGesture gesture,
                                     double target, double sourceDuration)
 {

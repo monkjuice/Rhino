@@ -37,11 +37,14 @@ public:
     // a track, a region or nothing. The shell reads it to decide which editor
     // the lower pane should be showing.
     te::EditItemID selectedClipID() const { return selected; }
-    // Cuts the selected clip in two at the playhead. Public because Ctrl+E is
-    // a shell shortcut rather than an arrangement one: the timeline rarely has
-    // the keyboard when a clip editor is open, and the command still means the
-    // same thing.
-    void splitSelectedAtPlayhead();
+    // Cuts clips in two at the line. Public because Ctrl+E is a shell shortcut
+    // rather than an arrangement one: the timeline rarely has the keyboard when
+    // a clip editor is open, and the command still means the same thing.
+    void splitAtInsertPoint();
+    // Where the line is, in seconds. The audio editor's own Split button reads
+    // it so that the button and the shortcut it advertises cut in the same
+    // place even while the transport is rolling away from it.
+    double insertPointTime() const;
     // Turns the selected audio clips round. Public for the same reason as the
     // split above: R is a shell shortcut, because the clip you want to hear
     // backwards is usually the one open in the audio editor.
@@ -175,6 +178,13 @@ private:
     void dragRegionGesture(const juce::MouseEvent&);
     void endRegionGesture();
     void paintTimeSelection(juce::Graphics&);
+    // The clips a split would cut. A selection wins wherever the line actually
+    // crosses it; with nothing selected under the line the line cuts whatever
+    // it is drawn through, on the tracks the region covers.
+    std::vector<te::EditItemID> clipsUnderLine(double seconds) const;
+    // The one place a split is carried out and reported, so the shortcut, the
+    // clip menu and the audio editor all say the same thing about it.
+    void splitClipsAt(const std::vector<te::EditItemID>&, double seconds);
     // The ruler reads in bars whatever the snap grid is set to, so its
     // numbering is stepped by what stays legible at this zoom rather than
     // by the grid division. Changing the grid must not renumber the bars.

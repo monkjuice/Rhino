@@ -171,20 +171,21 @@
                             break;
                         }
                 require(paintedSomething, "The audio editor draws its controls and waveform, not just a background");
-                // Split acts on the clip the panel is showing, at the
-                // playhead, and says why rather than doing nothing when the
-                // line is outside it.
+                // Split acts on the clip the panel is showing, at the line,
+                // and says why rather than doing nothing when the line is
+                // outside it. With no splitPosition wired the line is the
+                // transport, which is where the shell parks it anyway.
                 juce::String reported;
                 panel->status = [&reported](juce::String text) { reported = text; };
                 auto* lane = te::getAudioTracks(*session.edit)[1];
                 const auto clipsBefore = lane->getClips().size();
                 session.edit->getTransport().setPosition(tracktion::core::TimePosition::fromSeconds(0.0));
-                panel->splitAtPlayhead();
+                panel->splitAtLine();
                 require(lane->getClips().size() == clipsBefore && reported.isNotEmpty(),
-                        "Split refuses and explains when the playhead is outside the clip");
+                        "Split refuses and explains when the line is outside the clip");
                 const auto middle = session.audioClipMix(id).startSeconds + session.audioClipMix(id).lengthSeconds() * 0.5;
                 session.edit->getTransport().setPosition(tracktion::core::TimePosition::fromSeconds(middle));
-                panel->splitAtPlayhead();
+                panel->splitAtLine();
                 require(lane->getClips().size() == clipsBefore + 1, "The audio editor's Split cuts the open clip in two");
                 require(panel->clipID() == id && panel->hasClip(), "The audio editor stays on the left half after a split");
                 session.undo();

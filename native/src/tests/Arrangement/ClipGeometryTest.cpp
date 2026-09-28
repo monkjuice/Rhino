@@ -21,6 +21,18 @@ int runArrangementGeometryTest()
         if (!close(previewClipEdit(geometry, ClipGesture::move, -5, 1).start, 0))
             throw std::runtime_error("Move stops at timeline zero");
 
+        if (!canSplitClipAt(geometry, 1.0))
+            throw std::runtime_error("A line inside a clip splits it");
+        if (canSplitClipAt(geometry, 0.5) || canSplitClipAt(geometry, 2.0))
+            throw std::runtime_error("A line outside a clip does not split it");
+        if (canSplitClipAt(geometry, geometry.start) || canSplitClipAt(geometry, geometry.end))
+            throw std::runtime_error("A line on a clip edge leaves nothing to cut");
+        if (canSplitClipAt(geometry, geometry.start + minimumSplitSeconds * 0.5)
+            || canSplitClipAt(geometry, geometry.end - minimumSplitSeconds * 0.5))
+            throw std::runtime_error("A cut has to leave something playable on both sides");
+        if (canSplitClipAt(geometry, std::nan("")))
+            throw std::runtime_error("A line with no position splits nothing");
+
         const juce::Rectangle<int> lane {100, 20, 800, 200};
         if (!playheadDamage(-1.0f, -1.0f, lane).isEmpty())
             throw std::runtime_error("Hidden playheads cause no damage");

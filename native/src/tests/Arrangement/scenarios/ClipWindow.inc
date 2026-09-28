@@ -73,4 +73,32 @@
                 if (note.pitch == 60) { drawnStart = note.start; drawnEnd = note.end; }
             require(close(drawnStart, 2.0) && close(drawnEnd, 4.0),
                     "The arrangement draws the sustained note across the clip it fills");
+
+            // A MIDI clip splits at the line exactly as an audio clip does, and
+            // for the same reason the paste above works: the right-hand half is
+            // a window into the sequence both halves still share, so no note
+            // moves and nothing is copied.
+            view.sync();
+            view.setSelection({});
+            view.setInsertPoint(2.0, windowSource);
+            view.splitAtInsertPoint();
+            auto* sourceLane = te::getAudioTracks(*session.edit)[windowSource];
+            require(sourceLane->getClips().size() == 2, "The line cuts a MIDI clip in two");
+            auto* rightHalf = static_cast<te::Clip*>(nullptr);
+            for (auto* half : sourceLane->getClips())
+                if (half != nullptr && close(half->getPosition().time.getStart().inSeconds(), 2.0))
+                    rightHalf = half;
+            require(rightHalf != nullptr, "The right-hand MIDI half starts at the line");
+            require(session.selectPatternClip(rightHalf->itemID).wasOk(),
+                    "The editor points at the right-hand half");
+            require(close(session.patternOffsetBeats(), 4.0),
+                    "The right-hand MIDI half opens a bar into the sequence it carries");
+            require(session.hasNote(0, 60),
+                    "The sustained note still plays at the start of the right-hand half");
+            session.undo();
+            require(te::getAudioTracks(*session.edit)[windowSource]->getClips().size() == 1,
+                    "Undo restores the MIDI clip the line split");
+            require(session.selectPatternClip(windowClip).wasOk(),
+                    "The editor goes back to the whole clip the undo restored");
+            view.sync();
         }

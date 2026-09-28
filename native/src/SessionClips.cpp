@@ -114,24 +114,36 @@ juce::Result Session::editClip(te::EditItemID id, ClipGeometry next, ClipGesture
     return juce::Result::ok();
 }
 
-juce::Result Session::splitClip(te::EditItemID id, double splitTimeSeconds)
+juce::Result Session::splitClips(const std::vector<te::EditItemID>& ids, double splitTimeSeconds,
+                                 int* splitCount)
 {
-    auto* clip = findClip(id);
-    if (!clip) return juce::Result::fail("Select a clip to split.");
+    if (splitCount != nullptr) *splitCount = 0;
     if (!std::isfinite(splitTimeSeconds)) return juce::Result::fail("Invalid split position.");
+    // Gathered before anything is cut: splitting inserts into the track's clip
+    // array, and a clip's own bounds have to be read before its neighbour moves.
+    std::vector<te::Clip*> cutting;
+    for (const auto id : ids)
+        if (auto* clip = findClip(id))
+        {
+            const auto time = clip->getPosition().time;
+            if (canSplitClipAt({time.getStart().inSeconds(), time.getEnd().inSeconds()}, splitTimeSeconds))
+                cutting.push_back(clip);
+        }
+    if (cutting.empty())
+        return juce::Result::fail("Move the line inside the clip before splitting.");
 
-    const auto old = clip->getPosition();
     const auto split = tracktion::core::TimePosition::fromSeconds(splitTimeSeconds);
-    constexpr double minimumSeconds = 0.01;
-    if (split <= old.time.getStart() + tracktion::core::TimeDuration::fromSeconds(minimumSeconds)
-        || split >= old.time.getEnd() - tracktion::core::TimeDuration::fromSeconds(minimumSeconds))
-        return juce::Result::fail("Move the playhead inside the selected clip before splitting.");
-
-    edit->getUndoManager().beginNewTransaction("Split audio clip");
-    auto* track = clip->getClipTrack();
-    auto* right = track != nullptr ? track->splitClip(*clip, split) : nullptr;
-    if (right == nullptr)
+    edit->getUndoManager().beginNewTransaction(cutting.size() == 1 ? "Split clip" : "Split clips");
+    auto cut = 0;
+    for (auto* clip : cutting)
+    {
+        auto* track = clip->getClipTrack();
+        if (track != nullptr && track->splitClip(*clip, split) != nullptr)
+            ++cut;
+    }
+    if (cut == 0)
         return juce::Result::fail("The right-hand split clip could not be created.");
+    if (splitCount != nullptr) *splitCount = cut;
     refreshLoop();
     edit->getUndoManager().beginNewTransaction();
     markModified();
@@ -139,6 +151,14 @@ juce::Result Session::splitClip(te::EditItemID id, double splitTimeSeconds)
         edit->restartPlayback();
     sendSynchronousChangeMessage();
     return juce::Result::ok();
+}
+
+// One clip, for the callers that already know which one they mean - the audio
+// editor is looking at it, and nothing else is in question.
+juce::Result Session::splitClip(te::EditItemID id, double splitTimeSeconds)
+{
+    if (findClip(id) == nullptr) return juce::Result::fail("Select a clip to split.");
+    return splitClips({id}, splitTimeSeconds);
 }
 
 // One clip is the smallest region there is, so duplicating it is the region

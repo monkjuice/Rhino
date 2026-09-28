@@ -17,6 +17,7 @@ Research deliverables: [open-source DAW and Ableton study](research/DAW-STUDY.md
 - One instrument per track, as in Live and Logic. Dropping an instrument on a track replaces the one already there and renames the track after it. The track's clips are untouched, so the pattern stays and the sound changes. Dropping one also makes the track a MIDI track for good. Audio samples and files are refused on a MIDI track.
 - **A new track is audio or MIDI, and you say which.** The `+` button above the track cards asks: a **MIDI track** holds clips and records what you play, an **audio track** takes files, samples and the audio input. **Ctrl+T** skips the question and adds whichever kind you picked last, MIDI to begin with. A MIDI track holds clips straight away, before anything is dropped on it - the notes wait for an instrument - and an audio track refuses them, which is the same rule under another name.
 - Clips are created deliberately: double-click an empty part of a lane to add a one-bar clip starting where you clicked, or press **Ctrl+A** to add one to the focused track at the playhead.
+- **Ctrl+E splits at the line.** The insert point - the line a click in the lanes leaves behind - is the whole instruction: **Ctrl+E** cuts every clip it runs through, MIDI or audio, on the tracks the selection covers. Nothing has to be selected first, which is the point, because the click that aims the cut is also the click that clears the clip selection. Where clips *are* selected, only the ones the line actually crosses are cut, so splitting one clip out of a gathered group does exactly that. A MIDI clip's right-hand half keeps the whole sequence and plays a window into it, so no note moves.
 - Drawing and erasing notes, grouped undo/redo, and tempo control from 40-240 BPM.
 - Play, pause, stop, looping, and audio hardware settings.
 - **Recording** into any track, audio or MIDI. Click the record dot on a track card to arm it, then press the record button or **F9**. What a track records follows from what the track is: one running an instrument records the MIDI input, one without records the audio input chosen in **Edit > Audio settings**. Neither needs a clip to record into - the take becomes a new clip covering the span it was recorded over, replacing what was underneath it, which is the same rule every other clip here follows. A MIDI take is drawn **while it is played**: the engine writes no clip until the transport stops, so the notes are read from its live feed and drawn where the clip will be, in the colours and the layout the clip will use. Recorded audio is written beside the project as `<track> Take <n>.wav`, or into `%APPDATA%/Rhino/Recordings` while the project is still untitled. An armed MIDI track always plays what you send it, because otherwise you could not hear the instrument you were recording.
@@ -118,7 +119,8 @@ The loop covers both the pattern and imported audio. If audio extends beyond one
 | Ctrl+V | Paste it at the insert point |
 | Ctrl+D | Duplicate it directly after itself |
 | Delete / Backspace | Empty the selection |
-| Ctrl+E, then Ctrl+arrows/wheel | Divide a selected note into retriggers |
+| Ctrl+E | Split every clip the insert line runs through, in the timeline |
+| Ctrl+E, then Ctrl+arrows/wheel | Divide a selected note into retriggers, in the note editor |
 | V+Up/Down or V+wheel | Adjust selected-note velocity |
 | Up/Down | Transpose the selection a semitone |
 | Shift+Up/Down | Transpose the selection an octave |

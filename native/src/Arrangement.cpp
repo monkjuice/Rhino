@@ -266,7 +266,7 @@ bool Arrangement::keyPressed(const juce::KeyPress& key)
     }
     if (key.getModifiers().isCommandDown() && key.getKeyCode() == 'E')
     {
-        splitSelectedAtPlayhead();
+        splitAtInsertPoint();
         return true;
     }
     if (key.getModifiers().isCommandDown() && key.getKeyCode() == 'J')
@@ -418,17 +418,40 @@ void Arrangement::focusTrack()
     if (trackFocused) trackFocused(selectedTrack);
 }
 
-void Arrangement::splitSelectedAtPlayhead()
+// Ctrl+E. The line is the whole instruction: it says where to cut, and what to
+// cut is whatever it is drawn through. Nothing has to be selected first, which
+// is the point - a click in a lane puts the line down and clears the clip
+// selection in the same gesture, so requiring a selection made the obvious way
+// of aiming the cut the one way that could not perform it.
+void Arrangement::splitAtInsertPoint()
 {
     cancelDrag();
-    auto* clip = session.findClip(selected);
+    const auto seconds = insertPointTime();
+    splitClipsAt(clipsUnderLine(seconds), seconds);
+}
+
+void Arrangement::splitClipsAt(const std::vector<te::EditItemID>& ids, double seconds)
+{
+    if (ids.empty())
+    {
+        if (status) status("Put the line inside a clip to split it");
+        return;
+    }
+    // Read before the cut: the left half keeps the clip's id and its name, but
+    // asking afterwards would be asking about a clip that is now half as long.
+    auto* clip = session.findClip(ids.front());
     const auto name = clip != nullptr ? clip->getName() : juce::String();
-    const auto result = session.splitClip(selected, playheadTime(session.edit->getTransport()));
+    int cut = 0;
+    const auto result = session.splitClips(ids, seconds, &cut);
     // Reported either way: the command usually arrives from the keyboard with
     // the clip halves too close together to see, so silence on success reads
     // as nothing having happened.
-    if (status) status(result.failed() ? result.getErrorMessage()
-                                       : "Split " + name.quoted() + " at the playhead");
+    if (!status) return;
+    if (result.failed())
+        status(result.getErrorMessage());
+    else
+        status(cut == 1 ? "Split " + name.quoted() + " at the line"
+                        : "Split " + juce::String(cut) + " clips at the line");
 }
 
 // Reverse is a property of the clip, so it acts on the whole selection the
@@ -683,7 +706,7 @@ void Arrangement::showClipMenu(te::EditItemID id)
     menu.addItem(5, "Copy       Ctrl+C");
     menu.addItem(6, "Paste       Ctrl+V", !clipboard.isEmpty());
     menu.addItem(2, "Duplicate       Ctrl+D");
-    menu.addItem(7, "Split at Playhead       Ctrl+E");
+    menu.addItem(7, "Split at Line       Ctrl+E");
     // Enabled from the selection rather than from the clip the menu was opened
     // on: merging needs two, and one clip can never be merged with itself.
     menu.addItem(9, "Merge       Ctrl+J", selectedClips.size() > 1);
@@ -705,6 +728,16 @@ void Arrangement::showClipMenu(te::EditItemID id)
                                                   : "Copied the clip into a session slot");
                 return;
             }
+            // Split is the one command here that is not about the selection,
+            // and it has to run before the line moves: selecting a clip puts
+            // the line on that clip's start, which is the one place inside it
+            // that cannot be cut. So this acts on the clip the menu was opened
+            // on, at the line where it already is, and selects nothing.
+            if (result == 7)
+            {
+                safe->splitClipsAt({id}, safe->insertPointTime());
+                return;
+            }
             // The commands act on a selection, so the clip the menu was opened
             // on becomes one before any of them runs.
             if (!safe->isSelected(id))
@@ -714,7 +747,6 @@ void Arrangement::showClipMenu(te::EditItemID id)
             else if (result == 4) safe->cutSelection();
             else if (result == 5) safe->copySelection();
             else if (result == 6) safe->pasteSelection();
-            else if (result == 7) safe->splitSelectedAtPlayhead();
             else if (result == 8) safe->reverseSelected();
             else if (result == 9) safe->mergeSelected();
         });

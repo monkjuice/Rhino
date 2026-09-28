@@ -128,8 +128,8 @@ void AudioClipPanel::configureControls()
         if (result.failed() && status) status(result.getErrorMessage());
     };
     split.setButtonText("Split");
-    split.setTooltip("Cut this clip in two at the playhead       Ctrl+E");
-    split.onClick = [this] { splitAtPlayhead(); };
+    split.setTooltip("Cut this clip in two at the line       Ctrl+E");
+    split.onClick = [this] { splitAtLine(); };
     styleAction(split);
     addAndMakeVisible(reverse);
     addAndMakeVisible(mute);
@@ -151,8 +151,8 @@ void AudioClipPanel::sync()
         slider.setEnabled(enabled);
     reverse.setEnabled(enabled);
     mute.setEnabled(enabled);
-    // Enabled for any open clip rather than only when the playhead happens to
-    // be inside it: the transport moves without telling this panel, so a state
+    // Enabled for any open clip rather than only when the line happens to be
+    // inside it: the line moves without telling this panel, so a state
     // computed here would go stale between frames. splitClip says why when the
     // line is in the wrong place, which is the more useful answer anyway.
     split.setEnabled(enabled);
@@ -244,11 +244,13 @@ void AudioClipPanel::apply(int control)
     repaint(waveArea);
 }
 
-void AudioClipPanel::splitAtPlayhead()
+void AudioClipPanel::splitAtLine()
 {
-    const auto result = session.splitClip(clip, playheadTime(session.edit->getTransport()));
+    const auto seconds = splitPosition ? splitPosition()
+                                       : playheadTime(session.edit->getTransport());
+    const auto result = session.splitClip(clip, seconds);
     if (status) status(result.failed() ? result.getErrorMessage()
-                                       : "Split " + mix.name.quoted() + " at the playhead");
+                                       : "Split " + mix.name.quoted() + " at the line");
 }
 
 void AudioClipPanel::refreshThumbnail()

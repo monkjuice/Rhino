@@ -206,6 +206,42 @@ void Arrangement::endRegionGesture()
     repaint();
 }
 
+// Where the line is. The line the lanes draw is the region's start - the
+// insert point - and while the transport is stopped the playhead is on it,
+// because stopping returns to exactly this position. A document nothing has
+// been clicked on has no line yet, and then the playhead is the only answer
+// there is.
+double Arrangement::insertPointTime() const
+{
+    return std::max(0.0, timeSelection.active ? timeSelection.start
+                                              : playheadTime(session.edit->getTransport()));
+}
+
+// A selection wins wherever the line genuinely crosses it, so cutting one clip
+// out of a gathered group still cuts only that one, and a region swept across
+// four lanes cuts every clip its start runs through because sweeping it
+// selected them. With nothing selected under the line - which is every click in
+// a lane, because starting a region clears the clip selection - the line cuts
+// whatever it is drawn through, on the tracks the region covers. That last rule
+// is the one that matters: the click that aims the cut is the same click that
+// leaves nothing selected to cut.
+std::vector<te::EditItemID> Arrangement::clipsUnderLine(double seconds) const
+{
+    std::vector<te::EditItemID> selectedHits, laneHits;
+    for (const auto& clip : clips)
+    {
+        if (!canSplitClipAt(clip.position, seconds))
+            continue;
+        if (isSelected(clip.id) || clip.id == selected)
+            selectedHits.push_back(clip.id);
+        // No region at all means the line is the playhead, and the working
+        // track is the only lane the timeline can say it is about.
+        if (timeSelection.active ? timeSelection.covers(clip.track) : clip.track == selectedTrack)
+            laneHits.push_back(clip.id);
+    }
+    return selectedHits.empty() ? laneHits : selectedHits;
+}
+
 void Arrangement::paintTimeSelection(juce::Graphics& g)
 {
     if (!timeSelection.active)

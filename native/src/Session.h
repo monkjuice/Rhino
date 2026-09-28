@@ -512,6 +512,13 @@ public:
     juce::Result editClip(te::EditItemID, ClipGeometry, ClipGesture, int targetTrack = -1,
                           const std::vector<te::EditItemID>& movingWith = {});
     juce::Result splitClip(te::EditItemID, double splitTimeSeconds);
+    // Every clip in the list cut at the same time, in one undo step, so a line
+    // drawn across four lanes cuts all four and one Ctrl+Z puts all four back.
+    // Clips the time misses are passed over rather than refusing the gesture:
+    // the caller hands over what a lane or a selection holds, not a list it has
+    // already filtered. splitCount, when asked for, reports how many were cut.
+    juce::Result splitClips(const std::vector<te::EditItemID>&, double splitTimeSeconds,
+                            int* splitCount = nullptr);
     juce::Result duplicateClip(te::EditItemID);
     // What a merge did, so the gesture that asked for it can select the clips
     // it made and say what went into them.

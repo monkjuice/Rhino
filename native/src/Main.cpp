@@ -249,6 +249,9 @@ public:
         arrangement.clipSelected = [this](te::EditItemID) { refreshEditorPanes(); };
         arrangement.clipOpened = [this](te::EditItemID id) { openClip(id); };
         audioClip.status = files.status;
+        // The panel's Split button advertises Ctrl+E, so it has to cut where
+        // Ctrl+E cuts. The timeline owns the line; the panel only asks for it.
+        audioClip.splitPosition = [this] { return arrangement.insertPointTime(); };
         sessionView.status = files.status;
         sessionView.trackSelected = [this](int track) { if (sessionViewOpen) rack.selectTrack(track); };
         sessionToggle.setButtonText("Session");
@@ -691,7 +694,7 @@ public:
         // still subdivides notes and never reaches here.
         if (key.getModifiers().isCommandDown() && key.getKeyCode() == 'E')
         {
-            arrangement.splitSelectedAtPlayhead();
+            arrangement.splitAtInsertPoint();
             return true;
         }
         // Merge reaches the shell for the same reason: the clips being folded

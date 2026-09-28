@@ -5,13 +5,42 @@
         view.sync();
         view.fit();
         view.setSelection({id}, id);
-        session.edit->getTransport().setPosition(tracktion::core::TimePosition::fromSeconds(0.5));
-        view.splitSelectedAtPlayhead();
+        // Selecting a clip puts the line on its start, so the line has to be
+        // moved into it before it can be cut - exactly as a click in the lane
+        // moves it in the app.
+        view.setInsertPoint(0.5, 1);
+        view.splitAtInsertPoint();
         require(te::getAudioTracks(*session.edit)[1]->getClips().size() == 2, "Split creates a second audio clip");
         session.undo();
         require(te::getAudioTracks(*session.edit)[1]->getClips().size() == 1, "Undo split restores one audio clip");
         clip = session.findAudioClip(id);
         require(clip != nullptr, "Original clip remains after undo split");
+        // The line alone is the instruction: a click in a lane clears the clip
+        // selection, and the split still has to find the clip underneath it.
+        view.sync();
+        view.setSelection({});
+        view.setInsertPoint(0.5, 1);
+        session.edit->getTransport().setPosition(tracktion::core::TimePosition::fromSeconds(0.0));
+        view.splitAtInsertPoint();
+        require(te::getAudioTracks(*session.edit)[1]->getClips().size() == 2,
+                "Split cuts the clip under the line with nothing selected");
+        session.undo();
+        require(te::getAudioTracks(*session.edit)[1]->getClips().size() == 1, "Undo restores the unselected split");
+        clip = session.findAudioClip(id);
+        require(clip != nullptr, "Original clip remains after the unselected split is undone");
+        // A line the clip does not reach cuts nothing and says so.
+        {
+            juce::String reported;
+            view.status = [&reported](juce::String text) { reported = text; };
+            view.sync();
+            view.setSelection({});
+            view.setInsertPoint(120.0, 1);
+            view.splitAtInsertPoint();
+            require(te::getAudioTracks(*session.edit)[1]->getClips().size() == 1
+                        && reported.isNotEmpty(),
+                    "Split explains rather than doing nothing when the line is in empty lane");
+            view.status = nullptr;
+        }
         view.sync();
         view.fit();
         view.setSelection({id}, id);

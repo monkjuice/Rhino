@@ -136,21 +136,77 @@ inline const char* lfoFullShapeName(int shape)
     return "Sine";
 }
 
+// A step inside a cycle, in a structure whose points have to keep going
+// forwards in x. A thousandth of a cycle is under half a pixel on the graph, and
+// shorter than the block an LFO turns over in at any rate one can be set to.
+inline constexpr float lfoStepGap = 0.001f;
+
+// The default shapes, as node sets rather than as formulas. A Default shape is
+// the same kind of thing a drawn one is: the dots on it are its own corners, the
+// ring in each gap is its own bend, and picking one up to edit starts from
+// exactly what was on screen instead of from a row of sampled dots that only
+// looked like it. It is also the only definition of these shapes — the panel and
+// the voice both read it, so neither can drift from the other.
+//
+// Three nodes carry a triangle and a sine alike: the sine is the same two
+// segments with both bowed to the limit. A parabola is not a sine, and stands
+// about 0.056 proud of one at its widest — but its peaks, its zero crossings and
+// its slope through them are all exact, and it is smooth across every join
+// including the cycle boundary. That is what a sine costs to be three nodes you
+// can take hold of rather than a formula you cannot.
+constexpr LfoTable lfoShapeTable(LfoShape shape) noexcept
+{
+    LfoTable table;
+    switch (shape)
+    {
+        case LfoShape::triangle:
+            table.count = 3;
+            table.points[0] = {0.0f, -1.0f};
+            table.points[1] = {0.5f, 1.0f};
+            table.points[2] = {1.0f, -1.0f};
+            break;
+        case LfoShape::saw:
+            table.count = 2;
+            table.points[0] = {0.0f, -1.0f};
+            table.points[1] = {1.0f, 1.0f};
+            break;
+        case LfoShape::square:
+            table.count = 4;
+            table.points[0] = {0.0f, 1.0f};
+            table.points[1] = {0.5f - lfoStepGap, 1.0f};
+            table.points[2] = {0.5f, -1.0f};
+            table.points[3] = {1.0f, -1.0f};
+            break;
+        case LfoShape::sampleHold:
+            // A step drawn afresh each cycle is not a curve and has no corners
+            // to offer. Level, and the panel fills in the step being held.
+            table.count = 2;
+            table.points[0] = {0.0f, 0.0f};
+            table.points[1] = {1.0f, 0.0f};
+            break;
+        case LfoShape::sine:
+            table.count = 3;
+            table.points[0] = {0.0f, 0.0f, 1.0f};
+            table.points[1] = {0.5f, 0.0f, -1.0f};
+            table.points[2] = {1.0f, 0.0f};
+            break;
+    }
+    return table;
+}
+
+inline constexpr std::array<LfoTable, lfoShapeCount> lfoShapeTables {
+    lfoShapeTable(LfoShape::sine), lfoShapeTable(LfoShape::triangle),
+    lfoShapeTable(LfoShape::saw), lfoShapeTable(LfoShape::square),
+    lfoShapeTable(LfoShape::sampleHold)};
+
 // The shape at a point in its cycle. `held` is the sample-and-hold's current
 // step, the one shape that cannot be worked out from the phase alone. A free
 // function so the panel draws the very curve the voice is reading, the way the
 // oscillator display and the oscillator share morph().
 inline float lfoWave(LfoShape shape, float phase, float held)
 {
-    switch (shape)
-    {
-        case LfoShape::triangle:   return 1.0f - 4.0f * std::abs(phase - 0.5f);
-        case LfoShape::saw:        return phase * 2.0f - 1.0f;
-        case LfoShape::square:     return phase < 0.5f ? 1.0f : -1.0f;
-        case LfoShape::sampleHold: return held;
-        case LfoShape::sine:       break;
-    }
-    return std::sin(phase * juce::MathConstants<float>::twoPi);
+    if (shape == LfoShape::sampleHold) return held;
+    return lfoShapeTables[static_cast<size_t>(shape)].sample(phase);
 }
 
 // How LFO 1 answers the keyboard. TRIG starts the shape again on every new

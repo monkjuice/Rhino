@@ -400,7 +400,12 @@ inline void drawLfo(juce::Graphics& g, juce::Rectangle<int> area, rhino::forge::
         g.drawHorizontalLine(juce::roundToInt(box.getY() + box.getHeight() * i / table.rows),
                              box.getX(), box.getRight());
 
-    juce::Path path;
+    // A Default shape is a node set of its own, so one table answers for both:
+    // a drawn one, or the built-in the shape names. The curve, the dots, the
+    // rings and the indicator all read that one table, which is what makes the
+    // dots on a Default shape its real corners rather than a row of samples.
+    auto shown = table.custom ? table
+                              : rhino::forge::lfoShapeTables[static_cast<size_t>(shape)];
     if (!table.custom && shape == rhino::forge::LfoShape::sampleHold)
     {
         // The step being held, flat across the whole display, because that is
@@ -409,11 +414,10 @@ inline void drawLfo(juce::Graphics& g, juce::Rectangle<int> area, rhino::forge::
         // each time the cycle turns over, which is what sample and hold looks
         // like when you watch it. Drawing a row of invented steps instead would
         // put the indicator on a curve the voice is not reading.
-        const auto y = plot(juce::jlimit(-1.0f, 1.0f, held));
-        path.startNewSubPath(box.getX(), y);
-        path.lineTo(box.getRight(), y);
+        shown.points[0].y = shown.points[1].y = juce::jlimit(-1.0f, 1.0f, held);
     }
-    else
+
+    juce::Path path;
     {
         constexpr int points = 240;
         for (int i = 0; i <= points; ++i)
@@ -421,9 +425,9 @@ inline void drawLfo(juce::Graphics& g, juce::Rectangle<int> area, rhino::forge::
             // The full closed interval, so a saw reaches the top of its ramp and
             // a square its second half before the cycle ends.
             const auto along = static_cast<float>(i) / static_cast<float>(points);
-            const auto at = table.custom ? table.sample(along) : rhino::forge::lfoWave(shape, along, held);
             const auto x = box.getX() + along * box.getWidth();
-            if (i == 0) path.startNewSubPath(x, plot(at)); else path.lineTo(x, plot(at));
+            const auto y = plot(shown.sample(along));
+            if (i == 0) path.startNewSubPath(x, y); else path.lineTo(x, y);
         }
     }
     strokeGlow(g, path, colour, alpha);
@@ -434,34 +438,29 @@ inline void drawLfo(juce::Graphics& g, juce::Rectangle<int> area, rhino::forge::
     // segment shows it sitting exactly on the line, and it is drawn first so a
     // handle pushed up against a point reads as being behind it — which is also
     // the order the pointer resolves them in.
-    if (table.custom)
-        for (int i = 0; i + 1 < table.count; ++i)
-        {
-            const auto handle = table.curveHandle(i);
-            const juce::Point<float> centre {box.getX() + handle.x * box.getWidth(), plot(handle.y)};
-            g.setColour(juce::Colour(0xff0a0d16).withAlpha(0.9f * alpha));
-            g.fillEllipse(juce::Rectangle<float>(7.0f, 7.0f).withCentre(centre));
-            g.setColour(juce::Colours::white.withAlpha(0.7f * alpha));
-            g.drawEllipse(juce::Rectangle<float>(6.0f, 6.0f).withCentre(centre), 1.4f);
-        }
-
-    const auto pointCount = table.custom ? table.count : 9;
-    for (int i = 0; i < pointCount; ++i)
+    for (int i = 0; i + 1 < shown.count; ++i)
     {
-        const auto along = table.custom ? table.points[static_cast<size_t>(i)].x : i / 8.0f;
-        const auto value = table.custom ? table.points[static_cast<size_t>(i)].y
-                                        : rhino::forge::lfoWave(shape, along, held);
+        const auto handle = shown.curveHandle(i);
+        const juce::Point<float> centre {box.getX() + handle.x * box.getWidth(), plot(handle.y)};
+        g.setColour(juce::Colour(0xff0a0d16).withAlpha(0.9f * alpha));
+        g.fillEllipse(juce::Rectangle<float>(7.0f, 7.0f).withCentre(centre));
+        g.setColour(juce::Colours::white.withAlpha(0.7f * alpha));
+        g.drawEllipse(juce::Rectangle<float>(6.0f, 6.0f).withCentre(centre), 1.4f);
+    }
+
+    for (int i = 0; i < shown.count; ++i)
+    {
+        const auto& point = shown.points[static_cast<size_t>(i)];
         g.setColour(juce::Colours::white.withAlpha(0.8f * alpha));
         g.fillEllipse(juce::Rectangle<float>(5.0f, 5.0f).withCentre(
-            {box.getX() + along * box.getWidth(), plot(value)}));
+            {box.getX() + point.x * box.getWidth(), plot(point.y)}));
     }
 
     // One cycle wide, so the phase is the position along it directly and the
     // indicator always sits on the curve it is drawn over.
     const auto at = juce::jlimit(0.0f, 1.0f, phase);
     const auto x = box.getX() + at * box.getWidth();
-    const auto y = plot(table.custom ? table.sample(phase)
-                                     : rhino::forge::lfoWave(shape, phase, held));
+    const auto y = plot(shown.sample(phase));
     g.setColour(colour.withAlpha(0.3f * alpha));
     g.drawVerticalLine(juce::roundToInt(x), box.getY(), box.getBottom());
     g.setColour(juce::Colours::white.withAlpha(0.9f * alpha));

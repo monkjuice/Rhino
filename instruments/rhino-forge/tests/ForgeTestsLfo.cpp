@@ -64,6 +64,74 @@ void lfoSuite()
         requireClose(rhino::forge::lfoWave(LfoShape::sampleHold, phase, -0.4f), -0.4f, 0.0001f,
                      "sample and hold holds its step for the whole cycle");
 
+    // The default shapes are node sets, not formulas, and the same node set the
+    // voice reads is the one the panel puts dots and rings on. Each is as small
+    // as the shape allows: a triangle is its two corners and its ends, a saw is
+    // its ends, and a sine is a triangle's three nodes with both segments bowed.
+    {
+        constexpr int nodes[] = {3, 3, 2, 4, 2};
+        for (int shape = 0; shape < rhino::forge::lfoShapeCount; ++shape)
+        {
+            const auto& built = rhino::forge::lfoShapeTables[static_cast<size_t>(shape)];
+            require(built.valid(), "a default shape is a table a drawn one could be");
+            require(built.count == nodes[shape], "a default shape uses the nodes it needs and no more");
+        }
+
+        // A triangle and a saw are carried exactly, so nothing about them moves.
+        for (int i = 0; i <= 64; ++i)
+        {
+            const auto phase = static_cast<float>(i) / 64.0f;
+            requireClose(rhino::forge::lfoWave(LfoShape::triangle, phase, 0.0f),
+                         1.0f - 4.0f * std::abs(phase - 0.5f), 0.0001f,
+                         "three nodes carry a triangle exactly");
+            requireClose(rhino::forge::lfoWave(LfoShape::saw, phase, 0.0f), phase * 2.0f - 1.0f,
+                         0.0001f, "two nodes carry a saw exactly");
+        }
+
+        // A square is the one shape with a step inside its cycle, and a table's
+        // points have to keep going forwards in x. Its riser is a thousandth of
+        // a cycle: level either side of it, and both levels exact.
+        requireClose(rhino::forge::lfoWave(LfoShape::square, 0.4f, 0.0f), 1.0f, 0.0001f,
+                     "a square holds the top of its cycle");
+        requireClose(rhino::forge::lfoWave(LfoShape::square, 0.5f, 0.0f), -1.0f, 0.0001f,
+                     "a square is all the way down by the half cycle");
+        require(rhino::forge::lfoWave(LfoShape::square, 0.5f - rhino::forge::lfoStepGap, 0.0f) > 0.99f,
+                "a square's riser is no wider than a thousandth of its cycle");
+
+        // A sine is three nodes bowed to the limit. What is exact is what a
+        // modulation source is judged on: the peaks, the zero crossings, and the
+        // slope through them, which is why the join is smooth rather than a
+        // corner. The shape between them is a parabola and stands about 0.056
+        // proud of a true sine, and that is the whole of the difference.
+        requireClose(rhino::forge::lfoWave(LfoShape::sine, 0.25f, 0.0f), 1.0f, 0.0001f,
+                     "a sine still peaks at exactly one, a quarter of the way through");
+        requireClose(rhino::forge::lfoWave(LfoShape::sine, 0.75f, 0.0f), -1.0f, 0.0001f,
+                     "a sine still troughs at exactly minus one");
+        for (const auto crossing : {0.0f, 0.5f, 1.0f})
+            requireClose(rhino::forge::lfoWave(LfoShape::sine, crossing, 0.0f), 0.0f, 0.0001f,
+                         "a sine still crosses zero where it did");
+        auto worst = 0.0f;
+        for (int i = 0; i <= 2048; ++i)
+        {
+            const auto phase = static_cast<float>(i) / 2048.0f;
+            worst = std::max(worst, std::abs(rhino::forge::lfoWave(LfoShape::sine, phase, 0.0f)
+                                             - std::sin(phase * juce::MathConstants<float>::twoPi)));
+        }
+        require(worst < 0.06f, "a sine of three nodes stays within 0.06 of a true one");
+
+        // Smooth across every join, including the one at the cycle boundary. A
+        // corner there would be heard as a tick on anything the LFO is driving.
+        constexpr auto step = 0.0005f;
+        for (const auto join : {0.0f, 0.5f})
+        {
+            const auto before = rhino::forge::lfoWave(LfoShape::sine, std::fmod(join + 1.0f - step, 1.0f), 0.0f)
+                              - rhino::forge::lfoWave(LfoShape::sine, std::fmod(join + 1.0f - 2.0f * step, 1.0f), 0.0f);
+            const auto after = rhino::forge::lfoWave(LfoShape::sine, join + 2.0f * step, 0.0f)
+                             - rhino::forge::lfoWave(LfoShape::sine, join + step, 0.0f);
+            requireClose(after, before, 0.001f, "a sine's segments meet without a corner");
+        }
+    }
+
     // Drawn points replace the built-in shape in the signal path. Their data
     // belongs to one LFO and survives both host state and a saved table file.
     {

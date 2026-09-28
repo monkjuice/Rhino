@@ -376,10 +376,10 @@ below the graph set columns and rows independently, from 2 to 32. Click an
 arrow to change by one, drag a number vertically or use the wheel for larger
 changes, and double-click a number to restore 8.
 
-A drawn table has two kinds of node, and they do different jobs. A solid dot is
-a **position**: where the line passes through. The hollow ring in each gap
-between two dots is that segment's **curve**, and it rides the line it bends, so
-a straight segment shows its ring sitting exactly on it. Drag a ring to bend the
+A table has two kinds of node, and they do different jobs. A solid dot is a
+**position**: where the line passes through. The hollow ring in each gap between
+two dots is that segment's **curve**, and it rides the line it bends, so a
+straight segment shows its ring sitting exactly on it. Drag a ring to bend the
 segment; double-click or right-click one to straighten it again.
 
 Both axes of a ring count. Its height is how far the segment stands off its
@@ -399,10 +399,29 @@ hard enough to leave the plus and minus one the LFO promises is flattened
 against that rail. The graph draws the same function the voice reads, so what
 rails on screen is what rails in the sound. Adding a point to a bent segment, or
 removing one between two, straightens what is left: a parabola does not cut into
-two parabolas, and an approximation would be quietly wrong. Rings appear once a
-table is **Custom** — a Default shape's dots sit on a real sine or saw, and a
-ring drawn on the chord between two of them would stand off the very curve it
-claims to bend.
+two parabolas, and an approximation would be quietly wrong.
+
+The **Default** shapes are node sets too, and as small as each shape allows: a
+triangle is its two ends and its corner, a saw is its two ends, a square is the
+four that its step needs, and a sine is a triangle's three nodes with both
+segments bowed to the limit — so its rings land on the peak and the trough,
+where pulling one is exactly the gesture it looks like. Dots and rings on a
+Default shape are its own, not a row of samples taken off a formula, which is
+what lets you take hold of one where it stands: drag anything and you get those
+same nodes as a **Custom** table rather than a fresh approximation of what was
+already on screen. It is also the only definition of these shapes — the voice
+and the panel read the one table, so neither can drift from the other.
+
+Two of them are not the formula they replaced, and both differences are the
+structure showing through. A square's step is a riser one thousandth of a cycle
+wide, because a table's points have to keep going forwards in x; that is under
+half a pixel on the graph and shorter than the block an LFO turns over in at any
+rate one can be set to. A sine is a pair of parabolas, which stand about 0.056
+proud of a true sine at their widest and read about 3% hotter in RMS. Its peaks,
+its zero crossings and its slope through them are exact, and it is smooth across
+every join including the cycle boundary. Sample and hold is unchanged: a step
+drawn afresh each cycle is not a curve, so it has no corners to offer, and its
+table is the level line the panel draws the held step along.
 
 The name menu loads and saves `.forgelfo` tables. The save dialog starts in
 `Documents/Rhino Forge/LFO Tables`, and tables in that folder appear under

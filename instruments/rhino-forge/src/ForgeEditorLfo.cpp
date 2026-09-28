@@ -55,15 +55,18 @@ LfoTable Editor::editableLfoTable(int lfo) const
 {
     auto table = processor.lfoTable(lfo);
     if (table.custom && table.valid()) return table;
-    table.count = 9;
-    table.custom = true;
     const auto shape = static_cast<LfoShape>(juce::jlimit(0, lfoShapeCount - 1,
         juce::roundToInt(value(lfoParameterId(lfo, "Shape")))));
-    for (int i = 0; i < table.count; ++i)
-    {
-        const auto x = i / 8.0f;
-        table.points[static_cast<size_t>(i)] = {x, lfoWave(shape, x, processor.lfoValue(lfo))};
-    }
+    // The Default shape's own nodes rather than a row of dots sampled off it, so
+    // what is picked up is exactly what was on screen. The grid stays as it was
+    // set: it is a property of the well, not of the shape standing in it.
+    const auto& starter = lfoShapeTables[static_cast<size_t>(shape)];
+    table.points = starter.points;
+    table.count = starter.count;
+    table.custom = true;
+    if (shape == LfoShape::sampleHold)
+        table.points[0].y = table.points[1].y
+            = std::clamp(processor.lfoValue(lfo), -1.0f, 1.0f);
     return table;
 }
 
@@ -88,10 +91,7 @@ int Editor::lfoCurveHandleAt(juce::Point<int> at) const
 {
     const auto plot = ui::lfoPlotBounds(lfoDisplayBounds());
     if (!plot.expanded(8).contains(at)) return -1;
-    // Only a drawn table has them. A Default shape's dots sit on a sine or a
-    // saw, and a chord's handle would be drawn off the very curve it claims to
-    // bend; dragging a dot makes the table Custom and the handles appear.
-    if (!processor.lfoTableIsCustom(shownLfo()) || lfoPointAt(at) >= 0) return -1;
+    if (lfoPointAt(at) >= 0) return -1;
     const auto table = editableLfoTable(shownLfo());
     for (int i = 0; i + 1 < table.count; ++i)
     {

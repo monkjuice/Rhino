@@ -331,10 +331,21 @@ void Arrangement::paint(juce::Graphics& g)
                 lowPitch = std::min(lowPitch, note.pitch);
                 highPitch = std::max(highPitch, note.pitch);
             }
+            // A note is fixed in the sequence the clip is a window onto, so what
+            // carries it is the window's origin rather than its start. Moving a
+            // clip slides both together and the notes travel with it; trimming
+            // the start advances the start and the offset by the same amount
+            // over a sequence that has not moved, so the notes that survive
+            // stay exactly where they were. Carrying them by the start alone
+            // slid them right through a left trim and pushed the last of them
+            // off the clip's own end, so the preview appeared to crop from the
+            // right until mouse-up drew it again.
+            const auto noteShift = (position.start - position.offset)
+                                 - (clip.position.start - clip.position.offset);
             for (const auto& note : clip.midiNotes)
             {
-                const auto x1 = xFor(position.start + note.start - clip.position.start);
-                const auto x2 = xFor(position.start + note.end - clip.position.start);
+                const auto x1 = xFor(note.start + noteShift);
+                const auto x2 = xFor(note.end + noteShift);
                 const auto w = std::max(3.0f, x2 - x1);
                 const auto pitchScale = static_cast<float>(note.pitch - lowPitch)
                     / static_cast<float>(std::max(1, highPitch - lowPitch));

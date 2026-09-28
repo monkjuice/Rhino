@@ -82,6 +82,45 @@
         require(dragPreviewOldPixels == 0 && dragPreviewNewPixels >= 25,
                 "Dragged MIDI clip contents must follow the live preview before mouse-up");
         view.dragging = false;
+        // Trimming the start is not a move: the window opens later over a
+        // sequence that stays where it is, so every note that survives the
+        // trim has to be drawn exactly where it already was. Carrying the
+        // notes by the new start instead slides them right and pushes the
+        // last of them off the clip's own end, which reads as the clip being
+        // cropped from the wrong side until mouse-up puts it back. The frame
+        // the drag shows and the frame the trim lands on are the same frame.
+        const auto trimTo = patternPosition.time.getStart().inSeconds()
+                          + patternPosition.time.getLength().inSeconds() * 0.25;
+        view.selected = patternID;
+        view.original = {patternPosition.time.getStart().inSeconds(), patternPosition.time.getEnd().inSeconds(),
+                         patternPosition.offset.inSeconds()};
+        view.preview = previewClipEdit(view.original, ClipGesture::trimLeft, trimTo, 0.0);
+        view.originalTrack = view.previewTrack = 0;
+        view.gesture = ClipGesture::trimLeft;
+        view.dragging = true;
+        const auto trimPreviewPicture = view.createComponentSnapshot(view.getLocalBounds());
+        view.dragging = false;
+        view.gesture = ClipGesture::move;
+        // Cleared before the sync so the rebuilt clips cannot drag a time
+        // selection onto the lane and colour the comparison.
+        view.selected = te::EditItemID();
+        require(session.editClip(patternID, view.preview, ClipGesture::trimLeft).wasOk(),
+                "The previewed left trim can be applied");
+        view.sync();
+        const auto trimLandedPicture = view.createComponentSnapshot(view.getLocalBounds());
+        int trimPreviewNotePixels = 0, trimPreviewDisagreements = 0;
+        for (int y = 95; y < 122; ++y)
+            for (int x = static_cast<int>(view.lane(0).getX()) + 7; x < 620; ++x)
+            {
+                const auto previewed = isMidiNotePixel(trimPreviewPicture.getPixelAt(x, y));
+                if (previewed) ++trimPreviewNotePixels;
+                if (previewed != isMidiNotePixel(trimLandedPicture.getPixelAt(x, y))) ++trimPreviewDisagreements;
+            }
+        require(trimPreviewNotePixels >= 25, "A left-trimmed MIDI clip still draws the notes it kept");
+        require(trimPreviewDisagreements == 0,
+                "A left trim must preview the notes where the finished trim leaves them");
+        session.undo();
+        view.sync();
         require(session.editClip(patternID, {0.0, 0.25, 0.0}, ClipGesture::trimRight).wasOk(),
                 "Can create a very short MIDI clip for paint clipping");
         view.sync();

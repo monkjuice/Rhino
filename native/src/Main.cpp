@@ -354,14 +354,18 @@ public:
         tempo.setValue(session.tempo(), juce::dontSendNotification);
         tempo.setTextValueSuffix(" BPM");
         tempo.onValueChange = [this] { session.setTempo(tempo.getValue()); };
-        timeSignature.addItem("3 / 4", 304);
-        timeSignature.addItem("4 / 4", 404);
-        timeSignature.addItem("5 / 4", 504);
-        timeSignature.addItem("6 / 8", 608);
-        timeSignature.addItem("7 / 8", 708);
-        timeSignature.addItem("9 / 8", 908);
-        timeSignature.addItem("12 / 8", 1208);
-        timeSignature.setTooltip("Project time signature");
+        // The id is numerator * 100 + denominator, which setTimeSignature reads
+        // straight back out. Every one of these is a signature the model already
+        // accepts; the list was simply shorter than the model.
+        for (const auto* signature : {"1 / 4", "2 / 4", "3 / 4", "4 / 4", "5 / 4", "6 / 4", "7 / 4",
+                                      "3 / 8", "5 / 8", "6 / 8", "7 / 8", "9 / 8", "12 / 8"})
+        {
+            const juce::String text {signature};
+            timeSignature.addItem(text, text.upToFirstOccurrenceOf("/", false, false).trim().getIntValue() * 100
+                                          + text.fromLastOccurrenceOf("/", false, false).trim().getIntValue());
+        }
+        timeSignature.setTooltip("Time signature: how many beats make a bar, and which note is the beat. "
+                                 "The arrangement shades its bars to match.");
         timeSignature.onChange = [this]
         {
             const auto value = timeSignature.getSelectedId();
@@ -678,6 +682,27 @@ public:
         if (key.getModifiers().isCommandDown() && key.getModifiers().isShiftDown() && key.getKeyCode() == 'E')
         {
             files.exportWav();
+            return true;
+        }
+        // Splitting is a clip command, so the arrangement owns it - but the
+        // keyboard is usually somewhere else by the time it is wanted: on a
+        // knob in the audio editor, or in the browser. This runs after the
+        // focused component has had its say, so the note editor's own Ctrl+E
+        // still subdivides notes and never reaches here.
+        if (key.getModifiers().isCommandDown() && key.getKeyCode() == 'E')
+        {
+            arrangement.splitSelectedAtPlayhead();
+            return true;
+        }
+        // Reverse reaches the shell for the same reason, and more often: the
+        // clip you want to hear backwards is usually the one already open in
+        // the audio editor, with the keyboard on one of its knobs. A plain
+        // letter is safe here because this runs last - a text field, the
+        // browser search or a rename editor has already swallowed it, and the
+        // typing keyboard's note keys do not include R.
+        if (!key.getModifiers().isAnyModifierKeyDown() && key.getKeyCode() == 'R')
+        {
+            arrangement.reverseSelected();
             return true;
         }
         if (key.getModifiers().isCommandDown() && key.getKeyCode() == 'F')
@@ -1094,7 +1119,8 @@ private:
                         "Double-click a cell  Add a note there\nB  Draw mode in the MIDI editor: drag paints notes\n"
                         "Right-drag in the MIDI editor  Erase notes\n"
                         "Ctrl+X / Ctrl+C / Ctrl+V  Cut, copy and paste the selection\n"
-                        "Ctrl+D  Duplicate it directly after itself\nDelete  Empty the selection\n"
+                        "Ctrl+D  Duplicate it directly after itself\nCtrl+E  Split the selected clip at the playhead\n"
+                        "R  Play the selected audio clips backwards\nDelete  Empty the selection\n"
                         "?  Show/hide Info View\nF12  Full screen");
                 else if (result == 2)
                     juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon, "About Rhino",

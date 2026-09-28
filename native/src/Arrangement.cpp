@@ -27,16 +27,14 @@ Arrangement::Arrangement(Session& s)
     duplicateButton.setTooltip("Duplicate selected clip");
     addTrack.setTooltip("Add a track: pick audio or MIDI (Ctrl+T repeats the last kind)");
     snap.setTooltip("Toggle clip snap");
-    gridControl.setTooltip("Arrangement grid settings");
+    gridControl.setTooltip("Grid spacing: how far apart the lines are, and what a clip snaps to");
+    toolbarGrid.setTooltip("Grid spacing: how far apart the lines are, and what a clip snaps to");
     automationButton.setTooltip("Automation edit mode: drag lanes instead of clips");
     snap.setClickingTogglesState(true);
     snap.setToggleState(true, juce::dontSendNotification);
-    gridControl.onClick = [this] { showGridMenu(); };
-    snap.onClick = [this]
-    {
-        gridSettings.mode = snap.getToggleState() ? GridMode::fixed : GridMode::off;
-        repaint();
-    };
+    gridControl.onClick = [this] { showGridMenu(&gridControl); };
+    toolbarGrid.onClick = [this] { showGridMenu(&toolbarGrid); };
+    snap.onClick = [this] { setGridEnabled(snap.getToggleState()); };
     automationButton.setClickingTogglesState(true);
     duplicateButton.onClick = [this] { duplicateSelected(); };
     automationButton.onClick = [this]
@@ -48,28 +46,8 @@ Arrangement::Arrangement(Session& s)
         repaint();
     };
     addTrack.onClick = [this] { showAddTrackMenu(); };
-    snapSize.addItem("1/16", 1);
-    snapSize.addItem("1/8", 2);
-    snapSize.addItem("1/4", 3);
-    snapSize.addItem("1 Bar", 4);
-    snapSize.setSelectedId(1, juce::dontSendNotification);
-    snapSize.onChange = [this]
-    {
-        gridSettings.mode = snap.getToggleState() ? GridMode::fixed : GridMode::off;
-        switch (snapSize.getSelectedId())
-        {
-            case 2: gridSettings.fixedDivision = GridDivision::eighth; break;
-            case 3: gridSettings.fixedDivision = GridDivision::quarter; break;
-            case 4: gridSettings.fixedDivision = GridDivision::bar; break;
-            default: gridSettings.fixedDivision = GridDivision::sixteenth; break;
-        }
-        repaint();
-    };
-    snapSize.setColour(juce::ComboBox::backgroundColourId, juce::Colour(0xff262c32));
-    snapSize.setColour(juce::ComboBox::outlineColourId, juce::Colour(0xff46515a));
-    for (auto* control : std::initializer_list<juce::Component*>{&duplicateButton, &addTrack, &snap, &automationButton, &gridControl, &scroll, &trackScrollBar})
+    for (auto* control : std::initializer_list<juce::Component*>{&duplicateButton, &addTrack, &snap, &automationButton, &gridControl, &toolbarGrid, &scroll, &trackScrollBar})
         addAndMakeVisible(control);
-    addAndMakeVisible(snapSize);
     laneHeaders.setInterceptsMouseClicks(false, true);
     addAndMakeVisible(laneHeaders);
     configureNameEditor();
@@ -123,7 +101,7 @@ void Arrangement::resized()
     duplicateButton.setBounds(48, 3, 34, 26);
     snap.setBounds(86, 3, 34, 26);
     automationButton.setBounds(124, 3, 34, 26);
-    snapSize.setBounds(164, 3, 74, 26);
+    toolbarGrid.setBounds(164, 3, 92, 26);
     // Above the main row rather than inside it.
     gridControl.setBounds(getWidth() - 104, static_cast<int>(masterLane().getY()) - 26, 76, 20);
     updateGridControl();
@@ -317,6 +295,11 @@ bool Arrangement::keyPressed(const juce::KeyPress& key)
         if (result.failed() && status) status(result.getErrorMessage());
         return true;
     }
+    if (!key.getModifiers().isAnyModifierKeyDown() && key.getKeyCode() == 'R')
+    {
+        reverseSelected();
+        return true;
+    }
     if (key.getKeyCode() == juce::KeyPress::escapeKey && (dragging || timeSelection.active))
     {
         cancelDrag();
@@ -433,8 +416,54 @@ void Arrangement::focusTrack()
 void Arrangement::splitSelectedAtPlayhead()
 {
     cancelDrag();
+    auto* clip = session.findClip(selected);
+    const auto name = clip != nullptr ? clip->getName() : juce::String();
     const auto result = session.splitClip(selected, playheadTime(session.edit->getTransport()));
-    if (result.failed() && status) status(result.getErrorMessage());
+    // Reported either way: the command usually arrives from the keyboard with
+    // the clip halves too close together to see, so silence on success reads
+    // as nothing having happened.
+    if (status) status(result.failed() ? result.getErrorMessage()
+                                       : "Split " + name.quoted() + " at the playhead");
+}
+
+// Reverse is a property of the clip, so it acts on the whole selection the
+// way colour and delete do rather than on whichever clip the audio editor
+// happens to have open. A mixed selection is settled the way Live settles a
+// mixed switch: one clip still playing forwards turns the whole selection
+// round, and only a selection that is already entirely backwards turns back.
+void Arrangement::reverseSelected()
+{
+    cancelDrag();
+    // MIDI clips are simply passed over. A selection swept across both kinds
+    // is the normal case, and refusing the whole thing because one lane holds
+    // notes would make the key useless exactly when it is quickest to reach.
+    auto chosen = selectedClips;
+    if (chosen.empty() && selected != te::EditItemID()) chosen = {selected};
+    std::vector<te::EditItemID> audio;
+    for (const auto id : chosen)
+        if (session.audioClipMix(id).valid)
+            audio.push_back(id);
+    if (audio.empty())
+    {
+        if (status) status("Select an audio clip to reverse");
+        return;
+    }
+    bool allReversed = true;
+    for (const auto id : audio)
+        allReversed = allReversed && session.audioClipMix(id).reversed;
+    // One undo step for the selection, not one per clip: turning four clips
+    // round and pressing Ctrl+Z should put all four back.
+    session.beginAudioClipGesture(allReversed ? "Play clips forwards" : "Reverse clips");
+    for (const auto id : audio)
+        session.setAudioClipReversed(id, !allReversed);
+    session.endAudioClipGesture();
+    // Said either way. A reversed clip looks the same in the lane at most
+    // zoom levels, so silence on success reads as the key having missed.
+    const auto subject = audio.size() == 1
+        ? session.audioClipMix(audio.front()).name.quoted()
+        : juce::String(static_cast<int>(audio.size())) + " clips";
+    if (status) status(allReversed ? subject + ": playing forwards again" : "Reversed " + subject);
+    repaint();
 }
 
 void Arrangement::nudgeSelected(int direction, bool byBar)
@@ -571,10 +600,32 @@ GridDivision Arrangement::resolvedGridDivision() const
     return gridSettings.fixedDivision;
 }
 
+// One place that turns the grid off and on, so the toggle, the menu item and
+// the readouts cannot disagree about what "on" means.
+void Arrangement::setGridEnabled(bool enabled)
+{
+    if (enabled)
+        gridSettings.mode = gridModeWhenSnapping;
+    else
+    {
+        if (gridSettings.mode != GridMode::off) gridModeWhenSnapping = gridSettings.mode;
+        gridSettings.mode = GridMode::off;
+    }
+    snap.setToggleState(enabled, juce::dontSendNotification);
+    updateGridControl();
+    repaint();
+}
+
 void Arrangement::updateGridControl()
 {
-    gridControl.setButtonText(juce::String(gridDivisionLabel(resolvedGridDivision()))
-                              + (gridSettings.triplet ? "T" : "") + " v");
+    // Adaptive resolves to whatever the zoom has landed on, so both faces read
+    // the division actually in force rather than the word "Adaptive" - which
+    // is the number a person is trying to find out when they look.
+    const auto value = gridSettings.mode == GridMode::off
+        ? juce::String("Off")
+        : juce::String(gridDivisionLabel(resolvedGridDivision())) + (gridSettings.triplet ? "T" : "");
+    gridControl.setButtonText(value + " v");
+    toolbarGrid.setButtonText("Grid " + value + " v");
 }
 
 double Arrangement::resolvedGridBeats() const
@@ -595,6 +646,10 @@ void Arrangement::showClipMenu(te::EditItemID id)
     menu.addItem(5, "Copy       Ctrl+C");
     menu.addItem(6, "Paste       Ctrl+V", !clipboard.isEmpty());
     menu.addItem(2, "Duplicate       Ctrl+D");
+    menu.addItem(7, "Split at Playhead       Ctrl+E");
+    // Ticked from the clip the menu was opened on, which is the one under the
+    // pointer whether or not the rest of the selection agrees with it.
+    menu.addItem(8, "Reverse       R", session.audioClipMix(id).valid, session.audioClipMix(id).reversed);
     menu.addSeparator();
     menu.addItem(3, "Delete");
     menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this)
@@ -619,6 +674,8 @@ void Arrangement::showClipMenu(te::EditItemID id)
             else if (result == 4) safe->cutSelection();
             else if (result == 5) safe->copySelection();
             else if (result == 6) safe->pasteSelection();
+            else if (result == 7) safe->splitSelectedAtPlayhead();
+            else if (result == 8) safe->reverseSelected();
         });
 }
 
@@ -652,7 +709,7 @@ void Arrangement::addTrackOfType(Session::TrackType type)
                                : "Added " + session.trackName(session.trackCount() - 1));
 }
 
-void Arrangement::showGridMenu()
+void Arrangement::showGridMenu(juce::Component* target)
 {
     juce::PopupMenu menu, adaptive, fixed;
     const std::array<std::pair<AdaptiveGridWidth, const char*>, 5> widths {{{AdaptiveGridWidth::widest, "Widest"},
@@ -669,7 +726,7 @@ void Arrangement::showGridMenu()
     menu.addSeparator();
     menu.addItem(1, "Triplet Grid", true, gridSettings.triplet);
     menu.addItem(2, "Show/Snap Grid", true, gridSettings.mode != GridMode::off);
-    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(gridControl),
+    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(target),
         [safe = juce::Component::SafePointer<Arrangement>(this)] (int result)
         {
             if (safe == nullptr || result == 0) return;
@@ -684,7 +741,10 @@ void Arrangement::showGridMenu()
                 safe->gridSettings.fixedDivision = gridDivisions[static_cast<size_t>(result - 200)];
             }
             else if (result == 1) safe->gridSettings.triplet = !safe->gridSettings.triplet;
-            else if (result == 2) safe->gridSettings.mode = safe->gridSettings.mode == GridMode::off ? GridMode::adaptive : GridMode::off;
+            else if (result == 2) { safe->setGridEnabled(safe->gridSettings.mode == GridMode::off); return; }
+            // Choosing a division turns the grid back on; toggling triplet on a
+            // grid that is off leaves it off.
+            if (safe->gridSettings.mode != GridMode::off) safe->gridModeWhenSnapping = safe->gridSettings.mode;
             safe->snap.setToggleState(safe->gridSettings.mode != GridMode::off, juce::dontSendNotification);
             safe->resized();
             safe->repaint();

@@ -102,6 +102,24 @@ inline const char* gridDivisionLabel(GridDivision division)
     return "1/16";
 }
 
+// How many bars one shaded band covers. The arrangement shades every other
+// band so the bar grouping reads at a glance - three beats in 3/4, four in
+// 4/4 - and the time signature is the only thing that knows how wide a bar is.
+// A bar too narrow to read alone is grouped with its neighbours in powers of
+// two, which is why a 1/4 project bands four bars where a 4/4 project at the
+// same zoom bands one.
+inline constexpr double barBandMinimumPixels = 120.0;
+
+inline int barsPerBand(double pixelsPerBar)
+{
+    int bars = 1;
+    // Bounded rather than trusting the width: a collapsed or not-yet-laid-out
+    // lane reports no width at all, and this runs inside paint.
+    while (bars < 256 && pixelsPerBar * bars < barBandMinimumPixels)
+        bars *= 2;
+    return bars;
+}
+
 inline bool isGridLine(double beat, double interval)
 {
     if (interval <= 0.0) return false;

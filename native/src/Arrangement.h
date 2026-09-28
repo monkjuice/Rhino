@@ -37,6 +37,15 @@ public:
     // a track, a region or nothing. The shell reads it to decide which editor
     // the lower pane should be showing.
     te::EditItemID selectedClipID() const { return selected; }
+    // Cuts the selected clip in two at the playhead. Public because Ctrl+E is
+    // a shell shortcut rather than an arrangement one: the timeline rarely has
+    // the keyboard when a clip editor is open, and the command still means the
+    // same thing.
+    void splitSelectedAtPlayhead();
+    // Turns the selected audio clips round. Public for the same reason as the
+    // split above: R is a shell shortcut, because the clip you want to hear
+    // backwards is usually the one open in the audio editor.
+    void reverseSelected();
     std::function<void(juce::String)> status;
     // The typing keyboard belongs to the shell, not to the arrangement, but the
     // card is where a MIDI track is armed and where its input is chosen - and
@@ -134,7 +143,6 @@ private:
     void cancelDrag();
     bool isSelected(te::EditItemID) const;
     void setSelection(std::vector<te::EditItemID>, te::EditItemID primary = {});
-    void splitSelectedAtPlayhead();
     void openCreatedClip(te::EditItemID created);
     // Records that the last click landed on a track card, and reports it.
     void focusTrack();
@@ -167,6 +175,10 @@ private:
     // numbering is stepped by what stays legible at this zoom rather than
     // by the grid division. Changing the grid must not renumber the bars.
     void paintBarNumbers(juce::Graphics&, double firstBeat, double lastBeat);
+    // Every other bar group washed a shade lighter, so the beats read as bars
+    // without counting grid lines. Painted under the clips: a clip is drawn
+    // translucent, so the band shows through it the way Live's does.
+    void paintBarBands(juce::Graphics&, double firstBeat, double lastBeat);
     juce::String barPositionText(double seconds) const;
     void copySelection();
     void cutSelection();
@@ -181,7 +193,10 @@ private:
     // positions and not the span between them, so it cannot be relied on to
     // fill the band in.
     void repaintRecordingBand();
-    void showGridMenu();
+    // Opened from either readout, or from a right-click on empty lane space -
+    // Live's own way in. A null target leaves the menu at the pointer.
+    void showGridMenu(juce::Component* target = nullptr);
+    void setGridEnabled(bool);
     void showAddTrackMenu();
     void addTrackOfType(Session::TrackType);
     void showClipMenu(te::EditItemID);
@@ -298,8 +313,10 @@ private:
     std::vector<bool> armedTracks;
     std::vector<int> trackRowIndex;
     float rowsHeight = 0.0f;
-    juce::TextButton duplicateButton, addTrack, snap, automationButton, gridControl;
-    juce::ComboBox snapSize;
+    // Two faces of one setting, never two settings: gridControl is Live's
+    // readout in the corner of the view, toolbarGrid is the same value and the
+    // same menu up beside the snap toggle. updateGridControl writes both.
+    juce::TextButton duplicateButton, addTrack, snap, automationButton, gridControl, toolbarGrid;
     // The header controls live in a container spanning the scrolling lane
     // viewport, so JUCE clips them at its edges: a row dragged past the bottom
     // slides under the pinned main row instead of being drawn over it, and one
@@ -327,6 +344,10 @@ private:
     juce::VBlankAttachment vblank;
     double viewStart = 0.0, viewSpan = 8.0, songEnd = 2.0, trackScroll = 0.0;
     GridSettings gridSettings;
+    // What the snap toggle turns back on. Without it, switching snapping off
+    // and on again silently moved an adaptive grid to fixed - the two controls
+    // now show the same value, so that quietly rewrote what the person read.
+    GridMode gridModeWhenSnapping = GridMode::adaptive;
     te::EditItemID selected;
     std::vector<te::EditItemID> selectedClips;
     // A copied rectangle rather than clip ids: a cut deletes its sources, and

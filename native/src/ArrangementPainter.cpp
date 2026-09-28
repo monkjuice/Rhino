@@ -14,6 +14,48 @@ namespace rhino
 // line happened to land on one. Stepping by the snap division made the ruler
 // read in whatever the grid was set to; stepping by bars keeps the numbering
 // consecutive and the reading musical at every zoom.
+// Bars are grouped and every other group is washed, which is what makes a 3/4
+// project read as threes and a 4/4 as fours - the beat lines alone look the
+// same in both. The wash goes on before the clips rather than over them: a
+// clip is filled translucent, so it picks the band up through its own colour.
+void Arrangement::paintBarBands(juce::Graphics& g, double firstBeat, double lastBeat)
+{
+    const auto barLength = std::max(0.25, session.beatsPerBar());
+    const auto timeOfBar = [this, barLength](double bar)
+    {
+        return session.edit->tempoSequence
+            .toTime(tracktion::core::BeatPosition::fromBeats(bar * barLength)).inSeconds();
+    };
+    // Counted from bar zero rather than from the left edge of the view, so
+    // which group is washed is a property of the music and does not flip as
+    // the arrangement is scrolled.
+    const auto firstBar = std::floor(firstBeat / barLength);
+    const auto lastBar = std::floor(lastBeat / barLength);
+    // A tempo ramp makes bars unequal in pixels; the group size is picked from
+    // the first bar on screen, exactly as the bar numbering's step is.
+    const auto pixelsPerBar = static_cast<double>(xFor(timeOfBar(firstBar + 1.0)) - xFor(timeOfBar(firstBar)));
+    const auto band = static_cast<double>(barsPerBand(pixelsPerBar));
+    const auto pair = band * 2.0;
+    const auto right = static_cast<float>(getWidth()) - 14.0f;
+    const auto top = lanesTop;
+    const auto bottom = masterLane().getBottom();
+    if (right <= headerWidth || bottom <= top) return;
+    juce::Graphics::ScopedSaveState scope(g);
+    g.reduceClipRegion(juce::Rectangle<float>(headerWidth, top, right - headerWidth, bottom - top)
+                           .getSmallestIntegerContainer());
+    g.setColour(juce::Colour(0x0affffff));
+    int painted = 0;
+    for (auto bar = std::floor(firstBar / pair) * pair; bar <= lastBar + pair && painted < 512; bar += pair)
+    {
+        const auto x1 = xFor(timeOfBar(bar + band));
+        const auto x2 = xFor(timeOfBar(bar + pair));
+        ++painted;
+        if (x2 < headerWidth) continue;
+        if (x1 > right) break;
+        g.fillRect(juce::Rectangle<float>(x1, top, x2 - x1, bottom - top));
+    }
+}
+
 void Arrangement::paintBarNumbers(juce::Graphics& g, double firstBeat, double lastBeat)
 {
     const auto barLength = std::max(0.25, session.beatsPerBar());
@@ -166,6 +208,7 @@ void Arrangement::paint(juce::Graphics& g)
 
     const auto firstBeat = session.edit->tempoSequence.toBeats(tracktion::core::TimePosition::fromSeconds(viewStart)).inBeats();
     const auto lastBeat = session.edit->tempoSequence.toBeats(tracktion::core::TimePosition::fromSeconds(viewStart + viewSpan)).inBeats();
+    paintBarBands(g, firstBeat, lastBeat);
     const auto gridBeat = resolvedGridBeats();
     const auto firstGrid = std::floor(firstBeat / gridBeat) * gridBeat;
     int paintedTicks = 0;

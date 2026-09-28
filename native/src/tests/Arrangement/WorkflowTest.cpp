@@ -83,6 +83,8 @@ int runArrangementTest()
        #include "scenarios/LibraryPreview.inc"
         scenario("rendering");
        #include "scenarios/Rendering.inc"
+        scenario("bar bands and the grid readouts");
+       #include "scenarios/BarBands.inc"
         scenario("audio clip editing");
        #include "scenarios/AudioClipEditing.inc"
         scenario("audio clip mixing");

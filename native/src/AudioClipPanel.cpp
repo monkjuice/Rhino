@@ -1,4 +1,5 @@
 #include "AudioClipPanel.h"
+#include "Playhead.h"
 #include "Theme.h"
 #include "WaveformLanes.h"
 #include <cmath>
@@ -22,6 +23,15 @@ juce::String panText(float pan)
     if (std::abs(pan) < 0.005f)
         return "C";
     return (pan < 0.0f ? "L" : "R") + juce::String(std::abs(pan) * 100.0f, 0);
+}
+
+// Reverse and Mute are states; Split is a thing that happens once. It gets
+// the same face as the switches in their off state so the column reads as one
+// group, and never lights up, because there is nothing for it to stay on for.
+void styleAction(juce::TextButton& button)
+{
+    button.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff2a323a));
+    button.setColour(juce::TextButton::textColourOffId, juce::Colour(0xffc2ccd4));
 }
 
 void styleSwitch(juce::TextButton& button, bool on, juce::Colour onColour)
@@ -104,7 +114,7 @@ void AudioClipPanel::configureControls()
     sliders[fadeOutControl].setRange(0.0, 1.0, 0.001);
 
     reverse.setButtonText("Reverse");
-    reverse.setTooltip("Play this clip's source material backwards");
+    reverse.setTooltip("Play this clip's source material backwards       R");
     reverse.onClick = [this]
     {
         const auto result = session.setAudioClipReversed(clip, !mix.reversed);
@@ -117,8 +127,13 @@ void AudioClipPanel::configureControls()
         const auto result = session.setAudioClipMuted(clip, !mix.muted);
         if (result.failed() && status) status(result.getErrorMessage());
     };
+    split.setButtonText("Split");
+    split.setTooltip("Cut this clip in two at the playhead       Ctrl+E");
+    split.onClick = [this] { splitAtPlayhead(); };
+    styleAction(split);
     addAndMakeVisible(reverse);
     addAndMakeVisible(mute);
+    addAndMakeVisible(split);
     sync();
 }
 
@@ -136,6 +151,11 @@ void AudioClipPanel::sync()
         slider.setEnabled(enabled);
     reverse.setEnabled(enabled);
     mute.setEnabled(enabled);
+    // Enabled for any open clip rather than only when the playhead happens to
+    // be inside it: the transport moves without telling this panel, so a state
+    // computed here would go stale between frames. splitClip says why when the
+    // line is in the wrong place, which is the more useful answer anyway.
+    split.setEnabled(enabled);
     // A fade can never be longer than the clip it is on, so the two fade
     // controls are scaled to whatever clip the panel is showing.
     const auto length = std::max(0.01, mix.lengthSeconds());
@@ -224,6 +244,13 @@ void AudioClipPanel::apply(int control)
     repaint(waveArea);
 }
 
+void AudioClipPanel::splitAtPlayhead()
+{
+    const auto result = session.splitClip(clip, playheadTime(session.edit->getTransport()));
+    if (status) status(result.failed() ? result.getErrorMessage()
+                                       : "Split " + mix.name.quoted() + " at the playhead");
+}
+
 void AudioClipPanel::refreshThumbnail()
 {
     const auto source = mix.valid ? mix.sourceFile.getFullPathName() : juce::String();
@@ -290,11 +317,18 @@ void AudioClipPanel::resized()
 
     auto controls = controlsArea;
     auto switches = controls.removeFromRight(switchWidth).reduced(6, 0);
-    const auto switchHeight = std::min(26, std::max(18, (switches.getHeight() - 8) / 2));
-    switches = switches.withSizeKeepingCentre(switches.getWidth(), switchHeight * 2 + 6);
+    // Three buttons in the column now, so the gaps come out of the height
+    // before it is divided rather than after: a short panel shrinks the
+    // buttons instead of pushing the last one off the bottom.
+    constexpr int switchGap = 5, switchCount = 3;
+    const auto switchHeight = std::min(26, std::max(16, (switches.getHeight() - switchGap * (switchCount - 1)) / switchCount));
+    switches = switches.withSizeKeepingCentre(switches.getWidth(),
+                                              switchHeight * switchCount + switchGap * (switchCount - 1));
     reverse.setBounds(switches.removeFromTop(switchHeight));
-    switches.removeFromTop(6);
+    switches.removeFromTop(switchGap);
     mute.setBounds(switches.removeFromTop(switchHeight));
+    switches.removeFromTop(switchGap);
+    split.setBounds(switches.removeFromTop(switchHeight));
 
     const auto cellWidth = std::max(1, controls.getWidth() / controlCount);
     for (int i = 0; i < controlCount; ++i)

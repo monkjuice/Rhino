@@ -55,6 +55,41 @@
             require(session.audioClipMix(id).reversed, "The clip plays backwards");
             require(!session.audioClipMix(neighbourID).reversed, "The clip beside it plays forwards");
 
+            // R, from the timeline or from the shell while the keyboard is on
+            // a knob in the audio editor. It acts on the selection rather than
+            // on the open clip, so it has to settle a selection that disagrees
+            // with itself, undo as one step, and pass over a MIDI clip that a
+            // sweep happened to gather up with the audio.
+            {
+                auto savedStatus = view.status;
+                juce::String reported;
+                view.status = [&reported](juce::String text) { reported = std::move(text); };
+                view.setSelection({id, neighbourID}, id);
+                view.reverseSelected();
+                require(session.audioClipMix(id).reversed && session.audioClipMix(neighbourID).reversed,
+                        "One clip still playing forwards turns the whole selection round");
+                view.reverseSelected();
+                require(!session.audioClipMix(id).reversed && !session.audioClipMix(neighbourID).reversed,
+                        "A selection already entirely backwards turns back");
+                view.reverseSelected();
+                session.undo();
+                require(!session.audioClipMix(id).reversed && !session.audioClipMix(neighbourID).reversed,
+                        "Reversing a selection of clips undoes in one step");
+
+                view.setSelection({session.pattern().itemID}, session.pattern().itemID);
+                reported.clear();
+                view.reverseSelected();
+                require(reported.isNotEmpty(), "Reversing a selection with no audio in it says so instead of failing silently");
+
+                view.setSelection({id}, id);
+                view.reverseSelected();
+                require(session.audioClipMix(id).reversed && !session.audioClipMix(neighbourID).reversed,
+                        "R turns the one selected clip round and leaves its neighbour alone");
+                view.reverseSelected();
+                require(!session.audioClipMix(id).reversed, "R is a toggle rather than a one-way switch");
+                view.status = std::move(savedStatus);
+            }
+
             // A fader drag is hundreds of values and one undo step. Without the
             // bracket every pixel of it would be an entry of its own.
             const auto gainBeforeGesture = session.audioClipMix(id).gainDb;
@@ -136,6 +171,27 @@
                             break;
                         }
                 require(paintedSomething, "The audio editor draws its controls and waveform, not just a background");
+                // Split acts on the clip the panel is showing, at the
+                // playhead, and says why rather than doing nothing when the
+                // line is outside it.
+                juce::String reported;
+                panel->status = [&reported](juce::String text) { reported = text; };
+                auto* lane = te::getAudioTracks(*session.edit)[1];
+                const auto clipsBefore = lane->getClips().size();
+                session.edit->getTransport().setPosition(tracktion::core::TimePosition::fromSeconds(0.0));
+                panel->splitAtPlayhead();
+                require(lane->getClips().size() == clipsBefore && reported.isNotEmpty(),
+                        "Split refuses and explains when the playhead is outside the clip");
+                const auto middle = session.audioClipMix(id).startSeconds + session.audioClipMix(id).lengthSeconds() * 0.5;
+                session.edit->getTransport().setPosition(tracktion::core::TimePosition::fromSeconds(middle));
+                panel->splitAtPlayhead();
+                require(lane->getClips().size() == clipsBefore + 1, "The audio editor's Split cuts the open clip in two");
+                require(panel->clipID() == id && panel->hasClip(), "The audio editor stays on the left half after a split");
+                session.undo();
+                require(lane->getClips().size() == clipsBefore, "Undo restores the clip the audio editor split");
+                panel->status = nullptr;
+                session.edit->getTransport().setPosition(tracktion::core::TimePosition::fromSeconds(0.0));
+
                 panel->setClip(session.pattern().itemID);
                 require(!panel->hasClip(), "A MIDI clip empties the audio editor instead of being drawn in it");
             }

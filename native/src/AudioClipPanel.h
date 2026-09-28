@@ -40,6 +40,10 @@ private:
     void updateReadouts();
     juce::String readout(int control) const;
     juce::String gestureName(int control) const;
+    // Cuts the open clip in two at the playhead. The panel acts on the clip
+    // it is showing rather than on whatever the arrangement has selected,
+    // because those are the same clip and this one is the one being looked at.
+    void splitAtPlayhead();
     void refreshThumbnail();
     void paintWaveform(juce::Graphics&, juce::Rectangle<int> area);
     void paintEmpty(juce::Graphics&, juce::Rectangle<int> area);
@@ -63,7 +67,7 @@ private:
     juce::Label title, subtitle;
     std::array<juce::Slider, controlCount> sliders;
     std::array<juce::Label, controlCount> names, values;
-    juce::TextButton reverse, mute;
+    juce::TextButton reverse, mute, split;
     juce::Rectangle<int> controlsArea, waveArea;
     static constexpr int headerHeight = 24, controlWidth = 66, switchWidth = 78;
     static constexpr int minimumWaveWidth = 140;

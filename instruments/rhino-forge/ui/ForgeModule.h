@@ -185,9 +185,12 @@ struct Module
     const char* enableId;
     bool violet;
     Display display;
-    // Position in a twelve-column grid. Rows are weighted, not fixed height,
+    // Position in a twenty-four-column grid. Rows are weighted, not fixed height,
     // so the panel keeps its proportions at every allowed window size.
-    int row, column, columnSpan;
+    int row;
+    // Fractional columns let three identical oscillator plates divide the
+    // sixteen-column centre exactly instead of making one visibly wider.
+    float column, columnSpan;
     // Knobs sized to their own cell instead of the panel's shared diameter,
     // and left out of working that diameter out. The macros are deliberately
     // smaller than the controls they drive, as Serum's are.
@@ -265,8 +268,8 @@ inline constexpr int headerHeight = 34;
 inline constexpr int plateFooterHeight = 20;
 
 // Row weights, top to bottom. Two rows, not three: the signal path across the
-// top — sources, the two oscillators, the filter — and everything that moves it
-// along the bottom. The tabs swap the oscillator pair for the matrix or the
+// top — sources, the oscillator bank, the filter — and everything that moves it
+// along the bottom. The tabs swap the oscillator bank for the matrix or the
 // wavetable editor without disturbing either end of the row, which is what lets
 // SUB, NOISE and FILTER stay put whichever tab is open.
 //
@@ -300,7 +303,7 @@ inline constexpr int filterDisplayPercent = 55;
 // largest thing on the panel at this share, and the knobs still come down from
 // 63 pixels to 52 at the size the panel opens at, which is where the third row
 // is actually paid for.
-inline constexpr int oscillatorDisplayPercent = 44;
+inline constexpr int oscillatorDisplayPercent = 30;
 
 // The share of its body a module actually gives its display.
 inline int displayShareOf(const Module& module)

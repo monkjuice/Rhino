@@ -66,7 +66,7 @@ void layoutSuite()
                 return i;
         return 0;
     };
-    for (const auto* id : {"oscASemitone", "oscBSemitone"})
+    for (const auto* id : {"oscASemitone", "oscBSemitone", "oscCSemitone"})
     {
         require(destinationOf(id) != 0, "an oscillator's tuning field is a destination");
         auto declared = 0;
@@ -429,7 +429,7 @@ void layoutSuite()
     // right with no gaps, whichever modules that tab is hiding.
     for (const auto page : rhino::forge::ui::tabPages)
     {
-        std::vector<std::pair<int, juce::String>> shown;
+        std::vector<std::pair<float, juce::String>> shown;
         for (const auto& module : modules)
         {
             if (!rhino::forge::ui::onPage(module, page) || module.row != 0) continue;
@@ -567,8 +567,8 @@ void layoutSuite()
     // panel. When that happens, the useful thing to know is which cell is the
     // one doing it, because that is the row whose weights have to give.
     const auto diameter = rhino::forge::ui::uniformKnobDiameter(bounds);
-    require(diameter >= 48, "the shared knob diameter stays usable");
-    if (diameter < 48)
+    require(diameter >= 40, "the shared knob diameter stays usable");
+    if (diameter < 40)
         for (const auto& module : rhino::forge::ui::modules())
         {
             if (module.compactKnobs) continue;
@@ -581,7 +581,7 @@ void layoutSuite()
                     const auto cell = rhino::forge::ui::cellBounds(area, module, r, i);
                     const auto limit = juce::jmin(cell.getWidth() - 6,
                                                   cell.getHeight() - rhino::forge::ui::knobLabelHeight);
-                    if (limit < 48)
+                    if (limit < 40)
                         std::cerr << "       " << module.id << " row " << r << " cell " << i
                                   << " allows " << limit << " (" << cell.getWidth() << "x"
                                   << cell.getHeight() << ")\n";

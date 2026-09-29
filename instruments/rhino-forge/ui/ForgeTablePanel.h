@@ -293,9 +293,10 @@ public:
     {
         for (int i = 0; i < oscillatorCount; ++i)
         {
-            auto chip = std::make_unique<ToggleChip>(i == 0 ? "A" : "B");
+            const auto letter = oscillatorLetter(i);
+            auto chip = std::make_unique<ToggleChip>(letter);
             chip->accent = electricBlue;
-            chip->setTooltip(i == 0 ? "Edit oscillator A's table" : "Edit oscillator B's table");
+            chip->setTooltip("Edit oscillator " + letter + "'s table");
             chip->setToggleState(i == oscillator, juce::dontSendNotification);
             chip->onClick = [this, i] { chooseOscillator(i); };
             addAndMakeVisible(*chip);

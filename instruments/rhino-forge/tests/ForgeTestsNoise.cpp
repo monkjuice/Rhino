@@ -24,8 +24,7 @@ namespace
 Patch noiseOnly(int source)
 {
     Patch patch;
-    patch.a.enable = 0.0f;
-    patch.b.enable = 0.0f;
+    for (auto& oscillator : patch.oscillators) oscillator.enable = 0.0f;
     patch.subEnable = 0.0f;
     patch.filterEnable = 0.0f;
     patch.noiseEnable = 1.0f;

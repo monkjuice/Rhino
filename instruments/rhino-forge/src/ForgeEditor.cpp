@@ -171,7 +171,7 @@ void Editor::applyTableCounts()
         for (auto& control : module.controls)
         {
             if (!control->id.endsWith("Position")) continue;
-            const auto oscillator = control->id.startsWith("oscB") ? 1 : 0;
+            const auto oscillator = juce::jmax(0, oscillatorIndexFromId(control->id));
             control->slider.gestureSteps = processor.tableStore().frameCount(oscillator);
             control->slider.updateText();
         }

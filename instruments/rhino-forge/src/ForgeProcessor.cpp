@@ -544,12 +544,14 @@ Patch Processor::patch() const
     };
 
     Patch result;
-    result.a = readOscillator("oscA");
-    result.b = readOscillator("oscB");
     // Picked up once per block and used for the whole of it, never re-read
-    // mid-block: that is the property the hand-over rule depends on.
-    result.a.table = tables.table(0);
-    result.b.table = tables.table(1);
+    // mid-block: that is the property the table hand-over rule depends on.
+    for (int oscillator = 0; oscillator < oscillatorCount; ++oscillator)
+    {
+        const auto index = static_cast<size_t>(oscillator);
+        result.oscillators[index] = readOscillator(oscillatorPrefix(oscillator));
+        result.oscillators[index].table = tables.table(oscillator);
+    }
     result.subEnable = value("subEnable");
     result.subWave = value("subWave");
     result.subOctave = value("subOctave");
@@ -563,8 +565,9 @@ Patch Processor::patch() const
     result.noisePan = value("noisePan");
     result.filterEnable = value("filterEnable");
     result.filterType = value("filterType");
-    result.routeA = value("routeA");
-    result.routeB = value("routeB");
+    for (int oscillator = 0; oscillator < oscillatorCount; ++oscillator)
+        result.routeOscillators[static_cast<size_t>(oscillator)] =
+            value("route" + oscillatorLetter(oscillator));
     result.routeSub = value("routeSub");
     result.routeNoise = value("routeNoise");
     result.cutoff = value("cutoff");
@@ -583,8 +586,9 @@ Patch Processor::patch() const
                 value(juce::String(prefix) + "Send" + juce::String(bus + 1));
         return sends;
     };
-    result.sendA = readSends("oscA");
-    result.sendB = readSends("oscB");
+    for (int oscillator = 0; oscillator < oscillatorCount; ++oscillator)
+        result.oscillatorSends[static_cast<size_t>(oscillator)] =
+            readSends(oscillatorPrefix(oscillator));
     result.sendSub = readSends("sub");
     result.sendNoise = readSends("noise");
     result.sendFilter = readSends("filter");

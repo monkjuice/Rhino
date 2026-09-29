@@ -6,14 +6,10 @@
 
 // State, presets and the files a table comes from.
 //
-// A preset saved at one milestone still opens at the next while the control
-// set is moving: parameters a preset predates load at their defaults, retired
-// ones are dropped rather than kept as ballast, and a source or destination
-// index written before something was inserted into the middle of a list is
-// remapped on the way in. All of that is migrated().
-//
-// Host state uses the same path, so a Rhino project holding older Forge state
-// opens without carrying dead parameters.
+// Preset format is a hard schema boundary. Inside the current schema, missing
+// parameters take their defaults and retired ones are dropped rather than kept
+// as ballast. Host state is not wrapped in a preset version, so migrated()
+// still reconciles it when a Rhino project is reopened.
 namespace rhino::forge
 {
 namespace
@@ -22,7 +18,7 @@ namespace
 // exist when they are opened — see Processor::migrated. That is what keeps a
 // preset saved at one milestone working at the next, while Forge's controls
 // are still moving.
-constexpr int presetFormatVersion = 2;
+constexpr int presetFormatVersion = 3;
 
 // A table travels as one child node holding every frame end to end. The
 // samples are deflated and then base64'd, because a ValueTree is written out as

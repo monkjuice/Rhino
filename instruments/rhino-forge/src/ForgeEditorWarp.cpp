@@ -135,7 +135,8 @@ void Editor::showWarpMenu(Control& control)
 // was clicked does not matter because both end up holding the other's mode.
 void Editor::swapWarpModes(const juce::String& id)
 {
-    const auto prefix = id.startsWith("oscB") ? "oscB" : "oscA";
+    const auto oscillator = juce::jmax(0, oscillatorIndexFromId(id));
+    const auto prefix = oscillatorPrefix(oscillator);
     const auto first = juce::String(prefix) + "Warp1Mode";
     const auto second = juce::String(prefix) + "Warp2Mode";
     const auto held = juce::roundToInt(value(first));

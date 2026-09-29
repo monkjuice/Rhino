@@ -205,12 +205,13 @@ void filterListSuite()
 rhino::forge::Patch filteredSine(int type, float cutoff, float resonance, float second)
 {
     rhino::forge::Patch patch;
-    patch.a.enable = 1.0f;
-    patch.a.position = 0.0f;   // the sine frame
-    patch.a.unison = 1.0f;
-    patch.a.detune = 0.0f;
-    patch.a.level = 0.75f;
-    patch.b.enable = 0.0f;
+    patch.oscillators[0].enable = 1.0f;
+    patch.oscillators[0].position = 0.0f;   // the sine frame
+    patch.oscillators[0].unison = 1.0f;
+    patch.oscillators[0].detune = 0.0f;
+    patch.oscillators[0].level = 0.75f;
+    patch.oscillators[1].enable = 0.0f;
+    patch.oscillators[2].enable = 0.0f;
     patch.subEnable = 0.0f;
     patch.noiseEnable = 0.0f;
     patch.filterEnable = 1.0f;
@@ -219,7 +220,7 @@ rhino::forge::Patch filteredSine(int type, float cutoff, float resonance, float 
     patch.resonance = resonance;
     patch.filterFreq = second;
     patch.drive = 0.0f;
-    patch.routeA = 1.0f;
+    patch.routeOscillators[0] = 1.0f;
     patch.envs[rhino::forge::ampEnv].attack = 0.001f;
     patch.envs[rhino::forge::ampEnv].sustain = 1.0f;
     return patch;
@@ -560,7 +561,7 @@ void filterCombTuningSuite()
     {
         auto patch = filteredSine(static_cast<int>(rhino::forge::FilterType::comb),
                                   cutoff, 0.95f, 1.0f);
-        patch.a.enable = 0.0f;
+        patch.oscillators[0].enable = 0.0f;
         patch.noiseEnable = 1.0f;
         patch.noiseLevel = 0.5f;
         patch.routeNoise = 1.0f;

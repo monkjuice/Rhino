@@ -424,8 +424,7 @@ void subSuite()
     const auto subOnly = [] (int wave, float octave)
     {
         rhino::forge::Patch patch;
-        patch.a.enable = 0.0f;
-        patch.b.enable = 0.0f;
+        for (auto& oscillator : patch.oscillators) oscillator.enable = 0.0f;
         patch.noiseEnable = 0.0f;
         patch.filterEnable = 0.0f;
         patch.subEnable = 1.0f;

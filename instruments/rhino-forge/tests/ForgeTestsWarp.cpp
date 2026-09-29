@@ -22,11 +22,12 @@ namespace
 rhino::forge::Patch warpTestPatch()
 {
     rhino::forge::Patch patch;
-    patch.a.enable = 1.0f;
-    patch.a.position = 6.0f / 9.0f;   // the SAW frame, landed on exactly
-    patch.a.unison = 1.0f;
-    patch.a.level = 0.75f;
-    patch.b.enable = 0.0f;
+    patch.oscillators[0].enable = 1.0f;
+    patch.oscillators[0].position = 6.0f / 9.0f;   // the SAW frame, landed on exactly
+    patch.oscillators[0].unison = 1.0f;
+    patch.oscillators[0].level = 0.75f;
+    patch.oscillators[1].enable = 0.0f;
+    patch.oscillators[2].enable = 0.0f;
     patch.subEnable = 0.0f;
     patch.noiseEnable = 0.0f;
     patch.filterEnable = 0.0f;
@@ -214,18 +215,18 @@ void warpSuite()
     for (int mode = 1; mode < modeCount; ++mode)
     {
         auto patch = warpTestPatch();
-        patch.a.unison = 4.0f;
-        patch.a.detune = 0.3f;
+        patch.oscillators[0].unison = 4.0f;
+        patch.oscillators[0].detune = 0.3f;
         // The modes that read another source need it switched on, or the stage
         // takes itself out and the render below proves nothing about it.
-        patch.b.enable = 1.0f;
-        patch.b.level = 0.5f;
+        patch.oscillators[1].enable = 1.0f;
+        patch.oscillators[1].level = 0.5f;
         patch.subEnable = 1.0f;
         patch.subLevel = 0.0f;
         for (int slot = 0; slot < rhino::forge::warpSlots; ++slot)
         {
-            patch.a.warpMode[static_cast<size_t>(slot)] = static_cast<float>(mode);
-            patch.a.warpAmount[static_cast<size_t>(slot)] = 1.0f;
+            patch.oscillators[0].warpMode[static_cast<size_t>(slot)] = static_cast<float>(mode);
+            patch.oscillators[0].warpAmount[static_cast<size_t>(slot)] = 1.0f;
         }
         for (const int note : {21, 57, 96})
         {
@@ -286,9 +287,9 @@ void warpSuite()
             auto patch = warpTestPatch();
             patch.subEnable = 1.0f;   // FM SUB reads it, and the rest never hear it
             patch.subLevel = 0.0f;
-            patch.a.position = checked.frame;
-            patch.a.warpMode[0] = static_cast<float>(checked.mode);
-            patch.a.warpAmount[0] = checked.depth;
+            patch.oscillators[0].position = checked.frame;
+            patch.oscillators[0].warpMode[0] = static_cast<float>(checked.mode);
+            patch.oscillators[0].warpAmount[0] = checked.depth;
             const auto rendered = warpRender(patch, 16384, note);
 
             const auto atNote = warpRepeat(rendered, period * checked.cycles);
@@ -323,8 +324,8 @@ void warpSuite()
     const auto warped = [] (WarpMode mode, float depth)
     {
         auto patch = warpTestPatch();
-        patch.a.warpMode[0] = static_cast<float>(mode);
-        patch.a.warpAmount[0] = depth;
+        patch.oscillators[0].warpMode[0] = static_cast<float>(mode);
+        patch.oscillators[0].warpAmount[0] = depth;
         return warpRender(patch, 8192);
     };
 
@@ -355,15 +356,15 @@ void warpSuite()
     // the one in front of it a way to read rather than something already read.
     {
         auto first = warpTestPatch();
-        first.a.warpMode[0] = static_cast<float>(WarpMode::hardClip);
-        first.a.warpAmount[0] = 0.8f;
-        first.a.warpMode[1] = static_cast<float>(WarpMode::rectify);
-        first.a.warpAmount[1] = 0.8f;
+        first.oscillators[0].warpMode[0] = static_cast<float>(WarpMode::hardClip);
+        first.oscillators[0].warpAmount[0] = 0.8f;
+        first.oscillators[0].warpMode[1] = static_cast<float>(WarpMode::rectify);
+        first.oscillators[0].warpAmount[1] = 0.8f;
         auto second = warpTestPatch();
-        second.a.warpMode[0] = static_cast<float>(WarpMode::rectify);
-        second.a.warpAmount[0] = 0.8f;
-        second.a.warpMode[1] = static_cast<float>(WarpMode::hardClip);
-        second.a.warpAmount[1] = 0.8f;
+        second.oscillators[0].warpMode[0] = static_cast<float>(WarpMode::rectify);
+        second.oscillators[0].warpAmount[0] = 0.8f;
+        second.oscillators[0].warpMode[1] = static_cast<float>(WarpMode::hardClip);
+        second.oscillators[0].warpAmount[1] = 0.8f;
 
         const auto one = warpRender(first, 2048);
         const auto two = warpRender(second, 2048);
@@ -381,8 +382,8 @@ void warpSuite()
                             WarpMode::amOsc, WarpMode::rmOsc})
     {
         auto alone = warpTestPatch();
-        alone.a.warpMode[0] = static_cast<float>(mode);
-        alone.a.warpAmount[0] = 1.0f;
+        alone.oscillators[0].warpMode[0] = static_cast<float>(mode);
+        alone.oscillators[0].warpAmount[0] = 1.0f;
         const auto withoutB = warpRender(alone, 2048);
         auto difference = 0.0f;
         for (size_t i = 0; i < withoutB.size(); ++i)
@@ -393,8 +394,8 @@ void warpSuite()
             std::cerr << "       " << rhino::forge::warpModeName(static_cast<int>(mode)) << '\n';
         }
 
-        alone.b.enable = 1.0f;
-        alone.b.level = 0.0f;   // heard only as a modulator, as the manual suggests
+        alone.oscillators[1].enable = 1.0f;
+        alone.oscillators[1].level = 0.0f;   // heard only as a modulator, as the manual suggests
         const auto withB = warpRender(alone, 2048);
         difference = 0.0f;
         for (size_t i = 0; i < withB.size(); ++i)
@@ -404,6 +405,34 @@ void warpSuite()
             require(false, "a stage driven by the other oscillator works with its level down");
             std::cerr << "       " << rhino::forge::warpModeName(static_cast<int>(mode)) << '\n';
         }
+    }
+
+    // With three oscillators, OSC modulation follows one explicit ring. Hold
+    // that contract for every carrier: A reads B, B reads C and C reads A.
+    for (int carrier = 0; carrier < rhino::forge::oscillatorCount; ++carrier)
+    {
+        auto ringPlain = warpTestPatch();
+        const auto carrierSettings = ringPlain.oscillators[0];
+        for (auto& oscillator : ringPlain.oscillators) oscillator.enable = 0.0f;
+        ringPlain.oscillators[static_cast<size_t>(carrier)] = carrierSettings;
+        const auto unmodulated = warpRender(ringPlain, 2048);
+
+        auto ringModulated = ringPlain;
+        auto& target = ringModulated.oscillators[static_cast<size_t>(carrier)];
+        target.warpMode[0] = static_cast<float>(WarpMode::amOsc);
+        target.warpAmount[0] = 1.0f;
+        auto& source = ringModulated.oscillators[static_cast<size_t>(
+            (carrier + 1) % rhino::forge::oscillatorCount)];
+        source.enable = 1.0f;
+        source.level = 0.0f;
+
+        const auto modulated = warpRender(ringModulated, 2048);
+        auto difference = 0.0f;
+        for (size_t sample = 0; sample < unmodulated.size(); ++sample)
+            difference = juce::jmax(difference,
+                std::abs(unmodulated[sample] - modulated[sample]));
+        require(difference > 0.01f,
+                "every oscillator reads the next member of the cross-modulation ring");
     }
 
     // --- FM against PD --------------------------------------------------------
@@ -452,12 +481,12 @@ void warpSuite()
         // And the two are audibly different things from the same source at the
         // same depth, which is the claim the separation is worth making for.
         auto pd = warpTestPatch();
-        pd.b.enable = 1.0f;
-        pd.b.level = 0.0f;
-        pd.a.warpMode[0] = static_cast<float>(WarpMode::pdOsc);
-        pd.a.warpAmount[0] = 0.6f;
+        pd.oscillators[1].enable = 1.0f;
+        pd.oscillators[1].level = 0.0f;
+        pd.oscillators[0].warpMode[0] = static_cast<float>(WarpMode::pdOsc);
+        pd.oscillators[0].warpAmount[0] = 0.6f;
         auto fm = pd;
-        fm.a.warpMode[0] = static_cast<float>(WarpMode::fmOsc);
+        fm.oscillators[0].warpMode[0] = static_cast<float>(WarpMode::fmOsc);
         const auto pdRender = warpRender(pd, 4096);
         const auto fmRender = warpRender(fm, 4096);
         auto difference = 0.0f;
@@ -482,8 +511,8 @@ void warpSuite()
             auto patch = warpTestPatch();
             patch.subEnable = 1.0f;
             patch.subLevel = 0.0f;
-            patch.a.warpMode[0] = static_cast<float>(mode);
-            patch.a.warpAmount[0] = 1.0f;
+            patch.oscillators[0].warpMode[0] = static_cast<float>(mode);
+            patch.oscillators[0].warpAmount[0] = 1.0f;
             return warpRender(patch, 16384, note);
         };
         require(warpRepeat(driven(WarpMode::amSub), period) > 0.2,
@@ -494,34 +523,28 @@ void warpSuite()
 
     // --- The matrix reaches the depths ----------------------------------------
     //
-    // The four warp depths were appended past the racks rather than put beside
-    // the oscillator controls they belong with, because a destination is stored
-    // as an index and moving one would move it inside every preset already
-    // saved. These are the two halves of that: the new entries land where they
-    // are expected, and nothing that was already there has shifted.
+    // Every oscillator's two warp depths form one regular destination bank
+    // after the rack controls.
     {
         rhino::forge::Patch patch;
         const auto base = rhino::forge::warpDestinationBase;
-        require(rhino::forge::destinationField(patch, base) == &patch.a.warpAmount[0]
-                    && rhino::forge::destinationField(patch, base + 1) == &patch.a.warpAmount[1]
-                    && rhino::forge::destinationField(patch, base + 2) == &patch.b.warpAmount[0]
-                    && rhino::forge::destinationField(patch, base + 3) == &patch.b.warpAmount[1],
-                "each warp depth is the destination its index names");
+        for (int oscillator = 0; oscillator < rhino::forge::oscillatorCount; ++oscillator)
+            for (int stage = 0; stage < rhino::forge::warpSlots; ++stage)
+                require(rhino::forge::destinationField(
+                            patch, base + oscillator * rhino::forge::warpSlots + stage)
+                            == &patch.oscillators[static_cast<size_t>(oscillator)]
+                                   .warpAmount[static_cast<size_t>(stage)],
+                        "each warp depth is the destination its index names");
         require(rhino::forge::destinationField(patch, rhino::forge::destinationCount) == nullptr,
                 "an index past the end of the list points at nothing");
         require(rhino::forge::fxDestinationOf(0, 0, 0) == rhino::forge::fxDestinationBase
                     && rhino::forge::destinationField(patch, rhino::forge::fxDestinationBase)
                            == &patch.racks[0].slots[0].knobs[0],
                 "appending the warp depths left the racks where they were");
-        require(base == 105
-                    && rhino::forge::fxDestinationOf(1, 0, 0) == 49
-                    && rhino::forge::fxDestinationOf(2, 3, 6) == 104,
-                "the original four rack slots keep their saved destination indices");
-        require(rhino::forge::fxDestinationOf(0, 4, 0) == rhino::forge::extendedFxDestinationBase
-                    && rhino::forge::destinationField(
-                           patch, rhino::forge::fxDestinationOf(2, 7, 6))
-                           == &patch.racks[2].slots[7].mix,
-                "the extended rack slots append after the existing warp destinations");
+        require(rhino::forge::destinationField(
+                    patch, rhino::forge::fxDestinationOf(2, rhino::forge::fxSlotCount - 1, 6))
+                    == &patch.racks[2].slots[rhino::forge::fxSlotCount - 1].mix,
+                "every rack slot occupies the same contiguous destination bank");
         for (int i = 0; i < rhino::forge::warpDestinationCount; ++i)
             require(juce::String(rhino::forge::destinations()[static_cast<size_t>(base + i)].id)
                         == rhino::forge::warpDestinations()[static_cast<size_t>(i)].id,
@@ -530,7 +553,9 @@ void warpSuite()
 
     // --- The parameters and the panel -----------------------------------------
     rhino::forge::Processor processor;
-    for (const auto* prefix : {"oscA", "oscB"})
+    for (int oscillator = 0; oscillator < rhino::forge::oscillatorCount; ++oscillator)
+    {
+        const auto* prefix = rhino::forge::oscillatorPrefix(oscillator);
         for (int slot = 1; slot <= rhino::forge::warpSlots; ++slot)
         {
             const auto id = juce::String(prefix) + "Warp" + juce::String(slot);
@@ -549,6 +574,7 @@ void warpSuite()
                             rhino::forge::warpModeName(mode),
                             "a warp mode reads out as the mode the engine runs");
         }
+    }
 
     // The four bipolar modes are the ones whose neutral is in the middle, and
     // nothing else claims to be. Written out rather than read back from the

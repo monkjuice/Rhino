@@ -7,12 +7,11 @@
 // What can modulate what: the list of sources, the list of destinations, and
 // the eight slots that join one to the other.
 //
-// Both lists are ordered, and a slot stores an index into them, so the order
-// is saved inside every preset — see Processor::migrated for what happens when
-// something is inserted into the middle of one.
+// Both lists are ordered, and a slot stores an index into them. The order is a
+// schema: changing it bumps the preset format instead of leaving historical
+// gaps in the hot-path lookup tables.
 namespace rhino::forge
 {
-// either is remapped on the way in; see Processor::migrated.
 enum class ModSource
 {
     off = 0,
@@ -21,7 +20,7 @@ enum class ModSource
     velocity = lfo1 + lfoCount,      // 11
     note,                            // 12
     macro1,                          // 13, and one per macro after it
-    modWheel = macro1 + macroCount   // appended: saved source indices stay stable
+    modWheel = macro1 + macroCount
 };
 
 inline constexpr int modSourceCount = static_cast<int>(ModSource::modWheel) + 1;
@@ -86,21 +85,36 @@ struct DestinationInfo
     const char* label;
 };
 
-// Appended to, never inserted into: a slot stores its destination as an index
-// into this list, so every index already written into a preset has to keep
-// meaning what it meant. The five the mixer added therefore sit at the end
-// rather than beside the controls they belong with, and the racks' come after
-// those.
+// A compact schema: the continuously modulatable controls of every oscillator
+// are contiguous, followed by the shared voice controls, rack controls, warp
+// depths and the remaining source shapers.
 inline const std::vector<DestinationInfo>& destinations();
 
-inline const std::array<DestinationInfo, 21>& namedDestinations()
+inline constexpr int oscillatorDestinationBase = 1;
+inline constexpr int oscillatorDestinationsPerOscillator = 5;
+inline constexpr int subLevelDestination = oscillatorDestinationBase
+    + oscillatorCount * oscillatorDestinationsPerOscillator;
+inline constexpr int noiseLevelDestination = subLevelDestination + 1;
+inline constexpr int cutoffDestination = noiseLevelDestination + 1;
+inline constexpr int resonanceDestination = cutoffDestination + 1;
+inline constexpr int driveDestination = resonanceDestination + 1;
+inline constexpr int subPanDestination = driveDestination + 1;
+inline constexpr int noisePanDestination = subPanDestination + 1;
+inline constexpr int filterPanDestination = noisePanDestination + 1;
+inline constexpr int filterMixDestination = filterPanDestination + 1;
+inline constexpr int filterLevelDestination = filterMixDestination + 1;
+inline constexpr int namedDestinationCount = filterLevelDestination + 1;
+
+inline const std::array<DestinationInfo, namedDestinationCount>& namedDestinations()
 {
-    static const std::array<DestinationInfo, 21> table {{
+    static const std::array<DestinationInfo, namedDestinationCount> table {{
         {"", "OFF"},
         {"oscAPosition", "A POS"},   {"oscALevel", "A LEVEL"}, {"oscAPan", "A PAN"},
         {"oscADetune", "A DETUNE"},  {"oscASemitone", "A PITCH"},
         {"oscBPosition", "B POS"},   {"oscBLevel", "B LEVEL"}, {"oscBPan", "B PAN"},
         {"oscBDetune", "B DETUNE"},  {"oscBSemitone", "B PITCH"},
+        {"oscCPosition", "C POS"},   {"oscCLevel", "C LEVEL"}, {"oscCPan", "C PAN"},
+        {"oscCDetune", "C DETUNE"},  {"oscCSemitone", "C PITCH"},
         {"subLevel", "SUB"},         {"noiseLevel", "NOISE"},
         {"cutoff", "CUTOFF"},        {"resonance", "RES"},     {"drive", "DRIVE"},
         {"subPan", "SUB PAN"},       {"noisePan", "NOISE PAN"},
@@ -109,18 +123,14 @@ inline const std::array<DestinationInfo, 21>& namedDestinations()
     return table;
 }
 
-// Where the named list stops and the racks begin. The original four slots per
-// rack remain in their historic contiguous block so every preset keeps naming
-// the same destination. New slots are appended after the warp destinations
-// below rather than inserted into that block.
-inline constexpr int fxDestinationBase = 21;
+// Where the named list stops and the racks begin.
+inline constexpr int fxDestinationBase = namedDestinationCount;
 
 // A slot's six knobs and its mix. LEVEL is left out on purpose — it is the
 // slot's own trim rather than something to play, and a rack whose every stage
 // could be swept in level is a rack that is hard to keep at a sane loudness.
 inline constexpr int fxDestinationsPerSlot = fxKnobCount + 1;
-inline constexpr int legacyFxDestinationCount =
-    rackCount * legacyFxSlotCount * fxDestinationsPerSlot;
+inline constexpr int fxDestinationCount = rackCount * fxSlotCount * fxDestinationsPerSlot;
 
 // Output is deliberately absent, and so are the bus levels and the sends: all
 // of them are applied once the voices are summed, so a per-voice modulation of
@@ -133,12 +143,8 @@ inline constexpr int legacyFxDestinationCount =
 // thing and warns about the same consequence: a per-voice envelope on an FX
 // knob retriggers on every note.
 
-// Where the racks stop and the warp depths begin. They sit past eighty-four
-// generated entries rather than beside the oscillator controls they belong
-// with, because this list is appended to and never inserted into: a slot stores
-// its destination as an index, and moving one is moving it inside every preset
-// already saved.
-inline constexpr int warpDestinationBase = fxDestinationBase + legacyFxDestinationCount;
+// Where the racks stop and the oscillator warp depths begin.
+inline constexpr int warpDestinationBase = fxDestinationBase + fxDestinationCount;
 inline constexpr int warpDestinationCount = oscillatorCount * warpSlots;
 
 inline const std::array<DestinationInfo, warpDestinationCount>& warpDestinations()
@@ -146,6 +152,7 @@ inline const std::array<DestinationInfo, warpDestinationCount>& warpDestinations
     static const std::array<DestinationInfo, warpDestinationCount> table {{
         {"oscAWarp1", "A WARP 1"}, {"oscAWarp2", "A WARP 2"},
         {"oscBWarp1", "B WARP 1"}, {"oscBWarp2", "B WARP 2"},
+        {"oscCWarp1", "C WARP 1"}, {"oscCWarp2", "C WARP 2"},
     }};
     return table;
 }
@@ -154,28 +161,13 @@ inline const std::array<DestinationInfo, warpDestinationCount>& warpDestinations
 // list of twenty-six unrelated modes is a stutter rather than a modulation, and
 // nothing about it would be continuous; the depth beside it is the thing worth
 // playing, and it is here.
-inline constexpr int extendedFxDestinationBase = warpDestinationBase + warpDestinationCount;
-inline constexpr int extendedFxSlotCount = fxSlotCount - legacyFxSlotCount;
-inline constexpr int extendedFxDestinationCount =
-    rackCount * extendedFxSlotCount * fxDestinationsPerSlot;
-inline constexpr int fxDestinationCount = legacyFxDestinationCount + extendedFxDestinationCount;
+// The filter's second field is worth a destination because MORPH is the filter
+// control a patch most wants an LFO on: sweeping LP to BP to HP is not a thing
+// any of the ordinary cutoff controls can ask for.
+inline constexpr int filterDestination = warpDestinationBase + warpDestinationCount;
 
-// The filter's second field, which arrived with the thirty-four filter types
-// and had to land at the end of the list for the same reason the extra rack
-// slots did: a slot stores its destination as an index, and everything past an
-// insertion would mean something else inside every preset already saved. It is
-// worth a destination because MORPH is the one filter control a patch most
-// wants an LFO on — a filter sweeping LP to BP to HP is not a thing any of the
-// other twenty destinations can ask for.
-inline constexpr int filterDestination = extendedFxDestinationBase + extendedFxDestinationCount;
-
-// The noise module's two shaping controls, landing at the end for the same
-// reason the filter's second field did: a slot stores its destination as an
-// index, and anything past an insertion would mean something else inside every
-// preset already saved. Its LEVEL and PAN are not here — they are at 12 and 17,
-// where they have been since the mixer, and they stay there.
-//
-// The source itself is deliberately absent, exactly as the warp modes are. A
+// The noise source itself is deliberately absent, exactly as the warp modes
+// are. A
 // sweep through four unrelated generators is a stutter rather than a
 // modulation; the two continuous controls beside it are the ones worth playing.
 inline constexpr int noiseToneDestination = filterDestination + 1;
@@ -202,12 +194,8 @@ inline juce::String fxRackParameterId(int rack, const char* suffix)
 // Where one slot's run of destinations starts.
 inline int fxDestinationOf(int rack, int slot, int control)
 {
-    if (slot < legacyFxSlotCount)
-        return fxDestinationBase
-             + ((rack * legacyFxSlotCount) + slot) * fxDestinationsPerSlot + control;
-    return extendedFxDestinationBase
-         + ((rack * extendedFxSlotCount) + slot - legacyFxSlotCount)
-             * fxDestinationsPerSlot + control;
+    return fxDestinationBase
+         + ((rack * fxSlotCount) + slot) * fxDestinationsPerSlot + control;
 }
 
 // The whole destination list: the named controls, then every rack slot's six
@@ -243,14 +231,10 @@ inline const std::vector<DestinationInfo>& destinations()
         };
 
         for (int rack = 0; rack < rackCount; ++rack)
-            for (int slot = 0; slot < legacyFxSlotCount; ++slot)
+            for (int slot = 0; slot < fxSlotCount; ++slot)
                 appendSlot(rack, slot);
 
         for (const auto& named : warpDestinations()) built.push_back(named);
-
-        for (int rack = 0; rack < rackCount; ++rack)
-            for (int slot = legacyFxSlotCount; slot < fxSlotCount; ++slot)
-                appendSlot(rack, slot);
 
         built.push_back({"filterFreq", "FLT FREQ"});
         built.push_back({"noiseTone", "NOISE TONE"});

@@ -10,7 +10,7 @@ namespace rhino::forge::tests
 namespace
 {
 // A patch that exercises as much of the voice at once as a single render can:
-// both oscillators detuned and stacked, both warp stages working, the sub and
+// all three oscillators detuned and stacked, both warp stages working, the sub and
 // the noise in, the filter half closed with resonance and drive, four
 // modulation slots joined up, and a rack on the main output.
 //
@@ -27,7 +27,7 @@ void everythingPatch(Processor& processor)
             std::cerr << "no such parameter: " << id << '\n';
     };
 
-    for (const auto* id : {"oscAEnable", "oscBEnable", "subEnable", "noiseEnable", "filterEnable"})
+    for (const auto* id : {"oscAEnable", "oscBEnable", "oscCEnable", "subEnable", "noiseEnable", "filterEnable"})
         set(id, 1.0f);
 
     set("oscAPosition", 0.62f);
@@ -51,6 +51,15 @@ void everythingPatch(Processor& processor)
     set("oscBLevel", 0.6f);
     set("oscBWarp1Mode", 20.0f);
     set("oscBWarp1", 0.65f);
+
+    set("oscCPosition", 0.82f);
+    set("oscCUnison", 4.0f);
+    set("oscCDetune", 0.28f);
+    set("oscCSemitone", -5.0f);
+    set("oscCPan", 0.1f);
+    set("oscCLevel", 0.5f);
+    set("oscCWarp1Mode", 2.0f);
+    set("oscCWarp1", 0.35f);
 
     set("subWave", 2.0f);
     set("subOctave", -1.0f);
@@ -90,10 +99,12 @@ void everythingPatch(Processor& processor)
     const auto env = [] (int which) { return static_cast<float>(ModSource::env1) + which - 1; };
     const auto lfo = [] (int which) { return static_cast<float>(ModSource::lfo1) + which - 1; };
 
-    slot(1, lfo(1), 13.0f, 0.5f);                                  // the cutoff
-    slot(2, env(2), 5.0f, 0.3f);                                   // oscillator A's pitch
-    slot(3, static_cast<float>(ModSource::velocity), 11.0f, 0.4f); // the sub
-    slot(4, lfo(2), 6.0f, 0.25f);
+    slot(1, lfo(1), static_cast<float>(cutoffDestination), 0.5f);
+    slot(2, env(2), static_cast<float>(oscillatorDestinationBase + 4), 0.3f);
+    slot(3, static_cast<float>(ModSource::velocity),
+         static_cast<float>(subLevelDestination), 0.4f);
+    slot(4, lfo(2), static_cast<float>(oscillatorDestinationBase
+                                      + oscillatorDestinationsPerOscillator), 0.25f);
 
     set(fxParameterId(0, 0, "Type").toRawUTF8(), 1.0f);
     set(fxParameterId(0, 0, "Mix").toRawUTF8(), 0.5f);

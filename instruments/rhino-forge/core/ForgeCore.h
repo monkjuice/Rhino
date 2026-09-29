@@ -555,18 +555,19 @@ private:
         bool active = false;
         int note = 0;
         float velocity = 0.0f;
-        std::array<float, unisonMax> phaseA {}, phaseB {};
+        std::array<std::array<float, unisonMax>, oscillatorCount> oscillatorPhases {};
         // What each oscillator's warp stages are holding on to, one set per
         // member of the stack: the filter modes' state and FM SELF's last
         // output. Per member rather than per oscillator because every member is
         // reading the table at a phase of its own — one filter shared by twelve
         // detuned copies would be a filter fed twelve different signals.
-        std::array<std::array<WarpState, warpSlots>, unisonMax> warpA {}, warpB {};
+        std::array<std::array<std::array<WarpState, warpSlots>, unisonMax>, oscillatorCount>
+            oscillatorWarps {};
         // What an asymmetric warp leaves behind, taken off each oscillator's
         // output rather than off every member of its stack: the offset is the
         // same in all of them, so blocking it once after the sum is the same
         // answer for a twelfth of the work.
-        std::array<WarpDcBlocker, 2> dcA {}, dcB {};
+        std::array<std::array<WarpDcBlocker, 2>, oscillatorCount> oscillatorDc {};
         float phaseSub = 0.0f;
         // The noise module's generators, which belong to the voice rather than
         // to the synth: a chord is several notes and each of them hisses on its
@@ -809,11 +810,14 @@ private:
             // where it should sound widest. A hash has no such structure, and
             // being a hash rather than a random number it is still the same on
             // every run, which is what lets the tests measure it.
-            for (juce::uint32 i = 0; i < voice.phaseA.size(); ++i)
+            for (int oscillator = 0; oscillator < oscillatorCount; ++oscillator)
             {
-                const auto seed = i * 2654435761u + static_cast<juce::uint32>(note) * 40503u;
-                voice.phaseA[i] = unitFromHash(seed);
-                voice.phaseB[i] = unitFromHash(seed + 2654435741u);
+                for (juce::uint32 i = 0; i < unisonMax; ++i)
+                {
+                    const auto seed = i * 2654435761u + static_cast<juce::uint32>(note) * 40503u;
+                    voice.oscillatorPhases[static_cast<size_t>(oscillator)][i] =
+                        unitFromHash(seed + static_cast<juce::uint32>(oscillator) * 2654435741u);
+                }
             }
             // Two notes struck together must not hiss identically, and the same
             // phrase rendered twice must. A counter mixed with the note number
@@ -999,27 +1003,34 @@ private:
         // filter mode needs, and whatever an FM mode is reading. Worked out
         // once here rather than once per member of a stack, which is what keeps
         // the exponentials out of the inner loop.
-        const auto hzA = hz * tuningRatio(patch.a), hzB = hz * tuningRatio(patch.b);
-        std::array<WarpStage, warpSlots> warpA {}, warpB {};
-        for (int i = 0; i < warpSlots; ++i)
+        std::array<float, oscillatorCount> oscillatorHz {};
+        std::array<std::array<WarpStage, warpSlots>, oscillatorCount> oscillatorWarp {};
+        auto wantsOther = false, wantsSub = false, wantsNoise = false;
+        for (int oscillator = 0; oscillator < oscillatorCount; ++oscillator)
         {
-            const auto slot = static_cast<size_t>(i);
-            warpA[slot] = warpStageFor(patch.a.warpMode[slot], patch.a.warpAmount[slot], hzA, sampleRate);
-            warpB[slot] = warpStageFor(patch.b.warpMode[slot], patch.b.warpAmount[slot], hzB, sampleRate);
+            const auto index = static_cast<size_t>(oscillator);
+            const auto& settings = patch.oscillators[index];
+            oscillatorHz[index] = hz * tuningRatio(settings);
+            // A disabled carrier cannot be heard or ask a source for
+            // modulation. Leave its resolved stages empty; if it is used as a
+            // modulator by the previous carrier, only its table and pitch are
+            // needed, and oscillatorHz above already supplies that.
+            if (!on(settings.enable)) continue;
+            for (int stage = 0; stage < warpSlots; ++stage)
+            {
+                const auto slot = static_cast<size_t>(stage);
+                auto& resolved = oscillatorWarp[index][slot];
+                resolved = warpStageFor(settings.warpMode[slot], settings.warpAmount[slot],
+                                        oscillatorHz[index], sampleRate);
+                wantsOther = wantsOther || warpReadsOtherOscillator(resolved.mode);
+                wantsSub = wantsSub || warpReadsSub(resolved.mode);
+                wantsNoise = wantsNoise || warpReadsNoise(resolved.mode);
+            }
         }
 
-        // What FM reads, worked out only where something is actually asking for
-        // it. The two oscillators read each other at the phases they both stand
-        // at now, before either has advanced, so neither is a sample ahead of
-        // the other and swapping which one is rendered first changes nothing.
-        const auto asks = [] (const std::array<WarpStage, warpSlots>& warp, bool (*test)(WarpMode))
-        {
-            for (const auto& stage : warp) if (test(stage.mode)) return true;
-            return false;
-        };
-        const auto wantsOther = asks(warpA, warpReadsOtherOscillator) || asks(warpB, warpReadsOtherOscillator);
-        const auto wantsSub = asks(warpA, warpReadsSub) || asks(warpB, warpReadsSub);
-        const auto wantsNoise = asks(warpA, warpReadsNoise) || asks(warpB, warpReadsNoise);
+        // What cross-modulation reads is sampled for all three carriers before
+        // any of them advances. Rendering order therefore cannot put one
+        // oscillator a sample ahead of another.
         // The sub, read once for whoever needs it: the source itself below, and
         // any warp stage pointed at it. Both read the same shape at the same
         // band limit, because a stage reading FM SUB is reading the sub rather
@@ -1034,16 +1045,22 @@ private:
         // The centre of the other oscillator's stack, not the whole of it: a
         // modulator is one signal, and twelve detuned copies of one would cost
         // twelve table reads to say the same thing.
-        const auto centre = [this] (const Oscillator& osc, const std::array<float, unisonMax>& phases,
-                                    float oscHz)
+        const auto centre = [this] (const Oscillator& osc,
+                                    const std::array<float, unisonMax>& phases, float oscHz)
         {
             if (!on(osc.enable)) return 0.0f;
             const auto& table = osc.table != nullptr ? *osc.table : builtInWavetable();
             return table.sample(table.levelFor(oscHz, sampleRate),
                                 juce::jlimit(0.0f, 1.0f, osc.position), phases[0]);
         };
-        const auto fromB = wantsOther ? centre(patch.b, voice.phaseB, hzB) : 0.0f;
-        const auto fromA = wantsOther ? centre(patch.a, voice.phaseA, hzA) : 0.0f;
+        std::array<float, oscillatorCount> centreSamples {};
+        if (wantsOther)
+            for (int oscillator = 0; oscillator < oscillatorCount; ++oscillator)
+            {
+                const auto index = static_cast<size_t>(oscillator);
+                centreSamples[index] = centre(patch.oscillators[index],
+                                              voice.oscillatorPhases[index], oscillatorHz[index]);
+            }
         // A stage pointed at a source that is switched off is not a stage. The
         // manual says as much -- the other oscillator has to be enabled for FM
         // to work, though its level may be all the way down -- and saying it
@@ -1068,16 +1085,27 @@ private:
                     case WarpSource::none:  break;
                 }
         };
-        pointAt(warpA, fromB, on(patch.b.enable));
-        pointAt(warpB, fromA, on(patch.a.enable));
+        // OSC is the next oscillator in a ring: A reads B, B reads C, C reads
+        // A. The rule is identical at every index and scales without another
+        // branch if the oscillator bank changes again.
+        for (int oscillator = 0; oscillator < oscillatorCount; ++oscillator)
+        {
+            const auto index = static_cast<size_t>(oscillator);
+            const auto other = static_cast<size_t>((oscillator + 1) % oscillatorCount);
+            pointAt(oscillatorWarp[index], centreSamples[other],
+                    on(patch.oscillators[other].enable));
+        }
 
-        auto left = 0.0f, right = 0.0f;
-        renderOscillator(voice.phaseA, voice.warpA, voice.dcA, patch.a, hz, dt, warpA, left, right);
-        distribute(left, right, on(patch.routeA), patch.sendA, buses);
-
-        left = right = 0.0f;
-        renderOscillator(voice.phaseB, voice.warpB, voice.dcB, patch.b, hz, dt, warpB, left, right);
-        distribute(left, right, on(patch.routeB), patch.sendB, buses);
+        for (int oscillator = 0; oscillator < oscillatorCount; ++oscillator)
+        {
+            const auto index = static_cast<size_t>(oscillator);
+            auto left = 0.0f, right = 0.0f;
+            renderOscillator(voice.oscillatorPhases[index], voice.oscillatorWarps[index],
+                             voice.oscillatorDc[index], patch.oscillators[index], hz, dt,
+                             oscillatorWarp[index], left, right);
+            distribute(left, right, on(patch.routeOscillators[index]),
+                       patch.oscillatorSends[index], buses);
+        }
 
         // The sub and the noise generator are their own sources: each is silent
         // unless its own module is on, whatever its level knob reads. Each is

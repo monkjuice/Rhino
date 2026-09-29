@@ -79,8 +79,15 @@ void soloSineOnA(Processor& processor);
 // Oscillator A through a filter closed far enough that opening it is obvious.
 void closedFilterOnA(Processor& processor);
 
-// Destination indices, matching rhino::forge::destinations().
-enum Destination { destOff = 0, destAPitch = 5, destSub = 11, destCutoff = 13 };
+// Destination indices, named from the production schema so a deliberate
+// reorder cannot leave tests pointing at a different control by accident.
+enum Destination
+{
+    destOff = 0,
+    destAPitch = rhino::forge::oscillatorDestinationBase + 4,
+    destSub = rhino::forge::subLevelDestination,
+    destCutoff = rhino::forge::cutoffDestination
+};
 
 // Point one modulation slot at one destination.
 void setSlot(Processor& processor, int slot, float source, float destination, float depth);

@@ -840,6 +840,21 @@ void fxDisplaySuite()
                                 "a seated field draws its line inside the strip it was given");
                         continue;
                     }
+                    // A fixed AudioParameterChoice with more than the inline
+                    // limit can only ever draw the single-line arrow form.
+                    // The two- and three-state stack belongs to the rack's
+                    // type-dependent mode controls, whose parameter is a plain
+                    // normalised float because its choices change with type.
+                    const auto* fixedChoices = dynamic_cast<const juce::AudioParameterChoice*>(
+                        processor.state.getParameter(controls[static_cast<size_t>(c)].id));
+                    if (fixedChoices != nullptr
+                        && fixedChoices->choices.size() > rhino::forge::ui::FxSelector::inlineLimit)
+                    {
+                        holding(fixedChoices->choices.size());
+                        require(field.withZeroOrigin().contains(selector.listBounds()),
+                                "a fixed long selector draws its line inside the box it was given");
+                        continue;
+                    }
                     // Every mode field that stacks its choices, at its widest.
                     for (int count = 2; count <= rhino::forge::ui::FxSelector::inlineLimit; ++count)
                     {

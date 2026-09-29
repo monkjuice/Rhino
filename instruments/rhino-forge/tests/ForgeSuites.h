@@ -17,7 +17,7 @@ void layoutTests();
 // ForgeTestsDisplays.cpp — the filter response, the envelope, the cached metal.
 void displayTests();
 
-// ForgeTestsPresets.cpp — saving, loading, and opening an older preset.
+// ForgeTestsPresets.cpp — saving, loading, and rejecting unknown preset schemas.
 void presetTests();
 
 // ForgeTestsOscillator.cpp — tuning, the unison stack, the shapes, the sub, and
@@ -34,7 +34,7 @@ void filterTests();
 // nothing about changing one of them clicks.
 void noiseTests();
 
-// ForgeTestsMixer.cpp — the eight channels, the sends and the two busses.
+// ForgeTestsMixer.cpp — the nine channels, the sends and the two busses.
 void mixerTests();
 
 // ForgeTestsFx.cpp — the three effects racks, rendered and drawn.

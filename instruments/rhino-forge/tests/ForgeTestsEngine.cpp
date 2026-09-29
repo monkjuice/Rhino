@@ -17,7 +17,7 @@ void engineSuite()
 
     // A silent patch really is silent: with every source switched off, nothing
     // reaches the output however the level knobs are set.
-    for (const auto* id : {"oscAEnable", "oscBEnable", "subEnable", "noiseEnable"})
+    for (const auto* id : {"oscAEnable", "oscBEnable", "oscCEnable", "subEnable", "noiseEnable"})
         setValue(processor, id, 0.0f);
     setValue(processor, "subLevel", 1.0f);
     setValue(processor, "noiseLevel", 1.0f);
@@ -44,8 +44,21 @@ void engineSuite()
     requireClose(peakForNote(processor), oscAOnly, 0.0001f,
                  "oscillator B's controls do not affect A while B is switched off");
 
+    setValue(processor, "oscCLevel", 0.8f);
+    setValue(processor, "oscCDetune", 0.6f);
+    setValue(processor, "oscCUnison", 6.0f);
+    requireClose(peakForNote(processor), oscAOnly, 0.0001f,
+                 "oscillator C's controls do not affect A while C is switched off");
+
     setValue(processor, "oscBEnable", 1.0f);
-    require(peakForNote(processor) > 0.0f, "both oscillators together make sound");
+    require(peakForNote(processor) > 0.0f, "oscillators A and B together make sound");
+
+    setValue(processor, "oscAEnable", 0.0f);
+    setValue(processor, "oscBEnable", 0.0f);
+    setValue(processor, "oscCEnable", 1.0f);
+    require(peakForNote(processor) > 0.0f, "oscillator C alone makes sound");
+    setValue(processor, "oscAEnable", 1.0f);
+    setValue(processor, "oscBEnable", 1.0f);
 
     // Bypassing the filter must actually bypass it: a cutoff low enough to
     // remove nearly everything should stop mattering.
@@ -59,12 +72,14 @@ void engineSuite()
     // Output stays finite and bounded across an extreme patch.
     auto extremeStorage = std::make_unique<rhino::forge::Processor>();
     auto& extreme = *extremeStorage;
-    for (const auto* id : {"oscAEnable", "oscBEnable", "subEnable", "noiseEnable", "filterEnable"})
+    for (const auto* id : {"oscAEnable", "oscBEnable", "oscCEnable", "subEnable", "noiseEnable", "filterEnable"})
         setValue(extreme, id, 1.0f);
     setValue(extreme, "oscAUnison", 8.0f);
     setValue(extreme, "oscBUnison", 8.0f);
+    setValue(extreme, "oscCUnison", 8.0f);
     setValue(extreme, "oscADetune", 1.0f);
     setValue(extreme, "oscBDetune", 1.0f);
+    setValue(extreme, "oscCDetune", 1.0f);
     setValue(extreme, "resonance", 1.0f);
     setValue(extreme, "drive", 1.0f);
     setValue(extreme, "output", 1.25f);
@@ -74,10 +89,10 @@ void engineSuite()
     // Drive the matrix hard too: LFO 1 into the cutoff and into oscillator A's
     // pitch, both at full depth.
     setValue(extreme, "mod1Source", 2.0f);
-    setValue(extreme, "mod1Dest", 13.0f);
+    setValue(extreme, "mod1Dest", static_cast<float>(destCutoff));
     setValue(extreme, "mod1Depth", 1.0f);
     setValue(extreme, "mod2Source", 2.0f);
-    setValue(extreme, "mod2Dest", 5.0f);
+    setValue(extreme, "mod2Dest", static_cast<float>(destAPitch));
     setValue(extreme, "mod2Depth", 1.0f);
 
     constexpr int blockSize = 512;

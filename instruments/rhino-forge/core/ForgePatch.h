@@ -38,7 +38,7 @@ struct Bus
 
 struct Patch
 {
-    Oscillator a, b;
+    std::array<Oscillator, oscillatorCount> oscillators {};
     float subEnable = 1.0f, subLevel = 0.17f;
     // Which of the six shapes the sub is reading, and how far below the note it
     // is reading it. Both open where the sub has always stood -- a sine, one
@@ -66,7 +66,13 @@ struct Patch
     float filterFreq = 0.0f;
     // Each source either passes through the filter or bypasses it straight to
     // the voice sum, exactly as Serum's per-source routing buttons work.
-    float routeA = 1.0f, routeB = 1.0f, routeSub = 1.0f, routeNoise = 1.0f;
+    std::array<float, oscillatorCount> routeOscillators = []
+    {
+        std::array<float, oscillatorCount> routes {};
+        routes.fill(1.0f);
+        return routes;
+    }();
+    float routeSub = 1.0f, routeNoise = 1.0f;
     float cutoff = 7800.0f, resonance = 0.12f, drive = 0.08f;
     // Whether the corner follows the note. Off, because a patch written before
     // this existed was played with a corner that stayed where it was put, and
@@ -79,7 +85,8 @@ struct Patch
     float filterPan = 0.0f, filterMix = 1.0f, filterLevel = 1.0f;
     // What each channel sends to each bus, parallel to wherever it is already
     // going.
-    Sends sendA, sendB, sendSub, sendNoise, sendFilter;
+    std::array<Sends, oscillatorCount> oscillatorSends {};
+    Sends sendSub, sendNoise, sendFilter;
     std::array<Bus, busCount> buses {};
     // One effects rack on the main output and one on each bus, in that order.
     // They run on the summed voices rather than inside them, which is what an
@@ -113,58 +120,50 @@ inline constexpr float voiceTailSeconds = 0.015f;
 // modulated. Null for "nothing", which is also what an out-of-range index gets.
 inline float* destinationField(Patch& patch, int destination)
 {
+    const auto oscillatorControl = destination - oscillatorDestinationBase;
+    if (oscillatorControl >= 0
+        && oscillatorControl < oscillatorCount * oscillatorDestinationsPerOscillator)
+    {
+        auto& oscillator = patch.oscillators[static_cast<size_t>(
+            oscillatorControl / oscillatorDestinationsPerOscillator)];
+        switch (oscillatorControl % oscillatorDestinationsPerOscillator)
+        {
+            case 0: return &oscillator.position;
+            case 1: return &oscillator.level;
+            case 2: return &oscillator.pan;
+            case 3: return &oscillator.detune;
+            case 4: return &oscillator.semitone;
+            default: break;
+        }
+    }
     switch (destination)
     {
-        case 1:  return &patch.a.position;
-        case 2:  return &patch.a.level;
-        case 3:  return &patch.a.pan;
-        case 4:  return &patch.a.detune;
-        case 5:  return &patch.a.semitone;
-        case 6:  return &patch.b.position;
-        case 7:  return &patch.b.level;
-        case 8:  return &patch.b.pan;
-        case 9:  return &patch.b.detune;
-        case 10: return &patch.b.semitone;
-        case 11: return &patch.subLevel;
-        case 12: return &patch.noiseLevel;
-        case 13: return &patch.cutoff;
-        case 14: return &patch.resonance;
-        case 15: return &patch.drive;
-        case 16: return &patch.subPan;
-        case 17: return &patch.noisePan;
-        case 18: return &patch.filterPan;
-        case 19: return &patch.filterMix;
-        case 20: return &patch.filterLevel;
+        case subLevelDestination:    return &patch.subLevel;
+        case noiseLevelDestination:  return &patch.noiseLevel;
+        case cutoffDestination:      return &patch.cutoff;
+        case resonanceDestination:   return &patch.resonance;
+        case driveDestination:       return &patch.drive;
+        case subPanDestination:      return &patch.subPan;
+        case noisePanDestination:    return &patch.noisePan;
+        case filterPanDestination:   return &patch.filterPan;
+        case filterMixDestination:   return &patch.filterMix;
+        case filterLevelDestination: return &patch.filterLevel;
         default: break;
     }
     if (destination == filterDestination) return &patch.filterFreq;
     if (destination == noiseToneDestination) return &patch.noiseTone;
     if (destination == noiseStereoDestination) return &patch.noiseStereo;
-    // Past the racks are the four warp depths, which are named rather than
-    // generated and so are read back the same way.
+    // The warp depths are laid out oscillator by oscillator, then stage.
     const auto warp = destination - warpDestinationBase;
     if (warp >= 0 && warp < warpDestinationCount)
-    {
-        auto& osc = warp < warpSlots ? patch.a : patch.b;
-        return &osc.warpAmount[static_cast<size_t>(warp % warpSlots)];
-    }
+        return &patch.oscillators[static_cast<size_t>(warp / warpSlots)]
+                    .warpAmount[static_cast<size_t>(warp % warpSlots)];
 
-    // The first four rack slots occupy their historic range. Slots five to
-    // eight live after the warp block so adding them cannot move an existing
-    // destination stored by index in an older preset.
-    auto fx = destination - fxDestinationBase;
-    auto slotsPerRack = legacyFxSlotCount;
-    auto slotOffset = 0;
-    if (fx < 0 || fx >= legacyFxDestinationCount)
-    {
-        fx = destination - extendedFxDestinationBase;
-        slotsPerRack = extendedFxSlotCount;
-        slotOffset = legacyFxSlotCount;
-        if (fx < 0 || fx >= extendedFxDestinationCount) return nullptr;
-    }
+    const auto fx = destination - fxDestinationBase;
+    if (fx < 0 || fx >= fxDestinationCount) return nullptr;
     const auto control = fx % fxDestinationsPerSlot;
-    const auto slot = (fx / fxDestinationsPerSlot) % slotsPerRack + slotOffset;
-    const auto rack = fx / (fxDestinationsPerSlot * slotsPerRack);
+    const auto slot = (fx / fxDestinationsPerSlot) % fxSlotCount;
+    const auto rack = fx / (fxDestinationsPerSlot * fxSlotCount);
     auto& held = patch.racks[static_cast<size_t>(rack)].slots[static_cast<size_t>(slot)];
     return control < fxKnobCount ? &held.knobs[static_cast<size_t>(control)] : &held.mix;
 }

@@ -75,7 +75,7 @@ void voiceStealSuite()
     {
         rhino::forge::Processor processor;
         soloSineOnA(processor);
-        // Both oscillators, which is where the user hears it: two of them make
+        // Multiple oscillators, which is where the user hears it: two of them make
         // the step twice the size.
         setValue(processor, "oscBEnable", 1.0f);
         setValue(processor, "oscBPosition", 0.0f);

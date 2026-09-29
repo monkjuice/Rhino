@@ -177,9 +177,10 @@ void Editor::paint(juce::Graphics& g)
                     // means when it says the 2D view shows what the mode is
                     // doing. The modes it cannot honestly draw take themselves
                     // off the picture -- see drawWaveform.
-                    const auto second = juce::String(descriptor.id) == "oscB";
-                    ui::drawWaveform(g, display, processor.tableStore().edit(second ? 1 : 0),
-                                     value(source), warpStagesOf(second ? "oscB" : "oscA"),
+                    const auto oscillator = juce::jmax(
+                        0, oscillatorIndexFromId(juce::String(descriptor.id)));
+                    ui::drawWaveform(g, display, processor.tableStore().edit(oscillator),
+                                     value(source), warpStagesOf(oscillatorPrefix(oscillator)),
                                      accent, alpha);
                 }
                 break;

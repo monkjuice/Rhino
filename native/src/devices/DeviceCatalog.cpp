@@ -33,7 +33,7 @@ std::vector<DeviceDescriptor> buildCatalog()
     // Forge is a VST3 discovered by scanning, so it has no type name to
     // create from -- see SessionExternalPlugins.cpp.
     add({"RhinoForge", {}, "Rhino Forge", {},
-         DeviceKind::Instrument, "Synths", "Two-oscillator Forge synth",
+         DeviceKind::Instrument, "Synths", "Three-oscillator Forge synth",
          0xff3a9aa9, "forge", true, true, false});
 
     // The drum rack is reached through its kits, which the browser lists

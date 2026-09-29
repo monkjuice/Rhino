@@ -17,10 +17,33 @@
 // them is in ForgeCore.h.
 namespace rhino::forge
 {
-// How many oscillators a voice has. They are identical and neither is defined
-// in terms of the other, which is what lets everything indexed by oscillator —
-// a table, a warp destination — be a pair rather than two special cases.
-inline constexpr int oscillatorCount = 2;
+// How many oscillators a voice has. They are identical and none is defined in
+// terms of another, so tables, modulation destinations and render state stay
+// one fixed-size bank instead of becoming lettered special cases.
+inline constexpr int oscillatorCount = 3;
+
+inline const char* oscillatorPrefix(int oscillator)
+{
+    static constexpr std::array<const char*, oscillatorCount> prefixes {"oscA", "oscB", "oscC"};
+    jassert(oscillator >= 0 && oscillator < oscillatorCount);
+    return oscillator >= 0 && oscillator < oscillatorCount
+        ? prefixes[static_cast<size_t>(oscillator)] : "";
+}
+
+inline juce::String oscillatorLetter(int oscillator)
+{
+    jassert(oscillator >= 0 && oscillator < oscillatorCount);
+    return oscillator >= 0 && oscillator < oscillatorCount
+        ? juce::String::charToString(static_cast<juce::juce_wchar>('A' + oscillator))
+        : juce::String();
+}
+
+inline int oscillatorIndexFromId(const juce::String& id)
+{
+    for (int oscillator = 0; oscillator < oscillatorCount; ++oscillator)
+        if (id.startsWith(oscillatorPrefix(oscillator))) return oscillator;
+    return -1;
+}
 
 // How many detuned copies one oscillator's unison stack may hold. The per-voice
 // phase arrays are this long, and the Unison parameter's range stops here, so
@@ -78,9 +101,8 @@ inline float unisonOffset(int slot, int count)
          + jitter * unisonJitter / static_cast<float>(last);
 }
 
-// Everything one oscillator owns. Both oscillators are the same shape: neither
-// is defined in terms of the other, so switching one off or changing its level
-// cannot move the other.
+// Everything one oscillator owns. Every oscillator is the same shape, so
+// switching one off or changing its level cannot move another.
 struct Oscillator
 {
     float enable = 1.0f;

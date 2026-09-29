@@ -91,9 +91,6 @@ juce::String asPan(float value)
     return (value < 0.0f ? "L" : "R") + juce::String(amount);
 }
 
-// Format 2 dropped the effects, the macros and the filter envelope. Format 1
-// files are not accepted; they described a synth that no longer exists.
-
 std::unique_ptr<juce::RangedAudioParameter> parameter(const juce::String& id, const juce::String& name,
                                                       juce::NormalisableRange<float> range,
                                                       float initial, Format format)
@@ -136,8 +133,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout Processor::parameterLayout()
     juce::StringArray warpModeNames;
     for (int i = 0; i < warpModeCount; ++i) warpModeNames.add(warpModeName(i));
 
-    // The two oscillators are declared identically. Neither is expressed in
-    // terms of the other, so each owns its tuning, its stack, its pan and its
+    // The three oscillators are declared identically. None is expressed in
+    // terms of another, so each owns its tuning, its stack, its pan and its
     // level outright.
     const auto oscillator = [this, &result, &warpModeNames] (int which, const char* prefix,
                                                              const char* label, bool enabled,
@@ -190,9 +187,19 @@ juce::AudioProcessorValueTreeState::ParameterLayout Processor::parameterLayout()
         }
     };
     // 6/9 is SAW and 1/9 is TRI: a fresh patch starts on shapes with names
-    // rather than part-way between two of them.
-    oscillator(0, "oscA", "Osc A", true, 6.0f / 9.0f, 0.0f, 0.75f);
-    oscillator(1, "oscB", "Osc B", true, 1.0f / 9.0f, 7.0f, 0.25f);
+    // rather than part-way between two of them. Defaults live beside the one
+    // loop that declares the bank, so another per-oscillator subsystem cannot
+    // be forgotten when the bank changes.
+    constexpr std::array<float, oscillatorCount> positions {6.0f / 9.0f, 1.0f / 9.0f, 0.0f};
+    constexpr std::array<float, oscillatorCount> semitones {0.0f, 7.0f, 0.0f};
+    constexpr std::array<float, oscillatorCount> levels {0.75f, 0.25f, 0.25f};
+    for (int index = 0; index < oscillatorCount; ++index)
+    {
+        const auto label = "Osc " + oscillatorLetter(index);
+        oscillator(index, oscillatorPrefix(index), label.toRawUTF8(), true,
+                   positions[static_cast<size_t>(index)], semitones[static_cast<size_t>(index)],
+                   levels[static_cast<size_t>(index)]);
+    }
 
     result.push_back(toggle("subEnable", "Sub Enable", true));
     // The shape, as a choice rather than a stepped float, so a host's lane
@@ -244,8 +251,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout Processor::parameterLayout()
         juce::ParameterID {"filterType", 1}, "Filter Type", filterTypeNames, 0));
     // Where a source goes. One switch, two readings: the FILTER module draws it
     // as a lettered chip, the mixer as a field that says the destination out.
-    result.push_back(toggle("routeA", "Filter Route Osc A", true, "MAIN", "FILTER"));
-    result.push_back(toggle("routeB", "Filter Route Osc B", true, "MAIN", "FILTER"));
+    for (int index = 0; index < oscillatorCount; ++index)
+    {
+        const auto letter = oscillatorLetter(index);
+        result.push_back(toggle("route" + letter, "Filter Route Osc " + letter,
+                                true, "MAIN", "FILTER"));
+    }
     result.push_back(toggle("routeSub", "Filter Route Sub", true, "MAIN", "FILTER"));
     result.push_back(toggle("routeNoise", "Filter Route Noise", true, "MAIN", "FILTER"));
     // CUTOFF reads as a vowel while a formant filter is in charge, because
@@ -303,15 +314,15 @@ juce::AudioProcessorValueTreeState::ParameterLayout Processor::parameterLayout()
     // Two sends per channel. A send is parallel to wherever the channel is
     // already going, which is what makes it a send rather than a second
     // destination: a source can reach the filter and both busses at once.
-    const auto sends = [&result] (const char* prefix, const char* label)
+    const auto sends = [&result] (const juce::String& prefix, const juce::String& label)
     {
         for (int bus = 1; bus <= busCount; ++bus)
             result.push_back(parameter(juce::String(prefix) + "Send" + juce::String(bus),
                                        juce::String(label) + " Send " + juce::String(bus),
                                        {0.0f, 1.0f}, 0.0f, asPercent));
     };
-    sends("oscA", "Osc A");
-    sends("oscB", "Osc B");
+    for (int index = 0; index < oscillatorCount; ++index)
+        sends(oscillatorPrefix(index), "Osc " + oscillatorLetter(index));
     sends("sub", "Sub");
     sends("noise", "Noise");
     sends("filter", "Filter");

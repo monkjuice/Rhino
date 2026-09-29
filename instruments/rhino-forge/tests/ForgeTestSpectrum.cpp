@@ -82,11 +82,12 @@ double partialAmplitude(const std::vector<double>& magnitude, double fundamental
 rhino::forge::Patch sawOnly()
 {
     rhino::forge::Patch patch;
-    patch.a.enable = 1.0f;
-    patch.a.position = 6.0f / 9.0f;   // the SAW frame, landed on exactly
-    patch.a.unison = 1.0f;
-    patch.a.level = 0.75f;
-    patch.b.enable = 0.0f;
+    patch.oscillators[0].enable = 1.0f;
+    patch.oscillators[0].position = 6.0f / 9.0f;   // the SAW frame, landed on exactly
+    patch.oscillators[0].unison = 1.0f;
+    patch.oscillators[0].level = 0.75f;
+    patch.oscillators[1].enable = 0.0f;
+    patch.oscillators[2].enable = 0.0f;
     patch.subEnable = 0.0f;
     patch.noiseEnable = 0.0f;
     patch.filterEnable = 0.0f;

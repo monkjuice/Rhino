@@ -82,7 +82,8 @@ inline juce::String warpTooltipFor(int mode)
         // PD moves where in the cycle the table is read. The note does not
         // move with it, which is the whole difference from FM below.
         case WarpMode::pdOsc:
-            return "Push the read along the cycle with the other oscillator. It has to be on, "
+            return "Push the read along the cycle with the next oscillator (A reads B, B reads C, "
+                   "C reads A). It has to be on, "
                    "though its level can be down if it is only wanted as a modulator. "
                    "Unlike FM, this leaves the note exactly where it was";
         case WarpMode::pdSub:
@@ -98,7 +99,8 @@ inline juce::String warpTooltipFor(int mode)
         // FM moves the rate the cycle runs at, which is why it can bend the
         // note where PD cannot.
         case WarpMode::fmOsc:
-            return "Modulate this oscillator's frequency with the other one, in proportion. "
+            return "Modulate this oscillator's frequency with the next one (A reads B, B reads C, "
+                   "C reads A), in proportion. "
                    "It has to be on, though its level can be down. Clamped at zero rather than "
                    "running backwards, which is the traditional FM sound";
         case WarpMode::fmSub:
@@ -108,7 +110,7 @@ inline juce::String warpTooltipFor(int mode)
             return "Modulate this oscillator's frequency with noise: grain and grit rather "
                    "than a second pitch";
         case WarpMode::fmExpOsc:
-            return "The same, on an exponential curve: a small move in the other oscillator "
+            return "The same, on an exponential curve: a small move in the next oscillator "
                    "sweeps the frequency a long way. Brighter and harsher than linear FM, "
                    "and it does not hold the note where linear does";
         case WarpMode::fmExpSub:
@@ -118,7 +120,7 @@ inline juce::String warpTooltipFor(int mode)
             return "Exponential frequency modulation from noise. The most violent of the six";
 
         case WarpMode::amOsc:
-            return "Ride this oscillator's level with the other one. The carrier is still in "
+            return "Ride this oscillator's level with the next one in the A-B-C ring. The carrier is still in "
                    "there, so this is a tremolo taken up to audio rate";
         case WarpMode::amSub:
             return "Ride this oscillator's level with the sub, an octave below the note";
@@ -126,7 +128,7 @@ inline juce::String warpTooltipFor(int mode)
             return "Ride this oscillator's level with noise, which reads as grit on the sound";
 
         case WarpMode::rmOsc:
-            return "Multiply this oscillator by the other one outright. The carrier's own "
+            return "Multiply this oscillator by the next one in the A-B-C ring outright. The carrier's own "
                    "pitch leaves the sound and what is left is the two sidebands: the "
                    "clangorous, bell-like one";
         case WarpMode::rmSub:
@@ -360,7 +362,7 @@ inline juce::String filterSecondTooltipFor(int type)
 
 inline juce::String tooltipFor(const juce::String& id)
 {
-    // Both oscillators expose the same controls, so their tooltips are keyed by
+    // Every oscillator exposes the same controls, so its tooltips are keyed by
     // the suffix and the oscillator's letter is filled in below.
     static const std::map<juce::String, juce::String> perOscillator {
         {"Enable", "Switch oscillator % out of the voice entirely"},
@@ -381,12 +383,14 @@ inline juce::String tooltipFor(const juce::String& id)
         {"Send1", "How much of oscillator % is sent to BUS 1, on top of where it already goes"},
         {"Send2", "How much of oscillator % is sent to BUS 2, on top of where it already goes"},
     };
-    for (const auto& letter : {"A", "B"})
-        if (id.startsWith("osc" + juce::String(letter)))
-        {
-            const auto found = perOscillator.find(id.fromFirstOccurrenceOf("osc" + juce::String(letter), false, false));
-            if (found != perOscillator.end()) return found->second.replace("%", letter);
-        }
+    const auto oscillator = oscillatorIndexFromId(id);
+    if (oscillator >= 0)
+    {
+        const auto letter = oscillatorLetter(oscillator);
+        const auto found = perOscillator.find(
+            id.fromFirstOccurrenceOf(oscillatorPrefix(oscillator), false, false));
+        if (found != perOscillator.end()) return found->second.replace("%", letter);
+    }
 
     static const std::map<juce::String, juce::String> tips {
         {"subEnable", "Switch the sub oscillator on or off"},
@@ -419,6 +423,7 @@ inline juce::String tooltipFor(const juce::String& id)
                            "whatever is played"},
         {"routeA", "Send oscillator A through the filter, or straight to the main output"},
         {"routeB", "Send oscillator B through the filter, or straight to the main output"},
+        {"routeC", "Send oscillator C through the filter, or straight to the main output"},
         {"routeSub", "Send the sub through the filter, or straight to the main output"},
         {"routeNoise", "Send the noise through the filter, or straight to the main output"},
 

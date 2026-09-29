@@ -154,7 +154,12 @@ private:
     // The revision each oscillator's table was last seen at, so a table changed
     // by a preset load or by the host is noticed rather than only one changed
     // by the panel itself.
-    std::array<int, oscillatorCount> tableRevisions {-1, -1};
+    std::array<int, oscillatorCount> tableRevisions = []
+    {
+        std::array<int, oscillatorCount> revisions {};
+        revisions.fill(-1);
+        return revisions;
+    }();
     ui::PresetButton loadPreset {"LOAD"}, savePreset {"SAVE"};
     juce::Label presetName;
     std::unique_ptr<juce::FileChooser> fileChooser;

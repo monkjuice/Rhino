@@ -34,6 +34,9 @@ void tableEditSuite()
     require(store.edit(0).isUntouched(), "a fresh table counts as untouched");
     require(store.isBuiltIn(0) && store.frameCount(0) == rhino::forge::waveShapeCount,
             "what POSITION reads is published with the table");
+    for (int oscillator = 0; oscillator < rhino::forge::oscillatorCount; ++oscillator)
+        require(store.edit(oscillator).isUntouched() && store.table(oscillator) != nullptr,
+                "every oscillator owns a published built-in table");
     for (const auto position : {0.0f, 0.23f, 0.5f, 0.77f, 1.0f})
         for (const auto phase : {0.0f, 0.1f, 0.37f, 0.62f, 0.99f})
             requireClose(store.edit(0).sample(position, phase), rhino::forge::waveAt(position, phase),
@@ -214,7 +217,8 @@ void tableFileSuite()
     // the oscillator — which it can only do if the voice is reading the frames
     // the editor changed.
     rhino::forge::Processor voice;
-    for (const auto* id : {"oscBEnable", "subEnable", "noiseEnable"}) setValue(voice, id, 0.0f);
+    for (const auto* id : {"oscBEnable", "oscCEnable", "subEnable", "noiseEnable"})
+        setValue(voice, id, 0.0f);
     setValue(voice, "oscAPosition", 0.0f);
     require(peakForNote(voice) > 0.01f, "the oscillator sounds before its frame is changed");
     voice.tableStore().edit(0).draw(0, 0.0f, 0.0f, 1.0f, 0.0f);

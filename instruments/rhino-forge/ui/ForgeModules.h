@@ -45,6 +45,9 @@ inline std::vector<Row> completeFxRows(std::vector<Row> rows)
     return rows;
 }
 
+inline constexpr float oscillatorColumnSpan = 16.0f / 3.0f;
+inline constexpr float mixerColumnSpan = static_cast<float>(gridColumns) / 9.0f;
+
 inline const std::vector<Module>& modules()
 {
     static const std::vector<Module> declared {
@@ -63,28 +66,42 @@ inline const std::vector<Module>& modules()
         // knobs is deliberate: the waveform is still the largest thing on the
         // panel, and a knob small enough to be hard to hit would have cost more
         // than the picture does. The knobs do come down — see displayShare.
-        {"oscA", "OSC A", "MORPH", "oscAEnable", false, Display::oscillator, 0, 4, 8, false,
-         {{20, {{"oscAOctave", "OCT", Style::stepper}, {"oscASemitone", "SEMI", Style::stepper},
+        {"oscA", "OSC A", "MORPH", "oscAEnable", false, Display::oscillator,
+         0, 4.0f, oscillatorColumnSpan, false,
+         {{16, {{"oscAOctave", "OCT", Style::stepper}, {"oscASemitone", "SEMI", Style::stepper},
                 {"oscAFine", "FINE", Style::stepper}}},
-          {40, {{"oscAPosition", "POSITION"}, {"oscAUnison", "UNISON"}, {"oscADetune", "DETUNE"},
-                {"oscABlend", "BLEND"}, {"oscAPan", "PAN"}, {"oscALevel", "LEVEL"}}},
-          {40, {{"oscAWarp1", "WARP 1", Style::knob, nullptr, 1, "oscAWarp1Mode"},
-                {"oscAWarp1Mode", "MODE 1", Style::selector, nullptr, 2},
-                {"oscAWarp2Mode", "MODE 2", Style::selector, nullptr, 2},
-                {"oscAWarp2", "WARP 2", Style::knob, nullptr, 1, "oscAWarp2Mode"}}}},
+          {27, {{"oscAPosition", "POSITION"}, {"oscAUnison", "UNISON"}, {"oscADetune", "DETUNE"}}},
+          {27, {{"oscABlend", "BLEND"}, {"oscAPan", "PAN"}, {"oscALevel", "LEVEL"}}},
+          {30, {{"oscAWarp1", "WARP 1", Style::knob, nullptr, 2, "oscAWarp1Mode"},
+                {"oscAWarp1Mode", "MODE 1", Style::selector, nullptr, 3},
+                {"oscAWarp2Mode", "MODE 2", Style::selector, nullptr, 3},
+                {"oscAWarp2", "WARP 2", Style::knob, nullptr, 2, "oscAWarp2Mode"}}}},
          0, only(Page::oscillators), 1, 0, 0, oscillatorDisplayPercent, 0, "OSCILLATOR A"},
-        {"oscB", "OSC B", "MORPH", "oscBEnable", false, Display::oscillator, 0, 12, 8, false,
-         {{20, {{"oscBOctave", "OCT", Style::stepper}, {"oscBSemitone", "SEMI", Style::stepper},
+        {"oscB", "OSC B", "MORPH", "oscBEnable", false, Display::oscillator,
+         0, 4.0f + oscillatorColumnSpan, oscillatorColumnSpan, false,
+         {{16, {{"oscBOctave", "OCT", Style::stepper}, {"oscBSemitone", "SEMI", Style::stepper},
                 {"oscBFine", "FINE", Style::stepper}}},
-          {40, {{"oscBPosition", "POSITION"}, {"oscBUnison", "UNISON"}, {"oscBDetune", "DETUNE"},
-                {"oscBBlend", "BLEND"}, {"oscBPan", "PAN"}, {"oscBLevel", "LEVEL"}}},
-          {40, {{"oscBWarp1", "WARP 1", Style::knob, nullptr, 1, "oscBWarp1Mode"},
-                {"oscBWarp1Mode", "MODE 1", Style::selector, nullptr, 2},
-                {"oscBWarp2Mode", "MODE 2", Style::selector, nullptr, 2},
-                {"oscBWarp2", "WARP 2", Style::knob, nullptr, 1, "oscBWarp2Mode"}}}},
+          {27, {{"oscBPosition", "POSITION"}, {"oscBUnison", "UNISON"}, {"oscBDetune", "DETUNE"}}},
+          {27, {{"oscBBlend", "BLEND"}, {"oscBPan", "PAN"}, {"oscBLevel", "LEVEL"}}},
+          {30, {{"oscBWarp1", "WARP 1", Style::knob, nullptr, 2, "oscBWarp1Mode"},
+                {"oscBWarp1Mode", "MODE 1", Style::selector, nullptr, 3},
+                {"oscBWarp2Mode", "MODE 2", Style::selector, nullptr, 3},
+                {"oscBWarp2", "WARP 2", Style::knob, nullptr, 2, "oscBWarp2Mode"}}}},
          0, only(Page::oscillators), 1, 0, 0, oscillatorDisplayPercent, 0, "OSCILLATOR B"},
 
-        // The matrix takes the two oscillators' columns — not the whole row,
+        {"oscC", "OSC C", "MORPH", "oscCEnable", false, Display::oscillator,
+         0, 4.0f + 2.0f * oscillatorColumnSpan, oscillatorColumnSpan, false,
+         {{16, {{"oscCOctave", "OCT", Style::stepper}, {"oscCSemitone", "SEMI", Style::stepper},
+                {"oscCFine", "FINE", Style::stepper}}},
+          {27, {{"oscCPosition", "POSITION"}, {"oscCUnison", "UNISON"}, {"oscCDetune", "DETUNE"}}},
+          {27, {{"oscCBlend", "BLEND"}, {"oscCPan", "PAN"}, {"oscCLevel", "LEVEL"}}},
+          {30, {{"oscCWarp1", "WARP 1", Style::knob, nullptr, 2, "oscCWarp1Mode"},
+                {"oscCWarp1Mode", "MODE 1", Style::selector, nullptr, 3},
+                {"oscCWarp2Mode", "MODE 2", Style::selector, nullptr, 3},
+                {"oscCWarp2", "WARP 2", Style::knob, nullptr, 2, "oscCWarp2Mode"}}}},
+         0, only(Page::oscillators), 1, 0, 0, oscillatorDisplayPercent, 0, "OSCILLATOR C"},
+
+        // The matrix takes the oscillator bank's columns — not the whole row,
         // because SUB, NOISE and FILTER sit either side of them and stay on
         // screen whichever tab is open. It reads as a table: one row per slot,
         // numbered down the side, the amount between the source driving it and
@@ -221,7 +238,8 @@ inline const std::vector<Module>& modules()
          {{displaySelectorHeight, {{"filterType", "TYPE", Style::selector}},
            1, 0, 0, Seat::displayTop},
           {displayButtonHeight, {{"routeA", "A", Style::chip}, {"routeB", "B", Style::chip},
-                                 {"routeSub", "S", Style::chip}, {"routeNoise", "N", Style::chip},
+                                 {"routeC", "C", Style::chip}, {"routeSub", "S", Style::chip},
+                                 {"routeNoise", "N", Style::chip},
                                  {"filterKeyTrack", "KEY", Style::chip}},
            1, 0, 0, Seat::displayFoot},
           {50, {{"cutoff", "CUTOFF"}, {"resonance", "RES"}, {"drive", "DRIVE"}}},
@@ -443,7 +461,7 @@ inline const std::vector<Module>& modules()
 
         // --- The mixer -------------------------------------------------------
         //
-        // Eight channels across the whole signal row, three grid columns each.
+        // Nine equal channels across the whole signal row.
         // The MIX tab is the only one that takes the row entire: the mixer is
         // the view of SUB, NOISE and the filter, so those three modules stand
         // down rather than sitting beside strips of themselves.
@@ -466,25 +484,36 @@ inline const std::vector<Module>& modules()
         // The header enable is the source's own — switching OSC A off here is
         // switching it off, exactly as Serum's mixer header does, which is also
         // what gives every channel the mute it has no separate control for.
-        {"mixSub", "SUB", "", "subEnable", false, Display::none, 0, 0, 3, true,
+        {"mixSub", "SUB", "", "subEnable", false, Display::none,
+         0, 0.0f, mixerColumnSpan, true,
          {{16, {{"routeSub", "TO", Style::stepper}}},
           {26, {{"subSend1", "BUS 1"}, {"subSend2", "BUS 2"}}},
           {26, {{"subPan", "PAN"}}},
           {32, {{"subLevel", "LEVEL", Style::fader}}}},
          0, only(Page::mix)},
-        {"mixOscA", "OSC A", "", "oscAEnable", false, Display::none, 0, 3, 3, true,
+        {"mixOscA", "OSC A", "", "oscAEnable", false, Display::none,
+         0, mixerColumnSpan, mixerColumnSpan, true,
          {{16, {{"routeA", "TO", Style::stepper}}},
           {26, {{"oscASend1", "BUS 1"}, {"oscASend2", "BUS 2"}}},
           {26, {{"oscAPan", "PAN"}}},
           {32, {{"oscALevel", "LEVEL", Style::fader}}}},
          0, only(Page::mix)},
-        {"mixOscB", "OSC B", "", "oscBEnable", false, Display::none, 0, 6, 3, true,
+        {"mixOscB", "OSC B", "", "oscBEnable", false, Display::none,
+         0, 2.0f * mixerColumnSpan, mixerColumnSpan, true,
          {{16, {{"routeB", "TO", Style::stepper}}},
           {26, {{"oscBSend1", "BUS 1"}, {"oscBSend2", "BUS 2"}}},
           {26, {{"oscBPan", "PAN"}}},
           {32, {{"oscBLevel", "LEVEL", Style::fader}}}},
          0, only(Page::mix)},
-        {"mixNoise", "NOISE", "", "noiseEnable", true, Display::none, 0, 9, 3, true,
+        {"mixOscC", "OSC C", "", "oscCEnable", false, Display::none,
+         0, 3.0f * mixerColumnSpan, mixerColumnSpan, true,
+         {{16, {{"routeC", "TO", Style::stepper}}},
+          {26, {{"oscCSend1", "BUS 1"}, {"oscCSend2", "BUS 2"}}},
+          {26, {{"oscCPan", "PAN"}}},
+          {32, {{"oscCLevel", "LEVEL", Style::fader}}}},
+         0, only(Page::mix)},
+        {"mixNoise", "NOISE", "", "noiseEnable", true, Display::none,
+         0, 4.0f * mixerColumnSpan, mixerColumnSpan, true,
          {{16, {{"routeNoise", "TO", Style::stepper}}},
           {26, {{"noiseSend1", "BUS 1"}, {"noiseSend2", "BUS 2"}}},
           {26, {{"noisePan", "PAN"}}},
@@ -494,7 +523,8 @@ inline const std::vector<Module>& modules()
         // filter passes goes to the main output and the only other place it
         // could go is a bus, which the sends already reach. MIX shares the pan
         // row instead, where TYPE would have been.
-        {"mixFilter", "FILTER", "", "filterEnable", false, Display::none, 0, 12, 3, true,
+        {"mixFilter", "FILTER", "", "filterEnable", false, Display::none,
+         0, 5.0f * mixerColumnSpan, mixerColumnSpan, true,
          {{16, {}},
           {26, {{"filterSend1", "BUS 1"}, {"filterSend2", "BUS 2"}}},
           {26, {{"filterPan", "PAN"}, {"filterMix", "MIX"}}},
@@ -504,13 +534,15 @@ inline const std::vector<Module>& modules()
         // making them, and where it goes afterwards is the TO field — so that
         // row holds the switch that takes the bus's own effects rack out of
         // the signal, which is the button Serum puts on this channel too.
-        {"mixBus1", "BUS 1", "", "bus1Enable", true, Display::none, 0, 15, 3, true,
+        {"mixBus1", "BUS 1", "", "bus1Enable", true, Display::none,
+         0, 6.0f * mixerColumnSpan, mixerColumnSpan, true,
          {{16, {{"bus1Dest", "TO", Style::stepper}}},
           {26, {{"fx2Bypass", "FX", Style::chip}}},
           {26, {{"bus1Pan", "PAN"}}},
           {32, {{"bus1Level", "LEVEL", Style::fader}}}},
          0, only(Page::mix)},
-        {"mixBus2", "BUS 2", "", "bus2Enable", true, Display::none, 0, 18, 3, true,
+        {"mixBus2", "BUS 2", "", "bus2Enable", true, Display::none,
+         0, 7.0f * mixerColumnSpan, mixerColumnSpan, true,
          {{16, {{"bus2Dest", "TO", Style::stepper}}},
           {26, {{"fx3Bypass", "FX", Style::chip}}},
           {26, {{"bus2Pan", "PAN"}}},
@@ -519,7 +551,8 @@ inline const std::vector<Module>& modules()
         // Where everything arrives. It is the OUTPUT knob from GLOBAL, drawn as
         // the fader at the end of the row: one setting, and the mixer is where
         // a final level is actually read against the channels feeding it.
-        {"mixMain", "MAIN", "", nullptr, false, Display::none, 0, 21, 3, true,
+        {"mixMain", "MAIN", "", nullptr, false, Display::none,
+         0, 8.0f * mixerColumnSpan, mixerColumnSpan, true,
          {{16, {}},
           {26, {{"fx1Bypass", "FX", Style::chip}}},
           {26, {}},

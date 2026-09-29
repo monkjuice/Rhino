@@ -185,13 +185,16 @@ inline juce::Rectangle<int> moduleBounds(juce::Rectangle<int> bounds, const Modu
         height += available * weights[static_cast<size_t>(row)] / total;
     }
 
-    const auto columnWidth = content.getWidth() / gridColumns;
-    const auto x = content.getX() + module.column * columnWidth;
-    // The last column in a row absorbs the integer-division remainder so the
-    // right edge lines up with the content instead of drifting inward.
-    const auto reachesRightEdge = module.column + module.columnSpan == gridColumns;
-    const auto width = reachesRightEdge ? content.getRight() - x : module.columnSpan * columnWidth;
-    return juce::Rectangle<int>(x, y, width, height).reduced(moduleGap / 2, 0);
+    const auto columnWidth = static_cast<float>(content.getWidth()) / static_cast<float>(gridColumns);
+    const auto x = content.getX() + juce::roundToInt(module.column * columnWidth);
+    // Work both edges from the same origin. Adjacent fractional columns then
+    // round to the same pixel and retain the exact gap their plates reduce by.
+    const auto reachesRightEdge = module.column + module.columnSpan
+                               >= static_cast<float>(gridColumns) - 0.001f;
+    const auto right = reachesRightEdge
+        ? content.getRight()
+        : content.getX() + juce::roundToInt((module.column + module.columnSpan) * columnWidth);
+    return juce::Rectangle<int>(x, y, right - x, height).reduced(moduleGap / 2, 0);
 }
 
 // The ordinary FX page occupies the signal row. Expanded, it occupies the
@@ -430,7 +433,7 @@ inline juce::Rectangle<int> displayPlotBounds(juce::Rectangle<int> moduleArea, c
 }
 
 // The parameter an oscillator's display draws: the first knob of the module,
-// which is POSITION by declaration in both oscillators.
+// which is POSITION by declaration in every oscillator.
 inline const char* displaySourceId(const Module& module)
 {
     for (const auto& row : module.rows)

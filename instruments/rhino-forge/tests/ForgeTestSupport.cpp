@@ -154,7 +154,7 @@ bool identical(const juce::AudioBuffer<float>& a, const juce::AudioBuffer<float>
 // be measured directly.
 void soloSineOnA(rhino::forge::Processor& processor)
 {
-    for (const auto* id : {"oscBEnable", "subEnable", "noiseEnable", "filterEnable"})
+    for (const auto* id : {"oscBEnable", "oscCEnable", "subEnable", "noiseEnable", "filterEnable"})
         setValue(processor, id, 0.0f);
     setValue(processor, "oscAEnable", 1.0f);
     setValue(processor, "oscAPosition", 0.0f);

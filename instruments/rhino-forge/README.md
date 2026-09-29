@@ -4,7 +4,7 @@ Rhino Forge is Rhino's independent synthesizer project. It is a VST3 and
 standalone JUCE application that deliberately owns no Tracktion or Rhino-DAW
 types.
 
-The panel is a set of modules — two oscillators, sub, noise, a filter, four
+The panel is a set of modules — three oscillators, sub, noise, a filter, four
 envelopes, six LFOs, global voicing, eight macros, the modulation matrix, the
 mixer and three effects racks — each in its own box with its own enable.
 
@@ -21,7 +21,7 @@ is a single free-running cycle shared by every voice and by the panel.
 The panel is two rows of modules, with a taller signal row, over a
 seventy-six key keyboard, and it is wider than it is tall at every size it
 allows. The top row is the signal path read left to right — sub and noise, the
-two oscillators, the filter. The bottom row is what shapes it, in the same
+three oscillators, the filter. The bottom row is what shapes it, in the same
 order: global voicing as a narrow column, then the envelopes, the LFOs and the
 macros.
 
@@ -43,8 +43,8 @@ headings and artwork are never temporarily downsampled or stretched from an
 earlier frame. Fractional display scales preserve the cache's physical pixels.
 
 The filter shows its own response, and that display is most of the module. The
-type selector lies along the top edge of the well and the five buttons — the
-four source routings and KEY — along its foot, each a pixel inside the frame,
+type selector lies along the top edge of the well and the six buttons — the
+five source routings and KEY — along its foot, each a pixel inside the frame,
 with the response between them and the frequencies named underneath it. Both
 rows are ordinary declared controls that happen to be *seated* in the display
 rather than in the body below it; see `Seat` in `ui/ForgeModule.h`. It is the
@@ -80,7 +80,7 @@ amount bars are unaffected — a field whose whole purpose is to be read exactly
 still shows what it holds.
 
 Five tabs in the title bar: `OSC`, `TABLE`, `MATRIX`, `MIX` and `FX`. The first
-three switch **only the two oscillators** — the wavetable editor and the matrix
+three switch **only the oscillator bank** — the wavetable editor and the matrix
 take turns in their columns, while sub, noise and the filter hold their places
 either side. `MIX` and `FX` take the whole signal row instead, because each is a
 view of everything upstream rather than a panel that sits beside it. The lower
@@ -92,8 +92,8 @@ noise and the filter need. Switching tabs hides and shows components rather than
 rebuilding them, so a knob the matrix is covering is still driven by the host
 and by its own modulation slots while it is out of sight.
 
-`MIX` is eight channels across the row, in the order the signal travels: SUB,
-OSC A, OSC B, NOISE, FILTER, BUS 1, BUS 2, MAIN. Every source channel carries
+`MIX` is nine channels across the row, in the order the signal travels: SUB,
+OSC A, OSC B, OSC C, NOISE, FILTER, BUS 1, BUS 2, MAIN. Every source channel carries
 where it goes, a send to each bus, a pan and a fader; the filter's channel adds
 a blend against what was sent into it; the busses carry a level, a pan and a
 destination. Nothing on it is a second copy of a setting — a channel's pan and

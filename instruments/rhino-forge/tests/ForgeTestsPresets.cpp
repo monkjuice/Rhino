@@ -24,6 +24,7 @@ void presetSuite()
             "a colour saved by a build that knew more of them clamps rather than wrapping");
     processor.setPanelColour("oscA", static_cast<int>(rhino::forge::ui::PanelColour::red));
     processor.setPanelColour("oscB", static_cast<int>(rhino::forge::ui::PanelColour::orange));
+    processor.setPanelColour("oscC", static_cast<int>(rhino::forge::ui::PanelColour::green));
 
     // A macro's name rides on the same properties for the same reason, and is
     // the other setting a preset could silently drop. It is text rather than a
@@ -44,14 +45,17 @@ void presetSuite()
     setValue(processor, "env1Release", 2.5f);
     setValue(processor, "noiseEnable", 1.0f);
     setValue(processor, "oscBEnable", 0.0f);
+    setValue(processor, "oscCSemitone", -7.0f);
     require(processor.savePreset(preset, "Round Trip").wasOk(), "preset saves");
 
     setValue(processor, "cutoff", 9000.0f);
     setValue(processor, "env1Release", 0.1f);
     setValue(processor, "noiseEnable", 0.0f);
     setValue(processor, "oscBEnable", 1.0f);
+    setValue(processor, "oscCSemitone", 12.0f);
     processor.setPanelColour("oscA", static_cast<int>(rhino::forge::ui::PanelColour::blue));
     processor.setPanelColour("oscB", static_cast<int>(rhino::forge::ui::PanelColour::blue));
+    processor.setPanelColour("oscC", static_cast<int>(rhino::forge::ui::PanelColour::blue));
     processor.setMacroName(0, "SOMETHING ELSE");
     processor.setMacroName(2, "GRIT");
     require(processor.loadPreset(preset).wasOk(), "preset loads");
@@ -59,12 +63,15 @@ void presetSuite()
     require(processor.macroName(2).isEmpty(),
             "a preset puts a macro it left unnamed back to unnamed");
     require(processor.panelColour("oscA") == static_cast<int>(rhino::forge::ui::PanelColour::red)
-                && processor.panelColour("oscB") == static_cast<int>(rhino::forge::ui::PanelColour::orange),
+                && processor.panelColour("oscB") == static_cast<int>(rhino::forge::ui::PanelColour::orange)
+                && processor.panelColour("oscC") == static_cast<int>(rhino::forge::ui::PanelColour::green),
             "a preset restores each oscillator's panel colour");
     requireClose(value(processor, "cutoff"), 1320.0f, 1.0f, "preset restores cutoff");
     requireClose(value(processor, "env1Release"), 2.5f, 0.001f, "preset restores release");
     requireClose(value(processor, "noiseEnable"), 1.0f, 0.001f, "preset restores an enabled module");
     requireClose(value(processor, "oscBEnable"), 0.0f, 0.001f, "preset restores a disabled module");
+    requireClose(value(processor, "oscCSemitone"), -7.0f, 0.001f,
+                 "preset restores oscillator C's controls");
 
     // A table is data rather than a parameter, so it travels beside the
     // parameter state. A preset that carries one has to give back the frames
@@ -73,30 +80,31 @@ void presetSuite()
     // behind — the same rule an omitted parameter follows.
     {
         rhino::forge::Processor drawn;
-        drawn.tableStore().edit(0).draw(0, 0.0f, -1.0f, 1.0f, 1.0f);
-        drawn.tableStore().edit(0).insertFrame(0, true);
-        drawn.tableStore().publish(0);
-        const auto frames = drawn.tableStore().edit(0).frameCount();
-        std::vector<float> authored(drawn.tableStore().edit(0).samples());
+        drawn.tableStore().edit(2).draw(0, 0.0f, -1.0f, 1.0f, 1.0f);
+        drawn.tableStore().edit(2).insertFrame(0, true);
+        drawn.tableStore().publish(2);
+        const auto frames = drawn.tableStore().edit(2).frameCount();
+        std::vector<float> authored(drawn.tableStore().edit(2).samples());
 
         const auto withTable = directory.getChildFile("Drawn.forgepreset");
         require(drawn.savePreset(withTable, "Drawn").wasOk(), "a preset holding a table saves");
 
         rhino::forge::Processor reopened;
         require(reopened.loadPreset(withTable).wasOk(), "a preset holding a table loads");
-        require(reopened.tableStore().edit(0).frameCount() == frames,
+        require(reopened.tableStore().edit(2).frameCount() == frames,
                 "a preset gives back the frames it was saved with");
-        require(reopened.tableStore().edit(0).samples() == authored,
+        require(reopened.tableStore().edit(2).samples() == authored,
                 "a preset gives back the samples it was saved with, exactly");
-        require(!reopened.tableStore().edit(0).isUntouched(),
+        require(!reopened.tableStore().edit(2).isUntouched(),
                 "a table that came out of a preset is not the built-in one");
-        require(reopened.tableStore().frameCount(0) == frames,
+        require(reopened.tableStore().frameCount(2) == frames,
                 "and POSITION is told how many frames it now has");
-        require(reopened.tableStore().edit(1).isUntouched(),
-                "an oscillator the preset said nothing about keeps the built-in table");
+        require(reopened.tableStore().edit(0).isUntouched()
+                    && reopened.tableStore().edit(1).isUntouched(),
+                "oscillators the preset said nothing about keep their built-in tables");
 
         require(reopened.loadPreset(preset).wasOk(), "a preset with no table loads over one with a table");
-        require(reopened.tableStore().edit(0).isUntouched(),
+        require(reopened.tableStore().edit(2).isUntouched(),
                 "a preset that carries no table puts the built-in one back");
 
         // Host state is the same payload by the same path, so a project reopens
@@ -105,7 +113,7 @@ void presetSuite()
         drawn.getStateInformation(block);
         rhino::forge::Processor hosted;
         hosted.setStateInformation(block.getData(), static_cast<int>(block.getSize()));
-        require(hosted.tableStore().edit(0).samples() == authored,
+        require(hosted.tableStore().edit(2).samples() == authored,
                 "host state carries the table too");
         // The table travels beside the parameters, never inside them.
         for (const auto child : hosted.state.copyState())
@@ -119,12 +127,17 @@ void presetSuite()
             "format 1 fixture writes");
     require(processor.loadPreset(version1).failed(), "a format 1 preset is refused");
 
+    const auto version2 = directory.getChildFile("Previous.forgepreset");
+    require(version2.replaceWithText("<RhinoForgePreset formatVersion=\"2\"><RhinoForgeState/></RhinoForgePreset>"),
+            "format 2 fixture writes");
+    require(processor.loadPreset(version2).failed(), "the previous destination schema is refused");
+
     const auto future = directory.getChildFile("Future.forgepreset");
     require(future.replaceWithText("<RhinoForgePreset formatVersion=\"99\"><RhinoForgeState/></RhinoForgePreset>"),
             "future-version fixture writes");
     require(processor.loadPreset(future).failed(), "a newer preset version is refused");
 
-    // Within format 2, a preset is reconciled against the parameters that exist
+    // Within format 3, a preset is reconciled against the parameters that exist
     // when it opens. This is what keeps presets working while Forge's controls
     // are still being built out milestone by milestone: entries Forge no longer
     // has are dropped, and controls the preset predates return to their
@@ -133,7 +146,7 @@ void presetSuite()
     setValue(processor, "noiseEnable", 1.0f);
     const auto partial = directory.getChildFile("Partial.forgepreset");
     require(partial.replaceWithText(
-                "<RhinoForgePreset formatVersion=\"2\"><RhinoForgeState>"
+                "<RhinoForgePreset formatVersion=\"3\"><RhinoForgeState>"
                 "<PARAM id=\"cutoff\" value=\"5000.0\"/>"
                 "<PARAM id=\"retiredKnob\" value=\"0.5\"/>"
                 "</RhinoForgeState></RhinoForgePreset>"),
@@ -148,7 +161,7 @@ void presetSuite()
     const auto resaved = directory.getChildFile("Resaved.forgepreset");
     require(processor.savePreset(resaved, "Resaved").wasOk(), "a reconciled preset saves");
     const auto text = resaved.loadFileAsString();
-    require(text.contains("formatVersion=\"2\""), "a saved preset declares format 2");
+    require(text.contains("formatVersion=\"3\""), "a saved preset declares format 3");
     require(!text.contains("retiredKnob"), "an unknown entry is dropped, not carried as ballast");
     require(text.contains("oscAEnable"), "the module enables are saved");
     require(text.contains("env1Release"), "an omitted parameter is written back out at its default");

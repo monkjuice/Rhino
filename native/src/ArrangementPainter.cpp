@@ -114,7 +114,12 @@ void Arrangement::paintTrackCards(juce::Graphics& g)
             continue;
         }
         const auto track = rows[static_cast<size_t>(index)].track;
-        g.setColour(track == 0 ? palette::arrangement.brighter(0.04f) : palette::arrangement);
+        // One ground for every lane. The first track used to be lifted a shade,
+        // which under the neutral palette landed it on exactly palette::minorGrid
+        // - so the subdivisions drawn over it were the colour of the lane they
+        // were drawn on and track one had no grid at all at any zoom the beat
+        // lines did not already cover.
+        g.setColour(palette::arrangement);
         g.fillRect(row.withX(0.0f).withWidth(static_cast<float>(getWidth()) - 14.0f));
         // The card is two columns with the panel grey between them: the
         // controls keep the panel background, and the name sits on the track

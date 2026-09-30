@@ -116,6 +116,56 @@ inline void drawSnappedText(juce::Graphics& g, const juce::String& text, juce::R
     g.drawSingleLineText(line, x, baseline);
 }
 
+// The window's own three caption buttons. LookAndFeel_V4 builds these out of
+// its colour scheme - a blue-grey in its dark scheme - and paints no surface at
+// all under the pointer, so the only feedback a caption button had was the
+// glyph changing tint. These carry the shell's greys and light the whole key
+// when the pointer is on one, which is what every other window on this desktop
+// does and the only feedback a button this small has room for.
+class CaptionButton final : public juce::Button
+{
+public:
+    enum class Kind { minimise, maximise, close };
+
+    CaptionButton(const juce::String& name, Kind buttonKind) : juce::Button(name), kind(buttonKind) {}
+
+    void paintButton(juce::Graphics& g, bool highlighted, bool pressed) override
+    {
+        const auto bounds = getLocalBounds();
+        if (highlighted || pressed)
+        {
+            // Close is the one key on the bar worth a colour: it is the only
+            // press here that cannot be taken back.
+            g.setColour(kind == Kind::close ? palette::recordAccent.darker(pressed ? 0.3f : 0.05f)
+                                            : palette::hover.brighter(pressed ? 0.3f : 0.1f));
+            g.fillRect(bounds);
+        }
+        g.setColour(kind == Kind::close && (highlighted || pressed) ? juce::Colours::white : palette::text);
+        // A whole number of pixels a side, and an odd one, so the minimise rule
+        // and the maximise frame land on pixel rows rather than between them.
+        const auto glyph = bounds.withSizeKeepingCentre(9, 9);
+        switch (kind)
+        {
+            case Kind::minimise:
+                g.fillRect(glyph.getX(), glyph.getCentreY(), glyph.getWidth(), 1);
+                break;
+            case Kind::maximise:
+                g.drawRect(glyph, 1);
+                break;
+            case Kind::close:
+            {
+                const auto area = glyph.toFloat().reduced(0.5f);
+                g.drawLine(area.getX(), area.getY(), area.getRight(), area.getBottom(), 1.2f);
+                g.drawLine(area.getRight(), area.getY(), area.getX(), area.getBottom(), 1.2f);
+                break;
+            }
+        }
+    }
+
+private:
+    Kind kind;
+};
+
 class Theme final : public juce::LookAndFeel_V4
 {
 public:
@@ -393,6 +443,30 @@ public:
             : textEditor.findColour(juce::TextEditor::outlineColourId);
         g.setColour(colour);
         g.drawRect(0, 0, width, height);
+    }
+
+    // The caption strip. The stock one fills with the colour scheme's widget
+    // background, which in LookAndFeel_V4's dark scheme is a blue-grey - and is
+    // why the bar carrying File and Edit never matched the control bar directly
+    // under it whatever colour the window was given. Nothing is drawn here but
+    // the ground: the project name is a Label the window places itself.
+    void drawDocumentWindowTitleBar(juce::DocumentWindow&, juce::Graphics& g, int w, int h,
+                                    int, int, const juce::Image*, bool) override
+    {
+        if (w <= 0 || h <= 0) return;
+        g.setColour(palette::globalBar);
+        g.fillRect(0, 0, w, h);
+    }
+
+    juce::Button* createDocumentWindowButton(int buttonType) override
+    {
+        if (buttonType == juce::DocumentWindow::minimiseButton)
+            return new CaptionButton("minimise", CaptionButton::Kind::minimise);
+        if (buttonType == juce::DocumentWindow::maximiseButton)
+            return new CaptionButton("maximise", CaptionButton::Kind::maximise);
+        if (buttonType == juce::DocumentWindow::closeButton)
+            return new CaptionButton("close", CaptionButton::Kind::close);
+        return juce::LookAndFeel_V4::createDocumentWindowButton(buttonType);
     }
 
 private:

@@ -1,4 +1,5 @@
 #include "ControlBarIcons.h"
+#include <cmath>
 
 namespace rhino::icons
 {
@@ -75,32 +76,16 @@ void drawCurvedArrow(juce::Graphics& g, juce::Rectangle<float> area, bool pointi
     g.fillPath(arrow);
 }
 
-void drawSidebar(juce::Graphics& g, juce::Rectangle<float> area, bool panelShowing)
+void drawSidebar(juce::Graphics& g, juce::Rectangle<float> area)
 {
-    const auto height = std::min(area.getHeight(), area.getWidth() / 1.2f);
-    if (height <= 3.0f) return;
-    const auto frame = area.withSizeKeepingCentre(height * 1.2f, height);
-    g.drawRoundedRectangle(frame.reduced(0.6f), 2.0f, 1.2f);
-    // The panel is the left third. Filled when the browser is showing and
-    // ruled off when it is not, so the toggle looks like what it does rather
-    // than merely lighting up after it has been pressed.
-    const auto split = frame.getX() + frame.getWidth() * 0.38f;
-    if (panelShowing)
-        g.fillRect(juce::Rectangle<float>(frame.getX(), frame.getY(), split - frame.getX(), frame.getHeight())
-                       .reduced(1.6f).withWidth(split - frame.getX() - 1.6f));
-    else
-        g.fillRect(split - 0.6f, frame.getY() + 1.2f, 1.2f, frame.getHeight() - 2.4f);
-}
-
-juce::Path chevron(bool pointingLeft)
-{
-    juce::Path path;
-    const auto tip = pointingLeft ? 0.15f : 0.85f;
-    const auto tail = pointingLeft ? 0.85f : 0.15f;
-    path.startNewSubPath(tail, 0.06f);
-    path.lineTo(tip, 0.5f);
-    path.lineTo(tail, 0.94f);
-    return path;
+    // Fixed at eighteen by fourteen and snapped to whole pixels: two solid
+    // blocks with a gap between them only stay legible while every edge lands
+    // on a pixel column, and the button this sits in is always the same size.
+    const auto icon = area.withSizeKeepingCentre(18.0f, 14.0f);
+    const auto x = std::floor(icon.getX());
+    const auto y = std::floor(icon.getY());
+    g.fillRect(x, y, 4.0f, 14.0f);
+    g.fillRect(x + 7.0f, y, 10.0f, 14.0f);
 }
 
 juce::Path chevronDown()

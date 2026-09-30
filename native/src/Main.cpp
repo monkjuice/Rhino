@@ -103,19 +103,13 @@ void registerRhinoProjectFileAssociation()
    #endif
 }
 
-// The browser toggle: a window with its side panel, and a chevron saying which
-// way the panel will go. Both are grey - the state is carried by brightness and
-// by whether the panel is filled in, not by a colour, because a coloured toggle
-// in a neutral bar reads as a warning rather than as a switch.
-inline void paintSidebarIcon(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour colour, bool showing)
+// The browser toggle: a narrow panel beside a wide one. Grey - the state is
+// carried by brightness alone, not by a colour, because a coloured toggle in a
+// neutral bar reads as a warning rather than as a switch.
+inline void paintSidebarIcon(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour colour)
 {
     g.setColour(colour);
-    // Two thirds of the width to the window, the rest to the chevron, so the
-    // pair reads as one control rather than as an icon with a mark beside it.
-    const auto window = area.removeFromLeft(area.getWidth() * 0.64f);
-    icons::drawSidebar(g, window, showing);
-    icons::strokeFitted(g, icons::chevron(showing),
-                        area.withSizeKeepingCentre(area.getWidth() * 0.55f, area.getHeight() * 0.5f), 1.3f);
+    icons::drawSidebar(g, area);
 }
 
 // Stop parks the playhead on the line the arrangement is working from, which
@@ -404,7 +398,7 @@ public:
         tempoBox.setRange(Session::minimumTempo, Session::maximumTempo, 1.0, 0.01);
         tempoBox.setDecimalPlaces(2);
         tempoBox.setSuffix("BPM");
-        tempoBox.setFontSize(17.0f, 8.0f);
+        tempoBox.setFontSize(16.0f, 8.0f);
         tempoBox.setJustification(juce::Justification::centredLeft);
         tempoBox.setValue(session.tempo());
         tempoBox.setTooltip("Tempo - drag up or down, hold Ctrl for hundredths, double-click to type");
@@ -454,9 +448,13 @@ public:
         // greys, from the same paths.
         browserToggle.setGlyphInset(0.15f);
         browserToggle.setActiveColour(palette::text);
-        browserToggle.setPainter([this](juce::Graphics& g, juce::Rectangle<float> area, juce::Colour colour)
+        // The one wiring the bar was missing: without it the toggle lit and
+        // dimmed with browserOpen but never changed it, so the only way to the
+        // browser was View > Browser.
+        browserToggle.onClick = [this] { toggleBrowser(); };
+        browserToggle.setPainter([](juce::Graphics& g, juce::Rectangle<float> area, juce::Colour colour)
         {
-            paintSidebarIcon(g, area, colour, browserOpen);
+            paintSidebarIcon(g, area, colour);
         });
         metronome.setGlyphInset(0.12f);
         metronome.setActiveColour(palette::text);
@@ -568,7 +566,16 @@ public:
         if (browserOpen)
         {
             g.setColour(palette::border);
-            g.fillRect(browserWidth, browserTop, browserDividerWidth, getHeight() - browserTop);
+            g.fillRect(browserWidth, browserTop, browserDividerWidth,
+                       std::max(0, workspaceBottom - browserTop));
+        }
+        // The band the clip and device strip sits on, drawn the whole width so
+        // the part beside the browser column is the same ground as the part
+        // over the arrangement - the panels above it stop at its top edge.
+        if (workspaceBottom > 0 && workspaceBottom < getHeight())
+        {
+            g.setColour(palette::sideSurface);
+            g.fillRect(0, workspaceBottom, getWidth(), getHeight() - workspaceBottom);
         }
         // The Info View lives at the foot of the browser column, so it goes
         // when the browser does. Asking infoVisible alone drew its heading into
@@ -614,12 +621,13 @@ public:
         g.fillRect(0, controlBarHeight - 1, getWidth(), 1);
     }
 
-    // Left to right in the order the specification asks for: the browser
-    // toggle, the song's own fields, the transport, the readout, and the undo
-    // pair pinned to the right edge. Everything but the readout takes the
-    // width it needs; the readout takes everything left between the transport
-    // and the arrows, which is what makes it the thing the bar is built around
-    // rather than one module among several.
+    // Four sections, ruled off from each other: the browser toggle, the song's
+    // own fields, the transport, and - from the right client edge inwards - the
+    // metronome and the undo pair. Every control takes the width it needs, and
+    // the readout is centred on the window in whatever is left between the two
+    // sides. It is the thing the bar is built around, but by being the one
+    // panel on it and the tallest thing in the row rather than by being wide:
+    // stretched across the whole leftover span it read as an empty bezel.
     void layoutControlBar()
     {
         barDividers.clear();
@@ -637,31 +645,36 @@ public:
         // reads as one row because everything on it shares a middle.
         const auto transportTop = barControlTop + (fieldHeight - transportSize) / 2;
 
-        place(browserToggle, 40, transportSize, transportTop, barGroupGap);
-        rule(x - barGroupGap / 2);
+        place(browserToggle, browserToggleWidth, transportSize, transportTop, barSectionGap);
+        rule(x - barSectionGap / 2);
 
-        // Tempo, signature and the metronome are one group: they are all the
-        // song's own settings, so they sit closer to each other than to
-        // anything else and take no rule between them.
-        place(tempoBox, 104, fieldHeight, barControlTop, barFieldGap);
-        place(signatureField, 72, fieldHeight, barControlTop, barFieldGap);
-        place(metronome, transportSize, transportSize, transportTop, 0);
-        place(metronomeMenu, 18, transportSize, transportTop, barGroupGap);
+        // Tempo and signature are one group - they are both the song's own
+        // settings - and take no rule between them, only the field gap.
+        place(tempoBox, tempoWidth, fieldHeight, barControlTop, barFieldGap);
+        place(signatureField, signatureWidth, fieldHeight, barControlTop, barSectionGap);
+        rule(x - barSectionGap / 2);
 
         for (auto* button : std::initializer_list<juce::Component*>{&rewind, &stop, &play, &record})
             place(*button, transportSize, transportSize, transportTop, barTransportGap);
-        x += barGroupGap - barTransportGap;
+        x += barSectionGap - barTransportGap;
 
-        // Pinned to the right edge and placed before the readout, because the
-        // readout is the elastic one: it is given whatever is left over.
+        // The right of the bar, laid out from the right client edge inwards:
+        // undo and redo pinned to it, and the metronome in its own section
+        // beside them. The click belongs with the tools rather than with the
+        // song's settings - it is something switched on while working, not a
+        // property of the document - so it sits over here now.
         auto rightEdge = getWidth() - barEdgeMargin;
-        for (auto* arrow : std::initializer_list<juce::Component*>{&redo, &undo})
+        const auto placeRight = [&rightEdge](juce::Component& component, int width, int height, int top, int gap)
         {
-            rightEdge -= undoSize;
-            arrow->setBounds(rightEdge, transportTop, undoSize, transportSize);
-            rightEdge -= barTransportGap;
-        }
-        rightEdge -= barGroupGap - barTransportGap;
+            rightEdge -= width;
+            component.setBounds(rightEdge, top, width, height);
+            rightEdge -= gap;
+        };
+        placeRight(redo, undoSize, transportSize, transportTop, barTransportGap);
+        placeRight(undo, undoSize, transportSize, transportTop, barSectionGap);
+        rule(rightEdge + barSectionGap / 2);
+        placeRight(metronomeMenu, metronomeMenuWidth, transportSize, transportTop, 0);
+        placeRight(metronome, transportSize, transportSize, transportTop, barSectionGap);
 
         sessionToggle.setVisible(sessionViewEnabled);
         arrangementToggle.setVisible(sessionViewEnabled);
@@ -677,16 +690,21 @@ public:
             rightEdge -= viewWidth + barGroupGap;
         }
 
-        // Below the width its three columns need, the readout is dropped
-        // rather than squeezed: a clock with half its digits missing is worse
-        // than no clock, and the controls around it stay reachable.
-        const auto readoutWidth = rightEdge - x;
-        position.setVisible(readoutWidth >= 260);
-        // A touch taller than the fields beside it, which is the other half of
-        // making it the focal point: it is the only thing in the bar that
-        // breaks the row of thirty-four pixel controls.
+        // Centred on the window rather than on the space left between the two
+        // sides, so the readout sits under the project name in the title bar
+        // and stays put as controls are added to either end. It gives up the
+        // centre only when a narrow window would push it into one of them.
+        // Below the width its three columns need it is dropped rather than
+        // squeezed: a clock with half its digits missing is worse than no
+        // clock, and the controls around it stay reachable.
+        const auto room = rightEdge - x;
+        position.setVisible(room >= 260);
         if (position.isVisible())
-            position.setBounds(x, barControlTop - 2, readoutWidth, fieldHeight + 4);
+        {
+            const auto width = std::min(displayWidth, room);
+            position.setBounds(juce::jlimit(x, rightEdge - width, (getWidth() - width) / 2),
+                               displayTop, width, displayHeight);
+        }
     }
 
     void resized() override
@@ -735,6 +753,11 @@ public:
         // band between the lanes and the pane, exactly as it did when the two
         // were stacked rather than layered.
         const auto arrangementBottom = lowerTop - 34;
+        // Where the docked columns stop. The clip and device strip is a band
+        // across the whole window rather than a panel that starts where the
+        // browser ends, so the browser is as tall as the arrangement beside it
+        // and nothing is laid out underneath the strip.
+        workspaceBottom = arrangementBottom;
         layoutControlBar();
         browser.setVisible(browserOpen);
         const auto infoArea = infoViewArea();
@@ -743,7 +766,7 @@ public:
         infoView.setVisible(infoVisible && browserOpen);
         infoView.setBounds(infoArea.withTrimmedTop(25).reduced(8, 5));
         browser.setBounds(0, browserTop, browserWidth,
-                          (infoVisible ? infoArea.getY() : getHeight()) - browserTop);
+                          std::max(0, (infoVisible ? infoArea.getY() : workspaceBottom) - browserTop));
         browserToggle.setToggleState(browserOpen, juce::dontSendNotification);
         // The tooltip says what the click will do, not what the button is.
         browserToggle.setTooltip(browserOpen ? "Hide browser" : "Show browser");
@@ -763,21 +786,26 @@ public:
         editorToggle.setToggleState(notes || audio, juce::dontSendNotification);
         editorToggle.setButtonText(audio ? "Audio" : "Clip");
         rackToggle.setToggleState(devices, juce::dontSendNotification);
-        editorToggle.setBounds(editorX + 8, arrangementBottom + 6, 52, 24);
-        rackToggle.setBounds(editorX + 66, arrangementBottom + 6, 72, 24);
+        // The strip and the pane under it are the window's full width: a clip
+        // editor or a device rack is the thing being worked on, and cutting it
+        // off at the browser's edge cost it two hundred pixels of the waveform
+        // or a device's worth of rack for a column that is not part of it.
+        const auto paneW = getWidth();
+        editorToggle.setBounds(8, arrangementBottom + 6, 52, 24);
+        rackToggle.setBounds(66, arrangementBottom + 6, 72, 24);
         patternLabel.setVisible(notes || audio);
-        patternLabel.setBounds(editorX + 148, arrangementBottom + 6, std::max(80, editorW - 500), 24);
+        patternLabel.setBounds(148, arrangementBottom + 6, std::max(80, paneW - 500), 24);
         // The scale, zoom and resolution controls belong to the note editor and
         // mean nothing over a waveform, so they follow it rather than the pane.
         scaleHighlight.setVisible(notes && !session.isPatternDrums());
         if (notes && !session.isPatternDrums())
-            scaleHighlight.setBounds(editorX + std::max(260, editorW - 328), arrangementBottom + 12, 146, 20);
+            scaleHighlight.setBounds(std::max(260, paneW - 328), arrangementBottom + 12, 146, 20);
         editorZoomOut.setVisible(notes);
         editorZoomIn.setVisible(notes);
         editorResolution.setVisible(notes);
-        editorZoomOut.setBounds(editorX + std::max(414, editorW - 174), arrangementBottom + 12, 25, 20);
-        editorZoomIn.setBounds(editorX + std::max(443, editorW - 145), arrangementBottom + 12, 25, 20);
-        editorResolution.setBounds(editorX + std::max(510, editorW - 78), arrangementBottom + 12, 70, 20);
+        editorZoomOut.setBounds(std::max(414, paneW - 174), arrangementBottom + 12, 25, 20);
+        editorZoomIn.setBounds(std::max(443, paneW - 145), arrangementBottom + 12, 25, 20);
+        editorResolution.setBounds(std::max(510, paneW - 78), arrangementBottom + 12, 70, 20);
 
         grid.setVisible(notes);
         audioClip.setVisible(audio);
@@ -785,14 +813,14 @@ public:
         // The note editor, the audio editor and the Device View are three faces
         // of one pane: they share its rectangle and exactly one of them is ever
         // visible in it, so the pane is as tall as the thing being worked on.
-        const juce::Rectangle<int> paneBounds {editorX, lowerTop, editorW, lowerH};
+        const juce::Rectangle<int> paneBounds {0, lowerTop, paneW, lowerH};
         grid.setBounds(paneBounds);
         audioClip.setBounds(paneBounds);
         rack.setBounds(paneBounds);
         // Everything in the lower pane is layered over the arrangement, which
         // is a sibling that covers the same ground.
         lowerSplitter.setVisible(lowerPaneVisible());
-        lowerSplitter.setBounds(editorX, arrangementBottom - 2, editorW, 8);
+        lowerSplitter.setBounds(0, arrangementBottom - 2, paneW, 8);
         for (auto* component : std::initializer_list<juce::Component*>{&grid, &audioClip, &rack, &lowerSplitter})
             component->toFront(false);
         browserToggle.toFront(false);
@@ -809,7 +837,8 @@ public:
 
     void mouseDown(const juce::MouseEvent& event) override
     {
-        resizingBrowser = browserOpen && std::abs(event.x - browserWidth) <= 5 && event.y >= browserTop;
+        resizingBrowser = browserOpen && std::abs(event.x - browserWidth) <= 5
+                          && event.y >= browserTop && event.y < workspaceBottom;
         resizeStartX = event.x;
         resizeStartY = event.y;
         resizeStartBrowserWidth = browserWidth;
@@ -1631,13 +1660,14 @@ private:
     juce::Rectangle<int> infoViewArea() const
     {
         if (!infoVisible || !browserOpen) return {};
-        return {0, std::max(browserTop + 96, getHeight() - infoViewHeight), browserWidth, infoViewHeight};
+        return {0, std::max(browserTop + 96, workspaceBottom - infoViewHeight), browserWidth, infoViewHeight};
     }
 
     bool isOverSplitter(juce::Point<float> point) const
     {
         return browserOpen && std::abs(point.x - static_cast<float>(browserWidth)) <= 5.0f
-            && point.y >= static_cast<float>(browserTop);
+            && point.y >= static_cast<float>(browserTop)
+            && point.y < static_cast<float>(workspaceBottom);
     }
 
     Session& session;
@@ -1678,6 +1708,10 @@ private:
     // depends on the display and cannot be known at construction.
     int browserWidth = 244, lowerPaneHeight = 0;
     int resizeStartX = 0, resizeStartY = 0, resizeStartBrowserWidth = 244;
+    // The foot of the docked columns, which is the top of the clip and device
+    // strip. Written by resized() and read by paint and by the hit tests, so
+    // the browser, its divider and the Info View all stop in the same place.
+    int workspaceBottom = 0;
     int resizeStartLowerPaneHeight = 0;
     // The control bar's own grid. One row of controls on one band: every
     // control shares a vertical centre, and the three gaps below are the whole
@@ -1689,11 +1723,33 @@ private:
     static constexpr int transportSize = 34;
     static constexpr int undoSize = 28;
     static constexpr int barControlTop = (controlBarHeight - fieldHeight) / 2;
+    // A fourth gap, wider than the rest, wherever a hairline rules one section
+    // of the bar off from the next. The sections used to be a group gap apart
+    // and the rule between them did all the separating on its own, which put
+    // the tempo hard against the browser toggle and the transport hard against
+    // the tempo.
+    static constexpr int barSectionGap = 30;
     static constexpr int barGroupGap = 18;
     static constexpr int barFieldGap = 8;
     static constexpr int barTransportGap = 3;
     static constexpr int barEdgeMargin = 12;
     static constexpr int barDividerTop = 18;
+    // The widths the bar's own controls take. The readout is a panel of a fixed
+    // size now rather than whatever the window had left over: stretched across
+    // a wide display it was a bezel with three small readings adrift in it, and
+    // the digits it is built around never grew with it.
+    static constexpr int browserToggleWidth = 34;
+    static constexpr int tempoWidth = 92;
+    static constexpr int signatureWidth = 72;
+    static constexpr int metronomeMenuWidth = 18;
+    // Wide enough for the position, the clock beside it and one column of
+    // readings against the right edge - which is what the load meters need to
+    // survive the box narrowing. Below this the readout starts dropping them.
+    static constexpr int displayWidth = 480;
+    // Taller than the controls beside it, which is what makes it the focal
+    // point now that it is no longer the widest thing on the bar.
+    static constexpr int displayHeight = 52;
+    static constexpr int displayTop = (controlBarHeight - displayHeight) / 2;
     // The gutter between the browser and the arrangement, which is also the
     // handle that resizes the browser.
     static constexpr int browserDividerWidth = 3;
@@ -1939,6 +1995,14 @@ private:
 
             void paintButton(juce::Graphics& g, bool highlighted, bool pressed) override
             {
+                // A lit key rather than brighter lettering alone: the menus sit
+                // on the same ground as the caption buttons beside them and are
+                // answered the same way, so the whole bar responds alike.
+                if (highlighted || pressed)
+                {
+                    g.setColour(palette::hover.brighter(pressed ? 0.3f : 0.1f));
+                    g.fillRect(getLocalBounds());
+                }
                 auto colour = findColour(juce::TextButton::textColourOffId);
                 if (highlighted || pressed) colour = colour.brighter(0.25f);
                 g.setColour(colour);

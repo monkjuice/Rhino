@@ -30,14 +30,13 @@ juce::Path returnToStart();
 // left it an outlined diamond on the end of a hook.
 void drawCurvedArrow(juce::Graphics&, juce::Rectangle<float> area, bool pointingLeft, float lineWidth);
 
-// The browser toggle's window-with-a-panel, drawn rather than returned for the
-// same reason: the panel is filled when the browser is showing and the frame
-// around it never is, and fitting a path twice put the two in different places.
-void drawSidebar(juce::Graphics&, juce::Rectangle<float> area, bool panelShowing);
+// The browser toggle: a narrow panel beside a wide one, both solid. Drawn
+// rather than returned because it is two filled rectangles at a fixed size
+// rather than artwork to be scaled - at fourteen pixels a traced window frame
+// with a chevron beside it reads as a smudge, which is why this is back.
+void drawSidebar(juce::Graphics&, juce::Rectangle<float> area);
 
-// A chevron pointing left or right, for "this collapses that way".
-juce::Path chevron(bool pointingLeft);
-// And the one that means "a menu opens below this".
+// The chevron that means "a menu opens below this".
 juce::Path chevronDown();
 
 // Scales a path into an area, preserving its proportions, and strokes it at a

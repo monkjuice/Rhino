@@ -8,6 +8,33 @@
 
 namespace rhino
 {
+namespace
+{
+// The record dot on a track card, drawn rather than set as text. It used to be
+// U+25CF handed to the UI face, which does not carry it: the glyph came from
+// whatever the system fell back to, and a fallback face sets its own side
+// bearings and its own baseline - so the dot sat left of centre and high in the
+// key, differently on every machine. A filled ellipse is centred by
+// construction and is the same mark at every size.
+class RecordArmButton final : public juce::TextButton
+{
+public:
+    RecordArmButton() : juce::TextButton("Arm") {}
+
+    void paintButton(juce::Graphics& g, bool highlighted, bool pressed) override
+    {
+        auto& look = getLookAndFeel();
+        look.drawButtonBackground(g, *this,
+                                  findColour(getToggleState() ? buttonOnColourId : buttonColourId),
+                                  highlighted, pressed);
+        g.setColour(findColour(getToggleState() ? textColourOnId : textColourOffId));
+        const auto bounds = getLocalBounds().toFloat();
+        const auto diameter = juce::jmin(7.0f, bounds.getWidth() * 0.45f, bounds.getHeight() * 0.45f);
+        if (diameter <= 0.0f) return;
+        g.fillEllipse(juce::Rectangle<float>(diameter, diameter).withCentre(bounds.getCentre()));
+    }
+};
+}
 
 void Arrangement::sync()
 {
@@ -135,9 +162,8 @@ void Arrangement::syncTrackControls()
         const auto track = static_cast<int>(mute.size());
         auto muteButton = std::make_unique<juce::TextButton>("M");
         auto soloButton = std::make_unique<juce::TextButton>("S");
-        // The record dot, as in Live and Logic. The transport symbols in the
-        // control bar already reach the system fallback face for their glyphs.
-        auto armButton = std::make_unique<juce::TextButton>(juce::String::charToString(0x25cf));
+        // The record dot, as in Live and Logic, painted by the button itself.
+        auto armButton = std::make_unique<RecordArmButton>();
         muteButton->setTooltip("Mute track");
         soloButton->setTooltip("Solo track");
         muteButton->onClick = [this, track] { session.toggleTrackMute(track); };

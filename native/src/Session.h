@@ -3,6 +3,7 @@
 // header: what Session needs is a device's identity and metadata, not its DSP.
 #include "DeviceCatalog.h"
 #include "ClipGeometry.h"
+#include <array>
 #include <functional>
 #include <optional>
 #include <vector>
@@ -136,6 +137,12 @@ public:
         int numerator = 4;
         int denominator = 4;
     };
+    // The limits the control bar reads so that the fields it offers and the
+    // values setTimeSignature accepts cannot drift apart. The signature range
+    // is Live's: any numerator from 1 to 99 over a power of two up to 16.
+    static constexpr double minimumTempo = 40.0, maximumTempo = 240.0;
+    static constexpr int minimumTimeSignatureNumerator = 1, maximumTimeSignatureNumerator = 99;
+    static constexpr std::array<int, 5> timeSignatureDenominators {1, 2, 4, 8, 16};
     struct Listener
     {
         virtual ~Listener() = default;
@@ -358,6 +365,14 @@ public:
     TimeSignature timeSignature() const;
     juce::Result setTimeSignature(int numerator, int denominator);
     double beatsPerBar() const;
+    // A tempo dragged across the control bar is one undo step, not one per
+    // pixel. It matters more here than on a fader: every tempo change rescales
+    // every automation lane and the loop range with it, so an unbracketed drag
+    // fills the undo stack with hundreds of entries that each did that work.
+    // The signature shares the bracket because the two are dragged side by side
+    // and a change to either means the same kind of thing.
+    void beginTempoGesture();
+    void endTempoGesture();
     bool clickTrackEnabled() const;
     bool clickTrackEmphasiseBars() const;
     float clickTrackGain() const;
@@ -858,7 +873,7 @@ private:
     // Engine initialization also changes its edit flag asynchronously. Track
     // user commands separately so startup cannot dirty an untouched document.
     juce::int64 changeRevision = 0, savedRevision = 0;
-    int audioClipGestureDepth = 0;
+    int audioClipGestureDepth = 0, tempoGestureDepth = 0;
     bool manualLoop = false;
     tracktion::core::TimeRange manualLoopRange;
     DeviceTarget lastTouchedParameter;

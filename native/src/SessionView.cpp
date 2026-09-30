@@ -1,4 +1,5 @@
 #include "SessionView.h"
+#include "Theme.h"
 #include <algorithm>
 
 // Session view lifecycle, layout and geometry.
@@ -79,7 +80,7 @@ SessionView::SessionView(Session& s) : session(s)
     mixerButton.onClick = [this] { setMixerVisible(mixerButton.getToggleState()); };
     mainLabel.setText("MAIN", juce::dontSendNotification);
     mainLabel.setColour(juce::Label::textColourId, juce::Colour(0xff8a969f));
-    mainLabel.setFont(juce::FontOptions(11.0f));
+    mainLabel.setFont(uiFont(9.0f));
     mainVolume.setSliderStyle(juce::Slider::LinearBar);
     mainVolume.setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
     mainVolume.setRange(Session::minimumVolumeDb, Session::maximumVolumeDb, 0.1);

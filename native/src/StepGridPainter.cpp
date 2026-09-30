@@ -22,7 +22,11 @@ void StepGrid::paintKeyboard(juce::Graphics& g)
     // A name needs a row tall enough to hold it. Once the lanes are squeezed
     // past that only the octaves stay named, and past that nothing does.
     const auto labelEvery = height >= 15.0f ? 1 : height >= 8.0f ? 12 : 0;
-    g.setFont(juce::FontOptions(std::clamp(height - 3.0f, 7.5f, 11.0f)));
+    // Rounded to a whole pixel per em rather than following the row height
+    // continuously: a lane height dragged between two integers would otherwise
+    // rasterise every key name at a fractional em, which is the one thing
+    // uiFont exists to avoid.
+    g.setFont(uiFont(std::round(std::clamp(height - 3.0f, 7.5f, 11.0f) * 0.825f)));
     for (int row = 0; row < rows; ++row)
     {
         const auto pitch = lowestVisiblePitch + rows - 1 - row;
@@ -37,7 +41,7 @@ void StepGrid::paintKeyboard(juce::Graphics& g)
             if (labelEvery > 0)
             {
                 g.setColour(juce::Colour(namedDrum ? 0xffffc16a : 0xffbac2ca));
-                g.drawText(drumLaneName(pitch), key, juce::Justification::centred);
+                drawSnappedText(g, drumLaneName(pitch), key.toNearestInt(), juce::Justification::centred, true);
             }
             continue;
         }
@@ -59,8 +63,8 @@ void StepGrid::paintKeyboard(juce::Graphics& g)
         g.setColour(juce::Colour(pitchClassOf(pitch) == 0 ? 0xff2f353c : 0xff70767d));
         // Middle C is C3 here, matching drumLaneName and Forge's keyboard — see
         // StepGridInternal.h for why the three of them have to agree.
-        g.drawText(juce::MidiMessage::getMidiNoteName(pitch, true, true, 3),
-                   key.reduced(3.0f, 0.0f), juce::Justification::centredRight);
+        drawSnappedText(g, juce::MidiMessage::getMidiNoteName(pitch, true, true, 3),
+                        key.reduced(3.0f, 0.0f).toNearestInt(), juce::Justification::centredRight);
     }
 }
 
@@ -72,7 +76,7 @@ void StepGrid::paint(juce::Graphics& g)
         g.setColour(juce::Colour(0xff55c7eb).withAlpha(0.12f));
         g.fillRect(getLocalBounds().removeFromTop(static_cast<int>(headerHeight)));
     }
-    g.setFont(juce::FontOptions(12.0f));
+    g.setFont(uiFont(10.0f));
     const auto dirty = g.getClipBounds().toFloat();
     const auto steps = session.editorStepCount();
     const auto firstVisibleStep = std::max(0, static_cast<int>(std::floor(stepScroll)));
@@ -83,7 +87,7 @@ void StepGrid::paint(juce::Graphics& g)
         if (headerCell.getRight() < labelWidth || headerCell.getX() > gridRight())
             continue;
         g.setColour(juce::Colour(step % 4 == 0 ? 0xffd4dacd : 0xff78818a));
-        g.drawText(juce::String(step + 1), headerCell, juce::Justification::centred);
+        drawSnappedText(g, juce::String(step + 1), headerCell.toNearestInt(), juce::Justification::centred);
     }
     paintKeyboard(g);
     const auto rows = visiblePitchRows();
@@ -249,8 +253,8 @@ void StepGrid::paint(juce::Graphics& g)
         g.fillRoundedRectangle(badge, 3.0f);
         g.setColour(juce::Colour(0xff252a30));
         g.drawRoundedRectangle(badge, 3.0f, 1.0f);
-        g.setFont(juce::FontOptions(13.0f).withStyle("Bold"));
-        g.drawText(juce::String(subdivisionCount), badge, juce::Justification::centred);
+        g.setFont(uiFontBold(10.5f));
+        drawSnappedText(g, juce::String(subdivisionCount), badge.toNearestInt(), juce::Justification::centred);
     }
     const auto footer = footerBounds();
     if (dirty.intersects(footer))
@@ -262,20 +266,24 @@ void StepGrid::paint(juce::Graphics& g)
         const auto velocity = selectedVelocityPercent();
         const auto value = velocity >= 0 ? juce::String(velocity) + "%"
                                          : velocity == -1 ? juce::String("MIXED") : juce::String("-");
-        g.setFont(juce::FontOptions(11.5f).withStyle("Bold"));
+        g.setFont(uiFontBold(9.5f));
         g.setColour(velocityAdjustActive ? juce::Colour(0xffe9a84a) : juce::Colour(0xffb8c4aa));
-        g.drawText("VELOCITY  " + value, footer.reduced(9.0f, 2.0f), juce::Justification::centredRight);
+        drawSnappedText(g, "VELOCITY  " + value, footer.reduced(9.0f, 2.0f).toNearestInt(),
+                        juce::Justification::centredRight);
         // The draw toggle sits at the left of the footer, so the hint starts
         // past it rather than underneath it.
         const auto hint = footer.withTrimmedLeft(68.0f).reduced(9.0f, 2.0f);
-        g.setFont(juce::FontOptions(10.5f));
+        g.setFont(uiFont(8.5f));
         g.setColour(juce::Colour(0xff78818a));
         if (drawMode)
-            g.drawText("Drag paints notes  -  B to select", hint, juce::Justification::centredLeft);
+            drawSnappedText(g, "Drag paints notes  -  B to select", hint.toNearestInt(),
+                            juce::Justification::centredLeft, true);
         else if (velocity >= -1)
-            g.drawText("Hold V + Up/Down or wheel", hint, juce::Justification::centredLeft);
+            drawSnappedText(g, "Hold V + Up/Down or wheel", hint.toNearestInt(),
+                            juce::Justification::centredLeft, true);
         else
-            g.drawText("Drag to select  -  double-click a cell for a note", hint, juce::Justification::centredLeft);
+            drawSnappedText(g, "Drag to select  -  double-click a cell for a note", hint.toNearestInt(),
+                            juce::Justification::centredLeft, true);
     }
 }
 

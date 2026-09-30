@@ -31,6 +31,18 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
     dragOrigin = event.position;
     dragPointer = event.position;
     dragModifiers = event.mods;
+    // The middle button pans, and answers first: it is a view gesture, so
+    // nothing under the pointer gets a say in whether it starts.
+    if (event.mods.isMiddleButtonDown())
+    {
+        panning = true;
+        panAnchor = event.position;
+        panStartView = viewStart;
+        panStartTrackScroll = trackScroll;
+        cancelDrag();
+        setMouseCursor(juce::MouseCursor::DraggingHandCursor);
+        return;
+    }
     if (event.mods.isRightButtonDown() && loopGestureAt(event.position) != LoopGesture::none)
     {
         session.clearManualLoopRange();
@@ -302,6 +314,11 @@ void Arrangement::mouseDrag(const juce::MouseEvent& event)
     dragPointer = event.position;
     dragModifiers = event.mods;
     dragTravelled = dragTravelled || event.getDistanceFromDragStart() >= 3;
+    if (panning)
+    {
+        panView(event.position);
+        return;
+    }
     if (resizingMaster)
     {
         // Pulling the edge up makes the row taller, which is the same sense a
@@ -384,8 +401,33 @@ void Arrangement::mouseDrag(const juce::MouseEvent& event)
     repaint();
 }
 
+// The view follows the pointer rather than the pointer scrolling the view: the
+// timeline moves the same number of pixels the mouse did, so whatever was under
+// the cursor when the button went down stays under it. Both axes at once, which
+// is what makes one gesture replace two scrollbars.
+void Arrangement::panView(juce::Point<float> pointer)
+{
+    const auto laneWidth = lane(0).getWidth();
+    if (laneWidth > 1.0f)
+        viewStart = panStartView - (pointer.x - panAnchor.x) / laneWidth * viewSpan;
+    trackScroll = panStartTrackScroll - (pointer.y - panAnchor.y);
+    // Clamped in one place: updateScroll holds both axes inside the song and
+    // the row stack, so a pan that runs off either end simply stops there.
+    updateScroll();
+    updatePlayhead();
+    resized();
+    repaint();
+}
+
 void Arrangement::mouseUp(const juce::MouseEvent& event)
 {
+    if (panning)
+    {
+        panView(event.position);
+        panning = false;
+        setMouseCursor(juce::MouseCursor::NormalCursor);
+        return;
+    }
     if (resizingMaster)
     {
         resizingMaster = false;
@@ -544,6 +586,10 @@ void Arrangement::autoScrollDrag()
 
 void Arrangement::mouseMove(const juce::MouseEvent& event)
 {
+    // A pan owns the cursor until the button comes up. JUCE still sends moves
+    // to a component that is not the drag source, and letting one through here
+    // would flicker the hand back to an arrow mid-gesture.
+    if (panning) return;
     if (masterResizeEdgeAt(event.position))
     {
         setMouseCursor(juce::MouseCursor::UpDownResizeCursor);

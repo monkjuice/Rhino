@@ -264,6 +264,9 @@ private:
     void paintTrackCards(juce::Graphics&);
     void showAutomationMenu(Session::DeviceTarget);
     // ArrangementGestures.cpp
+    // Middle-button pan: carries both the timeline and the row stack so that
+    // whatever was under the pointer when the button went down stays there.
+    void panView(juce::Point<float> pointer);
     int cardResizeEdgeAt(juce::Point<float>) const;
     int cardAt(juce::Point<float>) const;
     bool beginCardGesture(const juce::MouseEvent&);
@@ -451,6 +454,16 @@ private:
     // dragging up makes it taller.
     bool resizingMaster = false;
     float masterResizeAnchor = 0.0f, masterResizeStart = 0.0f;
+    // Holding the middle button and moving the mouse carries the view under
+    // the pointer, in both axes at once. It is offered before every other
+    // gesture and takes the whole panel, headers included: a pan is about the
+    // view rather than about whatever happens to be under the pointer, and
+    // having it stop working over a card or the ruler would be the surprise.
+    // The anchors are absolute, so a pan that runs to the end of the song and
+    // back returns to exactly where it started.
+    bool panning = false;
+    juce::Point<float> panAnchor;
+    double panStartView = 0.0, panStartTrackScroll = 0.0;
     static constexpr float headerWidth = 228.0f, rulerTop = 32.0f, lanesTop = 56.0f;
     // The main row is dragged from its top edge like any other, so its height
     // is a value rather than a constant. It is a view setting and lives here

@@ -191,8 +191,8 @@ double Session::beatsPerBar() const
 
 juce::Result Session::setTimeSignature(int numerator, int denominator)
 {
-    constexpr std::array validDenominators {1, 2, 4, 8, 16};
-    if (numerator < 1 || numerator > 99
+    const auto& validDenominators = timeSignatureDenominators;
+    if (numerator < minimumTimeSignatureNumerator || numerator > maximumTimeSignatureNumerator
         || std::find(validDenominators.begin(), validDenominators.end(), denominator) == validDenominators.end())
         return juce::Result::fail("Time signature must use a numerator from 1 to 99 and denominator 1, 2, 4, 8, or 16.");
     auto* signature = edit->tempoSequence.getTimeSig(0);
@@ -200,13 +200,16 @@ juce::Result Session::setTimeSignature(int numerator, int denominator)
         return juce::Result::fail("The project has no initial time signature.");
     if (timeSignature().numerator == numerator && timeSignature().denominator == denominator)
         return juce::Result::ok();
-    edit->getUndoManager().beginNewTransaction("Change time signature");
+    const auto insideGesture = tempoGestureDepth > 0;
+    if (!insideGesture)
+        edit->getUndoManager().beginNewTransaction("Change time signature");
     signature->setStringTimeSig(juce::String(numerator) + "/" + juce::String(denominator));
     edit->tempoSequence.updateTempoData();
     refreshLoop();
     markModified();
     if (edit->getTransport().isPlaying()) edit->restartPlayback();
-    edit->getUndoManager().beginNewTransaction();
+    if (!insideGesture)
+        edit->getUndoManager().beginNewTransaction();
     sendSynchronousChangeMessage();
     return juce::Result::ok();
 }
@@ -249,13 +252,31 @@ void Session::setClickTrackGain(float gainDb)
     sendSynchronousChangeMessage();
 }
 
+// A drag is one undo step and one transaction. Nested calls are counted, so a
+// caller cannot end a bracket another opened.
+void Session::beginTempoGesture()
+{
+    if (tempoGestureDepth++ == 0)
+        edit->getUndoManager().beginNewTransaction("Change tempo");
+}
+
+void Session::endTempoGesture()
+{
+    if (tempoGestureDepth <= 0) return;
+    if (--tempoGestureDepth > 0) return;
+    edit->getUndoManager().beginNewTransaction();
+    sendSynchronousChangeMessage();
+}
+
 void Session::setTempo(double bpm)
 {
     if (!std::isfinite(bpm)) return;
-    bpm = juce::jlimit(40.0, 240.0, bpm);
+    bpm = juce::jlimit(minimumTempo, maximumTempo, bpm);
     const auto previousBpm = tempo();
     if (bpm == previousBpm) return;
-    edit->getUndoManager().beginNewTransaction("Change tempo");
+    const auto insideGesture = tempoGestureDepth > 0;
+    if (!insideGesture)
+        edit->getUndoManager().beginNewTransaction("Change tempo");
     edit->tempoSequence.getTempo(0)->setBpm(bpm);
     markModified();
     edit->tempoSequence.updateTempoData();
@@ -274,7 +295,8 @@ void Session::setTempo(double bpm)
                            tracktion::core::TimePosition::fromSeconds(manualLoopRange.getEnd().inSeconds() * scale)};
 
     refreshLoop();
-    edit->getUndoManager().beginNewTransaction();
+    if (!insideGesture)
+        edit->getUndoManager().beginNewTransaction();
     sendSynchronousChangeMessage();
 }
 

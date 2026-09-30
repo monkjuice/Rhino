@@ -1,6 +1,7 @@
 #pragma once
 #include "StepGrid.h"
 #include "SelectionInput.h"
+#include "Theme.h"
 
 // Shared internals of the StepGrid implementation, which is defined across
 // StepGrid.cpp, StepGridPainter.cpp, StepGridGestures.cpp and

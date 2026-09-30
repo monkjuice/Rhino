@@ -159,15 +159,19 @@ void Arrangement::paintTrackCards(juce::Graphics& g)
         g.setFont(uiFontBold(10.0f));
         if (renamingTrack != track)
         {
-            // Clipped rather than shrunk to fit: a scaled-down line lands on a
+            // One pass of the SemiBold cut, exactly as every other label in the
+            // app is drawn. It used to be struck twice to make the name heavier
+            // than the card's other text, and that is what made it the one
+            // string in the interface that looked soft: a second composite over
+            // the same glyphs takes a half-covered edge pixel from 50% to 75%,
+            // so the antialiasing fringe darkens into the stem and the whole
+            // line reads as blurred rather than bold. Weight, if the name needs
+            // more of it, comes from the em size.
+            // Elided rather than shrunk to fit: a scaled-down line lands on a
             // fractional em again, which is the blur this is avoiding.
             const auto nameArea = trackNameBounds(track);
-            juce::Graphics::ScopedSaveState scope(g);
-            g.reduceClipRegion(nameArea);
-            // A shade heavier than the SemiBold cut the rest of the card uses:
-            // the name is the one thing on a card that has to be findable
-            // while the eye is moving down the stack.
-            drawSnappedTextHeavy(g, juce::String(track + 1).paddedLeft('0', 2) + "  " + session.trackName(track), nameArea);
+            drawSnappedText(g, juce::String(track + 1).paddedLeft('0', 2) + "  " + session.trackName(track),
+                            nameArea, juce::Justification::centredLeft, true);
         }
         g.setFont(uiFont(10.0f));
     }
@@ -335,8 +339,8 @@ void Arrangement::paint(juce::Graphics& g)
         g.fillRect(visible.getX(), box.getY() + headerHeight, visible.getWidth(), 1.0f);
         g.setColour(juce::Colour(0xffe0e7ec));
         if (visible.getWidth() >= 24.0f)
-            g.drawText(clip.name, visible.reduced(6.0f, 0).withHeight(headerHeight),
-                       juce::Justification::centredLeft, true);
+            drawSnappedText(g, clip.name, visible.reduced(6.0f, 0).withHeight(headerHeight).toNearestInt(),
+                            juce::Justification::centredLeft, true);
         if (clip.clipPlugins > 0)
         {
             const auto badge = visible.withSizeKeepingCentre(28.0f, 16.0f).withRightX(visible.getRight() - 5.0f).withY(visible.getY() + 5.0f);
@@ -345,7 +349,8 @@ void Arrangement::paint(juce::Graphics& g)
             g.setColour(label.brighter(0.75f));
             g.drawRect(badge.reduced(0.5f), 1.0f);
             g.setColour(juce::Colour(0xffeaf0f3));
-            g.drawText("FX" + juce::String(clip.clipPlugins), badge, juce::Justification::centred, true);
+            drawSnappedText(g, "FX" + juce::String(clip.clipPlugins), badge.toNearestInt(),
+                            juce::Justification::centred, true);
         }
         const auto position = displayedPosition(clip);
         if (clip.waveform)
@@ -363,8 +368,8 @@ void Arrangement::paint(juce::Graphics& g)
             else
             {
                 g.setColour(juce::Colour(0xffa1b1b9));
-                g.drawText(clip.waveform->readable ? "Reading waveform..." : "Missing or unreadable audio",
-                           waveArea.reduced(6, 0), juce::Justification::centredLeft, true);
+                drawSnappedText(g, clip.waveform->readable ? "Reading waveform..." : "Missing or unreadable audio",
+                                waveArea.reduced(6, 0).toNearestInt(), juce::Justification::centredLeft, true);
             }
         }
         else
@@ -415,7 +420,8 @@ void Arrangement::paint(juce::Graphics& g)
             if (clip.midiNotes.empty())
             {
                 g.setColour(juce::Colour(0xff9daa7e));
-                g.drawText("Edit notes below", noteArea, juce::Justification::centredLeft, true);
+                drawSnappedText(g, "Edit notes below", noteArea.toNearestInt(),
+                                juce::Justification::centredLeft, true);
             }
         }
     }
@@ -426,10 +432,10 @@ void Arrangement::paint(juce::Graphics& g)
             && !session.isGroupBusTrack(track))
         {
             g.setColour(juce::Colour(0xff75828e));
-            g.drawText(session.trackType(track) == Session::TrackType::midi
-                           ? "Double-click to add a clip, or drop an instrument here"
-                           : "Drop audio here",
-                       lane(track).reduced(16, 0), juce::Justification::centredLeft);
+            drawSnappedText(g, session.trackType(track) == Session::TrackType::midi
+                                ? "Double-click to add a clip, or drop an instrument here"
+                                : "Drop audio here",
+                            lane(track).reduced(16, 0).toNearestInt(), juce::Justification::centredLeft, true);
             break;
         }
     // Curves sit on top of the clips they modulate, and are clipped to the

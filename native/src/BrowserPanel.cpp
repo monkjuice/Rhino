@@ -1,5 +1,6 @@
 #include "BrowserPanel.h"
 #include "ContentLibrary.h"
+#include "Theme.h"
 
 namespace rhino
 {
@@ -90,8 +91,8 @@ public:
             g.fillRect(0, 0, width, height);
         }
         g.setColour(juce::Colour(0xffb9c4cd));
-        g.setFont(juce::FontOptions(12.5f));
-        g.drawText(name, 2, 0, width - 6, height, juce::Justification::centredLeft, true);
+        g.setFont(uiFont(10.5f));
+        drawSnappedText(g, name, {2, 0, width - 6, height}, juce::Justification::centredLeft, true);
     }
 
     void paintOpenCloseButton(juce::Graphics& g, const juce::Rectangle<float>& area, juce::Colour, bool) override
@@ -136,11 +137,11 @@ public:
         g.setColour(panel.colourFor(item));
         g.fillRect(2, height / 2 - 4, 7, 7);
         g.setColour(juce::Colour(0xffe5ebef));
-        g.setFont(juce::FontOptions(13.0f));
-        g.drawText(item.name, 15, 1, width - 19, 15, juce::Justification::centredLeft, true);
+        g.setFont(uiFont(10.5f));
+        drawSnappedText(g, item.name, {15, 1, width - 19, 15}, juce::Justification::centredLeft, true);
         g.setColour(juce::Colour(0xff8d99a3));
-        g.setFont(juce::FontOptions(10.5f));
-        g.drawText(item.detail, 15, 15, width - 19, 13, juce::Justification::centredLeft, true);
+        g.setFont(uiFont(8.5f));
+        drawSnappedText(g, item.detail, {15, 15, width - 19, 13}, juce::Justification::centredLeft, true);
     }
 
     void itemSelectionChanged(bool nowSelected) override
@@ -172,12 +173,12 @@ BrowserPanel::BrowserPanel(Session& s) : session(s)
     setWantsKeyboardFocus(true);
     title.setText("BROWSER", juce::dontSendNotification);
     title.setColour(juce::Label::textColourId, juce::Colour(0xffd5dde4));
-    title.setFont(juce::FontOptions(12.0f));
+    title.setFont(uiFont(10.0f));
     search.setTextToShowWhenEmpty("Search", juce::Colour(0xff6f7b85));
     search.onTextChange = [this] { rebuildTree(); };
     search.setColour(juce::TextEditor::backgroundColourId, juce::Colour(0xff262c32));
     search.setColour(juce::TextEditor::outlineColourId, juce::Colour(0xff46515a));
-    search.setFont(juce::FontOptions(12.0f));
+    search.setFont(uiFont(10.0f));
 
     categoryList.setRowHeight(categoryRowHeight);
     categoryList.setColour(juce::ListBox::backgroundColourId, juce::Colour(0xff1b2026));
@@ -263,8 +264,8 @@ void BrowserPanel::paint(juce::Graphics& g)
     g.setColour(juce::Colour(0xff303840));
     g.drawVerticalLine(getWidth() - 1, 0.0f, static_cast<float>(getHeight()));
     g.setColour(juce::Colour(0xff8f9aa4));
-    g.setFont(juce::FontOptions(10.0f));
-    g.drawText("LIBRARY", 10, 62, getWidth() - 20, 14, juce::Justification::centredLeft);
+    g.setFont(uiFont(8.0f));
+    drawSnappedText(g, "LIBRARY", {10, 62, getWidth() - 20, 14}, juce::Justification::centredLeft, true);
 }
 
 void BrowserPanel::resized()
@@ -307,9 +308,9 @@ void BrowserPanel::paintListBoxItem(int row, juce::Graphics& g, int width, int h
         g.fillRect(0, 0, 2, height);
     }
     g.setColour(juce::Colour(selected ? 0xffe5ebef : 0xffa8b3bd));
-    g.setFont(juce::FontOptions(12.5f));
-    g.drawText(categories[static_cast<size_t>(row)], 10, 0, width - 14, height,
-               juce::Justification::centredLeft, true);
+    g.setFont(uiFont(10.5f));
+    drawSnappedText(g, categories[static_cast<size_t>(row)], {10, 0, width - 14, height},
+                    juce::Justification::centredLeft, true);
 }
 
 void BrowserPanel::listBoxItemClicked(int row, const juce::MouseEvent&)

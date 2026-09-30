@@ -1,4 +1,5 @@
 #include "DeviceRack.h"
+#include "Theme.h"
 #include "BrowserIds.h"
 #include <cmath>
 #include <optional>
@@ -68,11 +69,11 @@ public:
             g.setColour(juce::Colour(0xff313841));
             g.drawRect(bounds.reduced(18.0f, 18.0f), 1.0f);
             g.setColour(juce::Colour(0xffeef2f4));
-            g.setFont(juce::FontOptions(24.0f));
-            g.drawText(deviceName, 34, 28, getWidth() - 68, 34, juce::Justification::centredLeft, true);
+            g.setFont(uiFont(20.0f));
+            drawSnappedText(g, deviceName, {34, 28, getWidth() - 68, 34}, juce::Justification::centredLeft, true);
             g.setColour(juce::Colour(0xff8cc5d2));
-            g.setFont(juce::FontOptions(11.0f));
-            g.drawText(deviceTypeLabel, 36, 62, 160, 18, juce::Justification::centredLeft, true);
+            g.setFont(uiFont(9.0f));
+            drawSnappedText(g, deviceTypeLabel, {36, 62, 160, 18}, juce::Justification::centredLeft, true);
 
             const juce::Rectangle<float> scope(210.0f, 88.0f, 260.0f, 126.0f);
             g.setColour(juce::Colour(0xff171b20));
@@ -144,10 +145,10 @@ public:
                 auto* slider = sliders.add(new juce::Slider());
                 auto* automation = automationButtons.add(new juce::TextButton());
                 label->setColour(juce::Label::textColourId, juce::Colour(0xffdce5ea));
-                label->setFont(juce::FontOptions(12.0f));
+                label->setFont(uiFont(10.0f));
                 label->setJustificationType(juce::Justification::centred);
                 value->setColour(juce::Label::textColourId, juce::Colour(0xff94a9b4));
-                value->setFont(juce::FontOptions(12.0f));
+                value->setFont(uiFont(10.0f));
                 value->setJustificationType(juce::Justification::centred);
                 slider->setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
                 slider->setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
@@ -267,8 +268,9 @@ public:
             g.setColour(accent.withAlpha(0.2f));
             g.fillRect(area.getX(), area.getY(), area.getWidth(), 3);
             g.setColour(juce::Colour(0xffdce5ea));
-            g.setFont(juce::FontOptions(12.0f));
-            g.drawText(title.toUpperCase(), area.reduced(14, 8).withHeight(18), juce::Justification::centredLeft, true);
+            g.setFont(uiFont(10.0f));
+            drawSnappedText(g, title.toUpperCase(), area.reduced(14, 8).withHeight(18).toNearestInt(),
+                            juce::Justification::centredLeft, true);
         }
 
         void paintWaveScope(juce::Graphics& g, juce::Rectangle<int> area) const
@@ -351,13 +353,14 @@ public:
             g.drawRect(bounds.reduced(16), 1);
 
             g.setColour(juce::Colour(0xfff3f7fa));
-            g.setFont(juce::FontOptions(30.0f));
-            g.drawText("Rhino Wave", 30, 24, 240, 36, juce::Justification::centredLeft, true);
+            g.setFont(uiFont(25.0f));
+            drawSnappedText(g, "Rhino Wave", {30, 24, 240, 36}, juce::Justification::centredLeft, true);
             g.setColour(juce::Colour(0xff75d3e6));
-            g.setFont(juce::FontOptions(11.0f));
-            g.drawText("MORPHING WAVETABLE SYNTH", 33, 58, 220, 18, juce::Justification::centredLeft, true);
+            g.setFont(uiFont(9.0f));
+            drawSnappedText(g, "MORPHING WAVETABLE SYNTH", {33, 58, 220, 18}, juce::Justification::centredLeft, true);
             g.setColour(juce::Colour(0xffc8de8f));
-            g.drawText(deviceName, bounds.getWidth() - 250, 34, 210, 18, juce::Justification::centredRight, true);
+            drawSnappedText(g, deviceName, {static_cast<int>(bounds.getWidth()) - 250, 34, 210, 18},
+                            juce::Justification::centredRight, true);
 
             paintSection(g, oscillatorArea, "Oscillators", juce::Colour(0xff75d3e6));
             paintSection(g, filterArea, "Filter + Tone", juce::Colour(0xffc8de8f));
@@ -511,12 +514,12 @@ DeviceRack::DeviceRack(Session& s) : session(s)
     setOpaque(true);
     title.setText("DEVICE VIEW", juce::dontSendNotification);
     title.setColour(juce::Label::textColourId, juce::Colour(0xffcbd6de));
-    title.setFont(juce::FontOptions(13.0f));
+    title.setFont(uiFont(10.5f));
     context.setColour(juce::Label::textColourId, juce::Colour(0xff89959f));
-    context.setFont(juce::FontOptions(12.0f));
+    context.setFont(uiFont(10.0f));
     outputLabel.setText("TRACK OUTPUT", juce::dontSendNotification);
     outputLabel.setColour(juce::Label::textColourId, juce::Colour(0xff82909a));
-    outputLabel.setFont(juce::FontOptions(10.0f));
+    outputLabel.setFont(uiFont(8.0f));
     outputLabel.setJustificationType(juce::Justification::centred);
     open.setButtonText("Edit");
     remove.setButtonText("Delete");

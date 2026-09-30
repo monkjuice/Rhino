@@ -11,6 +11,7 @@
 #include "ComputerKeyboard.h"
 #include "StartupScreen.h"
 #include "TransportDisplay.h"
+#include "ControlBarFields.h"
 #include "SystemUsage.h"
 #include <cmath>
 #include <functional>
@@ -63,6 +64,23 @@ void prepareCommandLineAudio()
     avoidLegacyDirectSound(testEngine);
     testEngine.getDeviceManager().deviceManager.closeAudioDevice();
    #endif
+}
+
+// Renders a component to a PNG without a desktop peer, so a panel can be
+// looked at without bringing the app to the front and taking the screen away
+// from whoever is using the machine.
+//
+// The file is deleted first, and that is not a tidiness measure: JUCE's
+// File::createOutputStream opens an existing file for *append*, so writing a
+// second PNG to the same path leaves the first one intact at the front and
+// every reader sees the original image. That cost an hour of chasing a text
+// run that was being drawn correctly the whole time.
+void writeSnapshot(juce::Component& component, const juce::File& destination)
+{
+    destination.deleteFile();
+    if (auto stream = destination.createOutputStream())
+        juce::PNGImageFormat().writeImageToStream(
+            component.createComponentSnapshot(component.getLocalBounds()), *stream);
 }
 
 void registerRhinoProjectFileAssociation()
@@ -372,32 +390,40 @@ public:
         infoView.setColour(juce::TextEditor::backgroundColourId, juce::Colour(0xff1d2228));
         infoView.setColour(juce::TextEditor::outlineColourId, juce::Colours::transparentBlack);
         infoView.setColour(juce::TextEditor::textColourId, juce::Colour(0xffc9d1c3));
-        infoView.setFont(juce::FontOptions(13.0f));
+        infoView.setFont(uiFont(10.5f));
         hint.setText({}, juce::dontSendNotification);
         hint.setVisible(false);
         hint.setColour(juce::Label::textColourId, juce::Colour(0xff8d98a3));
-        tempo.setSliderStyle(juce::Slider::IncDecButtons);
-        tempo.setTextBoxStyle(juce::Slider::TextBoxLeft, false, 90, 30);
-        tempo.setRange(40.0, 240.0, 1.0);
-        tempo.setValue(session.tempo(), juce::dontSendNotification);
-        tempo.setTextValueSuffix(" BPM");
-        tempo.onValueChange = [this] { session.setTempo(tempo.getValue()); };
-        // The id is numerator * 100 + denominator, which setTimeSignature reads
-        // straight back out. Every one of these is a signature the model already
-        // accepts; the list was simply shorter than the model.
-        for (const auto* signature : {"1 / 4", "2 / 4", "3 / 4", "4 / 4", "5 / 4", "6 / 4", "7 / 4",
-                                      "3 / 8", "5 / 8", "6 / 8", "7 / 8", "9 / 8", "12 / 8"})
+        // Tempo is a field you drag, which is how every DAW sets one: press
+        // and move the mouse up or down, Ctrl for hundredths, double-click to
+        // type an exact number. The range and the steps are the model's, so the
+        // field cannot offer a tempo setTempo would then refuse.
+        tempoBox.setRange(Session::minimumTempo, Session::maximumTempo, 1.0, 0.01);
+        tempoBox.setDecimalPlaces(2);
+        tempoBox.setSuffix("BPM");
+        tempoBox.setFontSize(17.0f, 8.0f);
+        tempoBox.setJustification(juce::Justification::centredLeft);
+        tempoBox.setValue(session.tempo());
+        tempoBox.setTooltip("Tempo - drag up or down, hold Ctrl for hundredths, double-click to type");
+        // One undo step per drag rather than one per pixel: every tempo change
+        // rescales the automation lanes and the loop with it.
+        tempoBox.onDragStart = [this] { session.beginTempoGesture(); };
+        tempoBox.onDragEnd = [this] { session.endTempoGesture(); };
+        tempoBox.onValueChange = [this](double bpm) { session.setTempo(bpm); };
+        // Two fields over one rule, dragged the same way. The limits come from
+        // the model, which takes Live's: 1 to 99 over 1, 2, 4, 8 or 16.
+        std::vector<double> denominators;
+        for (const auto denominator : Session::timeSignatureDenominators)
+            denominators.push_back(static_cast<double>(denominator));
+        signatureField.setLimits(Session::minimumTimeSignatureNumerator,
+                                 Session::maximumTimeSignatureNumerator, denominators);
+        signatureField.setFontSize(15.0f);
+        signatureField.setSignature(session.timeSignature().numerator, session.timeSignature().denominator);
+        signatureField.onDragStart = [this] { session.beginTempoGesture(); };
+        signatureField.onDragEnd = [this] { session.endTempoGesture(); };
+        signatureField.onChange = [this](int numerator, int denominator)
         {
-            const juce::String text {signature};
-            timeSignature.addItem(text, text.upToFirstOccurrenceOf("/", false, false).trim().getIntValue() * 100
-                                          + text.fromLastOccurrenceOf("/", false, false).trim().getIntValue());
-        }
-        timeSignature.setTooltip("Time signature: how many beats make a bar, and which note is the beat. "
-                                 "The arrangement shades its bars to match.");
-        timeSignature.onChange = [this]
-        {
-            const auto value = timeSignature.getSelectedId();
-            const auto result = session.setTimeSignature(value / 100, value % 100);
+            const auto result = session.setTimeSignature(numerator, denominator);
             if (result.failed()) logStatus(result.getErrorMessage());
         };
         position.configurationRequested = [this] { showDisplayMenu(); };
@@ -436,7 +462,7 @@ public:
         for (auto* component : std::initializer_list<juce::Component*>{
                  &infoView, &position, &play, &stop, &record, &panic,
                  &browser, &browserToggle, &editorToggle, &rackToggle, &grid, &audioClip, &arrangement, &sessionView,
-                 &sessionToggle, &arrangementToggle, &backToArrangement, &rack, &tempo, &timeSignature, &undo, &redo, &clear, &metronome, &metronomeMenu, &hint,
+                 &sessionToggle, &arrangementToggle, &backToArrangement, &rack, &tempoBox, &signatureField, &undo, &redo, &clear, &metronome, &metronomeMenu, &hint,
                  &patternLabel, &editorResolution, &editorZoomOut, &editorZoomIn, &scaleHighlight, &lowerSplitter})
             addAndMakeVisible(component);
         lowerSplitter.dragStarted = [this] (int screenY)
@@ -468,6 +494,9 @@ public:
         // This updates a text readout only. Pointer events and control painting
         // are not throttled to this timer; there is no full-window repaint loop.
         startTimerHz(30);
+        // Once by hand, so the readout is right in the first frame rather than
+        // blank until the timer comes round.
+        timerCallback();
     }
 
     ~ControlWindow() override
@@ -483,6 +512,7 @@ public:
     void paint(juce::Graphics& g) override
     {
         g.fillAll(juce::Colour(0xff171a1e));
+        paintControlBar(g);
         if (browserOpen)
         {
             g.setColour(juce::Colour(0xff3a434b));
@@ -496,18 +526,109 @@ public:
             g.setColour(juce::Colour(0xff3a434b));
             g.drawRect(area);
             g.setColour(juce::Colour(0xffb8c4aa));
-            g.setFont(juce::FontOptions(11.0f));
-            g.drawText("INFO VIEW   ?  HIDE", area.withTrimmedLeft(10).withHeight(24), juce::Justification::centredLeft);
+            g.setFont(uiFont(9.0f));
+            drawSnappedText(g, "INFO VIEW   ?  HIDE", area.withTrimmedLeft(10).withHeight(24),
+                            juce::Justification::centredLeft);
         }
     }
 
-    // The lower pane is layered over the arrangement, so the gap between the
-    // clip editor and the Device View is arrangement, not window: the handle
-    // between them has to be drawn after the children rather than behind them.
-    void paintOverChildren(juce::Graphics& g) override
+    // The captions and the rules between the modules. Drawn from what the
+    // layout recorded rather than from a second copy of the geometry, so a
+    // control that moves takes its caption with it.
+    void paintControlBar(juce::Graphics& g)
     {
-        g.setColour(juce::Colour(0xff3a434b));
-        g.fillRect(deviceSplitterBounds());
+        g.setColour(juce::Colour(0xff1b2026));
+        g.fillRect(0, 0, getWidth(), browserTop - 4);
+        g.setColour(juce::Colour(0xff2b333a));
+        for (const auto divider : barDividers)
+            g.fillRect(divider, barCaptionTop, 1, barControlTop + barControlHeight - barCaptionTop);
+        g.setFont(uiFontBold(8.0f));
+        g.setColour(juce::Colour(0xff707d88));
+        for (const auto& group : barGroups)
+            drawSnappedText(g, group.caption, group.bounds, juce::Justification::centredLeft, true);
+        g.setColour(juce::Colour(0xff272f36));
+        g.fillRect(0, browserTop - 4, getWidth(), 1);
+    }
+
+    // The control bar is a row of modules, each a caption over the controls it
+    // names, ruled off from its neighbours. Everything is placed left to right
+    // from one running x, the edit group is pinned to the right edge, and the
+    // readout takes whatever lies between - so the bar reflows as the window
+    // changes width instead of the clusters sliding over each other, which is
+    // what a layout hung off a centred readout used to do.
+    void layoutControlBar()
+    {
+        barGroups.clear();
+        barDividers.clear();
+        // A module: its caption goes on the caption row and its controls come
+        // back as a rectangle on the control row.
+        const auto module = [this](const char* caption, int x, int width)
+        {
+            barGroups.push_back({juce::String(caption), {x, barCaptionTop, width, barCaptionHeight}});
+            return juce::Rectangle<int>(x, barControlTop, width, barControlHeight);
+        };
+        const auto rule = [this](int x) { barDividers.push_back(x); };
+        const auto row = [](juce::Rectangle<int> area, std::initializer_list<juce::Component*> buttons, int gap)
+        {
+            const auto count = static_cast<int>(buttons.size());
+            const auto width = std::max(1, (area.getWidth() - gap * (count - 1)) / count);
+            for (auto* button : buttons)
+            {
+                button->setBounds(area.removeFromLeft(width));
+                area.removeFromLeft(gap);
+            }
+        };
+
+        browserToggle.setBounds(6, barControlTop, 38, barControlHeight);
+        auto x = 58;
+        rule(x - barGroupGap / 2);
+
+        constexpr int tempoWidth = 106, signatureWidth = 86, clickWidth = 54;
+        constexpr int transportWidth = 186, editWidth = 122, viewWidth = 112;
+        tempoBox.setBounds(module("TEMPO", x, tempoWidth));
+        x += tempoWidth + barGroupGap;
+        signatureField.setBounds(module("SIGNATURE", x, signatureWidth));
+        x += signatureWidth + barGroupGap;
+        {
+            auto area = module("CLICK", x, clickWidth);
+            metronome.setBounds(area.removeFromLeft(34));
+            metronomeMenu.setBounds(area.removeFromLeft(18));
+        }
+        x += clickWidth + barGroupGap;
+
+        rule(x - barGroupGap / 2);
+        row(module("TRANSPORT", x, transportWidth), {&play, &stop, &record, &panic}, 6);
+        x += transportWidth + barGroupGap;
+        rule(x - barGroupGap / 2);
+
+        // Pinned to the right edge and placed before the readout, because the
+        // readout is the elastic one: it is given whatever is left over.
+        auto rightEdge = getWidth() - 14;
+        row({rightEdge - editWidth, barControlTop, editWidth, barControlHeight}, {&undo, &redo, &clear}, 6);
+        module("EDIT", rightEdge - editWidth, editWidth);
+        rightEdge -= editWidth + barGroupGap;
+        sessionToggle.setVisible(sessionViewEnabled);
+        arrangementToggle.setVisible(sessionViewEnabled);
+        if constexpr (sessionViewEnabled)
+        {
+            row({rightEdge - viewWidth, barControlTop, viewWidth, barControlHeight},
+                {&sessionToggle, &arrangementToggle}, 4);
+            module("VIEW", rightEdge - viewWidth, viewWidth);
+            sessionToggle.setToggleState(sessionViewOpen, juce::dontSendNotification);
+            arrangementToggle.setToggleState(!sessionViewOpen, juce::dontSendNotification);
+            backToArrangement.setBounds(rightEdge - viewWidth, barControlTop + barControlHeight + 2, viewWidth, 0);
+            rightEdge -= viewWidth + barGroupGap;
+        }
+        rule(rightEdge + barGroupGap / 2);
+
+        // The readout is the one control here that gains from being wider, so
+        // it gets the whole of the space left between the two clusters. Below
+        // the width its two lines need it is dropped rather than squeezed: a
+        // clock with half its digits missing is worse than no clock.
+        const auto readoutWidth = rightEdge - x;
+        position.setVisible(readoutWidth >= 220);
+        if (position.isVisible())
+            position.setBounds(module("POSITION", x, readoutWidth));
     }
 
     void resized() override
@@ -549,46 +670,7 @@ public:
         // band between the lanes and the pane, exactly as it did when the two
         // were stacked rather than layered.
         const auto arrangementBottom = lowerTop - 34;
-        // Wide enough for the clock pair and both meters on the second line;
-        // the transport and the right-hand controls are placed from this, so
-        // widening it moves them rather than overlapping them.
-        const auto displayWidth = juce::jlimit(300, 400, getWidth() / 3);
-        const auto displayX = getWidth() / 2 - displayWidth / 2;
-        // Keep the control bar as one visual cluster. The browser may resize,
-        // but transport should remain beside the display rather than drifting
-        // to the arrangement's left edge.
-        const auto transportX = std::max(152, displayX - 352);
-        sessionToggle.setVisible(sessionViewEnabled);
-        arrangementToggle.setVisible(sessionViewEnabled);
-        if constexpr (sessionViewEnabled)
-        {
-            sessionToggle.setBounds(48, 34, 50, 30);
-            arrangementToggle.setBounds(98, 34, 50, 30);
-            sessionToggle.setToggleState(sessionViewOpen, juce::dontSendNotification);
-            arrangementToggle.setToggleState(!sessionViewOpen, juce::dontSendNotification);
-        }
-        if constexpr (sessionViewEnabled)
-            backToArrangement.setBounds(48, 66, 124, 22);
-        play.setBounds(transportX, 34, 38, 30);
-        stop.setBounds(transportX + 58, 34, 38, 30);
-        record.setBounds(transportX + 116, 34, 38, 30);
-        panic.setBounds(transportX + 174, 34, 38, 30);
-        position.setBounds(displayX, 21, displayWidth, 56);
-        constexpr int rightControlsWidth = 356;
-        auto rightX = std::min(displayX + displayWidth + 52, getWidth() - 24 - rightControlsWidth);
-        rightX = std::max(displayX + displayWidth + 8, rightX);
-        tempo.setBounds(rightX, 34, 100, 30);
-        rightX += 108;
-        timeSignature.setBounds(rightX, 34, 70, 30);
-        rightX += 78;
-        undo.setBounds(rightX, 34, 34, 30);
-        rightX += 40;
-        redo.setBounds(rightX, 34, 34, 30);
-        rightX += 40;
-        clear.setBounds(rightX, 34, 34, 30);
-        rightX += 42;
-        metronome.setBounds(rightX, 34, 30, 30);
-        metronomeMenu.setBounds(rightX + 30, 34, 18, 30);
+        layoutControlBar();
         browser.setVisible(browserOpen);
         const auto infoArea = infoViewArea();
         // The Info View lives at the foot of the browser column, so it goes
@@ -598,7 +680,6 @@ public:
         browser.setBounds(0, browserTop, browserWidth,
                           (infoVisible ? infoArea.getY() : getHeight()) - browserTop);
         browserToggle.setToggleState(browserOpen, juce::dontSendNotification);
-        browserToggle.setBounds(0, 40, 44, 50);
         arrangement.setVisible(!sessionViewOpen);
         sessionView.setVisible(sessionViewOpen);
         arrangement.setBounds(editorX, arrangementTop, editorW, arrangementH);
@@ -611,9 +692,10 @@ public:
                               std::max(150, arrangementBottom - arrangementTop));
         const auto notes = lowerPane == LowerPane::notes;
         const auto audio = lowerPane == LowerPane::audio;
+        const auto devices = lowerPane == LowerPane::devices;
         editorToggle.setToggleState(notes || audio, juce::dontSendNotification);
         editorToggle.setButtonText(audio ? "Audio" : "Clip");
-        rackToggle.setToggleState(rackOpen, juce::dontSendNotification);
+        rackToggle.setToggleState(devices, juce::dontSendNotification);
         editorToggle.setBounds(editorX, arrangementBottom + 10, 48, 22);
         rackToggle.setBounds(editorX + 54, arrangementBottom + 10, 72, 22);
         patternLabel.setVisible(notes || audio);
@@ -632,28 +714,14 @@ public:
 
         grid.setVisible(notes);
         audioClip.setVisible(audio);
-        rack.setVisible(rackOpen);
-        // The note editor and the audio editor are two faces of one pane, so
-        // they share its rectangle and only one of them is ever visible in it.
-        auto editorBounds = juce::Rectangle<int>(editorX, lowerTop, editorW, 0);
-        if (lowerPane != LowerPane::none && rackOpen)
-        {
-            deviceViewHeight = juce::jlimit(minimumPaneHeight, std::max(minimumPaneHeight, lowerH - minimumPaneHeight), deviceViewHeight);
-            const auto clipHeight = std::max(0, lowerH - deviceViewHeight - 8);
-            editorBounds = {editorX, lowerTop, editorW, clipHeight};
-            rack.setBounds(editorX, lowerTop + clipHeight + 8, editorW, deviceViewHeight);
-        }
-        else if (lowerPane != LowerPane::none)
-        {
-            editorBounds = {editorX, lowerTop, editorW, lowerH};
-            rack.setBounds(editorX, lowerTop + lowerH, editorW, 0);
-        }
-        else
-        {
-            rack.setBounds(editorX, lowerTop, editorW, rackOpen ? lowerH : 0);
-        }
-        grid.setBounds(editorBounds);
-        audioClip.setBounds(editorBounds);
+        rack.setVisible(devices);
+        // The note editor, the audio editor and the Device View are three faces
+        // of one pane: they share its rectangle and exactly one of them is ever
+        // visible in it, so the pane is as tall as the thing being worked on.
+        const juce::Rectangle<int> paneBounds {editorX, lowerTop, editorW, lowerH};
+        grid.setBounds(paneBounds);
+        audioClip.setBounds(paneBounds);
+        rack.setBounds(paneBounds);
         // Everything in the lower pane is layered over the arrangement, which
         // is a sibling that covers the same ground.
         lowerSplitter.setVisible(lowerPaneVisible());
@@ -668,20 +736,16 @@ public:
 
     void mouseMove(const juce::MouseEvent& event) override
     {
-        setMouseCursor(isOverDeviceSplitter(event.position)
-            ? juce::MouseCursor::UpDownResizeCursor
-            : isOverSplitter(event.position) ? juce::MouseCursor::LeftRightResizeCursor
-            : juce::MouseCursor::NormalCursor);
+        setMouseCursor(isOverSplitter(event.position) ? juce::MouseCursor::LeftRightResizeCursor
+                                                      : juce::MouseCursor::NormalCursor);
     }
 
     void mouseDown(const juce::MouseEvent& event) override
     {
         resizingBrowser = browserOpen && std::abs(event.x - browserWidth) <= 5 && event.y >= browserTop;
-        resizingDeviceView = isOverDeviceSplitter(event.position);
         resizeStartX = event.x;
         resizeStartY = event.y;
         resizeStartBrowserWidth = browserWidth;
-        resizeStartDeviceViewHeight = deviceViewHeight;
     }
 
     void mouseDrag(const juce::MouseEvent& event) override
@@ -692,21 +756,11 @@ public:
             resized();
             repaint();
         }
-        else if (resizingDeviceView)
-        {
-            const auto editorHeight = lowerPane == LowerPane::audio ? audioClip.getHeight() : grid.getHeight();
-            const auto available = std::max(minimumPaneHeight, editorHeight + rack.getHeight() + 8);
-            deviceViewHeight = juce::jlimit(minimumPaneHeight, std::max(minimumPaneHeight, available - minimumPaneHeight),
-                                            resizeStartDeviceViewHeight - (event.y - resizeStartY));
-            resized();
-            repaint();
-        }
     }
 
     void mouseUp(const juce::MouseEvent&) override
     {
         resizingBrowser = false;
-        resizingDeviceView = false;
     }
 
     bool keyPressed(const juce::KeyPress& key) override
@@ -850,7 +904,7 @@ public:
     // back to the arrangement.
     void toggleClipEditor()
     {
-        if (lowerPane != LowerPane::none)
+        if (clipPaneOpen())
             lowerPane = LowerPane::none;
         else if (const auto id = selectedAudioClipID(); id != te::EditItemID())
         {
@@ -869,9 +923,13 @@ public:
         applyPaneLayout();
     }
 
+    // The other half of the pair. Pressing Devices while a clip editor is open
+    // swaps to the devices rather than stacking them, which is the whole point
+    // of the two being one pane.
     void toggleDeviceView()
     {
-        rackOpen = !rackOpen;
+        lowerPane = lowerPane == LowerPane::devices ? LowerPane::none : LowerPane::devices;
+        updateEditorLabel();
         applyPaneLayout();
     }
 
@@ -880,10 +938,15 @@ public:
     // instrument track's - so this refuses nothing and consults no clip. The
     // card click arrives from a mouse *down* that may be starting a card drag,
     // so the layout waits for the button, as the clip panes do.
+    // Clicking a card still asks for that track's devices, but only when the
+    // pane is free. A clip editor that is open is being worked in, and having
+    // it swapped out by a click on the card beside it would be a surprise; the
+    // Devices toggle is the way across while one is open.
     void showDeviceView()
     {
-        if (rackOpen) return;
-        rackOpen = true;
+        if (lowerPane != LowerPane::none) return;
+        lowerPane = LowerPane::devices;
+        updateEditorLabel();
         requestPaneLayout();
     }
 
@@ -961,7 +1024,7 @@ public:
         // follow that selection the way Live's clip view does - onto the next
         // clip, whichever editor that clip calls for - and close when what was
         // selected is not a clip at all.
-        if (lowerPane != LowerPane::none)
+        if (clipPaneOpen())
         {
             if (const auto audio = selectedAudioClipID(); audio != te::EditItemID())
             {
@@ -993,7 +1056,9 @@ public:
     {
         patternLabel.setText(lowerPane == LowerPane::audio
                                  ? "AUDIO CLIP  /  " + audioClip.clipName().toUpperCase()
-                                 : session.isPatternDrums() ? "PATTERN 1  /  DRUM EDITOR" : "PATTERN 1  /  NOTE EDITOR",
+                             : lowerPane == LowerPane::devices
+                                 ? juce::String("DEVICES")
+                             : session.isPatternDrums() ? "PATTERN 1  /  DRUM EDITOR" : "PATTERN 1  /  NOTE EDITOR",
                              juce::dontSendNotification);
     }
 
@@ -1154,8 +1219,8 @@ private:
         juce::PopupMenu menu;
         menu.addItem(1, "Browser", true, browserOpen);
         menu.addItem(2, lowerPane == LowerPane::audio ? "Audio Editor" : "Clip Editor",
-                     true, lowerPane != LowerPane::none);
-        menu.addItem(3, "Device View", true, rackOpen);
+                     true, clipPaneOpen());
+        menu.addItem(3, "Device View", true, lowerPane == LowerPane::devices);
         menu.addItem(4, "Info View", browserOpen, infoVisible && browserOpen);
         menu.addSeparator();
         juce::PopupMenu::Item fullScreen {"Full Screen"};
@@ -1313,9 +1378,9 @@ private:
         play.setButtonText(playing ? juce::String(L"\u275a\u275a") : juce::String(L"\u25b6"));
         play.setTooltip(playing ? "Pause" : "Play");
         updateRecordButton();
-        tempo.setValue(session.tempo(), juce::dontSendNotification);
+        tempoBox.setValue(session.tempo());
         const auto signature = session.timeSignature();
-        timeSignature.setSelectedId(signature.numerator * 100 + signature.denominator, juce::dontSendNotification);
+        signatureField.setSignature(signature.numerator, signature.denominator);
         metronome.setToggleState(session.clickTrackEnabled(), juce::dontSendNotification);
         undo.setEnabled(session.edit->getUndoManager().canUndo());
         redo.setEnabled(session.edit->getUndoManager().canRedo());
@@ -1394,6 +1459,7 @@ private:
         if (displayTimeSignature) parts.add(juce::String(signature.numerator) + "/" + juce::String(signature.denominator));
         const auto text = parts.joinIntoString("     ");
         position.setDisplayText(text);
+        std::fprintf(stderr, "RHINOPOS [%s] vis=%d w=%d\n", text.toRawUTF8(), (int) position.isVisible(), position.getWidth());
     }
 
     // The second line of the display. The clock follows the playhead at the
@@ -1462,14 +1528,6 @@ private:
              + "   " + juce::String(block * 1000.0 / rate, 1) + " ms";
     }
 
-    juce::Rectangle<int> deviceSplitterBounds() const
-    {
-        if (lowerPane == LowerPane::none || !rackOpen) return {};
-        const auto& editor = lowerPane == LowerPane::audio ? static_cast<const juce::Component&>(audioClip)
-                                                           : static_cast<const juce::Component&>(grid);
-        return {editor.getX(), editor.getBottom() + 2, editor.getWidth(), 4};
-    }
-
     juce::Rectangle<int> infoViewArea() const
     {
         if (!infoVisible || !browserOpen) return {};
@@ -1482,12 +1540,6 @@ private:
             && point.y >= static_cast<float>(browserTop);
     }
 
-    bool isOverDeviceSplitter(juce::Point<float> point) const
-    {
-        const auto splitter = deviceSplitterBounds();
-        return !splitter.isEmpty() && splitter.expanded(0, 4).toFloat().contains(point);
-    }
-
     Session& session;
     juce::Label hint, patternLabel;
     juce::TextEditor infoView;
@@ -1498,8 +1550,8 @@ private:
     SessionView sessionView;
     DeviceRack rack;
     AudioClipPanel audioClip;
-    juce::Slider tempo;
-    juce::ComboBox timeSignature;
+    ValueDragBox tempoBox;
+    TimeSignatureField signatureField;
     juce::TextButton metronome, metronomeMenu;
     juce::TextButton undo {"Undo"}, redo {"Redo"}, clear {"Clear"};
     juce::TextButton play {"Play"}, panic {"Panic"};
@@ -1520,10 +1572,17 @@ private:
     // Zero until the pane is opened for the first time, which is what asks for
     // a fifth of the window rather than a number chosen here: the right height
     // depends on the display and cannot be known at construction.
-    int browserWidth = 244, lowerPaneHeight = 0, deviceViewHeight = 220;
+    int browserWidth = 244, lowerPaneHeight = 0;
     int resizeStartX = 0, resizeStartY = 0, resizeStartBrowserWidth = 244;
-    int resizeStartLowerPaneHeight = 0, resizeStartDeviceViewHeight = 220;
-    static constexpr int browserTop = 94;
+    int resizeStartLowerPaneHeight = 0;
+    // The control bar's own grid: a caption row over a control row, with the
+    // same top and the same height for every module in the bar. Laying every
+    // group out against these two numbers is what makes the bar read as one
+    // band instead of as controls that happen to be near each other.
+    static constexpr int barCaptionTop = 10, barCaptionHeight = 11;
+    static constexpr int barControlTop = 25, barControlHeight = 42;
+    static constexpr int barGroupGap = 16;
+    static constexpr int browserTop = barControlTop + barControlHeight + 14;
     // A pane shorter than this shows neither a usable editor nor a device, so
     // it is the floor for both the pane and the Device View inside it.
     static constexpr int minimumPaneHeight = 112;
@@ -1536,19 +1595,35 @@ private:
     // which clip editor the clip pane is showing, and rackOpen whether the
     // Device View is up. Both start hidden - double-clicking a clip reveals the
     // editor that clip belongs in, and clicking a track card the devices.
-    enum class LowerPane { none, notes, audio };
+    // One pane showing one thing. The clip editors and the Device View used to
+    // stack inside it, which asked for a window tall enough for both and left
+    // neither of them tall enough to work in. They are a pair of toggles now:
+    // opening either closes the other, the way Live's Clip and Device views
+    // are two faces of one strip rather than two strips.
+    enum class LowerPane { none, notes, audio, devices };
     LowerPane lowerPane = LowerPane::none;
-    bool lowerPaneVisible() const { return lowerPane != LowerPane::none || rackOpen; }
+    bool lowerPaneVisible() const { return lowerPane != LowerPane::none; }
+    bool clipPaneOpen() const { return lowerPane == LowerPane::notes || lowerPane == LowerPane::audio; }
     // The clip selection the pane state was chosen for, so a notification about
     // the same selection does not overwrite a toggle the user just pressed.
     te::EditItemID paneClip;
     bool paneMidi = false;
     bool paneLayoutPending = false;
-    bool browserOpen = true, rackOpen = false, infoVisible = true;
+    bool browserOpen = true, infoVisible = true;
     bool sessionViewOpen = false;
-    bool resizingBrowser = false, resizingDeviceView = false;
+    bool resizingBrowser = false;
+    // What the bar paints over the controls it has placed: one caption per
+    // module and a hairline between groups. Recorded by the layout, because
+    // only the layout knows where the modules ended up.
+    struct BarGroup { juce::String caption; juce::Rectangle<int> bounds; };
+    std::vector<BarGroup> barGroups;
+    std::vector<int> barDividers;
     bool updatingEditorResolution = false;
-    bool displayPosition = true, displayTempo = true, displayTimeSignature = true, displayLoop = true;
+    // The tempo and the signature have fields of their own in the bar now, so
+    // the readout no longer repeats them: it is the position, the clock and
+    // the loop. Both are still in the display menu for anyone who wants them
+    // back on the one line their eye is already on while playing.
+    bool displayPosition = true, displayTempo = false, displayTimeSignature = false, displayLoop = true;
     bool displayTime = true, displayCpu = true, displayMemory = true, displayAudio = true;
     double cpuLoad = 0.0;
     juce::uint64 memoryBytes = 0;
@@ -1615,10 +1690,7 @@ public:
         }
         const auto screenshot = juce::SystemStats::getEnvironmentVariable("RHINO_STARTUP_SNAPSHOT", {});
         if (startupTest && screenshot.isNotEmpty())
-        {
-            if (auto stream = juce::File(screenshot).createOutputStream())
-                juce::PNGImageFormat().writeImageToStream(loading->createComponentSnapshot(loading->getLocalBounds()), *stream);
-        }
+            writeSnapshot(*loading, juce::File(screenshot));
         // Let the window become visible before constructing the engine. Engine
         // initialization requires the message thread; yield between its phases.
         startTimer(40);
@@ -1711,6 +1783,16 @@ private:
                 if (projectToOpen != juce::File{})
                     if (auto* controls = dynamic_cast<ControlWindow*>(window->getContentComponent()))
                         controls->openProjectFile(projectToOpen);
+                // The shell is the one panel that cannot be rendered from a
+                // test: ControlWindow is defined inside this file and the test
+                // runners cannot reach it. This is the way to look at the
+                // control bar without taking the display away from whoever is
+                // using the machine - RHINO_SHELL_SNAPSHOT under
+                // --startup-test writes the window to a PNG and quits.
+                if (const auto shellShot = juce::SystemStats::getEnvironmentVariable("RHINO_SHELL_SNAPSHOT", {});
+                    startupTest && shellShot.isNotEmpty())
+                    if (auto* content = window->getContentComponent())
+                        writeSnapshot(*content, juce::File(shellShot));
                 if (startupTest) quit();
                 return;
             }
@@ -1737,8 +1819,8 @@ private:
                 auto colour = findColour(juce::TextButton::textColourOffId);
                 if (highlighted || pressed) colour = colour.brighter(0.25f);
                 g.setColour(colour);
-                g.setFont(juce::FontOptions(13.0f));
-                g.drawFittedText(getButtonText(), getLocalBounds(), juce::Justification::centred, 1);
+                g.setFont(uiFont(10.5f));
+                drawSnappedText(g, getButtonText(), getLocalBounds(), juce::Justification::centred);
             }
         };
 

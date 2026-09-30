@@ -99,6 +99,7 @@ target_sources(RhinoNative PRIVATE
     # App
     src/Main.cpp
     src/TransportDisplay.cpp
+    src/ControlBarFields.cpp
     src/ProjectFiles.cpp
     # Tests
     src/tests/SelfTest.cpp

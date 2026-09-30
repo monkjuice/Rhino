@@ -29,12 +29,12 @@
         return span;
     };
 
-    readout.setSize(400, 56);
+    readout.setSize(400, 42);
     const auto wide = readout.createComponentSnapshot(readout.getLocalBounds());
-    require(wide.getWidth() == 400 && wide.getHeight() == 56, "The readout renders at the size it is given");
+    require(wide.getWidth() == 400 && wide.getHeight() == 42, "The readout renders at the size it is given");
     // Text is inset by eight and stops short of the chevron at 380.
-    const auto widePosition = litSpan(wide, 4, 30, 372);
-    const auto wideClock = litSpan(wide, 34, 52, 372);
+    const auto widePosition = litSpan(wide, 2, 23, 372);
+    const auto wideClock = litSpan(wide, 25, 40, 372);
     require(widePosition.first == 8, "The position starts at the left edge of the box");
     require(wideClock.first == 8, "The clock starts under the position");
     require(widePosition.second > 340 && widePosition.second < 372, "The loop is drawn against the right edge");
@@ -43,10 +43,10 @@
     // Narrow enough that the second line cannot hold both of its runs. The
     // clock keeps the line and the device reading goes, rather than the two
     // being squeezed into each other.
-    readout.setSize(300, 56);
+    readout.setSize(300, 42);
     const auto narrow = readout.createComponentSnapshot(readout.getLocalBounds());
-    const auto narrowPosition = litSpan(narrow, 4, 30, 272);
-    const auto narrowClock = litSpan(narrow, 34, 52, 272);
+    const auto narrowPosition = litSpan(narrow, 2, 23, 272);
+    const auto narrowClock = litSpan(narrow, 25, 40, 272);
     require(narrowPosition.first == widePosition.first, "Narrowing the box does not move the position");
     require(narrowClock.first == wideClock.first, "Narrowing the box does not move the clock");
     require(narrowPosition.second > 240, "The loop still fits beside the position");

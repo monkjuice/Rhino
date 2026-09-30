@@ -1,6 +1,7 @@
 #pragma once
 #include "Arrangement.h"
 #include "SelectionInput.h"
+#include "Theme.h"
 
 // Shared internals of the Arrangement implementation, which spans
 // Arrangement.cpp, ArrangementGeometry.cpp, ArrangementPainter.cpp,

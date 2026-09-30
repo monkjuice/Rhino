@@ -379,12 +379,12 @@ void Arrangement::paintGhostRow(juce::Graphics& g, int row)
     g.setColour(juce::Colour(focused ? 0xff2e3840 : 0xff222930));
     g.fillRect(area.withX(0.0f).withWidth(headerWidth));
     g.setColour(juce::Colour(0xff9aa6af));
-    g.setFont(juce::FontOptions(11.0f));
-    g.drawText(automation->deviceName, 22, static_cast<int>(area.getY()) + 3,
-               static_cast<int>(headerWidth) - 32, 15, juce::Justification::centredLeft, true);
+    g.setFont(uiFont(9.0f));
+    drawSnappedText(g, automation->deviceName, {22, static_cast<int>(area.getY()) + 3,
+                    static_cast<int>(headerWidth) - 32, 15}, juce::Justification::centredLeft, true);
     g.setColour(juce::Colour(0xffd6dde2));
-    g.drawText(automation->parameterName, 22, static_cast<int>(area.getY()) + 18,
-               static_cast<int>(headerWidth) - 32, 15, juce::Justification::centredLeft, true);
+    drawSnappedText(g, automation->parameterName, {22, static_cast<int>(area.getY()) + 18,
+                    static_cast<int>(headerWidth) - 32, 15}, juce::Justification::centredLeft, true);
     g.setColour(activeCurve.withAlpha(automation->active() ? 1.0f : 0.5f));
     g.fillRect(10.0f, area.getY() + 8.0f, 3.0f, area.getHeight() - 16.0f);
 }

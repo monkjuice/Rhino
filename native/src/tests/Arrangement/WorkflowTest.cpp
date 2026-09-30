@@ -6,6 +6,7 @@
 #include "audio/VocoderDevice.h"
 #include "../../Theme.h"
 #include "../../TransportDisplay.h"
+#include "../../ControlBarFields.h"
 #include "../../StepGrid.h"
 #include "../../AudioClipPanel.h"
 #include "../../SessionView.h"
@@ -77,6 +78,8 @@ int runArrangementTest()
         }
         scenario("transport readout");
        #include "scenarios/TransportReadout.inc"
+        scenario("control bar fields");
+       #include "scenarios/ControlBarFields.inc"
         scenario("browser drops");
        #include "scenarios/BrowserDrops.inc"
         scenario("library preview");
@@ -95,6 +98,8 @@ int runArrangementTest()
        #include "scenarios/ClipMerge.inc"
         scenario("region clipboard");
        #include "scenarios/RegionClipboard.inc"
+        scenario("arrangement pan");
+       #include "scenarios/ArrangementPan.inc"
         scenario("track management");
        #include "scenarios/TrackManagement.inc"
         scenario("group bus routing");

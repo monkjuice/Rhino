@@ -1,4 +1,5 @@
 #include "TransportDisplay.h"
+#include "Theme.h"
 
 namespace rhino
 {
@@ -24,8 +25,8 @@ void TransportDisplay::GlyphButton::paintButton(juce::Graphics& g, bool highligh
     auto colour = findColour(juce::TextButton::textColourOffId);
     if (highlighted || pressed) colour = colour.brighter(0.3f);
     g.setColour(colour);
-    g.setFont(juce::FontOptions(11.0f));
-    g.drawFittedText(getButtonText(), getLocalBounds(), juce::Justification::centred, 1);
+    g.setFont(uiFont(9.0f));
+    drawSnappedText(g, getButtonText(), getLocalBounds(), juce::Justification::centred);
 }
 
 void TransportDisplay::setDisplayText(const juce::String& next)
@@ -75,12 +76,12 @@ void drawReadoutRow(juce::Graphics& g, juce::Rectangle<int> row,
         {
             g.setColour(rightColour);
             g.setFont(rightFont);
-            g.drawText(right, row.removeFromRight(rightWidth), juce::Justification::centredRight, false);
+            drawSnappedText(g, right, row.removeFromRight(rightWidth), juce::Justification::centredRight);
         }
     }
     g.setColour(leftColour);
     g.setFont(leftFont);
-    g.drawText(left, row, juce::Justification::centredLeft, true);
+    drawSnappedText(g, left, row, juce::Justification::centredLeft, true);
 }
 }
 
@@ -92,17 +93,19 @@ void TransportDisplay::paint(juce::Graphics& g)
     g.setColour(juce::Colour(0xff3f4c55));
     g.drawRoundedRectangle(bounds.reduced(0.5f), 3.0f, 1.0f);
     auto area = getLocalBounds().reduced(8, 1).withTrimmedRight(20);
-    const juce::Font positionFont(juce::FontOptions(13.0f).withStyle("Bold"));
-    const juce::Font readingFont(juce::FontOptions(10.0f));
+    // The bar gives this box a module of its own now rather than a gap between
+    // two clusters, so the position is set at a size meant to be read across a
+    // desk rather than squinted at, and the readings under it come up with it.
+    const juce::Font positionFont(uiFontBold(13.0f));
+    const juce::Font readingFont(uiFont(9.0f));
     // The loop shares the position's line but not its weight: it is set once
     // and then watched out of the corner of the eye, so it is drawn at the
     // size of a reading rather than the size of the clock beside it.
-    const juce::Font trailingFont(juce::FontOptions(11.0f));
+    const juce::Font trailingFont(uiFont(10.0f));
     if (secondary.isNotEmpty() || secondaryTrailing.isNotEmpty())
     {
-        // Two rows in a box sized for one line of 13px: the split is by weight
-        // rather than in half, so the readings sit under the position instead
-        // of beside a gap.
+        // Two rows in one box: the split is by weight rather than in half, so
+        // the readings sit under the position instead of beside a gap.
         const auto primaryHeight = juce::roundToInt(area.getHeight() * 0.58f);
         const auto lower = area.withTrimmedTop(primaryHeight);
         area = area.withHeight(primaryHeight);

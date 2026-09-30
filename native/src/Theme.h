@@ -22,40 +22,53 @@ inline juce::Font uiFontBold(float pixelsPerEm)
     return juce::Font(juce::FontOptions().withPointHeight(pixelsPerEm).withStyle("SemiBold"));
 }
 
+// Shortens a line with an ellipsis when it will not fit the width given. JUCE's
+// own drawText does this, so anything replacing a drawText call needs it too or
+// a long name simply runs out of its box instead of ending in a dash.
+inline juce::String elidedToWidth(const juce::Font& font, const juce::String& text, int width)
+{
+    if (width <= 0) return {};
+    if (juce::GlyphArrangement::getStringWidthInt(font, text) <= width) return text;
+    static const juce::String ellipsis {juce::CharPointer_UTF8("\xe2\x80\xa6")};
+    const auto room = width - juce::GlyphArrangement::getStringWidthInt(font, ellipsis);
+    if (room <= 0) return {};
+    // Binary search rather than a character at a time: a name is measured once
+    // per repaint, and measuring is the expensive half of drawing it.
+    int low = 0, high = text.length();
+    while (low < high)
+    {
+        const auto mid = (low + high + 1) / 2;
+        if (juce::GlyphArrangement::getStringWidthInt(font, text.substring(0, mid)) <= room)
+            low = mid;
+        else
+            high = mid - 1;
+    }
+    return text.substring(0, low).trimEnd() + ellipsis;
+}
+
 // The other half of it: JUCE centres a line by computing its baseline in
 // floats, so text centred in a box of the wrong height is drawn half a pixel
 // low however whole the em size is. This rounds the baseline to a pixel row.
+//
+// Every line of text in the interface goes through here. One path, one baseline
+// rule: a glyph run drawn any other way lands on whatever fractional row JUCE
+// computes for it, and at ten pixels per em that is the difference between a
+// crisp stem and a grey one.
 inline void drawSnappedText(juce::Graphics& g, const juce::String& text, juce::Rectangle<int> area,
-                            juce::Justification justification = juce::Justification::centredLeft)
+                            juce::Justification justification = juce::Justification::centredLeft,
+                            bool elide = false)
 {
     const auto font = g.getCurrentFont();
+    const auto line = elide ? elidedToWidth(font, text, area.getWidth()) : text;
+    if (line.isEmpty()) return;
     const auto baseline = area.getY()
         + juce::roundToInt((static_cast<float>(area.getHeight()) + font.getAscent() - font.getDescent()) * 0.5f);
     auto x = area.getX();
     if (justification.testFlags(juce::Justification::horizontallyCentred))
-        x = area.getCentreX() - juce::roundToInt(juce::GlyphArrangement::getStringWidth(font, text) * 0.5f);
+        x = area.getCentreX() - juce::roundToInt(juce::GlyphArrangement::getStringWidth(font, line) * 0.5f);
     else if (justification.testFlags(juce::Justification::right))
-        x = area.getRight() - juce::GlyphArrangement::getStringWidthInt(font, text);
-    g.drawSingleLineText(text, x, baseline);
-}
-
-// Inter ships here in two cuts, Regular and SemiBold, so anything heavier than
-// SemiBold has to be synthesised. Striking the same line twice is the way to do
-// it: the glyphs land on exactly the same pixels, and each pass composites the
-// text colour again, so a half-covered edge pixel goes from 50% to 75% and the
-// line gains weight without gaining width. Nothing moves, so it stays crisp.
-//
-// The obvious alternatives are both wrong here. Offsetting the second pass by a
-// pixel reads as a double strike at ten pixels per em. Outlining the glyphs and
-// stroking the outline looks right in a full repaint and is not stable under a
-// clipped one - a stroke rasterised against a damage rectangle does not land on
-// the values a full repaint gives, so playing back leaves stale pixels along
-// every name the playhead sweeps past.
-inline void drawSnappedTextHeavy(juce::Graphics& g, const juce::String& text, juce::Rectangle<int> area,
-                                 juce::Justification justification = juce::Justification::centredLeft)
-{
-    drawSnappedText(g, text, area, justification);
-    drawSnappedText(g, text, area, justification);
+        x = area.getRight() - juce::GlyphArrangement::getStringWidthInt(font, line);
+    g.drawSingleLineText(line, x, baseline);
 }
 
 class Theme final : public juce::LookAndFeel_V4
@@ -76,6 +89,32 @@ public:
                 font.isBold() ? static_cast<size_t>(BinaryData::InterSemiBold_ttfSize)
                               : static_cast<size_t>(BinaryData::InterRegular_ttfSize));
         return cached != nullptr ? cached : juce::LookAndFeel_V4::getTypefaceForFont(font);
+    }
+
+    // Every stock control asks its look-and-feel for a font, and the stock
+    // answer is a *height* derived from the control's own size - so a 30 pixel
+    // button asks for 16 and Inter rasterises it at 13.2 pixels per em. These
+    // three are the ones this interface actually uses; each rounds that height
+    // to a whole number of pixels per em so a button label, a combo box and a
+    // menu row are as crisp as the text the panels draw for themselves.
+    static juce::Font snapped(float heightInPixels)
+    {
+        return uiFont(std::max(7.0f, std::round(heightInPixels * 0.825f)));
+    }
+
+    juce::Font getTextButtonFont(juce::TextButton&, int buttonHeight) override
+    {
+        return snapped(std::min(16.0f, static_cast<float>(buttonHeight) * 0.6f));
+    }
+
+    juce::Font getComboBoxFont(juce::ComboBox& box) override
+    {
+        return snapped(std::min(16.0f, static_cast<float>(box.getHeight()) * 0.7f));
+    }
+
+    juce::Font getPopupMenuFont() override
+    {
+        return uiFont(11.0f);
     }
 
     void drawRotarySlider(juce::Graphics& g, int x, int y, int width, int height,

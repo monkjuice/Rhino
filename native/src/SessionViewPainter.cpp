@@ -1,4 +1,5 @@
 #include "SessionView.h"
+#include "Theme.h"
 #include <algorithm>
 
 // Session view rendering.
@@ -76,9 +77,9 @@ void SessionView::paint(juce::Graphics& g)
                     if (info.stopQueued) drawSquare(g, glyph, juce::Colour(0xff11161b));
                     else drawTriangle(g, glyph, juce::Colour(0xff11161b));
                     g.setColour(juce::Colour(0xff11161b));
-                    g.setFont(juce::FontOptions(11.0f));
-                    g.drawText(info.name, inner.toNearestInt().withTrimmedLeft(2),
-                               juce::Justification::centredLeft, false);
+                    g.setFont(uiFont(9.0f));
+                    drawSnappedText(g, info.name, inner.toNearestInt().withTrimmedLeft(2),
+                                    juce::Justification::centredLeft, true);
                 }
                 else
                 {
@@ -99,9 +100,9 @@ void SessionView::paint(juce::Graphics& g)
         if (trackCount == 0 || sceneCount == 0)
         {
             g.setColour(juce::Colour(dimTextColour));
-            g.setFont(juce::FontOptions(12.0f));
-            g.drawText("No scenes yet", 12, static_cast<int>(gridTop) + 8, 240, 20,
-                       juce::Justification::centredLeft);
+            g.setFont(uiFont(10.0f));
+            drawSnappedText(g, "No scenes yet", {12, static_cast<int>(gridTop) + 8, 240, 20},
+                            juce::Justification::centredLeft);
         }
     }
 
@@ -122,9 +123,9 @@ void SessionView::paint(juce::Graphics& g)
                 g.fillRect(header.withHeight(2.0f).reduced(1.0f, 0.0f));
             }
             g.setColour(juce::Colour(textColour));
-            g.setFont(juce::FontOptions(11.0f));
-            g.drawText(juce::String(track + 1).paddedLeft('0', 2) + "  " + session.trackName(track),
-                       header.toNearestInt().reduced(6, 4), juce::Justification::centredLeft, false);
+            g.setFont(uiFont(9.0f));
+            drawSnappedText(g, juce::String(track + 1).paddedLeft('0', 2) + "  " + session.trackName(track),
+                            header.toNearestInt().reduced(6, 4), juce::Justification::centredLeft, true);
         }
     }
 
@@ -187,9 +188,9 @@ void SessionView::paint(juce::Graphics& g)
             drawTriangle(g, row.reduced(2.0f).withWidth(16.0f).withSizeKeepingCentre(8.0f, 9.0f),
                          juce::Colour(isHovered ? playingColour : 0xff9aa5ae));
             g.setColour(juce::Colour(textColour));
-            g.setFont(juce::FontOptions(11.0f));
-            g.drawText(session.sceneName(scene), row.reduced(2.0f).toNearestInt().withTrimmedLeft(20),
-                       juce::Justification::centredLeft, false);
+            g.setFont(uiFont(9.0f));
+            drawSnappedText(g, session.sceneName(scene), row.reduced(2.0f).toNearestInt().withTrimmedLeft(20),
+                            juce::Justification::centredLeft, true);
         }
     }
 
@@ -197,11 +198,11 @@ void SessionView::paint(juce::Graphics& g)
     g.setColour(juce::Colour(toolbarColour));
     g.fillRect(0.0f, 0.0f, static_cast<float>(getWidth()), toolbarHeight);
     g.setColour(juce::Colour(dimTextColour));
-    g.setFont(juce::FontOptions(11.0f));
-    g.drawText("QUANTISE", 106, 4, 80, 22, juce::Justification::centredLeft);
-    g.drawText("Click a clip to launch / right-click a slot to fill it",
-               290, 4, std::max(0, static_cast<int>(sceneColumnX()) - 300), 22,
-               juce::Justification::centredLeft);
+    g.setFont(uiFont(9.0f));
+    drawSnappedText(g, "QUANTISE", {106, 4, 80, 22}, juce::Justification::centredLeft);
+    drawSnappedText(g, "Click a clip to launch / right-click a slot to fill it",
+                    {290, 4, std::max(0, static_cast<int>(sceneColumnX()) - 300), 22},
+                    juce::Justification::centredLeft, true);
     g.setColour(juce::Colour(gridLineColour));
     g.drawHorizontalLine(static_cast<int>(toolbarHeight), 0.0f, static_cast<float>(getWidth()));
     g.drawHorizontalLine(static_cast<int>(toolbarHeight + trackHeaderHeight), 0.0f, sceneColumnX());

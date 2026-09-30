@@ -1,4 +1,5 @@
 #include "DeviceEditorPanel.h"
+#include "Theme.h"
 #include "audio/RhinoSpaceDevice.h"
 #include "audio/AutoTuneDevice.h"
 #include "audio/RhinoEqDevice.h"
@@ -37,7 +38,7 @@ float normalisedValue(const Session::DeviceParameter& parameter)
 DeviceEditorPanel::DeviceEditorPanel(Session& s) : session(s)
 {
     setOpaque(false);
-    title.setFont(juce::FontOptions(11.0f).withStyle("Bold"));
+    title.setFont(uiFontBold(9.0f));
     title.setColour(juce::Label::textColourId, juce::Colour(0xffdce5ea));
     title.setInterceptsMouseClicks(false, false);
     power.setTooltip("Enable or bypass this device");
@@ -225,9 +226,9 @@ void DeviceEditorPanel::ensureControls()
         auto* value = parameterValues.add(new juce::Label());
         auto* slider = parameterSliders.add(new juce::Slider());
         auto* automation = parameterAutomation.add(new juce::TextButton());
-        name->setFont(juce::FontOptions(11.5f));
+        name->setFont(uiFont(9.5f));
         name->setJustificationType(juce::Justification::centred);
-        value->setFont(juce::FontOptions(10.5f));
+        value->setFont(uiFont(8.5f));
         value->setJustificationType(juce::Justification::centred);
         slider->setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
         slider->setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
@@ -307,8 +308,8 @@ void DeviceEditorPanel::paint(juce::Graphics& g)
     if (parameters.empty())
     {
         g.setColour(juce::Colour(0xff75818a));
-        g.setFont(juce::FontOptions(11.0f));
-        g.drawText("No exposed parameters", contentArea, juce::Justification::centred);
+        g.setFont(uiFont(9.0f));
+        drawSnappedText(g, "No exposed parameters", contentArea, juce::Justification::centred, true);
         return;
     }
 
@@ -351,8 +352,8 @@ void DeviceEditorPanel::paint(juce::Graphics& g)
         g.setColour(juce::Colour(0xffc6d58c));
         g.fillEllipse(centre.x - 3.0f, centre.y - 3.0f, 6.0f, 6.0f);
         g.setColour(juce::Colour(0xff89a0ac));
-        g.setFont(juce::FontOptions(9.5f).withStyle("Bold"));
-        g.drawText("SPACE FIELD", visualArea.withHeight(18), juce::Justification::centred);
+        g.setFont(uiFontBold(8.0f));
+        drawSnappedText(g, "SPACE FIELD", visualArea.withHeight(18), juce::Justification::centred);
     }
 }
 

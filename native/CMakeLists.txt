@@ -101,6 +101,7 @@ target_sources(RhinoNative PRIVATE
     # App
     src/Main.cpp
     src/TransportDisplay.cpp
+    src/TimeRuler.cpp
     src/ControlBarFields.cpp
     src/ControlBarIcons.cpp
     src/ProjectFiles.cpp

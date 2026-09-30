@@ -72,9 +72,8 @@ void Arrangement::paintBarNumbers(juce::Graphics& g, double firstBeat, double la
     // width of the first one on screen and the labels simply thin out or crowd
     // a little where the tempo moves.
     const auto pixelsPerBar = std::max(0.01f, xFor(timeOfBar(firstBar + 1.0)) - xFor(timeOfBar(firstBar)));
-    double step = 1.0;
-    while (step * pixelsPerBar < 44.0f && step < 4096.0) step *= 2.0;
-    const auto start = std::floor((firstBar - 1.0) / step) * step + 1.0;
+    const auto step = barLabelStep(pixelsPerBar, barNumberMinimumPixels);
+    const auto start = firstLabelledBar(firstBar, step);
     const auto right = static_cast<float>(getWidth()) - 14.0f;
     int painted = 0;
     for (auto bar = start; bar <= lastBar + step && painted < 512; bar += step)

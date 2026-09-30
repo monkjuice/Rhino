@@ -135,6 +135,32 @@ inline bool isWashedBar(double bar, int bandBars)
     return std::fmod(std::fmod(band, 2.0) + 2.0, 2.0) >= 1.0;
 }
 
+// How far apart two labelled bars have to be. The ruler prints a bar number at
+// the top of the timeline and the time ruler under it prints that same bar's
+// wall-clock time, which is a far wider string - so the two ask for different
+// spacing and would otherwise thin out onto different bars.
+inline constexpr double barNumberMinimumPixels = 44.0;
+inline constexpr double timeLabelMinimumPixels = barNumberMinimumPixels * 2.0;
+
+// The step, in bars, between one label and the next: the smallest power of two
+// that leaves at least minimumPixels between them. Both rows step this way and
+// both minimums are powers of two apart, so whichever row is labelling less
+// often is labelling a subset of the other's bars - which is what keeps a time
+// under every bar number it sits below.
+inline double barLabelStep(double pixelsPerBar, double minimumPixels)
+{
+    double step = 1.0;
+    while (step * pixelsPerBar < minimumPixels && step < 4096.0) step *= 2.0;
+    return step;
+}
+
+// The first labelled bar at or before a given one, so the run of labels is a
+// property of the music rather than of where the view happens to start.
+inline double firstLabelledBar(double bar, double step)
+{
+    return std::floor((bar - 1.0) / step) * step + 1.0;
+}
+
 inline bool isGridLine(double beat, double interval)
 {
     if (interval <= 0.0) return false;

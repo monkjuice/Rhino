@@ -296,6 +296,10 @@ void Arrangement::updateScroll()
     trackScrollBar.setRangeLimits(0.0, std::max(trackVisible, trackTotal), juce::dontSendNotification);
     trackScrollBar.setCurrentRange(trackScroll, trackVisible, juce::dontSendNotification);
     trackScrollBar.setVisible(trackTotal > trackVisible + 1.0);
+    // Last, so whatever reads the view reads it settled. The handler only
+    // repaints a sibling; it must never lay anything out, because this runs
+    // from inside resized().
+    if (viewChanged) viewChanged();
 }
 
 }

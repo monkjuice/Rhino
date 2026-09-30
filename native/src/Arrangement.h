@@ -77,6 +77,23 @@ public:
     // editor a clip belongs in is the shell's business, not the timeline's.
     std::function<void(te::EditItemID)> clipSelected;
     std::function<void(te::EditItemID)> clipOpened;
+    // What the timeline is showing, and where. left and width are the lane
+    // rectangle in this component's own coordinates, and a time lands at
+    // left + (seconds - start) / span * width - which is exactly what the
+    // painter's xFor does. The time ruler under the panel is placed on that
+    // rectangle and given these numbers, so its labels sit in the same columns
+    // as the bar numbers in the ruler at the top without either row knowing
+    // anything about the other.
+    struct TimelineView
+    {
+        double start = 0.0, span = 8.0;
+        int left = 0, width = 0;
+        bool operator==(const TimelineView&) const = default;
+    };
+    TimelineView timelineView() const;
+    // Fired whenever any of those four moves. Every zoom, pan, scroll and
+    // resize goes through updateScroll, so that is the one place it is raised.
+    std::function<void()> viewChanged;
 private:
     friend int runArrangementTest();
     struct Waveform;

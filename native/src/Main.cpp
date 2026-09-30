@@ -11,6 +11,7 @@
 #include "ComputerKeyboard.h"
 #include "StartupScreen.h"
 #include "TransportDisplay.h"
+#include "TimeRuler.h"
 #include "ControlBarFields.h"
 #include "ControlBarIcons.h"
 #include "SystemUsage.h"
@@ -198,22 +199,6 @@ public:
 private:
     State state = State::idle;
 };
-
-// Wall-clock readings for the control bar. Minutes are padded to two digits
-// rather than widened past an hour: an arrangement that long would push the
-// load meters out of the box, and the bar number above is the reading that
-// matters at that length anyway.
-static juce::String formatClock(double seconds, bool withMilliseconds)
-{
-    if (!std::isfinite(seconds) || seconds < 0.0) seconds = 0.0;
-    const auto totalMs = static_cast<juce::int64>(seconds * 1000.0 + 0.5);
-    const auto milliseconds = static_cast<int>(totalMs % 1000);
-    const auto totalSeconds = totalMs / 1000;
-    auto text = juce::String(static_cast<int>(totalSeconds / 60)).paddedLeft('0', 2)
-              + ":" + juce::String(static_cast<int>(totalSeconds % 60)).paddedLeft('0', 2);
-    if (withMilliseconds) text += ":" + juce::String(milliseconds).paddedLeft('0', 3);
-    return text;
-}
 
 static juce::String formatMemory(juce::uint64 bytes)
 {
@@ -509,7 +494,8 @@ public:
                  &infoView, &position, &play, &stop, &record, &rewind,
                  &browser, &browserToggle, &editorToggle, &rackToggle, &grid, &audioClip, &arrangement, &sessionView,
                  &sessionToggle, &arrangementToggle, &backToArrangement, &rack, &tempoBox, &signatureField, &undo, &redo, &metronome, &metronomeMenu, &hint,
-                 &patternLabel, &editorResolution, &editorZoomOut, &editorZoomIn, &scaleHighlight, &lowerSplitter})
+                 &patternLabel, &editorResolution, &editorZoomOut, &editorZoomIn, &scaleHighlight,
+                 &timeRuler, &lowerSplitter})
             addAndMakeVisible(component);
         lowerSplitter.dragStarted = [this] (int screenY)
         {
@@ -524,6 +510,14 @@ public:
             lowerPaneHeight = resizeStartLowerPaneHeight - (screenY - resizeStartY);
             resized();
             repaint();
+        };
+        // Every zoom, pan and scroll of the timeline moves the ruler under it.
+        // Only the view is pushed across: the ruler is laid out by resized(),
+        // and this fires from inside the arrangement's own resized().
+        arrangement.viewChanged = [this]
+        {
+            const auto view = arrangement.timelineView();
+            timeRuler.setView(view.start, view.span);
         };
         session.edit->getTransport().addChangeListener(this);
         session.addChangeListener(this);
@@ -567,15 +561,16 @@ public:
         {
             g.setColour(palette::border);
             g.fillRect(browserWidth, browserTop, browserDividerWidth,
-                       std::max(0, workspaceBottom - browserTop));
+                       std::max(0, browserColumnBottom() - browserTop));
         }
-        // The band the clip and device strip sits on, drawn the whole width so
-        // the part beside the browser column is the same ground as the part
-        // over the arrangement - the panels above it stop at its top edge.
-        if (workspaceBottom > 0 && workspaceBottom < getHeight())
+        // The ground under the time ruler and the Clip and Devices strip,
+        // drawn the width of the band so the part beside the Info View is the
+        // same surface as the part over the arrangement. Every panel above it
+        // stops at its top edge, so nothing here is painted over.
+        if (lowerBandTop > 0 && lowerBandTop < getHeight())
         {
             g.setColour(palette::sideSurface);
-            g.fillRect(0, workspaceBottom, getWidth(), getHeight() - workspaceBottom);
+            g.fillRect(lowerBandLeft, lowerBandTop, getWidth() - lowerBandLeft, getHeight() - lowerBandTop);
         }
         // The Info View lives at the foot of the browser column, so it goes
         // when the browser does. Asking infoVisible alone drew its heading into
@@ -644,19 +639,26 @@ public:
         // centred on the fields rather than sharing their top edge: the bar
         // reads as one row because everything on it shares a middle.
         const auto transportTop = barControlTop + (fieldHeight - transportSize) / 2;
+        // The sections spread apart on a wide bar and close up on a narrow one.
+        // The readout is what the space is being spent on, and at the smallest
+        // window a clock is worth more than air between the groups: held at the
+        // full gap, the bar ran out of room for the readout at 976 pixels and
+        // dropped it, which is inside the smallest window this supports.
+        const auto sectionGap = juce::jlimit(barGroupGap, barSectionGap,
+                                             barGroupGap + (getWidth() - 960) / 12);
 
-        place(browserToggle, browserToggleWidth, transportSize, transportTop, barSectionGap);
-        rule(x - barSectionGap / 2);
+        place(browserToggle, browserToggleWidth, transportSize, transportTop, sectionGap);
+        rule(x - sectionGap / 2);
 
         // Tempo and signature are one group - they are both the song's own
         // settings - and take no rule between them, only the field gap.
         place(tempoBox, tempoWidth, fieldHeight, barControlTop, barFieldGap);
-        place(signatureField, signatureWidth, fieldHeight, barControlTop, barSectionGap);
-        rule(x - barSectionGap / 2);
+        place(signatureField, signatureWidth, fieldHeight, barControlTop, sectionGap);
+        rule(x - sectionGap / 2);
 
         for (auto* button : std::initializer_list<juce::Component*>{&rewind, &stop, &play, &record})
             place(*button, transportSize, transportSize, transportTop, barTransportGap);
-        x += barSectionGap - barTransportGap;
+        x += sectionGap - barTransportGap;
 
         // The right of the bar, laid out from the right client edge inwards:
         // undo and redo pinned to it, and the metronome in its own section
@@ -671,10 +673,10 @@ public:
             rightEdge -= gap;
         };
         placeRight(redo, undoSize, transportSize, transportTop, barTransportGap);
-        placeRight(undo, undoSize, transportSize, transportTop, barSectionGap);
-        rule(rightEdge + barSectionGap / 2);
+        placeRight(undo, undoSize, transportSize, transportTop, sectionGap);
+        rule(rightEdge + sectionGap / 2);
         placeRight(metronomeMenu, metronomeMenuWidth, transportSize, transportTop, 0);
-        placeRight(metronome, transportSize, transportSize, transportTop, barSectionGap);
+        placeRight(metronome, transportSize, transportSize, transportTop, sectionGap);
 
         sessionToggle.setVisible(sessionViewEnabled);
         arrangementToggle.setVisible(sessionViewEnabled);
@@ -740,7 +742,8 @@ public:
             if (lowerPaneHeight <= 0)
                 lowerPaneHeight = getHeight() / 5;
             lowerPaneHeight = juce::jlimit(minimumPaneHeight,
-                                           std::max(minimumPaneHeight, getHeight() - arrangementTop - 150 - toggleStripHeight),
+                                           std::max(minimumPaneHeight, getHeight() - arrangementTop - 150
+                                                                        - toggleStripHeight - timeRulerHeight),
                                            lowerPaneHeight);
             paneH = lowerPaneHeight;
         }
@@ -749,24 +752,29 @@ public:
         // pixels short of it, which read as a card sitting on the window
         // rather than as the foot of the workspace.
         const auto lowerTop = getHeight() - lowerH;
-        // Where the arrangement is covered from: the toggle strip sits in the
-        // band between the lanes and the pane, exactly as it did when the two
-        // were stacked rather than layered.
-        const auto arrangementBottom = lowerTop - 34;
-        // Where the docked columns stop. The clip and device strip is a band
-        // across the whole window rather than a panel that starts where the
-        // browser ends, so the browser is as tall as the arrangement beside it
-        // and nothing is laid out underneath the strip.
-        workspaceBottom = arrangementBottom;
+        // Where the arrangement is covered from. Two bands sit between the
+        // lanes and the pane: the Clip and Devices strip along the bottom, and
+        // the time ruler above it. They move together as the pane is dragged,
+        // so the ruler stays against the foot of the timeline it labels.
+        const auto stripTop = lowerTop - toggleStripHeight;
+        const auto arrangementBottom = stripTop - timeRulerHeight;
+        // The Info View takes the bottom-left corner of the window whenever it
+        // is showing, and the band beside it starts at its right edge rather
+        // than running underneath it. Hidden, the band takes the whole width.
+        const auto infoArea = infoViewArea();
+        const auto infoColumn = !infoArea.isEmpty();
+        lowerBandTop = arrangementBottom;
+        lowerBandLeft = infoColumn ? browserWidth + browserDividerWidth : 0;
+        // Where the browser column stops: above the Info View when there is
+        // one, and at the band otherwise.
+        workspaceBottom = infoColumn ? infoArea.getY() : arrangementBottom;
         layoutControlBar();
         browser.setVisible(browserOpen);
-        const auto infoArea = infoViewArea();
-        // The Info View lives at the foot of the browser column, so it goes
-        // with it. Only the toggle stays behind.
-        infoView.setVisible(infoVisible && browserOpen);
+        // The Info View lives in the browser column, so it goes with it. Only
+        // the toggle stays behind.
+        infoView.setVisible(infoColumn);
         infoView.setBounds(infoArea.withTrimmedTop(25).reduced(8, 5));
-        browser.setBounds(0, browserTop, browserWidth,
-                          std::max(0, (infoVisible ? infoArea.getY() : workspaceBottom) - browserTop));
+        browser.setBounds(0, browserTop, browserWidth, std::max(0, workspaceBottom - browserTop));
         browserToggle.setToggleState(browserOpen, juce::dontSendNotification);
         // The tooltip says what the click will do, not what the button is.
         browserToggle.setTooltip(browserOpen ? "Hide browser" : "Show browser");
@@ -777,35 +785,44 @@ public:
         // foot the pane covers: its main row and its scrollbars ride up to sit
         // above the pane while the lanes behind it stay where they are.
         arrangement.setBottomInset(static_cast<float>(std::max(0, arrangementTop + arrangementH - arrangementBottom)));
-        // The session view has no such inset, so it simply stops at the strip.
+        // The session view has no such inset, so it simply stops at the band.
         sessionView.setBounds(editorX, arrangementTop, editorW,
                               std::max(150, arrangementBottom - arrangementTop));
+        // Placed on the timeline's own lane rectangle and told what that
+        // rectangle is showing, which is the whole of how a time comes to sit
+        // under the bar number for the same bar. Read after the arrangement has
+        // been given its bounds, because the lane's width comes from them.
+        const auto view = arrangement.timelineView();
+        timeRuler.setVisible(!sessionViewOpen && view.width > 1);
+        timeRuler.setBounds(editorX + view.left, lowerBandTop, std::max(1, view.width), timeRulerHeight);
+        timeRuler.setView(view.start, view.span);
         const auto notes = lowerPane == LowerPane::notes;
         const auto audio = lowerPane == LowerPane::audio;
         const auto devices = lowerPane == LowerPane::devices;
         editorToggle.setToggleState(notes || audio, juce::dontSendNotification);
         editorToggle.setButtonText(audio ? "Audio" : "Clip");
         rackToggle.setToggleState(devices, juce::dontSendNotification);
-        // The strip and the pane under it are the window's full width: a clip
-        // editor or a device rack is the thing being worked on, and cutting it
-        // off at the browser's edge cost it two hundred pixels of the waveform
-        // or a device's worth of rack for a column that is not part of it.
-        const auto paneW = getWidth();
-        editorToggle.setBounds(8, arrangementBottom + 6, 52, 24);
-        rackToggle.setBounds(66, arrangementBottom + 6, 72, 24);
+        // The strip and the pane under it run to both client edges, stopping
+        // only at the Info View: a clip editor or a device rack is the thing
+        // being worked on, and cutting it off at the browser's edge cost it two
+        // hundred pixels of the waveform for a column that is not part of it.
+        const auto paneX = lowerBandLeft;
+        const auto paneW = std::max(120, getWidth() - paneX);
+        editorToggle.setBounds(paneX + 8, stripTop + 5, 52, 24);
+        rackToggle.setBounds(paneX + 66, stripTop + 5, 72, 24);
         patternLabel.setVisible(notes || audio);
-        patternLabel.setBounds(148, arrangementBottom + 6, std::max(80, paneW - 500), 24);
+        patternLabel.setBounds(paneX + 148, stripTop + 5, std::max(80, paneW - 500), 24);
         // The scale, zoom and resolution controls belong to the note editor and
         // mean nothing over a waveform, so they follow it rather than the pane.
         scaleHighlight.setVisible(notes && !session.isPatternDrums());
         if (notes && !session.isPatternDrums())
-            scaleHighlight.setBounds(std::max(260, paneW - 328), arrangementBottom + 12, 146, 20);
+            scaleHighlight.setBounds(paneX + std::max(260, paneW - 328), stripTop + 7, 146, 20);
         editorZoomOut.setVisible(notes);
         editorZoomIn.setVisible(notes);
         editorResolution.setVisible(notes);
-        editorZoomOut.setBounds(std::max(414, paneW - 174), arrangementBottom + 12, 25, 20);
-        editorZoomIn.setBounds(std::max(443, paneW - 145), arrangementBottom + 12, 25, 20);
-        editorResolution.setBounds(std::max(510, paneW - 78), arrangementBottom + 12, 70, 20);
+        editorZoomOut.setBounds(paneX + std::max(414, paneW - 174), stripTop + 7, 25, 20);
+        editorZoomIn.setBounds(paneX + std::max(443, paneW - 145), stripTop + 7, 25, 20);
+        editorResolution.setBounds(paneX + std::max(510, paneW - 78), stripTop + 7, 70, 20);
 
         grid.setVisible(notes);
         audioClip.setVisible(audio);
@@ -813,14 +830,17 @@ public:
         // The note editor, the audio editor and the Device View are three faces
         // of one pane: they share its rectangle and exactly one of them is ever
         // visible in it, so the pane is as tall as the thing being worked on.
-        const juce::Rectangle<int> paneBounds {0, lowerTop, paneW, lowerH};
+        const juce::Rectangle<int> paneBounds {paneX, lowerTop, paneW, lowerH};
         grid.setBounds(paneBounds);
         audioClip.setBounds(paneBounds);
         rack.setBounds(paneBounds);
         // Everything in the lower pane is layered over the arrangement, which
         // is a sibling that covers the same ground.
         lowerSplitter.setVisible(lowerPaneVisible());
-        lowerSplitter.setBounds(0, arrangementBottom - 2, paneW, 8);
+        // At the top of the Clip and Devices strip rather than at the top of the
+        // whole band: the handle paints a rule down its middle, and two pixels
+        // higher that rule would be struck through the time ruler ticks.
+        lowerSplitter.setBounds(paneX, stripTop - 2, paneW, 8);
         for (auto* component : std::initializer_list<juce::Component*>{&grid, &audioClip, &rack, &lowerSplitter})
             component->toFront(false);
         browserToggle.toFront(false);
@@ -838,7 +858,7 @@ public:
     void mouseDown(const juce::MouseEvent& event) override
     {
         resizingBrowser = browserOpen && std::abs(event.x - browserWidth) <= 5
-                          && event.y >= browserTop && event.y < workspaceBottom;
+                          && event.y >= browserTop && event.y < browserColumnBottom();
         resizeStartX = event.x;
         resizeStartY = event.y;
         resizeStartBrowserWidth = browserWidth;
@@ -1657,17 +1677,29 @@ private:
              + "   " + juce::String(block * 1000.0 / rate, 1) + " ms";
     }
 
+    // The bottom-left corner of the window. It runs to the client edge rather
+    // than stopping where the browser does, because the clip and device panel
+    // begins to the right of it: the Info View sits beside that panel now,
+    // rather than being buried above it.
     juce::Rectangle<int> infoViewArea() const
     {
         if (!infoVisible || !browserOpen) return {};
-        return {0, std::max(browserTop + 96, workspaceBottom - infoViewHeight), browserWidth, infoViewHeight};
+        const auto top = std::max(browserTop + 96, getHeight() - infoViewHeight);
+        return {0, top, browserWidth, std::max(1, getHeight() - top)};
+    }
+
+    // The foot of the browser's whole column, Info View included. The divider
+    // and the drag that resizes the browser both run the length of it.
+    int browserColumnBottom() const
+    {
+        return infoVisible && browserOpen ? getHeight() : workspaceBottom;
     }
 
     bool isOverSplitter(juce::Point<float> point) const
     {
         return browserOpen && std::abs(point.x - static_cast<float>(browserWidth)) <= 5.0f
             && point.y >= static_cast<float>(browserTop)
-            && point.y < static_cast<float>(workspaceBottom);
+            && point.y < static_cast<float>(browserColumnBottom());
     }
 
     Session& session;
@@ -1692,6 +1724,7 @@ private:
     StopButton stop;
     RecordButton record;
     IconButton browserToggle {"Browser"};
+    TimeRuler timeRuler {session};
     juce::TextButton editorToggle {"Clip"}, rackToggle {"Devices"};
     juce::TextButton sessionToggle {"Session"}, arrangementToggle {"Arrange"};
     juce::TextButton backToArrangement;
@@ -1708,10 +1741,14 @@ private:
     // depends on the display and cannot be known at construction.
     int browserWidth = 244, lowerPaneHeight = 0;
     int resizeStartX = 0, resizeStartY = 0, resizeStartBrowserWidth = 244;
-    // The foot of the docked columns, which is the top of the clip and device
-    // strip. Written by resized() and read by paint and by the hit tests, so
-    // the browser, its divider and the Info View all stop in the same place.
-    int workspaceBottom = 0;
+    // Three results of the layout, written by resized() and read by paint and
+    // by the hit tests so that the panels, the ground under them and the
+    // pointer all agree about where one region ends and the next begins.
+    // Where the browser column stops; the top of the band under the
+    // arrangement, which is the time ruler and the Clip and Devices strip; and
+    // that band's left edge, which is the Info View's right edge when the Info
+    // View is showing and the client edge when it is not.
+    int workspaceBottom = 0, lowerBandTop = 0, lowerBandLeft = 0;
     int resizeStartLowerPaneHeight = 0;
     // The control bar's own grid. One row of controls on one band: every
     // control shares a vertical centre, and the three gaps below are the whole
@@ -1727,10 +1764,11 @@ private:
     // of the bar off from the next. The sections used to be a group gap apart
     // and the rule between them did all the separating on its own, which put
     // the tempo hard against the browser toggle and the transport hard against
-    // the tempo.
-    static constexpr int barSectionGap = 30;
+    // the tempo. This is the widest it opens to; it closes back towards
+    // barGroupGap as the window narrows - see layoutControlBar.
+    static constexpr int barSectionGap = 44;
     static constexpr int barGroupGap = 18;
-    static constexpr int barFieldGap = 8;
+    static constexpr int barFieldGap = 18;
     static constexpr int barTransportGap = 3;
     static constexpr int barEdgeMargin = 12;
     static constexpr int barDividerTop = 18;
@@ -1759,8 +1797,11 @@ private:
     static constexpr int minimumPaneHeight = 112;
     static constexpr int infoViewHeight = 132;
     // Room under the arrangement for the Clip and Devices toggles, which stay
-    // put whether or not the pane they open is showing.
-    static constexpr int toggleStripHeight = 46;
+    // put whether or not the pane they open is showing, and above them for the
+    // time ruler. The two are one band: the arrangement stops at the top of it
+    // and the pane, when it is open, slides out from under the bottom.
+    static constexpr int toggleStripHeight = 34;
+    static constexpr int timeRulerHeight = TimeRuler::standardHeight;
     // The clip pane and the Device View are two independent panels that happen
     // to stack in the same strip, and each answers to one thing: this says
     // which clip editor the clip pane is showing, and rackOpen whether the

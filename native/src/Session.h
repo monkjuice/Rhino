@@ -701,6 +701,14 @@ public:
     // How near a transient a new marker has to land to be pulled onto it.
     static constexpr double warpMarkerSnapSeconds = 0.05;
     ClipWarp clipWarp(te::EditItemID) const;
+    // How fast a clip reads its source, in source seconds per played second.
+    // For an unwarped clip that is the engine's own speed ratio; for a warped
+    // one the engine leaves that at one and derives the speed from the clip's
+    // tempo against the song's, so anything drawing the clip's waveform has to
+    // ask here rather than reading getSpeedRatio and drawing the wrong part of
+    // the file. Cheap: it reads two numbers off the clip and never builds a
+    // warp manager, which is why the arrangement can call it per clip per sync.
+    double clipPlaybackSpeed(const te::AudioClipBase&) const;
     juce::Result setClipFollowsTempo(te::EditItemID, bool);
     juce::Result setClipWarpMode(te::EditItemID, WarpMode);
     // The clip's own tempo. Changing it rescales the window the clip shows

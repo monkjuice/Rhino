@@ -316,12 +316,27 @@ and `*2` are for. `rescaleWarpedClip` keeps the clip's window into the source at
 the same fraction of its content, so a clip that was already trimmed stays
 trimmed by the same amount.
 
+**A warped clip's speed is not its speed ratio.** The engine leaves
+`getSpeedRatio` at one for an auto-tempo clip and derives the playback speed
+from the clip's own tempo against the song's, so anything drawing that clip's
+waveform has to ask `Session::clipPlaybackSpeed` instead. Reading the ratio
+draws the first half of the file across the whole of a clip stretched to twice
+its length, and silence after it. Repitch is the exception and needs no special
+case: its speed *is* the ratio, because that is how it is expressed.
+
 **The marker list always spans the whole file.** The engine seeds a marker at
 each end the first time the manager is asked for, and `removeMarker` straightens
 an end marker rather than deleting it, so the map is never partial. Between two
 markers the mapping is linear - which is what lets the panel draw the warped
 waveform with one `drawChannel` per segment rather than resampling a thumbnail
 column by column.
+
+The arrangement draws a warped clip's waveform at that speed, which is exact
+while the warp is a single ratio. Once markers have been dragged the mapping is
+piecewise rather than linear, and the timeline still draws it linearly - so a
+clip whose markers have been pulled about is up to the drag distance out,
+locally, in the arrangement. The clip editor draws it exactly, segment by
+segment, which is where that work is done.
 
 What is not there: Live's per-mode parameters (Beats' Preserve and Transient
 Loop Mode, Tones' and Texture's Grain Size, Complex Pro's Formants), its

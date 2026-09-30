@@ -62,6 +62,11 @@ void Arrangement::sync()
                 auto& waveform = waveforms[key];
                 if (!waveform) waveform = std::make_unique<Waveform>(*this, file);
                 view.waveform = waveform.get();
+                // Not getSpeedRatio: a warped clip leaves that at one and takes
+                // its speed from its own tempo against the song's, so reading
+                // the ratio would draw the first half of a stretched file
+                // across the whole clip and silence after it.
+                view.speed = session.clipPlaybackSpeed(*audio);
                 view.sourceDuration = audio->getSourceLength().inSeconds() / std::max(0.0001, view.speed);
             }
             else if (auto* midi = dynamic_cast<te::MidiClip*>(clip))

@@ -103,6 +103,24 @@
     require(std::abs(clipLength() - 4.0) < 0.05, "Halving the tempo stretches a warped clip to twice its length");
 
     {
+        // The arrangement has to read the clip at the speed it actually plays
+        // at rather than at the speed ratio, which the engine leaves at one for
+        // a warped clip. Reading the ratio draws the first half of the file
+        // across the whole of a clip stretched to twice its length, and silence
+        // after it - so this is checked where the timeline gets its answer.
+        Arrangement warpView(warp);
+        warpView.setSize(1000, 246);
+        warpView.sync();
+        warpView.fit();
+        require(warpView.clips.size() == 1, "The stretched clip is in the arrangement");
+        const auto& drawn = warpView.clips.front();
+        require(std::abs(drawn.speed - 0.5) < 0.001,
+                "and is read at half speed, which is the song's tempo over the clip's");
+        require(std::abs(drawn.sourceDuration - 4.0) < 0.05,
+                "so the whole file covers the four seconds the clip now takes");
+    }
+
+    {
         scenario("clip warp: a stretched clip keeps its pitch");
         juce::TemporaryFile stretched(".wav");
         renderWarpClip(stretched.getFile());

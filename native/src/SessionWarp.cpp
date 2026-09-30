@@ -109,6 +109,15 @@ juce::String Session::warpModeBlurb(WarpMode mode)
     return {};
 }
 
+double Session::clipPlaybackSpeed(const te::AudioClipBase& clip) const
+{
+    if (!storedWarpOn(clip) || storedMode(clip) == WarpMode::repitch)
+        return std::max(0.0001, clip.getSpeedRatio());
+    const auto clipBpm = bpmOf(clip);
+    if (!(clipBpm > 0.0)) return std::max(0.0001, clip.getSpeedRatio());
+    return std::max(0.0001, tempo() / clipBpm);
+}
+
 Session::ClipWarp Session::clipWarp(te::EditItemID id) const
 {
     ClipWarp warp;

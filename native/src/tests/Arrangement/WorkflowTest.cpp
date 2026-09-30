@@ -11,6 +11,7 @@
 #include "../../AudioClipPanel.h"
 #include "../../SessionView.h"
 #include "../../Playhead.h"
+#include <algorithm>
 #include <functional>
 #include <stdexcept>
 
@@ -62,26 +63,16 @@ int runArrangementTest()
             std::fprintf(stderr, "Arrangement scenario: %s\n", name);
             std::fflush(stderr);
         };
-        scenario("interface font");
-        {
-            // The shell font is whatever Windows hands over; the interface is
-            // drawn with the face the app ships, so this checks the theme is
-            // actually serving it rather than silently falling back.
-            Theme theme;
-            const auto plain = theme.getTypefaceForFont(juce::Font(juce::FontOptions(12.0f)));
-            const auto bold = theme.getTypefaceForFont(juce::Font(juce::FontOptions(12.0f, juce::Font::bold)));
-            require(plain != nullptr && plain->getName().containsIgnoreCase("Inter"),
-                    "Plain text is drawn with the bundled face");
-            require(bold != nullptr && bold->getName().containsIgnoreCase("Inter"),
-                    "Bold text is drawn with the bundled face");
-            require(plain != bold, "Bold is a cut of its own rather than a synthesised weight");
-        }
         scenario("transport readout");
        #include "scenarios/TransportReadout.inc"
         scenario("control bar fields");
        #include "scenarios/ControlBarFields.inc"
         scenario("browser drops");
        #include "scenarios/BrowserDrops.inc"
+        // After the arrangement exists, because the last thing it checks is a
+        // track card's own name.
+        scenario("interface fonts");
+       #include "scenarios/InterfaceFonts.inc"
         scenario("library preview");
        #include "scenarios/LibraryPreview.inc"
         scenario("rendering");

@@ -1459,7 +1459,6 @@ private:
         if (displayTimeSignature) parts.add(juce::String(signature.numerator) + "/" + juce::String(signature.denominator));
         const auto text = parts.joinIntoString("     ");
         position.setDisplayText(text);
-        std::fprintf(stderr, "RHINOPOS [%s] vis=%d w=%d\n", text.toRawUTF8(), (int) position.isVisible(), position.getWidth());
     }
 
     // The second line of the display. The clock follows the playhead at the

@@ -80,14 +80,27 @@ public:
     // x-height, flat terminals, sturdy stems - stays legible where the shell
     // font goes soft. Glyphs the Latin cut does not carry, such as the
     // transport symbols, still reach the system fallback.
+    // Which cut a font asks for, read off its style name rather than through
+    // juce::Font::isBold(). That looks for "Bold" as a *whole word*, and
+    // "SemiBold" is one word - so it answers false for the style uiFontBold
+    // sets, and this handed back the Regular cut for every bold label in the
+    // interface. Nothing looked obviously wrong, because a heading in Regular
+    // is still legible; it is why the track card's name was struck twice to
+    // get its weight back, and why that one string then looked soft.
+    static bool wantsHeavierCut(const juce::Font& font)
+    {
+        return font.getTypefaceStyle().containsIgnoreCase("bold");
+    }
+
     juce::Typeface::Ptr getTypefaceForFont(const juce::Font& font) override
     {
-        auto& cached = font.isBold() ? semiBold : regular;
+        const auto heavy = wantsHeavierCut(font);
+        auto& cached = heavy ? semiBold : regular;
         if (cached == nullptr)
             cached = juce::Typeface::createSystemTypefaceFor(
-                font.isBold() ? BinaryData::InterSemiBold_ttf : BinaryData::InterRegular_ttf,
-                font.isBold() ? static_cast<size_t>(BinaryData::InterSemiBold_ttfSize)
-                              : static_cast<size_t>(BinaryData::InterRegular_ttfSize));
+                heavy ? BinaryData::InterSemiBold_ttf : BinaryData::InterRegular_ttf,
+                heavy ? static_cast<size_t>(BinaryData::InterSemiBold_ttfSize)
+                      : static_cast<size_t>(BinaryData::InterRegular_ttfSize));
         return cached != nullptr ? cached : juce::LookAndFeel_V4::getTypefaceForFont(font);
     }
 

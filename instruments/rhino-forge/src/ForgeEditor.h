@@ -101,6 +101,13 @@ private:
     // three-second window ENV 1 wants is a sliver, and switching to it would
     // hand you a display you had to re-zoom every time.
     std::array<int, envCount> envelopeZoom = ui::envelopeZoomDefaults();
+    // Which corner of which envelope the hand is moving. A corner writes the
+    // same host parameters the four knobs are attached to, so graph, knobs,
+    // automation and presets have one source of truth.
+    ui::EnvelopeNode envelopeDragNode = ui::EnvelopeNode::none;
+    int envelopeDragBank = -1;
+    juce::Point<int> envelopeDragStart;
+    bool envelopeDragMoved = false;
     // Wheel travel not yet spent on a zoom step. One notch of a mouse wheel
     // measures about 0.2 here, so the threshold sits below that and a notch is
     // reliably a step — at 0.25 the first notch of a turn did nothing, which
@@ -408,6 +415,11 @@ private:
     const ui::Module* envelopeModule() const;
     juce::Rectangle<int> envelopeDisplayBounds() const;
     void setEnvelopeZoom(int zoom);
+    ui::EnvelopeShape envelopeShapeFor(int env) const;
+    ui::EnvelopeNode envelopeNodeAt(juce::Point<int> at) const;
+    void beginEnvelopeNodeDrag(ui::EnvelopeNode node);
+    void editEnvelopeNode(juce::Point<int> at);
+    void endEnvelopeNodeDrag();
     bool keyStateChanged(bool isKeyDown) override;
     bool keyPressed(const juce::KeyPress&) override;
     void shiftComputerKeyOctave(int delta);

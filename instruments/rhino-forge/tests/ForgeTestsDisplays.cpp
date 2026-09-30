@@ -678,6 +678,146 @@ void envelopeDisplaySuite()
                     fault("a zoom button is big enough to hit");
             }
     }
+
+    // A corner turns back into the knob values that put it there. The middle
+    // one is deliberately two-dimensional: decay is its time and sustain is
+    // its level, so all four ADSR values are reachable through three corners.
+    {
+        const auto shape = ui::envelopeShape(box, 0.2f, 0.4f, 0.5f, 0.6f);
+        require(ui::envelopeNodeAt(shape, {shape.attackX, shape.peakY})
+                    == ui::EnvelopeNode::attack,
+                "the attack corner can be picked up where it is drawn");
+        require(ui::envelopeNodeAt(shape, {shape.decayX, shape.sustainY})
+                    == ui::EnvelopeNode::decaySustain,
+                "the decay and sustain corner can be picked up where it is drawn");
+        require(ui::envelopeNodeAt(shape, {shape.endX, shape.floorY})
+                    == ui::EnvelopeNode::release,
+                "the release corner can be picked up where it is drawn");
+
+        const ui::EnvelopeValues initial {0.2f, 0.4f, 0.5f, 0.6f};
+        const auto attack = ui::envelopeValuesForNodeDrag(
+            shape, initial, ui::EnvelopeNode::attack, {shape.xFor(0.3f), shape.peakY});
+        requireClose(attack.attack, 0.3f, 0.001f, "moving the peak sets attack from the time axis");
+        requireClose(attack.decay, initial.decay, 0.001f, "moving attack leaves decay alone");
+
+        const auto middle = ui::envelopeValuesForNodeDrag(
+            shape, initial, ui::EnvelopeNode::decaySustain,
+            {shape.xFor(0.8f), shape.floorY - shape.box.getHeight() * 0.25f});
+        requireClose(middle.decay, 0.6f, 0.001f,
+                     "moving the middle corner sets decay after attack");
+        requireClose(middle.sustain, 0.25f, 0.001f,
+                     "moving the middle corner vertically sets sustain");
+
+        const auto release = ui::envelopeValuesForNodeDrag(
+            shape, initial, ui::EnvelopeNode::release, {shape.xFor(1.5f), shape.floorY});
+        requireClose(release.release, 0.9f, 0.001f,
+                     "moving the tail sets release after attack and decay");
+    }
+
+    // Exercise the editor gesture as well as the pure geometry. The graph
+    // writes the host parameter, and the existing attachment must carry that
+    // same value straight back onto the corresponding knob.
+    {
+        auto processor = std::make_unique<rhino::forge::Processor>();
+        setValue(*processor, "env1Attack", 0.2f);
+        setValue(*processor, "env1Decay", 0.4f);
+        setValue(*processor, "env1Sustain", 0.5f);
+        setValue(*processor, "env1Release", 0.6f);
+        setValue(*processor, "env2Attack", 0.2f);
+        std::unique_ptr<juce::AudioProcessorEditor> editor(processor->createEditor());
+
+        const ui::Module* envelope = nullptr;
+        for (const auto& module : ui::modules())
+            if (module.display == ui::Display::envelope) envelope = &module;
+        require(envelope != nullptr, "the envelope module exists for direct editing");
+        if (envelope == nullptr) return;
+
+        const auto moduleArea = ui::moduleBounds(editor->getLocalBounds(), *envelope);
+        const auto display = ui::displayBounds(moduleArea, *envelope);
+        const auto curve = ui::envelopeCurveBounds(display);
+        const auto shape = [&]
+        {
+            return ui::envelopeShape(curve, value(*processor, "env1Attack"),
+                                     value(*processor, "env1Decay"),
+                                     value(*processor, "env1Sustain"),
+                                     value(*processor, "env1Release"));
+        };
+        const auto mouse = juce::Desktop::getInstance().getMainMouseSource();
+        const auto when = juce::Time::getCurrentTime();
+        const auto eventAt = [&] (juce::Point<int> at, bool dragged)
+        {
+            return juce::MouseEvent(mouse, at.toFloat(), juce::ModifierKeys(),
+                                    1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+                                    editor.get(), editor.get(), when, at.toFloat(), when, 1, dragged);
+        };
+        const auto nearAttack = ui::envelopeNodePosition(shape(), ui::EnvelopeNode::attack)
+                                    .roundToInt().translated(5, 0);
+        editor->mouseDown(eventAt(nearAttack, false));
+        editor->mouseUp(eventAt(nearAttack, false));
+        requireClose(value(*processor, "env1Attack"), 0.2f, 0.001f,
+                     "clicking a corner without dragging does not nudge it");
+        const auto drag = [&] (ui::EnvelopeNode node, juce::Point<float> to)
+        {
+            const auto from = ui::envelopeNodePosition(shape(), node).roundToInt();
+            const auto target = to.roundToInt();
+            editor->mouseDown(eventAt(from, false));
+            editor->mouseDrag(eventAt(target, true));
+            editor->mouseUp(eventAt(target, true));
+        };
+
+        drag(ui::EnvelopeNode::attack, {shape().xFor(0.5f), shape().peakY});
+        requireClose(value(*processor, "env1Attack"), 0.5f, 0.02f,
+                     "dragging the peak writes ENV 1 attack");
+        drag(ui::EnvelopeNode::decaySustain,
+             {shape().xFor(1.2f), shape().floorY - shape().box.getHeight() * 0.25f});
+        requireClose(value(*processor, "env1Decay"), 0.7f, 0.02f,
+                     "dragging the middle corner writes ENV 1 decay");
+        requireClose(value(*processor, "env1Sustain"), 0.25f, 0.02f,
+                     "dragging the middle corner writes ENV 1 sustain");
+        drag(ui::EnvelopeNode::release, {shape().xFor(2.4f), shape().floorY});
+        requireClose(value(*processor, "env1Release"), 1.2f, 0.02f,
+                     "dragging the tail writes ENV 1 release");
+
+        std::vector<ui::ModKnob*> knobs;
+        for (auto* child : editor->getChildren())
+            if (auto* knob = dynamic_cast<ui::ModKnob*>(child))
+                if (knob->isVisible() && moduleArea.contains(knob->getBounds().getCentre()))
+                    knobs.push_back(knob);
+        std::sort(knobs.begin(), knobs.end(), [] (const auto* a, const auto* b)
+        {
+            return a->getX() < b->getX();
+        });
+        require(knobs.size() == 4, "the envelope bank shows its four attached knobs");
+        if (knobs.size() == 4)
+        {
+            requireClose(static_cast<float>(knobs[0]->getValue()), value(*processor, "env1Attack"), 0.001f,
+                         "the attack knob follows a peak drag");
+            requireClose(static_cast<float>(knobs[1]->getValue()), value(*processor, "env1Decay"), 0.001f,
+                         "the decay knob follows a middle-corner drag");
+            requireClose(static_cast<float>(knobs[2]->getValue()), value(*processor, "env1Sustain"), 0.001f,
+                         "the sustain knob follows a middle-corner drag");
+            requireClose(static_cast<float>(knobs[3]->getValue()), value(*processor, "env1Release"), 0.001f,
+                         "the release knob follows a tail drag");
+        }
+
+        // Bank selection is view state, and a gesture must follow it rather
+        // than continuing to write ENV 1 just because that was the opening bank.
+        for (auto* child : editor->getChildren())
+            if (auto* card = dynamic_cast<ui::BankCard*>(child))
+                if (card->getTooltip() == "Show ENV 2" && card->onClick) card->onClick();
+        const auto env2Shape = ui::envelopeShape(
+            curve, value(*processor, "env2Attack"), value(*processor, "env2Decay"),
+            value(*processor, "env2Sustain"), value(*processor, "env2Release"));
+        const auto from = ui::envelopeNodePosition(env2Shape, ui::EnvelopeNode::attack).roundToInt();
+        const auto target = juce::Point<float>(env2Shape.xFor(0.8f), env2Shape.peakY).roundToInt();
+        editor->mouseDown(eventAt(from, false));
+        editor->mouseDrag(eventAt(target, true));
+        editor->mouseUp(eventAt(target, true));
+        requireClose(value(*processor, "env2Attack"), 0.8f, 0.02f,
+                     "the same gesture follows the envelope bank showing");
+        requireClose(value(*processor, "env1Attack"), 0.5f, 0.02f,
+                     "editing ENV 2 leaves ENV 1 alone");
+    }
 }
 
 void lfoFooterSuite()

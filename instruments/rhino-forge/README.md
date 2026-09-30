@@ -18,6 +18,11 @@ the same key. An LFO set to TRIG or ENV runs inside each voice too, so a new not
 starts its own copy and leaves the notes already sounding alone; one set to OFF
 is a single free-running cycle shared by every voice and by the panel.
 
+Every envelope can also be shaped in its display. Drag the peak sideways for
+ATTACK, the middle corner sideways and vertically for DECAY and SUSTAIN, and the
+tail sideways for RELEASE. Those gestures write the same host parameters as the
+four knobs, so the knobs, automation and the drawn shape stay together.
+
 The panel is two rows of modules, with a taller signal row, over a
 seventy-six key keyboard, and it is wider than it is tall at every size it
 allows. The top row is the signal path read left to right — sub and noise, the

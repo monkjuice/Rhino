@@ -27,6 +27,11 @@ void Editor::mouseMove(const juce::MouseEvent& event)
 {
     if (event.eventComponent != this) return;
     const auto at = event.getEventRelativeTo(this).getPosition();
+    if (envelopeNodeAt(at) != ui::EnvelopeNode::none)
+    {
+        setMouseCursor(juce::MouseCursor::PointingHandCursor);
+        return;
+    }
     const auto display = lfoDisplayBounds();
     const auto column = ui::lfoColumnBounds(display);
     const auto row = ui::lfoRowBounds(display);
@@ -49,6 +54,16 @@ void Editor::mouseDown(const juce::MouseEvent& event)
     if (event.eventComponent == this)
     {
         const auto at = event.getEventRelativeTo(this).getPosition();
+        if (!event.mods.isPopupMenu() && event.getNumberOfClicks() < 2)
+        {
+            const auto node = envelopeNodeAt(at);
+            if (node != ui::EnvelopeNode::none)
+            {
+                envelopeDragStart = at;
+                beginEnvelopeNodeDrag(node);
+                return;
+            }
+        }
         const auto display = lfoDisplayBounds();
         if (display.contains(at))
         {
@@ -339,6 +354,14 @@ void Editor::mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWhee
 
 void Editor::mouseDrag(const juce::MouseEvent& event)
 {
+    if (envelopeDragNode != ui::EnvelopeNode::none)
+    {
+        const auto at = event.getEventRelativeTo(this).getPosition();
+        if (!envelopeDragMoved && at.getDistanceFrom(envelopeDragStart) < 2.0f) return;
+        envelopeDragMoved = true;
+        editEnvelopeNode(at);
+        return;
+    }
     if (lfoGridDragAxis >= 0)
     {
         const auto at = event.getEventRelativeTo(this).getPosition();
@@ -394,6 +417,13 @@ void Editor::mouseDrag(const juce::MouseEvent& event)
 
 void Editor::mouseUp(const juce::MouseEvent& event)
 {
+    if (envelopeDragNode != ui::EnvelopeNode::none)
+    {
+        if (envelopeDragMoved)
+            editEnvelopeNode(event.getEventRelativeTo(this).getPosition());
+        endEnvelopeNodeDrag();
+        return;
+    }
     if (lfoGridDragAxis >= 0)
     {
         lfoGridDragAxis = lfoGridDragBank = -1;

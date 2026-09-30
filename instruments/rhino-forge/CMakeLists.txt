@@ -128,6 +128,7 @@ set(forge_sources
     src/ForgeEditor.cpp
     src/ForgeEditor.h
     src/ForgeEditorInternal.h
+    src/ForgeEditorEnvelope.cpp
     src/ForgeEditorFilter.cpp
     src/ForgeEditorFx.cpp
     src/ForgeEditorFxView.cpp

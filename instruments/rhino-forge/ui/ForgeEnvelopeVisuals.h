@@ -116,6 +116,88 @@ inline EnvelopeShape envelopeShape(juce::Rectangle<float> box, float attack, flo
     return shape;
 }
 
+// The three movable corners of an ADSR shape. The middle corner carries two
+// readings: its horizontal position is DECAY and its height is SUSTAIN. That is
+// how four knobs describe three corners without inventing a sustain duration
+// that the voice does not have.
+enum class EnvelopeNode { none, attack, decaySustain, release };
+
+inline juce::Point<float> envelopeNodePosition(const EnvelopeShape& shape, EnvelopeNode node)
+{
+    switch (node)
+    {
+        case EnvelopeNode::attack:       return {shape.attackX, shape.peakY};
+        case EnvelopeNode::decaySustain: return {shape.decayX, shape.sustainY};
+        case EnvelopeNode::release:      return {shape.endX, shape.floorY};
+        case EnvelopeNode::none:         break;
+    }
+    return {};
+}
+
+// The nearest corner wins when their hit circles overlap. Short envelopes put
+// several corners close together, and nearest is what keeps each one reachable
+// after zooming in rather than letting the first corner in the list mask all
+// the others.
+inline EnvelopeNode envelopeNodeAt(const EnvelopeShape& shape, juce::Point<float> at,
+                                   float radius = 9.0f)
+{
+    auto found = EnvelopeNode::none;
+    auto nearest = radius;
+    for (const auto node : {EnvelopeNode::attack, EnvelopeNode::decaySustain,
+                            EnvelopeNode::release})
+    {
+        const auto position = envelopeNodePosition(shape, node);
+        // A corner beyond the chosen time window is clipped by the painter and
+        // cannot be picked through the frame. Zooming out brings it back.
+        if (!shape.box.expanded(radius).contains(position)) continue;
+        const auto distance = position.getDistanceFrom(at);
+        if (distance <= nearest)
+        {
+            nearest = distance;
+            found = node;
+        }
+    }
+    return found;
+}
+
+struct EnvelopeValues
+{
+    float attack = 0.0f, decay = 0.0f, sustain = 0.0f, release = 0.0f;
+};
+
+// Turn a corner's panel position back into the same plain values the four
+// knobs carry. Parameter ranges are applied by the caller: the axis answers
+// only for geometry, while the parameters remain the authority on legal
+// values and host normalisation.
+inline EnvelopeValues envelopeValuesForNodeDrag(const EnvelopeShape& shape,
+                                                 EnvelopeValues values,
+                                                 EnvelopeNode node,
+                                                 juce::Point<float> at)
+{
+    const auto seconds = juce::jmap(
+        juce::jlimit(shape.box.getX(), shape.box.getRight(), at.x),
+        shape.box.getX(), shape.box.getRight(), 0.0f, shape.axis.seconds);
+    const auto level = juce::jlimit(
+        0.0f, 1.0f, (shape.floorY - at.y) / juce::jmax(1.0f, shape.box.getHeight()));
+
+    switch (node)
+    {
+        case EnvelopeNode::attack:
+            values.attack = seconds;
+            break;
+        case EnvelopeNode::decaySustain:
+            values.decay = juce::jmax(0.0f, seconds - values.attack);
+            values.sustain = level;
+            break;
+        case EnvelopeNode::release:
+            values.release = juce::jmax(0.0f, seconds - values.attack - values.decay);
+            break;
+        case EnvelopeNode::none:
+            break;
+    }
+    return values;
+}
+
 // A time written the way the knobs write theirs, so "250 ms" on the axis and
 // "250 ms" under a knob are the same number in the same words.
 inline juce::String envelopeTimeText(float seconds)
@@ -148,6 +230,11 @@ inline juce::Rectangle<int> envelopeZoomStrip(juce::Rectangle<int> display)
 inline juce::Rectangle<int> envelopePlotBounds(juce::Rectangle<int> display)
 {
     return display.withTrimmedRight(envelopeZoomStripWidth + envelopeZoomStripGap);
+}
+
+inline juce::Rectangle<float> envelopeCurveBounds(juce::Rectangle<int> display)
+{
+    return envelopePlotBounds(display).toFloat().reduced(0.0f, 9.0f);
 }
 
 // Plus magnifies, as it does on a map or in a page view: it shortens the window
@@ -238,7 +325,7 @@ inline void drawEnvelope(juce::Graphics& g, juce::Rectangle<int> area, float att
     juce::Graphics::ScopedSaveState clip(g);
     g.reduceClipRegion(displayClip(plot));
 
-    const auto box = plot.toFloat().reduced(0.0f, 9.0f);
+    const auto box = envelopeCurveBounds(area);
     const auto shape = envelopeShape(box, attack, decay, sustain, release, zoom);
     drawEnvelopeGrid(g, box, shape.axis);
 
@@ -264,11 +351,11 @@ inline void drawEnvelope(juce::Graphics& g, juce::Rectangle<int> area, float att
 
     // A handle on every corner, so the three stages stay tellable apart where
     // one of them is short enough to leave almost no segment to see.
-    for (const auto& node : {juce::Point<float>(shape.attackX, shape.peakY),
-                             juce::Point<float>(shape.decayX, shape.sustainY),
-                             juce::Point<float>(shape.endX, shape.floorY)})
+    for (const auto node : {EnvelopeNode::attack, EnvelopeNode::decaySustain,
+                            EnvelopeNode::release})
     {
-        const auto dot = juce::Rectangle<float>(6.5f, 6.5f).withCentre(node);
+        const auto dot = juce::Rectangle<float>(6.5f, 6.5f)
+                             .withCentre(envelopeNodePosition(shape, node));
         g.setColour(panel.withAlpha(alpha));
         g.fillEllipse(dot);
         g.setColour(colour.withAlpha(alpha));

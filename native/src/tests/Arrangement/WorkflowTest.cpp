@@ -94,6 +94,10 @@ int runArrangementTest()
        #include "scenarios/AudioClipMixing.inc"
         scenario("audio channels");
        #include "scenarios/AudioChannels.inc"
+        // Renders, so it has to come before "gestures and persistence" closes
+        // the audio device.
+        scenario("clip warp");
+       #include "scenarios/ClipWarp.inc"
         scenario("clip merge");
        #include "scenarios/ClipMerge.inc"
         scenario("region clipboard");

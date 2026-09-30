@@ -718,6 +718,28 @@ void Arrangement::showClipMenu(te::EditItemID id)
     // Ticked from the clip the menu was opened on, which is the one under the
     // pointer whether or not the rest of the selection agrees with it.
     menu.addItem(8, "Reverse       R", session.audioClipMix(id).valid, session.audioClipMix(id).reversed);
+    // Warping is where a person looks for it in Live: on the clip, not only in
+    // the editor below. The mode is here too, because choosing one is the next
+    // thing anyone does after switching warping on.
+    if (const auto warp = session.clipWarp(id); warp.valid)
+    {
+        menu.addSeparator();
+        menu.addItem(10, "Warp", true, warp.followsTempo);
+        juce::PopupMenu modes;
+        for (int i = 0; i < Session::warpModeCount; ++i)
+        {
+            const auto mode = static_cast<Session::WarpMode>(i);
+            juce::PopupMenu::Item item {Session::warpModeName(mode)};
+            item.itemID = 20 + i;
+            item.isTicked = warp.mode == mode;
+            item.isEnabled = warp.followsTempo;
+            item.shortcutKeyDescription = Session::warpModeBlurb(mode);
+            modes.addItem(std::move(item));
+        }
+        menu.addSubMenu("Warp mode: " + Session::warpModeName(warp.mode), modes, warp.followsTempo);
+        menu.addItem(11, "Half the clip tempo   :2", warp.clipBpm > 0.0);
+        menu.addItem(12, "Double the clip tempo   *2", warp.clipBpm > 0.0);
+    }
     menu.addSeparator();
     menu.addItem(3, "Delete");
     menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this)
@@ -741,6 +763,32 @@ void Arrangement::showClipMenu(te::EditItemID id)
             if (result == 7)
             {
                 safe->splitClipsAt({id}, safe->insertPointTime());
+                return;
+            }
+            // Warping is about the clip the menu was opened on, the way
+            // Reverse is about a selection - a warp is a property of one piece
+            // of audio and one tempo, and applying it to whatever else happens
+            // to be selected is not what the click asked for.
+            if (result >= 10 && result <= 12)
+            {
+                const auto warp = safe->session.clipWarp(id);
+                const auto outcome = result == 10 ? safe->session.setClipFollowsTempo(id, !warp.followsTempo)
+                                   : result == 11 ? safe->session.scaleClipBpm(id, 0.5)
+                                                  : safe->session.scaleClipBpm(id, 2.0);
+                if (safe->status && outcome.failed()) safe->status(outcome.getErrorMessage());
+                else if (safe->status && result == 10)
+                    safe->status(warp.followsTempo ? "This clip plays at its own speed again"
+                                                   : "This clip follows the song's tempo");
+                return;
+            }
+            if (result >= 20 && result < 20 + Session::warpModeCount)
+            {
+                const auto mode = static_cast<Session::WarpMode>(result - 20);
+                const auto outcome = safe->session.setClipWarpMode(id, mode);
+                if (safe->status)
+                    safe->status(outcome.failed() ? outcome.getErrorMessage()
+                                                  : "Warp mode: " + Session::warpModeName(mode)
+                                                        + " - " + Session::warpModeBlurb(mode));
                 return;
             }
             // The commands act on a selection, so the clip the menu was opened

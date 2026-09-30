@@ -57,6 +57,7 @@ target_sources(RhinoNative PRIVATE
     src/SessionMixer.cpp
     src/SessionClips.cpp
     src/SessionAudioClips.cpp
+    src/SessionWarp.cpp
     src/SessionRegion.cpp
     src/SessionMerge.cpp
     src/SessionSamples.cpp
@@ -88,6 +89,7 @@ target_sources(RhinoNative PRIVATE
     src/SessionViewGestures.cpp
     src/BrowserPanel.cpp
     src/AudioClipPanel.cpp
+    src/AudioClipWarp.cpp
     src/DeviceEditorPanel.cpp
     src/DeviceEditorPanelAutoTune.cpp
     src/DeviceEditorPanelEq.cpp
@@ -116,7 +118,8 @@ target_compile_definitions(RhinoNative PRIVATE
     JUCE_PLUGINHOST_VST3=1 JUCE_PLUGINHOST_AU=0
     RHINO_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
     JUCE_MODAL_LOOPS_PERMITTED=0
-    TRACKTION_ENABLE_TIMESTRETCH_SOUNDTOUCH=1)
+    TRACKTION_ENABLE_TIMESTRETCH_SOUNDTOUCH=1
+    TRACKTION_ENABLE_TIMESTRETCH_SIGNALSMITH=1)
 target_link_libraries(RhinoNative PRIVATE
     RhinoNativeAssets
     RhinoCore

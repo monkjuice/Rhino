@@ -257,6 +257,78 @@ Mono / Stereo / Precise modes, and its Attack/Release being per-band. Each of
 the other three carriers is a way of making a carrier when you have not got
 one, and Rhino has a track full of synths.
 
+## Time warp
+
+Making an audio clip follow the song's tempo instead of playing at the speed it
+was recorded at. `SessionWarp.cpp` in the model, `AudioClipWarp.cpp` in the UI,
+and `ClipWarp.inc` for the tests. The vocabulary is Live's, because that is the
+one anyone arriving already has.
+
+The engine had all three moving parts and Rhino had none of them wired up:
+`AudioClipBase::setAutoTempo` makes a clip beat-based, `setTimeStretchMode`
+picks the algorithm, and `WarpTimeManager` holds the markers and the detected
+transients. What Rhino adds is the vocabulary, a clip tempo that rescales the
+clip rather than quietly changing what it means, and marker edits that are
+single undo steps.
+
+**The switch and the mode are Rhino's own properties on the clip**
+(`rhinoWarpOn`, `rhinoWarpMode`), and the engine's state is derived from them
+rather than read back out of it. Four of the five modes are auto-tempo with a
+different stretcher, but Repitch is not stretching at all, and the engine
+refuses to leave its stretcher disabled while auto-tempo is on -
+`getActualTimeStretchMode` substitutes the default mode. So a warped Repitch
+clip is expressed as a speed ratio instead, recomputed by
+`Session::updateRepitchedClips` whenever the tempo moves. That is what a record
+player does, and what Live's Re-Pitch is.
+
+The five modes, and the stretcher each one actually is. Every one is a
+different algorithm rather than a label over the same code - offering a choice
+that does not change what is heard would be worse than offering none:
+
+| Mode | For | Engine |
+| --- | --- | --- |
+| Repitch | Speed changes the pitch | a speed ratio, no stretcher |
+| Beats | Drums and loops | SoundTouch, normal |
+| Tones | Melody and voice | Signalsmith, cheaper |
+| Texture | Pads and ambience | SoundTouch, better |
+| Complex | A whole mix | Signalsmith, default |
+
+Both stretchers are compiled in from the Tracktion checkout -
+`TRACKTION_ENABLE_TIMESTRETCH_SOUNDTOUCH` and `..._SIGNALSMITH` in
+`native/CMakeLists.txt`. Elastique is not: it is licensed separately.
+
+**A warped clip stretches while it plays rather than through a rendered copy of
+itself.** The engine offers both, and `setUsesProxy(false)` is what chooses.
+With proxies on it renders a stretched file per clip and plays that back
+plainly, which is cheaper per block and wrong here: every tempo change and
+every warp marker drag invalidates that file, so the clip falls silent or plays
+its last version until the render catches up - and those are exactly the two
+things someone warping a clip does repeatedly while listening. It is also what
+made the first offline render of a warped clip never finish, because the proxy
+was waiting on a message thread the render had blocked.
+
+**A clip's tempo is its length in beats, so raising it makes the clip longer.**
+Saying a two second file holds eight beats rather than four means eight beats
+have to fit at the song's tempo, so the clip covers twice the timeline and
+plays at half the speed. That is the direction that fixes the usual mistake - a
+loop detected an octave out and playing at double speed - and it is what `:2`
+and `*2` are for. `rescaleWarpedClip` keeps the clip's window into the source at
+the same fraction of its content, so a clip that was already trimmed stays
+trimmed by the same amount.
+
+**The marker list always spans the whole file.** The engine seeds a marker at
+each end the first time the manager is asked for, and `removeMarker` straightens
+an end marker rather than deleting it, so the map is never partial. Between two
+markers the mapping is linear - which is what lets the panel draw the warped
+waveform with one `drawChannel` per segment rather than resampling a thumbnail
+column by column.
+
+What is not there: Live's per-mode parameters (Beats' Preserve and Transient
+Loop Mode, Tones' and Texture's Grain Size, Complex Pro's Formants), its
+Transient Loop and Envelope controls, and its "Warp from here" family. The
+stretchers Rhino ships do not expose those knobs, so offering them would be a
+row of controls that did nothing.
+
 ## Dependencies
 
 Pinned to the source-study Tracktion revision and its exact JUCE submodule revision. See `scripts/fetch-dependencies.py` for hashes. Upstream licence files are retained inside `.deps`; this does not change the licensing findings in the research.

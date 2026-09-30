@@ -647,6 +647,80 @@ public:
     juce::Result setAudioClipFadeOut(te::EditItemID, double seconds);
     juce::Result setAudioClipMuted(te::EditItemID, bool muted);
     juce::Result setAudioClipReversed(te::EditItemID, bool reversed);
+    // Time warp: making an audio clip follow the song's tempo instead of
+    // playing at the speed it happened to be recorded at. It is the same idea
+    // Live calls warping, and it has three parts.
+    //
+    // The switch (followsTempo) says the clip is measured in beats rather than
+    // in seconds. Its content is `beats` beats long at `clipBpm`, so the clip
+    // stretches as the song's tempo moves and its musical position holds.
+    //
+    // The mode says how the stretching is done. Repitch does not stretch at
+    // all - it resamples, so the clip changes pitch with its speed, which is
+    // what a record player does and what a lot of dance music wants. The
+    // others hold the pitch and differ in how they treat what is in the file.
+    //
+    // The markers are the fine work. A marker pins one moment in the file to
+    // one moment in beat time; the audio between two markers is stretched to
+    // fit, so a take that drifts can be pulled back onto the grid a beat at a
+    // time. Markers are off until someone asks for them, because a clip whose
+    // tempo is simply steady needs none of it.
+    enum class WarpMode { repitch, beats, tones, texture, complex };
+    static constexpr int warpModeCount = 5;
+    static juce::String warpModeName(WarpMode);
+    // One line on what the mode is for, shown in the chooser.
+    static juce::String warpModeBlurb(WarpMode);
+    struct WarpMarkerView
+    {
+        // Where in the file, and where that moment is played. Both in seconds;
+        // the beats the person reads come from the edit's tempo sequence.
+        double sourceSeconds = 0.0, warpSeconds = 0.0;
+    };
+    struct ClipWarp
+    {
+        bool valid = false;
+        bool followsTempo = false;
+        bool markersEnabled = false;
+        WarpMode mode = WarpMode::beats;
+        double clipBpm = 0.0;
+        double beats = 0.0;
+        double sourceLengthSeconds = 0.0;
+        // Always at least two: one at the start of the file and one at its
+        // end, which is what the engine seeds a new warp with. Everything
+        // between them is the person's.
+        std::vector<WarpMarkerView> markers;
+        // Where the file's own attacks are, so a marker dropped near one lands
+        // on it. Detected on a worker thread the first time a clip is warped,
+        // so the answer is not ready in the same frame it was asked for.
+        std::vector<double> transients;
+        bool transientsReady = false;
+    };
+    // Live's range, which is wider than the song tempo's: a loop can honestly
+    // be recorded at 30 or at 400, and saying so is how it gets warped right.
+    static constexpr double minimumClipBpm = 20.0, maximumClipBpm = 999.0;
+    // How near a transient a new marker has to land to be pulled onto it.
+    static constexpr double warpMarkerSnapSeconds = 0.05;
+    ClipWarp clipWarp(te::EditItemID) const;
+    juce::Result setClipFollowsTempo(te::EditItemID, bool);
+    juce::Result setClipWarpMode(te::EditItemID, WarpMode);
+    // The clip's own tempo. Changing it rescales the window the clip shows
+    // into its source, so doubling it halves the clip on the timeline - which
+    // is what the :2 and *2 buttons are, through scaleClipBpm.
+    juce::Result setClipBpm(te::EditItemID, double bpm);
+    juce::Result scaleClipBpm(te::EditItemID, double factor);
+    // Asks the engine to work the tempo out from the audio. Blocking, and
+    // honest about failing: a clip with no steady pulse has no answer.
+    juce::Result detectClipBpm(te::EditItemID);
+    juce::Result setClipWarpMarkersEnabled(te::EditItemID, bool);
+    // sourceSeconds is a position in the file. The marker is created where the
+    // clip currently plays that moment, so adding one changes nothing until it
+    // is dragged.
+    juce::Result addClipWarpMarker(te::EditItemID, double sourceSeconds);
+    juce::Result moveClipWarpMarker(te::EditItemID, int index, double warpSeconds);
+    // The first and last markers cannot be taken away - they are the ends of
+    // the file - so removing either straightens it instead.
+    juce::Result removeClipWarpMarker(te::EditItemID, int index);
+    juce::Result resetClipWarpMarkers(te::EditItemID);
     // A slider drag is one undo step and one notification, not one per pixel:
     // the panel brackets the drag with these and the setters in between stay
     // quiet. Nested calls are counted, so a caller cannot end another's.
@@ -758,6 +832,15 @@ private:
         te::AutomatableParameter::Ptr parameter;
         float restoreValue = 0.0f;
     };
+    // SessionWarp.cpp - holds a warped clip's length in step with its content
+    // after the content's length in beats has changed.
+    static void rescaleWarpedClip(te::WaveAudioClip&, double previousContentSeconds);
+    // The one place the engine's warp state is written, from the switch and
+    // the mode Rhino records on the clip.
+    void applyWarpState(te::WaveAudioClip&, bool on, WarpMode);
+    // Repitch is a speed ratio rather than a beat-based clip, so it is the one
+    // mode that has to be rewritten when the song's tempo moves.
+    void updateRepitchedClips();
     // SessionAudioClips.cpp - find the clip, open a transaction unless a
     // gesture already has one open, apply, and notify once it is over.
     juce::Result applyAudioClipEdit(te::EditItemID, const juce::String& actionName,

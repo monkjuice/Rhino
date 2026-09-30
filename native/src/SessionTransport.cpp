@@ -294,6 +294,9 @@ void Session::setTempo(double bpm)
         manualLoopRange = {tracktion::core::TimePosition::fromSeconds(manualLoopRange.getStart().inSeconds() * scale),
                            tracktion::core::TimePosition::fromSeconds(manualLoopRange.getEnd().inSeconds() * scale)};
 
+    // A repitched clip follows the tempo by changing its playback speed, which
+    // is the one thing the engine's own remap cannot do for it.
+    updateRepitchedClips();
     refreshLoop();
     if (!insideGesture)
         edit->getUndoManager().beginNewTransaction();

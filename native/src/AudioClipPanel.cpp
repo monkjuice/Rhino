@@ -56,6 +56,7 @@ AudioClipPanel::AudioClipPanel(Session& s) : session(s)
 
 AudioClipPanel::~AudioClipPanel()
 {
+    stopTimer();
     session.listeners.remove(this);
     session.removeChangeListener(this);
 }
@@ -134,6 +135,7 @@ void AudioClipPanel::configureControls()
     addAndMakeVisible(reverse);
     addAndMakeVisible(mute);
     addAndMakeVisible(split);
+    configureWarpControls();
     sync();
 }
 
@@ -167,6 +169,7 @@ void AudioClipPanel::sync()
                      juce::dontSendNotification);
     styleSwitch(reverse, mix.valid && mix.reversed, juce::Colour(accentColour));
     styleSwitch(mute, mix.valid && mix.muted, juce::Colour(0xff97634c));
+    syncWarpControls();
     pushValues();
     updateReadouts();
     refreshThumbnail();
@@ -284,8 +287,19 @@ void AudioClipPanel::changeListenerCallback(juce::ChangeBroadcaster* source)
 
 void AudioClipPanel::editWillChange()
 {
+    stopTimer();
+    // A drag cannot survive the document under it being replaced, and the
+    // gesture bracket it opened has to be closed or every later edit would be
+    // folded into it.
+    if (warpGestureOpen)
+    {
+        warpGestureOpen = false;
+        session.endAudioClipGesture();
+    }
+    draggingMarker = -1;
     clip = {};
     mix = {};
+    warp = {};
 }
 
 void AudioClipPanel::editDidChange()
@@ -300,6 +314,12 @@ void AudioClipPanel::resized()
     subtitle.setBounds(header.removeFromRight(std::min(header.getWidth() / 2, 320)));
     title.setBounds(header);
     area.removeFromTop(4);
+    // The warp strip spans the panel along its foot, under both the mix
+    // controls and the waveform, because it is about the clip rather than
+    // about either of them. It goes first so the two above it divide what is
+    // left rather than being pushed off the bottom.
+    layoutWarpControls(getLocalBounds().removeFromBottom(warpStripHeight));
+    area = area.withTrimmedBottom(warpStripHeight - 6);
 
     // The controls keep their size and the waveform takes what is left, down to
     // a width worth drawing; below that the controls have the panel to
@@ -316,6 +336,10 @@ void AudioClipPanel::resized()
         controlsArea = area;
         waveArea = {};
     }
+
+    markerBar = warpMarkersVisible() && !waveArea.isEmpty()
+        ? waveArea.reduced(4, 0).withHeight(markerBarHeight).translated(0, 2)
+        : juce::Rectangle<int>();
 
     auto controls = controlsArea;
     auto switches = controls.removeFromRight(switchWidth).reduced(6, 0);
@@ -355,6 +379,7 @@ void AudioClipPanel::paint(juce::Graphics& g)
         g.setColour(juce::Colour(0xff2b343b));
         g.fillRect(waveArea.getX() - 5, controlsArea.getY(), 1, controlsArea.getHeight());
     }
+    paintWarpStrip(g);
     if (waveArea.isEmpty())
         return;
     g.setColour(juce::Colour(0xff13181c));
@@ -365,6 +390,7 @@ void AudioClipPanel::paint(juce::Graphics& g)
         return;
     }
     paintWaveform(g, waveArea);
+    paintWarpMarkers(g);
 }
 
 void AudioClipPanel::paintEmpty(juce::Graphics& g, juce::Rectangle<int> area)
@@ -386,6 +412,16 @@ void AudioClipPanel::paintWaveform(juce::Graphics& g, juce::Rectangle<int> area)
         g.setFont(uiFont(11.0f));
         drawSnappedText(g, thumbnailReadable ? "Reading waveform..." : "Missing or unreadable audio",
                         inner, juce::Justification::centred);
+        return;
+    }
+    // With markers on, the whole file is drawn in the time the clip plays it,
+    // because that is what a marker is being dragged against. Without them the
+    // panel shows the span the clip plays, which is what it has always shown.
+    if (warpMarkersVisible())
+    {
+        paintWarpedWaveform(g, inner.withTrimmedTop(markerBar.getHeight() + 2));
+        g.setColour(juce::Colour(0xff2b343b));
+        g.drawRect(area, 1);
         return;
     }
     const auto speed = std::max(0.0001, mix.speedRatio);

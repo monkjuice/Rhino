@@ -32,6 +32,8 @@ Application code, `native/src`:
 | Playing MIDI from the typing keyboard | `ComputerKeyboard.*`, wired in `Main.cpp`; the notes go in through `Session::sendMidiInputNote` |
 | Recording: arming a track, the count-in, and the clip a take becomes | `SessionRecording.cpp` in the model, `CountInClick.*` for the count-in click, the record button in `Main.cpp` and the record dot in `ArrangementSync.cpp` |
 | Audio clip editor: one clip's own gain, pan, pitch, fades, mute and reverse | `AudioClipPanel.*` in the UI, `SessionAudioClips.cpp` in the model |
+| Time warp: making an audio clip follow the song's tempo, its warp mode, its own tempo and its warp markers | `SessionWarp.cpp` in the model, `AudioClipWarp.cpp` in the UI. See the Time warp section of [native/README.md](native/README.md) |
+| The control bar: tempo, time signature, transport, the readout | `Main.cpp` lays it out in `layoutControlBar`; the fields you drag are `ControlBarFields.*` and the readout is `TransportDisplay.*` |
 | Selecting a span of the timeline, and cut/copy/paste/duplicate on it | `ArrangementSelection.cpp` in the UI, `SessionRegion.cpp` in the model. The note editor uses the same rule in steps, in `StepGridEditing.cpp` |
 | Track groups, which are bus tracks | `SessionGroups.cpp`, `ArrangementGroups.cpp` |
 | Renaming a track card or a group band in place | `ArrangementRename.cpp` |

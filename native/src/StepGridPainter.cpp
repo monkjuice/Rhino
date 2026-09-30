@@ -70,7 +70,7 @@ void StepGrid::paintKeyboard(juce::Graphics& g)
 
 void StepGrid::paint(juce::Graphics& g)
 {
-    g.fillAll(juce::Colour(0xff1d2228));
+    g.fillAll(palette::sideSurface);
     if (hasKeyboardFocus(true))
     {
         g.setColour(juce::Colour(0xff55c7eb).withAlpha(0.12f));

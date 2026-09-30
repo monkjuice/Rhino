@@ -1,26 +1,35 @@
 // The control bar's readout, at the widest and the narrowest the layout will
-// ever hand it. Each line now carries a run against the left edge and a
-// second against the right, and the rule between them is what is worth
-// checking: the right run appears when there is room for it and vanishes
-// whole when there is not, without moving the position or the clock a pixel.
+// ever hand it. It is three columns now rather than two lines: the position
+// against the left edge, the tempo, signature and clock beside it, and the
+// loop and the load meters against the right. Two rules are worth holding on
+// to. The position never moves, whatever the box is doing around it - it is a
+// clock, and a digit's worth of drift reads as the clock itself moving. And
+// the readings that will not fit are dropped whole, lowest priority first,
+// rather than truncated into each other.
 {
     Theme readoutTheme;
     juce::LookAndFeel::setDefaultLookAndFeel(&readoutTheme);
     TransportDisplay readout;
-    readout.setDisplayText("005  1     120     4/4");
-    readout.setSecondaryText("00:08:260 / 01:08:597   CPU 6%   RAM 249 MB");
-    readout.setTrailingText("LOOP  001 - 035");
-    readout.setSecondaryTrailingText("48.0 kHz   256   5.3 ms");
+    readout.setPosition("001.1.1");
+    readout.setTempoAndSignature("120", "4/4");
+    readout.setClock("00:08:260  /  01:08:597");
+    readout.setLoop("001.1.1 - 035.1.0");
+    readout.setStatistics("CPU 6%   RAM 249 MB");
+    readout.setDeviceInfo("48.0 kHz   256   5.3 ms");
 
     // The first and last column holding text in a band of the box. The
-    // threshold clears the background at 0xff101418 and the border at
-    // 0xff3f4c55 while still catching the dimmest reading, 0xff76856f.
-    const auto litSpan = [](const juce::Image& image, int top, int bottom, int right)
+    // threshold clears the inset ground at 0xff101010 and the border at
+    // 0xff3a3a3a while still catching the dimmest reading, 0xff76856f.
+    const auto lit = [](const juce::Image& image, int x, int y)
+    {
+        return image.getPixelAt(x, y).getBrightness() > 0.35f;
+    };
+    const auto litColumns = [&lit](const juce::Image& image, int left, int right)
     {
         std::pair<int, int> span {-1, -1};
-        for (int x = 1; x < right; ++x)
-            for (int y = top; y < bottom; ++y)
-                if (image.getPixelAt(x, y).getBrightness() > 0.35f)
+        for (int x = left; x < right; ++x)
+            for (int y = 1; y < image.getHeight() - 1; ++y)
+                if (lit(image, x, y))
                 {
                     if (span.first < 0) span.first = x;
                     span.second = x;
@@ -28,29 +37,49 @@
                 }
         return span;
     };
+    const auto litRows = [&lit](const juce::Image& image, int left, int right)
+    {
+        std::pair<int, int> span {-1, -1};
+        for (int y = 1; y < image.getHeight() - 1; ++y)
+            for (int x = left; x < right; ++x)
+                if (lit(image, x, y))
+                {
+                    if (span.first < 0) span.first = y;
+                    span.second = y;
+                    break;
+                }
+        return span;
+    };
 
-    readout.setSize(400, 42);
+    // Wide enough for all three columns. The chevron is a child component and
+    // is caught by a snapshot, so every scan stops short of it.
+    readout.setSize(760, 38);
     const auto wide = readout.createComponentSnapshot(readout.getLocalBounds());
-    require(wide.getWidth() == 400 && wide.getHeight() == 42, "The readout renders at the size it is given");
-    // Text is inset by eight and stops short of the chevron at 380.
-    const auto widePosition = litSpan(wide, 2, 23, 372);
-    const auto wideClock = litSpan(wide, 25, 40, 372);
-    require(widePosition.first == 8, "The position starts at the left edge of the box");
-    require(wideClock.first == 8, "The clock starts under the position");
-    require(widePosition.second > 340 && widePosition.second < 372, "The loop is drawn against the right edge");
-    require(wideClock.second > 340 && wideClock.second < 372, "The device reading is drawn against the right edge");
+    require(wide.getWidth() == 760 && wide.getHeight() == 38, "The readout renders at the size it is given");
+    const auto wideText = litColumns(wide, 1, 720);
+    // Inside the padding, plus whatever left side bearing the first digit
+    // carries - which is why this is a band rather than the exact sixteen.
+    require(wideText.first >= 16 && wideText.first <= 22, "The position starts at the box's own padding");
+    require(wideText.second > 700, "The right-hand column is set against the right edge");
 
-    // Narrow enough that the second line cannot hold both of its runs. The
-    // clock keeps the line and the device reading goes, rather than the two
-    // being squeezed into each other.
-    readout.setSize(300, 42);
+    // The hierarchy the bar is built around: the position is set to be read
+    // across a desk and everything beside it to be watched out of the corner
+    // of the eye. Measured rather than asserted from the font sizes, because
+    // what matters is the height on screen.
+    const auto positionHeight = litRows(wide, 16, 70);
+    const auto readingHeight = litRows(wide, 640, 720);
+    require(positionHeight.second - positionHeight.first
+                > (readingHeight.second - readingHeight.first) / 2,
+            "The position is set larger than the readings beside it");
+
+    // Narrow enough that the right column cannot be held as well as the
+    // position and the clock. It goes whole, and the position does not shift
+    // by a pixel to make room.
+    readout.setSize(300, 38);
     const auto narrow = readout.createComponentSnapshot(readout.getLocalBounds());
-    const auto narrowPosition = litSpan(narrow, 2, 23, 272);
-    const auto narrowClock = litSpan(narrow, 25, 40, 272);
-    require(narrowPosition.first == widePosition.first, "Narrowing the box does not move the position");
-    require(narrowClock.first == wideClock.first, "Narrowing the box does not move the clock");
-    require(narrowPosition.second > 240, "The loop still fits beside the position");
-    require(narrowClock.second < 240, "The device reading is dropped rather than run into the clock");
+    const auto narrowText = litColumns(narrow, 1, 260);
+    require(narrowText.first == wideText.first, "Narrowing the box does not move the position");
+    require(narrowText.second < 260, "The readings that will not fit are dropped, not run together");
 
     juce::LookAndFeel::setDefaultLookAndFeel(nullptr);
 }

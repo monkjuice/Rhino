@@ -6,10 +6,13 @@ namespace rhino
 {
 namespace
 {
-constexpr auto panelColour = 0xff141a1f;
-constexpr auto panelEdgeColour = 0xff39434b;
-constexpr auto valueColour = 0xffe3ead2;
-constexpr auto captionColour = 0xff7f8c96;
+// A field on the control bar is a raised control, not a recessed one: the
+// display is the only well in the bar, and two kinds of inset next to each
+// other read as a mistake rather than as a hierarchy.
+const juce::Colour panelColour {palette::control};
+const juce::Colour panelEdgeColour {palette::border};
+const juce::Colour valueColour {palette::text};
+const juce::Colour captionColour {palette::textDim};
 }
 
 ValueDragBox::ValueDragBox()
@@ -102,15 +105,15 @@ void ValueDragBox::paint(juce::Graphics& g)
     const auto bounds = getLocalBounds();
     if (drawsBackground)
     {
-        g.setColour(juce::Colour(panelColour));
+        g.setColour(panelColour);
         g.fillRoundedRectangle(bounds.toFloat(), 3.0f);
-        g.setColour(juce::Colour(panelEdgeColour));
+        g.setColour(panelEdgeColour);
         g.drawRoundedRectangle(bounds.toFloat().reduced(0.5f), 3.0f, 1.0f);
     }
     auto area = bounds.reduced(6, 3);
     if (caption.isNotEmpty())
     {
-        g.setColour(juce::Colour(captionColour));
+        g.setColour(captionColour);
         g.setFont(uiFontBold(captionEm));
         drawSnappedText(g, caption, area.removeFromTop(juce::roundToInt(captionEm) + 4), justification, true);
     }
@@ -119,11 +122,11 @@ void ValueDragBox::paint(juce::Graphics& g)
         g.setFont(uiFontBold(captionEm));
         const auto width = juce::GlyphArrangement::getStringWidthInt(g.getCurrentFont(), suffix) + 5;
         auto tail = area.removeFromRight(width);
-        g.setColour(juce::Colour(captionColour));
+        g.setColour(captionColour);
         drawSnappedText(g, suffix, tail, juce::Justification::centredRight);
     }
     if (editor != nullptr) return;
-    g.setColour(juce::Colour(valueColour));
+    g.setColour(valueColour);
     g.setFont(uiFontBold(valueEm));
     drawSnappedText(g, valueText(), area, justification, true);
 }
@@ -213,11 +216,11 @@ void ValueDragBox::beginTyping()
     editor = std::make_unique<juce::TextEditor>();
     editor->setFont(uiFontBold(valueEm));
     editor->setJustification(justification);
-    editor->setColour(juce::TextEditor::backgroundColourId, juce::Colour(0xff1d252b));
-    editor->setColour(juce::TextEditor::textColourId, juce::Colour(valueColour));
-    editor->setColour(juce::TextEditor::outlineColourId, juce::Colour(0xff5d7f8c));
-    editor->setColour(juce::TextEditor::focusedOutlineColourId, juce::Colour(0xffc6d58c));
-    editor->setColour(juce::TextEditor::highlightColourId, juce::Colour(0xff3c525c));
+    editor->setColour(juce::TextEditor::backgroundColourId, palette::appBackground);
+    editor->setColour(juce::TextEditor::textColourId, valueColour);
+    editor->setColour(juce::TextEditor::outlineColourId, palette::border);
+    editor->setColour(juce::TextEditor::focusedOutlineColourId, palette::activeNeutral);
+    editor->setColour(juce::TextEditor::highlightColourId, palette::hover);
     editor->setText(valueText(), false);
     editor->setSelectAllWhenFocused(true);
     editor->onReturnKey = [this] { endTyping(true); };
@@ -299,14 +302,14 @@ void TimeSignatureField::setFontSize(float size)
 
 void TimeSignatureField::paint(juce::Graphics& g)
 {
-    g.setColour(juce::Colour(0xff141a1f));
+    g.setColour(panelColour);
     g.fillRoundedRectangle(getLocalBounds().toFloat(), 3.0f);
-    g.setColour(juce::Colour(0xff39434b));
+    g.setColour(panelEdgeColour);
     g.drawRoundedRectangle(getLocalBounds().toFloat().reduced(0.5f), 3.0f, 1.0f);
     // The rule between the two numbers. Leaned over rather than upright so it
     // reads as a signature and not as a fraction bar with nothing under it.
     const auto centre = getLocalBounds().withSizeKeepingCentre(14, getHeight()).toFloat();
-    g.setColour(juce::Colour(0xff6e7a84));
+    g.setColour(palette::textDim);
     g.drawLine(centre.getCentreX() + 3.0f, centre.getY() + 8.0f,
                centre.getCentreX() - 3.0f, centre.getBottom() - 8.0f, 1.4f);
 }

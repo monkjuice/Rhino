@@ -87,10 +87,10 @@ public:
         if (name.isEmpty()) return;
         if (isSelected())
         {
-            g.setColour(juce::Colour(0xff34424a));
+            g.setColour(palette::hover);
             g.fillRect(0, 0, width, height);
         }
-        g.setColour(juce::Colour(0xffb9c4cd));
+        g.setColour(palette::text);
         g.setFont(uiFont(10.5f));
         drawSnappedText(g, name, {2, 0, width - 6, height}, juce::Justification::centredLeft, true);
     }
@@ -109,7 +109,7 @@ public:
             arrow.addTriangle(centre.x - size * 0.6f, centre.y - size,
                               centre.x - size * 0.6f, centre.y + size,
                               centre.x + size * 0.9f, centre.y);
-        g.setColour(juce::Colour(0xff8f9aa4));
+        g.setColour(palette::textDim);
         g.fillPath(arrow);
     }
 
@@ -131,15 +131,15 @@ public:
     {
         if (isSelected())
         {
-            g.setColour(juce::Colour(0xff34424a));
+            g.setColour(palette::hover);
             g.fillRect(0, 0, width, height);
         }
         g.setColour(panel.colourFor(item));
         g.fillRect(2, height / 2 - 4, 7, 7);
-        g.setColour(juce::Colour(0xffe5ebef));
+        g.setColour(palette::text);
         g.setFont(uiFont(10.5f));
         drawSnappedText(g, item.name, {15, 1, width - 19, 15}, juce::Justification::centredLeft, true);
-        g.setColour(juce::Colour(0xff8d99a3));
+        g.setColour(palette::textDim);
         g.setFont(uiFont(8.5f));
         drawSnappedText(g, item.detail, {15, 15, width - 19, 13}, juce::Justification::centredLeft, true);
     }
@@ -172,22 +172,22 @@ BrowserPanel::BrowserPanel(Session& s) : session(s)
     setOpaque(true);
     setWantsKeyboardFocus(true);
     title.setText("BROWSER", juce::dontSendNotification);
-    title.setColour(juce::Label::textColourId, juce::Colour(0xffd5dde4));
+    title.setColour(juce::Label::textColourId, palette::text);
     title.setFont(uiFont(10.0f));
-    search.setTextToShowWhenEmpty("Search", juce::Colour(0xff6f7b85));
+    search.setTextToShowWhenEmpty("Search", palette::disabled);
     search.onTextChange = [this] { rebuildTree(); };
-    search.setColour(juce::TextEditor::backgroundColourId, juce::Colour(0xff262c32));
-    search.setColour(juce::TextEditor::outlineColourId, juce::Colour(0xff46515a));
+    search.setColour(juce::TextEditor::backgroundColourId, palette::control);
+    search.setColour(juce::TextEditor::outlineColourId, palette::border);
     search.setFont(uiFont(10.0f));
 
     categoryList.setRowHeight(categoryRowHeight);
-    categoryList.setColour(juce::ListBox::backgroundColourId, juce::Colour(0xff1b2026));
+    categoryList.setColour(juce::ListBox::backgroundColourId, palette::sideSurface);
     categoryList.setColour(juce::ListBox::outlineColourId, juce::Colours::transparentBlack);
     categoryList.setMultipleSelectionEnabled(false);
     categoryList.selectRow(0, juce::dontSendNotification);
 
-    tree.setColour(juce::TreeView::backgroundColourId, juce::Colour(0xff20262c));
-    tree.setColour(juce::TreeView::linesColourId, juce::Colour(0xff323a42));
+    tree.setColour(juce::TreeView::backgroundColourId, palette::sideSurface);
+    tree.setColour(juce::TreeView::linesColourId, palette::border);
     tree.setDefaultOpenness(false);
     tree.setRootItemVisible(false);
     tree.setIndentSize(13);
@@ -260,10 +260,10 @@ BrowserPanel::~BrowserPanel()
 
 void BrowserPanel::paint(juce::Graphics& g)
 {
-    g.fillAll(juce::Colour(0xff1b2026));
-    g.setColour(juce::Colour(0xff303840));
+    g.fillAll(palette::sideSurface);
+    g.setColour(palette::border);
     g.drawVerticalLine(getWidth() - 1, 0.0f, static_cast<float>(getHeight()));
-    g.setColour(juce::Colour(0xff8f9aa4));
+    g.setColour(palette::textDim);
     g.setFont(uiFont(8.0f));
     drawSnappedText(g, "LIBRARY", {10, 62, getWidth() - 20, 14}, juce::Justification::centredLeft, true);
 }
@@ -302,12 +302,12 @@ void BrowserPanel::paintListBoxItem(int row, juce::Graphics& g, int width, int h
     if (!juce::isPositiveAndBelow(row, static_cast<int>(categories.size()))) return;
     if (selected)
     {
-        g.setColour(juce::Colour(0xff2f3a43));
+        g.setColour(palette::hover);
         g.fillRect(0, 0, width, height);
-        g.setColour(juce::Colour(0xffc6d58c));
+        g.setColour(palette::selection);
         g.fillRect(0, 0, 2, height);
     }
-    g.setColour(juce::Colour(selected ? 0xffe5ebef : 0xffa8b3bd));
+    g.setColour(selected ? palette::text : palette::textDim);
     g.setFont(uiFont(10.5f));
     drawSnappedText(g, categories[static_cast<size_t>(row)], {10, 0, width - 14, height},
                     juce::Justification::centredLeft, true);

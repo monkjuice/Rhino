@@ -464,7 +464,7 @@ private:
     bool panning = false;
     juce::Point<float> panAnchor;
     double panStartView = 0.0, panStartTrackScroll = 0.0;
-    static constexpr float headerWidth = 228.0f, rulerTop = 32.0f, lanesTop = 56.0f;
+    static constexpr float headerWidth = 228.0f, rulerTop = 36.0f, lanesTop = 60.0f;
     // The main row is dragged from its top edge like any other, so its height
     // is a value rather than a constant. It is a view setting and lives here
     // beside the zoom: the fitted lane height is measured against the default

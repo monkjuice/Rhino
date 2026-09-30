@@ -369,7 +369,7 @@ void AudioClipPanel::resized()
 
 void AudioClipPanel::paint(juce::Graphics& g)
 {
-    g.fillAll(juce::Colour(0xff1a1f24));
+    g.fillAll(palette::sideSurface);
     g.setColour(juce::Colour(0xff222a30));
     g.fillRect(getLocalBounds().withHeight(headerHeight + 8));
     g.setColour(juce::Colour(0xff2b343b));

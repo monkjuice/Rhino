@@ -75,7 +75,7 @@ struct TrackSwatches final : public juce::PopupMenu::CustomComponent
             g.setColour(palette[static_cast<size_t>(i)]);
             g.fillRect(box);
             const auto isSelected = palette[static_cast<size_t>(i)] == selected;
-            g.setColour(juce::Colour(isSelected ? 0xffe8eef2 : 0xff161b20));
+            g.setColour(isSelected ? palette::text : palette::appBackground);
             g.drawRect(box, isSelected ? 2 : 1);
         }
     }

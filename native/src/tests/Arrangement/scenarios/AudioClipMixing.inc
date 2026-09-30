@@ -165,7 +165,7 @@
                 bool paintedSomething = false;
                 for (int x = 4; x < drawn.getWidth() && !paintedSomething; x += 7)
                     for (int y = 4; y < drawn.getHeight(); y += 7)
-                        if (drawn.getPixelAt(x, y) != juce::Colour(0xff1a1f24))
+                        if (drawn.getPixelAt(x, y) != palette::sideSurface)
                         {
                             paintedSomething = true;
                             break;

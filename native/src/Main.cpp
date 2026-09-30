@@ -12,6 +12,7 @@
 #include "StartupScreen.h"
 #include "TransportDisplay.h"
 #include "ControlBarFields.h"
+#include "ControlBarIcons.h"
 #include "SystemUsage.h"
 #include <cmath>
 #include <functional>
@@ -102,40 +103,37 @@ void registerRhinoProjectFileAssociation()
    #endif
 }
 
-class BrowserToggleButton final : public juce::TextButton
+// The browser toggle: a window with its side panel, and a chevron saying which
+// way the panel will go. Both are grey - the state is carried by brightness and
+// by whether the panel is filled in, not by a colour, because a coloured toggle
+// in a neutral bar reads as a warning rather than as a switch.
+inline void paintSidebarIcon(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour colour, bool showing)
 {
-public:
-    BrowserToggleButton() : juce::TextButton("Browser") {}
-
-    void paintButton(juce::Graphics& g, bool highlighted, bool pressed) override
-    {
-        if (highlighted || pressed)
-            g.fillAll(juce::Colour(0x182f3942));
-
-        const auto colour = getToggleState() ? playheadColour : juce::Colour(0xffc7cdd2);
-        const auto icon = getLocalBounds().withSizeKeepingCentre(18, 14);
-        g.setColour(colour);
-        g.fillRect(icon.getX(), icon.getY(), 4, icon.getHeight());
-        g.fillRect(icon.getX() + 7, icon.getY(), 10, icon.getHeight());
-    }
-};
+    g.setColour(colour);
+    // Two thirds of the width to the window, the rest to the chevron, so the
+    // pair reads as one control rather than as an icon with a mark beside it.
+    const auto window = area.removeFromLeft(area.getWidth() * 0.64f);
+    icons::drawSidebar(g, window, showing);
+    icons::strokeFitted(g, icons::chevron(showing),
+                        area.withSizeKeepingCentre(area.getWidth() * 0.55f, area.getHeight() * 0.5f), 1.3f);
+}
 
 // Stop parks the playhead on the line the arrangement is working from, which
 // is what makes play-stop-play repeat a passage. Double-clicking it means the
 // top of the song instead. The second click is told apart here, where the
 // system's own click counting is already available, rather than by timing
 // clicks in the handler.
-class StopButton final : public juce::TextButton
+class StopButton final : public IconButton
 {
 public:
-    StopButton() : juce::TextButton("Stop") {}
+    StopButton() : IconButton("Stop") {}
 
     std::function<void()> onStop, onReturnToStart;
 
     void mouseDown(const juce::MouseEvent& event) override
     {
         secondClick = event.getNumberOfClicks() > 1;
-        juce::TextButton::mouseDown(event);
+        IconButton::mouseDown(event);
     }
 
     void clicked() override
@@ -177,18 +175,21 @@ public:
     void paintButton(juce::Graphics& g, bool highlighted, bool pressed) override
     {
         const auto bounds = getLocalBounds().toFloat();
-        g.setColour(juce::Colour(0xff343a40));
-        g.fillRoundedRectangle(bounds, 3.0f);
+        // No box. The dot sits on the bar like every other transport glyph,
+        // and the wash under the pointer is what shows the hit area is larger
+        // than the twelve pixels the dot occupies.
         if (highlighted || pressed)
         {
-            g.setColour(juce::Colour(0x1affffff));
-            g.fillRoundedRectangle(bounds, 3.0f);
+            g.setColour(juce::Colour(pressed ? 0x24ffffff : 0x14ffffff));
+            g.fillRoundedRectangle(bounds.reduced(1.0f), 3.0f);
         }
         const auto dot = bounds.withSizeKeepingCentre(12.0f, 12.0f);
-        const auto colour = state == State::recording  ? juce::Colour(0xffe4443a)
+        // Red is the one colour the neutral chrome keeps, and it keeps it here:
+        // record is the only control in the bar whose state is worth a colour.
+        const auto colour = state == State::recording  ? palette::recordAccent
                           : state == State::countingIn ? juce::Colour(0xffe0a03c)
-                          : state == State::armed      ? juce::Colour(0xffbb5349)
-                                                       : juce::Colour(0xff70797f);
+                          : state == State::armed      ? palette::recordAccent.withMultipliedSaturation(0.72f).darker(0.25f)
+                                                       : palette::disabled;
         g.setColour(colour);
         g.fillEllipse(dot);
         // A ring while it is actually capturing, so a rolling recording cannot
@@ -244,7 +245,7 @@ public:
     SplitterBar() { setMouseCursor(juce::MouseCursor::UpDownResizeCursor); }
     void paint(juce::Graphics& g) override
     {
-        g.setColour(juce::Colour(0xff3a434b));
+        g.setColour(palette::border);
         g.fillRect(getLocalBounds().withSizeKeepingCentre(getWidth(), 4));
     }
     void mouseDown(const juce::MouseEvent& event) override
@@ -316,10 +317,8 @@ public:
         // A browser double-click has no drop target of its own, so it follows
         // whichever track the visible arrangement has selected.
         rack.status = files.status;
-        browserToggle.onClick = [this] { toggleBrowser(); };
         editorToggle.onClick = [this] { toggleClipEditor(); };
         rackToggle.onClick = [this] { toggleDeviceView(); };
-        browserToggle.setTooltip("Show or hide browser");
         editorToggle.setButtonText("Clip");
         rackToggle.setButtonText("Devices");
         editorToggle.setTooltip("Show or hide the Clip / MIDI Editor");
@@ -348,14 +347,18 @@ public:
         scaleHighlight.setSelectedId(1, juce::dontSendNotification);
         scaleHighlight.setTooltip("Highlight notes in a scale");
         scaleHighlight.onChange = [this] { grid.setScaleHighlight(scaleHighlight.getSelectedId()); };
-        for (auto* toggle : std::initializer_list<juce::TextButton*>{&browserToggle, &editorToggle, &rackToggle,
+        // Clip and Devices are two faces of one strip, so the one that is
+        // showing is marked in grey rather than coloured in: a tab that lights
+        // up teal in a neutral bar reads as a warning rather than as "you are
+        // here". The restraint is the point.
+        for (auto* toggle : std::initializer_list<juce::TextButton*>{&editorToggle, &rackToggle,
                                                                      &sessionToggle, &arrangementToggle,
                                                                      &backToArrangement})
         {
-            toggle->setColour(juce::TextButton::buttonColourId, juce::Colour(0xff252b31));
-            toggle->setColour(juce::TextButton::buttonOnColourId, juce::Colour(0xff38505b));
-            toggle->setColour(juce::TextButton::textColourOffId, juce::Colour(0xffaeb8c1));
-            toggle->setColour(juce::TextButton::textColourOnId, juce::Colour(0xffdce5ea));
+            toggle->setColour(juce::TextButton::buttonColourId, palette::control);
+            toggle->setColour(juce::TextButton::buttonOnColourId, palette::hover);
+            toggle->setColour(juce::TextButton::textColourOffId, palette::textDim);
+            toggle->setColour(juce::TextButton::textColourOnId, palette::text);
         }
         // The typing keyboard plays the MIDI input, so it is caught wherever
         // the focus happens to be. A text editor with focus consumes its own
@@ -387,13 +390,13 @@ public:
         infoView.setScrollbarsShown(false);
         infoView.setCaretVisible(false);
         infoView.setWantsKeyboardFocus(false);
-        infoView.setColour(juce::TextEditor::backgroundColourId, juce::Colour(0xff1d2228));
+        infoView.setColour(juce::TextEditor::backgroundColourId, palette::sideSurface);
         infoView.setColour(juce::TextEditor::outlineColourId, juce::Colours::transparentBlack);
-        infoView.setColour(juce::TextEditor::textColourId, juce::Colour(0xffc9d1c3));
+        infoView.setColour(juce::TextEditor::textColourId, palette::textDim);
         infoView.setFont(uiFont(10.5f));
         hint.setText({}, juce::dontSendNotification);
         hint.setVisible(false);
-        hint.setColour(juce::Label::textColourId, juce::Colour(0xff8d98a3));
+        hint.setColour(juce::Label::textColourId, palette::textDim);
         // Tempo is a field you drag, which is how every DAW sets one: press
         // and move the mouse up or down, Ctrl for hundredths, double-click to
         // type an exact number. The range and the steps are the model's, so the
@@ -429,40 +432,85 @@ public:
         position.configurationRequested = [this] { showDisplayMenu(); };
         undo.onClick = [this] { session.undo(); };
         redo.onClick = [this] { session.redo(); };
-        clear.onClick = [this] { session.clearPattern(); };
-        undo.setButtonText(L"\u21b6");
-        redo.setButtonText(L"\u21b7");
-        clear.setButtonText(L"\u00d7");
-        undo.setTooltip("Undo");
-        redo.setTooltip("Redo");
-        clear.setTooltip("Clear pattern");
-        metronome.setButtonText(L"\u266b");
-        metronomeMenu.setButtonText("v");
-        metronome.setTooltip("Toggle metronome");
-        metronomeMenu.setTooltip("Metronome settings");
         metronome.setClickingTogglesState(true);
         metronome.onClick = [this] { session.setClickTrackEnabled(metronome.getToggleState()); };
         metronomeMenu.onClick = [this] { showMetronomeMenu(); };
         play.onClick = [this] { session.togglePlayback(); };
         stop.onStop = [this] { session.stop(); };
         stop.onReturnToStart = [this] { session.returnToStart(); };
+        rewind.onClick = [this] { session.returnToStart(); };
         record.onClick = [this] { toggleRecording(); };
-        record.setTooltip("Record into the armed tracks  (F9)");
-        panic.onClick = [this]
-        {
-            session.panicReset();
-            logStatus("Panic reset: stopped transport, reset plugins, restarted audio device");
-        };
-        play.setButtonText(L"\u25b6");
-        stop.setButtonText(L"\u25a0");
-        panic.setButtonText("!");
-        play.setTooltip("Play or pause");
+        undo.setTooltip("Undo");
+        redo.setTooltip("Redo");
+        metronome.setTooltip("Toggle metronome");
+        metronomeMenu.setTooltip("Metronome settings");
+        rewind.setTooltip("Return to the start of the song");
         stop.setTooltip("Stop and return to the selected line  (double-click for the start of the song)");
-        panic.setTooltip("Panic reset audio");
+        record.setTooltip("Record into the armed tracks  (F9)");
+
+        // What each control on the bar draws. Kept together rather than spread
+        // through the constructor, because they are one set: the bar reads as a
+        // bar precisely because these are struck at the same weight, in the same
+        // greys, from the same paths.
+        browserToggle.setGlyphInset(0.15f);
+        browserToggle.setActiveColour(palette::text);
+        browserToggle.setPainter([this](juce::Graphics& g, juce::Rectangle<float> area, juce::Colour colour)
+        {
+            paintSidebarIcon(g, area, colour, browserOpen);
+        });
+        metronome.setGlyphInset(0.12f);
+        metronome.setActiveColour(palette::text);
+        metronome.setPainter([](juce::Graphics& g, juce::Rectangle<float> area, juce::Colour colour)
+        {
+            g.setColour(colour);
+            icons::strokeFitted(g, icons::metronome(), area, 1.4f);
+        });
+        metronomeMenu.setGlyphInset(0.08f);
+        metronomeMenu.setPainter([](juce::Graphics& g, juce::Rectangle<float> area, juce::Colour colour)
+        {
+            g.setColour(colour);
+            icons::strokeFitted(g, icons::chevronDown(), area.withSizeKeepingCentre(9.0f, 5.0f), 1.3f);
+        });
+        rewind.setPainter([](juce::Graphics& g, juce::Rectangle<float> area, juce::Colour colour)
+        {
+            g.setColour(colour);
+            icons::fillFitted(g, icons::returnToStart(), area.withSizeKeepingCentre(area.getWidth() * 0.88f, area.getHeight() * 0.7f));
+        });
+        stop.setPainter([](juce::Graphics& g, juce::Rectangle<float> area, juce::Colour colour)
+        {
+            g.setColour(colour);
+            icons::fillFitted(g, icons::stop(), area.withSizeKeepingCentre(area.getHeight() * 0.74f, area.getHeight() * 0.74f));
+        });
+        // Play is struck a shade larger than its neighbours, which is the only
+        // hierarchy the transport has: it is the button people reach for.
+        play.setGlyphInset(0.24f);
+        play.setActiveColour(palette::text);
+        play.setPainter([](juce::Graphics& g, juce::Rectangle<float> area, juce::Colour colour)
+        {
+            g.setColour(colour);
+            icons::fillFitted(g, icons::play(), area.withSizeKeepingCentre(area.getWidth() * 0.86f, area.getHeight() * 0.86f));
+        });
+        for (auto* arrow : {&undo, &redo})
+        {
+            // No wash and no surface under these two: the glyph alone, brighter
+            // under the pointer and dimmer when there is nothing on the stack.
+            arrow->setWashesOnHover(false);
+            arrow->setGlyphInset(0.16f);
+        }
+        undo.setPainter([](juce::Graphics& g, juce::Rectangle<float> area, juce::Colour colour)
+        {
+            g.setColour(colour);
+            icons::drawCurvedArrow(g, area, true, 1.5f);
+        });
+        redo.setPainter([](juce::Graphics& g, juce::Rectangle<float> area, juce::Colour colour)
+        {
+            g.setColour(colour);
+            icons::drawCurvedArrow(g, area, false, 1.5f);
+        });
         for (auto* component : std::initializer_list<juce::Component*>{
-                 &infoView, &position, &play, &stop, &record, &panic,
+                 &infoView, &position, &play, &stop, &record, &rewind,
                  &browser, &browserToggle, &editorToggle, &rackToggle, &grid, &audioClip, &arrangement, &sessionView,
-                 &sessionToggle, &arrangementToggle, &backToArrangement, &rack, &tempoBox, &signatureField, &undo, &redo, &clear, &metronome, &metronomeMenu, &hint,
+                 &sessionToggle, &arrangementToggle, &backToArrangement, &rack, &tempoBox, &signatureField, &undo, &redo, &metronome, &metronomeMenu, &hint,
                  &patternLabel, &editorResolution, &editorZoomOut, &editorZoomIn, &scaleHighlight, &lowerSplitter})
             addAndMakeVisible(component);
         lowerSplitter.dragStarted = [this] (int screenY)
@@ -484,7 +532,7 @@ public:
         session.listeners.add(this);
         session.edit->getUndoManager().addChangeListener(this);
         patternLabel.setText("PATTERN 1  /  NOTE EDITOR", juce::dontSendNotification);
-        patternLabel.setColour(juce::Label::textColourId, juce::Colour(0xffb8c4aa));
+        patternLabel.setColour(juce::Label::textColourId, palette::textDim);
         setSize(1280, 900);
         changeListenerCallback(nullptr);
         // Records the selection the pane state belongs to, so the first real
@@ -511,132 +559,146 @@ public:
 
     void paint(juce::Graphics& g) override
     {
-        g.fillAll(juce::Colour(0xff171a1e));
+        g.fillAll(palette::appBackground);
         paintControlBar(g);
+        // The only thing between the browser and the arrangement: a gutter
+        // three pixels wide that is also the handle the pointer grabs. There
+        // are no margins around either panel and no frames on them, so the
+        // regions are told apart by their own surface tones and by this.
         if (browserOpen)
         {
-            g.setColour(juce::Colour(0xff3a434b));
-            g.fillRect(browserWidth, browserTop, 4, getHeight() - browserTop);
+            g.setColour(palette::border);
+            g.fillRect(browserWidth, browserTop, browserDividerWidth, getHeight() - browserTop);
         }
-        if (infoVisible)
+        // The Info View lives at the foot of the browser column, so it goes
+        // when the browser does. Asking infoVisible alone drew its heading into
+        // an empty rectangle at the origin, which put the words on the control
+        // bar with the browser hidden.
+        if (infoVisible && browserOpen)
         {
             const auto area = infoViewArea();
-            g.setColour(juce::Colour(0xff1d2228));
+            g.setColour(palette::sideSurface);
             g.fillRect(area);
-            g.setColour(juce::Colour(0xff3a434b));
-            g.drawRect(area);
-            g.setColour(juce::Colour(0xffb8c4aa));
-            g.setFont(uiFont(9.0f));
-            drawSnappedText(g, "INFO VIEW   ?  HIDE", area.withTrimmedLeft(10).withHeight(24),
+            // A rule along the top only. A box drawn round the Info View made
+            // it a card floating in the browser, which is the thing this
+            // layout is getting rid of everywhere else.
+            g.setColour(palette::border);
+            g.fillRect(area.withHeight(1));
+            g.setColour(palette::textDim);
+            g.setFont(uiFontBold(9.0f));
+            drawSnappedText(g, "INFO VIEW", area.withTrimmedLeft(12).withTrimmedTop(6).withHeight(18),
                             juce::Justification::centredLeft);
+            g.setColour(palette::disabled);
+            g.setFont(uiFont(9.0f));
+            drawSnappedText(g, "?   HIDE", area.withTrimmedLeft(12).withTrimmedTop(6).withHeight(18).withTrimmedRight(12),
+                            juce::Justification::right);
         }
     }
 
-    // The captions and the rules between the modules. Drawn from what the
-    // layout recorded rather than from a second copy of the geometry, so a
-    // control that moves takes its caption with it.
+    // One continuous band across the top of the window, and the hairlines that
+    // separate the few groups that need separating. The micro-headings that
+    // used to sit over each group - TEMPO, SIGNATURE, CLICK, TRANSPORT,
+    // POSITION, EDIT - are gone: six words of eight pixel type to label six
+    // controls that each say what they are, at the cost of a second row of
+    // height in the one band that is on screen the whole time.
     void paintControlBar(juce::Graphics& g)
     {
-        g.setColour(juce::Colour(0xff1b2026));
-        g.fillRect(0, 0, getWidth(), browserTop - 4);
-        g.setColour(juce::Colour(0xff2b333a));
+        g.setColour(palette::globalBar);
+        g.fillRect(0, 0, getWidth(), controlBarHeight);
+        g.setColour(palette::border);
         for (const auto divider : barDividers)
-            g.fillRect(divider, barCaptionTop, 1, barControlTop + barControlHeight - barCaptionTop);
-        g.setFont(uiFontBold(8.0f));
-        g.setColour(juce::Colour(0xff707d88));
-        for (const auto& group : barGroups)
-            drawSnappedText(g, group.caption, group.bounds, juce::Justification::centredLeft, true);
-        g.setColour(juce::Colour(0xff272f36));
-        g.fillRect(0, browserTop - 4, getWidth(), 1);
+            g.fillRect(divider, barDividerTop, 1, controlBarHeight - barDividerTop * 2);
+        // The foot of the bar, which is also the top edge of everything docked
+        // beneath it. Drawn here rather than by the panels, so it runs the
+        // whole width whether or not the browser is showing.
+        g.fillRect(0, controlBarHeight - 1, getWidth(), 1);
     }
 
-    // The control bar is a row of modules, each a caption over the controls it
-    // names, ruled off from its neighbours. Everything is placed left to right
-    // from one running x, the edit group is pinned to the right edge, and the
-    // readout takes whatever lies between - so the bar reflows as the window
-    // changes width instead of the clusters sliding over each other, which is
-    // what a layout hung off a centred readout used to do.
+    // Left to right in the order the specification asks for: the browser
+    // toggle, the song's own fields, the transport, the readout, and the undo
+    // pair pinned to the right edge. Everything but the readout takes the
+    // width it needs; the readout takes everything left between the transport
+    // and the arrows, which is what makes it the thing the bar is built around
+    // rather than one module among several.
     void layoutControlBar()
     {
-        barGroups.clear();
         barDividers.clear();
-        // A module: its caption goes on the caption row and its controls come
-        // back as a rectangle on the control row.
-        const auto module = [this](const char* caption, int x, int width)
-        {
-            barGroups.push_back({juce::String(caption), {x, barCaptionTop, width, barCaptionHeight}});
-            return juce::Rectangle<int>(x, barControlTop, width, barControlHeight);
-        };
         const auto rule = [this](int x) { barDividers.push_back(x); };
-        const auto row = [](juce::Rectangle<int> area, std::initializer_list<juce::Component*> buttons, int gap)
+        // A run of controls at one height, laid out from a running x.
+        auto x = barEdgeMargin;
+        const auto place = [&x](juce::Component& component, int width, int height, int top, int gap)
         {
-            const auto count = static_cast<int>(buttons.size());
-            const auto width = std::max(1, (area.getWidth() - gap * (count - 1)) / count);
-            for (auto* button : buttons)
-            {
-                button->setBounds(area.removeFromLeft(width));
-                area.removeFromLeft(gap);
-            }
+            component.setBounds(x, top, width, height);
+            x += width + gap;
         };
 
-        browserToggle.setBounds(6, barControlTop, 38, barControlHeight);
-        auto x = 58;
+        // A square glyph and a field are different heights, so the glyphs are
+        // centred on the fields rather than sharing their top edge: the bar
+        // reads as one row because everything on it shares a middle.
+        const auto transportTop = barControlTop + (fieldHeight - transportSize) / 2;
+
+        place(browserToggle, 40, transportSize, transportTop, barGroupGap);
         rule(x - barGroupGap / 2);
 
-        constexpr int tempoWidth = 106, signatureWidth = 86, clickWidth = 54;
-        constexpr int transportWidth = 186, editWidth = 122, viewWidth = 112;
-        tempoBox.setBounds(module("TEMPO", x, tempoWidth));
-        x += tempoWidth + barGroupGap;
-        signatureField.setBounds(module("SIGNATURE", x, signatureWidth));
-        x += signatureWidth + barGroupGap;
-        {
-            auto area = module("CLICK", x, clickWidth);
-            metronome.setBounds(area.removeFromLeft(34));
-            metronomeMenu.setBounds(area.removeFromLeft(18));
-        }
-        x += clickWidth + barGroupGap;
+        // Tempo, signature and the metronome are one group: they are all the
+        // song's own settings, so they sit closer to each other than to
+        // anything else and take no rule between them.
+        place(tempoBox, 104, fieldHeight, barControlTop, barFieldGap);
+        place(signatureField, 72, fieldHeight, barControlTop, barFieldGap);
+        place(metronome, transportSize, transportSize, transportTop, 0);
+        place(metronomeMenu, 18, transportSize, transportTop, barGroupGap);
 
-        rule(x - barGroupGap / 2);
-        row(module("TRANSPORT", x, transportWidth), {&play, &stop, &record, &panic}, 6);
-        x += transportWidth + barGroupGap;
-        rule(x - barGroupGap / 2);
+        for (auto* button : std::initializer_list<juce::Component*>{&rewind, &stop, &play, &record})
+            place(*button, transportSize, transportSize, transportTop, barTransportGap);
+        x += barGroupGap - barTransportGap;
 
         // Pinned to the right edge and placed before the readout, because the
         // readout is the elastic one: it is given whatever is left over.
-        auto rightEdge = getWidth() - 14;
-        row({rightEdge - editWidth, barControlTop, editWidth, barControlHeight}, {&undo, &redo, &clear}, 6);
-        module("EDIT", rightEdge - editWidth, editWidth);
-        rightEdge -= editWidth + barGroupGap;
+        auto rightEdge = getWidth() - barEdgeMargin;
+        for (auto* arrow : std::initializer_list<juce::Component*>{&redo, &undo})
+        {
+            rightEdge -= undoSize;
+            arrow->setBounds(rightEdge, transportTop, undoSize, transportSize);
+            rightEdge -= barTransportGap;
+        }
+        rightEdge -= barGroupGap - barTransportGap;
+
         sessionToggle.setVisible(sessionViewEnabled);
         arrangementToggle.setVisible(sessionViewEnabled);
         if constexpr (sessionViewEnabled)
         {
-            row({rightEdge - viewWidth, barControlTop, viewWidth, barControlHeight},
-                {&sessionToggle, &arrangementToggle}, 4);
-            module("VIEW", rightEdge - viewWidth, viewWidth);
+            constexpr int viewWidth = 112;
+            const auto area = juce::Rectangle<int>(rightEdge - viewWidth, barControlTop, viewWidth, fieldHeight);
+            sessionToggle.setBounds(area.withWidth(viewWidth / 2 - 2));
+            arrangementToggle.setBounds(area.withTrimmedLeft(viewWidth / 2 + 2));
             sessionToggle.setToggleState(sessionViewOpen, juce::dontSendNotification);
             arrangementToggle.setToggleState(!sessionViewOpen, juce::dontSendNotification);
-            backToArrangement.setBounds(rightEdge - viewWidth, barControlTop + barControlHeight + 2, viewWidth, 0);
+            backToArrangement.setBounds(rightEdge - viewWidth, barControlTop + fieldHeight + 2, viewWidth, 0);
             rightEdge -= viewWidth + barGroupGap;
         }
-        rule(rightEdge + barGroupGap / 2);
 
-        // The readout is the one control here that gains from being wider, so
-        // it gets the whole of the space left between the two clusters. Below
-        // the width its two lines need it is dropped rather than squeezed: a
-        // clock with half its digits missing is worse than no clock.
+        // Below the width its three columns need, the readout is dropped
+        // rather than squeezed: a clock with half its digits missing is worse
+        // than no clock, and the controls around it stay reachable.
         const auto readoutWidth = rightEdge - x;
-        position.setVisible(readoutWidth >= 220);
+        position.setVisible(readoutWidth >= 260);
+        // A touch taller than the fields beside it, which is the other half of
+        // making it the focal point: it is the only thing in the bar that
+        // breaks the row of thirty-four pixel controls.
         if (position.isVisible())
-            position.setBounds(module("POSITION", x, readoutWidth));
+            position.setBounds(x, barControlTop - 2, readoutWidth, fieldHeight + 4);
     }
 
     void resized() override
     {
-        constexpr int gap = 18;
+        // Docked, not floated: the browser sits against the left client edge,
+        // the arrangement fills everything right of the divider out to the
+        // right client edge, and neither has a margin around it. Hiding the
+        // browser takes its width *and* its divider out of the sum, so the
+        // arrangement expands into the whole of the freed space.
         const auto leftWidth = browserOpen ? browserWidth : 0;
-        const auto editorX = leftWidth + gap;
-        const auto editorW = getWidth() - editorX - 24;
+        const auto editorX = browserOpen ? leftWidth + browserDividerWidth : 0;
+        const auto editorW = std::max(120, getWidth() - editorX);
         // The transport is a full-width bar. Both the browser and arrangement
         // begin below it, so their top edges remain aligned.
         const auto arrangementTop = browserTop;
@@ -665,7 +727,10 @@ public:
             paneH = lowerPaneHeight;
         }
         const auto lowerH = paneH;
-        const auto lowerTop = getHeight() - 12 - lowerH;
+        // Flush with the bottom client edge. The pane used to stop twelve
+        // pixels short of it, which read as a card sitting on the window
+        // rather than as the foot of the workspace.
+        const auto lowerTop = getHeight() - lowerH;
         // Where the arrangement is covered from: the toggle strip sits in the
         // band between the lanes and the pane, exactly as it did when the two
         // were stacked rather than layered.
@@ -680,6 +745,8 @@ public:
         browser.setBounds(0, browserTop, browserWidth,
                           (infoVisible ? infoArea.getY() : getHeight()) - browserTop);
         browserToggle.setToggleState(browserOpen, juce::dontSendNotification);
+        // The tooltip says what the click will do, not what the button is.
+        browserToggle.setTooltip(browserOpen ? "Hide browser" : "Show browser");
         arrangement.setVisible(!sessionViewOpen);
         sessionView.setVisible(sessionViewOpen);
         arrangement.setBounds(editorX, arrangementTop, editorW, arrangementH);
@@ -696,10 +763,10 @@ public:
         editorToggle.setToggleState(notes || audio, juce::dontSendNotification);
         editorToggle.setButtonText(audio ? "Audio" : "Clip");
         rackToggle.setToggleState(devices, juce::dontSendNotification);
-        editorToggle.setBounds(editorX, arrangementBottom + 10, 48, 22);
-        rackToggle.setBounds(editorX + 54, arrangementBottom + 10, 72, 22);
+        editorToggle.setBounds(editorX + 8, arrangementBottom + 6, 52, 24);
+        rackToggle.setBounds(editorX + 66, arrangementBottom + 6, 72, 24);
         patternLabel.setVisible(notes || audio);
-        patternLabel.setBounds(editorX + 136, arrangementBottom + 10, std::max(80, editorW - 500), 24);
+        patternLabel.setBounds(editorX + 148, arrangementBottom + 6, std::max(80, editorW - 500), 24);
         // The scale, zoom and resolution controls belong to the note editor and
         // mean nothing over a waveform, so they follow it rather than the pane.
         scaleHighlight.setVisible(notes && !session.isPatternDrums());
@@ -1176,6 +1243,11 @@ private:
                         monitoring);
         menu.addSeparator();
         menu.addItem(4, "Audio settings...");
+        // Panic was an exclamation mark on the control bar, which told nobody
+        // what it did. It is named here instead, beside the audio settings it
+        // restarts. Clear pattern, the other symbol that used to sit up there,
+        // was already in this menu.
+        menu.addItem(12, "Panic reset audio");
         menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(target != nullptr ? *target : editMenu),
             [safe = juce::Component::SafePointer<ControlWindow>(this), noteEditorHasFocus](int result)
             {
@@ -1198,6 +1270,11 @@ private:
                                        : "Library sounds are no longer played when clicked");
                 }
                 else if (result == 11) safe->computerKeyboard.toggle();
+                else if (result == 12)
+                {
+                    safe->session.panicReset();
+                    safe->logStatus("Panic reset: stopped transport, reset plugins, restarted audio device");
+                }
                 else if (result >= 20 && result <= 22)
                 {
                     const auto mode = static_cast<Session::InputMonitoring>(result - 20);
@@ -1360,7 +1437,7 @@ private:
         juce::DialogWindow::LaunchOptions options;
         options.content.setOwned(selector.release());
         options.dialogTitle = "Audio settings";
-        options.dialogBackgroundColour = juce::Colour(0xff202327);
+        options.dialogBackgroundColour = palette::sideSurface;
         options.useNativeTitleBar = true;
         audioSettings = options.launchAsync();
     }
@@ -1375,7 +1452,11 @@ private:
     void changeListenerCallback(juce::ChangeBroadcaster*) override
     {
         const auto playing = session.edit->getTransport().isPlaying();
-        play.setButtonText(playing ? juce::String(L"\u275a\u275a") : juce::String(L"\u25b6"));
+        // The glyph holds still and the brightness moves: a triangle that turns
+        // into two bars asks the eye to re-read the button every time the
+        // transport starts, and at fourteen pixels the two shapes are too alike
+        // to tell apart at a glance in any case.
+        play.setToggleState(playing, juce::dontSendNotification);
         play.setTooltip(playing ? "Pause" : "Play");
         updateRecordButton();
         tempoBox.setValue(session.tempo());
@@ -1440,25 +1521,23 @@ private:
             session.applyTrackAutomationAt(playheadTime(session.edit->getTransport()));
         const auto seconds = session.edit->getTransport().getPosition().inSeconds();
         updateReadings(seconds);
-        // The loop is where the transport will turn, so it belongs beside the
-        // position rather than under it.
-        position.setTrailingText(displayLoop ? loopText() : juce::String());
-        // A count-in owns the first line while it runs, but the clock, the
-        // load meters and the loop keep reading, which is why all of them are
+        // The loop is where the transport will turn, so it heads the column of
+        // readings that describe the session rather than follow it.
+        position.setLoop(displayLoop ? loopText() : juce::String());
+        const auto signature = session.timeSignature();
+        position.setTempoAndSignature(
+            displayTempo ? juce::String(session.tempo(), 0) : juce::String(),
+            displayTimeSignature ? juce::String(signature.numerator) + "/" + juce::String(signature.denominator)
+                                 : juce::String());
+        // A count-in owns the position while it runs, but the clock, the load
+        // meters and the loop keep reading, which is why all of them are
         // updated above this.
         if (session.isCountingIn())
         {
-            position.setDisplayText("COUNT-IN     " + juce::String(session.countInBarsRemaining()));
+            position.setPosition("COUNT-IN  " + juce::String(session.countInBarsRemaining()));
             return;
         }
-        const auto place = barAndBeat(seconds);
-        const auto signature = session.timeSignature();
-        juce::StringArray parts;
-        if (displayPosition) parts.add(juce::String(place.first).paddedLeft('0', 3) + "  " + juce::String(place.second));
-        if (displayTempo) parts.add(juce::String(session.tempo(), 0));
-        if (displayTimeSignature) parts.add(juce::String(signature.numerator) + "/" + juce::String(signature.denominator));
-        const auto text = parts.joinIntoString("     ");
-        position.setDisplayText(text);
+        position.setPosition(displayPosition ? placeText(seconds) : juce::String());
     }
 
     // The second line of the display. The clock follows the playhead at the
@@ -1474,14 +1553,17 @@ private:
             memoryBytes = SystemUsage::processMemoryBytes();
             audioDescription = audioDeviceText();
         }
-        juce::StringArray readings;
-        if (displayTime)
-            readings.add(formatClock(seconds, true) + " / "
-                         + formatClock(session.edit->getLength().inSeconds(), true));
-        if (displayCpu) readings.add("CPU " + juce::String(juce::roundToInt(cpuLoad * 100.0)) + "%");
-        if (displayMemory) readings.add("RAM " + formatMemory(memoryBytes));
-        position.setSecondaryText(readings.joinIntoString("   "));
-        position.setSecondaryTrailingText(displayAudio ? audioDescription : juce::String());
+        position.setClock(displayTime ? formatClock(seconds, true) + "  /  "
+                                            + formatClock(session.edit->getLength().inSeconds(), true)
+                                      : juce::String());
+        juce::StringArray load;
+        if (displayCpu) load.add("CPU " + juce::String(juce::roundToInt(cpuLoad * 100.0)) + "%");
+        if (displayMemory) load.add("RAM " + formatMemory(memoryBytes));
+        position.setStatistics(load.joinIntoString("   "));
+        // The device reading is the lowest priority thing in the box: the
+        // display drops it first when the window is too narrow to hold
+        // everything, before it gives up any of the readings above.
+        position.setDeviceInfo(displayAudio ? audioDescription : juce::String());
     }
 
     // Bars and beats at a point on the timeline, both counted from one, which
@@ -1495,21 +1577,40 @@ private:
         return {bar, static_cast<int>(std::floor(beats - (bar - 1) * barLength)) + 1};
     }
 
-    // The loop, in the bars the position is counted in. Looping is always on:
-    // with no span dragged on the ruler it is the whole arrangement, so until
-    // someone narrows it this reads as the length of the project. The beat is
-    // left off a loop that begins and ends on a downbeat, which is nearly all
-    // of them.
+    // Which sixteenth of the beat the playhead is in, counted from one. The
+    // third field of the position, and the one that actually moves while the
+    // transport rolls: bars and beats change too slowly to tell a stalled
+    // readout from a stopped transport.
+    int subdivision(double seconds) const
+    {
+        const auto beats = session.edit->tempoSequence
+                               .toBeats(tracktion::core::TimePosition::fromSeconds(seconds)).inBeats();
+        const auto intoBeat = beats - std::floor(beats);
+        return juce::jlimit(1, 4, static_cast<int>(std::floor(intoBeat * 4.0)) + 1);
+    }
+
+    // The loop, written exactly as the position above it is - bar, beat and
+    // sixteenth - because a loop counted differently from the playhead is a
+    // loop nobody can read against it. Looping is always on: with no span
+    // dragged on the ruler it is the whole arrangement, so until someone
+    // narrows it this reads as the length of the project. The word LOOP is the
+    // display's, not this function's; it drops it when the box is tight.
     juce::String loopText() const
     {
         const auto range = session.loopRange();
-        auto place = [] (std::pair<int, int> point)
-        {
-            return juce::String(point.first).paddedLeft('0', 3)
-                 + (point.second == 1 ? juce::String() : "." + juce::String(point.second));
-        };
-        return "LOOP  " + place(barAndBeat(range.getStart().inSeconds()))
-             + " - " + place(barAndBeat(range.getEnd().inSeconds()));
+        return placeText(range.getStart().inSeconds())
+             + " - " + placeText(range.getEnd().inSeconds());
+    }
+
+    // Bar, beat and sixteenth, which is how the position and the loop beside it
+    // are both written. One formatter for both, because a loop that counts
+    // differently from the playhead is a loop nobody can read against it.
+    juce::String placeText(double seconds) const
+    {
+        const auto place = barAndBeat(seconds);
+        return juce::String(place.first).paddedLeft('0', 3)
+             + "." + juce::String(place.second)
+             + "." + juce::String(subdivision(seconds));
     }
 
     // What the engine is actually running on. Sampled with the load meters
@@ -1551,12 +1652,16 @@ private:
     AudioClipPanel audioClip;
     ValueDragBox tempoBox;
     TimeSignatureField signatureField;
-    juce::TextButton metronome, metronomeMenu;
-    juce::TextButton undo {"Undo"}, redo {"Redo"}, clear {"Clear"};
-    juce::TextButton play {"Play"}, panic {"Panic"};
+    // Every control on the bar is a glyph on the bar's own surface. Clear and
+    // panic used to sit here as an x and an exclamation mark, which said
+    // nothing about what either one did; both are in the Edit menu now, where
+    // they are spelt out. Nothing was dropped - see showEditMenu.
+    IconButton metronome {"Metronome"}, metronomeMenu {"Metronome settings"};
+    IconButton undo {"Undo"}, redo {"Redo"};
+    IconButton play {"Play"}, rewind {"Return to start"};
     StopButton stop;
     RecordButton record;
-    BrowserToggleButton browserToggle;
+    IconButton browserToggle {"Browser"};
     juce::TextButton editorToggle {"Clip"}, rackToggle {"Devices"};
     juce::TextButton sessionToggle {"Session"}, arrangementToggle {"Arrange"};
     juce::TextButton backToArrangement;
@@ -1574,14 +1679,25 @@ private:
     int browserWidth = 244, lowerPaneHeight = 0;
     int resizeStartX = 0, resizeStartY = 0, resizeStartBrowserWidth = 244;
     int resizeStartLowerPaneHeight = 0;
-    // The control bar's own grid: a caption row over a control row, with the
-    // same top and the same height for every module in the bar. Laying every
-    // group out against these two numbers is what makes the bar read as one
-    // band instead of as controls that happen to be near each other.
-    static constexpr int barCaptionTop = 10, barCaptionHeight = 11;
-    static constexpr int barControlTop = 25, barControlHeight = 42;
-    static constexpr int barGroupGap = 16;
-    static constexpr int browserTop = barControlTop + barControlHeight + 14;
+    // The control bar's own grid. One row of controls on one band: every
+    // control shares a vertical centre, and the three gaps below are the whole
+    // of the grouping - a wide gap between groups, a narrow one inside a group,
+    // and a narrower one still between the transport's four glyphs, which read
+    // as one control with four parts.
+    static constexpr int controlBarHeight = 72;
+    static constexpr int fieldHeight = 34;
+    static constexpr int transportSize = 34;
+    static constexpr int undoSize = 28;
+    static constexpr int barControlTop = (controlBarHeight - fieldHeight) / 2;
+    static constexpr int barGroupGap = 18;
+    static constexpr int barFieldGap = 8;
+    static constexpr int barTransportGap = 3;
+    static constexpr int barEdgeMargin = 12;
+    static constexpr int barDividerTop = 18;
+    // The gutter between the browser and the arrangement, which is also the
+    // handle that resizes the browser.
+    static constexpr int browserDividerWidth = 3;
+    static constexpr int browserTop = controlBarHeight;
     // A pane shorter than this shows neither a usable editor nor a device, so
     // it is the floor for both the pane and the Device View inside it.
     static constexpr int minimumPaneHeight = 112;
@@ -1611,18 +1727,19 @@ private:
     bool browserOpen = true, infoVisible = true;
     bool sessionViewOpen = false;
     bool resizingBrowser = false;
-    // What the bar paints over the controls it has placed: one caption per
-    // module and a hairline between groups. Recorded by the layout, because
-    // only the layout knows where the modules ended up.
-    struct BarGroup { juce::String caption; juce::Rectangle<int> bounds; };
-    std::vector<BarGroup> barGroups;
+    // Where the bar rules off one group from the next. Recorded by the layout,
+    // because only the layout knows where the groups ended up.
     std::vector<int> barDividers;
     bool updatingEditorResolution = false;
     // The tempo and the signature have fields of their own in the bar now, so
     // the readout no longer repeats them: it is the position, the clock and
     // the loop. Both are still in the display menu for anyone who wants them
     // back on the one line their eye is already on while playing.
-    bool displayPosition = true, displayTempo = false, displayTimeSignature = false, displayLoop = true;
+    // Tempo and signature were off by default because the old readout had one
+    // line and putting them on it shoved the position sideways. The middle
+    // column is where they go now, so they are on: they are what the display
+    // is asked for most often after the position itself.
+    bool displayPosition = true, displayTempo = true, displayTimeSignature = true, displayLoop = true;
     bool displayTime = true, displayCpu = true, displayMemory = true, displayAudio = true;
     double cpuLoad = 0.0;
     juce::uint64 memoryBytes = 0;
@@ -1660,8 +1777,6 @@ public:
         const auto requestedProject = juce::File(args.trim().unquoted());
         if (requestedProject.existsAsFile() && requestedProject.hasFileExtension("rhinoedit"))
             projectToOpen = requestedProject;
-        theme.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff343a40));
-        theme.setColour(juce::Slider::trackColourId, juce::Colour(0xffc6d58c));
         juce::LookAndFeel::setDefaultLookAndFeel(&theme);
         window = std::make_unique<Window>();
         loading = new StartupScreen();
@@ -1788,10 +1903,19 @@ private:
                 // control bar without taking the display away from whoever is
                 // using the machine - RHINO_SHELL_SNAPSHOT under
                 // --startup-test writes the window to a PNG and quits.
+                // RHINO_SHELL_SNAPSHOT_SIZE=960x680 renders it at a size of
+                // your choosing first, which is how the smallest supported
+                // window gets looked at without resizing the real one.
                 if (const auto shellShot = juce::SystemStats::getEnvironmentVariable("RHINO_SHELL_SNAPSHOT", {});
                     startupTest && shellShot.isNotEmpty())
                     if (auto* content = window->getContentComponent())
+                    {
+                        const auto size = juce::SystemStats::getEnvironmentVariable("RHINO_SHELL_SNAPSHOT_SIZE", {});
+                        if (const auto cross = size.indexOfChar('x'); cross > 0)
+                            content->setSize(std::max(200, size.substring(0, cross).getIntValue()),
+                                             std::max(200, size.substring(cross + 1).getIntValue()));
                         writeSnapshot(*content, juce::File(shellShot));
+                    }
                 if (startupTest) quit();
                 return;
             }
@@ -1823,7 +1947,10 @@ private:
             }
         };
 
-        Window() : DocumentWindow({}, juce::Colour(0xff171a1e), allButtons)
+        // The title bar takes the control bar's own tone, so the two read as
+        // one band of chrome across the top of the window rather than as a
+        // frame with a toolbar inside it.
+        Window() : DocumentWindow({}, palette::globalBar, allButtons)
         {
             // Keep the frame and content in JUCE's single client-area layout.
             // Native Windows non-client bounds can put the title bar above the
@@ -1845,7 +1972,7 @@ private:
             projectTitle.setInterceptsMouseClicks(false, false);
             projectTitle.setText("Untitled", juce::dontSendNotification);
             for (auto* menu : {&fileMenu, &editMenu, &viewMenu, &helpMenu})
-                menu->setColour(juce::TextButton::textColourOffId, juce::Colour(0xffd7dde2));
+                menu->setColour(juce::TextButton::textColourOffId, palette::text);
             for (auto* component : std::initializer_list<juce::Component*>{&fileMenu, &editMenu, &viewMenu, &helpMenu, &projectTitle})
                 addAndMakeVisible(component);
             fileMenu.onClick = [this] { if (fileRequested) fileRequested(fileMenu); };

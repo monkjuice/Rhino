@@ -164,16 +164,29 @@ void Arrangement::syncTrackControls()
                 else status(session.trackName(track) + " is armed: press Record or F9");
             }
         };
-        muteButton->setColour(juce::TextButton::buttonOnColourId, juce::Colour(0xff97634c));
-        soloButton->setColour(juce::TextButton::buttonOnColourId, juce::Colour(0xff657440));
-        armButton->setColour(juce::TextButton::buttonOnColourId, juce::Colour(0xffb5453b));
+        // Mute and solo are opposite states and are lit as opposites: a muted
+        // track's key goes dark and recedes, a soloed track's goes bright and
+        // takes dark text, so the one track that is being listened to is the
+        // one lit thing in the stack. Telling them apart by value rather than
+        // by hue is what lets the chrome stay grey without the two keys
+        // becoming indistinguishable - which is exactly what happened when
+        // both were simply given the neutral "on" fill.
+        muteButton->setColour(juce::TextButton::buttonOnColourId, palette::disabled);
+        muteButton->setColour(juce::TextButton::textColourOnId, palette::text);
+        soloButton->setColour(juce::TextButton::buttonOnColourId, palette::activeNeutral);
+        soloButton->setColour(juce::TextButton::textColourOnId, palette::appBackground);
+        // Arm keeps red. It is the one state in the interface that is worth a
+        // colour, and it is the same red the record button and the record dot
+        // on the card already wear.
+        armButton->setColour(juce::TextButton::buttonOnColourId, palette::recordAccent.darker(0.2f));
+        armButton->setColour(juce::TextButton::textColourOnId, juce::Colours::white);
         // Live's MIDI From chooser. The list is the machine's devices at the
         // moment it is opened, so it is a menu rather than a ComboBox holding
         // a snapshot of them.
         auto inputButton = std::make_unique<juce::TextButton>("All Ins  v");
         inputButton->onClick = [this, track] { showMidiInputMenu(track); };
-        inputButton->setColour(juce::TextButton::buttonColourId, juce::Colour(0xff222a30));
-        inputButton->setColour(juce::TextButton::textColourOffId, juce::Colour(0xffaebbc3));
+        inputButton->setColour(juce::TextButton::buttonColourId, palette::control);
+        inputButton->setColour(juce::TextButton::textColourOffId, palette::textDim);
         auto volumeSlider = std::make_unique<juce::Slider>();
         volumeSlider->setSliderStyle(juce::Slider::LinearBar);
         // The bar paints the value itself, in a colour picked for whichever of
@@ -203,15 +216,17 @@ void Arrangement::syncTrackControls()
             session.setTrackPan(track, static_cast<float>(slider->getValue()));
         };
         // Level and position are different quantities, so they are not the
-        // same colour: the fader keeps the accent green the app uses for
-        // amounts, and pan takes the blue it uses for placement.
-        volumeSlider->setColour(juce::Slider::trackColourId, juce::Colour(0xff45d0d4));
-        volumeSlider->setColour(juce::Slider::backgroundColourId, juce::Colour(0xff1a2026));
-        volumeSlider->setColour(juce::Slider::textBoxTextColourId, juce::Colour(0xff0e1317));
+        // same colour: volume is cyan and pan is red, here and on the main row
+        // alike. These two are the reason the chrome around them is grey -
+        // they say which fader is which at a glance, and they cannot do that
+        // from within a bar full of other coloured things.
+        volumeSlider->setColour(juce::Slider::trackColourId, palette::volume);
+        volumeSlider->setColour(juce::Slider::backgroundColourId, palette::displayInset);
+        volumeSlider->setColour(juce::Slider::textBoxTextColourId, palette::appBackground);
         volumeSlider->setColour(juce::Slider::textBoxOutlineColourId, juce::Colour(0x33000000));
-        panSlider->setColour(juce::Slider::trackColourId, juce::Colour(0xffd4564e));
-        panSlider->setColour(juce::Slider::backgroundColourId, juce::Colour(0xff1a2026));
-        panSlider->setColour(juce::Slider::textBoxTextColourId, juce::Colour(0xff0e1317));
+        panSlider->setColour(juce::Slider::trackColourId, palette::pan);
+        panSlider->setColour(juce::Slider::backgroundColourId, palette::displayInset);
+        panSlider->setColour(juce::Slider::textBoxTextColourId, palette::appBackground);
         panSlider->setColour(juce::Slider::textBoxOutlineColourId, juce::Colour(0x33000000));
         // The Info View explains a control while the pointer rests on it, so
         // every one of them reports its enter and exit to the arrangement.

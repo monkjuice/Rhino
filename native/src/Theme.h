@@ -7,6 +7,51 @@
 
 namespace rhino
 {
+// The interface's semantic colours, in one place. Every surface, border and
+// run of text in the shell names one of these rather than carrying a literal,
+// so the chrome can be re-toned without hunting for hex through a dozen paint
+// methods. The chrome is deliberately neutral: a grey that is actually grey
+// leaves the only saturated things on screen the ones that carry meaning -
+// a track's colour, the cyan of a fader, the red of a pan or a record light.
+//
+// These are objects rather than constants because juce::Colour has no
+// constexpr constructor; they are read while painting, long after static
+// initialisation has finished.
+namespace palette
+{
+inline const juce::Colour appBackground    {0xff141414};  // behind everything
+inline const juce::Colour globalBar        {0xff181818};  // the control bar
+inline const juce::Colour sideSurface      {0xff1e1e1e};  // browser, track headers, panels
+inline const juce::Colour arrangement      {0xff242424};  // the timeline's own ground
+inline const juce::Colour control          {0xff292929};  // a raised control
+inline const juce::Colour hover            {0xff333333};  // hovered or selected row
+inline const juce::Colour border           {0xff3a3a3a};  // borders and major grid lines
+inline const juce::Colour minorGrid        {0xff2c2c2c};  // subdivisions
+inline const juce::Colour text             {0xffe0e0e0};  // primary text and icons
+inline const juce::Colour textDim          {0xffa0a0a0};  // secondary text
+inline const juce::Colour disabled         {0xff626262};  // a control that cannot be used
+inline const juce::Colour activeNeutral    {0xffbdbdbd};  // a neutral control that is on
+inline const juce::Colour displayInset     {0xff101010};  // the readout's recessed ground
+inline const juce::Colour recordAccent     {0xffed3935};  // the one red the chrome keeps
+
+// The readout keeps the tint it has always had. It is the one lit surface in
+// the interface and the only place the eye is meant to be drawn to, so it is
+// a display token rather than a chrome one: nothing else may use it.
+inline const juce::Colour displayText      {0xffd6e6a7};
+inline const juce::Colour displayTextDim   {0xff8fa08c};
+inline const juce::Colour displayTextFaint {0xff76856f};
+
+// The mixer's two colours, which say which control is which at a glance and
+// are therefore not chrome. Volume is cyan and pan is red on a track card and
+// on the main row alike.
+inline const juce::Colour volume           {0xff45d0d4};
+inline const juce::Colour pan              {0xffd4564e};
+
+// What the chrome uses to mark a selection or a focused row, kept grey so it
+// never competes with a track colour sitting next to it.
+inline const juce::Colour selection        {0xffdcdcdc};
+}
+
 // A JUCE font height is ascent plus descent, which the face then divides down
 // to an em size: ask for a height of 12 and Inter is rasterised at 9.9 pixels
 // per em. A fractional em is what puts stems between pixel columns, and with
@@ -74,6 +119,44 @@ inline void drawSnappedText(juce::Graphics& g, const juce::String& text, juce::R
 class Theme final : public juce::LookAndFeel_V4
 {
 public:
+    // Every stock JUCE control asks its look-and-feel for these before it
+    // paints, and LookAndFeel_V4's own dark scheme is a blue-grey. Setting them
+    // here is what keeps a popup menu, a dialog or a scrollbar the same neutral
+    // grey as the panels around it without each of those controls being
+    // recoloured where it happens to be created.
+    Theme()
+    {
+        setColour(juce::ResizableWindow::backgroundColourId, palette::appBackground);
+        setColour(juce::DocumentWindow::textColourId, palette::text);
+        setColour(juce::PopupMenu::backgroundColourId, palette::sideSurface);
+        setColour(juce::PopupMenu::textColourId, palette::text);
+        setColour(juce::PopupMenu::headerTextColourId, palette::textDim);
+        setColour(juce::PopupMenu::highlightedBackgroundColourId, palette::hover);
+        setColour(juce::PopupMenu::highlightedTextColourId, juce::Colours::white);
+        setColour(juce::TextButton::buttonColourId, palette::control);
+        setColour(juce::TextButton::buttonOnColourId, palette::hover);
+        setColour(juce::TextButton::textColourOffId, palette::textDim);
+        setColour(juce::TextButton::textColourOnId, palette::text);
+        setColour(juce::ComboBox::backgroundColourId, palette::control);
+        setColour(juce::ComboBox::outlineColourId, palette::border);
+        setColour(juce::ComboBox::textColourId, palette::text);
+        setColour(juce::ComboBox::arrowColourId, palette::textDim);
+        setColour(juce::TextEditor::backgroundColourId, palette::control);
+        setColour(juce::TextEditor::outlineColourId, palette::border);
+        setColour(juce::TextEditor::focusedOutlineColourId, palette::activeNeutral);
+        setColour(juce::TextEditor::textColourId, palette::text);
+        setColour(juce::TextEditor::highlightColourId, palette::hover);
+        setColour(juce::Label::textColourId, palette::text);
+        setColour(juce::ScrollBar::thumbColourId, palette::border.brighter(0.25f));
+        setColour(juce::ScrollBar::trackColourId, palette::appBackground);
+        setColour(juce::TooltipWindow::backgroundColourId, palette::control);
+        setColour(juce::TooltipWindow::textColourId, palette::text);
+        setColour(juce::TooltipWindow::outlineColourId, palette::border);
+        setColour(juce::AlertWindow::backgroundColourId, palette::sideSurface);
+        setColour(juce::AlertWindow::textColourId, palette::text);
+        setColour(juce::AlertWindow::outlineColourId, palette::border);
+    }
+
     // The app ships its own UI face rather than inheriting the Windows shell
     // font. JUCE renders text with greyscale antialiasing and no grid fitting,
     // so at the sizes this interface uses a face drawn for screen - large

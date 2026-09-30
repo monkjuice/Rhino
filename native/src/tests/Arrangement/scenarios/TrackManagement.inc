@@ -294,13 +294,15 @@
             const auto shot = view.createComponentSnapshot(view.getLocalBounds());
             const auto strip = static_cast<int>(view.masterLane().getBottom()) + 4;
             require(strip < view.getHeight() - 180, "The strip under the main row is inside the panel");
-            require(shot.getPixelAt(160, strip) == juce::Colour(0xff222930),
+            // Named rather than spelt as a hex value, so re-toning the chrome
+            // cannot quietly turn this into a test of a colour nobody uses.
+            require(shot.getPixelAt(160, strip) == palette::sideSurface,
                     "The strip under the main row is the row's own fill, not the lane that ran past it");
             // Clear of the MAIN label and both of its faders, which is the only
             // part of the row's header column that is bare fill.
-            require(shot.getPixelAt(210, static_cast<int>(view.masterLane().getY()) + 10) == juce::Colour(0xff222930),
+            require(shot.getPixelAt(210, static_cast<int>(view.masterLane().getY()) + 10) == palette::sideSurface,
                     "And so is the row itself");
-            require(shot.getPixelAt(160, view.getHeight() - 90) == juce::Colour(0xff171a1e),
+            require(shot.getPixelAt(160, view.getHeight() - 90) == palette::appBackground,
                     "Below the main row the panel leaves the covered strip to the shell");
             view.setBottomInset(0.0f);
             require(session.setTrackLaneHeight(0, restore).wasOk(), "The row is put back as it was");

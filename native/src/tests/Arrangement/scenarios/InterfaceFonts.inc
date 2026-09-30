@@ -148,7 +148,7 @@
         const auto nameArea = view.trackNameBounds(track);
         require(!nameArea.isEmpty(), "The card has a name box");
         const auto cardColour = session.trackColour(track).isTransparent()
-            ? juce::Colour(0xff41505d) : session.trackColour(track);
+            ? palette::control.brighter(0.18f) : session.trackColour(track);
         const auto card = view.createComponentSnapshot(nameArea);
 
         juce::Image expected(juce::Image::RGB, nameArea.getWidth(), nameArea.getHeight(), true);

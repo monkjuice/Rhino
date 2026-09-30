@@ -81,13 +81,13 @@ void Arrangement::configureMasterControls()
     masterPan.onDragStart = [this] { session.beginMasterPanGesture(); };
     masterPan.onDragEnd = [this] { session.endMasterPanGesture(); };
     masterPan.onValueChange = [this] { session.setMasterPan(static_cast<float>(masterPan.getValue())); };
-    masterVolume.setColour(juce::Slider::trackColourId, juce::Colour(0xff45d0d4));
-    masterVolume.setColour(juce::Slider::backgroundColourId, juce::Colour(0xff161c21));
-    masterVolume.setColour(juce::Slider::textBoxTextColourId, juce::Colour(0xff0e1317));
+    masterVolume.setColour(juce::Slider::trackColourId, palette::volume);
+    masterVolume.setColour(juce::Slider::backgroundColourId, palette::displayInset);
+    masterVolume.setColour(juce::Slider::textBoxTextColourId, palette::appBackground);
     masterVolume.setColour(juce::Slider::textBoxOutlineColourId, juce::Colour(0x33000000));
-    masterPan.setColour(juce::Slider::trackColourId, juce::Colour(0xffd4564e));
-    masterPan.setColour(juce::Slider::backgroundColourId, juce::Colour(0xff161c21));
-    masterPan.setColour(juce::Slider::textBoxTextColourId, juce::Colour(0xff0e1317));
+    masterPan.setColour(juce::Slider::trackColourId, palette::pan);
+    masterPan.setColour(juce::Slider::backgroundColourId, palette::displayInset);
+    masterPan.setColour(juce::Slider::textBoxTextColourId, palette::appBackground);
     masterPan.setColour(juce::Slider::textBoxOutlineColourId, juce::Colour(0x33000000));
     masterVolume.addMouseListener(this, false);
     masterPan.addMouseListener(this, false);
@@ -97,11 +97,11 @@ void Arrangement::configureMasterControls()
 
 void Arrangement::resized()
 {
-    addTrack.setBounds(10, 3, 34, 26);
-    duplicateButton.setBounds(48, 3, 34, 26);
-    snap.setBounds(86, 3, 34, 26);
-    automationButton.setBounds(124, 3, 34, 26);
-    toolbarGrid.setBounds(164, 3, 92, 26);
+    addTrack.setBounds(10, 5, 34, 26);
+    duplicateButton.setBounds(48, 5, 34, 26);
+    snap.setBounds(86, 5, 34, 26);
+    automationButton.setBounds(124, 5, 34, 26);
+    toolbarGrid.setBounds(164, 5, 92, 26);
     // Above the main row rather than inside it.
     gridControl.setBounds(getWidth() - 104, static_cast<int>(masterLane().getY()) - 26, 76, 20);
     updateGridControl();

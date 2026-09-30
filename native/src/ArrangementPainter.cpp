@@ -83,9 +83,9 @@ void Arrangement::paintBarNumbers(juce::Graphics& g, double firstBeat, double la
         if (x < headerWidth - 1.0f) continue;
         if (x > right) break;
         ++painted;
-        g.setColour(juce::Colour(0xff4a5862));
+        g.setColour(palette::border.brighter(0.2f));
         g.drawVerticalLine(static_cast<int>(x), rulerTop + 2.0f, lanesTop);
-        g.setColour(juce::Colour(0xff8c99a4));
+        g.setColour(palette::textDim);
         g.setFont(uiFont(10.0f));
         drawSnappedText(g, juce::String(static_cast<juce::int64>(bar)),
                         {static_cast<int>(x) + 4, static_cast<int>(rulerTop), 64, 24});
@@ -114,7 +114,7 @@ void Arrangement::paintTrackCards(juce::Graphics& g)
             continue;
         }
         const auto track = rows[static_cast<size_t>(index)].track;
-        g.setColour(juce::Colour(track == 0 ? 0xff262e36 : 0xff222a31));
+        g.setColour(track == 0 ? palette::arrangement.brighter(0.04f) : palette::arrangement);
         g.fillRect(row.withX(0.0f).withWidth(static_cast<float>(getWidth()) - 14.0f));
         // The card is two columns with the panel grey between them: the
         // controls keep the panel background, and the name sits on the track
@@ -125,17 +125,17 @@ void Arrangement::paintTrackCards(juce::Graphics& g)
                                                        headerWidth - indent - cardControlsWidth - cardDividerWidth,
                                                        row.getHeight());
         const auto colour = session.trackColour(track);
-        const auto cardColour = colour.isTransparent() ? juce::Colour(0xff41505d) : colour;
+        const auto cardColour = colour.isTransparent() ? palette::control.brighter(0.18f) : colour;
         g.setColour(cardColour);
         g.fillRect(nameColumn);
-        g.setColour(juce::Colour(0xff39434b));
+        g.setColour(palette::border);
         g.fillRect(indent + cardControlsWidth, row.getY(), cardDividerWidth, row.getHeight());
         paintGroupGutter(g, track, row);
         if (isTrackArmed(track))
         {
             // A card too short to show its buttons still has to say it is
             // armed, so the edge of the header carries it too.
-            g.setColour(juce::Colour(0xffb5453b));
+            g.setColour(palette::recordAccent.darker(0.2f));
             g.fillRect(row.withX(headerWidth - 3.0f).withWidth(3.0f));
         }
         if (isTrackSelected(track))
@@ -147,7 +147,7 @@ void Arrangement::paintTrackCards(juce::Graphics& g)
             g.fillRect(row.withX(0.0f).withWidth(headerWidth));
             if (track == selectedTrack)
             {
-                g.setColour(juce::Colour(0xffc6d58c));
+                g.setColour(palette::selection);
                 g.fillRect(row.withX(0.0f).withWidth(3.0f));
             }
         }
@@ -179,9 +179,9 @@ void Arrangement::paintTrackCards(juce::Graphics& g)
 
 void Arrangement::paint(juce::Graphics& g)
 {
-    g.fillAll(juce::Colour(0xff1d2228));
+    g.fillAll(palette::sideSurface);
     g.setFont(uiFont(10.0f));
-    g.setColour(juce::Colour(0xff8a969f));
+    g.setColour(palette::textDim);
     drawSnappedText(g, "Drop browser items or files / drag clips to move / trim edges",
                     {360, 0, getWidth() - 370, 30});
     paintTrackCards(g);
@@ -199,14 +199,14 @@ void Arrangement::paint(juce::Graphics& g)
             if (row.getHeight() <= 0.0f) continue;
             if (row.getBottom() < lanesTop || row.getY() > laneBottom) continue;
             const auto ownRow = rows[static_cast<size_t>(index)].automation < 0;
-            g.setColour(juce::Colour(ownRow ? 0xff39434b : 0xff2c353c));
+            g.setColour(ownRow ? palette::border : palette::minorGrid);
             // Two pixels rather than one: at a single pixel the divisions read
             // as a tone change between lanes rather than as a line ruled
             // between them, and the bands stopped separating at a glance.
             g.fillRect(0.0f, row.getBottom() - trackDividerThickness,
                        static_cast<float>(getWidth()) - 14.0f, trackDividerThickness);
         }
-        g.setColour(juce::Colour(0xff39434b));
+        g.setColour(palette::border);
         g.fillRect(headerWidth - trackDividerThickness, lanesTop, trackDividerThickness, laneBottom - lanesTop);
     }
 
@@ -221,21 +221,21 @@ void Arrangement::paint(juce::Graphics& g)
         const juce::Rectangle<float> band {0.0f, master.getY(), static_cast<float>(getWidth()),
                                            std::max(master.getHeight(),
                                                     getHeight() - bottomInset - master.getY())};
-        g.setColour(juce::Colour(0xff191f24));
+        g.setColour(palette::appBackground);
         g.fillRect(band);
-        g.setColour(juce::Colour(isMasterSelected() ? 0xff343f47 : 0xff222930));
+        g.setColour(isMasterSelected() ? palette::hover : palette::sideSurface);
         g.fillRect(band.withWidth(headerWidth));
         if (isMasterSelected())
         {
-            g.setColour(juce::Colour(0xffc6d58c));
+            g.setColour(palette::selection);
             g.fillRect(band.withWidth(3.0f));
         }
         // Last, so it rules the whole width: drawn before the header column it
         // stopped at the cards and the main row read as closed off over the
         // lanes and open beside them.
-        g.setColour(juce::Colour(0xff3a434b));
+        g.setColour(palette::border);
         g.fillRect(band.withHeight(trackDividerThickness));
-        g.setColour(juce::Colour(0xffc4cbd1));
+        g.setColour(palette::text);
         g.setFont(uiFontBold(9.0f));
         drawSnappedText(g, "MAIN", {10, static_cast<int>(master.getY()) + 5, 44, 16});
     }
@@ -264,7 +264,7 @@ void Arrangement::paint(juce::Graphics& g)
             // read as columns with nothing in them. The epsilon keeps a line
             // sitting on a bar boundary in the bar it opens rather than in the
             // one before it, which floating point otherwise decides at random.
-            const auto line = juce::Colour(bar ? 0xff45545f : wholeBeat ? 0xff39434d : 0xff2f3941);
+            const auto line = bar ? palette::border.brighter(0.12f) : wholeBeat ? palette::border : palette::minorGrid;
             g.setColour(isWashedBar(std::floor(beat / barLength + 0.000001), bandBars)
                             ? line.interpolatedWith(juce::Colours::white, barBandWash)
                             : line);
@@ -286,9 +286,9 @@ void Arrangement::paint(juce::Graphics& g)
                                                getHeight() - bottomInset - rulerTop - 18.0f};
             if (!loopBounds.isEmpty())
             {
-                g.setColour(juce::Colour(0x245ab9d6));
+                g.setColour(palette::activeNeutral.withAlpha(0.1f));
                 g.fillRect(loopBounds);
-                g.setColour(juce::Colour(0xff5ab9d6));
+                g.setColour(palette::activeNeutral);
                 g.fillRect(loopBounds.withHeight(3.0f));
                 g.drawVerticalLine(static_cast<int>(loopBounds.getX()), static_cast<int>(rulerTop), static_cast<int>(lanesTop));
                 g.drawVerticalLine(static_cast<int>(loopBounds.getRight()), static_cast<int>(rulerTop), static_cast<int>(lanesTop));
@@ -310,7 +310,7 @@ void Arrangement::paint(juce::Graphics& g)
     {
         const auto own = juce::isPositiveAndBelow(track, static_cast<int>(laneColours.size()))
                              ? laneColours[static_cast<size_t>(track)] : juce::Colour();
-        return own.isTransparent() ? juce::Colour(track == 0 ? 0xff414c34 : 0xff284b59) : own.darker(0.5f);
+        return own.isTransparent() ? palette::control.brighter(track == 0 ? 0.12f : 0.06f) : own.darker(0.5f);
     };
     std::set<int> tracksWithClips;
     for (const auto& clip : clips)
@@ -329,7 +329,7 @@ void Arrangement::paint(juce::Graphics& g)
         g.fillRect(box);
         g.setColour(label.brighter(0.55f));
         g.fillRect(box.withHeight(4.0f));
-        g.setColour(juce::Colour(isSelected(clip.id) ? 0xffdce9b1 : 0xff617985));
+        g.setColour(isSelected(clip.id) ? palette::selection : palette::border.brighter(0.25f));
         g.drawRect(box.reduced(0.5f), isSelected(clip.id) ? 2.0f : 1.0f);
         // The two rows the pointer reads, drawn so they can be seen: the strip
         // along the top is the clip itself and carries its name, and the row
@@ -337,18 +337,18 @@ void Arrangement::paint(juce::Graphics& g)
         const auto headerHeight = clipHeaderHeight(box.getHeight());
         g.setColour(label.darker(0.75f));
         g.fillRect(visible.getX(), box.getY() + headerHeight, visible.getWidth(), 1.0f);
-        g.setColour(juce::Colour(0xffe0e7ec));
+        g.setColour(palette::text);
         if (visible.getWidth() >= 24.0f)
             drawSnappedText(g, clip.name, visible.reduced(6.0f, 0).withHeight(headerHeight).toNearestInt(),
                             juce::Justification::centredLeft, true);
         if (clip.clipPlugins > 0)
         {
             const auto badge = visible.withSizeKeepingCentre(28.0f, 16.0f).withRightX(visible.getRight() - 5.0f).withY(visible.getY() + 5.0f);
-            g.setColour(juce::Colour(0xcc15191d));
+            g.setColour(palette::appBackground.withAlpha(0.8f));
             g.fillRect(badge);
             g.setColour(label.brighter(0.75f));
             g.drawRect(badge.reduced(0.5f), 1.0f);
-            g.setColour(juce::Colour(0xffeaf0f3));
+            g.setColour(juce::Colours::white);
             drawSnappedText(g, "FX" + juce::String(clip.clipPlugins), badge.toNearestInt(),
                             juce::Justification::centred, true);
         }
@@ -367,7 +367,7 @@ void Arrangement::paint(juce::Graphics& g)
             }
             else
             {
-                g.setColour(juce::Colour(0xffa1b1b9));
+                g.setColour(palette::textDim);
                 drawSnappedText(g, clip.waveform->readable ? "Reading waveform..." : "Missing or unreadable audio",
                                 waveArea.reduced(6, 0).toNearestInt(), juce::Justification::centredLeft, true);
             }
@@ -412,14 +412,14 @@ void Arrangement::paint(juce::Graphics& g)
                 const auto y = noteArea.getBottom() - h - pitchScale * (noteArea.getHeight() - h);
                 const juce::Rectangle<float> noteBox {x1, y, w, h};
                 if (!noteBox.intersects(visible)) continue;
-                g.setColour(juce::Colour(0xffc6d58c));
+                g.setColour(palette::selection);
                 g.fillRect(noteBox);
-                g.setColour(juce::Colour(0xffe8f1bd));
+                g.setColour(palette::selection.brighter(0.3f));
                 g.drawRect(noteBox.reduced(0.5f), 1.0f);
             }
             if (clip.midiNotes.empty())
             {
-                g.setColour(juce::Colour(0xff9daa7e));
+                g.setColour(palette::textDim);
                 drawSnappedText(g, "Edit notes below", noteArea.toNearestInt(),
                                 juce::Justification::centredLeft, true);
             }
@@ -431,7 +431,7 @@ void Arrangement::paint(juce::Graphics& g)
         if (!tracksWithClips.contains(track) && !session.trackHasInstrument(track) && !isTrackHidden(track)
             && !session.isGroupBusTrack(track))
         {
-            g.setColour(juce::Colour(0xff75828e));
+            g.setColour(palette::textDim);
             drawSnappedText(g, session.trackType(track) == Session::TrackType::midi
                                 ? "Double-click to add a clip, or drop an instrument here"
                                 : "Drop audio here",
@@ -458,7 +458,7 @@ void Arrangement::paint(juce::Graphics& g)
     {
         const auto target = lane(moveDestination);
         const auto y = moveDestination > movingTrack ? target.getBottom() : target.getY();
-        g.setColour(juce::Colour(0xffc6d58c));
+        g.setColour(palette::selection);
         g.fillRect(0.0f, y - 1.0f, static_cast<float>(getWidth()) - 14.0f, 2.0f);
     }
     // What is being recorded, while it is being recorded. The engine writes no
@@ -480,9 +480,9 @@ void Arrangement::paint(juce::Graphics& g)
             const auto row = lane(track);
             if (row.getHeight() <= 0.0f) continue;
             const juce::Rectangle<float> band {x1, row.getY(), std::max(2.0f, x2 - x1), row.getHeight() - 1.0f};
-            g.setColour(juce::Colour(0x38e4443a));
+            g.setColour(palette::recordAccent.withAlpha(0.22f));
             g.fillRect(band);
-            g.setColour(juce::Colour(0xffe4443a));
+            g.setColour(palette::recordAccent);
             g.fillRect(band.withWidth(2.0f));
             // The notes as they are played. They are drawn in the colour and
             // the layout the clip will use, so the take does not change
@@ -511,7 +511,7 @@ void Arrangement::paint(juce::Graphics& g)
                     noteRight - noteLeft, noteHeight};
                 if (!noteBox.intersects(dirty))
                     continue;
-                g.setColour(juce::Colour(0xffc6d58c));
+                g.setColour(palette::selection);
                 g.fillRect(noteBox);
             }
         }
@@ -533,7 +533,7 @@ void Arrangement::paint(juce::Graphics& g)
     // gaps inside the pane stand on - and those belong to the shell.
     if (bottomInset > 0.0f)
     {
-        g.setColour(juce::Colour(0xff171a1e));
+        g.setColour(palette::appBackground);
         g.fillRect(0.0f, getHeight() - bottomInset, static_cast<float>(getWidth()), bottomInset);
     }
 }

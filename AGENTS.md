@@ -33,7 +33,7 @@ Application code, `native/src`:
 | Recording: arming a track, the count-in, and the clip a take becomes | `SessionRecording.cpp` in the model, `CountInClick.*` for the count-in click, the record button in `Main.cpp` and the record dot in `ArrangementSync.cpp` |
 | Audio clip editor: one clip's own gain, pan, pitch, fades, mute and reverse | `AudioClipPanel.*` in the UI, `SessionAudioClips.cpp` in the model |
 | Time warp: making an audio clip follow the song's tempo, its warp mode, its own tempo and its warp markers | `SessionWarp.cpp` in the model, `AudioClipWarp.cpp` in the UI. See the Time warp section of [native/README.md](native/README.md) |
-| The control bar: tempo, time signature, transport, the readout | `Main.cpp` lays it out in `layoutControlBar`; the fields you drag are `ControlBarFields.*` and the readout is `TransportDisplay.*` |
+| The control bar: tempo, time signature, transport, the readout | `Main.cpp` lays it out in `layoutControlBar`; the fields you drag are `ControlBarFields.*`, the glyphs and the borderless button that wears them are `ControlBarIcons.*`, and the readout is `TransportDisplay.*`. See the shell chrome section of [native/README.md](native/README.md) |
 | Selecting a span of the timeline, and cut/copy/paste/duplicate on it | `ArrangementSelection.cpp` in the UI, `SessionRegion.cpp` in the model. The note editor uses the same rule in steps, in `StepGridEditing.cpp` |
 | Track groups, which are bus tracks | `SessionGroups.cpp`, `ArrangementGroups.cpp` |
 | Renaming a track card or a group band in place | `ArrangementRename.cpp` |
@@ -54,7 +54,7 @@ Application code, `native/src`:
 | Vocoder (Rhino Vocoder) | The DSP is `core/VocoderEngine.*`. The device is `devices/audio/VocoderDevice.*` and its face is `DeviceEditorPanelVocoder.cpp`. See the Rhino Vocoder section of [native/README.md](native/README.md) |
 | Vocal pitch correction (Rhino Tune) | The DSP is in `core/`: `PitchTracker.*`, `PsolaShifter.*`, `ScaleQuantizer.h`, `AutoTuneEngine.*`. The device is `devices/audio/AutoTuneDevice.*` and its face is `DeviceEditorPanelAutoTune.cpp`. See the Rhino Tune section of [native/README.md](native/README.md) |
 | Sample and content library | `library/` at the repository root, found by `native/src/core/ContentLibrary.h` |
-| Theme | `Theme.h` |
+| Theme | `Theme.h` — the font rules, the stock-control look-and-feel, and `palette`, which is where every chrome colour in the app is named. Nothing should spell a surface, border or text colour as a hex literal |
 
 The UI depends on `Session`; `Session` knows nothing about the UI. Keep that direction.
 

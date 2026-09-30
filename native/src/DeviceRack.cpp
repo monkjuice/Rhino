@@ -57,7 +57,7 @@ public:
 
         void paint(juce::Graphics& g) override
         {
-            g.fillAll(juce::Colour(0xff111316));
+            g.fillAll(palette::appBackground);
             if (isRhinoWave)
             {
                 paintRhinoWave(g);
@@ -552,7 +552,7 @@ DeviceRack::~DeviceRack()
 
 void DeviceRack::paint(juce::Graphics& g)
 {
-    g.fillAll(juce::Colour(0xff1b2025));
+    g.fillAll(palette::sideSurface);
     g.setColour(juce::Colour(0xff303840));
     g.drawRect(getLocalBounds());
 }

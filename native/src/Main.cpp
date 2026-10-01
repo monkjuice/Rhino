@@ -11,7 +11,7 @@
 #include "ComputerKeyboard.h"
 #include "StartupScreen.h"
 #include "TransportDisplay.h"
-#include "TimeRuler.h"
+#include "WallClock.h"
 #include "ControlBarFields.h"
 #include "ControlBarIcons.h"
 #include "SystemUsage.h"
@@ -495,7 +495,7 @@ public:
                  &browser, &browserToggle, &editorToggle, &rackToggle, &grid, &audioClip, &arrangement, &sessionView,
                  &sessionToggle, &arrangementToggle, &backToArrangement, &rack, &tempoBox, &signatureField, &undo, &redo, &metronome, &metronomeMenu, &hint,
                  &patternLabel, &editorResolution, &editorZoomOut, &editorZoomIn, &scaleHighlight,
-                 &timeRuler, &lowerSplitter})
+                 &lowerSplitter})
             addAndMakeVisible(component);
         lowerSplitter.dragStarted = [this] (int screenY)
         {
@@ -510,14 +510,6 @@ public:
             lowerPaneHeight = resizeStartLowerPaneHeight - (screenY - resizeStartY);
             resized();
             repaint();
-        };
-        // Every zoom, pan and scroll of the timeline moves the ruler under it.
-        // Only the view is pushed across: the ruler is laid out by resized(),
-        // and this fires from inside the arrangement's own resized().
-        arrangement.viewChanged = [this]
-        {
-            const auto view = arrangement.timelineView();
-            timeRuler.setView(view.start, view.span);
         };
         session.edit->getTransport().addChangeListener(this);
         session.addChangeListener(this);
@@ -692,20 +684,19 @@ public:
             rightEdge -= viewWidth + barGroupGap;
         }
 
-        // Centred on the window rather than on the space left between the two
-        // sides, so the readout sits under the project name in the title bar
-        // and stays put as controls are added to either end. It gives up the
-        // centre only when a narrow window would push it into one of them.
-        // Below the width its three columns need it is dropped rather than
-        // squeezed: a clock with half its digits missing is worse than no
-        // clock, and the controls around it stay reachable.
+        // Centred in what the two sides have left rather than on the window:
+        // the left of the bar carries four sections and the right two, so a
+        // readout centred on the window sat hard against the transport with a
+        // gulf on the other side of it. Below the width its three columns need
+        // it is dropped rather than squeezed: a clock with half its digits
+        // missing is worse than no clock, and the controls around it stay
+        // reachable.
         const auto room = rightEdge - x;
         position.setVisible(room >= 260);
         if (position.isVisible())
         {
             const auto width = std::min(displayWidth, room);
-            position.setBounds(juce::jlimit(x, rightEdge - width, (getWidth() - width) / 2),
-                               displayTop, width, displayHeight);
+            position.setBounds(x + (room - width) / 2, displayTop, width, displayHeight);
         }
     }
 
@@ -742,8 +733,8 @@ public:
             if (lowerPaneHeight <= 0)
                 lowerPaneHeight = getHeight() / 5;
             lowerPaneHeight = juce::jlimit(minimumPaneHeight,
-                                           std::max(minimumPaneHeight, getHeight() - arrangementTop - 150
-                                                                        - toggleStripHeight - timeRulerHeight),
+                                           std::max(minimumPaneHeight,
+                                                    getHeight() - arrangementTop - 150 - toggleStripHeight),
                                            lowerPaneHeight);
             paneH = lowerPaneHeight;
         }
@@ -752,12 +743,12 @@ public:
         // pixels short of it, which read as a card sitting on the window
         // rather than as the foot of the workspace.
         const auto lowerTop = getHeight() - lowerH;
-        // Where the arrangement is covered from. Two bands sit between the
-        // lanes and the pane: the Clip and Devices strip along the bottom, and
-        // the time ruler above it. They move together as the pane is dragged,
-        // so the ruler stays against the foot of the timeline it labels.
-        const auto stripTop = lowerTop - toggleStripHeight;
-        const auto arrangementBottom = stripTop - timeRulerHeight;
+        // Where the arrangement is covered from: the Clip and Devices strip
+        // sits in the band between the lanes and the pane and moves with the
+        // pane as it is dragged. The times that read the timeline are printed
+        // inside the panel, in the main row's own lane, so nothing is reserved
+        // for them here.
+        const auto arrangementBottom = lowerTop - toggleStripHeight;
         // The Info View takes the bottom-left corner of the window whenever it
         // is showing, and the band beside it starts at its right edge rather
         // than running underneath it. Hidden, the band takes the whole width.
@@ -788,14 +779,6 @@ public:
         // The session view has no such inset, so it simply stops at the band.
         sessionView.setBounds(editorX, arrangementTop, editorW,
                               std::max(150, arrangementBottom - arrangementTop));
-        // Placed on the timeline's own lane rectangle and told what that
-        // rectangle is showing, which is the whole of how a time comes to sit
-        // under the bar number for the same bar. Read after the arrangement has
-        // been given its bounds, because the lane's width comes from them.
-        const auto view = arrangement.timelineView();
-        timeRuler.setVisible(!sessionViewOpen && view.width > 1);
-        timeRuler.setBounds(editorX + view.left, lowerBandTop, std::max(1, view.width), timeRulerHeight);
-        timeRuler.setView(view.start, view.span);
         const auto notes = lowerPane == LowerPane::notes;
         const auto audio = lowerPane == LowerPane::audio;
         const auto devices = lowerPane == LowerPane::devices;
@@ -808,21 +791,21 @@ public:
         // hundred pixels of the waveform for a column that is not part of it.
         const auto paneX = lowerBandLeft;
         const auto paneW = std::max(120, getWidth() - paneX);
-        editorToggle.setBounds(paneX + 8, stripTop + 5, 52, 24);
-        rackToggle.setBounds(paneX + 66, stripTop + 5, 72, 24);
+        editorToggle.setBounds(paneX + 8, arrangementBottom + 5, 52, 24);
+        rackToggle.setBounds(paneX + 66, arrangementBottom + 5, 72, 24);
         patternLabel.setVisible(notes || audio);
-        patternLabel.setBounds(paneX + 148, stripTop + 5, std::max(80, paneW - 500), 24);
+        patternLabel.setBounds(paneX + 148, arrangementBottom + 5, std::max(80, paneW - 500), 24);
         // The scale, zoom and resolution controls belong to the note editor and
         // mean nothing over a waveform, so they follow it rather than the pane.
         scaleHighlight.setVisible(notes && !session.isPatternDrums());
         if (notes && !session.isPatternDrums())
-            scaleHighlight.setBounds(paneX + std::max(260, paneW - 328), stripTop + 7, 146, 20);
+            scaleHighlight.setBounds(paneX + std::max(260, paneW - 328), arrangementBottom + 7, 146, 20);
         editorZoomOut.setVisible(notes);
         editorZoomIn.setVisible(notes);
         editorResolution.setVisible(notes);
-        editorZoomOut.setBounds(paneX + std::max(414, paneW - 174), stripTop + 7, 25, 20);
-        editorZoomIn.setBounds(paneX + std::max(443, paneW - 145), stripTop + 7, 25, 20);
-        editorResolution.setBounds(paneX + std::max(510, paneW - 78), stripTop + 7, 70, 20);
+        editorZoomOut.setBounds(paneX + std::max(414, paneW - 174), arrangementBottom + 7, 25, 20);
+        editorZoomIn.setBounds(paneX + std::max(443, paneW - 145), arrangementBottom + 7, 25, 20);
+        editorResolution.setBounds(paneX + std::max(510, paneW - 78), arrangementBottom + 7, 70, 20);
 
         grid.setVisible(notes);
         audioClip.setVisible(audio);
@@ -837,10 +820,7 @@ public:
         // Everything in the lower pane is layered over the arrangement, which
         // is a sibling that covers the same ground.
         lowerSplitter.setVisible(lowerPaneVisible());
-        // At the top of the Clip and Devices strip rather than at the top of the
-        // whole band: the handle paints a rule down its middle, and two pixels
-        // higher that rule would be struck through the time ruler ticks.
-        lowerSplitter.setBounds(paneX, stripTop - 2, paneW, 8);
+        lowerSplitter.setBounds(paneX, lowerBandTop - 2, paneW, 8);
         for (auto* component : std::initializer_list<juce::Component*>{&grid, &audioClip, &rack, &lowerSplitter})
             component->toFront(false);
         browserToggle.toFront(false);
@@ -1724,7 +1704,6 @@ private:
     StopButton stop;
     RecordButton record;
     IconButton browserToggle {"Browser"};
-    TimeRuler timeRuler {session};
     juce::TextButton editorToggle {"Clip"}, rackToggle {"Devices"};
     juce::TextButton sessionToggle {"Session"}, arrangementToggle {"Arrange"};
     juce::TextButton backToArrangement;
@@ -1766,7 +1745,7 @@ private:
     // the tempo hard against the browser toggle and the transport hard against
     // the tempo. This is the widest it opens to; it closes back towards
     // barGroupGap as the window narrows - see layoutControlBar.
-    static constexpr int barSectionGap = 44;
+    static constexpr int barSectionGap = 64;
     static constexpr int barGroupGap = 18;
     static constexpr int barFieldGap = 18;
     static constexpr int barTransportGap = 3;
@@ -1797,11 +1776,10 @@ private:
     static constexpr int minimumPaneHeight = 112;
     static constexpr int infoViewHeight = 132;
     // Room under the arrangement for the Clip and Devices toggles, which stay
-    // put whether or not the pane they open is showing, and above them for the
-    // time ruler. The two are one band: the arrangement stops at the top of it
-    // and the pane, when it is open, slides out from under the bottom.
+    // put whether or not the pane they open is showing. The arrangement stops
+    // at the top of the strip and the pane, when it is open, slides out from
+    // under the bottom of it.
     static constexpr int toggleStripHeight = 34;
-    static constexpr int timeRulerHeight = TimeRuler::standardHeight;
     // The clip pane and the Device View are two independent panels that happen
     // to stack in the same strip, and each answers to one thing: this says
     // which clip editor the clip pane is showing, and rackOpen whether the

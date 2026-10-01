@@ -77,23 +77,6 @@ public:
     // editor a clip belongs in is the shell's business, not the timeline's.
     std::function<void(te::EditItemID)> clipSelected;
     std::function<void(te::EditItemID)> clipOpened;
-    // What the timeline is showing, and where. left and width are the lane
-    // rectangle in this component's own coordinates, and a time lands at
-    // left + (seconds - start) / span * width - which is exactly what the
-    // painter's xFor does. The time ruler under the panel is placed on that
-    // rectangle and given these numbers, so its labels sit in the same columns
-    // as the bar numbers in the ruler at the top without either row knowing
-    // anything about the other.
-    struct TimelineView
-    {
-        double start = 0.0, span = 8.0;
-        int left = 0, width = 0;
-        bool operator==(const TimelineView&) const = default;
-    };
-    TimelineView timelineView() const;
-    // Fired whenever any of those four moves. Every zoom, pan, scroll and
-    // resize goes through updateScroll, so that is the one place it is raised.
-    std::function<void()> viewChanged;
 private:
     friend int runArrangementTest();
     struct Waveform;
@@ -211,6 +194,11 @@ private:
     // numbering is stepped by what stays legible at this zoom rather than
     // by the grid division. Changing the grid must not renumber the bars.
     void paintBarNumbers(juce::Graphics&, double firstBeat, double lastBeat);
+    // The same bars read as wall-clock times, in the strip above the horizontal
+    // scrollbar. That strip is the main row's own lane: the row takes no clips,
+    // so it is the one piece of the panel that is empty at every zoom and every
+    // window size, and it already starts where the track cards end.
+    void paintTimeRuler(juce::Graphics&, double firstBeat, double lastBeat);
     // Every other bar group washed a shade lighter, so the beats read as bars
     // without counting grid lines. Painted under the clips: a clip is drawn
     // translucent, so the band shows through it the way Live's does.
@@ -482,6 +470,9 @@ private:
     juce::Point<float> panAnchor;
     double panStartView = 0.0, panStartTrackScroll = 0.0;
     static constexpr float headerWidth = 228.0f, rulerTop = 36.0f, lanesTop = 60.0f;
+    // The foot of the panel: the horizontal scrollbar, and the row of times
+    // directly above it.
+    static constexpr float scrollBarHeight = 14.0f, timeRulerHeight = 18.0f;
     // The main row is dragged from its top edge like any other, so its height
     // is a value rather than a constant. It is a view setting and lives here
     // beside the zoom: the fitted lane height is measured against the default

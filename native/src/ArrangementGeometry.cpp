@@ -62,11 +62,6 @@ juce::Rectangle<float> Arrangement::lane(int track) const
             std::max(1.0f, getWidth() - headerWidth - 14.0f), height};
 }
 
-Arrangement::TimelineView Arrangement::timelineView() const
-{
-    return {viewStart, viewSpan, static_cast<int>(headerWidth), static_cast<int>(lane(0).getWidth())};
-}
-
 float Arrangement::xFor(double seconds) const
 {
     return headerWidth + static_cast<float>((seconds - viewStart) / viewSpan * lane(0).getWidth());

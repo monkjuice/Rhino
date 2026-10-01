@@ -1,6 +1,7 @@
 #include "ArrangementInternal.h"
 #include "Playhead.h"
 #include "Theme.h"
+#include "WallClock.h"
 #include "WaveformLanes.h"
 #include <optional>
 #include <set>
@@ -88,6 +89,76 @@ void Arrangement::paintBarNumbers(juce::Graphics& g, double firstBeat, double la
         g.setFont(uiFont(10.0f));
         drawSnappedText(g, juce::String(static_cast<juce::int64>(bar)),
                         {static_cast<int>(x) + 4, static_cast<int>(rulerTop), 64, 24});
+    }
+}
+
+// The same bars the ruler numbers, read as wall-clock times, in the strip above
+// the horizontal scrollbar.
+//
+// It goes here rather than in a band of its own between the panel and the clip
+// editor. The main row takes no clips, so everything right of its header is
+// empty whatever the zoom and whatever the window size - and it is already the
+// right width, because the row starts where the track cards end. A band of its
+// own cost eighteen pixels of timeline to print the same thing in a column
+// nothing else was using.
+//
+// Drawn after the grid, and over a strip of the row's own ground, so a
+// subdivision is not struck through a digit. That makes the foot of the panel
+// a mirror of the ruler at the top, where the bar numbers sit on the chrome
+// rather than on the lanes for the same reason.
+void Arrangement::paintTimeRuler(juce::Graphics& g, double firstBeat, double lastBeat)
+{
+    const auto foot = static_cast<float>(getHeight()) - bottomInset;
+    const auto right = static_cast<float>(getWidth()) - 14.0f;
+    const juce::Rectangle<float> strip {headerWidth, foot - scrollBarHeight - timeRulerHeight,
+                                        std::max(1.0f, right - headerWidth), timeRulerHeight};
+    // The main row is as tall as its controls plus this strip, so there is
+    // always room - but it is dragged by hand, so this is asked rather than
+    // assumed.
+    if (strip.getY() <= masterLane().getY() + trackDividerThickness) return;
+
+    const auto barLength = std::max(0.25, session.beatsPerBar());
+    const auto timeOfBar = [this, barLength](double bar)
+    {
+        return session.edit->tempoSequence
+            .toTime(tracktion::core::BeatPosition::fromBeats((bar - 1.0) * barLength)).inSeconds();
+    };
+    const auto firstBar = std::max(1.0, std::floor(firstBeat / barLength) + 1.0);
+    const auto lastBar = std::floor(lastBeat / barLength) + 1.0;
+    if (lastBar < firstBar) return;
+
+    g.setColour(palette::appBackground);
+    g.fillRect(strip);
+
+    // A time is a far wider string than a bar number, so the two rows ask for
+    // different spacing - and both step by the same rule from minimums a power
+    // of two apart, which is what keeps every time under a bar number rather
+    // than merely near one.
+    const auto pixelsPerBar = std::max(0.01f, xFor(timeOfBar(firstBar + 1.0)) - xFor(timeOfBar(firstBar)));
+    const auto step = barLabelStep(pixelsPerBar, timeLabelMinimumPixels);
+    g.setFont(uiFont(10.0f));
+    // The whole reading or none of it. A bar number clipped by the right edge
+    // is still the start of a number; "00:0" is not a time, and at nine
+    // characters a stub is wide enough to read as one.
+    const auto labelWidth = static_cast<float>(
+        juce::GlyphArrangement::getStringWidthInt(g.getCurrentFont(), "00:00:000"));
+    int painted = 0;
+    for (auto bar = firstLabelledBar(firstBar, step); bar <= lastBar + step && painted < 512; bar += step)
+    {
+        const auto time = timeOfBar(bar);
+        const auto x = xFor(time);
+        if (x < headerWidth - 1.0f) continue;
+        if (x + 4.0f + labelWidth > right) break;
+        ++painted;
+        // A tick on the bar line, and the time four pixels to the right of it:
+        // the same offset the bar number above takes, so the two readings share
+        // a left edge down the whole column.
+        g.setColour(palette::border.brighter(0.2f));
+        g.drawVerticalLine(static_cast<int>(x), strip.getY(), strip.getY() + 4.0f);
+        g.setColour(palette::textDim);
+        drawSnappedText(g, formatClock(time, true),
+                        {static_cast<int>(x) + 4, static_cast<int>(strip.getY()), 76,
+                         static_cast<int>(strip.getHeight())});
     }
 }
 
@@ -276,6 +347,7 @@ void Arrangement::paint(juce::Graphics& g)
         }
     }
     paintBarNumbers(g, firstBeat, lastBeat);
+    paintTimeRuler(g, firstBeat, lastBeat);
     {
         const auto loopRange = session.edit->getTransport().getLoopRange();
         auto start = loopGesture != LoopGesture::none ? loopPreviewStart : loopRange.getStart().inSeconds();

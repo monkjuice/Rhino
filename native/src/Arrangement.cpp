@@ -168,7 +168,8 @@ void Arrangement::resized()
     // Both scrollbars stop at the top of whatever covers the foot of the panel,
     // so the pane floating over the arrangement never buries them.
     const auto foot = getHeight() - static_cast<int>(bottomInset);
-    scroll.setBounds(static_cast<int>(headerWidth), foot - 14, getWidth() - static_cast<int>(headerWidth) - 14, 14);
+    scroll.setBounds(static_cast<int>(headerWidth), foot - static_cast<int>(scrollBarHeight),
+                     getWidth() - static_cast<int>(headerWidth) - 14, static_cast<int>(scrollBarHeight));
     trackScrollBar.setBounds(getWidth() - 12, static_cast<int>(lanesTop), 12,
                              std::max(1, foot - static_cast<int>(lanesTop) - 18));
     updateScroll();

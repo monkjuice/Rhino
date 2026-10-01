@@ -524,9 +524,9 @@ DeviceRack::DeviceRack(Session& s) : session(s)
     open.setButtonText("Edit");
     remove.setButtonText("Delete");
     add.setButtonText("+");
-    open.setTooltip("Open selected device editor");
-    remove.setTooltip("Delete selected device");
-    add.setTooltip("Add a device at the end of this track's chain");
+    open.setTooltip("Open the selected device's own editor in a window of its own.");
+    remove.setTooltip("Delete the selected device from this track's chain.");
+    add.setTooltip("Add a device at the end of this track's chain.");
     add.onClick = [this] { showAddMenu(); };
     open.onClick = [this] { openSelectedDevice(); };
     remove.onClick = [this]

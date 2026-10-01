@@ -199,9 +199,6 @@ public:
         setColour(juce::Label::textColourId, palette::text);
         setColour(juce::ScrollBar::thumbColourId, palette::border.brighter(0.25f));
         setColour(juce::ScrollBar::trackColourId, palette::appBackground);
-        setColour(juce::TooltipWindow::backgroundColourId, palette::control);
-        setColour(juce::TooltipWindow::textColourId, palette::text);
-        setColour(juce::TooltipWindow::outlineColourId, palette::border);
         setColour(juce::AlertWindow::backgroundColourId, palette::sideSurface);
         setColour(juce::AlertWindow::textColourId, palette::text);
         setColour(juce::AlertWindow::outlineColourId, palette::border);

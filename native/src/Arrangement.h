@@ -22,8 +22,6 @@ public:
     void mouseDrag(const juce::MouseEvent&) override;
     void mouseUp(const juce::MouseEvent&) override;
     void mouseMove(const juce::MouseEvent&) override;
-    void mouseEnter(const juce::MouseEvent&) override;
-    void mouseExit(const juce::MouseEvent&) override;
     void mouseWheelMove(const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
     bool keyPressed(const juce::KeyPress&) override;
     bool isInterestedInFileDrag(const juce::StringArray&) override;
@@ -314,7 +312,6 @@ private:
     void toggleGroupCollapsed(int groupId);
     void groupSelectedTracks();
     void ungroupSelection();
-    juce::String controlDescription(juce::Component*) const;
     juce::Rectangle<float> lane(int track) const;
     // The master row is pinned under the scrolling lanes and never scrolls.
     juce::Rectangle<float> masterLane() const;

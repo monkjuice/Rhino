@@ -58,17 +58,30 @@ void Arrangement::sync()
         solo[index]->setToggleState(mixer.soloed, juce::dontSendNotification);
         armedTracks.push_back(session.isTrackArmed(track));
         arm[index]->setToggleState(armedTracks.back(), juce::dontSendNotification);
+        // What each of the card's controls does, named for the track it is on.
+        // Set here rather than where the controls are built, because every one
+        // of these sentences has the track's name in it and two of them change
+        // with what the track has become - a lane that takes an instrument
+        // starts recording MIDI instead of audio. The shell shows them in the
+        // Info View while the pointer rests on the control.
+        const auto name = session.trackName(track);
+        mute[index]->setTooltip("Mute " + name + " - silences this track while the rest keeps playing.");
+        solo[index]->setTooltip("Solo " + name + " - silences every track that is not soloed.");
         // The dot is the same whatever the track records, because the track
         // already says which that is. What it would capture goes in the
-        // tooltip, which follows the track as an instrument lands on it.
+        // description, which follows the track as an instrument lands on it.
         arm[index]->setTooltip(session.trackRecordInput(track) == Session::RecordInput::midi
-                                   ? "Arm " + session.trackName(track) + " to record the MIDI input"
-                                   : "Arm " + session.trackName(track) + " to record the audio input");
+                                   ? "Arm " + name + " - records what you play on the MIDI input into a new clip."
+                                   : "Arm " + name + " - records the audio input from Audio settings into a new clip.");
         // Whatever the card shows here is what an armed track actually listens
         // to: the name comes from the session rather than from anything the
         // menu remembered.
         midiInput[index]->setButtonText(session.trackMidiInputName(track) + "  v");
-        midiInput[index]->setTooltip("MIDI input for " + session.trackName(track));
+        midiInput[index]->setTooltip("MIDI From on " + name + " - which input plays it. All Ins is every keyboard "
+                                     "plus the typing keyboard; Computer Keyboard is the typing keyboard alone.");
+        volume[index]->setTooltip("Volume of " + name + " - drag to set the level, double-click for 0.0 dB.");
+        pan[index]->setTooltip("Pan of " + name + " - drag to place it between the speakers, double-click to "
+                               "centre it.");
         if (!volume[index]->isMouseButtonDown())
             volume[index]->setValue(mixer.volumeDb, juce::dontSendNotification);
         if (!pan[index]->isMouseButtonDown())
@@ -164,8 +177,6 @@ void Arrangement::syncTrackControls()
         auto soloButton = std::make_unique<juce::TextButton>("S");
         // The record dot, as in Live and Logic, painted by the button itself.
         auto armButton = std::make_unique<RecordArmButton>();
-        muteButton->setTooltip("Mute track");
-        soloButton->setTooltip("Solo track");
         muteButton->onClick = [this, track] { session.toggleTrackMute(track); };
         soloButton->onClick = [this, track] { session.toggleTrackSolo(track); };
         // Arming reports twice: whether the track can be armed at all, and
@@ -222,7 +233,6 @@ void Arrangement::syncTrackControls()
         // The bar is small enough that the unit costs more room than it earns.
         volumeSlider->setTextValueSuffix({});
         volumeSlider->setDoubleClickReturnValue(true, 0.0);
-        volumeSlider->setTooltip("Track volume");
         volumeSlider->onDragStart = [this, track] { session.beginTrackVolumeGesture(track); };
         volumeSlider->onDragEnd = [this, track] { session.endTrackVolumeGesture(track); };
         volumeSlider->onValueChange = [this, track, slider = volumeSlider.get()]
@@ -234,7 +244,6 @@ void Arrangement::syncTrackControls()
         panSlider->setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
         panSlider->setRange(-1.0, 1.0, 0.01);
         panSlider->setDoubleClickReturnValue(true, 0.0);
-        panSlider->setTooltip("Track pan");
         panSlider->onDragStart = [this, track] { session.beginTrackPanGesture(track); };
         panSlider->onDragEnd = [this, track] { session.endTrackPanGesture(track); };
         panSlider->onValueChange = [this, track, slider = panSlider.get()]
@@ -254,12 +263,6 @@ void Arrangement::syncTrackControls()
         panSlider->setColour(juce::Slider::backgroundColourId, palette::displayInset);
         panSlider->setColour(juce::Slider::textBoxTextColourId, palette::appBackground);
         panSlider->setColour(juce::Slider::textBoxOutlineColourId, juce::Colour(0x33000000));
-        // The Info View explains a control while the pointer rests on it, so
-        // every one of them reports its enter and exit to the arrangement.
-        for (auto* control : std::initializer_list<juce::Component*>{muteButton.get(), soloButton.get(),
-                                                                     armButton.get(), inputButton.get(),
-                                                                     volumeSlider.get(), panSlider.get()})
-            control->addMouseListener(this, false);
         laneHeaders.addAndMakeVisible(*muteButton);
         laneHeaders.addAndMakeVisible(*soloButton);
         laneHeaders.addAndMakeVisible(*armButton);

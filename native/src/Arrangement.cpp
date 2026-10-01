@@ -24,9 +24,11 @@ Arrangement::Arrangement(Session& s)
     addTrack.setButtonText(L"+");
     snap.setButtonText(L"\u2317");
     automationButton.setButtonText("A");
-    duplicateButton.setTooltip("Duplicate selected clip");
+    duplicateButton.setTooltip("Duplicate the selection - puts a copy flush against the end of what is "
+                               "selected, ready to be dragged. Ctrl+D.");
     addTrack.setTooltip("Add a track: pick audio or MIDI (Ctrl+T repeats the last kind)");
-    snap.setTooltip("Toggle clip snap");
+    snap.setTooltip("Snap - clips, edges and the line land on the grid. Turn it off to place them freely, "
+                    "or hold Alt for one gesture.");
     gridControl.setTooltip("Grid spacing: how far apart the lines are, and what a clip snaps to");
     toolbarGrid.setTooltip("Grid spacing: how far apart the lines are, and what a clip snaps to");
     automationButton.setTooltip("Automation edit mode: drag lanes instead of clips");
@@ -69,7 +71,8 @@ void Arrangement::configureMasterControls()
     masterVolume.setRange(Session::minimumVolumeDb, Session::maximumVolumeDb, 0.1);
     masterVolume.setTextValueSuffix({});
     masterVolume.setDoubleClickReturnValue(true, 0.0);
-    masterVolume.setTooltip("Main output volume");
+    masterVolume.setTooltip("Main volume - the level of everything the arrangement plays. Drag to set it, "
+                            "double-click for 0.0 dB.");
     masterVolume.onDragStart = [this] { session.beginMasterVolumeGesture(); };
     masterVolume.onDragEnd = [this] { session.endMasterVolumeGesture(); };
     masterVolume.onValueChange = [this] { session.setMasterVolumeDb(static_cast<float>(masterVolume.getValue())); };
@@ -77,7 +80,8 @@ void Arrangement::configureMasterControls()
     masterPan.setTextBoxStyle(juce::Slider::NoTextBox, true, 0, 0);
     masterPan.setRange(-1.0, 1.0, 0.01);
     masterPan.setDoubleClickReturnValue(true, 0.0);
-    masterPan.setTooltip("Main output pan");
+    masterPan.setTooltip("Main pan - where the whole mix sits between the speakers. Drag to move it, "
+                         "double-click to centre it.");
     masterPan.onDragStart = [this] { session.beginMasterPanGesture(); };
     masterPan.onDragEnd = [this] { session.endMasterPanGesture(); };
     masterPan.onValueChange = [this] { session.setMasterPan(static_cast<float>(masterPan.getValue())); };
@@ -89,8 +93,6 @@ void Arrangement::configureMasterControls()
     masterPan.setColour(juce::Slider::backgroundColourId, palette::displayInset);
     masterPan.setColour(juce::Slider::textBoxTextColourId, palette::appBackground);
     masterPan.setColour(juce::Slider::textBoxOutlineColourId, juce::Colour(0x33000000));
-    masterVolume.addMouseListener(this, false);
-    masterPan.addMouseListener(this, false);
     addAndMakeVisible(masterVolume);
     addAndMakeVisible(masterPan);
 }

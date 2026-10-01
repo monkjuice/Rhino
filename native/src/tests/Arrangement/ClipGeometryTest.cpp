@@ -1,6 +1,7 @@
 #include "ClipGeometryTest.h"
 #include "../../ClipGeometry.h"
 #include "../../ArrangementGrid.h"
+#include "../../InfoHints.h"
 #include "../../Playhead.h"
 #include <cmath>
 #include <cstdio>
@@ -106,6 +107,31 @@ int runArrangementGeometryTest()
                 throw std::runtime_error("Ruler marks never crowd past their minimum spacing");
             if (marks < timeTickDivisions && times * pixelsPerBar / (marks * 2) >= timeTickMinimumPixels)
                 throw std::runtime_error("And are as fine as that spacing allows");
+        }
+        // The Info View is written to by the hint that follows the pointer and
+        // by the status line that reports what just happened. Which of them
+        // wins is the whole of how the panel behaves, and both of its rules
+        // are easy to invert by accident.
+        {
+            juce::Component control, other;
+            const juce::String mute {"Mute Audio 2 - silences this track."};
+            const juce::String solo {"Solo Audio 2 - silences the rest."};
+            if (!infoHintReplaces(nullptr, {}, &control, mute))
+                throw std::runtime_error("Reaching a control that explains itself writes the panel");
+            if (infoHintReplaces(&control, mute, &control, mute))
+                throw std::runtime_error("Resting on the same control does not rewrite it");
+            if (!infoHintReplaces(&control, mute, &other, solo))
+                throw std::runtime_error("Reaching a different control writes the panel");
+            // Play becoming pause under a pointer that has not moved.
+            if (!infoHintReplaces(&control, mute, &control, solo))
+                throw std::runtime_error("A control that relabels itself is read again");
+            // The pointer crossing a lane, a clip or the gap between two
+            // buttons must not blank what the panel was last told - which is
+            // also what keeps a status message on screen.
+            if (infoHintReplaces(&control, mute, nullptr, {}))
+                throw std::runtime_error("Nothing under the pointer leaves the panel alone");
+            if (infoHintReplaces(nullptr, mute, &other, {}))
+                throw std::runtime_error("A control that says nothing leaves the panel alone");
         }
         return 0;
     }

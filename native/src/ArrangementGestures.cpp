@@ -941,46 +941,6 @@ void Arrangement::showMidiInputMenu(int track)
 // What the Info View says while the pointer rests on a header control. The
 // controls are the same objects the session view drives, so the text names the
 // track rather than leaving the reader to work out which card it came from.
-juce::String Arrangement::controlDescription(juce::Component* component) const
-{
-    if (component == &masterVolume)
-        return "Main volume - the level of everything the arrangement plays. Drag to set it, double-click for 0.0 dB.";
-    if (component == &masterPan)
-        return "Main pan - where the whole mix sits between the speakers. Drag to move it, double-click to centre it.";
-    for (int track = 0; track < static_cast<int>(mute.size()); ++track)
-    {
-        const auto index = static_cast<size_t>(track);
-        const auto name = session.trackName(track);
-        if (component == mute[index].get())
-            return "Mute " + name + " - silences this track while the rest keeps playing.";
-        if (component == solo[index].get())
-            return "Solo " + name + " - silences every track that is not soloed.";
-        if (component == arm[index].get())
-            return session.trackRecordInput(track) == Session::RecordInput::midi
-                       ? "Arm " + name + " - records what you play on the MIDI input into a new clip."
-                       : "Arm " + name + " - records the audio input from Audio settings into a new clip.";
-        if (component == midiInput[index].get())
-            return "MIDI From on " + name + " - which input plays it. All Ins is every keyboard plus "
-                   "the typing keyboard; Computer Keyboard is the typing keyboard alone.";
-        if (component == volume[index].get())
-            return "Volume of " + name + " - drag to set the level, double-click for 0.0 dB.";
-        if (component == pan[index].get())
-            return "Pan of " + name + " - drag to place it between the speakers, double-click to centre it.";
-    }
-    return {};
-}
-
-void Arrangement::mouseEnter(const juce::MouseEvent& event)
-{
-    if (status)
-        if (const auto text = controlDescription(event.eventComponent); text.isNotEmpty())
-            status(text);
-}
-
-void Arrangement::mouseExit(const juce::MouseEvent&)
-{
-}
-
 void Arrangement::mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel)
 {
     if (dragging) return;

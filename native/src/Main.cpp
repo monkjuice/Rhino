@@ -14,6 +14,7 @@
 #include "WallClock.h"
 #include "ControlBarFields.h"
 #include "ControlBarIcons.h"
+#include "InfoHints.h"
 #include "SystemUsage.h"
 #include <cmath>
 #include <functional>
@@ -300,8 +301,9 @@ public:
         rackToggle.onClick = [this] { toggleDeviceView(); };
         editorToggle.setButtonText("Clip");
         rackToggle.setButtonText("Devices");
-        editorToggle.setTooltip("Show or hide the Clip / MIDI Editor");
-        rackToggle.setTooltip("Show or hide Device View");
+        editorToggle.setTooltip("Clip - show or hide the editor for the selected clip: the notes of a MIDI clip, "
+                                "the waveform of an audio one.");
+        rackToggle.setTooltip("Devices - show or hide the device chain of the selected track.");
         editorResolution.addItem("1/16", 16);
         editorResolution.addItem("1/32", 32);
         editorResolution.addItem("1/64", 64);
@@ -313,8 +315,8 @@ public:
         };
         editorZoomOut.setButtonText("-");
         editorZoomIn.setButtonText("+");
-        editorZoomOut.setTooltip("Zoom out of note editor");
-        editorZoomIn.setTooltip("Zoom in to note editor");
+        editorZoomOut.setTooltip("Zoom out of the note editor - more bars across the same width.");
+        editorZoomIn.setTooltip("Zoom in to the note editor - fewer bars across the same width.");
         editorZoomOut.onClick = [this] { grid.zoomOut(); };
         editorZoomIn.onClick = [this] { grid.zoomIn(); };
         scaleHighlight.addItem("Scale: off", 1);
@@ -324,7 +326,8 @@ public:
         for (int root = 0; root < 12; ++root)
             scaleHighlight.addItem(juce::String(roots[root]) + " Minor", root + 14);
         scaleHighlight.setSelectedId(1, juce::dontSendNotification);
-        scaleHighlight.setTooltip("Highlight notes in a scale");
+        scaleHighlight.setTooltip("Highlight the rows of a scale in the note editor, so the notes that belong "
+                                  "to it stand out from the ones that do not.");
         scaleHighlight.onChange = [this] { grid.setScaleHighlight(scaleHighlight.getSelectedId()); };
         // Clip and Devices are two faces of one strip, so the one that is
         // showing is marked in grey rather than coloured in: a tab that lights
@@ -419,10 +422,12 @@ public:
         stop.onReturnToStart = [this] { session.returnToStart(); };
         rewind.onClick = [this] { session.returnToStart(); };
         record.onClick = [this] { toggleRecording(); };
-        undo.setTooltip("Undo");
-        redo.setTooltip("Redo");
-        metronome.setTooltip("Toggle metronome");
-        metronomeMenu.setTooltip("Metronome settings");
+        undo.setTooltip("Undo - take back the last change to the project. The arrow dims when there is "
+                        "nothing left to take back.");
+        redo.setTooltip("Redo - put back the change that was undone last.");
+        metronome.setTooltip("Metronome - a click on every beat while the transport is rolling.");
+        metronomeMenu.setTooltip("Metronome settings - whether the first beat of a bar is emphasised, how loud "
+                                 "the click is, and how many bars it counts in before a recording.");
         rewind.setTooltip("Return to the start of the song");
         stop.setTooltip("Stop and return to the selected line  (double-click for the start of the song)");
         record.setTooltip("Record into the armed tracks  (F9)");
@@ -769,7 +774,10 @@ public:
         browser.setBounds(0, browserTop, browserWidth, std::max(0, workspaceBottom - browserTop));
         browserToggle.setToggleState(browserOpen, juce::dontSendNotification);
         // The tooltip says what the click will do, not what the button is.
-        browserToggle.setTooltip(browserOpen ? "Hide browser" : "Show browser");
+        browserToggle.setTooltip(browserOpen ? "Hide the browser - the instruments, patterns, samples and "
+                                               "effects column down the left of the window."
+                                             : "Show the browser - the instruments, patterns, samples and "
+                                               "effects column down the left of the window.");
         arrangement.setVisible(!sessionViewOpen);
         sessionView.setVisible(sessionViewOpen);
         arrangement.setBounds(editorX, arrangementTop, editorW, arrangementH);
@@ -1206,7 +1214,6 @@ public:
     std::function<bool()> fullScreenActive;
 
 private:
-    juce::TooltipWindow tooltipWindow {this, 700};
     void showFileMenu(juce::Component* target = nullptr)
     {
         juce::PopupMenu menu;
@@ -1479,6 +1486,37 @@ private:
         juce::Logger::writeToLog("Rhino: " + message);
     }
 
+    // What the Info View says while the pointer is resting on a control.
+    //
+    // The app floated a tooltip for this. A tooltip covers the thing it is
+    // describing, is gone the moment the pointer moves, and holds about two
+    // words because that is all a popup over a timeline can carry - so the
+    // interesting half of what a control does was never written down anywhere
+    // the user could read it. The Info View is already on screen, has room for
+    // a sentence, and is where Live puts the same thing.
+    //
+    // A control still says what it is through setTooltip, which keeps the
+    // words beside the control they describe and next to the code that knows
+    // when they change. Only where they are shown has moved.
+    void updateHint()
+    {
+        const auto source = juce::Desktop::getInstance().getMainMouseSource();
+        auto* under = source.isTouch() ? nullptr : source.getComponentUnderMouse();
+        // The control directly under the pointer and no ancestor of it: a
+        // control that says nothing says nothing deliberately, and must not
+        // inherit the explanation of the panel it happens to sit on.
+        auto* client = dynamic_cast<juce::TooltipClient*>(under);
+        if (client == nullptr) under = nullptr;
+        const auto text = client != nullptr ? client->getTooltip() : juce::String();
+        // Which of this and the status line wins the panel is the whole of the
+        // behaviour, so the rule is stated once in InfoHints.h rather than
+        // here: this only remembers what the panel was last told about.
+        const auto replaces = infoHintReplaces(hintSource.getComponent(), hintText, under, text);
+        hintSource = under;
+        hintText = text;
+        if (replaces) infoView.setText(text, false);
+    }
+
     void changeListenerCallback(juce::ChangeBroadcaster*) override
     {
         const auto playing = session.edit->getTransport().isPlaying();
@@ -1487,7 +1525,7 @@ private:
         // transport starts, and at fourteen pixels the two shapes are too alike
         // to tell apart at a glance in any case.
         play.setToggleState(playing, juce::dontSendNotification);
-        play.setTooltip(playing ? "Pause" : "Play");
+        play.setTooltip(playing ? "Pause the transport." : "Play - start the transport from the playhead.");
         updateRecordButton();
         tempoBox.setValue(session.tempo());
         const auto signature = session.timeSignature();
@@ -1533,6 +1571,7 @@ private:
     {
         if (paneLayoutPending && !juce::ModifierKeys::getCurrentModifiers().isAnyMouseButtonDown())
             applyPaneLayout();
+        updateHint();
         // The engine both starts and finishes a recording on the audio thread
         // and broadcasts neither, so the clips it wrote are collected here -
         // the same reason the slot override below is polled rather than
@@ -1686,6 +1725,12 @@ private:
     Session& session;
     juce::Label hint, patternLabel;
     juce::TextEditor infoView;
+    // The control the Info View is currently explaining, and what it said about
+    // it. Both are needed: the control alone misses a button that relabels
+    // itself under the pointer, and the words alone would have the hint fight
+    // every status message for the panel.
+    juce::Component::SafePointer<juce::Component> hintSource;
+    juce::String hintText;
     TransportDisplay position;
     BrowserPanel browser;
     StepGrid grid;

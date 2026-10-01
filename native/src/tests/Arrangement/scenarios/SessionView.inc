@@ -24,8 +24,22 @@
         }
         require(launcher.isInterestedInDragSource({"rhino-browser:preset:HouseKit", nullptr, {10, 70}}),
                 "The session view accepts browser drag payloads");
-        launcher.applyBrowserDrop("rhino-browser:preset:HouseKit", 1, 1);
-        require(session.slotClip(1, 1).hasClip, "A browser preset dropped on a slot fills it");
+        // A slot belongs to a track, so it takes what the track takes: a
+        // pattern is notes, and only a MIDI lane holds those. The lanes are
+        // looked up by kind rather than by index, because the scenarios above
+        // this one reshape the stack and reopen the document.
+        auto slotMidiTrack = -1, slotAudioTrack = -1;
+        for (int track = 0; track < session.trackCount(); ++track)
+        {
+            if (session.isGroupBusTrack(track)) continue;
+            auto& found = session.trackType(track) == Session::TrackType::midi ? slotMidiTrack : slotAudioTrack;
+            if (found < 0) found = track;
+        }
+        require(slotMidiTrack >= 0 && slotAudioTrack >= 0, "The stack holds a lane of each kind to drop on");
+        launcher.applyBrowserDrop("rhino-browser:preset:HouseKit", slotAudioTrack, 1);
+        require(!session.slotClip(slotAudioTrack, 1).hasClip, "An audio track's slot refuses a pattern preset");
+        launcher.applyBrowserDrop("rhino-browser:preset:HouseKit", slotMidiTrack, 1);
+        require(session.slotClip(slotMidiTrack, 1).hasClip, "A browser preset dropped on a MIDI track's slot fills it");
 
         scenario("session view: cell geometry");
         {
@@ -59,9 +73,9 @@
                 "The new scene reaches the last track");
         require(session.deleteScene(sceneTotal).wasOk(), "A scene can be deleted");
         require(session.sceneCount() == sceneTotal, "Deleting a scene shrinks the list back");
-        require(session.deleteSlotClip(1, 1).wasOk(), "A slot clip can be deleted");
-        require(!session.slotClip(1, 1).hasClip, "The deleted slot is empty again");
-        require(session.deleteSlotClip(1, 1).failed(), "Deleting from an empty slot reports a problem");
+        require(session.deleteSlotClip(slotMidiTrack, 1).wasOk(), "A slot clip can be deleted");
+        require(!session.slotClip(slotMidiTrack, 1).hasClip, "The deleted slot is empty again");
+        require(session.deleteSlotClip(slotMidiTrack, 1).failed(), "Deleting from an empty slot reports a problem");
 
         scenario("session view: persistence");
         {

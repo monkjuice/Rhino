@@ -258,10 +258,12 @@ public:
     // from the moment it is created, and the arrangement makes the person
     // choose rather than guessing on their behalf.
     //
-    // The declaration is a starting point, not a cage: a track that runs an
-    // instrument reads as MIDI whatever it was created as, which is what keeps
-    // every track written before this - and the document's own first track -
-    // behaving exactly as it did.
+    // The declaration is final. Nothing dropped on a track changes what it
+    // is: an instrument, a drum kit, a MIDI effect and a MIDI clip go on a
+    // MIDI track, audio files and audio clips go on an audio track, and audio
+    // effects go on either. A track that changed kind under a drop made every
+    // lane a guess about what it would accept next, and made "what is this
+    // track" a question only the chain could answer.
     enum class TrackType { audio, midi };
     TrackType trackType(int track) const;
     juce::Result addTrack(TrackType);
@@ -953,6 +955,11 @@ private:
     std::optional<te::MonotonicBeat> nextLaunchBeat() const;
     void startTransportForLaunch();
     juce::Result preparePresetTrack(int trackIndex, const PresetPattern&, PatternPreset);
+    // Every path that makes a track goes through here, so no track can exist
+    // without having said what it is for. It appends the row, names it,
+    // colours it, writes its type and gives it its utility device; the caller
+    // owns the undo transaction and whatever reconciling the new row needs.
+    te::AudioTrack* appendTrack(TrackType);
     void initialiseExternalPlugins(bool retry = false);
     void setPatternInstrument(bool useDrums);
     void ensureEditablePatternClip();

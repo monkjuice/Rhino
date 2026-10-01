@@ -10,7 +10,9 @@
                 return session.edit->tempoSequence.toBeats(
                     tracktion::core::TimePosition::fromSeconds(seconds)).inBeats();
             };
-            require(session.addAudioTrack().wasOk(), "Add a track to change the tempo under");
+            // MIDI, because what goes on it is a pattern. The preset used to
+            // turn an audio lane into a MIDI one on the way in.
+            require(session.addTrack(Session::TrackType::midi).wasOk(), "Add a track to change the tempo under");
             const auto tempoTrack = session.trackCount() - 1;
             require(session.insertPatternPreset(Session::PatternPreset::AcidSteps, tempoTrack, 0.0).wasOk(),
                     "Place a clip on it");

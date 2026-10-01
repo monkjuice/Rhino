@@ -1,7 +1,13 @@
         {
             Session parameterSession;
-            // The second starter track is the audio lane these checks work on.
-            auto* parameterTrack = te::getAudioTracks(*parameterSession.edit)[1];
+            // Two starter lanes, because a device is not welcome on both: the
+            // second is the audio lane, which takes audio FX, and the third is
+            // the MIDI lane, which is the only kind that takes an instrument
+            // or a MIDI effect.
+            auto* parameterTrack = te::getAudioTracks(*parameterSession.edit)[2];
+            require(parameterSession.trackType(1) == Session::TrackType::audio
+                    && parameterSession.trackType(2) == Session::TrackType::midi,
+                    "The starter stack puts an audio lane and a MIDI lane where these checks expect them");
             require(parameterSession.addAudioEffect(Session::AudioEffect::Reverb, 1).wasOk(), "Audio FX browser action inserts Reverb");
             const auto reverbDevices = parameterSession.deviceSlots(1);
             const auto reverbSlot = reverbDevices.empty() ? -1 : reverbDevices.back().pluginIndex;
@@ -22,8 +28,12 @@
             require(rhinoParameters.size() >= 6, "Rhino Space exposes its macro controls");
             require(parameterSession.setDeviceParameter(1, rhinoSlot, 0, rhinoParameters.front().maximum).wasOk(),
                     "Rhino Space macro controls are editable");
-            require(parameterSession.addInstrument(Session::Instrument::FourOsc, 1).wasOk(), "Audio track can host a synth instrument");
-            require(parameterSession.addMidiEffect(Session::MidiEffect::RhinoArp, 1).wasOk(), "MIDI FX browser action inserts Rhino Arp");
+            require(parameterSession.addInstrument(Session::Instrument::FourOsc, 1).failed(),
+                    "An audio track refuses an instrument, because a track's kind is fixed when it is made");
+            require(parameterSession.addMidiEffect(Session::MidiEffect::RhinoArp, 1).failed(),
+                    "and refuses a MIDI effect, which would have nothing to act on");
+            require(parameterSession.addInstrument(Session::Instrument::FourOsc, 2).wasOk(), "A MIDI track hosts a synth instrument");
+            require(parameterSession.addMidiEffect(Session::MidiEffect::RhinoArp, 2).wasOk(), "MIDI FX browser action inserts Rhino Arp");
             int arpSlot = -1, synthSlot = -1;
             for (int i = 0; i < parameterTrack->pluginList.size(); ++i)
             {
@@ -34,9 +44,9 @@
             }
             require(arpSlot >= 0 && synthSlot >= 0 && arpSlot < synthSlot,
                     "Rhino Arp is inserted before the target instrument");
-            auto arpParameters = parameterSession.deviceParameters(1, arpSlot);
+            auto arpParameters = parameterSession.deviceParameters(2, arpSlot);
             require(arpParameters.size() == 3, "Rhino Arp exposes rate, octaves, and gate controls");
-            require(parameterSession.addInstrument(Session::Instrument::RhinoWave, 1).wasOk(), "Audio track can host Rhino Wave");
+            require(parameterSession.addInstrument(Session::Instrument::RhinoWave, 2).wasOk(), "A MIDI track hosts Rhino Wave");
             int waveSlot = -1;
             for (int i = 0; i < parameterTrack->pluginList.size(); ++i)
             {
@@ -45,7 +55,7 @@
                     waveSlot = i;
             }
             require(waveSlot >= 0, "Rhino Wave is inserted in the target track chain");
-            auto waveParameters = parameterSession.deviceParameters(1, waveSlot);
+            auto waveParameters = parameterSession.deviceParameters(2, waveSlot);
             require(waveParameters.size() >= 23 && waveParameters[0].name == "Position"
                     && waveParameters[2].name == "Motion" && waveParameters[3].name == "Osc 2"
                     && waveParameters[4].name == "Tune 2" && waveParameters[5].name == "Cutoff"
@@ -58,9 +68,9 @@
                 require(parameterSession.isForgeAvailable(), "Rhino discovers the development Forge VST3 bundle");
             if (parameterSession.isForgeAvailable())
             {
-                require(parameterSession.addInstrument(Session::Instrument::RhinoForge, 1).wasOk(),
+                require(parameterSession.addInstrument(Session::Instrument::RhinoForge, 2).wasOk(),
                         "An arrangement drop can put the independent Rhino Forge VST3 on a track");
-                require(parameterSession.createClip(1, 0.0).wasOk(),
+                require(parameterSession.createClip(2, 0.0).wasOk(),
                         "A clip can then be created on the track routed to Forge");
                 int forgeSlot = -1;
                 for (int i = 0; i < parameterTrack->pluginList.size(); ++i)
@@ -83,7 +93,7 @@
                 require(reopenedForgeEditor != nullptr && reopenedForgeEditor->getWidth() >= 900,
                         "Forge custom editor reopens after its previous window closes");
                 reopenedForgeEditor.reset();
-                const auto forgeParameters = parameterSession.deviceParameters(1, forgeSlot);
+                const auto forgeParameters = parameterSession.deviceParameters(2, forgeSlot);
                 require(forgeParameters.size() >= 35,
                         "Tracktion exposes Forge VST3 parameters to Rhino");
                 require(parameterSession.addInstrument(Session::Instrument::RhinoForge, 0).wasOk(),

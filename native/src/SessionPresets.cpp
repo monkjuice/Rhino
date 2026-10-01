@@ -200,6 +200,10 @@ juce::Result Session::preparePresetTrack(int trackIndex, const PresetPattern& da
     const auto tracks = te::getAudioTracks(*edit);
     if (!juce::isPositiveAndBelow(trackIndex, tracks.size()))
         return juce::Result::fail("Drop clips on a track lane.");
+    // A pattern is notes and the instrument that plays them, so it lands where
+    // a clip and an instrument each land on their own.
+    if (trackType(trackIndex) != TrackType::midi)
+        return juce::Result::fail("That is an audio track. Drop patterns on a MIDI track instead.");
     auto* track = tracks[trackIndex];
     if (trackIndex == 0)
     {

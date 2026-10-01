@@ -25,13 +25,13 @@ juce::String Session::trackTypeName(TrackType type)
     return type == TrackType::midi ? "MIDI" : "Audio";
 }
 
-// A track that runs an instrument is a MIDI track whatever it was created as:
-// the instrument is the stronger statement, and it is the answer every track
-// written before the type existed gives.
+// What the track said it was when it was made, and nothing else. Reading the
+// chain instead - a track that runs an instrument is MIDI - meant an audio
+// lane turned into a MIDI one the moment a synth landed on it, so the lane's
+// kind was a consequence of the last drop rather than a promise to the person
+// who created it.
 Session::TrackType Session::trackType(int track) const
 {
-    if (trackHasInstrument(track))
-        return TrackType::midi;
     const auto tracks = te::getAudioTracks(*edit);
     if (!juce::isPositiveAndBelow(track, tracks.size()))
         return TrackType::audio;
@@ -59,15 +59,12 @@ void Session::setLastAddedTrackType(TrackType type)
     properties.saveIfNeeded();
 }
 
-juce::Result Session::addTrack(TrackType type)
+te::AudioTrack* Session::appendTrack(TrackType type)
 {
-    const auto tracks = te::getAudioTracks(*edit);
-    const auto kind = trackTypeName(type);
-    edit->getUndoManager().beginNewTransaction("Add " + kind.toLowerCase() + " track");
     auto newTrack = edit->insertNewAudioTrack(te::TrackInsertPoint::getEndOfTracks(*edit), nullptr, false);
     if (newTrack == nullptr)
-        return juce::Result::fail("Could not create " + kind.toLowerCase() + " track.");
-    newTrack->setName(kind);
+        return nullptr;
+    newTrack->setName(trackTypeName(type));
     newTrack->setColour(pickTrackColour());
     // Only MIDI is written down: audio is what a track with nothing to say is,
     // so an audio track needs no property and no document needs migrating.
@@ -75,6 +72,15 @@ juce::Result Session::addTrack(TrackType type)
         newTrack->state.setProperty(trackTypeID, "midi", &edit->getUndoManager());
     auto audioDevice = edit->getPluginCache().createNewPlugin(UtilityDevice::xmlTypeName, {});
     newTrack->pluginList.insertPlugin(audioDevice, 0, nullptr);
+    return newTrack.get();
+}
+
+juce::Result Session::addTrack(TrackType type)
+{
+    const auto kind = trackTypeName(type);
+    edit->getUndoManager().beginNewTransaction("Add " + kind.toLowerCase() + " track");
+    if (appendTrack(type) == nullptr)
+        return juce::Result::fail("Could not create " + kind.toLowerCase() + " track.");
     refreshUtilityPointers();
     // The new track lands after the last one, so it joins a group only if that
     // group already ran to the bottom of the stack; reconciling says which.

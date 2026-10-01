@@ -48,6 +48,14 @@ juce::Result Session::editClip(te::EditItemID id, ClipGeometry next, ClipGesture
         targetTrack = oldTrackIndex;
     if (targetTrack < 0 || targetTrack > tracks.size())
         return juce::Result::fail("Drop the clip on a track lane.");
+    // A clip only ever lands on a lane of its own kind. Dropping one on the
+    // wrong lane used to drag the lane's kind along with it - a MIDI clip
+    // carried its instrument onto an audio track and silently made it MIDI.
+    if (targetTrack != oldTrackIndex && targetTrack < tracks.size()
+        && trackType(targetTrack) != (movingMidi ? TrackType::midi : TrackType::audio))
+        return juce::Result::fail(movingMidi
+            ? "That is an audio track. Move MIDI clips to a MIDI track."
+            : "That is a MIDI track. Move audio clips to an audio track.");
     const auto old = clip->getPosition();
     if (std::abs(old.time.getStart().inSeconds() - next.start) < 1.0e-8
         && std::abs(old.time.getEnd().inSeconds() - next.end) < 1.0e-8
@@ -60,13 +68,10 @@ juce::Result Session::editClip(te::EditItemID id, ClipGeometry next, ClipGesture
     edit->getUndoManager().beginNewTransaction(gesture == ClipGesture::move ? "Move clip" : "Trim clip");
     if (targetTrack == tracks.size())
     {
-        auto newTrack = edit->insertNewAudioTrack(te::TrackInsertPoint::getEndOfTracks(*edit), nullptr, false);
-        if (newTrack == nullptr)
+        // Dragged off the bottom of the stack: the new lane is made for the
+        // clip that is arriving, so a MIDI clip gets a MIDI track.
+        if (appendTrack(movingMidi ? TrackType::midi : TrackType::audio) == nullptr)
             return juce::Result::fail("Could not create a track for the moved clip.");
-        newTrack->setName("Audio");
-        newTrack->setColour(pickTrackColour());
-        auto audioDevice = edit->getPluginCache().createNewPlugin(UtilityDevice::xmlTypeName, {});
-        newTrack->pluginList.insertPlugin(audioDevice, 0, nullptr);
         targetTrack = tracks.size();
     }
     const auto refreshedTracks = te::getAudioTracks(*edit);

@@ -322,8 +322,8 @@
         view.sync();
         view.setSelection({movedDuplicateID}, movedDuplicateID);
         drag({view.xFor(movedDuplicate->getPosition().time.getStart().inSeconds() + 0.1), clipRowY(1)},
-             {view.xFor(0.5), clipRowY(2)});
-        require(te::getAudioTracks(*session.edit)[2]->findClipForID(movedDuplicateID) != nullptr,
+             {view.xFor(0.5), clipRowY(3)});
+        require(te::getAudioTracks(*session.edit)[3]->findClipForID(movedDuplicateID) != nullptr,
                 "Dragging a duplicated audio clip to a newly-created track preserves clip identity");
         require(renderClipRms(*session.findAudioClip(movedDuplicateID)) > 0.01f,
                 "Duplicated audio moved to a newly-created track still renders audible audio");
@@ -334,33 +334,30 @@
         view.sync();
         scenario("track management: cross-track move");
         view.setSelection({id}, id);
-        drag({view.xFor(0.2), clipRowY(1)}, {view.xFor(0.5), clipRowY(2)});
+        drag({view.xFor(0.2), clipRowY(1)}, {view.xFor(0.5), clipRowY(3)});
         require(te::getAudioTracks(*session.edit)[1]->getClips().isEmpty(), "Dragging an audio clip to another lane removes it from the source track");
-        require(te::getAudioTracks(*session.edit)[2]->findClipForID(id) != nullptr, "Dragging an audio clip to another lane preserves clip identity on the target track");
+        require(te::getAudioTracks(*session.edit)[3]->findClipForID(id) != nullptr, "Dragging an audio clip to another lane preserves clip identity on the target track");
         require(close(session.findAudioClip(id)->getPosition().time.getStart().inSeconds(), 0.25), "Cross-track audio drag also updates the clip time");
         require(renderClipRms(*session.findAudioClip(id)) > 0.01f, "Cross-track moved clip still renders audible audio");
         session.undo();
         require(te::getAudioTracks(*session.edit)[1]->findClipForID(id) != nullptr, "Undo restores the clip to its original track");
-        require(te::getAudioTracks(*session.edit)[2]->findClipForID(id) == nullptr, "Undo removes the clip from the drag target track");
+        require(te::getAudioTracks(*session.edit)[3]->findClipForID(id) == nullptr, "Undo removes the clip from the drag target track");
         view.sync();
-        scenario("track management: instrument-lane move");
-        session.applyPatternPreset(Session::PatternPreset::WavePluck);
-        view.sync();
+        scenario("track management: a MIDI lane refuses audio");
         view.setSelection({id}, id);
+        const auto beforeRefusedDrag = session.findAudioClip(id)->getPosition().time.getStart().inSeconds();
         drag({view.xFor(0.2), clipRowY(1)}, {view.xFor(0.5), clipRowY(0)});
-        require(te::getAudioTracks(*session.edit)[0]->findClipForID(id) != nullptr,
-                "Dragging an audio clip onto an instrument lane moves it there");
-        require(renderClipRms(*session.findAudioClip(id)) > 0.01f,
-                "Audio moved onto a Rhino Wave instrument lane still renders audible audio");
-        session.undo();
-        session.undo();
+        require(te::getAudioTracks(*session.edit)[0]->findClipForID(id) == nullptr,
+                "An audio clip cannot be dragged onto a MIDI lane");
         require(te::getAudioTracks(*session.edit)[1]->findClipForID(id) != nullptr,
-                "Undo restores audio after an instrument-lane move");
+                "so it stays on the audio lane it came from");
+        require(close(session.findAudioClip(id)->getPosition().time.getStart().inSeconds(), beforeRefusedDrag),
+                "and is not moved in time either, because the refused drag changes nothing");
         view.sync();
         scenario("track management: move during playback");
         session.togglePlayback();
         require(session.edit->getTransport().isPlaying(), "Transport starts before cross-track clip drag");
-        drag({view.xFor(0.2), clipRowY(1)}, {view.xFor(0.5), clipRowY(2)});
+        drag({view.xFor(0.2), clipRowY(1)}, {view.xFor(0.5), clipRowY(3)});
         require(session.edit->getTransport().isPlaying(), "Cross-track clip drag keeps playback running");
         session.stop();
         session.undo();
@@ -463,6 +460,53 @@
                     "but takes audio");
             require(session.trackRecordInput(audioTrack) == Session::RecordInput::audio,
                     "and records the audio input");
+
+            // What a track is cannot be changed by dropping something on it.
+            // An instrument used to convert an audio lane to MIDI on contact,
+            // so the lane the person made to hold a file quietly became one
+            // that could not, and no gesture put it back.
+            require(session.addInstrument(Session::Instrument::FourOsc, audioTrack).failed(),
+                    "An audio track refuses an instrument");
+            require(session.addDrumKit(DrumKit::Rhino808, audioTrack).failed(),
+                    "and a drum kit, which is an instrument wearing a kit");
+            require(session.addMidiEffect(Session::MidiEffect::RhinoArp, audioTrack).failed(),
+                    "and a MIDI effect, which would have no notes to act on");
+            require(session.trackType(audioTrack) == Session::TrackType::audio
+                    && !session.trackHasInstrument(audioTrack),
+                    "and is still an audio track running nothing afterwards");
+            require(session.addAudioEffect(Session::AudioEffect::Reverb, audioTrack).wasOk()
+                    && session.addAudioEffect(Session::AudioEffect::Reverb, midiTrack).wasOk(),
+                    "An audio effect is the one device both kinds take");
+
+            // A clip goes to a lane of its own kind, and nowhere else.
+            te::EditItemID onAudioLane;
+            for (auto* laneClip : te::getAudioTracks(*session.edit)[audioTrack]->getClips())
+                if (dynamic_cast<te::WaveAudioClip*>(laneClip) != nullptr)
+                    onAudioLane = laneClip->itemID;
+            require(onAudioLane.isValid(), "The imported audio clip is findable");
+            require(session.editClip(onEmptyMidi, {0.0, 1.0, 0.0}, ClipGesture::move, audioTrack).failed(),
+                    "A MIDI clip cannot be dragged onto an audio track");
+            require(session.editClip(onAudioLane, {0.0, 1.0, 0.0}, ClipGesture::move, midiTrack).failed(),
+                    "and an audio clip cannot be dragged onto a MIDI one");
+            require(session.trackType(audioTrack) == Session::TrackType::audio
+                    && session.trackType(midiTrack) == Session::TrackType::midi,
+                    "so neither lane changed kind under a refused drag");
+
+            // Taking the instrument off again leaves a MIDI track waiting for
+            // another one, not a track that has turned into an audio lane.
+            require(session.addInstrument(Session::Instrument::FourOsc, midiTrack).wasOk(),
+                    "The MIDI track takes an instrument");
+            auto instrumentSlot = -1;
+            for (const auto& slot : session.deviceSlots(midiTrack))
+                if (slot.kind == Session::DeviceKind::Instrument)
+                    instrumentSlot = slot.pluginIndex;
+            require(instrumentSlot >= 0, "which shows in its Device View");
+            require(session.editClip(onAudioLane, {0.0, 1.0, 0.0}, ClipGesture::move, midiTrack).failed(),
+                    "and running one does not make the lane any more willing to take audio");
+            require(session.deleteDevice(midiTrack, instrumentSlot).wasOk(), "and can be taken off again");
+            require(!session.trackHasInstrument(midiTrack)
+                    && session.trackType(midiTrack) == Session::TrackType::midi,
+                    "leaving a MIDI track that runs nothing, rather than an audio one");
 
             // The kind travels with the document, so reopening does not hand
             // the MIDI track back as an audio one.

@@ -60,13 +60,27 @@
         {
             // Each drum pattern has an instrument beside it. Dropping one sets
             // the track's instrument to Rhino Drums and selects that kit.
-            require(view.applyBrowserDrop("rhino-browser:drumkit:BreakKit", 2).wasOk(),
-                    "A drum kit can be dropped on a track");
-            require(session.trackHasInstrument(2), "The kit puts an instrument on the track");
-            require(session.trackName(2) == "Break Kit", "The track takes the kit's name");
+            //
+            // A kit is an instrument, so it goes on a MIDI lane. The lane is
+            // looked up by kind rather than by index, because the scenarios
+            // above this one reshape the stack and reopen the document.
+            auto kitTrack = -1, kitAudioTrack = -1;
+            for (int track = 0; track < session.trackCount(); ++track)
+            {
+                if (session.isGroupBusTrack(track)) continue;
+                auto& found = session.trackType(track) == Session::TrackType::midi ? kitTrack : kitAudioTrack;
+                if (found < 0) found = track;
+            }
+            require(kitTrack >= 0 && kitAudioTrack >= 0, "The stack holds a lane of each kind");
+            require(view.applyBrowserDrop("rhino-browser:drumkit:BreakKit", kitAudioTrack).failed(),
+                    "An audio track refuses a drum kit, which is an instrument");
+            require(view.applyBrowserDrop("rhino-browser:drumkit:BreakKit", kitTrack).wasOk(),
+                    "A drum kit can be dropped on a MIDI track");
+            require(session.trackHasInstrument(kitTrack), "The kit puts an instrument on the track");
+            require(session.trackName(kitTrack) == "Break Kit", "The track takes the kit's name");
             int instrumentCount = 0;
             juce::String instrumentType;
-            for (const auto& slot : session.deviceSlots(2))
+            for (const auto& slot : session.deviceSlots(kitTrack))
                 if (slot.kind == Session::DeviceKind::Instrument)
                 {
                     ++instrumentCount;
@@ -74,16 +88,16 @@
                 }
             require(instrumentCount == 1 && instrumentType == DrumDevice::xmlTypeName,
                     "A kit is the drum instrument, not a second instrument beside one");
-            auto* kitDevice = dynamic_cast<DrumDevice*>(session.patternInstrumentForTrack(2));
+            auto* kitDevice = dynamic_cast<DrumDevice*>(session.patternInstrumentForTrack(kitTrack));
             require(kitDevice != nullptr, "The track runs the drum device");
             require(kitDevice->kit() == DrumDevice::Kit::Break, "The dropped kit is the one selected");
-            require(view.applyBrowserDrop("rhino-browser:drumkit:ClapKit", 2).wasOk(), "Kits can be swapped");
+            require(view.applyBrowserDrop("rhino-browser:drumkit:ClapKit", kitTrack).wasOk(), "Kits can be swapped");
             require(kitDevice->kit() == DrumDevice::Kit::Clap, "Swapping a kit reuses the same drum device");
-            require(session.trackName(2) == "Clap Kit", "The track is renamed to the new kit");
+            require(session.trackName(kitTrack) == "Clap Kit", "The track is renamed to the new kit");
             const auto savedKit = session.projectSnapshot();
             juce::TemporaryFile kitProject(".rhinoedit");
             require(session.restoreProject(savedKit, kitProject.getFile()).wasOk(), "Reopen a project using a kit");
-            auto* restoredKit = dynamic_cast<DrumDevice*>(session.patternInstrumentForTrack(2));
+            auto* restoredKit = dynamic_cast<DrumDevice*>(session.patternInstrumentForTrack(kitTrack));
             require(restoredKit != nullptr && restoredKit->kit() == DrumDevice::Kit::Clap,
                     "The kit selection survives reopen");
         }

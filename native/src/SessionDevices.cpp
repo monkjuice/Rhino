@@ -178,6 +178,11 @@ juce::Result Session::addInstrumentDevice(const DeviceDescriptor& device, int tr
     const auto tracks = te::getAudioTracks(*edit);
     if (!juce::isPositiveAndBelow(trackIndex, tracks.size()))
         return juce::Result::fail("Drop instruments on a track.");
+    // An instrument is played by notes, and only a MIDI track holds any. A
+    // facility is exempt: it joins the chain rather than becoming what the
+    // track plays, so it belongs on an audio track as much as a MIDI one.
+    if (!device.infrastructure && trackType(trackIndex) != TrackType::midi)
+        return juce::Result::fail("That is an audio track. Drop instruments on a MIDI track instead.");
 
     auto* track = tracks[trackIndex];
     const auto& name = device.displayName;
@@ -224,6 +229,10 @@ juce::Result Session::addMidiEffectDevice(const DeviceDescriptor& device, int tr
     const auto tracks = te::getAudioTracks(*edit);
     if (!juce::isPositiveAndBelow(trackIndex, tracks.size()))
         return juce::Result::fail("Drop MIDI FX on an instrument track.");
+    // A MIDI effect rewrites notes on their way to an instrument. An audio
+    // track carries no notes for it to act on.
+    if (trackType(trackIndex) != TrackType::midi)
+        return juce::Result::fail("That is an audio track. Drop MIDI FX on a MIDI track instead.");
 
     const auto& name = device.displayName;
     const auto& type = device.typeName;
@@ -259,6 +268,9 @@ juce::Result Session::addDrumKit(DrumKit kit, int trackIndex)
     const auto tracks = te::getAudioTracks(*edit);
     if (!juce::isPositiveAndBelow(trackIndex, tracks.size()))
         return juce::Result::fail("Drop drum kits on a track.");
+    // A kit is an instrument, so it goes where an instrument goes.
+    if (trackType(trackIndex) != TrackType::midi)
+        return juce::Result::fail("That is an audio track. Drop drum kits on a MIDI track instead.");
     const auto name = DrumDevice::kitName(kit);
     edit->getUndoManager().beginNewTransaction("Add " + name);
     bool changed = false;

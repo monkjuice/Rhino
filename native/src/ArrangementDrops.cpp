@@ -15,6 +15,19 @@ bool isSupportedAudioFile(const juce::File& file)
     return extension == ".wav" || extension == ".aiff" || extension == ".aif"
         || extension == ".flac" || extension == ".ogg" || extension == ".mp3";
 }
+
+// What kind of track a browser item needs, when the drop lands past the last
+// lane and one has to be made for it. The lane is made for what is arriving
+// rather than always for audio, because a track cannot change kind afterwards.
+// Nothing is returned for an item that does not land on a lane at all.
+std::optional<Session::TrackType> trackTypeForDropKind(const juce::String& kind)
+{
+    if (kind == "preset" || kind == "instrument" || kind == "midi-effect" || kind == "drumkit")
+        return Session::TrackType::midi;
+    if (kind == "sample" || kind == "file" || kind == "effect")
+        return Session::TrackType::audio;
+    return {};
+}
 }
 
 bool Arrangement::isInterestedInFileDrag(const juce::StringArray& files)
@@ -48,7 +61,10 @@ void Arrangement::filesDropped(const juce::StringArray& files, int x, int y)
     {
         const auto file = juce::File(path);
         if (!isSupportedAudioFile(file)) continue;
-        const auto result = session.importAudioAt(file, std::max(1, targetTrack), snapped(std::max(0.0, timeAt(static_cast<float>(x))), false));
+        // The lane under the pointer is the lane it lands on. Nudging a drop
+        // off track 0 used to hide that a MIDI lane takes no audio by quietly
+        // using the next lane down instead.
+        const auto result = session.importAudioAt(file, targetTrack, snapped(std::max(0.0, timeAt(static_cast<float>(x))), false));
         if (result.failed() && status) status(result.getErrorMessage());
     }
     fit();
@@ -95,19 +111,20 @@ void Arrangement::itemDropped(const juce::DragAndDropTarget::SourceDetails& deta
                 + juce::String(session.clipPluginCount(clip.id)));
             return;
         }
-    if ((kind == "preset" || kind == "effect" || kind == "instrument" || kind == "midi-effect"
-         || kind == "sample" || kind == "file")
-        && targetTrack < 0
+    if (targetTrack < 0
         && session.trackCount() > 0
         && static_cast<float>(details.localPosition.y) > lane(session.trackCount() - 1).getBottom())
     {
-        const auto result = session.addAudioTrack();
-        if (result.failed())
+        if (const auto wanted = trackTypeForDropKind(kind))
         {
-            if (status) status(result.getErrorMessage());
-            return;
+            const auto result = session.addTrack(*wanted);
+            if (result.failed())
+            {
+                if (status) status(result.getErrorMessage());
+                return;
+            }
+            targetTrack = session.trackCount() - 1;
         }
-        targetTrack = session.trackCount() - 1;
     }
 
     const auto result = applyBrowserDrop(description, targetTrack,
@@ -210,7 +227,9 @@ juce::Result Arrangement::applyBrowserDrop(const juce::String& description, int 
     {
         const auto sample = builtInSampleFromId(id);
         if (!sample) return juce::Result::fail("That browser sample cannot be inserted here.");
-        if (track < 1) return juce::Result::fail("Drop audio samples on an audio track.");
+        // Any lane is offered: importAudioAt is what knows which lanes take
+        // audio, and says so in the same words wherever the sample came from.
+        if (track < 0) return juce::Result::fail("Drop audio samples on an audio track.");
         const auto result = session.importBuiltInSample(*sample, track, startSeconds);
         if (result.failed()) return result;
         selectTrack(track);

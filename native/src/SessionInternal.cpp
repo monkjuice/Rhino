@@ -374,15 +374,8 @@ juce::Result switchTrackInstrument(te::Edit& edit, te::AudioTrack& track, const 
         changed = true;
     }
 
-    // An instrument settles what the track is for good. Taking it off again
-    // leaves a track that holds notes and is waiting for another instrument,
-    // not one that has quietly turned into an audio track with clips on it.
-    if (track.state.getProperty(trackTypeID).toString() != "midi")
-    {
-        track.state.setProperty(trackTypeID, "midi", &edit.getUndoManager());
-        changed = true;
-    }
-
+    // What the track is was settled when it was created, so nothing is written
+    // here: only a MIDI track is ever offered an instrument in the first place.
     return juce::Result::ok();
 }
 

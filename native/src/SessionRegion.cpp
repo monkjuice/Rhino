@@ -1,6 +1,7 @@
 #include "SessionInternal.h"
 #include <algorithm>
 #include <cmath>
+#include <optional>
 
 // Region editing: the slice of the arrangement that copy, cut, paste, duplicate
 // and delete all act on. A region is a span of time across a run of tracks -
@@ -198,16 +199,39 @@ juce::Result Session::pasteClipRegion(const ClipRegion& region, double destinati
     if (!std::isfinite(destinationStart) || destinationStart < 0.0 || destinationTrack < 0)
         return juce::Result::fail("Choose a valid paste location.");
 
+    // A clip lands on a lane of its own kind, so what each row of the region
+    // needs is read off it before anything is created or cleared: a paste that
+    // would put MIDI on an audio lane is refused whole rather than half done,
+    // because clearing the destination has already happened by the time the
+    // first clip is inserted.
+    std::vector<std::optional<TrackType>> rowType(static_cast<size_t>(region.trackSpan) + 1);
+    for (const auto& snapshot : region.clips)
+        if (juce::isPositiveAndBelow(snapshot.track, static_cast<int>(rowType.size())))
+            rowType[static_cast<size_t>(snapshot.track)] = snapshot.midi ? TrackType::midi : TrackType::audio;
+
+    const auto trackCountBefore = te::getAudioTracks(*edit).size();
+    for (size_t row = 0; row < rowType.size(); ++row)
+    {
+        // A row the paste will make is made as the kind that row wants, so
+        // only the rows already there can be the wrong kind.
+        const auto index = destinationTrack + static_cast<int>(row);
+        if (!rowType[row].has_value() || index >= trackCountBefore)
+            continue;
+        if (trackType(index) != *rowType[row])
+            return juce::Result::fail(*rowType[row] == TrackType::midi
+                ? "That is an audio track. Paste MIDI clips on a MIDI track."
+                : "That is a MIDI track. Paste audio clips on an audio track.");
+    }
+
     edit->getUndoManager().beginNewTransaction("Paste clips");
     while (te::getAudioTracks(*edit).size() < destinationTrack + region.trackSpan + 1)
     {
-        const auto index = te::getAudioTracks(*edit).size();
-        auto newTrack = edit->insertNewAudioTrack(te::TrackInsertPoint::getEndOfTracks(*edit), nullptr, false);
-        if (newTrack == nullptr)
+        const auto row = te::getAudioTracks(*edit).size() - destinationTrack;
+        const auto type = juce::isPositiveAndBelow(row, static_cast<int>(rowType.size()))
+                              ? rowType[static_cast<size_t>(row)].value_or(TrackType::audio)
+                              : TrackType::audio;
+        if (appendTrack(type) == nullptr)
             return juce::Result::fail("Could not create a track for pasted clips.");
-        newTrack->setName("Audio");
-        newTrack->setColour(pickTrackColour());
-        newTrack->pluginList.insertPlugin(edit->getPluginCache().createNewPlugin(UtilityDevice::xmlTypeName, {}), 0, nullptr);
     }
 
     // Pasting replaces what it lands on, as it does in Live: what arrives is

@@ -42,9 +42,11 @@
 
         {
             Session repeatedDrums;
-            require(repeatedDrums.insertPatternPreset(Session::PatternPreset::BreakKit, 1, 2.0).wasOk(),
+            // The third starter lane, because a pattern is notes and an
+            // instrument and the second lane is there to hold audio.
+            require(repeatedDrums.insertPatternPreset(Session::PatternPreset::BreakKit, 2, 2.0).wasOk(),
                     "Repeated drum regression creates the first clip after silence");
-            auto* drumTrack = te::getAudioTracks(*repeatedDrums.edit)[1];
+            auto* drumTrack = te::getAudioTracks(*repeatedDrums.edit)[2];
             auto* first = drumTrack->getClips().getLast();
             require(first != nullptr, "Repeated drum regression finds its first clip");
             for (int i = 0; i < 3; ++i)

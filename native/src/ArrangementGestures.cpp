@@ -35,6 +35,7 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
     // nothing under the pointer gets a say in whether it starts.
     if (event.mods.isMiddleButtonDown())
     {
+        clearAutomationHover();
         panning = true;
         panAnchor = event.position;
         panStartView = viewStart;
@@ -590,6 +591,9 @@ void Arrangement::mouseMove(const juce::MouseEvent& event)
     // to a component that is not the drag source, and letting one through here
     // would flicker the hand back to an arrow mid-gesture.
     if (panning) return;
+    // Before the cursor is picked, because the cursor is one of the things it
+    // decides: the hover is the single answer about what the pointer is on.
+    updateAutomationHover(event.position, event.mods.isAltDown());
     if (masterResizeEdgeAt(event.position))
     {
         setMouseCursor(juce::MouseCursor::UpDownResizeCursor);
@@ -614,8 +618,12 @@ void Arrangement::mouseMove(const juce::MouseEvent& event)
         pointerStyle = juce::MouseCursor::DraggingHandCursor;
     else if (event.y >= rulerTop && event.y < lanesTop && event.x >= headerWidth)
         pointerStyle = juce::MouseCursor::CrosshairCursor;
-    else if (automationHitAt(event.position).valid())
-        pointerStyle = juce::MouseCursor::UpDownResizeCursor;
+    // A node is carried and the lane between nodes is clicked on, so the two
+    // say different things: the arrows mean a level is about to be dragged,
+    // the crosshair that a node is about to be placed.
+    else if (automationHover.valid())
+        pointerStyle = automationHover.point >= 0 ? juce::MouseCursor::UpDownResizeCursor
+                                                  : juce::MouseCursor::CrosshairCursor;
     else if (index >= 0)
     {
         // The pointer says which of a clip's rows it is over: a hand on the
@@ -630,6 +638,13 @@ void Arrangement::mouseMove(const juce::MouseEvent& event)
         }
     }
     setMouseCursor(pointerStyle);
+}
+
+// A pointer that has left the panel is over nothing, so the lit curve, the
+// ghost and the reading all have to go with it.
+void Arrangement::mouseExit(const juce::MouseEvent&)
+{
+    clearAutomationHover();
 }
 
 // The main row's top edge, across the whole width of the panel: the row spans
@@ -944,6 +959,10 @@ void Arrangement::showMidiInputMenu(int track)
 void Arrangement::mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel)
 {
     if (dragging) return;
+    // A wheel sends no move, so whatever was under the pointer before the view
+    // slid is not under it afterwards. Cleared rather than recomputed: the new
+    // scroll is not applied yet, and the next move answers properly.
+    clearAutomationHover();
     if (event.mods.isShiftDown())
     {
         const auto wheelDelta = std::abs(wheel.deltaY) >= std::abs(wheel.deltaX) ? wheel.deltaY : -wheel.deltaX;

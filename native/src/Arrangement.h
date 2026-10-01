@@ -22,6 +22,7 @@ public:
     void mouseDrag(const juce::MouseEvent&) override;
     void mouseUp(const juce::MouseEvent&) override;
     void mouseMove(const juce::MouseEvent&) override;
+    void mouseExit(const juce::MouseEvent&) override;
     void mouseWheelMove(const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
     bool keyPressed(const juce::KeyPress&) override;
     bool isInterestedInFileDrag(const juce::StringArray&) override;
@@ -138,11 +139,22 @@ private:
         float top = 0.0f;
         float height = 0.0f;
     };
-    struct AutomationHit
+    // What the pointer is over inside an automation lane, worked out once per
+    // move and read by everything that reacts to it: the curve lightens, the
+    // node under the pointer is marked, a ghost shows where a click would drop
+    // a new one, and the reading says what level that would be. It also stands
+    // in for the pointer during a drag, so the same readout follows a node
+    // being moved without a second code path.
+    struct AutomationHover
     {
         int row = -1;
         int automation = -1;
-        int point = -1; // -1 is the line itself rather than one of its points
+        int point = -1;       // the node under the pointer, -1 when between them
+        bool onCurve = false; // near enough that the value was pulled onto the line
+        bool dragging = false;
+        double timeSeconds = 0.0;
+        float value = 0.0f;
+        juce::Point<float> pointer;
         bool valid() const { return row >= 0; }
     };
     void sync();
@@ -255,11 +267,31 @@ private:
     float automationYFor(int row, const Session::TrackAutomation&, float value) const;
     float automationValueForY(int row, const Session::TrackAutomation&, float y) const;
     std::vector<Session::AutomationPoint> defaultAutomationPoints(const Session::TrackAutomation&) const;
-    AutomationHit automationHitAt(juce::Point<float>) const;
+    // The one automation hit test. Everything else - the cursor, the gesture,
+    // the drawing - reads its answer rather than measuring again, so what
+    // lights up under the pointer is by construction what a click acts on.
+    AutomationHover automationHoverAt(juce::Point<float>, bool bypassSnap) const;
+    void updateAutomationHover(juce::Point<float>, bool bypassSnap);
+    void clearAutomationHover();
+    // Where the curve would run at this time if the node at `index` were not
+    // there: what the subtle snap pulls a node onto, so dropping one on a ramp
+    // does not dent it.
+    float automationNeighbourValue(const std::vector<Session::AutomationPoint>&, int index, double seconds) const;
+    // Puts a node into the gesture's working copy and answers where it landed.
+    // A node dropped on one already there moves that one instead of stacking a
+    // second on top of it.
+    int insertAutomationPoint(double seconds, float value);
     bool beginAutomationGesture(const juce::MouseEvent&);
     void dragAutomationGesture(const juce::MouseEvent&);
     void endAutomationGesture(const juce::MouseEvent&);
+    // ArrangementAutomationPaint.cpp
     void paintAutomationRow(juce::Graphics&, int row);
+    // Where a click would drop a node, drawn on the curve it would join.
+    void paintAutomationGhost(juce::Graphics&, int row, const Session::TrackAutomation&) const;
+    // The level under the pointer, floated over the lanes. Painted last rather
+    // than with its row: it sits above the pointer and would otherwise be
+    // covered by whatever row is drawn next.
+    void paintAutomationReadout(juce::Graphics&);
     void paintGhostRow(juce::Graphics&, int row);
     // Every row's band and its card, clipped to the lanes: a row that straddles
     // the bottom edge has to stop at it rather than paint the height it was
@@ -433,6 +465,11 @@ private:
     Focus focus = Focus::none;
     int automationRow = -1, automationPoint = -1;
     std::vector<Session::AutomationPoint> automationPoints;
+    // A click that put a new node down has changed the curve before the
+    // pointer has moved at all, so it has to be written on release even though
+    // the gesture never travelled.
+    bool automationInserted = false;
+    AutomationHover automationHover;
     float playhead = -1.0f;
     // A parked playhead is a marker, not a sweep: it stays in the ruler so the
     // lanes are not cut in two by a line that is not going anywhere. Held here

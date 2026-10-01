@@ -511,6 +511,10 @@ public:
     // target.track, so an automation always sits under the track it belongs to.
     std::vector<TrackAutomation> trackAutomations(int track) const;
     AutomationLaneState trackAutomationState(DeviceTarget) const;
+    // What a value anywhere on a lane's curve reads as on the knob it drives -
+    // "2.0 dB", "12%" - so the arrangement can print the level under the
+    // pointer rather than a bare number between the parameter's two limits.
+    juce::String automationValueText(DeviceTarget, float value) const;
     juce::Result showTrackAutomation(DeviceTarget, bool ownLane);
     juce::Result hideTrackAutomation(DeviceTarget);
     juce::Result setTrackAutomationPoints(DeviceTarget, std::vector<AutomationPoint>);

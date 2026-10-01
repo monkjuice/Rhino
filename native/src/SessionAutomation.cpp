@@ -165,6 +165,24 @@ Session::AutomationLaneState Session::trackAutomationState(DeviceTarget target) 
     return lane;
 }
 
+// The engine formats only the value a parameter is currently on, so a reading
+// for a point further along the curve is converted here instead. An empty
+// answer means the device or the parameter has gone; the caller falls back to
+// the raw number rather than printing nothing.
+juce::String Session::automationValueText(DeviceTarget target, float value) const
+{
+    auto* list = pluginListForTrack(target.track);
+    if (list == nullptr || !juce::isPositiveAndBelow(target.slot, list->size()))
+        return {};
+    auto* plugin = (*list)[target.slot];
+    if (plugin == nullptr)
+        return {};
+    auto* parameter = exposedParameterAt(*plugin, target.parameter);
+    if (parameter == nullptr)
+        return {};
+    return formatExposedParameterValue(*plugin, target.parameter, value, *parameter);
+}
+
 // Creates the lane if it is missing, inside whatever transaction the caller has
 // already opened, so revealing and drawing a lane is one undo step either way.
 juce::ValueTree Session::ensureTrackAutomationState(DeviceTarget target, bool ownLane, bool keepExistingLane)

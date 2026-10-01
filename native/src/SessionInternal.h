@@ -108,6 +108,8 @@ juce::String fourOscMacroName(int index);
 juce::String rhinoWaveMacroName(int index);
 juce::String formatFourOscMacroValue(int index, float value, te::AutomatableParameter& parameter);
 juce::String formatRhinoWaveMacroValue(int index, float value, te::AutomatableParameter& parameter);
+juce::String formatExposedParameterValue(te::Plugin& plugin, int index, float value,
+                                         te::AutomatableParameter& parameter);
 te::AutomatableParameter* exposedParameterAt(te::Plugin& plugin, int index);
 float exposedParameterMaximum(te::Plugin& plugin, int index, float maximum);
 

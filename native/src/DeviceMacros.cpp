@@ -113,7 +113,14 @@ juce::String rhinoWaveMacroName(int index)
     return {};
 }
 
-juce::String formatFourOscMacroValue(int index, float value, te::AutomatableParameter& parameter)
+namespace
+{
+// The unit a macro prints where the engine would not print it itself. An empty
+// answer means the parameter formats its own value. Kept apart from the two
+// formatters below because the reading for an arbitrary value needs the same
+// units as the reading for the one the knob is holding, and spelling them
+// twice is how the two would drift.
+juce::String fourOscMacroUnits(int index, float value)
 {
     switch (index)
     {
@@ -121,20 +128,46 @@ juce::String formatFourOscMacroValue(int index, float value, te::AutomatablePara
         case 1:
         case 3:
             return juce::String(juce::roundToInt(value * 1000.0f)) + "ms";
-        default:
-            return parameter.getCurrentValueAsStringWithLabel();
     }
+    return {};
+}
+
+juce::String rhinoWaveMacroUnits(int index, float value)
+{
+    if (index == 4)
+        return juce::String(value > 0.0f ? "+" : "") + juce::String(juce::roundToInt(value)) + " st";
+    return {};
+}
+}
+
+juce::String formatFourOscMacroValue(int index, float value, te::AutomatableParameter& parameter)
+{
+    const auto units = fourOscMacroUnits(index, value);
+    return units.isNotEmpty() ? units : parameter.getCurrentValueAsStringWithLabel();
 }
 
 juce::String formatRhinoWaveMacroValue(int index, float value, te::AutomatableParameter& parameter)
 {
-    switch (index)
-    {
-        case 4:
-            return juce::String(value > 0.0f ? "+" : "") + juce::String(juce::roundToInt(value)) + " st";
-        default:
-            return parameter.getCurrentValueAsStringWithLabel();
-    }
+    const auto units = rhinoWaveMacroUnits(index, value);
+    return units.isNotEmpty() ? units : parameter.getCurrentValueAsStringWithLabel();
+}
+
+// A value the parameter is not currently holding, read the way its knob would
+// read it. Tracktion only formats the value a parameter is on, so a point
+// further along an automation curve has to be converted by hand - which is
+// what the arrangement's hover readout prints.
+juce::String formatExposedParameterValue(te::Plugin& plugin, int index, float value,
+                                         te::AutomatableParameter& parameter)
+{
+    if (dynamic_cast<te::FourOscPlugin*>(&plugin) != nullptr)
+        if (const auto units = fourOscMacroUnits(index, value); units.isNotEmpty())
+            return units;
+    if (dynamic_cast<RhinoWaveDevice*>(&plugin) != nullptr)
+        if (const auto units = rhinoWaveMacroUnits(index, value); units.isNotEmpty())
+            return units;
+    const auto text = parameter.valueToString(value);
+    const auto label = parameter.getLabel();
+    return label.isEmpty() ? text : text + " " + label;
 }
 
 te::AutomatableParameter* exposedParameterAt(te::Plugin& plugin, int index)

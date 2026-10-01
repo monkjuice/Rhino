@@ -621,6 +621,9 @@ void Arrangement::paint(juce::Graphics& g)
     // Over the clips: the region is the thing the commands act on, so it has
     // to read as covering what it contains.
     paintTimeSelection(g);
+    // After every row, because it floats above the pointer and would be
+    // painted over by the next row down if it went with its own.
+    paintAutomationReadout(g);
     if (playhead >= headerWidth)
     {
         g.setColour(playheadColour);

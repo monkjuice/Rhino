@@ -1,8 +1,9 @@
 #include "ArrangementInternal.h"
 #include <algorithm>
 
-// Track automation in the arrangement: the row stack, the curves drawn over it,
-// and the pointer gestures that edit them.
+// Track automation in the arrangement: the row stack, where a curve sits in a
+// row, what the pointer is over, and the gestures that edit it. The drawing is
+// next door in ArrangementAutomationPaint.cpp.
 //
 // Automation runs the length of the timeline, not the length of a clip. Every
 // track shows the lanes the user has revealed on it; a lane sent to its own row
@@ -14,14 +15,10 @@ namespace rhino
 namespace
 {
 constexpr float pointGrabRadius = 7.0f;
-const juce::Colour activeCurve {0xffe2564f};
-const juce::Colour restingCurve {0xffb9524d};
-
-void drawDashedLine(juce::Graphics& g, float x1, float y1, float x2, float y2)
-{
-    const float dashes[] {5.0f, 4.0f};
-    g.drawDashedLine({x1, y1, x2, y2}, dashes, 2, 1.4f);
-}
+// How close to the line counts as on it. Deliberately small: the snap is there
+// so a node meant for the curve lands exactly on it, not so that the lane
+// resists being drawn on a few pixels away.
+constexpr float curveSnapDistance = 5.0f;
 }
 
 // Rows are rebuilt whenever the edit changes, because revealing a lane changes
@@ -30,6 +27,10 @@ void drawDashedLine(juce::Graphics& g, float x1, float y1, float x2, float y2)
 // re-reading the edit.
 void Arrangement::buildRows()
 {
+    // The hover addresses a lane by its index in the stack being thrown away
+    // here, so it cannot survive the rebuild. The next pointer move answers
+    // against the new stack.
+    automationHover = {};
     rows.clear();
     groups = session.trackGroups();
     trackRowIndex.assign(static_cast<size_t>(std::max(0, session.trackCount())), -1);
@@ -137,51 +138,176 @@ std::vector<Session::AutomationPoint> Arrangement::defaultAutomationPoints(const
     return {{0.0, automation.restingValue}, {end, automation.restingValue}};
 }
 
-Arrangement::AutomationHit Arrangement::automationHitAt(juce::Point<float> point) const
+Arrangement::AutomationHover Arrangement::automationHoverAt(juce::Point<float> point, bool bypassSnap) const
 {
-    if (point.x < headerWidth || point.y >= lanesTop + laneContentHeight())
-        return {};
+    AutomationHover hover;
+    if (point.x < headerWidth || point.x > static_cast<float>(getWidth()) - 14.0f
+        || point.y < lanesTop || point.y >= lanesTop + laneContentHeight())
+        return hover;
     const auto row = rowAt(point.y);
     if (row < 0)
-        return {};
+        return hover;
     const auto& entry = rows[static_cast<size_t>(row)];
     // A track's own row belongs to its clips: automation there is read-only
     // until the A button puts the arrangement in automation mode. A lane row
     // holds nothing else, so it is always editable.
     if (entry.automation < 0 && !automationButton.getToggleState())
-        return {};
+        return hover;
+    if (automationArea(row).isEmpty() || !juce::isPositiveAndBelow(entry.track, static_cast<int>(trackLanes.size())))
+        return hover;
 
     // A lane row shows exactly one curve; a track row shows every curve that
     // was not sent away, tested newest first so the topmost drawn wins.
+    const auto& lanes = trackLanes[static_cast<size_t>(entry.track)];
     std::vector<int> candidates;
     if (entry.automation >= 0)
         candidates.push_back(entry.automation);
-    else if (juce::isPositiveAndBelow(entry.track, static_cast<int>(trackLanes.size())))
-        for (int i = static_cast<int>(trackLanes[static_cast<size_t>(entry.track)].size()); --i >= 0;)
-            if (!trackLanes[static_cast<size_t>(entry.track)][static_cast<size_t>(i)].ownLane)
+    else
+        for (int i = static_cast<int>(lanes.size()); --i >= 0;)
+            if (!lanes[static_cast<size_t>(i)].ownLane)
                 candidates.push_back(i);
+    if (candidates.empty())
+        return hover;
 
+    hover.row = row;
+    hover.pointer = point;
+
+    // A node under the pointer wins over the line it sits on: it is the
+    // smaller target, and it is the one being reached for.
     for (const auto index : candidates)
     {
-        const auto& automation = trackLanes[static_cast<size_t>(entry.track)][static_cast<size_t>(index)];
+        const auto& automation = lanes[static_cast<size_t>(index)];
         for (int i = 0; i < static_cast<int>(automation.points.size()); ++i)
         {
             const auto& stored = automation.points[static_cast<size_t>(i)];
             const juce::Point<float> handle {xFor(stored.timeSeconds), automationYFor(row, automation, stored.value)};
             if (std::abs(handle.x - point.x) <= pointGrabRadius && std::abs(handle.y - point.y) <= pointGrabRadius)
-                return {row, index, i};
+            {
+                hover.automation = index;
+                hover.point = i;
+                hover.onCurve = true;
+                hover.timeSeconds = stored.timeSeconds;
+                hover.value = stored.value;
+                return hover;
+            }
         }
     }
 
-    // Lifting the resting line is the only way to activate a lane until the
-    // next milestone adds points anywhere along an existing curve.
+    // Otherwise the pointer belongs to the nearest curve in the row, wherever
+    // in the lane it is: a lane is a value editor, so every position in one
+    // says something about one of the curves drawn on it.
+    const auto pointerTime = std::max(0.0, timeAt(point.x));
+    auto nearest = -1;
+    auto nearestDistance = 0.0f;
     for (const auto index : candidates)
     {
-        const auto& automation = trackLanes[static_cast<size_t>(entry.track)][static_cast<size_t>(index)];
-        if (!automation.active())
-            return {row, index, -1};
+        const auto& automation = lanes[static_cast<size_t>(index)];
+        const auto distance = std::abs(automationYFor(row, automation, automation.valueAt(pointerTime)) - point.y);
+        if (nearest < 0 || distance < nearestDistance)
+        {
+            nearest = index;
+            nearestDistance = distance;
+        }
     }
-    return {};
+
+    const auto& automation = lanes[static_cast<size_t>(nearest)];
+    // The same snap a dragged node takes, so where the ghost is drawn is where
+    // the node lands rather than somewhere near it.
+    hover.automation = nearest;
+    hover.timeSeconds = std::max(0.0, snapped(pointerTime, bypassSnap));
+    const auto onLine = automation.valueAt(hover.timeSeconds);
+    hover.onCurve = std::abs(automationYFor(row, automation, onLine) - point.y) <= curveSnapDistance;
+    hover.value = hover.onCurve ? onLine : automationValueForY(row, automation, point.y);
+    return hover;
+}
+
+void Arrangement::clearAutomationHover()
+{
+    updateAutomationHover({-1.0f, -1.0f}, false);
+}
+
+// Repaints only what the change touched. A move over a lane fires at pointer
+// rate, and repainting the whole arrangement for a four-pixel ghost would put
+// the timeline's frame cost on the mouse.
+void Arrangement::updateAutomationHover(juce::Point<float> point, bool bypassSnap)
+{
+    // A gesture speaks for the pointer while it runs: the drag keeps the
+    // reading pinned to the node it is carrying.
+    if (automationGesture != AutomationGesture::none)
+        return;
+    const auto next = automationHoverAt(point, bypassSnap);
+    const auto unchanged = next.valid() == automationHover.valid()
+        && next.row == automationHover.row && next.automation == automationHover.automation
+        && next.point == automationHover.point && next.onCurve == automationHover.onCurve
+        && std::abs(next.timeSeconds - automationHover.timeSeconds) < 1.0e-9
+        && std::abs(next.value - automationHover.value) < 1.0e-6f
+        && next.pointer.getDistanceFrom(automationHover.pointer) < 0.5f;
+    if (unchanged)
+        return;
+    const auto damage = [this] (const AutomationHover& hover)
+    {
+        if (!hover.valid())
+            return juce::Rectangle<int>();
+        // The reading floats above the pointer, which puts it over the row
+        // above whenever the pointer is near the top of its own.
+        return rowBounds(hover.row).getSmallestIntegerContainer()
+            .getUnion({static_cast<int>(hover.pointer.x) - 200, static_cast<int>(hover.pointer.y) - 48, 400, 96});
+    };
+    const auto before = damage(automationHover);
+    automationHover = next;
+    const auto after = damage(automationHover);
+    if (!before.isEmpty())
+        repaint(before);
+    if (!after.isEmpty())
+        repaint(after);
+}
+
+float Arrangement::automationNeighbourValue(const std::vector<Session::AutomationPoint>& points,
+                                            int index, double seconds) const
+{
+    if (!juce::isPositiveAndBelow(index, static_cast<int>(points.size())))
+        return 0.0f;
+    const auto hasPrevious = index > 0;
+    const auto hasNext = index + 1 < static_cast<int>(points.size());
+    if (hasPrevious && hasNext)
+    {
+        const auto& previous = points[static_cast<size_t>(index - 1)];
+        const auto& next = points[static_cast<size_t>(index + 1)];
+        const auto span = next.timeSeconds - previous.timeSeconds;
+        if (span <= 0.0)
+            return next.value;
+        const auto amount = static_cast<float>(std::clamp((seconds - previous.timeSeconds) / span, 0.0, 1.0));
+        return previous.value + (next.value - previous.value) * amount;
+    }
+    // An end node has one neighbour, and the curve runs flat past it, so that
+    // neighbour's value is the line the snap pulls it back onto.
+    if (hasPrevious)
+        return points[static_cast<size_t>(index - 1)].value;
+    if (hasNext)
+        return points[static_cast<size_t>(index + 1)].value;
+    return points[static_cast<size_t>(index)].value;
+}
+
+int Arrangement::insertAutomationPoint(double seconds, float value)
+{
+    auto index = 0;
+    while (index < static_cast<int>(automationPoints.size())
+           && automationPoints[static_cast<size_t>(index)].timeSeconds < seconds)
+        ++index;
+    constexpr auto sameTime = 1.0e-6;
+    if (index > 0 && seconds - automationPoints[static_cast<size_t>(index - 1)].timeSeconds < sameTime)
+    {
+        automationPoints[static_cast<size_t>(index - 1)].value = value;
+        return index - 1;
+    }
+    if (index < static_cast<int>(automationPoints.size())
+        && automationPoints[static_cast<size_t>(index)].timeSeconds - seconds < sameTime)
+    {
+        automationPoints[static_cast<size_t>(index)].value = value;
+        return index;
+    }
+    automationPoints.insert(automationPoints.begin() + index, {seconds, value});
+    return index;
 }
 
 // Only the lane Delete would act on is drawn as focused, so the highlight and
@@ -194,31 +320,68 @@ bool Arrangement::isFocusedAutomation(Session::DeviceTarget target) const
 
 bool Arrangement::beginAutomationGesture(const juce::MouseEvent& event)
 {
-    const auto target = automationHitAt(event.position);
-    if (!target.valid())
+    const auto hover = automationHoverAt(event.position, event.mods.isAltDown());
+    if (!hover.valid())
         return false;
-    const auto& entry = rows[static_cast<size_t>(target.row)];
-    const auto& automation = trackLanes[static_cast<size_t>(entry.track)][static_cast<size_t>(target.automation)];
+    const auto& entry = rows[static_cast<size_t>(hover.row)];
+    const auto& automation = trackLanes[static_cast<size_t>(entry.track)][static_cast<size_t>(hover.automation)];
 
-    automationRow = target.row;
+    automationRow = hover.row;
     automationTarget = automation.target;
     setSelection({});
     focusedAutomation = automation.target;
     focus = Focus::automation;
     automationPoints = automation.points.empty() ? defaultAutomationPoints(automation) : automation.points;
-    if (target.point >= 0)
+    automationInserted = false;
+    automationHover = hover;
+    automationHover.dragging = true;
+
+    // Double-clicking a node takes it out again. Adding one is a single click
+    // anywhere on the lane, so without this a curve could only ever gain
+    // nodes, and the only way back would be clearing the whole thing.
+    if (hover.point >= 0 && event.getNumberOfClicks() == 2 && automationPoints.size() > 2)
+    {
+        automationPoints.erase(automationPoints.begin() + hover.point);
+        auto points = std::move(automationPoints);
+        automationPoints.clear();
+        automationGesture = AutomationGesture::none;
+        automationRow = -1;
+        automationPoint = -1;
+        automationHover = {};
+        selectTrack(entry.track);
+        const auto result = session.setTrackAutomationPoints(automationTarget, std::move(points));
+        if (status)
+            status(result.wasOk() ? "Automation point removed" : result.getErrorMessage());
+        repaint();
+        return true;
+    }
+
+    if (hover.point >= 0)
     {
         automationGesture = AutomationGesture::movePoint;
-        automationPoint = target.point;
+        automationPoint = hover.point;
     }
-    else
+    else if (!automation.active())
     {
+        // A lane that has never been drawn has no curve to add to, so the
+        // press lifts its resting line into one instead.
         automationGesture = AutomationGesture::moveLine;
         automationPoint = -1;
     }
+    else
+    {
+        // Clicking the lane drops a node and starts carrying it, so the one
+        // gesture both adds and places. Near the line the value has already
+        // been pulled onto it, which is what keeps a node added to a ramp
+        // from denting the ramp.
+        automationGesture = AutomationGesture::movePoint;
+        automationPoint = insertAutomationPoint(hover.timeSeconds, hover.value);
+        automationInserted = true;
+        automationHover.point = automationPoint;
+    }
     selectTrack(entry.track);
-    // The curve is left alone until the pointer actually moves, so clicking a
-    // lane row focuses it the way clicking a track lane selects the track.
+    // An existing node is left exactly where it was until the pointer moves,
+    // so clicking one focuses its lane the way clicking a lane selects it.
     return true;
 }
 
@@ -230,14 +393,20 @@ void Arrangement::dragAutomationGesture(const juce::MouseEvent& event)
     if (!juce::isPositiveAndBelow(entry.track, static_cast<int>(trackLanes.size())))
         return;
     const Session::TrackAutomation* automation = nullptr;
-    for (const auto& lane : trackLanes[static_cast<size_t>(entry.track)])
-        if (lane.target.track == automationTarget.track && lane.target.slot == automationTarget.slot
-            && lane.target.parameter == automationTarget.parameter)
-            automation = &lane;
+    auto automationIndex = -1;
+    const auto& lanes = trackLanes[static_cast<size_t>(entry.track)];
+    for (int index = 0; index < static_cast<int>(lanes.size()); ++index)
+        if (lanes[static_cast<size_t>(index)].target.track == automationTarget.track
+            && lanes[static_cast<size_t>(index)].target.slot == automationTarget.slot
+            && lanes[static_cast<size_t>(index)].target.parameter == automationTarget.parameter)
+        {
+            automation = &lanes[static_cast<size_t>(index)];
+            automationIndex = index;
+        }
     if (automation == nullptr)
         return;
 
-    const auto value = automationValueForY(automationRow, *automation, event.position.y);
+    auto value = automationValueForY(automationRow, *automation, event.position.y);
     if (automationGesture == AutomationGesture::moveLine)
     {
         for (auto& point : automationPoints)
@@ -246,7 +415,6 @@ void Arrangement::dragAutomationGesture(const juce::MouseEvent& event)
     else if (juce::isPositiveAndBelow(automationPoint, static_cast<int>(automationPoints.size())))
     {
         auto& point = automationPoints[static_cast<size_t>(automationPoint)];
-        point.value = value;
         // End points anchor the curve to the start and end of the timeline;
         // moving them sideways would leave a gap the next milestone has to fill.
         if (automationPoint > 0 && automationPoint + 1 < static_cast<int>(automationPoints.size()))
@@ -261,7 +429,29 @@ void Arrangement::dragAutomationGesture(const juce::MouseEvent& event)
             point.timeSeconds = std::max(automationPoints[static_cast<size_t>(automationPoint - 1)].timeSeconds,
                                          snapped(std::max(0.0, timeAt(event.position.x)), event.mods.isAltDown()));
         }
+        // The subtle snap, applied to the drag as well as to the click that
+        // started it: within a few pixels of the line its neighbours draw, a
+        // node sits exactly on that line. Measured after the time has settled,
+        // because on a ramp the line to snap to depends on where along it the
+        // node now is.
+        const auto neighbour = automationNeighbourValue(automationPoints, automationPoint, point.timeSeconds);
+        if (std::abs(automationYFor(automationRow, *automation, neighbour)
+                     - automationYFor(automationRow, *automation, value)) <= curveSnapDistance)
+            value = neighbour;
+        point.value = value;
     }
+    // The reading follows the node rather than the pointer while one is being
+    // carried, so it says what the curve is about to become.
+    automationHover.row = automationRow;
+    automationHover.automation = automationIndex;
+    automationHover.point = automationPoint;
+    automationHover.dragging = true;
+    automationHover.onCurve = false;
+    automationHover.pointer = event.position;
+    automationHover.value = value;
+    automationHover.timeSeconds = juce::isPositiveAndBelow(automationPoint, static_cast<int>(automationPoints.size()))
+        ? automationPoints[static_cast<size_t>(automationPoint)].timeSeconds
+        : std::max(0.0, timeAt(event.position.x));
     repaint();
 }
 
@@ -270,123 +460,30 @@ void Arrangement::endAutomationGesture(const juce::MouseEvent& event)
     if (automationGesture == AutomationGesture::none)
         return;
     const auto target = automationTarget;
+    // A click that put a node down or took one out has already changed the
+    // curve, so travel is not what decides whether there is anything to write.
     const auto moved = event.getDistanceFromDragStart() >= 3;
+    const auto edited = automationInserted;
     auto points = automationPoints;
     automationGesture = AutomationGesture::none;
     automationRow = -1;
     automationPoint = -1;
+    automationInserted = false;
     automationPoints.clear();
-    if (!moved)
+    automationHover = {};
+    if (!moved && !edited)
     {
+        updateAutomationHover(event.position, event.mods.isAltDown());
         repaint();
         return;
     }
 
     const auto result = session.setTrackAutomationPoints(target, std::move(points));
     if (status)
-        status(result.wasOk() ? "Automation updated" : result.getErrorMessage());
+        status(result.wasOk() ? (edited && !moved ? "Automation point added" : "Automation updated")
+                              : result.getErrorMessage());
+    updateAutomationHover(event.position, event.mods.isAltDown());
     repaint();
-}
-
-void Arrangement::paintAutomationRow(juce::Graphics& g, int row)
-{
-    const auto& entry = rows[static_cast<size_t>(row)];
-    if (!juce::isPositiveAndBelow(entry.track, static_cast<int>(trackLanes.size())))
-        return;
-    const auto area = automationArea(row);
-    if (area.isEmpty())
-        return;
-    const auto left = std::max(headerWidth, area.getX());
-    const auto right = std::min(static_cast<float>(getWidth()) - 14.0f, area.getRight());
-    if (right <= left)
-        return;
-
-    const auto& lanes = trackLanes[static_cast<size_t>(entry.track)];
-    for (int index = 0; index < static_cast<int>(lanes.size()); ++index)
-    {
-        if (entry.automation >= 0 ? index != entry.automation : lanes[static_cast<size_t>(index)].ownLane)
-            continue;
-        const auto& automation = lanes[static_cast<size_t>(index)];
-        const auto beingDragged = automationGesture != AutomationGesture::none && automationRow == row
-            && automation.target.track == automationTarget.track && automation.target.slot == automationTarget.slot
-            && automation.target.parameter == automationTarget.parameter;
-        const auto points = beingDragged ? automationPoints : automation.points;
-        const auto focused = isFocusedAutomation(automation.target);
-
-        if (points.size() < 2)
-        {
-            // Never drawn: a dotted line at the knob's current value, which
-            // says "this parameter is free" rather than "this is its curve".
-            const auto y = automationYFor(row, automation, automation.restingValue);
-            g.setColour(restingCurve.withAlpha(0.85f));
-            drawDashedLine(g, left, y, right, y);
-            continue;
-        }
-
-        g.setColour(activeCurve);
-        auto previous = juce::Point<float>(left, automationYFor(row, automation, points.front().value));
-        for (const auto& point : points)
-        {
-            const juce::Point<float> next {xFor(point.timeSeconds), automationYFor(row, automation, point.value)};
-            g.drawLine(previous.x, previous.y, next.x, next.y, 1.6f);
-            previous = next;
-        }
-        g.drawLine(previous.x, previous.y, right, previous.y, 1.6f);
-        for (const auto& point : points)
-        {
-            const juce::Point<float> handle {xFor(point.timeSeconds), automationYFor(row, automation, point.value)};
-            if (handle.x < left - 6.0f || handle.x > right + 6.0f)
-                continue;
-            const auto box = juce::Rectangle<float>(focused ? 8.0f : 6.0f, focused ? 8.0f : 6.0f).withCentre(handle);
-            g.setColour(juce::Colour(0xff1b2126));
-            g.fillEllipse(box);
-            g.setColour(activeCurve);
-            g.drawEllipse(box, 1.6f);
-        }
-    }
-}
-
-// The ghost row: the track repeated dimly so the curve above it lines up with
-// something recognisable, plus the lane's name in the header.
-void Arrangement::paintGhostRow(juce::Graphics& g, int row)
-{
-    const auto& entry = rows[static_cast<size_t>(row)];
-    const auto* automation = automationFor(entry);
-    const auto area = rowBounds(row);
-    if (automation == nullptr || area.isEmpty())
-        return;
-
-    const auto full = area.withX(0.0f).withWidth(static_cast<float>(getWidth()) - 14.0f);
-    g.setColour(juce::Colour(0xff1b2126));
-    g.fillRect(full);
-    g.setColour(juce::Colour(0xff2a323a));
-    g.drawHorizontalLine(static_cast<int>(area.getY()), 0.0f, full.getRight());
-
-    for (const auto& clip : clips)
-    {
-        if (clip.track != entry.track)
-            continue;
-        const auto box = bounds(clip).withY(area.getY() + 3.0f).withHeight(area.getHeight() - 6.0f);
-        const auto visible = box.getIntersection(area);
-        if (visible.isEmpty())
-            continue;
-        const auto fallback = juce::Colour(clip.track == 0 ? 0xff414c34 : 0xff284b59);
-        g.setColour((clip.colour.isTransparent() ? fallback : clip.colour).withAlpha(0.22f));
-        g.fillRect(visible);
-    }
-
-    const auto focused = isFocusedAutomation(automation->target);
-    g.setColour(juce::Colour(focused ? 0xff2e3840 : 0xff222930));
-    g.fillRect(area.withX(0.0f).withWidth(headerWidth));
-    g.setColour(juce::Colour(0xff9aa6af));
-    g.setFont(uiFont(9.0f));
-    drawSnappedText(g, automation->deviceName, {22, static_cast<int>(area.getY()) + 3,
-                    static_cast<int>(headerWidth) - 32, 15}, juce::Justification::centredLeft, true);
-    g.setColour(juce::Colour(0xffd6dde2));
-    drawSnappedText(g, automation->parameterName, {22, static_cast<int>(area.getY()) + 18,
-                    static_cast<int>(headerWidth) - 32, 15}, juce::Justification::centredLeft, true);
-    g.setColour(activeCurve.withAlpha(automation->active() ? 1.0f : 0.5f));
-    g.fillRect(10.0f, area.getY() + 8.0f, 3.0f, area.getHeight() - 16.0f);
 }
 
 void Arrangement::showAutomationMenu(Session::DeviceTarget target)

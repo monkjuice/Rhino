@@ -83,12 +83,134 @@
         require(session.deviceParameters(0, 0)[0].automated,
                 "A drawn lane reports the parameter as automated");
 
+        // Adding nodes to a curve that is already there. The pointer is asked
+        // what it is over before anything is clicked, and what it answers is
+        // what the click has to write - otherwise the ghost drawn under the
+        // pointer and the node that lands are two different promises.
+        {
+            const auto laneBox = view.rowBounds(1);
+            const auto minimum = laneParameters.front().minimum;
+            const auto maximum = laneParameters.front().maximum;
+            // The ramp runs off the right of the view, so every position in
+            // the lane is between its two ends and a click there adds a node
+            // rather than landing on one.
+            const auto rampEnd = std::max(4.0, view.timeAt(laneBox.getRight()) + 2.0);
+            require(session.setTrackAutomationPoints(laneTarget, {{0.0, minimum}, {rampEnd, maximum}}).wasOk(),
+                    "Draw a ramp to add nodes to");
+            view.sync();
+            require(view.trackLanes[0].size() == 1 && view.trackLanes[0].front().active(),
+                    "The ramp is the lane's own curve");
+
+            const auto nodeTime = view.snapped(view.timeAt(laneBox.getCentreX()), false);
+            require(nodeTime > 0.001 && nodeTime < rampEnd - 0.001,
+                    "The lane centre is between the ramp's two ends");
+            const auto lineValue = view.trackLanes[0].front().valueAt(nodeTime);
+            const auto lineY = view.automationYFor(1, view.trackLanes[0].front(), lineValue);
+
+            // Hovering: on the line, a few pixels off it, and well away.
+            const auto onLine = view.automationHoverAt({view.xFor(nodeTime), lineY + 3.0f}, false);
+            require(onLine.valid() && onLine.point < 0 && onLine.onCurve,
+                    "A pointer a few pixels off the line is still on it");
+            require(std::abs(onLine.value - lineValue) < 0.0001f,
+                    "On the line, the reading is the line's own value rather than the pointer's");
+            require(std::abs(onLine.timeSeconds - nodeTime) < 0.0001,
+                    "The ghost sits at the time the node would take");
+            const auto offLine = view.automationHoverAt({view.xFor(nodeTime), lineY + 14.0f}, false);
+            require(offLine.valid() && !offLine.onCurve && offLine.value < lineValue - 0.0001f,
+                    "Further off, the reading follows the pointer instead of the line");
+            require(view.automationHoverAt({view.xFor(nodeTime), laneBox.getCentreY()}, false).valid(),
+                    "Anywhere in a lane row answers for the curve drawn on it");
+            require(session.automationValueText(laneTarget, lineValue).isNotEmpty(),
+                    "A level reads in the units the parameter's own knob prints");
+
+            // A lane is painted, not composed, so a render is the only
+            // coverage the lit curve, the ghost and the reading can have.
+            // The snapshot runs every time as a paint smoke test; the PNG is
+            // only written when somebody asks to look at it.
+            {
+                view.automationHover = onLine;
+                const auto band = view.rowBounds(1).getSmallestIntegerContainer()
+                    .expanded(0, 40).withX(0).withWidth(view.getWidth());
+                const auto picture = view.createComponentSnapshot(band);
+                require(picture.getWidth() == band.getWidth() && picture.getHeight() == band.getHeight(),
+                        "The automation lane renders");
+                if (const auto shot = juce::SystemStats::getEnvironmentVariable("RHINO_AUTOMATION_SNAPSHOT", {});
+                    shot.isNotEmpty())
+                {
+                    juce::File(shot).deleteFile();
+                    if (auto stream = juce::File(shot).createOutputStream())
+                        juce::PNGImageFormat().writeImageToStream(picture, *stream);
+                }
+                view.automationHover = {};
+            }
+
+            // Clicking: the node lands where the ghost was, on the line.
+            const auto pointsBefore = session.trackAutomations(0).front().points.size();
+            const juce::Point<float> clickAt {view.xFor(nodeTime), lineY + 3.0f};
+            view.mouseDown(laneEvent(clickAt, clickAt, false));
+            view.mouseUp(laneEvent(clickAt, clickAt, false));
+            view.sync();
+            {
+                const auto written = session.trackAutomations(0).front().points;
+                require(written.size() == pointsBefore + 1, "Clicking the lane adds a node to its curve");
+                auto added = -1;
+                for (int i = 0; i < static_cast<int>(written.size()); ++i)
+                    if (std::abs(written[static_cast<size_t>(i)].timeSeconds - nodeTime) < 0.001)
+                        added = i;
+                require(added >= 0, "The new node lands at the time the ghost was drawn at");
+                require(std::abs(written[static_cast<size_t>(added)].value - lineValue) < 0.001f,
+                        "A node dropped near the line snaps flush onto it rather than denting the ramp");
+            }
+
+            // The node under the pointer is the one a press picks up.
+            const juce::Point<float> nodeAt {view.xFor(nodeTime),
+                                             view.automationYFor(1, view.trackLanes[0].front(), lineValue)};
+            const auto nodeHover = view.automationHoverAt(nodeAt, false);
+            require(nodeHover.valid() && nodeHover.point >= 0,
+                    "A node under the pointer is marked rather than the line it sits on");
+            require(std::abs(nodeHover.value - lineValue) < 0.001f,
+                    "The reading over a node is that node's own level");
+
+            // Double-clicking it takes it out again, so a curve that can gain
+            // nodes by a click can lose them by one too.
+            const auto laneClicks = [&view](juce::Point<float> point, int clicks)
+            {
+                return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), point,
+                    juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier), 1.0f, 0, 0, 0, 0,
+                    &view, &view, juce::Time::getCurrentTime(), point, juce::Time::getCurrentTime(), clicks, false);
+            };
+            view.mouseDown(laneClicks(nodeAt, 2));
+            view.mouseUp(laneClicks(nodeAt, 2));
+            view.sync();
+            require(session.trackAutomations(0).front().points.size() == pointsBefore,
+                    "Double-clicking a node takes it out again");
+
+            // A click far from the line puts the node where the pointer is.
+            const juce::Point<float> lowClick {view.xFor(nodeTime), lineY + 14.0f};
+            view.mouseDown(laneEvent(lowClick, lowClick, false));
+            view.mouseUp(laneEvent(lowClick, lowClick, false));
+            view.sync();
+            {
+                const auto written = session.trackAutomations(0).front().points;
+                require(written.size() == pointsBefore + 1, "A click away from the line still adds a node");
+                for (const auto& point : written)
+                    if (std::abs(point.timeSeconds - nodeTime) < 0.001)
+                        require(point.value < lineValue - 0.0001f,
+                                "A node dropped away from the line keeps the level it was dropped at");
+            }
+
+            // The hover is addressed by row, so a rebuilt stack must not leave
+            // a stale one lighting a lane that has moved or gone.
+            view.buildRows();
+            require(!view.automationHover.valid(), "Rebuilding the row stack drops the hover");
+        }
+
         // A clip drag on the track's own row must still move the clip, not the
         // curve drawn over it, until automation mode is switched on.
-        require(!view.automationHitAt({view.xFor(0.5), view.lane(0).getCentreY()}).valid(),
+        require(!view.automationHoverAt({view.xFor(0.5), view.lane(0).getCentreY()}, false).valid(),
                 "Automation ignores the pointer on a track row in clip mode");
         view.automationButton.setToggleState(true, juce::dontSendNotification);
-        require(!view.automationHitAt({view.xFor(0.5), view.lane(0).getCentreY()}).valid(),
+        require(!view.automationHoverAt({view.xFor(0.5), view.lane(0).getCentreY()}, false).valid(),
                 "A lane on its own row is not also editable over the track");
         view.automationButton.setToggleState(false, juce::dontSendNotification);
 

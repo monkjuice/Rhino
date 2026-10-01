@@ -292,12 +292,17 @@
             view.setBottomInset(180.0f);
             view.sync();
             const auto shot = view.createComponentSnapshot(view.getLocalBounds());
-            const auto strip = static_cast<int>(view.masterLane().getBottom()) + 4;
-            require(strip < view.getHeight() - 180, "The strip under the main row is inside the panel");
-            // Named rather than spelt as a hex value, so re-toning the chrome
-            // cannot quietly turn this into a test of a colour nobody uses.
-            require(shot.getPixelAt(160, strip) == palette::sideSurface,
-                    "The strip under the main row is the row's own fill, not the lane that ran past it");
+            // The row is ruled off from the panel's foot - the times, the
+            // scrollbar - and what is under that rule is the foot's own
+            // ground. Colours are named rather than spelt as hex values, so
+            // re-toning the chrome cannot quietly turn this into a test of a
+            // colour nobody uses.
+            const auto rule = static_cast<int>(view.masterLane().getBottom()) + 1;
+            require(rule < view.getHeight() - 180, "The rule under the main row is inside the panel");
+            require(shot.getPixelAt(160, rule) == palette::border,
+                    "The main row is ruled off from the time ruler under it");
+            require(shot.getPixelAt(160, rule + 6) == palette::appBackground,
+                    "And under that rule is the foot, not the lane that ran past the stack");
             // Clear of the MAIN label and both of its faders, which is the only
             // part of the row's header column that is bare fill.
             require(shot.getPixelAt(210, static_cast<int>(view.masterLane().getY()) + 10) == palette::sideSurface,

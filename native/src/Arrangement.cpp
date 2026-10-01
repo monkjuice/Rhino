@@ -174,7 +174,7 @@ void Arrangement::resized()
                      foot - static_cast<int>(scrollBarHeight + trackDividerThickness),
                      getWidth() - static_cast<int>(headerWidth) - 14, static_cast<int>(scrollBarHeight));
     trackScrollBar.setBounds(getWidth() - 12, static_cast<int>(lanesTop), 12,
-                             std::max(1, foot - static_cast<int>(lanesTop) - 18));
+                             std::max(1, foot - static_cast<int>(lanesTop + footHeight)));
     updateScroll();
     updatePlayhead();
 }

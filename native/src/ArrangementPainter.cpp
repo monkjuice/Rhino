@@ -110,14 +110,25 @@ void Arrangement::paintTimeRuler(juce::Graphics& g, double firstBeat, double las
 {
     const auto foot = static_cast<float>(getHeight()) - bottomInset;
     const auto right = static_cast<float>(getWidth()) - 14.0f;
-    const juce::Rectangle<float> strip {headerWidth,
-                                        foot - trackDividerThickness - scrollBarHeight - timeRulerHeight,
-                                        std::max(1.0f, right - headerWidth), timeRulerHeight};
-    // The main row is as tall as its controls plus this strip, so there is
-    // always room - but it is dragged by hand, so this is asked rather than
-    // assumed.
-    if (strip.getY() <= masterLane().getY() + trackDividerThickness) return;
+    const juce::Rectangle<float> band {0.0f, foot - footHeight, static_cast<float>(getWidth()), footHeight};
+    // A panel too short to hold a lane, a main row and a foot is not worth
+    // drawing a foot into: the lanes above would be painted over.
+    if (band.getY() <= lanesTop) return;
 
+    // The foot's own ground. The lanes' grid and the main row both stop at the
+    // top of it, so this is what the times are read against rather than the
+    // bottom of a column of beat lines.
+    g.setColour(palette::appBackground);
+    g.fillRect(band);
+    g.setColour(palette::border);
+    // The delimiter the main row is closed off with, and the line the panel
+    // ends on. Every track row is ruled off from the one under it; the main row
+    // is ruled off from the ruler.
+    g.fillRect(band.withHeight(trackDividerThickness));
+    g.fillRect(band.withTop(band.getBottom() - trackDividerThickness));
+
+    const juce::Rectangle<float> strip {headerWidth, band.getY() + trackDividerThickness,
+                                        std::max(1.0f, right - headerWidth), timeRulerHeight};
     const auto barLength = std::max(0.25, session.beatsPerBar());
     const auto timeOfBar = [this, barLength](double bar)
     {
@@ -127,9 +138,6 @@ void Arrangement::paintTimeRuler(juce::Graphics& g, double firstBeat, double las
     const auto firstBar = std::max(1.0, std::floor(firstBeat / barLength) + 1.0);
     const auto lastBar = std::floor(lastBeat / barLength) + 1.0;
     if (lastBar < firstBar) return;
-
-    g.setColour(palette::appBackground);
-    g.fillRect(strip);
 
     // A time is a far wider string than a bar number, so the two rows ask for
     // different spacing - and both step by the same rule from minimums a power
@@ -171,8 +179,8 @@ void Arrangement::paintTimeRuler(juce::Graphics& g, double firstBeat, double las
         // above takes: the two readings share a left edge down the whole
         // column.
         drawSnappedText(g, formatClock(time, true),
-                        {static_cast<int>(x) + 4, static_cast<int>(strip.getY()), 76,
-                         static_cast<int>(strip.getHeight())});
+                        strip.withTrimmedTop(timeMajorTick).withX(x + 4.0f).withWidth(76.0f)
+                             .getSmallestIntegerContainer());
     }
 }
 
@@ -303,13 +311,13 @@ void Arrangement::paint(juce::Graphics& g)
     // is empty; only its header carries anything.
     {
         const auto master = masterLane();
-        // The row owns everything from its top edge to the foot of the panel,
-        // scrollbar strip included, and fills all of it. Filling only the row
-        // itself left an eighteen pixel gap that nothing else painted, so
-        // whatever the last lane happened to be showing came through it.
+        // The row owns its own height and nothing below it. Everything under it
+        // is the panel's foot - the times, the scrollbar, the two rules - and
+        // the row must not run down beside any of it: filled to the foot of the
+        // panel, selecting the main row lit a column the whole way past the
+        // ruler, and its ground sat behind the times.
         const juce::Rectangle<float> band {0.0f, master.getY(), static_cast<float>(getWidth()),
-                                           std::max(master.getHeight(),
-                                                    getHeight() - bottomInset - master.getY())};
+                                           master.getHeight()};
         g.setColour(palette::appBackground);
         g.fillRect(band);
         g.setColour(isMasterSelected() ? palette::hover : palette::sideSurface);
@@ -319,15 +327,12 @@ void Arrangement::paint(juce::Graphics& g)
             g.setColour(palette::selection);
             g.fillRect(band.withWidth(3.0f));
         }
-        // Last, so they rule the whole width: drawn before the header column
-        // they stopped at the cards and the main row read as closed off over
-        // the lanes and open beside them. Every track row is ruled off from the
-        // one under it; the main row has nothing under it to be ruled off from,
-        // so it closes itself off and the panel ends on a line rather than
-        // running into the strip below it.
+        // Last, so it rules the whole width: drawn before the header column it
+        // stopped at the cards and the main row read as closed off over the
+        // lanes and open beside them. The line under the row belongs to the
+        // foot and is drawn with it.
         g.setColour(palette::border);
         g.fillRect(band.withHeight(trackDividerThickness));
-        g.fillRect(band.withTop(band.getBottom() - trackDividerThickness));
         g.setColour(palette::text);
         g.setFont(uiFontBold(9.0f));
         drawSnappedText(g, "MAIN", {10, static_cast<int>(master.getY()) + 5, 44, 16});

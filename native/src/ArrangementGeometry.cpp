@@ -5,7 +5,7 @@ namespace rhino
 {
 float Arrangement::laneContentHeight() const
 {
-    return std::max(1.0f, getHeight() - bottomInset - lanesTop - 18.0f - masterLaneHeight);
+    return std::max(1.0f, getHeight() - bottomInset - lanesTop - footHeight - masterLaneHeight);
 }
 
 // Measured against the default main row and the whole panel, so neither the
@@ -14,7 +14,7 @@ float Arrangement::laneContentHeight() const
 // the timeline grow and shrink under the pointer.
 float Arrangement::fullLaneContentHeight() const
 {
-    return std::max(1.0f, getHeight() - lanesTop - 18.0f - defaultMasterLaneHeight);
+    return std::max(1.0f, getHeight() - lanesTop - footHeight - defaultMasterLaneHeight);
 }
 
 void Arrangement::setBottomInset(float inset)

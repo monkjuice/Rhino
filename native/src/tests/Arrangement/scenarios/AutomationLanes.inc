@@ -96,7 +96,13 @@
         // reach for the focused automation lane whatever was selected.
         {
             const auto savedHeight = view.getHeight();
-            view.setSize(view.getWidth(), 700);
+            // The clicks below land on rows by their own coordinates, so the
+            // stack has to fit. Written against the panel's foot - the times,
+            // the scrollbar, the two rules - rather than as a flat number,
+            // because the foot takes its slice of the height before any lane
+            // gets one and the figure would otherwise need revisiting every
+            // time the foot changes.
+            view.setSize(view.getWidth(), 682 + static_cast<int>(view.footHeight));
             require(session.setTrackAutomationPoints(laneTarget, {{0.0, laneParameters.front().minimum},
                                                                   {4.0, laneParameters.front().maximum}}).wasOk(),
                     "Redraw a curve for the delete-routing checks");

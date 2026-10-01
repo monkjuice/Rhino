@@ -555,13 +555,14 @@ public:
             g.fillRect(browserWidth, browserTop, browserDividerWidth,
                        std::max(0, browserColumnBottom() - browserTop));
         }
-        // The ground under the time ruler and the Clip and Devices strip,
-        // drawn the width of the band so the part beside the Info View is the
-        // same surface as the part over the arrangement. Every panel above it
-        // stops at its top edge, so nothing here is painted over.
+        // The ground the Clip and Devices strip stands on. In the shell's own
+        // background rather than the panel grey, because the arrangement spans
+        // the window and paints this same strip that colour for the part of it
+        // the panel covers - two answers here would leave a seam down the
+        // browser's edge whenever the Info View is hidden.
         if (lowerBandTop > 0 && lowerBandTop < getHeight())
         {
-            g.setColour(palette::sideSurface);
+            g.setColour(palette::appBackground);
             g.fillRect(lowerBandLeft, lowerBandTop, getWidth() - lowerBandLeft, getHeight() - lowerBandTop);
         }
         // The Info View lives at the foot of the browser column, so it goes

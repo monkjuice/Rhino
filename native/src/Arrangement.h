@@ -470,12 +470,6 @@ private:
     juce::Point<float> panAnchor;
     double panStartView = 0.0, panStartTrackScroll = 0.0;
     static constexpr float headerWidth = 228.0f, rulerTop = 36.0f, lanesTop = 60.0f;
-    // The foot of the panel, bottom upwards: the rule that closes the main row
-    // off, the horizontal scrollbar, and the row of times above that. The two
-    // tick heights are what let a labelled time be told from the marks between
-    // it and the next one at a glance.
-    static constexpr float scrollBarHeight = 14.0f, timeRulerHeight = 18.0f;
-    static constexpr float timeMajorTick = 10.0f, timeMinorTick = 5.0f;
     // The main row is dragged from its top edge like any other, so its height
     // is a value rather than a constant. It is a view setting and lives here
     // beside the zoom: the fitted lane height is measured against the default
@@ -489,6 +483,16 @@ private:
     // What rules one track off from the next, header and lane alike, and the
     // line the main row is closed off with.
     static constexpr float trackDividerThickness = 2.0f;
+    // The panel's foot, top downwards: the rule that closes the main row off,
+    // the row of times, the horizontal scrollbar, and the rule the panel ends
+    // on. It is a band of its own rather than the bottom of the main row - a
+    // ruler is not a lane, and the main row may not run down beside one or
+    // light a column through it when it is selected.
+    static constexpr float scrollBarHeight = 14.0f, timeRulerHeight = 18.0f;
+    static constexpr float footHeight = timeRulerHeight + scrollBarHeight + trackDividerThickness * 2.0f;
+    // The marks on that row, kept short: they are a reading aid under the
+    // times, not a continuation of the grid above them.
+    static constexpr float timeMajorTick = 5.0f, timeMinorTick = 3.0f;
     // A group's members are pushed right by groupIndent, and the gap that opens
     // up is filled with the bus's colour; the bus itself keeps that column for
     // its disclosure arrow. The step in the left edge is what tells a card

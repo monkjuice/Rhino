@@ -216,14 +216,31 @@ juce::Result Session::setTrackColour(int track, juce::Colour colour)
 
 const std::vector<juce::Colour>& Session::trackColourPalette()
 {
-    // Saturated enough to tell apart at a glance and to carry dark text, the
-    // way a track colour does in the DAWs this borrows from. The muted set
-    // these replace read as dirt on the panel rather than as a choice.
+    // Ordered round the colour wheel - red through orange, yellow, green, cyan,
+    // blue and violet, back to red - so the swatch grid reads as a wheel rather
+    // than as a bag of colours, and two entries next to each other in the menu
+    // are the two that are hardest to tell apart on the panel.
+    //
+    // Value is not sorted on, only hue: a dark navy belongs with the blues even
+    // though it is almost black, and pulling the dark ones out into a group of
+    // their own would break the wheel for the sake of a ladder nobody is
+    // reading. The two neutrals - the light grey and the near-black - have no
+    // hue to be placed by, so they close the list.
+    //
+    // The range of lightness here is much wider than the set it replaces, and
+    // nothing has to be done about it: a card draws its name with
+    // contrasting(0.8f) against whatever colour it is wearing, so the near
+    // blacks take light text and the grey takes dark text on their own.
     static const std::vector<juce::Colour> palette {
-        juce::Colour(0xff4aa3df), juce::Colour(0xff5ac8c8), juce::Colour(0xff58c07a), juce::Colour(0xff9bd14f),
-        juce::Colour(0xffd8d24a), juce::Colour(0xffe8a33d), juce::Colour(0xffe8743d), juce::Colour(0xffe05a5a),
-        juce::Colour(0xffe85f9b), juce::Colour(0xffb069d8), juce::Colour(0xff7d7ee0), juce::Colour(0xff8d9aa8),
-        juce::Colour(0xff2f7fb8), juce::Colour(0xff3f9a68), juce::Colour(0xffb8862f), juce::Colour(0xffb04a6a)
+        juce::Colour(0xffff0000), juce::Colour(0xffd00000), juce::Colour(0xffdc2f02), juce::Colour(0xffff5400),
+        juce::Colour(0xffe85d04), juce::Colour(0xffff8700), juce::Colour(0xfff48c06), juce::Colour(0xfffaa307),
+        juce::Colour(0xffffba08), juce::Colour(0xffffbd00), juce::Colour(0xffffd300), juce::Colour(0xffdeff0a),
+        juce::Colour(0xffa1ff0a), juce::Colour(0xff0aff99), juce::Colour(0xff90fcf9), juce::Colour(0xff0aefff),
+        juce::Colour(0xff63b4d1), juce::Colour(0xff147df5), juce::Colour(0xff7699d4), juce::Colour(0xff03071e),
+        juce::Colour(0xff580aff), juce::Colour(0xff390099), juce::Colour(0xff9448bc), juce::Colour(0xffbe0aff),
+        juce::Colour(0xff480355), juce::Colour(0xff4a1942), juce::Colour(0xff2e1c2b), juce::Colour(0xff893168),
+        juce::Colour(0xff9e0059), juce::Colour(0xff370617), juce::Colour(0xffff0054), juce::Colour(0xff6a040f),
+        juce::Colour(0xff9d0208), juce::Colour(0xffeaeaea), juce::Colour(0xff050404)
     };
     return palette;
 }

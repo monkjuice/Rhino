@@ -156,7 +156,7 @@
             juce::Graphics g(expected);
             g.fillAll(cardColour);
             g.setColour(cardColour.contrasting(0.8f));
-            g.setFont(uiFontBold(10.0f));
+            g.setFont(uiFontBold(11.0f));
             drawSnappedText(g, juce::String(track + 1).paddedLeft('0', 2) + "  " + session.trackName(track),
                             expected.getBounds(), juce::Justification::centredLeft, true);
         }

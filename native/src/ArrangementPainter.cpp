@@ -253,7 +253,7 @@ void Arrangement::paintTrackCards(juce::Graphics& g)
         // light card, light on a dark one, so every colour stays readable. A
         // card being renamed gives that line to the editor instead.
         g.setColour(cardColour.contrasting(0.8f));
-        g.setFont(uiFontBold(10.0f));
+        g.setFont(uiFontBold(11.0f));
         if (renamingTrack != track)
         {
             // One pass of the SemiBold cut, exactly as every other label in the
@@ -263,7 +263,10 @@ void Arrangement::paintTrackCards(juce::Graphics& g)
             // the same glyphs takes a half-covered edge pixel from 50% to 75%,
             // so the antialiasing fringe darkens into the stem and the whole
             // line reads as blurred rather than bold. Weight, if the name needs
-            // more of it, comes from the em size.
+            // more of it, comes from the em size - which is why the name is set
+            // an em above the card's other text rather than struck harder. Whole
+            // pixels per em only: a half step lands the stems between pixel
+            // columns, which is the same blur by another route.
             // Elided rather than shrunk to fit: a scaled-down line lands on a
             // fractional em again, which is the blur this is avoiding.
             const auto nameArea = trackNameBounds(track);

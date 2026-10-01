@@ -10,9 +10,12 @@
         // MIDI and audio alternating, so there is somewhere to play and
         // somewhere to drop a file without building the stack first.
         require(session.trackCount() == 4, "A new document opens with four tracks");
-        require(session.trackName(0) == "MIDI 1" && session.trackName(1) == "Audio 2"
-                && session.trackName(2) == "MIDI 3" && session.trackName(3) == "Audio 4",
-                "and each is named for what it is and where it sits");
+        // A track is named for what it is and nothing else: the card prints the
+        // row's one-based position beside the name itself, so a number in the
+        // name was the same figure twice on every card.
+        require(session.trackName(0) == "MIDI" && session.trackName(1) == "Audio"
+                && session.trackName(2) == "MIDI" && session.trackName(3) == "Audio",
+                "and each is named for what it is, MIDI and audio alternating");
         require(!session.trackHasInstrument(0) && session.patternInstrument() == nullptr,
                 "The starter track runs no instrument until one is dropped on it");
         require(session.deviceSlots(0).empty(), "The starter track shows no devices of its own");

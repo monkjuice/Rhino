@@ -63,7 +63,7 @@ juce::Result Session::editClip(te::EditItemID id, ClipGeometry next, ClipGesture
         auto newTrack = edit->insertNewAudioTrack(te::TrackInsertPoint::getEndOfTracks(*edit), nullptr, false);
         if (newTrack == nullptr)
             return juce::Result::fail("Could not create a track for the moved clip.");
-        newTrack->setName("Audio " + juce::String(tracks.size() + 1));
+        newTrack->setName("Audio");
         newTrack->setColour(pickTrackColour());
         auto audioDevice = edit->getPluginCache().createNewPlugin(UtilityDevice::xmlTypeName, {});
         newTrack->pluginList.insertPlugin(audioDevice, 0, nullptr);

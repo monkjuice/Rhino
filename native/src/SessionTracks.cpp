@@ -67,7 +67,7 @@ juce::Result Session::addTrack(TrackType type)
     auto newTrack = edit->insertNewAudioTrack(te::TrackInsertPoint::getEndOfTracks(*edit), nullptr, false);
     if (newTrack == nullptr)
         return juce::Result::fail("Could not create " + kind.toLowerCase() + " track.");
-    newTrack->setName(kind + " " + juce::String(tracks.size() + 1));
+    newTrack->setName(kind);
     newTrack->setColour(pickTrackColour());
     // Only MIDI is written down: audio is what a track with nothing to say is,
     // so an audio track needs no property and no document needs migrating.

@@ -1,5 +1,5 @@
         require(session.addAudioTrack().wasOk(), "Can create an audio track");
-        require(session.trackCount() == 5 && session.trackName(4) == "Audio 5",
+        require(session.trackCount() == 5 && session.trackName(4) == "Audio",
                 "New audio track is visible in the arrangement model, named for where it sits");
         view.sync();
         view.resized();
@@ -437,8 +437,7 @@
             const auto editedBefore = session.patternClipID;
             require(session.addTrack(Session::TrackType::midi).wasOk(), "A MIDI track can be added");
             const auto midiTrack = session.trackCount() - 1;
-            require(session.trackName(midiTrack) == "MIDI " + juce::String(before + 1),
-                    "and is named for what it is");
+            require(session.trackName(midiTrack) == "MIDI", "and is named for what it is");
             require(session.trackType(midiTrack) == Session::TrackType::midi,
                     "The track reads back as a MIDI track");
             require(!session.trackHasInstrument(midiTrack),
@@ -455,8 +454,7 @@
 
             require(session.addTrack(Session::TrackType::audio).wasOk(), "An audio track can be added");
             const auto audioTrack = session.trackCount() - 1;
-            require(session.trackName(audioTrack) == "Audio " + juce::String(before + 2),
-                    "and is named for what it is");
+            require(session.trackName(audioTrack) == "Audio", "and is named for what it is");
             require(session.trackType(audioTrack) == Session::TrackType::audio,
                     "The track reads back as an audio track");
             require(session.createClip(audioTrack, 0.0).failed(),

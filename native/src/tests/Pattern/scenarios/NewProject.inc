@@ -9,9 +9,12 @@
         require(session.projectFile == juce::File{}, "A new project is untitled");
         require(!session.hasUnsavedChanges(), "A new project is clean");
         require(session.trackCount() == 4, "A new project has four tracks");
-        require(session.trackName(0) == "MIDI 1" && session.trackName(1) == "Audio 2"
-                && session.trackName(2) == "MIDI 3" && session.trackName(3) == "Audio 4",
-                "A new project's tracks are named for what they are and where they sit");
+        // A track is named for what it is and nothing else: the card prints the
+        // row's one-based position beside the name itself, so a number in the
+        // name was the same figure twice on every card.
+        require(session.trackName(0) == "MIDI" && session.trackName(1) == "Audio"
+                && session.trackName(2) == "MIDI" && session.trackName(3) == "Audio",
+                "A new project's tracks are named for what they are, MIDI and audio alternating");
         require(session.trackType(0) == Session::TrackType::midi
                 && session.trackType(1) == Session::TrackType::audio
                 && session.trackType(2) == Session::TrackType::midi

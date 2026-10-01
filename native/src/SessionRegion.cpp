@@ -205,7 +205,7 @@ juce::Result Session::pasteClipRegion(const ClipRegion& region, double destinati
         auto newTrack = edit->insertNewAudioTrack(te::TrackInsertPoint::getEndOfTracks(*edit), nullptr, false);
         if (newTrack == nullptr)
             return juce::Result::fail("Could not create a track for pasted clips.");
-        newTrack->setName("Audio " + juce::String(index + 1));
+        newTrack->setName("Audio");
         newTrack->setColour(pickTrackColour());
         newTrack->pluginList.insertPlugin(edit->getPluginCache().createNewPlugin(UtilityDevice::xmlTypeName, {}), 0, nullptr);
     }

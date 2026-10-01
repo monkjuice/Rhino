@@ -74,7 +74,7 @@ void Session::buildStarterEdit()
     {
         auto* starter = starterTracks[i];
         const auto type = starterTypes[static_cast<size_t>(i)];
-        starter->setName(trackTypeName(type) + " " + juce::String(i + 1));
+        starter->setName(trackTypeName(type));
         // Only MIDI is written down: audio is what a track with nothing to say
         // is, so an audio track needs no property.
         if (type == TrackType::midi)

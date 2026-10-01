@@ -154,6 +154,23 @@ inline double barLabelStep(double pixelsPerBar, double minimumPixels)
     return step;
 }
 
+// The marks between one labelled time and the next. At most this many to a
+// label, and never closer together than this many pixels - so the row fills in
+// as the view is zoomed in and thins back out as it is zoomed out, while every
+// mark stays a binary subdivision of the gap between two labels and therefore
+// lands on a musical division rather than wherever the arithmetic falls.
+inline constexpr int timeTickDivisions = 8;
+inline constexpr double timeTickMinimumPixels = 20.0;
+
+// How many of those a label step is actually divided into at this zoom.
+inline int timeTicksPerLabel(double pixelsPerBar, double labelStep)
+{
+    auto divisions = timeTickDivisions;
+    while (divisions > 1 && labelStep * pixelsPerBar / divisions < timeTickMinimumPixels)
+        divisions /= 2;
+    return divisions;
+}
+
 // The first labelled bar at or before a given one, so the run of labels is a
 // property of the music rather than of where the view happens to start.
 inline double firstLabelledBar(double bar, double step)

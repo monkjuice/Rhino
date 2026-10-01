@@ -110,7 +110,8 @@ void Arrangement::paintTimeRuler(juce::Graphics& g, double firstBeat, double las
 {
     const auto foot = static_cast<float>(getHeight()) - bottomInset;
     const auto right = static_cast<float>(getWidth()) - 14.0f;
-    const juce::Rectangle<float> strip {headerWidth, foot - scrollBarHeight - timeRulerHeight,
+    const juce::Rectangle<float> strip {headerWidth,
+                                        foot - trackDividerThickness - scrollBarHeight - timeRulerHeight,
                                         std::max(1.0f, right - headerWidth), timeRulerHeight};
     // The main row is as tall as its controls plus this strip, so there is
     // always room - but it is dragged by hand, so this is asked rather than
@@ -136,26 +137,39 @@ void Arrangement::paintTimeRuler(juce::Graphics& g, double firstBeat, double las
     // than merely near one.
     const auto pixelsPerBar = std::max(0.01f, xFor(timeOfBar(firstBar + 1.0)) - xFor(timeOfBar(firstBar)));
     const auto step = barLabelStep(pixelsPerBar, timeLabelMinimumPixels);
+    // Marks between the labels, as many as the zoom has room for. Counted from
+    // a labelled bar rather than from the edge of the view, so which marks are
+    // long and which are short is a property of the music and does not shuffle
+    // as the arrangement is scrolled.
+    const auto divisions = timeTicksPerLabel(pixelsPerBar, step);
+    const auto tick = step / static_cast<double>(divisions);
+    const auto start = firstLabelledBar(firstBar, step);
+
     g.setFont(uiFont(10.0f));
     // The whole reading or none of it. A bar number clipped by the right edge
     // is still the start of a number; "00:0" is not a time, and at nine
     // characters a stub is wide enough to read as one.
     const auto labelWidth = static_cast<float>(
         juce::GlyphArrangement::getStringWidthInt(g.getCurrentFont(), "00:00:000"));
-    int painted = 0;
-    for (auto bar = firstLabelledBar(firstBar, step); bar <= lastBar + step && painted < 512; bar += step)
+    for (int mark = 0; mark < 4096; ++mark)
     {
+        const auto bar = start + tick * mark;
+        if (bar > lastBar + step) break;
         const auto time = timeOfBar(bar);
         const auto x = xFor(time);
         if (x < headerWidth - 1.0f) continue;
-        if (x + 4.0f + labelWidth > right) break;
-        ++painted;
-        // A tick on the bar line, and the time four pixels to the right of it:
-        // the same offset the bar number above takes, so the two readings share
-        // a left edge down the whole column.
-        g.setColour(palette::border.brighter(0.2f));
-        g.drawVerticalLine(static_cast<int>(x), strip.getY(), strip.getY() + 4.0f);
+        if (x > right) break;
+        const auto labelled = mark % divisions == 0;
+        g.setColour(labelled ? palette::border.brighter(0.55f) : palette::border.brighter(0.12f));
+        g.drawVerticalLine(static_cast<int>(x), strip.getY(),
+                           strip.getY() + (labelled ? timeMajorTick : timeMinorTick));
+        // The marks carry on to the edge whether or not the last of them is
+        // close enough to it to be worth a reading.
+        if (!labelled || x + 4.0f + labelWidth > right) continue;
         g.setColour(palette::textDim);
+        // Four pixels right of the mark, which is the offset the bar number
+        // above takes: the two readings share a left edge down the whole
+        // column.
         drawSnappedText(g, formatClock(time, true),
                         {static_cast<int>(x) + 4, static_cast<int>(strip.getY()), 76,
                          static_cast<int>(strip.getHeight())});
@@ -305,11 +319,15 @@ void Arrangement::paint(juce::Graphics& g)
             g.setColour(palette::selection);
             g.fillRect(band.withWidth(3.0f));
         }
-        // Last, so it rules the whole width: drawn before the header column it
-        // stopped at the cards and the main row read as closed off over the
-        // lanes and open beside them.
+        // Last, so they rule the whole width: drawn before the header column
+        // they stopped at the cards and the main row read as closed off over
+        // the lanes and open beside them. Every track row is ruled off from the
+        // one under it; the main row has nothing under it to be ruled off from,
+        // so it closes itself off and the panel ends on a line rather than
+        // running into the strip below it.
         g.setColour(palette::border);
         g.fillRect(band.withHeight(trackDividerThickness));
+        g.fillRect(band.withTop(band.getBottom() - trackDividerThickness));
         g.setColour(palette::text);
         g.setFont(uiFontBold(9.0f));
         drawSnappedText(g, "MAIN", {10, static_cast<int>(master.getY()) + 5, 44, 16});

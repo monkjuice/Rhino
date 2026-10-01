@@ -68,6 +68,45 @@ int runArrangementGeometryTest()
             throw std::runtime_error("Bars before the start alternate the same way");
         if (isWashedBar(1.0, 0))
             throw std::runtime_error("A band of no bars washes nothing");
+
+        // The ruler numbers bars; the row at the foot of the panel reads the
+        // same bars as wall-clock times. A time is a far wider string, so the
+        // two rows thin out at different zooms - and the one labelling less
+        // often has to be labelling a subset of the other's bars, or a time
+        // would stand under a bar with no number over it. Swept across four
+        // decades of zoom at an irrational-ish ratio, so the step boundaries
+        // are crossed rather than landed on.
+        for (double pixelsPerBar = 0.5; pixelsPerBar < 4096.0; pixelsPerBar *= 1.37)
+        {
+            const auto numbers = barLabelStep(pixelsPerBar, barNumberMinimumPixels);
+            const auto times = barLabelStep(pixelsPerBar, timeLabelMinimumPixels);
+            if (times < numbers || !close(std::fmod(times, numbers), 0.0))
+                throw std::runtime_error("Every labelled time sits on a numbered bar");
+            if (numbers < 4096.0 && numbers * pixelsPerBar < barNumberMinimumPixels)
+                throw std::runtime_error("Bar numbers are at least their minimum apart");
+            if (times < 4096.0 && times * pixelsPerBar < timeLabelMinimumPixels)
+                throw std::runtime_error("Times are at least their minimum apart");
+            if (numbers > 1.0 && numbers * 0.5 * pixelsPerBar >= barNumberMinimumPixels)
+                throw std::runtime_error("And neither row thins out further than it has to");
+
+            // Wherever the view starts, a run of times starts on a bar the
+            // number row labels too.
+            const auto first = firstLabelledBar(37.0, times);
+            if (first > 37.0 || first < 1.0 || !close(std::fmod(first - 1.0, numbers), 0.0))
+                throw std::runtime_error("A run of times starts on a numbered bar at or before the view");
+
+            // The marks between two times fill in as the view is zoomed in and
+            // thin back out as it is zoomed out, and are always a binary
+            // subdivision of the gap - so every label keeps a long mark and
+            // every short one lands on a musical division.
+            const auto marks = timeTicksPerLabel(pixelsPerBar, times);
+            if (marks < 1 || marks > timeTickDivisions)
+                throw std::runtime_error("A label is divided between once and timeTickDivisions times");
+            if (marks > 1 && times * pixelsPerBar / marks < timeTickMinimumPixels)
+                throw std::runtime_error("Ruler marks never crowd past their minimum spacing");
+            if (marks < timeTickDivisions && times * pixelsPerBar / (marks * 2) >= timeTickMinimumPixels)
+                throw std::runtime_error("And are as fine as that spacing allows");
+        }
         return 0;
     }
     catch (const std::exception& error)

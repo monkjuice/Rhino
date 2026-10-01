@@ -470,9 +470,12 @@ private:
     juce::Point<float> panAnchor;
     double panStartView = 0.0, panStartTrackScroll = 0.0;
     static constexpr float headerWidth = 228.0f, rulerTop = 36.0f, lanesTop = 60.0f;
-    // The foot of the panel: the horizontal scrollbar, and the row of times
-    // directly above it.
+    // The foot of the panel, bottom upwards: the rule that closes the main row
+    // off, the horizontal scrollbar, and the row of times above that. The two
+    // tick heights are what let a labelled time be told from the marks between
+    // it and the next one at a glance.
     static constexpr float scrollBarHeight = 14.0f, timeRulerHeight = 18.0f;
+    static constexpr float timeMajorTick = 10.0f, timeMinorTick = 5.0f;
     // The main row is dragged from its top edge like any other, so its height
     // is a value rather than a constant. It is a view setting and lives here
     // beside the zoom: the fitted lane height is measured against the default

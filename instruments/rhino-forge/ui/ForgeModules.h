@@ -106,12 +106,16 @@ inline std::vector<Row> oscillatorRows(const char* mode, const char* octave, con
         return gatedBy(whenSpectral(id, label), mode);
     };
     return {
-        // What the oscillator is, along the top edge of the display showing it
-        // — the arrangement the filter's TYPE field already has, and for the
-        // same reason: the picture underneath is of this mode, so the name of
-        // it is a reading of the display rather than a setting beside it.
-        // Serum puts the same field in the same place (p. 104).
-        {displaySelectorHeight, {{mode, "MODE", Style::selector}}, 1, 0, 0, Seat::displayTop},
+        // What the oscillator is, beside its name in the header.
+        //
+        // It was seated along the top edge of the display first, following the
+        // filter's TYPE field, and that was the wrong read: TYPE names the
+        // curve drawn under it, so it belongs to the picture, while a mode
+        // names the *module* — it decides what the picture even is. Beside the
+        // title it sits with the other answer to "what am I looking at", and
+        // the display gets its strip back. Serum puts it in the same place
+        // (p. 104).
+        {headerSelectorHeight, {{mode, "MODE", Style::selector}}, 1, 0, 0, Seat::header},
         {16, {{octave, "OCT", Style::stepper}, {semitone, "SEMI", Style::stepper},
               {fine, "FINE", Style::stepper}}},
         {27, {wt(position, "POSITION"), sp(scan, "SCAN"),
@@ -143,14 +147,14 @@ inline const std::vector<Module>& modules()
         // knobs is deliberate: the waveform is still the largest thing on the
         // panel, and a knob small enough to be hard to hit would have cost more
         // than the picture does. The knobs do come down — see displayShare.
-        {"oscA", "OSC A", "MORPH", "oscAEnable", false, Display::oscillator,
+        {"oscA", "OSC A", "", "oscAEnable", false, Display::oscillator,
          0, 4.0f, oscillatorColumnSpan, false,
          oscillatorRows("oscAMode", "oscAOctave", "oscASemitone", "oscAFine",
                         "oscAPosition", "oscAScan", "oscAUnison", "oscADetune", "oscACut",
                         "oscABlend", "oscAMix", "oscAPan", "oscALevel",
                         "oscAWarp1", "oscAWarp1Mode", "oscAWarp2Mode", "oscAWarp2"),
          0, only(Page::oscillators), 1, 0, 0, oscillatorDisplayPercent, 0, "OSCILLATOR A"},
-        {"oscB", "OSC B", "MORPH", "oscBEnable", false, Display::oscillator,
+        {"oscB", "OSC B", "", "oscBEnable", false, Display::oscillator,
          0, 4.0f + oscillatorColumnSpan, oscillatorColumnSpan, false,
          oscillatorRows("oscBMode", "oscBOctave", "oscBSemitone", "oscBFine",
                         "oscBPosition", "oscBScan", "oscBUnison", "oscBDetune", "oscBCut",
@@ -158,7 +162,7 @@ inline const std::vector<Module>& modules()
                         "oscBWarp1", "oscBWarp1Mode", "oscBWarp2Mode", "oscBWarp2"),
          0, only(Page::oscillators), 1, 0, 0, oscillatorDisplayPercent, 0, "OSCILLATOR B"},
 
-        {"oscC", "OSC C", "MORPH", "oscCEnable", false, Display::oscillator,
+        {"oscC", "OSC C", "", "oscCEnable", false, Display::oscillator,
          0, 4.0f + 2.0f * oscillatorColumnSpan, oscillatorColumnSpan, false,
          oscillatorRows("oscCMode", "oscCOctave", "oscCSemitone", "oscCFine",
                         "oscCPosition", "oscCScan", "oscCUnison", "oscCDetune", "oscCCut",

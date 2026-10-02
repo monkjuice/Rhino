@@ -800,7 +800,7 @@ void fxDisplaySuite()
                     // A field seated inside a display has no label strip over
                     // it — it is inside the thing it names — so the strip it
                     // was given is the whole field.
-                    const auto seated = rhino::forge::ui::seatedInDisplay(module, r);
+                    const auto seated = rhino::forge::ui::seatedOutsideBody(module, r);
                     const auto field = seated
                         ? block
                         : block.withTrimmedTop(rhino::forge::ui::stepperLabelHeight);

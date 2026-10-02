@@ -92,7 +92,7 @@ inline void drawModuleShell(juce::Graphics& g, juce::Rectangle<int> area, const 
     // on GLOBAL/MACROS/FILTER; oscillator headers continue into their displays.
     if (module.handleSource == 0)
     {
-        const auto badgeWidth = juce::jmin(box.getWidth() - 14, module.enableId ? 124.0f : 100.0f);
+        const auto badgeWidth = static_cast<float>(headerBadgeWidth(area, module));
         const auto x = box.getX() + 6, y = box.getY() + 7;
         const auto badge = metalPolygon({{x + 3, y}, {x + badgeWidth, y},
                                          {x + badgeWidth - 13, y + 23}, {x, y + 23}, {x, y + 3}});
@@ -103,6 +103,13 @@ inline void drawModuleShell(juce::Graphics& g, juce::Rectangle<int> area, const 
         g.drawLine(x + 2, y + 23, x + badgeWidth - 13, y + 23, 0.65f);
         auto header = area.withHeight(headerHeight).reduced(grouped ? 8 : 12, 0);
         if (module.enableId != nullptr) header.removeFromLeft(headerHeight);
+        // A module with a field in its header stops its title short of it.
+        // Without this the two are laid out independently and a long title runs
+        // under the control — which is exactly what a spectral oscillator's
+        // sample name did when it was drawn in this strip.
+        if (seatsRowInHeader(module))
+            header = header.withRight(juce::jmax(header.getX(),
+                                                 headerCarve(area, module).getX() - 4));
         g.setColour(text.withAlpha(on ? 1.0f : 0.55f));
         g.setFont(panelFont(Face::header, 14.5f));
         g.drawFittedText(module.title, header, juce::Justification::centredLeft, 1, 0.85f);

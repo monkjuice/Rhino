@@ -202,11 +202,13 @@ inline juce::Rectangle<int> faderBlock(juce::Rectangle<int> moduleArea, const Mo
         .withCentre(cell.getCentre());
 }
 
-// Whether a row is seated inside its module's display. A seated control takes
-// the strip it was given whole: the strip was declared at the height the
-// control wants, and its width is the display's, so the caps that stop a field
-// stretching across a module have nothing to protect it from here.
-inline bool seatedInDisplay(const Module& module, int rowIndex)
+// Whether a row sits somewhere other than the module's body — inside its
+// display, or in its header. A seated control takes the strip it was given
+// whole: the strip was declared at the height the control wants, and its width
+// is the display's or the header's, so the caps that stop a field stretching
+// across a module have nothing to protect it from here. It carries no label
+// either, for the same reason: it is inside the thing it would have named.
+inline bool seatedOutsideBody(const Module& module, int rowIndex)
 {
     return module.rows[static_cast<size_t>(rowIndex)].seat != Seat::body;
 }
@@ -224,7 +226,7 @@ inline juce::Rectangle<int> selectorBlock(juce::Rectangle<int> moduleArea, const
     // Seated, it spans the display: the name is centred between two arrows at
     // the ends of the well, which is the field at its most readable and the one
     // place on the panel that can afford it.
-    if (seatedInDisplay(module, rowIndex)) return cell.reduced(seatedControlGap, 0);
+    if (seatedOutsideBody(module, rowIndex)) return cell.reduced(seatedControlGap, 0);
     return juce::Rectangle<int>(juce::jmin(cell.getWidth() - 10, maxSelectorWidth),
                                 juce::jmin(cell.getHeight(), stepperLabelHeight + selectorHeight))
         .withCentre(cell.getCentre());
@@ -259,7 +261,7 @@ inline juce::Rectangle<int> chipBlock(juce::Rectangle<int> moduleArea, const Mod
     // Seated, the row of them is a strip of buttons across the foot of the
     // display rather than a handful of chips floating in a row, so each takes
     // its cell whole and the gaps between them are the only air.
-    if (seatedInDisplay(module, rowIndex)) return cell.reduced(seatedControlGap, 0);
+    if (seatedOutsideBody(module, rowIndex)) return cell.reduced(seatedControlGap, 0);
     return juce::Rectangle<int>(juce::jmin(cell.getWidth() - 8, maxChipWidth),
                                 juce::jmin(cell.getHeight(), chipHeight))
         .withCentre(cell.getCentre());

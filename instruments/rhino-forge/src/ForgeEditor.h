@@ -11,10 +11,16 @@
 
 namespace rhino::forge
 {
-class Editor final : public juce::AudioProcessorEditor, private juce::Timer
+// TooltipClient because a spectral oscillator's sample name is drawn nowhere:
+// a filename is far too long for the header — it ran under the title when it
+// was there — and far too long to print over the spectrogram. It is what the
+// picture *is*, so the picture answers for it when the hand rests on it.
+class Editor final : public juce::AudioProcessorEditor, private juce::Timer,
+                     public juce::TooltipClient
 {
 public:
     explicit Editor(Processor&);
+    juce::String getTooltip() override;
     void paint(juce::Graphics&) override;
     // The piano is a child, so the reach marking has to go on after it rather
     // than in paint().
@@ -330,6 +336,8 @@ private:
     const juce::Image& spectrogramFor(int oscillator, juce::Rectangle<int> area,
                                       juce::Colour accent);
     juce::String spectralHeaderDetail(int oscillator) const;
+    // The module whose spectral display is under this point, or -1.
+    int spectralDisplayAt(juce::Point<int> at) const;
     void showSampleMenu(int oscillator);
     void loadSampleInto(int oscillator);
     // The drawn spectrogram, and what it was drawn from. Rebuilt only when the

@@ -102,13 +102,43 @@ const juce::Image& Editor::spectrogramFor(int oscillator, juce::Rectangle<int> a
     return spectrogramCache[index];
 }
 
-// What the header says a spectral oscillator is reading. The same slot the
-// envelope names its stage in and the LFO its rate — what the module is doing,
-// rather than what it is — and the same place Serum prints it (p. 105).
+// What a spectral oscillator is reading.
+//
+// Not drawn anywhere. A sample's filename is the one piece of text on this
+// panel with no bound on its length — "MAN-1-3126333-0252252 PHONK X TOKYO..."
+// is a real one — and there is nowhere to put it: in the header it ran under
+// the title, and over the spectrogram it would cover the picture it was
+// describing. So it is a tooltip, and the picture answers for itself when the
+// hand rests on it.
 juce::String Editor::spectralHeaderDetail(int oscillator) const
 {
     const auto name = processor.sampleStore().sourceName(oscillator);
-    return name.isNotEmpty() ? name : juce::String("NO SAMPLE");
+    return name.isNotEmpty() ? name : juce::String("No sample — click to load one");
+}
+
+// Which oscillator's spectral display is under this point, if any. Used both by
+// the tooltip and by the click that opens the sample menu, so the two cannot
+// disagree about where the picture is.
+int Editor::spectralDisplayAt(juce::Point<int> at) const
+{
+    for (const auto& module : moduleUis)
+    {
+        if (module.descriptor->display != ui::Display::oscillator) continue;
+        if (!moduleShown(*module.descriptor)) continue;
+        const auto which = oscillatorIndexFromId(juce::String(module.descriptor->id));
+        if (which < 0 || !oscillatorIsSpectral(which)) continue;
+        if (ui::displayBounds(moduleAreaFor(*module.descriptor), *module.descriptor).contains(at))
+            return which;
+    }
+    return -1;
+}
+
+// The editor answers for everything it painted itself; its child controls carry
+// their own tooltips and are asked before this is.
+juce::String Editor::getTooltip()
+{
+    const auto oscillator = spectralDisplayAt(getMouseXYRelative());
+    return oscillator >= 0 ? spectralHeaderDetail(oscillator) : juce::String();
 }
 
 void Editor::showSampleMenu(int oscillator)

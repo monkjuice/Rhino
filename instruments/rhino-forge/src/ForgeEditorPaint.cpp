@@ -132,12 +132,8 @@ void Editor::paint(juce::Graphics& g)
         // cannot be read off the greyed-out rate knob.
         const auto tableModule = juce::String(descriptor.id) == "table";
         const auto rackModule = isFxModule(descriptor);
-        const auto oscillatorModule = descriptor.display == ui::Display::oscillator
-            ? oscillatorIndexFromId(juce::String(descriptor.id)) : -1;
         ui::drawModuleDetail(g, area, descriptor, on,
-                             oscillatorModule >= 0 && oscillatorIsSpectral(oscillatorModule)
-                                 ? spectralHeaderDetail(oscillatorModule)
-                             : descriptor.display == ui::Display::envelope ? envHeaderDetail()
+                             descriptor.display == ui::Display::envelope ? envHeaderDetail()
                              : descriptor.display == ui::Display::lfo ? lfoHeaderDetail()
                              : rackModule ? fxHeaderDetail()
                              : tableModule && tablePanel != nullptr ? tablePanel->headerDetail()

@@ -410,7 +410,7 @@ inline juce::Rectangle<int> displayCarve(juce::Rectangle<int> moduleArea, const 
     for (int i = 0; i < static_cast<int>(module.rows.size()); ++i)
     {
         const auto& row = module.rows[static_cast<size_t>(i)];
-        if (row.seat == Seat::body) continue;
+        if (row.seat == Seat::body || row.seat == Seat::header) continue;
         const auto atTop = row.seat == Seat::displayTop;
         // Never more than the display has: a window small enough to make the
         // plot vanish should take the plot, not hand a strip a negative height
@@ -422,6 +422,20 @@ inline juce::Rectangle<int> displayCarve(juce::Rectangle<int> moduleArea, const 
         else       inner.removeFromBottom(displaySeatGap);
     }
     return wanted < 0 ? inner : juce::Rectangle<int>();
+}
+
+// A row seated in the module's header: the strip between the title plate and
+// the module's right edge.
+//
+// There is only ever one such row and it holds one control, so unlike
+// displayCarve there is nothing to divide — the field takes what the title
+// leaves. The title gives up width to it rather than the other way round; see
+// headerBadgeWidth.
+inline juce::Rectangle<int> headerCarve(juce::Rectangle<int> moduleArea, const Module& module)
+{
+    const auto left = moduleArea.getX() + 6 + headerBadgeWidth(moduleArea, module) + 6;
+    const auto right = moduleArea.getRight() - 12;
+    return {left, moduleArea.getY() + 5, juce::jmax(0, right - left), headerHeight - 11};
 }
 
 // What the display has left for the thing it is a display *of*. Everything that
@@ -466,8 +480,9 @@ inline juce::Rectangle<int> rowBounds(juce::Rectangle<int> moduleArea, const Mod
     // A seated row is laid out in the display rather than in the body, and is
     // absent from the division below — which is what lets the body's rows be
     // declared as shares of what is actually theirs.
-    if (module.rows[static_cast<size_t>(rowIndex)].seat != Seat::body)
-        return displayCarve(moduleArea, module, rowIndex);
+    const auto seat = module.rows[static_cast<size_t>(rowIndex)].seat;
+    if (seat == Seat::header) return headerCarve(moduleArea, module);
+    if (seat != Seat::body) return displayCarve(moduleArea, module, rowIndex);
 
     const auto area = controlArea(moduleArea, module);
     if (juce::String(module.id) == "fx")

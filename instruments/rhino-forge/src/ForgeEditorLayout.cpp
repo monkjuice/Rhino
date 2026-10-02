@@ -164,7 +164,7 @@ void Editor::resized()
                     // Seated, the field is the whole strip it was given and
                     // has no caption above it; everywhere else it wears the
                     // label line a stepper does.
-                    if (!ui::seatedInDisplay(descriptor, control.row))
+                    if (!ui::seatedOutsideBody(descriptor, control.row))
                         control.label.setBounds(block.removeFromTop(ui::stepperLabelHeight));
                     control.selector->setBounds(block);
                     break;

@@ -153,7 +153,12 @@ struct Control
 // it holds is text at a size that does not scale, so neither does the room it
 // needs. Everything else about it is ordinary — the same cells, the same
 // blocks, the same components, the same attachments.
-enum class Seat { body, displayTop, displayFoot };
+// A header seat is the third place, and it is for a field that says what the
+// module *is* rather than what it is set to. An oscillator's MODE belongs
+// beside its name for the same reason the name is there: both answer "what am
+// I looking at", and a mode seated in the display instead cost the picture a
+// strip to say something that was not about the picture.
+enum class Seat { body, displayTop, displayFoot, header };
 
 struct Row
 {
@@ -247,6 +252,26 @@ struct Module
     const char* group = nullptr;
 };
 
+// Whether a module seats one of its rows in its header. Asked by the title
+// plate, which gives up width to it, and by the row geometry.
+inline bool seatsRowInHeader(const Module& module)
+{
+    for (const auto& row : module.rows)
+        if (row.seat == Seat::header) return true;
+    return false;
+}
+
+// How wide the metal title plate is. A module that seats a field in its header
+// gets a shorter one: the plate is decoration and the field is a control, so
+// the control takes the room it needs and the plate keeps what is left. 86 is
+// what "OSC A" wants at the header's font with its margins.
+inline int headerBadgeWidth(juce::Rectangle<int> moduleArea, const Module& module)
+{
+    const auto generous = module.enableId != nullptr ? 124 : 100;
+    return juce::jmin(moduleArea.getWidth() - 14,
+                      seatsRowInHeader(module) ? 86 : generous);
+}
+
 // The numbered cards that choose which bank a module is showing, laid along its
 // header after the title or the drag handle. They hang from the module's top
 // edge and take the whole height of the header, so the lit strip along that
@@ -338,6 +363,10 @@ inline constexpr int maxChipWidth = 44;
 // frame rather than floating inside it. The gap is what separates a strip from
 // the plot, and it is the only slack in the display's height.
 inline constexpr int displaySelectorHeight = 26;
+// A field seated in the header. Shorter than one seated in a display: the
+// header is 34 tall and the field has to clear the module's top edge and the
+// lit strip that runs along it.
+inline constexpr int headerSelectorHeight = 23;
 inline constexpr int displayButtonHeight = chipHeight;
 inline constexpr int displaySeatInset = 1;
 inline constexpr int displaySeatGap = 3;

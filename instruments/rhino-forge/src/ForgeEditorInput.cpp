@@ -67,16 +67,12 @@ void Editor::mouseDown(const juce::MouseEvent& event)
         // A spectral oscillator's display is how its sample is chosen. There
         // is no cell free in the module for a chooser field — see the mode
         // decision in ui/ForgeModules.h — and the picture is what the sample
-        // is, so clicking it is the most direct thing available.
-        for (const auto& module : moduleUis)
+        // is, so clicking it is the most direct thing available. The same hit
+        // test answers the tooltip, so the two cannot disagree about where the
+        // picture is.
+        if (const auto spectral = spectralDisplayAt(at); spectral >= 0)
         {
-            if (module.descriptor->display != ui::Display::oscillator) continue;
-            if (!moduleShown(*module.descriptor)) continue;
-            const auto which = oscillatorIndexFromId(juce::String(module.descriptor->id));
-            if (which < 0 || !oscillatorIsSpectral(which)) continue;
-            if (!ui::displayBounds(moduleAreaFor(*module.descriptor),
-                                   *module.descriptor).contains(at)) continue;
-            showSampleMenu(which);
+            showSampleMenu(spectral);
             return;
         }
 

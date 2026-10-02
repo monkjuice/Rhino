@@ -269,17 +269,36 @@ void layoutSuite()
         // stay inside the well, and it has to leave the thing the display is a
         // display *of* somewhere to be drawn. Both are the same walk in
         // displayCarve, and this is what keeps the two ends of it honest.
+        //
+        // A row seated in the *header* is held to the other half of that
+        // bargain: it is paid for out of the title plate rather than out of the
+        // display, so it must leave the display alone entirely and must clear
+        // the title it is standing beside.
         const auto plot = rhino::forge::ui::displayPlotBounds(area, modules[i]);
         for (int r = 0; r < static_cast<int>(modules[i].rows.size()); ++r)
         {
-            if (modules[i].rows[static_cast<size_t>(r)].seat == rhino::forge::ui::Seat::body)
-                continue;
+            const auto seated = modules[i].rows[static_cast<size_t>(r)].seat;
+            if (seated == rhino::forge::ui::Seat::body) continue;
             const auto seat = rhino::forge::ui::rowBounds(area, modules[i], r);
-            require(modules[i].display != rhino::forge::ui::Display::none,
-                    "a row seated in a display belongs to a module that has one");
-            require(rhino::forge::ui::displayBounds(area, modules[i]).contains(seat),
-                    "a seated row stays inside the display it is seated in");
-            require(!seat.intersects(plot), "a seated row leaves the plot alone");
+            if (seated == rhino::forge::ui::Seat::header)
+            {
+                require(area.withHeight(rhino::forge::ui::headerHeight).contains(seat),
+                        "a row seated in the header stays inside the header");
+                require(seat.getX() >= area.getX() + rhino::forge::ui::headerBadgeWidth(area, modules[i]),
+                        "a row seated in the header starts past the title plate");
+                require(!seat.intersects(rhino::forge::ui::displayBounds(area, modules[i])),
+                        "a row seated in the header leaves the display alone");
+                require(seat.getWidth() > 40,
+                        "a row seated in the header is wide enough to read a mode name in");
+            }
+            else
+            {
+                require(modules[i].display != rhino::forge::ui::Display::none,
+                        "a row seated in a display belongs to a module that has one");
+                require(rhino::forge::ui::displayBounds(area, modules[i]).contains(seat),
+                        "a seated row stays inside the display it is seated in");
+                require(!seat.intersects(plot), "a seated row leaves the plot alone");
+            }
             require(!seat.intersects(controls),
                     "a seated row stays out of the body, which is what pays for it");
             require(seat.getHeight() > 0, "a seated row is given the height it asked for");

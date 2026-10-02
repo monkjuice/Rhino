@@ -161,6 +161,18 @@ Do not make a device self-register from a static initialiser. Objects in a stati
 
 `Session::addDevice(id, track)` is the one way to add a device. `Session`'s `Instrument`, `AudioEffect` and `MidiEffect` enums remain as a typed shorthand for the devices that predate the catalog — presets and tests name instruments with them — and `DeviceIds.h` is the only place they become catalog ids. A device added from now on needs no enum.
 
+## The order of a chain
+
+A track's plugin list *is* its signal chain: a device reads what the device in front of it wrote. A vocoder followed by Rhino Tune tunes the vocoded signal; swap them and the vocoder is handed an already-tuned voice. So the order is a thing worth editing, and a device is dragged by its name bar to move it.
+
+Three parts, each in one place:
+
+- `DeviceEditorPanel` starts the drag. A press on the name bar arms it, four pixels of travel spends it, and the drag carries `rhino-device:<track>:<pluginIndex>` with the name bar as its image. A press anywhere else never arms it, so a knob is never a drag.
+- `DeviceRack` is the drop target it already was for the browser, and now tells the two apart by that description. `dropGapFor` turns a point into the gap between panels it is nearest, asked in the chain's own coordinates so the viewport's scroll needs no arithmetic, and a hairline child of the chain content marks it.
+- `Session::moveDevice` does the move. It is the one device call that speaks in **positions within `deviceSlots`** rather than plugin indices, because the list also holds the channel strip and any dormant instrument, and what is dragged is what is on screen. The destination plugin index is taken from the neighbour the device lands against, never counted, and the plugin leaves the list before it rejoins it so everything behind it has shifted down one.
+
+A chain runs MIDI effects, then the instrument, then audio effects — the order every add path already builds. `moveDevice` refuses a drag that would break it and says why, rather than letting a MIDI effect land behind the instrument with no notes left to rewrite. The rule lives in `chainRank` in `SessionDevices.cpp`, in the model, so every path into it inherits the refusal.
+
 ## Rhino Tune
 
 The pitch corrector is split between `src/core/` and `src/devices/audio/AutoTuneDevice.cpp`, and almost all of it is in core. `AutoTuneDevice` only reads parameters and hands them to `AutoTuneEngine`; the tracking, the correction law and the shifting are plain C++ over a buffer, so `--self-test` drives them with a synthesised vowel and measures what comes back instead of reading the DSP.

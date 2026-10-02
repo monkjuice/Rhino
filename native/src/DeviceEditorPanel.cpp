@@ -47,6 +47,9 @@ DeviceEditorPanel::DeviceEditorPanel(Session& s) : session(s)
         const auto result = session.toggleDeviceEnabled(track, pluginSlot);
         if (result.failed() && status) status(result.getErrorMessage());
     };
+    // A drag has no affordance to draw, so the Info View is where the gesture
+    // is told. The knobs carry their own readings and win it where they are.
+    setTooltip("Drag this device by its name to move it along the chain");
     addAndMakeVisible(title);
     addAndMakeVisible(power);
     addMouseListener(this, true);
@@ -103,6 +106,7 @@ int DeviceEditorPanel::preferredWidth() const
 
 void DeviceEditorPanel::mouseDown(const juce::MouseEvent& event)
 {
+    headerPressed = false;
     // Right-clicking a knob is how automation is revealed, so the panel takes
     // the event back from the slider rather than letting it fall through.
     if (event.mods.isPopupMenu())
@@ -121,15 +125,23 @@ void DeviceEditorPanel::mouseDown(const juce::MouseEvent& event)
     // not known until the click happens.
     if (face == Face::Eq)
     {
-        handleEqMouseDown(event);
-        return;
+        if (handleEqMouseDown(event))
+            return;
+    }
+    else if (event.eventComponent == this)
+    {
+        // A face is asked before the name bar is, because a face may put a
+        // control up there: Rhino Tune's LIVE and NAT toggles share that row
+        // with the device's own name.
+        if (face == Face::AutoTune && handleAutoTuneClick(event))
+            return;
+        if (face == Face::Vocoder && handleVocoderClick(event))
+            return;
     }
     if (event.eventComponent != this)
         return;
-    if (face == Face::AutoTune)
-        handleAutoTuneClick(event);
-    else if (face == Face::Vocoder)
-        handleVocoderClick(event);
+    // Whatever is left of the name bar is the handle the chain is reordered by.
+    headerPressed = event.y < headerHeight && !event.mods.isPopupMenu();
 }
 
 // The EQ display is dragged, wheeled and double-clicked; nothing else on any
@@ -137,12 +149,30 @@ void DeviceEditorPanel::mouseDown(const juce::MouseEvent& event)
 // generic panel behaves exactly as it did.
 void DeviceEditorPanel::mouseDrag(const juce::MouseEvent& event)
 {
+    if (headerPressed)
+    {
+        // A few pixels of slack, so clicking the name bar to select the device
+        // does not start a drag the hand did not mean.
+        if (event.getDistanceFromDragStart() < 4)
+            return;
+        headerPressed = false;
+        if (auto* container = juce::DragAndDropContainer::findParentDragContainerFor(this))
+        {
+            // The name bar alone, not the whole face: a tab under the cursor
+            // reads as the thing being carried, and an EQ is 660 pixels wide.
+            const auto tab = createComponentSnapshot(getLocalBounds().withHeight(headerHeight), true, 1.0f);
+            container->startDragging(deviceChainDragDescription(track, pluginSlot), this,
+                                     juce::ScaledImage(tab), true);
+        }
+        return;
+    }
     if (face == Face::Eq && event.eventComponent == this)
         handleEqDrag(event);
 }
 
 void DeviceEditorPanel::mouseUp(const juce::MouseEvent& event)
 {
+    headerPressed = false;
     if (face != Face::Eq || !eqDragging)
         return;
     juce::ignoreUnused(event);
@@ -301,7 +331,7 @@ void DeviceEditorPanel::paint(juce::Graphics& g)
     g.setColour(juce::Colour(0xff171d22));
     g.fillRoundedRectangle(bounds, 3.0f);
     g.setColour(juce::Colour(0xff222a30));
-    g.fillRoundedRectangle(bounds.withHeight(23.0f), 3.0f);
+    g.fillRoundedRectangle(bounds.withHeight(static_cast<float>(headerHeight)), 3.0f);
     g.setColour(isSelected ? juce::Colour(0xff75b9cc) : juce::Colour(0xff3a454d));
     g.drawRoundedRectangle(bounds.reduced(0.5f), 3.0f, isSelected ? 1.5f : 1.0f);
 

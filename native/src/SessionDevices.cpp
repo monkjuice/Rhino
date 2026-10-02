@@ -47,6 +47,17 @@ bool isSelectedPatternInstrument(te::Plugin& plugin, const juce::String& selecte
     return device->patternKey == selected;
 }
 
+// A chain runs MIDI effects, then the instrument, then audio effects. That is
+// the order every add path already builds, and a drag may not break it: a MIDI
+// effect behind the instrument has no notes left to rewrite, and an audio
+// effect in front of it has no audio yet.
+int chainRank(Session::DeviceKind kind)
+{
+    return kind == Session::DeviceKind::MidiEffect ? 0
+         : kind == Session::DeviceKind::Instrument ? 1
+         : 2;
+}
+
 int channelStripInsertIndex(te::AudioTrack& track)
 {
     for (int i = 0; i < track.pluginList.size(); ++i)
@@ -474,6 +485,59 @@ juce::Result Session::toggleDeviceEnabled(int track, int slot)
     if (plugin == nullptr) return juce::Result::fail("Select a device first.");
     edit->getUndoManager().beginNewTransaction(plugin->isEnabled() ? "Bypass device" : "Enable device");
     plugin->setEnabled(!plugin->isEnabled());
+    edit->getUndoManager().beginNewTransaction();
+    markModified();
+    if (edit->getTransport().isPlaying())
+        edit->restartPlayback();
+    sendSynchronousChangeMessage();
+    return juce::Result::ok();
+}
+
+// Reordering is the one device edit that is about the chain rather than about
+// one device, so it is the one that speaks in visible positions: the rack
+// hides the channel strip and any dormant instrument, and the person drags
+// what they can see.
+juce::Result Session::moveDevice(int track, int fromDevice, int toDevice)
+{
+    auto* list = pluginListForTrack(track);
+    if (list == nullptr)
+        return juce::Result::fail("That track has no device chain.");
+    const auto slots = deviceSlots(track);
+    const auto count = static_cast<int>(slots.size());
+    if (!juce::isPositiveAndBelow(fromDevice, count))
+        return juce::Result::fail("Select a device first.");
+    toDevice = juce::jlimit(0, count - 1, toDevice);
+    if (toDevice == fromDevice)
+        return juce::Result::ok();
+
+    auto order = slots;
+    const auto moved = order[static_cast<size_t>(fromDevice)];
+    order.erase(order.begin() + fromDevice);
+    order.insert(order.begin() + toDevice, moved);
+    for (int i = 1; i < count; ++i)
+        if (chainRank(order[static_cast<size_t>(i)].kind) < chainRank(order[static_cast<size_t>(i - 1)].kind))
+            return juce::Result::fail(
+                moved.kind == DeviceKind::MidiEffect ? "MIDI FX run before the instrument."
+                : moved.kind == DeviceKind::Instrument ? "The instrument runs after the MIDI FX and before the audio effects."
+                : "Audio effects run after the instrument.");
+
+    te::Plugin::Ptr plugin = (*list)[moved.pluginIndex];
+    if (plugin == nullptr)
+        return juce::Result::fail("Select a device first.");
+
+    // The plugin leaves the list before it rejoins it, so every plugin behind
+    // it has shifted down one by the time the insert index is read. The index
+    // is taken from the neighbour the device is landing against, never
+    // counted, because the list also holds plugins the chain does not show.
+    const auto removed = moved.pluginIndex;
+    const auto shifted = [removed](int pluginIndex) { return pluginIndex > removed ? pluginIndex - 1 : pluginIndex; };
+    const auto insertIndex = toDevice + 1 < count
+        ? shifted(order[static_cast<size_t>(toDevice + 1)].pluginIndex)
+        : shifted(order[static_cast<size_t>(toDevice - 1)].pluginIndex) + 1;
+
+    edit->getUndoManager().beginNewTransaction("Move " + moved.name);
+    plugin->removeFromParent();
+    list->insertPlugin(plugin, juce::jlimit(0, list->size(), insertIndex), nullptr);
     edit->getUndoManager().beginNewTransaction();
     markModified();
     if (edit->getTransport().isPlaying())

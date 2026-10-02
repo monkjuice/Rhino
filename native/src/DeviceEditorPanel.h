@@ -2,17 +2,40 @@
 #include "Session.h"
 #include "SpectrumAnalyser.h"
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace rhino
 {
+// A device panel dragged by its name bar says where it came from, so the rack
+// can tell a chain reorder from a browser drop. The format lives beside the
+// panel because the panel is what writes it; the rack is its only reader.
+inline juce::String deviceChainDragDescription(int track, int pluginIndex)
+{
+    return "rhino-device:" + juce::String(track) + ":" + juce::String(pluginIndex);
+}
+
+inline std::optional<int> deviceChainDragSlot(const juce::String& description, int track)
+{
+    if (!description.startsWith("rhino-device:"))
+        return std::nullopt;
+    const auto body = description.fromFirstOccurrenceOf(":", false, false);
+    if (body.upToFirstOccurrenceOf(":", false, false).getIntValue() != track)
+        return std::nullopt;
+    return body.fromFirstOccurrenceOf(":", false, false).getIntValue();
+}
+
 // Hosts Rhino's native device faces. Unknown and third-party devices retain a
 // generic parameter surface; plug-in-owned editors remain available via Edit.
 class DeviceEditorPanel final : public juce::Component,
+                                public juce::SettableTooltipClient,
                                 private juce::Timer
 {
 public:
     static constexpr int standardHeight = 176;
+    // The name bar: what the panel is dragged by, and the one strip of it that
+    // belongs to no face.
+    static constexpr int headerHeight = 23;
 
     explicit DeviceEditorPanel(Session&);
     void setTarget(int track, const Session::DeviceSlot&, bool selected);
@@ -73,6 +96,9 @@ private:
     Session& session;
     int track = -1, pluginSlot = -1;
     bool syncing = false, isSelected = false;
+    // Set by a press on the name bar and spent by the first drag far enough to
+    // mean it. A press anywhere else never arms it, so a knob is never a drag.
+    bool headerPressed = false;
     Face face = Face::Generic;
     juce::String deviceName;
     std::vector<Session::DeviceParameter> parameters;

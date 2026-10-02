@@ -343,6 +343,11 @@ public:
     juce::Result endDeviceParameterGesture(int track, int slot, int parameter);
     juce::Result toggleDeviceEnabled(int track, int slot);
     juce::Result deleteDevice(int track, int slot);
+    // A reorder is expressed in positions within deviceSlots, not plugin
+    // indices: the chain hides the channel strip and any dormant instrument,
+    // and what is dragged is what is on screen. toDevice is where the device
+    // ends up, so moveDevice(track, 2, 0) puts the third device first.
+    juce::Result moveDevice(int track, int fromDevice, int toDevice);
     // A device that takes audio from another track as well as from its own -
     // a sidechain. Rhino Vocoder is the one that does today: the voice is on
     // the track and the carrier is whatever synth is chosen here. The tap sits

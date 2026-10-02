@@ -40,6 +40,16 @@ void styleAutomationButton(juce::TextButton& button, const Session::DeviceParame
 
 }
 
+// The line a dragged device will land on. It is a child of the chain content
+// rather than something the rack paints, so it scrolls with the panels and
+// needs no repaint plumbing of its own.
+class DeviceRack::DropMarker final : public juce::Component
+{
+public:
+    DropMarker() { setInterceptsMouseClicks(false, false); }
+    void paint(juce::Graphics& g) override { g.fillAll(palette::selection); }
+};
+
 class DeviceRack::FloatingDeviceWindow final : public juce::DocumentWindow
 {
 public:
@@ -596,12 +606,91 @@ void DeviceRack::openSelectedDevice()
 bool DeviceRack::isInterestedInDragSource(const juce::DragAndDropTarget::SourceDetails& details)
 {
     const auto description = details.description.toString();
+    if (deviceChainDragSlot(description, selectedTrack).has_value())
+        return true;
     return deviceFromBrowserDrop(description) != nullptr;
+}
+
+void DeviceRack::itemDragEnter(const juce::DragAndDropTarget::SourceDetails& details)
+{
+    itemDragMove(details);
+}
+
+void DeviceRack::itemDragMove(const juce::DragAndDropTarget::SourceDetails& details)
+{
+    if (!deviceChainDragSlot(details.description.toString(), selectedTrack).has_value())
+        return;
+    showDropMarker(dropGapFor(details.localPosition));
+}
+
+void DeviceRack::itemDragExit(const juce::DragAndDropTarget::SourceDetails&)
+{
+    hideDropMarker();
+}
+
+int DeviceRack::dropGapFor(juce::Point<int> rackPosition) const
+{
+    // Asked in the chain's own coordinates, so the viewport's scroll offset is
+    // already accounted for.
+    const auto x = chainContent.getLocalPoint(this, rackPosition).x;
+    for (int i = 0; i < devicePanels.size(); ++i)
+        if (x < devicePanels[i]->getBounds().getCentreX())
+            return i;
+    return devicePanels.size();
+}
+
+int DeviceRack::devicePositionFor(int pluginIndex) const
+{
+    for (int i = 0; i < static_cast<int>(slots.size()); ++i)
+        if (slots[static_cast<size_t>(i)].pluginIndex == pluginIndex)
+            return i;
+    return -1;
+}
+
+void DeviceRack::showDropMarker(int gap)
+{
+    if (devicePanels.isEmpty())
+        return;
+    if (dropMarker == nullptr)
+    {
+        dropMarker = std::make_unique<DropMarker>();
+        chainContent.addChildComponent(dropMarker.get());
+    }
+    gap = juce::jlimit(0, devicePanels.size(), gap);
+    const auto x = gap < devicePanels.size() ? std::max(0, devicePanels[gap]->getX() - 3)
+                                            : devicePanels.getLast()->getRight() + 1;
+    dropMarker->setBounds(x, 0, 2, DeviceEditorPanel::standardHeight);
+    dropMarker->setVisible(true);
+    dropMarker->toFront(false);
+}
+
+void DeviceRack::hideDropMarker()
+{
+    if (dropMarker != nullptr)
+        dropMarker->setVisible(false);
 }
 
 void DeviceRack::itemDropped(const juce::DragAndDropTarget::SourceDetails& details)
 {
+    hideDropMarker();
     const auto description = details.description.toString();
+    // A device dragged out of this same chain is a reorder, not an add.
+    if (const auto dragged = deviceChainDragSlot(description, selectedTrack))
+    {
+        const auto from = devicePositionFor(*dragged);
+        if (from < 0)
+            return;
+        // The gap the cursor is in counts the dragged device itself while it
+        // is still in place, so a gap behind it is one position further on
+        // than where the device will end up.
+        const auto gap = dropGapFor(details.localPosition);
+        const auto name = slots[static_cast<size_t>(from)].name;
+        const auto result = session.moveDevice(selectedTrack, from, gap > from ? gap - 1 : gap);
+        if (status)
+            status(result.wasOk() ? "Moved " + name + " in " + session.trackName(selectedTrack) + "'s chain"
+                                  : result.getErrorMessage());
+        return;
+    }
     const auto* device = deviceFromBrowserDrop(description);
     if (device == nullptr)
         return;

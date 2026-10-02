@@ -42,7 +42,7 @@ Application code, `native/src`:
 | Session view (clip launcher) UI, paused, see [SESSION-VIEW.md](SESSION-VIEW.md) | `SessionView.h`, `SessionView.cpp`, `SessionViewPainter.cpp`, `SessionViewGestures.cpp` |
 | Scenes, clip slots and launching | `SessionSlots.cpp` |
 | Mixer: track volume, pan, mute, solo, main output | `SessionMixer.cpp` |
-| Device rack and editors | `DeviceRack.*` |
+| Device rack and editors | `DeviceRack.*`. A device is dragged by its name bar to reorder the chain; `Session::moveDevice` does the move and refuses one that would break MIDI FX → instrument → audio FX. See the chain-order section of [native/README.md](native/README.md) |
 | Browser | `BrowserPanel.*` |
 | App shell and lifecycle | `Main.cpp` |
 | Project files | `ProjectFiles.*` |

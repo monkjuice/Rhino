@@ -3,6 +3,7 @@
 #include "../core/ForgeCore.h"
 #include "../core/ForgeMidiMap.h"
 #include "../core/ForgeTableStore.h"
+#include "../core/ForgeSampleStore.h"
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <map>
 
@@ -22,6 +23,9 @@ class Processor final : public juce::AudioProcessor,
     // to exist before parameterLayout() runs, which happens while `state` is
     // being constructed.
     WavetableStore tables;
+    // Beside the tables and for the same reason: a spectral oscillator's
+    // sample is handed to the audio thread exactly as its table is.
+    SampleStore samples;
 
 public:
     Processor();
@@ -50,10 +54,19 @@ public:
     // draws on these directly; nothing else outside this class should.
     WavetableStore& tableStore() noexcept { return tables; }
 
+    // The samples the spectral oscillators resynthesise.
+    SampleStore& sampleStore() noexcept { return samples; }
+
     // Read a wavetable file into one oscillator's table: an ordinary .wav of
     // single-cycle frames laid end to end. Message thread only — it opens a
     // file and builds a table.
     juce::Result importTable(int oscillator, const juce::File&);
+
+    // Read an audio file into one oscillator's spectral source: any format
+    // JUCE can decode, mixed to mono and analysed into a spectrogram. Message
+    // thread only — it opens a file and runs an FFT per frame.
+    juce::Result importSample(int oscillator, const juce::File&);
+    void clearSample(int oscillator);
     juce::AudioProcessorValueTreeState state;
     // The editor's keyboard plays through this, so notes struck on screen reach
     // the voice the same way notes from the host do.

@@ -26,6 +26,7 @@ constexpr Area areas[] {
     {"displays", displayTests},
     {"presets", presetTests},
     {"engine", engineTests},
+    {"spectral", spectralTests},
     {"oscillator", oscillatorTests},
     {"warp", warpTests},
     {"filter", filterTests},

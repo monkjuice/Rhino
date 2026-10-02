@@ -65,4 +65,9 @@ void midiTests();
 // ForgeTestsEngine.cpp — every source audible on its own, and an extreme patch
 // that stays finite and inside full scale.
 void engineTests();
+
+// ForgeTestsSpectral.cpp — the spectral oscillator: the pitch it resynthesises
+// at, that SCAN moves the playhead without moving the pitch, and the
+// spectral filter.
+void spectralTests();
 }

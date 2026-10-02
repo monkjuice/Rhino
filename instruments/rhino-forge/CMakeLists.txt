@@ -196,6 +196,7 @@ if (BUILD_TESTING)
         displays
         presets
         engine
+        spectral
         oscillator
         warp
         filter
@@ -224,6 +225,7 @@ if (BUILD_TESTING)
         tests/ForgeTestsDisplays.cpp
         tests/ForgeTestsPresets.cpp
         tests/ForgeTestsEngine.cpp
+        tests/ForgeTestsSpectral.cpp
         tests/ForgeTestsOscillator.cpp
         tests/ForgeTestsWarp.cpp
         tests/ForgeTestsFilter.cpp

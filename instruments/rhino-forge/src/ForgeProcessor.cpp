@@ -155,6 +155,7 @@ void Processor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
     // is what lets the message thread tell when a replaced table has stopped
     // being read. See ForgeTableStore.h.
     const WavetableStore::ScopedBlock block(tables);
+    const SampleStore::ScopedBlock sampleBlock(samples);
     buffer.clear();
     // Read before the patch is built, because the patch resolves a synced LFO
     // against it.
@@ -555,6 +556,7 @@ Patch Processor::patch() const
         const auto index = static_cast<size_t>(oscillator);
         result.oscillators[index] = readOscillator(oscillatorPrefix(oscillator));
         result.oscillators[index].table = tables.table(oscillator);
+        result.oscillators[index].sample = samples.sample(oscillator);
     }
     result.subEnable = value("subEnable");
     result.subWave = value("subWave");

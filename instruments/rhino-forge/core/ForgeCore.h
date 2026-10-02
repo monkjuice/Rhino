@@ -2,9 +2,11 @@
 
 #include "ForgeArp.h"
 #include "ForgePatch.h"
+#include "ForgeSpectral.h"
 
 #include <algorithm>
 #include <cstdint>
+#include <memory>
 
 // The reusable sound engine. It deliberately owns no AudioProcessor, UI,
 // Tracktion, state tree, filesystem, or allocation in renderSample().
@@ -64,6 +66,18 @@ public:
         for (auto& voice : filterDelays)
             for (auto& channel : voice)
                 channel.prepare(sampleRate);
+        // The spectral bank, on the heap and never inside a voice. It is about
+        // three and a half megabytes across sixteen voices and three
+        // oscillators, and Core is constructed on the stack by most of the test
+        // suites — see the per-voice state decision in SPECTRAL.md, and the
+        // /STACK:8388608 the test binary already needed once for a smaller
+        // version of this mistake.
+        //
+        // Allocated whether or not any oscillator is spectral, because the mode
+        // changes while audio is running and the audio thread cannot be the one
+        // to find the memory.
+        if (spectral == nullptr) spectral = std::make_unique<SpectralBank>();
+        spectral->scratch.prepare();
         reset();
     }
 
@@ -377,7 +391,7 @@ public:
             if (fxModulated && loudest) { fxScratch.racks = active.racks; fxPatch = &fxScratch; }
 
             Buses buses;
-            renderOscillators(voice, active, buses);
+            renderOscillators(voiceIndex, voice, active, buses);
 
             // Drive belongs to the filter, so only what is routed into it is
             // driven, and switching the module off bypasses the drive with it.
@@ -798,6 +812,18 @@ private:
     // and a pitch jump is a new note rather than a click.
     void startVoice(Voice& voice, int note, float velocity)
     {
+        // A new note starts the sample again, so the vocoder's running phases,
+        // its overlap-add tail and where it had got to in the spectrogram all
+        // go. The state sits beside the voice rather than inside it — see the
+        // spectral bank — and is reached by the same index, which is what this
+        // recovers: `voices` is an array member and `voice` is always one of
+        // its elements, so the subtraction is the index and nothing else.
+        if (spectral != nullptr)
+        {
+            const auto index = static_cast<size_t>(&voice - voices.data());
+            if (index < spectral->voices.size())
+                for (auto& oscillator : spectral->voices[index]) oscillator.reset();
+        }
         const auto sounding = voice.active;
         if (!sounding)
         {
@@ -984,7 +1010,52 @@ private:
         right += outRight;
     }
 
-    void renderOscillators(Voice& voice, const Patch& patch, Buses& buses)
+    // A spectral oscillator's contribution. The vocoder in ForgeSpectral.h does
+    // the work; this decides what to tell it, and is the only place the two
+    // engines' shared controls are translated into spectral terms.
+    //
+    // Not const, unlike renderOscillator beside it: a wavetable voice's whole
+    // state is the phases passed into it, and a spectral voice's is a hop of
+    // overlap-add and a phase per bin that live in Core.
+    void renderSpectralOscillator(size_t voiceIndex, int oscillator, const Oscillator& osc,
+                                  float baseHz, float& left, float& right)
+    {
+        if (!on(osc.enable) || osc.sample == nullptr || spectral == nullptr) return;
+        auto& state = spectral->voices[voiceIndex][static_cast<size_t>(oscillator)];
+
+        SpectralSettings settings;
+        // The note, against the pitch the sample plays back at unshifted. The
+        // shift is done inside the spectrum, so this costs the same at every
+        // note — see the pitch decision in SPECTRAL.md.
+        settings.pitchRatio = juce::jlimit(0.03125f, 32.0f,
+                                           baseHz * tuningRatio(osc) / spectralRootHz);
+        // SCAN is frames per hop, and one frame per hop is the sample running
+        // at its own speed: the vocoder emits exactly the hop the analysis
+        // took. Nothing here divides by the pitch, which is what makes the
+        // manual's Key Track option a property of this engine rather than a
+        // correction applied on top of it — the scan rate is already fixed
+        // regardless of the key played.
+        settings.scan = juce::jlimit(-4.0f, 4.0f, osc.scan);
+        settings.cut = juce::jlimit(0.0f, 1.0f, osc.cut);
+        settings.mix = juce::jlimit(0.0f, 1.0f, osc.mix);
+        settings.unison = juce::jlimit(1, spectralUnisonMax, juce::roundToInt(osc.unison));
+        settings.detune = juce::jlimit(0.0f, 1.0f, osc.detune);
+        settings.blend = juce::jlimit(0.0f, 1.0f, osc.blend);
+        settings.pan = juce::jlimit(-1.0f, 1.0f, osc.pan);
+        // Fwd Loop and transient preservation, until the loop field that would
+        // choose otherwise has somewhere on the panel to stand. See SPECTRAL.md.
+        settings.loop = true;
+        settings.transients = true;
+
+        auto stackLeft = 0.0f, stackRight = 0.0f;
+        spectralRead(state, *osc.sample, settings, spectral->scratch, spectral->fft,
+                     stackLeft, stackRight);
+        const auto level = juce::jlimit(0.0f, 1.0f, osc.level);
+        left += stackLeft * level;
+        right += stackRight * level;
+    }
+
+    void renderOscillators(size_t voiceIndex, Voice& voice, const Patch& patch, Buses& buses)
     {
         const auto dt = static_cast<float>(1.0 / sampleRate);
         const auto glide = juce::jlimit(0.0f, 2.0f, patch.glide);
@@ -1100,9 +1171,17 @@ private:
         {
             const auto index = static_cast<size_t>(oscillator);
             auto left = 0.0f, right = 0.0f;
-            renderOscillator(voice.oscillatorPhases[index], voice.oscillatorWarps[index],
-                             voice.oscillatorDc[index], patch.oscillators[index], hz, dt,
-                             oscillatorWarp[index], left, right);
+            // Which engine renders this oscillator. The two share the
+            // oscillator's tuning, its pan, its level and its place in the
+            // mixer, and nothing else: a spectral oscillator has no table to
+            // read and a wavetable one has no spectrum to resynthesise.
+            if (oscModeOf(patch.oscillators[index].mode) == OscMode::spectral)
+                renderSpectralOscillator(voiceIndex, oscillator, patch.oscillators[index],
+                                         hz, left, right);
+            else
+                renderOscillator(voice.oscillatorPhases[index], voice.oscillatorWarps[index],
+                                 voice.oscillatorDc[index], patch.oscillators[index], hz, dt,
+                                 oscillatorWarp[index], left, right);
             distribute(left, right, on(patch.routeOscillators[index]),
                        patch.oscillatorSends[index], buses);
         }
@@ -1152,6 +1231,18 @@ private:
         }
         voice.phaseSub = wrap(voice.phaseSub + hzSub * dt);
     }
+
+    // Every voice's spectral state, and the one scratch and transform they
+    // share. One voice is inside a hop at a time, so the scratch is per Core
+    // rather than per voice — another forty kilobytes that would otherwise be
+    // multiplied by forty-eight.
+    struct SpectralBank
+    {
+        std::array<std::array<SpectralVoice, oscillatorCount>, 16> voices {};
+        SpectralScratch scratch;
+        juce::dsp::FFT fft {spectralFftOrder};
+    };
+    std::unique_ptr<SpectralBank> spectral;
 
     std::array<Voice, 16> voices {};
     // One set of filter delay lines per voice, per channel. Sized in

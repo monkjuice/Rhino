@@ -189,6 +189,16 @@ struct Oscillator
     // parameter read gives back. See ForgeWarp.h for what each one does.
     std::array<float, warpSlots> warpMode {};
     std::array<float, warpSlots> warpAmount {};
+    // The sample this oscillator resynthesises while its mode is spectral.
+    // Null means nothing has been loaded, and a spectral oscillator with
+    // nothing loaded is silent — there is no built-in to fall back on, because
+    // a sample is a recording and Forge ships no default one.
+    //
+    // Forward-declared rather than included: ForgeSpectral.h includes this
+    // header for the unison spread, so naming the type here would close a
+    // cycle. The Processor owns what this points at, exactly as it owns the
+    // table below.
+    const class Sample* sample = nullptr;
     // The table this oscillator reads. Null means the built-in frames, which is
     // what every oscillator starts on and what a Core needs no setting up to
     // sound. The Processor owns whatever this points at and outlives the voice

@@ -89,59 +89,74 @@ What Forge does have that this builds straight onto:
 
 ## The architecture, and the three decisions behind it
 
-### Resynthesis is a phase vocoder, and pitch is not part of it
+### Resynthesis is a phase vocoder, and the pitch shift happens inside it
 
 The engine is a standard overlap-add phase vocoder. Analysis happens once when
 a sample loads: an STFT over the file gives frames of magnitude and phase. A
 voice keeps a read position in that spectrogram; when its output buffer runs
 dry it interpolates a frame at that position, applies the frequency bounds, the
-filter mask and the cutoff, advances the phases, inverse-transforms, windows and
+filter and the cutoff, advances the phases, inverse-transforms, windows and
 overlap-adds.
 
-The vocoder's **output** always runs at real time and at the sample's original
-pitch. Its **input** advances through the spectrogram at whatever SCAN asks for.
-That is what makes time-scaling independent of pitch, and it is the only
-structure in which the manual's Key Track option means anything.
+The vocoder's **output** always runs at real time, one analysis hop per
+synthesis hop. Its **input** advances through the spectrogram at whatever SCAN
+asks for — that is the whole of the time-scaling, and it is the only structure
+in which the manual's Key Track option means anything.
 
-Pitch is then a **resampler reading the vocoder's output**, at the ratio the
-note asks for. Because the resampler consumes output faster or slower than real
-time, it drags the apparent scan rate with it, so with key track *off* the
-vocoder's internal advance is divided by the pitch ratio to cancel exactly that;
-with key track *on* it is not. One division is the whole of that feature.
+**Pitch is a shift inside the spectrum, not a resampling of the output.** For
+an output bin, the magnitude is read from the bin its partial would have to
+come from, and the phase advances by *that* bin's measured frequency times the
+ratio. The obvious alternative — resynthesise at the original pitch and read the
+result faster — is what the first draft of this document described, and it is
+wrong twice over. It drags the scan rate along with the pitch, so key track
+would have to be a division cancelling it back out; and it makes the cost of a
+note scale with how high it is, because a note an octave up consumes output
+twice as fast and so needs twice the transforms. Shifting in the spectrum costs
+the same at every note and leaves SCAN independent of pitch for nothing.
 
-### Unison resamples one stream rather than running one vocoder each
+What it buys is the thing that is actually hard to get: a sample can be held at
+a fixed point in its own time while being played as a chromatic instrument.
+
+### Unison is summed in the spectrum, so a stack costs one transform
 
 A 2048-point inverse transform every 512 samples is about 94 per second per
-voice. Sixteen voices across three oscillators is manageable. Multiplying it by
-a unison stack of up to twelve is not — it would be the single most expensive
-thing in the synth by a wide margin, for no musical gain, because detuned copies
-of one source is precisely what unison is.
+voice. Sixteen voices across three oscillators is manageable; multiplying it by
+a stack of twelve is not.
 
-So the vocoder runs **once per voice per oscillator**, into a ring, and each
-unison member keeps its own read position in that ring and resamples it at its
-own detuned ratio. The stack costs an interpolation per member, which is what it
-costs in wavetable mode.
+It does not have to be multiplied. Every member of the stack is resynthesising
+the same spectrogram position at a slightly different ratio, so each member's
+contribution is accumulated into **one** complex spectrum — two, in fact, left
+and right, which is what lets the members be spread across the image — and the
+transform is taken once. A member costs a pass over the bins rather than a
+transform of its own.
 
-The cost of that choice is honest and worth writing down: Serum's **START** and
-**SPAN** give each unison member a different *scan* offset, and its **WARP 1/2**
-spread gives each a different warp depth. Neither is reachable from a shared
-stream, because both need the member to be looking at a different part of the
-spectrogram. They are deferred below rather than approximated.
+What a member does need is a synthesis phase per bin of its own: members are at
+different pitches, so their phases advance at different rates, and that
+difference is the whole of what detune is. That is four kilobytes each, which is
+why `spectralUnisonMax` is 6 rather than the wavetable stack's 12 — see the
+memory note below.
+
+The honest cost of this arrangement: Serum's **START** and **SPAN** give each
+member a different *scan* offset, and its **WARP 1/2** spread gives each a
+different warp depth. Neither survives a shared spectrogram position, because
+both need the member to be reading somewhere else in the sample. They are
+deferred below rather than approximated.
 
 ### The per-voice state is on the heap, and this is not optional
 
-A voice's spectral state — the output ring, the running phase accumulator, the
-frame being assembled — is roughly twenty kilobytes per oscillator. Sixteen
-voices across three oscillators is about a megabyte per `Core`.
+A voice's spectral state — a synthesis phase per bin per unison member, the
+overlap-add buffers and the hop waiting to be read out — is about seventy
+kilobytes per oscillator. Sixteen voices across three oscillators is roughly
+three and a half megabytes per `Core`.
 
 `Core` cannot absorb that. It is a header-only type held **by value** inside
 `Processor`, and the test suites construct it **on the stack** —
 `rhino::forge::Core core;` appears throughout `tests/`, and `oscillatorSuite()`
 holds eight `Processor`s alive on one frame. The test binary already links with
 `/STACK:8388608` because per-voice filter state once pushed it over a megabyte;
-eight more megabytes of spectral state would overflow it on the first run, and
-CTest reports a Windows stack overflow as a bare `SegFault` with no output,
-which is a miserable thing to debug twice.
+twenty-eight more megabytes of spectral state across those eight would overflow
+it on the first run, and CTest reports a Windows stack overflow as a bare
+`SegFault` with no output, which is a miserable thing to debug twice.
 
 Therefore: `Core` holds **one heap-allocated block** of spectral voice state,
 sized at `prepare()` and never on the audio thread, with the voice holding an
@@ -150,7 +165,7 @@ decision — it is what keeps the existing tests running.
 
 ## The milestones
 
-### M16a — an oscillator has a mode
+### M16a — an oscillator has a mode — done
 
 `OscMode { wavetable, spectral }`, with room left for the three Serum modes
 Forge is not building yet. A parameter per oscillator, a selector in the module
@@ -161,31 +176,59 @@ Wavetable mode must come out of this bit-identical. The existing oscillator,
 warp, table and voicing suites passing unchanged is the proof, and `--render`
 against a worktree of the previous revision is the stronger one.
 
-### M16b — a sample, loaded and owned
+### M16b — a sample, loaded and owned — engine side done
 
-An immutable analysed `Sample` and a `SampleStore` that publishes it, following
-`WavetableStore`'s guard pattern rather than a new one. Decoding and analysis on
-the message thread. A stable id so the sample travels inside the preset and
-inside host state the way a drawn table already does, and a recoverable state
-for a sample that has gone missing. A small factory set under `samples/`.
+`Sample` (`core/ForgeSample.h`) is the immutable analysed form: the STFT, the
+spectral flux each frame carries so a transient can be recognised, and the audio
+itself for the display to draw. `SampleStore` (`core/ForgeSampleStore.h`)
+publishes it to the audio thread with `WavetableStore`'s guard pattern rather
+than a new one. `Processor::importSample` decodes any format JUCE can read,
+mixes it to mono and analyses it, on the message thread.
+
+**Still outstanding:** the sample does not yet travel inside the preset or host
+state, there is no factory set under `samples/`, no missing-sample recovery, and
+nothing in the UI calls `importSample` — so a sample can be loaded only from
+code. That is what makes this milestone's second half, and it is the first thing
+to pick up.
 
 This is also the substrate M14c needs for the noise module's sample sources, so
 it is shared investment rather than spectral-only cost.
 
-### M16c — the spectral engine
+### M16c — the spectral engine — done, less the loop field
 
-Analysis to a spectrogram at load; per-voice resynthesis as described above.
-SCAN with its range, reverse and key track. Sample start and end. One-shot, Fwd
-Loop and Manual of the loop modes. Frequency LO/HI with Smooth. The spectral
-filter as CUT, a mask that is flat until there is an editor for it, and MIX.
-Phase lock and transients.
+`core/ForgeSpectral.h` is the vocoder; `Core::renderSpectralOscillator` is what
+tells it what to do. Pitch, SCAN in both directions, the frequency bounds with
+their Butterworth skirts, CUT and MIX, transient preservation, and unison summed
+in the spectrum.
 
-Verified by measuring rendered audio, in the way `tuningSuite()` already does:
-a sample of known content, resynthesised, should come back at the pitch the note
-asked for and at the scan rate SCAN asked for, and those two should be provably
-independent of each other.
+Verified by measuring rendered audio, in the way `tuningSuite()` already does —
+`ctest -R forge_spectral`. Seven checks: the root note comes back at the
+sample's own pitch, an octave either way transposes by an octave, SCAN at zero,
+forward and backward all render the same pitch, SCAN at two reaches the second
+half of a sample in half the time, CUT takes a tone out, an oscillator with no
+sample is silent, and a spectral oscillator changes nothing about a wavetable
+one beside it.
 
-### M16d — the spectrogram, and the controls the manual draws
+Two bugs that suite caught and that are worth knowing about, because both were
+silent and neither was visible in the code:
+
+- **The first frame had no previous frame to measure against.** Differencing it
+  against itself looks harmless and is not: a measured advance of zero makes the
+  unwrap snap every bin to a whole turn per hop, quantising the pitch to
+  multiples of four bins. A 440 Hz sample came out at 468.75, 110 cents sharp,
+  on any frozen playhead. The first frame now measures forwards.
+- **A transient reset the phase on every hop that read it, not on arrival.** A
+  playhead held still on an attack — SCAN at zero, an ordinary setting — reset
+  to the same phase every hop, which is a periodic signal at the hop rate rather
+  than the tone that is there.
+
+**Still outstanding:** the loop field. One-shot, Manual and the rest need a
+control to choose them, and the oscillator module has no free cell for it — it
+belongs in the strip under the display that M16d adds. Until then the engine
+runs Fwd Loop with transients on. Phase lock is a declared setting that nothing
+reads yet.
+
+### M16d — the spectrogram, and the controls the manual draws — not started
 
 `Display::spectral`, with the playhead, draggable start/end markers on the body
 and LO/HI markers down the right edge. The control block laid out as p. 116 has

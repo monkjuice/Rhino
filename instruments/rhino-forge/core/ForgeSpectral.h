@@ -1,0 +1,366 @@
+#pragma once
+
+#include "ForgeSample.h"
+#include "ForgeVoiceParts.h"
+#include "ForgePatch.h"  // sourcePanLeft/Right, the one pan law every source is placed with
+
+#include <array>
+#include <cmath>
+
+// The phase vocoder a spectral oscillator is rendered by: what one voice holds
+// while it is sounding, and the hop of work that fills it.
+//
+// The analysed sample is in ForgeSample.h and is immutable and shared. This is
+// the per-voice half — the running synthesis phase, the overlap-add buffer and
+// where in the spectrogram the voice has got to — and it is the only part that
+// is touched from the audio thread.
+//
+// Read the architecture section of SPECTRAL.md before changing any of it. The
+// three decisions it records are load-bearing and none of them is obvious from
+// the code alone.
+namespace rhino::forge
+{
+// What plays the sample back at its own pitch. MIDI 60, which Forge's keyboard
+// marks C3 (see Editor's setOctaveForMiddleC), so the note under the hand at
+// the middle of the keyboard is the sample as it was recorded.
+inline constexpr float spectralRootHz = 261.6255653f;
+
+// How many detuned members a spectral stack may hold.
+//
+// The whole stack is summed in the frequency domain and inverse-transformed
+// once, so a member costs a pass over the bins rather than a transform of its
+// own — but it does cost a synthesis phase per bin, which is four kilobytes
+// each, per voice, per oscillator. Twelve of those across sixteen voices and
+// three oscillators is most of this engine's memory, and a spectral stack that
+// wide is a wash rather than a chorus in any case.
+inline constexpr int spectralUnisonMax = 6;
+
+// Everything one voice holds for one spectral oscillator.
+//
+// This is heap-allocated by Core and never by value inside Voice. It is about
+// seventy kilobytes, and Core is a header-only type that the test suites
+// construct on the stack — see the per-voice state decision in SPECTRAL.md for
+// why that is not negotiable.
+struct SpectralVoice
+{
+    // Where in the spectrogram this voice is reading, in frames. Fractional:
+    // the magnitudes either side of it are interpolated, which is what lets
+    // SCAN move at a rate unrelated to the one the sample was analysed at.
+    double frame = 0.0;
+    bool running = false;
+    // Which frame the last hop read. A transient resets the running phase, and
+    // that has to happen on *arriving* at the frame rather than on every hop
+    // that reads it: a playhead held still on an attack — SCAN at zero, which
+    // is a frozen spectrum and a perfectly ordinary setting — would otherwise
+    // reset to the same phase every hop, which is a periodic signal at the hop
+    // rate rather than the tone that is actually there.
+    int lastFrame = -1;
+
+    // One running synthesis phase per bin per unison member. A member's phase
+    // cannot be shared or offset from another's: they advance at different
+    // rates because they are at different pitches, and that difference is the
+    // whole of what detune is.
+    std::array<std::array<float, spectralBins>, spectralUnisonMax> synthPhase {};
+
+    // The overlap-add buffers, circular and exactly one window long. A sample
+    // is complete once every window that covers it has been added in, which at
+    // a quarter-window hop is four of them.
+    std::array<float, spectralFftSize> olaLeft {};
+    std::array<float, spectralFftSize> olaRight {};
+    int writeIndex = 0;
+
+    // The hop of finished samples waiting to be handed out one at a time.
+    std::array<float, spectralHop> outLeft {};
+    std::array<float, spectralHop> outRight {};
+    int pending = 0;
+    int readIndex = 0;
+
+    void reset() noexcept
+    {
+        frame = 0.0;
+        running = false;
+        lastFrame = -1;
+        for (auto& member : synthPhase) member.fill(0.0f);
+        olaLeft.fill(0.0f);
+        olaRight.fill(0.0f);
+        writeIndex = 0;
+        pending = 0;
+        readIndex = 0;
+    }
+};
+
+// The scratch one hop of synthesis needs. Shared by every voice rather than
+// held per voice: only one voice is ever inside a hop at a time, and this is
+// another forty kilobytes that would otherwise be multiplied by forty-eight.
+struct SpectralScratch
+{
+    std::array<float, 2 * spectralFftSize> spectrumLeft {};
+    std::array<float, 2 * spectralFftSize> spectrumRight {};
+    std::array<float, spectralFftSize> window {};
+    bool ready = false;
+
+    void prepare()
+    {
+        if (ready) return;
+        for (int i = 0; i < spectralFftSize; ++i)
+            window[static_cast<size_t>(i)] = 0.5f - 0.5f * std::cos(
+                2.0f * juce::MathConstants<float>::pi * static_cast<float>(i)
+                / static_cast<float>(spectralFftSize));
+        ready = true;
+    }
+};
+
+// What a hop of synthesis is told, resolved once per block rather than per bin.
+struct SpectralSettings
+{
+    float pitchRatio = 1.0f;   // the note, against the sample's own pitch
+    float scan = 1.0f;         // frames per hop, signed
+    float cut = 1.0f;          // the spectral filter's corner, 0..1 of Nyquist
+    float mix = 0.0f;          // filtered against unfiltered
+    float lo = 0.0f, hi = 1.0f;  // the frequency bounds, 0..1 of Nyquist
+    bool smooth = true;        // a Butterworth skirt at the bounds, not a cliff
+    bool phaseLock = false;
+    bool transients = false;
+    int unison = 1;
+    float detune = 0.0f;
+    float blend = 0.5f;
+    float pan = 0.0f;
+    bool manual = false;       // the playhead does not run; SCAN is the position
+    bool loop = false;
+};
+
+// A fourth-order Butterworth magnitude response, which is what the manual's
+// Smooth option asks for at each frequency bound (p. 107). Applied to the
+// magnitude of a bin rather than as a filter, because in here there is nothing
+// to filter — the spectrum is the signal.
+inline float spectralSkirt(float ratio) noexcept
+{
+    if (ratio <= 0.0f) return 1.0f;
+    const auto r4 = ratio * ratio * ratio * ratio;
+    const auto r8 = r4 * r4;
+    return 1.0f / std::sqrt(1.0f + r8);
+}
+
+// The gain one bin keeps, from the frequency bounds and the spectral filter.
+//
+// CUT is a corner rather than a mask curve: the drawable mask is deferred (see
+// SPECTRAL.md) and would multiply in here when it arrives, which is why this is
+// a separate function rather than three terms inlined into the bin loop.
+inline float spectralBinGain(float normalised, const SpectralSettings& s) noexcept
+{
+    auto gain = 1.0f;
+    if (s.smooth)
+    {
+        if (s.lo > 0.0f) gain *= spectralSkirt(s.lo / juce::jmax(1.0e-4f, normalised));
+        if (s.hi < 1.0f) gain *= spectralSkirt(normalised / juce::jmax(1.0e-4f, s.hi));
+    }
+    else if (normalised < s.lo || normalised > s.hi)
+    {
+        return 0.0f;
+    }
+    return gain;
+}
+
+// One hop: read the spectrogram where the voice has got to, build the stack's
+// spectrum from it, transform it once, and overlap-add the result.
+//
+// `fft` is the Core's, built once at prepare. Nothing here allocates.
+inline void spectralSynthesise(SpectralVoice& voice, const Sample& sample,
+                               const SpectralSettings& settings, SpectralScratch& scratch,
+                               const juce::dsp::FFT& fft) noexcept
+{
+    auto& left = scratch.spectrumLeft;
+    auto& right = scratch.spectrumRight;
+    left.fill(0.0f);
+    right.fill(0.0f);
+
+    const auto frames = sample.frameCount();
+    const auto here = juce::jlimit(0, frames - 1, static_cast<int>(voice.frame));
+    const auto next = juce::jlimit(0, frames - 1, here + 1);
+    const auto blendFrames = static_cast<float>(voice.frame - std::floor(voice.frame));
+    const auto* magsHere = sample.magnitudes(here);
+    const auto* magsNext = sample.magnitudes(next);
+    // The pair of frames whose phase difference tells each bin its true
+    // frequency, rather than the nominal one its bin centre implies.
+    //
+    // Normally that is this frame and the one before it. At frame zero there is
+    // no frame before it, and taking the difference against itself is not the
+    // harmless fallback it looks like: a measured advance of zero makes the
+    // unwrap below snap every bin to the nearest whole turn per hop, which
+    // quantises the pitch to multiples of four bins. A 440 Hz sample sitting at
+    // bin 18.77 comes out at bin 20, which is 468.75 Hz — 110 cents sharp, and
+    // audible immediately on a frozen playhead. So the first frame measures
+    // forwards instead, which is a real reading rather than an absent one.
+    const auto back = here >= 1 ? here - 1 : 0;
+    const auto front = here >= 1 ? here : juce::jmin(1, frames - 1);
+    const auto* phaseHere = sample.phases(front);
+    const auto* phaseBack = sample.phases(back);
+
+    // A transient is where the vocoder's running phase is thrown away and the
+    // sample's own is taken instead. Smearing is the price of carrying phase
+    // across hops, and at an attack it is the whole of what goes wrong.
+    const auto reset = settings.transients && here != voice.lastFrame
+                    && sample.transient(here) > 0.35f;
+    voice.lastFrame = here;
+
+    const auto members = juce::jlimit(1, spectralUnisonMax, settings.unison);
+    auto power = 0.0f;
+
+    for (int member = 0; member < members; ++member)
+    {
+        const auto spread = members == 1 ? 0.0f
+            : static_cast<float>(member) / static_cast<float>(members - 1) - 0.5f;
+        const auto offset = unisonOffset(member, members);
+        const auto centreWeight = 1.0f - juce::jmin(1.0f, std::abs(spread) * 2.0f);
+        const auto gain = juce::jmap(juce::jlimit(0.0f, 1.0f, settings.blend), centreWeight, 1.0f);
+        power += gain * gain;
+
+        // This member's pitch, as a ratio against the sample's own. The shift
+        // happens here, in the spectrum, rather than by reading the output
+        // faster: a bin's magnitude is taken from the bin its partial would
+        // have to come from, and its phase advances by that bin's true
+        // frequency times the ratio. That is what keeps one transform per hop
+        // whatever note is played, and what leaves SCAN free of the pitch
+        // entirely.
+        const auto ratio = settings.pitchRatio
+            * std::pow(2.0f, offset * juce::jlimit(0.0f, 1.0f, settings.detune)
+                                    * unisonSpreadSemitones / 12.0f);
+        const auto memberPan = juce::jlimit(-1.0f, 1.0f,
+            settings.pan + spread * juce::jlimit(0.0f, 1.0f, settings.detune) * 1.6f);
+        const auto panL = sourcePanLeft(memberPan) * gain;
+        const auto panR = sourcePanRight(memberPan) * gain;
+        auto& phases = voice.synthPhase[static_cast<size_t>(member)];
+
+        for (int bin = 1; bin < spectralBins - 1; ++bin)
+        {
+            // Where this output bin's content comes from. Above the top of the
+            // source spectrum there is nothing to read, which is what makes a
+            // sample played far above its own pitch quietly run out of top end
+            // rather than fold back down.
+            const auto source = static_cast<float>(bin) / ratio;
+            if (source < 1.0f || source >= static_cast<float>(spectralBins - 2)) continue;
+            const auto low = static_cast<int>(source);
+            const auto frac = source - static_cast<float>(low);
+
+            const auto magnitude =
+                juce::jmap(blendFrames,
+                           juce::jmap(frac, magsHere[low], magsHere[low + 1]),
+                           juce::jmap(frac, magsNext[low], magsNext[low + 1]));
+            if (magnitude <= 1.0e-7f) continue;
+
+            const auto normalised = static_cast<float>(bin) / static_cast<float>(spectralBins - 1);
+            const auto bounded = magnitude * spectralBinGain(normalised, settings);
+            // CUT and MIX. The filtered spectrum and the unfiltered one are the
+            // same spectrum with two different gains, so the wet/dry blend is
+            // done here on the magnitude rather than on two transforms.
+            const auto corner = juce::jlimit(0.0f, 1.0f, settings.cut);
+            const auto filtered = normalised <= corner
+                ? bounded
+                : bounded * spectralSkirt(normalised / juce::jmax(1.0e-4f, corner));
+            const auto shaped = juce::jmap(juce::jlimit(0.0f, 1.0f, settings.mix), bounded, filtered);
+            if (shaped <= 1.0e-7f) continue;
+
+            // The bin's true phase advance: what the hop would give it if it
+            // sat exactly on its own centre frequency, plus however far the
+            // sample says it actually moved.
+            const auto expected = spectralBinAdvance(low);
+            const auto measured = phaseHere[low] - phaseBack[low];
+            const auto advance = expected + spectralWrap(measured - expected);
+
+            auto phase = reset ? phaseHere[low] : phases[static_cast<size_t>(bin)] + advance * ratio;
+            phase = spectralWrap(phase);
+            phases[static_cast<size_t>(bin)] = phase;
+
+            const auto re = shaped * std::cos(phase);
+            const auto im = shaped * std::sin(phase);
+            left[static_cast<size_t>(2 * bin)] += re * panL;
+            left[static_cast<size_t>(2 * bin + 1)] += im * panL;
+            right[static_cast<size_t>(2 * bin)] += re * panR;
+            right[static_cast<size_t>(2 * bin + 1)] += im * panR;
+        }
+    }
+
+    // The mirrored half, which a real signal's spectrum has and the inverse
+    // transform needs filled in.
+    for (int bin = 1; bin < spectralBins - 1; ++bin)
+    {
+        const auto mirror = spectralFftSize - bin;
+        left[static_cast<size_t>(2 * mirror)] = left[static_cast<size_t>(2 * bin)];
+        left[static_cast<size_t>(2 * mirror + 1)] = -left[static_cast<size_t>(2 * bin + 1)];
+        right[static_cast<size_t>(2 * mirror)] = right[static_cast<size_t>(2 * bin)];
+        right[static_cast<size_t>(2 * mirror + 1)] = -right[static_cast<size_t>(2 * bin + 1)];
+    }
+
+    fft.performRealOnlyInverseTransform(left.data());
+    fft.performRealOnlyInverseTransform(right.data());
+
+    // Power normalisation, the same rule the wavetable stack is held to: a
+    // wider stack changes the sound without changing how loud it is.
+    const auto scale = spectralGain / std::sqrt(juce::jmax(0.0001f, power));
+    const auto mask = spectralFftSize - 1;
+    for (int i = 0; i < spectralFftSize; ++i)
+    {
+        const auto at = static_cast<size_t>((voice.writeIndex + i) & mask);
+        const auto windowed = scratch.window[static_cast<size_t>(i)] * scale;
+        voice.olaLeft[at] += left[static_cast<size_t>(i)] * windowed;
+        voice.olaRight[at] += right[static_cast<size_t>(i)] * windowed;
+    }
+
+    // The hop at the write head is now complete — every window that covers it
+    // has been added in — so it is taken out and its place cleared for the
+    // window that will land on it four hops from now.
+    for (int i = 0; i < spectralHop; ++i)
+    {
+        const auto at = static_cast<size_t>((voice.writeIndex + i) & mask);
+        voice.outLeft[static_cast<size_t>(i)] = voice.olaLeft[at];
+        voice.outRight[static_cast<size_t>(i)] = voice.olaRight[at];
+        voice.olaLeft[at] = 0.0f;
+        voice.olaRight[at] = 0.0f;
+    }
+    voice.writeIndex = (voice.writeIndex + spectralHop) & mask;
+    voice.pending = spectralHop;
+    voice.readIndex = 0;
+
+    // And move through the spectrogram, which is the only place SCAN acts. In
+    // manual mode the playhead does not run at all: SCAN is read as the
+    // position itself, so it can be automated or modulated to anywhere in the
+    // sample (p. 109).
+    if (settings.manual)
+    {
+        voice.frame = juce::jlimit(0.0, static_cast<double>(frames - 1),
+                                   static_cast<double>(juce::jlimit(0.0f, 1.0f, settings.scan * 0.5f + 0.5f))
+                                       * static_cast<double>(frames - 1));
+        return;
+    }
+    voice.frame += static_cast<double>(settings.scan);
+    if (settings.loop)
+    {
+        const auto span = static_cast<double>(frames);
+        if (span > 0.0)
+        {
+            voice.frame = std::fmod(voice.frame, span);
+            if (voice.frame < 0.0) voice.frame += span;
+        }
+    }
+    else
+    {
+        voice.frame = juce::jlimit(0.0, static_cast<double>(frames - 1), voice.frame);
+    }
+}
+
+// One sample out of the vocoder, synthesising another hop when the last one
+// runs out. This is what renderSample calls, so it is a branch and two array
+// reads on all but one sample in five hundred and twelve.
+inline void spectralRead(SpectralVoice& voice, const Sample& sample,
+                         const SpectralSettings& settings, SpectralScratch& scratch,
+                         const juce::dsp::FFT& fft, float& left, float& right) noexcept
+{
+    if (sample.isEmpty()) return;
+    if (voice.pending <= 0) spectralSynthesise(voice, sample, settings, scratch, fft);
+    if (voice.pending <= 0) return;
+    left += voice.outLeft[static_cast<size_t>(voice.readIndex)];
+    right += voice.outRight[static_cast<size_t>(voice.readIndex)];
+    ++voice.readIndex;
+    --voice.pending;
+}
+}

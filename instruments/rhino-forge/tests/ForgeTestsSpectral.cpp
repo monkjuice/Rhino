@@ -1,0 +1,329 @@
+#include "ForgeTestSupport.h"
+#include "ForgeTestSpectrum.h"
+
+#include "../core/ForgeSpectral.h"
+
+#include <juce_dsp/juce_dsp.h>
+#include <cmath>
+#include <memory>
+#include <vector>
+
+// The spectral oscillator, measured off what it renders.
+//
+// Everything here asks its question of the audio, the way tuningSuite() does
+// and for the same reason: a check that read the vocoder's own phase
+// accumulator would agree with it by construction. A sample of known content
+// goes in, the rendered signal is transformed, and the peak is compared with
+// what the note and the knobs say it should be.
+//
+// The two claims worth the most are the ones in SPECTRAL.md's architecture
+// section, because neither is obvious and both would fail silently: that the
+// pitch follows the note, and that SCAN moves through the sample without
+// touching the pitch while doing it.
+namespace rhino::forge::tests
+{
+namespace
+{
+constexpr double testRate = 48000.0;
+
+// A sample of a steady sine, long enough to analyse into a few hundred frames.
+// Built rather than loaded: a file would make these checks depend on content in
+// the repository, and what is being measured is the engine.
+std::unique_ptr<Sample> sineSample(double hz, double seconds = 2.0)
+{
+    const auto length = static_cast<int>(testRate * seconds);
+    std::vector<float> audio(static_cast<size_t>(length));
+    for (int i = 0; i < length; ++i)
+        audio[static_cast<size_t>(i)] = static_cast<float>(
+            0.5 * std::sin(2.0 * juce::MathConstants<double>::pi * hz
+                           * static_cast<double>(i) / testRate));
+    return std::make_unique<Sample>(audio.data(), length, testRate, "SINE");
+}
+
+// A sample that is one tone for its first half and another for its second, so
+// where the playhead has got to can be read off the pitch that comes out.
+std::unique_ptr<Sample> twoToneSample(double first, double second, double seconds = 4.0)
+{
+    const auto length = static_cast<int>(testRate * seconds);
+    const auto half = length / 2;
+    std::vector<float> audio(static_cast<size_t>(length));
+    for (int i = 0; i < length; ++i)
+    {
+        const auto hz = i < half ? first : second;
+        audio[static_cast<size_t>(i)] = static_cast<float>(
+            0.5 * std::sin(2.0 * juce::MathConstants<double>::pi * hz
+                           * static_cast<double>(i) / testRate));
+    }
+    return std::make_unique<Sample>(audio.data(), length, testRate, "TWO TONE");
+}
+
+Patch spectralOnly(const Sample& sample)
+{
+    Patch patch;
+    patch.oscillators[0].enable = 1.0f;
+    patch.oscillators[0].mode = static_cast<float>(OscMode::spectral);
+    patch.oscillators[0].sample = &sample;
+    patch.oscillators[0].unison = 1.0f;
+    patch.oscillators[0].level = 1.0f;
+    patch.oscillators[0].scan = 1.0f;
+    patch.oscillators[0].cut = 1.0f;
+    patch.oscillators[0].mix = 0.0f;
+    patch.oscillators[1].enable = 0.0f;
+    patch.oscillators[2].enable = 0.0f;
+    patch.subEnable = 0.0f;
+    patch.noiseEnable = 0.0f;
+    patch.filterEnable = 0.0f;
+    patch.envs[ampEnv].attack = 0.001f;
+    patch.envs[ampEnv].sustain = 1.0f;
+    return patch;
+}
+
+// The magnitude spectrum of a spectral patch, measured after `skip` samples so
+// the window lands where the caller means it to. The vocoder needs a few hops
+// before its overlap-add is full, so nothing is measured at zero.
+std::vector<double> spectralSpectrum(const Patch& patch, int note, int skip)
+{
+    Core core;
+    core.initialise(testRate);
+    core.noteOn(note, 1.0f, patch);
+    for (int i = 0; i < skip; ++i) { auto l = 0.0f, r = 0.0f; core.renderSample(patch, l, r); }
+
+    std::vector<float> data(2 * spectrumSize, 0.0f);
+    for (int i = 0; i < spectrumSize; ++i)
+    {
+        auto l = 0.0f, r = 0.0f;
+        core.renderSample(patch, l, r);
+        const auto w = 0.5 - 0.5 * std::cos(2.0 * juce::MathConstants<double>::pi
+                                            * static_cast<double>(i) / static_cast<double>(spectrumSize));
+        data[static_cast<size_t>(i)] = static_cast<float>(0.5 * (l + r) * w);
+    }
+
+    juce::dsp::FFT fft(spectrumOrder);
+    fft.performRealOnlyForwardTransform(data.data());
+    std::vector<double> magnitude(static_cast<size_t>(spectrumSize / 2), 0.0);
+    for (int bin = 0; bin < spectrumSize / 2; ++bin)
+    {
+        const auto re = static_cast<double>(data[static_cast<size_t>(2 * bin)]);
+        const auto im = static_cast<double>(data[static_cast<size_t>(2 * bin + 1)]);
+        magnitude[static_cast<size_t>(bin)] = std::sqrt(re * re + im * im);
+    }
+    return magnitude;
+}
+
+double spectralPitch(const Patch& patch, int note, int skip = 8192)
+{
+    return loudestPeak(spectralSpectrum(patch, note, skip), testRate).frequency;
+}
+
+// How far two frequencies are apart, in cents, which is the unit a tuning error
+// is actually heard in.
+double centsBetween(double actual, double expected)
+{
+    if (actual <= 0.0 || expected <= 0.0) return 1.0e6;
+    return 1200.0 * std::log2(actual / expected);
+}
+
+// --- The checks ---------------------------------------------------------------
+
+// A sample resynthesised at the root note comes back at its own pitch. This is
+// the one that fails if the window, the hop, the overlap-add scaling or the
+// phase advance is wrong, and it fails loudly rather than subtly.
+void rootPitchSuite()
+{
+    const auto sample = sineSample(440.0);
+    const auto patch = spectralOnly(*sample);
+    // MIDI 60 is spectralRootHz, so the shift is exactly one.
+    const auto rendered = spectralPitch(patch, 60);
+    requireClose(static_cast<float>(centsBetween(rendered, 440.0)), 0.0f, 12.0f,
+                 "a sample resynthesised at the root note keeps its own pitch");
+}
+
+// And transposes with the keyboard. An octave is the test that catches a ratio
+// applied to the wrong quantity: a shift applied to the hop rather than the
+// spectrum would still move the pitch, just not by this.
+void transposeSuite()
+{
+    const auto sample = sineSample(440.0);
+    const auto patch = spectralOnly(*sample);
+
+    const auto up = spectralPitch(patch, 72);
+    requireClose(static_cast<float>(centsBetween(up, 880.0)), 0.0f, 18.0f,
+                 "an octave up resynthesises an octave up");
+
+    const auto down = spectralPitch(patch, 48);
+    requireClose(static_cast<float>(centsBetween(down, 220.0)), 0.0f, 18.0f,
+                 "an octave down resynthesises an octave down");
+}
+
+// The claim the whole architecture is arranged around: SCAN moves the playhead
+// and does not move the pitch. A frozen playhead and one running at full speed
+// render the same note.
+//
+// If pitch were done by reading the output faster — the obvious implementation,
+// and the one SPECTRAL.md explains why this is not — these two would come back
+// an octave or more apart.
+void scanDoesNotChangePitchSuite()
+{
+    const auto sample = sineSample(440.0);
+
+    auto still = spectralOnly(*sample);
+    still.oscillators[0].scan = 0.0f;
+    auto running = spectralOnly(*sample);
+    running.oscillators[0].scan = 1.0f;
+    auto backwards = spectralOnly(*sample);
+    backwards.oscillators[0].scan = -1.0f;
+
+    const auto frozen = spectralPitch(still, 60);
+    const auto moving = spectralPitch(running, 60);
+    const auto reversed = spectralPitch(backwards, 60);
+
+    requireClose(static_cast<float>(centsBetween(moving, frozen)), 0.0f, 12.0f,
+                 "scanning the sample does not change the pitch it sounds at");
+    requireClose(static_cast<float>(centsBetween(reversed, frozen)), 0.0f, 12.0f,
+                 "scanning backwards does not change the pitch either");
+}
+
+// And the other half of that claim: SCAN really does move the playhead, and
+// twice the rate reaches the second half of the sample in half the time.
+//
+// Measured on a sample that changes pitch at its midpoint, so where the
+// playhead is can be read off what comes out. The note is the root, so the
+// sample's own tones arrive unshifted.
+void scanMovesThePlayheadSuite()
+{
+    // Ten seconds, which is 934 frames and a midpoint at 467.
+    //
+    // The length is not arbitrary. A measurement window is 32768 samples, which
+    // is 64 hops, so the playhead travels 64 frames through it at single speed
+    // and 128 at double — and the whole window has to stay on one side of the
+    // midpoint or it measures a mixture of the two tones and reports whichever
+    // happened to win. A shorter sample also wraps its loop inside the window,
+    // which puts the playhead back in the first half while it is being read.
+    const auto sample = twoToneSample(440.0, 880.0, 10.0);
+
+    auto slow = spectralOnly(*sample);
+    slow.oscillators[0].scan = 1.0f;
+    auto fast = spectralOnly(*sample);
+    fast.oscillators[0].scan = 2.0f;
+
+    // Two and a half seconds in: 234 hops. At one frame per hop that is frame
+    // 234, comfortably inside the first half; at two it is frame 468, just past
+    // the midpoint, and the window that follows stays in the second half.
+    const auto skip = static_cast<int>(testRate * 2.5);
+    const auto atSlow = loudestPeak(spectralSpectrum(slow, 60, skip), testRate).frequency;
+    const auto atFast = loudestPeak(spectralSpectrum(fast, 60, skip), testRate).frequency;
+
+    requireClose(static_cast<float>(centsBetween(atSlow, 440.0)), 0.0f, 40.0f,
+                 "at one frame per hop the playhead is still in the sample's first half");
+    requireClose(static_cast<float>(centsBetween(atFast, 880.0)), 0.0f, 40.0f,
+                 "at two frames per hop it has reached the second half");
+}
+
+// CUT takes the top off, and MIX decides how much of that is heard. Measured as
+// the level of a tone that sits above the corner, against the same tone with
+// the filter mixed out.
+void spectralFilterSuite()
+{
+    const auto sample = sineSample(4000.0);
+
+    auto dry = spectralOnly(*sample);
+    dry.oscillators[0].mix = 0.0f;
+    auto wet = spectralOnly(*sample);
+    // A corner well below where the tone sits, fully mixed in.
+    wet.oscillators[0].cut = 0.05f;
+    wet.oscillators[0].mix = 1.0f;
+
+    const auto open = loudestPeak(spectralSpectrum(dry, 60, 8192), testRate).amplitude;
+    const auto cut = loudestPeak(spectralSpectrum(wet, 60, 8192), testRate).amplitude;
+
+    require(open > 1.0e-4, "a spectral oscillator with the filter mixed out is audible");
+    require(cut < open * 0.2,
+            "CUT below a tone takes it out when MIX is all the way wet");
+}
+
+// An oscillator in spectral mode with nothing loaded is silent, rather than
+// falling back to a table or to whatever the buffers held. There is no built-in
+// sample, so silence is the honest answer.
+void emptySpectralIsSilentSuite()
+{
+    Patch patch;
+    patch.oscillators[0].enable = 1.0f;
+    patch.oscillators[0].mode = static_cast<float>(OscMode::spectral);
+    patch.oscillators[0].sample = nullptr;
+    patch.oscillators[0].level = 1.0f;
+    patch.oscillators[1].enable = 0.0f;
+    patch.oscillators[2].enable = 0.0f;
+    patch.subEnable = 0.0f;
+    patch.noiseEnable = 0.0f;
+    patch.filterEnable = 0.0f;
+
+    Core core;
+    core.initialise(testRate);
+    core.noteOn(60, 1.0f, patch);
+    auto peak = 0.0f;
+    for (int i = 0; i < 8192; ++i)
+    {
+        auto l = 0.0f, r = 0.0f;
+        core.renderSample(patch, l, r);
+        peak = juce::jmax(peak, std::abs(l), std::abs(r));
+    }
+    require(peak < 1.0e-6f, "a spectral oscillator with no sample loaded is silent");
+}
+
+// Switching an oscillator to spectral must not disturb the wavetable engine
+// beside it. OSC B on a saw renders identically whether OSC A is a silent
+// spectral oscillator or a switched-off wavetable one.
+void modesDoNotLeakSuite()
+{
+    const auto render = [] (bool spectralNeighbour)
+    {
+        Patch patch;
+        patch.oscillators[0].enable = spectralNeighbour ? 1.0f : 0.0f;
+        patch.oscillators[0].mode = spectralNeighbour ? static_cast<float>(OscMode::spectral) : 0.0f;
+        patch.oscillators[0].sample = nullptr;
+        patch.oscillators[1].enable = 1.0f;
+        patch.oscillators[1].position = 6.0f / 9.0f;
+        patch.oscillators[1].unison = 1.0f;
+        patch.oscillators[1].level = 0.75f;
+        patch.oscillators[1].semitone = 0.0f;
+        patch.oscillators[2].enable = 0.0f;
+        patch.subEnable = 0.0f;
+        patch.noiseEnable = 0.0f;
+        patch.filterEnable = 0.0f;
+        patch.envs[ampEnv].attack = 0.001f;
+        patch.envs[ampEnv].sustain = 1.0f;
+
+        Core core;
+        core.initialise(testRate);
+        core.noteOn(57, 1.0f, patch);
+        std::vector<float> out(4096);
+        for (int i = 0; i < 4096; ++i)
+        {
+            auto l = 0.0f, r = 0.0f;
+            core.renderSample(patch, l, r);
+            out[static_cast<size_t>(i)] = l + r;
+        }
+        return out;
+    };
+
+    const auto without = render(false);
+    const auto with = render(true);
+    auto worst = 0.0f;
+    for (size_t i = 0; i < without.size(); ++i)
+        worst = juce::jmax(worst, std::abs(without[i] - with[i]));
+    require(worst < 1.0e-6f,
+            "a spectral oscillator beside a wavetable one changes nothing about it");
+}
+}
+
+void spectralTests()
+{
+    rootPitchSuite();
+    transposeSuite();
+    scanDoesNotChangePitchSuite();
+    scanMovesThePlayheadSuite();
+    spectralFilterSuite();
+    emptySpectralIsSilentSuite();
+    modesDoNotLeakSuite();
+}
+}

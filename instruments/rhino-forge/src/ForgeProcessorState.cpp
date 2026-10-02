@@ -433,4 +433,58 @@ juce::Result Processor::importTable(int oscillator, const juce::File& file)
     tables.publish(oscillator);
     return juce::Result::ok();
 }
+
+// A spectral source is an ordinary recording, and unlike a wavetable file
+// nothing is assumed about its contents: no frame size, no cycle hunting, no
+// requirement that it be tonal. It is decoded, mixed to mono and analysed.
+//
+// Mono because a spectral oscillator resynthesises one spectrum and places it
+// with its own PAN, exactly as the sub and the noise module are placed. A
+// stereo file is averaged rather than having one channel taken, because a
+// recording is not a wavetable: both channels are the same sound and dropping
+// one throws away half the signal-to-noise for no reason.
+juce::Result Processor::importSample(int oscillator, const juce::File& file)
+{
+    if (!file.existsAsFile()) return juce::Result::fail("that file is not there.");
+
+    juce::AudioFormatManager formats;
+    formats.registerBasicFormats();
+    const std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(file));
+    if (reader == nullptr) return juce::Result::fail("Forge cannot read that kind of file.");
+
+    const auto length = static_cast<int>(juce::jmin<juce::int64>(reader->lengthInSamples,
+                                                                 spectralMaxLength));
+    if (length < spectralFftSize)
+        return juce::Result::fail("that file is shorter than one analysis window.");
+
+    juce::AudioBuffer<float> source(static_cast<int>(juce::jmax(1u, reader->numChannels)), length);
+    source.clear();
+    if (!reader->read(&source, 0, length, 0, true, true))
+        return juce::Result::fail("Forge could not read that file's samples.");
+
+    std::vector<float> mono(static_cast<size_t>(length), 0.0f);
+    const auto channels = source.getNumChannels();
+    for (int channel = 0; channel < channels; ++channel)
+    {
+        const auto* read = source.getReadPointer(channel);
+        for (int i = 0; i < length; ++i) mono[static_cast<size_t>(i)] += read[i];
+    }
+    if (channels > 1)
+        for (auto& value : mono) value /= static_cast<float>(channels);
+
+    const auto name = file.getFileNameWithoutExtension().toUpperCase();
+    auto analysed = std::make_unique<Sample>(mono.data(), length, reader->sampleRate, name);
+    if (analysed->isEmpty())
+        return juce::Result::fail("Forge could not analyse that file.");
+
+    samples.setSourceName(oscillator, name);
+    samples.publish(oscillator, std::move(analysed));
+    return juce::Result::ok();
+}
+
+void Processor::clearSample(int oscillator)
+{
+    samples.setSourceName(oscillator, {});
+    samples.clear(oscillator);
+}
 }

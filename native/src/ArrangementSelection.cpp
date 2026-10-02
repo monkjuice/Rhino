@@ -288,8 +288,6 @@ void Arrangement::paintTimeSelection(juce::Graphics& g)
     {
         g.setColour(juce::Colour(0xffc6d58c));
         g.fillRect(marker - 1.0f, top, 2.0f, bottom - top);
-        g.fillRect(marker - 4.0f, top, 9.0f, 3.0f);
-        g.fillRect(marker - 4.0f, bottom - 3.0f, 9.0f, 3.0f);
     }
 }
 

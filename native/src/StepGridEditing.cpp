@@ -159,8 +159,6 @@ void StepGrid::paintStepSelection(juce::Graphics& g)
     g.reduceClipRegion(juce::Rectangle<float>(labelWidth, 0.0f, gridWidth(), bottom).getSmallestIntegerContainer());
     g.setColour(juce::Colour(0xffc6d58c));
     g.fillRect(left - 1.0f, top, 2.0f, bottom - top);
-    g.fillRect(left - 4.0f, top, 9.0f, 3.0f);
-    g.fillRect(left - 4.0f, bottom - 3.0f, 9.0f, 3.0f);
 }
 
 // What is copied is the region, not the notes' own bounding box: a rest at

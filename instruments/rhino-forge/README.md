@@ -369,6 +369,36 @@ self-contained when it moves between machines.
 The editor saves and loads versioned `.forgepreset` files; host project state
 remains independent and continues to use the VST3 state API.
 
+## Spectral oscillators
+
+An oscillator is not only a wavetable. The field along the top edge of its
+display is its **mode**, and the second mode is **spectral**: a sample analysed
+into frames of frequency and resynthesised by a phase vocoder, so it can be
+scanned, transposed and filtered in the spectrum rather than in the waveform.
+
+The mode swaps three of the module's six knobs. A wavetable oscillator carries
+POSITION, DETUNE and BLEND; a spectral one carries **SCAN**, **CUT** and
+**MIX** in the same cells, with UNISON, PAN, LEVEL and both warp stages shared.
+Detune and blend go on driving the stack while they are off the face, which is
+also what Serum does with them in this mode.
+
+SCAN is how fast and which way the playhead moves through the spectrogram, and
+it is genuinely independent of the note: the pitch shift happens inside the
+spectrum rather than by reading the output faster, so a sample can be frozen at
+one point in its own time and still played chromatically. CUT is the spectral
+filter's corner and MIX balances the filtered spectrum against the unfiltered
+one.
+
+Click the display to load a sample — any format JUCE can decode, mixed to mono
+and analysed on the message thread. The display then draws its spectrogram, and
+the header names it.
+
+A spectral sample does **not** yet travel inside the preset or host state: a
+patch saved with one reopens with the mode set and nothing loaded. That, the
+markers on the display, the loop field and the drawable filter mask are what is
+still missing. [SPECTRAL.md](SPECTRAL.md) is the plan, the milestones and the
+reasoning behind the engine.
+
 ## LFO tables
 
 Each of the six LFOs starts on **Default**, which contains the existing sine,

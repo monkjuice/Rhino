@@ -366,7 +366,13 @@ inline juce::String tooltipFor(const juce::String& id)
     // the suffix and the oscillator's letter is filled in below.
     static const std::map<juce::String, juce::String> perOscillator {
         {"Enable", "Switch oscillator % out of the voice entirely"},
+        {"Mode", "What oscillator % is: a wavetable read cycle by cycle, or a "
+                 "sample analysed into frequency and resynthesised"},
         {"Position", "Scan oscillator %'s harmonic shape: sine, triangle, saw, square"},
+        {"Scan", "How fast and which way oscillator % moves through its sample's "
+                 "spectrum. Zero freezes it; the left half runs it backwards"},
+        {"Cut", "Where oscillator %'s spectral filter cuts the resynthesised spectrum"},
+        {"Mix", "Balance oscillator %'s filtered spectrum against its unfiltered one"},
         {"Octave", "Transpose oscillator % in octaves"},
         {"Semitone", "Transpose oscillator % in semitones"},
         {"Fine", "Detune oscillator % in cents"},

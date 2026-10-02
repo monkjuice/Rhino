@@ -48,6 +48,83 @@ inline std::vector<Row> completeFxRows(std::vector<Row> rows)
 inline constexpr float oscillatorColumnSpan = 16.0f / 3.0f;
 inline constexpr float mixerColumnSpan = static_cast<float>(gridColumns) / 9.0f;
 
+// The two halves of a cell an oscillator's mode chooses between.
+//
+// Row geometry is deliberately stateless — `rowBounds` is handed a descriptor
+// and nothing else, which is what lets the layout suite check every module at
+// every window size without a Processor in the room. So a mode cannot add or
+// remove a *row*; it can only decide which of two controls is standing in a
+// cell that exists either way.
+//
+// That is not the compromise it sounds like, because it is also what Serum
+// does. A spectral oscillator's panel carries SCAN, CUT and MIX where a
+// wavetable one carries POSITION, DETUNE and BLEND, and Serum moves detune and
+// blend into the unison popup rather than finding room for them (pp. 111-113).
+// The parameters go on existing and go on driving the stack; they are simply
+// not on the face while the oscillator is spectral.
+//
+// The first of the pair owns the cell and the second shares it, which is the
+// arrangement `inSharedCell` already understands from LFO 1's two rate knobs.
+inline Control whenWavetable(const char* id, const char* label)
+{
+    return {id, label, Style::knob, nullptr, 1, nullptr, false,
+            nullptr, static_cast<int>(OscMode::wavetable)};
+}
+
+inline Control whenSpectral(const char* id, const char* label)
+{
+    return {id, label, Style::knob, nullptr, 1, nullptr, true,
+            nullptr, static_cast<int>(OscMode::spectral)};
+}
+
+// The mode parameter the pair above is asking about. Declared separately
+// because the three oscillators are written out one at a time and each names
+// its own, and because a helper that took the prefix would have to keep the
+// composed string alive for as long as the descriptor does.
+inline Control gatedBy(Control control, const char* modeId)
+{
+    control.modeBy = modeId;
+    return control;
+}
+
+// One oscillator's rows. The three are identical but for their prefix, and
+// writing them out three times is what let the mode gate drift between them,
+// so they are built once here instead.
+inline std::vector<Row> oscillatorRows(const char* mode, const char* octave, const char* semitone,
+                                       const char* fine, const char* position, const char* scan,
+                                       const char* unison, const char* detune, const char* cut,
+                                       const char* blend, const char* mix, const char* pan,
+                                       const char* level, const char* warp1, const char* warp1Mode,
+                                       const char* warp2Mode, const char* warp2)
+{
+    const auto wt = [mode] (const char* id, const char* label)
+    {
+        return gatedBy(whenWavetable(id, label), mode);
+    };
+    const auto sp = [mode] (const char* id, const char* label)
+    {
+        return gatedBy(whenSpectral(id, label), mode);
+    };
+    return {
+        // What the oscillator is, along the top edge of the display showing it
+        // — the arrangement the filter's TYPE field already has, and for the
+        // same reason: the picture underneath is of this mode, so the name of
+        // it is a reading of the display rather than a setting beside it.
+        // Serum puts the same field in the same place (p. 104).
+        {displaySelectorHeight, {{mode, "MODE", Style::selector}}, 1, 0, 0, Seat::displayTop},
+        {16, {{octave, "OCT", Style::stepper}, {semitone, "SEMI", Style::stepper},
+              {fine, "FINE", Style::stepper}}},
+        {27, {wt(position, "POSITION"), sp(scan, "SCAN"),
+              {unison, "UNISON"},
+              wt(detune, "DETUNE"), sp(cut, "CUT")}},
+        {27, {wt(blend, "BLEND"), sp(mix, "MIX"),
+              {pan, "PAN"}, {level, "LEVEL"}}},
+        {30, {{warp1, "WARP 1", Style::knob, nullptr, 2, warp1Mode},
+              {warp1Mode, "MODE 1", Style::selector, nullptr, 3},
+              {warp2Mode, "MODE 2", Style::selector, nullptr, 3},
+              {warp2, "WARP 2", Style::knob, nullptr, 2, warp2Mode}}}};
+}
+
 inline const std::vector<Module>& modules()
 {
     static const std::vector<Module> declared {
@@ -68,37 +145,25 @@ inline const std::vector<Module>& modules()
         // than the picture does. The knobs do come down — see displayShare.
         {"oscA", "OSC A", "MORPH", "oscAEnable", false, Display::oscillator,
          0, 4.0f, oscillatorColumnSpan, false,
-         {{16, {{"oscAOctave", "OCT", Style::stepper}, {"oscASemitone", "SEMI", Style::stepper},
-                {"oscAFine", "FINE", Style::stepper}}},
-          {27, {{"oscAPosition", "POSITION"}, {"oscAUnison", "UNISON"}, {"oscADetune", "DETUNE"}}},
-          {27, {{"oscABlend", "BLEND"}, {"oscAPan", "PAN"}, {"oscALevel", "LEVEL"}}},
-          {30, {{"oscAWarp1", "WARP 1", Style::knob, nullptr, 2, "oscAWarp1Mode"},
-                {"oscAWarp1Mode", "MODE 1", Style::selector, nullptr, 3},
-                {"oscAWarp2Mode", "MODE 2", Style::selector, nullptr, 3},
-                {"oscAWarp2", "WARP 2", Style::knob, nullptr, 2, "oscAWarp2Mode"}}}},
+         oscillatorRows("oscAMode", "oscAOctave", "oscASemitone", "oscAFine",
+                        "oscAPosition", "oscAScan", "oscAUnison", "oscADetune", "oscACut",
+                        "oscABlend", "oscAMix", "oscAPan", "oscALevel",
+                        "oscAWarp1", "oscAWarp1Mode", "oscAWarp2Mode", "oscAWarp2"),
          0, only(Page::oscillators), 1, 0, 0, oscillatorDisplayPercent, 0, "OSCILLATOR A"},
         {"oscB", "OSC B", "MORPH", "oscBEnable", false, Display::oscillator,
          0, 4.0f + oscillatorColumnSpan, oscillatorColumnSpan, false,
-         {{16, {{"oscBOctave", "OCT", Style::stepper}, {"oscBSemitone", "SEMI", Style::stepper},
-                {"oscBFine", "FINE", Style::stepper}}},
-          {27, {{"oscBPosition", "POSITION"}, {"oscBUnison", "UNISON"}, {"oscBDetune", "DETUNE"}}},
-          {27, {{"oscBBlend", "BLEND"}, {"oscBPan", "PAN"}, {"oscBLevel", "LEVEL"}}},
-          {30, {{"oscBWarp1", "WARP 1", Style::knob, nullptr, 2, "oscBWarp1Mode"},
-                {"oscBWarp1Mode", "MODE 1", Style::selector, nullptr, 3},
-                {"oscBWarp2Mode", "MODE 2", Style::selector, nullptr, 3},
-                {"oscBWarp2", "WARP 2", Style::knob, nullptr, 2, "oscBWarp2Mode"}}}},
+         oscillatorRows("oscBMode", "oscBOctave", "oscBSemitone", "oscBFine",
+                        "oscBPosition", "oscBScan", "oscBUnison", "oscBDetune", "oscBCut",
+                        "oscBBlend", "oscBMix", "oscBPan", "oscBLevel",
+                        "oscBWarp1", "oscBWarp1Mode", "oscBWarp2Mode", "oscBWarp2"),
          0, only(Page::oscillators), 1, 0, 0, oscillatorDisplayPercent, 0, "OSCILLATOR B"},
 
         {"oscC", "OSC C", "MORPH", "oscCEnable", false, Display::oscillator,
          0, 4.0f + 2.0f * oscillatorColumnSpan, oscillatorColumnSpan, false,
-         {{16, {{"oscCOctave", "OCT", Style::stepper}, {"oscCSemitone", "SEMI", Style::stepper},
-                {"oscCFine", "FINE", Style::stepper}}},
-          {27, {{"oscCPosition", "POSITION"}, {"oscCUnison", "UNISON"}, {"oscCDetune", "DETUNE"}}},
-          {27, {{"oscCBlend", "BLEND"}, {"oscCPan", "PAN"}, {"oscCLevel", "LEVEL"}}},
-          {30, {{"oscCWarp1", "WARP 1", Style::knob, nullptr, 2, "oscCWarp1Mode"},
-                {"oscCWarp1Mode", "MODE 1", Style::selector, nullptr, 3},
-                {"oscCWarp2Mode", "MODE 2", Style::selector, nullptr, 3},
-                {"oscCWarp2", "WARP 2", Style::knob, nullptr, 2, "oscCWarp2Mode"}}}},
+         oscillatorRows("oscCMode", "oscCOctave", "oscCSemitone", "oscCFine",
+                        "oscCPosition", "oscCScan", "oscCUnison", "oscCDetune", "oscCCut",
+                        "oscCBlend", "oscCMix", "oscCPan", "oscCLevel",
+                        "oscCWarp1", "oscCWarp1Mode", "oscCWarp2Mode", "oscCWarp2"),
          0, only(Page::oscillators), 1, 0, 0, oscillatorDisplayPercent, 0, "OSCILLATOR C"},
 
         // The matrix takes the oscillator bank's columns — not the whole row,

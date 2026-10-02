@@ -266,9 +266,18 @@ public:
     // A field with this many or fewer shows them all; past it, a list.
     static constexpr int inlineLimit = 3;
 
+    // Unless the field says otherwise. Stacking every choice needs a box tall
+    // enough to stack them in, and a field *seated* in a display has a strip
+    // rather than a box — an oscillator's MODE lies along the top edge of the
+    // waveform in 26 pixels, where two stacked segments are 13 pixels each and
+    // the names spill over the picture below. The list style is one line
+    // whatever the box is, so it fits a strip exactly, and it is also what
+    // Serum draws this particular field as (p. 104).
+    bool forceList = false;
+
     int count() const { return static_cast<int>(choices.size()); }
 
-    bool inlineChoices() const { return count() > 0 && count() <= inlineLimit; }
+    bool inlineChoices() const { return !forceList && count() > 0 && count() <= inlineLimit; }
 
     juce::Rectangle<int> segmentBounds(int index) const
     {

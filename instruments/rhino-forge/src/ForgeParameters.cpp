@@ -133,16 +133,29 @@ juce::AudioProcessorValueTreeState::ParameterLayout Processor::parameterLayout()
     juce::StringArray warpModeNames;
     for (int i = 0; i < warpModeCount; ++i) warpModeNames.add(warpModeName(i));
 
+    // Every mode Serum names, built or not: a choice parameter's list is part
+    // of the plugin's published interface, so adding to the middle of it later
+    // would renumber what a host has already automated.
+    juce::StringArray oscModeNames;
+    for (int i = 0; i < oscModeCount; ++i) oscModeNames.add(oscModeName(i));
+
     // The three oscillators are declared identically. None is expressed in
     // terms of another, so each owns its tuning, its stack, its pan and its
     // level outright.
-    const auto oscillator = [this, &result, &warpModeNames] (int which, const char* prefix,
+    const auto oscillator = [this, &result, &warpModeNames, &oscModeNames] (int which, const char* prefix,
                                                              const char* label, bool enabled,
                                                              float position, float semitone, float level)
     {
         const auto id = [prefix] (const char* suffix) { return juce::String(prefix) + suffix; };
         const auto name = [label] (const char* suffix) { return juce::String(label) + " " + suffix; };
         result.push_back(toggle(id("Enable"), name("Enable"), enabled));
+        // What this oscillator is. A choice rather than a stepped float so a
+        // host's lane reads SPECTRAL instead of 0.8, and declared with Serum's
+        // full five names even though Forge renders two of them — the three in
+        // the middle keep their numbers for when they arrive, and the menu
+        // simply does not offer what oscModeBuilt() says is not there.
+        result.push_back(std::make_unique<juce::AudioParameterChoice>(
+            juce::ParameterID {id("Mode"), 1}, name("Mode"), oscModeNames, 0));
         // POSITION reads as the shape it is on, or as the two it sits between —
         // "where is the saw?" is the question a wavetable knob is asked, and a
         // percentage answers none of it. On a table somebody drew there are no
@@ -167,6 +180,21 @@ juce::AudioProcessorValueTreeState::ParameterLayout Processor::parameterLayout()
         result.push_back(parameter(id("Blend"), name("Blend"), {0.0f, 1.0f}, 0.5f, asPercent));
         result.push_back(parameter(id("Pan"), name("Pan"), {-1.0f, 1.0f}, 0.0f, asPan));
         result.push_back(parameter(id("Level"), name("Level"), {0.0f, 1.0f}, level, asDecibels));
+        // The spectral set. These stand in POSITION's, DETUNE's and BLEND's
+        // cells while the oscillator is spectral, and are declared for every
+        // oscillator whatever mode it is in — a parameter that came and went
+        // with a mode would renumber the host's automation every time the menu
+        // moved.
+        //
+        // SCAN is signed and opens at 1, which is the sample playing forwards
+        // at its own speed: the knob's zero is a frozen spectrum and its
+        // negative half is the sample running backwards (p. 116). CUT opens
+        // wide open and MIX opens dry, so switching an oscillator to spectral
+        // and loading a sample plays the sample rather than something already
+        // filtered.
+        result.push_back(parameter(id("Scan"), name("Scan"), {-2.0f, 2.0f}, 1.0f, asPercent));
+        result.push_back(parameter(id("Cut"), name("Cut"), {0.0f, 1.0f}, 1.0f, asPercent));
+        result.push_back(parameter(id("Mix"), name("Mix"), {0.0f, 1.0f}, 0.0f, asPercent));
         // Two warp stages, applied in the order they are declared. The mode is
         // a choice rather than a stepped float, so a host's lane reads "BEND +"
         // instead of 0.16; the depth beside it is a plain 0..1, because what it

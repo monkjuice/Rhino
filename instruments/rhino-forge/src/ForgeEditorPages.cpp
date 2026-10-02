@@ -31,6 +31,7 @@ void Editor::applyPage()
     refreshWarpFields();
     refreshFilterFields();
     refreshNoiseField();
+    refreshOscModeFields();
     if (tablePanel != nullptr) tablePanel->setVisible(page == ui::Page::table);
     // Last, because a macro's handle takes the place of its label and the
     // layout pass is what decides that.
@@ -223,6 +224,12 @@ void Editor::applyEnableStates()
                 // A rack knob its slot's type does not have is not a control
                 // at all while that type is in there.
                 && fxControlUsed(*control)
+                // A control belonging to another mode is not here at all. The
+                // mode chooses between control sets rather than switching one
+                // off, so the set that is not chosen leaves the panel instead
+                // of greying out on top of the set that is.
+                && (control->modeBy == nullptr
+                    || juce::roundToInt(value(control->modeBy)) == control->modeIs)
                 && (on || !ui::inSharedCell(*module.descriptor, control->row, control->index));
 
             // A control seated inside a display carries no label strip. It is

@@ -128,6 +128,15 @@ struct Control
     // not the one in charge rather than greyed out, because a greyed control
     // would be sitting on top of the live one.
     bool sharesCell = false;
+    // Live only while this parameter reads this exact value.
+    //
+    // enabledBy and disabledBy ask whether something is on; this asks which of
+    // several things it is, which is what an oscillator's mode needs — SCAN
+    // belongs to a spectral oscillator and POSITION to a wavetable one, and
+    // neither is the other switched off. Paired with sharesCell, the two sit in
+    // one cell and exactly one of them is ever on screen.
+    const char* modeBy = nullptr;
+    int modeIs = 0;
 };
 
 // Where a row is laid out. Almost every row sits in the module's body, under

@@ -124,6 +124,7 @@ Editor::Editor(Processor& p)
     refreshWarpFields();
     refreshFilterFields();
     refreshNoiseField();
+    refreshOscModeFields();
     applyEnableStates();
     applyTableCounts();
     // Before the first layout pass, so a project that opens with named macros
@@ -252,6 +253,8 @@ void Editor::buildModules()
                 control->id = declared.id;
                 control->disabledBy = declared.disabledBy;
                 control->enabledBy = declared.enabledBy;
+                control->modeBy = declared.modeBy;
+                control->modeIs = declared.modeIs;
                 control->row = r;
                 control->index = i;
                 control->bank = ui::bankOf(descriptor, r, i);
@@ -287,6 +290,23 @@ void Editor::buildModules()
                         control->selector->onChoose = [this] (int choice) { setFilterType(choice); };
                         control->selector->onOpenList = [this, held] { showFilterMenu(*held); };
                     }
+                    // An oscillator's mode. Like the noise module's source, the
+                    // list it shows is not the list the parameter stores — see
+                    // ForgeEditorOscMode.cpp — so the arrows hand back a
+                    // position that has to be turned back into a mode.
+                    else if (oscillatorIndexFromId(declared.id) >= 0
+                             && juce::String(declared.id).endsWith("Mode"))
+                    {
+                        control->selector->accent = accent;
+                        // Two choices would stack, and this one is seated in a
+                        // strip along the top of the display. See forceList.
+                        control->selector->forceList = true;
+                        control->selector->onChoose = [this, held] (int choice)
+                        {
+                            setOscMode(held->id, oscModeAt(choice));
+                        };
+                        control->selector->onOpenList = [this, held] { showOscModeMenu(*held); };
+                    }
                     // The noise module's source: a fixed list like the two
                     // above, and unlike them it moves nothing but itself.
                     else if (juce::String(declared.id) == "noiseSource")
@@ -321,6 +341,17 @@ void Editor::buildModules()
                         control->slider.onValueChange = [this] { refreshFilterFields(); repaint(); };
                     else if (juce::String(declared.id) == "noiseSource")
                         control->slider.onValueChange = [this] { refreshNoiseField(); repaint(); };
+                    // A mode change swaps the controls standing in three of the
+                    // module's cells, so the panel has to be told to show the
+                    // other set as well as to redraw the field itself.
+                    else if (oscillatorIndexFromId(declared.id) >= 0
+                             && juce::String(declared.id).endsWith("Mode"))
+                        control->slider.onValueChange = [this]
+                        {
+                            refreshOscModeFields();
+                            applyEnableStates();
+                            repaint();
+                        };
                     else
                         control->slider.onValueChange = [this] { refreshFxSlots(); repaintFxDisplays(); };
                     control->attachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(

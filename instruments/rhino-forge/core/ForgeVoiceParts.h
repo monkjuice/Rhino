@@ -101,15 +101,89 @@ inline float unisonOffset(int slot, int count)
          + jitter * unisonJitter / static_cast<float>(last);
 }
 
+// What kind of oscillator this is — not what it is playing, but which engine
+// renders it and which controls the module shows for it.
+//
+// Serum's header menu offers five: Wavetable, Multisample, Sample, Granular,
+// Spectral. Forge builds two of them. The numbering deliberately leaves the
+// other three room in the middle rather than appending spectral after
+// wavetable, so a preset written today names the same mode once Sample and
+// Granular arrive and nothing has to be migrated. See SPECTRAL.md.
+enum class OscMode { wavetable = 0, spectral = 4 };
+inline constexpr int oscModeCount = 5;
+
+inline const char* oscModeName(int mode)
+{
+    switch (mode)
+    {
+        case 1: return "MULTISAMPLE";
+        case 2: return "SAMPLE";
+        case 3: return "GRANULAR";
+        case 4: return "SPECTRAL";
+        default: break;
+    }
+    return "WAVETABLE";
+}
+
+// Whether Forge actually renders this mode yet. The three it does not are
+// declared so the numbering is Serum's and a preset survives them arriving,
+// but they are left out of the menu rather than offered and then refused.
+inline constexpr bool oscModeBuilt(int mode)
+{
+    return mode == static_cast<int>(OscMode::wavetable)
+        || mode == static_cast<int>(OscMode::spectral);
+}
+
+// What a mode value read off a parameter means to the engine. Anything not
+// built falls back to a wavetable, so a preset from a later version opens and
+// sounds like something rather than falling silent.
+inline OscMode oscModeOf(float value) noexcept
+{
+    const auto mode = juce::roundToInt(value);
+    return mode == static_cast<int>(OscMode::spectral) ? OscMode::spectral : OscMode::wavetable;
+}
+
+// What is stored and what is shown are two orders, exactly as they are for the
+// noise module's SOURCE field. The parameter holds Serum's numbering, with gaps
+// where Multisample, Sample and Granular will go; the field lists only the
+// modes that are built, so stepping it with the arrows cannot land on one that
+// does nothing. The two orders meet here and nowhere else.
+inline constexpr int oscModeBuiltCount = 2;
+
+inline int oscModeAt(int position) noexcept
+{
+    auto seen = 0;
+    for (int mode = 0; mode < oscModeCount; ++mode)
+        if (oscModeBuilt(mode) && seen++ == position) return mode;
+    return static_cast<int>(OscMode::wavetable);
+}
+
+inline int oscModePosition(int mode) noexcept
+{
+    auto seen = 0;
+    for (int i = 0; i < oscModeCount; ++i)
+    {
+        if (i == mode) return seen;
+        if (oscModeBuilt(i)) ++seen;
+    }
+    return 0;
+}
+
 // Everything one oscillator owns. Every oscillator is the same shape, so
 // switching one off or changing its level cannot move another.
 struct Oscillator
 {
     float enable = 1.0f;
+    // Which engine renders this oscillator. Held as a float for the same reason
+    // the warp modes are: that is what a parameter read gives back.
+    float mode = 0.0f;
     float position = 0.55f;
     float octave = 0.0f, semitone = 0.0f, fine = 0.0f;
     float unison = 2.0f, detune = 0.18f, blend = 0.5f;
     float pan = 0.0f, level = 0.75f;
+    // The spectral set. Meaningless while the mode is wavetable, and read by
+    // nothing in that case — see SPECTRAL.md for what each one does.
+    float scan = 1.0f, cut = 1.0f, mix = 0.0f;
     // The two warp stages, in the order they are applied. A mode is held as a
     // float for the same reason everything else here is: that is what a
     // parameter read gives back. See ForgeWarp.h for what each one does.

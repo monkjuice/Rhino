@@ -31,6 +31,10 @@ private:
         juce::String id;
         const char* disabledBy = nullptr;
         const char* enabledBy = nullptr;
+        // Which mode of its module this control belongs to, and the parameter
+        // that says which mode is on. Null means it belongs to every mode.
+        const char* modeBy = nullptr;
+        int modeIs = 0;
         int row = 0, index = 0;
         // Which bank of its module this control belongs to. Zero in a module
         // that declares none, which is all of them but the envelopes and the
@@ -317,6 +321,9 @@ private:
     void setNoiseSource(int choice);
     void refreshNoiseField();
     void showNoiseMenu(Control&);
+    void setOscMode(const juce::String& id, int mode);
+    void refreshOscModeFields();
+    void showOscModeMenu(Control&);
     // The shelves the slots sit on, drawn behind their controls.
     void paintFxShelves(juce::Graphics&, juce::Rectangle<int> area, const ui::Module&);
     // The compact signal-flow overview at the left of the rack. It is a

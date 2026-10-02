@@ -123,8 +123,17 @@ void layoutSuite()
                         "a shared cell is shared inside one bank");
                 const auto& first = controls[static_cast<size_t>(owner)];
                 const auto& second = controls[static_cast<size_t>(c)];
-                require(first.disabledBy != nullptr && second.enabledBy != nullptr
-                            && juce::String(first.disabledBy) == second.enabledBy,
+                // Either gated on and off by one switch — LFO 1's rate, which
+                // is a knob in Hertz or a knob in beats — or gated by one mode
+                // field reading two different values, which is how an
+                // oscillator chooses between POSITION and SCAN. Both arrive at
+                // the same guarantee: exactly one of the pair is ever drawn.
+                const auto switched = first.disabledBy != nullptr && second.enabledBy != nullptr
+                    && juce::String(first.disabledBy) == second.enabledBy;
+                const auto moded = first.modeBy != nullptr && second.modeBy != nullptr
+                    && juce::String(first.modeBy) == second.modeBy
+                    && first.modeIs != second.modeIs;
+                require(switched || moded,
                         "the two controls in a shared cell are gated by one parameter, one each way");
                 require(rhino::forge::ui::cellBounds(area, module, r, c)
                             == rhino::forge::ui::cellBounds(area, module, r, owner),

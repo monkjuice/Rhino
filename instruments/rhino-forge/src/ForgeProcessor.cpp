@@ -525,6 +525,7 @@ Patch Processor::patch() const
         const auto id = [prefix] (const char* suffix) { return juce::String(prefix) + suffix; };
         Oscillator osc;
         osc.enable = value(id("Enable"));
+        osc.mode = value(id("Mode"));
         osc.position = value(id("Position"));
         osc.octave = value(id("Octave"));
         osc.semitone = value(id("Semitone"));
@@ -534,6 +535,9 @@ Patch Processor::patch() const
         osc.blend = value(id("Blend"));
         osc.pan = value(id("Pan"));
         osc.level = value(id("Level"));
+        osc.scan = value(id("Scan"));
+        osc.cut = value(id("Cut"));
+        osc.mix = value(id("Mix"));
         for (int slot = 0; slot < warpSlots; ++slot)
         {
             const auto stage = juce::String(prefix) + "Warp" + juce::String(slot + 1);

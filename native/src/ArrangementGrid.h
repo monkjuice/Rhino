@@ -110,10 +110,13 @@ inline const char* gridDivisionLabel(GridDivision division)
 // same zoom bands one.
 inline constexpr double barBandMinimumPixels = 120.0;
 
-// How much lighter a washed band is than the lane under it. Anything drawn
-// over a lane has to know this: a grid line picked to read against the base
-// shade disappears against the wash unless it is lifted by the same amount.
-inline constexpr float barBandWash = 10.0f / 255.0f;
+// How much of the lane a washed band takes away. Anything drawn over a lane
+// has to know this: a grid line picked to read against the base shade
+// disappears against the wash unless it is taken down by the same fraction.
+// Read as a fraction rather than as counts of 255 because the lanes are light
+// and the wash is black - it shades what is under it by a proportion of
+// itself, where the old white one added a flat amount.
+inline constexpr float barBandWash = 0.16f;
 
 inline int barsPerBand(double pixelsPerBar)
 {

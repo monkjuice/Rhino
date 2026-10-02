@@ -43,8 +43,8 @@
                     const auto here = shadeAtBeat(picture, beat);
                     // Two shades and no others: a third would mean the sample
                     // had wandered onto a line, a clip or a glyph.
-                    require(here == base || here.getBrightness() > base.getBrightness(),
-                            "A lane is either the base shade or the wash, and the wash is the lighter one");
+                    require(here == base || here.getBrightness() < base.getBrightness(),
+                            "A lane is either the base shade or the wash, and the wash is the darker one");
                     washed.push_back(here != base);
                 }
                 return washed;

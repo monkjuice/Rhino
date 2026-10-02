@@ -15,7 +15,7 @@ namespace rhino
 // line happened to land on one. Stepping by the snap division made the ruler
 // read in whatever the grid was set to; stepping by bars keeps the numbering
 // consecutive and the reading musical at every zoom.
-// Bars are grouped and every other group is washed, which is what makes a 3/4
+// Bars are grouped and every other group is shaded, which is what makes a 3/4
 // project read as threes and a 4/4 as fours - the beat lines alone look the
 // same in both. The wash goes on before the clips rather than over them: a
 // clip is filled translucent, so it picks the band up through its own colour.
@@ -44,7 +44,7 @@ int Arrangement::paintBarBands(juce::Graphics& g, double firstBeat, double lastB
     juce::Graphics::ScopedSaveState scope(g);
     g.reduceClipRegion(juce::Rectangle<float>(headerWidth, top, right - headerWidth, bottom - top)
                            .getSmallestIntegerContainer());
-    g.setColour(juce::Colours::white.withAlpha(barBandWash));
+    g.setColour(juce::Colours::black.withAlpha(barBandWash));
     int painted = 0;
     for (auto bar = std::floor(firstBar / pair) * pair; bar <= lastBar + pair && painted < 512; bar += pair)
     {
@@ -206,13 +206,15 @@ void Arrangement::paintTrackCards(juce::Graphics& g)
             continue;
         }
         const auto track = rows[static_cast<size_t>(index)].track;
-        // One ground for every lane. The first track used to be lifted a shade,
-        // which under the neutral palette landed it on exactly palette::minorGrid
-        // - so the subdivisions drawn over it were the colour of the lane they
-        // were drawn on and track one had no grid at all at any zoom the beat
-        // lines did not already cover.
+        // Two grounds, not one: the card keeps the chrome's own shade and the
+        // lane is the light surface the grid is ruled into. They were a single
+        // fill while they were a single colour, and a card lit to the lane's
+        // new shade would have been the brightest block in the window.
+        g.setColour(palette::trackCard);
+        g.fillRect(row.withX(0.0f).withWidth(headerWidth));
         g.setColour(palette::arrangement);
-        g.fillRect(row.withX(0.0f).withWidth(static_cast<float>(getWidth()) - 14.0f));
+        g.fillRect(row.withX(headerWidth)
+                      .withWidth(std::max(0.0f, static_cast<float>(getWidth()) - 14.0f - headerWidth)));
         // The card is two columns with the panel grey between them: the
         // controls keep the panel background, and the name sits on the track
         // colour. The clips on the track keep whatever colours they were given.
@@ -280,6 +282,16 @@ void Arrangement::paintTrackCards(juce::Graphics& g)
 void Arrangement::paint(juce::Graphics& g)
 {
     g.fillAll(palette::sideSurface);
+    // The timeline is one field, from the first lane to the foot of the main
+    // row, and every row paints its own ground over it. What is left showing is
+    // the space below the last track, which the ruler's divisions are ruled
+    // through exactly as they are through a lane - and a dark line needs the
+    // lit ground under it wherever it is drawn, or that space keeps the
+    // chrome's shade and the grid disappears into it.
+    g.setColour(palette::arrangement);
+    g.fillRect(headerWidth, lanesTop,
+               std::max(0.0f, static_cast<float>(getWidth()) - 14.0f - headerWidth),
+               std::max(0.0f, masterLane().getBottom() - lanesTop));
     g.setFont(uiFont(10.0f));
     g.setColour(palette::textDim);
     drawSnappedText(g, "Drop browser items or files / drag clips to move / trim edges",
@@ -299,14 +311,14 @@ void Arrangement::paint(juce::Graphics& g)
             if (row.getHeight() <= 0.0f) continue;
             if (row.getBottom() < lanesTop || row.getY() > laneBottom) continue;
             const auto ownRow = rows[static_cast<size_t>(index)].automation < 0;
-            g.setColour(ownRow ? palette::border : palette::minorGrid);
+            g.setColour(ownRow ? palette::barGrid : palette::beatGrid);
             // Two pixels rather than one: at a single pixel the divisions read
             // as a tone change between lanes rather than as a line ruled
             // between them, and the bands stopped separating at a glance.
             g.fillRect(0.0f, row.getBottom() - trackDividerThickness,
                        static_cast<float>(getWidth()) - 14.0f, trackDividerThickness);
         }
-        g.setColour(palette::border);
+        g.setColour(palette::barGrid);
         g.fillRect(headerWidth - trackDividerThickness, lanesTop, trackDividerThickness, laneBottom - lanesTop);
     }
 
@@ -323,6 +335,13 @@ void Arrangement::paint(juce::Graphics& g)
                                            master.getHeight()};
         g.setColour(palette::appBackground);
         g.fillRect(band);
+        // The row takes no clips, but the ruler's divisions are drawn through
+        // it on purpose, and a dark line needs the lane's ground under it to
+        // be seen at all. It ends where the lanes above it end, short of the
+        // scrollbar strip.
+        g.setColour(palette::arrangement);
+        g.fillRect(headerWidth, band.getY(), std::max(0.0f, static_cast<float>(getWidth()) - 14.0f - headerWidth),
+                   band.getHeight());
         g.setColour(isMasterSelected() ? palette::hover : palette::sideSurface);
         g.fillRect(band.withWidth(headerWidth));
         if (isMasterSelected())
@@ -334,7 +353,7 @@ void Arrangement::paint(juce::Graphics& g)
         // stopped at the cards and the main row read as closed off over the
         // lanes and open beside them. The line under the row belongs to the
         // foot and is drawn with it.
-        g.setColour(palette::border);
+        g.setColour(palette::barGrid);
         g.fillRect(band.withHeight(trackDividerThickness));
         g.setColour(palette::text);
         g.setFont(uiFontBold(9.0f));
@@ -359,15 +378,16 @@ void Arrangement::paint(juce::Graphics& g)
         // in the track headers, which the row before them has already painted.
         if ((gridSettings.mode != GridMode::off || bar) && x >= headerWidth)
         {
-            // A line inside a washed band is lifted by the wash, so it keeps
-            // the contrast it was picked for. Held flat, the subdivisions
-            // matched the washed lane almost exactly and the alternating bands
-            // read as columns with nothing in them. The epsilon keeps a line
-            // sitting on a bar boundary in the bar it opens rather than in the
-            // one before it, which floating point otherwise decides at random.
-            const auto line = bar ? palette::border.brighter(0.12f) : wholeBeat ? palette::border : palette::minorGrid;
+            // A line inside a shaded band is taken down by the same wash, so
+            // it keeps the contrast it was picked for. Held flat, the
+            // subdivisions matched the shaded lane almost exactly and the
+            // alternating bands read as columns with nothing in them. The
+            // epsilon keeps a line sitting on a bar boundary in the bar it
+            // opens rather than in the one before it, which floating point
+            // otherwise decides at random.
+            const auto line = bar ? palette::barGrid : wholeBeat ? palette::beatGrid : palette::minorGrid;
             g.setColour(isWashedBar(std::floor(beat / barLength + 0.000001), bandBars)
-                            ? line.interpolatedWith(juce::Colours::white, barBandWash)
+                            ? line.interpolatedWith(juce::Colours::black, barBandWash)
                             : line);
             g.drawVerticalLine(static_cast<int>(x), static_cast<int>(lanesTop), masterLane().getBottom());
         }

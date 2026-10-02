@@ -22,17 +22,30 @@ namespace palette
 inline const juce::Colour appBackground    {0xff141414};  // behind everything
 inline const juce::Colour globalBar        {0xff181818};  // the control bar
 inline const juce::Colour sideSurface      {0xff1e1e1e};  // browser, track headers, panels
-inline const juce::Colour arrangement      {0xff242424};  // the timeline's own ground
+inline const juce::Colour trackCard        {0xff242424};  // a track card's own ground
 inline const juce::Colour control          {0xff292929};  // a raised control
 inline const juce::Colour hover            {0xff333333};  // hovered or selected row
-inline const juce::Colour border           {0xff3a3a3a};  // borders and major grid lines
-inline const juce::Colour minorGrid        {0xff2c2c2c};  // subdivisions
+inline const juce::Colour border           {0xff3a3a3a};  // borders
 inline const juce::Colour text             {0xffe0e0e0};  // primary text and icons
 inline const juce::Colour textDim          {0xffa0a0a0};  // secondary text
 inline const juce::Colour disabled         {0xff626262};  // a control that cannot be used
 inline const juce::Colour activeNeutral    {0xffbdbdbd};  // a neutral control that is on
 inline const juce::Colour displayInset     {0xff101010};  // the readout's recessed ground
 inline const juce::Colour recordAccent     {0xffed3935};  // the one red the chrome keeps
+
+// The timeline reads the other way round from the rest of the chrome: the
+// lanes are the lightest large surface in the app and the grid is ruled into
+// them dark. A light line on a dark lane is the first thing ambient light
+// washes out - the whole range it had to live in was the eight counts between
+// the lane and a subdivision - and a dark line on a light one keeps its
+// contrast under any lamp in the room. Nothing outside the arrangement uses
+// these, and the three grid shades are a scale: the further apart two bars
+// are in the music, the further apart their lines are here.
+inline const juce::Colour arrangement      {0xff3c3c3c};  // a track's lane, the timeline's ground
+inline const juce::Colour automationLane   {0xff333c43};  // an automation row, the same ground cooled
+inline const juce::Colour minorGrid        {0xff303030};  // subdivisions
+inline const juce::Colour beatGrid         {0xff232323};  // beats
+inline const juce::Colour barGrid          {0xff121212};  // bars, and the rules between rows
 
 // The readout keeps the tint it has always had. It is the one lit surface in
 // the interface and the only place the eye is meant to be drawn to, so it is

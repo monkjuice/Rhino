@@ -18,6 +18,14 @@ const juce::Colour restingCurve {0xffb9524d};
 const juce::Colour hoveredCurve = activeCurve.brighter(0.4f);
 const juce::Colour hoveredResting = restingCurve.brighter(0.4f);
 
+// A curve is drawn on a track's lane and on a lane of its own, and the two
+// grounds are different shades, so anything that has to disappear into the row
+// it sits on asks for the row's own.
+juce::Colour groundFor(int automationIndex)
+{
+    return automationIndex >= 0 ? palette::automationLane : palette::arrangement;
+}
+
 void drawDashedLine(juce::Graphics& g, float x1, float y1, float x2, float y2)
 {
     const float dashes[] {5.0f, 4.0f};
@@ -92,7 +100,11 @@ void Arrangement::paintAutomationRow(juce::Graphics& g, int row)
             const auto active = hovered && automationHover.point == i;
             const auto size = active ? 9.0f : focused ? 8.0f : 6.0f;
             const auto box = juce::Rectangle<float>(size, size).withCentre(handle);
-            g.setColour(active ? curveColour : juce::Colour(0xff1b2126));
+            // A resting node is a hole punched in the row it sits on, so it is
+            // filled with that row's own ground. A curve is drawn both on a
+            // track's lane and on a lane of its own, and the two grounds are
+            // different shades.
+            g.setColour(active ? curveColour : groundFor(rows[static_cast<size_t>(row)].automation));
             g.fillEllipse(box);
             g.setColour(active ? hoveredCurve.brighter(0.5f) : curveColour);
             g.drawEllipse(box, 1.6f);
@@ -111,7 +123,7 @@ void Arrangement::paintAutomationGhost(juce::Graphics& g, int row, const Session
     if (centre.x < area.getX() - 6.0f || centre.x > std::min(static_cast<float>(getWidth()) - 14.0f, area.getRight()) + 6.0f)
         return;
     const auto box = juce::Rectangle<float>(9.0f, 9.0f).withCentre(centre);
-    g.setColour(juce::Colour(0xff1b2126).withAlpha(0.75f));
+    g.setColour(groundFor(rows[static_cast<size_t>(row)].automation).withAlpha(0.75f));
     g.fillEllipse(box);
     // On the line the ghost is solid-edged, because that is where it will
     // land; off it the edge is dashed to say the value is the pointer's own.
@@ -176,9 +188,12 @@ void Arrangement::paintGhostRow(juce::Graphics& g, int row)
         return;
 
     const auto full = area.withX(0.0f).withWidth(static_cast<float>(getWidth()) - 14.0f);
-    g.setColour(juce::Colour(0xff1b2126));
+    // Lit to the same degree the lanes are, and cooled rather than tinted
+    // darker: the row still has to read as not-a-track at a glance, and the
+    // timeline's grid is drawn through it in the same dark lines.
+    g.setColour(palette::automationLane);
     g.fillRect(full);
-    g.setColour(juce::Colour(0xff2a323a));
+    g.setColour(palette::barGrid);
     g.drawHorizontalLine(static_cast<int>(area.getY()), 0.0f, full.getRight());
 
     for (const auto& clip : clips)

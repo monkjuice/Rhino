@@ -1,6 +1,8 @@
 #include "SessionInternal.h"
 #include "CountInClick.h"
+#include <algorithm>
 #include <set>
+#include <utility>
 #include <vector>
 
 // Recording.
@@ -32,6 +34,31 @@
 
 namespace rhino
 {
+namespace
+{
+// How the three settings are spelled in the document. Words rather than the
+// enum's numbers, so a .rhinoedit says what it means when it is read by eye.
+juce::String monitoringToken(Session::InputMonitoring mode)
+{
+    return mode == Session::InputMonitoring::on          ? "on"
+         : mode == Session::InputMonitoring::automatic   ? "auto"
+                                                         : "off";
+}
+
+Session::InputMonitoring defaultMonitoringFor(Session::RecordInput input)
+{
+    return input == Session::RecordInput::midi ? Session::InputMonitoring::automatic
+                                               : Session::InputMonitoring::off;
+}
+
+// Off < Auto < On. The order a device shared by several tracks is reconciled
+// with, and the only one that never silences a track that asked to hear
+// itself.
+int monitoringStrength(Session::InputMonitoring mode)
+{
+    return mode == Session::InputMonitoring::on ? 2 : mode == Session::InputMonitoring::automatic ? 1 : 0;
+}
+}
 
 juce::File RhinoEngineBehaviour::getFileForNewAudioRecording(te::Track& track, const juce::String& fileExtension)
 {
@@ -151,20 +178,31 @@ bool Session::isRecording() const
     return edit->getTransport().isRecording();
 }
 
-// Rebuilds the engine's input destinations from the arm flags. Everything is
-// cleared first rather than diffed, because the answer is cheap to recompute
-// and a stale destination records into the wrong track.
+// Rebuilds the engine's input destinations from the arm flags and the monitor
+// settings. Everything is cleared first rather than diffed, because the answer
+// is cheap to recompute and a stale destination records into the wrong track.
+//
+// Arming is no longer the only reason a track needs its input routed to it.
+// Monitoring On means you hear the input whether or not a take would capture
+// it, so such a track gets a destination of its own with recordEnabled left
+// false: the input reaches the track and nothing is written.
 juce::Result Session::applyRecordArming()
 {
     jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
     const auto tracks = te::getAudioTracks(*edit);
+    const auto wantsInput = [this](int track)
+    {
+        if (trackRecordInput(track) == RecordInput::none)
+            return false;
+        return isTrackArmed(track) || trackMonitoring(track) == InputMonitoring::on;
+    };
     bool wantsMidi = false, wantsAudio = false;
     for (int track = 0; track < tracks.size(); ++track)
     {
-        if (!isTrackArmed(track))
+        if (!wantsInput(track))
             continue;
         if (trackRecordInput(track) == RecordInput::midi) wantsMidi = true;
-        else if (trackRecordInput(track) == RecordInput::audio) wantsAudio = true;
+        else wantsAudio = true;
     }
     if (!wantsMidi && !wantsAudio)
     {
@@ -178,68 +216,82 @@ juce::Result Session::applyRecordArming()
     // has resolved a device to a pointer.
     if (wantsMidi)
         for (int track = 0; track < tracks.size(); ++track)
-            if (isTrackArmed(track) && trackMidiInput(track) == midiInputKeyboardToken())
+            if (wantsInput(track) && trackMidiInput(track) == midiInputKeyboardToken())
             {
                 ensureComputerKeyboardDevice();
                 break;
             }
-    // The audio input is the one Audio settings made the default, or the first
-    // one the device offers when nothing has been chosen. Arming turns it on:
-    // an input nobody had enabled is exactly the one the user has just asked
-    // to record from.
-    te::WaveInputDevice* wave = nullptr;
-    if (wantsAudio)
-    {
-        wave = deviceManager.getDefaultWaveInDevice();
-        if (wave == nullptr)
-            for (auto* candidate : deviceManager.getWaveInputDevices())
-                if (candidate != nullptr) { wave = candidate; break; }
-    }
-    // Every armed MIDI track names its own input, so this is a device per
-    // track rather than one for the document. All Ins resolves to the engine's
-    // merge of the physical inputs, and a physical input only feeds that merge
-    // while it is open - so enabling them is part of what All Ins means.
-    std::vector<te::MidiInputDevice*> trackMidi(static_cast<size_t>(tracks.size()), nullptr);
+    // Every track names its own input, audio as well as MIDI, so this is a
+    // device per track rather than one for the document. All Ins resolves to
+    // the engine's merge of the physical inputs, and a physical input only
+    // feeds that merge while it is open - so enabling them is part of what All
+    // Ins means.
+    std::vector<te::InputDevice*> trackDevice(static_cast<size_t>(tracks.size()), nullptr);
     auto wantsAllIns = false;
     for (int track = 0; track < tracks.size(); ++track)
     {
-        if (!isTrackArmed(track) || trackRecordInput(track) != RecordInput::midi)
+        if (!wantsInput(track))
             continue;
-        trackMidi[static_cast<size_t>(track)] = midiInputDeviceForTrack(track);
-        if (trackMidiInput(track) == midiInputAllInsToken())
-            wantsAllIns = true;
+        if (trackRecordInput(track) == RecordInput::midi)
+        {
+            trackDevice[static_cast<size_t>(track)] = midiInputDeviceForTrack(track);
+            if (trackMidiInput(track) == midiInputAllInsToken())
+                wantsAllIns = true;
+        }
+        else
+        {
+            trackDevice[static_cast<size_t>(track)] = audioInputDeviceForTrack(track);
+        }
     }
     if (wantsAllIns)
         enablePhysicalMidiInputs();
 
     // Monitoring is decided before anything is armed, because the engine makes
-    // a live input audible as soon as a destination is record-enabled and the
-    // mode is the one it defaults to. Audio follows the preference, which is
-    // off; MIDI is always monitored, or playing an armed instrument track would
-    // be silent.
-    if (wave != nullptr)
-        wave->setMonitorMode(monitorAudioInput == InputMonitoring::on        ? te::InputDevice::MonitorMode::on
-                             : monitorAudioInput == InputMonitoring::automatic ? te::InputDevice::MonitorMode::automatic
-                                                                              : te::InputDevice::MonitorMode::off);
-    for (auto* midi : trackMidi)
-        if (midi != nullptr)
-            midi->setMonitorMode(te::InputDevice::MonitorMode::automatic);
+    // a live input audible as soon as the destination exists and the mode
+    // allows it. The mode belongs to the *device* and the only per-track term
+    // in it is whether that track is armed, so two tracks sharing one input
+    // cannot hold two modes at once: the device takes the strongest any of
+    // them asked for. On beats Auto beats Off, because that is the only order
+    // that never silences a track which asked to hear itself - and giving the
+    // two tracks different inputs gives each exactly what its card says.
+    std::vector<std::pair<te::InputDevice*, InputMonitoring>> deviceModes;
+    for (int track = 0; track < tracks.size(); ++track)
+    {
+        auto* device = trackDevice[static_cast<size_t>(track)];
+        if (device == nullptr)
+            continue;
+        const auto asked = trackMonitoring(track);
+        auto existing = std::find_if(deviceModes.begin(), deviceModes.end(),
+                                     [device](const auto& entry) { return entry.first == device; });
+        if (existing == deviceModes.end())
+            deviceModes.push_back({device, asked});
+        else if (monitoringStrength(asked) > monitoringStrength(existing->second))
+            existing->second = asked;
+    }
+    for (const auto& [device, mode] : deviceModes)
+        device->setMonitorMode(mode == InputMonitoring::on          ? te::InputDevice::MonitorMode::on
+                               : mode == InputMonitoring::automatic ? te::InputDevice::MonitorMode::automatic
+                                                                    : te::InputDevice::MonitorMode::off);
 
     // An input instance is built when the playback context is, and only for
     // devices that were enabled at the time. Enabling comes first for that
     // reason, and a context that predates it is rebuilt so the instance exists.
+    // Asking for an input is what switches it on: one nobody had enabled is
+    // exactly the one the user has just asked to record from.
     auto enabledSomething = false;
-    if (wave != nullptr && !wave->isEnabled())
+    for (const auto& entry : deviceModes)
     {
-        deviceManager.setDeviceEnabled(*wave, true);
+        auto* device = entry.first;
+        if (device->isEnabled())
+            continue;
+        // A wave input is opened through the device manager, which reopens the
+        // audio device around it; a MIDI input opens on its own.
+        if (auto* wave = dynamic_cast<te::WaveInputDevice*>(device))
+            deviceManager.setDeviceEnabled(*wave, true);
+        else
+            device->setEnabled(true);
         enabledSomething = true;
     }
-    for (auto* midi : trackMidi)
-        if (midi != nullptr && !midi->isEnabled())
-        {
-            midi->setEnabled(true);
-            enabledSomething = true;
-        }
     // Nothing to arm against while the device is shut. Saying so is better
     // than allocating a playback context that has no input to give it.
     if (engine.getDeviceManager().deviceManager.getCurrentAudioDevice() == nullptr)
@@ -260,12 +312,10 @@ juce::Result Session::applyRecordArming()
     juce::String problem;
     for (int track = 0; track < tracks.size(); ++track)
     {
-        if (!isTrackArmed(track))
+        if (!wantsInput(track))
             continue;
         const auto wanted = trackRecordInput(track);
-        te::InputDevice* device = wanted == RecordInput::midi
-                                      ? static_cast<te::InputDevice*>(trackMidi[static_cast<size_t>(track)])
-                                      : static_cast<te::InputDevice*>(wave);
+        auto* device = trackDevice[static_cast<size_t>(track)];
         if (device == nullptr)
         {
             // A track set to None is doing exactly what it was asked to, so it
@@ -274,10 +324,15 @@ juce::Result Session::applyRecordArming()
             if (wanted == RecordInput::midi
                 && (trackMidiInput(track) == midiInputNoneToken() || awaitingMidiDeviceScan))
                 continue;
+            if (wanted == RecordInput::audio && trackAudioInput(track) == audioInputNoneToken())
+                continue;
             problem = wanted == RecordInput::midi
                           ? trackName(track) + " has no MIDI input to record from. Pick one on its card, "
                             "or connect a keyboard and enable it in Audio settings."
-                          : "No audio input is available. Choose one in Audio settings.";
+                      : trackAudioInput(track).isEmpty()
+                          ? "No audio input is available. Choose one in Audio settings."
+                          : trackName(track) + " records from " + trackAudioInputName(track)
+                            + ", which this machine does not have. Pick an input on its card.";
             continue;
         }
         auto* instance = context->getInputFor(device);
@@ -304,7 +359,10 @@ juce::Result Session::applyRecordArming()
             problem = destination.error();
             continue;
         }
-        (*destination)->recordEnabled = true;
+        // Arming is what records. A track that is here only because it
+        // monitors at all times keeps the input routed to it and captures
+        // nothing, which is the whole difference between On and Auto.
+        (*destination)->recordEnabled = isTrackArmed(track);
     }
     edit->dispatchPendingUpdatesSynchronously();
     return problem.isEmpty() ? juce::Result::ok() : juce::Result::fail(problem);
@@ -320,45 +378,58 @@ void Session::clearRecordArming()
 
 juce::String Session::inputMonitoringName(InputMonitoring mode)
 {
-    return mode == InputMonitoring::on          ? "In"
+    return mode == InputMonitoring::on          ? "On"
          : mode == InputMonitoring::automatic   ? "Auto"
                                                 : "Off";
 }
 
-// Changing this has to reach a track that is already armed, so the arming is
-// reapplied rather than waiting for the next time it is touched.
-void Session::setInputMonitoring(InputMonitoring mode)
+// What a track is set to, with the default for its kind standing in for a
+// track that has never been asked. Auto on MIDI, because that is the only
+// setting under which playing an armed instrument track makes a sound; off on
+// audio, because a microphone and speakers in one room feed back.
+Session::InputMonitoring Session::trackMonitoring(int trackIndex) const
 {
-    if (monitorAudioInput == mode)
-        return;
-    monitorAudioInput = mode;
-    // It describes the hardware in front of you rather than the song, so it is
-    // a preference of this machine and not a property of the document.
-    if (!isCommandLineTestMode())
-    {
-        juce::PropertiesFile properties(rhinoSettingsOptions());
-        properties.setValue("monitorAudioInput", static_cast<int>(mode));
-        properties.saveIfNeeded();
-    }
+    const auto tracks = te::getAudioTracks(*edit);
+    if (!juce::isPositiveAndBelow(trackIndex, tracks.size()))
+        return InputMonitoring::off;
+    const auto stored = tracks[trackIndex]->state.getProperty(trackMonitorID, juce::String()).toString();
+    if (stored == monitoringToken(InputMonitoring::on)) return InputMonitoring::on;
+    if (stored == monitoringToken(InputMonitoring::automatic)) return InputMonitoring::automatic;
+    if (stored == monitoringToken(InputMonitoring::off)) return InputMonitoring::off;
+    return defaultMonitoringFor(trackRecordInput(trackIndex));
+}
+
+// Changing this has to reach a track that is already armed, so the routing is
+// reapplied rather than waiting for the next time it is touched - and On has
+// to reach a track that is not armed at all, which is the whole point of it.
+juce::Result Session::setTrackMonitoring(int trackIndex, InputMonitoring mode)
+{
+    jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
+    const auto tracks = te::getAudioTracks(*edit);
+    if (!juce::isPositiveAndBelow(trackIndex, tracks.size()))
+        return juce::Result::fail("The main output takes no input, so there is nothing to monitor.");
+    const auto wanted = trackRecordInput(trackIndex);
+    if (wanted == RecordInput::none)
+        return juce::Result::fail("A group track carries its members' audio, so it has no input to monitor.");
+    if (trackMonitoring(trackIndex) == mode)
+        return juce::Result::ok();
+    // Not an edit of the music, so it opens no undo transaction - the same
+    // treatment arming and the two input choosers get. The default for the
+    // track's kind writes nothing, so the property is only ever there when
+    // someone has said something other than the obvious.
+    if (mode == defaultMonitoringFor(wanted))
+        tracks[trackIndex]->state.removeProperty(trackMonitorID, nullptr);
+    else
+        tracks[trackIndex]->state.setProperty(trackMonitorID, monitoringToken(mode), nullptr);
     // Changing the monitor mode restarts the transports, so a take in progress
     // would be cut in half by it. The setting takes hold at the next arm
     // instead, which is the next moment it could matter.
+    auto applied = juce::Result::ok();
     if (!isRecording() && !isCountingIn())
-        juce::ignoreUnused(applyRecordArming());
+        applied = applyRecordArming();
+    markModified();
     sendSynchronousChangeMessage();
-}
-
-// Off unless asked for - see the note on the enum. A developer's setting
-// cannot decide what the suite does, so the test runs always read the default.
-Session::InputMonitoring Session::readInputMonitoringPreference()
-{
-    if (isCommandLineTestMode())
-        return InputMonitoring::off;
-    juce::PropertiesFile properties(rhinoSettingsOptions());
-    const auto stored = properties.getIntValue("monitorAudioInput", static_cast<int>(InputMonitoring::off));
-    return stored == static_cast<int>(InputMonitoring::on)        ? InputMonitoring::on
-         : stored == static_cast<int>(InputMonitoring::automatic) ? InputMonitoring::automatic
-                                                                  : InputMonitoring::off;
+    return applied;
 }
 
 int Session::countInBars() const

@@ -410,13 +410,13 @@ public:
     // The token is what is stored. All Ins is the empty string so that the
     // default writes nothing at all, and a named device is prefixed so that a
     // keyboard called "None" cannot mean anything but itself.
-    struct MidiInputChoice
+    struct InputChoice
     {
         juce::String token;
         juce::String name;
         bool available = true;
     };
-    std::vector<MidiInputChoice> midiInputChoices() const;
+    std::vector<InputChoice> midiInputChoices() const;
     juce::String trackMidiInput(int track) const;
     // What the card and the menu show: the device's name rather than its token.
     juce::String trackMidiInputName(int track) const;
@@ -425,6 +425,20 @@ public:
     static juce::String midiInputKeyboardToken();
     static juce::String midiInputNoneToken();
     static juce::String midiInputDeviceToken(const juce::String& deviceName);
+    // Which audio input a track records from, which is the same idea one
+    // signal down: an audio track names a WaveInputDevice the way a MIDI track
+    // names a MidiInputDevice, it is stored on the track, and it is saved with
+    // the project. The empty token is the input Audio settings made the
+    // default, so a track that has never been asked writes nothing at all --
+    // and a project carried to another machine follows that machine's default
+    // rather than naming an interface that is not plugged into it.
+    std::vector<InputChoice> audioInputChoices() const;
+    juce::String trackAudioInput(int track) const;
+    juce::String trackAudioInputName(int track) const;
+    juce::Result setTrackAudioInput(int track, const juce::String& token);
+    static juce::String audioInputDefaultToken();
+    static juce::String audioInputNoneToken();
+    static juce::String audioInputDeviceToken(const juce::String& deviceName);
     // True when there is a MIDI keyboard on the machine - something other than
     // the two virtual devices Rhino and the engine make for themselves. False
     // means the typing keyboard is the only way to play a MIDI track, which is
@@ -433,21 +447,35 @@ public:
     // Hearing yourself. These are Live's three Monitor settings under another
     // spelling, and the engine happens to carry exactly the same three.
     //
-    // Two things about it are Rhino's rather than Live's. The default is off,
-    // not automatic: the engine makes a live input audible the moment a track
-    // is *armed*, and the machine most people run this on has a microphone at
-    // one end and speakers at the other, so the default Live ships would mean
-    // a feedback tone that lasts as long as the track stays armed.
+    //   Off  records the input without playing it back.
+    //   Auto plays it back only while the track is armed.
+    //   On   plays it back at all times, armed or not -- which is what makes
+    //        it the setting you leave a track on while you set a level.
     //
-    // And it belongs to the audio *input*, not to one track. Live can differ
-    // per track because each track chooses its own input; every audio track
-    // here records the one input, and the engine carries a single mode per
-    // input device, so the setting shows the same on every card because it is
-    // the same setting. MIDI is always monitored: a MIDI input cannot feed
-    // back, and an armed instrument track you could not hear would be useless.
+    // It is a property of the *track*, because a track now names its own
+    // input: both choosers live on the card and the pair of them is what a
+    // track takes in. It travels with the track when the stack is reordered
+    // and is saved with the project, exactly as the arm flag is.
+    //
+    // The default is per kind rather than one value. A MIDI track is `auto`,
+    // which is what every armed instrument track did before this existed and
+    // the only setting under which playing one makes a sound. An audio track
+    // is `off`, where Live starts at `auto`: the machine most people run this
+    // on has a microphone at one end and speakers at the other, so Live's
+    // default is a feedback tone that lasts as long as the track stays armed.
+    // Absent therefore writes nothing, and `trackMonitoring` is the one place
+    // that resolves it.
+    //
+    // The engine carries the mode on the *device*, with the arm flag as the
+    // only per-track term, so two tracks sharing one input cannot hold two
+    // different modes at once. `applyRecordArming` gives such a device the
+    // strongest mode any of its tracks asked for -- on beats auto beats off --
+    // which is the only reconciliation that never silences a track that asked
+    // to hear itself. Give the two tracks different inputs and each gets
+    // exactly what its card says.
     enum class InputMonitoring { off, automatic, on };
-    InputMonitoring inputMonitoring() const { return monitorAudioInput; }
-    void setInputMonitoring(InputMonitoring);
+    InputMonitoring trackMonitoring(int track) const;
+    juce::Result setTrackMonitoring(int track, InputMonitoring);
     static juce::String inputMonitoringName(InputMonitoring);
     // Where the recording started, so the arrangement can draw the span being
     // recorded. Negative when nothing is being recorded.
@@ -888,6 +916,12 @@ private:
     te::MidiInputDevice* computerKeyboardDevice() const;
     te::MidiInputDevice* ensureComputerKeyboardDevice();
     te::MidiInputDevice* midiInputDeviceForTrack(int track) const;
+    // SessionAudioInput.cpp - the same question for audio. The default is the
+    // one Audio settings chose, or the first the device offers when nothing
+    // has been; null means the track is set to None, or names a device this
+    // machine does not have.
+    te::WaveInputDevice* defaultWaveInputDevice() const;
+    te::WaveInputDevice* audioInputDeviceForTrack(int track) const;
     // A physical input only feeds the All Ins merge while it is open, so
     // opening them is part of what All Ins means rather than a side effect.
     void enablePhysicalMidiInputs();
@@ -928,7 +962,6 @@ private:
     void detachCountIn();
     // SessionPreview.cpp
     static bool readPreviewPreference();
-    static InputMonitoring readInputMonitoringPreference();
     void ensurePreviewAttached();
     void releasePreview();
     void buildStarterEdit();
@@ -990,7 +1023,6 @@ private:
     juce::AudioSourcePlayer previewPlayer;
     std::unique_ptr<juce::AudioFormatReaderSource> previewReader;
     bool browserPreview = readPreviewPreference();
-    InputMonitoring monitorAudioInput = readInputMonitoringPreference();
     bool previewAttached = false;
     // Built on first use and, like the preview, detached before the device it
     // is registered with goes.

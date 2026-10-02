@@ -33,6 +33,10 @@ const juce::Identifier trackArmedID {"rhinoArmed"};
 // runs anything. Only "midi" is ever written: a track with no answer is an
 // audio track, which is what every document written before this contains.
 const juce::Identifier trackTypeID {"rhinoTrackType"};
+// Whether you hear what the track is taking in. Absent is the default for the
+// track's kind - auto on MIDI, off on audio - so the common answer writes
+// nothing; see the note on Session::InputMonitoring for why those two differ.
+const juce::Identifier trackMonitorID {"rhinoMonitor"};
 // The count-in lives beside the other metronome settings, on the edit.
 const juce::Identifier countInBarsID {"rhinoCountInBars"};
 

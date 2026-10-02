@@ -46,6 +46,12 @@ extern const juce::Identifier legacyTrackGroupIdID;
 extern const juce::Identifier legacyTrackGroupNameID;
 extern const juce::Identifier legacyTrackGroupColourID;
 extern const juce::Identifier trackArmedID;
+// Whether you hear the input a track is taking in. Beside the arm flag
+// because the two describe one thing - what a track does with its input - and
+// SessionRecording.cpp reads both. Written only when it is not the default for
+// the track's kind; which input that is stays private to the file that owns
+// it, the way rhinoMidiInput and rhinoAudioInput both do.
+extern const juce::Identifier trackMonitorID;
 // Written only for a track created as a MIDI track. Absent means audio,
 // which is what every track written before this says and what an audio
 // track still says - so the property never has to be migrated in.
@@ -59,7 +65,7 @@ bool isCommandLineTestMode();
 
 // The application's own preferences - what belongs to this machine rather than
 // to the project. Named here rather than in one feature's .cpp now that the
-// browser preview and input monitoring both read it.
+// browser preview and the last track kind chosen both read it.
 juce::PropertiesFile::Options rhinoSettingsOptions();
 
 // The one thing Rhino tells the engine about itself.

@@ -64,6 +64,7 @@ target_sources(RhinoNative PRIVATE
     src/SessionPreview.cpp
     src/SessionRecording.cpp
     src/SessionMidiInput.cpp
+    src/SessionAudioInput.cpp
     src/SessionSidechain.cpp
     src/SessionAutomation.cpp
     src/SessionTransport.cpp
@@ -85,6 +86,7 @@ target_sources(RhinoNative PRIVATE
     src/ArrangementAutomation.cpp
     src/ArrangementAutomationPaint.cpp
     src/ArrangementDrops.cpp
+    src/MonitorSelector.cpp
     src/SessionView.cpp
     src/SessionViewPainter.cpp
     src/SessionViewGestures.cpp

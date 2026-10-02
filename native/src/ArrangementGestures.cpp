@@ -801,29 +801,25 @@ void Arrangement::showTrackMenu(int track)
     menu.addSeparator();
     menu.addItem(3, "Rename " + session.trackName(track) + "...       F2");
     menu.addSeparator();
-    // Hearing yourself, in Live's three settings. It belongs to the audio input
-    // rather than to this card - every audio track records the one input - so
-    // the header says so and every card shows the same answer.
-    if (session.trackRecordInput(track) == Session::RecordInput::audio)
+    // What the track takes in and whether you hear it. The card carries both,
+    // but only on a row tall enough for the third and fourth control lines -
+    // so the menu is where a short row reaches them. A group bus takes neither,
+    // because it carries its members' audio and has no input of its own.
+    if (const auto takes = session.trackRecordInput(track); takes != Session::RecordInput::none)
     {
+        menu.addItem(211, (takes == Session::RecordInput::midi
+                               ? "MIDI From: " + session.trackMidiInputName(track)
+                               : "Audio From: " + session.trackAudioInputName(track)) + "...");
         juce::PopupMenu monitoring;
-        monitoring.addSectionHeader("Audio input");
         for (const auto mode : {Session::InputMonitoring::off, Session::InputMonitoring::automatic,
                                 Session::InputMonitoring::on})
             monitoring.addItem(200 + static_cast<int>(mode),
                                Session::inputMonitoringName(mode)
                                    + (mode == Session::InputMonitoring::automatic ? "   (while armed)"
                                     : mode == Session::InputMonitoring::on        ? "   (always)"
-                                                                                  : ""),
-                               true, session.inputMonitoring() == mode);
-        menu.addSubMenu("Monitor: " + Session::inputMonitoringName(session.inputMonitoring()), monitoring);
-    }
-    else if (session.trackRecordInput(track) == Session::RecordInput::midi)
-    {
-        // The card carries this too, but only on a row tall enough for a third
-        // line - so the menu is where a short row reaches it.
-        menu.addItem(211, "MIDI From: " + session.trackMidiInputName(track) + "...");
-        menu.addItem(210, "Monitor: always, on an instrument track", false, false);
+                                                                                  : "   (never)"),
+                               true, session.trackMonitoring(track) == mode);
+        menu.addSubMenu("Monitor: " + Session::inputMonitoringName(session.trackMonitoring(track)), monitoring);
     }
     menu.addSeparator();
     // A bus is the group, so what it offers is what happens to the group. The
@@ -862,7 +858,7 @@ void Arrangement::showTrackMenu(int track)
                 if (safe->status)
                     safe->status(done.failed() ? done.getErrorMessage() : subject + " left the group");
             }
-            else if (choice == 211) safe->showMidiInputMenu(track);
+            else if (choice == 211) safe->showTrackInputMenu(track);
             else if (choice == 5) safe->groupSelectedTracks();
             else if (choice == 6) safe->toggleGroupCollapsed(safe->session.trackGroupBusId(track));
             else if (choice == 7)
@@ -871,18 +867,7 @@ void Arrangement::showTrackMenu(int track)
                 safe->ungroupSelection();
             }
             else if (choice >= 200 && choice <= 202)
-            {
-                const auto mode = static_cast<Session::InputMonitoring>(choice - 200);
-                safe->session.setInputMonitoring(mode);
-                if (safe->status)
-                    safe->status(mode == Session::InputMonitoring::off
-                                     ? "The audio input is not played back"
-                                 : mode == Session::InputMonitoring::automatic
-                                     ? "An armed track plays its audio input back. Use headphones: a built-in "
-                                       "microphone and speakers will feed back."
-                                     : "The audio input is played back at all times. Use headphones: a built-in "
-                                       "microphone and speakers will feed back.");
-            }
+                safe->applyMonitorChoice(track, static_cast<Session::InputMonitoring>(choice - 200));
             else if (choice >= 100 && choice - 100 < static_cast<int>(safe->groups.size()))
             {
                 const auto group = safe->groups[static_cast<size_t>(choice - 100)];
@@ -890,6 +875,92 @@ void Arrangement::showTrackMenu(int track)
                 if (safe->status)
                     safe->status(done.failed() ? done.getErrorMessage() : subject + " joined " + group.name);
             }
+        });
+}
+
+// Which of the two choosers a card's input button opens. The track says which,
+// and the track's kind is fixed when it is made, so the button never has to
+// decide anything the model has not already settled.
+void Arrangement::showTrackInputMenu(int track)
+{
+    switch (session.trackRecordInput(track))
+    {
+        case Session::RecordInput::midi:  showMidiInputMenu(track); break;
+        case Session::RecordInput::audio: showAudioInputMenu(track); break;
+        case Session::RecordInput::none:
+            if (status)
+                status(session.trackName(track) + " carries its members' audio, so it takes no input of its own.");
+            break;
+    }
+}
+
+// Applying a monitor choice, from the card's segmented control and from the
+// same choice in the track menu. One place, because both have to say the same
+// thing afterwards - and because hearing a live microphone through the
+// machine's own speakers is worth warning about every time it is asked for.
+void Arrangement::applyMonitorChoice(int track, Session::InputMonitoring mode)
+{
+    const auto done = session.setTrackMonitoring(track, mode);
+    if (status == nullptr)
+        return;
+    if (done.failed())
+    {
+        status(done.getErrorMessage());
+        return;
+    }
+    const auto name = session.trackName(track);
+    // Only an audio input can feed back. A MIDI input cannot, so the warning
+    // would be noise on an instrument track - where Auto is also the default.
+    const auto feedback = session.trackRecordInput(track) == Session::RecordInput::audio
+                              ? " Use headphones: a built-in microphone and speakers will feed back." : "";
+    status(mode == Session::InputMonitoring::off
+               ? name + " does not play its input back"
+           : mode == Session::InputMonitoring::automatic
+               ? name + " plays its input back while it is armed." + feedback
+               : name + " plays its input back at all times, armed or not." + feedback);
+}
+
+// The audio input chooser, opened from the card and from the track menu. Built
+// when the menu opens for the same reason the MIDI one is: it describes the
+// machine, and an interface plugged in while Rhino was running should be in it.
+void Arrangement::showAudioInputMenu(int track)
+{
+    if (session.trackRecordInput(track) != Session::RecordInput::audio)
+    {
+        if (status)
+            status(session.trackName(track) + " is a MIDI track. What plays it is chosen with MIDI From.");
+        return;
+    }
+    const auto choices = session.audioInputChoices();
+    const auto current = session.trackAudioInput(track);
+
+    juce::PopupMenu menu;
+    menu.addSectionHeader("AUDIO FROM");
+    for (size_t i = 0; i < choices.size(); ++i)
+    {
+        // A separator before the hardware and another before None, so the
+        // three kinds of answer read apart rather than as one long list.
+        if (choices[i].token.startsWith("device:") && (i == 0 || !choices[i - 1].token.startsWith("device:")))
+            menu.addSeparator();
+        if (choices[i].token == Session::audioInputNoneToken())
+            menu.addSeparator();
+        menu.addItem(static_cast<int>(i) + 1, choices[i].name, choices[i].available,
+                     choices[i].token == current);
+    }
+    juce::Component* anchor = this;
+    if (juce::isPositiveAndBelow(track, static_cast<int>(trackInput.size())))
+        anchor = trackInput[static_cast<size_t>(track)].get();
+    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(anchor),
+        [safe = juce::Component::SafePointer<Arrangement>(this), track, choices] (int result)
+        {
+            if (safe == nullptr || result == 0) return;
+            const auto& chosen = choices[static_cast<size_t>(result - 1)];
+            const auto done = safe->session.setTrackAudioInput(track, chosen.token);
+            if (safe->status == nullptr) return;
+            // The call reports two things at once, as arming does: whether the
+            // track took the choice, and whether the input behind it is there.
+            safe->status(done.failed() ? done.getErrorMessage()
+                                       : safe->session.trackName(track) + " records from " + chosen.name);
         });
 }
 
@@ -923,8 +994,8 @@ void Arrangement::showMidiInputMenu(int track)
                      choices[i].token == current);
     }
     juce::Component* anchor = this;
-    if (juce::isPositiveAndBelow(track, static_cast<int>(midiInput.size())))
-        anchor = midiInput[static_cast<size_t>(track)].get();
+    if (juce::isPositiveAndBelow(track, static_cast<int>(trackInput.size())))
+        anchor = trackInput[static_cast<size_t>(track)].get();
     menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(anchor),
         [safe = juce::Component::SafePointer<Arrangement>(this), track, choices] (int result)
         {

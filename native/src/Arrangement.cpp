@@ -132,11 +132,15 @@ void Arrangement::resized()
         const auto left = cardControlLeft + static_cast<int>(trackIndent(i));
         const auto right = left + cardControlWidth + cardControlGap;
         const auto mixerVisible = row.getHeight() >= mixerLaneHeight;
-        // Only a MIDI track has an input to choose, and the line only appears
-        // once the row is tall enough to hold it -- the same rule the faders
-        // already follow one line up.
-        const auto inputVisible = row.getHeight() >= inputLaneHeight
-            && session.trackRecordInput(i) == Session::RecordInput::midi;
+        // A track that takes an input gets both of the lines that describe it:
+        // which input, and whether you hear it. A group bus and the main row
+        // take none, so they get neither. Each line only appears once the row
+        // is tall enough to hold it -- the same rule the faders already follow
+        // one line up, and the track menu carries both for the rows that are
+        // not.
+        const auto takesInput = session.trackRecordInput(i) != Session::RecordInput::none;
+        const auto inputVisible = row.getHeight() >= inputLaneHeight && takesInput;
+        const auto monitorVisible = row.getHeight() >= monitorLaneHeight && takesInput;
         // A row folded into a collapsed group is laid out at no height, so its
         // controls go with it rather than piling up under the band above.
         const auto visible = row.getHeight() > 1.0f && row.getBottom() > lanesTop && row.getY() < lanesBottom;
@@ -144,20 +148,22 @@ void Arrangement::resized()
         solo[index]->setVisible(visible);
         // A group bus records nothing of its own, so it is given no dot to
         // press rather than one that refuses.
-        const auto armable = session.trackRecordInput(i) != Session::RecordInput::none;
-        arm[index]->setVisible(visible && armable);
+        arm[index]->setVisible(visible && takesInput);
         volume[index]->setVisible(visible && mixerVisible);
         pan[index]->setVisible(visible && mixerVisible);
-        midiInput[index]->setVisible(visible && inputVisible);
+        trackInput[index]->setVisible(visible && inputVisible);
+        monitor[index]->setVisible(visible && monitorVisible);
         const auto buttonStep = cardButtonWidth + cardControlGap;
         mute[index]->setBounds(left, top, cardButtonWidth, 18);
         solo[index]->setBounds(left + buttonStep, top, cardButtonWidth, 18);
         arm[index]->setBounds(left + 2 * buttonStep, top, cardButtonWidth, 18);
         volume[index]->setBounds(left, top + 23, cardControlWidth, 16);
         pan[index]->setBounds(right, top + 23, cardControlWidth, 16);
-        // The chooser spans both fader columns, because a device name needs
-        // the room and there is nothing to sit beside it.
-        midiInput[index]->setBounds(left, top + 42, cardControlWidth * 2 + cardControlGap, 16);
+        // Both of these span both fader columns: a device name needs the room,
+        // and three segments divide that width evenly.
+        const auto inputWidth = cardControlWidth * 2 + cardControlGap;
+        trackInput[index]->setBounds(left, top + 42, inputWidth, 16);
+        monitor[index]->setBounds(left, top + 61, inputWidth, 15);
     }
     {
         // Everything the main row carries sits on its single line, and its two

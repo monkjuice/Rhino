@@ -126,9 +126,9 @@ void Session::midiDevicesChanged()
     sendSynchronousChangeMessage();
 }
 
-std::vector<Session::MidiInputChoice> Session::midiInputChoices() const
+std::vector<Session::InputChoice> Session::midiInputChoices() const
 {
-    std::vector<MidiInputChoice> choices;
+    std::vector<InputChoice> choices;
     choices.push_back({midiInputAllInsToken(), "All Ins", true});
     choices.push_back({midiInputKeyboardToken(), computerKeyboardDeviceName, true});
     for (const auto& candidate : engine.getDeviceManager().getMidiInDevices())

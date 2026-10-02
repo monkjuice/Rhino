@@ -70,15 +70,29 @@ void Arrangement::sync()
         // The dot is the same whatever the track records, because the track
         // already says which that is. What it would capture goes in the
         // description, which follows the track as an instrument lands on it.
-        arm[index]->setTooltip(session.trackRecordInput(track) == Session::RecordInput::midi
+        const auto takes = session.trackRecordInput(track);
+        arm[index]->setTooltip(takes == Session::RecordInput::midi
                                    ? "Arm " + name + " - records what you play on the MIDI input into a new clip."
-                                   : "Arm " + name + " - records the audio input from Audio settings into a new clip.");
-        // Whatever the card shows here is what an armed track actually listens
-        // to: the name comes from the session rather than from anything the
-        // menu remembered.
-        midiInput[index]->setButtonText(session.trackMidiInputName(track) + "  v");
-        midiInput[index]->setTooltip("MIDI From on " + name + " - which input plays it. All Ins is every keyboard "
-                                     "plus the typing keyboard; Computer Keyboard is the typing keyboard alone.");
+                                   : "Arm " + name + " - records its input, "
+                                         + session.trackAudioInputName(track) + ", into a new clip.");
+        // Whatever the card shows here is what the track actually listens to:
+        // the name comes from the session rather than from anything the menu
+        // remembered. Which of the two inputs is named follows from what the
+        // track is, which is fixed when the track is made.
+        trackInput[index]->setButtonText((takes == Session::RecordInput::midi
+                                              ? session.trackMidiInputName(track)
+                                              : session.trackAudioInputName(track)) + "  v");
+        trackInput[index]->setTooltip(takes == Session::RecordInput::midi
+            ? "MIDI From on " + name + " - which input plays it. All Ins is every keyboard "
+              "plus the typing keyboard; Computer Keyboard is the typing keyboard alone."
+            : "Audio From on " + name + " - which input it records. Default In is whichever input "
+              "Audio settings chose, so it follows the machine the project is opened on.");
+        monitor[index]->setMode(session.trackMonitoring(track));
+        monitor[index]->setTooltip("Monitor on " + name + " - On plays its input back at all times, Auto only "
+                                   "while the track is armed, Off never."
+                                   + juce::String(takes == Session::RecordInput::audio
+                                                      ? " Use headphones: a built-in microphone and speakers "
+                                                        "will feed back." : ""));
         volume[index]->setTooltip("Volume of " + name + " - drag to set the level, double-click for 0.0 dB.");
         pan[index]->setTooltip("Pan of " + name + " - drag to place it between the speakers, double-click to "
                                "centre it.");
@@ -217,13 +231,20 @@ void Arrangement::syncTrackControls()
         // on the card already wear.
         armButton->setColour(juce::TextButton::buttonOnColourId, palette::recordAccent.darker(0.2f));
         armButton->setColour(juce::TextButton::textColourOnId, juce::Colours::white);
-        // Live's MIDI From chooser. The list is the machine's devices at the
+        // What the track takes in. The list is the machine's devices at the
         // moment it is opened, so it is a menu rather than a ComboBox holding
-        // a snapshot of them.
+        // a snapshot of them, and which list that is follows from the track.
         auto inputButton = std::make_unique<juce::TextButton>("All Ins  v");
-        inputButton->onClick = [this, track] { showMidiInputMenu(track); };
+        inputButton->onClick = [this, track] { showTrackInputMenu(track); };
         inputButton->setColour(juce::TextButton::buttonColourId, palette::control);
         inputButton->setColour(juce::TextButton::textColourOffId, palette::textDim);
+        // And whether you hear it. The three settings are one answer, so they
+        // are one control; see MonitorSelector.h.
+        auto monitorControl = std::make_unique<MonitorSelector>();
+        monitorControl->onChoose = [this, track](Session::InputMonitoring mode)
+        {
+            applyMonitorChoice(track, mode);
+        };
         auto volumeSlider = std::make_unique<juce::Slider>();
         volumeSlider->setSliderStyle(juce::Slider::LinearBar);
         // The bar paints the value itself, in a colour picked for whichever of
@@ -267,12 +288,14 @@ void Arrangement::syncTrackControls()
         laneHeaders.addAndMakeVisible(*soloButton);
         laneHeaders.addAndMakeVisible(*armButton);
         laneHeaders.addAndMakeVisible(*inputButton);
+        laneHeaders.addAndMakeVisible(*monitorControl);
         laneHeaders.addAndMakeVisible(*volumeSlider);
         laneHeaders.addAndMakeVisible(*panSlider);
         mute.push_back(std::move(muteButton));
         solo.push_back(std::move(soloButton));
         arm.push_back(std::move(armButton));
-        midiInput.push_back(std::move(inputButton));
+        trackInput.push_back(std::move(inputButton));
+        monitor.push_back(std::move(monitorControl));
         volume.push_back(std::move(volumeSlider));
         pan.push_back(std::move(panSlider));
     }
@@ -281,7 +304,8 @@ void Arrangement::syncTrackControls()
         mute.pop_back();
         solo.pop_back();
         arm.pop_back();
-        midiInput.pop_back();
+        trackInput.pop_back();
+        monitor.pop_back();
         volume.pop_back();
         pan.pop_back();
     }

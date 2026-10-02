@@ -75,21 +75,89 @@
             require(session.toggleRecording().failed(), "and recording refuses rather than rolling silently");
             require(!session.isRecording() && !session.isCountingIn(), "Nothing started");
 
-            scenario("recording: the audio input is not monitored unless it is asked for");
+            scenario("recording: monitoring belongs to the track, and defaults to its kind");
             // Monitoring an armed audio track through the machine's own
-            // speakers is a feedback loop, so it is off until it is chosen.
-            require(session.inputMonitoring() == Session::InputMonitoring::off, "Monitoring starts off");
-            session.setInputMonitoring(Session::InputMonitoring::automatic);
-            require(session.inputMonitoring() == Session::InputMonitoring::automatic,
-                    "and can follow the arm, as Live's Auto does");
-            session.setInputMonitoring(Session::InputMonitoring::on);
-            require(session.inputMonitoring() == Session::InputMonitoring::on, "or stay on");
-            require(Session::inputMonitoringName(Session::InputMonitoring::on) == "In"
+            // speakers is a feedback loop, so an audio track is off until it
+            // is asked for. A MIDI input cannot feed back and an armed
+            // instrument track you could not hear would be useless, so a MIDI
+            // track follows the arm instead.
+            require(session.trackRecordInput(0) == Session::RecordInput::midi
+                        && session.trackRecordInput(member) == Session::RecordInput::audio,
+                    "One track of each kind, so both defaults can be read off at once");
+            require(session.trackMonitoring(member) == Session::InputMonitoring::off,
+                    "An audio track starts off");
+            require(session.trackMonitoring(0) == Session::InputMonitoring::automatic,
+                    "while a MIDI track starts on Auto");
+            require(session.trackMonitoring(session.masterTrackIndex()) == Session::InputMonitoring::off,
+                    "and the main row, which takes no input, answers off rather than guessing");
+            require(Session::inputMonitoringName(Session::InputMonitoring::on) == "On"
                         && Session::inputMonitoringName(Session::InputMonitoring::automatic) == "Auto"
                         && Session::inputMonitoringName(Session::InputMonitoring::off) == "Off",
-                    "and the three are named the way every other DAW names them");
-            session.setInputMonitoring(Session::InputMonitoring::off);
-            require(session.inputMonitoring() == Session::InputMonitoring::off, "and off again");
+                    "The three are named the way the card spells them");
+
+            scenario("recording: each track answers for itself");
+            juce::ignoreUnused(session.setTrackMonitoring(member, Session::InputMonitoring::on));
+            require(session.trackMonitoring(member) == Session::InputMonitoring::on,
+                    "One track can be told to monitor at all times");
+            require(session.trackMonitoring(0) == Session::InputMonitoring::automatic,
+                    "without moving the one beside it");
+            juce::ignoreUnused(session.setTrackMonitoring(0, Session::InputMonitoring::off));
+            require(session.trackMonitoring(0) == Session::InputMonitoring::off,
+                    "and a MIDI track can be taken off its default too");
+            require(session.setTrackMonitoring(bus, Session::InputMonitoring::on).failed(),
+                    "A group bus has no input of its own, so it refuses");
+            require(session.setTrackMonitoring(session.masterTrackIndex(), Session::InputMonitoring::on).failed(),
+                    "and so does the main row");
+
+            scenario("recording: monitoring is saved with the project, on the track that holds it");
+            {
+                const auto monitored = session.projectSnapshot();
+                juce::TemporaryFile monitoredProject(".rhinoedit");
+                require(session.restoreProject(monitored, monitoredProject.getFile()).wasOk(),
+                        "The project reopens");
+                require(session.trackMonitoring(member) == Session::InputMonitoring::on
+                            && session.trackMonitoring(0) == Session::InputMonitoring::off,
+                        "with both answers back on the tracks that held them");
+            }
+            juce::ignoreUnused(session.setTrackMonitoring(member, Session::InputMonitoring::off));
+            juce::ignoreUnused(session.setTrackMonitoring(0, Session::InputMonitoring::automatic));
+            require(session.trackMonitoring(member) == Session::InputMonitoring::off
+                        && session.trackMonitoring(0) == Session::InputMonitoring::automatic,
+                    "and both go back to their defaults");
+
+            scenario("recording: a track names the audio input it records from");
+            require(session.trackAudioInput(member) == Session::audioInputDefaultToken(),
+                    "A new audio track takes the default input");
+            require(session.trackAudioInputName(member) == "Default In", "which is what its card says");
+            {
+                const auto audioChoices = session.audioInputChoices();
+                require(audioChoices.size() >= 2, "The default and None are always offered");
+                require(audioChoices.front().token == Session::audioInputDefaultToken(),
+                        "The default comes first");
+                require(audioChoices.back().token == Session::audioInputNoneToken(), "and None last");
+                require(std::all_of(audioChoices.begin() + 1, audioChoices.end() - 1,
+                                    [](const auto& choice) { return choice.token.startsWith("device:"); }),
+                        "with the machine's own inputs between them");
+            }
+            require(session.setTrackAudioInput(member, Session::audioInputNoneToken()).wasOk(),
+                    "A track can be told to record from nothing");
+            require(session.trackAudioInputName(member) == "None", "and says so");
+            require(session.setTrackAudioInput(0, Session::audioInputNoneToken()).failed(),
+                    "A MIDI track has no audio input to choose");
+            require(session.trackAudioInput(0) == Session::audioInputDefaultToken(),
+                    "and is left alone by the refusal");
+            require(session.setTrackAudioInput(bus, Session::audioInputNoneToken()).failed(),
+                    "and neither has a group bus");
+            {
+                const auto routed = session.projectSnapshot();
+                juce::TemporaryFile routedProject(".rhinoedit");
+                require(session.restoreProject(routed, routedProject.getFile()).wasOk(), "The project reopens");
+                require(session.trackAudioInputName(member) == "None",
+                        "with the track still recording from nothing");
+            }
+            require(session.setTrackAudioInput(member, Session::audioInputDefaultToken()).wasOk(),
+                    "and it can be put back on the default");
+            require(session.trackAudioInputName(member) == "Default In", "which is the default again");
 
             scenario("recording: the count-in is one to four bars, or off");
             session.setCountInBars(2);
@@ -122,6 +190,16 @@
             juce::ignoreUnused(session.setTrackArmed(pairSecond, true));
             require(session.isTrackArmed(pairFirst) && session.isTrackArmed(pairSecond),
                     "Both take the arm");
+            // Two tracks on one input cannot hold two monitor modes at once -
+            // the engine carries the mode on the device - so the device takes
+            // the strongest either of them asked for. Neither track's own
+            // setting is rewritten by that: the cards keep saying what they
+            // were told, which is what makes the rule explainable.
+            juce::ignoreUnused(session.setTrackMonitoring(pairFirst, Session::InputMonitoring::on));
+            require(session.trackMonitoring(pairFirst) == Session::InputMonitoring::on
+                        && session.trackMonitoring(pairSecond) == Session::InputMonitoring::off,
+                    "One of a pair sharing an input can monitor without moving the other's setting");
+            juce::ignoreUnused(session.setTrackMonitoring(pairFirst, Session::InputMonitoring::off));
             // Both audio tracks record from the one input, so both have to be
             // destinations of it at once. The engine's setTarget can either add
             // a destination or move the input onto one, clearing the rest; the
@@ -143,6 +221,19 @@
                             "The audio input records into both armed tracks, not only the one armed last");
                 }
             }
+
+            scenario("recording: monitoring at all times routes the input without arming anything");
+            // On means you hear the input whether or not a take would capture
+            // it, so the track needs the input routed to it while unarmed -
+            // and still must not record when the transport rolls.
+            for (int track = 0; track < session.trackCount(); ++track)
+                juce::ignoreUnused(session.setTrackArmed(track, false));
+            require(!session.anyTrackArmed(), "Nothing is left armed");
+            juce::ignoreUnused(session.setTrackMonitoring(pairFirst, Session::InputMonitoring::on));
+            require(!session.anyTrackArmed(), "Monitoring does not arm the track");
+            require(session.toggleRecording().failed(),
+                    "and recording still refuses, because monitoring is not arming");
+            juce::ignoreUnused(session.setTrackMonitoring(pairFirst, Session::InputMonitoring::off));
 
             scenario("recording: putting the session back");
             require(session.restoreProject(entryState, entryProject.getFile()).wasOk(),

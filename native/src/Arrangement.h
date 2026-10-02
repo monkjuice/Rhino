@@ -1,6 +1,7 @@
 #pragma once
 #include "Session.h"
 #include "ArrangementGrid.h"
+#include "MonitorSelector.h"
 #include <map>
 #include <memory>
 
@@ -308,8 +309,15 @@ private:
     void dragCardGesture(const juce::MouseEvent&);
     void endCardGesture();
     void showTrackMenu(int track);
-    // The MIDI From menu for one card, and for the same card in the track menu.
+    // The input chooser for one card, and for the same card in the track menu.
+    // Which of the two a track gets follows from what the track is, so the
+    // card's button calls the first and never has to know.
+    void showTrackInputMenu(int track);
     void showMidiInputMenu(int track);
+    void showAudioInputMenu(int track);
+    // One place that applies a monitor choice and says what it means, because
+    // the card and the track menu both make it.
+    void applyMonitorChoice(int track, Session::InputMonitoring);
     // A drag that reaches the edge of the lanes pulls the view after it, so a
     // selection or a clip can be dragged somewhere that is not on screen yet.
     // Driven by the frame clock rather than by pointer movement: a pointer
@@ -399,11 +407,17 @@ private:
     // last, as it is in Live's track header, so the two that shape playback
     // stay together on the left.
     std::vector<std::unique_ptr<juce::TextButton>> mute, solo, arm;
-    // Live's MIDI From chooser, on the line under the faders and only on MIDI
-    // tracks: an audio track records the one audio input and has nothing to
-    // choose. It is a button that opens a menu rather than a ComboBox because
-    // the list is rebuilt from the machine's devices every time it is opened.
-    std::vector<std::unique_ptr<juce::TextButton>> midiInput;
+    // What the track takes in, on the line under the faders: Live's MIDI From
+    // on a MIDI track and the audio input on an audio track, in the same place
+    // because they are the same question. It is a button that opens a menu
+    // rather than a ComboBox because the list is rebuilt from the machine's
+    // devices every time it is opened - an interface plugged in while Rhino
+    // was running should be in it, and one unplugged should not.
+    std::vector<std::unique_ptr<juce::TextButton>> trackInput;
+    // And whether you hear it, on the line under that. Every kind of track
+    // that takes an input has one; a group bus and the main row take none, so
+    // they are given no control rather than one that refuses.
+    std::vector<std::unique_ptr<MonitorSelector>> monitor;
     // The same mixer values the session view shows, laid out horizontally.
     std::vector<std::unique_ptr<juce::Slider>> volume, pan;
     juce::Slider masterVolume, masterPan;
@@ -535,10 +549,13 @@ private:
     // A card is name plus one control line at its shortest; the mixer line is
     // the next thing that fits, and past that a row only gets roomier.
     static constexpr float minimumLaneHeight = 32.0f, mixerLaneHeight = 54.0f, maximumLaneHeight = 260.0f;
-    // The third control line - the MIDI input chooser - needs a taller row
-    // again. A default row is between 62 and 96, so it is there unless the
-    // window is very short or the row has been dragged down by hand.
-    static constexpr float inputLaneHeight = 72.0f;
+    // The third control line - the input chooser - needs a taller row again,
+    // and the fourth - the monitor control - taller again than that. A default
+    // row is between 62 and 96 and is 96 in any window worth working in, so
+    // both are there unless the window is very short or the row has been
+    // dragged down by hand. The track menu carries the same two settings for
+    // the rows that are not.
+    static constexpr float inputLaneHeight = 72.0f, monitorLaneHeight = 90.0f;
     // A card is two columns: the controls, then the name on its colour. The
     // divider between them is the same grey the row separators use. Both lines
     // of controls share one left edge and one width, so the buttons sit

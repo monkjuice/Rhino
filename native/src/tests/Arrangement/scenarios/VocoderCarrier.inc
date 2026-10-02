@@ -172,18 +172,23 @@
                     "and can be put back on All Ins");
             require(session.trackMidiInputName(carrierTrack) == "All Ins", "which is the default again");
 
-            scenario("midi input: the card carries the chooser on a MIDI track only");
+            scenario("midi input: the card names whichever input the track takes");
             view.sync();
             view.resized();
-            require(view.midiInput.size() == static_cast<size_t>(session.trackCount()),
-                    "Every card has one");
-            require(view.midiInput[static_cast<size_t>(carrierTrack)]->getButtonText().startsWith("All Ins"),
-                    "and the MIDI track's shows what it listens to");
-            require(!view.midiInput[static_cast<size_t>(voiceTrack)]->isVisible(),
-                    "while an audio track is given none rather than one with nothing in it");
-            require(view.midiInput[static_cast<size_t>(carrierTrack)]->getRight()
+            require(view.trackInput.size() == static_cast<size_t>(session.trackCount()),
+                    "Every card has a chooser");
+            require(view.trackInput[static_cast<size_t>(carrierTrack)]->getButtonText().startsWith("All Ins"),
+                    "and the MIDI track's shows what plays it");
+            require(view.trackInput[static_cast<size_t>(voiceTrack)]->getButtonText().startsWith("Default In"),
+                    "while the audio track's shows what it records");
+            require(view.trackInput[static_cast<size_t>(carrierTrack)]->getRight()
                         <= static_cast<int>(view.trackIndent(carrierTrack) + view.cardControlsWidth),
-                    "It stays inside the controls column with the rest");
+                    "Both stay inside the controls column with the rest");
+            require(view.monitor.size() == static_cast<size_t>(session.trackCount()),
+                    "and every card carries the monitor control beside it");
+            require(view.monitor[static_cast<size_t>(carrierTrack)]->getRight()
+                        <= static_cast<int>(view.trackIndent(carrierTrack) + view.cardControlsWidth),
+                    "which stays in the column too");
 
             scenario("vocoder: putting the session back");
             require(session.restoreProject(entryState, entryProject.getFile()).wasOk(),

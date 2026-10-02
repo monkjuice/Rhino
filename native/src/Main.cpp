@@ -1267,17 +1267,10 @@ private:
         menu.addSeparator();
         menu.addItem(11, "Computer keyboard plays MIDI       M", true, computerKeyboard.isEnabled());
         menu.addItem(5, "Preview library sounds", true, session.previewEnabled());
-        juce::PopupMenu monitoring;
-        for (const auto mode : {Session::InputMonitoring::off, Session::InputMonitoring::automatic,
-                                Session::InputMonitoring::on})
-            monitoring.addItem(20 + static_cast<int>(mode),
-                               Session::inputMonitoringName(mode)
-                                   + (mode == Session::InputMonitoring::automatic ? "   (while armed)"
-                                    : mode == Session::InputMonitoring::on        ? "   (always)"
-                                                                                  : ""),
-                               true, session.inputMonitoring() == mode);
-        menu.addSubMenu("Monitor the audio input: " + Session::inputMonitoringName(session.inputMonitoring()),
-                        monitoring);
+        // Monitoring used to be here, as one setting for the whole document.
+        // It is a property of the track now - each one names its own input -
+        // so it lives where that input is chosen: the card, and the track menu
+        // for a row too short to carry the control.
         menu.addSeparator();
         menu.addItem(4, "Audio settings...");
         // Panic was an exclamation mark on the control bar, which told nobody
@@ -1311,19 +1304,6 @@ private:
                 {
                     safe->session.panicReset();
                     safe->logStatus("Panic reset: stopped transport, reset plugins, restarted audio device");
-                }
-                else if (result >= 20 && result <= 22)
-                {
-                    const auto mode = static_cast<Session::InputMonitoring>(result - 20);
-                    safe->session.setInputMonitoring(mode);
-                    // Said plainly, because hearing the input on a machine with
-                    // its own microphone and speakers is a feedback loop.
-                    safe->logStatus(mode == Session::InputMonitoring::off
-                                        ? "The audio input is not played back"
-                                        : "The audio input is played back"
-                                          + juce::String(mode == Session::InputMonitoring::automatic
-                                                             ? " while a track is armed" : " at all times")
-                                          + ". Use headphones: a built-in microphone and speakers will feed back.");
                 }
             });
     }

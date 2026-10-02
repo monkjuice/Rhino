@@ -314,6 +314,60 @@ void modesDoNotLeakSuite()
     require(worst < 1.0e-6f,
             "a spectral oscillator beside a wavetable one changes nothing about it");
 }
+
+// The loader, end to end: a file on disk becomes a published sample that a
+// voice can render. This is the one check here that goes through Processor
+// rather than Core, because decoding and analysis are the Processor's and
+// because a path that only ever ran from the UI would be untested.
+void loaderSuite()
+{
+    const auto file = juce::File::getSpecialLocation(juce::File::tempDirectory)
+                          .getChildFile("forge-spectral-test.wav");
+    file.deleteFile();
+
+    {
+        juce::AudioBuffer<float> buffer(1, static_cast<int>(testRate));
+        for (int i = 0; i < buffer.getNumSamples(); ++i)
+            buffer.setSample(0, i, static_cast<float>(
+                0.5 * std::sin(2.0 * juce::MathConstants<double>::pi * 440.0
+                               * static_cast<double>(i) / testRate)));
+        juce::WavAudioFormat wav;
+        std::unique_ptr<juce::FileOutputStream> stream(file.createOutputStream());
+        require(stream != nullptr, "the test can write a sample to the temp directory");
+        if (stream == nullptr) return;
+        const std::unique_ptr<juce::AudioFormatWriter> writer(
+            wav.createWriterFor(stream.release(), testRate, 1, 16, {}, 0));
+        require(writer != nullptr, "the test can encode a wav");
+        if (writer != nullptr) writer->writeFromAudioSampleBuffer(buffer, 0, buffer.getNumSamples());
+    }
+
+    Processor processor;
+    const auto result = processor.importSample(0, file);
+    require(result.wasOk(), "a wav file loads as a spectral sample");
+    require(processor.sampleStore().sample(0) != nullptr,
+            "the loaded sample is published to the audio thread");
+    requireText(processor.sampleStore().sourceName(0), "FORGE-SPECTRAL-TEST",
+                "the loaded sample is named after its file");
+
+    // And it renders. The oscillator is switched to spectral through the same
+    // parameter the panel writes, so this exercises the mode as well as the
+    // loader.
+    setValue(processor, "oscAMode", static_cast<float>(OscMode::spectral));
+    setValue(processor, "oscBEnable", 0.0f);
+    setValue(processor, "oscCEnable", 0.0f);
+    setValue(processor, "subEnable", 0.0f);
+    setValue(processor, "noiseEnable", 0.0f);
+    require(peakForNote(processor, 16384) > 1.0e-3f,
+            "a loaded spectral sample is audible");
+
+    processor.clearSample(0);
+    require(processor.sampleStore().sample(0) == nullptr, "clearing a sample unpublishes it");
+
+    const auto missing = processor.importSample(0, file.getSiblingFile("not-there.wav"));
+    require(missing.failed(), "loading a file that is not there fails rather than crashing");
+
+    file.deleteFile();
+}
 }
 
 void spectralTests()
@@ -325,5 +379,6 @@ void spectralTests()
     spectralFilterSuite();
     emptySpectralIsSilentSuite();
     modesDoNotLeakSuite();
+    loaderSuite();
 }
 }

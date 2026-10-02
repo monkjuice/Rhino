@@ -132,8 +132,12 @@ void Editor::paint(juce::Graphics& g)
         // cannot be read off the greyed-out rate knob.
         const auto tableModule = juce::String(descriptor.id) == "table";
         const auto rackModule = isFxModule(descriptor);
+        const auto oscillatorModule = descriptor.display == ui::Display::oscillator
+            ? oscillatorIndexFromId(juce::String(descriptor.id)) : -1;
         ui::drawModuleDetail(g, area, descriptor, on,
-                             descriptor.display == ui::Display::envelope ? envHeaderDetail()
+                             oscillatorModule >= 0 && oscillatorIsSpectral(oscillatorModule)
+                                 ? spectralHeaderDetail(oscillatorModule)
+                             : descriptor.display == ui::Display::envelope ? envHeaderDetail()
                              : descriptor.display == ui::Display::lfo ? lfoHeaderDetail()
                              : rackModule ? fxHeaderDetail()
                              : tableModule && tablePanel != nullptr ? tablePanel->headerDetail()
@@ -171,6 +175,27 @@ void Editor::paint(juce::Graphics& g)
                 // from the frames as authored rather than from a band-limited
                 // copy — so the tube shows the table and not a formula, and not
                 // whichever copy the note being held happens to want.
+                {
+                    const auto which = juce::jmax(
+                        0, oscillatorIndexFromId(juce::String(descriptor.id)));
+                    if (oscillatorIsSpectral(which))
+                    {
+                        // The spectrogram, where a wavetable oscillator draws
+                        // its table. Cached and blitted rather than worked out
+                        // here: see spectrogramFor.
+                        const auto plot = display.reduced(3);
+                        const auto& picture = spectrogramFor(which, plot, accent);
+                        if (picture.isValid()) g.drawImageAt(picture, plot.getX(), plot.getY());
+                        else
+                        {
+                            g.setColour(ui::mutedText.withAlpha(alpha * 0.7f));
+                            g.setFont(ui::panelFont(ui::Face::label, 11.0f));
+                            g.drawText("CLICK TO LOAD A SAMPLE", display,
+                                       juce::Justification::centred);
+                        }
+                        break;
+                    }
+                }
                 if (const auto* source = ui::displaySourceId(descriptor))
                 {
                     // Warped as the voice warps it, which is what the manual

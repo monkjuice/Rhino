@@ -185,11 +185,18 @@ publishes it to the audio thread with `WavetableStore`'s guard pattern rather
 than a new one. `Processor::importSample` decodes any format JUCE can read,
 mixes it to mono and analyses it, on the message thread.
 
-**Still outstanding:** the sample does not yet travel inside the preset or host
-state, there is no factory set under `samples/`, no missing-sample recovery, and
-nothing in the UI calls `importSample` — so a sample can be loaded only from
-code. That is what makes this milestone's second half, and it is the first thing
-to pick up.
+A sample is chosen by clicking the oscillator's display, which opens Load
+Sample / Clear Sample. The display is the chooser because the module has no free
+cell for a field — see the mode decision in `ui/ForgeModules.h` — and because
+the picture *is* the sample. The header names what is loaded, in the slot the
+envelope names its stage in.
+
+**Still outstanding, and this is the gap that matters most:** the sample does
+not travel inside the preset or inside host state. A patch saved with a spectral
+oscillator reopens with the mode set and nothing loaded. That needs a stable id
+and a path stored beside it, with a recoverable state for a sample that has
+moved — and it is the first thing to pick up. There is also no factory set under
+`samples/`, so every sample is one you went and found.
 
 This is also the substrate M14c needs for the noise module's sample sources, so
 it is shared investment rather than spectral-only cost.
@@ -228,12 +235,20 @@ belongs in the strip under the display that M16d adds. Until then the engine
 runs Fwd Loop with transients on. Phase lock is a declared setting that nothing
 reads yet.
 
-### M16d — the spectrogram, and the controls the manual draws — not started
+### M16d — the spectrogram, and the controls the manual draws — part done
 
-`Display::spectral`, with the playhead, draggable start/end markers on the body
-and LO/HI markers down the right edge. The control block laid out as p. 116 has
-it: `SCAN / CUT - FILTER - MIX / PAN` over `WARP 1 / WARP 2 / LEVEL`, with the
-FILTER well drawing the mask between CUT and MIX.
+The oscillator's display draws the spectrogram of whatever it is reading, on a
+logarithmic frequency scale, each row read as its loudest bin rather than its
+average — averaging is what makes a spectrogram look like fog. It is cached
+against the sample's revision and the module's size and blitted on every other
+frame, because the panel repaints whole at 24 Hz and a spectrogram is a pass
+over every bin of every frame.
+
+**Still outstanding:** the playhead, the draggable start/end markers, the LO/HI
+markers down the right edge, and the strip under the display carrying the loop
+field and the unison gear. The frequency bounds exist in the engine and are
+reachable only from code until those markers are drawn. The `FILTER` well
+between CUT and MIX is part of the mask editor and is deferred with it.
 
 ## Deferred, and why
 

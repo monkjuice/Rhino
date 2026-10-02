@@ -324,6 +324,19 @@ private:
     void setOscMode(const juce::String& id, int mode);
     void refreshOscModeFields();
     void showOscModeMenu(Control&);
+
+    // The spectral oscillator's face: ForgeEditorSpectral.cpp.
+    bool oscillatorIsSpectral(int oscillator) const;
+    const juce::Image& spectrogramFor(int oscillator, juce::Rectangle<int> area,
+                                      juce::Colour accent);
+    juce::String spectralHeaderDetail(int oscillator) const;
+    void showSampleMenu(int oscillator);
+    void loadSampleInto(int oscillator);
+    // The drawn spectrogram, and what it was drawn from. Rebuilt only when the
+    // sample or the size changes; see spectrogramFor.
+    std::array<juce::Image, oscillatorCount> spectrogramCache {};
+    std::array<int, oscillatorCount> spectrogramRevision {};
+    std::array<juce::Rectangle<int>, oscillatorCount> spectrogramArea {};
     // The shelves the slots sit on, drawn behind their controls.
     void paintFxShelves(juce::Graphics&, juce::Rectangle<int> area, const ui::Module&);
     // The compact signal-flow overview at the left of the rack. It is a

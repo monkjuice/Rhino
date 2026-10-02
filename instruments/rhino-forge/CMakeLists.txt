@@ -139,6 +139,7 @@ set(forge_sources
     src/ForgeEditorNoise.cpp
     src/ForgeEditorOscMode.cpp
     src/ForgeEditorPages.cpp
+    src/ForgeEditorSpectral.cpp
     src/ForgeEditorPaint.cpp
     src/ForgeEditorWarp.cpp)
 

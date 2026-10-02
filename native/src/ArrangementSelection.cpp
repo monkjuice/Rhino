@@ -287,7 +287,9 @@ void Arrangement::paintTimeSelection(juce::Graphics& g)
     if (marker >= headerWidth && marker <= static_cast<float>(getWidth() - 14))
     {
         g.setColour(juce::Colour(0xffc6d58c));
-        g.fillRect(marker - 1.0f, top, 2.0f, bottom - top);
+        // Left edge on the time, the same two pixels the playhead fills, so
+        // that a parked playhead sits exactly on the line it was parked by.
+        g.fillRect(marker, top, 2.0f, bottom - top);
     }
 }
 

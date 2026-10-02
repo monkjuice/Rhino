@@ -158,7 +158,9 @@ void StepGrid::paintStepSelection(juce::Graphics& g)
     juce::Graphics::ScopedSaveState scope(g);
     g.reduceClipRegion(juce::Rectangle<float>(labelWidth, 0.0f, gridWidth(), bottom).getSmallestIntegerContainer());
     g.setColour(juce::Colour(0xffc6d58c));
-    g.fillRect(left - 1.0f, top, 2.0f, bottom - top);
+    // Left edge on the step, the same two pixels the playhead fills, so that a
+    // parked playhead sits exactly on the line it was parked by.
+    g.fillRect(left, top, 2.0f, bottom - top);
 }
 
 // What is copied is the region, not the notes' own bounding box: a rest at

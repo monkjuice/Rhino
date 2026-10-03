@@ -195,22 +195,24 @@ juce::AudioProcessorValueTreeState::ParameterLayout Processor::parameterLayout()
         result.push_back(parameter(id("Scan"), name("Scan"), {-2.0f, 2.0f}, 1.0f, asPercent));
         result.push_back(parameter(id("Cut"), name("Cut"), {0.0f, 1.0f}, 1.0f, asPercent));
         result.push_back(parameter(id("Mix"), name("Mix"), {0.0f, 1.0f}, 0.0f, asPercent));
-        // How the playhead travels through the sample, and the loop it goes
-        // round. The loop list is Serum's whole one in Serum's order for the
-        // reason MODE's is — see SpectralLoop — and opens on FWD LOOP, which is
-        // what every spectral oscillator did before there was a menu.
+        // How the playhead travels through the sample, and the markers it
+        // travels between. The loop list is Serum's whole one in Serum's order
+        // for the reason MODE's is — see SpectralLoop — and opens on FWD LOOP,
+        // which is what every spectral oscillator did before there was a menu.
         //
-        // The loop's ends are proportions of the whole sample rather than
-        // times, so they mean the same thing whatever is loaded and a patch
-        // that swaps its sample keeps its shape. The loop opens on all of it,
-        // so a fresh oscillator plays the sample through and round exactly as
-        // it did before the markers existed. There is no separate START and
-        // END: the modes that never reach a loop play the whole sample.
+        // The markers are proportions of the whole sample rather than times,
+        // so they mean the same thing whatever is loaded and a patch that swaps
+        // its sample keeps its shape. START and END are read by the modes that
+        // play a stretch, the loop's ends by the modes that go round, and each
+        // pair opens on the whole sample, so a fresh oscillator plays it
+        // through and round exactly as it did before the markers existed.
         juce::StringArray loopNames;
         for (int mode = 0; mode < spectralLoopCount; ++mode) loopNames.add(spectralLoopName(mode));
         result.push_back(std::make_unique<juce::AudioParameterChoice>(
             juce::ParameterID {id("LoopMode"), 1}, name("Loop Mode"), loopNames,
             static_cast<int>(SpectralLoop::forward)));
+        result.push_back(parameter(id("Start"), name("Start"), {0.0f, 1.0f}, 0.0f, asPercent));
+        result.push_back(parameter(id("End"), name("End"), {0.0f, 1.0f}, 1.0f, asPercent));
         result.push_back(parameter(id("LoopStart"), name("Loop Start"), {0.0f, 1.0f}, 0.0f, asPercent));
         result.push_back(parameter(id("LoopEnd"), name("Loop End"), {0.0f, 1.0f}, 1.0f, asPercent));
         // Two warp stages, applied in the order they are declared. The mode is

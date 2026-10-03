@@ -3,6 +3,7 @@
 
 #include "../core/ForgeSpectral.h"
 #include "../ui/ForgePlacement.h"
+#include "../ui/ForgeDisplays.h"
 
 #include <juce_dsp/juce_dsp.h>
 #include <cmath>
@@ -649,6 +650,8 @@ SpectralSettings loopSettings(SpectralLoop mode, float scan = 1.0f)
     SpectralSettings settings;
     settings.loopMode = mode;
     settings.scan = scan;
+    settings.start = 0.1f;
+    settings.end = 0.9f;
     settings.loopStart = 0.5f;
     settings.loopEnd = 0.7f;
     return settings;
@@ -656,34 +659,41 @@ SpectralSettings loopSettings(SpectralLoop mode, float scan = 1.0f)
 
 void loopModesSuite()
 {
-    // Four seconds: 372 frames, so the loop is seventy-four frames long and
-    // the run from the sample's start reaches its start at hop 186 and its end
-    // at hop 260 — which is where REV LOOP and FWD/REV arrive, since both turn
-    // at the far end. Each check reads from past its own mode's arrival.
+    // Four seconds: 372 frames, so the loop is seventy-four frames long. A
+    // loop mode runs in from the sample's own start, whatever START says, and
+    // reaches the loop's start at hop 186 and its end at hop 260 — which is
+    // where REV LOOP and FWD/REV arrive, since both turn at the far end. Each
+    // check reads from past its own mode's arrival.
     const auto sample = sineSample(440.0, 4.0);
     const auto last = static_cast<double>(sample->frameCount() - 1);
     const auto loopStart = 0.5 * last, loopEnd = 0.7 * last;
     constexpr auto slack = 1.0e-6;
 
-    // Every mode starts at the sample's start going forwards and at its end
-    // going backwards. There is no other pair of markers to start from.
+    // ONE-SHOT starts on START going forwards and on END going backwards; a
+    // loop mode ignores both and starts on the sample's own ends.
     {
-        const auto forwards = playheadTrail(*sample, loopSettings(SpectralLoop::forward), 1);
-        requireClose(static_cast<float>(forwards.frames.front()), 1.0f, 0.01f,
-                     "a voice begins playing at the sample's start");
-        const auto backwards = playheadTrail(*sample, loopSettings(SpectralLoop::forward, -1.0f), 1);
-        requireClose(static_cast<float>(backwards.frames.front()), static_cast<float>(last - 1.0), 0.01f,
-                     "a voice with SCAN running backwards begins at the sample's end");
+        const auto once = playheadTrail(*sample, loopSettings(SpectralLoop::oneShot), 1);
+        requireClose(static_cast<float>(once.frames.front()), static_cast<float>(0.1 * last + 1.0), 0.01f,
+                     "a one-shot begins playing at the start marker");
+        const auto onceBack = playheadTrail(*sample, loopSettings(SpectralLoop::oneShot, -1.0f), 1);
+        requireClose(static_cast<float>(onceBack.frames.front()), static_cast<float>(0.9 * last - 1.0), 0.01f,
+                     "a one-shot with SCAN running backwards begins at the end marker");
+        const auto looped = playheadTrail(*sample, loopSettings(SpectralLoop::forward), 1);
+        requireClose(static_cast<float>(looped.frames.front()), 1.0f, 0.01f,
+                     "a loop mode begins at the sample's start, not at a start marker it does not show");
+        const auto loopedBack = playheadTrail(*sample, loopSettings(SpectralLoop::forward, -1.0f), 1);
+        requireClose(static_cast<float>(loopedBack.frames.front()), static_cast<float>(last - 1.0), 0.01f,
+                     "a loop mode with SCAN running backwards begins at the sample's end");
     }
 
-    // ONE-SHOT plays the whole sample and stops, whatever the loop is set to:
-    // the playhead parks on the last frame, the voice reports it has ended,
-    // and what comes out after that is silence.
+    // ONE-SHOT runs to END and stops, whatever the loop is set to: the
+    // playhead parks, the voice reports it has ended, and what comes out after
+    // that is silence.
     {
-        const auto trail = playheadTrail(*sample, loopSettings(SpectralLoop::oneShot), 450);
-        require(trail.ended, "a one-shot ends once it has played the sample through");
-        requireClose(static_cast<float>(trail.frames.back()), static_cast<float>(last), 0.01f,
-                     "a one-shot plays past the loop to the sample's end rather than looping");
+        const auto trail = playheadTrail(*sample, loopSettings(SpectralLoop::oneShot), 400);
+        require(trail.ended, "a one-shot ends once it has played to the end marker");
+        requireClose(static_cast<float>(trail.frames.back()), static_cast<float>(0.9 * last), 0.01f,
+                     "a one-shot plays past the loop and stops at the end marker");
 
         auto voice = std::make_unique<SpectralVoice>();
         auto scratch = std::make_unique<SpectralScratch>();
@@ -691,11 +701,11 @@ void loopModesSuite()
         juce::dsp::FFT fft(spectralFftOrder);
         const auto settings = loopSettings(SpectralLoop::oneShot);
         auto tail = 0.0f;
-        for (int i = 0; i < 450 * spectralHop; ++i)
+        for (int i = 0; i < 400 * spectralHop; ++i)
         {
             auto l = 0.0f, r = 0.0f;
             spectralRead(*voice, *sample, settings, *scratch, fft, l, r);
-            if (i >= 430 * spectralHop) tail = juce::jmax(tail, std::abs(l), std::abs(r));
+            if (i >= 380 * spectralHop) tail = juce::jmax(tail, std::abs(l), std::abs(r));
         }
         require(tail < 1.0e-6f, "a one-shot that has ended is silent");
     }
@@ -753,18 +763,17 @@ void loopModesSuite()
                 "a forward/reverse loop goes both ways about equally");
     }
 
-    // MANUAL does not run: the playhead is wherever SCAN puts it across the
-    // whole sample, every hop, however long the note — the loop does not
-    // narrow it.
+    // MANUAL does not run: the playhead is wherever SCAN puts it between START
+    // and END, every hop, however long the note.
     {
         auto settings = loopSettings(SpectralLoop::manual);
         settings.position = 0.25f;
         const auto trail = playheadTrail(*sample, settings, 100);
-        const auto expected = 0.25 * last;
+        const auto expected = 0.1 * last + 0.25 * (0.9 - 0.1) * last;
         auto still = true;
-        // To a thousandth of a frame: the position arrives as a float.
+        // To a thousandth of a frame: the markers arrive as floats.
         for (const auto frame : trail.frames) still = still && std::abs(frame - expected) < 1.0e-3;
-        require(still, "a manual playhead stays where SCAN puts it across the whole sample");
+        require(still, "a manual playhead stays where SCAN puts it between the start and end markers");
     }
 }
 
@@ -812,10 +821,11 @@ void loopParametersSuite()
     file.deleteFile();
 }
 
-// The loop markers on the real panel: one pair, there and draggable while the
-// loop mode reaches the loop, and neither drawn nor picked up in ONE-SHOT or
-// MANUAL, which never do. Driven through the editor's own mouse handlers, so
-// the hit test, the cursor, the drag and the paint are the ones a hand meets.
+// The markers on the real panel: START and END in ONE-SHOT and MANUAL, the
+// loop's bracket in the modes that go round, and never the pair a mode does not
+// read, either drawn or picked up. Driven through the editor's own mouse
+// handlers, so the hit test, the cursor, the drag and the paint are the ones a
+// hand meets.
 void loopMarkersSuite()
 {
     const auto file = juce::File::getSpecialLocation(juce::File::tempDirectory)
@@ -839,6 +849,8 @@ void loopMarkersSuite()
     require(processor.importSample(0, file).wasOk(), "the marker test's sample loads");
     file.deleteFile();
     setValue(processor, "oscAMode", static_cast<float>(OscMode::spectral));
+    setValue(processor, "oscAStart", 0.1f);
+    setValue(processor, "oscAEnd", 0.9f);
     setValue(processor, "oscALoopStart", 0.3f);
     setValue(processor, "oscALoopEnd", 0.7f);
     std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
@@ -849,9 +861,10 @@ void loopMarkersSuite()
         if (juce::String(module.id) == "oscA") oscA = &module;
     require(oscA != nullptr, "OSC A is declared");
     if (oscA == nullptr) return;
-    // Where the editor draws the spectrogram: the display less its loop strip.
+    // Where the editor draws the spectrogram: the display less its loop strip,
+    // inside the well's wall.
     const auto plot = ui::displayPlotBounds(ui::moduleBounds(editor->getLocalBounds(), *oscA), *oscA,
-                                            static_cast<int>(OscMode::spectral)).reduced(2);
+                                            static_cast<int>(OscMode::spectral)).reduced(ui::spectralWellWall);
     const auto xAt = [&plot] (float proportion)
     {
         return plot.getX() + juce::roundToInt(proportion * static_cast<float>(plot.getWidth()));
@@ -894,34 +907,49 @@ void loopMarkersSuite()
     const juce::MouseCursor resize(juce::MouseCursor::LeftRightResizeCursor);
     const juce::MouseCursor plain(juce::MouseCursor::NormalCursor);
 
-    // In the modes that never reach the loop, nothing is there to pick up and
-    // nothing is drawn: the picture is the same in both.
+    // ONE-SHOT and MANUAL offer START and END down their whole height, and
+    // nothing where the loop is; the two draw the same picture.
     setValue(processor, "oscALoopMode", static_cast<float>(SpectralLoop::oneShot));
-    require(cursorOver({xAt(0.3f), middle}) == plain, "a one-shot offers no loop marker to drag");
+    require(cursorOver({xAt(0.1f), middle}) == resize && cursorOver({xAt(0.9f), plot.getBottom() - 3}) == resize,
+            "a one-shot offers its start and end markers down their whole height");
+    require(cursorOver({xAt(0.3f), middle}) == plain && cursorOver({xAt(0.7f), middle}) == plain,
+            "a one-shot offers no loop marker to drag");
     const auto oneShot = plotPixels();
     setValue(processor, "oscALoopMode", static_cast<float>(SpectralLoop::manual));
-    require(cursorOver({xAt(0.7f), middle}) == plain, "manual offers no loop marker to drag");
-    require(samePixels(oneShot, plotPixels()), "neither a one-shot nor manual draws the loop markers");
+    require(cursorOver({xAt(0.1f), middle}) == resize && cursorOver({xAt(0.3f), middle}) == plain,
+            "manual offers the start and end markers and not the loop's");
+    require(samePixels(oneShot, plotPixels()), "a one-shot and manual draw the same markers");
 
-    // In a loop mode the markers are drawn, and each end is picked up down its
-    // whole height, not only along the bar at the top.
+    // A loop mode offers the loop's ends down their whole height, and nothing
+    // where START and END are; it draws a different picture.
     for (const auto mode : {SpectralLoop::forward, SpectralLoop::reverse, SpectralLoop::pingPong})
     {
         setValue(processor, "oscALoopMode", static_cast<float>(mode));
         require(cursorOver({xAt(0.3f), middle}) == resize && cursorOver({xAt(0.7f), plot.getBottom() - 3}) == resize,
                 "every loop mode offers both loop markers down their whole height");
-        require(!samePixels(oneShot, plotPixels()), "every loop mode draws its loop markers");
+        require(cursorOver({xAt(0.1f), middle}) == plain && cursorOver({xAt(0.9f), middle}) == plain,
+                "a loop mode offers no start or end marker to drag");
+        require(!samePixels(oneShot, plotPixels()), "a loop mode draws the loop's markers in place of the run's");
     }
 
-    // And they move the loop: an end on its own, then the bar whole.
+    // Each pair moves its own parameters and leaves the other pair alone.
+    const auto step = 1.5f / static_cast<float>(plot.getWidth());
+    setValue(processor, "oscALoopMode", static_cast<float>(SpectralLoop::oneShot));
+    drag({xAt(0.1f), middle}, {xAt(0.15f), middle});
+    drag({xAt(0.9f), middle}, {xAt(0.85f), middle});
+    requireClose(value(processor, "oscAStart"), 0.15f, step, "dragging the start marker moves START");
+    requireClose(value(processor, "oscAEnd"), 0.85f, step, "dragging the end marker moves END");
+    requireClose(value(processor, "oscALoopStart"), 0.3f, 1.0e-6f, "and neither touches the loop");
+    const auto startBefore = value(processor, "oscAStart");
+
     setValue(processor, "oscALoopMode", static_cast<float>(SpectralLoop::forward));
     drag({xAt(0.3f), middle}, {xAt(0.2f), middle});
-    const auto step = 1.5f / static_cast<float>(plot.getWidth());
-    requireClose(value(processor, "oscALoopStart"), 0.2f, step, "dragging the left marker moves the loop's start");
+    requireClose(value(processor, "oscALoopStart"), 0.2f, step, "dragging the left loop marker moves the loop's start");
     requireClose(value(processor, "oscALoopEnd"), 0.7f, step, "and leaves its end where it was");
     drag({xAt(0.45f), plot.getY() + 3}, {xAt(0.55f), plot.getY() + 3});
     requireClose(value(processor, "oscALoopStart"), 0.3f, step, "dragging the bar moves the loop's start");
     requireClose(value(processor, "oscALoopEnd"), 0.8f, step, "and its end by the same distance");
+    requireClose(value(processor, "oscAStart"), startBefore, 1.0e-6f, "and none of it touches START");
 }
 }
 

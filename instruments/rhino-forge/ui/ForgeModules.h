@@ -148,23 +148,23 @@ inline std::vector<Row> oscillatorRows(const char* mode, const char* octave, con
         // strip is gated by the mode and the plot — only the plot — knows it.
         // See Row::modeBy.
         //
-        // The loop's two ends are not here. They are the markers on the
-        // spectrogram, where the hand can see what it is putting them on; a
-        // pair of numeric fields beside them was the same setting twice. See
-        // displayParameters.
+        // The markers are not here — neither START and END nor the loop's two
+        // ends. They are dragged on the spectrogram, where the hand can see
+        // what it is putting them on; a pair of numeric fields beside them was
+        // the same setting twice. See displayParameters.
         {spectralStripHeight, {strip(loopMode, "LOOP", Style::selector, 1)},
          1, 0, 0, Seat::displayFoot, mode, static_cast<int>(OscMode::spectral)}};
 }
 
 // The parameters a module's display is the control for, rather than a cell in
-// one of its rows: a spectral oscillator's loop markers, dragged on the
+// one of its rows: a spectral oscillator's markers, dragged on the
 // spectrogram. Named here so the layout test's rule that every parameter
 // appears somewhere on the panel has somewhere to find them.
 inline std::vector<juce::String> displayParameters(const Module& module)
 {
     if (module.display != Display::oscillator) return {};
     const auto prefix = juce::String(module.id);
-    return {prefix + "LoopStart", prefix + "LoopEnd"};
+    return {prefix + "Start", prefix + "End", prefix + "LoopStart", prefix + "LoopEnd"};
 }
 
 inline const std::vector<Module>& modules()

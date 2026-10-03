@@ -230,6 +230,17 @@ inline void drawDisplayWell(juce::Graphics& g, juce::Rectangle<int> area, bool b
     g.drawHorizontalLine(area.getCentreY(), box.getX(), box.getRight());
 }
 
+// A spectral oscillator's well, which is not the picture tube. What goes in it
+// is a spectrogram, a rectangle of time against frequency, and on the tube its
+// corners were cut off by the bowed glass and its edges ran under the bezel. So
+// it is flat and square-cornered, and the picture fills it to within the wall.
+inline constexpr int spectralWellWall = 1;
+
+inline void drawSpectralWell(juce::Graphics& g, juce::Rectangle<int> well, float alpha)
+{
+    drawWell(g, well.toFloat(), juce::Colour(0xff01030c), alpha, 0.0f, 0);
+}
+
 // The oscillator's own table on its tube. The table is handed in rather than
 // looked up, because each oscillator now has one of its own and the panel has
 // to draw the one that oscillator is actually reading.

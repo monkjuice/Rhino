@@ -150,9 +150,17 @@ void Editor::paint(juce::Graphics& g)
         if (display.isEmpty()) continue;
         const auto accent = accentOf(descriptor);
         // An oscillator shows its wave on a picture tube; the other displays
-        // stay flat wells, which is what keeps the tubes reading as screens.
+        // stay flat wells, which is what keeps the tubes reading as screens. A
+        // spectral oscillator is the exception: a spectrogram is a rectangle,
+        // and it gets a square well it fills rather than a bowed glass that
+        // cuts its corners off. See drawSpectralWell.
         if (descriptor.display == ui::Display::oscillator)
-            ui::drawCrtScreen(g, display, accent, alpha);
+        {
+            if (oscillatorIsSpectral(juce::jmax(0, oscillatorIndexFromId(juce::String(descriptor.id)))))
+                ui::drawSpectralWell(g, spectralWellFor(descriptor), alpha);
+            else
+                ui::drawCrtScreen(g, display, accent, alpha);
+        }
         else if (descriptor.display == ui::Display::envelope)
             // Short of the full strip: the zoom control has its own well beside
             // this one, and draws it with the curve.
@@ -185,7 +193,7 @@ void Editor::paint(juce::Graphics& g)
                         if (picture.isValid())
                         {
                             g.drawImageAt(picture, plot.getX(), plot.getY());
-                            paintSpectralMarkers(g, which, plot, alpha);
+                            paintSpectralMarkers(g, which, plot, accent, alpha);
                             // The playhead, where the loudest voice has got to.
                             // Drawn only while a note is actually sounding: at
                             // rest the reading is zero, and a line pinned to the

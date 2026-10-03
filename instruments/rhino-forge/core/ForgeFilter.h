@@ -706,10 +706,15 @@ struct FilterSvfOut
 inline FilterSvfOut filterSvf(float input, float& low, float& band,
                               float g, float damping, float heat)
 {
-    // The resonant path. FAT saturates it, which rounds a sharp peak off and
-    // puts harmonics where it was; at nothing it is the term itself.
+    // The resonant path. FAT adds nonlinear damping, which rounds a sharp peak
+    // off and puts harmonics where it was; at nothing it is the term itself.
+    // Keep the linear term intact: replacing it with tanh removes damping as
+    // the state grows, so a hot resonant filter can run to infinity and poison
+    // the audio stream with NaNs. fed - tanh(fed) is zero to first order, so
+    // the small-signal response stays the one the display draws, and it adds
+    // damping rather than taking it away once the resonant path gets large.
     auto fed = (2.0f * damping + g) * band;
-    if (heat > 0.0f) fed += heat * (std::tanh(fed) - fed);
+    if (heat > 0.0f) fed += heat * (fed - std::tanh(fed));
     const auto high = (input - fed - low) / (1.0f + 2.0f * damping * g + g * g);
     const auto bandStep = g * high;
     const auto bandOut = bandStep + band;

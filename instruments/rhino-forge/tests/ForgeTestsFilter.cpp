@@ -354,6 +354,63 @@ void filterStabilitySuite()
         }
 }
 
+// A real patch exposed a slower failure than the corner sweep above: LOW's
+// FAT path could remove enough of the topology's stabilising feedback that its
+// integrators climbed to infinity after the short stability render had ended.
+// The master clipper turned that climb into a full-scale beep; the following
+// NaNs then made the standalone silent until its audio device was reopened.
+void filterFatLongRunSuite()
+{
+    rhino::forge::Processor processor;
+    setValue(processor, "oscAEnable", 1.0f);
+    setValue(processor, "oscBEnable", 1.0f);
+    setValue(processor, "oscCEnable", 1.0f);
+    setValue(processor, "subEnable", 1.0f);
+    setValue(processor, "noiseEnable", 0.0f);
+    setValue(processor, "oscAPosition", 6.0f / 9.0f);
+    setValue(processor, "oscBPosition", 1.0f / 9.0f);
+    setValue(processor, "oscCPosition", 1.0f / 9.0f);
+    setValue(processor, "oscAUnison", 8.0f);
+    setValue(processor, "oscBUnison", 12.0f);
+    setValue(processor, "oscCUnison", 2.0f);
+    setValue(processor, "oscADetune", 0.592f);
+    setValue(processor, "oscBDetune", 0.504f);
+    setValue(processor, "oscCDetune", 0.18f);
+    setValue(processor, "oscALevel", 0.948f);
+    setValue(processor, "oscBLevel", 0.72f);
+    setValue(processor, "oscCLevel", 0.4f);
+    setValue(processor, "oscAOctave", -2.0f);
+    setValue(processor, "subOctave", 2.0f);
+    setValue(processor, "subLevel", 0.954f);
+    setValue(processor, "filterEnable", 1.0f);
+    setValue(processor, "filterType", static_cast<float>(rhino::forge::FilterType::lowPass));
+    setValue(processor, "cutoff", 6152.4f);
+    setValue(processor, "resonance", 0.732f);
+    setValue(processor, "filterFreq", 0.684f);
+    setValue(processor, "drive", 0.623685f);
+    setValue(processor, "filterMix", 0.812f);
+    setValue(processor, "output", 0.86f);
+    setValue(processor, "env1Attack", 0.001f);
+    setValue(processor, "env1Sustain", 0.752f);
+
+    constexpr double rate = 44100.0;
+    constexpr int blockSize = 441;
+    constexpr int blocks = 500; // Five seconds, over ten times the old failure time.
+    processor.prepareToPlay(rate, blockSize);
+    juce::AudioBuffer<float> buffer(2, blockSize);
+    juce::MidiBuffer midi;
+    midi.addEvent(juce::MidiMessage::noteOn(1, 57, 1.0f), 0);
+
+    auto finite = true;
+    for (int block = 0; block < blocks && finite; ++block)
+    {
+        processor.processBlock(buffer, midi);
+        midi.clear();
+        finite = allSamplesFinite(buffer);
+    }
+    require(finite, "a hot resonant FAT filter stays finite past its former failure time");
+}
+
 // --------------------------------------------------- the curve and the audio ---
 
 // The display draws `filterMagnitude`. This is what makes that worth drawing:
@@ -749,6 +806,7 @@ void filterTests()
     filterRoutingSuite();
     filterListSuite();
     filterStabilitySuite();
+    filterFatLongRunSuite();
     filterResponseSuite();
     filterSecondSuite();
     filterCombTuningSuite();

@@ -31,3 +31,9 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 ## [2026-10-03] update | START and END return for ONE-SHOT and MANUAL, and spectral gets a flat display
 - updated: pages/forge-spectral.md (commit `bbc2b85` supersedes `dbd223d`'s one-pair decision: each loop mode reads exactly one marker pair, START/END for ONE-SHOT and MANUAL, the loop for the rest, and only that pair is drawn or grabbed; no value fields by user request; the pixel-rounded drag value trap in tests; new "The display" section on the square spectral well replacing the CRT tube)
 - updated: pages/forge-editor.md (`displayParameters` now lists all four spectral markers)
+
+## [2026-10-03] update | MANUAL shows only its playhead on the spectrogram
+- updated: pages/forge-spectral.md (commit `ab7fd45`: `spectralMarkerPairOf` / `SpectralMarkerPair { none, run, loop }` replaces `spectralLoopReachesLoop`; MANUAL reads no marker and sweeps the whole sample at `spectralManualPosition(scan)`, shared by voice and panel; START/END for ONE-SHOT only; the playhead is drawn at rest in MANUAL, from the voice while a note plays; the MANUAL panel check)
+- updated: pages/inc-edits-do-not-rebuild.md (the filter-hides-the-build-failure trap hit Forge via `Select-String` chained with `ctest`)
+- updated: pages/build-and-test-forge.md (do not chain a filtered build with ctest; check `$LASTEXITCODE` first)
+- updated: pages/development-environment.md (anchor regex identifier renames with `\b` at both ends)

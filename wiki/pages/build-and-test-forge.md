@@ -63,6 +63,9 @@ ctest --test-dir instruments/rhino-forge/build -C Release -j 8 --output-on-failu
 - To prove a new check can fail, break the code temporarily and then restore it by editing, not with `Copy-Item`. A
   copied-back file keeps the backup's older timestamp, so MSBuild keeps the object built from the broken code
   ([Editing only a scenario .inc does not rebuild the tests](inc-edits-do-not-rebuild.md)).
+- Never filter the build and run `ctest` in one command (`cmake --build ... | Select-String ...; ctest ...`): a failed
+  build leaves the old binary and CTest reports it all passed. Redirect the build to a log, check `$LASTEXITCODE`, and
+  only then run CTest ([Editing only a scenario .inc does not rebuild the tests](inc-edits-do-not-rebuild.md)).
 - `--snapshot`, `--profile` and `--render` are development tools in the same binary, not test cases
   ([Proving a Forge change changed nothing](proving-a-forge-change-changed-nothing.md)).
 

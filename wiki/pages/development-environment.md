@@ -44,6 +44,9 @@ Read the figures too: the screenshots carry layout the prose never states, such 
 - **Bash-tool heredocs collapse backslashes**, even with a quoted delimiter, and truncate long payloads. A patch script
   matching `"\n"` in C++ then fails silently or writes a broken literal (`error C2001`). Write anything longer than a
   few lines, or holding a backslash, to a file with the Write tool and run it by path.
+- **Anchor identifier renames at both ends.** A regex rename of `SpectralMarkers\b` to `SpectralMarkerPair` also
+  rewrote `paintSpectralMarkers`, because a `\b` only at the end matches inside a longer name (2026-10-03). Use
+  `\bName\b`.
 - **Tooling stays out of the repository.** Capture scripts, monitors and skills go in the scratchpad or
   `%USERPROFILE%\.claude\skills\`, where `synth-ab` lives; ask before committing any to the repo
   ([Git workflow](git-workflow.md)).

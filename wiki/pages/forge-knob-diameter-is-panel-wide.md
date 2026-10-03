@@ -15,7 +15,7 @@ Every ordinary knob on Forge's panel is drawn at one size, `ui::uniformKnobDiame
 
 Modules declared with `compactKnobs` size their knobs to their own cells and are left out of the minimum: the macros, the nine MIX strips, the FX rack and the six arp panes (`ui/ForgeModules.h`). Without that, the narrow mixer channels alone would set the size for everything. The oscillators, sub, noise, filter, GLOBAL, ENV and LFO share the one budget.
 
-Height usually binds, because the rule takes 14 px off the height and only 6 off the width. On 2026-09-22, with two oscillators, the oscillators set the size at 54 px from 74×68 cells, and narrowing the filter's cells from 104 to 69 px wide changed nothing. The third oscillator (commit `a5103e9`, 2026-09-28) narrowed each oscillator plate to 16/3 grid columns and cut their display share from 44% to 30%, so those figures are history. Print the limits before trusting any number.
+Height usually binds, because the rule takes 14 px off the height and only 6 off the width. On 2026-09-22, with two oscillators, the oscillators set the size at 54 px from 74×68 cells, and narrowing the filter's cells from 104 to 69 px wide changed nothing. The third oscillator (commit `a5103e9`, 2026-09-28) narrowed each oscillator plate to 16/3 grid columns and cut their display share from 44% to 30%, so those figures are history. Since commit `7be9a56` (2026-10-03) dropped the 20 px plate legend for a 6 px foot margin, the diameter at 1440×900 is 46 px, still bound by the oscillators' two knob rows (95×60 cells); with the legend it was 43 px (95×57). Print the limits before trusting any number.
 
 ## The test no longer guards it
 
@@ -26,7 +26,7 @@ One related standard still bites: `a stacked choice stays tall enough to read` (
 ## Making room
 
 - Print every cell's limit once instead of guessing at row weights. Giving the filter a fourth row once took three build-and-test cycles of guessing.
-- What usually pays for a new row is the module's `displayShare`.
+- What usually pays for a new row is the module's `displayShare`. The plate foot is already down to `plateFootMargin` (6 px), the clearance the housing's rail needs, so there is nothing left to reclaim there.
 - Better still, seat the row inside the display (`Seat` in `ui/ForgeModule.h`). The filter's type field and routing chips sit in strips at the top and foot of its response display, which costs the plot a strip and the knobs nothing.
 
 ## Related

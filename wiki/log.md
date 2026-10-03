@@ -17,3 +17,7 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 
 ## [2026-10-03] update | A switched-off Forge oscillator keeps its shared-cell knobs
 - updated: pages/forge-editor.md (new "Rules that bite" entry: shared-cell hiding reads `inCharge`, not the module's switch; the label-counting trap in editor tests)
+
+## [2026-10-03] update | Forge's plate legends give their strip to the knobs, and captions keep one size
+- updated: pages/forge-editor.md (`Module` positional-initialiser trap; captions span their cell with no side border because `juce::Label` squashes then shrinks text that does not fit, guarded by `captionsKeepTheirSizeSuite`; plates have a 6 px `plateFootMargin` instead of the 20 px legend, commit `7be9a56`)
+- updated: pages/forge-knob-diameter-is-panel-wide.md (shared diameter at 1440×900 now 46 px from 95×60 oscillator cells, was 43; the plate foot has no more height to give)

@@ -196,7 +196,7 @@ inline const std::vector<Module>& modules()
                         "oscABlend", "oscAMix", "oscAPan", "oscALevel",
                         "oscAWarp1", "oscAWarp1Mode", "oscAWarp2Mode", "oscAWarp2",
                         "oscALoopMode", "oscALoopStart", "oscALoopEnd"),
-         0, only(Page::oscillators), 1, 0, 0, oscillatorDisplayPercent, 0, "OSCILLATOR A"},
+         0, only(Page::oscillators), 1, 0, 0, oscillatorDisplayPercent},
         {"oscB", "OSC B", "", "oscBEnable", false, Display::oscillator,
          0, 4.0f + oscillatorColumnSpan, oscillatorColumnSpan, false,
          oscillatorRows("oscBMode", "oscBOctave", "oscBSemitone", "oscBFine",
@@ -204,7 +204,7 @@ inline const std::vector<Module>& modules()
                         "oscBBlend", "oscBMix", "oscBPan", "oscBLevel",
                         "oscBWarp1", "oscBWarp1Mode", "oscBWarp2Mode", "oscBWarp2",
                         "oscBLoopMode", "oscBLoopStart", "oscBLoopEnd"),
-         0, only(Page::oscillators), 1, 0, 0, oscillatorDisplayPercent, 0, "OSCILLATOR B"},
+         0, only(Page::oscillators), 1, 0, 0, oscillatorDisplayPercent},
 
         {"oscC", "OSC C", "", "oscCEnable", false, Display::oscillator,
          0, 4.0f + 2.0f * oscillatorColumnSpan, oscillatorColumnSpan, false,
@@ -213,7 +213,7 @@ inline const std::vector<Module>& modules()
                         "oscCBlend", "oscCMix", "oscCPan", "oscCLevel",
                         "oscCWarp1", "oscCWarp1Mode", "oscCWarp2Mode", "oscCWarp2",
                         "oscCLoopMode", "oscCLoopStart", "oscCLoopEnd"),
-         0, only(Page::oscillators), 1, 0, 0, oscillatorDisplayPercent, 0, "OSCILLATOR C"},
+         0, only(Page::oscillators), 1, 0, 0, oscillatorDisplayPercent},
 
         // The matrix takes the oscillator bank's columns — not the whole row,
         // because SUB, NOISE and FILTER sit either side of them and stay on
@@ -289,7 +289,7 @@ inline const std::vector<Module>& modules()
          {{50, {{"subWave", "", Style::wave}}},
           {20, {{"subOctave", "OCT", Style::stepper}}},
           {30, {{"subLevel", "LEVEL"}}}},
-         0, everyPageBut(Page::mix, Page::fx), 1, 0, 0, 0, 0, nullptr, "SUB / NOISE"},
+         0, everyPageBut(Page::mix, Page::fx), 1, 0, 0, 0, 0, "SUB / NOISE"},
         // Four rows where there was one knob floating in an empty column. The
         // source is the module's display -- what it says is the whole answer to
         // what this module is doing -- so it takes the top of the plate, and
@@ -315,7 +315,7 @@ inline const std::vector<Module>& modules()
           {25, {{"noiseTone", "TONE"}}},
           {25, {{"noiseStereo", "STEREO"}}},
           {25, {{"noiseLevel", "LEVEL"}}}},
-         0, everyPageBut(Page::mix, Page::fx), 1, 0, 0, 0, 0, nullptr, "SUB / NOISE"},
+         0, everyPageBut(Page::mix, Page::fx), 1, 0, 0, 0, 0, "SUB / NOISE"},
         // The display *is* the module, and the two rows that used to sit under
         // it are now inside it. Which filter it is and what is routed into it
         // are readings of the curve rather than settings beside it — the shape
@@ -710,7 +710,7 @@ inline const std::vector<Module>& modules()
         // launchable slots and arrive with them.
         {"arpGlobal", "ARP", "", "arpEnable", true, Display::none, 1, 3, 2, true,
          {{100, {{"arpLaunchQuant", "LAUNCH QUANT", Style::stepper}}}},
-         0, only(Page::arp), 1, 0, 0, 0, 0, nullptr, "ARPEGGIATOR"},
+         0, only(Page::arp), 1, 0, 0, 0, 0, "ARPEGGIATOR"},
 
         // RATE is one knob in one place and UNIT says what it counts in, the
         // pair sharing a cell exactly as an LFO's rate does. TRIP and DOT scale
@@ -721,7 +721,7 @@ inline const std::vector<Module>& modules()
                 {"arpDivision", "RATE", Style::knob, nullptr, 1, "arpRateUnit", true},
                 {"arpRateUnit", "UNIT", Style::stepper}}},
           {30, {{"arpTriplet", "TRIP", Style::chip}, {"arpDotted", "DOT", Style::chip}}}},
-         0, only(Page::arp), 1, 0, 0, 0, 0, nullptr, "ARPEGGIATOR"},
+         0, only(Page::arp), 1, 0, 0, 0, 0, "ARPEGGIATOR"},
 
         // SHIFT is how far each repetition moves and RANGE is how many there
         // are; the shape of the range is the same vocabulary the pattern uses,
@@ -730,14 +730,14 @@ inline const std::vector<Module>& modules()
         {"arpTranspose", "TRANSPOSE", "", nullptr, true, Display::none, 1, 9, 3, true,
          {{42, {{"arpRangeShape", "SHAPE", Style::stepper}}},
           {58, {{"arpShift", "SHIFT"}, {"arpRange", "RANGE"}}}},
-         0, only(Page::arp), 1, 0, 0, 0, 0, nullptr, "ARPEGGIATOR"},
+         0, only(Page::arp), 1, 0, 0, 0, 0, "ARPEGGIATOR"},
 
         {"arpPlayback", "PLAYBACK", "", nullptr, true, Display::none, 1, 12, 4, true,
          {{28, {{"arpLatch", "LATCH", Style::chip}, {"arpThru", "THRU", Style::chip},
                 {"arpChancePre", "PRE", Style::chip}}},
           {36, {{"arpOffset", "OFFSET"}, {"arpRepeats", "REPEATS"}}},
           {36, {{"arpGate", "GATE"}, {"arpChance", "CHANCE"}}}},
-         0, only(Page::arp), 1, 0, 0, 0, 0, nullptr, "ARPEGGIATOR"},
+         0, only(Page::arp), 1, 0, 0, 0, 0, "ARPEGGIATOR"},
 
         // FIRST means nothing until NOTE is on, and the division means nothing
         // until RATE is, so both say so rather than sitting there live and
@@ -748,14 +748,14 @@ inline const std::vector<Module>& modules()
                 {"arpRetrigFirst", "FIRST", Style::chip, nullptr, 1, "arpRetrigNote"}}},
           {33, {{"arpRetrigRateOn", "RATE", Style::chip},
                 {"arpRetrigRate", "EVERY", Style::stepper, nullptr, 2, "arpRetrigRateOn"}}}},
-         0, only(Page::arp), 1, 0, 0, 0, 0, nullptr, "ARPEGGIATOR"},
+         0, only(Page::arp), 1, 0, 0, 0, 0, "ARPEGGIATOR"},
 
         {"arpVelocity", "VELOCITY", "", nullptr, true, Display::none, 1, 19, 2, true,
          {{25, {{"arpVelEnable", "VEL", Style::chip}}},
           {25, {{"arpVelRetrig", "RETRIG", Style::chip, nullptr, 1, "arpVelEnable"}}},
           {50, {{"arpVelDecay", "DECAY", Style::knob, nullptr, 1, "arpVelEnable"},
                 {"arpVelTarget", "TARGET", Style::knob, nullptr, 1, "arpVelEnable"}}}},
-         0, only(Page::arp), 1, 0, 0, 0, 0, nullptr, "ARPEGGIATOR"},
+         0, only(Page::arp), 1, 0, 0, 0, 0, "ARPEGGIATOR"},
     };
     return declared;
 }
@@ -813,7 +813,7 @@ inline bool coveredByArp(const Module& module)
     return false;
 }
 
-// The part number stamped on a plate's foot: the grid row it sits in as a
+// The part number stamped in a plate's header: the grid row it sits in as a
 // letter, and its place across that row as a number.
 //
 // Worked out against the tab being shown rather than against the declaration,

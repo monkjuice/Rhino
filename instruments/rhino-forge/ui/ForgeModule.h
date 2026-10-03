@@ -140,7 +140,7 @@ struct Control
 };
 
 // Where a row is laid out. Almost every row sits in the module's body, under
-// the display and above the plate's legend. A seated row sits *inside* the
+// the display and above the plate's foot. A seated row sits *inside* the
 // display instead, along its top edge or its foot.
 //
 // The filter's two are the reason this exists. Which filter it is and what is
@@ -248,16 +248,9 @@ struct Module
     // numbers: the rack's three are MAIN, BUS 1 and BUS 2. The four envelopes
     // and the six LFOs are genuinely numbered and keep the narrow card.
     int bankWidth = 0;
-    // What the legend along the plate's foot calls this module, where that is
-    // not simply its title. The header has room for OSC A and the foot has room
-    // for OSCILLATOR A, and a plate marked with the long name is what makes the
-    // short one in the header read as an abbreviation rather than as the name.
-    // Null means the title serves for both.
-    const char* plateName = nullptr;
     // Modules sharing a group are drawn inside one plate: the group carries the
-    // outer plate, its legend and its part number, and each module in it gets a
-    // shallower inner panel instead of a plate of its own. The string is both
-    // the key and what is stamped on the plate's foot, so a group needs no
+    // outer plate, and each module in it gets a shallower inner panel instead
+    // of a plate of its own. The string is the key, so a group needs no
     // declaration anywhere else.
     //
     // SUB and NOISE are one piece of hardware with two channels on it. Drawn as
@@ -308,12 +301,12 @@ inline constexpr int gridColumns = 24;
 inline constexpr int moduleGap = 8;
 inline constexpr int headerHeight = 34;
 
-// The strip along a plate's foot carrying its stamped legend: the module's
-// long name on the left and its part number on the right, the way a piece of
-// equipment is marked rather than labelled. It is reserved out of the module's
-// interior rather than drawn over it, so no control can ever land on top of
-// it, and it costs every module the same few pixels at every window size.
-inline constexpr int plateFooterHeight = 20;
+// The margin along a plate's foot, kept clear of controls so the lowest row
+// does not sit on the rail and the rivet the housing carries there. It once
+// held a stamped legend — OSCILLATOR A on the left, A-03 on the right — at
+// twenty pixels; the legend said nothing the header did not, so the knobs
+// were given the room instead.
+inline constexpr int plateFootMargin = 6;
 
 // Row weights, top to bottom. Two rows, not three: the signal path across the
 // top — sources, the oscillator bank, the filter — and everything that moves it

@@ -207,16 +207,14 @@ inline juce::Rectangle<int> fxModuleBounds(juce::Rectangle<int> bounds, const Mo
     return expanded ? contentBounds(bounds) : moduleBounds(bounds, module);
 }
 
-// Everything on a plate between its header and the legend along its foot.
-// Every carve of a module's area begins here, so the footer is reserved in one
+// Everything on a plate between its header and the margin along its foot.
+// Every carve of a module's area begins here, so the margin is reserved in one
 // place and no caller can forget it.
 inline juce::Rectangle<int> moduleInterior(juce::Rectangle<int> moduleArea)
 {
-    return moduleArea.withTrimmedTop(headerHeight).withTrimmedBottom(plateFooterHeight);
+    return moduleArea.withTrimmedTop(headerHeight).withTrimmedBottom(plateFootMargin);
 }
 
-// The legend strip itself, inset to the same margin the header's title uses so
-// the two line up down the plate's left edge.
 // How far a grouped module's own panel sits inside the area it was given, so
 // the plate underneath shows around it.
 inline constexpr int innerPanelInset = 3;
@@ -235,11 +233,6 @@ inline juce::Rectangle<int> groupBounds(juce::Rectangle<int> bounds, const char*
         plate = plate.isEmpty() ? area : plate.getUnion(area);
     }
     return plate;
-}
-
-inline juce::Rectangle<int> plateFooterBounds(juce::Rectangle<int> moduleArea)
-{
-    return moduleArea.withTop(moduleArea.getBottom() - plateFooterHeight).reduced(10, 0);
 }
 
 inline int fxListWidth(bool open) { return open ? fxListOpenWidth : fxListFoldedWidth; }
@@ -261,7 +254,7 @@ inline juce::Rectangle<int> fxRackBounds(juce::Rectangle<int> moduleArea, bool l
         .withTrimmedRight(fxRackScrollGutter);
 }
 
-// Everything between the header and the legend. The list and the rack each cut
+// Everything between the header and the foot. The list and the rack each cut
 // their own window from it and scroll it separately, so nothing across the two
 // has to share a baseline.
 inline juce::Rectangle<int> fxViewportBounds(juce::Rectangle<int> moduleArea)

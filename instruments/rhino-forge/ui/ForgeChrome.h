@@ -43,7 +43,7 @@ inline const auto plateFaceTop   = juce::Colour(0xff191b1e);
 inline const auto plateFaceFoot  = juce::Colour(0xff0b0d10);
 inline const auto plateEdgeLit   = juce::Colour(0xff868d9c);
 inline const auto plateEdgeDark  = juce::Colour(0xff020407);
-// Stamped legends: a part number, a plate's long name, the markings on a decal.
+// Stamped legends: a part number, the markings on a decal.
 // Dimmer than mutedText, because a legend is read once and then ignored.
 inline const auto legendText     = juce::Colour(0xff6c7386);
 

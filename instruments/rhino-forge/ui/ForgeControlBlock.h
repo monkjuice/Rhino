@@ -369,9 +369,16 @@ inline constexpr int knobOpticalInset = 4;
 // The strip keeps its height and moves down into that empty margin, so nothing
 // about the knob's own size or position changes. The labels are click-through,
 // which is what keeps the overlap from costing the knob the start of a drag.
-inline juce::Rectangle<int> knobLabelBounds(juce::Rectangle<int> block)
+//
+// It spans the cell rather than the knob. A caption held to the knob's own
+// width is a forty-pixel box at the size the panel opens at, and a word longer
+// than that — POSITION — is squashed and then set in a smaller size than the
+// captions beside it. The cell is the knob's and nobody else's, so the word
+// can have all of it.
+inline juce::Rectangle<int> knobLabelBounds(juce::Rectangle<int> block, juce::Rectangle<int> cell)
 {
-    return block.withHeight(knobLabelHeight).translated(0, knobOpticalInset);
+    const auto strip = block.withHeight(knobLabelHeight).translated(0, knobOpticalInset);
+    return strip.withSizeKeepingCentre(juce::jmax(block.getWidth(), cell.getWidth()), strip.getHeight());
 }
 
 inline juce::Rectangle<int> rockerBounds(juce::Rectangle<int> knobArea)

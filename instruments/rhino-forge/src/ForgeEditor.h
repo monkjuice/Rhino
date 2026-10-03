@@ -400,7 +400,7 @@ private:
     bool moduleShown(const ui::Module&) const;
     // Which page a module is drawn as belonging to, which is the tab for
     // everything except the arp's panes: those are on a page of their own that
-    // is never the tab showing, and the plate legend and part number are worked
+    // is never the tab showing, and the group plate and part number are worked
     // out against the page a module is actually on.
     ui::Page pageOf(const ui::Module&) const;
     juce::Rectangle<int> moduleAreaFor(const ui::Module&) const;

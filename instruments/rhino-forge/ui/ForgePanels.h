@@ -37,22 +37,6 @@ inline void drawHousing(juce::Graphics& g, juce::Rectangle<float> box, float foo
     drawRivet(g, {box.getRight() - 9, box.getBottom() - 10}, 4.4f, 1.0f);
 }
 
-inline void drawLegendRecess(juce::Graphics& g, juce::Rectangle<int> area,
-                             const juce::String& name, const juce::String& code)
-{
-    auto footer = plateFooterBounds(area).toFloat();
-    const auto x = footer.getX(), y = footer.getY(), r = footer.getRight(), b = footer.getBottom() - 3;
-    const auto shape = metalPolygon({{x - 4, y}, {r - 12, y}, {r - 16, b}, {x + 1, b}, {x - 4, b - 5}});
-    g.setGradientFill(juce::ColourGradient(juce::Colour(0xff090c0f), x, y,
-                                          juce::Colour(0xff121619), x, b, false));
-    g.fillPath(shape);
-    g.setColour(juce::Colour(0xff363c45));
-    g.drawLine(x - 3, y, r - 13, y, 0.7f);
-    footer.removeFromRight(21);
-    stamp(g, name, footer, 12.5f, 0.9f);
-    stamp(g, code, footer, 12.5f, 0.5f, juce::Justification::centredRight);
-}
-
 inline void drawModuleDetail(juce::Graphics& g, juce::Rectangle<int> area, const Module& module,
                              bool on, const juce::String& detailOverride, int detailRightInset)
 {
@@ -80,7 +64,7 @@ inline void drawModuleShell(juce::Graphics& g, juce::Rectangle<int> area, const 
     const auto lower = module.row > 0;
     if (grouped)
     {
-        const auto inner = box.withTrimmedBottom(plateFooterHeight).reduced(4.0f, 3.0f);
+        const auto inner = box.withTrimmedBottom(plateFootMargin).reduced(4.0f, 3.0f);
         drawMetalPiece(g, housingOutline(inner, id == "noise" ? 27.0f : 5.0f));
         drawMetalRail(g, {inner.getX() + 8, inner.getY() + 2, juce::jmin(68.0f, inner.getWidth() - 18), 3});
         drawEdgeWear(g, inner, id == "noise" ? 76 : 35);
@@ -115,22 +99,9 @@ inline void drawModuleShell(juce::Graphics& g, juce::Rectangle<int> area, const 
         g.drawFittedText(module.title, header, juce::Justification::centredLeft, 1, 0.85f);
     }
 
-    if (!grouped)
-    {
-        if (module.plateName != nullptr)
-            drawLegendRecess(g, area, module.plateName, code);
-        else if (lower || id == "filter")
-        {
-            stamp(g, code, box.withHeight(headerHeight).reduced(14, 0), 12.5f, 0.7f,
-                  juce::Justification::centredRight);
-            if (id == "filter")
-            {
-                const auto foot = plateFooterBounds(area).toFloat().reduced(2, 5);
-                drawMetalRail(g, foot.withTrimmedLeft(22).withTrimmedRight(22));
-                drawHatch(g, foot.withWidth(20), legendText.withAlpha(0.4f), 0.9f, 3.0f);
-            }
-        }
-    }
+    if (!grouped && (lower || id == "filter"))
+        stamp(g, code, box.withHeight(headerHeight).reduced(14, 0), 12.5f, 0.7f,
+              juce::Justification::centredRight);
     if (id == "global")
     {
         const auto body = controlArea(area, module).toFloat();
@@ -140,11 +111,9 @@ inline void drawModuleShell(juce::Graphics& g, juce::Rectangle<int> area, const 
     }
 }
 
-inline void drawGroupPlate(juce::Graphics& g, juce::Rectangle<int> area, const juce::String& legend,
-                           const juce::String& code)
+inline void drawGroupPlate(juce::Graphics& g, juce::Rectangle<int> area)
 {
     drawHousing(g, area.toFloat());
-    drawLegendRecess(g, area, legend, code);
 }
 
 inline void drawWordmark(juce::Graphics& g, juce::Rectangle<float> area)

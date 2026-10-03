@@ -577,9 +577,9 @@ void layoutSuite()
     // The chassis and the module plates are cached between frames, so the panel
     // now has a way of being wrong it did not have before: a change that moves
     // a plate but does not reach the cache's key would leave the old picture on
-    // screen. The strip along the foot of the top row carries the plates'
-    // stamped legends and nothing else — no control is ever laid out in it — so
-    // a difference there is a difference in the cached layer, and changing tab
+    // screen. The margin along the foot of the top row carries the plates'
+    // metal and nothing else — no control is ever laid out in it — so a
+    // difference there is a difference in the cached layer, and changing tab
     // has to produce one.
     {
         std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
@@ -594,8 +594,8 @@ void layoutSuite()
                 editor->paintEntireComponent(g, false);
                 return image;
             };
-            const auto band = rhino::forge::ui::plateFooterBounds(
-                rhino::forge::ui::moduleBounds(editor->getLocalBounds(), modules.front()));
+            const auto foot = rhino::forge::ui::moduleBounds(editor->getLocalBounds(), modules.front());
+            const auto band = foot.withTop(foot.getBottom() - rhino::forge::ui::plateFootMargin);
 
             const auto before = shot();
             rhino::forge::ui::PageTab* mix = nullptr;
@@ -1040,6 +1040,53 @@ void switchedOffControlsStaySuite()
     require(shownLabels(*editor, "POSITION") == 2,
             "and does not bring back the wavetable knobs it stands in for");
 }
+
+// Every caption on the panel is set at one size. A label too narrow for its
+// word does not overflow: JUCE squashes the glyphs and then drops to a smaller
+// size, so the word reads as a different font from the captions beside it —
+// POSITION did, in a box the width of its knob. Checked at the smallest window
+// as well as the one the panel opens at, because the cells shrink with it.
+void captionsKeepTheirSizeSuite()
+{
+    rhino::forge::Processor processor;
+    std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+    const auto captionHeight = ui::panelFont(ui::Face::label, ui::controlLabelSize).getHeight();
+    for (const auto width : {ui::minPanelWidth, ui::defaultPanelWidth})
+    {
+        editor->setSize(width, width == ui::minPanelWidth ? ui::minPanelHeight : ui::defaultPanelHeight);
+        for (const auto* page : {"OSC", "MATRIX", "MIX", "FX"})
+        {
+            for (auto* child : editor->getChildren())
+                if (auto* tab = dynamic_cast<ui::PageTab*>(child))
+                    if (tab->getButtonText() == page && tab->onClick) tab->onClick();
+
+            // Down through visible components only, so a label reached is one on
+            // screen. isShowing would say so too, but needs a window, and this
+            // editor is never put in one.
+            auto checked = 0;
+            const auto walk = [&] (auto&& self, juce::Component& parent) -> void
+            {
+                for (auto* child : parent.getChildren())
+                {
+                    if (!child->isVisible()) continue;
+                    self(self, *child);
+                    auto* label = dynamic_cast<juce::Label*>(child);
+                    if (label == nullptr || label->getText().isEmpty()) continue;
+                    if (std::abs(label->getFont().getHeight() - captionHeight) > 0.01f) continue;
+                    ++checked;
+                    const auto room = label->getBorderSize().subtractedFrom(label->getLocalBounds()).getWidth();
+                    const auto needed = juce::GlyphArrangement::getStringWidth(label->getFont(), label->getText());
+                    if (needed <= static_cast<float>(room)) continue;
+                    require(false, "every caption fits its box at the panel's one caption size");
+                    std::cerr << "       " << label->getText() << " on " << page << " at " << width
+                              << ": needs " << needed << " px, has " << room << '\n';
+                }
+            };
+            walk(walk, *editor);
+            require(checked > 0, "every tab puts captions on screen for the size check to read");
+        }
+    }
+}
 }
 
 void layoutTests()
@@ -1047,5 +1094,6 @@ void layoutTests()
     layoutSuite();
     steppedFieldSuite();
     switchedOffControlsStaySuite();
+    captionsKeepTheirSizeSuite();
 }
 }

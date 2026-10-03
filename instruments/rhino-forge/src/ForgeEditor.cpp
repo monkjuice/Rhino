@@ -36,6 +36,11 @@ void dressControlLabel(juce::Label& label, const juce::String& caption)
     label.setInterceptsMouseClicks(false, false);
     label.setColour(juce::Label::textColourId, ui::labelText);
     label.setFont(ui::panelFont(ui::Face::label, ui::controlLabelSize));
+    // No side margin. A caption is centred, so the margin only ever takes room
+    // from the longest words, and a word that runs out of room is set smaller
+    // rather than overflowing — WARP 2 did, in its narrow cell at the smallest
+    // window.
+    label.setBorderSize({1, 0, 1, 0});
     label.setBufferedToImage(true);
 }
 }

@@ -40,8 +40,9 @@ range; modulation holds its position and is available as **MOD WHEEL** in the
 matrix. Host MIDI pitch bend and CC1 drive the same controls.
 
 The metal chassis follows the reference's assembled construction: interlocking
-header plates, segmented rails, a shared Sub/Noise housing, recessed legends,
-and keyboard end plates. `ui/ForgePanels.h` draws that static furniture; the
+header plates, segmented rails, a shared Sub/Noise housing and keyboard end
+plates. The plates carry no legend along their foot: the name is in the header,
+and the strip it took went to the knobs. `ui/ForgePanels.h` draws that static furniture; the
 editor caches it at the display scale, independently of the live controls.
 Resizing rebuilds that layer at the current size and full display resolution;
 headings and artwork are never temporarily downsampled or stretched from an

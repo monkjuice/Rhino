@@ -123,8 +123,12 @@ void Editor::resized()
                     controlsArea = fxRackAreaFor(area, rack, slot);
             }
             auto block = ui::controlBlock(controlsArea, descriptor, control.row, control.index, diameter);
+            auto cell = ui::cellBounds(controlsArea, descriptor, control.row, control.index);
             if (rackModule)
+            {
                 block = block.translated(-fxControlViewport.getX(), -fxControlViewport.getY());
+                cell = cell.translated(-fxControlViewport.getX(), -fxControlViewport.getY());
+            }
 
             // A macro's cell is laid out as nothing else on the panel is: the
             // knob, the plate beside it carrying the number you drag and the
@@ -134,8 +138,6 @@ void Editor::resized()
             if (control.macroName != nullptr)
             {
                 const auto macro = control.id.getTrailingIntValue();
-                const auto cell = ui::cellBounds(controlsArea, descriptor,
-                                                 control.row, control.index);
                 if (auto* handle = handleFor(static_cast<int>(ModSource::macro1) + macro - 1))
                 {
                     handle->setVisible(visible && control.bank == module.bank);
@@ -171,7 +173,7 @@ void Editor::resized()
                 case ui::Style::fader:
                     // The same label line a knob's sits on, so a row of faders
                     // and a row of knobs line up across the mixer.
-                    control.label.setBounds(ui::knobLabelBounds(block));
+                    control.label.setBounds(ui::knobLabelBounds(block, cell));
                     control.slider.setBounds(block.withTrimmedTop(ui::knobLabelHeight));
                     break;
                 case ui::Style::stepper:
@@ -187,11 +189,11 @@ void Editor::resized()
                 case ui::Style::rocker:
                     // Same label line as the knobs either side, so the switch
                     // sits exactly where their circles do.
-                    control.label.setBounds(ui::knobLabelBounds(block));
+                    control.label.setBounds(ui::knobLabelBounds(block, cell));
                     control.rocker->setBounds(ui::rockerBounds(block.withTrimmedTop(ui::knobLabelHeight)));
                     break;
                 case ui::Style::knob:
-                    control.label.setBounds(ui::knobLabelBounds(block));
+                    control.label.setBounds(ui::knobLabelBounds(block, cell));
                     control.slider.setBounds(block.withTrimmedTop(ui::knobLabelHeight));
                     break;
             }

@@ -42,8 +42,7 @@ void Editor::paintPlates(juce::Graphics& g)
         if (descriptor.group == nullptr || !moduleShown(descriptor)) continue;
         if (drawn.contains(descriptor.group)) continue;
         drawn.add(descriptor.group);
-        ui::drawGroupPlate(g, ui::groupBounds(getLocalBounds(), descriptor.group, pageOf(descriptor)),
-                           descriptor.group, ui::plateCode(descriptor, pageOf(descriptor)));
+        ui::drawGroupPlate(g, ui::groupBounds(getLocalBounds(), descriptor.group, pageOf(descriptor)));
     }
 
     for (const auto& module : moduleUis)

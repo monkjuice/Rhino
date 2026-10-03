@@ -5,6 +5,7 @@
 #include "../ui/ForgeTablePanel.h"
 #include "../ui/ForgeVisuals.h"
 #include "../ui/ForgePerformanceWheel.h"
+#include "../ui/ForgeNoteGuide.h"
 #include "../ui/ForgeFxDisplay.h"
 #include <memory>
 #include <vector>
@@ -132,7 +133,11 @@ private:
     std::vector<std::unique_ptr<ui::SourceHandle>> handles;
     ui::SourceHandle* draggingHandle = nullptr;
     juce::Point<int> dragPosition;
-    juce::MidiKeyboardComponent keyboard;
+    ui::NoteGuideState noteGuide;
+    ui::NoteGuideKeyboard keyboard;
+    ui::NoteGuideField guideRoot {"Off"}, guideChord {"Off"}, guideScale {"Off"};
+    ui::NoteGuideQuality guideQuality;
+    juce::Label guideHeading, guideRootLabel, guideChordLabel, guideScaleLabel;
     ui::PerformanceWheel pitchWheel {true};
     ui::PerformanceWheel modulationWheel {false};
     // Which octave the computer keys play. The keyboard's own mapping is 17
@@ -198,6 +203,10 @@ private:
     // table. Re-applied whenever a table changes.
     void applyTableCounts();
     void buildTabs();
+    void buildNoteGuide();
+    void refreshNoteGuide();
+    void showNoteGuideMenu(int which);
+    void saveNoteGuide();
     void showPage(ui::Page);
     void applyPage();
     void paintTable(juce::Graphics&, juce::Rectangle<int> area, const ui::Module&);

@@ -78,11 +78,12 @@ inline juce::Rectangle<int> keyboardShelf(juce::Rectangle<int> bounds)
 // the plate is sized as the difference between them — the keys are divided out
 // of the span they always had, so every key is exactly the width it was before
 // the arp existed and the octave is what actually pays for the plate.
-inline constexpr int keyboardWhiteKeys = 45;       // A1 to C8
+inline constexpr int keyboardWhiteKeys = 38;       // A1 to C7: the guide takes the high octave
 inline constexpr int keyboardWhiteKeysWithoutArp = 52; // A0 to C8, as it was
 inline constexpr int keyboardLowestNote = 33;      // A1
-inline constexpr int keyboardHighestNote = 108;    // C8
+inline constexpr int keyboardHighestNote = 96;     // C7; MIDI itself remains unrestricted
 inline constexpr int arpPlateGap = 8;
+inline constexpr int noteGuidePlateGap = 8;
 
 inline int arpPlateWidth(juce::Rectangle<int> bounds)
 {
@@ -113,7 +114,19 @@ inline juce::Rectangle<int> arpPlateLedBounds(juce::Rectangle<int> bounds)
 // its octave.
 inline juce::Rectangle<int> keyboardBounds(juce::Rectangle<int> bounds)
 {
-    return keyboardShelf(bounds).withTrimmedLeft(arpPlateWidth(bounds) + arpPlateGap);
+    const auto shelf = keyboardShelf(bounds);
+    // Work from the pre-guide key width. The keyboard loses seven white keys
+    // (the twelve high MIDI notes) and the recovered span joins the old right
+    // deck plate, so neither surviving key nor the left edge moves.
+    const auto originalKeys = shelf.getWidth() - arpPlateWidth(bounds) - arpPlateGap;
+    const auto recovered = originalKeys * 7 / keyboardWhiteKeysWithoutArp;
+    return shelf.withTrimmedLeft(arpPlateWidth(bounds) + arpPlateGap)
+                .withTrimmedRight(recovered + noteGuidePlateGap);
+}
+
+inline juce::Rectangle<int> noteGuidePlateBounds(juce::Rectangle<int> bounds)
+{
+    return keyboardStrip(bounds).withLeft(keyboardBounds(bounds).getRight() + noteGuidePlateGap);
 }
 
 // --- The title bar's right-hand end -----------------------------------------

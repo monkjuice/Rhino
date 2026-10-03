@@ -4,11 +4,79 @@
 #include "../ui/ForgeLayout.h"
 #include "../ui/ForgeTooltips.h"
 #include "../ui/ForgeVisuals.h"
+#include "../ui/ForgeNoteGuide.h"
 
 namespace rhino::forge::tests
 {
 namespace
 {
+void noteGuideSuite()
+{
+    using namespace rhino::forge::ui;
+    const std::array<unsigned, 12> majorChords {
+        guideMask({}), guideMask({0, 4, 7}), guideMask({0, 4, 7, 9}), guideMask({0, 4, 7, 10}),
+        guideMask({0, 4, 7, 11}), guideMask({0, 4, 8}), guideMask({0, 3, 6}), guideMask({0, 4, 8, 10}),
+        guideMask({0, 3, 6, 9}), guideMask({0, 3, 6, 10}), guideMask({0, 2, 7}), guideMask({0, 5, 7})};
+    const std::array<unsigned, 12> minorChords {
+        guideMask({}), guideMask({0, 3, 7}), guideMask({0, 3, 7, 9}), guideMask({0, 3, 7, 10}),
+        guideMask({0, 3, 7, 11}), guideMask({0, 4, 8}), guideMask({0, 3, 6}), guideMask({0, 4, 8, 10}),
+        guideMask({0, 3, 6, 9}), guideMask({0, 3, 6, 10}), guideMask({0, 2, 7}), guideMask({0, 5, 7})};
+    const std::array<unsigned, 13> scales {
+        guideMask({}), guideMask({0, 2, 4, 5, 7, 9, 11}), guideMask({0, 2, 3, 5, 7, 8, 10}),
+        guideMask({0, 2, 4, 7, 9}), guideMask({0, 3, 5, 7, 10}), guideMask({0, 3, 5, 6, 7, 10}),
+        guideMask({0, 2, 3, 5, 7, 8, 11}), guideMask({0, 2, 3, 5, 7, 9, 11}),
+        guideMask({0, 2, 3, 5, 7, 9, 10}), guideMask({0, 1, 3, 5, 7, 8, 10}),
+        guideMask({0, 2, 4, 6, 7, 9, 11}), guideMask({0, 2, 4, 5, 7, 9, 10}),
+        guideMask({0, 1, 3, 5, 6, 8, 10})};
+    require(guideChordMask(GuideChord::triad, false) == guideMask({0, 4, 7}), "major triad intervals are authoritative");
+    require(guideChordMask(GuideChord::triad, true) == guideMask({0, 3, 7}), "minor triad intervals are authoritative");
+    require(guideChordMask(GuideChord::sixth, true) == guideMask({0, 3, 7, 9}), "minor sixth keeps a major sixth");
+    require(guideChordMask(GuideChord::seventh, false) == guideMask({0, 4, 7, 10}), "major 7th is dominant seventh");
+    require(guideChordMask(GuideChord::maj7, true) == guideMask({0, 3, 7, 11}), "minor maj7 keeps its major seventh");
+    require(guideChordMask(GuideChord::aug7, false) == guideMask({0, 4, 8, 10}), "Aug7 is augmented dominant seventh");
+    require(guideChordMask(GuideChord::dim7, false) == guideMask({0, 3, 6, 9}), "Dim7 uses the diminished seventh");
+    require(guideChordMask(GuideChord::halfDiminished, false) == guideMask({0, 3, 6, 10}), "half diminished is m7b5");
+    require(guideScaleMask(GuideScale::melodicMinor) == guideMask({0, 2, 3, 5, 7, 9, 11}), "melodic minor is its fixed ascending pitch-class set");
+    require(guideScaleMask(GuideScale::locrian) == guideMask({0, 1, 3, 5, 6, 8, 10}), "locrian intervals are authoritative");
+
+    for (int chord = static_cast<int>(GuideChord::off); chord <= static_cast<int>(GuideChord::sus4); ++chord)
+    {
+        require(guideChordMask(static_cast<GuideChord>(chord), false) == majorChords[static_cast<size_t>(chord)],
+                "every major/fixed chord table matches its semitone definition");
+        require(guideChordMask(static_cast<GuideChord>(chord), true) == minorChords[static_cast<size_t>(chord)],
+                "every minor/fixed chord table matches its semitone definition");
+    }
+    for (int scale = static_cast<int>(GuideScale::off); scale <= static_cast<int>(GuideScale::locrian); ++scale)
+        require(guideScaleMask(static_cast<GuideScale>(scale)) == scales[static_cast<size_t>(scale)],
+                "every scale table matches its semitone definition");
+
+    for (int root = 0; root < 12; ++root)
+    {
+        NoteGuideState guide {root, GuideChord::triad, false, GuideScale::major};
+        require(guideTone(guide, root) == GuideTone::root, "each root is strongest at every pitch class");
+        require(guideTone(guide, (root + 4) % 12) == GuideTone::chord, "chord tones take precedence over scale tones");
+        require(guideTone(guide, (root + 2) % 12) == GuideTone::scale, "scale tones repeat from every root");
+        for (int chord = 1; chord < 12; ++chord)
+            for (const auto minor : {false, true})
+            {
+                NoteGuideState chordGuide {root, static_cast<GuideChord>(chord), minor, GuideScale::off};
+                for (int relative = 1; relative < 12; ++relative)
+                    require(guideTone(chordGuide, (root + relative) % 12)
+                                == (((minor ? minorChords : majorChords)[static_cast<size_t>(chord)] & (1u << relative))
+                                    ? GuideTone::chord : GuideTone::normal),
+                            "every chord repeats accurately at all twelve roots");
+            }
+        for (int scale = 1; scale < 13; ++scale)
+        {
+            NoteGuideState scaleGuide {root, GuideChord::off, false, static_cast<GuideScale>(scale)};
+            for (int relative = 1; relative < 12; ++relative)
+                require(guideTone(scaleGuide, (root + relative) % 12)
+                            == ((scales[static_cast<size_t>(scale)] & (1u << relative))
+                                ? GuideTone::scale : GuideTone::normal),
+                        "every scale repeats accurately at all twelve roots");
+        }
+    }
+}
 // ---------------------------------------------------------------- layout ---
 
 void layoutSuite()
@@ -1091,6 +1159,7 @@ void captionsKeepTheirSizeSuite()
 
 void layoutTests()
 {
+    noteGuideSuite();
     layoutSuite();
     steppedFieldSuite();
     switchedOffControlsStaySuite();

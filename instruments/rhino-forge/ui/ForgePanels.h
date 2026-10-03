@@ -175,22 +175,21 @@ inline void drawUnitMark(juce::Graphics& g, juce::Rectangle<int> area)
 inline void drawDeckPlates(juce::Graphics& g, juce::Rectangle<int> bounds)
 {
     const auto left = deckLeftBounds(bounds).toFloat();
-    const auto right = deckRightBounds(bounds).toFloat();
     const auto x = left.getX(), y = left.getY(), r = left.getRight(), b = left.getBottom();
     drawMetalPiece(g, metalPolygon({{x + 5, y - 5}, {r - 16, y - 5}, {r, y + 11},
                                     {r, b + 8}, {x + 14, b + 8}, {x, b - 6}, {x, y}}));
-    drawMetalPiece(g, housingOutline(right.withTrimmedTop(-5).withTrimmedBottom(-8), 26));
     drawRivet(g, {x + 12, y + 7}, 4.2f, 1.0f);
-    drawRivet(g, {right.getRight() - 12, y + 7}, 4.2f, 1.0f);
     drawEdgeWear(g, left, 41);
-    drawEdgeWear(g, right, 63);
-    const auto motto = right.reduced(12, 0).translated(0, 34);
-    stamp(g, "FOR A MORE", motto.withHeight(12), 9, 0.7f);
-    stamp(g, "HUMAN TOMORROW", motto.translated(0, 13).withHeight(12), 8, 0.6f);
-    const auto at = juce::Point<float>(right.getRight() - 21, right.getY() + 34);
-    g.setColour(markRed);
-    g.drawLine(at.x - 5, at.y, at.x + 5, at.y, 1.2f);
-    g.drawLine(at.x, at.y - 5, at.x, at.y + 5, 1.2f);
+}
+
+inline void drawNoteGuideHousing(juce::Graphics& g, juce::Rectangle<int> componentBounds)
+{
+    const auto plate = noteGuidePlateBounds(componentBounds).toFloat();
+    drawMetalPiece(g, housingOutline(plate.withTrimmedTop(-5).withTrimmedBottom(-8), 16));
+    drawEdgeWear(g, plate, 63);
+    drawRivet(g, {plate.getRight() - 12, plate.getY() + 7}, 3.4f, 0.9f);
+    drawRivet(g, {plate.getX() + 9, plate.getBottom() - 9}, 2.6f, 0.8f);
+    drawWell(g, plate.reduced(7.0f, 8.0f), juce::Colour(0xff05070c), 1.0f, 5);
 }
 
 // The ARP switch on the shelf beside the keys, standing in the octave the
@@ -316,6 +315,7 @@ inline void drawBackdrop(juce::Graphics& g, juce::Rectangle<int> componentBounds
     drawWell(g, keyboardBounds(componentBounds).toFloat().expanded(4, 3), juce::Colour(0xff010203), 1, 4);
     drawDeckPlates(g, componentBounds);
     drawArpPlateHousing(g, componentBounds);
+    drawNoteGuideHousing(g, componentBounds);
     for (const auto point : {juce::Point<float>(16, 16), {w - 16, 16}, {16, h - 15}, {w - 16, h - 15}})
         drawScrew(g, point, 7.0f, 1.0f);
 }

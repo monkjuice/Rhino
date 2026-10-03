@@ -47,7 +47,7 @@ void dressControlLabel(juce::Label& label, const juce::String& caption)
 
 Editor::Editor(Processor& p)
     : AudioProcessorEditor(&p), processor(p),
-      keyboard(p.keyboardState, juce::MidiKeyboardComponent::horizontalKeyboard)
+      keyboard(p.keyboardState, noteGuide)
 {
     // The viewport itself is transparent to the rack background and list; its
     // children remain interactive and JUCE clips them to these bounds.
@@ -82,6 +82,7 @@ Editor::Editor(Processor& p)
     keyboard.setColour(juce::MidiKeyboardComponent::upDownButtonBackgroundColourId, ui::panelRaised);
     keyboard.setColour(juce::MidiKeyboardComponent::upDownButtonArrowColourId, ui::mutedText);
     addAndMakeVisible(keyboard);
+    buildNoteGuide();
     pitchWheel.onChange = [this] (float value)
     {
         processor.setPitchWheel(juce::roundToInt(value * 16383.0f));

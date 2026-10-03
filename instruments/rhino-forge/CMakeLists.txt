@@ -106,6 +106,7 @@ set(forge_sources
     ui/ForgeLayout.h
     ui/ForgePanels.h
     ui/ForgePerformanceWheel.h
+    ui/ForgeNoteGuide.h
     ui/ForgeTablePanel.h
     ui/ForgeTooltips.h
     ui/ForgeType.h
@@ -134,6 +135,7 @@ set(forge_sources
     src/ForgeEditorFxView.cpp
     src/ForgeEditorInput.cpp
     src/ForgeEditorLayout.cpp
+    src/ForgeEditorNoteGuide.cpp
     src/ForgeEditorLfo.cpp
     src/ForgeEditorModulation.cpp
     src/ForgeEditorNoise.cpp

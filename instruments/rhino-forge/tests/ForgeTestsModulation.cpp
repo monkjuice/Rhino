@@ -311,7 +311,9 @@ void modulationStabilitySuite()
 {
     constexpr double rate = 44100.0;
     constexpr int blockSize = 441;
-    constexpr int blocksPerType = 200;
+    constexpr int fixedBlocksPerType = 200;
+    constexpr int trajectoryBlocksPerType = 200;
+    constexpr int blocksPerType = fixedBlocksPerType + trajectoryBlocksPerType;
     const std::array filterTypes {
         FilterType::lowPass,
         FilterType::dirtyLadder,
@@ -358,11 +360,82 @@ void modulationStabilitySuite()
         for (const auto note : {45, 57, 64, 72})
             midi.addEvent(juce::MidiMessage::noteOn(1, note, 1.0f), 0);
 
+        // Keep the first phase as the fixed regression cadence above. Then
+        // use a small fixed-seed generator to vary real continuous controls
+        // and the eight matrix routes at 10 ms boundaries, as host automation
+        // does. This stays reproducible while exploring combinations that a
+        // single hand-authored patch cannot cover.
+        auto randomState = 0x6d2b79f5u ^ static_cast<std::uint32_t>(type);
+        const auto nextRandom = [&randomState]
+        {
+            randomState ^= randomState << 13;
+            randomState ^= randomState >> 17;
+            randomState ^= randomState << 5;
+            return randomState;
+        };
+        const auto unitRandom = [&nextRandom]
+        {
+            return static_cast<float>(nextRandom() >> 8) / 16777215.0f;
+        };
+        const auto routeDestinations = std::array {
+            oscillatorDestinationBase,
+            oscillatorDestinationBase + 1,
+            oscillatorDestinationBase + 2,
+            oscillatorDestinationBase + 3,
+            oscillatorDestinationBase + 4,
+            subLevelDestination,
+            noiseLevelDestination,
+            cutoffDestination,
+            resonanceDestination,
+            driveDestination,
+            subPanDestination,
+            noisePanDestination,
+            filterPanDestination,
+            filterMixDestination,
+            filterDestination,
+            noiseToneDestination,
+            noiseStereoDestination,
+            warpDestinationBase,
+            fxDestinationOf(0, 0, 0),
+        };
+
         auto finite = true;
         auto bounded = true;
         auto tailEnergy = 0.0;
         for (int block = 0; block < blocksPerType && finite && bounded; ++block)
         {
+            if (block >= fixedBlocksPerType)
+            {
+                const auto phase = static_cast<float>(block - fixedBlocksPerType);
+                setValue(*processor, "cutoff", 30.0f + 17970.0f * unitRandom());
+                setValue(*processor, "resonance", unitRandom());
+                setValue(*processor, "drive", unitRandom());
+                setValue(*processor, "filterFreq", unitRandom());
+                setValue(*processor, "filterMix", 0.35f + 0.65f * unitRandom());
+                setValue(*processor, "oscAPosition", unitRandom());
+                setValue(*processor, "oscADetune", unitRandom());
+                setValue(*processor, "oscASemitone", -24.0f + 48.0f * unitRandom());
+                setValue(*processor, "subLevel", unitRandom());
+                setValue(*processor, "noiseLevel", 0.2f * unitRandom());
+
+                // Rewire every few blocks so each route remains active long
+                // enough to move its destination through a meaningful range.
+                if ((static_cast<int>(phase) % 4) == 0)
+                {
+                    for (int slot = 1; slot <= modSlotCount; ++slot)
+                    {
+                        const auto source = static_cast<int>(ModSource::lfo1)
+                                          + static_cast<int>(nextRandom() % lfoCount);
+                        const auto destination = routeDestinations[
+                            static_cast<size_t>(nextRandom() % routeDestinations.size())];
+                        const auto depth = -1.0f + 2.0f * unitRandom();
+                        setSlot(*processor, slot, static_cast<float>(source),
+                                static_cast<float>(destination), depth);
+                        setValue(*processor, ("mod" + juce::String(slot) + "Bipolar").toRawUTF8(),
+                                 (nextRandom() & 1u) != 0 ? 1.0f : 0.0f);
+                    }
+                }
+            }
             processor->processBlock(buffer, midi);
             midi.clear();
             for (int channel = 0; channel < buffer.getNumChannels(); ++channel)

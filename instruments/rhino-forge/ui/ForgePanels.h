@@ -189,7 +189,7 @@ inline void drawNoteGuideHousing(juce::Graphics& g, juce::Rectangle<int> compone
     drawEdgeWear(g, plate, 63);
     drawRivet(g, {plate.getRight() - 12, plate.getY() + 7}, 3.4f, 0.9f);
     drawRivet(g, {plate.getX() + 9, plate.getBottom() - 9}, 2.6f, 0.8f);
-    drawWell(g, plate.reduced(7.0f, 8.0f), juce::Colour(0xff05070c), 1.0f, 5);
+    drawWell(g, plate.reduced(6.0f), juce::Colour(0xff05070c), 1.0f, 5);
 }
 
 // The ARP switch on the shelf beside the keys, standing in the octave the

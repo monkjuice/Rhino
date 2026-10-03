@@ -30,10 +30,8 @@ void Editor::buildNoteGuide()
     noteGuide.scale = static_cast<ui::GuideScale>(juce::jlimit(0, 12, static_cast<int>(state.getProperty(guideScaleProperty, 0))));
 
     for (auto* field : {&guideRoot, &guideChord, &guideScale}) addAndMakeVisible(field);
-    for (auto* label : {&guideHeading, &guideRootLabel, &guideChordLabel, &guideScaleLabel}) addAndMakeVisible(label);
+    for (auto* label : {&guideRootLabel, &guideChordLabel, &guideScaleLabel}) addAndMakeVisible(label);
     addAndMakeVisible(guideQuality);
-    dressGuideLabel(guideHeading, "NOTE GUIDE");
-    guideHeading.setFont(ui::panelFont(ui::Face::header, 9.5f));
     dressGuideLabel(guideRootLabel, "ROOT");
     dressGuideLabel(guideChordLabel, "CHORD");
     dressGuideLabel(guideScaleLabel, "SCALE");

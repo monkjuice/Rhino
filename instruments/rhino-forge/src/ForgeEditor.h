@@ -137,7 +137,7 @@ private:
     ui::NoteGuideKeyboard keyboard;
     ui::NoteGuideField guideRoot {"Off"}, guideChord {"Off"}, guideScale {"Off"};
     ui::NoteGuideQuality guideQuality;
-    juce::Label guideHeading, guideRootLabel, guideChordLabel, guideScaleLabel;
+    juce::Label guideRootLabel, guideChordLabel, guideScaleLabel;
     ui::PerformanceWheel pitchWheel {true};
     ui::PerformanceWheel modulationWheel {false};
     // Which octave the computer keys play. The keyboard's own mapping is 17

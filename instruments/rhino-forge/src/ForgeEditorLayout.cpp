@@ -52,18 +52,19 @@ void Editor::resized()
     keyboard.setKeyWidth(static_cast<float>(keys.getWidth())
                          / static_cast<float>(ui::keyboardWhiteKeys));
     keyboard.setBounds(keys);
-    const auto guide = ui::noteGuidePlateBounds(getLocalBounds()).reduced(8, 8);
-    auto rows = guide.withTrimmedTop(13);
-    const auto rowHeight = juce::jlimit(18, 24, (rows.getHeight() - 4) / 2);
+    // With no title line, both rows use the whole inset face. The small extra
+    // clearance also gives the fields a less cramped vertical hit target while
+    // keeping the lower-left rivet visible beside the quality switch.
+    const auto guide = ui::noteGuidePlateBounds(getLocalBounds()).reduced(7, 6);
+    const auto rowHeight = juce::jlimit(24, 29, (guide.getHeight() - 6) / 2);
     const auto leftWidth = juce::jmin(88, guide.getWidth() * 38 / 100);
     const auto placeRow = [&] (juce::Rectangle<int> row, juce::Label& label, juce::Component& field)
     {
         label.setBounds(row.withWidth(34));
         field.setBounds(row.withTrimmedLeft(36));
     };
-    guideHeading.setBounds(guide.withHeight(12));
-    auto first = rows.withHeight(rowHeight);
-    auto second = rows.withTrimmedTop(rowHeight + 4).withHeight(rowHeight);
+    auto first = guide.withHeight(rowHeight);
+    auto second = guide.withTrimmedTop(rowHeight + 6).withHeight(rowHeight);
     placeRow(first.withWidth(leftWidth), guideRootLabel, guideRoot);
     placeRow(first.withTrimmedLeft(leftWidth + 7), guideChordLabel, guideChord);
     guideQuality.setBounds(second.withWidth(leftWidth));

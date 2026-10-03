@@ -274,38 +274,40 @@ silent and neither was visible in the code:
   than the tone that is there.
 
 The **loop modes** are built: ONE-SHOT, FWD LOOP, REV LOOP, FWD/REV and
-MANUAL, in `spectralAdvance`. There are two pairs of markers and each mode reads
-at most one (`spectralMarkerPairOf`): **START and END** for ONE-SHOT, which
-plays that stretch once; the **loop's two ends** for the three that go round;
-and neither for **MANUAL**, whose playhead is wherever SCAN puts it in the whole
-sample. A mode that does not read START runs from the sample's own start, or its
-end with SCAN negative, so a marker the panel is not showing cannot change what
-is heard. (For a while the loop's pair was the only one and ONE-SHOT played the
-whole sample; START and END came back so a one-shot can be trimmed, but never
-both pairs on screen at once, which is what had read as the same thing twice.)
-MANUAL's position is `spectralManualPosition`, one function for the voice and
-for the panel, so the line on the picture is where the voice reads. The parameter
+MANUAL, in `spectralAdvance`. There are two pairs of markers (`spectralReadsRun`,
+`spectralReadsLoop`). **START and END** are read by every mode that travels:
+ONE-SHOT plays from one to the other, and a loop mode starts from START (END with
+SCAN negative) and keeps its loop between them. The **loop's two ends** are read
+by the three that go round. **MANUAL** reads neither: its playhead is wherever
+SCAN puts it in the whole sample, at `spectralManualPosition` — one function for
+the voice and the panel, so the line on the picture is where the voice reads.
+Because a loop mode runs in from START, the first time round is a choice: START
+before the loop gives a run-in, and START moved up onto the loop's start begins
+on the loop itself. START dragged past the loop's start carries the loop's
+heard edge with it, without moving the loop's own setting. (This took three
+attempts to settle: START and END were dropped once, then shown only in
+ONE-SHOT, before coming back to the loop modes for the run-in they give.) The parameter
 declares Serum's whole list, TAILED included, for the reason MODE does; TAILED
 is the one not built, because the manual's description of it is the one in the
 menu that does not say what the loop markers do, and it plays as FWD LOOP if a
 preset names it.
 A voice is placed on its first hop rather than at note-on, because note-on does
-not yet know which way SCAN points: forwards it starts at the start of its run,
-backwards at the end — START and END in ONE-SHOT, the sample's own ends in a
-loop mode — and "arriving at the loop" means reaching its far end in the
-direction of travel. REV LOOP and FWD/REV both turn at that far end, so for
+not yet know which way SCAN points: forwards it starts at START, backwards at
+END, and "arriving at the loop" means reaching its far end in the direction of
+travel. REV LOOP and FWD/REV both turn at that far end, so for
 them the arrival is the turn; FWD LOOP is simply in the loop as soon as it is
 inside it. A ONE-SHOT that reaches END stops reading and lets the overlap-add
 drain, so the last of the sample fades over the three hops it was always going
 to take. The markers are proportions of the whole sample, so they mean the same
 thing whatever is loaded.
 
-Checked hop by hop off the voice: ONE-SHOT starts on START (on END backwards), a
-loop mode on the sample's own ends whatever START says, a one-shot plays past
-the loop to END and is then silent (also through the Processor's own
-parameters), FWD LOOP stays inside the loop and wraps, REV LOOP runs backwards
-round it, FWD/REV goes both ways about equally without ever jumping, and MANUAL
-stays exactly where SCAN puts it across the whole sample.
+Checked hop by hop off the voice: ONE-SHOT and every loop mode start on START
+(on END backwards), START on the loop's start makes the first time round the
+loop, a loop is held between START and END, a one-shot plays past the loop to
+END and is then silent (also through the Processor's own parameters), FWD LOOP
+stays inside the loop and wraps, REV LOOP runs backwards round it, FWD/REV goes
+both ways about equally without ever jumping, and MANUAL stays exactly where
+SCAN puts it across the whole sample.
 
 **Still outstanding:** transients are always on, and the SCAN menu that would
 turn them off does not exist yet. Its Phase Lock is a declared setting that
@@ -338,14 +340,18 @@ at the voice's own once one is sounding, which carries whatever modulates SCAN.
 
 The **loop strip** is seated along the foot of the display and holds the LOOP
 field alone. The markers are on the spectrogram rather than fields beside it,
-and only the pair the mode reads is there. In ONE-SHOT, START and END are lines
-down its height in the module's colour, with a tab at the foot and what lies
-outside them dimmed. In the loop modes the loop is a blue bracket: two lines down
-the height joined by a bar along the top. MANUAL has no marker at all, only its
+and only what the mode reads is there. START and END, in ONE-SHOT and the loop
+modes, are lines down its height in the module's colour, with a tab at the foot
+and what lies outside them dimmed. The loop modes also have the loop as a blue
+bracket — two lines down the height joined by a bar along the top — drawn where
+it is heard, held between START and END. MANUAL has no marker at all, only its
 playhead. Any line moves its own marker, picked up anywhere down its height; the
 bar moves the loop whole; anywhere else on the picture is still the sample menu.
-The pair a mode does not read is not drawn faint — it is not there — because a
-faint marker still looks like something to drag. Over a marker the tooltip says what it does. One hit
+Where a loop end stands on START or END (all four open on the sample's ends) the
+height decides: the bar is the loop's, the foot tabs are START's and END's, and
+in between START and END are taken first. What a mode does not read is not drawn
+faint — it is not there — because a faint marker still looks like something to
+drag. Over a marker the tooltip says what it does. One hit
 test serves the cursor, the press, the drag and the tooltip, so what can be
 picked up is exactly what is drawn.
 

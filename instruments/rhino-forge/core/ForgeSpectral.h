@@ -48,20 +48,20 @@ inline constexpr int spectralUnisonMax = 6;
 //
 // - ONE-SHOT plays from the start marker to the end marker once, and is then
 //   silent for the rest of the note.
-// - FWD LOOP plays from the sample's start into the loop, and round it.
+// - FWD LOOP plays from the start marker into the loop, and round it.
 // - REV LOOP plays into the loop, turns at its far end, and loops backwards.
 // - FWD/REV plays into the loop and then bounces between its ends.
 // - MANUAL does not run at all: SCAN is the playhead's position across the
 //   whole sample, so it is set, automated or modulated rather than played
 //   (p. 109).
 //
-// Each mode reads the markers it uses and no others — see spectralMarkerPairOf.
-// A mode that does not read START runs from the sample's own end, so a marker
-// the panel is not showing cannot move where it begins.
+// Each mode reads the markers it uses and no others — see spectralReadsRun and
+// spectralReadsLoop. A loop mode starts from START, so the run into the first
+// time round is a choice: moving START up to the loop's start is how to begin
+// on the loop itself.
 //
 // A negative SCAN plays the same journey from the other end: a voice starts at
-// the end marker, or the sample's end in a loop mode, and "into the loop" means
-// arriving at the loop's end first.
+// the end marker, and "into the loop" means arriving at the loop's end first.
 enum class SpectralLoop { oneShot = 0, forward = 1, reverse = 2, pingPong = 3, tailed = 4, manual = 5 };
 inline constexpr int spectralLoopCount = 6;
 
@@ -84,25 +84,21 @@ inline constexpr bool spectralLoopBuilt(int mode)
     return mode >= 0 && mode < spectralLoopCount && mode != static_cast<int>(SpectralLoop::tailed);
 }
 
-// Which pair of markers a mode reads, if any. ONE-SHOT plays the stretch from
-// START to END; the modes that go round read the loop's two ends; MANUAL reads
-// neither, because its playhead is wherever SCAN puts it in the whole sample
-// and that playhead is all its picture shows. The panel draws only what the
-// mode reads, because a marker that moves nothing is a control that lies.
-enum class SpectralMarkerPair { none, run, loop };
-
-inline constexpr SpectralMarkerPair spectralMarkerPairOf(SpectralLoop mode) noexcept
+// Which markers a mode reads. START and END bound every mode that travels:
+// ONE-SHOT plays from one to the other, and a loop mode starts from START (END
+// with SCAN negative) and keeps its loop between them. The loop's two ends are
+// read only by the modes that go round. MANUAL reads none, because its playhead
+// is wherever SCAN puts it in the whole sample and that playhead is all its
+// picture shows. The panel draws only what the mode reads, because a marker
+// that moves nothing is a control that lies.
+inline constexpr bool spectralReadsRun(SpectralLoop mode) noexcept
 {
-    switch (mode)
-    {
-        case SpectralLoop::oneShot: return SpectralMarkerPair::run;
-        case SpectralLoop::manual:  return SpectralMarkerPair::none;
-        case SpectralLoop::forward:
-        case SpectralLoop::reverse:
-        case SpectralLoop::pingPong:
-        case SpectralLoop::tailed:  break;
-    }
-    return SpectralMarkerPair::loop;
+    return mode != SpectralLoop::manual;
+}
+
+inline constexpr bool spectralReadsLoop(SpectralLoop mode) noexcept
+{
+    return mode != SpectralLoop::oneShot && mode != SpectralLoop::manual;
 }
 
 // Where MANUAL puts the playhead, 0..1 of the whole sample, from SCAN as set:
@@ -281,9 +277,11 @@ struct SpectralSettings
     float blend = 0.5f;
     float pan = 0.0f;
     SpectralLoop loopMode = SpectralLoop::forward;
-    // The markers, each 0..1 of the whole sample: the stretch ONE-SHOT plays,
-    // and the loop the other modes go round. Each mode reads at most one pair
-    // and ignores the other — see spectralMarkerPairOf.
+    // The markers, each 0..1 of the whole sample: the run from START to END,
+    // and the loop inside it that the loop modes go round. The loop is held
+    // inside the run here rather than by the parameters, so dragging START
+    // past a loop drags the loop's effective edge with it without moving its
+    // setting. See spectralReadsRun and spectralReadsLoop.
     float start = 0.0f, end = 1.0f;
     float loopStart = 0.0f, loopEnd = 1.0f;
     // MANUAL's playhead, 0..1 across the whole sample.
@@ -291,8 +289,8 @@ struct SpectralSettings
 };
 
 // Where the playhead may go, in frames, worked out once per hop: the run, and
-// the loop inside it. The run is START to END for ONE-SHOT and the whole
-// sample for every other mode. Both are at least a frame long, so nothing
+// the loop inside it. The run is START to END for every mode that reads them
+// and the whole sample for MANUAL. Both are at least a frame long, so nothing
 // below divides by a span of nothing.
 struct SpectralSpan
 {
@@ -305,7 +303,7 @@ struct SpectralSpan
         {
             return static_cast<double>(juce::jlimit(0.0f, 1.0f, proportion)) * last;
         };
-        if (spectralMarkerPairOf(settings.loopMode) == SpectralMarkerPair::run)
+        if (spectralReadsRun(settings.loopMode))
         {
             start = at(juce::jmin(settings.start, settings.end));
             end = at(juce::jmax(settings.start, settings.end));
@@ -456,10 +454,9 @@ inline void spectralSynthesise(SpectralVoice& voice, const Sample& sample,
 {
     const auto frames = sample.frameCount();
 
-    // The first hop puts the playhead at the start of its run going forwards
-    // and at the end going backwards: the markers in ONE-SHOT, the sample's own
-    // ends in a loop mode. MANUAL needs no placing — it is put wherever SCAN
-    // says on every hop, this one included.
+    // The first hop puts the playhead on START going forwards and on END going
+    // backwards, in a loop mode as in ONE-SHOT. MANUAL needs no placing — it is
+    // put wherever SCAN says on every hop, this one included.
     if (!voice.running)
     {
         voice.running = true;

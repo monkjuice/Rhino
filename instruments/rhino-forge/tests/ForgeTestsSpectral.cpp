@@ -659,31 +659,52 @@ SpectralSettings loopSettings(SpectralLoop mode, float scan = 1.0f)
 
 void loopModesSuite()
 {
-    // Four seconds: 372 frames, so the loop is seventy-four frames long. A
-    // loop mode runs in from the sample's own start, whatever START says, and
-    // reaches the loop's start at hop 186 and its end at hop 260 — which is
-    // where REV LOOP and FWD/REV arrive, since both turn at the far end. Each
-    // check reads from past its own mode's arrival.
+    // Four seconds: 372 frames, so the loop is seventy-four frames long. Every
+    // mode but MANUAL runs from START, so a loop mode reaches the loop's start
+    // at hop 149 and its end at hop 223 — which is where REV LOOP and FWD/REV
+    // arrive, since both turn at the far end. Each check reads from past its
+    // own mode's arrival.
     const auto sample = sineSample(440.0, 4.0);
     const auto last = static_cast<double>(sample->frameCount() - 1);
     const auto loopStart = 0.5 * last, loopEnd = 0.7 * last;
     constexpr auto slack = 1.0e-6;
 
-    // ONE-SHOT starts on START going forwards and on END going backwards; a
-    // loop mode ignores both and starts on the sample's own ends.
+    // ONE-SHOT and every loop mode start on START going forwards and on END
+    // going backwards: the run into the first time round is where START puts
+    // it.
+    for (const auto mode : {SpectralLoop::oneShot, SpectralLoop::forward, SpectralLoop::reverse,
+                            SpectralLoop::pingPong})
     {
-        const auto once = playheadTrail(*sample, loopSettings(SpectralLoop::oneShot), 1);
-        requireClose(static_cast<float>(once.frames.front()), static_cast<float>(0.1 * last + 1.0), 0.01f,
-                     "a one-shot begins playing at the start marker");
-        const auto onceBack = playheadTrail(*sample, loopSettings(SpectralLoop::oneShot, -1.0f), 1);
-        requireClose(static_cast<float>(onceBack.frames.front()), static_cast<float>(0.9 * last - 1.0), 0.01f,
-                     "a one-shot with SCAN running backwards begins at the end marker");
-        const auto looped = playheadTrail(*sample, loopSettings(SpectralLoop::forward), 1);
-        requireClose(static_cast<float>(looped.frames.front()), 1.0f, 0.01f,
-                     "a loop mode begins at the sample's start, not at a start marker it does not show");
-        const auto loopedBack = playheadTrail(*sample, loopSettings(SpectralLoop::forward, -1.0f), 1);
-        requireClose(static_cast<float>(loopedBack.frames.front()), static_cast<float>(last - 1.0), 0.01f,
-                     "a loop mode with SCAN running backwards begins at the sample's end");
+        const auto forwards = playheadTrail(*sample, loopSettings(mode), 1);
+        requireClose(static_cast<float>(forwards.frames.front()), static_cast<float>(0.1 * last + 1.0), 0.01f,
+                     "a voice begins playing at the start marker");
+        const auto backwards = playheadTrail(*sample, loopSettings(mode, -1.0f), 1);
+        requireClose(static_cast<float>(backwards.frames.front()), static_cast<float>(0.9 * last - 1.0), 0.01f,
+                     "a voice with SCAN running backwards begins at the end marker");
+    }
+
+    // START moved up onto the loop's start makes the first time round the
+    // loop itself: the playhead begins inside it and never leaves it.
+    {
+        auto settings = loopSettings(SpectralLoop::forward);
+        settings.start = settings.loopStart;
+        const auto trail = playheadTrail(*sample, settings, 300);
+        auto inside = true;
+        for (const auto frame : trail.frames)
+            inside = inside && frame >= loopStart - slack && frame <= loopEnd + slack;
+        require(inside, "with START on the loop's start, the first time round is the loop");
+    }
+
+    // START moved past the loop's start carries the loop's edge with it: the
+    // loop is held between START and END, so it goes round from START.
+    {
+        auto settings = loopSettings(SpectralLoop::forward);
+        settings.start = 0.6f;
+        const auto trail = playheadTrail(*sample, settings, 300);
+        auto inside = true;
+        for (const auto frame : trail.frames)
+            inside = inside && frame >= 0.6 * last - slack && frame <= loopEnd + slack;
+        require(inside, "a loop is held between START and END");
     }
 
     // ONE-SHOT runs to END and stops, whatever the loop is set to: the
@@ -943,16 +964,17 @@ void loopMarkersSuite()
             "and the playhead follows SCAN when it moves");
     setValue(processor, "oscAScan", 1.0f);
 
-    // A loop mode offers the loop's ends down their whole height, and nothing
-    // where START and END are; it draws a different picture.
+    // A loop mode offers the loop's ends down their whole height, and START
+    // and END as well, since it runs in from START; it draws the loop on top
+    // of what a one-shot draws.
     for (const auto mode : {SpectralLoop::forward, SpectralLoop::reverse, SpectralLoop::pingPong})
     {
         setValue(processor, "oscALoopMode", static_cast<float>(mode));
-        require(cursorOver({xAt(0.3f), middle}) == resize && cursorOver({xAt(0.7f), plot.getBottom() - 3}) == resize,
+        require(cursorOver({xAt(0.3f), middle}) == resize && cursorOver({xAt(0.7f), plot.getY() + 2}) == resize,
                 "every loop mode offers both loop markers down their whole height");
-        require(cursorOver({xAt(0.1f), middle}) == plain && cursorOver({xAt(0.9f), middle}) == plain,
-                "a loop mode offers no start or end marker to drag");
-        require(!samePixels(oneShot, plotPixels()), "a loop mode draws the loop's markers in place of the run's");
+        require(cursorOver({xAt(0.1f), middle}) == resize && cursorOver({xAt(0.9f), middle}) == resize,
+                "every loop mode offers START and END as well");
+        require(!samePixels(oneShot, plotPixels()), "a loop mode draws the loop as well as START and END");
     }
 
     // Each pair moves its own parameters and leaves the other pair alone.
@@ -973,6 +995,23 @@ void loopMarkersSuite()
     requireClose(value(processor, "oscALoopStart"), 0.3f, step, "dragging the bar moves the loop's start");
     requireClose(value(processor, "oscALoopEnd"), 0.8f, step, "and its end by the same distance");
     requireClose(value(processor, "oscAStart"), startBefore, 1.0e-6f, "and none of it touches START");
+
+    // A loop end standing right on START — where both open — is told apart by
+    // height: on the bar it is the loop's, at the foot it is START.
+    setValue(processor, "oscAStart", 0.2f);
+    setValue(processor, "oscALoopStart", 0.2f);
+    drag({xAt(0.2f), plot.getY() + 3}, {xAt(0.25f), plot.getY() + 3});
+    requireClose(value(processor, "oscALoopStart"), 0.25f, step, "on the bar, a loop end on START is the loop's");
+    requireClose(value(processor, "oscAStart"), 0.2f, 1.0e-6f, "and START stays where it was");
+    setValue(processor, "oscALoopStart", 0.2f);
+    drag({xAt(0.2f), plot.getBottom() - 2}, {xAt(0.15f), plot.getBottom() - 2});
+    requireClose(value(processor, "oscAStart"), 0.15f, step, "at the foot, it is START");
+    requireClose(value(processor, "oscALoopStart"), 0.2f, 1.0e-6f, "and the loop stays where it was");
+
+    // And the loop stays between START and END: its start stops at START.
+    drag({xAt(0.2f), plot.getY() + 3}, {xAt(0.05f), plot.getY() + 3});
+    requireClose(value(processor, "oscALoopStart"), value(processor, "oscAStart"), step,
+                 "the loop's start cannot be dragged past START");
 }
 }
 

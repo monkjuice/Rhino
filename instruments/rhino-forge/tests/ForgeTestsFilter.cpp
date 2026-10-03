@@ -411,6 +411,83 @@ void filterFatLongRunSuite()
     require(finite, "a hot resonant FAT filter stays finite past its former failure time");
 }
 
+// A held corner is not enough to prove a stateful filter safe. The standalone
+// reads a dragged parameter once per audio block, so moving CUTOFF quickly can
+// hand the same integrator state to very different coefficients on successive
+// 10 ms blocks. This is the live Scarlett cadence that exposed the failure.
+void filterCutoffSweepSuite()
+{
+    rhino::forge::Processor processor;
+    setValue(processor, "oscAEnable", 1.0f);
+    setValue(processor, "oscBEnable", 1.0f);
+    setValue(processor, "oscCEnable", 1.0f);
+    setValue(processor, "subEnable", 1.0f);
+    setValue(processor, "noiseEnable", 0.0f);
+    setValue(processor, "oscAUnison", 8.0f);
+    setValue(processor, "oscBUnison", 12.0f);
+    setValue(processor, "oscCUnison", 2.0f);
+    setValue(processor, "oscADetune", 0.592f);
+    setValue(processor, "oscBDetune", 0.504f);
+    setValue(processor, "oscCDetune", 0.18f);
+    setValue(processor, "oscALevel", 0.948f);
+    setValue(processor, "oscBLevel", 0.72f);
+    setValue(processor, "oscCLevel", 0.4f);
+    setValue(processor, "oscAOctave", -2.0f);
+    setValue(processor, "subOctave", 2.0f);
+    setValue(processor, "subLevel", 0.954f);
+    setValue(processor, "filterEnable", 1.0f);
+    setValue(processor, "filterType", static_cast<float>(rhino::forge::FilterType::lowPass));
+    setValue(processor, "resonance", 0.732f);
+    setValue(processor, "filterFreq", 0.684f);
+    setValue(processor, "drive", 0.623685f);
+    setValue(processor, "filterMix", 0.812f);
+    setValue(processor, "output", 0.86f);
+    setValue(processor, "env1Attack", 0.001f);
+    setValue(processor, "env1Sustain", 0.752f);
+
+    constexpr double rate = 44100.0;
+    constexpr int blockSize = 441;
+    processor.prepareToPlay(rate, blockSize);
+    juce::AudioBuffer<float> buffer(2, blockSize);
+    juce::MidiBuffer midi;
+    midi.addEvent(juce::MidiMessage::noteOn(1, 57, 1.0f), 0);
+
+    auto finite = true;
+    auto recoveryEnergy = 0.0;
+    for (int block = 0; block < 800 && finite; ++block)
+    {
+        if (block < 750)
+        {
+            // Two quick trips through the whole logarithmic knob travel each
+            // second.
+            const auto within = block % 50;
+            const auto position = within <= 25 ? static_cast<float>(within) / 25.0f
+                                               : static_cast<float>(50 - within) / 25.0f;
+            setValue(processor, "cutoff", rhino::forge::filterCutoffAt(position));
+        }
+        else
+        {
+            // A held corner proves the poisoned state did not merely get
+            // hidden when the gesture ended.
+            setValue(processor, "cutoff", 6152.4f);
+        }
+        processor.processBlock(buffer, midi);
+        midi.clear();
+        finite = allSamplesFinite(buffer);
+        if (block >= 750)
+            for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
+                for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+                {
+                    const auto value = buffer.getSample(channel, sample);
+                    recoveryEnergy += static_cast<double>(value) * value;
+                }
+    }
+
+    require(finite, "a hot resonant FAT filter stays finite while CUTOFF is swept");
+    require(recoveryEnergy > 1.0e-6,
+            "a cutoff sweep leaves the held voice producing sound afterwards");
+}
+
 // --------------------------------------------------- the curve and the audio ---
 
 // The display draws `filterMagnitude`. This is what makes that worth drawing:
@@ -807,6 +884,7 @@ void filterTests()
     filterListSuite();
     filterStabilitySuite();
     filterFatLongRunSuite();
+    filterCutoffSweepSuite();
     filterResponseSuite();
     filterSecondSuite();
     filterCombTuningSuite();

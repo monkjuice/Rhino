@@ -301,10 +301,96 @@ void modulationSuite()
     require(zeroCrossings(modulated, 0, settled) < straightCrossings,
             "host pitch bend lowers the rendered note");
 }
+
+// Matrix tests that compare two short renders prove the routing arithmetic,
+// but they do not keep rapidly changing coefficients alive long enough to
+// expose a poisoned DSP state. Exercise all eight slots at the live standalone
+// cadence, with independent fast LFOs repeatedly driving the four filter
+// controls to both ends of their ranges.
+void modulationStabilitySuite()
+{
+    constexpr double rate = 44100.0;
+    constexpr int blockSize = 441;
+    constexpr int blocksPerType = 200;
+    const std::array filterTypes {
+        FilterType::lowPass,
+        FilterType::dirtyLadder,
+        FilterType::comb,
+        FilterType::scream,
+        FilterType::reverb,
+    };
+
+    for (const auto type : filterTypes)
+    {
+        auto processor = std::make_unique<Processor>();
+        soloSineOnA(*processor);
+        setValue(*processor, "filterEnable", 1.0f);
+        setValue(*processor, "filterType", static_cast<float>(type));
+        setValue(*processor, "cutoff", 1000.0f);
+        setValue(*processor, "resonance", 0.5f);
+        setValue(*processor, "filterFreq", 0.5f);
+        setValue(*processor, "drive", 0.75f);
+        setValue(*processor, "filterMix", 1.0f);
+        setValue(*processor, "env1Attack", 0.001f);
+        setValue(*processor, "env1Sustain", 0.9f);
+
+        for (int lfo = 0; lfo < lfoCount; ++lfo)
+        {
+            const auto rateId = lfoParameterId(lfo, "Rate");
+            const auto unitId = lfoParameterId(lfo, "RateUnit");
+            setValue(*processor, unitId.toRawUTF8(), 0.0f);
+            setValue(*processor, rateId.toRawUTF8(), 20.0f - static_cast<float>(lfo) * 1.7f);
+        }
+
+        const auto lfo = static_cast<float>(ModSource::lfo1);
+        setSlot(*processor, 1, lfo,     cutoffDestination,     1.0f);
+        setSlot(*processor, 2, lfo + 1, resonanceDestination,  1.0f);
+        setSlot(*processor, 3, lfo + 2, driveDestination,      1.0f);
+        setSlot(*processor, 4, lfo + 3, filterDestination,     1.0f);
+        setSlot(*processor, 5, lfo + 4, cutoffDestination,    -1.0f);
+        setSlot(*processor, 6, lfo + 5, resonanceDestination, -1.0f);
+        setSlot(*processor, 7, lfo,     filterDestination,    -1.0f);
+        setSlot(*processor, 8, lfo + 1, driveDestination,     -1.0f);
+
+        processor->prepareToPlay(rate, blockSize);
+        juce::AudioBuffer<float> buffer(2, blockSize);
+        juce::MidiBuffer midi;
+        for (const auto note : {45, 57, 64, 72})
+            midi.addEvent(juce::MidiMessage::noteOn(1, note, 1.0f), 0);
+
+        auto finite = true;
+        auto bounded = true;
+        auto tailEnergy = 0.0;
+        for (int block = 0; block < blocksPerType && finite && bounded; ++block)
+        {
+            processor->processBlock(buffer, midi);
+            midi.clear();
+            for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
+                for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+                {
+                    const auto value = buffer.getSample(channel, sample);
+                    finite = finite && std::isfinite(value);
+                    bounded = bounded && std::abs(value) <= 1.0001f;
+                    if (block >= blocksPerType - 20)
+                        tailEnergy += static_cast<double>(value) * value;
+                }
+        }
+
+        if (!finite || !bounded || !(tailEnergy > 1.0e-6))
+            std::cerr << "       " << filterTypeName(static_cast<int>(type))
+                      << " finite " << finite << " bounded " << bounded
+                      << " tail energy " << tailEnergy << '\n';
+        require(finite, "fast simultaneous modulation never produces a non-finite sample");
+        require(bounded, "fast simultaneous modulation stays inside the master limiter");
+        require(tailEnergy > 1.0e-6,
+                "fast simultaneous modulation leaves the held notes sounding");
+    }
+}
 }
 
 void modulationTests()
 {
     modulationSuite();
+    modulationStabilitySuite();
 }
 }

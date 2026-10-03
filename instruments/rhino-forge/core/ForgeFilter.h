@@ -706,16 +706,23 @@ struct FilterSvfOut
 inline FilterSvfOut filterSvf(float input, float& low, float& band,
                               float g, float damping, float heat)
 {
-    // The resonant path. FAT adds nonlinear damping, which rounds a sharp peak
-    // off and puts harmonics where it was; at nothing it is the term itself.
-    // Keep the linear term intact: replacing it with tanh removes damping as
-    // the state grows, so a hot resonant filter can run to infinity and poison
-    // the audio stream with NaNs. fed - tanh(fed) is zero to first order, so
-    // the small-signal response stays the one the display draws, and it adds
-    // damping rather than taking it away once the resonant path gets large.
-    auto fed = (2.0f * damping + g) * band;
-    if (heat > 0.0f) fed += heat * (fed - std::tanh(fed));
-    const auto high = (input - fed - low) / (1.0f + 2.0f * damping * g + g * g);
+    // The resonant path. FAT raises its damping with level, which rounds a
+    // sharp peak and puts harmonics where it was. The raised coefficient has
+    // to take part in the implicit solve on both sides: adding it only to the
+    // numerator is an explicit correction, and handing that state a much
+    // larger `g` during a cutoff sweep can throw the integrators to infinity.
+    //
+    // 1 - tanh(x) / x is zero to first order and approaches one with level, so
+    // the small-signal response remains the curve the display draws. It also
+    // leaves heat == 0 on the exact old arithmetic path.
+    auto feedback = 2.0f * damping + g;
+    if (heat > 0.0f)
+    {
+        const auto magnitude = std::abs(feedback * band);
+        if (magnitude > 1.0e-6f)
+            feedback *= 1.0f + heat * (1.0f - std::tanh(magnitude) / magnitude);
+    }
+    const auto high = (input - feedback * band - low) / (1.0f + g * feedback);
     const auto bandStep = g * high;
     const auto bandOut = bandStep + band;
     band = bandOut + bandStep;

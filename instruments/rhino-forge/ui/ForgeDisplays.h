@@ -2,7 +2,7 @@
 
 #include "ForgeStyle.h"
 
-// The picture tube: the curved face, its bezel and brackets, the phosphor a
+// The picture tube: the curved face, its bezel, the phosphor a
 // trace is drawn in, and the wave paths that go on it. What each module
 // actually plots is its own file's — this is the glass.
 namespace rhino::forge::ui
@@ -120,33 +120,6 @@ inline juce::Path crtPath(juce::Rectangle<float> face)
     return tube;
 }
 
-// The L-shaped marks in a screen's corners: the registration a scope face
-// carries. Drawn inside the glass rather than on the frame, so they read as
-// part of what is being shown rather than as decoration around it.
-inline void drawDisplayBrackets(juce::Graphics& g, juce::Rectangle<float> face, juce::Colour colour,
-                                float alpha)
-{
-    const auto arm = juce::jmin(9.0f, face.getWidth() * 0.08f, face.getHeight() * 0.14f);
-    if (arm < 3.0f) return;
-    const auto inset = 5.0f;
-    const auto box = face.reduced(inset);
-
-    juce::Path marks;
-    const auto bracket = [&marks, arm] (float x, float y, float dx, float dy)
-    {
-        marks.startNewSubPath(x + dx * arm, y);
-        marks.lineTo(x, y);
-        marks.lineTo(x, y + dy * arm);
-    };
-    bracket(box.getX(),     box.getY(),       1.0f,  1.0f);
-    bracket(box.getRight(), box.getY(),      -1.0f,  1.0f);
-    bracket(box.getX(),     box.getBottom(),  1.0f, -1.0f);
-    bracket(box.getRight(), box.getBottom(), -1.0f, -1.0f);
-
-    g.setColour(colour.withAlpha(0.55f * alpha));
-    g.strokePath(marks, juce::PathStrokeType(1.3f));
-}
-
 inline void drawCrtScreen(juce::Graphics& g, juce::Rectangle<int> well,
                           juce::Colour phosphor, float alpha)
 {
@@ -193,7 +166,7 @@ inline void drawCrtScreen(juce::Graphics& g, juce::Rectangle<int> well,
 
         // The graticule, as faint as one etched on the glass: six divisions
         // across and quarters down. It is what makes the trace read as
-        // measured rather than drawn, and it is what the corner marks imply.
+        // measured rather than drawn.
         g.setColour(phosphor.withAlpha(0.06f * alpha));
         for (int division = 1; division < 6; ++division)
             g.fillRect(face.getX() + face.getWidth() * (float) division / 6.0f, face.getY(),
@@ -204,10 +177,6 @@ inline void drawCrtScreen(juce::Graphics& g, juce::Rectangle<int> well,
         // The zero axis, brighter than the rest of the graticule.
         g.setColour(phosphor.withAlpha(0.16f * alpha));
         g.fillRect(face.getX() + 4.0f, cy, face.getWidth() - 8.0f, 1.0f);
-
-        // Registration marks in the corners, on the glass with the graticule
-        // rather than on the bezel around it.
-        drawDisplayBrackets(g, face, phosphor, alpha);
     }
 
     // The bezel: widest and faintest first, so the edge blooms outward.

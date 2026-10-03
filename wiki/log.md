@@ -14,3 +14,6 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 ## [2026-10-03] update | Forge's oscillator CRT loses its corner brackets
 - updated: none (no page describes the oscillator CRT display)
 - notes: `drawCrtScreen` in `instruments/rhino-forge/ui/ForgeDisplays.h` no longer draws L-shaped corner brackets inside the glass, and `drawDisplayBrackets` is gone (commit `0328983`). The user asked for this as a design preference, so do not put corner marks back on the CRT face. The graticule, zero axis, bezel glow and trace are unchanged.
+
+## [2026-10-03] update | A switched-off Forge oscillator keeps its shared-cell knobs
+- updated: pages/forge-editor.md (new "Rules that bite" entry: shared-cell hiding reads `inCharge`, not the module's switch; the label-counting trap in editor tests)

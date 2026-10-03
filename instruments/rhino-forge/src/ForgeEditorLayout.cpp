@@ -177,8 +177,10 @@ void Editor::resized()
                 case ui::Style::stepper:
                     // Inside a table the column title is the label, so the
                     // field takes the whole block rather than the half of it
-                    // left under a label strip.
-                    if (descriptor.columnHeaderHeight == 0)
+                    // left under a label strip. Seated, the field carries its
+                    // caption inside itself — see stepperBlock.
+                    if (descriptor.columnHeaderHeight == 0
+                        && !ui::seatedOutsideBody(descriptor, control.row))
                         control.label.setBounds(block.removeFromTop(ui::stepperLabelHeight));
                     control.slider.setBounds(block);
                     break;

@@ -229,6 +229,9 @@ void layoutSuite()
             for (const auto& row : module.rows)
                 for (const auto& control : row.controls)
                     if (withId->paramID == control.id) found = true;
+            // A marker dragged on a display is that parameter's control.
+            for (const auto& id : rhino::forge::ui::displayParameters(module))
+                if (withId->paramID == id) found = true;
         }
         require(found, "every parameter appears somewhere on the panel");
         if (!found) std::cerr << "       orphan parameter: " << withId->paramID << '\n';
@@ -277,9 +280,33 @@ void layoutSuite()
         const auto plot = rhino::forge::ui::displayPlotBounds(area, modules[i]);
         for (int r = 0; r < static_cast<int>(modules[i].rows.size()); ++r)
         {
-            const auto seated = modules[i].rows[static_cast<size_t>(r)].seat;
+            const auto& declared = modules[i].rows[static_cast<size_t>(r)];
+            const auto seated = declared.seat;
             if (seated == rhino::forge::ui::Seat::body) continue;
             const auto seat = rhino::forge::ui::rowBounds(area, modules[i], r);
+            // A strip that only one mode has is held to both halves of what
+            // that buys: in its own mode the picture gives it room, and in
+            // every other mode the picture is exactly what it would have been
+            // without it — which is the whole reason the strip is gated rather
+            // than carved for everyone.
+            if (declared.modeBy != nullptr)
+            {
+                require(seated == rhino::forge::ui::Seat::displayTop
+                            || seated == rhino::forge::ui::Seat::displayFoot,
+                        "only a row seated in a display may come and go with a mode");
+                const auto own = rhino::forge::ui::displayPlotBounds(area, modules[i], declared.modeIs);
+                require(!seat.intersects(own), "a mode's strip leaves that mode's plot alone");
+                require(own.getHeight() > 20, "a mode's strip leaves its plot room to draw in");
+                require(plot.intersects(seat) && plot.getHeight() > own.getHeight(),
+                        "a mode's strip costs every other mode's picture nothing");
+                for (const auto& control : declared.controls)
+                    require(control.modeBy != nullptr && control.modeIs == declared.modeIs,
+                            "every control in a mode's strip leaves with it");
+                require(rhino::forge::ui::displayBounds(area, modules[i]).contains(seat),
+                        "a mode's strip stays inside the display it is seated in");
+                require(!seat.intersects(controls), "a mode's strip stays out of the body");
+                continue;
+            }
             if (seated == rhino::forge::ui::Seat::header)
             {
                 require(area.withHeight(rhino::forge::ui::headerHeight).contains(seat),
@@ -686,6 +713,14 @@ void layoutSuite()
                     require(false, "a display keeps room to draw in at every allowed size");
                     std::cerr << "       " << modules[i].id << " at " << width << "x" << height << '\n';
                 }
+                // And in every mode that takes a strip out of it.
+                for (const auto& row : modules[i].rows)
+                    if (row.modeBy != nullptr
+                        && rhino::forge::ui::displayPlotBounds(box, modules[i], row.modeIs).getHeight() <= 20)
+                    {
+                        require(false, "a display keeps room to draw in at every allowed size, in every mode");
+                        std::cerr << "       " << modules[i].id << " at " << width << "x" << height << '\n';
+                    }
                 if (rhino::forge::ui::controlArea(box, modules[i]).getHeight() <= 24)
                 {
                     require(false, "controls stay usable at every allowed size");

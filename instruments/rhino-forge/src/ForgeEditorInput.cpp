@@ -32,6 +32,14 @@ void Editor::mouseMove(const juce::MouseEvent& event)
         setMouseCursor(juce::MouseCursor::PointingHandCursor);
         return;
     }
+    if (const auto spectral = spectralDisplayAt(at); spectral >= 0)
+    {
+        const auto marker = spectralMarkerAt(spectral, at);
+        setMouseCursor(marker == SpectralMarker::none ? juce::MouseCursor::NormalCursor
+                       : marker == SpectralMarker::loop ? juce::MouseCursor::DraggingHandCursor
+                                                        : juce::MouseCursor::LeftRightResizeCursor);
+        return;
+    }
     const auto display = lfoDisplayBounds();
     const auto column = ui::lfoColumnBounds(display);
     const auto row = ui::lfoRowBounds(display);
@@ -72,6 +80,15 @@ void Editor::mouseDown(const juce::MouseEvent& event)
         // picture is.
         if (const auto spectral = spectralDisplayAt(at); spectral >= 0)
         {
+            // Unless the press is on one of its markers, which it picks up
+            // instead: the picture is the chooser everywhere the markers are
+            // not.
+            const auto marker = spectralMarkerAt(spectral, at);
+            if (marker != SpectralMarker::none && !event.mods.isPopupMenu())
+            {
+                beginSpectralMarkerDrag(spectral, marker, at);
+                return;
+            }
             showSampleMenu(spectral);
             return;
         }
@@ -366,6 +383,11 @@ void Editor::mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWhee
 
 void Editor::mouseDrag(const juce::MouseEvent& event)
 {
+    if (markerDrag != SpectralMarker::none)
+    {
+        dragSpectralMarker(event.getEventRelativeTo(this).getPosition());
+        return;
+    }
     if (envelopeDragNode != ui::EnvelopeNode::none)
     {
         const auto at = event.getEventRelativeTo(this).getPosition();
@@ -429,6 +451,11 @@ void Editor::mouseDrag(const juce::MouseEvent& event)
 
 void Editor::mouseUp(const juce::MouseEvent& event)
 {
+    if (markerDrag != SpectralMarker::none)
+    {
+        endSpectralMarkerDrag();
+        return;
+    }
     if (envelopeDragNode != ui::EnvelopeNode::none)
     {
         if (envelopeDragMoved)
@@ -591,6 +618,7 @@ void Editor::timerCallback()
     refreshFilterFields();
     refreshNoiseField();
     refreshOscModeFields();
+    refreshLoopFields();
     refreshModulationRings();
     refreshMidiLearn();
 

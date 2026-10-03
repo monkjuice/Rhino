@@ -389,17 +389,28 @@ one point in its own time and still played chromatically. CUT is the spectral
 filter's corner and MIX balances the filtered spectrum against the unfiltered
 one.
 
-Click the display to load a sample — any format JUCE can decode, mixed to mono
-and analysed on the message thread. The display then draws its spectrogram, and
-the header names it.
+Click the display to load a sample — any format JUCE can decode, mixed to mono,
+normalised to full scale and analysed on the message thread. The display then
+draws its spectrogram, and hovering over it names the file. A sample recorded at
+another rate plays at its own pitch and speed.
+
+The **loop strip** along the foot of a spectral display chooses how the playhead
+travels — **ONE-SHOT**, **FWD LOOP**, **REV LOOP**, **FWD/REV** or **MANUAL**, in
+which SCAN is the playhead's position rather than its speed — and sets the
+loop's two ends as **LS** and **LE**. The strip is there only while the
+oscillator is spectral; a wavetable oscillator keeps the whole of its picture.
+On the spectrogram itself, the two lines down its height are **START** and
+**END** and the blue bar along its top is the loop: drag a line, either end of
+the bar, or the bar whole. Clicking anywhere else on the picture still opens the
+sample menu.
 
 A spectral sample travels inside the preset and inside host state, exactly as a
 drawn table does, so a patch carrying one stays self-contained when it moves
 between machines. It rides as FLAC rather than as the float the analysis reads,
 which is the difference between a preset you can send and one you cannot.
 
-The markers on the display, the loop field and the drawable filter mask are what
-is still missing. [SPECTRAL.md](SPECTRAL.md) is the plan, the milestones and the
+The LO/HI frequency markers and the drawable filter mask are what is still
+missing. [SPECTRAL.md](SPECTRAL.md) is the plan, the milestones and the
 reasoning behind the engine.
 
 ## LFO tables

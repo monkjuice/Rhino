@@ -243,7 +243,7 @@ is one you went and found.
 This is also the substrate M14c needs for the noise module's sample sources, so
 it is shared investment rather than spectral-only cost.
 
-### M16c — the spectral engine — done, less the loop field
+### M16c — the spectral engine — done
 
 `core/ForgeSpectral.h` is the vocoder; `Core::renderSpectralOscillator` is what
 tells it what to do. Pitch, SCAN in both directions, the frequency bounds with
@@ -273,13 +273,32 @@ silent and neither was visible in the code:
   to the same phase every hop, which is a periodic signal at the hop rate rather
   than the tone that is there.
 
-**Still outstanding:** the loop field. One-shot, Manual and the rest need a
-control to choose them, and the oscillator module has no free cell for it — it
-belongs in the strip under the display that M16d adds. Until then the engine
-runs Fwd Loop with transients on. The SCAN menu's Phase Lock is a declared
-setting that nothing reads yet — every region is locked to its peak regardless,
-because that is what keeps the level, so whatever the option ends up meaning it
-is not that.
+The **loop modes** are built: ONE-SHOT, FWD LOOP, REV LOOP, FWD/REV and
+MANUAL, travelling between four markers — START and END for the run, LS and LE
+for the loop inside it — in `spectralAdvance`. The parameter declares Serum's
+whole list, TAILED included, for the reason MODE does; TAILED is the one not
+built, because the manual's description of it is the one in the menu that does
+not say what the loop markers do, and it plays as FWD LOOP if a preset names it.
+A voice is placed on its starting marker on its first hop rather than at
+note-on, because note-on does not yet know which way SCAN points: forwards
+starts at START, backwards at END, and "arriving at the loop" means reaching its
+far end in the direction of travel. REV LOOP and FWD/REV both turn at that far
+end, so for them the arrival is the turn; FWD LOOP is simply in the loop as soon
+as it is inside it. A ONE-SHOT that reaches its end stops reading and lets the
+overlap-add drain, so the last of the sample fades over the three hops it was
+always going to take. The markers are proportions of the whole sample, so they
+mean the same thing whatever is loaded.
+
+Checked hop by hop off the voice: every mode starts on the right marker, a
+one-shot ends at END and is then silent (also through the Processor's own
+parameters), FWD LOOP stays inside the loop and wraps, REV LOOP runs backwards
+round it, FWD/REV goes both ways about equally without ever jumping, and MANUAL
+stays exactly where SCAN puts it.
+
+**Still outstanding:** transients are always on, and the SCAN menu that would
+turn them off does not exist yet. Its Phase Lock is a declared setting that
+nothing reads — every region is locked to its peak regardless, because that is
+what keeps the level, so whatever the option ends up meaning it is not that.
 
 ### M16d — the spectrogram, and the controls the manual draws — part done
 
@@ -297,18 +316,37 @@ once per block rather than per sample, and is drawn only while a note is
 sounding: at rest the reading is zero, and a line pinned to the left edge of a
 still picture reads as a marker somebody put there rather than as a position.
 
-**Still outstanding:** the draggable start/end markers, the LO/HI markers down
-the right edge, and the strip under the display carrying the loop field and the
-unison gear. The frequency bounds exist in the engine and are reachable only
-from code until those markers are drawn. The `FILTER` well between CUT and MIX
-is part of the mask editor and is deferred with it.
+The **loop strip** is seated along the foot of the display — the LOOP field, LS
+and LE, the last two wearing their captions inside the field because a seated
+row has no label line — and the **markers** are drawn on the spectrogram:
+START and END as lines down its height with what lies outside them dimmed, the
+loop as a blue bar along its top that is lit while the mode loops and faint
+while it does not. Either line, either end of the bar, or the bar whole can be
+dragged; anywhere else on the picture is still the sample menu. One hit test
+serves the cursor, the press and the drag, so what can be picked up is exactly
+what is drawn.
 
-A note on why the loop field is not simply added: row geometry is stateless, so
-a strip under the display would be carved out in **both** modes and a wavetable
-oscillator would pay a strip of its picture for a control it does not have. The
-header took the mode field for the same reason and there is no room there for a
-second. Either the strip is worth it to both modes, or the geometry learns about
-modes — and that is a real decision, not a detail to settle while adding a field.
+That settles the question this section used to leave open: whether a strip under
+the display is worth it to both modes, or the geometry learns about modes. It is
+the second, and only as far as it has to. A seated row may now say it exists in
+one mode (`Row::modeBy`); its strip is carved where it would be in any mode, and
+after every strip that is always there, so no other row's rectangle depends on
+the mode and none of the thirty-odd callers of the row geometry had to learn it.
+The **plot** is the one thing that does change, and `displayPlotBounds` takes
+the mode from the few places that draw into it. A wavetable oscillator keeps the
+whole of its picture. The layout suite holds both halves: in its own mode the
+plot gives the strip room, in every other mode the plot is exactly what it was.
+
+START and END are markers and not fields because the strip is not wide enough at
+the smallest window to give five fields a readable number each, and because the
+manual puts them on the picture too (p. 106). `displayParameters` names them, so
+the rule that every parameter appears somewhere on the panel still holds.
+
+**Still outstanding:** the LO/HI markers down the right edge, and the unison
+gear. The frequency bounds exist in the engine and are reachable only from code
+until those markers are drawn. The `FILTER` well between CUT and MIX is part of
+the mask editor and is deferred with it. In MANUAL the SCAN knob still reads as a
+percentage of speed rather than as a position.
 
 ## Deferred, and why
 
@@ -323,8 +361,10 @@ Not half-built, not approximated — absent, with a note saying so.
 - **X|Y manual mode** (pp. 114-115) and its eight Y-axis targets. Manual
   *playback* is in M16c because it is one branch in the scan; the dot, the Y
   assignment and the modulation routing to it are UI and matrix work.
-- **The rest of the loop modes** — Rev, Fwd/Rev, Tailed — plus Relative Loop,
-  Link Loop Length, Exit Loop on Release, and the loop crossfade (p. 110).
+- **TAILED**, and the loop menu's toggles — Relative Loop, Link Loop Length,
+  Exit Loop on Release — plus the loop crossfade (p. 110) and the reversed loop
+  a modulated LE behind LS is meant to give. Today LE behind LS is read as the
+  same loop the right way round.
 - **The spectral unison extras** — STACK, RANGE, SPAN, START and the WARP 1/2
   spread (pp. 111-113). START and SPAN need per-member vocoders; see the unison
   decision above.

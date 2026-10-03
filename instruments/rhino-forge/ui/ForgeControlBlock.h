@@ -161,6 +161,21 @@ inline int knobDiameterOf(juce::Rectangle<int> block)
     return block.getHeight() - knobLabelHeight;
 }
 
+// Whether a row sits somewhere other than the module's body — inside its
+// display, or in its header. A seated control takes the strip it was given
+// whole: the strip was declared at the height the control wants, and its width
+// is the display's or the header's, so the caps that stop a field stretching
+// across a module have nothing to protect it from here. It carries no label
+// either, for the same reason: it is inside the thing it would have named.
+inline bool seatedOutsideBody(const Module& module, int rowIndex)
+{
+    return module.rows[static_cast<size_t>(rowIndex)].seat != Seat::body;
+}
+
+// Between one seated control and the next. The chips reduce by a pixel of their
+// own when they paint, so this is half of the gap that shows.
+inline constexpr int seatedControlGap = 1;
+
 // A stepper is a fixed-height numeric field, so it does not scale with the
 // window the way a knob does. Inside a table it carries no label of its own —
 // the column titles say what it is — so it takes the height of its row instead
@@ -169,6 +184,11 @@ inline juce::Rectangle<int> stepperBlock(juce::Rectangle<int> moduleArea, const 
                                          int rowIndex, int index)
 {
     const auto cell = cellBounds(moduleArea, module, rowIndex, index);
+    // Seated, it takes its cell whole as the selector and the chips do, and
+    // wears its caption inside the field rather than on a line above it: the
+    // strip was declared at the height of one field, and a label strip would
+    // leave the number half of that.
+    if (seatedOutsideBody(module, rowIndex)) return cell.reduced(seatedControlGap, 0);
     if (module.columnHeaderHeight > 0)
         return juce::Rectangle<int>(juce::jmin(cell.getWidth() - 12, maxTableFieldWidth),
                                     juce::jmin(cell.getHeight() - 6, tableFieldHeight))
@@ -201,21 +221,6 @@ inline juce::Rectangle<int> faderBlock(juce::Rectangle<int> moduleArea, const Mo
                                 juce::jmax(1, cell.getHeight() - 2))
         .withCentre(cell.getCentre());
 }
-
-// Whether a row sits somewhere other than the module's body — inside its
-// display, or in its header. A seated control takes the strip it was given
-// whole: the strip was declared at the height the control wants, and its width
-// is the display's or the header's, so the caps that stop a field stretching
-// across a module have nothing to protect it from here. It carries no label
-// either, for the same reason: it is inside the thing it would have named.
-inline bool seatedOutsideBody(const Module& module, int rowIndex)
-{
-    return module.rows[static_cast<size_t>(rowIndex)].seat != Seat::body;
-}
-
-// Between one seated control and the next. The chips reduce by a pixel of their
-// own when they paint, so this is half of the gap that shows.
-inline constexpr int seatedControlGap = 1;
 
 // Laid out like a stepper, so a selector's label sits on the same line as the
 // labels either side of it however tall the field under it is.

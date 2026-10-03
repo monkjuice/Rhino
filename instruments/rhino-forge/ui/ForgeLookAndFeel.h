@@ -98,10 +98,25 @@ public:
 
         drawModBar(g, area, slider, enabled);
 
+        // A seated field's caption, small and to the left, with the value
+        // pushed right of it. The strip it sits in has no line above it for a
+        // label, and a number with nothing beside it in a row of three is a
+        // number nobody can place.
+        auto valueArea = area;
+        const auto caption = slider.getProperties().getWithDefault("caption", {}).toString();
+        if (caption.isNotEmpty())
+        {
+            const auto captionArea = valueArea.removeFromLeft(
+                juce::jmin(valueArea.getWidth() * 0.4f, 8.0f + 7.0f * static_cast<float>(caption.length())));
+            g.setColour(labelText.withAlpha(enabled ? 0.8f : 0.3f));
+            g.setFont(panelFont(Face::label, 10.0f));
+            g.drawText(caption, captionArea.withTrimmedLeft(4.0f), juce::Justification::centredLeft);
+        }
+
         // Over a fill, the value is read against the accent rather than in it.
         g.setColour((horizontal || !active ? text : accent).withAlpha(enabled ? 1.0f : 0.35f));
-        g.setFont(panelFont(Face::reading, 13.5f));
-        g.drawText(slider.getTextFromValue(slider.getValue()), area, juce::Justification::centred);
+        g.setFont(panelFont(Face::reading, caption.isNotEmpty() ? 12.0f : 13.5f));
+        g.drawText(slider.getTextFromValue(slider.getValue()), valueArea, juce::Justification::centred);
     }
 
     // A modulated field carries the strip the knob carries a ring: how far the

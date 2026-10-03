@@ -373,6 +373,16 @@ inline juce::String tooltipFor(const juce::String& id)
                  "spectrum. Zero freezes it; the left half runs it backwards"},
         {"Cut", "Where oscillator %'s spectral filter cuts the resynthesised spectrum"},
         {"Mix", "Balance oscillator %'s filtered spectrum against its unfiltered one"},
+        {"LoopMode", "How oscillator % travels through its sample: once through, round the "
+                     "loop, round it backwards, back and forth across it, or held where SCAN puts it"},
+        {"Start", "Where oscillator % starts playing its sample. Drag the left-hand marker "
+                  "on the spectrogram"},
+        {"End", "Where oscillator % stops playing its sample. Drag the right-hand marker "
+                "on the spectrogram"},
+        {"LoopStart", "Where oscillator %'s loop begins. Drag here, or the left end of the "
+                      "bar along the top of the spectrogram"},
+        {"LoopEnd", "Where oscillator %'s loop ends. Drag here, or the right end of the "
+                    "bar along the top of the spectrogram"},
         {"Octave", "Transpose oscillator % in octaves"},
         {"Semitone", "Transpose oscillator % in semitones"},
         {"Fine", "Detune oscillator % in cents"},

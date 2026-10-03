@@ -188,6 +188,20 @@ struct Row
     // Inside the module's display rather than under it. Last, so the rows that
     // are not seated need not mention it.
     Seat seat = Seat::body;
+    // A seated row that only exists while this parameter reads this value:
+    // the spectral oscillator's loop strip, which a wavetable oscillator has
+    // no use for.
+    //
+    // Only a row seated in a display may say this, and what it changes is
+    // only the plot. The strip itself is carved where it would be whatever the
+    // mode, and carved after every strip that is always there, so no other
+    // row's rectangle depends on the mode and every caller that asks for one
+    // can go on not knowing it. The plot is the one thing that does change —
+    // a wavetable oscillator keeps the whole of its picture — and it is asked
+    // for by the few places that draw into it, which do know which mode they
+    // are drawing. See displayCarve.
+    const char* modeBy = nullptr;
+    int modeIs = 0;
 };
 
 struct Module

@@ -177,13 +177,16 @@ void Editor::paint(juce::Graphics& g)
                     if (oscillatorIsSpectral(which))
                     {
                         // The spectrogram, where a wavetable oscillator draws
-                        // its table. Cached and blitted rather than worked out
-                        // here: see spectrogramFor.
-                        const auto plot = display.reduced(3);
+                        // its table — less the loop strip along the foot of
+                        // the display, which only a spectral oscillator has.
+                        // Cached and blitted rather than worked out here: see
+                        // spectrogramFor.
+                        const auto plot = spectralPlotFor(descriptor);
                         const auto& picture = spectrogramFor(which, plot, accent);
                         if (picture.isValid())
                         {
                             g.drawImageAt(picture, plot.getX(), plot.getY());
+                            paintSpectralMarkers(g, which, plot, accent, alpha);
                             // The playhead, where the loudest voice has got to.
                             // Drawn only while a note is actually sounding: at
                             // rest the reading is zero, and a line pinned to the
@@ -202,7 +205,7 @@ void Editor::paint(juce::Graphics& g)
                         {
                             g.setColour(ui::mutedText.withAlpha(alpha * 0.7f));
                             g.setFont(ui::panelFont(ui::Face::label, 11.0f));
-                            g.drawText("CLICK TO LOAD A SAMPLE", display,
+                            g.drawText("CLICK TO LOAD A SAMPLE", plot,
                                        juce::Justification::centred);
                         }
                         break;

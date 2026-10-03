@@ -1072,15 +1072,25 @@ private:
         // rather than a correction applied on top of it — the scan rate is
         // already fixed regardless of the key played.
         settings.scan = juce::jlimit(-4.0f, 4.0f, osc.scan) * rateRatio;
+        settings.loopMode = spectralLoopOf(osc.loopMode);
+        settings.start = osc.start;
+        settings.end = osc.end;
+        settings.loopStart = osc.loopStart;
+        settings.loopEnd = osc.loopEnd;
+        // In MANUAL, SCAN is where the playhead is rather than how fast it
+        // goes, and the knob's whole sweep is the whole run from START to END:
+        // fully left is the start marker, fully right the end, the middle the
+        // middle. Read off the knob as set, before the rate scaling above,
+        // which is about speed and means nothing to a position.
+        settings.position = juce::jlimit(0.0f, 1.0f, osc.scan * 0.25f + 0.5f);
         settings.cut = juce::jlimit(0.0f, 1.0f, osc.cut);
         settings.mix = juce::jlimit(0.0f, 1.0f, osc.mix);
         settings.unison = juce::jlimit(1, spectralUnisonMax, juce::roundToInt(osc.unison));
         settings.detune = juce::jlimit(0.0f, 1.0f, osc.detune);
         settings.blend = juce::jlimit(0.0f, 1.0f, osc.blend);
         settings.pan = juce::jlimit(-1.0f, 1.0f, osc.pan);
-        // Fwd Loop and transient preservation, until the loop field that would
-        // choose otherwise has somewhere on the panel to stand. See SPECTRAL.md.
-        settings.loop = true;
+        // Transient preservation is always on until the SCAN menu that would
+        // turn it off exists. See SPECTRAL.md.
         settings.transients = true;
 
         auto stackLeft = 0.0f, stackRight = 0.0f;

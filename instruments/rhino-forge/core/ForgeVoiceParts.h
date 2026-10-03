@@ -184,6 +184,11 @@ struct Oscillator
     // The spectral set. Meaningless while the mode is wavetable, and read by
     // nothing in that case — see SPECTRAL.md for what each one does.
     float scan = 1.0f, cut = 1.0f, mix = 0.0f;
+    // How the playhead travels, and the four markers it travels between: the
+    // run from start to end, and the loop inside it. Each marker is 0..1 of the
+    // whole sample. See SpectralLoop in ForgeSpectral.h.
+    float loopMode = 1.0f;
+    float start = 0.0f, end = 1.0f, loopStart = 0.0f, loopEnd = 1.0f;
     // The two warp stages, in the order they are applied. A mode is held as a
     // float for the same reason everything else here is: that is what a
     // parameter read gives back. See ForgeWarp.h for what each one does.

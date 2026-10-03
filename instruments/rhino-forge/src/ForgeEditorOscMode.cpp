@@ -41,8 +41,9 @@ void Editor::refreshOscModeFields()
             auto& control = *held;
             if (control.selector == nullptr || !control.id.endsWith("Mode")) continue;
             if (oscillatorIndexFromId(control.id) < 0) continue;
-            // The warp stages end in "Mode" too, and are a different list.
-            if (isWarpControl(control.id)) continue;
+            // The warp stages and the loop end in "Mode" too, and are
+            // different lists.
+            if (isWarpControl(control.id) || isLoopModeControl(control.id)) continue;
 
             const auto mode = juce::jlimit(0, oscModeCount - 1, juce::roundToInt(value(control.id)));
             const auto position = oscModePosition(mode);

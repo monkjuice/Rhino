@@ -402,25 +402,35 @@ inline juce::Rectangle<int> displayBounds(juce::Rectangle<int> moduleArea, const
 //
 // `wanted` is the row whose strip is being asked for, or -1 for the plot, which
 // is simply whatever the strips left.
+//
+// `mode` is what the module's mode parameter reads, and it decides only which
+// gated rows the *plot* gives up room to. The strips that are always there are
+// carved first; a gated strip is carved after them, as if it were the only
+// gated one, whenever it is the strip being asked for. So a gated row lands in
+// the same place in every mode, no ungated row ever moves, and -1 — no mode —
+// is a plot with no gated strip taken out of it.
 inline juce::Rectangle<int> displayCarve(juce::Rectangle<int> moduleArea, const Module& module,
-                                         int wanted)
+                                         int wanted, int mode = -1)
 {
     if (module.display == Display::none) return {};
     auto inner = displayBounds(moduleArea, module).reduced(displaySeatInset);
-    for (int i = 0; i < static_cast<int>(module.rows.size()); ++i)
-    {
-        const auto& row = module.rows[static_cast<size_t>(i)];
-        if (row.seat == Seat::body || row.seat == Seat::header) continue;
-        const auto atTop = row.seat == Seat::displayTop;
-        // Never more than the display has: a window small enough to make the
-        // plot vanish should take the plot, not hand a strip a negative height
-        // and let it wander out of the well.
-        const auto height = juce::jlimit(0, juce::jmax(0, inner.getHeight()), row.weight);
-        const auto strip = atTop ? inner.removeFromTop(height) : inner.removeFromBottom(height);
-        if (i == wanted) return strip;
-        if (atTop) inner.removeFromTop(displaySeatGap);
-        else       inner.removeFromBottom(displaySeatGap);
-    }
+    for (const auto gated : {false, true})
+        for (int i = 0; i < static_cast<int>(module.rows.size()); ++i)
+        {
+            const auto& row = module.rows[static_cast<size_t>(i)];
+            if (row.seat == Seat::body || row.seat == Seat::header) continue;
+            if ((row.modeBy != nullptr) != gated) continue;
+            if (gated && i != wanted && !(wanted < 0 && row.modeIs == mode)) continue;
+            const auto atTop = row.seat == Seat::displayTop;
+            // Never more than the display has: a window small enough to make
+            // the plot vanish should take the plot, not hand a strip a negative
+            // height and let it wander out of the well.
+            const auto height = juce::jlimit(0, juce::jmax(0, inner.getHeight()), row.weight);
+            const auto strip = atTop ? inner.removeFromTop(height) : inner.removeFromBottom(height);
+            if (i == wanted) return strip;
+            if (atTop) inner.removeFromTop(displaySeatGap);
+            else       inner.removeFromBottom(displaySeatGap);
+        }
     return wanted < 0 ? inner : juce::Rectangle<int>();
 }
 
@@ -440,10 +450,12 @@ inline juce::Rectangle<int> headerCarve(juce::Rectangle<int> moduleArea, const M
 
 // What the display has left for the thing it is a display *of*. Everything that
 // draws into a display asks for this rather than for displayBounds, so a curve
-// can never be plotted underneath the controls seated on top of it.
-inline juce::Rectangle<int> displayPlotBounds(juce::Rectangle<int> moduleArea, const Module& module)
+// can never be plotted underneath the controls seated on top of it. A module
+// with a mode says which one it is drawing; see displayCarve.
+inline juce::Rectangle<int> displayPlotBounds(juce::Rectangle<int> moduleArea, const Module& module,
+                                              int mode = -1)
 {
-    return displayCarve(moduleArea, module, -1);
+    return displayCarve(moduleArea, module, -1, mode);
 }
 
 // The parameter an oscillator's display draws: the first knob of the module,

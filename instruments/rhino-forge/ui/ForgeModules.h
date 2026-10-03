@@ -87,6 +87,13 @@ inline Control gatedBy(Control control, const char* modeId)
     return control;
 }
 
+// The strip along the foot of a spectral oscillator's display: the loop menu
+// and the loop's two ends, which is the strip the manual draws under the
+// spectrogram (pp. 109-110). Thinner than the filter's seated selector — this
+// one is read less often than the picture above it, and every pixel it takes
+// is a pixel of spectrogram.
+inline constexpr int spectralStripHeight = 22;
+
 // One oscillator's rows. The three are identical but for their prefix, and
 // writing them out three times is what let the mode gate drift between them,
 // so they are built once here instead.
@@ -95,7 +102,8 @@ inline std::vector<Row> oscillatorRows(const char* mode, const char* octave, con
                                        const char* unison, const char* detune, const char* cut,
                                        const char* blend, const char* mix, const char* pan,
                                        const char* level, const char* warp1, const char* warp1Mode,
-                                       const char* warp2Mode, const char* warp2)
+                                       const char* warp2Mode, const char* warp2,
+                                       const char* loopMode, const char* loopStart, const char* loopEnd)
 {
     const auto wt = [mode] (const char* id, const char* label)
     {
@@ -104,6 +112,14 @@ inline std::vector<Row> oscillatorRows(const char* mode, const char* octave, con
     const auto sp = [mode] (const char* id, const char* label)
     {
         return gatedBy(whenSpectral(id, label), mode);
+    };
+    // A strip control: in a cell of its own rather than sharing one, because
+    // the whole strip leaves with the mode rather than standing in for
+    // something that stays.
+    const auto strip = [mode] (const char* id, const char* label, Style style, int weight)
+    {
+        return gatedBy({id, label, style, nullptr, weight, nullptr, false,
+                        nullptr, static_cast<int>(OscMode::spectral)}, mode);
     };
     return {
         // What the oscillator is, beside its name in the header.
@@ -126,7 +142,33 @@ inline std::vector<Row> oscillatorRows(const char* mode, const char* octave, con
         {30, {{warp1, "WARP 1", Style::knob, nullptr, 2, warp1Mode},
               {warp1Mode, "MODE 1", Style::selector, nullptr, 3},
               {warp2Mode, "MODE 2", Style::selector, nullptr, 3},
-              {warp2, "WARP 2", Style::knob, nullptr, 2, warp2Mode}}}};
+              {warp2, "WARP 2", Style::knob, nullptr, 2, warp2Mode}}},
+        // The loop strip, seated along the foot of the display and there only
+        // while the oscillator is spectral. This is the decision SPECTRAL.md
+        // left open: a strip carved in both modes would have cost a wavetable
+        // oscillator part of its picture for a control it does not have, so the
+        // strip is gated by the mode and the plot — only the plot — knows it.
+        // See Row::modeBy.
+        //
+        // START and END are not here. They are the markers on the spectrogram
+        // itself, which is where the manual puts them too (p. 106), and the
+        // strip is not wide enough at the smallest window to give five fields
+        // a readable number each. See displayParameters.
+        {spectralStripHeight, {strip(loopMode, "LOOP", Style::selector, 4),
+                               strip(loopStart, "LS", Style::stepper, 3),
+                               strip(loopEnd, "LE", Style::stepper, 3)},
+         1, 0, 0, Seat::displayFoot, mode, static_cast<int>(OscMode::spectral)}};
+}
+
+// The parameters a module's display is the control for, rather than a cell in
+// one of its rows: a spectral oscillator's START and END markers, dragged on
+// the spectrogram. Named here so the layout test's rule that every parameter
+// appears somewhere on the panel has somewhere to find them.
+inline std::vector<juce::String> displayParameters(const Module& module)
+{
+    if (module.display != Display::oscillator) return {};
+    const auto prefix = juce::String(module.id);
+    return {prefix + "Start", prefix + "End"};
 }
 
 inline const std::vector<Module>& modules()
@@ -152,14 +194,16 @@ inline const std::vector<Module>& modules()
          oscillatorRows("oscAMode", "oscAOctave", "oscASemitone", "oscAFine",
                         "oscAPosition", "oscAScan", "oscAUnison", "oscADetune", "oscACut",
                         "oscABlend", "oscAMix", "oscAPan", "oscALevel",
-                        "oscAWarp1", "oscAWarp1Mode", "oscAWarp2Mode", "oscAWarp2"),
+                        "oscAWarp1", "oscAWarp1Mode", "oscAWarp2Mode", "oscAWarp2",
+                        "oscALoopMode", "oscALoopStart", "oscALoopEnd"),
          0, only(Page::oscillators), 1, 0, 0, oscillatorDisplayPercent, 0, "OSCILLATOR A"},
         {"oscB", "OSC B", "", "oscBEnable", false, Display::oscillator,
          0, 4.0f + oscillatorColumnSpan, oscillatorColumnSpan, false,
          oscillatorRows("oscBMode", "oscBOctave", "oscBSemitone", "oscBFine",
                         "oscBPosition", "oscBScan", "oscBUnison", "oscBDetune", "oscBCut",
                         "oscBBlend", "oscBMix", "oscBPan", "oscBLevel",
-                        "oscBWarp1", "oscBWarp1Mode", "oscBWarp2Mode", "oscBWarp2"),
+                        "oscBWarp1", "oscBWarp1Mode", "oscBWarp2Mode", "oscBWarp2",
+                        "oscBLoopMode", "oscBLoopStart", "oscBLoopEnd"),
          0, only(Page::oscillators), 1, 0, 0, oscillatorDisplayPercent, 0, "OSCILLATOR B"},
 
         {"oscC", "OSC C", "", "oscCEnable", false, Display::oscillator,
@@ -167,7 +211,8 @@ inline const std::vector<Module>& modules()
          oscillatorRows("oscCMode", "oscCOctave", "oscCSemitone", "oscCFine",
                         "oscCPosition", "oscCScan", "oscCUnison", "oscCDetune", "oscCCut",
                         "oscCBlend", "oscCMix", "oscCPan", "oscCLevel",
-                        "oscCWarp1", "oscCWarp1Mode", "oscCWarp2Mode", "oscCWarp2"),
+                        "oscCWarp1", "oscCWarp1Mode", "oscCWarp2Mode", "oscCWarp2",
+                        "oscCLoopMode", "oscCLoopStart", "oscCLoopEnd"),
          0, only(Page::oscillators), 1, 0, 0, oscillatorDisplayPercent, 0, "OSCILLATOR C"},
 
         // The matrix takes the oscillator bank's columns — not the whole row,

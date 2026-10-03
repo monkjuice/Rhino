@@ -536,7 +536,6 @@ double vocoderGainDb(const Sample& sample, float ratio)
     juce::dsp::FFT fft(spectralFftOrder);
     SpectralSettings settings;
     settings.pitchRatio = ratio;
-    settings.loop = true;
     settings.transients = true;
 
     auto sum = 0.0;
@@ -614,6 +613,202 @@ void sampleRateSuite()
     requireClose(core.scanPosition(0), 0.25f, 0.02f,
                  "a second of playing reaches a second into a sample recorded at another rate");
 }
+
+// --- The loop modes ------------------------------------------------------------
+//
+// Where the playhead goes, hop by hop. Read straight off the voice rather than
+// off the audio: a loop is a statement about position, and the pitch checks
+// above have already shown that position and pitch do not touch.
+
+struct Trail
+{
+    std::vector<double> frames;
+    bool ended = false;
+};
+
+Trail playheadTrail(const Sample& sample, const SpectralSettings& settings, int hops)
+{
+    auto voice = std::make_unique<SpectralVoice>();
+    auto scratch = std::make_unique<SpectralScratch>();
+    scratch->prepare();
+    juce::dsp::FFT fft(spectralFftOrder);
+    Trail trail;
+    for (int hop = 0; hop < hops; ++hop)
+    {
+        // Where this hop reads, then the hop itself, which moves it on.
+        spectralSynthesise(*voice, sample, settings, *scratch, fft);
+        trail.frames.push_back(voice->frame);
+    }
+    trail.ended = voice->ended;
+    return trail;
+}
+
+SpectralSettings loopSettings(SpectralLoop mode, float scan = 1.0f)
+{
+    SpectralSettings settings;
+    settings.loopMode = mode;
+    settings.scan = scan;
+    settings.start = 0.1f;
+    settings.end = 0.9f;
+    settings.loopStart = 0.5f;
+    settings.loopEnd = 0.7f;
+    return settings;
+}
+
+void loopModesSuite()
+{
+    // Four seconds: 372 frames, so the loop is seventy-four frames long and
+    // the run from START reaches its start at hop 149 and its end at hop 223 —
+    // which is where REV LOOP and FWD/REV arrive, since both turn at the far
+    // end. Each check reads from past its own mode's arrival.
+    const auto sample = sineSample(440.0, 4.0);
+    const auto last = static_cast<double>(sample->frameCount() - 1);
+    const auto loopStart = 0.5 * last, loopEnd = 0.7 * last;
+    constexpr auto slack = 1.0e-6;
+
+    // Every mode starts at START going forwards and at END going backwards.
+    {
+        const auto forwards = playheadTrail(*sample, loopSettings(SpectralLoop::forward), 1);
+        requireClose(static_cast<float>(forwards.frames.front()), static_cast<float>(0.1 * last + 1.0), 0.01f,
+                     "a voice begins playing at the start marker");
+        const auto backwards = playheadTrail(*sample, loopSettings(SpectralLoop::forward, -1.0f), 1);
+        requireClose(static_cast<float>(backwards.frames.front()), static_cast<float>(0.9 * last - 1.0), 0.01f,
+                     "a voice with SCAN running backwards begins at the end marker");
+    }
+
+    // ONE-SHOT runs to END and stops: the playhead parks, the voice reports it
+    // has ended, and what comes out after that is silence.
+    {
+        const auto trail = playheadTrail(*sample, loopSettings(SpectralLoop::oneShot), 400);
+        require(trail.ended, "a one-shot ends once it has played to the end marker");
+        requireClose(static_cast<float>(trail.frames.back()), static_cast<float>(0.9 * last), 0.01f,
+                     "a one-shot stops at the end marker rather than looping");
+
+        auto voice = std::make_unique<SpectralVoice>();
+        auto scratch = std::make_unique<SpectralScratch>();
+        scratch->prepare();
+        juce::dsp::FFT fft(spectralFftOrder);
+        const auto settings = loopSettings(SpectralLoop::oneShot);
+        auto tail = 0.0f;
+        for (int i = 0; i < 400 * spectralHop; ++i)
+        {
+            auto l = 0.0f, r = 0.0f;
+            spectralRead(*voice, *sample, settings, *scratch, fft, l, r);
+            if (i >= 380 * spectralHop) tail = juce::jmax(tail, std::abs(l), std::abs(r));
+        }
+        require(tail < 1.0e-6f, "a one-shot that has ended is silent");
+    }
+
+    // FWD LOOP reaches the loop and stays in it, going round: once inside,
+    // every position is between the loop's ends and the playhead jumps back
+    // to the loop's start at least once.
+    {
+        const auto trail = playheadTrail(*sample, loopSettings(SpectralLoop::forward), 400);
+        auto inside = true, wrapped = false;
+        for (size_t hop = 200; hop < trail.frames.size(); ++hop)
+        {
+            inside = inside && trail.frames[hop] >= loopStart - slack && trail.frames[hop] <= loopEnd + slack;
+            wrapped = wrapped || trail.frames[hop] < trail.frames[hop - 1];
+        }
+        require(inside, "a forward loop stays between the loop markers once it has reached them");
+        require(wrapped, "a forward loop goes back round to the loop start");
+    }
+
+    // REV LOOP turns at the loop's end and goes round backwards: once looping,
+    // the playhead only ever falls, except where it wraps back up to the end.
+    {
+        const auto trail = playheadTrail(*sample, loopSettings(SpectralLoop::reverse), 500);
+        auto falling = 0, rising = 0;
+        auto inside = true;
+        for (size_t hop = 240; hop < trail.frames.size(); ++hop)
+        {
+            const auto step = trail.frames[hop] - trail.frames[hop - 1];
+            if (step < -slack) ++falling;
+            if (step > slack) ++rising;
+            inside = inside && trail.frames[hop] >= loopStart - slack && trail.frames[hop] <= loopEnd + slack;
+        }
+        require(inside, "a reverse loop stays between the loop markers");
+        require(falling > rising * 20, "a reverse loop runs backwards round the loop");
+        require(rising > 0, "a reverse loop wraps from the loop start back to the loop end");
+    }
+
+    // FWD/REV bounces: once looping it spends as long going up as coming down,
+    // and never leaves the loop or jumps across it.
+    {
+        const auto trail = playheadTrail(*sample, loopSettings(SpectralLoop::pingPong), 690);
+        auto falling = 0, rising = 0;
+        auto inside = true, jumped = false;
+        for (size_t hop = 240; hop < trail.frames.size(); ++hop)
+        {
+            const auto step = trail.frames[hop] - trail.frames[hop - 1];
+            if (step < -slack) ++falling;
+            if (step > slack) ++rising;
+            jumped = jumped || std::abs(step) > 1.5;
+            inside = inside && trail.frames[hop] >= loopStart - slack && trail.frames[hop] <= loopEnd + slack;
+        }
+        require(inside, "a forward/reverse loop stays between the loop markers");
+        require(!jumped, "a forward/reverse loop turns rather than jumping");
+        require(rising > 50 && falling > 50 && std::abs(rising - falling) < rising / 4,
+                "a forward/reverse loop goes both ways about equally");
+    }
+
+    // MANUAL does not run: the playhead is wherever SCAN puts it between START
+    // and END, every hop, however long the note.
+    {
+        auto settings = loopSettings(SpectralLoop::manual);
+        settings.position = 0.25f;
+        const auto trail = playheadTrail(*sample, settings, 100);
+        const auto expected = 0.1 * last + 0.25 * (0.9 - 0.1) * last;
+        auto still = true;
+        // To a thousandth of a frame: the markers arrive as floats.
+        for (const auto frame : trail.frames) still = still && std::abs(frame - expected) < 1.0e-3;
+        require(still, "a manual playhead stays where SCAN puts it between the start and end markers");
+    }
+}
+
+// The same, through the parameters a host and the panel write: a one-shot set
+// from the Processor plays its sample once and then goes quiet.
+void loopParametersSuite()
+{
+    const auto file = juce::File::getSpecialLocation(juce::File::tempDirectory)
+                          .getChildFile("forge-spectral-oneshot.wav");
+    file.deleteFile();
+    {
+        juce::AudioBuffer<float> buffer(1, static_cast<int>(testRate / 2));
+        for (int i = 0; i < buffer.getNumSamples(); ++i)
+            buffer.setSample(0, i, static_cast<float>(
+                0.5 * std::sin(2.0 * juce::MathConstants<double>::pi * 440.0
+                               * static_cast<double>(i) / testRate)));
+        juce::WavAudioFormat wav;
+        std::unique_ptr<juce::FileOutputStream> stream(file.createOutputStream());
+        if (stream == nullptr) { require(false, "the test can write a sample"); return; }
+        const std::unique_ptr<juce::AudioFormatWriter> writer(
+            wav.createWriterFor(stream.release(), testRate, 1, 16, {}, 0));
+        if (writer != nullptr) writer->writeFromAudioSampleBuffer(buffer, 0, buffer.getNumSamples());
+    }
+
+    const auto lateLevel = [&file] (SpectralLoop mode)
+    {
+        Processor processor;
+        if (processor.importSample(0, file).failed()) return -1.0f;
+        setValue(processor, "oscAMode", static_cast<float>(OscMode::spectral));
+        setValue(processor, "oscALoopMode", static_cast<float>(mode));
+        setValue(processor, "oscBEnable", 0.0f);
+        setValue(processor, "oscCEnable", 0.0f);
+        setValue(processor, "subEnable", 0.0f);
+        setValue(processor, "noiseEnable", 0.0f);
+        // Two seconds of a half-second sample, read for the last half second.
+        juce::AudioBuffer<float> buffer(2, static_cast<int>(testRate * 2));
+        renderNote(processor, buffer, 60);
+        return buffer.getMagnitude(0, static_cast<int>(testRate * 1.5), static_cast<int>(testRate / 2));
+    };
+
+    const auto looped = lateLevel(SpectralLoop::forward);
+    const auto once = lateLevel(SpectralLoop::oneShot);
+    require(looped > 1.0e-3f, "a looping sample is still sounding long after it would have ended");
+    require(once >= 0.0f && once < 1.0e-5f, "a one-shot set from its parameter is silent once it has played");
+    file.deleteFile();
+}
 }
 
 void spectralTests()
@@ -631,5 +826,7 @@ void spectralTests()
     levelSuite();
     normalisedSuite();
     sampleRateSuite();
+    loopModesSuite();
+    loopParametersSuite();
 }
 }

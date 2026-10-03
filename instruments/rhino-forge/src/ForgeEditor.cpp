@@ -125,6 +125,7 @@ Editor::Editor(Processor& p)
     refreshFilterFields();
     refreshNoiseField();
     refreshOscModeFields();
+    refreshLoopFields();
     applyEnableStates();
     applyTableCounts();
     // Before the first layout pass, so a project that opens with named macros
@@ -290,6 +291,20 @@ void Editor::buildModules()
                         control->selector->onChoose = [this] (int choice) { setFilterType(choice); };
                         control->selector->onOpenList = [this, held] { showFilterMenu(*held); };
                     }
+                    // A spectral oscillator's loop. Asked before the
+                    // oscillator's own MODE, whose test it would otherwise
+                    // pass, and like it the list shown is not the list stored:
+                    // TAILED is declared and not built. See SpectralLoop.
+                    else if (isLoopModeControl(declared.id))
+                    {
+                        control->selector->accent = accent;
+                        control->selector->forceList = true;
+                        control->selector->onChoose = [this, held] (int choice)
+                        {
+                            setLoopMode(held->id, spectralLoopAt(choice));
+                        };
+                        control->selector->onOpenList = [this, held] { showLoopMenu(*held); };
+                    }
                     // An oscillator's mode. Like the noise module's source, the
                     // list it shows is not the list the parameter stores — see
                     // ForgeEditorOscMode.cpp — so the arrows hand back a
@@ -341,6 +356,8 @@ void Editor::buildModules()
                         control->slider.onValueChange = [this] { refreshFilterFields(); repaint(); };
                     else if (juce::String(declared.id) == "noiseSource")
                         control->slider.onValueChange = [this] { refreshNoiseField(); repaint(); };
+                    else if (isLoopModeControl(declared.id))
+                        control->slider.onValueChange = [this] { refreshLoopFields(); repaint(); };
                     // A mode change swaps the controls standing in three of the
                     // module's cells, so the panel has to be told to show the
                     // other set as well as to redraw the field itself.
@@ -489,6 +506,10 @@ void Editor::buildModules()
                 control->slider.setColour(juce::Slider::textBoxTextColourId, ui::text);
                 control->slider.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
                 control->slider.setTooltip(ui::tooltipFor(declared.id));
+                // A field seated in a strip has no label line above it, so it
+                // says what it is inside itself. See drawLinearSlider.
+                if (declared.style == ui::Style::stepper && ui::seatedOutsideBody(descriptor, r))
+                    control->slider.getProperties().set("caption", juce::String(declared.label));
                 if (declared.style == ui::Style::knob || declared.style == ui::Style::fader)
                 {
                     // onDragStart/onDragEnd/onValueChange are the editor's to

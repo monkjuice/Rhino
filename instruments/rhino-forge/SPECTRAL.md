@@ -275,14 +275,16 @@ silent and neither was visible in the code:
 
 The **loop modes** are built: ONE-SHOT, FWD LOOP, REV LOOP, FWD/REV and
 MANUAL, in `spectralAdvance`. There are two pairs of markers and each mode reads
-exactly one (`spectralLoopReachesLoop`): **START and END** for the two that play
-a stretch of the sample — ONE-SHOT plays it once, MANUAL is placed within it —
-and the **loop's two ends** for the three that go round. A loop mode runs in
-from the sample's own start, or its end with SCAN negative, and ignores START and
-END, so a marker the panel is not showing cannot change what is heard. (For a
-while the loop's pair was the only one and ONE-SHOT played the whole sample;
-START and END came back so a one-shot can be trimmed, but never both pairs on
-screen at once, which is what had read as the same thing twice.) The parameter
+at most one (`spectralMarkerPairOf`): **START and END** for ONE-SHOT, which
+plays that stretch once; the **loop's two ends** for the three that go round;
+and neither for **MANUAL**, whose playhead is wherever SCAN puts it in the whole
+sample. A mode that does not read START runs from the sample's own start, or its
+end with SCAN negative, so a marker the panel is not showing cannot change what
+is heard. (For a while the loop's pair was the only one and ONE-SHOT played the
+whole sample; START and END came back so a one-shot can be trimmed, but never
+both pairs on screen at once, which is what had read as the same thing twice.)
+MANUAL's position is `spectralManualPosition`, one function for the voice and
+for the panel, so the line on the picture is where the voice reads. The parameter
 declares Serum's whole list, TAILED included, for the reason MODE does; TAILED
 is the one not built, because the manual's description of it is the one in the
 menu that does not say what the loop markers do, and it plays as FWD LOOP if a
@@ -303,7 +305,7 @@ loop mode on the sample's own ends whatever START says, a one-shot plays past
 the loop to END and is then silent (also through the Processor's own
 parameters), FWD LOOP stays inside the loop and wraps, REV LOOP runs backwards
 round it, FWD/REV goes both ways about equally without ever jumping, and MANUAL
-stays exactly where SCAN puts it between START and END.
+stays exactly where SCAN puts it across the whole sample.
 
 **Still outstanding:** transients are always on, and the SCAN menu that would
 turn them off does not exist yet. Its Phase Lock is a declared setting that
@@ -330,17 +332,20 @@ It crosses from the audio thread the way the envelope's level does, published
 once per block rather than per sample, and is drawn only while a note is
 sounding: at rest the reading is zero, and a line pinned to the left edge of a
 still picture reads as a marker somebody put there rather than as a position.
+MANUAL is the exception. Its playhead is the whole of what its picture shows —
+SCAN is where it is — so it is always drawn: at the knob's position at rest, and
+at the voice's own once one is sounding, which carries whatever modulates SCAN.
 
 The **loop strip** is seated along the foot of the display and holds the LOOP
 field alone. The markers are on the spectrogram rather than fields beside it,
-and only the pair the mode reads is there. In ONE-SHOT and MANUAL, START and END
-are lines down its height in the module's colour, with a tab at the foot and
-what lies outside them dimmed. In the loop modes the loop is a blue bracket: two
-lines down the height joined by a bar along the top. Any line moves its own
-marker, picked up anywhere down its height; the bar moves the loop whole;
-anywhere else on the picture is still the sample menu. The pair a mode does not
-read is not drawn faint — it is not there — because a faint marker still looks
-like something to drag. Over a marker the tooltip says what it does. One hit
+and only the pair the mode reads is there. In ONE-SHOT, START and END are lines
+down its height in the module's colour, with a tab at the foot and what lies
+outside them dimmed. In the loop modes the loop is a blue bracket: two lines down
+the height joined by a bar along the top. MANUAL has no marker at all, only its
+playhead. Any line moves its own marker, picked up anywhere down its height; the
+bar moves the loop whole; anywhere else on the picture is still the sample menu.
+The pair a mode does not read is not drawn faint — it is not there — because a
+faint marker still looks like something to drag. Over a marker the tooltip says what it does. One hit
 test serves the cursor, the press, the drag and the tooltip, so what can be
 picked up is exactly what is drawn.
 

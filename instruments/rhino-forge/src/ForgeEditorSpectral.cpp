@@ -222,14 +222,14 @@ void Editor::showLoopMenu(Control& control)
 // --- The markers --------------------------------------------------------------
 //
 // Two pairs, and only the one the loop mode reads is ever on the picture (see
-// spectralLoopReachesLoop). ONE-SHOT and MANUAL have START and END: lines down
-// the whole height in the module's colour, with what lies outside them dimmed.
-// The modes that go round have the loop's bracket: its two ends down the
-// height and a bar joining them along the top, an end dragged one at a time or
-// the bar dragged whole (p. 110). Both pairs on screen at once read as the same
-// thing twice, which is what showing only one settles. Drawn and hit-tested
-// from the one set of numbers below, so what the hand can pick up is exactly
-// what is drawn.
+// spectralMarkerPairOf). ONE-SHOT has START and END: lines down the whole height
+// in the module's colour, with what lies outside them dimmed. The modes that go
+// round have the loop's bracket: its two ends down the height and a bar joining
+// them along the top, an end dragged one at a time or the bar dragged whole
+// (p. 110). MANUAL has neither — its picture is the playhead SCAN puts there.
+// Both pairs on screen at once read as the same thing twice, which is what
+// showing only one settles. Drawn and hit-tested from the one set of numbers
+// below, so what the hand can pick up is exactly what is drawn.
 
 namespace
 {
@@ -278,7 +278,8 @@ Editor::SpectralMarker Editor::spectralMarkerAt(int oscillator, juce::Point<int>
 {
     if (oscillator < 0 || processor.sampleStore().sample(oscillator) == nullptr) return SpectralMarker::none;
     const auto prefix = juce::String(oscillatorPrefix(oscillator));
-    const auto looping = spectralLoopReachesLoop(spectralLoopOf(value(prefix + "LoopMode")));
+    const auto markers = spectralMarkerPairOf(spectralLoopOf(value(prefix + "LoopMode")));
+    if (markers == SpectralMarkerPair::none) return SpectralMarker::none;
     for (const auto& module : moduleUis)
     {
         if (oscillatorIndexFromId(juce::String(module.descriptor->id)) != oscillator
@@ -295,7 +296,7 @@ Editor::SpectralMarker Editor::spectralMarkerAt(int oscillator, juce::Point<int>
         // is drawn at; in a loop mode, the bar between them along the top as
         // well. Anywhere else is the sample itself, which a click opens the
         // menu for.
-        if (!looping)
+        if (markers == SpectralMarkerPair::run)
         {
             if (near("Start")) return SpectralMarker::start;
             if (near("End")) return SpectralMarker::end;
@@ -403,8 +404,11 @@ void Editor::paintSpectralMarkers(juce::Graphics& g, int oscillator, juce::Recta
     const auto height = static_cast<float>(plot.getHeight());
 
     // The pair this mode does not read is not drawn at all, rather than drawn
-    // faint: a faint marker still looks like something to drag.
-    if (!spectralLoopReachesLoop(spectralLoopOf(value(prefix + "LoopMode"))))
+    // faint: a faint marker still looks like something to drag. MANUAL reads
+    // neither.
+    const auto markers = spectralMarkerPairOf(spectralLoopOf(value(prefix + "LoopMode")));
+    if (markers == SpectralMarkerPair::none) return;
+    if (markers == SpectralMarkerPair::run)
     {
         // What is outside the run is dimmed rather than hidden: it is still
         // the sample, and dragging a marker back over it should uncover

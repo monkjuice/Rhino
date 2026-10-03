@@ -199,10 +199,21 @@ void Editor::paint(juce::Graphics& g)
                             // rest the reading is zero, and a line pinned to the
                             // left edge of a still picture reads as a marker
                             // somebody put there rather than as a position.
-                            const auto scan = processor.scanPosition(which);
-                            if (scan > 0.0f)
+                            //
+                            // Except in MANUAL, where the playhead is the whole
+                            // of what the picture shows: SCAN is where it is, so
+                            // it is always drawn — at the knob's position at
+                            // rest, and at the voice's own once one is sounding,
+                            // which carries whatever is modulating SCAN.
+                            const auto prefix = juce::String(oscillatorPrefix(which));
+                            const auto manual = spectralLoopOf(value(prefix + "LoopMode"))
+                                                == SpectralLoop::manual;
+                            auto scan = processor.scanPosition(which);
+                            if (manual && scan <= 0.0f) scan = spectralManualPosition(value(prefix + "Scan"));
+                            if (scan > 0.0f || manual)
                             {
-                                const auto x = plot.getX() + scan * static_cast<float>(plot.getWidth());
+                                const auto x = juce::jmin(plot.getX() + scan * static_cast<float>(plot.getWidth()),
+                                                          static_cast<float>(plot.getRight()) - 1.4f);
                                 g.setColour(juce::Colours::white.withAlpha(0.8f * alpha));
                                 g.fillRect(x, static_cast<float>(plot.getY()), 1.4f,
                                            static_cast<float>(plot.getHeight()));

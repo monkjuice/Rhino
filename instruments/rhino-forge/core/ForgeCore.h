@@ -1078,11 +1078,10 @@ private:
         settings.loopStart = osc.loopStart;
         settings.loopEnd = osc.loopEnd;
         // In MANUAL, SCAN is where the playhead is rather than how fast it
-        // goes, and the knob's whole sweep is the run from START to END: fully
-        // left is the start marker, fully right the end, the middle the
-        // middle. Read off the knob as set, before the rate scaling above,
-        // which is about speed and means nothing to a position.
-        settings.position = juce::jlimit(0.0f, 1.0f, osc.scan * 0.25f + 0.5f);
+        // goes, and the knob's whole sweep is the whole sample. Read off the
+        // knob as set, before the rate scaling above, which is about speed and
+        // means nothing to a position.
+        settings.position = spectralManualPosition(osc.scan);
         settings.cut = juce::jlimit(0.0f, 1.0f, osc.cut);
         settings.mix = juce::jlimit(0.0f, 1.0f, osc.mix);
         settings.unison = juce::jlimit(1, spectralUnisonMax, juce::roundToInt(osc.unison));

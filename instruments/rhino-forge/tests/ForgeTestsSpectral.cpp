@@ -763,17 +763,18 @@ void loopModesSuite()
                 "a forward/reverse loop goes both ways about equally");
     }
 
-    // MANUAL does not run: the playhead is wherever SCAN puts it between START
-    // and END, every hop, however long the note.
+    // MANUAL does not run: the playhead is wherever SCAN puts it across the
+    // whole sample, every hop, however long the note — START and END, which
+    // it does not show, do not narrow it.
     {
         auto settings = loopSettings(SpectralLoop::manual);
         settings.position = 0.25f;
         const auto trail = playheadTrail(*sample, settings, 100);
-        const auto expected = 0.1 * last + 0.25 * (0.9 - 0.1) * last;
+        const auto expected = 0.25 * last;
         auto still = true;
-        // To a thousandth of a frame: the markers arrive as floats.
+        // To a thousandth of a frame: the position arrives as a float.
         for (const auto frame : trail.frames) still = still && std::abs(frame - expected) < 1.0e-3;
-        require(still, "a manual playhead stays where SCAN puts it between the start and end markers");
+        require(still, "a manual playhead stays where SCAN puts it across the whole sample");
     }
 }
 
@@ -821,11 +822,11 @@ void loopParametersSuite()
     file.deleteFile();
 }
 
-// The markers on the real panel: START and END in ONE-SHOT and MANUAL, the
-// loop's bracket in the modes that go round, and never the pair a mode does not
-// read, either drawn or picked up. Driven through the editor's own mouse
-// handlers, so the hit test, the cursor, the drag and the paint are the ones a
-// hand meets.
+// The markers on the real panel: START and END in ONE-SHOT, the loop's bracket
+// in the modes that go round, nothing but the playhead in MANUAL, and never the
+// pair a mode does not read, either drawn or picked up. Driven through the
+// editor's own mouse handlers, so the hit test, the cursor, the drag and the
+// paint are the ones a hand meets.
 void loopMarkersSuite()
 {
     const auto file = juce::File::getSpecialLocation(juce::File::tempDirectory)
@@ -907,18 +908,40 @@ void loopMarkersSuite()
     const juce::MouseCursor resize(juce::MouseCursor::LeftRightResizeCursor);
     const juce::MouseCursor plain(juce::MouseCursor::NormalCursor);
 
-    // ONE-SHOT and MANUAL offer START and END down their whole height, and
-    // nothing where the loop is; the two draw the same picture.
+    // ONE-SHOT offers START and END down their whole height, and nothing where
+    // the loop is.
     setValue(processor, "oscALoopMode", static_cast<float>(SpectralLoop::oneShot));
     require(cursorOver({xAt(0.1f), middle}) == resize && cursorOver({xAt(0.9f), plot.getBottom() - 3}) == resize,
             "a one-shot offers its start and end markers down their whole height");
     require(cursorOver({xAt(0.3f), middle}) == plain && cursorOver({xAt(0.7f), middle}) == plain,
             "a one-shot offers no loop marker to drag");
     const auto oneShot = plotPixels();
+
+    // MANUAL offers no marker at all, and shows the playhead where SCAN puts
+    // it — with no note sounding, and following the knob. Read along the top
+    // of the picture, which a 440 Hz sine leaves dark.
+    const auto brightAt = [&plot] (const juce::Image& image, float proportion)
+    {
+        const auto x = juce::roundToInt(proportion * static_cast<float>(plot.getWidth()));
+        auto brightest = 0.0f;
+        for (int dx = -1; dx <= 2; ++dx)
+            brightest = juce::jmax(brightest, image.getPixelAt(juce::jlimit(0, image.getWidth() - 1, x + dx), 3)
+                                                  .getBrightness());
+        return brightest;
+    };
     setValue(processor, "oscALoopMode", static_cast<float>(SpectralLoop::manual));
-    require(cursorOver({xAt(0.1f), middle}) == resize && cursorOver({xAt(0.3f), middle}) == plain,
-            "manual offers the start and end markers and not the loop's");
-    require(samePixels(oneShot, plotPixels()), "a one-shot and manual draw the same markers");
+    require(cursorOver({xAt(0.1f), middle}) == plain && cursorOver({xAt(0.9f), middle}) == plain
+                && cursorOver({xAt(0.3f), middle}) == plain && cursorOver({xAt(0.7f), middle}) == plain,
+            "manual offers no marker to drag");
+    setValue(processor, "oscAScan", 1.0f);
+    const auto right = plotPixels();
+    setValue(processor, "oscAScan", -1.0f);
+    const auto left = plotPixels();
+    require(brightAt(right, spectralManualPosition(1.0f)) > 0.5f && brightAt(left, spectralManualPosition(1.0f)) < 0.3f,
+            "manual draws its playhead where SCAN puts it, with no note sounding");
+    require(brightAt(left, spectralManualPosition(-1.0f)) > 0.5f && brightAt(right, spectralManualPosition(-1.0f)) < 0.3f,
+            "and the playhead follows SCAN when it moves");
+    setValue(processor, "oscAScan", 1.0f);
 
     // A loop mode offers the loop's ends down their whole height, and nothing
     // where START and END are; it draws a different picture.

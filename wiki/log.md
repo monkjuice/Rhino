@@ -21,3 +21,9 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 ## [2026-10-03] update | Forge's plate legends give their strip to the knobs, and captions keep one size
 - updated: pages/forge-editor.md (`Module` positional-initialiser trap; captions span their cell with no side border because `juce::Label` squashes then shrinks text that does not fit, guarded by `captionsKeepTheirSizeSuite`; plates have a 6 px `plateFootMargin` instead of the 20 px legend, commit `7be9a56`)
 - updated: pages/forge-knob-diameter-is-panel-wide.md (shared diameter at 1440×900 now 46 px from 95×60 oscillator cells, was 43; the plate foot has no more height to give)
+
+## [2026-10-03] update | The spectral oscillator keeps one pair of markers, the loop's
+- updated: pages/forge-spectral.md (START/END and LS/LE removed, commit `dbd223d`; playback spans the whole sample; loop markers shown and draggable only when `spectralLoopReachesLoop`, hidden rather than faded; why one pair; `loopMarkersSuite`)
+- updated: pages/forge-editor.md (a parameter dragged on a display must be listed in `displayParameters` for the layout test)
+- updated: pages/inc-edits-do-not-rebuild.md (a `Copy-Item` restore keeps the older timestamp, so MSBuild keeps the object built from a temporary edit; touch or restore by editing)
+- updated: pages/build-and-test-forge.md (pointer to that trap when proving a check can fail)

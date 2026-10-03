@@ -60,6 +60,9 @@ ctest --test-dir instruments/rhino-forge/build -C Release -j 8 --output-on-failu
   name in `forge_test_areas`). Nothing self-registers; reconfigure afterwards.
 - The test binary links with an 8 MB stack because suites keep several `Processor`s as locals; a CTest `SegFault` can
   still be an overflow ([A CTest SegFault may be a stack overflow](stack-overflow-reports-as-segfault.md)).
+- To prove a new check can fail, break the code temporarily and then restore it by editing, not with `Copy-Item`. A
+  copied-back file keeps the backup's older timestamp, so MSBuild keeps the object built from the broken code
+  ([Editing only a scenario .inc does not rebuild the tests](inc-edits-do-not-rebuild.md)).
 - `--snapshot`, `--profile` and `--render` are development tools in the same binary, not test cases
   ([Proving a Forge change changed nothing](proving-a-forge-change-changed-nothing.md)).
 

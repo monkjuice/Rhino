@@ -17,7 +17,7 @@ The panel is one `Editor` (`src/ForgeEditor.h`) defined across fifteen `.cpp` fi
 
 `Module` is an aggregate initialised positionally, so its optional trailing fields (`pages` through `group`) are reached by counting. Adding or removing one means revisiting every initialiser in `ui/ForgeModules.h` that reaches past it; when `plateName` went (commit `7be9a56`), the six arp panes were the ones easy to miss.
 
-**Adding a control** is its parameter in `src/ForgeParameters.cpp` plus a line in `ui/ForgeModules.h`. The layout test (`tests/ForgeTestsLayout.cpp`) fails if the two disagree in either direction, if a control or enable lacks a real tooltip in `ui/ForgeTooltips.h`, or if a module escapes or overlaps at any allowed size, swept in 20 px steps (about 800 sizes between 1180×820 and 2000×1180).
+**Adding a control** is its parameter in `src/ForgeParameters.cpp` plus a line in `ui/ForgeModules.h`. The layout test (`tests/ForgeTestsLayout.cpp`) fails if the two disagree in either direction, if a control or enable lacks a real tooltip in `ui/ForgeTooltips.h`, or if a module escapes or overlaps at any allowed size, swept in 20 px steps (about 800 sizes between 1180×820 and 2000×1180). A parameter set by dragging on a display rather than from a cell must be listed in `displayParameters` (`ui/ForgeModules.h`) for that test to find it. As of `dbd223d` the only ones are the spectral loop markers ([Forge spectral oscillator](forge-spectral.md)).
 
 ## Pages
 

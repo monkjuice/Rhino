@@ -24,9 +24,14 @@ SPECTRAL is the second oscillator MODE: M16, built on 2026-10-02 and 2026-10-03,
 - **Sample rate:** the file's own rate scales both pitch and scan; without it, a 44.1 kHz file played sharp.
 - **Saving:** presets and host state carry the sample as a `SAMPLE` node of 16-bit FLAC in base64, with no path. The spectrogram is recomputed on load ([Forge presets and state](forge-presets-and-state.md)).
 
-## Loops
+## Loops and markers
 
-There are five loop modes: ONE-SHOT, FWD LOOP, REV LOOP, FWD/REV and MANUAL; in MANUAL, SCAN sets the playhead's position. Playback runs from START to END, both dragged on the spectrogram, and loops between LS and LE in the strip below. All four are proportions of the sample. Serum's TAILED is declared but plays as FWD LOOP.
+Five loop modes are built: ONE-SHOT, FWD LOOP, REV LOOP, FWD/REV and MANUAL, in which SCAN places the playhead anywhere in the sample. Serum's TAILED is declared, so MANUAL's index never moves, but plays as FWD LOOP.
+
+Playback always spans the whole sample: `SpectralSpan` (`core/ForgeSpectral.h`) runs from frame 0 to the last frame and clamps the loop inside. The only markers are the loop's, `<osc>LoopStart` and `<osc>LoopEnd`, proportions of the sample dragged on the spectrogram: either line anywhere down its height, or the top bar to move the loop whole. The strip under the plot holds only the LOOP selector.
+
+- **One pair, not two (commit `dbd223d`).** START/END trim markers and LS/LE fields used to sit beside the loop's pair, and switching between ONE-SHOT and FWD LOOP made the two pairs look alike. The loop's pair was kept, so ONE-SHOT and MANUAL can no longer trim to a region. `Processor::migrated` drops the retired `osc{A,B,C}Start`/`End` parameters from old presets and host state, so the format was not bumped ([Forge presets and state](forge-presets-and-state.md)).
+- **Markers appear only where they act.** `spectralLoopReachesLoop` is false for ONE-SHOT and MANUAL. In those modes the markers are not drawn and cannot be grabbed. They are hidden rather than faded, because a faint marker still looks draggable. `loopMarkersSuite` (`tests/ForgeTestsSpectral.cpp`) sends the editor mouse events to check the cursor and the plot's pixels in every mode, and drags an end and the bar.
 
 ## Two silent bugs
 

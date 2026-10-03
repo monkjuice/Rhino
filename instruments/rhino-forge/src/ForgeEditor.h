@@ -357,10 +357,9 @@ private:
     juce::Rectangle<int> spectralWellFor(const ui::Module&) const;
     juce::Rectangle<int> spectralPlotFor(const ui::Module&) const;
     // The markers on the spectrogram, and the drag that moves them. Only what
-    // the loop mode reads is there: START and END down the height for ONE-SHOT
-    // and the loop modes, the loop's two ends and the bar between them as well
-    // for the loop modes, and nothing for MANUAL, whose picture is its
-    // playhead.
+    // the loop mode reads is there: START for ONE-SHOT and the loop modes, END
+    // for ONE-SHOT alone, the loop's two ends and the bar between them for the
+    // loop modes, and nothing for MANUAL, whose picture is its playhead.
     enum class SpectralMarker { none, start, end, loopStart, loopEnd, loop };
     static std::vector<const char*> markerParameters(SpectralMarker);
     SpectralMarker spectralMarkerAt(int oscillator, juce::Point<int> at) const;

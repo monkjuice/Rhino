@@ -221,15 +221,17 @@ void Editor::showLoopMenu(Control& control)
 
 // --- The markers --------------------------------------------------------------
 //
-// Only what the loop mode reads is on the picture (see spectralReadsRun and
-// spectralReadsLoop). START and END are lines down the whole height in the
-// module's colour, with a tab at the foot and what lies outside them dimmed;
-// ONE-SHOT and every loop mode have them. The loop modes also have the loop's
-// bracket: its two ends down the height and a bar joining them along the top,
-// an end dragged one at a time or the bar dragged whole, and held between START
-// and END (p. 110). MANUAL has none of it — its picture is the playhead SCAN
-// puts there. Drawn and hit-tested from the one set of numbers below, so what
-// the hand can pick up is exactly what is drawn.
+// Only what the loop mode reads is on the picture (see spectralReadsStart,
+// spectralReadsEnd and spectralReadsLoop). START, where a note begins, is a
+// line down the whole height in the module's colour, with a tab at the foot and
+// what lies before it dimmed; ONE-SHOT and every loop mode have it. END, the
+// same, is ONE-SHOT's alone. The loop modes have the loop's bracket: its two
+// ends down the height and a bar joining them along the top, an end dragged
+// one at a time or the bar dragged whole (p. 78). START and the loop are
+// separate settings — moving one never moves the other. MANUAL has none of it;
+// its picture is the playhead SCAN puts there. Drawn and hit-tested from the
+// one set of numbers below, so what the hand can pick up is exactly what is
+// drawn.
 
 namespace
 {
@@ -260,15 +262,12 @@ float proportionAt(juce::Rectangle<int> plot, int x)
                                         / static_cast<float>(juce::jmax(1, plot.getWidth())));
 }
 
-// The loop as it is heard: held between START and END, the way SpectralSpan
-// holds it. It is drawn and picked up there too, so a START dragged past the
-// loop's start carries the loop's drawn edge along exactly as it carries what
-// plays, and the hand finds the edge where the eye does.
-juce::Range<float> heardLoop(float start, float end, float loopStart, float loopEnd)
+// The loop in order. The engine reads a loop end set before its start as the
+// same loop the right way round (the reversed loop the manual describes is
+// deferred — see SPECTRAL.md), so the panel draws and picks it up that way too.
+juce::Range<float> orderedLoop(float loopStart, float loopEnd)
 {
-    const auto low = juce::jmin(start, end), high = juce::jmax(start, end);
-    return {juce::jlimit(low, high, juce::jmin(loopStart, loopEnd)),
-            juce::jlimit(low, high, juce::jmax(loopStart, loopEnd))};
+    return {juce::jmin(loopStart, loopEnd), juce::jmax(loopStart, loopEnd)};
 }
 }
 
@@ -293,8 +292,9 @@ Editor::SpectralMarker Editor::spectralMarkerAt(int oscillator, juce::Point<int>
     if (oscillator < 0 || processor.sampleStore().sample(oscillator) == nullptr) return SpectralMarker::none;
     const auto prefix = juce::String(oscillatorPrefix(oscillator));
     const auto mode = spectralLoopOf(value(prefix + "LoopMode"));
-    const auto readsRun = spectralReadsRun(mode), readsLoop = spectralReadsLoop(mode);
-    if (!readsRun && !readsLoop) return SpectralMarker::none;
+    const auto readsStart = spectralReadsStart(mode), readsEnd = spectralReadsEnd(mode);
+    const auto readsLoop = spectralReadsLoop(mode);
+    if (!readsStart && !readsLoop) return SpectralMarker::none;
     for (const auto& module : moduleUis)
     {
         if (oscillatorIndexFromId(juce::String(module.descriptor->id)) != oscillator
@@ -307,15 +307,14 @@ Editor::SpectralMarker Editor::spectralMarkerAt(int oscillator, juce::Point<int>
         {
             return std::abs(x - xFor(plot, proportion)) <= static_cast<float>(markerGrab);
         };
-        const auto start = value(prefix + "Start"), end = value(prefix + "End");
-        const auto loop = heardLoop(start, end, value(prefix + "LoopStart"), value(prefix + "LoopEnd"));
+        const auto loop = orderedLoop(value(prefix + "LoopStart"), value(prefix + "LoopEnd"));
 
-        // In a loop mode a loop end can stand right on START or END — all four
-        // open on the sample's ends — so the height says which is meant: the
-        // bar along the top is the loop's, the tabs along the foot are START's
-        // and END's, and in between START and END are taken first. Anywhere
-        // that is not a marker is the sample itself, which a click opens the
-        // menu for.
+        // In a loop mode the loop's start can stand right on START — both open
+        // on the sample's start, and moving START up to the loop is how to
+        // begin on it — so the height says which is meant: the bar along the
+        // top is the loop's, the tab at the foot is START's, and in between
+        // START is taken first. Anywhere that is not a marker is the sample
+        // itself, which a click opens the menu for.
         const auto inBar = at.y <= plot.getY() + loopBarHeight + 2;
         const auto inFoot = at.y >= plot.getBottom() - markerTab - 2;
         if (readsLoop && inBar)
@@ -324,11 +323,8 @@ Editor::SpectralMarker Editor::spectralMarkerAt(int oscillator, juce::Point<int>
             if (near(loop.getEnd())) return SpectralMarker::loopEnd;
             if (x > xFor(plot, loop.getStart()) && x < xFor(plot, loop.getEnd())) return SpectralMarker::loop;
         }
-        if (readsRun)
-        {
-            if (near(start)) return SpectralMarker::start;
-            if (near(end)) return SpectralMarker::end;
-        }
+        if (readsStart && near(value(prefix + "Start"))) return SpectralMarker::start;
+        if (readsEnd && near(value(prefix + "End"))) return SpectralMarker::end;
         if (readsLoop && !inFoot)
         {
             if (near(loop.getStart())) return SpectralMarker::loopStart;
@@ -375,16 +371,20 @@ void Editor::dragSpectralMarker(juce::Point<int> at)
     };
     const auto start = value(prefix + "Start"), end = value(prefix + "End");
     const auto loopStart = value(prefix + "LoopStart"), loopEnd = value(prefix + "LoopEnd");
+    const auto looping = spectralReadsLoop(spectralLoopOf(value(prefix + "LoopMode")));
     const auto here = proportionAt(plot, at.x);
 
-    // Each pair keeps its order, and the loop stays between START and END,
-    // which is the one rule the manual states about dragging them (p. 110).
-    // START and END themselves may cross a loop end; the loop that is heard,
-    // and drawn, is then held inside them — see heardLoop.
+    // In a one-shot START and END keep their order. In a loop mode START is
+    // where the note begins on its way to the loop, so it goes no further than
+    // the loop's start, and the loop goes no earlier than START — the one rule
+    // the manual states about dragging them (p. 78). The loop's end is free to
+    // reach the sample's end: END is not a loop mode's, and a marker it does
+    // not show must not hold anything back.
     switch (markerDrag)
     {
         case SpectralMarker::start:
-            set("Start", juce::jlimit(0.0f, end - markerMinimumGap, here));
+            set("Start", looping ? juce::jlimit(0.0f, juce::jmin(loopStart, loopEnd), here)
+                                 : juce::jlimit(0.0f, end - markerMinimumGap, here));
             break;
         case SpectralMarker::end:
             set("End", juce::jlimit(start + markerMinimumGap, 1.0f, here));
@@ -396,17 +396,15 @@ void Editor::dragSpectralMarker(juce::Point<int> at)
             break;
         }
         case SpectralMarker::loopEnd:
-        {
-            const auto lower = loopStart + markerMinimumGap;
-            set("LoopEnd", juce::jlimit(lower, juce::jmax(end, lower), here));
+            set("LoopEnd", juce::jlimit(loopStart + markerMinimumGap, 1.0f, here));
             break;
-        }
         case SpectralMarker::loop:
         {
             // Whole, by however far the hand has moved, and stopped at START
-            // and END rather than squeezed against them.
+            // and at the sample's end rather than squeezed against them.
             const auto length = markerDragLoopEnd - markerDragLoopStart;
-            const auto moved = juce::jlimit(start, juce::jmax(start, end - length),
+            const auto highest = juce::jmax(0.0f, 1.0f - length);
+            const auto moved = juce::jlimit(juce::jmin(start, highest), highest,
                                             markerDragLoopStart + here - markerDragFrom);
             set("LoopStart", moved);
             set("LoopEnd", moved + length);
@@ -442,26 +440,27 @@ void Editor::paintSpectralMarkers(juce::Graphics& g, int oscillator, juce::Recta
     // faint: a faint marker still looks like something to drag. MANUAL reads
     // nothing.
     const auto mode = spectralLoopOf(value(prefix + "LoopMode"));
-    const auto readsRun = spectralReadsRun(mode), readsLoop = spectralReadsLoop(mode);
+    const auto readsStart = spectralReadsStart(mode), readsEnd = spectralReadsEnd(mode);
+    const auto readsLoop = spectralReadsLoop(mode);
     const auto start = value(prefix + "Start"), end = value(prefix + "End");
-    const auto startX = xFor(plot, juce::jmin(start, end));
+    const auto startX = xFor(plot, readsEnd ? juce::jmin(start, end) : start);
     const auto endX = xFor(plot, juce::jmax(start, end));
 
-    // What is outside the run is dimmed rather than hidden: it is still the
-    // sample, and dragging a marker back over it should uncover something
-    // already there rather than something that appears.
-    if (readsRun)
-    {
-        g.setColour(juce::Colours::black.withAlpha(0.55f * alpha));
+    // What is never played is dimmed rather than hidden — before START, and in
+    // a one-shot past END: it is still the sample, and dragging a marker back
+    // over it should uncover something already there rather than something
+    // that appears.
+    g.setColour(juce::Colours::black.withAlpha(0.55f * alpha));
+    if (readsStart)
         g.fillRect(juce::Rectangle<float>(static_cast<float>(plot.getX()), top,
                                           startX - static_cast<float>(plot.getX()), height));
+    if (readsEnd)
         g.fillRect(juce::Rectangle<float>(endX, top, static_cast<float>(plot.getRight()) - endX, height));
-    }
 
-    // The loop, where it is heard.
+    // The loop, wherever its own markers put it.
     if (readsLoop)
     {
-        const auto loop = heardLoop(start, end, value(prefix + "LoopStart"), value(prefix + "LoopEnd"));
+        const auto loop = orderedLoop(value(prefix + "LoopStart"), value(prefix + "LoopEnd"));
         const auto loopLeft = xFor(plot, loop.getStart()), loopRight = xFor(plot, loop.getEnd());
         const auto bar = juce::Rectangle<float>(loopLeft, top, juce::jmax(1.0f, loopRight - loopLeft),
                                                 static_cast<float>(loopBarHeight));
@@ -472,17 +471,17 @@ void Editor::paintSpectralMarkers(juce::Graphics& g, int oscillator, juce::Recta
         g.fillRect(juce::Rectangle<float>(loopRight - 1.5f, top, 1.5f, height));
     }
 
-    // START and END on top, in the module's own colour, each with its tab.
-    if (readsRun)
+    // START, and a one-shot's END, on top, in the module's own colour, each
+    // with its tab.
+    const auto tab = static_cast<float>(markerTab);
+    g.setColour(accent.withAlpha(0.95f * alpha));
+    const auto drawMarker = [&] (float x)
     {
-        const auto tab = static_cast<float>(markerTab);
-        g.setColour(accent.withAlpha(0.95f * alpha));
-        for (const auto x : {startX, endX})
-        {
-            g.fillRect(juce::Rectangle<float>(x - 0.75f, top, 1.5f, height));
-            g.fillRect(juce::Rectangle<float>(x - tab * 0.5f, top + height - tab, tab, tab));
-        }
-    }
+        g.fillRect(juce::Rectangle<float>(x - 0.75f, top, 1.5f, height));
+        g.fillRect(juce::Rectangle<float>(x - tab * 0.5f, top + height - tab, tab, tab));
+    };
+    if (readsStart) drawMarker(startX);
+    if (readsEnd) drawMarker(endX);
 }
 
 // The editor answers for everything it painted itself; its child controls carry

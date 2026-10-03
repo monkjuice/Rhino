@@ -375,10 +375,10 @@ inline juce::String tooltipFor(const juce::String& id)
         {"Mix", "Balance oscillator %'s filtered spectrum against its unfiltered one"},
         {"LoopMode", "How oscillator % travels through its sample: once through, round the "
                      "loop, round it backwards, back and forth across it, or held where SCAN puts it"},
-        {"Start", "Where oscillator % starts playing its sample, and in a loop mode where it "
-                  "runs into the loop from. Drag this marker"},
-        {"End", "Where oscillator % stops playing its sample, or starts when SCAN runs backwards. "
-                "The loop stays between START and END. Drag this marker"},
+        {"Start", "Where oscillator % begins playing its sample when a note starts. In a loop "
+                  "mode it runs on from here into the loop; move it up to the loop's start to "
+                  "begin on the loop itself. Drag this marker"},
+        {"End", "Where oscillator % stops playing its sample in ONE-SHOT. Drag this marker"},
         {"LoopStart", "Where oscillator %'s loop begins. Drag this marker, or the bar along "
                       "the top to move the whole loop"},
         {"LoopEnd", "Where oscillator %'s loop ends. Drag this marker, or the bar along "

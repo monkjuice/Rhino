@@ -401,16 +401,20 @@ which SCAN is the playhead's position rather than its speed. The strip is there
 only while the oscillator is spectral; a wavetable oscillator keeps the whole of
 its picture tube, while a spectral one draws its spectrogram across a flat
 rectangle the full width of the display. The markers are on the spectrogram,
-and only those the mode uses are shown. The green lines are **START** and
-**END**: where a one-shot starts and stops, and in the three loop modes where
-playback runs in from on its way to the loop, which stays between them. Move
-START onto the loop's start to begin on the loop itself. The loop modes also
-show the loop as a blue bracket — two lines joined by a bar along the top. Drag
-a line to move that marker, or the bar to move the loop whole; where a loop end
-sits on START or END, grab the bar for the loop and the foot tab for START or
-END. MANUAL shows no markers, only the playhead, standing wherever SCAN puts it
-in the whole sample whether or not a note is playing. Clicking anywhere else on
-the picture still opens the sample menu.
+and only those the mode uses are shown. **START** (green) is where a note
+begins. In ONE-SHOT the sample plays from START to **END** (green) once. In the
+loop modes the loop is a blue bracket — two lines joined by a bar along the top
+— and is the region that repeats: FWD LOOP plays from START to the loop's end
+and jumps back to its start, REV LOOP plays from START to the loop's end and
+then goes round the loop backwards, and FWD/REV plays from START into the loop
+and bounces between its ends. START and the loop are separate settings; move
+START up to the loop's start to begin on the loop itself. END plays no part in
+a loop mode and is not shown there. Drag a line to move that marker, or the bar
+to move the loop whole; where the loop's start sits on START, grab the bar for
+the loop and the foot tab for START. MANUAL shows no markers, only the
+playhead, standing wherever SCAN puts it in the whole sample whether or not a
+note is playing. Clicking anywhere else on the picture still opens the sample
+menu.
 
 A spectral sample travels inside the preset and inside host state, exactly as a
 drawn table does, so a patch carrying one stays self-contained when it moves

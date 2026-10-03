@@ -994,11 +994,58 @@ void steppedFieldSuite()
     require(SteppedField(18).movedBy(100, true) < SteppedField(18).movedBy(100),
             "the fine modifier makes a list field slower, not faster");
 }
+
+// A module switched off greys its controls; it does not take any of them away.
+// The controls that share a cell with another mode's are the ones at risk —
+// POSITION stands where SCAN does — because a shared cell hides whichever of
+// its pair is not in charge, and switching the oscillator off once counted as
+// neither being in charge, so the cell came up empty.
+void switchedOffControlsStaySuite()
+{
+    const auto shownLabels = [] (juce::Component& editor, const juce::String& text)
+    {
+        auto count = 0;
+        const auto walk = [&] (auto&& self, juce::Component& parent) -> void
+        {
+            for (auto* child : parent.getChildren())
+            {
+                if (auto* label = dynamic_cast<juce::Label*>(child))
+                    if (label->isVisible() && label->getText() == text) ++count;
+                self(self, *child);
+            }
+        };
+        walk(walk, editor);
+        return count;
+    };
+
+    rhino::forge::Processor processor;
+    for (const auto* id : {"oscAEnable", "oscBEnable", "oscCEnable"}) setValue(processor, id, 1.0f);
+    setValue(processor, "oscBEnable", 0.0f);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+    editor->setSize(rhino::forge::ui::defaultPanelWidth, rhino::forge::ui::defaultPanelHeight);
+    for (const auto* name : {"POSITION", "DETUNE", "BLEND", "UNISON"})
+        require(shownLabels(*editor, name) == 3,
+                "an oscillator switched off keeps every knob on its face, greyed rather than gone");
+    require(shownLabels(*editor, "SCAN") == 0,
+            "a wavetable oscillator switched off still does not show the spectral set");
+
+    // And the other mode the same way round: OSC A spectral and off, OSC B
+    // wavetable and off, OSC C wavetable and on.
+    setValue(processor, "oscAMode", static_cast<float>(rhino::forge::OscMode::spectral));
+    setValue(processor, "oscAEnable", 0.0f);
+    editor.reset(processor.createEditor());
+    editor->setSize(rhino::forge::ui::defaultPanelWidth, rhino::forge::ui::defaultPanelHeight);
+    require(shownLabels(*editor, "SCAN") == 1 && shownLabels(*editor, "CUT") == 1,
+            "a spectral oscillator switched off keeps its own knobs on its face");
+    require(shownLabels(*editor, "POSITION") == 2,
+            "and does not bring back the wavetable knobs it stands in for");
+}
 }
 
 void layoutTests()
 {
     layoutSuite();
     steppedFieldSuite();
+    switchedOffControlsStaySuite();
 }
 }

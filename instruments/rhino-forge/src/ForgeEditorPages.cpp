@@ -200,11 +200,12 @@ void Editor::applyEnableStates()
                             moduleAreaFor(*module.descriptor));
                 }
             }
-            // A control is live when its module is on and nothing else has
-            // taken it over — polyphony means nothing once mono is switched on,
-            // and a tempo division means nothing while the rate is in Hertz.
-            const auto on = module.on()
-                && (control->disabledBy == nullptr || value(control->disabledBy) < 0.5f)
+            // A control is in charge when nothing else has taken it over —
+            // polyphony means nothing once mono is switched on, and a tempo
+            // division means nothing while the rate is in Hertz — and live when
+            // it is in charge of a module that is on.
+            const auto inCharge =
+                (control->disabledBy == nullptr || value(control->disabledBy) < 0.5f)
                 && (control->enabledBy == nullptr || value(control->enabledBy) >= 0.5f)
                 && !(module.descriptor->display == ui::Display::lfo
                      && control->id.endsWith("Shape")
@@ -213,9 +214,16 @@ void Editor::applyEnableStates()
                 // same way polyphony does under mono. It is still here; it just
                 // has nothing to do until the mode beside it moves.
                 && fxKnobLive(*control);
+            const auto on = module.on() && inCharge;
             // A control that shares its cell leaves rather than greys out: the
             // other reading of the same setting is standing in the same place,
             // and a greyed control would be sitting on top of the live one.
+            //
+            // Asked of the control rather than of its module. Switching a
+            // module off takes both of a pair out of service at once, and
+            // hiding both would leave the cell empty — an oscillator switched
+            // off lost POSITION, DETUNE and BLEND that way. The one in charge
+            // stays and greys out with the rest of the module.
             const auto shown = onPage
                 // A module declared in banks has only one of them on screen.
                 && control->bank == module.bank
@@ -231,7 +239,7 @@ void Editor::applyEnableStates()
                 // of greying out on top of the set that is.
                 && (control->modeBy == nullptr
                     || juce::roundToInt(value(control->modeBy)) == control->modeIs)
-                && (on || !ui::inSharedCell(*module.descriptor, control->row, control->index));
+                && (inCharge || !ui::inSharedCell(*module.descriptor, control->row, control->index));
 
             // A control seated inside a display carries no label strip. It is
             // inside the thing it would have named — the filter's TYPE field

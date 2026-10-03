@@ -100,6 +100,7 @@ public:
         meterEnvelope = {};
         meterStage = {};
         meterOffsets = {};
+        meterScan = {};
         for (auto& rack : racks) rack.reset();
     }
 
@@ -174,6 +175,16 @@ public:
     float envelopeLevel(int env = ampEnv) const
     {
         return env >= 0 && env < envCount ? meterEnvelope[static_cast<size_t>(env)] : 0.0f;
+    }
+
+    // How far through its sample a spectral oscillator has scanned, 0 to 1.
+    // Zero on a wavetable oscillator and on one with nothing loaded, which is
+    // also where a spectral voice starts, so the display draws the playhead
+    // only while something is actually sounding.
+    float scanPosition(int oscillator) const
+    {
+        return oscillator >= 0 && oscillator < oscillatorCount
+            ? meterScan[static_cast<size_t>(oscillator)] : 0.0f;
     }
 
     int envelopeStage(int env = ampEnv) const
@@ -298,6 +309,7 @@ public:
         meterEnvelope = {};
         meterStage = {};
         meterOffsets = {};
+        meterScan = {};
 
         // What every voice has sent to each bus. Filled inside the loop and
         // resolved once after it.
@@ -342,6 +354,23 @@ public:
             {
                 meterEnvelope = voice.envelope;
                 meterStage = voice.envStage;
+                // Where each spectral oscillator has got to in its sample, for
+                // the playhead the display draws. The loudest voice's copy, for
+                // the reason the envelope and the LFOs report theirs: that is
+                // the note a player is listening to, and sixteen unrelated
+                // playheads on one picture would say nothing.
+                if (spectral != nullptr)
+                    for (int osc = 0; osc < oscillatorCount; ++osc)
+                    {
+                        const auto index = static_cast<size_t>(osc);
+                        const auto& state = spectral->voices[voiceIndex][index];
+                        const auto* source = patch.oscillators[index].sample;
+                        const auto frames = source != nullptr ? source->frameCount() : 0;
+                        meterScan[index] = frames > 1
+                            ? juce::jlimit(0.0f, 1.0f, static_cast<float>(
+                                  state.frame / static_cast<double>(frames - 1)))
+                            : 0.0f;
+                    }
             }
 
             // Every LFO that answers the keyboard runs inside the voice, so a
@@ -1243,6 +1272,8 @@ private:
         juce::dsp::FFT fft {spectralFftOrder};
     };
     std::unique_ptr<SpectralBank> spectral;
+
+    std::array<float, oscillatorCount> meterScan {};
 
     std::array<Voice, 16> voices {};
     // One set of filter delay lines per voice, per channel. Sized in

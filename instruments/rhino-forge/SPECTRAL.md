@@ -262,11 +262,25 @@ against the sample's revision and the module's size and blitted on every other
 frame, because the panel repaints whole at 24 Hz and a spectrogram is a pass
 over every bin of every frame.
 
-**Still outstanding:** the playhead, the draggable start/end markers, the LO/HI
-markers down the right edge, and the strip under the display carrying the loop
-field and the unison gear. The frequency bounds exist in the engine and are
-reachable only from code until those markers are drawn. The `FILTER` well
-between CUT and MIX is part of the mask editor and is deferred with it.
+The **playhead** rides on it, reading where the loudest voice has got to — the
+same voice the envelope and the LFO displays follow, and for the same reason.
+It crosses from the audio thread the way the envelope's level does, published
+once per block rather than per sample, and is drawn only while a note is
+sounding: at rest the reading is zero, and a line pinned to the left edge of a
+still picture reads as a marker somebody put there rather than as a position.
+
+**Still outstanding:** the draggable start/end markers, the LO/HI markers down
+the right edge, and the strip under the display carrying the loop field and the
+unison gear. The frequency bounds exist in the engine and are reachable only
+from code until those markers are drawn. The `FILTER` well between CUT and MIX
+is part of the mask editor and is deferred with it.
+
+A note on why the loop field is not simply added: row geometry is stateless, so
+a strip under the display would be carved out in **both** modes and a wavetable
+oscillator would pay a strip of its picture for a control it does not have. The
+header took the mode field for the same reason and there is no room there for a
+second. Either the strip is worth it to both modes, or the geometry learns about
+modes — and that is a real decision, not a detail to settle while adding a field.
 
 ## Deferred, and why
 

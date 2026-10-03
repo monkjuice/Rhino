@@ -181,7 +181,23 @@ void Editor::paint(juce::Graphics& g)
                         // here: see spectrogramFor.
                         const auto plot = display.reduced(3);
                         const auto& picture = spectrogramFor(which, plot, accent);
-                        if (picture.isValid()) g.drawImageAt(picture, plot.getX(), plot.getY());
+                        if (picture.isValid())
+                        {
+                            g.drawImageAt(picture, plot.getX(), plot.getY());
+                            // The playhead, where the loudest voice has got to.
+                            // Drawn only while a note is actually sounding: at
+                            // rest the reading is zero, and a line pinned to the
+                            // left edge of a still picture reads as a marker
+                            // somebody put there rather than as a position.
+                            const auto scan = processor.scanPosition(which);
+                            if (scan > 0.0f)
+                            {
+                                const auto x = plot.getX() + scan * static_cast<float>(plot.getWidth());
+                                g.setColour(juce::Colours::white.withAlpha(0.8f * alpha));
+                                g.fillRect(x, static_cast<float>(plot.getY()), 1.4f,
+                                           static_cast<float>(plot.getHeight()));
+                            }
+                        }
                         else
                         {
                             g.setColour(ui::mutedText.withAlpha(alpha * 0.7f));

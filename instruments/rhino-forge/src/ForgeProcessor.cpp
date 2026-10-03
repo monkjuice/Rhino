@@ -288,6 +288,8 @@ void Processor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
         meterLevel[static_cast<size_t>(env)].store(core.envelopeLevel(env), std::memory_order_relaxed);
         meterStage[static_cast<size_t>(env)].store(core.envelopeStage(env), std::memory_order_relaxed);
     }
+    for (int osc = 0; osc < oscillatorCount; ++osc)
+        meterScan[static_cast<size_t>(osc)].store(core.scanPosition(osc), std::memory_order_relaxed);
     for (int lfo = 0; lfo < lfoCount; ++lfo)
     {
         meterLfoPhase[static_cast<size_t>(lfo)].store(core.lfoPosition(lfo), std::memory_order_relaxed);

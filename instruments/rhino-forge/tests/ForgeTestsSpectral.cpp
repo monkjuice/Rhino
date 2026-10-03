@@ -443,6 +443,68 @@ void persistenceSuite()
 
     file.deleteFile();
 }
+
+// The playhead reads where the sample actually is, and moves at the rate SCAN
+// asks for. Measured through the Processor because that is what crosses the
+// reading to the message thread, and the crossing is as much of this feature as
+// the reading is.
+void playheadSuite()
+{
+    const auto file = juce::File::getSpecialLocation(juce::File::tempDirectory)
+                          .getChildFile("forge-spectral-playhead.wav");
+    file.deleteFile();
+    {
+        juce::AudioBuffer<float> buffer(1, static_cast<int>(testRate * 4));
+        for (int i = 0; i < buffer.getNumSamples(); ++i)
+            buffer.setSample(0, i, static_cast<float>(
+                0.5 * std::sin(2.0 * juce::MathConstants<double>::pi * 440.0
+                               * static_cast<double>(i) / testRate)));
+        juce::WavAudioFormat wav;
+        std::unique_ptr<juce::FileOutputStream> stream(file.createOutputStream());
+        if (stream == nullptr) { require(false, "the test can write a sample"); return; }
+        const std::unique_ptr<juce::AudioFormatWriter> writer(
+            wav.createWriterFor(stream.release(), testRate, 1, 16, {}, 0));
+        if (writer != nullptr) writer->writeFromAudioSampleBuffer(buffer, 0, buffer.getNumSamples());
+    }
+
+    const auto scanAfter = [&file] (float scan, int samples)
+    {
+        Processor processor;
+        if (processor.importSample(0, file).failed()) return -1.0f;
+        setValue(processor, "oscAMode", static_cast<float>(OscMode::spectral));
+        setValue(processor, "oscAScan", scan);
+        setValue(processor, "oscBEnable", 0.0f);
+        setValue(processor, "oscCEnable", 0.0f);
+        processor.prepareToPlay(testRate, samples);
+        juce::AudioBuffer<float> buffer(2, samples);
+        juce::MidiBuffer midi;
+        midi.addEvent(juce::MidiMessage::noteOn(1, 60, 1.0f), 0);
+        processor.processBlock(buffer, midi);
+        return processor.scanPosition(0);
+    };
+
+    // A wavetable oscillator has no sample to be anywhere in, so it reports
+    // nothing rather than a stale reading from whatever was loaded before.
+    {
+        Processor processor;
+        setValue(processor, "oscAMode", static_cast<float>(OscMode::wavetable));
+        peakForNote(processor, 4096);
+        requireClose(processor.scanPosition(0), 0.0f, 0.001f,
+                     "a wavetable oscillator reports no scan position");
+    }
+
+    const auto quarter = static_cast<int>(testRate);
+    const auto slow = scanAfter(1.0f, quarter);
+    const auto fast = scanAfter(2.0f, quarter);
+    require(slow > 0.0f, "a sounding spectral oscillator reports where it has got to");
+    require(fast > slow * 1.5f,
+            "twice the scan rate reaches twice as far through the sample");
+    // A second into a four-second sample at single speed is a quarter of the
+    // way through it, give or take the hop the vocoder is part way into.
+    requireClose(slow, 0.25f, 0.02f, "the playhead reads the position it has actually reached");
+
+    file.deleteFile();
+}
 }
 
 void spectralTests()
@@ -456,5 +518,6 @@ void spectralTests()
     modesDoNotLeakSuite();
     loaderSuite();
     persistenceSuite();
+    playheadSuite();
 }
 }

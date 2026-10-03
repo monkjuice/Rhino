@@ -85,6 +85,14 @@ public:
     // crosses. All four report the loudest voice's copy of themselves, so the
     // panel shows one voice rather than four unrelated readings.
     float envelopeLevel(int env = ampEnv) const { return meter(meterLevel, env); }
+    // How far through its sample a spectral oscillator has scanned, for the
+    // playhead on its display. Crosses the same way the envelope's level does.
+    float scanPosition(int oscillator) const
+    {
+        return oscillator >= 0 && oscillator < oscillatorCount
+            ? meterScan[static_cast<size_t>(oscillator)].load(std::memory_order_relaxed)
+            : 0.0f;
+    }
     int envelopeStage(int env = ampEnv) const
     {
         return env >= 0 && env < envCount
@@ -282,6 +290,7 @@ private:
     // about bars.
     void quantiseArpStart(int sampleIndex, const ArpSettings&);
     std::array<std::atomic<float>, envCount> meterLevel {};
+    std::array<std::atomic<float>, oscillatorCount> meterScan {};
     std::array<std::atomic<int>, envCount> meterStage {};
     std::array<std::atomic<float>, lfoCount> meterLfoPhase {};
     std::array<std::atomic<float>, lfoCount> meterLfoValue {};

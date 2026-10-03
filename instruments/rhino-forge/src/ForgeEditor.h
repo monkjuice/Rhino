@@ -355,15 +355,15 @@ private:
     // Where a spectral oscillator draws its spectrogram: the display, less the
     // loop strip along its foot.
     juce::Rectangle<int> spectralPlotFor(const ui::Module&) const;
-    // The markers on the spectrogram — START and END down its height, the loop
-    // as a bar along its top — and the drag that moves them.
-    enum class SpectralMarker { none, start, end, loopStart, loopEnd, loop };
+    // The loop's markers on the spectrogram — its two ends down the height and
+    // a bar between them along the top — and the drag that moves them. There
+    // only while the loop mode loops.
+    enum class SpectralMarker { none, loopStart, loopEnd, loop };
     SpectralMarker spectralMarkerAt(int oscillator, juce::Point<int> at) const;
     void beginSpectralMarkerDrag(int oscillator, SpectralMarker, juce::Point<int> at);
     void dragSpectralMarker(juce::Point<int> at);
     void endSpectralMarkerDrag();
-    void paintSpectralMarkers(juce::Graphics&, int oscillator, juce::Rectangle<int> plot,
-                              juce::Colour accent, float alpha);
+    void paintSpectralMarkers(juce::Graphics&, int oscillator, juce::Rectangle<int> plot, float alpha);
     int markerDragOscillator = -1;
     SpectralMarker markerDrag = SpectralMarker::none;
     // Where the drag began, in proportion of the sample, and the loop's two

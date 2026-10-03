@@ -542,8 +542,6 @@ Patch Processor::patch() const
         osc.cut = value(id("Cut"));
         osc.mix = value(id("Mix"));
         osc.loopMode = value(id("LoopMode"));
-        osc.start = value(id("Start"));
-        osc.end = value(id("End"));
         osc.loopStart = value(id("LoopStart"));
         osc.loopEnd = value(id("LoopEnd"));
         for (int slot = 0; slot < warpSlots; ++slot)

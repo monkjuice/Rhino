@@ -119,8 +119,8 @@ juce::String Editor::spectralHeaderDetail(int oscillator) const
 // Which oscillator's spectral display is under this point, if any. Used by the
 // tooltip, by the click that opens the sample menu and by the markers, so none
 // of them can disagree about where the picture is. The plot rather than the
-// whole display: the loop strip along its foot is controls, and a click on the
-// gap between two of them is not a click on the sample.
+// whole display: the loop strip along its foot is a control, and a click beside
+// the field is not a click on the sample.
 int Editor::spectralDisplayAt(juce::Point<int> at) const
 {
     for (const auto& module : moduleUis)
@@ -214,10 +214,14 @@ void Editor::showLoopMenu(Control& control)
 
 // --- The markers --------------------------------------------------------------
 //
-// START and END stand down the spectrogram's whole height; the loop is a bar
-// along its top edge, its two ends dragged one at a time or the bar between
-// them dragged whole (pp. 106, 110). They are drawn and hit-tested from the one
-// set of numbers below, so what the hand can pick up is exactly what is drawn.
+// The loop is the one thing marked on the spectrogram: its two ends stand down
+// the whole height and a bar joins them along the top, an end dragged one at a
+// time or the bar dragged whole (p. 110). There used to be a second pair, START
+// and END, for the run the loop sat inside; switching ONE-SHOT to FWD LOOP
+// moved from one pair to the other while the picture looked the same, so the
+// loop's pair is the only one, and it is drawn only while the mode reaches it
+// — see spectralLoopReachesLoop. Drawn and hit-tested from the one set of
+// numbers below, so what the hand can pick up is exactly what is drawn.
 
 namespace
 {
@@ -249,6 +253,8 @@ float proportionAt(juce::Rectangle<int> plot, int x)
 Editor::SpectralMarker Editor::spectralMarkerAt(int oscillator, juce::Point<int> at) const
 {
     if (oscillator < 0 || processor.sampleStore().sample(oscillator) == nullptr) return SpectralMarker::none;
+    const auto prefix = juce::String(oscillatorPrefix(oscillator));
+    if (!spectralLoopReachesLoop(spectralLoopOf(value(prefix + "LoopMode")))) return SpectralMarker::none;
     for (const auto& module : moduleUis)
     {
         if (oscillatorIndexFromId(juce::String(module.descriptor->id)) != oscillator
@@ -256,25 +262,20 @@ Editor::SpectralMarker Editor::spectralMarkerAt(int oscillator, juce::Point<int>
             continue;
         const auto plot = spectralPlotFor(*module.descriptor);
         if (!plot.expanded(markerGrab, 0).contains(at)) return SpectralMarker::none;
-        const auto prefix = juce::String(oscillatorPrefix(oscillator));
         const auto near = [&] (const char* suffix)
         {
             return std::abs(static_cast<float>(at.x) - xFor(plot, value(prefix + suffix)))
                 <= static_cast<float>(markerGrab);
         };
-        // The loop bar first, along the top: its ends, then the bar between
-        // them. Below it the two run markers, and anywhere else is the sample
-        // itself, which a click opens the menu for.
-        if (at.y <= plot.getY() + loopBarHeight + 2)
-        {
-            if (near("LoopStart")) return SpectralMarker::loopStart;
-            if (near("LoopEnd")) return SpectralMarker::loopEnd;
-            const auto x = static_cast<float>(at.x);
-            if (x > xFor(plot, value(prefix + "LoopStart")) && x < xFor(plot, value(prefix + "LoopEnd")))
-                return SpectralMarker::loop;
-        }
-        if (near("Start")) return SpectralMarker::start;
-        if (near("End")) return SpectralMarker::end;
+        // Either end, anywhere down the height it is drawn at; then the bar
+        // between them along the top. Anywhere else is the sample itself,
+        // which a click opens the menu for.
+        if (near("LoopStart")) return SpectralMarker::loopStart;
+        if (near("LoopEnd")) return SpectralMarker::loopEnd;
+        const auto x = static_cast<float>(at.x);
+        if (at.y <= plot.getY() + loopBarHeight + 2
+            && x > xFor(plot, value(prefix + "LoopStart")) && x < xFor(plot, value(prefix + "LoopEnd")))
+            return SpectralMarker::loop;
         return SpectralMarker::none;
     }
     return SpectralMarker::none;
@@ -293,7 +294,7 @@ void Editor::beginSpectralMarkerDrag(int oscillator, SpectralMarker marker, juce
             markerDragFrom = proportionAt(spectralPlotFor(*module.descriptor), at.x);
     // One gesture per parameter the drag can move, so a host records the drag
     // as one edit rather than as every value it passed through.
-    for (const auto* suffix : {"Start", "End", "LoopStart", "LoopEnd"})
+    for (const auto* suffix : {"LoopStart", "LoopEnd"})
         if (auto* parameter = processor.state.getParameter(prefix + suffix))
             parameter->beginChangeGesture();
 }
@@ -314,32 +315,24 @@ void Editor::dragSpectralMarker(juce::Point<int> at)
         if (auto* parameter = processor.state.getParameter(prefix + suffix))
             parameter->setValueNotifyingHost(parameter->convertTo0to1(juce::jlimit(0.0f, 1.0f, proportion)));
     };
-    const auto start = value(prefix + "Start"), end = value(prefix + "End");
     const auto loopStart = value(prefix + "LoopStart"), loopEnd = value(prefix + "LoopEnd");
     const auto here = proportionAt(plot, at.x);
 
-    // The run's markers keep their order; the loop's stay between them, which
-    // is the one rule the manual states about dragging them (p. 110).
+    // The ends keep their order and the loop stays inside the sample.
     switch (markerDrag)
     {
-        case SpectralMarker::start:
-            set("Start", juce::jlimit(0.0f, end - markerMinimumGap, here));
-            break;
-        case SpectralMarker::end:
-            set("End", juce::jlimit(start + markerMinimumGap, 1.0f, here));
-            break;
         case SpectralMarker::loopStart:
-            set("LoopStart", juce::jlimit(start, loopEnd - markerMinimumGap, here));
+            set("LoopStart", juce::jlimit(0.0f, loopEnd - markerMinimumGap, here));
             break;
         case SpectralMarker::loopEnd:
-            set("LoopEnd", juce::jlimit(loopStart + markerMinimumGap, end, here));
+            set("LoopEnd", juce::jlimit(loopStart + markerMinimumGap, 1.0f, here));
             break;
         case SpectralMarker::loop:
         {
-            // Whole, by however far the hand has moved, and stopped at the run's
-            // ends rather than squeezed against them.
+            // Whole, by however far the hand has moved, and stopped at the
+            // sample's ends rather than squeezed against them.
             const auto length = markerDragLoopEnd - markerDragLoopStart;
-            const auto moved = juce::jlimit(start, juce::jmax(start, end - length),
+            const auto moved = juce::jlimit(0.0f, juce::jmax(0.0f, 1.0f - length),
                                             markerDragLoopStart + here - markerDragFrom);
             set("LoopStart", moved);
             set("LoopEnd", moved + length);
@@ -356,7 +349,7 @@ void Editor::endSpectralMarkerDrag()
     if (markerDragOscillator >= 0)
     {
         const auto prefix = juce::String(oscillatorPrefix(markerDragOscillator));
-        for (const auto* suffix : {"Start", "End", "LoopStart", "LoopEnd"})
+        for (const auto* suffix : {"LoopStart", "LoopEnd"})
             if (auto* parameter = processor.state.getParameter(prefix + suffix))
                 parameter->endChangeGesture();
     }
@@ -364,58 +357,45 @@ void Editor::endSpectralMarkerDrag()
     markerDragOscillator = -1;
 }
 
-void Editor::paintSpectralMarkers(juce::Graphics& g, int oscillator, juce::Rectangle<int> plot,
-                                  juce::Colour accent, float alpha)
+void Editor::paintSpectralMarkers(juce::Graphics& g, int oscillator, juce::Rectangle<int> plot, float alpha)
 {
     const auto prefix = juce::String(oscillatorPrefix(oscillator));
-    const auto start = value(prefix + "Start"), end = value(prefix + "End");
-    const auto loopStart = juce::jlimit(start, end, value(prefix + "LoopStart"));
-    const auto loopEnd = juce::jlimit(start, end, value(prefix + "LoopEnd"));
-    const auto mode = spectralLoopOf(value(prefix + "LoopMode"));
+    // Nothing at all in a mode that never reaches the loop, rather than the
+    // markers drawn faint: a faint marker still looks like something to drag.
+    if (!spectralLoopReachesLoop(spectralLoopOf(value(prefix + "LoopMode")))) return;
     const auto top = static_cast<float>(plot.getY());
     const auto height = static_cast<float>(plot.getHeight());
 
-    // What is outside the run is dimmed rather than hidden: it is still the
-    // sample, and dragging a marker back over it should uncover something
-    // already there rather than something that appears.
-    g.setColour(juce::Colours::black.withAlpha(0.55f * alpha));
-    const auto startX = xFor(plot, juce::jmin(start, end));
-    const auto endX = xFor(plot, juce::jmax(start, end));
-    g.fillRect(juce::Rectangle<float>(static_cast<float>(plot.getX()), top,
-                                      startX - static_cast<float>(plot.getX()), height));
-    g.fillRect(juce::Rectangle<float>(endX, top, static_cast<float>(plot.getRight()) - endX, height));
-
-    // The loop, along the top. Lit while the mode loops, faint while it does
-    // not — ONE-SHOT and MANUAL never reach it, but the bar is still where a
-    // loop mode would put it, and hiding it would make switching modes look
-    // like it had moved the markers.
-    const auto looping = mode != SpectralLoop::oneShot && mode != SpectralLoop::manual;
-    const auto loopLeft = xFor(plot, loopStart), loopRight = xFor(plot, loopEnd);
+    const auto loopLeft = xFor(plot, value(prefix + "LoopStart"));
+    const auto loopRight = xFor(plot, value(prefix + "LoopEnd"));
     const auto bar = juce::Rectangle<float>(loopLeft, top, juce::jmax(1.0f, loopRight - loopLeft),
                                             static_cast<float>(loopBarHeight));
-    g.setColour(ui::electricBlue.withAlpha((looping ? 0.55f : 0.18f) * alpha));
+    g.setColour(ui::electricBlue.withAlpha(0.55f * alpha));
     g.fillRect(bar);
-    g.setColour(ui::electricBlue.withAlpha((looping ? 0.95f : 0.35f) * alpha));
-    g.fillRect(juce::Rectangle<float>(loopLeft, top, 1.5f, looping ? height : static_cast<float>(loopBarHeight)));
-    g.fillRect(juce::Rectangle<float>(loopRight - 1.5f, top, 1.5f,
-                                      looping ? height : static_cast<float>(loopBarHeight)));
-
-    // The run's two ends, in the module's own colour, with a tab at the foot so
-    // a marker sitting on the plot's edge still has something to pick up.
-    g.setColour(accent.withAlpha(0.95f * alpha));
-    for (const auto x : {startX, endX})
-    {
-        g.fillRect(juce::Rectangle<float>(x - 0.75f, top, 1.5f, height));
-        g.fillRect(juce::Rectangle<float>(x - 3.0f, top + height - 6.0f, 6.0f, 6.0f));
-    }
+    g.setColour(ui::electricBlue.withAlpha(0.95f * alpha));
+    g.fillRect(juce::Rectangle<float>(loopLeft, top, 1.5f, height));
+    g.fillRect(juce::Rectangle<float>(loopRight - 1.5f, top, 1.5f, height));
 }
 
 // The editor answers for everything it painted itself; its child controls carry
-// their own tooltips and are asked before this is.
+// their own tooltips and are asked before this is. Over a loop marker that is
+// what the marker does, since it is the loop's only control; anywhere else on
+// the picture it is the sample's name.
 juce::String Editor::getTooltip()
 {
-    const auto oscillator = spectralDisplayAt(getMouseXYRelative());
-    return oscillator >= 0 ? spectralHeaderDetail(oscillator) : juce::String();
+    const auto at = getMouseXYRelative();
+    const auto oscillator = spectralDisplayAt(at);
+    if (oscillator < 0) return {};
+    const auto prefix = juce::String(oscillatorPrefix(oscillator));
+    switch (spectralMarkerAt(oscillator, at))
+    {
+        case SpectralMarker::loopStart: return ui::tooltipFor(prefix + "LoopStart");
+        case SpectralMarker::loopEnd:   return ui::tooltipFor(prefix + "LoopEnd");
+        case SpectralMarker::loop:      return "Drag to move oscillator " + oscillatorLetter(oscillator)
+                                               + "'s whole loop";
+        case SpectralMarker::none:      break;
+    }
+    return spectralHeaderDetail(oscillator);
 }
 
 void Editor::showSampleMenu(int oscillator)

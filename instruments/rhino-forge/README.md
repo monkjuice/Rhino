@@ -397,13 +397,14 @@ another rate plays at its own pitch and speed.
 
 The **loop strip** along the foot of a spectral display chooses how the playhead
 travels — **ONE-SHOT**, **FWD LOOP**, **REV LOOP**, **FWD/REV** or **MANUAL**, in
-which SCAN is the playhead's position rather than its speed — and sets the
-loop's two ends as **LS** and **LE**. The strip is there only while the
-oscillator is spectral; a wavetable oscillator keeps the whole of its picture.
-On the spectrogram itself, the two lines down its height are **START** and
-**END** and the blue bar along its top is the loop: drag a line, either end of
-the bar, or the bar whole. Clicking anywhere else on the picture still opens the
-sample menu.
+which SCAN is the playhead's position across the whole sample rather than its
+speed. The strip is there only while the oscillator is spectral; a wavetable
+oscillator keeps the whole of its picture. ONE-SHOT plays the whole sample
+once. In the three loop modes the loop is marked on the spectrogram itself: two
+blue lines down its height, joined by a bar along its top. Drag a line to move
+that end, or the bar to move the loop whole. ONE-SHOT and MANUAL never reach a
+loop, so they show no markers. Clicking anywhere else on the picture still opens
+the sample menu.
 
 A spectral sample travels inside the preset and inside host state, exactly as a
 drawn table does, so a patch carrying one stays self-contained when it moves

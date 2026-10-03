@@ -46,17 +46,21 @@ inline constexpr int spectralUnisonMax = 6;
 // loop markers do — so it is left off the field and plays as FWD LOOP if a
 // preset from elsewhere names it.
 //
-// - ONE-SHOT plays from the start marker to the end marker once, and is then
-//   silent for the rest of the note.
-// - FWD LOOP plays from the start marker into the loop, and round it.
+// - ONE-SHOT plays the sample through once, and is then silent for the rest of
+//   the note.
+// - FWD LOOP plays from the sample's start into the loop, and round it.
 // - REV LOOP plays into the loop, turns at its far end, and loops backwards.
 // - FWD/REV plays into the loop and then bounces between its ends.
-// - MANUAL does not run at all: SCAN is the playhead's position between the
-//   start and end markers, so it is set, automated or modulated rather than
-//   played (p. 109).
+// - MANUAL does not run at all: SCAN is the playhead's position across the
+//   whole sample, so it is set, automated or modulated rather than played
+//   (p. 109).
+//
+// The loop markers are the only markers. ONE-SHOT and MANUAL never reach a
+// loop, so they have the sample's own ends instead of a second pair of markers
+// that would mean the same thing under another name.
 //
 // A negative SCAN plays the same journey from the other end: a voice starts at
-// the end marker, and "into the loop" means arriving at the loop's end first.
+// the sample's end, and "into the loop" means arriving at the loop's end first.
 enum class SpectralLoop { oneShot = 0, forward = 1, reverse = 2, pingPong = 3, tailed = 4, manual = 5 };
 inline constexpr int spectralLoopCount = 6;
 
@@ -77,6 +81,15 @@ inline const char* spectralLoopName(int mode)
 inline constexpr bool spectralLoopBuilt(int mode)
 {
     return mode >= 0 && mode < spectralLoopCount && mode != static_cast<int>(SpectralLoop::tailed);
+}
+
+// Whether a mode ever reaches its loop. ONE-SHOT plays the sample through and
+// MANUAL is put wherever SCAN says, so neither does — which is why the panel
+// shows the loop markers only for the modes that do: a marker that moves
+// nothing is a control that lies.
+inline constexpr bool spectralLoopReachesLoop(SpectralLoop mode) noexcept
+{
+    return mode != SpectralLoop::oneShot && mode != SpectralLoop::manual;
 }
 
 // What a loop value read off a parameter means to the engine. Anything not
@@ -246,19 +259,15 @@ struct SpectralSettings
     float blend = 0.5f;
     float pan = 0.0f;
     SpectralLoop loopMode = SpectralLoop::forward;
-    // The markers, each 0..1 of the whole sample: where playback starts and
-    // ends, and the loop inside that. The loop is held inside the playback
-    // markers here rather than by the parameters, so dragging START past a
-    // loop drags the loop's effective edge with it without moving its setting.
-    float start = 0.0f, end = 1.0f;
+    // The loop, each end 0..1 of the whole sample.
     float loopStart = 0.0f, loopEnd = 1.0f;
-    // MANUAL's playhead, 0..1 between the start and end markers.
+    // MANUAL's playhead, 0..1 across the whole sample.
     float position = 0.0f;
 };
 
-// Where the markers fall in frames, worked out once per hop. The loop is at
-// least a frame long and the run at least a frame long, so nothing below
-// divides by a span of nothing.
+// Where the playhead may go, in frames, worked out once per hop: the sample's
+// own ends, and the loop inside them. The loop is at least a frame long, so
+// nothing below divides by a span of nothing.
 struct SpectralSpan
 {
     double start = 0.0, end = 0.0, loopStart = 0.0, loopEnd = 0.0;
@@ -270,10 +279,8 @@ struct SpectralSpan
         {
             return static_cast<double>(juce::jlimit(0.0f, 1.0f, proportion)) * last;
         };
-        start = at(juce::jmin(settings.start, settings.end));
-        end = at(juce::jmax(settings.start, settings.end));
-        if (end - start < 1.0) end = juce::jmin(last, start + 1.0);
-        if (end - start < 1.0) start = juce::jmax(0.0, end - 1.0);
+        start = 0.0;
+        end = last;
         loopStart = juce::jlimit(start, end, at(juce::jmin(settings.loopStart, settings.loopEnd)));
         loopEnd = juce::jlimit(start, end, at(juce::jmax(settings.loopStart, settings.loopEnd)));
         if (loopEnd - loopStart < 1.0) loopEnd = juce::jmin(end, loopStart + 1.0);
@@ -413,9 +420,9 @@ inline void spectralSynthesise(SpectralVoice& voice, const Sample& sample,
 {
     const auto frames = sample.frameCount();
 
-    // The first hop puts the playhead on its starting marker: the start going
-    // forwards, the end going backwards. MANUAL needs no placing — it is put
-    // wherever SCAN says on every hop, this one included.
+    // The first hop puts the playhead at the sample's start going forwards and
+    // at its end going backwards. MANUAL needs no placing — it is put wherever
+    // SCAN says on every hop, this one included.
     if (!voice.running)
     {
         voice.running = true;

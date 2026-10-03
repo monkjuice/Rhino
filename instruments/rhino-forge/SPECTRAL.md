@@ -274,26 +274,32 @@ silent and neither was visible in the code:
   than the tone that is there.
 
 The **loop modes** are built: ONE-SHOT, FWD LOOP, REV LOOP, FWD/REV and
-MANUAL, travelling between four markers — START and END for the run, LS and LE
-for the loop inside it — in `spectralAdvance`. The parameter declares Serum's
-whole list, TAILED included, for the reason MODE does; TAILED is the one not
-built, because the manual's description of it is the one in the menu that does
-not say what the loop markers do, and it plays as FWD LOOP if a preset names it.
-A voice is placed on its starting marker on its first hop rather than at
-note-on, because note-on does not yet know which way SCAN points: forwards
-starts at START, backwards at END, and "arriving at the loop" means reaching its
-far end in the direction of travel. REV LOOP and FWD/REV both turn at that far
-end, so for them the arrival is the turn; FWD LOOP is simply in the loop as soon
-as it is inside it. A ONE-SHOT that reaches its end stops reading and lets the
+MANUAL, in `spectralAdvance`. There is one pair of markers, the loop's — LOOP
+START and LOOP END. The modes that never reach a loop, ONE-SHOT and MANUAL, play
+or scan the whole sample, and the loop modes run in from the sample's own start
+(or its end, with SCAN negative). There used to be a second pair, START and END,
+for a run the loop sat inside; switching ONE-SHOT to FWD LOOP moved from one
+pair to the other while the picture looked the same, so the run went and the
+loop's pair is the only one. The parameter declares Serum's whole list, TAILED
+included, for the reason MODE does; TAILED is the one not built, because the
+manual's description of it is the one in the menu that does not say what the
+loop markers do, and it plays as FWD LOOP if a preset names it.
+A voice is placed on its first hop rather than at note-on, because note-on does
+not yet know which way SCAN points: forwards it starts at the sample's start,
+backwards at its end, and "arriving at the loop" means reaching its far end in
+the direction of travel. REV LOOP and FWD/REV both turn at that far end, so for
+them the arrival is the turn; FWD LOOP is simply in the loop as soon as it is
+inside it. A ONE-SHOT that reaches the sample's end stops reading and lets the
 overlap-add drain, so the last of the sample fades over the three hops it was
-always going to take. The markers are proportions of the whole sample, so they
-mean the same thing whatever is loaded.
+always going to take. The loop's ends are proportions of the whole sample, so
+they mean the same thing whatever is loaded.
 
-Checked hop by hop off the voice: every mode starts on the right marker, a
-one-shot ends at END and is then silent (also through the Processor's own
-parameters), FWD LOOP stays inside the loop and wraps, REV LOOP runs backwards
-round it, FWD/REV goes both ways about equally without ever jumping, and MANUAL
-stays exactly where SCAN puts it.
+Checked hop by hop off the voice: every mode starts at the right end of the
+sample, a one-shot plays past the loop to the sample's end and is then silent
+(also through the Processor's own parameters), FWD LOOP stays inside the loop and
+wraps, REV LOOP runs backwards round it, FWD/REV goes both ways about equally
+without ever jumping, and MANUAL stays exactly where SCAN puts it across the
+whole sample.
 
 **Still outstanding:** transients are always on, and the SCAN menu that would
 turn them off does not exist yet. Its Phase Lock is a declared setting that
@@ -316,15 +322,16 @@ once per block rather than per sample, and is drawn only while a note is
 sounding: at rest the reading is zero, and a line pinned to the left edge of a
 still picture reads as a marker somebody put there rather than as a position.
 
-The **loop strip** is seated along the foot of the display — the LOOP field, LS
-and LE, the last two wearing their captions inside the field because a seated
-row has no label line — and the **markers** are drawn on the spectrogram:
-START and END as lines down its height with what lies outside them dimmed, the
-loop as a blue bar along its top that is lit while the mode loops and faint
-while it does not. Either line, either end of the bar, or the bar whole can be
-dragged; anywhere else on the picture is still the sample menu. One hit test
-serves the cursor, the press and the drag, so what can be picked up is exactly
-what is drawn.
+The **loop strip** is seated along the foot of the display and holds the LOOP
+field alone. The loop's ends are **markers** on the spectrogram rather than
+fields beside it: two blue lines down its height joined by a bar along its top.
+Either line, picked up anywhere down its height, moves one end; the bar moves
+the loop whole; anywhere else on the picture is still the sample menu. They are
+drawn, and can be picked up, only while the mode reaches the loop — in ONE-SHOT
+and MANUAL there is nothing there, not a faint marker, because a faint marker
+still looks like something to drag (`spectralLoopReachesLoop`). Over a marker
+the tooltip says what it does. One hit test serves the cursor, the press, the
+drag and the tooltip, so what can be picked up is exactly what is drawn.
 
 That settles the question this section used to leave open: whether a strip under
 the display is worth it to both modes, or the geometry learns about modes. It is
@@ -337,10 +344,10 @@ the mode from the few places that draw into it. A wavetable oscillator keeps the
 whole of its picture. The layout suite holds both halves: in its own mode the
 plot gives the strip room, in every other mode the plot is exactly what it was.
 
-START and END are markers and not fields because the strip is not wide enough at
-the smallest window to give five fields a readable number each, and because the
-manual puts them on the picture too (p. 106). `displayParameters` names them, so
-the rule that every parameter appears somewhere on the panel still holds.
+The loop's ends are markers and not fields because the hand can see what it is
+putting them on, and a pair of numbers beside them was the same setting twice.
+`displayParameters` names them, so the rule that every parameter appears
+somewhere on the panel still holds.
 
 **Still outstanding:** the LO/HI markers down the right edge, and the unison
 gear. The frequency bounds exist in the engine and are reachable only from code
@@ -363,8 +370,8 @@ Not half-built, not approximated — absent, with a note saying so.
   assignment and the modulation routing to it are UI and matrix work.
 - **TAILED**, and the loop menu's toggles — Relative Loop, Link Loop Length,
   Exit Loop on Release — plus the loop crossfade (p. 110) and the reversed loop
-  a modulated LE behind LS is meant to give. Today LE behind LS is read as the
-  same loop the right way round.
+  a modulated loop end behind the loop start is meant to give. Today an end
+  behind the start is read as the same loop the right way round.
 - **The spectral unison extras** — STACK, RANGE, SPAN, START and the WARP 1/2
   spread (pp. 111-113). START and SPAN need per-member vocoders; see the unison
   decision above.

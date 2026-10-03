@@ -185,7 +185,7 @@ void Editor::paint(juce::Graphics& g)
                         if (picture.isValid())
                         {
                             g.drawImageAt(picture, plot.getX(), plot.getY());
-                            paintSpectralMarkers(g, which, plot, accent, alpha);
+                            paintSpectralMarkers(g, which, plot, alpha);
                             // The playhead, where the loudest voice has got to.
                             // Drawn only while a note is actually sounding: at
                             // rest the reading is zero, and a line pinned to the

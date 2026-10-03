@@ -25,6 +25,78 @@ constexpr int presetFormatVersion = 3;
 // XML and eighty kilobytes of raw float is not text.
 constexpr const char* tableNodeType = "TABLE";
 
+// A spectral sample travels the same way a table does, and for the same reason:
+// a patch that referenced a file on disk would stop being a patch the moment it
+// moved to another machine, and Forge already promises that a table it carries
+// goes with it.
+//
+// What differs is the size and therefore the encoding. A table is a few tens of
+// kilobytes and deflates well enough; a sample is seconds of arbitrary
+// recording, where deflate buys almost nothing because audio is not
+// repetitive text. So it is written as FLAC — about half of 16-bit PCM and a
+// quarter of the raw float — and base64'd on top of that, which is what a
+// ValueTree needs to survive being written out as XML.
+//
+// Sixteen bits rather than the float the analysis reads. Ninety-six decibels of
+// range is far below the floor the spectrogram is even drawn at, and the
+// alternative triples what every preset carrying a sample weighs.
+constexpr const char* sampleNodeType = "SAMPLE";
+
+juce::ValueTree sampleNode(const Sample& sample, const juce::String& name, int oscillator)
+{
+    juce::ValueTree node(sampleNodeType);
+    node.setProperty("osc", oscillator, nullptr);
+    node.setProperty("name", name, nullptr);
+    node.setProperty("rate", sample.rate(), nullptr);
+    node.setProperty("length", static_cast<int>(sample.waveform().size()), nullptr);
+
+    const auto& audio = sample.waveform();
+    juce::AudioBuffer<float> buffer(1, static_cast<int>(audio.size()));
+    std::copy(audio.begin(), audio.end(), buffer.getWritePointer(0));
+
+    juce::MemoryBlock encoded;
+    {
+        juce::FlacAudioFormat flac;
+        // The writer takes the stream only if it is created, and deletes it
+        // when it goes out of scope here — which is also what flushes the last
+        // FLAC frame, so the block is not complete until this scope closes.
+        const std::unique_ptr<juce::AudioFormatWriter> writer(
+            flac.createWriterFor(new juce::MemoryOutputStream(encoded, false),
+                                 sample.rate(), 1, 16, {}, 0));
+        if (writer == nullptr) return {};
+        writer->writeFromAudioSampleBuffer(buffer, 0, buffer.getNumSamples());
+    }
+    node.setProperty("data", encoded.toBase64Encoding(), nullptr);
+    return node;
+}
+
+// Refuses anything it cannot account for, the way readTableNode does: a sample
+// whose decoded length does not match what it declared is a damaged preset, and
+// resynthesising half of it would be worse than loading none of it.
+std::unique_ptr<Sample> readSampleNode(const juce::ValueTree& node)
+{
+    const auto declared = static_cast<int>(node.getProperty("length", 0));
+    if (declared < spectralFftSize || declared > spectralMaxLength) return nullptr;
+
+    juce::MemoryBlock encoded;
+    if (!encoded.fromBase64Encoding(node.getProperty("data").toString())) return nullptr;
+
+    juce::FlacAudioFormat flac;
+    const std::unique_ptr<juce::AudioFormatReader> reader(
+        flac.createReaderFor(new juce::MemoryInputStream(encoded, false), true));
+    if (reader == nullptr) return nullptr;
+    if (static_cast<int>(reader->lengthInSamples) != declared) return nullptr;
+
+    juce::AudioBuffer<float> buffer(1, declared);
+    buffer.clear();
+    if (!reader->read(&buffer, 0, declared, 0, true, true)) return nullptr;
+
+    const auto rate = static_cast<double>(node.getProperty("rate", reader->sampleRate));
+    auto sample = std::make_unique<Sample>(buffer.getReadPointer(0), declared, rate,
+                                           node.getProperty("name").toString());
+    return sample->isEmpty() ? nullptr : std::move(sample);
+}
+
 juce::ValueTree tableNode(const WavetableEdit& edit, int oscillator)
 {
     juce::ValueTree node(tableNodeType);
@@ -164,6 +236,7 @@ void Processor::getStateInformation(juce::MemoryBlock& destination)
 {
     auto tree = state.copyState();
     appendTables(tree);
+    appendSamples(tree);
     appendLfoTables(tree);
     if (const auto xml = tree.createXml())
         copyXmlToBinary(*xml, destination);
@@ -181,6 +254,7 @@ void Processor::setStateInformation(const void* data, int size)
             // Read before migrated() strips the table nodes back out, so the
             // live parameter state stays parameters only.
             applyTables(saved);
+            applySamples(saved);
             applyLfoTables(saved);
             state.replaceState(migrated(saved));
         }
@@ -195,6 +269,7 @@ juce::Result Processor::savePreset(const juce::File& destination, const juce::St
                                                         : destination.getFileNameWithoutExtension(), nullptr);
     auto tree = state.copyState();
     appendTables(tree);
+    appendSamples(tree);
     appendLfoTables(tree);
     preset.addChild(tree, -1, nullptr);
     const auto xml = preset.createXml();
@@ -222,6 +297,7 @@ juce::Result Processor::loadPreset(const juce::File& source)
     if (!savedState.isValid())
         return juce::Result::fail("The preset does not contain Forge parameter state.");
     applyTables(savedState);
+    applySamples(savedState);
     applyLfoTables(savedState);
     state.replaceState(migrated(savedState));
     return juce::Result::ok();
@@ -331,7 +407,8 @@ juce::ValueTree Processor::migrated(const juce::ValueTree& savedState) const
     {
         // A table is data rather than a parameter and is applied separately, so
         // it is taken out here and never reaches the parameter state.
-        if (result.getChild(i).hasType(tableNodeType) || result.getChild(i).hasType("ForgeLfoTable"))
+        if (result.getChild(i).hasType(tableNodeType) || result.getChild(i).hasType("ForgeLfoTable")
+            || result.getChild(i).hasType(sampleNodeType))
         { result.removeChild(i, nullptr); continue; }
         const auto id = result.getChild(i).getProperty("id").toString();
         if (id.isNotEmpty() && state.getParameter(id) == nullptr)
@@ -358,6 +435,37 @@ void Processor::appendTables(juce::ValueTree& tree) const
         // base64 into a preset to say "unchanged".
         if (tables.edit(osc).isUntouched()) continue;
         tree.addChild(tableNode(tables.edit(osc), osc), -1, nullptr);
+    }
+}
+
+void Processor::appendSamples(juce::ValueTree& tree) const
+{
+    for (int osc = 0; osc < oscillatorCount; ++osc)
+    {
+        const auto* sample = samples.sample(osc);
+        if (sample == nullptr || sample->isEmpty()) continue;
+        auto node = sampleNode(*sample, samples.sourceName(osc), osc);
+        if (node.isValid()) tree.addChild(node, -1, nullptr);
+    }
+}
+
+void Processor::applySamples(const juce::ValueTree& tree)
+{
+    for (int osc = 0; osc < oscillatorCount; ++osc)
+    {
+        juce::ValueTree found;
+        for (const auto child : tree)
+            if (child.hasType(sampleNodeType) && static_cast<int>(child.getProperty("osc", -1)) == osc)
+                found = child;
+        if (!found.isValid()) { clearSample(osc); continue; }
+        // Re-analysed on the way in rather than carried as a spectrogram: the
+        // STFT is several times the size of the audio it came from, and
+        // rebuilding it is a few tens of milliseconds on the thread that is
+        // already opening a file.
+        auto sample = readSampleNode(found);
+        if (sample == nullptr) { clearSample(osc); continue; }
+        samples.setSourceName(osc, found.getProperty("name").toString());
+        samples.publish(osc, std::move(sample));
     }
 }
 

@@ -321,6 +321,10 @@ private:
     // default rather than keeping the previous patch's value.
     void appendTables(juce::ValueTree& tree) const;
     void applyTables(const juce::ValueTree& tree);
+    // A spectral sample rides on the state the way a table does, so a patch
+    // carrying one stays a patch when it moves between machines.
+    void appendSamples(juce::ValueTree& tree) const;
+    void applySamples(const juce::ValueTree& tree);
     void appendLfoTables(juce::ValueTree& tree) const;
     void applyLfoTables(const juce::ValueTree& tree);
 };

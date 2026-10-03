@@ -176,7 +176,7 @@ Wavetable mode must come out of this bit-identical. The existing oscillator,
 warp, table and voicing suites passing unchanged is the proof, and `--render`
 against a worktree of the previous revision is the stronger one.
 
-### M16b — a sample, loaded and owned — engine side done
+### M16b — a sample, loaded and owned — done
 
 `Sample` (`core/ForgeSample.h`) is the immutable analysed form: the STFT, the
 spectral flux each frame carries so a transient can be recognised, and the audio
@@ -191,12 +191,30 @@ cell for a field — see the mode decision in `ui/ForgeModules.h` — and becaus
 the picture *is* the sample. The header names what is loaded, in the slot the
 envelope names its stage in.
 
-**Still outstanding, and this is the gap that matters most:** the sample does
-not travel inside the preset or inside host state. A patch saved with a spectral
-oscillator reopens with the mode set and nothing loaded. That needs a stable id
-and a path stored beside it, with a recoverable state for a sample that has
-moved — and it is the first thing to pick up. There is also no factory set under
-`samples/`, so every sample is one you went and found.
+A sample travels **inside** the preset and inside host state, the way a drawn
+table already does, so a patch carrying one is still a patch when it moves
+between machines. There is deliberately no path stored and no missing-sample
+state to recover from: a reference to a file on disk is the thing that breaks,
+and Forge already promises its tables do not work that way.
+
+What differs from a table is the encoding, because the sizes are not comparable.
+A table is a few tens of kilobytes and deflates well; a sample is seconds of
+arbitrary recording, where deflate buys almost nothing because audio is not
+repetitive text. So it is written as **FLAC at 16 bits** and base64'd on top —
+roughly a quarter of what the raw float would cost. Ninety-six decibels of range
+is far below the floor the spectrogram is even drawn at, and the alternative
+triples what every preset carrying a sample weighs. The spectrogram is *not*
+stored: it is several times the size of the audio it came from, and re-analysing
+at load is a few tens of milliseconds on the thread that is already opening a
+file.
+
+The suite round-trips a sample through host state and checks it comes back
+audible, named, in spectral mode, and **smaller than the raw float would have
+been** — that last one because a regression to uncompressed audio would be
+invisible until a patch carrying ten seconds of it weighed twenty-five megabytes.
+
+**Still outstanding:** there is no factory set under `samples/`, so every sample
+is one you went and found.
 
 This is also the substrate M14c needs for the noise module's sample sources, so
 it is shared investment rather than spectral-only cost.

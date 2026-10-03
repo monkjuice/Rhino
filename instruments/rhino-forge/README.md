@@ -393,10 +393,13 @@ Click the display to load a sample — any format JUCE can decode, mixed to mono
 and analysed on the message thread. The display then draws its spectrogram, and
 the header names it.
 
-A spectral sample does **not** yet travel inside the preset or host state: a
-patch saved with one reopens with the mode set and nothing loaded. That, the
-markers on the display, the loop field and the drawable filter mask are what is
-still missing. [SPECTRAL.md](SPECTRAL.md) is the plan, the milestones and the
+A spectral sample travels inside the preset and inside host state, exactly as a
+drawn table does, so a patch carrying one stays self-contained when it moves
+between machines. It rides as FLAC rather than as the float the analysis reads,
+which is the difference between a preset you can send and one you cannot.
+
+The markers on the display, the loop field and the drawable filter mask are what
+is still missing. [SPECTRAL.md](SPECTRAL.md) is the plan, the milestones and the
 reasoning behind the engine.
 
 ## LFO tables

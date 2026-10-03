@@ -368,6 +368,81 @@ void loaderSuite()
 
     file.deleteFile();
 }
+
+// A sample survives a save. This is the check that would have caught the gap
+// the engine shipped with: the mode persisted and the sample did not, so a
+// patch reopened silent with every knob in the right place.
+//
+// Round-tripped through host state rather than a preset file because that is
+// the path a DAW project takes, and because it needs no temp file of its own.
+void persistenceSuite()
+{
+    const auto file = juce::File::getSpecialLocation(juce::File::tempDirectory)
+                          .getChildFile("forge-spectral-persist.wav");
+    file.deleteFile();
+    {
+        juce::AudioBuffer<float> buffer(1, static_cast<int>(testRate));
+        for (int i = 0; i < buffer.getNumSamples(); ++i)
+            buffer.setSample(0, i, static_cast<float>(
+                0.5 * std::sin(2.0 * juce::MathConstants<double>::pi * 440.0
+                               * static_cast<double>(i) / testRate)));
+        juce::WavAudioFormat wav;
+        std::unique_ptr<juce::FileOutputStream> stream(file.createOutputStream());
+        if (stream == nullptr) { require(false, "the test can write a sample"); return; }
+        const std::unique_ptr<juce::AudioFormatWriter> writer(
+            wav.createWriterFor(stream.release(), testRate, 1, 16, {}, 0));
+        if (writer != nullptr) writer->writeFromAudioSampleBuffer(buffer, 0, buffer.getNumSamples());
+    }
+
+    juce::MemoryBlock saved;
+    {
+        Processor processor;
+        require(processor.importSample(0, file).wasOk(), "the sample loads");
+        setValue(processor, "oscAMode", static_cast<float>(OscMode::spectral));
+        processor.getStateInformation(saved);
+    }
+    require(saved.getSize() > 0, "state was written");
+    // Stored as FLAC rather than as the float the analysis reads. That is the
+    // difference between a preset somebody can send and one they cannot, and it
+    // is worth a check because a regression to raw float would be invisible
+    // until a patch carrying ten seconds of audio weighed twenty-five megabytes.
+    const auto asRawFloat = static_cast<size_t>(testRate) * sizeof(float) * 4 / 3;
+    require(saved.getSize() < asRawFloat,
+            "a sample is stored compressed rather than as raw float");
+
+    Processor reopened;
+    require(reopened.sampleStore().sample(0) == nullptr, "a fresh processor has no sample");
+    reopened.setStateInformation(saved.getData(), static_cast<int>(saved.getSize()));
+
+    const auto* sample = reopened.sampleStore().sample(0);
+    require(sample != nullptr, "a spectral sample survives a save and reload");
+    requireText(reopened.sampleStore().sourceName(0), "FORGE-SPECTRAL-PERSIST",
+                "the reloaded sample keeps its name");
+    requireClose(value(reopened, "oscAMode"), static_cast<float>(OscMode::spectral), 0.01f,
+                 "the oscillator reopens in spectral mode");
+    if (sample != nullptr)
+        require(sample->frameCount() > 0 && !sample->waveform().empty(),
+                "the reloaded sample carries its audio");
+
+    // And it still sounds like what went in. FLAC is lossless and the 16-bit
+    // quantisation is far below anything the pitch measurement can see, so the
+    // reloaded sample renders at the same note as the original did.
+    setValue(reopened, "oscBEnable", 0.0f);
+    setValue(reopened, "oscCEnable", 0.0f);
+    setValue(reopened, "subEnable", 0.0f);
+    setValue(reopened, "noiseEnable", 0.0f);
+    require(peakForNote(reopened, 16384) > 1.0e-3f, "the reloaded sample is audible");
+
+    // A state with no sample node clears whatever was loaded, rather than
+    // leaving the previous patch's sample under the new one's knobs.
+    juce::MemoryBlock empty;
+    { Processor bare; bare.getStateInformation(empty); }
+    reopened.setStateInformation(empty.getData(), static_cast<int>(empty.getSize()));
+    require(reopened.sampleStore().sample(0) == nullptr,
+            "a patch with no sample clears the one that was loaded");
+
+    file.deleteFile();
+}
 }
 
 void spectralTests()
@@ -380,5 +455,6 @@ void spectralTests()
     emptySpectralIsSilentSuite();
     modesDoNotLeakSuite();
     loaderSuite();
+    persistenceSuite();
 }
 }

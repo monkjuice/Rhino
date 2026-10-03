@@ -19,6 +19,10 @@ Rhino Forge is a polyphonic wavetable and spectral synthesizer built for movemen
 
 Forge is an independent JUCE plugin. Use it inside Rhino or another VST3 host, or open the standalone app when you want to design sounds without a DAW.
 
+![Rhino Forge oscillator view with three wavetable oscillators, filter, envelopes, LFO, macros, and keyboard](../../docs/images/forge-oscillators.png)
+
+<p align="center"><sub>Three oscillators, hands-on modulation, and the filter stay visible together while a sound takes shape.</sub></p>
+
 ## Start with a waveform. End somewhere new.
 
 ### Three oscillators, two ways to create
@@ -38,6 +42,10 @@ Thirty-four filter types cover state-variable shapes, dual filters, morphing res
 ### Route, mix, and finish inside the patch
 
 The mixer gives the sub, three oscillators, noise, and filter their own level, pan, routing, and sends. Two effect buses and the main output each carry an ordered eight-slot rack with reverb, delay, chorus, distortion, EQ, filter, compression, and phaser.
+
+![Rhino Forge mixer with individual source channels, two effect buses, main output, envelopes, LFO, macros, and keyboard](../../docs/images/forge-mixer.png)
+
+<p align="center"><sub>The MIX view brings every source, both effect buses, and the main output onto one console.</sub></p>
 
 ### Play patterns, not just notes
 

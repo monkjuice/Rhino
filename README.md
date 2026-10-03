@@ -19,11 +19,21 @@ Rhino is a native desktop DAW built for electronic music, sound design, and fast
 
 It is written in C++20 with [JUCE](https://juce.com/) and [Tracktion Engine](https://github.com/Tracktion/tracktion_engine), with immediate pointer response and smooth visual feedback treated as core features—not finishing touches.
 
+![Rhino's arrangement workspace with four color-coded audio and MIDI tracks, the browser, transport, and timeline](docs/images/rhino-workspace.png)
+
+<p align="center"><sub>The arrangement keeps tracks, browser, transport, and editing tools in one focused workspace.</sub></p>
+
 ## From first beat to final mix
 
 ### Write without breaking the flow
 
 Create MIDI clips directly on the arrangement, draw and edit notes in the step grid, play instruments from a MIDI controller or the computer keyboard, and shape ideas with Rhino Arp. Region-based cut, copy, paste, duplicate, split, and undo keep larger arrangements quick to edit.
+
+<p align="center">
+  <img src="docs/images/rhino-arp.png" width="820" alt="Rhino Arp device with its pattern display and performance controls">
+</p>
+
+<p align="center"><sub>Rhino Arp turns held notes into scale-aware patterns without leaving the track's device chain.</sub></p>
 
 ### Record what happens
 

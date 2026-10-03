@@ -9,7 +9,7 @@ updated: 2026-10-03
 
 # Forge editor (panel)
 
-The panel is one `Editor` (`src/ForgeEditor.h`) defined across fifteen `.cpp` files, `src/ForgeEditor.cpp` plus `ForgeEditor{Envelope,Filter,Fx,FxView,Input,Layout,Lfo,Modulation,Noise,OscMode,Pages,Paint,Spectral,Warp}.cpp`, sharing the private `src/ForgeEditorInternal.h`. The `README.md` layout table still says nine (checked 2026-10-03). This is the split Rhino uses ([Keeping files small](keeping-files-small.md)); unlike the engine, the panel may span translation units freely ([Forge's engine splits into headers only](forge-engine-headers-only.md)).
+The panel is one `Editor` (`src/ForgeEditor.h`) defined across sixteen `.cpp` files, `src/ForgeEditor.cpp` plus `ForgeEditor{Envelope,Filter,Fx,FxView,Input,Layout,Lfo,Modulation,Noise,NoteGuide,OscMode,Pages,Paint,Spectral,Warp}.cpp`, sharing the private `src/ForgeEditorInternal.h`. The `README.md` layout table still says nine (checked 2026-10-03). This is the split Rhino uses ([Keeping files small](keeping-files-small.md)); unlike the engine, the panel may span translation units freely ([Forge's engine splits into headers only](forge-engine-headers-only.md)).
 
 ## Declared, not computed
 
@@ -22,6 +22,10 @@ The panel is one `Editor` (`src/ForgeEditor.h`) defined across fifteen `.cpp` fi
 ## Pages
 
 OSC, TABLE and MATRIX swap only the oscillator columns; MIX and FX take the whole signal row. The arp overlay is a sixth page, `Page::arp`, that is never a tab ([Forge arpeggiator](forge-arpeggiator.md)). Switching hides and shows components instead of rebuilding them, so a hidden knob stays attached, automated and modulated.
+
+## Note guide
+
+The note-guide plate on the keyboard shelf is a compact two-row control, not a titled module: it deliberately has no `NOTE GUIDE` heading so ROOT/CHORD occupy the first row and the MAJ/MIN quality switch with SCALE occupy the second. `Editor::resized` in `src/ForgeEditorLayout.cpp` uses the plate's full inset face with relaxed 7 px horizontal and 6 px vertical insets, rows clamped to 24--29 px, and a 6 px row gap; keep the plate's bevel and rivets visible when altering it. Its stored choices and the keyboard's note-mask/MIDI behaviour are independent of this visual geometry (`src/ForgeEditorNoteGuide.cpp`).
 
 ## Rules that bite
 

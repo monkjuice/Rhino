@@ -20,7 +20,7 @@ struct NoteGuideState
 enum class GuideTone { normal, scale, chord, root };
 
 inline constexpr std::array<const char*, 12> guideRootNames {
-    "C", "C♯/D♭", "D", "D♯/E♭", "E", "F", "F♯/G♭", "G", "G♯/A♭", "A", "A♯/B♭", "B"
+    "C", "C#/Db", "D", "D#/Eb", "E", "F", "F#/Gb", "G", "G#/Ab", "A", "A#/Bb", "B"
 };
 inline constexpr std::array<const char*, 12> guideSharpNames {
     "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"
@@ -29,7 +29,7 @@ inline constexpr std::array<const char*, 12> guideChordNames {
     "Off", "Triad", "6th", "7th", "Maj7", "Augmented", "Diminished", "Aug7", "Dim7", "Half-dim", "Sus2", "Sus4"
 };
 inline constexpr std::array<const char*, 12> guideChordMenuNames {
-    "Off", "Triad", "6th", "7th", "Maj7", "Augmented", "Diminished", "Aug7 (7♯5)", "Dim7", "Half-Diminished (m7♭5)", "Sus2", "Sus4"
+    "Off", "Triad", "6th", "7th", "Maj7", "Augmented", "Diminished", "Aug7 (7#5)", "Dim7", "Half-Diminished (m7b5)", "Sus2", "Sus4"
 };
 inline constexpr std::array<const char*, 13> guideScaleNames {
     "Off", "Major", "Nat Minor", "Maj Penta", "Min Penta", "Blues", "Harm Minor", "Mel Minor", "Dorian", "Phrygian", "Lydian", "Mixolydian", "Locrian"
@@ -134,9 +134,9 @@ private:
                           : tone == GuideTone::scale ? juce::Colour(0xff67b7af) : juce::Colours::transparentBlack;
         if (tone != GuideTone::normal)
         {
-            g.setColour(colour.withAlpha(down ? 0.18f : black ? 0.34f : 0.22f));
+            g.setColour(colour.withAlpha(down ? 0.24f : black ? 0.42f : 0.30f));
             g.fillRoundedRectangle(area.reduced(1.0f), 1.5f);
-            g.setColour(colour.withAlpha(down ? 0.9f : 0.72f));
+            g.setColour(colour.withAlpha(down ? 0.94f : 0.82f));
             g.fillRect(area.getX() + 1.0f, area.getBottom() - 2.5f, area.getWidth() - 2.0f, 1.5f);
             if (tone == GuideTone::root)
             {

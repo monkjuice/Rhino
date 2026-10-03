@@ -38,7 +38,7 @@ void Editor::buildNoteGuide()
     guideRoot.setTooltip("Shared root for the chord and scale note guide");
     guideChord.setTooltip("Chord tones repeat across every visible octave");
     guideScale.setTooltip("Scale notes repeat across every visible octave");
-    guideQuality.setTooltip("MAJ → 7; MIN → m7. Maj7: MAJ → maj7; MIN → m(maj7)");
+    guideQuality.setTooltip("MAJ -> 7; MIN -> m7. Maj7: MAJ -> maj7; MIN -> m(maj7)");
     guideRoot.onClick = [this] { showNoteGuideMenu(0); };
     guideChord.onClick = [this] { showNoteGuideMenu(1); };
     guideScale.onClick = [this] { showNoteGuideMenu(2); };

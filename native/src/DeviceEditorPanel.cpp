@@ -4,6 +4,7 @@
 #include "audio/AutoTuneDevice.h"
 #include "audio/RhinoEqDevice.h"
 #include "audio/VocoderDevice.h"
+#include "midi/RhinoArpDevice.h"
 #include <algorithm>
 #include <cmath>
 
@@ -62,6 +63,7 @@ void DeviceEditorPanel::setTarget(int nextTrack, const Session::DeviceSlot& devi
     deviceName = device.name;
     isSelected = nextSelected;
     face = device.type == RhinoSpaceDevice::xmlTypeName ? Face::RhinoSpace
+         : device.type == RhinoArpDevice::xmlTypeName ? Face::Arp
          : device.type == AutoTuneDevice::xmlTypeName ? Face::AutoTune
          : device.type == RhinoEqDevice::xmlTypeName ? Face::Eq
          : device.type == VocoderDevice::xmlTypeName ? Face::Vocoder
@@ -100,6 +102,8 @@ int DeviceEditorPanel::preferredWidth() const
         return 660;
     if (face == Face::RhinoSpace)
         return 460;
+    if (face == Face::Arp)
+        return 820;
     const auto columns = std::max(2, std::min(6, visibleParameterCount()));
     return juce::jlimit(190, 470, 46 + columns * 66);
 }
@@ -243,7 +247,7 @@ int DeviceEditorPanel::visibleParameterCount() const
     // Twelve is what the generic grid can lay out and stay readable. Rhino
     // Tune's own face has room for its thirteenth, and the device lists its
     // parameters so the twelve a fallback panel would show come first.
-    return std::min(face == Face::AutoTune || face == Face::Vocoder ? 13 : 12,
+    return std::min(face == Face::AutoTune || face == Face::Vocoder || face == Face::Arp ? 13 : 12,
                     static_cast<int>(parameters.size()));
 }
 
@@ -307,6 +311,7 @@ void DeviceEditorPanel::styleControls()
         const auto accent = face == Face::RhinoSpace ? juce::Colour(0xff75b9cc)
             : face == Face::AutoTune ? juce::Colour(0xffb2739c)
             : face == Face::Vocoder ? juce::Colour(0xff7d8fc4)
+            : face == Face::Arp ? palette::midiEffect
             : juce::Colour(0xffc6d58c);
         parameterLabels[i]->setText(parameter.name, juce::dontSendNotification);
         parameterLabels[i]->setColour(juce::Label::textColourId, juce::Colour(0xffdfe6ea));
@@ -358,6 +363,11 @@ void DeviceEditorPanel::paint(juce::Graphics& g)
         paintVocoder(g);
         return;
     }
+    if (face == Face::Arp)
+    {
+        paintArp(g);
+        return;
+    }
     if (face != Face::RhinoSpace)
         return;
 
@@ -403,6 +413,8 @@ void DeviceEditorPanel::resized()
         layoutEq();
     else if (face == Face::Vocoder && contentArea.getWidth() >= 660 && contentArea.getHeight() >= 120)
         layoutVocoder();
+    else if (face == Face::Arp && contentArea.getWidth() >= 650 && contentArea.getHeight() >= 120)
+        layoutArp();
     else if (face == Face::RhinoSpace && contentArea.getWidth() >= 350 && contentArea.getHeight() >= 80)
         layoutRhinoSpace();
     else

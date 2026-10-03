@@ -86,8 +86,8 @@ std::vector<DeviceDescriptor> buildCatalog()
 
     // ---- MIDI FX -----------------------------------------------------------
     add({"RhinoArp", RhinoArpDevice::xmlTypeName, "Rhino Arp", {},
-         DeviceKind::MidiEffect, {}, "Drop before an instrument to arpeggiate it",
-         0, {}, true, false, false});
+         DeviceKind::MidiEffect, {}, "Bouncing, scale-aware chords before an instrument",
+         0xff55c7d5, {}, true, false, false});
 
     return catalog;
 }

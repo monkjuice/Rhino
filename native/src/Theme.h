@@ -60,6 +60,11 @@ inline const juce::Colour displayTextFaint {0xff76856f};
 inline const juce::Colour volume           {0xff45d0d4};
 inline const juce::Colour pan              {0xffd4564e};
 
+// MIDI processors use cyan because they transform events rather than audio;
+// it also gives Rhino Arp's moving-note display a colour with a job, not a
+// decorative tint that competes with track colours.
+inline const juce::Colour midiEffect       {0xff55c7d5};
+
 // What the chrome uses to mark a selection or a focused row, kept grey so it
 // never competes with a track colour sitting next to it.
 inline const juce::Colour selection        {0xffdcdcdc};

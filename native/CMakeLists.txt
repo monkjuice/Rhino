@@ -94,6 +94,7 @@ target_sources(RhinoNative PRIVATE
     src/AudioClipPanel.cpp
     src/AudioClipWarp.cpp
     src/DeviceEditorPanel.cpp
+    src/DeviceEditorPanelArp.cpp
     src/DeviceEditorPanelAutoTune.cpp
     src/DeviceEditorPanelEq.cpp
     src/DeviceEditorPanelVocoder.cpp

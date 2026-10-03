@@ -51,11 +51,16 @@ public:
     std::function<void()> selected;
 
 private:
-    enum class Face { Generic, RhinoSpace, AutoTune, Eq, Vocoder };
+    enum class Face { Generic, RhinoSpace, Arp, AutoTune, Eq, Vocoder };
     void ensureControls();
     void styleControls();
     void layoutGeneric();
     void layoutRhinoSpace();
+    // Rhino Arp uses the same automatable controls as the generic face, but
+    // groups them around a diagram of the generated motion. Its layout and
+    // drawing live in DeviceEditorPanelArp.cpp.
+    void layoutArp();
+    void paintArp(juce::Graphics&);
     // Rhino Tune's face is its own translation unit, DeviceEditorPanelAutoTune.cpp:
     // it is a meter, a keyboard and two choosers on top of the knobs, and it is
     // the only face that needs the device itself rather than its parameters.

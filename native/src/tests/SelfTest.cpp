@@ -111,6 +111,60 @@ int runSelfTest()
         }
         require(session.addDevice("NoSuchDevice", 0).failed());
 
+        // Rhino Arp is a MIDI plugin in the chain, not a path hidden inside an
+        // instrument. Drive that plugin directly: a C-minor chord arriving a
+        // quarter-second into the block must be silent before it arrives, then
+        // bounce down an octave because -7 minor scale degrees is -12 semitones.
+        {
+            auto arpPlugin = session.edit->getPluginCache().createNewPlugin(RhinoArpDevice::xmlTypeName, {});
+            auto* arp = dynamic_cast<RhinoArpDevice*>(arpPlugin.get());
+            require(arp != nullptr);
+            const auto setArp = [&] (const char* id, float value)
+            {
+                auto parameter = arp->getAutomatableParameterByID(id);
+                require(parameter != nullptr);
+                parameter->setParameter(value, juce::dontSendNotification);
+            };
+            setArp("style", 4.0f);       // chord trigger makes each movement easy to inspect
+            setArp("rate", 1.0f);        // 1/16
+            setArp("gate", 50.0f);
+            setArp("distance", -7.0f);
+            setArp("steps", 2.0f);
+            setArp("groove", 0.0f);      // straight timestamps for this assertion
+            setArp("hold", 0.0f);
+            setArp("retrigger", 0.0f);
+            setArp("root", 0.0f);
+            setArp("scale", 2.0f);       // C minor
+            arp->initialise({{}, 48000.0, 36000});
+
+            te::MidiMessageArray arpMidi;
+            for (const auto pitch : {60, 63, 67})
+                arpMidi.addMidiMessage(juce::MidiMessage::noteOn(1, pitch, 0.8f), 0.25, {});
+            for (const auto pitch : {60, 63, 67})
+                arpMidi.addMidiMessage(juce::MidiMessage::noteOff(1, pitch), 0.70, {});
+            const tracktion::core::TimeRange arpTime {
+                tracktion::core::TimePosition::fromSeconds(0.0),
+                tracktion::core::TimePosition::fromSeconds(0.75)};
+            te::PluginRenderContext arpContext(nullptr, 0, 36000, &arpMidi, 0.0, arpTime,
+                                               true, false, true, false);
+            arp->applyToBuffer(arpContext);
+
+            std::vector<int> firstChord, secondChord;
+            for (const auto& message : arpMidi)
+            {
+                if (!message.isNoteOn())
+                    continue;
+                require(message.getTimeStamp() >= 0.25 - 1.0e-6);
+                if (std::abs(message.getTimeStamp() - 0.25) < 1.0e-5)
+                    firstChord.push_back(message.getNoteNumber());
+                if (std::abs(message.getTimeStamp() - 0.375) < 1.0e-5)
+                    secondChord.push_back(message.getNoteNumber());
+            }
+            require(firstChord == std::vector<int>({60, 63, 67}));
+            require(secondChord == std::vector<int>({48, 51, 55}));
+            arp->deinitialise();
+        }
+
 
         auto drumPlugin = session.edit->getPluginCache().createNewPlugin(DrumDevice::xmlTypeName, {});
         auto* drums = dynamic_cast<DrumDevice*>(drumPlugin.get());

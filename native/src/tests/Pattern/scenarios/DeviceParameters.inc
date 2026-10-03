@@ -45,7 +45,17 @@
             require(arpSlot >= 0 && synthSlot >= 0 && arpSlot < synthSlot,
                     "Rhino Arp is inserted before the target instrument");
             auto arpParameters = parameterSession.deviceParameters(2, arpSlot);
-            require(arpParameters.size() == 3, "Rhino Arp exposes rate, octaves, and gate controls");
+            require(arpParameters.size() == RhinoArpDevice::parameterCount
+                    && arpParameters[RhinoArpDevice::styleParameter].name == "Style"
+                    && arpParameters[RhinoArpDevice::styleParameter].valueText == "UpDown"
+                    && arpParameters[RhinoArpDevice::rateParameter].valueText == "1/16"
+                    && arpParameters[RhinoArpDevice::distanceParameter].valueText == "-7 sd"
+                    && arpParameters[RhinoArpDevice::stepsParameter].valueText == "2"
+                    && arpParameters[RhinoArpDevice::grooveParameter].valueText == "Swing 16"
+                    && arpParameters[RhinoArpDevice::retriggerParameter].valueText == "Beat"
+                    && arpParameters[RhinoArpDevice::rootParameter].valueText == "G#"
+                    && arpParameters[RhinoArpDevice::scaleParameter].valueText == "Minor",
+                    "Rhino Arp opens with the Bouncy Chords controls and defaults");
             require(parameterSession.addInstrument(Session::Instrument::RhinoWave, 2).wasOk(), "A MIDI track hosts Rhino Wave");
             int waveSlot = -1;
             for (int i = 0; i < parameterTrack->pluginList.size(); ++i)

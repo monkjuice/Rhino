@@ -81,6 +81,14 @@ A class may be defined across several translation units. `Session` is implemente
 
 - `DrumDevice` has one parameter, `kit`, selecting a table of per-voice shapes: playback rate, an optional decay in seconds, and a level. It is read on the audio thread as a plain lookup with no allocation, and the Clap kit additionally routes the backbeat note to the clap pad. Kits are the same sample set reshaped, which is how a drum rack preset differs from another.
 
+## Rhino Arp
+
+`RhinoArpDevice` is a built-in Tracktion MIDI plugin under `src/devices/midi/`, in the `RhinoDevices` target. It owns no synth voice and emits no audio. The track chain puts it before the instrument, it consumes held input notes, and the generated note-ons and note-offs continue to whichever instrument follows it. There is no arpeggiator path in `Session` or in a Rhino instrument.
+
+The default is the device's sound: UpDown at 1/16, 84% gate, Swing 16, Hold on, beat retrigger every half note, infinite repeats, then two movements of -7 scale degrees in G# minor. Style also offers Up, Down, DownUp and Chord. Offset rotates the note order; Distance and Steps move each completed order through either semitones or the chosen major/minor scale; finite Repeats leaves rhythmic gaps until Note or Beat retrigger starts the pattern again. Gate may pass 100% for overlapping notes.
+
+Timing is kept in edit beats and converted to seconds only when a MIDI message is emitted, so tempo changes do not pull the pattern off the grid. Input messages are applied at their timestamp inside the block: a chord arriving halfway through a callback cannot produce notes before it was played. The editor is `DeviceEditorPanelArp.cpp`, a dedicated rack face around the same thirteen automatable parameters the generic device surface would expose.
+
 ## Audio From
 
 The same idea one signal across, and answered the same way: `SessionAudioInput.cpp`

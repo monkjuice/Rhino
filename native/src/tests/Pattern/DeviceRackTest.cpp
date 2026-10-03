@@ -3,6 +3,7 @@
 #include "../../Session.h"
 #include "audio/AutoTuneDevice.h"
 #include "audio/UtilityDevice.h"
+#include "midi/RhinoArpDevice.h"
 #include <stdexcept>
 
 namespace rhino
@@ -126,6 +127,37 @@ void runPatternDeviceRackTest()
     chainView.selectTrack(0);
     chainView.setSize(1400, 280);
     require(chainView.devicePanels.size() == 4, "The rack shows a panel per visible device");
+    auto* arpPanel = chainView.devicePanels.getFirst();
+    require(arpPanel->preferredWidth() >= 800, "Rhino Arp has room for its full dedicated face");
+    arpPanel->setSize(arpPanel->preferredWidth(), DeviceEditorPanel::standardHeight);
+    std::vector<juce::Rectangle<int>> arpKnobs;
+    for (auto* child : arpPanel->getChildren())
+    {
+        require(arpPanel->getLocalBounds().contains(child->getBounds()),
+                "Every Rhino Arp control stays inside its face");
+        if (child->isVisible() && dynamic_cast<juce::Slider*>(child) != nullptr)
+            arpKnobs.push_back(child->getBounds());
+    }
+    require(arpKnobs.size() == RhinoArpDevice::parameterCount,
+            "Rhino Arp's dedicated face exposes every automatable control");
+    for (size_t i = 0; i < arpKnobs.size(); ++i)
+        for (auto j = i + 1; j < arpKnobs.size(); ++j)
+            require(!arpKnobs[i].intersects(arpKnobs[j]), "Rhino Arp controls do not overlap");
+    const auto arpSnapshot = arpPanel->createComponentSnapshot(arpPanel->getLocalBounds());
+    require(arpSnapshot.getWidth() == arpPanel->getWidth()
+            && arpSnapshot.getHeight() == DeviceEditorPanel::standardHeight,
+            "Rhino Arp's dedicated face paints at its promised size");
+    if (const auto path = juce::SystemStats::getEnvironmentVariable("RHINO_ARP_SNAPSHOT", {});
+        path.isNotEmpty())
+    {
+        const juce::File file(path);
+        file.deleteFile();
+        if (auto stream = file.createOutputStream())
+            require(juce::PNGImageFormat().writeImageToStream(arpSnapshot, *stream),
+                    "Rhino Arp snapshot is writable");
+        else
+            require(false, "Rhino Arp snapshot path is writable");
+    }
     const auto gapAt = [&chainView](juce::Point<int> point) { return chainView.dropGapFor(point); };
     const auto* second = chainView.devicePanels[1];
     require(gapAt({0, 60}) == 0, "A drop at the far left lands in front of the first device");

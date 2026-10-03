@@ -37,3 +37,7 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/inc-edits-do-not-rebuild.md (the filter-hides-the-build-failure trap hit Forge via `Select-String` chained with `ctest`)
 - updated: pages/build-and-test-forge.md (do not chain a filtered build with ctest; check `$LASTEXITCODE` first)
 - updated: pages/development-environment.md (anchor regex identifier renames with `\b` at both ends)
+
+## [2026-10-03] update | The bar ruler labels counts inside a bar
+- updated: pages/arrangement-view.md (new bullet: `bar.count` labels and minor marks once bar numbers are a bar apart; a count is the signature's denominator note, not `beatsPerBar()`; the `finerRulerSpan` divisibility chain, `rulerLabelSpan` at 44 px and `rulerTickSpan` at 10 px down to a quarter count; it ignores the snap grid and leaves the time ruler alone)
+- updated: pages/transport.md (the ruler counts in the numerator's notes, not `beatsPerBar()` quarters)

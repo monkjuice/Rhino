@@ -48,7 +48,8 @@ nesting, so one caller cannot close a bracket another opened.
 
 Any numerator from 1 to 99 over 1, 2, 4, 8 or 16. `beatsPerBar()` is numerator × 4 ÷ denominator, and it is what "one
 bar" means everywhere — a new clip, a pattern, the loop of an empty document. Playback restarts after a signature
-change.
+change. The arrangement's bar ruler subdivides a bar into the numerator's counts (eighths in 6/8), not into
+`beatsPerBar()` quarter notes ([Arrangement view](arrangement-view.md)).
 
 The click's on/off, bar emphasis and level are the edit's own `clickTrack*` properties. `clickTrackGain` converts:
 Rhino speaks decibels, the engine stores a linear gain and clamps it to 0.2-1.0, and writing decibels straight in put

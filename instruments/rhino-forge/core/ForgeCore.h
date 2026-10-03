@@ -1053,18 +1053,25 @@ private:
         auto& state = spectral->voices[voiceIndex][static_cast<size_t>(oscillator)];
 
         SpectralSettings settings;
+        // How the file's rate compares with the one Forge is running at. A bin
+        // of a sample analysed at 44.1 kHz is 21.5 Hz wide and the same bin
+        // resynthesised at 48 kHz is 23.4 Hz, so without this a CD-rate file
+        // plays a semitone and a half sharp and its hops run 9% fast. Both the
+        // pitch and the scan are scaled by it, which is exactly what playing
+        // the recording back at its own rate would have done to them.
+        const auto rateRatio = static_cast<float>(osc.sample->rate() / juce::jmax(1.0, sampleRate));
         // The note, against the pitch the sample plays back at unshifted. The
         // shift is done inside the spectrum, so this costs the same at every
         // note — see the pitch decision in SPECTRAL.md.
         settings.pitchRatio = juce::jlimit(0.03125f, 32.0f,
-                                           baseHz * tuningRatio(osc) / spectralRootHz);
-        // SCAN is frames per hop, and one frame per hop is the sample running
-        // at its own speed: the vocoder emits exactly the hop the analysis
-        // took. Nothing here divides by the pitch, which is what makes the
-        // manual's Key Track option a property of this engine rather than a
-        // correction applied on top of it — the scan rate is already fixed
-        // regardless of the key played.
-        settings.scan = juce::jlimit(-4.0f, 4.0f, osc.scan);
+                                           baseHz * tuningRatio(osc) / spectralRootHz * rateRatio);
+        // SCAN is frames per hop, and one frame per hop at a matching rate is
+        // the sample running at its own speed: the vocoder emits exactly the
+        // hop the analysis took. Nothing here divides by the pitch, which is
+        // what makes the manual's Key Track option a property of this engine
+        // rather than a correction applied on top of it — the scan rate is
+        // already fixed regardless of the key played.
+        settings.scan = juce::jlimit(-4.0f, 4.0f, osc.scan) * rateRatio;
         settings.cut = juce::jlimit(0.0f, 1.0f, osc.cut);
         settings.mix = juce::jlimit(0.0f, 1.0f, osc.mix);
         settings.unison = juce::jlimit(1, spectralUnisonMax, juce::roundToInt(osc.unison));

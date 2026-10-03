@@ -103,12 +103,14 @@ synthesis hop. Its **input** advances through the spectrogram at whatever SCAN
 asks for — that is the whole of the time-scaling, and it is the only structure
 in which the manual's Key Track option means anything.
 
-**Pitch is a shift inside the spectrum, not a resampling of the output.** For
-an output bin, the magnitude is read from the bin its partial would have to
-come from, and the phase advances by *that* bin's measured frequency times the
-ratio. The obvious alternative — resynthesise at the original pitch and read the
-result faster — is what the first draft of this document described, and it is
-wrong twice over. It drags the scan rate along with the pitch, so key track
+**Pitch is a shift inside the spectrum, not a resampling of the output.** Each
+hop the spectrum is cut into regions, one per peak, and every region is moved
+**whole**, by a whole number of bins, to where its peak's measured frequency
+times the ratio lands; every bin in a region is locked to its peak's phase, and
+only the peak's phase is carried from hop to hop (Laroche and Dolson's peak
+shifting with scaled phase locking). The obvious alternative — resynthesise at
+the original pitch and read the result faster — is what the first draft of this
+document described, and it is wrong twice over. It drags the scan rate along with the pitch, so key track
 would have to be a division cancelling it back out; and it makes the cost of a
 note scale with how high it is, because a note an octave up consumes output
 twice as fast and so needs twice the transforms. Shifting in the spectrum costs
@@ -116,6 +118,28 @@ the same at every note and leaves SCAN independent of pitch for nothing.
 
 What it buys is the thing that is actually hard to get: a sample can be held at
 a fixed point in its own time while being played as a chromatic instrument.
+
+Moving regions whole rather than reading each output bin from wherever
+`bin / ratio` lands is not a refinement; the bin-by-bin version was the first
+one built and it lost level. A partial is not one bin — the window spreads it
+across four, with the bins either side alternating in phase against the centre
+— and that shape *is* the window coming back out. Read bin by bin, it was
+crushed to half its width an octave down and stretched to double an octave up,
+the overlap-add stopped summing to one, and the level went with it: 11 dB lost
+an octave down on a real loop, 7 dB an octave up. Moved whole, the same loop
+stays within about a decibel of itself across the two octaves. Where two
+shifted regions land on one bin, the bin carries the phase of whichever is
+louder there; letting the later one win cost a bright tone 3.6 dB an octave
+down, because a harmonic would carry on next hop from its neighbour's phase.
+
+Two things about the source are settled when it is read rather than left to
+the knobs. A sample is **peak-normalised** when it is analysed, so its loudest
+moment meets full scale where a wavetable's loudest frame already is — a
+recording arrives at whatever level it was bounced at, and the loop this was
+found on peaked at −5 dB with an RMS of −28. And the file's own **rate** scales
+both the pitch and the scan, because a bin of a 44.1 kHz analysis is narrower
+than the same bin resynthesised at 48 kHz: without it a CD-rate file played a
+semitone and a half sharp and ran 9% fast.
 
 ### Unison is summed in the spectrum, so a stack costs one transform
 
@@ -227,12 +251,14 @@ their Butterworth skirts, CUT and MIX, transient preservation, and unison summed
 in the spectrum.
 
 Verified by measuring rendered audio, in the way `tuningSuite()` already does —
-`ctest -R forge_spectral`. Seven checks: the root note comes back at the
-sample's own pitch, an octave either way transposes by an octave, SCAN at zero,
-forward and backward all render the same pitch, SCAN at two reaches the second
-half of a sample in half the time, CUT takes a tone out, an oscillator with no
-sample is silent, and a spectral oscillator changes nothing about a wavetable
-one beside it.
+`ctest -R forge_spectral`. The root note comes back at the sample's own pitch,
+an octave either way transposes by an octave, SCAN at zero, forward and
+backward all render the same pitch, SCAN at two reaches the second half of a
+sample in half the time, CUT takes a tone out, an oscillator with no sample is
+silent, and a spectral oscillator changes nothing about a wavetable one beside
+it. The level is held to within 1.5 dB of the sample at the root and an octave
+either way, on a sine and on a bright harmonic tone; a sample is normalised on
+analysis; and a 44.1 kHz file plays at its own pitch and its own speed at 48.
 
 Two bugs that suite caught and that are worth knowing about, because both were
 silent and neither was visible in the code:
@@ -250,8 +276,10 @@ silent and neither was visible in the code:
 **Still outstanding:** the loop field. One-shot, Manual and the rest need a
 control to choose them, and the oscillator module has no free cell for it — it
 belongs in the strip under the display that M16d adds. Until then the engine
-runs Fwd Loop with transients on. Phase lock is a declared setting that nothing
-reads yet.
+runs Fwd Loop with transients on. The SCAN menu's Phase Lock is a declared
+setting that nothing reads yet — every region is locked to its peak regardless,
+because that is what keeps the level, so whatever the option ends up meaning it
+is not that.
 
 ### M16d — the spectrogram, and the controls the manual draws — part done
 

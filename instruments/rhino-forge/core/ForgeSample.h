@@ -83,6 +83,20 @@ public:
         frames = (length - spectralFftSize) / spectralHop + 1;
         if (frames < 1) { frames = 0; audio.clear(); return; }
 
+        // Peak-normalised, so the loudest moment of any sample meets full
+        // scale, which is where a wavetable's loudest frame already is. A
+        // recording arrives at whatever level it was mastered or bounced at —
+        // the cowbell loop this was found on peaks at -5 dB and sits at -28 dB
+        // RMS — and an oscillator playing it at that level sounds broken beside
+        // two that are not. Done here rather than in the loader so that every
+        // way a Sample is made, a patch reopening included, gets the same
+        // answer; and it is idempotent, so a sample saved normalised and
+        // loaded again comes back exactly as it went.
+        auto peak = 0.0f;
+        for (const auto value : audio) peak = juce::jmax(peak, std::abs(value));
+        if (peak > 1.0e-6f)
+            for (auto& value : audio) value /= peak;
+
         magnitudeStore.assign(static_cast<size_t>(frames) * spectralBins, 0.0f);
         phaseStore.assign(static_cast<size_t>(frames) * spectralBins, 0.0f);
         flux.assign(static_cast<size_t>(frames), 0.0f);

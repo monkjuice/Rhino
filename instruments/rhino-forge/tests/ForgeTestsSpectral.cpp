@@ -505,6 +505,115 @@ void playheadSuite()
 
     file.deleteFile();
 }
+
+// A sample of a bright tone: thirty harmonics of 110 Hz falling as a saw's do,
+// which is the content a level loss in the shifting shows up on first — a
+// single sine has only one partial to keep whole.
+std::unique_ptr<Sample> harmonicSample(double seconds = 2.0)
+{
+    const auto length = static_cast<int>(testRate * seconds);
+    std::vector<float> audio(static_cast<size_t>(length));
+    for (int i = 0; i < length; ++i)
+    {
+        auto value = 0.0;
+        for (int harmonic = 1; harmonic <= 30; ++harmonic)
+            value += std::sin(2.0 * juce::MathConstants<double>::pi * 110.0 * harmonic
+                              * static_cast<double>(i) / testRate) / harmonic;
+        audio[static_cast<size_t>(i)] = static_cast<float>(0.3 * value);
+    }
+    return std::make_unique<Sample>(audio.data(), length, testRate, "HARMONIC");
+}
+
+// How loud the vocoder plays a sample at a given shift, in decibels against the
+// sample itself placed at the centre of the image. Measured on the vocoder
+// alone, so the voice's own output gain — which a wavetable oscillator goes
+// through just the same — is not part of the answer.
+double vocoderGainDb(const Sample& sample, float ratio)
+{
+    auto voice = std::make_unique<SpectralVoice>();
+    auto scratch = std::make_unique<SpectralScratch>();
+    scratch->prepare();
+    juce::dsp::FFT fft(spectralFftOrder);
+    SpectralSettings settings;
+    settings.pitchRatio = ratio;
+    settings.loop = true;
+    settings.transients = true;
+
+    auto sum = 0.0;
+    auto count = 0;
+    for (int i = 0; i < static_cast<int>(testRate); ++i)
+    {
+        auto l = 0.0f, r = 0.0f;
+        spectralRead(*voice, sample, settings, *scratch, fft, l, r);
+        if (i < 8192) continue;
+        sum += static_cast<double>(l) * l;
+        ++count;
+    }
+    auto source = 0.0;
+    for (const auto value : sample.waveform()) source += static_cast<double>(value) * value;
+    // The centre of the image is the pan law's half power on each side.
+    const auto expected = std::sqrt(0.5 * source / static_cast<double>(sample.waveform().size()));
+    return 20.0 * std::log10(std::sqrt(sum / juce::jmax(1, count)) / expected);
+}
+
+// A sample comes out as loud as it went in, at its own pitch and an octave
+// either way of it. This is the check the user's ear found first: the shift
+// used to read each output bin from wherever bin / ratio landed, which crushed
+// a partial's window an octave down and stretched it an octave up, and the
+// overlap-add stopped summing to one — 11 dB lost an octave down on a real
+// loop, 7 dB an octave up. Moving each partial's region whole keeps its shape.
+void levelSuite()
+{
+    const auto sine = sineSample(440.0);
+    const auto bright = harmonicSample();
+    for (const auto* sample : {sine.get(), bright.get()})
+        for (const auto ratio : {0.5f, 1.0f, 2.0f})
+            requireClose(static_cast<float>(vocoderGainDb(*sample, ratio)), 0.0f, 1.5f,
+                         "a spectral oscillator keeps a sample's level at the root and an octave either way");
+}
+
+// Every sample peaks at full scale once it is loaded, wherever it was recorded,
+// so a quiet file and a loud one sit at the level a wavetable does.
+void normalisedSuite()
+{
+    constexpr auto length = 8192;
+    std::vector<float> quiet(static_cast<size_t>(length));
+    for (int i = 0; i < length; ++i)
+        quiet[static_cast<size_t>(i)] = 0.1f * std::sin(0.05f * static_cast<float>(i));
+    const Sample sample(quiet.data(), length, testRate, "QUIET");
+    auto peak = 0.0f;
+    for (const auto value : sample.waveform()) peak = juce::jmax(peak, std::abs(value));
+    requireClose(peak, 1.0f, 0.001f, "a sample is normalised to full scale when it is analysed");
+}
+
+// A file recorded at another rate plays at its own pitch and its own speed.
+// Without the rate in the ratio a 44.1 kHz file at 48 kHz played 147 cents
+// sharp and ran 9% fast — and nearly every sample anybody downloads is 44.1.
+void sampleRateSuite()
+{
+    constexpr auto fileRate = 44100.0;
+    const auto length = static_cast<int>(fileRate * 4.0);
+    std::vector<float> audio(static_cast<size_t>(length));
+    for (int i = 0; i < length; ++i)
+        audio[static_cast<size_t>(i)] = static_cast<float>(
+            0.5 * std::sin(2.0 * juce::MathConstants<double>::pi * 440.0 * static_cast<double>(i) / fileRate));
+    const Sample sample(audio.data(), length, fileRate, "CD RATE");
+    const auto patch = spectralOnly(sample);
+
+    requireClose(static_cast<float>(centsBetween(spectralPitch(patch, 60), 440.0)), 0.0f, 12.0f,
+                 "a sample recorded at another rate keeps its own pitch at the root note");
+
+    Core core;
+    core.initialise(testRate);
+    core.noteOn(60, 1.0f, patch);
+    for (int i = 0; i < static_cast<int>(testRate); ++i)
+    {
+        auto l = 0.0f, r = 0.0f;
+        core.renderSample(patch, l, r);
+    }
+    requireClose(core.scanPosition(0), 0.25f, 0.02f,
+                 "a second of playing reaches a second into a sample recorded at another rate");
+}
 }
 
 void spectralTests()
@@ -519,5 +628,8 @@ void spectralTests()
     loaderSuite();
     persistenceSuite();
     playheadSuite();
+    levelSuite();
+    normalisedSuite();
+    sampleRateSuite();
 }
 }

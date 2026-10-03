@@ -60,6 +60,14 @@ struct SpectralVoice
     // cannot be shared or offset from another's: they advance at different
     // rates because they are at different pitches, and that difference is the
     // whole of what detune is.
+    //
+    // What a bin holds is the phase of the *peak* that last owned it, not the
+    // bin's own: every bin in a peak's region is locked to that peak, so the
+    // peak's phase is the one thing that has to be carried from hop to hop.
+    // Keeping it at every bin of the region is what lets a partial that drifts
+    // into the next bin carry on from where it was rather than from whatever
+    // its new neighbour was locked to — Laroche and Dolson's scaled phase
+    // locking, without a list of peaks to match between hops.
     std::array<std::array<float, spectralBins>, spectralUnisonMax> synthPhase {};
 
     // The overlap-add buffers, circular and exactly one window long. A sample
@@ -91,12 +99,35 @@ struct SpectralVoice
 
 // The scratch one hop of synthesis needs. Shared by every voice rather than
 // held per voice: only one voice is ever inside a hop at a time, and this is
-// another forty kilobytes that would otherwise be multiplied by forty-eight.
+// another sixty kilobytes that would otherwise be multiplied by forty-eight.
 struct SpectralScratch
 {
     std::array<float, 2 * spectralFftSize> spectrumLeft {};
     std::array<float, 2 * spectralFftSize> spectrumRight {};
     std::array<float, spectralFftSize> window {};
+
+    // What the hop reads out of the sample before any member of the stack has
+    // shifted it: the magnitude where the playhead is, every bin's true phase
+    // advance, and the peaks the spectrum is divided into. None of it depends
+    // on the pitch, so it is worked out once per hop rather than once per
+    // member.
+    std::array<float, spectralBins> magnitude {};
+    std::array<float, spectralBins> advance {};
+    std::array<int, spectralBins> peak {};
+    std::array<int, spectralBins> regionLow {};
+    std::array<int, spectralBins> regionHigh {};
+    int peaks = 0;
+    // One member's peak phases for the next hop, written beside the ones being
+    // read so a region shifted onto a bin cannot overwrite the phase a later
+    // peak was about to continue from.
+    std::array<float, spectralBins> nextPhase {};
+    // How loud the region that wrote each bin of nextPhase was there. Shifting
+    // down packs regions closer together than they were analysed, so two of
+    // them can land on one bin; the bin carries the phase of whichever is
+    // louder at it. Without this, a harmonic's region overwrote the bin the
+    // harmonic below it had landed on, and that partial carried on next hop
+    // from its neighbour's phase — 3.6 dB of a bright tone lost an octave down.
+    std::array<float, spectralBins> claim {};
     bool ready = false;
 
     void prepare()
@@ -199,9 +230,88 @@ inline void spectralSynthesise(SpectralVoice& voice, const Sample& sample,
     // A transient is where the vocoder's running phase is thrown away and the
     // sample's own is taken instead. Smearing is the price of carrying phase
     // across hops, and at an attack it is the whole of what goes wrong.
-    const auto reset = settings.transients && here != voice.lastFrame
-                    && sample.transient(here) > 0.35f;
+    //
+    // The first hop a voice takes is a reset as well. Its running phases are
+    // whatever the last note left in them, and the attack the sample opens on
+    // is exactly the thing that should come out as it was recorded.
+    const auto reset = voice.lastFrame < 0
+                    || (settings.transients && here != voice.lastFrame
+                        && sample.transient(here) > 0.35f);
     voice.lastFrame = here;
+
+    // --- What the hop reads, before anything is shifted ----------------------
+    //
+    // The magnitude where the playhead is, interpolated between the two frames
+    // either side of it, and each bin's true phase advance: what the hop would
+    // give it if it sat exactly on its own centre frequency, plus however far
+    // the sample says it actually moved.
+    auto& magnitude = scratch.magnitude;
+    auto& advance = scratch.advance;
+    auto loudest = 0.0f;
+    for (int bin = 0; bin < spectralBins; ++bin)
+    {
+        const auto index = static_cast<size_t>(bin);
+        magnitude[index] = juce::jmap(blendFrames, magsHere[bin], magsNext[bin]);
+        loudest = juce::jmax(loudest, magnitude[index]);
+        const auto expected = spectralBinAdvance(bin);
+        advance[index] = expected + spectralWrap(phaseHere[bin] - phaseBack[bin] - expected);
+    }
+
+    // The peaks, and the region of the spectrum each one owns.
+    //
+    // A partial is not one bin. The analysis window spreads it across four, and
+    // the shape of that spread — its magnitudes, and the phases of the bins
+    // either side alternating against the centre — is what makes the window
+    // come back out as the window. Shift a partial bin by bin, reading each
+    // output bin from wherever b / ratio lands, and that shape is stretched an
+    // octave up and crushed an octave down: the window that comes back is the
+    // wrong width, the overlap-add no longer sums to one, and the level falls
+    // with it — 11 dB an octave down, measured on a real loop. So the spectrum
+    // is cut into regions, one per peak, each region is moved whole by a whole
+    // number of bins, and every bin in it is locked to its peak's phase
+    // (Laroche & Dolson, 1999). The shape is never touched; only where it sits
+    // and how fast its peak turns.
+    //
+    // A peak is louder than both neighbours on either side, which is the test
+    // that keeps the sidelobes of one partial from each claiming a region of
+    // their own. Anything a hundred decibels under the loudest bin is noise
+    // floor, and not worth the regions it would cut.
+    const auto floor = loudest * 1.0e-5f;
+    auto peaks = 0;
+    for (int bin = 1; bin < spectralBins - 1; ++bin)
+    {
+        const auto at = [&magnitude] (int b)
+        {
+            return b < 0 || b >= spectralBins ? 0.0f : magnitude[static_cast<size_t>(b)];
+        };
+        const auto m = at(bin);
+        if (m <= floor || m <= at(bin - 1) || m < at(bin + 1)
+            || m <= at(bin - 2) || m < at(bin + 2))
+            continue;
+        scratch.peak[static_cast<size_t>(peaks++)] = bin;
+    }
+    // A region runs from the quietest bin after the previous peak to the
+    // quietest bin before the next one, so two partials close together divide
+    // the trough between them where it is actually deepest.
+    for (int i = 0; i < peaks; ++i)
+    {
+        const auto index = static_cast<size_t>(i);
+        scratch.regionLow[index] = i == 0 ? 1 : scratch.regionHigh[index - 1] + 1;
+        if (i == peaks - 1)
+        {
+            scratch.regionHigh[index] = spectralBins - 2;
+            continue;
+        }
+        auto trough = scratch.peak[index];
+        for (int bin = scratch.peak[index] + 1; bin < scratch.peak[index + 1]; ++bin)
+            if (magnitude[static_cast<size_t>(bin)] < magnitude[static_cast<size_t>(trough)]) trough = bin;
+        scratch.regionHigh[index] = trough;
+    }
+
+    // How many bins one hop's phase advance is worth, which turns a peak's
+    // measured advance back into the frequency it is really at.
+    constexpr auto binsPerRadian = static_cast<float>(spectralFftSize)
+        / (2.0f * juce::MathConstants<float>::pi * static_cast<float>(spectralHop));
 
     const auto members = juce::jlimit(1, spectralUnisonMax, settings.unison);
     auto power = 0.0f;
@@ -217,11 +327,10 @@ inline void spectralSynthesise(SpectralVoice& voice, const Sample& sample,
 
         // This member's pitch, as a ratio against the sample's own. The shift
         // happens here, in the spectrum, rather than by reading the output
-        // faster: a bin's magnitude is taken from the bin its partial would
-        // have to come from, and its phase advances by that bin's true
-        // frequency times the ratio. That is what keeps one transform per hop
-        // whatever note is played, and what leaves SCAN free of the pitch
-        // entirely.
+        // faster: each region moves to where its peak's frequency times the
+        // ratio lands, and the peak's phase advances by its true frequency
+        // times the ratio. That is what keeps one transform per hop whatever
+        // note is played, and what leaves SCAN free of the pitch entirely.
         const auto ratio = settings.pitchRatio
             * std::pow(2.0f, offset * juce::jlimit(0.0f, 1.0f, settings.detune)
                                     * unisonSpreadSemitones / 12.0f);
@@ -230,54 +339,70 @@ inline void spectralSynthesise(SpectralVoice& voice, const Sample& sample,
         const auto panL = sourcePanLeft(memberPan) * gain;
         const auto panR = sourcePanRight(memberPan) * gain;
         auto& phases = voice.synthPhase[static_cast<size_t>(member)];
+        auto& nextPhase = scratch.nextPhase;
+        nextPhase = phases;
+        scratch.claim.fill(-1.0f);
 
-        for (int bin = 1; bin < spectralBins - 1; ++bin)
+        for (int i = 0; i < peaks; ++i)
         {
-            // Where this output bin's content comes from. Above the top of the
-            // source spectrum there is nothing to read, which is what makes a
-            // sample played far above its own pitch quietly run out of top end
-            // rather than fold back down.
-            const auto source = static_cast<float>(bin) / ratio;
-            if (source < 1.0f || source >= static_cast<float>(spectralBins - 2)) continue;
-            const auto low = static_cast<int>(source);
-            const auto frac = source - static_cast<float>(low);
+            const auto index = static_cast<size_t>(i);
+            const auto peak = scratch.peak[index];
+            // Where the partial really is, in bins, and how far the whole region
+            // has to move for it to land on the note. Rounded, because a region
+            // only moves whole: the fraction of a bin left over is carried by
+            // the phase advance below, which is what sets the frequency that
+            // actually comes out — the bins only have to be near it.
+            const auto frequency = advance[static_cast<size_t>(peak)] * binsPerRadian;
+            const auto shift = juce::roundToInt(frequency * (ratio - 1.0f));
+            const auto target = peak + shift;
+            // Above the top of the spectrum there is nothing to write, which is
+            // what makes a sample played far above its own pitch quietly run out
+            // of top end rather than fold back down.
+            if (target < 1 || target > spectralBins - 2) continue;
 
-            const auto magnitude =
-                juce::jmap(blendFrames,
-                           juce::jmap(frac, magsHere[low], magsHere[low + 1]),
-                           juce::jmap(frac, magsNext[low], magsNext[low + 1]));
-            if (magnitude <= 1.0e-7f) continue;
+            const auto peakPhase = spectralWrap(reset
+                ? phaseHere[peak]
+                : phases[static_cast<size_t>(target)] + advance[static_cast<size_t>(peak)] * ratio);
 
-            const auto normalised = static_cast<float>(bin) / static_cast<float>(spectralBins - 1);
-            const auto bounded = magnitude * spectralBinGain(normalised, settings);
-            // CUT and MIX. The filtered spectrum and the unfiltered one are the
-            // same spectrum with two different gains, so the wet/dry blend is
-            // done here on the magnitude rather than on two transforms.
-            const auto corner = juce::jlimit(0.0f, 1.0f, settings.cut);
-            const auto filtered = normalised <= corner
-                ? bounded
-                : bounded * spectralSkirt(normalised / juce::jmax(1.0e-4f, corner));
-            const auto shaped = juce::jmap(juce::jlimit(0.0f, 1.0f, settings.mix), bounded, filtered);
-            if (shaped <= 1.0e-7f) continue;
+            for (int bin = scratch.regionLow[index]; bin <= scratch.regionHigh[index]; ++bin)
+            {
+                const auto out = bin + shift;
+                if (out < 1 || out > spectralBins - 2) continue;
+                // Every bin of the region carries the peak's phase forward, so
+                // whichever of them the partial is nearest next hop continues
+                // it — unless a louder region has already landed there.
+                const auto source = magnitude[static_cast<size_t>(bin)];
+                if (source > scratch.claim[static_cast<size_t>(out)])
+                {
+                    scratch.claim[static_cast<size_t>(out)] = source;
+                    nextPhase[static_cast<size_t>(out)] = peakPhase;
+                }
+                if (source <= 1.0e-7f) continue;
+                const auto normalised = static_cast<float>(out) / static_cast<float>(spectralBins - 1);
+                const auto bounded = source * spectralBinGain(normalised, settings);
+                // CUT and MIX. The filtered spectrum and the unfiltered one are
+                // the same spectrum with two different gains, so the wet/dry
+                // blend is done here on the magnitude rather than on two
+                // transforms.
+                const auto corner = juce::jlimit(0.0f, 1.0f, settings.cut);
+                const auto filtered = normalised <= corner
+                    ? bounded
+                    : bounded * spectralSkirt(normalised / juce::jmax(1.0e-4f, corner));
+                const auto shaped = juce::jmap(juce::jlimit(0.0f, 1.0f, settings.mix), bounded, filtered);
+                if (shaped <= 1.0e-7f) continue;
 
-            // The bin's true phase advance: what the hop would give it if it
-            // sat exactly on its own centre frequency, plus however far the
-            // sample says it actually moved.
-            const auto expected = spectralBinAdvance(low);
-            const auto measured = phaseHere[low] - phaseBack[low];
-            const auto advance = expected + spectralWrap(measured - expected);
-
-            auto phase = reset ? phaseHere[low] : phases[static_cast<size_t>(bin)] + advance * ratio;
-            phase = spectralWrap(phase);
-            phases[static_cast<size_t>(bin)] = phase;
-
-            const auto re = shaped * std::cos(phase);
-            const auto im = shaped * std::sin(phase);
-            left[static_cast<size_t>(2 * bin)] += re * panL;
-            left[static_cast<size_t>(2 * bin + 1)] += im * panL;
-            right[static_cast<size_t>(2 * bin)] += re * panR;
-            right[static_cast<size_t>(2 * bin + 1)] += im * panR;
+                // Locked to the peak: the bin keeps the phase it had against the
+                // peak in the analysis, which is the window's own shape.
+                const auto phase = peakPhase + phaseHere[bin] - phaseHere[peak];
+                const auto re = shaped * std::cos(phase);
+                const auto im = shaped * std::sin(phase);
+                left[static_cast<size_t>(2 * out)] += re * panL;
+                left[static_cast<size_t>(2 * out + 1)] += im * panL;
+                right[static_cast<size_t>(2 * out)] += re * panR;
+                right[static_cast<size_t>(2 * out + 1)] += im * panR;
+            }
         }
+        phases = nextPhase;
     }
 
     // The mirrored half, which a real signal's spectrum has and the inverse

@@ -27,3 +27,7 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/forge-editor.md (a parameter dragged on a display must be listed in `displayParameters` for the layout test)
 - updated: pages/inc-edits-do-not-rebuild.md (a `Copy-Item` restore keeps the older timestamp, so MSBuild keeps the object built from a temporary edit; touch or restore by editing)
 - updated: pages/build-and-test-forge.md (pointer to that trap when proving a check can fail)
+
+## [2026-10-03] update | START and END return for ONE-SHOT and MANUAL, and spectral gets a flat display
+- updated: pages/forge-spectral.md (commit `bbc2b85` supersedes `dbd223d`'s one-pair decision: each loop mode reads exactly one marker pair, START/END for ONE-SHOT and MANUAL, the loop for the rest, and only that pair is drawn or grabbed; no value fields by user request; the pixel-rounded drag value trap in tests; new "The display" section on the square spectral well replacing the CRT tube)
+- updated: pages/forge-editor.md (`displayParameters` now lists all four spectral markers)

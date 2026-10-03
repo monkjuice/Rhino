@@ -26,12 +26,18 @@ SPECTRAL is the second oscillator MODE: M16, built on 2026-10-02 and 2026-10-03,
 
 ## Loops and markers
 
-Five loop modes are built: ONE-SHOT, FWD LOOP, REV LOOP, FWD/REV and MANUAL, in which SCAN places the playhead anywhere in the sample. Serum's TAILED is declared, so MANUAL's index never moves, but plays as FWD LOOP.
+Five loop modes are built: ONE-SHOT, FWD LOOP, REV LOOP, FWD/REV and MANUAL, in which SCAN places the playhead between START and END. Serum's TAILED is declared, so MANUAL's index never moves, but plays as FWD LOOP.
 
-Playback always spans the whole sample: `SpectralSpan` (`core/ForgeSpectral.h`) runs from frame 0 to the last frame and clamps the loop inside. The only markers are the loop's, `<osc>LoopStart` and `<osc>LoopEnd`, proportions of the sample dragged on the spectrogram: either line anywhere down its height, or the top bar to move the loop whole. The strip under the plot holds only the LOOP selector.
+**Each mode reads exactly one pair of markers**, all proportions of the sample: `<osc>Start`/`End` (defaults 0 and 1) or `<osc>LoopStart`/`LoopEnd`. `SpectralSpan` (`core/ForgeSpectral.h`) chooses by `spectralLoopReachesLoop(mode)`. In a loop mode (FWD LOOP, REV LOOP, FWD/REV, TAILED) the run is the whole sample and START/END are ignored. In ONE-SHOT and MANUAL the run is START..END, ordered and at least one frame. The loop is clamped inside the run.
 
-- **One pair, not two (commit `dbd223d`).** START/END trim markers and LS/LE fields used to sit beside the loop's pair, and switching between ONE-SHOT and FWD LOOP made the two pairs look alike. The loop's pair was kept, so ONE-SHOT and MANUAL can no longer trim to a region. `Processor::migrated` drops the retired `osc{A,B,C}Start`/`End` parameters from old presets and host state, so the format was not bumped ([Forge presets and state](forge-presets-and-state.md)).
-- **Markers appear only where they act.** `spectralLoopReachesLoop` is false for ONE-SHOT and MANUAL. In those modes the markers are not drawn and cannot be grabbed. They are hidden rather than faded, because a faint marker still looks draggable. `loopMarkersSuite` (`tests/ForgeTestsSpectral.cpp`) sends the editor mouse events to check the cursor and the plot's pixels in every mode, and drags an end and the bar.
+- **Two pairs, one shown (commits `dbd223d`, `bbc2b85`).** Showing both pairs made ONE-SHOT and FWD LOOP look alike, so `dbd223d` removed START/END, which left ONE-SHOT and MANUAL unable to trim. At the user's request `bbc2b85` restored them under the same ids and solved the confusion by showing only the pair the mode reads. A state saved between the two commits lacks them, and `Processor::migrated` adds them at their defaults ([Forge presets and state](forge-presets-and-state.md)).
+- **Only the mode's pair is drawn or grabbed.** `spectralMarkerAt` and `paintSpectralMarkers` (`src/ForgeEditorSpectral.cpp`) offer START/END in ONE-SHOT and MANUAL: accent-coloured lines with foot tabs, the outside dimmed. In the loop modes they offer the blue loop bracket instead: either end, or the top bar to move it whole. Never both, and the other pair is hidden rather than faded, because a faint marker still looks draggable. `markerParameters(SpectralMarker)` lists what each drag moves, and gestures open and close only on those.
+- **No value fields.** The strip under the plot holds only the LOOP selector. The user does not want numeric or draggable fields there; markers are set on the plot.
+- **Tested by pointer.** `loopMarkersSuite` (`tests/ForgeTestsSpectral.cpp`) sends the editor mouse events in every mode to check what is offered and drawn, and that each drag moves only its own parameters. A drag lands on a pixel, so a marker aimed at 0.15 reads something like 0.14841. To check that a later drag left it alone, compare with the value read after the first drag, not with the target.
+
+## The display
+
+A spectral oscillator draws in a flat, square well (`ui::drawSpectralWell`, `ui/ForgeDisplays.h`), not the CRT tube the wavetable keeps (`src/ForgeEditorPaint.cpp`). On the bowed tube the spectrogram's corners were cut off and its edges ran under the bezel. `Editor::spectralWellFor` spans the display's full width above the loop strip, and `spectralPlotFor` is that well inset by `ui::spectralWellWall` (1 px), so the spectrogram fills it. Tests derive the plot geometry from that constant.
 
 ## Two silent bugs
 

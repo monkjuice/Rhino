@@ -108,7 +108,8 @@ inline float unisonOffset(int slot, int count)
 // Spectral. Forge builds two of them. The numbering deliberately leaves the
 // other three room in the middle rather than appending spectral after
 // wavetable, so a preset written today names the same mode once Sample and
-// Granular arrive and nothing has to be migrated. See SPECTRAL.md.
+// Granular arrive and nothing has to be migrated. See
+// wiki/pages/forge-spectral.md.
 enum class OscMode { wavetable = 0, spectral = 4 };
 inline constexpr int oscModeCount = 5;
 
@@ -182,7 +183,8 @@ struct Oscillator
     float unison = 2.0f, detune = 0.18f, blend = 0.5f;
     float pan = 0.0f, level = 0.75f;
     // The spectral set. Meaningless while the mode is wavetable, and read by
-    // nothing in that case — see SPECTRAL.md for what each one does.
+    // nothing in that case — see wiki/pages/forge-spectral.md for what each one
+    // does.
     float scan = 1.0f, cut = 1.0f, mix = 0.0f;
     // How the playhead travels, and the two pairs of markers a mode chooses
     // between: START and END for the modes that play a stretch, the loop's

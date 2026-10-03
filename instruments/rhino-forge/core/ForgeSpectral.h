@@ -15,9 +15,9 @@
 // where in the spectrogram the voice has got to — and it is the only part that
 // is touched from the audio thread.
 //
-// Read the architecture section of SPECTRAL.md before changing any of it. The
-// three decisions it records are load-bearing and none of them is obvious from
-// the code alone.
+// Read the architecture section of wiki/pages/forge-spectral.md before changing
+// any of it. The three decisions it records are load-bearing and none of them
+// is obvious from the code alone.
 namespace rhino::forge
 {
 // What plays the sample back at its own pitch. MIDI 60, which Forge's keyboard
@@ -156,7 +156,8 @@ inline int spectralLoopPosition(int mode) noexcept
 //
 // This is heap-allocated by Core and never by value inside Voice. It is about
 // seventy kilobytes, and Core is a header-only type that the test suites
-// construct on the stack — see the per-voice state decision in SPECTRAL.md for
+// construct on the stack — see the per-voice state decision in
+// wiki/pages/forge-spectral.md for
 // why that is not negotiable.
 struct SpectralVoice
 {
@@ -425,8 +426,9 @@ inline float spectralSkirt(float ratio) noexcept
 // The gain one bin keeps, from the frequency bounds and the spectral filter.
 //
 // CUT is a corner rather than a mask curve: the drawable mask is deferred (see
-// SPECTRAL.md) and would multiply in here when it arrives, which is why this is
-// a separate function rather than three terms inlined into the bin loop.
+// wiki/pages/forge-spectral.md) and would multiply in here when it arrives,
+// which is why this is a separate function rather than three terms inlined into
+// the bin loop.
 inline float spectralBinGain(float normalised, const SpectralSettings& s) noexcept
 {
     auto gain = 1.0f;

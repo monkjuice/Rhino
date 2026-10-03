@@ -18,10 +18,10 @@
 // goes in, the rendered signal is transformed, and the peak is compared with
 // what the note and the knobs say it should be.
 //
-// The two claims worth the most are the ones in SPECTRAL.md's architecture
-// section, because neither is obvious and both would fail silently: that the
-// pitch follows the note, and that SCAN moves through the sample without
-// touching the pitch while doing it.
+// The two claims worth the most are the ones in wiki/pages/forge-spectral.md's
+// architecture section, because neither is obvious and both would fail
+// silently: that the pitch follows the note, and that SCAN moves through the
+// sample without touching the pitch while doing it.
 namespace rhino::forge::tests
 {
 namespace
@@ -162,8 +162,8 @@ void transposeSuite()
 // render the same note.
 //
 // If pitch were done by reading the output faster — the obvious implementation,
-// and the one SPECTRAL.md explains why this is not — these two would come back
-// an octave or more apart.
+// and the one wiki/pages/forge-spectral.md explains why this is not — these two
+// would come back an octave or more apart.
 void scanDoesNotChangePitchSuite()
 {
     const auto sample = sineSample(440.0);

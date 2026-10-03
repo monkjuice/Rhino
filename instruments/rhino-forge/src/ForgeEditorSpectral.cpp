@@ -264,7 +264,8 @@ float proportionAt(juce::Rectangle<int> plot, int x)
 
 // The loop in order. The engine reads a loop end set before its start as the
 // same loop the right way round (the reversed loop the manual describes is
-// deferred — see SPECTRAL.md), so the panel draws and picks it up that way too.
+// deferred — see wiki/pages/forge-spectral.md), so the panel draws and picks it
+// up that way too.
 juce::Range<float> orderedLoop(float loopStart, float loopEnd)
 {
     return {juce::jmin(loopStart, loopEnd), juce::jmax(loopStart, loopEnd)};

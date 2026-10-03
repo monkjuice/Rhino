@@ -1,8 +1,8 @@
 # Rhino project memory
 
-Rhino is a native desktop DAW: C++20, Tracktion Engine, JUCE. The application lives entirely in `native/src`. See [the root README](README.md) for what it does, [ARCHITECTURE.md](ARCHITECTURE.md) for direction, and [native/README.md](native/README.md) for implementation contracts.
+Rhino is a native desktop DAW: C++20, Tracktion Engine, JUCE. The application lives entirely in `native/src`. See [the root README](README.md) for the product and setup, and [the project wiki](wiki/index.md) for architecture, implementation contracts, decisions, guides and gotchas.
 
-> **Read [HANDOVER.md](HANDOVER.md) first if you last worked on this before commit `105cd78`.** `Session.cpp`, `StepGrid.cpp` and `Arrangement.cpp` were split into focused files in September 2026. No header, signature or call site changed, but the file you remember editing has probably moved. HANDOVER.md maps every move and lists the issues currently being inherited.
+> **If you last worked on this before commit `105cd78`, read [Keeping files small](wiki/pages/keeping-files-small.md).** `Session.cpp`, `StepGrid.cpp` and `Arrangement.cpp` were split into focused translation units in September 2026. No header, signature or call site changed, but the file you remember editing has probably moved.
 
 ## Working preferences
 
@@ -15,7 +15,7 @@ Rhino is a native desktop DAW: C++20, Tracktion Engine, JUCE. The application li
 
 Two large trees in this workspace are not Rhino's code. Reading or searching them wastes context and returns misleading results.
 
-- **`native/.deps/`** — pinned JUCE and Tracktion checkouts, 400,000+ lines, fetched by a script and ignored by git. Never grep or glob here. To understand engine behaviour, read `native/README.md` first, then the curated snapshots below.
+- **`native/.deps/`** — pinned JUCE and Tracktion checkouts, 400,000+ lines, fetched by a script and ignored by git. Never grep or glob here. To understand engine behaviour, read the relevant [wiki page](wiki/index.md) first, then use the curated snapshots through [research/SOURCE_MAP.md](research/SOURCE_MAP.md) only when prior art is explicitly needed.
 - **`research/sources/`** — read-only snapshots of Ardour, LMMS, Zrythm and Tracktion source, about 30,000 lines, kept as study material. It is tracked by git and therefore **is** searched by default, so exclude it deliberately. Reach it only through the index in [research/SOURCE_MAP.md](research/SOURCE_MAP.md), and only when prior art is explicitly wanted.
 
 Neither tree is compiled or imported. Nothing in either is ever the answer to "where is this implemented".
@@ -32,27 +32,27 @@ Application code, `native/src`:
 | Playing MIDI from the typing keyboard | `ComputerKeyboard.*`, wired in `Main.cpp`; the notes go in through `Session::sendMidiInputNote` |
 | Recording: arming a track, the count-in, and the clip a take becomes | `SessionRecording.cpp` in the model, `CountInClick.*` for the count-in click, the record button in `Main.cpp` and the record dot in `ArrangementSync.cpp` |
 | Audio clip editor: one clip's own gain, pan, pitch, fades, mute and reverse | `AudioClipPanel.*` in the UI, `SessionAudioClips.cpp` in the model |
-| Time warp: making an audio clip follow the song's tempo, its warp mode, its own tempo and its warp markers | `SessionWarp.cpp` in the model, `AudioClipWarp.cpp` in the UI. See the Time warp section of [native/README.md](native/README.md) |
-| The control bar: tempo, time signature, transport, the readout | `Main.cpp` lays it out in `layoutControlBar`; the fields you drag are `ControlBarFields.*`, the glyphs and the borderless button that wears them are `ControlBarIcons.*`, and the readout is `TransportDisplay.*`. See the shell chrome section of [native/README.md](native/README.md) |
+| Time warp: making an audio clip follow the song's tempo, its warp mode, its own tempo and its warp markers | `SessionWarp.cpp` in the model, `AudioClipWarp.cpp` in the UI. See [Time warp](wiki/pages/time-warp.md) |
+| The control bar: tempo, time signature, transport, the readout | `Main.cpp` lays it out in `layoutControlBar`; the fields you drag are `ControlBarFields.*`, the glyphs and the borderless button that wears them are `ControlBarIcons.*`, and the readout is `TransportDisplay.*`. See [App shell and control bar](wiki/pages/app-shell.md) |
 | Selecting a span of the timeline, and cut/copy/paste/duplicate on it | `ArrangementSelection.cpp` in the UI, `SessionRegion.cpp` in the model. The note editor uses the same rule in steps, in `StepGridEditing.cpp` |
 | Track groups, which are bus tracks | `SessionGroups.cpp`, `ArrangementGroups.cpp` |
 | Renaming a track card or a group band in place | `ArrangementRename.cpp` |
 | Merging audio clips into one, Ctrl+J | `SessionMerge.cpp` in the model, `Arrangement::mergeSelected` in the UI. It renders, so it is the one clip command that writes a file |
 | Auditioning a library sound | `SessionPreview.cpp` |
-| Session view (clip launcher) UI, paused, see [SESSION-VIEW.md](SESSION-VIEW.md) | `SessionView.h`, `SessionView.cpp`, `SessionViewPainter.cpp`, `SessionViewGestures.cpp` |
+| Session view (clip launcher) UI, paused, see [Session view](wiki/pages/session-view.md) | `SessionView.h`, `SessionView.cpp`, `SessionViewPainter.cpp`, `SessionViewGestures.cpp` |
 | Scenes, clip slots and launching | `SessionSlots.cpp` |
 | Mixer: track volume, pan, mute, solo, main output | `SessionMixer.cpp` |
-| Device rack and editors | `DeviceRack.*`. A device is dragged by its name bar to reorder the chain; `Session::moveDevice` does the move and refuses one that would break MIDI FX → instrument → audio FX. See the chain-order section of [native/README.md](native/README.md) |
+| Device rack and editors | `DeviceRack.*`. A device is dragged by its name bar to reorder the chain; `Session::moveDevice` does the move and refuses one that would break MIDI FX → instrument → audio FX. See [Device chain order](wiki/pages/device-chain-order.md) |
 | Browser | `BrowserPanel.*` |
 | App shell and lifecycle | `Main.cpp` |
 | Project files | `ProjectFiles.*` |
 | Playhead rendering | `Playhead.*` |
 | Built-in devices | `native/src/devices/`, split `instruments/`, `audio/`, `midi/`. Declared once in `DeviceCatalog.cpp` |
-| Eight-band EQ with a live spectrum (Rhino EQ) | The DSP is in `core/`: `EqFilter.h` (a pure header; the curve and the audio both read it), `EqEngine.*`, `SpectrumAnalyser.*`. The device is `devices/audio/RhinoEqDevice.*` and its face is `DeviceEditorPanelEq.cpp`. See the Rhino EQ section of [native/README.md](native/README.md) |
+| Eight-band EQ with a live spectrum (Rhino EQ) | The DSP is in `core/`: `EqFilter.h` (a pure header; the curve and the audio both read it), `EqEngine.*`, `SpectrumAnalyser.*`. The device is `devices/audio/RhinoEqDevice.*` and its face is `DeviceEditorPanelEq.cpp`. See [Rhino EQ](wiki/pages/rhino-eq.md) |
 | Routing one track's audio into another track's device (a sidechain) | `SessionSidechain.cpp`. The device declares four input channels; the engine's graph builder does the rest |
 | Which input a track takes, and whether you hear it | `SessionMidiInput.cpp` and `SessionAudioInput.cpp` in the model, monitoring in `SessionRecording.cpp`. On the card: the chooser and the On/Auto/Off control in `ArrangementSync.cpp` and `ArrangementGestures.cpp`, the control itself in `MonitorSelector.*` |
-| Vocoder (Rhino Vocoder) | The DSP is `core/VocoderEngine.*`. The device is `devices/audio/VocoderDevice.*` and its face is `DeviceEditorPanelVocoder.cpp`. See the Rhino Vocoder section of [native/README.md](native/README.md) |
-| Vocal pitch correction (Rhino Tune) | The DSP is in `core/`: `PitchTracker.*`, `PsolaShifter.*`, `ScaleQuantizer.h`, `AutoTuneEngine.*`. The device is `devices/audio/AutoTuneDevice.*` and its face is `DeviceEditorPanelAutoTune.cpp`. See the Rhino Tune section of [native/README.md](native/README.md) |
+| Vocoder (Rhino Vocoder) | The DSP is `core/VocoderEngine.*`. The device is `devices/audio/VocoderDevice.*` and its face is `DeviceEditorPanelVocoder.cpp`. See [Rhino Vocoder and sidechains](wiki/pages/rhino-vocoder.md) |
+| Vocal pitch correction (Rhino Tune) | The DSP is in `core/`: `PitchTracker.*`, `PsolaShifter.*`, `ScaleQuantizer.h`, `AutoTuneEngine.*`. The device is `devices/audio/AutoTuneDevice.*` and its face is `DeviceEditorPanelAutoTune.cpp`. See [Rhino Tune](wiki/pages/rhino-tune.md) |
 | Sample and content library | `library/` at the repository root, found by `native/src/core/ContentLibrary.h` |
 | Theme | `Theme.h` — the font rules, the stock-control look-and-feel, and `palette`, which is where every chrome colour in the app is named. Nothing should spell a surface, border or text colour as a hex literal |
 
@@ -92,7 +92,7 @@ Clips take their track's colour. A clip carries no colour of its own until someo
 
 A track has exactly one instrument, matching Live and Logic. Dropping an instrument replaces the one already there and removes it; the track's clips are untouched, so the pattern survives the swap. Never cache an instrument pointer across a switch. An instrument drop changes the track and its name and nothing else: it does not create a clip, and it does not change what the track is — only a MIDI track is offered one in the first place, so taking the instrument off again leaves the MIDI track it was always on. Clips are created by double-clicking a lane or pressing Ctrl+A, and only MIDI tracks can hold them.
 
-The session view and the arrangement are two presentations of one project, not two documents. Tracks, devices, the mixer and the transport are shared because both views read the same `Session`; never let a view cache a copy of that state. Selection, focus, scroll and zoom are per-view and should stay that way. Clips are the one thing that genuinely differs: slot clips belong to scenes, timeline clips belong to the arrangement, exactly as in Live. The session view is currently switched off in the shell: `sessionViewEnabled` in `Main.cpp` gates the control-bar switch and the Tab shortcut, while the model and tests keep running. Read [SESSION-VIEW.md](SESSION-VIEW.md) before touching any of it. Because the two sets of clips are separate, the only way between them is to copy: `copySlotClipToArrangement` and `copyClipToSlot` in `SessionSlots.cpp`, reached from the right-click menu in either view. Neither view should ever try to display the other's clips.
+The session view and the arrangement are two presentations of one project, not two documents. Tracks, devices, the mixer and the transport are shared because both views read the same `Session`; never let a view cache a copy of that state. Selection, focus, scroll and zoom are per-view and should stay that way. Clips are the one thing that genuinely differs: slot clips belong to scenes, timeline clips belong to the arrangement, exactly as in Live. The session view is currently switched off in the shell: `sessionViewEnabled` in `Main.cpp` gates the control-bar switch and the Tab shortcut, while the model and tests keep running. Read [Session view](wiki/pages/session-view.md) before touching any of it. Because the two sets of clips are separate, the only way between them is to copy: `copySlotClipToArrangement` and `copyClipToSlot` in `SessionSlots.cpp`, reached from the right-click menu in either view. Neither view should ever try to display the other's clips.
 
 Every source file is listed explicitly in `native/CMakeLists.txt` — nothing is globbed. A new `.cpp` needs a line there or it silently will not compile.
 

@@ -13,8 +13,9 @@
 // what a band-limited copy is, or holds a table of its own — so what is drawn
 // and what is played cannot come apart.
 //
-// Deliberately absent, and named in PLAN.md rather than left to be discovered:
-// the harmonic bars, the brush palette and the formula bar Serum also carries.
+// Deliberately absent, and recorded in wiki/pages/forge-oscillators.md rather
+// than left to be discovered: the harmonic bars, the brush palette and the
+// formula bar Serum also carries.
 namespace rhino::forge::ui
 {
 // A flat button for something that happens rather than something that is on.

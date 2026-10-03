@@ -142,11 +142,11 @@ inline std::vector<Row> oscillatorRows(const char* mode, const char* octave, con
               {warp2Mode, "MODE 2", Style::selector, nullptr, 3},
               {warp2, "WARP 2", Style::knob, nullptr, 2, warp2Mode}}},
         // The loop strip, seated along the foot of the display and there only
-        // while the oscillator is spectral. This is the decision SPECTRAL.md
-        // left open: a strip carved in both modes would have cost a wavetable
-        // oscillator part of its picture for a control it does not have, so the
-        // strip is gated by the mode and the plot — only the plot — knows it.
-        // See Row::modeBy.
+        // while the oscillator is spectral. This is the decision recorded in
+        // wiki/pages/forge-spectral.md; a strip carved in both modes would have
+        // cost a wavetable oscillator part of its picture for a control it does
+        // not have, so the strip is gated by the mode and the plot — only the
+        // plot — knows it. See Row::modeBy.
         //
         // The markers are not here — neither START and END nor the loop's two
         // ends. They are dragged on the spectrogram, where the hand can see

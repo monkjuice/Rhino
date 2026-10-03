@@ -69,9 +69,9 @@ public:
         // The spectral bank, on the heap and never inside a voice. It is about
         // three and a half megabytes across sixteen voices and three
         // oscillators, and Core is constructed on the stack by most of the test
-        // suites — see the per-voice state decision in SPECTRAL.md, and the
-        // /STACK:8388608 the test binary already needed once for a smaller
-        // version of this mistake.
+        // suites — see the per-voice state decision in
+        // wiki/pages/forge-spectral.md, and the /STACK:8388608 the test binary
+        // already needed once for a smaller version of this mistake.
         //
         // Allocated whether or not any oscillator is spectral, because the mode
         // changes while audio is running and the audio thread cannot be the one
@@ -1062,7 +1062,7 @@ private:
         const auto rateRatio = static_cast<float>(osc.sample->rate() / juce::jmax(1.0, sampleRate));
         // The note, against the pitch the sample plays back at unshifted. The
         // shift is done inside the spectrum, so this costs the same at every
-        // note — see the pitch decision in SPECTRAL.md.
+        // note — see the pitch decision in wiki/pages/forge-spectral.md.
         settings.pitchRatio = juce::jlimit(0.03125f, 32.0f,
                                            baseHz * tuningRatio(osc) / spectralRootHz * rateRatio);
         // SCAN is frames per hop, and one frame per hop at a matching rate is
@@ -1089,7 +1089,7 @@ private:
         settings.blend = juce::jlimit(0.0f, 1.0f, osc.blend);
         settings.pan = juce::jlimit(-1.0f, 1.0f, osc.pan);
         // Transient preservation is always on until the SCAN menu that would
-        // turn it off exists. See SPECTRAL.md.
+        // turn it off exists. See wiki/pages/forge-spectral.md.
         settings.transients = true;
 
         auto stackLeft = 0.0f, stackRight = 0.0f;

@@ -1,718 +1,119 @@
-# Rhino Forge
-
-Rhino Forge is Rhino's independent synthesizer project. It is a VST3 and
-standalone JUCE application that deliberately owns no Tracktion or Rhino-DAW
-types.
-
-The panel is a set of modules — three oscillators, sub, noise, a filter, four
-envelopes, six LFOs, global voicing, eight macros, the modulation matrix, the
-mixer and three effects racks — each in its own box with its own enable.
-
-The four envelopes share one module and the six LFOs share another, each showing
-one at a time: numbered cards hanging from the module's top edge say which, and
-the module's drag handle — another such card, carrying the name of whichever is
-showing — drags it onto a knob. ENV 1 is the voice's amplitude; ENV 2–4 are
-sources and nothing else, so one reaches a control through a modulation slot or
-not at all. All four run in every voice, started by the same note and released by
-the same key. An LFO set to TRIG or ENV runs inside each voice too, so a new note
-starts its own copy and leaves the notes already sounding alone; one set to OFF
-is a single free-running cycle shared by every voice and by the panel.
-
-Every envelope can also be shaped in its display. Drag the peak sideways for
-ATTACK, the middle corner sideways and vertically for DECAY and SUSTAIN, and the
-tail sideways for RELEASE. Those gestures write the same host parameters as the
-four knobs, so the knobs, automation and the drawn shape stay together.
-
-The panel is two rows of modules, with a taller signal row, over a
-seventy-six key keyboard, and it is wider than it is tall at every size it
-allows. The top row is the signal path read left to right — sub and noise, the
-three oscillators, the filter. The bottom row is what shapes it, in the same
-order: global voicing as a narrow column, then the envelopes, the LFOs and the
-macros.
-
-The keyboard was eighty-eight keys until the arpeggiator arrived and gave up
-its bottom octave for the **ARP** plate, which stands between the performance
-wheels and the keys. Every key is the width it always was: the plate is sized as
-the octave that came off, so the keys are still divided out of the span they
-had. Pitch and modulation wheels share the metal plate at the lower left.
-Drag up to raise either wheel. Pitch springs back to center with a two semitone
-range; modulation holds its position and is available as **MOD WHEEL** in the
-matrix. Host MIDI pitch bend and CC1 drive the same controls.
-
-The metal chassis follows the reference's assembled construction: interlocking
-header plates, segmented rails, a shared Sub/Noise housing and keyboard end
-plates. The plates carry no legend along their foot: the name is in the header,
-and the strip it took went to the knobs. `ui/ForgePanels.h` draws that static furniture; the
-editor caches it at the display scale, independently of the live controls.
-Resizing rebuilds that layer at the current size and full display resolution;
-headings and artwork are never temporarily downsampled or stretched from an
-earlier frame. Fractional display scales preserve the cache's physical pixels.
-
-The filter shows its own response, and that display is most of the module. The
-type selector lies along the top edge of the well and the six buttons — the
-five source routings and KEY — along its foot, each a pixel inside the frame,
-with the response between them and the frequencies named underneath it. Both
-rows are ordinary declared controls that happen to be *seated* in the display
-rather than in the body below it; see `Seat` in `ui/ForgeModule.h`. It is the
-one module built that way. The two rows those controls used to take are what
-pays for the rest: the body holds nothing but knobs now, two rows of three where
-it was two rows of two, and the display took the height they gave up — 74 pixels
-to 171 at the size the panel opens at, with the curve inside it going from 62 to
-about 105.
-
-Inside it: the band the filter is passing filled under the curve, the band it is
-taking out washed in above it, the decades ruled across the audible range with
-the log marks between them, and the corner frequency marked and named — plus the
-second corner, more faintly, on a type that has one. It is drawn from the
-transfer functions in `core/ForgeFilter.h`, which is the same header the
-engine's coefficients are worked out in, so what the display claims is being
-removed is what is being removed — including the peak resonance puts back at the
-corner.
-
-Three of the types are not linear and so have no transfer function to draw. Each
-of those draws the truest thing that can be said about it instead: unity for the
-ring modulator and the diffusor, which take nothing out, and a hold's own sinc
-for the sample and hold, which genuinely is what freezing a value does to a
-spectrum. The first two are labelled PHASE ONLY on the display, because a flat
-line means one thing on a diffusor and quite another on a low pass.
-
-No knob prints its value. A readout under every knob costs the panel a line of
-height each, whether or not anyone is reading it, and it was the readout rather
-than the knob that decided how small a macro could be drawn. The value appears
-instead where the hand already is: a bubble beside the knob being turned,
-naming the control and what it now reads, which stays for a moment after the
-gesture so a wheel notch shows something too. The steppers and the matrix's
-amount bars are unaffected — a field whose whole purpose is to be read exactly
-still shows what it holds.
-
-Five tabs in the title bar: `OSC`, `TABLE`, `MATRIX`, `MIX` and `FX`. The first
-three switch **only the oscillator bank** — the wavetable editor and the matrix
-take turns in their columns, while sub, noise and the filter hold their places
-either side. `MIX` and `FX` take the whole signal row instead, because each is a
-view of everything upstream rather than a panel that sits beside it. The lower
-row never moves.
-
-A module says which tabs it appears on by declaring a set of pages, so the
-answer can be one tab, every tab, or every tab but one — which is what sub,
-noise and the filter need. Switching tabs hides and shows components rather than
-rebuilding them, so a knob the matrix is covering is still driven by the host
-and by its own modulation slots while it is out of sight.
-
-`MIX` is nine channels across the row, in the order the signal travels: SUB,
-OSC A, OSC B, OSC C, NOISE, FILTER, BUS 1, BUS 2, MAIN. Every source channel carries
-where it goes, a send to each bus, a pan and a fader; the filter's channel adds
-a blend against what was sent into it; the busses carry a level, a pan and a
-destination. Nothing on it is a second copy of a setting — a channel's pan and
-level are the module's own parameters, shown where a balance is actually read.
-
-A channel's header enable is the source's own, exactly as Serum's mixer header
-is, which is also what gives every channel its mute. The two busses are summing
-points with a level and a place in the image; a bus can feed the other one or
-the main output, and two pointed at each other is broken by the engine rather
-than refused by the panel. Each bus carries the effects rack shown on the FX
-tab, so a send reaches the ordered chain selected by its BUS card.
-
-`FX` is three racks — one on the main output and one on each bus — chosen by the
-named cards in the module's header. A rack is eight slots and the signal runs
-down them, top to bottom. A slot holds any of eight types, the same type can sit
-in two slots, and every slot declares the same twelve controls whatever is in
-it: a type, two mode fields, six general knobs, a bypass, a mix and a level.
-
-The rack has a signal-flow list down its left side. A fixed **+ ADD EFFECT** at
-its top fills the next slot; only assigned effects occupy rows below it. Each
-row is one line of text: the effect's colour as a tick, its mark drawn no
-bigger than the name beside it, the name, and a bypass and a remove at the
-right. Dragging a row reorders the chain. Removing one closes the chain
-around it, leaving clean empty space after the final effect instead of an OFF
-placeholder. The list folds to a rail of ticks and marks when the editor needs
-the width. The expand button at the right of the rack
-header — or **Alt+F** on Windows — grows the rack through both module rows, so
-more of the chain is visible without changing the keyboard or the title bar.
-
-The list and the rack scroll separately. The list is a line per effect, so a
-full chain of eight is usually all on screen beside the first two strips. The
-rack is a fixed-height strip per effect in both views, and the wheel over it
-steps through them a strip at a time; over a knob the wheel still turns the
-knob. Clicking a row in the list brings its strip into view, and a newly added
-effect is brought into view in both. Each rack remembers both of its scroll
-positions. These are views of the same slot parameters, not copies of the rack,
-and none of the view settings are saved in a preset.
-
-What those six knobs *mean* belongs to the type, declared once in
-[core/ForgeFx.h](core/ForgeFx.h) and read three times — by the DSP, by the panel
-labelling them, and by the readout turning 0.6 into 480 milliseconds. A knob the
-type does not use is taken off the panel rather than greyed, because a reverb
-has no fourth knob at all.
-
-A slot is filled by clicking its **name plate** and choosing from the list, so a
-slot's identity and its one structural choice are the same object. Each type has
-a colour and a mark of its own — a reverb's decaying burst, a delay's fading
-repeats, a distortion's flattened peaks — and the slot wears both: on the plate,
-on every knob in the row, and lit down the left edge of the shelf it sits on. A
-rack is meant to be read by colour down its rows before a word on it is.
-
-A slot's two mode fields are drawn as whatever the choice in front of you
-actually is. Two or three named states — `PLATE / HALL`, `NORMAL / PING-PONG`,
-`OFF / PRE / POST` — are stacked, with the live one lit; the names are words of
-very different lengths, and a column gives each of them the field's full width
-rather than cropping the long ones. More than three, as with the distortion's
-eight shapes, is a name between two arrows: the arrows step, the name opens the
-list. That field shrinks its name, and the padding around its arrows, rather
-than cropping either: an ellipsis is the one thing it must never show, because
-the whole of its job is to say which choice you are on and `BRO...` does not.
-The rack's fields and the filter's are wide enough that nothing happens. The
-noise module's, on a plate two columns of twenty-four wide, is where it earns
-its keep. Each carries the label the
-type gives it, so the field says what it is choosing as well as what is chosen.
-
-A knob a mode has made meaningless greys out rather than disappearing: the
-distortion's FREQ and Q while its filter is off, an equaliser band's gain once
-that band is a pass shape. That is a different thing from a knob the type does
-not have at all, which comes off the panel entirely — "not just now" against
-"not ever, while this is in the slot".
-
-Each slot draws itself in a strip beside its mode fields: a reverb's decay
-envelope, a delay's repeats falling away across the two channels, a chorus's two
-taps swinging across one cycle, a distortion's transfer curve against the
-diagonal that no distortion would be alongside its PRE/POST LP/HP response, an equaliser's response, a filter's
-corner, a compressor's transfer curve, or a phaser's moving notches. Every one
-is computed from the arithmetic the engine actually runs — the
-distortion curve is `fxShape` called per pixel, the equaliser's is the magnitude
-of the very biquads `setBand` builds — so a display cannot claim one thing while
-the slot does another.
-
-Choosing a type also sets that type up, the way adding a module in Serum loads
-its default preset. One parameter default cannot serve eight effect types — 100% wet is
-right for an equaliser and wrong for a reverb on the main output — so what a
-type opens on lives beside the type. A type arriving from a preset or from a
-host's automation lane is left exactly as it came.
-
-That shape is what lets a rack hold anything anywhere. Naming every control of
-every type in every slot would be several hundred parameters with nearly all of
-them dead at any moment, so a host's automation lane reads "MAIN 2 KNOB 3"
-rather than "Reverb Damp" — the same trade Serum makes, for the same reason.
-
-The racks run on the summed voices rather than inside them, the way an insert
-after the synth does. A per-voice source pointed at a rack knob therefore has to
-resolve to a single value, and Core takes the loudest voice's — the voice the
-envelope and LFO displays already follow. An LFO in OFF, which free-runs and is
-shared by every voice, is the source that drives a rack cleanly.
-
-The **filter** is thirty-four types across six families, chosen from a menu
-grouped the way that menu is actually read — you know you want a ladder before
-you know which one. BASIC is the five taps of one state-variable filter: low,
-high, band, notch and peak. DUAL is twelve pairs of those in series, the first
-on CUTOFF and the second on FREQ — its own frequency on the same scale, not an
-interval, so a sweep drags one filter past a stationary other exactly as Serum's
-does. LP+HP therefore has an edge you can place at each end, and LP+NT is a low
-pass with a hole in it wherever you put it. MORPH is four sweeps through
-three responses, which is the one filter movement no corner can give you.
-ANALOG is four chains of poles with the last one's output fed back round them
-through a saturator — a four-pole transistor ladder, a three-pole diode ladder
-leaned the way a diode conducts, that ladder driven hard inside its own loop,
-and a three-pole that keeps a little of the signal past the poles so the body
-survives the resonance. RESONATORS are a tuned delay fed back, the same delay
-against the dry signal so its teeth are nulls instead of peaks, and a chain of
-all-passes. CHARACTER is the six that are filters only by where they sit: a
-vowel bank the cutoff moves the mouth of, a ring modulator, a sample and hold,
-an all-pass diffusor, a low pass with the damping taken out from under it until
-it screams, and the delay loop with the diffusor inside it.
-
-Six knobs under the display, in two rows of three: CUTOFF, RES and DRIVE are the
-filter, and the type's own control, PAN and MIX are what happens to the result —
-where it sits in the image and how much of what comes out is the filtered signal
-rather than what went in. Those last two are the same parameters the mixer's
-FILTER channel carries, reached from the module they belong to as well as from
-the strip; the channel's fader stays on the mixer, because a level belongs with
-the other levels.
-
-The fourth of those knobs carries whatever the type needs, the way a rack slot's
-knobs carry whatever is in the slot: FREQ on a dual, MORPH on a morph, FAT on
-the basic five and the clean ladders, PAIN, DAMP, STAGES, SHIFT, SPREAD, DIFF or
-FEED on the rest. Its label, its readout and its double-click all come from the
-type's own row in `filterTypes()`, so it cannot be labelled as one thing and
-rendered as another. Choosing a type from the menu moves that knob to what the
-new type opens on, but only when the type has changed what the knob is *for* —
-stepping LOW to HIGH leaves it alone, and stepping LOW to LP+HP does not.
-
-**KEY**, the fifth button under the response, makes the corner follow the note:
-an octave up takes it an octave up, measured from middle C, so the note it is
-measured from sounds exactly as it did and a patch keeps its brightness across
-the keyboard instead of getting duller with every octave. It follows the pitch
-the voice is actually sounding rather than the note number, so a glide takes the
-filter with it. Off by default, because a patch written before it existed was
-played with a corner that stayed where it was put. The display draws the corner
-the knob is holding whatever KEY is doing, since a curve cannot honestly be
-drawn for eight voices at eight pitches.
-
-LOW, HIGH and BAND are still types 0, 1 and 2, and FREQ opens at nothing, which
-is FAT off. A patch saved before any of the rest of this existed therefore loads
-on the filter it was saved on and sounds the way it did, to the bit.
-
-The **noise** module is a small oscillator rather than a hiss knob. SOURCE
-names one of nineteen generators, grouped into six families the way the
-filter's thirty-four types are, and wears the same field the filter's TYPE and
-the warp modes wear: the arrows step through the list and the name opens it.
-
-COLOUR is the six spectra — WHITE flat across the band, PINK falling at 3 dB an
-octave, BROWN at 6, BLUE rising at 3 and VIOLET at 6, and GREY, which is
-weighted to *sound* flat rather than to measure flat. ANALOG is five noise
-floors: POLY and POLY HP, the same soft-topped vintage polysynth hiss with and
-without its body, MONO's focused low-mid grit, TAPE's lifted top and slow
-breathing wobble, and HUM's mains fundamental over a quiet floor. DIGITAL is
-BRIGHT's resonant sheen, BIT held and quantised at once, and ALPHA's shift
-register. INHARMONIC is METAL, five resonators at ratios that are deliberately
-not a harmonic series, so what rings is a struck object rather than a note.
-ORGANIC is VINYL — a surface, the dirt on it and the rumble under both — and
-WIND, a band swept by two slow cycles beating against each other. TRANSIENT is
-GEIGER's countable clicks and CRACKLE's twenty-five times as many.
-
-Every one of them is generated. None is a recording, and the analog five are
-named for what they sound like rather than for the hardware whose character
-they borrow.
-
-Two orders are in play and it is worth knowing which is which. The **stored**
-order is the enum, which is appended to and never reordered, so a preset keeps
-naming the source it named — which is why GEIGER is third, among the colours,
-and a host's automation lane reads it there. The **shown** order is by family,
-and it is what the field steps through and what the menu groups. They meet at
-`noiseSourceAt` and `noiseSourcePosition` and nowhere else.
-
-TONE tilts whichever source is selected about 1 kHz, dark one way and bright
-the other, and is genuinely out of the way at twelve o'clock: the two halves of
-the spectrum are scaled against each other, so at nothing they add back up to
-the generator untouched. STEREO is decorrelation and not width — at nothing
-both channels are the same samples, so the module sums to mono without
-cancelling anything, and at the top they share no state at all. The correlation
-between them falls off as the square root of what is left, at constant power.
-PAN, LEVEL and where the module is routed are the mixer's, where they have been
-since the MIX tab, and the module shows the same parameters the mixer's NOISE
-strip does.
-
-The state is **per voice**: every note hisses on its own, so a chord thickens
-rather than doubling one stream shared out. The generators are seeded from a
-counter reset with the engine, so two notes are different and the same phrase
-rendered twice is the same file.
-
-A source is **a colour through a character**. White, pink and brown are the
-three spectra every other source is built from, and they are the slow part —
-brown's pole sits at 8 Hz — so those three run every sample whatever is
-selected. What sits on top of them is fast, so only the live one runs plus the
-one being faded out of. That split is what lets the list grow: nineteen sources
-all running at once would be nineteen times the arithmetic to hear one of them,
-where nineteen sources sharing three warm colours is two character stages
-however long the list gets. A stage is reset as it comes in, which costs
-nothing because what feeds it never went cold; METAL is the one that audibly
-blooms, over about the time its own resonators take to ring up.
-
-The crossover is six milliseconds, the same ramp the module's own power switch
-uses, because hiss arriving at full level in one sample is a click whichever
-source it is.
-
-The DSP is [core/ForgeNoise.h](core/ForgeNoise.h), which depends on nothing of
-Forge's for the reason `ForgeFilter.h` does not: the engine renders from it and
-`tests/ForgeTestsNoise.cpp` measures what came back — the five slopes fitted
-through six octave bands each, the correlation between the channels, where
-METAL's second partial sits against where an octave would be, and the step at
-every one of the thirty-six source changes it renders against the steps either
-side of it. Nothing in that file asks the filter what its slope is.
-
-What each source has to be multiplied by to arrive at white's level is measured
-rather than derived, by rendering a few seconds of each at prepare: nearly all
-of them are white through something, and what that something does to the level
-depends on the poles it was just given, on where a difference of two decays
-happens to peak, and on how hard a saturator is being leaned on. It depends on
-nothing but the sample rate, so it is done once and shared — a second plugin
-instance pays nothing, and neither do the Cores a test run builds.
-
-Each oscillator carries two **warp** stages under its knobs, applied in the
-order they are drawn: a mode chosen from a menu grouped the way the Serum
-manual groups it, and a knob setting how deep that mode goes. Thirty-eight modes
-across nine families — a window sync, nine ways of bending where in the cycle
-the table is read, three pitch-tracked filters on the waveform itself, eight
-waveshapers, and then four kinds of cross-modulation from elsewhere in the
-voice: FM on the carrier's frequency, linear or exponential; PD on its phase;
-AM and RM on its level. The arrows beside a field step through the list without
-opening it, and the foot of the menu swaps the two stages over.
-
-FM and PD are separate families and not two names for one thing. FM moves the
-rate the cycle runs at, so a deep setting bends the note and linear clamps at
-zero rather than running backwards — the traditional FM every classic digital
-synth had. PD moves where in the cycle the table is read, so the note stays
-exactly where it was however deep it goes. The three sources are the other
-oscillator, the sub and the noise, each of which must be switched on though its
-level may be all the way down; PD adds a fourth, a stage reading its own output.
-
-Every mode leaves the wave exactly as it was at the depth it calls neutral, so a
-mode can be chosen and then opened up rather than the other way round; four of
-them go both ways and are neutral at twelve o'clock, and a double-click on the
-depth returns it to whichever of the two its mode means. The oscillator's own
-display draws the warp it is running — but only the modes that are honestly a
-picture of a table, which is the same line the manual draws when it says the 2D
-view shows Sync, Alt Warp and Distortion. Both depths are modulation
-destinations; the modes are not, because sweeping a list of twenty-six unrelated
-modes is a stutter rather than a modulation.
-
-Forge does not oversample, so a warp that brightens a wave instead reads a
-duller band-limited copy of the table: each mode declares how much extra
-bandwidth it is about to ask for, and the oscillator picks its copy for a note
-that much higher. That reduces aliasing rather than removing it, and the modes
-that put a step in the waveform — FLIP and QUANTIZE — are where it still shows.
-
-Each oscillator reads a wavetable of its own. `TABLE` draws on it: freehand or
-straight lines on the selected frame, a strip of every frame below it, and add,
-duplicate, remove, init, normalise and undo. A table can also be loaded from an
-ordinary `.wav` of single-cycle frames — ten factory tables ship in
-[tables/](tables/) — or dropped on the editor. A table that has been drawn on or
-loaded travels inside the preset and inside host state, so a patch stays
-self-contained when it moves between machines.
-
-The editor saves and loads versioned `.forgepreset` files; host project state
-remains independent and continues to use the VST3 state API.
-
-## Spectral oscillators
-
-An oscillator is not only a wavetable. The field along the top edge of its
-display is its **mode**, and the second mode is **spectral**: a sample analysed
-into frames of frequency and resynthesised by a phase vocoder, so it can be
-scanned, transposed and filtered in the spectrum rather than in the waveform.
-
-The mode swaps three of the module's six knobs. A wavetable oscillator carries
-POSITION, DETUNE and BLEND; a spectral one carries **SCAN**, **CUT** and
-**MIX** in the same cells, with UNISON, PAN, LEVEL and both warp stages shared.
-Detune and blend go on driving the stack while they are off the face, which is
-also what Serum does with them in this mode.
-
-SCAN is how fast and which way the playhead moves through the spectrogram, and
-it is genuinely independent of the note: the pitch shift happens inside the
-spectrum rather than by reading the output faster, so a sample can be frozen at
-one point in its own time and still played chromatically. CUT is the spectral
-filter's corner and MIX balances the filtered spectrum against the unfiltered
-one.
-
-Click the display to load a sample — any format JUCE can decode, mixed to mono,
-normalised to full scale and analysed on the message thread. The display then
-draws its spectrogram, and hovering over it names the file. A sample recorded at
-another rate plays at its own pitch and speed.
-
-The **loop strip** along the foot of a spectral display chooses how the playhead
-travels — **ONE-SHOT**, **FWD LOOP**, **REV LOOP**, **FWD/REV** or **MANUAL**, in
-which SCAN is the playhead's position rather than its speed. The strip is there
-only while the oscillator is spectral; a wavetable oscillator keeps the whole of
-its picture tube, while a spectral one draws its spectrogram across a flat
-rectangle the full width of the display. The markers are on the spectrogram,
-and only those the mode uses are shown. **START** (green) is where a note
-begins. In ONE-SHOT the sample plays from START to **END** (green) once. In the
-loop modes the loop is a blue bracket — two lines joined by a bar along the top
-— and is the region that repeats: FWD LOOP plays from START to the loop's end
-and jumps back to its start, REV LOOP plays from START to the loop's end and
-then goes round the loop backwards, and FWD/REV plays from START into the loop
-and bounces between its ends. START and the loop are separate settings; move
-START up to the loop's start to begin on the loop itself. END plays no part in
-a loop mode and is not shown there. Drag a line to move that marker, or the bar
-to move the loop whole; where the loop's start sits on START, grab the bar for
-the loop and the foot tab for START. MANUAL shows no markers, only the
-playhead, standing wherever SCAN puts it in the whole sample whether or not a
-note is playing. Clicking anywhere else on the picture still opens the sample
-menu.
-
-A spectral sample travels inside the preset and inside host state, exactly as a
-drawn table does, so a patch carrying one stays self-contained when it moves
-between machines. It rides as FLAC rather than as the float the analysis reads,
-which is the difference between a preset you can send and one you cannot.
-
-The LO/HI frequency markers and the drawable filter mask are what is still
-missing. [SPECTRAL.md](SPECTRAL.md) is the plan, the milestones and the
-reasoning behind the engine.
-
-## LFO tables
-
-Each of the six LFOs starts on **Default**, which contains the existing sine,
-triangle, saw, square and sample and hold shapes. The name below the graph
-opens the shape menu; the arrows beside it step through the basic and saved
-shapes. Drag a point to make a **Custom** table; double-click empty space to add
-a point, double-click a point to remove it, or right-click an interior point to
-remove it. Hold Alt while dragging to snap to the grid. The two numbered fields
-below the graph set columns and rows independently, from 2 to 32. Click an
-arrow to change by one, drag a number vertically or use the wheel for larger
-changes, and double-click a number to restore 8.
-
-A table has two kinds of node, and they do different jobs. A solid dot is a
-**position**: where the line passes through. The hollow ring in each gap between
-two dots is that segment's **curve**, and it rides the line it bends, so a
-straight segment shows its ring sitting exactly on it. Drag a ring to bend the
-segment; double-click or right-click one to straighten it again.
-
-Both axes of a ring count. Its height is how far the segment stands off its
-straight line, and how far along the segment it sits is where that stand-off is
-measured — so the same height a quarter of the way along and three quarters
-along are different bends, leaning towards the end the ring is nearest. That is
-why the ring moves between its two dots rather than only up and down. A ring
-stays inside the middle four fifths of its segment, where it is always
-grabbable and where a point under the same pointer never loses a grab meant for
-it.
-
-The bend is a parabola standing off the chord, which costs two multiplies on a
-path that runs per sample per voice per LFO, and which bows a level segment as
-readily as a sloped one — a time warp, the more usual choice, cannot move a
-level segment at all. It may also push past the two dots it joins, and a bend
-hard enough to leave the plus and minus one the LFO promises is flattened
-against that rail. The graph draws the same function the voice reads, so what
-rails on screen is what rails in the sound. Adding a point to a bent segment, or
-removing one between two, straightens what is left: a parabola does not cut into
-two parabolas, and an approximation would be quietly wrong.
-
-The **Default** shapes are node sets too, and as small as each shape allows: a
-triangle is its two ends and its corner, a saw is its two ends, a square is the
-four that its step needs, and a sine is a triangle's three nodes with both
-segments bowed to the limit — so its rings land on the peak and the trough,
-where pulling one is exactly the gesture it looks like. Dots and rings on a
-Default shape are its own, not a row of samples taken off a formula, which is
-what lets you take hold of one where it stands: drag anything and you get those
-same nodes as a **Custom** table rather than a fresh approximation of what was
-already on screen. It is also the only definition of these shapes — the voice
-and the panel read the one table, so neither can drift from the other.
-
-Two of them are not the formula they replaced, and both differences are the
-structure showing through. A square's step is a riser one thousandth of a cycle
-wide, because a table's points have to keep going forwards in x; that is under
-half a pixel on the graph and shorter than the block an LFO turns over in at any
-rate one can be set to. A sine is a pair of parabolas, which stand about 0.056
-proud of a true sine at their widest and read about 3% hotter in RMS. Its peaks,
-its zero crossings and its slope through them are exact, and it is smooth across
-every join including the cycle boundary. Sample and hold is unchanged: a step
-drawn afresh each cycle is not a curve, so it has no corners to offer, and its
-table is the level line the panel draws the held step along.
-
-The name menu loads and saves `.forgelfo` tables. The save dialog starts in
-`Documents/Rhino Forge/LFO Tables`, and tables in that folder appear under
-**Saved shapes**. Custom tables also travel inside Forge presets and host
-project state, so the project does not depend on the saved file.
-
-## The arpeggiator
-
-The **ARP** plate beside the keys does two things, exactly as Serum's does: the
-circle switches the arpeggiator on, and the rest of the plate puts its settings
-up. They are drawn differently — a lit lamp against a raised face — because an
-arp running with its settings away and an arp on screen that is switched off are
-both ordinary states.
-
-Its settings are an **overlay, not a tab**. They stand on ENV and LFO, so
-opening them covers the modulators and leaves GLOBAL and the macros either side
-on screen: a patch is adjusted at the macros while the arp runs, and the
-oscillators and the filter are what you want to keep watching while a pattern
-plays. The five tabs are unaffected, and the arp opens over whichever of them is
-showing. It is declared as a page all the same — `Page::arp`, which is never
-what a tab is set to — because "which modules does this show" is the same
-question for it as for a tab, and answering it the same way is what keeps the
-no-two-modules-overlap check honest.
-
-Six panes share one plate, in the order the manual groups them: the arp's own
-switch and launch quantisation, the PATTERN, the TRANSPOSE range, PLAYBACK,
-RETRIGGER and VELOCITY. The first is called ARP rather than GLOBAL, which is the
-manual's name for it, because Forge already has a GLOBAL standing immediately
-beside it.
-
-Eighteen shapes, and **one list serves twice**: the order the held keys are
-played in, and the order the transposition stages are visited in. Serum's SHAPE
-field and its transpose-range menu offer the same vocabulary and mean the same
-thing by it — an order to visit a set of things in — so `arpOrder` is called
-once for the chord and once for the stages, and knows which it is doing neither
-time.
-
-The arp is **upstream of every voice rather than inside one**, so it is not part
-of `Core` and `Core` knows nothing about it. It is fed the notes the host and
-the panel's keyboard send, and it hands notes back through two callbacks — which
-is what lets the whole of it be tested against a pair of lambdas with no
-`Processor`, no `Core` and no audio device, so what the arp did is a list of
-note numbers rather than a waveform to be measured.
-
-Still to come, and each its own piece of work: the twelve launchable arp slots
-per bank with their `EDIT ALL` and their bank presets, and the custom pattern
-editor. `LAUNCH QUANT` is already real without the slots — it holds a started
-arp to the next division of the host's bar.
-
-It takes inspiration from the fast, visual sound-design workflow of modern
-hybrid synths. It does not reuse Serum code, assets, names, presets, or UI.
-
-**[PLAN.md](PLAN.md) is the build-out plan**: what is done, what is next, and
-which decisions are already settled. Read it before changing the synth.
-
-## Binding a MIDI controller
-
-Right-click any control and choose **MIDI learn**, then move a knob or hit a pad
-on the keyboard. That control is now driven by it. Right-click again to forget
-it; the menu names what is bound in its header, so a control says what is on it
-before it offers to change anything.
-
-Learning **replaces at both ends**. The knob lets go of whatever it drove
-before, so one knob never quietly does two things, and the control lets go of
-whatever drove it, because a control with two masters jumps when either one
-moves and nothing on the panel would say which. That is what the menu means when
-it offers to replace what is already there.
-
-A pad and a key are the same message, so there is no pad handling and no device
-detection — no table of known hardware anywhere in this. What a press does is
-read off the control it is pointed at: a **switch** is flipped and left flipped,
-and a **knob** is held up for as long as the pad is down and put back on
-release, as far as the velocity of the hit. Moving the same pad from one to the
-other needs nothing said.
-
-A bound message is taken out of the stream before anything else sees it, so a
-pad bound to a switch does not also sound a note and a bound CC 1 stops reaching
-the mod wheel. The exception is a note **release**, which is always passed
-through: a pad bound while it was already held has a note sounding that was
-never consumed, and swallowing its note-off would hang that note forever.
-
-Out of the box, **CC 21–28 drive the eight macros** — the numbers the General
-MIDI convention leaves free and most controllers ship sending. That is written
-on a machine with no bindings file and never over a binding that already exists,
-so a default taken off stays off.
-
-The bindings live in `%APPDATA%\Rhino Forge\MidiMap.xml`, not in the preset and
-not in the plugin state. A binding describes the hardware on the desk rather
-than the sound: in a preset it would let a patch from another machine silently
-repoint your knobs, and in the plugin state every project would remember a
-keyboard that may not be plugged in. One file serves every instance, which is
-also why `Processor::setMidiMapFile` exists — the tests redirect it rather than
-writing over the bindings of whoever runs them.
-
-Two threads meet here, and the split is the whole design. `core/ForgeMidiMap.h`
-is a flat array of atomics indexed by channel and number, so the audio thread
-can ask "is this bound" without locking or allocating. It never writes a
-parameter — writing one means telling the host, which takes locks — so a bound
-message is pushed onto a lock-free queue and applied by the Processor's own
-60 Hz timer in `ForgeProcessorMidi.cpp`. The timer is the Processor's and not
-the editor's, or a knob would stop working the moment the window was closed.
-
-**In the standalone, tick the keyboard first.** JUCE auto-enables MIDI inputs on
-iOS and Android only; on Windows and macOS the default is off, so Options →
-Audio/MIDI Settings → *Active MIDI inputs* has to be ticked once. It is then
-remembered in `Rhino Forge.settings`. In a host there is nothing to do — the
-host routes MIDI in.
-
-## Layout
-
-| File | Holds |
-| --- | --- |
-| `core/ForgeCore.h` | The voice engine. No AudioProcessor, UI, state tree, filesystem, or allocation in `renderSample`. Four headers under it, listed at the top of it. |
-| `core/ForgeArp.h` | The arpeggiator: the shapes, the clock, and the notes a held chord becomes. Stands in front of Core rather than inside it, and emits through callbacks so it can be driven without either. |
-| `core/ForgeMidiMap.h` | Which knob or pad drives which control. A flat array of atomics so the audio thread can ask without locking, plus the queue that carries a bound message to the thread allowed to write a parameter. Knows nothing of the Processor, so the table and the learn are tested by calling them. |
-| `core/ForgeFx.h` | What an effects rack is: the types, what each one's controls are called, and what a normalised knob means in each. No DSP. |
-| `core/ForgeFxDsp.h` | The racks, rendered. A slot carries every type's state, sized once at `prepare`, because a type changes while audio is running. |
-| `core/ForgeFilter.h` | The filter: the thirty-four types, what each holds between samples, the one function that runs any of them, and the response the panel draws. Depends on nothing of Forge's, so the curve and the audio are read out of one file. |
-| `core/ForgeNoise.h` | The noise module: the nineteen sources and the six families they group into, the three colours the rest are built from, the state one voice holds, the tilt after them and the decorrelation between the channels. Depends on nothing of Forge's either, so what a source *is* is written down once and measured rather than asserted. |
-| `ui/ForgeFxDisplay.h` | What each effect draws of itself, from the same functions that render it. |
-| `ui/ForgeFilterVisuals.h` | The window the filter's response is drawn in: the axes, the grid, the fill and the corner markers. The arithmetic is `core/ForgeFilter.h`'s. |
-| `src/ForgeProcessor.*` | What the host calls, and what it hands the engine. `ForgeParameters.cpp` declares every parameter; `ForgeProcessorState.cpp` carries state, presets and table files. `ForgeProcessorMidi.cpp` is the message thread's half of MIDI learn. |
-| `ui/ForgeLayout.h` | What modules exist, what each contains, and where it sits. Pure geometry and declaration; four headers, listed at the top of it. |
-| `ui/ForgeVisuals.h` | The knob look and the drawing primitives. Decides nothing about placement; seven headers, listed at the top of it. |
-| `ui/ForgePanels.h` | Static metal housings, chassis rails, hardware and decorative lettering. |
-| `src/ForgeEditor.*` | Walks the declared modules and builds the components. One class across nine files, by what each does. |
-| `tests/` | One file per area, one CTest case each. See **Tests** below. |
-
-`ForgeCore.h`, `ForgeLayout.h` and `ForgeVisuals.h` each include the headers
-they were split into and list them at the top, so every existing include still
-works and nothing had to move. Include the narrowest one that answers the
-question — a test that draws nothing, or a header that only needs to know what
-a `Module` is, should not be pulling in every knob look Forge has.
-
-The engine splits into headers and never into translation units. `renderSample`
-is compiled into the processor and stays inlined there; Release has no
-link-time code generation, so a call across a `.cpp` boundary on the audio path
-would be a real one. The panel is the opposite case and splits into translation
-units freely: a frame spends its time in Direct2D, not in call overhead.
-
-`src/ForgeEditor*.cpp` are one `Editor` defined across several translation
-units, the way `Session` and `Arrangement` already are in the DAW: no header
-change, no call site change, and a new file needs only a line in
-`CMakeLists.txt`. `ForgeEditorInternal.h` carries what used to be the
-anonymous namespace and is private to those files.
-
-Adding a control means declaring the parameter in `src/ForgeParameters.cpp` and
-naming it in a module in `ui/ForgeModules.h`. The layout test fails if the two
-disagree in either direction.
-
-## Tests
-
-One binary, one file per area, one CTest case per file. The area's name is the
-argument that selects it and the case that runs it, so an afternoon on the
-effects is `tests/ForgeTestsFx.cpp`, `--fx` and `ctest -R forge_fx` — one
-translation unit rebuilt and one second of checks — while a milestone is plain
-`ctest`, which runs the lot.
+<p align="center">
+  <img src="ui/assets/forge_logo_lockup.png" width="520" alt="Rhino Forge">
+</p>
+
+<h1 align="center">Rhino Forge</h1>
+
+<p align="center"><strong>Wavetables, samples, motion, and modulation—forged into one instrument.</strong></p>
+
+<p align="center">
+  <a href="#build-forge-on-windows">Build Forge</a> ·
+  <a href="../../README.md">Rhino DAW</a> ·
+  <a href="../../wiki/pages/forge.md">Forge wiki</a>
+</p>
+
+> [!IMPORTANT]
+> Rhino Forge is in **mid-alpha**. It currently ships as a source-built Windows VST3 and standalone app. Installers for Windows and macOS are planned with Rhino's first production release, targeted for **December 2026–January 2027**.
+
+Rhino Forge is a polyphonic wavetable and spectral synthesizer built for movement. Three oscillators, a playable noise engine, deep per-voice modulation, flexible mixing, and three effects racks live in one resizable instrument with a fast, direct workflow.
+
+Forge is an independent JUCE plugin. Use it inside Rhino or another VST3 host, or open the standalone app when you want to design sounds without a DAW.
+
+## Start with a waveform. End somewhere new.
+
+### Three oscillators, two ways to create
+
+Each oscillator can run as a band-limited wavetable instrument or resynthesize a sample in spectral mode. Draw and import wavetables, scan through frames, stack unison voices, tune each source independently, and chain two warp stages for shapes that move far beyond the original material.
+
+Spectral mode separates pitch from time: play a loaded sample chromatically while scanning, freezing, reversing, or looping through its spectrum.
+
+### Modulation that stays playable
+
+Four envelopes, six LFOs, eight macros, velocity, key tracking, aftertouch, and performance controls route through an eight-slot modulation matrix. Drag a source onto a control, set the depth, and keep working; visual feedback follows the same values the audio engine uses.
+
+### A filter built for character
+
+Thirty-four filter types cover state-variable shapes, dual filters, morphing responses, analogue ladders, resonators, combs, vowels, ring modulation, sample-and-hold, and diffusion. The response display is calculated from the same filter code that processes the sound.
+
+### Route, mix, and finish inside the patch
+
+The mixer gives the sub, three oscillators, noise, and filter their own level, pan, routing, and sends. Two effect buses and the main output each carry an ordered eight-slot rack with reverb, delay, chorus, distortion, EQ, filter, compression, and phaser.
+
+### Play patterns, not just notes
+
+Forge's arpeggiator turns held chords into musical motion with multiple directions, scale-aware intervals, swing, gate, repeats, retriggering, octave movement, and launch quantization. MIDI learn maps hardware knobs and pads directly to the panel.
+
+## Use Forge three ways
+
+| Format | Best for | Output |
+| --- | --- | --- |
+| Standalone | Sound design and playing without a DAW | `Standalone/Rhino Forge.exe` |
+| VST3 | Any compatible Windows host | `VST3/Rhino Forge.vst3` |
+| Inside Rhino | A native part of the Rhino writing workflow | Discovered from the development build automatically |
+
+## What to expect from the alpha
+
+The core synth, wavetable editor, spectral oscillator, modulation, mixer, effects racks, arpeggiator, presets, MIDI learn, and host automation are working and covered by focused DSP and UI tests.
+
+The factory preset library is still small, parts of the spectral workflow remain under construction, and a custom arpeggiator pattern editor and sample-based noise sources are not yet available. Preset compatibility may change before the production release.
+
+## Build Forge on Windows
+
+Forge uses Rhino's pinned JUCE checkout, so setup begins at the repository root.
+
+### 1. Install the prerequisites
+
+- [Git](https://git-scm.com/download/win) and [Git LFS](https://git-lfs.com/)
+- [Python 3.12 or newer](https://www.python.org/downloads/windows/)
+- [CMake 3.24 or newer](https://cmake.org/download/)
+- [Visual Studio 2022](https://visualstudio.microsoft.com/vs/) with **Desktop development with C++** and a Windows SDK
+
+### 2. Clone and build
+
+Open PowerShell and run:
+
+```powershell
+git lfs install
+git clone https://github.com/monkjuice/Rhino.git
+Set-Location Rhino
+python native/scripts/fetch-dependencies.py
+cmake -S instruments/rhino-forge -B instruments/rhino-forge/build -G "Visual Studio 17 2022" -A x64
+cmake --build instruments/rhino-forge/build --config Release --parallel 2 -- /p:BuildInParallel=false
+```
+
+`BuildInParallel=false` avoids a Visual Studio project-resolution failure while compilation still uses two jobs.
+
+### 3. Run the standalone app
+
+```powershell
+& ".\instruments\rhino-forge\build\RhinoForge_artefacts\Release\Standalone\Rhino Forge.exe"
+```
+
+To play from a MIDI controller, open **Options → Audio/MIDI Settings** and enable the input once. A plugin host handles MIDI routing for the VST3.
+
+### 4. Use the VST3
+
+The plugin bundle is built at:
+
+```text
+instruments/rhino-forge/build/RhinoForge_artefacts/Release/VST3/Rhino Forge.vst3
+```
+
+Rhino finds this development bundle automatically. For another host, add its parent folder to the host's VST3 search paths or install the bundle in the standard system VST3 location after testing it.
+
+## Verify a development build
+
+Build and run all Forge test areas:
 
 ```powershell
 cmake --build instruments/rhino-forge/build --config Release --target RhinoForgeTests --parallel 2 -- /p:BuildInParallel=false
 ctest --test-dir instruments/rhino-forge/build -C Release -j 8 --output-on-failure
+```
+
+Run one area while iterating—for example, the effects rack:
+
+```powershell
 ctest --test-dir instruments/rhino-forge/build -C Release -R forge_fx --output-on-failure
 ```
 
-No two areas share a `Processor`, so `-j 8` is safe, and it is what makes the
-full run about five seconds rather than seventeen.
-
-The arpeggiator's area is mostly not a render at all: `Arp` emits through
-callbacks, so its shapes and its clock are checked against a pair of lambdas
-that write note numbers into a vector, and only the last suite goes through a
-`Processor` — because the one thing lambdas cannot check is that the notes reach
-the voices.
-
-`RhinoForgeTests --list` prints the areas. Three places hold the registry and
-are edited together: `tests/ForgeSuites.h` declares each area's entry point,
-the table in `tests/ForgeTestMain.cpp` maps a name to a function, and
-`forge_test_areas` in `CMakeLists.txt` turns each name into a case. Nothing
-self-registers and nothing is globbed.
-
-Checks, parameter access, rendering a note and measuring what came back are
-shared in `tests/ForgeTestSupport.*`; the FFT that settles pitch and timbre is
-in `tests/ForgeTestSpectrum.*`. An area that draws nothing includes neither
-`ForgeLayout.h` nor `ForgeVisuals.h`, which is most of why a one-file rebuild
-costs what it does.
-
-## Build on Windows
-
-First fetch the parent project's dependencies, then configure this directory:
-
-```powershell
-cmake -S instruments/rhino-forge -B instruments/rhino-forge/build -G "Visual Studio 17 2022" -A x64
-cmake --build instruments/rhino-forge/build --config Release --parallel 2 -- /p:BuildInParallel=false
-ctest --test-dir instruments/rhino-forge/build -C Release --output-on-failure
-```
-
-The MSBuild property serializes project-reference resolution to avoid the
-toolchain's silent `GetTargetPath` failure; compilation still uses two jobs.
-
-The standalone build at
-`build/RhinoForge_artefacts/Release/Standalone/Rhino Forge.exe` is the quickest
-way to look at a change without a host.
-
-For a windowless visual review, the test binary also accepts
-`--snapshot output.png [width height [OSC|TABLE|MATRIX|MIX|FX|ARP [scale [preset.forgepreset]]]]`.
-`ARP` is not one of the tabs — it presses the plate beside the keyboard, which
-is the only way in, so the review takes the same route a hand does.
-A preset is opened before the editor is built, which is the only way to
-review anything the panel draws out of the patch rather than out of the
-layout — a modulation ring, a macro's destination count, the name under it.
-It captures the actual editor, including its controls and cached metal layer.
-`--profile [width height]` reports what a frame costs instead, and
-`--render out.raw [blocks]` writes a deliberately busy patch as raw interleaved
-floats. None is a CTest case; they live in `tests/ForgeTestTools.cpp` and
-`tests/ForgeTestRender.cpp`.
-
-`--render` is how a change to the engine is shown to have changed nothing: hash
-its output, build the other revision beside this one, hash that, and compare.
-The same trick works on the panel with `--snapshot`, which writes a PNG of the
-real editor. Both were what settled that splitting these files was free.
-
-Every Forge source compiles against `src/ForgePch.h`, which holds JUCE and the
-standard library and deliberately no Forge header. It roughly halves what a
-translation unit costs, which is what makes one file per area cheaper than one
-file for everything: twenty translation units now build in less time than
-three did before it.
-
-The VST3 is emitted below `build/RhinoForge_artefacts/Release/VST3`. Install or
-copy it only after validating it in a host; do not add generated plugin bundles
-to Git.
-
-Rhino's development build discovers that bundle directly, then instantiates it
-through Tracktion Engine's standard external-plugin wrapper. The editor shown in
-Rhino is this plugin's own editor; Forge has no dependency on Rhino or Tracktion.
+The full architecture, DSP decisions, module behavior, test tools, and build gotchas live in the [Forge wiki](../../wiki/pages/forge.md). Useful starting points include the [engine](../../wiki/pages/forge-engine.md), [oscillators](../../wiki/pages/forge-oscillators.md), [modulation](../../wiki/pages/forge-modulation.md), [effects](../../wiki/pages/forge-mixer-and-fx.md), and [build guide](../../wiki/pages/build-and-test-forge.md).

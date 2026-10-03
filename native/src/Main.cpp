@@ -208,10 +208,10 @@ static juce::String formatMemory(juce::uint64 bytes)
     return juce::String(juce::roundToInt(megabytes)) + " MB";
 }
 
-// Session view development is paused; see SESSION-VIEW.md for what exists, what
-// is missing, and how to pick it up. The view and its model are still built and
-// tested, but nothing in the shell reaches them. Setting this to true restores
-// the control-bar switch and the Tab shortcut.
+// Session view development is paused; see wiki/pages/session-view.md for what
+// exists, what is missing, and how to pick it up. The view and its model are
+// still built and tested, but nothing in the shell reaches them. Setting this
+// to true restores the control-bar switch and the Tab shortcut.
 static constexpr bool sessionViewEnabled = false;
 
 // The clip and device panes float over the foot of the arrangement, so the

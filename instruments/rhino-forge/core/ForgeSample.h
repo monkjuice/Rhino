@@ -17,7 +17,8 @@
 //
 // Nothing here is called from renderSample except the const readers at the
 // bottom. Building one allocates and runs an FFT per frame; that happens on the
-// message thread, before the sample is ever handed to a voice. See SPECTRAL.md.
+// message thread, before the sample is ever handed to a voice. See
+// wiki/pages/forge-spectral.md.
 namespace rhino::forge
 {
 // The analysis window, and how far it moves between frames.
@@ -169,7 +170,8 @@ public:
     }
 
     // How much of a transient this frame is, 0..1, against the sharpest one in
-    // this sample. What the TRANSIENTS option tests. See SPECTRAL.md.
+    // this sample. What the TRANSIENTS option tests. See
+    // wiki/pages/forge-spectral.md.
     float transient(int frame) const noexcept
     {
         if (flux.empty()) return 0.0f;

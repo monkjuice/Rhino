@@ -3,9 +3,11 @@
 #include "../../ArrangementGrid.h"
 #include "../../InfoHints.h"
 #include "../../Playhead.h"
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <stdexcept>
+#include <vector>
 
 namespace rhino
 {
@@ -108,6 +110,52 @@ int runArrangementGeometryTest()
             if (marks < timeTickDivisions && times * pixelsPerBar / (marks * 2) >= timeTickMinimumPixels)
                 throw std::runtime_error("And are as fine as that spacing allows");
         }
+
+        // Inside a bar the ruler steps along one chain of spans in counts, each
+        // dividing the one before it, so 4/4 is cut at the half bar and 6/8 at
+        // the dotted quarter, and an odd bar drops straight to its counts.
+        {
+            const auto chainIs = [&close](double counts, std::vector<double> expected)
+            {
+                std::vector<double> chain;
+                for (; counts >= rulerFinestSpan; counts = finerRulerSpan(counts))
+                    chain.push_back(counts);
+                return chain.size() == expected.size()
+                    && std::equal(chain.begin(), chain.end(), expected.begin(), close);
+            };
+            if (!chainIs(4.0, {4.0, 2.0, 1.0, 0.5, 0.25}))
+                throw std::runtime_error("A 4/4 bar halves to beats and then to sixteenths");
+            if (!chainIs(6.0, {6.0, 3.0, 1.0, 0.5, 0.25}))
+                throw std::runtime_error("A 6/8 bar is cut at the dotted quarter before the eighth");
+            if (!chainIs(7.0, {7.0, 1.0, 0.5, 0.25}))
+                throw std::runtime_error("An odd bar drops straight to its counts");
+            if (!chainIs(24.0, {24.0, 12.0, 6.0, 3.0, 1.0, 0.5, 0.25}))
+                throw std::runtime_error("Whole bars of 3/4 halve down to one bar before its counts");
+        }
+        for (const auto countsPerBar : {2, 3, 4, 5, 6, 7, 12})
+            for (double pixelsPerCount = 1.0; pixelsPerCount < 2048.0; pixelsPerCount *= 1.37)
+            {
+                const auto labels = rulerLabelSpan(pixelsPerCount, countsPerBar, barNumberMinimumPixels);
+                if (labels < 1.0 || !close(std::fmod(countsPerBar, labels), 0.0))
+                    throw std::runtime_error("Count labels are a whole number of counts that divides the bar");
+                if (labels < countsPerBar && labels * pixelsPerCount < barNumberMinimumPixels)
+                    throw std::runtime_error("Count labels are at least a bar number's minimum apart");
+                if (labels > 1.0 && finerRulerSpan(labels) * pixelsPerCount >= barNumberMinimumPixels)
+                    throw std::runtime_error("And label as finely as that spacing allows");
+
+                const auto ticks = rulerTickSpan(pixelsPerCount, labels);
+                if (ticks < rulerFinestSpan || ticks > labels || !close(std::fmod(labels, ticks), 0.0))
+                    throw std::runtime_error("Ruler marks divide the span between two labels");
+                if (ticks < labels && ticks * pixelsPerCount < rulerTickMinimumPixels)
+                    throw std::runtime_error("Ruler marks never crowd past their minimum spacing");
+                if (ticks > rulerFinestSpan && finerRulerSpan(ticks) * pixelsPerCount >= rulerTickMinimumPixels)
+                    throw std::runtime_error("And mark as finely as that spacing allows");
+            }
+        // Labels a few bars apart are marked at the bars between them before
+        // anything finer, so a mark never lands off a bar line it could have
+        // been on.
+        if (!close(rulerTickSpan(16.0 / 4.0, 4.0 * 4.0), 4.0))
+            throw std::runtime_error("Labels four bars apart are marked at each bar");
         // The Info View is written to by the hint that follows the pointer and
         // by the status line that reports what just happened. Which of them
         // wins is the whole of how the panel behaves, and both of its rules

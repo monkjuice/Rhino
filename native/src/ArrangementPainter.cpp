@@ -61,10 +61,11 @@ int Arrangement::paintBarBands(juce::Graphics& g, double firstBeat, double lastB
 void Arrangement::paintBarNumbers(juce::Graphics& g, double firstBeat, double lastBeat)
 {
     const auto barLength = std::max(0.25, session.beatsPerBar());
-    const auto timeOfBar = [this, barLength](double bar)
+    const auto countsPerBar = std::max(1, session.timeSignature().numerator);
+    const auto countLength = barLength / countsPerBar;
+    const auto timeOfBeat = [this](double beat)
     {
-        return session.edit->tempoSequence
-            .toTime(tracktion::core::BeatPosition::fromBeats((bar - 1.0) * barLength)).inSeconds();
+        return session.edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(beat)).inSeconds();
     };
     const auto firstBar = std::max(1.0, std::floor(firstBeat / barLength) + 1.0);
     const auto lastBar = std::floor(lastBeat / barLength) + 1.0;
@@ -72,22 +73,47 @@ void Arrangement::paintBarNumbers(juce::Graphics& g, double firstBeat, double la
     // A tempo ramp makes bars unequal in pixels, so the step is picked from the
     // width of the first one on screen and the labels simply thin out or crowd
     // a little where the tempo moves.
-    const auto pixelsPerBar = std::max(0.01f, xFor(timeOfBar(firstBar + 1.0)) - xFor(timeOfBar(firstBar)));
+    const auto pixelsPerBar = std::max(0.01f, xFor(timeOfBeat(firstBar * barLength))
+                                                  - xFor(timeOfBeat((firstBar - 1.0) * barLength)));
+    const auto pixelsPerCount = pixelsPerBar / countsPerBar;
     const auto step = barLabelStep(pixelsPerBar, barNumberMinimumPixels);
+    // Bar numbers more than a bar apart leave no room for counts, so only a
+    // ruler numbering every bar is asked whether it can cut the bar finer.
+    const auto labelSpan = step > 1.0 ? step * countsPerBar
+                                      : rulerLabelSpan(pixelsPerCount, countsPerBar, barNumberMinimumPixels);
+    const auto tickSpan = rulerTickSpan(pixelsPerCount, labelSpan);
+    const auto marksPerLabel = std::max(1, juce::roundToInt(labelSpan / tickSpan));
     const auto start = firstLabelledBar(firstBar, step);
     const auto right = static_cast<float>(getWidth()) - 14.0f;
-    int painted = 0;
-    for (auto bar = start; bar <= lastBar + step && painted < 512; bar += step)
+    g.setFont(uiFont(10.0f));
+    // Counted from a labelled bar rather than from the edge of the view, so
+    // which marks are labelled is a property of the music and does not
+    // shuffle as the arrangement is scrolled.
+    for (int mark = 0; mark < 4096; ++mark)
     {
-        const auto x = xFor(timeOfBar(bar));
+        const auto counts = tickSpan * mark;
+        const auto x = xFor(timeOfBeat((start - 1.0) * barLength + counts * countLength));
         if (x < headerWidth - 1.0f) continue;
         if (x > right) break;
-        ++painted;
+        if (mark % marksPerLabel != 0)
+        {
+            g.setColour(palette::border.brighter(0.12f));
+            g.drawVerticalLine(static_cast<int>(x), lanesTop - rulerMinorTick, lanesTop);
+            continue;
+        }
+        // Every span on the chain is a whole number of counts or a power-of-two
+        // fraction of one, so counts is exact and a label on a bar line is
+        // never read as the last count of the bar before.
+        const auto barIndex = std::floor(counts / countsPerBar);
+        const auto count = juce::roundToInt(counts - barIndex * countsPerBar);
+        const auto bar = static_cast<juce::int64>(start + barIndex);
+        const auto opensBar = count == 0;
         g.setColour(palette::border.brighter(0.2f));
-        g.drawVerticalLine(static_cast<int>(x), rulerTop + 2.0f, lanesTop);
-        g.setColour(palette::textDim);
-        g.setFont(uiFont(10.0f));
-        drawSnappedText(g, juce::String(static_cast<juce::int64>(bar)),
+        g.drawVerticalLine(static_cast<int>(x), opensBar ? rulerTop + 2.0f : lanesTop - countTick, lanesTop);
+        // A count reads quieter than the bar it belongs to, so the bar numbers
+        // still carry the eye along the timeline.
+        g.setColour(opensBar ? palette::textDim : palette::textDim.withMultipliedAlpha(0.7f));
+        drawSnappedText(g, opensBar ? juce::String(bar) : juce::String(bar) + "." + juce::String(count + 1),
                         {static_cast<int>(x) + 4, static_cast<int>(rulerTop), 64, 24});
     }
 }

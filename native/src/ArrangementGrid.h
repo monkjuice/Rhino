@@ -181,6 +181,53 @@ inline double firstLabelledBar(double bar, double step)
     return std::floor((bar - 1.0) / step) * step + 1.0;
 }
 
+// Between the bar numbers. A bar wide enough to hold more than its own number
+// is labelled at its counts as well - 1.2, 1.3, 1.4 in 4/4 - with short marks
+// between the labels. A count is the note the time signature counts in, a
+// quarter in 4/4 and an eighth in 6/8, so the ruler reads the way the
+// signature is written rather than in the engine's quarter-note beats.
+//
+// Every span the ruler steps by, in counts, sits on one chain where each span
+// divides the one before it: whole bars halve down to one bar, a bar halves
+// while it stays a whole number of counts and then drops to a single count,
+// and a count halves twice more. 4/4 runs 4, 2, 1, 1/2, 1/4; 6/8 runs 6, 3, 1,
+// so its bar is cut at the dotted quarter before the eighth; 7/8 goes straight
+// from the bar to its counts. A mark is therefore always a division of the
+// labels either side of it.
+inline double finerRulerSpan(double counts)
+{
+    const auto whole = std::round(counts);
+    if (counts > 1.0 && std::abs(counts - whole) < 0.000001)
+        return static_cast<long long>(whole) % 2 == 0 ? whole / 2.0 : 1.0;
+    return counts * 0.5;
+}
+
+// A sixteenth in 4/4. Finer marks than that are a texture, not a reading.
+inline constexpr double rulerFinestSpan = 0.25;
+inline constexpr double rulerTickMinimumPixels = 10.0;
+
+// Counts from one label to the next once the bar numbers are a bar apart: the
+// finest span on the chain, and never finer than one count, that keeps
+// minimumPixels between two labels. The whole bar when nothing finer fits.
+inline double rulerLabelSpan(double pixelsPerCount, int countsPerBar, double minimumPixels)
+{
+    auto span = static_cast<double>(std::max(1, countsPerBar));
+    while (span > 1.0 && finerRulerSpan(span) * pixelsPerCount >= minimumPixels)
+        span = finerRulerSpan(span);
+    return span;
+}
+
+// Counts from one mark to the next between labels a given span apart: as far
+// down the chain as the marks stay rulerTickMinimumPixels apart. The label
+// span itself when not even one mark fits between two labels.
+inline double rulerTickSpan(double pixelsPerCount, double labelSpan)
+{
+    auto span = labelSpan;
+    while (span > rulerFinestSpan && finerRulerSpan(span) * pixelsPerCount >= rulerTickMinimumPixels)
+        span = finerRulerSpan(span);
+    return span;
+}
+
 inline bool isGridLine(double beat, double interval)
 {
     if (interval <= 0.0) return false;

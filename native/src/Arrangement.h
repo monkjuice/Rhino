@@ -204,6 +204,8 @@ private:
     // The ruler reads in bars whatever the snap grid is set to, so its
     // numbering is stepped by what stays legible at this zoom rather than
     // by the grid division. Changing the grid must not renumber the bars.
+    // Zoomed in far enough, it labels the counts inside a bar as well (1.2,
+    // 1.3) and marks the divisions between labels, by the same rule.
     void paintBarNumbers(juce::Graphics&, double firstBeat, double lastBeat);
     // The same bars read as wall-clock times, in the strip above the horizontal
     // scrollbar. That strip is the main row's own lane: the row takes no clips,
@@ -541,6 +543,10 @@ private:
     // The marks on that row, kept short: they are a reading aid under the
     // times, not a continuation of the grid above them.
     static constexpr float timeMajorTick = 5.0f, timeMinorTick = 3.0f;
+    // The bar ruler's marks below a bar line, which runs the ruler's full
+    // height: a labelled count rises half of it, an unlabelled mark a few
+    // pixels, both standing on the lanes.
+    static constexpr float countTick = 12.0f, rulerMinorTick = 4.0f;
     // A group's members are pushed right by groupIndent, and the gap that opens
     // up is filled with the bus's colour; the bus itself keeps that column for
     // its disclosure arrow. The step in the left edge is what tells a card

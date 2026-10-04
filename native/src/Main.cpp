@@ -16,6 +16,7 @@
 #include "ControlBarIcons.h"
 #include "InfoHints.h"
 #include "SystemUsage.h"
+#include "tests/Pattern/DeviceRackTest.h"
 #include <cmath>
 #include <functional>
 #include <stdexcept>
@@ -1861,6 +1862,16 @@ public:
         logger = std::make_unique<juce::FileLogger>(logFile, "Rhino debug log", 512 * 1024);
         juce::Logger::setCurrentLogger(logger.get());
         juce::Logger::writeToLog("Rhino: log started at " + logFile.getFullPathName());
+        // A component snapshot has no audio path, so it stays available while
+        // another Rhino instance owns the Windows audio backend. The normal
+        // workflow test below still prepares audio for its render scenarios.
+        if (args == "--arp-snapshot")
+        {
+            Session::setCommandLineTestMode(true);
+            setApplicationReturnValue(runArpSnapshotTest());
+            quit();
+            return;
+        }
         if (args == "--self-test" || args == "--pattern-test" || args == "--arrangement-test"
             || args == "--arrangement-geometry-test")
         {

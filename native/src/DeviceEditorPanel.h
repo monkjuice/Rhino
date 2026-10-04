@@ -61,6 +61,10 @@ private:
     // drawing live in DeviceEditorPanelArp.cpp.
     void layoutArp();
     void paintArp(juce::Graphics&);
+    void ensureArpControls();
+    void styleArpControls();
+    juce::ComboBox* arpChoiceFor(int parameter) const;
+    int arpParameterForComponent(const juce::Component*) const;
     // Rhino Tune's face is its own translation unit, DeviceEditorPanelAutoTune.cpp:
     // it is a meter, a keyboard and two choosers on top of the knobs, and it is
     // the only face that needs the device itself rather than its parameters.
@@ -110,6 +114,13 @@ private:
     juce::OwnedArray<juce::Label> parameterLabels, parameterValues;
     juce::OwnedArray<juce::Slider> parameterSliders;
     juce::OwnedArray<juce::TextButton> parameterAutomation;
+    // Arp is deliberately not a generic knob grid: musical choices read as
+    // choices, and Hold is one direct on/off action. These controls still
+    // write the device's ordinary automatable parameters.
+    juce::OwnedArray<juce::ComboBox> arpChoiceControls;
+    std::vector<int> arpChoiceParameters;
+    juce::TextButton arpHold {"Hold"};
+    bool arpControlsCreated = false;
     juce::Label title;
     juce::TextButton power;
     juce::Rectangle<int> contentArea, visualArea;

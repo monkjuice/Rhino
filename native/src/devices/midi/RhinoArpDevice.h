@@ -44,6 +44,11 @@ public:
     juce::String getPluginType() override { return xmlTypeName; }
     juce::String getVendor() override { return "Rhino"; }
     juce::String getSelectableDescription() override { return getName(); }
+    // The rack editor reads the same names the parameter text uses. Keeping
+    // the choices here prevents the editor from becoming a second list that
+    // can fall out of step with the persisted parameter values.
+    static int parameterChoiceCount(int parameterIndex);
+    static juce::String parameterChoiceName(int parameterIndex, int choice);
     BusLayout getBusses() const override { return {}; }
     void initialise(const te::PluginInitialisationInfo&) override;
     void deinitialise() override {}

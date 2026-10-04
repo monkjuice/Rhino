@@ -16,13 +16,6 @@ constexpr std::array<const char*, 3> scaleNames {"Chromatic", "Major", "Minor"};
 constexpr std::array<int, 7> majorScale {0, 2, 4, 5, 7, 9, 11};
 constexpr std::array<int, 7> minorScale {0, 2, 3, 5, 7, 8, 10};
 
-template <size_t Size>
-juce::String choiceName(float value, const std::array<const char*, Size>& names)
-{
-    return names[static_cast<size_t>(juce::jlimit(0, static_cast<int>(Size) - 1,
-                                                  juce::roundToInt(value)))];
-}
-
 int positiveModulo(int value, int divisor)
 {
     const auto remainder = value % divisor;
@@ -34,6 +27,45 @@ int floorDivide(int value, int divisor)
     const auto quotient = value / divisor;
     return value < 0 && value % divisor != 0 ? quotient - 1 : quotient;
 }
+}
+
+int RhinoArpDevice::parameterChoiceCount(int parameterIndex)
+{
+    switch (parameterIndex)
+    {
+        case styleParameter: return static_cast<int>(styleNames.size());
+        case rateParameter: return static_cast<int>(rateNames.size());
+        case stepsParameter: return 9;
+        case offsetParameter: return 16;
+        case grooveParameter: return static_cast<int>(grooveNames.size());
+        case retriggerParameter: return static_cast<int>(retriggerNames.size());
+        case intervalParameter: return static_cast<int>(intervalNames.size());
+        case repeatsParameter: return 9;
+        case rootParameter: return static_cast<int>(rootNames.size());
+        case scaleParameter: return static_cast<int>(scaleNames.size());
+        default: return 0;
+    }
+}
+
+juce::String RhinoArpDevice::parameterChoiceName(int parameterIndex, int choice)
+{
+    const auto count = parameterChoiceCount(parameterIndex);
+    const auto selected = juce::jlimit(0, std::max(0, count - 1), choice);
+    switch (parameterIndex)
+    {
+        case styleParameter: return styleNames[static_cast<size_t>(selected)];
+        case rateParameter: return rateNames[static_cast<size_t>(selected)];
+        case stepsParameter:
+        case offsetParameter: return juce::String(selected);
+        case grooveParameter: return grooveNames[static_cast<size_t>(selected)];
+        case retriggerParameter: return retriggerNames[static_cast<size_t>(selected)];
+        case intervalParameter: return intervalNames[static_cast<size_t>(selected)];
+        case repeatsParameter: return selected == 0 ? juce::String::fromUTF8("\xe2\x88\x9e")
+                                                    : juce::String(selected);
+        case rootParameter: return rootNames[static_cast<size_t>(selected)];
+        case scaleParameter: return scaleNames[static_cast<size_t>(selected)];
+        default: return {};
+    }
 }
 
 RhinoArpDevice::RhinoArpDevice(te::PluginCreationInfo info) : Plugin(info)
@@ -68,27 +100,33 @@ RhinoArpDevice::RhinoArpDevice(te::PluginCreationInfo info) : Plugin(info)
     rootParam = addParam("root", "Root", {0.0f, 11.0f, 1.0f});
     scaleParam = addParam("scale", "Scale", {0.0f, 2.0f, 1.0f});
 
-    styleParam->valueToStringFunction = [] (float value) { return choiceName(value, styleNames); };
-    rateParam->valueToStringFunction = [] (float value) { return choiceName(value, rateNames); };
+    styleParam->valueToStringFunction = [] (float value)
+    { return parameterChoiceName(styleParameter, juce::roundToInt(value)); };
+    rateParam->valueToStringFunction = [] (float value)
+    { return parameterChoiceName(rateParameter, juce::roundToInt(value)); };
     gateParam->valueToStringFunction = [] (float value) { return juce::String(juce::roundToInt(value)) + "%"; };
     distanceParam->valueToStringFunction = [this] (float value)
     {
         const auto unit = juce::roundToInt(scaleParam->getCurrentValue()) == 0 ? " st" : " sd";
         return juce::String(juce::roundToInt(value)) + unit;
     };
-    stepsParam->valueToStringFunction = [] (float value) { return juce::String(juce::roundToInt(value)); };
-    offsetParam->valueToStringFunction = [] (float value) { return juce::String(juce::roundToInt(value)); };
-    grooveParam->valueToStringFunction = [] (float value) { return choiceName(value, grooveNames); };
+    stepsParam->valueToStringFunction = [] (float value)
+    { return parameterChoiceName(stepsParameter, juce::roundToInt(value)); };
+    offsetParam->valueToStringFunction = [] (float value)
+    { return parameterChoiceName(offsetParameter, juce::roundToInt(value)); };
+    grooveParam->valueToStringFunction = [] (float value)
+    { return parameterChoiceName(grooveParameter, juce::roundToInt(value)); };
     holdParam->valueToStringFunction = [] (float value) { return value >= 0.5f ? "On" : "Off"; };
-    retriggerParam->valueToStringFunction = [] (float value) { return choiceName(value, retriggerNames); };
-    intervalParam->valueToStringFunction = [] (float value) { return choiceName(value, intervalNames); };
+    retriggerParam->valueToStringFunction = [] (float value)
+    { return parameterChoiceName(retriggerParameter, juce::roundToInt(value)); };
+    intervalParam->valueToStringFunction = [] (float value)
+    { return parameterChoiceName(intervalParameter, juce::roundToInt(value)); };
     repeatsParam->valueToStringFunction = [] (float value)
-    {
-        return value < 0.5f ? juce::String::fromUTF8("\xe2\x88\x9e")
-                            : juce::String(juce::roundToInt(value));
-    };
-    rootParam->valueToStringFunction = [] (float value) { return choiceName(value, rootNames); };
-    scaleParam->valueToStringFunction = [] (float value) { return choiceName(value, scaleNames); };
+    { return parameterChoiceName(repeatsParameter, juce::roundToInt(value)); };
+    rootParam->valueToStringFunction = [] (float value)
+    { return parameterChoiceName(rootParameter, juce::roundToInt(value)); };
+    scaleParam->valueToStringFunction = [] (float value)
+    { return parameterChoiceName(scaleParameter, juce::roundToInt(value)); };
 
     styleParam->attachToCurrentValue(style);
     rateParam->attachToCurrentValue(rateIndex);

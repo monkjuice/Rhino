@@ -130,19 +130,53 @@ void runPatternDeviceRackTest()
     auto* arpPanel = chainView.devicePanels.getFirst();
     require(arpPanel->preferredWidth() >= 800, "Rhino Arp has room for its full dedicated face");
     arpPanel->setSize(arpPanel->preferredWidth(), DeviceEditorPanel::standardHeight);
-    std::vector<juce::Rectangle<int>> arpKnobs;
+    std::vector<juce::Rectangle<int>> arpControls;
+    int arpKnobCount = 0, arpChoiceCount = 0;
+    juce::ComboBox* arpRoot = nullptr;
+    juce::ComboBox* arpScale = nullptr;
+    juce::TextButton* arpHold = nullptr;
     for (auto* child : arpPanel->getChildren())
     {
-        require(arpPanel->getLocalBounds().contains(child->getBounds()),
-                "Every Rhino Arp control stays inside its face");
+        if (child->isVisible())
+            require(arpPanel->getLocalBounds().contains(child->getBounds()),
+                    "Every visible Rhino Arp control stays inside its face");
         if (child->isVisible() && dynamic_cast<juce::Slider*>(child) != nullptr)
-            arpKnobs.push_back(child->getBounds());
+        {
+            ++arpKnobCount;
+            arpControls.push_back(child->getBounds());
+        }
+        if (child->isVisible())
+            if (auto* choice = dynamic_cast<juce::ComboBox*>(child))
+            {
+                ++arpChoiceCount;
+                arpControls.push_back(choice->getBounds());
+                if (choice->getTooltip().startsWith("Root:")) arpRoot = choice;
+                if (choice->getTooltip().startsWith("Scale:")) arpScale = choice;
+            }
+        if (child->isVisible())
+            if (auto* button = dynamic_cast<juce::TextButton*>(child); button != nullptr && button->getName() == "Hold")
+            {
+                arpHold = button;
+                arpControls.push_back(button->getBounds());
+            }
     }
-    require(arpKnobs.size() == RhinoArpDevice::parameterCount,
-            "Rhino Arp's dedicated face exposes every automatable control");
-    for (size_t i = 0; i < arpKnobs.size(); ++i)
-        for (auto j = i + 1; j < arpKnobs.size(); ++j)
-            require(!arpKnobs[i].intersects(arpKnobs[j]), "Rhino Arp controls do not overlap");
+    require(arpKnobCount == 2 && arpChoiceCount == 10 && arpHold != nullptr
+            && arpControls.size() == RhinoArpDevice::parameterCount,
+            "Rhino Arp uses two continuous knobs, choice menus, and one Hold switch");
+    require(arpRoot != nullptr && arpScale != nullptr && arpRoot->getNumItems() == 12
+            && arpScale->getNumItems() == 3 && arpRoot->getText() == "G#" && arpScale->getText() == "Minor",
+            "Rhino Arp exposes its root and scale as named dropdowns");
+    for (size_t i = 0; i < arpControls.size(); ++i)
+        for (auto j = i + 1; j < arpControls.size(); ++j)
+            require(!arpControls[i].intersects(arpControls[j]), "Rhino Arp controls do not overlap");
+    arpRoot->setSelectedId(1, juce::sendNotificationSync);
+    arpHold->onClick();
+    const auto arpParameters = session.deviceParameters(0, session.deviceSlots(0).front().pluginIndex);
+    require(arpParameters[RhinoArpDevice::rootParameter].valueText == "C"
+            && arpParameters[RhinoArpDevice::holdParameter].valueText == "Off",
+            "Rhino Arp's dropdown and Hold switch write ordinary automatable parameters");
+    arpRoot->setSelectedId(9, juce::sendNotificationSync);
+    arpHold->onClick();
     const auto arpSnapshot = arpPanel->createComponentSnapshot(arpPanel->getLocalBounds());
     require(arpSnapshot.getWidth() == arpPanel->getWidth()
             && arpSnapshot.getHeight() == DeviceEditorPanel::standardHeight,
@@ -185,5 +219,20 @@ void runPatternDeviceRackTest()
     const auto liveBefore = tune->liveMode();
     tunePanel->mouseDown(press(*tunePanel, {static_cast<float>(tunePanel->getWidth() - 162), 12.0f}));
     require(tune->liveMode() != liveBefore, "Rhino Tune's LIVE toggle still answers a click on the name row");
+}
+
+int runArpSnapshotTest()
+{
+    try
+    {
+        runPatternDeviceRackTest();
+        return 0;
+    }
+    catch (const std::exception& error)
+    {
+        juce::Logger::writeToLog("Rhino Arp snapshot: " + juce::String(error.what()));
+        std::fprintf(stderr, "%s\n", error.what());
+        return 1;
+    }
 }
 }

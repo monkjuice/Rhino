@@ -9,7 +9,7 @@ updated: 2026-10-03
 
 # Rhino's build targets
 
-`native/src` builds as three CMake targets so that editing one part does not rebuild the others. Each has its own explicit source list; nothing is globbed. Long form: the *Layout* section of `native/README.md` (partly stale, see below).
+`native/src` builds as three CMake targets so that editing one part does not rebuild the others. Each has its own explicit source list; nothing is globbed.
 
 | Target | Source list | Links | Holds |
 | --- | --- | --- | --- |
@@ -32,7 +32,7 @@ Inside `RhinoCore` only `ContentLibrary` includes JUCE; the DSP classes use the 
 ## Pitfalls
 
 - A new `.cpp` needs a line in one of the three lists and then an explicit configure: `CMAKE_SUPPRESS_REGENERATION ON` means `cmake --build` never re-runs CMake, so the file silently never compiles ([A new source file needs an explicit CMake configure](cmake-does-not-reconfigure.md)).
-- `native/README.md`'s *Layout* table still says `RhinoCore` holds only `ContentLibrary` and the pitch-correction DSP; it also holds `EqEngine`, `SpectrumAnalyser`, `VocoderEngine` and `SystemUsage` (checked 2026-10-03).
+- `RhinoCore` holds `ContentLibrary`, the pitch-correction DSP, `EqEngine`, `SpectrumAnalyser`, `VocoderEngine` and `SystemUsage` (checked 2026-10-03).
 
 ## Related
 

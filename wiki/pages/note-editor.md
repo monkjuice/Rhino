@@ -29,11 +29,9 @@ The marquee anchors in steps and pitch, not pixels: a drag past an edge scrolls 
 ## Pitfalls
 
 - **Size.** Its row-addressed caches (512 steps × 48 pitch rows) make one `StepGrid` about 200 KB; in a test scenario create it with `std::make_unique` ([A CTest SegFault may be a stack overflow](stack-overflow-reports-as-segfault.md)).
-- **It is welded to `Session`.** The four files reach into `Session` 101 times (counted 2026-10-03), and `Session.h` pulls in Tracktion. That is why Forge's arp pattern editor (`instruments/rhino-forge/PLAN.md` M13c, not started) cannot simply reuse it: the plan is first to extract a Session-free note-grid header, as `ClipGeometry.h` was.
+- **It is welded to `Session`.** The four files reach into `Session` 101 times (counted 2026-10-03), and `Session.h` pulls in Tracktion. That is why Forge's planned arp pattern editor cannot simply reuse it: first extract a Session-free note-grid header, as `ClipGeometry.h` was.
 - **The clip can vanish under it.** `Session::repairPatternClip` is the single place that re-points the editor when its clip is deleted ([Hold ids, not pointers](ids-not-pointers.md)).
 - **Octave names.** Middle C reads C3 (`drumLaneName` in `StepGridInternal.h` and the painter), matching Live and Forge; the two must change together.
-
-`README.md` ("Create A Pattern") still describes a span dragged out "with S held"; that held key was retired and a plain drag sweeps (checked 2026-10-03).
 
 ## Related
 

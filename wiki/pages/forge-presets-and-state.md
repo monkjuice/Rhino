@@ -21,7 +21,7 @@ Not in it: view settings (tab, the bank on show, envelope zoom, FX scroll) and M
 
 ## A format version is a hard boundary
 
-`Processor::loadPreset` refuses any `formatVersion` but `presetFormatVersion` (3) with "This preset was saved by a different version of Forge." Format 1 described the synth M1 stripped back; format 3 came with the third oscillator, whose reordered destination list gave format-2 slot indices new meanings ([Stored indices are append-only](append-only-stored-indices.md)). An additive change does not bump it: wavetable nodes arrived inside format 2 (`HANDOVER-M9B.md`), at the accepted cost that an older build loads such a preset and ignores the table.
+`Processor::loadPreset` refuses any `formatVersion` but `presetFormatVersion` (3) with "This preset was saved by a different version of Forge." Format 1 described the synth stripped back; format 3 came with the third oscillator, whose reordered destination list gave format-2 slot indices new meanings ([Stored indices are append-only](append-only-stored-indices.md)). An additive change does not bump it: wavetable nodes arrived inside format 2, at the accepted cost that an older build loads such a preset and ignores the table.
 
 ## Within a version, reconcile
 
@@ -33,7 +33,6 @@ Not in it: view settings (tab, the bank on show, envelope zoom, FX scroll) and M
 
 ## Stale and missing
 
-- `PLAN.md` (M1, "Decisions locked in") and `HANDOVER-M9B.md` still say format 2.
 - The only bundled preset, `presets/aLiLBitDark.forgepreset`, is format 1, referenced by nothing and refused. The M8 factory set was never authored.
 - A hand-written preset for `--snapshot` needs `formatVersion="3"`, or the tool exits 1 without a PNG ([Seeing the UI without taking the screen](headless-ui-snapshots.md)).
 
@@ -43,4 +42,3 @@ Not in it: view settings (tab, the bank on show, envelope zoom, FX scroll) and M
 - [Forge oscillators and wavetables](forge-oscillators.md)
 - [Forge spectral oscillator](forge-spectral.md)
 - [Hosting Forge in Rhino](forge-hosting.md)
-- [Where Forge's docs disagree with its code](forge-doc-drift.md)

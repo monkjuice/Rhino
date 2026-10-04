@@ -29,8 +29,6 @@ Which input a track takes, and whether you hear it, are properties of the **trac
 
 The engine keeps the mode on the *device*, so two tracks sharing one input get the strongest mode either asked for (On beats Auto beats Off), which never silences a track that asked to hear itself. Different inputs give each track exactly what its card says. A mode change reapplies routing, except during a take or count-in: `setMonitorMode` restarts the transports and would cut the recording in half.
 
-`README.md`'s monitoring paragraph is stale: there is no longer one setting for the audio input, nor an **Edit > Monitor the audio input** item (checked 2026-10-03). Long form: *Audio From* and *MIDI From* in `native/README.md`.
-
 ## Related
 
 - [Recording and the count-in](recording.md)

@@ -9,7 +9,7 @@ updated: 2026-10-03
 
 # Pointer and selection rules
 
-The arrangement and the note editor answer the pointer the same way, because a clip and a note are the same kind of thing to select. `native/src/SelectionInput.h` writes the rule down as shared predicates rather than a shared gesture; each panel still decides what its marquee catches. Long form: the *Boundaries* bullets of `native/README.md`.
+The arrangement and the note editor answer the pointer the same way, because a clip and a note are the same kind of thing to select. `native/src/SelectionInput.h` writes the rule down as shared predicates rather than a shared gesture; each panel still decides what its marquee catches.
 
 ## The rules
 
@@ -28,7 +28,7 @@ A drag reaching a panel's edge pulls the view after it, so a selection can sweep
 
 ## History
 
-These rules retired the held-key marquee, **S**, in both panels. `README.md` still mentions it in its note-editor paragraph (checked 2026-10-03).
+These rules retired the held-key marquee, **S**, in both panels.
 
 ## Related
 

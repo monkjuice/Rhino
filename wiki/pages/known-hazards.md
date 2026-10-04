@@ -58,7 +58,5 @@ with a test, not a known bug. When one is fixed or disproved, delete it here and
 
 ## Related
 
-- [Where the written docs disagree with the code](doc-drift.md)
-- [Where Forge's docs disagree with its code](forge-doc-drift.md)
 - [Writing Rhino tests](writing-rhino-tests.md)
 - [Session, the model](session-model.md)

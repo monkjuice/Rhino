@@ -31,8 +31,6 @@ The clipboard holds values: source file and speed, or the whole note list, plus 
 
 `StepGridEditing.cpp` applies the same rule in steps: the marquee's span, the selected notes rounded out to whole steps, or the whole clip after Ctrl+A. One difference: a note paste clears only the pitches and steps it writes, not the whole rectangle.
 
-`README.md` still has a note-editor span dragged with **S** held (retired; a plain marquee drag sets it), and `native/README.md` names the paste `pasteClipSnapshots` (it is `pasteClipRegion`); checked 2026-10-03.
-
 ## Related
 
 - [Clips never overlap](clip-placement.md)

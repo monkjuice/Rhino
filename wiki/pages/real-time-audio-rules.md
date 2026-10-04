@@ -11,7 +11,7 @@ updated: 2026-10-03
 
 ## The rule
 
-An audio callback does no allocation, takes no lock, touches no file and does no UI work. That covers a Rhino device's `applyToBuffer` and Forge's `Core::renderSample`. `INSTRUMENT_PLAN.md` makes it a quality gate for every instrument, and Forge's `PLAN.md` calls it "a hard gate on every milestone". One known breach as of 2026-10-03: `RhinoArpDevice::applyToBuffer` reserves a fresh `te::MidiMessageArray` on every call ([Hazards found while seeding the wiki](known-hazards.md)).
+An audio callback does no allocation, takes no lock, touches no file and does no UI work. That covers a Rhino device's `applyToBuffer` and Forge's `Core::renderSample`. It is a hard gate for every instrument and milestone. One known breach as of 2026-10-03: `RhinoArpDevice::applyToBuffer` reserves a fresh `te::MidiMessageArray` on every call ([Hazards found while seeding the wiki](known-hazards.md)).
 
 ## Why
 
@@ -27,7 +27,7 @@ Each block has a deadline (about 2.7 ms at 48 kHz and 128 samples) that an alloc
 - A single-producer, single-consumer queue to a timer. MIDI learn pushes bound messages into `MidiControlQueue` (256 slots, no allocation), and the `Processor`'s own 60 Hz timer applies them, because writing a parameter takes locks ([Forge MIDI learn](forge-midi-learn.md)).
 - A split at the thread boundary. Rhino EQ's `SpectrumTap` only copies samples into a ring; `SpectrumReader` transforms them on the panel's timer.
 
-**Poll what the engine does not broadcast.** Tracktion starts and stops recordings and raises slot overrides on the audio thread without notifying anyone. `ControlWindow` in `Main.cpp` polls them on its one 30 Hz timer, which also applies track automation during playback (`Session::applyTrackAutomationAt`). `README.md` and `native/README.md` still describe a separate 10 Hz transport-text timer; there is none (checked 2026-10-03).
+**Poll what the engine does not broadcast.** Tracktion starts and stops recordings and raises slot overrides on the audio thread without notifying anyone. `ControlWindow` in `Main.cpp` polls them on its one 30 Hz timer, which also applies track automation during playback (`Session::applyTrackAutomationAt`).
 
 **Extra device callbacks are lazy and come off first.** The browser preview and the count-in are extra `AudioIODeviceCallback`s on the engine's device manager, built on first use and removed in `releaseAudioDevice` and `~Session` before the device or transport they read goes away.
 

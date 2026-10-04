@@ -9,7 +9,7 @@ updated: 2026-10-03
 
 # Built-in devices
 
-Every device in the [Device catalog](device-catalog.md) on 2026-10-03. Rhino's own live under `native/src/devices/`; four come from Tracktion. Long form: the Utility and `DrumDevice` bullets in `native/README.md`.
+Every device in the [Device catalog](device-catalog.md) on 2026-10-03. Rhino's own live under `native/src/devices/`; four come from Tracktion.
 
 | Device | Kind | Source | What it is |
 | --- | --- | --- | --- |

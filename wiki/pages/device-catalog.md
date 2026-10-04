@@ -9,7 +9,7 @@ updated: 2026-10-03
 
 # Device catalog
 
-`native/src/devices/DeviceCatalog.h/.cpp` is the one list of Rhino's devices. Before it (commit `db5b174`, 2026-09-19) a device's metadata lived in six places: an enum in `Session.h`, switches in `SessionDevices.cpp` and `SessionInternal.cpp`, and rows in `BrowserPanel.cpp`, `BrowserIds.h` and `DeviceRack.cpp`. Miss one and the device half-worked. Long form: the *Adding a device* section of `native/README.md`.
+`native/src/devices/DeviceCatalog.h/.cpp` is the one list of Rhino's devices. Before it (commit `db5b174`, 2026-09-19) a device's metadata lived in six places: an enum in `Session.h`, switches in `SessionDevices.cpp` and `SessionInternal.cpp`, and rows in `BrowserPanel.cpp`, `BrowserIds.h` and `DeviceRack.cpp`. Miss one and the device half-worked.
 
 ## An entry
 

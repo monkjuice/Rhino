@@ -11,7 +11,7 @@ updated: 2026-10-03
 
 ## Context
 
-Until commit `16ef43a` (2026-09-14) a track kept every instrument dropped on it and toggled `setEnabled` so that one was audible. It sounded right, but it left dormant plugins behind and made the device chain lie about what the track was. Live and Logic give a track exactly one instrument, with MIDI effects before it and audio effects after it; Live nests racks and Logic groups tracks in Track Stacks rather than stacking instruments. The rule also makes a clip launcher coherent: the instrument belongs to the track, so a slot clip is only note data (`SESSION-VIEW.md`, gap 1, which is the long form).
+Until commit `16ef43a` (2026-09-14) a track kept every instrument dropped on it and toggled `setEnabled` so that one was audible. It sounded right, but it left dormant plugins behind and made the device chain lie about what the track was. Live and Logic give a track exactly one instrument, with MIDI effects before it and audio effects after it; Live nests racks and Logic groups tracks in Track Stacks rather than stacking instruments. The rule also makes a clip launcher coherent: the instrument belongs to the track, so a slot clip is only note data.
 
 ## Decision
 

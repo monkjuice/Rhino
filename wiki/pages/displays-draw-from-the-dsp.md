@@ -11,7 +11,7 @@ updated: 2026-10-03
 
 ## The rule
 
-A display is drawn from the arithmetic the engine actually runs, never from a picture of the effect in general. A response drawn from its own formulas "is a drawing of what someone believed the filter does" (`native/README.md`, *Rhino EQ*). Drawn from the coefficients the samples go through, it can only be wrong by arithmetic. A merely plausible display is worse than none, "because it is believed" (`tests/ForgeTestsDisplays.cpp` in Forge). So when a display disagrees with what is heard, the display is not the thing that is wrong.
+A display is drawn from the arithmetic the engine actually runs, never from a picture of the effect in general. A response drawn from separate formulas is only a drawing of what someone believed the filter does. Drawn from the coefficients the samples go through, it can only be wrong by arithmetic. A merely plausible display is worse than none, "because it is believed" (`tests/ForgeTestsDisplays.cpp` in Forge). So when a display disagrees with what is heard, the display is not the thing that is wrong.
 
 ## Where it is applied
 

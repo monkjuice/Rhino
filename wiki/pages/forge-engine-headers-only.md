@@ -42,8 +42,7 @@ Two binary-identical checks against a worktree build of the previous commit prov
 ## Consequences
 
 - **Header edits are expensive.** Editing a widely included `core/` or `ui/` header recompiles every translation unit that includes it ([Build and test Forge](build-and-test-forge.md)).
-- **There is no engine library.** A single `forge_sources` list is compiled into both the plugin and the test binary. `INSTRUMENT_PLAN.md` planned a "JUCE-only static library", and it never existed.
-- **Some README counts are stale (checked 2026-10-03).** The *Layout* section of Forge's `README.md` still counts four parts for `ForgeCore.h`, seven for `ForgeVisuals.h` and nine editor files. The code now lists five and eight; `ForgeCore.h` also includes `ForgeSpectral.h`, and the editor spans 15 `.cpp` files.
+- **There is no engine library.** A single `forge_sources` list is compiled into both the plugin and the test binary.
 
 ## Related
 

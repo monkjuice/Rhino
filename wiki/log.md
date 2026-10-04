@@ -51,3 +51,81 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 
 ## [2026-10-03] update | Forge note guide gives its inset face to two controls rows
 - updated: pages/forge-editor.md (the keyboard-shelf note guide has no heading; its full inset face is two larger rows with a 6 px gap while bevel and rivets remain, and its state/MIDI logic is unaffected; corrected the Editor split to sixteen files including `ForgeEditorNoteGuide.cpp`)
+
+## [2026-10-03] update | Forge note guide avoids unsupported Unicode glyphs
+- updated: pages/forge-editor.md (accidentals, chord qualities and tooltip arrows use ASCII after the popup font/environment rendered Unicode glyphs broken; note-overlay contrast is intentionally stronger on both key colours)
+
+## [2026-10-03] update | Rhino Arp redesign
+
+- `pages/rhino-arp.md` — Recorded the standalone MIDI-effect boundary, parameter/default model, beat-domain realtime scheduling contract, dedicated editor ownership, and regression-test expectations.
+
+## [2026-10-03] update | Wiki becomes the engineering documentation source
+- updated: `overview.md` — Recorded mid-alpha status, the installer target, and the new documentation split.
+- created: `pages/documentation-ownership.md` — Defined READMEs as product/setup entry points and the wiki as canonical engineering documentation.
+- updated: `index.md` — Catalogued documentation ownership and removed the retired drift analyses.
+- removed: `pages/doc-drift.md` — The legacy Rhino documents it audited were removed after consolidation into the wiki.
+- removed: `pages/forge-doc-drift.md` — The legacy Forge documents it audited were removed after consolidation into the wiki.
+- updated: `pages/adding-a-device.md` — Removed legacy-doc pointers; this page now carries the complete guidance.
+- updated: `pages/app-shell.md` — Removed comparisons with retired and rewritten docs.
+- updated: `pages/append-only-stored-indices.md` — Kept the warp-index decision without a retired plan citation.
+- updated: `pages/arrangement-view.md` — Removed legacy-doc pointers and obsolete drift notes.
+- updated: `pages/audio-clip-editor.md` — Kept lower-pane history without obsolete README comparisons.
+- updated: `pages/automation.md` — Kept the track-automation history without a retired handover citation.
+- updated: `pages/browser.md` — Removed the obsolete handover comparison.
+- updated: `pages/build-and-test-forge.md` — Distinguished the README quick start from the canonical development guide.
+- updated: `pages/build-and-test-rhino.md` — Distinguished the README quick start from the canonical development guide.
+- updated: `pages/built-in-devices.md` — Removed the retired implementation-document pointer.
+- updated: `pages/colours-and-typography.md` — Removed the retired implementation-document citation.
+- updated: `pages/computer-keyboard.md` — Kept the current fallback contract without an obsolete doc comparison.
+- updated: `pages/content-is-files.md` — Removed the retired implementation-document citation.
+- updated: `pages/development-environment.md` — Removed outdated setup claims from deleted documents.
+- updated: `pages/device-catalog.md` — Removed the retired long-form pointer.
+- updated: `pages/device-chain-order.md` — Made the wiki page self-contained.
+- updated: `pages/device-rack.md` — Removed obsolete README comparisons and retired long-form pointers.
+- updated: `pages/displays-draw-from-the-dsp.md` — Preserved the design rule without citing a deleted document.
+- updated: `pages/forge-arpeggiator.md` — Removed the retired milestone-plan citation.
+- updated: `pages/forge-editor.md` — Removed stale README and plan comparisons while preserving concurrent note-guide guidance.
+- updated: `pages/forge-engine-headers-only.md` — Removed legacy planning and README-drift notes.
+- updated: `pages/forge-filter.md` — Removed retired plan and README comparisons.
+- updated: `pages/forge-fx-slots-have-generic-parameters.md` — Kept the rejected alternative without a retired plan citation.
+- updated: `pages/forge-hosting.md` — Made hosting and real-host validation guidance self-contained.
+- updated: `pages/forge-is-an-independent-vst3.md` — Recast the decision and consequences without deleted architecture and instrument plans.
+- updated: `pages/forge-knob-diameter-is-panel-wide.md` — Kept the sizing rationale without a retired plan citation.
+- updated: `pages/forge-mixer-and-fx.md` — Removed the obsolete plan comparison.
+- updated: `pages/forge-noise.md` — Removed the retired milestone citation.
+- updated: `pages/forge-oscillators.md` — Removed obsolete handover and plan comparisons.
+- updated: `pages/forge-presets-and-state.md` — Kept format history without deleted plan and handover references.
+- updated: `pages/forge-spectral.md` — Made the spectral architecture and known warp gap canonical here.
+- updated: `pages/forge-warp.md` — Removed retired plan and README comparisons.
+- updated: `pages/forge.md` — Replaced the legacy document map with the wiki's canonical component map.
+- updated: `pages/ids-not-pointers.md` — Removed the handover citation while keeping the stale-pointer failure history.
+- updated: `pages/inputs-and-monitoring.md` — Removed obsolete README comparisons.
+- updated: `pages/keeping-files-small.md` — Removed the handover/README comparisons and corrected the Editor file count to sixteen.
+- updated: `pages/known-hazards.md` — Removed links to the retired drift analyses.
+- updated: `pages/main-track.md` — Removed the handover citation while retaining the index pitfall.
+- updated: `pages/mixer.md` — Made the fader and meter decisions self-contained.
+- updated: `pages/no-rhinoedit-back-compat.md` — Removed the deleted instrument-plan citation.
+- updated: `pages/note-editor.md` — Removed retired plan and README comparisons.
+- updated: `pages/off-limits-directories.md` — Routed Tracktion research through the wiki and source map.
+- updated: `pages/one-instrument-per-track.md` — Removed the deleted session-view citation.
+- updated: `pages/pattern-presets.md` — Kept the slot-wide instrument consequence without the deleted session-view citation.
+- updated: `pages/playhead.md` — Removed obsolete README comparisons.
+- updated: `pages/pointer-and-selection.md` — Removed retired implementation-document and README comparisons.
+- updated: `pages/project-files.md` — Kept export-history context without an obsolete README comparison.
+- updated: `pages/real-time-audio-rules.md` — Made the realtime and polling rules canonical here.
+- updated: `pages/recording.md` — Removed an obsolete README comparison.
+- updated: `pages/region-editing.md` — Removed obsolete README and retired implementation-document comparisons.
+- updated: `pages/rhino-build-targets.md` — Made the target layout canonical here.
+- updated: `pages/rhino-eq.md` — Removed the retired implementation-document pointer.
+- updated: `pages/rhino-tune.md` — Removed the retired implementation-document pointer.
+- updated: `pages/rhino-vocoder.md` — Removed retired implementation-document pointers and preserved the correct test span.
+- updated: `pages/session-model.md` — Kept split history without a deleted handover pointer.
+- updated: `pages/session-view.md` — Made this page the resume guide and removed deleted handover/session-view references.
+- updated: `pages/time-warp.md` — Made proxy and mode guidance self-contained.
+- updated: `pages/track-kind-fixed-at-creation.md` — Removed obsolete README comparisons.
+- updated: `pages/track-kinds.md` — Removed the retired stale-doc section.
+- updated: `pages/tracktion-and-juce.md` — Grounded the decision in surviving research and current code.
+
+## [2026-10-03] update | Forge filter remains stable under cutoff and modulation sweeps
+- updated: pages/forge-filter.md (FAT's level-dependent damping is part of both sides of the implicit SVF solve; recorded the rapid-cutoff failure mode and live-cadence regression)
+- updated: pages/forge-modulation.md (recorded the eight-slot, six-LFO multi-filter stress scenario and its finite, bounded and audible-output contract)

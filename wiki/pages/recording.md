@@ -13,7 +13,7 @@ The model is `native/src/SessionRecording.cpp`, the count-in click `native/src/C
 
 ## A track is armed, not an input
 
-The arm flag is `rhinoArmed` on the track's state, so it is saved and follows the track when reordered (no undo transaction). What a track records follows its kind: `Session::trackRecordInput` answers MIDI for a MIDI track, audio for an audio track, nothing for a group bus or the main row ([Track kinds](track-kinds.md)). `README.md` still ties it to whether the track runs an instrument (checked 2026-10-03).
+The arm flag is `rhinoArmed` on the track's state, so it is saved and follows the track when reordered (no undo transaction). What a track records follows its kind: `Session::trackRecordInput` answers MIDI for a MIDI track, audio for an audio track, nothing for a group bus or the main row ([Track kinds](track-kinds.md)).
 
 `applyRecordArming` rebuilds the engine's input destinations from those flags, clearing all and re-adding rather than diffing, because a stale destination records into the wrong track. Two lessons live there:
 

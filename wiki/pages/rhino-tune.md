@@ -9,7 +9,7 @@ updated: 2026-10-03
 
 # Rhino Tune
 
-Vocal pitch correction modelled on Live's Auto Shift. The device, `native/src/devices/audio/AutoTuneDevice.*` (`rhino.autotune.v1`), only hands parameters to `AutoTuneEngine`; tracking, correction and shifting are plain C++ in `native/src/core/`, which `--self-test` drives with a synthesised vowel. Long form: the *Rhino Tune* section of `native/README.md`.
+Vocal pitch correction modelled on Live's Auto Shift. The device, `native/src/devices/audio/AutoTuneDevice.*` (`rhino.autotune.v1`), only hands parameters to `AutoTuneEngine`; tracking, correction and shifting are plain C++ in `native/src/core/`, which `--self-test` drives with a synthesised vowel.
 
 ## The DSP
 

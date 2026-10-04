@@ -11,7 +11,7 @@ updated: 2026-10-03
 
 ## Context
 
-Rhino used to embed its samples (the TR-808 kit and a hand clap) with `juce_add_binary_data`, which turns an asset into a C++ array at roughly three bytes of source per byte of data and recompiles all of it on a clean build. The 700 KB then embedded had become 2.1 MB of generated source, and the 282-file vinyl drum pack about to be added would have been roughly 54 MB of C++ (commit `98b750b`, 2026-09-19). The rule is stated in `AGENTS.md` (*Content is files, never compiled in*) and the *Layout* section of `native/README.md`.
+Rhino used to embed its samples (the TR-808 kit and a hand clap) with `juce_add_binary_data`, which turns an asset into a C++ array at roughly three bytes of source per byte of data and recompiles all of it on a clean build. The 700 KB then embedded had become 2.1 MB of generated source, and the 282-file vinyl drum pack about to be added would have been roughly 54 MB of C++ (commit `98b750b`, 2026-09-19). The rule is also stated in `AGENTS.md` (*Content is files, never compiled in*).
 
 ## Decision
 

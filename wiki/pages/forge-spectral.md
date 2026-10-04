@@ -9,9 +9,9 @@ updated: 2026-10-03
 
 # Forge spectral oscillator
 
-SPECTRAL is the second oscillator MODE: M16, built on 2026-10-02 and 2026-10-03, with the plan in `SPECTRAL.md`. It analyses a sample into STFT frames and resynthesises them with an overlap-add phase vocoder (`core/ForgeSpectral.h`). SCAN, CUT and MIX take the cells of POSITION, DETUNE and BLEND. MODE uses Serum's numbering (spectral is 4), so the modes not yet built will need no migration.
+SPECTRAL is the second oscillator MODE, built on 2026-10-02 and 2026-10-03. It analyses a sample into STFT frames and resynthesises them with an overlap-add phase vocoder (`core/ForgeSpectral.h`). SCAN, CUT and MIX take the cells of POSITION, DETUNE and BLEND. MODE uses Serum's numbering (spectral is 4), so the modes not yet built will need no migration.
 
-## Engine decisions (SPECTRAL.md, "The architecture")
+## Engine decisions
 
 - **Pitch shifts inside the spectrum.** Each peak's region moves whole, with its phases locked to the peak (Laroche–Dolson). A bin-by-bin shift lost 11 dB an octave down. This keeps SCAN independent of pitch and makes every note cost the same.
 - **Unison is summed in the spectrum.** Each channel takes one inverse transform. Each member still costs 4 KB of phases, so `spectralUnisonMax` is 6.
@@ -51,11 +51,11 @@ The playhead (`src/ForgeEditorPaint.cpp`) is normally drawn only while a note so
 - **First frame:** comparing it with itself quantised the pitch, and a 440 Hz sample played 110 cents sharp.
 - **Transients:** resetting phase on every hop over a transient, not just on arrival, made a frozen playhead buzz.
 
-## Unfinished, and a doc conflict
+## Unfinished and a known warp gap
 
 Not built yet: the LO/HI markers, the mask editor, the unison gear, and the SCAN menu (transients are always on).
 
-`SPECTRAL.md` says warp applies to the output stream. In the code, `renderSpectralOscillator` ignores both warp stages, so the warp row does nothing in spectral mode (checked 2026-10-03). A warp elsewhere with a spectral oscillator as its OSC source most likely gets a constant, since it reads that
+`renderSpectralOscillator` ignores both warp stages, so the warp row does nothing in spectral mode (checked 2026-10-03). A warp elsewhere with a spectral oscillator as its OSC source most likely gets a constant, since it reads that
 oscillator's wavetable at a phase nothing advances (traced in the code, not measured;
 [Hazards found while seeding the wiki](known-hazards.md)).
 

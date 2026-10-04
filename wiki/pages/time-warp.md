@@ -27,12 +27,12 @@ Each mode is a different algorithm, not a label. Both stretchers are compiled in
 
 ## Decisions and traps
 
-- **A warped clip skips the proxy.** `applyWarpState` calls `setUsesProxy(!on)`, so only while warping is on does a clip stretch live instead of playing a rendered copy; an unwarped clip keeps the engine's default. Every tempo change and marker drag would invalidate that copy, leaving the clip silent or stale. `native/README.md` adds that a proxy made the first offline render of a warped clip never finish ([Offline renders that never return](renders-that-never-return.md)).
+- **A warped clip skips the proxy.** `applyWarpState` calls `setUsesProxy(!on)`, so only while warping is on does a clip stretch live instead of playing a rendered copy; an unwarped clip keeps the engine's default. Every tempo change and marker drag would invalidate that copy, leaving the clip silent or stale. A proxy also made the first offline render of a warped clip never finish ([Offline renders that never return](renders-that-never-return.md)).
 - **Clip tempo is length in beats.** Raising it makes the clip longer, the direction that fixes a loop detected an octave out (**:2** and **\*2**). `rescaleWarpedClip` keeps a trimmed clip trimmed by the same fraction. **Detect** blocks the message thread on a file read.
 - **Speed is not `getSpeedRatio`.** The engine leaves that at 1 for an auto-tempo clip, so drawing code asks `Session::clipPlaybackSpeed`; reading the ratio drew half the file across the whole clip.
 - **Markers span the whole file.** The engine seeds one at each end and straightens rather than deletes them, and maps linearly between markers. A new marker snaps to an attack within 50 ms; Repitch takes none. The editor draws the warp exactly, segment by segment; the arrangement draws one speed, so after marker drags it is locally out by up to the drag distance.
 
-Live's per-mode parameters are not offered: these stretchers expose no such knobs. Long form: *Time warp* in `native/README.md`.
+Live's per-mode parameters are not offered: these stretchers expose no such knobs.
 
 ## Related
 

@@ -32,7 +32,7 @@ Imported audio is referenced at its original path and never collected. Takes are
 
 ## WAV export
 
-*Export WAV* renders the whole edit on a worker at the audio device's own rate and block size (falling back to 48 kHz and 512), 24-bit, dithered, through the master plugins and with no normalising, so the file matches what the main fader set. `te::Edit::ScopedRenderStatus` detaches the edit from the device meanwhile, and automation lanes are mirrored into engine curves first ([Track automation](automation.md)). `README.md` still says 48 kHz, peak-normalised to -1 dBFS; commit `d3ead2a` (2026-09-15) changed both.
+*Export WAV* renders the whole edit on a worker at the audio device's own rate and block size (falling back to 48 kHz and 512), 24-bit, dithered, through the master plugins and with no normalising, so the file matches what the main fader set. `te::Edit::ScopedRenderStatus` detaches the edit from the device meanwhile, and automation lanes are mirrored into engine curves first ([Track automation](automation.md)). Commit `d3ead2a` (2026-09-15) changed export from fixed 48 kHz and peak normalisation to this behaviour.
 
 ## Related
 

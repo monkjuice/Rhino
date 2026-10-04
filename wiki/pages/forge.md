@@ -45,14 +45,10 @@ Forge follows Serum 2's manual for structure: layout, routing and drag-to-modula
 | `tables/` | Ten factory wavetables and `make-tables.py`, the script that writes them |
 | `presets/` | `aLiLBitDark.forgepreset`, a format 1 file that the current build refuses |
 
-## Docs
+## Documentation
 
-- **`README.md`** describes the behaviour of every module, plus the build, tests and file layout.
-- **`PLAN.md`** holds milestones M1 to M14c and the settled decisions. Parts are stale: it mostly describes two oscillators (there have been three since 2026-09-28), gives preset format 2 (it is now 3), and still lists spectral oscillators under "Later still".
-- **`SPECTRAL.md`** is M16, the spectral oscillator.
-- **`HANDOVER-M9B.md`** covers wavetable internals. Its band-limiting figures are stale ([Forge oscillators and wavetables](forge-oscillators.md)).
-
-Every stale statement found on 2026-10-03 is listed in [Where Forge's docs disagree with its code](forge-doc-drift.md).
+Forge's `README.md` is the newcomer-facing product and setup page. The component pages linked above, plus the build,
+state and hosting guides, are the canonical engineering documentation ([Documentation ownership](documentation-ownership.md)).
 
 ## Status
 
@@ -66,7 +62,7 @@ As of 2026-10-03:
   - The factory preset set planned in M8.
 - **Deferred:**
   - M11e, the rest of the effects rack.
-  - The preset browser, which PLAN.md also numbers M14.
+  - The preset browser.
   - M15, a second filter.
   - MPE.
 

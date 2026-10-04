@@ -34,7 +34,7 @@ The saw is rotated half a cycle, as Serum stores it, so the display shows its ed
 
 There are three copies per octave (`wavetableLevelsPerOctave`), giving 26 levels and about 50 KB per frame. With one copy per octave, two notes a tone apart could differ by half their harmonics.
 
-The voice reads `levelFor(hz * 1.05 * headroom)` with Catmull-Rom interpolation. The extra 5% allows for the sharpest unison member, and warps add their own headroom. `HANDOVER-M9B.md` and PLAN.md M9b-1 still describe eleven octave-spaced levels and `hz * 1.03` (checked 2026-10-03).
+The voice reads `levelFor(hz * 1.05 * headroom)` with Catmull-Rom interpolation. The extra 5% allows for the sharpest unison member, and warps add their own headroom.
 
 Level 0, the frame as authored, is what the panel draws. The voice reads whichever level the note allows. Do not "fix" the display to match, or it would change with every note.
 

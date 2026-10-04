@@ -9,7 +9,7 @@ updated: 2026-10-03
 
 # Session view (paused)
 
-The session view is Rhino's clip launcher: tracks as columns, scenes as rows, every cell a clip slot. It is built and tested but unreachable: `static constexpr bool sessionViewEnabled = false;` in `native/src/Main.cpp` hides the Session/Arrange switch, the Tab shortcut and *Back to Arrangement*. `SESSION-VIEW.md` is the long form and the resume guide; read it before touching any of this.
+The session view is Rhino's clip launcher: tracks as columns, scenes as rows, every cell a clip slot. It is built and tested but unreachable: `static constexpr bool sessionViewEnabled = false;` in `native/src/Main.cpp` hides the Session/Arrange switch, the Tab shortcut and *Back to Arrangement*. This page is the resume guide.
 
 ## What still runs
 
@@ -25,10 +25,9 @@ Tracks, devices, the [Mixer](mixer.md) and the transport are shared because both
 
 ## Before turning it back on
 
-- The note editor cannot open a slot clip: `findClip` searches track clip lists, not `ClipSlot`s (`SESSION-VIEW.md`, gap 2).
+- The note editor cannot open a slot clip: `findClip` searches track clip lists, not `ClipSlot`s.
 - The slot paths predate fixed track kinds. `insertDeviceClipInSlot` calls `switchTrackInstrument` directly, and `insertAudioFileInSlot` and `copySlotClipToArrangement` never ask `trackType`, so the refusals of [A track's kind is fixed when it is made](track-kind-fixed-at-creation.md) do not hold there (checked 2026-10-03).
 - The arrangement's clip menu still offers *Copy to session slot* while the view is off, so a clip can be copied into a slot nobody can see.
-- `SESSION-VIEW.md` is stale twice: its intermittent `native_arrangement_workflow` failure was a stale clip pointer, since fixed (`HANDOVER.md`); and the arrangement now renames and colours tracks, so that gap is the session view's alone.
 - Still missing: per-track Back to Arrangement, dragging between views, Arrangement Record, meters, sends and returns, follow actions, recording into slots, scene rename.
 
 ## Related

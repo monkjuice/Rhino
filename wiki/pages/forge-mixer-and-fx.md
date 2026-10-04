@@ -29,7 +29,7 @@ Three racks (MAIN, BUS 1, BUS 2) of eight slots (`fxSlotCount`); a slot holds on
 - Slot displays are computed from the DSP's own functions ([Displays draw from the DSP](displays-draw-from-the-dsp.md)).
 - In the list, **+ ADD EFFECT** fills the next free slot. Dragging a row reorders the chain by moving values between slots, and removing a row closes the gap. Alt+F expands the rack over both module rows.
 
-Still absent as of 2026-10-03: a `DIRECT` output, Serum's Bode, Convolve, Flanger, Hyper/Dimension and splitter types, rack presets, and any metering. `PLAN.md` M11a still describes four slots and six types.
+Still absent as of 2026-10-03: a `DIRECT` output, Serum's Bode, Convolve, Flanger, Hyper/Dimension and splitter types, rack presets, and any metering.
 
 ## Related
 

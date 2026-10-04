@@ -36,7 +36,6 @@ Audio effects go on either kind, and so does a channel-strip facility (an `infra
 
 - The UI has to ask: the `+` button offers MIDI or audio, and Ctrl+T repeats the last choice.
 - A MIDI track holds clips before it runs anything, and taking its instrument off leaves a MIDI track.
-- `README.md` ("Dropping one also makes the track a MIDI track for good") and `native/README.md` (`trackType` answers `midi` for any track carrying an instrument) still describe step 2 (checked 2026-10-03).
 - Leftovers: `createClip`'s refusal on an audio track still suggests "drop an instrument here", which is now refused as well; and the paused session view's slot paths never ask the kind ([Session view (paused)](session-view.md)).
 
 ## Related

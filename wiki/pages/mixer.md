@@ -23,7 +23,7 @@ Rhino has one mixer, not one per view. `native/src/SessionMixer.cpp` reads and w
 
 ## Rules
 
-- **`UtilityDevice` is not the fader.** It is a device in the chain, like Live's Utility. Two bottom-bar gain sliders once drove Utility devices; they read as a second, contradictory mixer and were replaced by the main output level (`SESSION-VIEW.md`, *Design decisions worth keeping*).
+- **`UtilityDevice` is not the fader.** It is a device in the chain, like Live's Utility. Two bottom-bar gain sliders once drove Utility devices; they read as a second, contradictory mixer and were replaced by the main output level.
 - **A fader drag is one undo step.** `beginTrackVolumeGesture`/`endTrackVolumeGesture`, and the pan and main equivalents, open a named transaction and bracket the parameter's change gesture, so the engine records one move and undo one entry.
 - **Colour carries meaning.** Volume bars are cyan and pan bars red on every card and on the main row; mute darkens its key and solo brightens it, so the two differ by value rather than hue.
 - **The main row** has level and pan only, no mute or solo. Its devices and fader reach an exported WAV because the export renders master plugins ([The main track](main-track.md)).
@@ -34,7 +34,7 @@ A lane made by dragging a clip below the last lane, or by a paste that runs off 
 
 ## Not built
 
-No level meters, sends or return tracks (nothing in `native/src` creates a level-measuring plugin or an aux send, checked 2026-10-03). `SESSION-VIEW.md` notes that meters need a per-track measuring plugin read at a bounded rate, never polled from `paint`.
+No level meters, sends or return tracks (nothing in `native/src` creates a level-measuring plugin or an aux send, checked 2026-10-03). Meters need a per-track measuring plugin read at a bounded rate, never polled from `paint`.
 
 ## Related
 

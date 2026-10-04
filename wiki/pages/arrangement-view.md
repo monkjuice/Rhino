@@ -22,14 +22,12 @@ updated: 2026-10-03
 
 - **A clip is two rows.** The top strip (`clipHeaderHeight`: half the clip, clamped to 8-22 px) selects and carries it; the body behaves like empty lane, so a press there sets the selection line and a drag sweeps a region. Edges trim at any height.
 - **The selection line is where playback starts.** `moveTransportToSelectionStart` always calls `Session::setPlaybackStart`, but moves the transport only while stopped and not counting in.
-- **Two snapping rules.** Clip edges round to the nearest line (`snapped`); a pointer position takes the cell it is inside (`snappedDown`/`snappedUp`). The grid is adaptive by default (`ArrangementGrid.h`); `README.md`'s "Snap 1/16" toggle is stale (checked 2026-10-03).
+- **Two snapping rules.** Clip edges round to the nearest line (`snapped`); a pointer position takes the cell it is inside (`snappedDown`/`snappedUp`). The grid is adaptive by default (`ArrangementGrid.h`).
 - **The bar ruler labels counts too.** Bar numbers step by powers of two bars, 44 px apart (`barLabelStep`, `barNumberMinimumPixels`). Once they are one bar apart, `paintBarNumbers` also labels counts as `bar.count` with short marks between, like Live. A count is the signature's denominator note (`timeSignature().numerator` per bar, so 6/8 reads 1.2 to 1.6 in eighths), not the engine's quarter-note beat (`beatsPerBar()`). Every span comes from one chain in `ArrangementGrid.h`, `finerRulerSpan`, where each span divides the previous: 4/4 runs 4, 2, 1, 1/2, 1/4; 6/8 runs 6, 3, 1; 7/8 runs 7, 1. That chain is what makes every mark land on a division of the labels either side. `rulerLabelSpan` keeps labels 44 px apart and never goes finer than a count. `rulerTickSpan` keeps marks 10 px apart and stops at a quarter count. The ruler ignores the snap grid, and the time ruler's rule (every labelled time sits on a numbered bar) is unchanged. Unit-tested in `tests/Arrangement/ClipGeometryTest.cpp`.
 - **`Focus`** records what the last click selected (clip, track, automation lane, region or nothing), and Delete dispatches on it.
 - **Autoscroll runs on the frame clock** (`VBlankAttachment`), because a pointer held still past the edge sends no drag events.
 - **It reports, the shell decides.** `clipSelected`, `clipOpened`, `trackSelected` and `trackFocused` are callbacks; which panel opens is the [app shell](app-shell.md)'s call.
-- **Cards.** A card's bottom edge resizes its row and its body carries the track through the stack (`Session::moveTrack`), both previewed until release. Row height (`rhinoLaneHeight`, 0 means fit the panel) is a view setting written without undo; colour and name are undoable. Renaming puts one `TextEditor` over the painted name; `native/README.md`'s `groupNameBounds` no longer exists.
-
-Long form: the *Boundaries* bullets in `native/README.md`.
+- **Cards.** A card's bottom edge resizes its row and its body carries the track through the stack (`Session::moveTrack`), both previewed until release. Row height (`rhinoLaneHeight`, 0 means fit the panel) is a view setting written without undo; colour and name are undoable. Renaming puts one `TextEditor` over the painted name.
 
 ## Related
 

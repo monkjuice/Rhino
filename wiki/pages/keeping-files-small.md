@@ -15,14 +15,14 @@ Split a `.cpp` when it passes roughly 600 lines or takes on a second responsibil
 
 ## Why
 
-Five files once held 68% of Rhino, and `Session.cpp` alone was 2,661 lines. Each of its responsibilities already had a different caller (`StepGrid` used only the note API, `DeviceRack` only the device API), so the split followed seams the callers had already drawn (`HANDOVER.md`). Small units also rebuild cheaply. Forge's precompiled header, `src/ForgePch.h`, is why twenty translation units now build faster than three did.
+Five files once held 68% of Rhino, and `Session.cpp` alone was 2,661 lines. Each of its responsibilities already had a different caller (`StepGrid` used only the note API, `DeviceRack` only the device API), so the split followed seams the callers had already drawn. Small units also rebuild cheaply. Forge's precompiled header, `src/ForgePch.h`, is why twenty translation units now build faster than three did.
 
 ## Where it is applied
 
 As of 2026-10-03:
 
 - **Rhino.** `Session` spans 24 `Session*.cpp` files: 22 define its members, and `SessionInternal.cpp` and `SessionPatches.cpp` hold its private helpers. `Arrangement` spans 11 `Arrangement*.cpp` files and `StepGrid` spans four. `DeviceEditorPanel` keeps its device faces in `DeviceEditorPanelEq.cpp`, `DeviceEditorPanelAutoTune.cpp` and `DeviceEditorPanelVocoder.cpp`.
-- **Forge.** `Editor` spans 15 `src/ForgeEditor*.cpp` files, and `Processor` spans five (`ForgeProcessor.cpp`, `ForgeParameters.cpp`, `ForgeProcessorState.cpp`, `ForgeProcessorLfo.cpp`, `ForgeProcessorMidi.cpp`). Forge's `README.md` still says the editor is nine files. The engine is the exception and splits into headers only, never into translation units ([Forge's engine splits into headers only](forge-engine-headers-only.md)).
+- **Forge.** `Editor` spans 16 `src/ForgeEditor*.cpp` files, and `Processor` spans five (`ForgeProcessor.cpp`, `ForgeParameters.cpp`, `ForgeProcessorState.cpp`, `ForgeProcessorLfo.cpp`, `ForgeProcessorMidi.cpp`). The engine is the exception and splits into headers only, never into translation units ([Forge's engine splits into headers only](forge-engine-headers-only.md)).
 
 ## How to apply it
 

@@ -10,8 +10,8 @@ updated: 2026-10-03
 # Build and test Rhino
 
 Rhino builds with CMake and Visual Studio 2022. The test runners are compiled into the app, so every CTest case is
-`RhinoDAW.exe` with a flag. The long form is the *Run On Windows* section of `README.md` and the *Tests* section of
-`AGENTS.md`.
+`RhinoDAW.exe` with a flag. `README.md` has the newcomer quick start; this page and the *Tests* section of `AGENTS.md`
+carry the development detail.
 
 ## Prerequisites
 

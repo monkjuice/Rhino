@@ -9,7 +9,7 @@ updated: 2026-10-03
 
 # Rhino Vocoder and sidechains
 
-A channel vocoder in the one mode Live calls External: the voice is the track's own audio, the carrier another track's output. `native/src/core/VocoderEngine.*` is the bank and followers, `native/src/devices/audio/VocoderDevice.*` (`rhino.vocoder.v1`) hands it parameters, and the face is `native/src/DeviceEditorPanelVocoder.cpp`. Long form, including what is not offered: the *Rhino Vocoder* section of `native/README.md`.
+A channel vocoder in the one mode Live calls External: the voice is the track's own audio, the carrier another track's output. `native/src/core/VocoderEngine.*` is the bank and followers, `native/src/devices/audio/VocoderDevice.*` (`rhino.vocoder.v1`) hands it parameters, and the face is `native/src/DeviceEditorPanelVocoder.cpp`.
 
 ## The sidechain
 
@@ -31,7 +31,7 @@ A channel vocoder in the one mode Live calls External: the voice is the track's 
 
 ## Tests
 
-`native/src/tests/VocoderTest.cpp` builds a carrier of four tones (250 Hz, 1, 2 and 4 kHz), feeds one as the modulator and measures which comes out; the formant check repeats it with the bank an octave up. `native/README.md` calls the tones "five octaves apart"; they span four (checked 2026-10-03). `native/src/tests/Arrangement/scenarios/VocoderCarrier.inc` checks the routing: four wires, saved with the project, cleared with the carrier track.
+`native/src/tests/VocoderTest.cpp` builds a carrier of four tones (250 Hz, 1, 2 and 4 kHz), feeds one as the modulator and measures which comes out; the formant check repeats it with the bank an octave up. They span four octaves. `native/src/tests/Arrangement/scenarios/VocoderCarrier.inc` checks the routing: four wires, saved with the project, cleared with the carrier track.
 
 ## Related
 

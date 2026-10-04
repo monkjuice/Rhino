@@ -23,7 +23,7 @@ updated: 2026-10-03
 - Input and audition: `SessionRecording`, `SessionMidiInput`, `SessionAudioInput`, `SessionPreview`.
 - `SessionInternal.h/.cpp`: property identifiers and helpers private to these files.
 
-`HANDOVER.md`'s table covers the September split of `Session.cpp`; most of the other files arrived after it.
+The September 2026 split established the responsibility-based `Session*.cpp` layout; most of the files arrived later.
 
 ## What every command does
 

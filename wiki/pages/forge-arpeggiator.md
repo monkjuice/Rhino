@@ -9,7 +9,7 @@ updated: 2026-10-03
 
 # Forge arpeggiator
 
-One arpeggiator modelled on Serum's ARP (manual pp. 244-266), milestone M13 in `PLAN.md`. The logic is `core/ForgeArp.h`, `Processor::processBlock` (`src/ForgeProcessor.cpp`) drives it, and its six panes are declared in `ui/ForgeModules.h`.
+One arpeggiator modelled on Serum's ARP (manual pp. 244-266). The logic is `core/ForgeArp.h`, `Processor::processBlock` (`src/ForgeProcessor.cpp`) drives it, and its six panes are declared in `ui/ForgeModules.h`.
 
 ## In front of the voices
 

@@ -9,7 +9,7 @@ updated: 2026-10-03
 
 # One knob diameter for the whole Forge panel
 
-Every ordinary knob on Forge's panel is drawn at one size, `ui::uniformKnobDiameter` in `ui/ForgeControlBlock.h`. That is the smallest `min(cell width − 6, cell height − 14)` over every knob cell on the panel, where 14 is the label line above the circle. The rule is deliberate (`PLAN.md` M2): sized per module, SUB's single knob would dwarf GLOBAL's. The catch is that a row or cell added to *one* module can shrink every knob on the panel.
+Every ordinary knob on Forge's panel is drawn at one size, `ui::uniformKnobDiameter` in `ui/ForgeControlBlock.h`. That is the smallest `min(cell width − 6, cell height − 14)` over every knob cell on the panel, where 14 is the label line above the circle. The rule is deliberate: sized per module, SUB's single knob would dwarf GLOBAL's. The catch is that a row or cell added to *one* module can shrink every knob on the panel.
 
 ## Who competes
 

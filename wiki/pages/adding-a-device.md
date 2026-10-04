@@ -9,8 +9,6 @@ updated: 2026-10-03
 
 # Adding a device to Rhino
 
-Long form: the *Adding a device* section of `native/README.md`.
-
 ## The three edits
 
 1. The source under `native/src/devices/instruments/`, `audio/` or `midi/`.
@@ -24,7 +22,7 @@ Then run `cmake -S native -B native/build`: the build never reconfigures itself 
 Start from `audio/UtilityDevice.*` (one parameter) or `audio/RhinoSpaceDevice.*` (six).
 
 - Derive from `te::Plugin` with `inline static const char* xmlTypeName = "rhino.<name>.v1"`; documents store it, so never rename it. Override `getName`, `getPluginType`, `getVendor`, `getSelectableDescription` and `getBusses`. An instrument adds `isSynth`, `takesMidiInput` and `producesAudioWhenNoAudioInput`; a MIDI effect declares no buses (`midi/RhinoArpDevice.h`).
-- Per parameter: a `juce::CachedValue` with `referTo`, `addParam`, `attachToCurrentValue`; `notifyListenersOfDeletion()` then `detachFromCurrentValue()` in the destructor; `te::copyPropertiesToCachedValues` and `updateFromAttachedValue()` in `restorePluginStateFromValueTree`. About eight mentions per parameter; the helper `HANDOVER.md` proposes does not exist yet (checked 2026-10-03).
+- Per parameter: a `juce::CachedValue` with `referTo`, `addParam`, `attachToCurrentValue`; `notifyListenersOfDeletion()` then `detachFromCurrentValue()` in the destructor; `te::copyPropertiesToCachedValues` and `updateFromAttachedValue()` in `restorePluginStateFromValueTree`. This is about eight mentions per parameter; no helper abstracts it (checked 2026-10-03).
 - Choosers and switches are state properties, not parameters, as in Rhino Tune and Rhino EQ.
 - `applyToBuffer` never allocates, locks or touches files; read content in `initialise()` and survive its absence ([Real-time audio rules](real-time-audio-rules.md)). Report latency through `getLatencySeconds` and restart playback when it changes; the graph reads it only when built. A sidechain is extra input channel names ([Rhino Vocoder and sidechains](rhino-vocoder.md)).
 

@@ -32,7 +32,7 @@ Damage has to be exact on Direct2D: it presents from rotating buffers, so a regi
 
 ## Tests
 
-`ClipGeometryTest.cpp` checks the damage rectangles. `Rendering.inc` moves each playhead through fractional positions, wraparound and hiding, and requires every incremental frame to match a full render pixel for pixel at scales 1.0, 1.25 and 2.0. `native/README.md` claims 150% as well, and both READMEs describe the readout timer as 10 Hz; it is the shell's 30 Hz timer (checked 2026-10-03). The Direct2D handoff itself is exercised only when `RHINO_NATIVE_RENDER_TEST=1` is set, because that check needs a real desktop peer: it puts the arrangement on the desktop off-screen, forces the Direct2D engine and queues damage the way a vblank would. None of this measures live frame pacing.
+`ClipGeometryTest.cpp` checks the damage rectangles. `Rendering.inc` moves each playhead through fractional positions, wraparound and hiding, and requires every incremental frame to match a full render pixel for pixel at scales 1.0, 1.25 and 2.0. The Direct2D handoff itself is exercised only when `RHINO_NATIVE_RENDER_TEST=1` is set, because that check needs a real desktop peer: it puts the arrangement on the desktop off-screen, forces the Direct2D engine and queues damage the way a vblank would. None of this measures live frame pacing.
 
 ## Related
 

@@ -15,9 +15,7 @@ checked there on 2026-10-03; build prerequisites are in [Build and test Rhino](b
 ## Tools
 
 - **Shells:** Git Bash, and Windows PowerShell 5.1, which has no `&&` (chain with `; if ($?) { ... }`).
-- **CMake** is installed system-wide and on `PATH`. `README.md` mentions a portable copy under `native/.tools/`, and
-  `instruments/rhino-forge/HANDOVER-M9B.md` says CMake is reachable only inside the Visual Studio 2022 install; neither
-  holds on the machine now.
+- **CMake** is installed system-wide and on `PATH`.
 - **Python 3.13** with `numpy`, Pillow and `tkinter`: enough to decode a `.wav`, sample PNG pixels and run the
   `synth-ab` capture window.
 - **ffmpeg and ffplay** from a build in the Downloads folder, on `PATH` under Git Bash; another copy ships inside an app

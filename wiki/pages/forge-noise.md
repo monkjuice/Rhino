@@ -9,7 +9,7 @@ updated: 2026-10-03
 
 # Forge noise module
 
-NOISE is a small per-voice oscillator, not a hiss knob (PLAN.md M14, M14b). Its controls are SOURCE, TONE, STEREO and LEVEL. PAN, routing and the sends belong to the mixer's NOISE strip.
+NOISE is a small per-voice oscillator, not a hiss knob. Its controls are SOURCE, TONE, STEREO and LEVEL. PAN, routing and the sends belong to the mixer's NOISE strip.
 
 The DSP is in `core/ForgeNoise.h`. It depends on nothing else in Forge, so the engine renders from it and `tests/ForgeTestsNoise.cpp` measures it directly.
 

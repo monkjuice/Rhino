@@ -9,7 +9,7 @@ updated: 2026-10-03
 
 # Forge warp
 
-Each oscillator has two warp stages (`warpSlots`). Each stage is a MODE and a depth, and the two apply in order (`core/ForgeWarp.h`, PLAN.md M12). Depths are modulation destinations. Modes are not, since sweeping through unrelated modes only stutters.
+Each oscillator has two warp stages (`warpSlots`). Each stage is a MODE and a depth, and the two apply in order (`core/ForgeWarp.h`). Depths are modulation destinations. Modes are not, since sweeping through unrelated modes only stutters.
 
 ## Modes
 
@@ -35,7 +35,7 @@ The sources are OSC, SUB and NOISE, plus SELF for PD. They are wired in `renderO
 
 - **OSC** is the next oscillator in a ring: A reads B, B reads C, C reads A.
 - **OSC and SUB** stages turn off when their source is disabled. A live stage would still ask for bandwidth and dull the carrier. The source's level can be zero.
-- **NOISE** is Core's own white generator. It runs even with the NOISE module off, and it ignores that module's SOURCE. Forge's `README.md` says every source must be on; only OSC and SUB must be (checked 2026-10-03).
+- **NOISE** is Core's own white generator. It runs even with the NOISE module off, and it ignores that module's SOURCE. Only OSC and SUB sources must be enabled.
 - **Spectral oscillators** ignore warp. An OSC stage reading one reads its wavetable at a phase only the wavetable path
   advances, so it most likely gets a constant (traced in the code on 2026-10-03, not measured;
   [Forge spectral oscillator](forge-spectral.md)).

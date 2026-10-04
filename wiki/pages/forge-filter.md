@@ -9,7 +9,7 @@ updated: 2026-10-03
 
 # Forge filter
 
-FILTER is one filter per voice, fed by whichever sources are routed into it (PLAN.md M4). Its DSP lives in `core/ForgeFilter.h`, which depends on nothing else in Forge. `filterSample` renders the audio and `filterMagnitude` draws the response, and both read the same `FilterShape` (`filterShapeOf` in `core/ForgePatch.h`). So the drawn curve cannot disagree with what is rendered ([Displays draw from the DSP](displays-draw-from-the-dsp.md)).
+FILTER is one filter per voice, fed by whichever sources are routed into it. Its DSP lives in `core/ForgeFilter.h`, which depends on nothing else in Forge. `filterSample` renders the audio and `filterMagnitude` draws the response, and both read the same `FilterShape` (`filterShapeOf` in `core/ForgePatch.h`). So the drawn curve cannot disagree with what is rendered ([Displays draw from the DSP](displays-draw-from-the-dsp.md)).
 
 ## Types
 
@@ -29,7 +29,7 @@ Type indices are stored in patches, so new types are only ever appended. LOW, HI
 - **Knobs.** CUTOFF (30 Hz–18 kHz), RES and DRIVE, then FREQ, PAN and MIX. PAN and MIX belong to the mixer's FILTER channel.
 - **The fourth knob.** Each type's row defines it: FREQ, MORPH, FAT, PAIN, DAMP, STAGES, SHIFT, SPREAD, DIFF or FEED. The row also sets its label, readout, double-click value and opening value.
 - **FREQ is an absolute second corner, not an offset.** It was first built as an offset. A Serum screenshot then showed CUTOFF at its minimum with a notch several kHz higher, which an offset could not reach. Read the knob angles before tuning to a reference image ([Comparing Forge with Serum](comparing-forge-with-serum.md)).
-- **Seated rows.** TYPE sits along the display's top edge. The routing chips A, B, C, S and N, plus KEY, sit along its foot (`Seat` in `ui/ForgeModule.h`). Forge's `README.md` says the filter is the only module built this way, but the oscillators now seat MODE and their loop strip too (checked 2026-10-03).
+- **Seated rows.** TYPE sits along the display's top edge. The routing chips A, B, C, S and N, plus KEY, sit along its foot (`Seat` in `ui/ForgeModule.h`). The oscillators also seat MODE and their loop strip.
 - **DRIVE** affects only the routed sources. Switching the module off bypasses DRIVE as well, while the filter state keeps running so that switching back on does not click.
 - **KEY** tracks the voice's sounding pitch, including glide, from middle C. It is off by default, and the display ignores it.
 
@@ -42,6 +42,12 @@ The curves are analogue prototypes: Core prewarps its corners, so the knee sits 
 - REVERB draws the envelope its damping puts on the tail.
 
 **Pitfall:** the FX rack's FILTER type is a separate SVF in `core/ForgeFxDsp.h`, with its own mapping from resonance to damping. The same RES value therefore gives a different Q there ([Forge mixer and effects racks](forge-mixer-and-fx.md)).
+
+## Time-varying stability
+
+The BASIC SVF's FAT control adds level-dependent damping. That damping is part of the zero-delay implicit solve: `filterSvf` derives a nonnegative feedback coefficient from `1 - tanh(x) / x` and applies the same coefficient to both the numerator and denominator. Keeping it in only the numerator can appear stable at a fixed cutoff yet run to Inf/NaN when cutoff moves quickly, because the new high cutoff coefficient solves the old state against an inconsistent denominator. Once a voice state becomes non-finite it can poison the output until the engine is reset.
+
+The coefficient tends to zero with signal level, so the small-signal response is preserved; the `heat == 0` path retains its original arithmetic. `tests/ForgeTestsFilter.cpp` protects the live failure mode at 44.1 kHz in 441-sample blocks: a hot resonant patch repeatedly sweeps the full cutoff range, then must remain finite and audible.
 
 ## Related
 

@@ -93,6 +93,7 @@ The catalog of this wiki: every page, grouped by type, one line each (`- [Title]
 - [Colours and typography](pages/colours-and-typography.md) — Rhino names chrome colours in Theme.h's palette and draws text in embedded Inter; Forge has its own metal look, accent colours and four faces.
 - [Dependency direction](pages/dependency-direction.md) — Knowledge flows one way in both products, UI to model to devices to core, and every rule lives in the model so each UI path inherits it.
 - [Directories not to read](pages/off-limits-directories.md) — native/.deps and research/sources are not Rhino's code and are never searched; Tracktion signatures are checked in curated header snapshots.
+- [Documentation ownership](pages/documentation-ownership.md) — READMEs introduce and build the products; the wiki is the canonical home for engineering detail, decisions and gotchas.
 - [Displays draw from the DSP](pages/displays-draw-from-the-dsp.md) — A curve on screen is computed by the same functions the audio runs, never from a second set of formulas, and tests hold the two together.
 - [Git workflow](pages/git-workflow.md) — Focused, verified commits pushed at milestones; stage explicit paths since the user edits Forge in the same tree; never rewrite pushed history.
 - [Hold ids, not pointers](pages/ids-not-pointers.md) — Anything kept beyond one call holds an id or a copy, never a raw engine pointer, because undo, moves, reloads and publishes free the object.
@@ -122,5 +123,7 @@ The catalog of this wiki: every page, grouped by type, one line each (`- [Title]
 ## Analyses
 
 - [Hazards found while seeding the wiki](pages/known-hazards.md) — Probable bugs traced by reading the code on 2026-10-03, none of them reproduced yet, with where each one lives and what it breaks.
-- [Where Forge's docs disagree with its code](pages/forge-doc-drift.md) — Statements in Forge's README, plan and handover notes that the code has overtaken, checked on 2026-10-03.
-- [Where the written docs disagree with the code](pages/doc-drift.md) — Statements in Rhino's own docs that the code has overtaken, checked on 2026-10-03, with what the code does instead.
+
+## MIDI devices
+
+- [Rhino Arp](pages/rhino-arp.md) — Architecture, parameter model, beat-domain scheduling, and dedicated rack UI for the built-in arpeggiator.

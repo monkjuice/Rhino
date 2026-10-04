@@ -9,7 +9,7 @@ updated: 2026-10-03
 
 # Rhino EQ
 
-Eight bands, the eight filter types of Live's EQ Eight, and a live spectrum behind the curve. The device, `native/src/devices/audio/RhinoEqDevice.*` (catalog id `Equaliser`, type `rhino.eq.v1`), is a thin shell; nearly everything else is in `native/src/core/`, where `--self-test` measures it without an edit. Long form: the *Rhino EQ* section of `native/README.md`.
+Eight bands, the eight filter types of Live's EQ Eight, and a live spectrum behind the curve. The device, `native/src/devices/audio/RhinoEqDevice.*` (catalog id `Equaliser`, type `rhino.eq.v1`), is a thin shell; nearly everything else is in `native/src/core/`, where `--self-test` measures it without an edit.
 
 ## The DSP
 

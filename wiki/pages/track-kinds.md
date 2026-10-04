@@ -31,10 +31,6 @@ A MIDI track carries `rhinoTrackType="midi"` on its state; an audio track carrie
 - `trackRecordInput` records MIDI or audio by kind, and nothing for a bus or the main row.
 - `ArrangementPainter.cpp`'s empty-lane hint names what the lane accepts.
 
-## Stale docs
-
-`README.md` ("Dropping one also makes the track a MIDI track for good") and `native/README.md` (`trackType` answers `midi` for any track with an instrument; the fifth track is `MIDI 5`; a drop below the last lane calls `addAudioTrack`, now true only for files) describe earlier stages, and `HANDOVER.md`'s one-track starter is gone (checked 2026-10-03).
-
 ## Related
 
 - [A track's kind is fixed when it is made](track-kind-fixed-at-creation.md)

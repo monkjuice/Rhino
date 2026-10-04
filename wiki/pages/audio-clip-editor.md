@@ -19,7 +19,7 @@ Gain (-60 to +24 dB), pan, pitch (±24 semitones), fade in, fade out, mute and r
 
 ## Where it appears
 
-Double-clicking an audio clip opens it in the shell's lower pane, which shows one face at a time: note editor, audio clip editor or Device View. Once open, it follows the clip selection as Live's clip view does: another audio clip replaces this one, a MIDI clip hands over to the note editor, anything else closes it ([App shell and control bar](app-shell.md)). `native/README.md` (*Boundaries*) and the audio-clip paragraph of `README.md` still call the clip panel and the Device View independent panels that never close each other; they became one pane in commit `a33503f` (2026-09-30).
+Double-clicking an audio clip opens it in the shell's lower pane, which shows one face at a time: note editor, audio clip editor or Device View. Once open, it follows the clip selection as Live's clip view does: another audio clip replaces this one, a MIDI clip hands over to the note editor, anything else closes it ([App shell and control bar](app-shell.md)). The three faces became one pane in commit `a33503f` (2026-09-30).
 
 ## Commands that reach past it
 

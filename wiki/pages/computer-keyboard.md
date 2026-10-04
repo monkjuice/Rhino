@@ -13,7 +13,7 @@ updated: 2026-10-03
 
 ## It plays the input, not a track
 
-Notes go through `Session::sendMidiInputNote` into the `keyboardState` of the engine's MIDI input devices, the entry a controller's notes take. Nothing downstream can tell where a note came from, so arming, monitoring and recording need no second path. It writes into both virtual devices, "All MIDI Ins" and "Computer Keyboard", because a track on either has to hear it ([Track inputs and monitoring](inputs-and-monitoring.md)). `native/README.md` (*Boundaries*) still names `Session::midiInputDevice` as the rule; it is now only a fallback (checked 2026-10-03).
+Notes go through `Session::sendMidiInputNote` into the `keyboardState` of the engine's MIDI input devices, the entry a controller's notes take. Nothing downstream can tell where a note came from, so arming, monitoring and recording need no second path. It writes into both virtual devices, "All MIDI Ins" and "Computer Keyboard", because a track on either has to hear it ([Track inputs and monitoring](inputs-and-monitoring.md)). `Session::midiInputDevice` is only a fallback.
 
 ## One mapping, not two
 

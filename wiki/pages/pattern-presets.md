@@ -26,8 +26,8 @@ Drums, Rhino Wave, or 4OSC with one of its patches. So dropping a pattern on a l
    `makeRoomForClip`, so the new clip wins the ground it lands on ([Clips never overlap](clip-placement.md)).
 
 The clip-slot path in the session view (`insertPatternPresetInSlot`) calls the same `preparePresetTrack`, so the two
-cannot drift apart. The cost, noted in `SESSION-VIEW.md`, is that dropping a pattern into one slot changes the
-instrument for every clip on that track.
+cannot drift apart. The cost is that dropping a pattern into one slot changes the instrument for every clip on that
+track.
 
 A drum pattern switches the track to Rhino Drums but does not pick a kit. A fresh drum device starts on the TR-808 kit,
 and an existing one keeps its kit. The five kits are separate drops under Instruments / Drum Rack, each tuned for one

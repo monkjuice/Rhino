@@ -9,7 +9,7 @@ updated: 2026-10-03
 
 # Hosting Forge in Rhino
 
-Rhino plays [Rhino Forge](forge.md) as an ordinary VST3 through Tracktion's external-plugin wrapper; the reasons are in [Forge is an independent VST3](forge-is-an-independent-vst3.md). Rhino's side is `native/src/SessionExternalPlugins.cpp` and one catalog entry. Long form: the end of *Build on Windows* in `instruments/rhino-forge/README.md`, and *Compatibility notes* in its `PLAN.md`.
+Rhino plays [Rhino Forge](forge.md) as an ordinary VST3 through Tracktion's external-plugin wrapper; the reasons are in [Forge is an independent VST3](forge-is-an-independent-vst3.md). Rhino's side is `native/src/SessionExternalPlugins.cpp` and one catalog entry.
 
 ## Discovery
 
@@ -36,7 +36,7 @@ A description qualifies if its name contains "Rhino Forge", or "Forge" with a ma
 
 - A running RhinoDAW with Forge loaded holds the `.vst3`, and Forge's build then fails to relink with LNK1104. Build the tests and the standalone instead and say the VST3 is stale ([LNK1104 means a running binary holds the file](locked-executable-lnk1104.md)).
 - The suite covers Forge only where one can be found: `--self-test` skips external devices, and `native/src/tests/Pattern/scenarios/DeviceParameters.inc` runs its Forge checks only when discovery succeeded. A green run on a machine without a Forge build proves nothing about hosting.
-- `INSTRUMENT_PLAN.md`'s gate: a VST3 counts as shipped only after it has been loaded and automated in at least one external host.
+- A VST3 counts as shipped only after it has been loaded and automated in at least one external host.
 
 ## Related
 

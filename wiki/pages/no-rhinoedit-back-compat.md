@@ -23,7 +23,7 @@ That day a project saved by the same day's build reopened silent, and one made o
 
 ## Alternatives considered
 
-The earlier plans assumed versioned migration. `research/ROADMAP.md` lists file migration under Stage 5 hardening, and the quality gates in `INSTRUMENT_PLAN.md` say to preserve old Rhino Wave projects. Both predate 2026-09-20.
+The earlier research roadmap assumed versioned migration: `research/ROADMAP.md` lists file migration under Stage 5 hardening. That predates the 2026-09-20 decision.
 
 ## Consequences
 

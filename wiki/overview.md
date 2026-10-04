@@ -14,13 +14,14 @@ This repository holds two products.
 - **Rhino** is a native desktop DAW for electronic music: an arrangement view with a note editor, audio and MIDI
   recording, time warp, track groups, a device chain per track, and a clip launcher that is built but switched off.
   It is C++20 on Tracktion Engine and JUCE, under `native/`. Windows is the development platform; macOS is kept
-  portable in the architecture but has never been built. `README.md` calls it "an early composition workflow, not a
-  complete DAW".
+  portable in the architecture but has not yet been validated.
 - **Rhino Forge** is an independent wavetable and spectral synthesiser: one JUCE `AudioProcessor` built as a VST3 and
   a standalone app, under `instruments/rhino-forge/`. Rhino hosts it like any third-party VST3. Serum 2 is its north
   star for structure and workflow; it reuses no Serum code, assets, names or presets.
 
-Both are personal-use projects. Ableton Live is the reference for Rhino's workflow vocabulary, as Serum is for Forge's.
+Both products are in mid-alpha. Source builds are supported on Windows; production installers for Windows and macOS
+are targeted for December 2026-January 2027. Ableton Live is the reference for Rhino's workflow vocabulary, as Serum
+is for Forge's.
 
 ## Repository layout
 
@@ -65,11 +66,9 @@ per-area cases — [Build and test Forge](pages/build-and-test-forge.md). Before
 - **Before changing anything:** [Keeping files small](pages/keeping-files-small.md),
   [Real-time audio rules](pages/real-time-audio-rules.md), [Git workflow](pages/git-workflow.md),
   [Directories not to read](pages/off-limits-directories.md).
-- **The repository's own docs:** `AGENTS.md` is the most current statement of the rules and wins over older prose;
-  `README.md` lists features and shortcuts; `native/README.md` holds the implementation contracts; `HANDOVER.md`
-  maps the September 2026 file split; Forge's `README.md`, `PLAN.md` and `SPECTRAL.md` hold its design. Some of
-  that prose has fallen behind the code — see
-  [Where the written docs disagree with the code](pages/doc-drift.md).
+- **The repository's own docs:** the root and Forge READMEs are product and setup entry points; this wiki owns the
+  engineering detail. `AGENTS.md` carries the active working rules. Focused test, asset-provenance and research docs
+  remain beside what they describe. See [Documentation ownership](pages/documentation-ownership.md).
 
 The full catalog is [index.md](index.md).
 
@@ -78,7 +77,7 @@ The full catalog is [index.md](index.md).
 | Date | Event |
 | --- | --- |
 | 2026-09-08 | Research study and first native evaluation, under the name Theda, then Theta |
-| 2026-09-12 | `Session.cpp`, `StepGrid.cpp` and `Arrangement.cpp` split into focused files (`HANDOVER.md`) |
+| 2026-09-12 | `Session.cpp`, `StepGrid.cpp` and `Arrangement.cpp` split into focused files |
 | 2026-09-13 | Forge scaffolded as an independent VST3 and hosted through Tracktion |
 | 2026-09-14 | Session view (clip launcher) built, then paused behind a build switch |
 | 2026-09-16 | Renamed Rhino; on 2026-09-18 the binary became `RhinoDAW` to escape a driver profile |

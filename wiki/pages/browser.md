@@ -19,8 +19,6 @@ There is no click-to-add and no double-click action, so browsing and auditioning
 
 A drop below the last lane makes a lane of the kind the item needs, since a track cannot change kind later ([Track kinds: audio and MIDI](track-kinds.md)).
 
-`HANDOVER.md` still says browser double-clicks act on the selected track through `BrowserPanel::targetTrack`; no such path exists (checked 2026-10-03).
-
 ## Preview
 
 Clicking a sample plays it once. The audition is a second `juce::AudioIODeviceCallback` on the engine's own `AudioDeviceManager` (`SessionPreview.cpp`), not anything inside the edit: JUCE sums its callbacks, so it mixes with the transport while choosing no track, writing no clip and opening no undo transaction.

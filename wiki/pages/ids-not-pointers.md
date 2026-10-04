@@ -15,7 +15,7 @@ Anything kept beyond the current call (a selection, a test variable, an automati
 
 ## Why
 
-Tracktion rebuilds its objects from the edit's `ValueTree`, so a raw `te::Clip*` does not survive an undo, a move to another track or a project restore (`HANDOVER.md`). The intermittent `native_arrangement_workflow` segfault looked like a 1-in-5 race that tracked no code change, and it was exactly this. `AudioClipEditing.inc` cached a clip pointer, `TrackManagement.inc` moved the clip and undid the move, and `GesturesAndPersistence.inc` then dereferenced freed memory. Whether it crashed depended on the state of the heap. The fix was one line: look the clip up by id again.
+Tracktion rebuilds its objects from the edit's `ValueTree`, so a raw `te::Clip*` does not survive an undo, a move to another track or a project restore. The intermittent `native_arrangement_workflow` segfault looked like a 1-in-5 race that tracked no code change, and it was exactly this. `AudioClipEditing.inc` cached a clip pointer, `TrackManagement.inc` moved the clip and undid the move, and `GesturesAndPersistence.inc` then dereferenced freed memory. Whether it crashed depended on the state of the heap. The fix was one line: look the clip up by id again.
 
 ## Rhino
 

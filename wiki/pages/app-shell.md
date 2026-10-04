@@ -17,7 +17,7 @@ updated: 2026-10-03
 
 ## The control bar
 
-Under the 72 px bar sit the docked browser, whose 3 px divider is its resize handle, and the arrangement, with no margins or frames. `layoutControlBar` places from a running x: browser toggle, tempo and signature, then rewind, stop, play and record; from the right edge inwards, redo, undo, then the metronome and its menu. The readout is centred in what remains, capped at 480 px, and hidden rather than squeezed when under 260 px remain. `native/README.md` (*The shell's chrome*) still puts the metronome beside the signature and calls the readout elastic (checked 2026-10-03).
+Under the 72 px bar sit the docked browser, whose 3 px divider is its resize handle, and the arrangement, with no margins or frames. `layoutControlBar` places from a running x: browser toggle, tempo and signature, then rewind, stop, play and record; from the right edge inwards, redo, undo, then the metronome and its menu. The readout is centred in what remains, capped at 480 px, and hidden rather than squeezed when under 260 px remain.
 
 - `ControlBarFields.*`: `ValueDragBox`, the tempo and signature fields you drag; one drag is one undo step (`Session::beginTempoGesture`).
 - `ControlBarIcons.*`: glyphs are paths worn by the borderless `IconButton`, because Unicode transport symbols fell through to a different system face on every machine.
@@ -25,7 +25,7 @@ Under the 72 px bar sit the docked browser, whose 3 px divider is its resize han
 
 ## The lower pane
 
-Note editor, audio clip editor and Device View are three faces of one pane (`LowerPane`). Double-clicking a clip opens its editor, which then follows the clip selection; a card click opens the Device View only when the pane is free. It floats over the arrangement's foot (`Arrangement::setBottomInset`): pushing the lanes up refitted them under a dragged split, so every clip grew and shrank under the pointer. A layout change asked for by a click waits for the timer and for no mouse button down, because that press may be starting a drag. `native/README.md` and `README.md` still describe two independent panels, merged in commit `a33503f` (2026-09-30).
+Note editor, audio clip editor and Device View are three faces of one pane (`LowerPane`). Double-clicking a clip opens its editor, which then follows the clip selection; a card click opens the Device View only when the pane is free. It floats over the arrangement's foot (`Arrangement::setBottomInset`): pushing the lanes up refitted them under a dragged split, so every clip grew and shrank under the pointer. A layout change asked for by a click waits for the timer and for no mouse button down, because that press may be starting a drag. The three faces became one pane in commit `a33503f` (2026-09-30).
 
 ## The 30 Hz timer
 

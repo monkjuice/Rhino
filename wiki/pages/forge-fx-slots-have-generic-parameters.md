@@ -17,7 +17,7 @@ Forge's racks take Serum's shape: any effect type in any slot, in any order, dup
 
 Each slot declares the same twelve parameters whatever it holds (`src/ForgeParameters.cpp`): `fx{rack}s{slot}Type`, `ModeA`, `ModeB`, `Bypass`, `Knob1`-`Knob6`, `Mix` and `Level`. The knobs are plain 0..1. What a knob *means* belongs to the type and is declared once in `fxTypes()` in `core/ForgeFx.h`: knob labels, mode choices, opening values. Three readers take it from there: the DSP in `core/ForgeFxDsp.h`, the panel's labels (`Editor::refreshFxSlots`) and the readout (`Processor::fxKnobText`), which calls the same helpers the DSP does, so "480 ms" in the bubble is the delay being heard. The mode fields are floats, not choice parameters, because their choices change with the type.
 
-Rejected (`PLAN.md` M11a): a fixed chain of named effects, which would name every automation lane honestly but fix the order and forbid duplicates.
+Rejected: a fixed chain of named effects, which would name every automation lane honestly but fix the order and forbid duplicates.
 
 ## Consequences
 

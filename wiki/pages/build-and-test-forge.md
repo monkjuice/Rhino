@@ -11,8 +11,8 @@ updated: 2026-10-03
 
 Forge is its own CMake project under `instruments/rhino-forge/`, with no Tracktion or Rhino code, but it borrows
 Rhino's pinned JUCE: `RHINO_JUCE_DIR` defaults to `native/.deps/juce`, so run `python native/scripts/fetch-dependencies.py`
-first ([Build and test Rhino](build-and-test-rhino.md)). The long form is the *Tests* and *Build on Windows* sections of
-`instruments/rhino-forge/README.md`.
+first ([Build and test Rhino](build-and-test-rhino.md)). The Forge README has the newcomer quick start; this page carries
+the development detail.
 
 ## Build
 

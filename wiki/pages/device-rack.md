@@ -9,7 +9,7 @@ updated: 2026-10-03
 
 # Device rack and device editors
 
-The Device View is `DeviceRack` (`native/src/DeviceRack.*`). It shares the lower pane with the note editor and the audio clip editor, and exactly one of the three is visible (`LowerPane` in `Main.cpp`); clicking a track card opens devices only while the pane is free; `native/README.md`'s "two independent panels" and `README.md`'s "opening a clip never closes the devices" are stale (checked 2026-10-03). Long form: *The order of a chain* in `native/README.md` and the face paragraph of each device's section there.
+The Device View is `DeviceRack` (`native/src/DeviceRack.*`). It shares the lower pane with the note editor and the audio clip editor, and exactly one of the three is visible (`LowerPane` in `Main.cpp`); clicking a track card opens devices only while the pane is free.
 
 ## Pieces
 
@@ -23,7 +23,7 @@ The Device View is `DeviceRack` (`native/src/DeviceRack.*`). It shares the lower
 
 - Everything on a face that is not a knob is drawn and hit-tested by rectangle rather than made a child component.
 - View state that must survive lives on the device; the EQ's selected band is a device property.
-- A face that needs the device itself, not its parameter list, asks `Session::devicePlugin`. Tune, EQ and Vocoder all do; `native/README.md` still says Tune is the only one.
+- A face that needs the device itself, not its parameter list, asks `Session::devicePlugin`. Tune, EQ and Vocoder all do.
 
 Faces that move on their own (Tune's meter, the vocoder bank, the EQ spectrum) run a 24 Hz timer; the rest ask for no frames.
 

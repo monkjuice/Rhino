@@ -9,7 +9,7 @@ updated: 2026-10-03
 
 # Track automation
 
-Automation belongs to a track and spans the whole timeline; it moved off clips in September 2026 (`HANDOVER.md`, *Automation moved from clips to tracks*). The model is `native/src/SessionAutomation.cpp`; the arrangement's lane rows, hit testing and gestures are `ArrangementAutomation.cpp`, the drawing `ArrangementAutomationPaint.cpp`.
+Automation belongs to a track and spans the whole timeline; it moved off clips in September 2026. The model is `native/src/SessionAutomation.cpp`; the arrangement's lane rows, hit testing and gestures are `ArrangementAutomation.cpp`, the drawing `ArrangementAutomationPaint.cpp`.
 
 ## Storage
 

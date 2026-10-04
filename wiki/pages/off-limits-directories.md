@@ -21,7 +21,7 @@ This holds read-only snapshots of Ardour, LMMS, Zrythm and Tracktion Engine, tak
 
 ## Confirming a Tracktion signature
 
-When a Tracktion API must be confirmed rather than guessed, read `native/README.md` first for engine behaviour, then grep `research/sources/tracktion/`. That is the one sanctioned way in. It holds nine engine headers, among them `tracktion_Plugin.h`, `tracktion_Edit.h`, `tracktion_AutomatableParameter.h`, `tracktion_WaveAudioClip.h`, `tracktion_PluginNode.h` and `tracktion_PluginManager.h`, plus the engine's `FEATURES.md` and `LICENSE.md`. They come from the same revision the build pins. Two things to know:
+When a Tracktion API must be confirmed rather than guessed, read the relevant wiki component page first, then use `research/SOURCE_MAP.md` to reach the curated material under `research/sources/tracktion/`. That is the one sanctioned way in. It holds nine engine headers, among them `tracktion_Plugin.h`, `tracktion_Edit.h`, `tracktion_AutomatableParameter.h`, `tracktion_WaveAudioClip.h`, `tracktion_PluginNode.h` and `tracktion_PluginManager.h`, plus the engine's `FEATURES.md` and `LICENSE.md`. They come from the same revision the build pins. Two things to know:
 
 - The files have flattened names with a `.txt` suffix, such as `modules__tracktion_engine__plugins__tracktion_Plugin.h.txt`, so a glob for `*.h` finds nothing. List the directory first.
 - They are headers only. `AutomatableParameter::valueToString` can be confirmed there; what a method body does cannot. When only a body would answer, design so that a wrong guess cannot change behaviour already on screen: add the new path beside the existing call sites rather than rewriting them to share one.

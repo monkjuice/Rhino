@@ -9,7 +9,7 @@ updated: 2026-10-03
 
 # Device chain order
 
-A track's plugin list *is* its signal chain: each device reads what the one in front of it wrote. So order is meaningful and editable. A vocoder followed by [Rhino Tune](rhino-tune.md) tunes the vocoded signal; swap them and the vocoder is handed an already-tuned voice. Long form: *The order of a chain* in `native/README.md`.
+A track's plugin list *is* its signal chain: each device reads what the one in front of it wrote. So order is meaningful and editable. A vocoder followed by [Rhino Tune](rhino-tune.md) tunes the vocoded signal; swap them and the vocoder is handed an already-tuned voice.
 
 ## The order
 

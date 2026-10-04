@@ -32,6 +32,10 @@ ENV 1 is the amplitude; ENV 2-4 reach anything only through a slot, and all four
 
 Slot 1 ships wired to LFO 1 at zero depth with the literal destination `13` (`src/ForgeParameters.cpp`), meant as CUTOFF; since the format-3 reorder, 13 is C PAN (checked 2026-10-03).
 
+## Stability coverage
+
+`tests/ForgeTestsModulation.cpp` includes a deliberately hostile modulation scenario for finding DSP state corruption rather than checking one routing in isolation. It fills all eight matrix slots, runs six fast LFOs, drives cutoff, resonance, drive and the filter type's secondary control at once, and holds four notes through representative BASIC, ANALOG, RESONATOR and CHARACTER filters. Every render must stay finite, bounded and non-silent. This complements the direct cutoff-sweep regression in `tests/ForgeTestsFilter.cpp`: the focused test preserves the exact live failure cadence, while the matrix stress test broadens the combinations likely to expose the same class of fault.
+
 ## Related
 
 - [Forge engine (Core)](forge-engine.md)

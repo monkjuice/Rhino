@@ -28,7 +28,7 @@ The row is pinned under the scrolling lanes, so `laneContentHeight` excludes it 
 
 ## Pitfalls
 
-- **An index can silently mean main.** On a one-track document index 1 *is* the main row, so a hard-coded `1` targets main instead of failing; that is why `addAudioEffect` lost its `= 1` default (`HANDOVER.md`). Always name the track.
+- **An index can silently mean main.** On a one-track document index 1 *is* the main row, so a hard-coded `1` targets main instead of failing; that is why `addAudioEffect` lost its `= 1` default. Always name the track.
 - **No automation lanes yet.** `showTrackAutomation` refuses a main-row target because the pinned row has nowhere to stack a lane, though lane storage (on the edit's own state) and playback already treat it like any track ([Track automation](automation.md)).
 
 ## Related

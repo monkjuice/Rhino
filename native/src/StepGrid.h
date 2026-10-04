@@ -156,6 +156,9 @@ private:
     std::vector<MovingNote> movingNotes;
     Gesture gesture = Gesture::none;
     bool adding = true, showingDrumLabels = false, noteMoved = false, manualPitchScroll = false, movingGroup = false, resizingFromLeft = false;
+    // The gesture clock repeats the drag while autoscrolling. Remember the
+    // snapped edge so a stationary pointer does not rewrite the model at 60 Hz.
+    bool hasResizeTarget = false;
     bool drawMode = false;
     // A plain press inside a group of selected notes keeps the group, so the
     // drag carries all of it. If the press turns out never to have been a
@@ -179,7 +182,7 @@ private:
     juce::Point<float> keyboardDragPosition {-1.0f, -1.0f};
     double keyboardScrollRemainder = 0.0;
     double dragStartStep = -1.0;
-    double resizingStartStep = 0.0;
+    double resizingStartStep = 0.0, resizeTarget = 0.0;
     juce::ValueTree movingNoteState, resizingNoteState;
     bool subdivisionActive = false;
     int subdivisionCount = 0;

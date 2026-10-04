@@ -219,6 +219,7 @@ void StepGrid::mouseDown(const juce::MouseEvent& event)
             const auto bounds = boundsFor(note);
             resizingFromLeft = event.position.x < bounds.getCentreX();
             resizingStartStep = note.start;
+            hasResizeTarget = false;
             dragPosition = event.position;
             noteMoved = false;
             session.beginNoteGesture("Resize note");
@@ -462,9 +463,15 @@ juce::Result StepGrid::resizeCurrentNoteTo(int index)
         return juce::Result::ok();
     const auto targetStep = index % Session::steps;
     const auto length = std::max(0.0625, targetStep - resizingStartStep + 1.0);
+    if (hasResizeTarget && std::abs(resizeTarget - length) < 0.0001)
+        return juce::Result::ok();
     const auto result = session.resizeNote(resizingNoteState, length);
     if (result.wasOk())
+    {
+        resizeTarget = length;
+        hasResizeTarget = true;
         noteMoved = true;
+    }
     return result;
 }
 
@@ -479,9 +486,13 @@ juce::Result StepGrid::resizeCurrentNoteTo(juce::Point<float> position, bool fre
             newStart = std::round(newStart);
         else
             newStart = std::round(newStart * 16.0) / 16.0;
+        if (hasResizeTarget && std::abs(resizeTarget - newStart) < 0.0001)
+            return juce::Result::ok();
         const auto result = session.resizeNoteFromLeft(resizingNoteState, newStart);
         if (result.wasOk())
         {
+            resizeTarget = newStart;
+            hasResizeTarget = true;
             resizingStartStep = newStart;
             noteMoved = true;
         }
@@ -495,8 +506,15 @@ juce::Result StepGrid::resizeCurrentNoteTo(juce::Point<float> position, bool fre
         length = std::round(length);
     else
         length = std::round(length * 16.0) / 16.0;
+    if (hasResizeTarget && std::abs(resizeTarget - length) < 0.0001)
+        return juce::Result::ok();
     const auto result = session.resizeNote(resizingNoteState, length);
-    if (result.wasOk()) noteMoved = true;
+    if (result.wasOk())
+    {
+        resizeTarget = length;
+        hasResizeTarget = true;
+        noteMoved = true;
+    }
     return result;
 }
 
@@ -607,6 +625,7 @@ void StepGrid::mouseUp(const juce::MouseEvent& event)
     stopTimer();
     resizingNoteState = {};
     resizingFromLeft = false;
+    hasResizeTarget = false;
     noteMoved = false;
 }
 

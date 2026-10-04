@@ -290,6 +290,8 @@ juce::Result Session::resizeNote(int step, int pitch, double lengthSteps)
         if (note->getNoteNumber() == pitch
             && std::abs(note->getStartBeat().inBeats() - beat) < 0.0001)
         {
+            if (std::abs(note->getLengthBeats().inBeats() / stepBeats - lengthSteps) < 0.0001)
+                return juce::Result::ok();
             const auto start = tracktion::core::BeatPosition::fromBeats(beat);
             const auto length = tracktion::core::BeatDuration::fromBeats(lengthSteps * stepBeats);
             note->setStartAndLength(start, length, undoManager);
@@ -310,12 +312,16 @@ juce::Result Session::resizeNote(const juce::ValueTree& state, double lengthStep
     const auto stepBeats = stepDurationBeats(editorStepResolution());
     const auto startStep = stepForBeat(note->getStartBeat().inBeats());
     lengthSteps = std::clamp(lengthSteps, 0.001, static_cast<double>(editorStepCount()) - startStep);
+    if (std::abs(note->getLengthBeats().inBeats() / stepBeats - lengthSteps) < 0.0001)
+        return juce::Result::ok();
     auto nextStart = static_cast<double>(editorStepCount());
     for (auto* other : sequence.getNotes())
         if (other != note && other->getNoteNumber() == note->getNoteNumber()
             && other->getStartBeat() > note->getStartBeat())
             nextStart = std::min(nextStart, stepForBeat(other->getStartBeat().inBeats()));
     lengthSteps = std::min(lengthSteps, std::max(0.001, nextStart - startStep));
+    if (std::abs(note->getLengthBeats().inBeats() / stepBeats - lengthSteps) < 0.0001)
+        return juce::Result::ok();
     note->setStartAndLength(note->getStartBeat(),
                             tracktion::core::BeatDuration::fromBeats(lengthSteps * stepBeats),
                             &edit->getUndoManager());
@@ -340,6 +346,8 @@ juce::Result Session::resizeNoteFromLeft(double startStep, int pitch, double new
                 if (other->getNoteNumber() == pitch && other != note && other->getStartBeat().inBeats() < startBeat)
                     previousEnd = std::max(previousEnd, stepForBeat(other->getEndBeat().inBeats()));
             newStartStep = std::clamp(newStartStep, previousEnd, endStep - 0.0625);
+            if (std::abs(stepForBeat(note->getStartBeat().inBeats()) - newStartStep) < 0.0001)
+                return juce::Result::ok();
             note->setStartAndLength(tracktion::core::BeatPosition::fromBeats(beatForStep(newStartStep)),
                                     tracktion::core::BeatDuration::fromBeats((endStep - newStartStep) * stepBeats), undoManager);
             markModified();
@@ -364,6 +372,8 @@ juce::Result Session::resizeNoteFromLeft(const juce::ValueTree& state, double ne
             && other->getStartBeat() < note->getStartBeat())
             previousEnd = std::max(previousEnd, stepForBeat(other->getEndBeat().inBeats()));
     newStartStep = std::clamp(newStartStep, previousEnd, endStep - 0.001);
+    if (std::abs(stepForBeat(note->getStartBeat().inBeats()) - newStartStep) < 0.0001)
+        return juce::Result::ok();
     note->setStartAndLength(tracktion::core::BeatPosition::fromBeats(beatForStep(newStartStep)),
                             tracktion::core::BeatDuration::fromBeats((endStep - newStartStep) * stepBeats),
                             &edit->getUndoManager());

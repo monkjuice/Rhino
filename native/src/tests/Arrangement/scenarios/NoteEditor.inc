@@ -73,11 +73,24 @@
         const auto resizeTarget = selectionGrid.cell(4, rowForPitch(48)).getCentre();
         selectionGrid.mouseDown(gridEvent(resizeHandle, resizeHandle, false));
         selectionGrid.mouseDrag(gridEvent(resizeHandle, resizeTarget, true));
+        const auto revisionAfterResize = session.changeRevision;
+        selectionGrid.timerCallback();
+        require(session.changeRevision == revisionAfterResize,
+                "The resize timer does no model, undo or UI work while the snapped note length is unchanged");
         selectionGrid.mouseUp(gridEvent(resizeHandle, resizeTarget, true));
         selectionGrid.changeListenerCallback(nullptr);
         require(session.noteLengthSteps(1, 48) == 4
                 && selectionGrid.noteLengths[static_cast<size_t>(selectionGrid.indexForCell(1, 48))] == 4,
                 "Dragging a note edge resizes its musical length in the editor");
+        juce::ValueTree resizedState;
+        for (const auto& note : selectionGrid.visibleNotes)
+            if (note.pitch == 48 && close(note.start, 1.0))
+                resizedState = note.state;
+        require(resizedState.isValid(), "The resized note is addressable by state");
+        const auto revisionBeforeUnchangedLeftEdge = session.changeRevision;
+        require(session.resizeNoteFromLeft(resizedState, 1.0).wasOk()
+                && session.changeRevision == revisionBeforeUnchangedLeftEdge,
+                "An unchanged left note edge does no model, undo or UI work");
         session.setNote(1, 49, true);
         require(session.resizeNote(1, 49, 4).wasOk(), "Can create a sustained note for drag testing");
         selectionGrid.changeListenerCallback(nullptr);

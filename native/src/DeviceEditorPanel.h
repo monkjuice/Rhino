@@ -65,6 +65,7 @@ private:
     void styleArpControls();
     juce::ComboBox* arpChoiceFor(int parameter) const;
     int arpParameterForComponent(const juce::Component*) const;
+    void setArpButtonParameter(int parameter, float value);
     // Rhino Tune's face is its own translation unit, DeviceEditorPanelAutoTune.cpp:
     // it is a meter, a keyboard and two choosers on top of the knobs, and it is
     // the only face that needs the device itself rather than its parameters.
@@ -120,6 +121,7 @@ private:
     juce::OwnedArray<juce::ComboBox> arpChoiceControls;
     std::vector<int> arpChoiceParameters;
     juce::TextButton arpHold {"Hold"};
+    juce::TextButton arpRateBeats {"Beat"}, arpRateMilliseconds {"ms"};
     bool arpControlsCreated = false;
     juce::Label title;
     juce::TextButton power;

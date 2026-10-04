@@ -162,6 +162,30 @@ int runSelfTest()
             }
             require(firstChord == std::vector<int>({60, 63, 67}));
             require(secondChord == std::vector<int>({48, 51, 55}));
+
+            // Free rate is measured in wall-clock time rather than converted
+            // to a saved note division. The same scheduler still honours the
+            // exact in-block start of the arriving chord.
+            setArp("steps", 0.0f);
+            setArp("rateMode", 1.0f);
+            setArp("freeRate", 80.0f);
+            arp->reset();
+            te::MidiMessageArray freeRateMidi;
+            freeRateMidi.addMidiMessage(juce::MidiMessage::noteOn(1, 60, 0.8f), 0.10, {});
+            freeRateMidi.addMidiMessage(juce::MidiMessage::noteOff(1, 60), 0.42, {});
+            const tracktion::core::TimeRange freeRateTime {
+                tracktion::core::TimePosition::fromSeconds(0.0),
+                tracktion::core::TimePosition::fromSeconds(0.5)};
+            te::PluginRenderContext freeRateContext(nullptr, 0, 24000, &freeRateMidi, 0.0,
+                                                     freeRateTime, true, false, true, false);
+            arp->applyToBuffer(freeRateContext);
+            std::vector<double> freeRateOnsets;
+            for (const auto& message : freeRateMidi)
+                if (message.isNoteOn())
+                    freeRateOnsets.push_back(message.getTimeStamp());
+            require(freeRateOnsets.size() == 4);
+            for (int i = 0; i < static_cast<int>(freeRateOnsets.size()); ++i)
+                require(std::abs(freeRateOnsets[static_cast<size_t>(i)] - (0.10 + i * 0.08)) < 1.0e-5);
             arp->deinitialise();
         }
 

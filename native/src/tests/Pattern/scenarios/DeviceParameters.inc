@@ -54,7 +54,9 @@
                     && arpParameters[RhinoArpDevice::grooveParameter].valueText == "Swing 16"
                     && arpParameters[RhinoArpDevice::retriggerParameter].valueText == "Beat"
                     && arpParameters[RhinoArpDevice::rootParameter].valueText == "G#"
-                    && arpParameters[RhinoArpDevice::scaleParameter].valueText == "Minor",
+                    && arpParameters[RhinoArpDevice::scaleParameter].valueText == "Minor"
+                    && arpParameters[RhinoArpDevice::rateModeParameter].valueText == "Beats"
+                    && arpParameters[RhinoArpDevice::freeRateParameter].valueText == "125 ms",
                     "Rhino Arp opens with the Bouncy Chords controls and defaults");
             require(parameterSession.addInstrument(Session::Instrument::RhinoWave, 2).wasOk(), "A MIDI track hosts Rhino Wave");
             int waveSlot = -1;

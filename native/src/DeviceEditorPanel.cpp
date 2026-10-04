@@ -70,7 +70,7 @@ void DeviceEditorPanel::setTarget(int nextTrack, const Session::DeviceSlot& devi
          : Face::Generic;
     // A freshly rebuilt built-in plugin can briefly have no display name while
     // Tracktion refreshes its state. The face still has a stable catalog name.
-    if (deviceName.isEmpty() && face == Face::Arp)
+    if (face == Face::Arp)
         deviceName = RhinoArpDevice::getPluginName();
     // The tuner's meter and the EQ's spectrum are the only things on any face
     // that move on their own, so they are the only devices that ask for
@@ -100,6 +100,8 @@ void DeviceEditorPanel::setTarget(int nextTrack, const Session::DeviceSlot& devi
     else
     {
         arpHold.setVisible(false);
+        arpRateBeats.setVisible(false);
+        arpRateMilliseconds.setVisible(false);
         for (auto* choice : arpChoiceControls)
             choice->setVisible(false);
     }
@@ -268,11 +270,11 @@ void DeviceEditorPanel::showParameterMenu(int index)
 
 int DeviceEditorPanel::visibleParameterCount() const
 {
-    // Twelve is what the generic grid can lay out and stay readable. Rhino
-    // Tune's own face has room for its thirteenth, and the device lists its
-    // parameters so the twelve a fallback panel would show come first.
-    return std::min(face == Face::AutoTune || face == Face::Vocoder || face == Face::Arp ? 13 : 12,
-                    static_cast<int>(parameters.size()));
+    // Twelve is what the generic grid can lay out and stay readable. Dedicated
+    // faces can expose more because they give each control an intentional home.
+    const auto limit = face == Face::Arp ? RhinoArpDevice::parameterCount
+        : face == Face::AutoTune || face == Face::Vocoder ? 13 : 12;
+    return std::min(limit, static_cast<int>(parameters.size()));
 }
 
 void DeviceEditorPanel::ensureControls()
@@ -318,144 +320,39 @@ void DeviceEditorPanel::ensureControls()
     }
 }
 
-void DeviceEditorPanel::ensureArpControls()
-{
-    if (arpControlsCreated)
-        return;
-    arpControlsCreated = true;
-
-    constexpr std::array<int, 10> choiceParameters {
-        RhinoArpDevice::styleParameter,
-        RhinoArpDevice::rateParameter,
-        RhinoArpDevice::stepsParameter,
-        RhinoArpDevice::offsetParameter,
-        RhinoArpDevice::grooveParameter,
-        RhinoArpDevice::retriggerParameter,
-        RhinoArpDevice::intervalParameter,
-        RhinoArpDevice::repeatsParameter,
-        RhinoArpDevice::rootParameter,
-        RhinoArpDevice::scaleParameter
-    };
-
-    for (const auto parameter : choiceParameters)
-    {
-        auto* choice = arpChoiceControls.add(new juce::ComboBox());
-        arpChoiceParameters.push_back(parameter);
-        for (int value = 0; value < RhinoArpDevice::parameterChoiceCount(parameter); ++value)
-            choice->addItem(RhinoArpDevice::parameterChoiceName(parameter, value), value + 1);
-        choice->setJustificationType(juce::Justification::centred);
-        choice->onChange = [this, parameter, choice]
-        {
-            if (syncing || choice->getSelectedId() == 0)
-                return;
-            const auto started = session.beginDeviceParameterGesture(track, pluginSlot, parameter);
-            if (started.failed())
-            {
-                if (status) status(started.getErrorMessage());
-                return;
-            }
-            const auto changed = session.setDeviceParameter(track, pluginSlot, parameter,
-                                                            static_cast<float>(choice->getSelectedId() - 1));
-            const auto ended = session.endDeviceParameterGesture(track, pluginSlot, parameter);
-            if (changed.failed() && status) status(changed.getErrorMessage());
-            else if (ended.failed() && status) status(ended.getErrorMessage());
-        };
-        addAndMakeVisible(choice);
-    }
-
-    arpHold.setClickingTogglesState(true);
-    arpHold.onClick = [this]
-    {
-        constexpr auto parameter = RhinoArpDevice::holdParameter;
-        const auto wasOn = juce::isPositiveAndBelow(parameter, static_cast<int>(parameters.size()))
-            && parameters[static_cast<size_t>(parameter)].value >= 0.5f;
-        const auto started = session.beginDeviceParameterGesture(track, pluginSlot, parameter);
-        if (started.failed())
-        {
-            if (status) status(started.getErrorMessage());
-            return;
-        }
-        const auto changed = session.setDeviceParameter(track, pluginSlot, parameter,
-                                                        wasOn ? 0.0f : 1.0f);
-        const auto ended = session.endDeviceParameterGesture(track, pluginSlot, parameter);
-        if (changed.failed() && status) status(changed.getErrorMessage());
-        else if (ended.failed() && status) status(ended.getErrorMessage());
-    };
-    addAndMakeVisible(arpHold);
-}
-
-void DeviceEditorPanel::styleArpControls()
-{
-    if (!arpControlsCreated)
-        return;
-
-    syncing = true;
-    for (int i = 0; i < arpChoiceControls.size(); ++i)
-    {
-        const auto parameter = arpChoiceParameters[static_cast<size_t>(i)];
-        const auto valid = juce::isPositiveAndBelow(parameter, static_cast<int>(parameters.size()));
-        auto* choice = arpChoiceControls[i];
-        choice->setVisible(valid);
-        if (!valid)
-            continue;
-        const auto& value = parameters[static_cast<size_t>(parameter)];
-        choice->setSelectedId(juce::roundToInt(value.value) + 1, juce::dontSendNotification);
-        choice->setTooltip(value.name + ": " + value.valueText + ". Right-click for automation.");
-        choice->setColour(juce::ComboBox::backgroundColourId, palette::control);
-        choice->setColour(juce::ComboBox::outlineColourId, palette::border);
-        choice->setColour(juce::ComboBox::textColourId, palette::text);
-        choice->setColour(juce::ComboBox::arrowColourId, palette::midiEffect);
-    }
-
-    const auto holdOn = juce::isPositiveAndBelow(RhinoArpDevice::holdParameter,
-                                                  static_cast<int>(parameters.size()))
-        && parameters[RhinoArpDevice::holdParameter].value >= 0.5f;
-    arpHold.setVisible(true);
-    arpHold.setToggleState(holdOn, juce::dontSendNotification);
-    arpHold.setTooltip("Hold: " + juce::String(holdOn ? "On" : "Off") + ". Right-click for automation.");
-    arpHold.setColour(juce::TextButton::buttonColourId, palette::control);
-    arpHold.setColour(juce::TextButton::buttonOnColourId, palette::midiEffect.darker(0.62f));
-    arpHold.setColour(juce::TextButton::textColourOffId, palette::textDim);
-    arpHold.setColour(juce::TextButton::textColourOnId, palette::text);
-    syncing = false;
-}
-
-juce::ComboBox* DeviceEditorPanel::arpChoiceFor(int parameter) const
-{
-    for (int i = 0; i < arpChoiceControls.size(); ++i)
-        if (arpChoiceParameters[static_cast<size_t>(i)] == parameter)
-            return arpChoiceControls[i];
-    return nullptr;
-}
-
-int DeviceEditorPanel::arpParameterForComponent(const juce::Component* component) const
-{
-    if (component == &arpHold || arpHold.isParentOf(component))
-        return RhinoArpDevice::holdParameter;
-    for (int i = 0; i < arpChoiceControls.size(); ++i)
-        if (component == arpChoiceControls[i] || arpChoiceControls[i]->isParentOf(component))
-            return arpChoiceParameters[static_cast<size_t>(i)];
-    return -1;
-}
-
 void DeviceEditorPanel::styleControls()
 {
     const auto count = visibleParameterCount();
+    const auto beatRate = !juce::isPositiveAndBelow(RhinoArpDevice::rateModeParameter,
+                                                     static_cast<int>(parameters.size()))
+        || parameters[RhinoArpDevice::rateModeParameter].value < 0.5f;
     syncing = true;
     for (int i = 0; i < parameterLabels.size(); ++i)
     {
-        // Gate and Distance are the only continuous Arp controls. The rest
-        // are deliberate musical choices and live in selectors below.
-        const auto visible = i < count && (face != Face::Arp
-            || i == RhinoArpDevice::gateParameter || i == RhinoArpDevice::distanceParameter);
+        // Arp mixes selectors with tactile fields. Both rate values exist for
+        // automation, but only the value chosen by the tiny mode buttons is
+        // put under the hand.
+        const auto arpSlider = i == RhinoArpDevice::gateParameter
+            || i == RhinoArpDevice::distanceParameter
+            || i == RhinoArpDevice::intervalParameter
+            || i == RhinoArpDevice::repeatsParameter
+            || (i == RhinoArpDevice::rateParameter && beatRate)
+            || (i == RhinoArpDevice::freeRateParameter && !beatRate);
+        const auto visible = i < count && (face != Face::Arp || arpSlider);
         // The Arp face draws the two knob captions itself, alongside the
         // compact grouped controls. Leaving the generic captions or A buttons
         // live would retain their previous layout rectangles.
         const auto genericChromeVisible = visible && face != Face::Arp;
         parameterLabels[i]->setVisible(genericChromeVisible);
-        parameterValues[i]->setVisible(genericChromeVisible);
+        const auto arpRepeatReadout = face == Face::Arp && visible
+            && i == RhinoArpDevice::repeatsParameter;
+        parameterValues[i]->setVisible(genericChromeVisible || arpRepeatReadout);
         parameterSliders[i]->setVisible(visible);
         parameterAutomation[i]->setVisible(genericChromeVisible);
+        parameterSliders[i]->setSliderStyle(face == Face::Arp && i == RhinoArpDevice::repeatsParameter
+            ? juce::Slider::LinearBarVertical : juce::Slider::RotaryHorizontalVerticalDrag);
+        parameterSliders[i]->setSkewFactor(1.0);
+        parameterSliders[i]->textFromValueFunction = {};
         if (!visible) continue;
 
         const auto& parameter = parameters[static_cast<size_t>(i)];
@@ -468,7 +365,30 @@ void DeviceEditorPanel::styleControls()
         parameterLabels[i]->setColour(juce::Label::textColourId, juce::Colour(0xffdfe6ea));
         parameterValues[i]->setText(parameter.valueText, juce::dontSendNotification);
         parameterValues[i]->setColour(juce::Label::textColourId, juce::Colour(0xffaebbc3));
+        parameterValues[i]->setInterceptsMouseClicks(!arpRepeatReadout, false);
+        if (arpRepeatReadout)
+        {
+            parameterValues[i]->setText(parameter.value < 0.5f ? "All" : parameter.valueText,
+                                        juce::dontSendNotification);
+            parameterValues[i]->toFront(false);
+        }
         parameterSliders[i]->setRange(parameter.minimum, parameter.maximum, parameter.discrete ? 1.0 : 0.0);
+        if (face == Face::Arp && i == RhinoArpDevice::freeRateParameter)
+            parameterSliders[i]->setSkewFactorFromMidPoint(250.0);
+        if (face == Face::Arp && (i == RhinoArpDevice::rateParameter
+                                 || i == RhinoArpDevice::intervalParameter
+                                 || i == RhinoArpDevice::repeatsParameter))
+            parameterSliders[i]->textFromValueFunction = [i] (double value)
+            {
+                if (i == RhinoArpDevice::repeatsParameter && value < 0.5)
+                    return juce::String("All");
+                return RhinoArpDevice::parameterChoiceName(i, juce::roundToInt(value));
+            };
+        else if (face == Face::Arp && i == RhinoArpDevice::freeRateParameter)
+            parameterSliders[i]->textFromValueFunction = [] (double value)
+            {
+                return juce::String(juce::roundToInt(value)) + " ms";
+            };
         parameterSliders[i]->setValue(parameter.value, juce::dontSendNotification);
         parameterSliders[i]->setTooltip(parameter.name + ": " + parameter.valueText);
         parameterSliders[i]->setColour(juce::Slider::trackColourId, accent);

@@ -8,9 +8,9 @@ namespace rhino
 {
 namespace te = tracktion::engine;
 
-// A tempo-synchronised MIDI effect. It owns no voices and produces no audio:
-// held input notes are consumed here and the notes it generates continue down
-// the track's device chain to whichever instrument follows it.
+// A clocked MIDI effect with tempo-synchronised and free-millisecond rates. It
+// owns no voices and produces no audio: held input notes are consumed here and
+// generated notes continue down the chain to whichever instrument follows it.
 class RhinoArpDevice final : public te::Plugin
 {
 public:
@@ -35,6 +35,10 @@ public:
         repeatsParameter,
         rootParameter,
         scaleParameter,
+        // Append new controls: automation addresses the original controls by
+        // their exposed index, so their order is part of the saved contract.
+        rateModeParameter,
+        freeRateParameter,
         parameterCount
     };
 
@@ -86,8 +90,10 @@ private:
     };
 
     double rateBeats() const;
+    double nextStepBeat(double tickBeat, int step) const;
+    double noteOffBeat(double tickBeat, double nextBeat, int step) const;
+    double grooveMultiplier(int step) const;
     double intervalBeats() const;
-    double stepLengthBeats(int step) const;
     int activeNoteCount() const;
     int physicallyHeldCount() const;
     int noteAtOrdinal(int ordinal) const;
@@ -108,9 +114,11 @@ private:
 
     juce::CachedValue<float> style, rateIndex, gatePercent, distance, steps, offset;
     juce::CachedValue<float> groove, hold, retrigger, interval, repeats, root, scale;
+    juce::CachedValue<float> rateMode, freeRateMilliseconds;
     te::AutomatableParameter::Ptr styleParam, rateParam, gateParam, distanceParam, stepsParam;
     te::AutomatableParameter::Ptr offsetParam, grooveParam, holdParam, retriggerParam;
     te::AutomatableParameter::Ptr intervalParam, repeatsParam, rootParam, scaleParam;
+    te::AutomatableParameter::Ptr rateModeParam, freeRateParam;
 
     std::array<HeldNote, 128> heldNotes;
     // A full MIDI chord can schedule one release per pitch. Four banks leave

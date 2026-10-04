@@ -135,6 +135,10 @@ void runPatternDeviceRackTest()
     juce::ComboBox* arpRoot = nullptr;
     juce::ComboBox* arpScale = nullptr;
     juce::TextButton* arpHold = nullptr;
+    juce::TextButton* arpBeatRate = nullptr;
+    juce::TextButton* arpMillisecondRate = nullptr;
+    juce::Slider* arpInterval = nullptr;
+    juce::Slider* arpRepeats = nullptr;
     for (auto* child : arpPanel->getChildren())
     {
         if (child->isVisible())
@@ -144,6 +148,9 @@ void runPatternDeviceRackTest()
         {
             ++arpKnobCount;
             arpControls.push_back(child->getBounds());
+            auto* slider = dynamic_cast<juce::Slider*>(child);
+            if (slider->getTooltip().startsWith("Interval:")) arpInterval = slider;
+            if (slider->getTooltip().startsWith("Repeats:")) arpRepeats = slider;
         }
         if (child->isVisible())
             if (auto* choice = dynamic_cast<juce::ComboBox*>(child))
@@ -159,10 +166,24 @@ void runPatternDeviceRackTest()
                 arpHold = button;
                 arpControls.push_back(button->getBounds());
             }
+        if (child->isVisible())
+            if (auto* button = dynamic_cast<juce::TextButton*>(child); button != nullptr
+                && (button->getName() == "Beat rate" || button->getName() == "Millisecond rate"))
+            {
+                if (button->getName() == "Beat rate") arpBeatRate = button;
+                if (button->getName() == "Millisecond rate") arpMillisecondRate = button;
+                arpControls.push_back(button->getBounds());
+            }
     }
-    require(arpKnobCount == 2 && arpChoiceCount == 10 && arpHold != nullptr
+    require(arpKnobCount == 5 && arpChoiceCount == 7 && arpHold != nullptr
+            && arpBeatRate != nullptr && arpMillisecondRate != nullptr
             && arpControls.size() == RhinoArpDevice::parameterCount,
-            "Rhino Arp uses two continuous knobs, choice menus, and one Hold switch");
+            "Rhino Arp uses tactile rate, interval, repeat, distance, and gate controls");
+    require(arpInterval != nullptr
+            && arpInterval->getSliderStyle() == juce::Slider::RotaryHorizontalVerticalDrag
+            && arpRepeats != nullptr
+            && arpRepeats->getSliderStyle() == juce::Slider::LinearBarVertical,
+            "Rhino Arp presents Interval as a knob and Repeats as a vertically dragged value bar");
     require(arpRoot != nullptr && arpScale != nullptr && arpRoot->getNumItems() == 12
             && arpScale->getNumItems() == 3 && arpRoot->getText() == "G#" && arpScale->getText() == "Minor",
             "Rhino Arp exposes its root and scale as named dropdowns");
@@ -175,6 +196,11 @@ void runPatternDeviceRackTest()
     require(arpParameters[RhinoArpDevice::rootParameter].valueText == "C"
             && arpParameters[RhinoArpDevice::holdParameter].valueText == "Off",
             "Rhino Arp's dropdown and Hold switch write ordinary automatable parameters");
+    arpMillisecondRate->onClick();
+    const auto freeRateParameters = session.deviceParameters(0, session.deviceSlots(0).front().pluginIndex);
+    require(freeRateParameters[RhinoArpDevice::rateModeParameter].valueText == "Milliseconds",
+            "Rhino Arp's tiny rate buttons switch the scheduler between beats and milliseconds");
+    arpBeatRate->onClick();
     arpRoot->setSelectedId(9, juce::sendNotificationSync);
     arpHold->onClick();
     const auto arpSnapshot = arpPanel->createComponentSnapshot(arpPanel->getLocalBounds());

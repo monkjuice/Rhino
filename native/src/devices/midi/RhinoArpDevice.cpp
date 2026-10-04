@@ -11,6 +11,7 @@ constexpr std::array<const char*, 5> rateNames {"1/8", "1/16", "1/32", "1/8T", "
 constexpr std::array<const char*, 3> grooveNames {"Straight", "Swing 8", "Swing 16"};
 constexpr std::array<const char*, 3> retriggerNames {"Off", "Note", "Beat"};
 constexpr std::array<const char*, 4> intervalNames {"1/4", "1/2", "1 bar", "2 bars"};
+constexpr std::array<const char*, 2> rateModeNames {"Beats", "Milliseconds"};
 constexpr std::array<const char*, 12> rootNames {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
 constexpr std::array<const char*, 3> scaleNames {"Chromatic", "Major", "Minor"};
 constexpr std::array<int, 7> majorScale {0, 2, 4, 5, 7, 9, 11};
@@ -43,6 +44,7 @@ int RhinoArpDevice::parameterChoiceCount(int parameterIndex)
         case repeatsParameter: return 9;
         case rootParameter: return static_cast<int>(rootNames.size());
         case scaleParameter: return static_cast<int>(scaleNames.size());
+        case rateModeParameter: return static_cast<int>(rateModeNames.size());
         default: return 0;
     }
 }
@@ -64,6 +66,7 @@ juce::String RhinoArpDevice::parameterChoiceName(int parameterIndex, int choice)
                                                     : juce::String(selected);
         case rootParameter: return rootNames[static_cast<size_t>(selected)];
         case scaleParameter: return scaleNames[static_cast<size_t>(selected)];
+        case rateModeParameter: return rateModeNames[static_cast<size_t>(selected)];
         default: return {};
     }
 }
@@ -85,6 +88,8 @@ RhinoArpDevice::RhinoArpDevice(te::PluginCreationInfo info) : Plugin(info)
     repeats.referTo(state, "repeats", getUndoManager(), 0.0f);
     root.referTo(state, "root", getUndoManager(), 8.0f);
     scale.referTo(state, "scale", getUndoManager(), 2.0f);
+    rateMode.referTo(state, "rateMode", getUndoManager(), 0.0f);
+    freeRateMilliseconds.referTo(state, "freeRate", getUndoManager(), 125.0f);
 
     styleParam = addParam("style", "Style", {0.0f, 4.0f, 1.0f});
     rateParam = addParam("rate", "Rate", {0.0f, 4.0f, 1.0f});
@@ -99,6 +104,8 @@ RhinoArpDevice::RhinoArpDevice(te::PluginCreationInfo info) : Plugin(info)
     repeatsParam = addParam("repeats", "Repeats", {0.0f, 8.0f, 1.0f});
     rootParam = addParam("root", "Root", {0.0f, 11.0f, 1.0f});
     scaleParam = addParam("scale", "Scale", {0.0f, 2.0f, 1.0f});
+    rateModeParam = addParam("rateMode", "Rate Mode", {0.0f, 1.0f, 1.0f});
+    freeRateParam = addParam("freeRate", "Free Rate", {10.0f, 2000.0f, 1.0f});
 
     styleParam->valueToStringFunction = [] (float value)
     { return parameterChoiceName(styleParameter, juce::roundToInt(value)); };
@@ -127,6 +134,10 @@ RhinoArpDevice::RhinoArpDevice(te::PluginCreationInfo info) : Plugin(info)
     { return parameterChoiceName(rootParameter, juce::roundToInt(value)); };
     scaleParam->valueToStringFunction = [] (float value)
     { return parameterChoiceName(scaleParameter, juce::roundToInt(value)); };
+    rateModeParam->valueToStringFunction = [] (float value)
+    { return parameterChoiceName(rateModeParameter, juce::roundToInt(value)); };
+    freeRateParam->valueToStringFunction = [] (float value)
+    { return juce::String(juce::roundToInt(value)) + " ms"; };
 
     styleParam->attachToCurrentValue(style);
     rateParam->attachToCurrentValue(rateIndex);
@@ -141,6 +152,8 @@ RhinoArpDevice::RhinoArpDevice(te::PluginCreationInfo info) : Plugin(info)
     repeatsParam->attachToCurrentValue(repeats);
     rootParam->attachToCurrentValue(root);
     scaleParam->attachToCurrentValue(scale);
+    rateModeParam->attachToCurrentValue(rateMode);
+    freeRateParam->attachToCurrentValue(freeRateMilliseconds);
 }
 
 RhinoArpDevice::~RhinoArpDevice()
@@ -159,6 +172,8 @@ RhinoArpDevice::~RhinoArpDevice()
     repeatsParam->detachFromCurrentValue();
     rootParam->detachFromCurrentValue();
     scaleParam->detachFromCurrentValue();
+    rateModeParam->detachFromCurrentValue();
+    freeRateParam->detachFromCurrentValue();
 }
 
 void RhinoArpDevice::initialise(const te::PluginInitialisationInfo& info)
@@ -211,22 +226,51 @@ double RhinoArpDevice::intervalBeats() const
     }
 }
 
-double RhinoArpDevice::stepLengthBeats(int step) const
+double RhinoArpDevice::grooveMultiplier(int step) const
 {
-    const auto straight = rateBeats();
     const auto selected = static_cast<Groove>(juce::roundToInt(grooveParam->getCurrentValue()));
     if (selected == Groove::Straight)
-        return straight;
+        return 1.0;
 
     // 58/42 is deliberately a groove rather than a second rate. The pair
     // keeps the same total length, so bars and beat retriggers remain aligned.
+    const auto straight = rateBeats();
     const auto swingPair = selected == Groove::Swing16 ? 2 : std::max(2, juce::roundToInt(1.0 / straight));
     const auto place = positiveModulo(step, swingPair);
     if (place == 0)
-        return straight * 1.16;
+        return 1.16;
     if (place == 1)
-        return straight * 0.84;
-    return straight;
+        return 0.84;
+    return 1.0;
+}
+
+double RhinoArpDevice::nextStepBeat(double tickBeat, int step) const
+{
+    const auto multiplier = grooveMultiplier(step);
+    if (rateModeParam->getCurrentValue() < 0.5f)
+        return tickBeat + rateBeats() * multiplier;
+
+    const auto tickSeconds = edit.tempoSequence.toTime(
+        tracktion::core::BeatPosition::fromBeats(tickBeat)).inSeconds();
+    const auto nextSeconds = tickSeconds
+        + juce::jlimit(10.0f, 2000.0f, freeRateParam->getCurrentValue()) * 0.001 * multiplier;
+    return edit.tempoSequence.toBeats(
+        tracktion::core::TimePosition::fromSeconds(nextSeconds)).inBeats();
+}
+
+double RhinoArpDevice::noteOffBeat(double tickBeat, double nextBeat, int step) const
+{
+    const auto gate = juce::jlimit(10.0f, 200.0f, gateParam->getCurrentValue()) / 100.0;
+    if (rateModeParam->getCurrentValue() < 0.5f)
+        return tickBeat + (nextBeat - tickBeat) * gate;
+
+    const auto tickSeconds = edit.tempoSequence.toTime(
+        tracktion::core::BeatPosition::fromBeats(tickBeat)).inSeconds();
+    const auto offSeconds = tickSeconds
+        + juce::jlimit(10.0f, 2000.0f, freeRateParam->getCurrentValue()) * 0.001
+            * grooveMultiplier(step) * gate;
+    return edit.tempoSequence.toBeats(
+        tracktion::core::TimePosition::fromSeconds(offSeconds)).inBeats();
 }
 
 int RhinoArpDevice::activeNoteCount() const
@@ -395,9 +439,8 @@ void RhinoArpDevice::generateUntil(double endBeat, double blockStartSeconds, dou
         const auto fullPatternLength = std::max(1, patternLength * (transposeCount + 1));
         const auto repeatLimit = juce::jlimit(0, 8, juce::roundToInt(repeatsParam->getCurrentValue()));
         const auto shouldPlay = repeatLimit == 0 || sequenceStep < fullPatternLength * repeatLimit;
-        const auto stepLength = stepLengthBeats(sequenceStep);
-        const auto offBeat = nextTickBeat + stepLength
-            * juce::jlimit(10.0f, 200.0f, gateParam->getCurrentValue()) / 100.0;
+        const auto followingTick = nextStepBeat(nextTickBeat, sequenceStep);
+        const auto offBeat = noteOffBeat(nextTickBeat, followingTick, sequenceStep);
 
         if (shouldPlay)
         {
@@ -413,7 +456,7 @@ void RhinoArpDevice::generateUntil(double endBeat, double blockStartSeconds, dou
                          blockStartSeconds, blockEndSeconds, output);
             }
         }
-        nextTickBeat += stepLength;
+        nextTickBeat = followingTick;
         ++sequenceStep;
     }
 }
@@ -518,7 +561,8 @@ void RhinoArpDevice::applyToBuffer(const te::PluginRenderContext& context)
 void RhinoArpDevice::restorePluginStateFromValueTree(const juce::ValueTree& source)
 {
     te::copyPropertiesToCachedValues(source, style, rateIndex, gatePercent, distance, steps,
-                                     offset, groove, hold, retrigger, interval, repeats, root, scale);
+                                     offset, groove, hold, retrigger, interval, repeats, root, scale,
+                                     rateMode, freeRateMilliseconds);
     for (auto* parameter : getAutomatableParameters())
         parameter->updateFromAttachedValue();
 }

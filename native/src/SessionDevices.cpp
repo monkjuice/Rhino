@@ -18,12 +18,6 @@ bool isTrackInfrastructure(const juce::String& type)
     return type == "volume" || type == "level";
 }
 
-bool isBuiltInInstrument(const juce::String& type)
-{
-    const auto* device = DeviceCatalog::byTypeName(type);
-    return device != nullptr && device->kind == DeviceKind::Instrument;
-}
-
 Session::DeviceKind deviceKind(te::Plugin& plugin)
 {
     if (const auto* device = DeviceCatalog::byTypeName(plugin.getPluginType()))
@@ -32,19 +26,6 @@ Session::DeviceKind deviceKind(te::Plugin& plugin)
     if (isForgePlugin(plugin))
         return Session::DeviceKind::Instrument;
     return Session::DeviceKind::AudioEffect;
-}
-
-bool isSelectedPatternInstrument(te::Plugin& plugin, const juce::String& selected)
-{
-    const auto* device = DeviceCatalog::byTypeName(plugin.getPluginType());
-    if (device == nullptr && isForgePlugin(plugin))
-        device = DeviceCatalog::byId("RhinoForge");
-    if (device == nullptr || device->patternKey.isEmpty())
-        return true;
-    // An unset property means the original starter synth.
-    if (selected.isEmpty())
-        return device->patternKey == "synth";
-    return device->patternKey == selected;
 }
 
 // A chain runs MIDI effects, then the instrument, then audio effects. That is
@@ -216,8 +197,6 @@ juce::Result Session::addInstrumentDevice(const DeviceDescriptor& device, int tr
         if (result.failed())
             return result;
     }
-    if (trackIndex == 0 && !device.infrastructure && device.patternKey.isNotEmpty())
-        edit->state.setProperty("rhinoPatternInstrument", device.patternKey, &edit->getUndoManager());
     edit->getUndoManager().beginNewTransaction();
     if (changed)
         markModified();
@@ -298,8 +277,6 @@ juce::Result Session::addDrumKit(DrumKit kit, int trackIndex)
     // The track is named after its instrument, and the kit is what the
     // instrument now is.
     tracks[trackIndex]->setName(name);
-    if (trackIndex == 0)
-        edit->state.setProperty("rhinoPatternInstrument", "drums", &edit->getUndoManager());
     edit->getUndoManager().beginNewTransaction();
     markModified();
     if (edit->getTransport().isPlaying())
@@ -326,7 +303,9 @@ std::vector<Session::DeviceSlot> Session::deviceSlots(int track) const
     std::vector<DeviceSlot> slots;
     auto* list = pluginListForTrack(track);
     if (list == nullptr) return slots;
-    const auto selectedPatternInstrument = edit->state.getProperty("rhinoPatternInstrument").toString();
+    // Every device a track runs is shown and can be taken off. The channel
+    // strip is the one thing hidden, because it is the track's own rather than
+    // something put on it. No track is special for being first.
     for (int pluginIndex = 0; pluginIndex < list->size(); ++pluginIndex)
     {
         auto* plugin = (*list)[pluginIndex];
@@ -334,12 +313,8 @@ std::vector<Session::DeviceSlot> Session::deviceSlots(int track) const
         const auto type = plugin->getPluginType();
         if (isTrackInfrastructure(type))
             continue;
-        if (track == 0 && (isBuiltInInstrument(type) || isForgePlugin(*plugin))
-            && !isSelectedPatternInstrument(*plugin, selectedPatternInstrument))
-            continue;
-        const auto corePatternInstrument = track == 0 && deviceKind(*plugin) == DeviceKind::Instrument;
         slots.push_back({plugin->getDisplayName(), type, deviceKind(*plugin), pluginIndex,
-                         plugin->isEnabled(), !corePatternInstrument});
+                         plugin->isEnabled(), true});
     }
     return slots;
 }
@@ -552,14 +527,10 @@ juce::Result Session::deleteDevice(int track, int slot)
     if (list == nullptr || !juce::isPositiveAndBelow(slot, list->size()))
         return juce::Result::fail("Select a removable device first.");
     auto* plugin = (*list)[slot];
-    const auto type = plugin->getPluginType();
-    // The starter chain is a property of the first track, not of the devices
-    // themselves, so this is a list of ids rather than a catalog flag.
-    const auto* device = DeviceCatalog::byTypeName(type);
-    const auto id = device != nullptr ? device->id : juce::String();
-    const auto coreStarterDevice = track == 0 && (id == "Utility" || id == "FourOsc" || id == "Drums");
-    if (plugin == nullptr || coreStarterDevice || isTrackInfrastructure(type))
-        return juce::Result::fail("Core devices stay in the starter track chain.");
+    if (plugin == nullptr)
+        return juce::Result::fail("Select a removable device first.");
+    if (isTrackInfrastructure(plugin->getPluginType()))
+        return juce::Result::fail("The track's channel strip stays on the track.");
     edit->getUndoManager().beginNewTransaction("Delete device");
     plugin->removeFromParent();
     edit->getUndoManager().beginNewTransaction();

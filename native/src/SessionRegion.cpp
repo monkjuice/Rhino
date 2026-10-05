@@ -261,12 +261,6 @@ juce::Result Session::pasteClipRegion(const ClipRegion& region, double destinati
                                                                 forgeDescription ? &*forgeDescription : nullptr);
             if (instrumentResult.failed())
                 return instrumentResult;
-            if (targetIndex == 0)
-                edit->state.setProperty("rhinoPatternInstrument",
-                                        snapshot.instrument == Instrument::Drums ? "drums"
-                                            : snapshot.instrument == Instrument::RhinoWave ? "wave"
-                                            : snapshot.instrument == Instrument::RhinoForge ? "forge" : "synth",
-                                        &edit->getUndoManager());
             if (auto midiCopy = target->insertMIDIClip(snapshot.name, range, nullptr))
             {
                 auto& sequence = midiCopy->getSequence();

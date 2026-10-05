@@ -8,6 +8,7 @@
 #include "instruments/RhinoWaveDevice.h"
 #include "midi/RhinoArpDevice.h"
 #include "DeviceRackTest.h"
+#include "../../StepGrid.h"
 #include <stdexcept>
 
 namespace rhino
@@ -27,6 +28,8 @@ int runPatternTest()
         };
         scenario("device rack");
         runPatternDeviceRackTest();
+        scenario("no track is first");
+       #include "scenarios/NoFirstTrack.inc"
         Session session;
 
         scenario("device parameters");

@@ -11,9 +11,8 @@
 namespace rhino
 {
 struct PresetPattern;
-// Held only as a pointer here, so the definition stays in the device library.
-class UtilityDevice;
-// Likewise: the count-in click is an audio callback of Rhino's own, and only
+// Held only as a pointer here, so the definition stays where it is used: the
+// count-in click is an audio callback of Rhino's own, and only
 // SessionRecording.cpp needs to see how it works.
 class CountInClick;
 
@@ -191,7 +190,11 @@ public:
     void panicReset(bool restartAudioDevice = true);
     void releaseAudioDevice();
     static constexpr int steps = 512, defaultSteps = 16, pitches = 16, lowestNote = 48;
-    te::MidiClip& pattern() const { return *patternClip; }
+    // The MIDI clip open in the note editor. A document with no MIDI track has
+    // none, so ask hasPatternClip() before pattern(); every note edit below
+    // refuses rather than reaching for a clip that is not there.
+    bool hasPatternClip() const { return patternClip != nullptr; }
+    te::MidiClip& pattern() const { jassert(patternClip != nullptr); return *patternClip; }
     int editorStepResolution() const;
     int editorStepCount() const;
     double patternLengthBeats() const;
@@ -850,8 +853,6 @@ public:
     te::SceneWatcher* sceneWatcher() const;
     te::Engine engine;
     std::unique_ptr<te::Edit> edit;
-    UtilityDevice* utility = nullptr; // owned by edit's plugin list
-    UtilityDevice* audioUtility = nullptr; // owned by edit's plugin list
     // A track has one instrument, so there is nothing stable to cache: switching
     // removes the previous plugin. Ask the track instead.
     te::Plugin* patternInstrument() const;
@@ -901,9 +902,11 @@ private:
     // the clips already there are split at its edges and the part underneath
     // it is removed. This is the only place that rule lives.
     void makeRoomForClip(te::Clip&, const std::vector<te::EditItemID>& alsoKeep = {});
-    // Deleting clips can take the clip the note editor is pointed at. This puts
-    // the editor back on a clip of track one, making a starter one if the track
-    // has none left, and is what keeps `pattern()` safe to call.
+    // Deleting clips, deleting a track, undo and reopening can all take the
+    // clip the note editor is pointed at. This finds it again by id, and
+    // otherwise puts the editor on the first MIDI track's first MIDI clip,
+    // giving that track a hidden starter clip if it has none. A document with
+    // no MIDI track leaves the editor with no clip at all.
     void repairPatternClip();
     // SessionRecording.cpp - arming is Rhino's state, held on the track, and
     // the engine's input destinations are rebuilt from it rather than being a
@@ -978,7 +981,6 @@ private:
     te::ClipSlot* clipSlotAt(int track, int scene) const;
     te::VolumeAndPanPlugin* trackVolumePlugin(int track) const;
     void ensureTrackMixers();
-    void refreshUtilityPointers();
     // The reorder itself, without a transaction or a notification, so the group
     // calls can move several tracks inside one of their own.
     void moveTrackInEdit(int track, int destination);
@@ -999,8 +1001,6 @@ private:
     // owns the undo transaction and whatever reconciling the new row needs.
     te::AudioTrack* appendTrack(TrackType);
     void initialiseExternalPlugins(bool retry = false);
-    void setPatternInstrument(bool useDrums);
-    void ensureEditablePatternClip();
     juce::ValueTree automationOwnerState(int track) const;
     juce::ValueTree findTrackAutomationState(DeviceTarget) const;
     juce::ValueTree ensureTrackAutomationState(DeviceTarget, bool ownLane, bool keepExistingLane);

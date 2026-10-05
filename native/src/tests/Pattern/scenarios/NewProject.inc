@@ -36,8 +36,13 @@
         require(te::getAudioTracks(*session.edit)[1]->getClips().isEmpty(),
                 "A new project does not inherit the audio the last one held");
         require(!session.isPatternDrums(), "A new project does not inherit the drum instrument");
-        require(session.utility != nullptr, "A new project has its pattern track Utility device");
-        require(session.audioUtility != nullptr, "A new project's second track carries an audio Utility");
+        for (int track = 0; track < session.trackCount(); ++track)
+        {
+            auto carriesUtility = false;
+            for (auto* plugin : te::getAudioTracks(*session.edit)[track]->pluginList)
+                carriesUtility = carriesUtility || dynamic_cast<UtilityDevice*>(plugin) != nullptr;
+            require(carriesUtility, "Every track of a new project carries its Utility channel strip");
+        }
         require(std::abs(session.tempo() - 120.0) < 0.001, "A new project is back at 120 BPM");
         require(session.editorStepCount() == Session::defaultSteps, "A new project uses the default pattern length");
         require(session.pattern().getSequence().getNumNotes() == 0, "A new project's pattern is empty");

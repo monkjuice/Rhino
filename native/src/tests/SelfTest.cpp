@@ -28,8 +28,14 @@ int runSelfTest()
                 throw std::runtime_error("Native device check failed at line " + std::to_string(location.line()));
         };
         Session session;
-        require(session.utility != nullptr);
-        auto& device = *session.utility;
+        // Every track carries a Utility as its channel strip; the first one is
+        // the device exercised here.
+        UtilityDevice* utility = nullptr;
+        for (auto* plugin : te::getAudioTracks(*session.edit)[0]->pluginList)
+            if (auto* found = dynamic_cast<UtilityDevice*>(plugin))
+                utility = found;
+        require(utility != nullptr);
+        auto& device = *utility;
         device.gain().setParameter(-6.0f, juce::dontSendNotification);
         device.initialise({{}, 48000.0, 512});
         juce::AudioBuffer<float> buffer(2, 520);

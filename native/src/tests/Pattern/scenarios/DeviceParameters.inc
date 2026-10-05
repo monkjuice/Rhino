@@ -110,6 +110,10 @@
                         "Tracktion exposes Forge VST3 parameters to Rhino");
                 require(parameterSession.addInstrument(Session::Instrument::RhinoForge, 0).wasOk(),
                         "The Forge VST3 can replace the Pattern synth");
-                require(parameterSession.projectSnapshot().getProperty("rhinoPatternInstrument").toString() == "forge",
-                        "Pattern-grid Forge selection persists in the project state");
+                // The track's own plugin list is what records it, so it is
+                // saved with the track rather than in an edit-wide property.
+                auto* firstInstrument = parameterSession.patternInstrumentForTrack(0);
+                require(firstInstrument != nullptr && firstInstrument->getWrappedAudioProcessor() != nullptr
+                        && firstInstrument->getWrappedAudioProcessor()->getName().containsIgnoreCase("Forge"),
+                        "The Forge VST3 is what the first track now plays");
             }

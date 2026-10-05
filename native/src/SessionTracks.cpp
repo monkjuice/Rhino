@@ -81,9 +81,8 @@ juce::Result Session::addTrack(TrackType type)
     edit->getUndoManager().beginNewTransaction("Add " + kind.toLowerCase() + " track");
     if (appendTrack(type) == nullptr)
         return juce::Result::fail("Could not create " + kind.toLowerCase() + " track.");
-    refreshUtilityPointers();
-    // The new track lands after the last one, so it joins a group only if that
-    // group already ran to the bottom of the stack; reconciling says which.
+    // The new track lands after the last one, below every group, so it joins
+    // none of them; reconciling routes it to the main output with the rest.
     reconcileTrackGroups();
     ensureSceneSlots();
     ensureTrackMixers();
@@ -91,30 +90,6 @@ juce::Result Session::addTrack(TrackType type)
     markModified();
     sendSynchronousChangeMessage();
     return juce::Result::ok();
-}
-
-// Both utility pointers are positional - the first track and the second - so
-// any track that appears or disappears can leave them stale or dangling. A
-// group bus is skipped: it is a track in the list, but it is a sum of other
-// tracks and carries no utility of its own.
-void Session::refreshUtilityPointers()
-{
-    const auto tracks = te::getAudioTracks(*edit);
-    utility = nullptr;
-    audioUtility = nullptr;
-    auto found = 0;
-    for (int i = 0; i < tracks.size() && found < 2; ++i)
-    {
-        if (isGroupBusTrack(i))
-            continue;
-        for (auto plugin : tracks[i]->pluginList)
-            if (auto* device = dynamic_cast<UtilityDevice*>(plugin))
-            {
-                (found == 0 ? utility : audioUtility) = device;
-                break;
-            }
-        ++found;
-    }
 }
 
 juce::Result Session::removeAudioTrack(int track)
@@ -126,9 +101,6 @@ juce::Result Session::removeAudioTrack(int track)
         return juce::Result::fail("Select a track to remove.");
     if (tracks.size() <= 1)
         return juce::Result::fail("Keep at least one track.");
-    // The pattern editor follows whichever track is first, so removing the one
-    // that currently holds its clip re-homes the clip rather than refusing.
-    const auto removingEditedPatternTrack = patternClip != nullptr && patternClip->getClipTrack() == tracks[track];
     edit->getUndoManager().beginNewTransaction("Remove track");
     // Anything taking this track's audio as a sidechain loses its source. The
     // id is cleared inside the same transaction as the deletion, so undo puts
@@ -136,13 +108,8 @@ juce::Result Session::removeAudioTrack(int track)
     // to, which is a device that has gone silent for no visible reason.
     clearSidechainSourcesNaming(tracks[track]->itemID);
     edit->deleteTrack(tracks[track]);
-    if (removingEditedPatternTrack)
-    {
-        patternClip = nullptr;
-        patternClipID = {};
-        ensureEditablePatternClip();
-    }
-    refreshUtilityPointers();
+    // The note editor's clip may have gone with the track.
+    repairPatternClip();
     reconcileTrackGroups();
     refreshLoop();
     edit->getUndoManager().beginNewTransaction();
@@ -293,7 +260,6 @@ juce::Result Session::moveTrack(int track, int destination)
     edit->getUndoManager().beginNewTransaction("Move track");
     moveTrackInEdit(track, destination);
     edit->getUndoManager().beginNewTransaction();
-    refreshUtilityPointers();
     // Where a track lands decides which group it is in: carried into a group it
     // joins, carried out of one it leaves.
     reconcileTrackGroups();

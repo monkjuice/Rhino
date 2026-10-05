@@ -129,7 +129,8 @@ void StepGrid::setStepRegionFromSelection()
 {
     // Counted rather than listed: this runs on every selection change, a note
     // drag included, and editorNotes builds a vector each time it is asked.
-    const auto noteCount = static_cast<size_t>(session.pattern().getSequence().getNumNotes());
+    const auto noteCount = session.hasPatternClip()
+        ? static_cast<size_t>(session.pattern().getSequence().getNumNotes()) : size_t {0};
     if (noteCount > 0 && selectedStates().size() == noteCount)
     {
         setStepSelection(0.0, static_cast<double>(session.editorStepCount()));

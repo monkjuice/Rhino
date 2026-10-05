@@ -15,7 +15,14 @@ void runPatternDeviceRackTest()
         if (!valid) throw std::runtime_error(message);
     };
     Session session;
-    require(session.utility != nullptr, "Session creates the Utility device on the starter track");
+    const auto hasUtility = [&session](int track)
+    {
+        for (auto* plugin : te::getAudioTracks(*session.edit)[track]->pluginList)
+            if (dynamic_cast<UtilityDevice*>(plugin) != nullptr)
+                return true;
+        return false;
+    };
+    require(hasUtility(0), "Session creates the Utility device on the starter track");
     require(session.trackCount() == 4 && !session.trackHasInstrument(0),
             "A new document opens with four empty tracks and nothing else");
     require(session.trackType(0) == Session::TrackType::midi
@@ -23,8 +30,7 @@ void runPatternDeviceRackTest()
             && session.trackType(2) == Session::TrackType::midi
             && session.trackType(3) == Session::TrackType::audio,
             "The starter stack alternates MIDI and audio");
-    require(session.audioUtility != nullptr,
-            "The starter audio track brings its own Utility device");
+    require(hasUtility(1), "The starter audio track brings its own Utility device");
     require(session.patternInstrument() == nullptr,
             "The starter track runs no instrument until one is dropped on it");
     require(session.addInstrument(Session::Instrument::FourOsc, 0).wasOk(),

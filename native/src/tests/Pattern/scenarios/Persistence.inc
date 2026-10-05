@@ -30,8 +30,13 @@
         auto loadedXml = juce::parseXML(project.getFile());
         require(loadedXml != nullptr, "Read saved project");
         require(session.restoreProject(juce::ValueTree::fromXml(*loadedXml), project.getFile()).wasOk(), "Restore project");
-        require(session.utility != nullptr && session.audioUtility != nullptr,
-                "Project restore keeps the Utility devices");
+        for (int track = 0; track < 2; ++track)
+        {
+            auto carriesUtility = false;
+            for (auto* plugin : te::getAudioTracks(*session.edit)[track]->pluginList)
+                carriesUtility = carriesUtility || dynamic_cast<UtilityDevice*>(plugin) != nullptr;
+            require(carriesUtility, "Project restore keeps each track's Utility channel strip");
+        }
         require(session.patternInstrument() != nullptr, "Project restore keeps the pattern track instrument");
         require(session.isPatternDrums(), "Project restore keeps drum instrument selection");
         require(session.pattern().getSequence().getNumNotes() == 10, "Notes survive project reopen");

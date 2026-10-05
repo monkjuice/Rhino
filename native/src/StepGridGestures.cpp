@@ -17,6 +17,8 @@ namespace rhino
 
 juce::Result StepGrid::loopEditedClip()
 {
+    if (!session.hasPatternClip())
+        return juce::Result::fail("Open a MIDI clip to loop it.");
     const auto range = session.pattern().getPosition().time;
     return session.setLoopRange(range.getStart().inSeconds(), range.getEnd().inSeconds());
 }
@@ -30,6 +32,8 @@ double StepGrid::loopStepAt(float x, bool free) const
 
 double StepGrid::timelineTimeForLoopStep(double step) const
 {
+    if (!session.hasPatternClip())
+        return 0.0;
     const auto range = session.pattern().getPosition().time;
     const auto start = range.getStart().inSeconds();
     const auto end = range.getEnd().inSeconds();
@@ -39,6 +43,8 @@ double StepGrid::timelineTimeForLoopStep(double step) const
 
 float StepGrid::loopXForTimelineTime(double seconds) const
 {
+    if (!session.hasPatternClip())
+        return -1.0f;
     const auto range = session.pattern().getPosition().time;
     const auto start = range.getStart().inSeconds();
     const auto duration = range.getEnd().inSeconds() - start;
@@ -183,7 +189,7 @@ void StepGrid::mouseDown(const juce::MouseEvent& event)
             repaint();
             return;
         }
-        if (!event.mods.isLeftButtonDown())
+        if (!event.mods.isLeftButtonDown() || !session.hasPatternClip())
             return;
         const auto localStep = std::clamp(stepScroll + (event.position.x - labelWidth) / cellWidth(),
                                           0.0, static_cast<double>(session.editorStepCount()));

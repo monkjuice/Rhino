@@ -170,7 +170,6 @@ juce::Result Session::assignTracksToGroup(std::vector<int> tracks, int groupId)
             if (moved[track]->itemID == id)
                 setMemberGroup(*moved[track], groupId, &undoManager);
     undoManager.beginNewTransaction();
-    refreshUtilityPointers();
     reconcileTrackGroups();
     markModified();
     sendSynchronousChangeMessage();
@@ -260,7 +259,6 @@ juce::Result Session::removeTrackFromGroup(int track)
         return juce::Result::fail("Select a track to remove from its group.");
     setMemberGroup(*tracks[track], noGroup, &undoManager);
     undoManager.beginNewTransaction();
-    refreshUtilityPointers();
     reconcileTrackGroups();
     markModified();
     sendSynchronousChangeMessage();
@@ -310,7 +308,6 @@ juce::Result Session::ungroupTracks(int groupId)
     if (juce::isPositiveAndBelow(busTrack, tracks.size()))
         edit->deleteTrack(tracks[busTrack]);
     undoManager.beginNewTransaction();
-    refreshUtilityPointers();
     reconcileTrackGroups();
     refreshLoop();
     markModified();

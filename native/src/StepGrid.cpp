@@ -390,7 +390,7 @@ void StepGrid::focusLost(juce::Component::FocusChangeType)
 
 int StepGrid::automaticLowestPitch() const
 {
-    if (session.isPatternDrums())
+    if (session.isPatternDrums() || !session.hasPatternClip())
         return Session::lowestNote;
 
     int minPitch = 128, maxPitch = 0;
@@ -419,6 +419,12 @@ void StepGrid::changeListenerCallback(juce::ChangeBroadcaster*)
     if (!manualPitchScroll)
         lowestVisiblePitch = automaticLowestPitch();
     rebuildVisibleNotes();
+    if (!session.hasPatternClip())
+    {
+        if (previousLowestPitch != lowestVisiblePitch)
+            repaint();
+        return;
+    }
     const auto& clipRange = session.pattern().getPosition().time;
     const auto& loopRange = session.edit->getTransport().getLoopRange();
     const auto loopsEditedClip = session.hasManualLoopRange()
@@ -513,6 +519,8 @@ void StepGrid::updatePlayhead()
 
 float StepGrid::playheadXForTime(double seconds) const
 {
+    if (!session.hasPatternClip())
+        return -1.0f;
     const auto& position = session.pattern().getPosition();
     const auto clipStart = position.time.getStart().inSeconds();
     const auto clipEnd = position.time.getEnd().inSeconds();

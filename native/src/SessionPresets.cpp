@@ -9,7 +9,7 @@ namespace rhino
 
 void Session::clearPattern()
 {
-    if (pattern().getSequence().getNumNotes() == 0) return;
+    if (patternClip == nullptr || pattern().getSequence().getNumNotes() == 0) return;
     edit->getUndoManager().beginNewTransaction("Clear pattern");
     pattern().getSequence().removeAllNotes(&edit->getUndoManager());
     pattern().state.setProperty(starterPlaceholderID, true, &edit->getUndoManager());
@@ -18,26 +18,20 @@ void Session::clearPattern()
     sendSynchronousChangeMessage();
 }
 
+// Loads a preset into the clip the note editor has open, and its sound onto
+// that clip's own track - the same work a preset dropped on that lane does.
 void Session::applyPatternPreset(PatternPreset preset)
 {
+    if (patternClip == nullptr) return;
+    const auto trackIndex = te::getAudioTracks(*edit).indexOf(dynamic_cast<te::AudioTrack*>(patternClip->getClipTrack()));
+    if (trackIndex < 0) return;
     const auto data = presetPattern(preset);
     edit->getUndoManager().beginNewTransaction("Load " + data.name);
-    if (data.useRhinoWave)
+    if (preparePresetTrack(trackIndex, data, preset).failed())
     {
-        bool instrumentChanged = false;
-        juce::ignoreUnused(switchTrackInstrument(*edit, *te::getAudioTracks(*edit)[0], Instrument::RhinoWave, instrumentChanged));
-        edit->state.setProperty("rhinoPatternInstrument", "wave", &edit->getUndoManager());
+        edit->getUndoManager().beginNewTransaction();
+        return;
     }
-    else
-    {
-        setPatternInstrument(data.useDrums);
-    }
-    if (data.synthPatch != SynthPatch::Default)
-        if (auto* fourOsc = findFourOsc(*te::getAudioTracks(*edit)[0]))
-            applySynthPatch(data.synthPatch, *fourOsc, edit->getUndoManager());
-    if (data.useRhinoWave)
-        if (auto* wave = findRhinoWave(*te::getAudioTracks(*edit)[0]))
-            applyRhinoWavePatch(preset, *wave);
     fillMidiClip(pattern(), data, edit->getUndoManager());
     markModified();
     edit->getUndoManager().beginNewTransaction();
@@ -143,27 +137,12 @@ juce::Result Session::createClip(int trackIndex, double startSeconds, te::EditIt
     return juce::Result::ok();
 }
 
-void Session::setPatternInstrument(bool useDrums)
-{
-    // Never the bus a group at the top of the stack puts at index zero: an
-    // instrument there has nothing to play and replaces the sum of every
-    // member feeding it, which is a whole project reopening into silence.
-    auto* track = patternTrackOf(*edit);
-    if (track == nullptr) return;
-    bool changed = false;
-    juce::ignoreUnused(switchTrackInstrument(*edit, *track,
-                                             useDrums ? Instrument::Drums : Instrument::FourOsc, changed));
-    edit->state.setProperty("rhinoPatternInstrument", useDrums ? "drums" : "synth", &edit->getUndoManager());
-}
-
 // The instrument belongs to the track the edited pattern sits on, so this is a
 // lookup rather than a cached flag.
 te::Plugin* Session::patternInstrument() const
 {
     auto* track = patternClip != nullptr ? patternClip->getClipTrack() : nullptr;
     auto* audioTrack = dynamic_cast<te::AudioTrack*>(track);
-    if (audioTrack == nullptr)
-        audioTrack = patternTrackOf(*edit);
     if (audioTrack == nullptr) return nullptr;
     return trackInstrument(*audioTrack);
 }
@@ -192,9 +171,9 @@ bool Session::isPatternDrums() const
     return patternInstrumentKind() == Instrument::Drums;
 }
 
-// Puts a track into the state a preset expects: the right instrument, its
-// patch, and the pattern-track bookkeeping track 0 carries. Shared by the
-// timeline and clip-slot insertion paths so the two cannot drift apart.
+// Puts a track into the state a preset expects: the right instrument and its
+// patch. Shared by the timeline and clip-slot insertion paths so the two cannot
+// drift apart, and the same for every track: none is special for being first.
 juce::Result Session::preparePresetTrack(int trackIndex, const PresetPattern& data, PatternPreset preset)
 {
     const auto tracks = te::getAudioTracks(*edit);
@@ -205,32 +184,14 @@ juce::Result Session::preparePresetTrack(int trackIndex, const PresetPattern& da
     if (trackType(trackIndex) != TrackType::midi)
         return juce::Result::fail("That is an audio track. Drop patterns on a MIDI track instead.");
     auto* track = tracks[trackIndex];
-    if (trackIndex == 0)
-    {
-        if (data.useRhinoWave)
-        {
-            bool instrumentChanged = false;
-            const auto result = switchTrackInstrument(*edit, *track, Instrument::RhinoWave, instrumentChanged);
-            if (result.failed())
-                return result;
-            edit->state.setProperty("rhinoPatternInstrument", "wave", &edit->getUndoManager());
-        }
-        else
-        {
-            setPatternInstrument(data.useDrums);
-        }
-    }
-    else
-    {
-        bool instrumentChanged = false;
-        const auto result = switchTrackInstrument(*edit, *track,
-                                                  data.useDrums ? Instrument::Drums
-                                                      : data.useRhinoWave ? Instrument::RhinoWave
-                                                      : Instrument::FourOsc,
-                                                  instrumentChanged);
-        if (result.failed())
-            return result;
-    }
+    bool instrumentChanged = false;
+    const auto result = switchTrackInstrument(*edit, *track,
+                                              data.useDrums ? Instrument::Drums
+                                                  : data.useRhinoWave ? Instrument::RhinoWave
+                                                  : Instrument::FourOsc,
+                                              instrumentChanged);
+    if (result.failed())
+        return result;
     if (data.synthPatch != SynthPatch::Default)
         if (auto* fourOsc = findFourOsc(*track))
             applySynthPatch(data.synthPatch, *fourOsc, edit->getUndoManager());

@@ -85,12 +85,6 @@ juce::Result Session::editClip(te::EditItemID id, ClipGeometry next, ClipGesture
                                                       forgeDescription ? &*forgeDescription : nullptr);
             if (result.failed())
                 return result;
-            if (targetTrack == 0)
-                edit->state.setProperty("rhinoPatternInstrument",
-                                        sourceInstrument == Instrument::Drums ? "drums"
-                                            : sourceInstrument == Instrument::RhinoWave ? "wave"
-                                            : sourceInstrument == Instrument::RhinoForge ? "forge" : "synth",
-                                        &edit->getUndoManager());
         }
         if (!clip->moveTo(*target))
             return juce::Result::fail("The clip could not be moved to that track.");
@@ -184,35 +178,39 @@ juce::Result Session::duplicateClip(te::EditItemID id)
     return pasteClipRegion(region, time.getEnd().inSeconds(), track, pasted);
 }
 
-// Deleting clips can take the one the note editor is pointed at, and pattern()
-// dereferences that pointer, so every path that removes a clip ends here. The
-// editor falls back to another MIDI clip on track one, or to a fresh starter
-// clip when the track has none left.
+// Every path that can take the clip the note editor is pointed at ends here:
+// deleting clips or a track, undo and redo, and reopening. The clip is found
+// again by id first, because undo rebuilds clips from their state and the id
+// outlives the object. Failing that the editor falls back to the first MIDI
+// track - never an audio track, which may not hold a MIDI clip - and to a
+// hidden starter clip there if it has none. A document with no MIDI track
+// leaves the editor with no clip, which hasPatternClip() reports.
 void Session::repairPatternClip()
 {
-    if (patternClip != nullptr && findClip(patternClipID) == patternClip)
+    if (auto* midi = dynamic_cast<te::MidiClip*>(findClip(patternClipID)))
+    {
+        patternClip = midi;
         return;
+    }
     patternClip = nullptr;
-    auto* track = patternTrackOf(*edit);
+    patternClipID = {};
+    auto* track = firstMidiTrackOf(*edit);
     if (track == nullptr)
         return;
     for (auto* existing : track->getClips())
         if (auto* midi = dynamic_cast<te::MidiClip*>(existing))
         {
             patternClip = midi;
-            break;
+            patternClipID = midi->itemID;
+            return;
         }
-    if (patternClip == nullptr)
-    {
-        const auto end = edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(4.0));
-        patternClip = track->insertMIDIClip("Pattern 1", {{}, end}, nullptr).get();
-        if (patternClip != nullptr)
-        {
-            patternClip->state.setProperty(starterPlaceholderID, true, nullptr);
-        }
-    }
+    const auto end = edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(beatsPerBar()));
+    patternClip = track->insertMIDIClip("Pattern 1", {{}, end}, nullptr).get();
     if (patternClip != nullptr)
+    {
+        patternClip->state.setProperty(starterPlaceholderID, true, nullptr);
         patternClipID = patternClip->itemID;
+    }
 }
 
 void Session::deleteClip(te::EditItemID id)

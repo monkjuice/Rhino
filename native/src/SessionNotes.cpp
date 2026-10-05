@@ -4,12 +4,22 @@
 #include <set>
 
 // Note editing and pattern geometry. Serves StepGrid.
+//
+// Every edit here reads the clip the note editor has open, and a document with
+// no MIDI track has none, so each one asks first and refuses rather than
+// reaching for a clip that is not there.
 
 namespace rhino
 {
+namespace
+{
+juce::Result noOpenClip() { return juce::Result::fail("Open a MIDI clip to edit its notes."); }
+}
 
 bool Session::hasNote(int step, int pitch) const
 {
+    if (patternClip == nullptr)
+        return false;
     const auto gridSteps = editorStepCount();
     if (step < 0 || step >= gridSteps || pitch < 0 || pitch > 127)
         return false;
@@ -24,6 +34,8 @@ bool Session::hasNote(int step, int pitch) const
 std::vector<Session::EditorNote> Session::editorNotes() const
 {
     std::vector<EditorNote> result;
+    if (patternClip == nullptr)
+        return result;
     const auto stepBeats = stepDurationBeats(editorStepResolution());
     result.reserve(static_cast<size_t>(pattern().getSequence().getNumNotes()));
     for (auto* note : pattern().getSequence().getNotes())
@@ -38,6 +50,8 @@ juce::Result Session::addNote(double startSteps, int pitch, double lengthSteps,
                               juce::ValueTree* addedState, int velocity)
 {
     jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
+    if (patternClip == nullptr)
+        return noOpenClip();
     const auto gridSteps = editorStepCount();
     if (startSteps < 0.0 || startSteps >= gridSteps || pitch < 0 || pitch > 127)
         return juce::Result::fail("Add notes inside the visible grid.");
@@ -67,6 +81,8 @@ juce::Result Session::addNote(double startSteps, int pitch, double lengthSteps,
 bool Session::removeNotes(const std::vector<juce::ValueTree>& states)
 {
     jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
+    if (patternClip == nullptr)
+        return false;
     auto& sequence = pattern().getSequence();
     auto& transport = edit->getTransport();
     const auto playing = transport.isPlaying();
@@ -104,7 +120,7 @@ bool Session::removeNotes(const std::vector<juce::ValueTree>& states)
 bool Session::adjustNoteVelocities(const std::vector<juce::ValueTree>& states, int percentageDelta)
 {
     jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
-    if (states.empty() || percentageDelta == 0)
+    if (states.empty() || percentageDelta == 0 || patternClip == nullptr)
         return false;
     auto& sequence = pattern().getSequence();
     auto* undoManager = &edit->getUndoManager();
@@ -193,6 +209,8 @@ void Session::setEditorStepCount(int newSteps)
 void Session::setNote(int step, int pitch, bool enabled)
 {
     jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
+    if (patternClip == nullptr)
+        return;
     const auto gridSteps = editorStepCount();
     const auto stepBeats = stepDurationBeats(editorStepResolution());
     if (step < 0 || step >= gridSteps || pitch < 0 || pitch > 127)
@@ -252,6 +270,8 @@ void Session::setNote(int step, int pitch, bool enabled)
 
 int Session::noteLengthSteps(int step, int pitch) const
 {
+    if (patternClip == nullptr)
+        return 0;
     const auto gridSteps = editorStepCount();
     const auto stepBeats = stepDurationBeats(editorStepResolution());
     if (step < 0 || step >= gridSteps || pitch < 0 || pitch > 127)
@@ -272,6 +292,8 @@ juce::Result Session::resizeNote(int step, int pitch, int lengthSteps)
 juce::Result Session::resizeNote(int step, int pitch, double lengthSteps)
 {
     jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
+    if (patternClip == nullptr)
+        return noOpenClip();
     const auto gridSteps = editorStepCount();
     const auto stepBeats = stepDurationBeats(editorStepResolution());
     if (step < 0 || step >= gridSteps || pitch < 0 || pitch > 127)
@@ -305,6 +327,8 @@ juce::Result Session::resizeNote(int step, int pitch, double lengthSteps)
 juce::Result Session::resizeNote(const juce::ValueTree& state, double lengthSteps)
 {
     jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
+    if (patternClip == nullptr)
+        return noOpenClip();
     auto& sequence = pattern().getSequence();
     auto* note = sequence.getNoteFor(state);
     if (note == nullptr)
@@ -333,6 +357,8 @@ juce::Result Session::resizeNote(const juce::ValueTree& state, double lengthStep
 juce::Result Session::resizeNoteFromLeft(double startStep, int pitch, double newStartStep)
 {
     jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
+    if (patternClip == nullptr)
+        return noOpenClip();
     const auto stepBeats = stepDurationBeats(editorStepResolution());
     const auto startBeat = beatForStep(startStep);
     auto& sequence = pattern().getSequence();
@@ -360,6 +386,8 @@ juce::Result Session::resizeNoteFromLeft(double startStep, int pitch, double new
 juce::Result Session::resizeNoteFromLeft(const juce::ValueTree& state, double newStartStep)
 {
     jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
+    if (patternClip == nullptr)
+        return noOpenClip();
     auto& sequence = pattern().getSequence();
     auto* note = sequence.getNoteFor(state);
     if (note == nullptr)
@@ -404,6 +432,8 @@ bool Session::ensurePatternLengthSteps(int requiredSteps)
 juce::Result Session::fillNoteToClipEnd(int step, int pitch)
 {
     jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
+    if (patternClip == nullptr)
+        return noOpenClip();
     const auto gridSteps = editorStepCount();
     if (step < 0 || step >= gridSteps || pitch < 0 || pitch > 127)
         return juce::Result::fail("Select a note inside the visible grid.");
@@ -436,6 +466,8 @@ juce::Result Session::fillNoteToClipEnd(int step, int pitch)
 
 juce::Result Session::fillNoteToClipEnd(const juce::ValueTree& state)
 {
+    if (patternClip == nullptr)
+        return noOpenClip();
     auto& sequence = pattern().getSequence();
     auto* note = sequence.getNoteFor(state);
     if (note == nullptr)
@@ -448,6 +480,8 @@ juce::Result Session::fillNoteToClipEnd(const juce::ValueTree& state)
 juce::Result Session::moveNote(int sourceStep, int sourcePitch, int targetStep, int targetPitch)
 {
     jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
+    if (patternClip == nullptr)
+        return noOpenClip();
     const auto gridSteps = editorStepCount();
     if (sourceStep < 0 || sourceStep >= gridSteps || targetStep < 0 || targetStep >= gridSteps
         || sourcePitch < 0 || sourcePitch > 127
@@ -489,6 +523,8 @@ juce::Result Session::moveNotes(const std::vector<std::pair<int, int>>& sources,
     jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
     if (sources.empty() || (stepDelta == 0 && pitchDelta == 0))
         return juce::Result::ok();
+    if (patternClip == nullptr)
+        return noOpenClip();
 
     const auto gridSteps = editorStepCount();
     const auto stepBeats = stepDurationBeats(editorStepResolution());
@@ -547,6 +583,8 @@ juce::Result Session::moveNotes(const std::vector<juce::ValueTree>& states, doub
 {
     if (states.empty() || (std::abs(stepDelta) < 0.0001 && pitchDelta == 0))
         return juce::Result::ok();
+    if (patternClip == nullptr)
+        return noOpenClip();
 
     auto& sequence = pattern().getSequence();
     const auto stepBeats = stepDurationBeats(editorStepResolution());
@@ -638,6 +676,8 @@ juce::Result Session::redistributeNotes(const std::vector<juce::ValueTree>& stat
     divisions = juce::jlimit(2, 32, divisions);
     if (states.empty())
         return juce::Result::fail("Select a note to divide.");
+    if (patternClip == nullptr)
+        return noOpenClip();
 
     auto& sequence = pattern().getSequence();
     std::vector<te::MidiNote*> sources;

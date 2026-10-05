@@ -9,7 +9,8 @@ namespace rhino
 class DeviceRack final : public juce::Component,
                          public juce::DragAndDropTarget,
                          private juce::ChangeListener,
-                         private juce::Timer
+                         private juce::Timer,
+                         private Session::Listener
 {
 public:
     explicit DeviceRack(Session&);
@@ -30,6 +31,8 @@ private:
     class FloatingDeviceWindow;
     class DropMarker;
     void changeListenerCallback(juce::ChangeBroadcaster*) override;
+    void editWillChange() override;
+    void editDidChange() override;
     void timerCallback() override;
     // The engine plays the lanes and tells nobody, so a knob a lane is moving
     // is read back here instead: only the faces with such a knob are

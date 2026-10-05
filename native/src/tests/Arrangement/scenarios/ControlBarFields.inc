@@ -42,6 +42,23 @@
     dragBy(tempoField, 30.0f, true);
     require(close(tempoField.value(), 120.1), "Ctrl-dragging moves the tempo in hundredths");
 
+    // Ctrl pressed and let go part way through one drag: each stretch moves at
+    // its own step from wherever the last one left the value.
+    {
+        tempoField.setValue(120.0);
+        const auto down = tempoField.getLocalBounds().getCentre().toFloat();
+        const auto coarse = juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier);
+        const auto fine = juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier | juce::ModifierKeys::ctrlModifier);
+        tempoField.mouseDown(fieldDrag(tempoField, down, down, coarse));
+        tempoField.mouseDrag(fieldDrag(tempoField, down, down.translated(0.0f, -30.0f), coarse));
+        require(close(tempoField.value(), 130.0), "Ten whole steps up");
+        tempoField.mouseDrag(fieldDrag(tempoField, down, down.translated(0.0f, -36.0f), fine));
+        require(close(tempoField.value(), 130.02), "Ctrl pressed part way adds hundredths to where the drag had got to");
+        tempoField.mouseDrag(fieldDrag(tempoField, down, down.translated(0.0f, -45.0f), coarse));
+        require(close(tempoField.value(), 133.02), "and letting it go goes back to whole steps from there");
+        tempoField.mouseUp(fieldDrag(tempoField, down, down.translated(0.0f, -45.0f), coarse));
+    }
+
     tempoField.setValue(Session::maximumTempo - 1.0);
     dragBy(tempoField, 3000.0f);
     require(close(tempoField.value(), Session::maximumTempo),

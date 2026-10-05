@@ -470,10 +470,9 @@ public:
         : DocumentWindow("Rhino Device", juce::Colour(0xff0f1114), DocumentWindow::closeButton)
     {
         setUsingNativeTitleBar(true);
-        const auto tracks = te::getAudioTracks(*session.edit);
-        if (juce::isPositiveAndBelow(track, tracks.size())
-            && juce::isPositiveAndBelow(slot, tracks[track]->pluginList.size()))
-            plugin = tracks[track]->pluginList[slot];
+        // Through the session, so a device on the main track opens its own
+        // editor too rather than the fallback face.
+        plugin = session.devicePlugin(track, slot);
 
         if (plugin != nullptr)
         {
@@ -511,10 +510,23 @@ public:
         setVisible(true);
     }
 
+    // Closing the window lets its owner destroy it, and with it the device's
+    // editor: hidden, the editor stayed active for a device nobody could see.
     void closeButtonPressed() override
     {
         setVisible(false);
+        if (onClose) onClose();
     }
+
+    // Whether the device shown is still in the edit. The window holds the
+    // device alive, so one whose device was deleted or whose document was
+    // closed has to go: a plugin must not outlive the edit it belongs to.
+    bool showsDeviceIn(const te::Edit& edit) const
+    {
+        return plugin == nullptr || plugin->state.isAChildOf(edit.state);
+    }
+
+    std::function<void()> onClose;
 
 private:
     te::Plugin::Ptr plugin;
@@ -554,6 +566,7 @@ DeviceRack::DeviceRack(Session& s) : session(s)
         addAndMakeVisible(component);
     session.addChangeListener(this);
     session.deviceParameterValues.addChangeListener(this);
+    session.listeners.add(this);
     selectTrack(0);
     // The rate the lanes used to be swept at, which is plenty for a knob.
     startTimerHz(30);
@@ -562,9 +575,19 @@ DeviceRack::DeviceRack(Session& s) : session(s)
 DeviceRack::~DeviceRack()
 {
     stopTimer();
+    session.listeners.remove(this);
     session.deviceParameterValues.removeChangeListener(this);
     session.removeChangeListener(this);
 }
+
+// The outgoing document's devices go with it, so a window open on one closes
+// first: it holds its device alive, and a device must not outlive its edit.
+void DeviceRack::editWillChange()
+{
+    floatingWindow.reset();
+}
+
+void DeviceRack::editDidChange() {}
 
 void DeviceRack::timerCallback()
 {
@@ -625,6 +648,16 @@ void DeviceRack::openSelectedDevice()
     // processor and createEditorIfNeeded may otherwise return the old pointer.
     floatingWindow.reset();
     floatingWindow = std::make_unique<FloatingDeviceWindow>(session, selectedTrack, selectedPluginIndex());
+    // Destroyed after the click that closed it has finished with it, and only
+    // if it is still the window open by then.
+    floatingWindow->onClose = [this, window = floatingWindow.get()]
+    {
+        juce::MessageManager::callAsync([rack = juce::Component::SafePointer<DeviceRack>(this), window]
+        {
+            if (rack != nullptr && rack->floatingWindow.get() == window)
+                rack->floatingWindow.reset();
+        });
+    };
     if (status) status("Opened " + slots[static_cast<size_t>(selectedDevice)].name + " device panel");
 }
 
@@ -811,6 +844,10 @@ void DeviceRack::rebuildDevicePanels()
 
 void DeviceRack::changeListenerCallback(juce::ChangeBroadcaster* source)
 {
+    // Before anything else, hidden or not: a window left open on a deleted
+    // device would keep it alive.
+    if (floatingWindow != nullptr && !floatingWindow->showsDeviceIn(*session.edit))
+        floatingWindow.reset();
     if (isHiddenInShell(*this))
     {
         staleWhileHidden = true;

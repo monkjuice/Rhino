@@ -61,6 +61,24 @@
             require(grid.selectedStates().size() == 2, "A plain drag marquee-selects the notes it swept");
             require(session.editorNotes().size() == 2, "and adds and removes nothing");
 
+            // F stretches the selection to the clip's end. Ctrl+F is the
+            // browser's search, and the editor holding the focus must let it by.
+            const auto lengths = [&session]
+            {
+                std::vector<double> result;
+                for (const auto& note : session.editorNotes()) result.push_back(note.lengthSteps);
+                return result;
+            };
+            const auto lengthsBefore = lengths();
+            require(!grid.keyPressed(juce::KeyPress('F', juce::ModifierKeys::commandModifier, 'f'))
+                        && lengths() == lengthsBefore,
+                    "Ctrl+F passes through the note editor to the browser search");
+            require(grid.keyPressed(juce::KeyPress('F', juce::ModifierKeys(), 'f')) && lengths() != lengthsBefore,
+                    "F on its own still fills the selection to the clip's end");
+            session.undo();
+            grid.changeListenerCallback(nullptr);
+            require(lengths() == lengthsBefore, "and one undo takes the fill back");
+
             const auto emptyPoint = grid.cell(13, rowFor(55)).getCentre();
             grid.mouseDown(press(emptyPoint, emptyPoint, false));
             grid.mouseUp(press(emptyPoint, emptyPoint, false));

@@ -88,6 +88,11 @@ private:
     double dragStart = 0.0;
     int dragStartIndex = 0;
     bool dragging = false;
+    // Where the drag was, and whether it was fine, when the step size last
+    // changed: Ctrl pressed or let go part way carries on from the value on
+    // screen rather than re-reading the whole drag at the new step.
+    float travelAtStepChange = 0.0f, lastTravel = 0.0f;
+    bool draggingFine = false;
     int decimals = 0;
     float valueEm = 15.0f, captionEm = 8.0f;
     juce::String caption, suffix;

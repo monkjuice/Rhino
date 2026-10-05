@@ -143,6 +143,8 @@ void ValueDragBox::mouseDown(const juce::MouseEvent& event)
         return;
     dragging = true;
     dragStart = current;
+    travelAtStepChange = lastTravel = 0.0f;
+    draggingFine = event.mods.isCtrlDown();
     dragStartIndex = 0;
     if (!ladder.empty())
         for (int i = 0; i < static_cast<int>(ladder.size()); ++i)
@@ -168,8 +170,20 @@ void ValueDragBox::mouseDrag(const juce::MouseEvent& event)
         applyValue(ladder[static_cast<size_t>(index)]);
         return;
     }
-    const auto step = event.mods.isCtrlDown() ? fineStep : coarseStep;
-    const auto steps = static_cast<double>(juce::roundToInt(travel / pixelsPerStep));
+    // Ctrl pressed or let go part way through: the drag goes on from the value
+    // on screen. Read across the whole travel at the new step, ten BPM dragged
+    // at whole steps fell back to a tenth of one the moment Ctrl went down.
+    // The movement since the last event was made with the new key state, so
+    // that is where the new step starts counting.
+    if (const auto fine = event.mods.isCtrlDown(); fine != draggingFine)
+    {
+        draggingFine = fine;
+        dragStart = current;
+        travelAtStepChange = lastTravel;
+    }
+    lastTravel = travel;
+    const auto step = draggingFine ? fineStep : coarseStep;
+    const auto steps = static_cast<double>(juce::roundToInt((travel - travelAtStepChange) / pixelsPerStep));
     // Quantised to the step from the value the drag began on, so a field
     // dragged out and back reads exactly what it started at.
     applyValue(dragStart + steps * step);

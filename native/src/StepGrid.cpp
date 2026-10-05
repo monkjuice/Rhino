@@ -363,7 +363,9 @@ bool StepGrid::keyPressed(const juce::KeyPress& key)
         toggleDrawMode();
         return true;
     }
-    if (key.getKeyCode() == 'F')
+    // Plain F only: Ctrl+F is the browser's search, and it has to get past
+    // the editor holding the focus.
+    if (!command && key.getKeyCode() == 'F')
         return fillSelectionToClipEnd();
     if (key.getKeyCode() == juce::KeyPress::deleteKey || key.getKeyCode() == juce::KeyPress::backspaceKey)
         return deleteSelection();

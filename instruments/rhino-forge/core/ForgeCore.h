@@ -256,6 +256,21 @@ public:
     }
     void setModWheel(float position) { modWheel = juce::jlimit(0.0f, 1.0f, position); }
 
+    // The processor calls this before a block's samples, promising that every
+    // renderSample of the block is handed this same patch, unchanged. It lets a
+    // modulated voice put back only the fields the matrix writes rather than
+    // copy the whole patch, per voice, per sample. Anything else rendering a
+    // Core need not call it and gets the whole copy.
+    void beginBlock(const Patch& patch)
+    {
+        scratch = patch;
+        scratchFor = &patch;
+    }
+
+    // The promise ends with the block: the same patch object may hold other
+    // values by the next one.
+    void endBlock() { scratchFor = nullptr; }
+
     void renderSample(const Patch& patch, const Modulation& modulation, float& left, float& right)
     {
         left = right = 0.0f;
@@ -417,7 +432,12 @@ public:
             const Patch* voicePatch = &patch;
             if (modulated)
             {
-                scratch = patch;
+                // A whole Patch is kilobytes, LFO tables and all, and this runs
+                // for every voice on every sample. Within a block it is copied
+                // once, by beginBlock, and here only the fields the matrix
+                // writes are put back before this voice's offsets go on.
+                if (scratchFor == &patch) restoreModulatedFields(patch, modulation);
+                else scratch = patch;
                 applyModulation(scratch, modulation, voice, lfoValues, loudest);
                 voicePatch = &scratch;
             }
@@ -754,6 +774,20 @@ private:
             if (field == nullptr) continue;
             const auto& range = destinationRanges[static_cast<size_t>(destination)];
             *field = range.convertFrom0to1(juce::jlimit(0.0f, 1.0f, range.convertTo0to1(*field) + offset));
+        }
+    }
+
+    // Every field a live slot can have written, back to the patch's own value.
+    // A superset of what applyModulation touched, which is all it needs to be.
+    void restoreModulatedFields(const Patch& patch, const Modulation& modulation)
+    {
+        auto& source = const_cast<Patch&>(patch);
+        for (const auto& slot : modulation.slots)
+        {
+            const auto destination = juce::roundToInt(slot.destination);
+            if (destination <= 0 || destination >= destinationCount) continue;
+            if (auto* field = destinationField(scratch, destination))
+                *field = *destinationField(source, destination);
         }
     }
 
@@ -1364,6 +1398,9 @@ private:
     // Reused every voice and every sample so a modulated render allocates
     // nothing; only touched when at least one slot is live.
     Patch scratch {};
+    // The patch scratch was last copied whole from, by beginBlock. Only that
+    // patch, unchanged since, may have just the matrix's fields put back.
+    const Patch* scratchFor = nullptr;
     // The three racks, rendered. They hold delay lines and filter state, so
     // they belong to the Core rather than to the patch that describes them.
     std::array<FxRack, rackCount> racks;

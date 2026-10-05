@@ -215,6 +215,7 @@ void Processor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
     arpWasEnabled = arpValues.enabled;
     arpWasLatched = arpValues.latch;
 
+    core.beginBlock(values);
     auto event = midi.cbegin();
     const auto end = midi.cend();
     for (int i = 0; i < buffer.getNumSamples(); ++i)
@@ -306,6 +307,7 @@ void Processor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
         buffer.addSample(0, i, left);
         if (buffer.getNumChannels() > 1) buffer.addSample(1, i, right);
     }
+    core.endBlock();
 
     // Published once per block rather than per sample: the display redraws at
     // 24 Hz, so a per-sample store would be pure contention for no extra detail.

@@ -54,11 +54,13 @@ std::vector<DeviceDescriptor> buildCatalog()
          DeviceKind::AudioEffect, "Dynamics", "Tracktion compressor",
          0, {}, true, false, false});
 
-    // The engine keeps a gain stage in every channel strip, so this type also
-    // appears in the graph without the user having added one.
+    // Every track already carries one as its channel strip, so it is not
+    // offered in the browser: a dropped Utility found the track's own and
+    // added nothing, and the rack hides the channel strip, so the drop
+    // appeared to do nothing at all.
     add({"Utility", UtilityDevice::xmlTypeName, "Utility", "Utility gain",
          DeviceKind::AudioEffect, "Dynamics", "Level trim inside a chain",
-         0xff56636c, {}, true, false, true});
+         0xff56636c, {}, false, false, true});
 
     add({"Reverb", te::ReverbPlugin::xmlTypeName, "Reverb", {},
          DeviceKind::AudioEffect, "Delay and Reverb", "Tracktion reverb",

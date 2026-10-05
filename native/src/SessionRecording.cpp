@@ -162,7 +162,15 @@ juce::Result Session::setTrackArmed(int trackIndex, bool armed)
     // track, so it is saved and it follows the track when the stack is
     // reordered.
     tracks[trackIndex]->state.setProperty(trackArmedID, armed, nullptr);
-    const auto applied = applyRecordArming();
+    // Not while a take is running: rebuilding every input's destinations under
+    // a recording can cut the tracks already capturing. The flag is kept, and
+    // the next take is armed from it. A count-in is still before the take, so
+    // a track armed during one is armed for it.
+    auto applied = juce::Result::ok();
+    if (!isRecording())
+        applied = applyRecordArming();
+    else
+        armingDeferred = true;
     markModified();
     sendSynchronousChangeMessage();
     return applied;
@@ -186,16 +194,20 @@ bool Session::isRecording() const
 // Monitoring On means you hear the input whether or not a take would capture
 // it, so such a track gets a destination of its own with recordEnabled left
 // false: the input reaches the track and nothing is written.
+// The one rule for whether a track needs its input routed to it: armed, so a
+// take captures it, or monitoring On, so it is heard while unarmed.
+bool Session::trackWantsInput(int track) const
+{
+    if (trackRecordInput(track) == RecordInput::none)
+        return false;
+    return isTrackArmed(track) || trackMonitoring(track) == InputMonitoring::on;
+}
+
 juce::Result Session::applyRecordArming()
 {
     jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
     const auto tracks = te::getAudioTracks(*edit);
-    const auto wantsInput = [this](int track)
-    {
-        if (trackRecordInput(track) == RecordInput::none)
-            return false;
-        return isTrackArmed(track) || trackMonitoring(track) == InputMonitoring::on;
-    };
+    const auto wantsInput = [this](int track) { return trackWantsInput(track); };
     bool wantsMidi = false, wantsAudio = false;
     for (int track = 0; track < tracks.size(); ++track)
     {
@@ -427,6 +439,8 @@ juce::Result Session::setTrackMonitoring(int trackIndex, InputMonitoring mode)
     auto applied = juce::Result::ok();
     if (!isRecording() && !isCountingIn())
         applied = applyRecordArming();
+    else
+        armingDeferred = true;
     markModified();
     sendSynchronousChangeMessage();
     return applied;
@@ -673,6 +687,13 @@ void Session::finishRecording()
     ++liveNoteRevision;
     recordingStart = -1.0;
     recordingStarted = false;
+    // Arming, monitoring or a device that changed while the take ran was kept
+    // off the inputs so as not to cut it; now is when it takes effect.
+    if (armingDeferred)
+    {
+        armingDeferred = false;
+        juce::ignoreUnused(applyRecordArming());
+    }
     refreshLoop();
     edit->getUndoManager().beginNewTransaction();
     if (changed)

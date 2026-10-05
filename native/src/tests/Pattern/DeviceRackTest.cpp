@@ -62,6 +62,16 @@ void runPatternDeviceRackTest()
             && signalChain[1].kind == Session::DeviceKind::Instrument
             && signalChain[2].kind == Session::DeviceKind::AudioEffect,
             "Device View follows MIDI effect to instrument to audio effect signal order");
+    // A MIDI effect added to a track with no instrument yet goes where it will
+    // still be in front of one: an instrument added afterwards lands behind it.
+    require(!session.trackHasInstrument(2)
+                && session.addMidiEffect(Session::MidiEffect::RhinoArp, 2).wasOk()
+                && session.addInstrument(Session::Instrument::FourOsc, 2).wasOk(),
+            "A MIDI effect, then an instrument, on an empty MIDI track");
+    const auto laterChain = session.deviceSlots(2);
+    require(laterChain.size() == 2 && laterChain[0].kind == Session::DeviceKind::MidiEffect
+                && laterChain[1].kind == Session::DeviceKind::Instrument,
+            "The MIDI effect added first still runs before the instrument added after it");
     DeviceRack deviceView(session);
     deviceView.setSize(900, 280);
     const auto panelsBeforeInsert = deviceView.devicePanels.size();

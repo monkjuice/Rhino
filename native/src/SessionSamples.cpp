@@ -67,13 +67,21 @@ juce::Result createSample(Session::BuiltInSample sample, const juce::File& file)
         audio.setSample(1, frame, value);
     }
 
-    juce::WavAudioFormat format;
-    std::unique_ptr<juce::OutputStream> stream(file.createOutputStream());
-    if (stream == nullptr)
-        return juce::Result::fail("Rhino could not write its built-in audio sample.");
-    auto writer = format.createWriterFor(stream, juce::AudioFormatWriterOptions()
-        .withSampleRate(sampleRate).withNumChannels(2).withBitsPerSample(24));
-    if (writer == nullptr || !writer->writeFromAudioSampleBuffer(audio, 0, frames))
+    // Written beside the target and moved into place. createOutputStream
+    // appends to a file that is already there, so a stub left by a write that
+    // was cut short would otherwise sit in front of the new audio for good.
+    juce::TemporaryFile temporary(file);
+    {
+        juce::WavAudioFormat format;
+        std::unique_ptr<juce::OutputStream> stream(temporary.getFile().createOutputStream());
+        if (stream == nullptr)
+            return juce::Result::fail("Rhino could not write its built-in audio sample.");
+        auto writer = format.createWriterFor(stream, juce::AudioFormatWriterOptions()
+            .withSampleRate(sampleRate).withNumChannels(2).withBitsPerSample(24));
+        if (writer == nullptr || !writer->writeFromAudioSampleBuffer(audio, 0, frames))
+            return juce::Result::fail("Rhino could not write its built-in audio sample.");
+    }
+    if (!temporary.overwriteTargetFileWithTemporary())
         return juce::Result::fail("Rhino could not write its built-in audio sample.");
     return juce::Result::ok();
 }

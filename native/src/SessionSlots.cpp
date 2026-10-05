@@ -311,6 +311,19 @@ juce::Result Session::insertInstrumentClipInSlot(Instrument instrument, int trac
     return insertDeviceClipInSlot(device->id, track, scene);
 }
 
+// Why a lane may not take a clip of this kind, or ok. The slot paths ask the
+// same question the arrangement's drops, moves and pastes already ask, so a
+// slot cannot become the way round the rule that a track's kind is fixed.
+juce::Result Session::clipLaneRefusal(int track, bool midi) const
+{
+    if (isGroupBusTrack(track))
+        return juce::Result::fail("A group track carries its members' audio, so it takes no clips.");
+    if (trackType(track) != (midi ? TrackType::midi : TrackType::audio))
+        return juce::Result::fail(midi ? "That is an audio track. Put MIDI clips on a MIDI track."
+                                       : "That is a MIDI track. Put audio clips on an audio track.");
+    return juce::Result::ok();
+}
+
 juce::Result Session::insertDeviceClipInSlot(const juce::String& deviceId, int track, int scene)
 {
     const auto* device = DeviceCatalog::byId(deviceId);
@@ -323,6 +336,8 @@ juce::Result Session::insertDeviceClipInSlot(const juce::String& deviceId, int t
     auto* slot = clipSlotAt(track, scene);
     if (slot == nullptr)
         return juce::Result::fail("Drop instruments on a session slot.");
+    if (const auto refused = clipLaneRefusal(track, true); refused.failed())
+        return refused;
     const auto name = DeviceCatalog::labelFor(*device);
     edit->getUndoManager().beginNewTransaction("Add " + name + " to slot");
     bool instrumentChanged = false;
@@ -350,6 +365,8 @@ juce::Result Session::insertAudioFileInSlot(const juce::File& file, int track, i
     auto* slot = clipSlotAt(track, scene);
     if (slot == nullptr)
         return juce::Result::fail("Drop audio on a session slot.");
+    if (const auto refused = clipLaneRefusal(track, false); refused.failed())
+        return refused;
     if (!file.existsAsFile())
         return juce::Result::fail("That audio file could not be found.");
     const te::AudioFile audioFile(engine, file);
@@ -432,6 +449,9 @@ juce::Result Session::copySlotClipToArrangement(int track, int scene, double sta
     const auto tracks = te::getAudioTracks(*edit);
     if (!juce::isPositiveAndBelow(track, tracks.size()))
         return juce::Result::fail("That track does not exist.");
+    if (const auto refused = clipLaneRefusal(track, dynamic_cast<te::MidiClip*>(source) != nullptr);
+        refused.failed())
+        return refused;
     const auto start = tracktion::core::TimePosition::fromSeconds(std::max(0.0, startSeconds));
     const auto range = tracktion::core::TimeRange(start, start + source->getPosition().time.getLength());
     edit->getUndoManager().beginNewTransaction("Copy clip to arrangement");

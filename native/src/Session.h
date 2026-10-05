@@ -948,6 +948,9 @@ private:
     // the engine's input destinations are rebuilt from it rather than being a
     // second place the answer lives.
     juce::Result applyRecordArming();
+    // Armed, or monitoring On: the one rule for whether a track's input is
+    // routed to it, shared by arming and by the MIDI device rescan.
+    bool trackWantsInput(int track) const;
     // The MIDI input Rhino records from and plays into: the one chosen in
     // Audio settings, or the first that is there. One rule, so what a note is
     // played into is what a recording is captured from.
@@ -986,6 +989,9 @@ private:
     // device in that window: it is on its way.
     bool awaitingMidiDeviceScan = false;
     bool reapplyingArming = false;
+    // An arming, monitoring or device change that arrived during a take, kept
+    // off the inputs until finishRecording so as not to cut the take.
+    bool armingDeferred = false;
     void clearRecordArming();
     void beginTransportRecording();
     // The tidy-up and the notification, with no question about whether the
@@ -1015,6 +1021,8 @@ private:
     // pointing at it. Inside the caller's transaction, so undo restores both.
     void clearSidechainSourcesNaming(te::EditItemID sourceTrack);
     te::ClipSlot* clipSlotAt(int track, int scene) const;
+    // SessionSlots.cpp - why a lane may not take a clip of this kind, or ok.
+    juce::Result clipLaneRefusal(int track, bool midi) const;
     te::VolumeAndPanPlugin* trackVolumePlugin(int track) const;
     void ensureTrackMixers();
     // The reorder itself, without a transaction or a notification, so the group

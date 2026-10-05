@@ -232,16 +232,28 @@ juce::Result Session::addMidiEffectDevice(const DeviceDescriptor& device, int tr
     if (plugin == nullptr)
         return juce::Result::fail(name + " could not be created.");
 
-    int insertIndex = 0;
+    // In front of the instrument when there is one. With none yet, after the
+    // MIDI effects already at the front of the chain - which is exactly where
+    // switchTrackInstrument will put an instrument, so one added later lands
+    // behind this rather than ahead of it. Appending to the end instead left
+    // the effect after the channel strip, and then after the instrument.
+    int insertIndex = -1;
     for (int i = 0; i < track->pluginList.size(); ++i)
-    {
-        auto* existing = track->pluginList[i];
-        if (existing != nullptr && deviceKind(*existing) == DeviceKind::Instrument)
+        if (auto* existing = track->pluginList[i]; existing != nullptr && deviceKind(*existing) == DeviceKind::Instrument)
         {
             insertIndex = i;
             break;
         }
-        insertIndex = i + 1;
+    if (insertIndex < 0)
+    {
+        insertIndex = 0;
+        while (insertIndex < track->pluginList.size())
+        {
+            auto* existing = track->pluginList[insertIndex];
+            if (existing == nullptr || deviceKind(*existing) != DeviceKind::MidiEffect)
+                break;
+            ++insertIndex;
+        }
     }
 
     track->pluginList.insertPlugin(plugin, juce::jlimit(0, track->pluginList.size(), insertIndex), nullptr);

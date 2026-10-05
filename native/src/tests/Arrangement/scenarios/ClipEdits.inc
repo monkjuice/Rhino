@@ -130,5 +130,27 @@
             require(stack.selectPatternClip(a).wasOk(), "The note editor opens a clip");
             require(stack.ensurePatternLengthSteps(Session::defaultSteps * 3), "The clip grows to take more steps");
             require(!overlapping(0), "and no clip on its lane overlaps another");
+
+            // A session slot is no way round a track's kind.
+            require(stack.insertDeviceClipInSlot("FourOsc", 1, 0).failed(),
+                    "A slot on an audio lane refuses an instrument clip");
+            require(stack.insertAudioFileInSlot(source.getFile(), 0, 0).failed(),
+                    "A slot on a MIDI lane refuses audio");
+
+            // A built-in sample whose file was cut short is written again
+            // whole, not appended after the stub that was left behind.
+            {
+                const auto whistle = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+                                         .getChildFile("Rhino").getChildFile("Built-in audio").getChildFile("Rhino Whistle.wav");
+                whistle.getParentDirectory().createDirectory();
+                require(whistle.replaceWithText("RIFF stub"), "A stub where the whistle should be");
+                require(stack.importBuiltInSample(Session::BuiltInSample::Whistle, 1, 30.0).wasOk(),
+                        "The whistle imports over a stub left by an interrupted write");
+                juce::AudioFormatManager formats;
+                formats.registerBasicFormats();
+                std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(whistle));
+                require(reader != nullptr && std::abs(reader->lengthInSamples / reader->sampleRate - 1.5) < 0.01,
+                        "and the file is the whole whistle again");
+            }
             stack.releaseAudioDevice();
         }

@@ -110,17 +110,27 @@ void Session::midiDevicesChanged()
 {
     if (reapplyingArming)
         return;
+    // Listening is armed or monitoring On - the same rule arming applies - so
+    // an unarmed track monitoring the typing keyboard picks up the device the
+    // rescan has just made, rather than staying silent until something arms.
     auto listening = false;
     const auto tracks = te::getAudioTracks(*edit);
     for (int track = 0; track < tracks.size(); ++track)
-        if (isTrackArmed(track) && trackRecordInput(track) == RecordInput::midi)
+        if (trackRecordInput(track) == RecordInput::midi && trackWantsInput(track))
         {
             listening = true;
             break;
         }
     awaitingMidiDeviceScan = false;
+    // Never under a running take: rebuilding the destinations can cut the
+    // tracks that are capturing. The next take is armed against the new list.
     if (!listening)
         return;
+    if (isRecording())
+    {
+        armingDeferred = true;
+        return;
+    }
     const juce::ScopedValueSetter<bool> guard(reapplyingArming, true);
     juce::ignoreUnused(applyRecordArming());
     sendSynchronousChangeMessage();

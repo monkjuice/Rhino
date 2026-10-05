@@ -97,6 +97,10 @@
         parameters.sampleRateForAudio = 48000;
         parameters.bitDepth = 24;
         parameters.time = clip->getPosition().time;
+        // The clip's own track only. Track 0 still runs the arp and the synth
+        // the earlier scenarios gave it, and since the arp latches by default it
+        // plays through this window and would be measured as the clip.
+        parameters.tracksToDo.setBit(te::getAllTracks(*session.edit).indexOf(clip->getTrack()));
         {
             te::Renderer::RenderTask task("Trimmed audio test", parameters, nullptr, nullptr);
             const auto deadline = juce::Time::getMillisecondCounterHiRes() + 15000.0;

@@ -455,6 +455,50 @@ void checkRangeSwitchIsSilentAndSafe()
     }
 }
 
+// A range or Live change empties the shifter, which then has nothing to give
+// for its whole latency, up to a tenth of a second at Bass. The voice stays on
+// its dry signal until the corrected one is back, rather than fading to the
+// silence in between and dropping out.
+void checkRangeSwitchKeepsSounding()
+{
+    AutoTuneEngine engine;
+    engine.prepare(testRate, 1, testBlock);
+    AutoTuneEngine::Settings settings;
+    settings.range = PitchTracker::Range::Mid;
+    engine.setSettings(settings);
+
+    const auto source = sawtooth(180.0f, 96000);
+    auto audio = source;
+    auto switchAt = -1;
+    const auto window = static_cast<int>(testRate * 0.005);
+    const auto rmsAt = [&audio, window] (int start)
+    {
+        auto sum = 0.0;
+        for (int i = start; i < start + window; ++i)
+            sum += static_cast<double>(audio[static_cast<size_t>(i)]) * audio[static_cast<size_t>(i)];
+        return static_cast<float>(std::sqrt(sum / window));
+    };
+    for (int offset = 0; offset + testBlock <= static_cast<int>(audio.size()); offset += testBlock)
+    {
+        // The first block past a second in, so the voice is well settled.
+        if (switchAt < 0 && offset >= 48000)
+        {
+            switchAt = offset;
+            settings.range = PitchTracker::Range::Bass;
+            engine.setSettings(settings);
+        }
+        float* channels[1] {audio.data() + offset};
+        engine.process(channels, 1, testBlock);
+    }
+    const auto steady = rmsAt(switchAt - 4 * window);
+    auto quietest = steady;
+    for (int start = switchAt; start + window <= switchAt + static_cast<int>(testRate * 0.3); start += window)
+        quietest = std::min(quietest, rmsAt(start));
+    if (quietest < steady * 0.3f)
+        throw std::runtime_error(("range switch: the voice falls to " + juce::String(quietest / steady, 3)
+            + " of its level while the shifter refills").toStdString());
+}
+
 // The face is drawn rather than assembled from child components, so what a
 // test can check is that the knobs it does own land inside the panel and off
 // each other, and that painting the rest of it runs at all.
@@ -536,10 +580,19 @@ void checkDevice(Session& session)
     tune->setScaleMask(mask);
     require(!tune->maskMatchesNamedScale());
 
+    // The latency the graph compensates is what the settings cost the moment
+    // they change, before any block has run: read back from the engine it
+    // was still the last range's until the audio thread caught up.
+    const auto costs = [] (PitchTracker::Range range, bool live)
+    {
+        return AutoTuneEngine::latencyFor(range, live, testRate) / testRate;
+    };
     tune->setTrackingRange(PitchTracker::Range::Bass);
     require(tune->trackingRange() == PitchTracker::Range::Bass);
+    require(std::abs(tune->getLatencySeconds() - costs(PitchTracker::Range::Bass, false)) < 1.0e-9);
     tune->setLiveMode(true);
     require(tune->liveMode());
+    require(std::abs(tune->getLatencySeconds() - costs(PitchTracker::Range::Bass, true)) < 1.0e-9);
 
     // Everything the device holds has to survive being written out and read
     // back, including the properties that are not automatable parameters.
@@ -588,6 +641,7 @@ void checkAutoTuneDsp(Session& session)
     checkFormantShift();
     checkDryWet();
     checkRangeSwitchIsSilentAndSafe();
+    checkRangeSwitchKeepsSounding();
     checkDevice(session);
     checkEditorFace(session);
 }

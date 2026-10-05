@@ -36,7 +36,12 @@ public:
     void reset() override;
     void applyToBuffer(const te::PluginRenderContext&) override;
     void restorePluginStateFromValueTree(const juce::ValueTree&) override;
-    double getLatencySeconds() override { return engine.latencySeconds(); }
+    // What this device's own Range and Live cost, worked out from them rather
+    // than read back from the engine. The engine takes a new range on the
+    // audio thread's next block, so between a change - from the face, an
+    // undo, a project opening - and that block it still answered with the old
+    // figure, and a graph built in the gap compensated the wrong delay.
+    double getLatencySeconds() override;
 
     // ---- what the editor reads and writes ---------------------------------
     AutoTuneEngine::Readout readout() const;
@@ -63,6 +68,9 @@ public:
 
 private:
     void writeProperty(const juce::Identifier&, const juce::var&);
+    // Everything the engine is run with, read from the device's state and
+    // knobs: once a block, and once at initialise.
+    AutoTuneEngine::Settings currentSettings() const;
 
     juce::CachedValue<float> strength, retune, flex, human, pitch, fine, formant, follow;
     juce::CachedValue<float> vibrato, vibratoRate, vibratoFade, mix, inputGain;
@@ -75,5 +83,6 @@ private:
     te::AutomatableParameter::Ptr mixParam, inputGainParam;
 
     AutoTuneEngine engine;
+    double preparedRate = 48000.0;
 };
 }

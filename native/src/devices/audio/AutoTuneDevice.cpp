@@ -109,8 +109,15 @@ AutoTuneDevice::~AutoTuneDevice()
 
 void AutoTuneDevice::initialise(const te::PluginInitialisationInfo& info)
 {
-    engine.prepare(info.sampleRate > 0.0 ? info.sampleRate : 48000.0, 2,
-                   std::max(64, info.blockSizeSamples));
+    preparedRate = info.sampleRate > 0.0 ? info.sampleRate : 48000.0;
+    // Prepared for this device's own Range and Live, not the engine's
+    // defaults: the graph reads the latency as soon as this returns.
+    engine.prepare(preparedRate, 2, std::max(64, info.blockSizeSamples), currentSettings());
+}
+
+double AutoTuneDevice::getLatencySeconds()
+{
+    return AutoTuneEngine::latencyFor(trackingRange(), live.get(), preparedRate) / preparedRate;
 }
 
 void AutoTuneDevice::reset()
@@ -193,16 +200,8 @@ void AutoTuneDevice::writeProperty(const juce::Identifier& id, const juce::var& 
         changed();
 }
 
-void AutoTuneDevice::applyToBuffer(const te::PluginRenderContext& context)
+AutoTuneEngine::Settings AutoTuneDevice::currentSettings() const
 {
-    if (context.destBuffer == nullptr || context.bufferNumSamples == 0)
-        return;
-
-    SCOPED_REALTIME_CHECK
-    auto& buffer = *context.destBuffer;
-    const auto channels = buffer.getNumChannels();
-    if (channels == 0) return;
-
     AutoTuneEngine::Settings settings;
     settings.inputGainDb = inputGainParam->getCurrentValue();
     settings.range = trackingRange();
@@ -225,7 +224,20 @@ void AutoTuneDevice::applyToBuffer(const te::PluginRenderContext& context)
     settings.vibratoFadeMs = vibratoFadeParam->getCurrentValue();
     settings.naturalVibrato = natural.get();
     settings.dryWet = mixParam->getCurrentValue();
-    engine.setSettings(settings);
+    return settings;
+}
+
+void AutoTuneDevice::applyToBuffer(const te::PluginRenderContext& context)
+{
+    if (context.destBuffer == nullptr || context.bufferNumSamples == 0)
+        return;
+
+    SCOPED_REALTIME_CHECK
+    auto& buffer = *context.destBuffer;
+    const auto channels = buffer.getNumChannels();
+    if (channels == 0) return;
+
+    engine.setSettings(currentSettings());
 
     float* channelData[2] {};
     const auto used = std::min(channels, 2);

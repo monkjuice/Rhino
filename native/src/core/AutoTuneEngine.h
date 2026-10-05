@@ -76,6 +76,14 @@ public:
     };
 
     void prepare(double sampleRate, int channels, int maxBlockSize);
+    // The same, ready for the settings it will be run with: prepared on its
+    // own it configures the shifter for whatever settings it last saw, and
+    // the first block then reconfigures it all over again.
+    void prepare(double sampleRate, int channels, int maxBlockSize, const Settings& initial)
+    {
+        settings = initial;
+        prepare(sampleRate, channels, maxBlockSize);
+    }
     void reset();
 
     // Called at the top of a block, from the audio thread.
@@ -110,6 +118,9 @@ private:
     float smoothedCorrection = 0.0f, stability = 0.0f, lastNote = 0.0f;
     float vibratoPhase = 0.0f, vibratoDrift = 0.0f, vibratoDriftTarget = 0.0f, onsetSeconds = 0.0f;
     float lastPeriod = 240.0f, settleGain = 0.0f;
+    // Samples left before a reconfigured shifter has anything to give: until
+    // then the voice stays on its dry signal, and only then fades back over.
+    int settleHold = 0;
     bool wasVoiced = false;
     unsigned int noise = 0x9e3779b9u;
 

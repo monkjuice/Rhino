@@ -99,6 +99,11 @@ void AutoTuneEngine::applyRange(PitchTracker::Range range, bool liveMode)
     // Not a full reset: the dry line keeps its contents, which are still the
     // right samples, only now read from a different distance back.
     settleGain = configured ? 0.0f : 1.0f;
+    // The shifter starts again from a ring of silence as long as its latency,
+    // so that is how long there is nothing corrected to fade to. Fading over
+    // the 20 ms alone dropped the voice out for the rest of it - up to a tenth
+    // of a second at Bass.
+    settleHold = configured ? latency : 0;
     configured = true;
 }
 
@@ -116,6 +121,7 @@ void AutoTuneEngine::reset()
     vibratoDriftTarget = 0.0f;
     onsetSeconds = 0.0f;
     settleGain = 1.0f;
+    settleHold = 0;
     wasVoiced = false;
     readDetected.store(0.0f, std::memory_order_relaxed);
     readTarget.store(0.0f, std::memory_order_relaxed);
@@ -282,7 +288,8 @@ void AutoTuneEngine::process(float* const* data, int channels, int count)
         for (int i = 0; i < chunk; ++i)
         {
             const auto slot = static_cast<size_t>((dryWritten + i - latency) & dryMask);
-            settleGain = std::min(1.0f, settleGain + settleStep);
+            if (settleHold > 0) --settleHold;
+            else settleGain = std::min(1.0f, settleGain + settleStep);
             const auto wetGain = wet * settleGain;
             for (int channel = 0; channel < used; ++channel)
             {

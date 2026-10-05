@@ -79,10 +79,10 @@ public:
     // The same, ready for the settings it will be run with: prepared on its
     // own it configures the shifter for whatever settings it last saw, and
     // the first block then reconfigures it all over again.
-    void prepare(double sampleRate, int channels, int maxBlockSize, const Settings& initial)
+    void prepare(double rate, int channels, int maxBlockSize, const Settings& initial)
     {
         settings = initial;
-        prepare(sampleRate, channels, maxBlockSize);
+        prepare(rate, channels, maxBlockSize);
     }
     void reset();
 

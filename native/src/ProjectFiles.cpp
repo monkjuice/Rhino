@@ -168,9 +168,9 @@ void ProjectFiles::renderWav(const juce::File& file)
     // the render has just re-prepared. Released on the message thread below,
     // which reattaches the device.
     renderStatus = std::make_unique<te::Edit::ScopedRenderStatus>(*edit, true);
-    // Lanes only move under the shell's playback timer, so the render needs them
-    // as engine curves or it writes every automated parameter frozen.
-    session.beginOfflineAutomation();
+    // The render reads the lanes from the engine's curves, as playback does, so
+    // they have to be current before it starts rather than at the next change.
+    session.mirrorAutomationToEngine();
     te::Renderer::turnOffAllPlugins(*edit);
 
     // Render at the device's own rate and block size. Anything else asks every
@@ -213,7 +213,6 @@ void ProjectFiles::renderWav(const juce::File& file)
             // Leave no plugin prepared for the render's settings before the
             // device comes back; releasing the status reallocates the context.
             te::Renderer::turnOffAllPlugins(*weak->session.edit);
-            weak->session.endOfflineAutomation();
             weak->renderStatus.reset();
             if (weak->loadingChanged) weak->loadingChanged(false);
             weak->report(success ? "Exported " + file.getFileName()

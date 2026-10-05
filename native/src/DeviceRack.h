@@ -8,7 +8,8 @@ namespace rhino
 {
 class DeviceRack final : public juce::Component,
                          public juce::DragAndDropTarget,
-                         private juce::ChangeListener
+                         private juce::ChangeListener,
+                         private juce::Timer
 {
 public:
     explicit DeviceRack(Session&);
@@ -25,9 +26,16 @@ public:
 
 private:
     friend void runPatternDeviceRackTest();
+    friend int runUiProfile();
     class FloatingDeviceWindow;
     class DropMarker;
     void changeListenerCallback(juce::ChangeBroadcaster*) override;
+    void timerCallback() override;
+    // The engine plays the lanes and tells nobody, so a knob a lane is moving
+    // is read back here instead: only the faces with such a knob are
+    // refreshed.
+    void followAutomation();
+    bool wasPlaying = false;
     void visibilityChanged() override;
     void openSelectedDevice();
     void showAddMenu();

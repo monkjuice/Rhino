@@ -1567,8 +1567,6 @@ private:
                 backToArrangement.setVisible(overriding);
                 resized();
             }
-        if (session.edit->getTransport().isPlaying())
-            session.applyTrackAutomationAt(playheadTime(session.edit->getTransport()));
         const auto seconds = session.edit->getTransport().getPosition().inSeconds();
         updateReadings(seconds);
         // The loop is where the transport will turn, so it heads the column of

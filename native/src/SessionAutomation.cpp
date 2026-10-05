@@ -79,8 +79,13 @@ juce::ValueTree Session::findTrackAutomationState(DeviceTarget target) const
 
 std::vector<Session::TrackAutomation> Session::readTrackAutomations(int track, bool resolveParameterInfo) const
 {
+    return readTrackAutomations(automationOwnerState(track), track, resolveParameterInfo);
+}
+
+std::vector<Session::TrackAutomation> Session::readTrackAutomations(const juce::ValueTree& owner, int track,
+                                                                    bool resolveParameterInfo) const
+{
     std::vector<TrackAutomation> automations;
-    const auto owner = automationOwnerState(track);
     if (!owner.isValid())
         return automations;
 
@@ -358,158 +363,173 @@ juce::Result Session::toggleParameterAutomationOverride(int track, int slot, int
     runtime.baseValue = pluginParameter->getCurrentValue();
     runtime.hasBaseValue = true;
     runtime.overridden = !runtime.overridden;
+    // An override is not a change to the document, so it is mirrored here
+    // rather than waiting for one.
+    mirrorAutomationToEngine();
     sendSynchronousChangeMessage();
     return juce::Result::ok();
 }
 
-void Session::applyTrackAutomationAt(double timelineSeconds)
+void Session::AutomationMirror::changeListenerCallback(juce::ChangeBroadcaster*)
 {
-    if (!std::isfinite(timelineSeconds) || timelineSeconds < 0.0)
-        return;
-
-    bool changed = false;
-    std::vector<DeviceTarget> activeTargets;
-    const auto applyTo = [&] (te::Plugin* plugin, const TrackAutomation& automation)
-    {
-        if (plugin == nullptr)
-            return;
-        auto* parameter = exposedParameterAt(*plugin, automation.target.parameter);
-        if (parameter == nullptr)
-            return;
-        auto& runtime = automationRuntimeFor(automation.target);
-        activeTargets.push_back(automation.target);
-        if (!runtime.hasBaseValue)
-        {
-            runtime.baseValue = parameter->getCurrentValue();
-            runtime.hasBaseValue = true;
-        }
-        runtime.active = true;
-        if (runtime.overridden)
-            return;
-
-        const auto range = parameter->getValueRange();
-        const auto next = juce::jlimit(range.getStart(),
-                                       exposedParameterMaximum(*plugin, automation.target.parameter, range.getEnd()),
-                                       automation.valueAt(timelineSeconds));
-        if (std::abs(parameter->getCurrentValue() - next) > 0.0001f)
-        {
-            parameter->setParameter(next, juce::sendNotification);
-            changed = true;
-        }
-    };
-
-    for (int track = 0; track <= masterTrackIndex(); ++track)
-    {
-        auto* list = pluginListForTrack(track);
-        if (list == nullptr)
-            continue;
-        for (const auto& automation : readTrackAutomations(track, false))
-        {
-            if (!automation.active() || !juce::isPositiveAndBelow(automation.target.slot, list->size()))
-                continue;
-            applyTo((*list)[automation.target.slot], automation);
-        }
-    }
-
-    // A lane that stopped driving hands the parameter back to the value the
-    // user last set by hand, rather than freezing on its final point.
-    for (auto& runtime : automationRuntime)
-    {
-        if (!runtime.active)
-            continue;
-        bool stillActive = false;
-        for (const auto target : activeTargets)
-            if (sameDeviceTarget(runtime.target, target))
-            {
-                stillActive = true;
-                break;
-            }
-        if (stillActive)
-            continue;
-
-        runtime.active = false;
-        if (runtime.overridden || !runtime.hasBaseValue)
-            continue;
-        auto* list = pluginListForTrack(runtime.target.track);
-        if (list == nullptr || !juce::isPositiveAndBelow(runtime.target.slot, list->size()))
-            continue;
-        auto* plugin = (*list)[runtime.target.slot];
-        if (plugin == nullptr)
-            continue;
-        if (auto* parameter = exposedParameterAt(*plugin, runtime.target.parameter))
-        {
-            const auto range = parameter->getValueRange();
-            const auto next = juce::jlimit(range.getStart(),
-                                           exposedParameterMaximum(*plugin, runtime.target.parameter, range.getEnd()), runtime.baseValue);
-            if (std::abs(parameter->getCurrentValue() - next) > 0.0001f)
-            {
-                parameter->setParameter(next, juce::sendNotification);
-                changed = true;
-            }
-        }
-    }
-
-    if (changed)
-        sendSynchronousChangeMessage();
+    if (session.automationMirrorStale)
+        session.mirrorAutomationToEngine();
 }
 
-
-// Playback drives the lanes from the shell's 30 Hz timer, which only runs while
-// the transport is playing. An offline render has neither: it walks the edit on
-// a worker thread with the transport stopped, so a swept parameter would be
-// written to the file frozen at whatever value the timer last left it holding.
-// Mirroring each lane into the engine's own automation curve is what puts the
-// movement somewhere the render can read, since the node graph pulls those per
-// sub-block whether it is playing live or rendering.
-void Session::beginOfflineAutomation()
+// The lanes used to be swept from the shell's 30 Hz timer: parameters moved in
+// steps a frame apart, stopped moving whenever the message thread was busy, an
+// offline render had to mirror the lanes for itself, and every step announced
+// a change that rebuilt the whole interface. The engine's own curves have none
+// of that, so the lanes now live there for as long as they drive anything.
+void Session::mirrorAutomationToEngine()
 {
-    endOfflineAutomation();
-
-    for (int track = 0; track <= masterTrackIndex(); ++track)
+    automationMirrorStale = false;
+    const auto samePoints = [](const std::vector<AutomationPoint>& a, const std::vector<AutomationPoint>& b)
     {
-        auto* list = pluginListForTrack(track);
-        if (list == nullptr)
-            continue;
-        for (const auto& automation : readTrackAutomations(track, false))
+        return std::equal(a.begin(), a.end(), b.begin(), b.end(), [](const auto& x, const auto& y)
+        {
+            return x.timeSeconds == y.timeSeconds && x.value == y.value;
+        });
+    };
+
+    // Every track's devices and the lanes stored on it, the main track's last,
+    // found in one walk of the track list: this runs after every change to the
+    // document, and asking track by track walked the list again each time.
+    struct Owner
+    {
+        te::PluginList& devices;
+        juce::ValueTree lanes;
+    };
+    std::vector<Owner> owners;
+    for (auto* track : te::getAudioTracks(*edit))
+        owners.push_back({track->pluginList, track->state});
+    owners.push_back({edit->getMasterPluginList(), edit->state});
+
+    // What each lane asks of the engine now: a curve for every lane that is
+    // drawn, whose device and parameter still exist, and that nobody has taken
+    // over by hand. A lane taken over still counts as driving its knob, which
+    // is what makes the next touch of that knob an override.
+    std::vector<MirroredCurve> wanted;
+    std::vector<DeviceTarget> driving;
+    for (int track = 0; track < static_cast<int>(owners.size()); ++track)
+    {
+        auto* list = &owners[static_cast<size_t>(track)].devices;
+        for (const auto& automation : readTrackAutomations(owners[static_cast<size_t>(track)].lanes, track, false))
         {
             if (!automation.active() || !juce::isPositiveAndBelow(automation.target.slot, list->size()))
                 continue;
-            // A lane the user has taken over by hand drives nothing during
-            // playback, so it must not drive the render either.
-            if (const auto* runtime = findAutomationRuntime(automation.target); runtime != nullptr && runtime->overridden)
-                continue;
-            auto* plugin = (*list)[automation.target.slot];
+            te::Plugin::Ptr plugin = (*list)[automation.target.slot];
             if (plugin == nullptr)
                 continue;
-            auto* parameter = exposedParameterAt(*plugin, automation.target.parameter);
+            te::AutomatableParameter::Ptr parameter = exposedParameterAt(*plugin, automation.target.parameter);
             if (parameter == nullptr)
                 continue;
-            auto& curve = parameter->getCurve();
-            // An engine curve already on the parameter is somebody else's
-            // automation. Leave it alone and let it render on its own terms.
-            if (curve.getNumPoints() > 0)
+            driving.push_back(automation.target);
+            auto& runtime = automationRuntimeFor(automation.target);
+            runtime.active = true;
+            // Read before any curve of ours is on it: this is the value the
+            // parameter is handed back when the lane stops driving it.
+            if (!runtime.hasBaseValue)
+            {
+                runtime.baseValue = parameter->getCurrentValue();
+                runtime.hasBaseValue = true;
+            }
+            if (runtime.overridden)
                 continue;
-
-            offlineAutomation.push_back({parameter, parameter->getCurrentValue()});
+            MirroredCurve curve {automation.target, plugin, parameter, {}};
             const auto range = parameter->getValueRange();
             const auto ceiling = exposedParameterMaximum(*plugin, automation.target.parameter, range.getEnd());
             for (const auto& point : automation.points)
-                curve.addPoint(tracktion::core::TimePosition::fromSeconds(point.timeSeconds),
-                               juce::jlimit(range.getStart(), ceiling, point.value), 0.0f, nullptr);
+                curve.points.push_back({point.timeSeconds, juce::jlimit(range.getStart(), ceiling, point.value)});
+            wanted.push_back(std::move(curve));
         }
     }
-}
+    for (auto& runtime : automationRuntime)
+        if (runtime.active && std::none_of(driving.begin(), driving.end(), [&runtime](const auto& target)
+                                           { return sameDeviceTarget(runtime.target, target); }))
+            runtime.active = false;
 
-void Session::endOfflineAutomation()
-{
-    for (auto& mirrored : offlineAutomation)
+    const auto findWanted = [&wanted](const te::AutomatableParameter* parameter) -> const MirroredCurve*
     {
-        if (mirrored.parameter == nullptr)
-            continue;
-        mirrored.parameter->getCurve().clear(nullptr);
-        mirrored.parameter->setParameter(mirrored.restoreValue, juce::dontSendNotification);
+        for (const auto& curve : wanted)
+            if (curve.parameter.get() == parameter)
+                return &curve;
+        return nullptr;
+    };
+
+    // Every engine curve in the edit is Rhino's to keep. One on a parameter no
+    // lane drives is left over, and it would play a movement nobody can see.
+    // The curves this mirror wrote are cleared from its own record. Any other
+    // can only have arrived with a plugin - in a document saved with its
+    // curves, a device brought back by undo, one moved to another track -
+    // because curves are never written through the undo manager, so the whole
+    // edit is searched only when the plugins in it have changed. By their ids
+    // rather than their addresses, which a freed plugin can hand on.
+    std::vector<te::EditItemID> plugins;
+    for (const auto& owner : owners)
+        for (auto* plugin : owner.devices)
+            if (plugin != nullptr)
+                plugins.push_back(plugin->itemID);
+    if (plugins != mirroredPlugins)
+    {
+        for (const auto& owner : owners)
+            for (auto* plugin : owner.devices)
+                if (plugin != nullptr)
+                    for (auto* parameter : plugin->getAutomatableParameters())
+                        if (parameter != nullptr && parameter->getCurve().getNumPoints() > 0
+                            && findWanted(parameter) == nullptr)
+                            parameter->getCurve().clear(nullptr);
+        mirroredPlugins = std::move(plugins);
     }
-    offlineAutomation.clear();
+    for (const auto& before : mirroredCurves)
+        if (findWanted(before.parameter.get()) == nullptr && before.plugin->state.isAChildOf(edit->state)
+            && before.parameter->getCurve().getNumPoints() > 0)
+            before.parameter->getCurve().clear(nullptr);
+
+    // A lane that stopped driving a parameter hands it back to the value the
+    // user last set by hand, rather than leaving it on wherever the curve last
+    // put it. Not one the user has taken over, whose knob is already theirs,
+    // and not one whose device has left the edit.
+    bool handedBack = false;
+    for (const auto& before : mirroredCurves)
+    {
+        if (findWanted(before.parameter.get()) != nullptr || before.plugin == nullptr
+            || !before.plugin->state.isAChildOf(edit->state))
+            continue;
+        const auto* runtime = findAutomationRuntime(before.target);
+        if (runtime == nullptr || runtime->overridden || !runtime->hasBaseValue)
+            continue;
+        const auto range = before.parameter->getValueRange();
+        const auto next = juce::jlimit(range.getStart(),
+                                       exposedParameterMaximum(*before.plugin, before.target.parameter, range.getEnd()),
+                                       runtime->baseValue);
+        if (std::abs(before.parameter->getCurrentValue() - next) > 0.0001f)
+        {
+            before.parameter->setParameter(next, juce::sendNotification);
+            handedBack = true;
+        }
+    }
+
+    for (const auto& curve : wanted)
+    {
+        auto& engineCurve = curve.parameter->getCurve();
+        const auto previous = std::find_if(mirroredCurves.begin(), mirroredCurves.end(), [&curve](const auto& before)
+        {
+            return before.parameter == curve.parameter;
+        });
+        if (previous != mirroredCurves.end() && samePoints(previous->points, curve.points)
+            && engineCurve.getNumPoints() == static_cast<int>(curve.points.size()))
+            continue;
+        engineCurve.clear(nullptr);
+        for (const auto& point : curve.points)
+            engineCurve.addPoint(tracktion::core::TimePosition::fromSeconds(point.timeSeconds), point.value, 0.0f, nullptr);
+    }
+    mirroredCurves = std::move(wanted);
+
+    // Whoever has already heard this announcement read the value from before
+    // the hand-back, so say it again.
+    if (handedBack)
+        sendChangeMessage();
 }
 
 }

@@ -14,6 +14,18 @@
         require(session.setTrackAutomationPoints({0, 0, 0}, {{0.0, persistedParameters.front().minimum},
                                                              {2.0, persistedParameters.front().maximum}}).wasOk(),
                 "Draw an automation curve before saving");
+        // An engine curve with no lane to own it, as a document can carry one:
+        // it would play a movement nobody can see, so reopening must drop it.
+        const auto utilityGainOf = [&session](int track) -> te::AutomatableParameter*
+        {
+            for (auto* plugin : te::getAudioTracks(*session.edit)[track]->pluginList)
+                if (auto* utility = dynamic_cast<UtilityDevice*>(plugin))
+                    return &utility->gain();
+            return nullptr;
+        };
+        require(utilityGainOf(1) != nullptr, "The audio lane carries a Utility");
+        utilityGainOf(1)->getCurve().addPoint(tracktion::core::TimePosition::fromSeconds(0.0), -60.0f, 0.0f, nullptr);
+        utilityGainOf(1)->getCurve().addPoint(tracktion::core::TimePosition::fromSeconds(1.0), 0.0f, 0.0f, nullptr);
 
         juce::TemporaryFile project(".rhinoedit");
         const auto snapshot = session.projectSnapshot();
@@ -48,6 +60,12 @@
             const auto restored = session.trackAutomations(0);
             require(restored.size() == 1 && restored.front().points.size() == 2,
                     "A restored automation curve keeps its points");
+            auto laneCurveBack = false;
+            for (auto* parameter : te::getAudioTracks(*session.edit)[0]->pluginList[0]->getAutomatableParameters())
+                laneCurveBack = laneCurveBack || parameter->getCurve().getNumPoints() == 2;
+            require(laneCurveBack, "A restored lane is played by the engine again");
+            require(utilityGainOf(1) != nullptr && utilityGainOf(1)->getCurve().getNumPoints() == 0,
+                    "A curve saved with no lane to own it is not played after reopening");
         }
         require(!session.hasUnsavedChanges(), "Opened project is clean");
         require(te::getAudioTracks(*session.edit)[importedTrack]->getClips().size() == 1, "Audio clip survives project reopen");

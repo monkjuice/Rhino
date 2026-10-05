@@ -176,9 +176,11 @@
             require(fxSession.setDeviceParameter(fxIndex, rhinoSlot, 2, 0.9f).wasOk(), "Rhino Space test sets feedback");
             auto params = rhinoSpace->getAutomatableParameters();
             require(params.size() >= 2 && params[1] != nullptr, "Rhino Space size parameter is automatable");
-            auto& sizeCurve = params[1]->getCurve();
-            sizeCurve.addPoint(tracktion::core::TimePosition::fromSeconds(0.0), 0.0f, 0.0f, nullptr);
-            sizeCurve.addPoint(tracktion::core::TimePosition::fromSeconds(1.0), 1.0f, 0.0f, nullptr);
+            // Drawn as a lane, the way the arrangement draws one: the render
+            // reads the engine curve the session mirrors the lane onto.
+            require(fxSession.setTrackAutomationPoints({fxIndex, rhinoSlot, 1}, {{0.0, 0.0f}, {1.0, 1.0f}}).wasOk()
+                        && params[1]->getCurve().getNumPoints() == 2,
+                    "A Rhino Space size lane reaches the engine as a curve");
 
             juce::TemporaryFile fxOutput(".wav");
             te::Renderer::Parameters fxParameters(*fxSession.edit);
@@ -209,4 +211,72 @@
             require(fxPeak > 0.0001f && fxPeak <= 1.0f, "Rhino Space size automation remains bounded and audible");
             fxSession.stop();
             fxSession.panicReset(false);
+        }
+
+        // A lane is heard in a plain render, with nothing set up for the
+        // render's sake: a gain lane rising from -60 dB to 0 dB over a steady
+        // tone comes out quiet at the start and loud at the end. Before the
+        // engine played the lanes, only the WAV export could hear them.
+        {
+            juce::TemporaryFile tone(".wav");
+            {
+                std::unique_ptr<juce::OutputStream> stream = tone.getFile().createOutputStream();
+                auto writer = wav.createWriterFor(stream, juce::AudioFormatWriterOptions()
+                    .withSampleRate(48000).withNumChannels(2).withBitsPerSample(24));
+                require(writer != nullptr, "Create a steady tone for the gain lane");
+                juce::AudioBuffer<float> steady(2, 96000);
+                for (int frame = 0; frame < steady.getNumSamples(); ++frame)
+                {
+                    const auto sample = 0.5f * static_cast<float>(std::sin(frame * 2.0 * juce::MathConstants<double>::pi * 220.0 / 48000.0));
+                    steady.setSample(0, frame, sample);
+                    steady.setSample(1, frame, sample);
+                }
+                require(writer->writeFromAudioSampleBuffer(steady, 0, steady.getNumSamples()), "Write the steady tone");
+            }
+            // On the heap: the runner's frame holds every scenario's locals.
+            auto laneDocument = std::make_unique<Session>();
+            auto& laneSession = *laneDocument;
+            require(laneSession.importAudio(tone.getFile()).wasOk(), "The tone imports onto the first free audio lane");
+            const auto laneTrack = 1;
+            auto* toneTrack = te::getAudioTracks(*laneSession.edit)[laneTrack];
+            int utilitySlot = -1;
+            for (int slot = 0; slot < toneTrack->pluginList.size(); ++slot)
+                if (dynamic_cast<UtilityDevice*>(toneTrack->pluginList[slot]) != nullptr)
+                    utilitySlot = slot;
+            require(utilitySlot >= 0, "An audio lane carries a Utility to automate");
+            require(laneSession.setTrackAutomationPoints({laneTrack, utilitySlot, 0}, {{0.0, -60.0f}, {2.0, 0.0f}}).wasOk(),
+                    "A gain lane is drawn across the tone");
+
+            juce::TemporaryFile laneOutput(".wav");
+            te::Renderer::Parameters laneParameters(*laneSession.edit);
+            laneParameters.destFile = laneOutput.getFile();
+            laneParameters.audioFormat = &wav;
+            laneParameters.sampleRateForAudio = 48000;
+            laneParameters.bitDepth = 24;
+            laneParameters.time = toneTrack->getClips()[0]->getPosition().time;
+            {
+                te::Renderer::RenderTask task("Gain lane render test", laneParameters, nullptr, nullptr);
+                const auto deadline = juce::Time::getMillisecondCounterHiRes() + 15000.0;
+                while (task.runJob() != juce::ThreadPoolJob::jobHasFinished)
+                    require(juce::Time::getMillisecondCounterHiRes() < deadline, "Gain lane render timed out");
+                require(task.errorMessage.isEmpty(), task.errorMessage.toRawUTF8());
+            }
+            std::unique_ptr<juce::AudioFormatReader> laneReader(formats.createReaderFor(laneOutput.getFile()));
+            require(laneReader != nullptr, "Read the gain lane render");
+            juce::AudioBuffer<float> laneAudio(static_cast<int>(laneReader->numChannels),
+                                               static_cast<int>(laneReader->lengthInSamples));
+            require(laneReader->read(&laneAudio, 0, laneAudio.getNumSamples(), 0, true, true), "Read the gain lane samples");
+            const auto rmsBetween = [&laneAudio](double from, double to)
+            {
+                const auto first = static_cast<int>(from * 48000.0);
+                const auto count = std::min(static_cast<int>((to - from) * 48000.0), laneAudio.getNumSamples() - first);
+                return count > 0 ? laneAudio.getRMSLevel(0, first, count) : 0.0f;
+            };
+            const auto early = rmsBetween(0.05, 0.25);
+            const auto late = rmsBetween(1.75, 1.95);
+            require(late > 0.1f && early < 0.01f && late > 20.0f * early,
+                    ("A gain lane is heard in a render: " + juce::String(early, 5) + " RMS at the start, "
+                     + juce::String(late, 5) + " at the end").toRawUTF8());
+            laneSession.stop();
+            laneSession.panicReset(false);
         }

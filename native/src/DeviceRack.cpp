@@ -555,12 +555,34 @@ DeviceRack::DeviceRack(Session& s) : session(s)
     session.addChangeListener(this);
     session.deviceParameterValues.addChangeListener(this);
     selectTrack(0);
+    // The rate the lanes used to be swept at, which is plenty for a knob.
+    startTimerHz(30);
 }
 
 DeviceRack::~DeviceRack()
 {
+    stopTimer();
     session.deviceParameterValues.removeChangeListener(this);
     session.removeChangeListener(this);
+}
+
+void DeviceRack::timerCallback()
+{
+    if (isHiddenInShell(*this))
+        return;
+    const auto playing = session.edit->getTransport().isPlaying();
+    // Once more as the transport stops, so the knobs settle where the curve
+    // left them rather than a frame short of it.
+    if (playing || wasPlaying)
+        followAutomation();
+    wasPlaying = playing;
+}
+
+void DeviceRack::followAutomation()
+{
+    for (int i = 0; i < devicePanels.size() && i < static_cast<int>(slots.size()); ++i)
+        if (devicePanels[i]->followsAutomation())
+            devicePanels[i]->setTarget(selectedTrack, slots[static_cast<size_t>(i)], i == selectedDevice);
 }
 
 void DeviceRack::paint(juce::Graphics& g)

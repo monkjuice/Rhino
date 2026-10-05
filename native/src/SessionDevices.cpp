@@ -417,8 +417,14 @@ juce::Result Session::beginDeviceParameterGesture(int track, int slot, int param
     auto* parameter = exposedParameterAt(*plugin, parameterIndex);
     if (parameter == nullptr) return juce::Result::fail("Select a parameter first.");
     lastTouchedParameter = {track, slot, parameterIndex};
-    if (auto* runtime = findAutomationRuntime(lastTouchedParameter); runtime != nullptr && runtime->active)
+    // Taking hold of an automated knob takes it from its lane, at once: the
+    // engine would otherwise go on playing the curve under the drag.
+    if (auto* runtime = findAutomationRuntime(lastTouchedParameter);
+        runtime != nullptr && runtime->active && !runtime->overridden)
+    {
         runtime->overridden = true;
+        mirrorAutomationToEngine();
+    }
     parameter->parameterChangeGestureBegin();
     if (parameterGestureDepth++ == 0)
         latencyAtGestureStart = plugin->getLatencySeconds();
@@ -440,8 +446,11 @@ juce::Result Session::setDeviceParameter(int track, int slot, int parameterIndex
     auto& runtime = automationRuntimeFor(lastTouchedParameter);
     runtime.baseValue = next;
     runtime.hasBaseValue = true;
-    if (runtime.active)
+    if (runtime.active && !runtime.overridden)
+    {
         runtime.overridden = true;
+        mirrorAutomationToEngine();
+    }
     parameter->setParameter(next, juce::sendNotification);
     markModified();
     // Inside a drag only the rack hears it, to keep the dragged device's

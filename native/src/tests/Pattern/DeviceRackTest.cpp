@@ -261,6 +261,27 @@ void runPatternDeviceRackTest()
     const auto liveBefore = tune->liveMode();
     tunePanel->mouseDown(press(*tunePanel, {static_cast<float>(tunePanel->getWidth() - 162), 12.0f}));
     require(tune->liveMode() != liveBefore, "Rhino Tune's LIVE toggle still answers a click on the name row");
+
+    // The engine plays the lanes and announces nothing, so the rack reads a
+    // knob a lane is moving back for itself, face by face.
+    chainView.selectTrack(0);
+    const auto synthSlot = session.deviceSlots(0)[1].pluginIndex;
+    auto* synth = session.devicePlugin(0, synthSlot);
+    require(dynamic_cast<te::FourOscPlugin*>(synth) != nullptr, "The 4OSC sits behind the arpeggiator");
+    const auto attack = session.deviceParameters(0, synthSlot).front();
+    require(session.setTrackAutomationPoints({0, synthSlot, 0}, {{0.0, attack.minimum}, {2.0, attack.maximum}}).wasOk(),
+            "A lane is drawn on the 4OSC's first knob");
+    auto* synthPanel = chainView.devicePanels[1];
+    require(synthPanel->followsAutomation() && !chainView.devicePanels.getFirst()->followsAutomation(),
+            "Only the face with a knob on a lane follows the engine");
+    for (auto* parameter : synth->getAutomatableParameters())
+        if (parameter->hasAutomationPoints())
+            parameter->updateToFollowCurve(tracktion::core::TimePosition::fromSeconds(1.0));
+    chainView.followAutomation();
+    require(std::abs(synthPanel->parameters.front().value - (attack.minimum + attack.maximum) * 0.5f) < 0.02f,
+            "The rack shows where the engine has moved a knob on a lane");
+    require(session.clearTrackAutomationPoints({0, synthSlot, 0}).wasOk() && !chainView.devicePanels[1]->followsAutomation(),
+            "A face stops following once its lane is cleared");
 }
 
 int runArpSnapshotTest()

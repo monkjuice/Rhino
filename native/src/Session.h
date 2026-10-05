@@ -565,12 +565,13 @@ public:
     juce::Result setTrackAutomationPoints(DeviceTarget, std::vector<AutomationPoint>);
     juce::Result clearTrackAutomationPoints(DeviceTarget);
     juce::Result toggleParameterAutomationOverride(int track, int slot, int parameter);
-    void applyTrackAutomationAt(double timelineSeconds);
-    // Playback sweeps the lanes from the UI timer, which an offline render
-    // never runs. These mirror the lanes into the engine's own curves so the
-    // render reads them, and hand the parameters back afterwards.
-    void beginOfflineAutomation();
-    void endOfflineAutomation();
+    // The engine plays the lanes. Every lane that is drawn, and that nobody
+    // has taken over by hand, is mirrored onto its parameter's own automation
+    // curve, which the audio graph reads every block - live and in a render
+    // alike, and whatever the message thread is doing. This runs by itself
+    // when a change to the document or to an override is announced; call it
+    // directly only where something has to hear the curves before then.
+    void mirrorAutomationToEngine();
     juce::Result moveNote(int sourceStep, int sourcePitch, int targetStep, int targetPitch);
     juce::Result moveNotes(const std::vector<std::pair<int, int>>&, int stepDelta, int pitchDelta);
     juce::Result moveNotes(const std::vector<juce::ValueTree>&, double stepDelta, int pitchDelta);
@@ -908,10 +909,24 @@ private:
         bool overridden = false;
         bool active = false;
     };
-    struct OfflineAutomation
+    // A lane written onto an engine curve, with the points it was written
+    // with, so the next mirror can leave an unchanged curve alone. The plugin
+    // is held so a curve can be handed back only while its device is still in
+    // the edit.
+    struct MirroredCurve
     {
+        DeviceTarget target;
+        te::Plugin::Ptr plugin;
         te::AutomatableParameter::Ptr parameter;
-        float restoreValue = 0.0f;
+        std::vector<AutomationPoint> points;
+    };
+    // Mirrors the lanes whenever the session announces a change that left
+    // them stale.
+    struct AutomationMirror final : juce::ChangeListener
+    {
+        explicit AutomationMirror(Session& owner) : session(owner) {}
+        void changeListenerCallback(juce::ChangeBroadcaster*) override;
+        Session& session;
     };
     // SessionWarp.cpp - holds a warped clip's length in step with its content
     // after the content's length in beats has changed.
@@ -1063,6 +1078,10 @@ private:
     juce::ValueTree findTrackAutomationState(DeviceTarget) const;
     juce::ValueTree ensureTrackAutomationState(DeviceTarget, bool ownLane, bool keepExistingLane);
     std::vector<TrackAutomation> readTrackAutomations(int track, bool resolveParameterInfo) const;
+    // The same, from an owner already found: a caller walking every track
+    // finds them all at once rather than through the track list each time.
+    std::vector<TrackAutomation> readTrackAutomations(const juce::ValueTree& owner, int track,
+                                                      bool resolveParameterInfo) const;
     AutomationRuntime& automationRuntimeFor(DeviceTarget);
     AutomationRuntime* findAutomationRuntime(DeviceTarget);
     const AutomationRuntime* findAutomationRuntime(DeviceTarget) const;
@@ -1082,7 +1101,13 @@ private:
     tracktion::core::TimeRange manualLoopRange;
     DeviceTarget lastTouchedParameter;
     std::vector<AutomationRuntime> automationRuntime;
-    std::vector<OfflineAutomation> offlineAutomation;
+    std::vector<MirroredCurve> mirroredCurves;
+    // The plugins in the edit when it was last searched for stray curves.
+    // Emptied with the edit, so a document just opened is always searched.
+    std::vector<te::EditItemID> mirroredPlugins;
+    // Set by every document change; the next announcement mirrors the lanes.
+    bool automationMirrorStale = true;
+    AutomationMirror automationMirror {*this};
     std::optional<juce::PluginDescription> forgeDescription;
     // Declared after the engine, so the preview is torn down before the device
     // manager it is registered with. The destructor detaches it either way.

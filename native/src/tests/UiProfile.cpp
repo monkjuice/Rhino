@@ -111,7 +111,8 @@ int runUiProfile()
         if (slots.empty())
             throw std::runtime_error("The profile synth has no slot");
         const auto synthSlot = slots.front().pluginIndex;
-        // Automation on a few tracks, so the automation sweep has lanes to read.
+        // Automation on a few tracks, so the mirror has lanes to write and the
+        // rack has a knob to follow.
         for (int track = 0; track < 4; ++track)
         {
             if (session.addDevice("FourOsc", track * 2).failed()) continue;
@@ -173,10 +174,23 @@ int runUiProfile()
         }));
         session.endTempoGesture();
 
-        // The automation sweep the shell runs every frame while playing.
-        report("automation sweep", medianMicroseconds(60, [&] (int i)
+        // What the lanes cost the message thread now that the engine plays
+        // them: one mirror onto the engine's curves for each change to the
+        // document, and, every frame while playing, the rack reading back the
+        // faces a lane is moving. The knob drag above took the first track's
+        // knob from its lane, so it is handed back first.
+        session.toggleParameterAutomationOverride(0, synthSlot, 0);
+        if (const auto knobs = session.deviceParameters(0, synthSlot);
+            knobs.empty() || !knobs.front().automated || knobs.front().automationOverridden)
+            throw std::runtime_error("The profile's first knob is not on a lane");
+        report("automation mirror", medianMicroseconds(60, [&] (int)
         {
-            session.applyTrackAutomationAt(0.05 * i);
+            session.markModified();
+            session.mirrorAutomationToEngine();
+        }));
+        report("rack automation follow", medianMicroseconds(60, [&] (int)
+        {
+            rack->followAutomation();
         }));
 
         // A frame of the arrangement: the whole panel, then what a playhead

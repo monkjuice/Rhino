@@ -155,6 +155,7 @@
                 "A drawn lane becomes active");
         const auto decayMinimum = synthMacros[1].minimum;
         const auto decayMaximum = std::min(synthMacros[1].maximum, decayMinimum + 1.0f);
+        const auto restingDecay = patternSynth()->ampDecay->getCurrentValue();
         require(session.showTrackAutomation({0, 0, 1}, true).wasOk()
                 && session.setTrackAutomationPoints({0, 0, 1}, {{0.0, decayMinimum}, {4.0, decayMaximum}}).wasOk(),
                 "A track can automate a second parameter on its own lane");
@@ -175,48 +176,58 @@
         require(synthMacros[0].automated && synthMacros[1].automated && synthMacros[2].automated
                 && !synthMacros[0].automationOverridden && !synthMacros[1].automationOverridden && !synthMacros[2].automationOverridden,
                 "Automated parameters report following state to device panels");
-        session.applyTrackAutomationAt(0.5);
+        // The engine plays the lanes: nothing on the message thread sweeps
+        // anything. follow puts each parameter with a curve where its curve
+        // says at that time, standing in for playback; the gain-lane render in
+        // "rendering" is what proves the audio graph does the same.
+        const auto follow = [&patternSynth](double seconds)
+        {
+            for (auto* parameter : patternSynth()->getAutomatableParameters())
+                if (parameter->hasAutomationPoints())
+                    parameter->updateToFollowCurve(tracktion::core::TimePosition::fromSeconds(seconds));
+        };
+        require(patternSynth()->ampAttack->getCurve().getNumPoints() == 2
+                    && patternSynth()->ampDecay->getCurve().getNumPoints() == 2
+                    && patternSynth()->ampAttack->isAutomationActive() && patternSynth()->ampDecay->isAutomationActive(),
+                "Every drawn lane is mirrored onto its parameter's own engine curve");
+        require(std::abs(patternSynth()->ampAttack->getCurve().getValueAt(
+                             tracktion::core::TimePosition::fromSeconds(0.75), 0.0f)
+                         - (attackMinimum + (attackMaximum - attackMinimum) * 0.75f)) < 0.02f,
+                "The curve carries the lane's shape, so a render hears the sweep exactly as playback does");
+        follow(0.5);
         require(std::abs(patternSynth()->ampAttack->getCurrentValue() - (attackMinimum + attackMaximum) * 0.5f) < 0.02f,
                 "Track automation applies interpolated parameter values during playback");
         require(std::abs(patternSynth()->ampDecay->getCurrentValue()
                          - (decayMinimum + (decayMaximum - decayMinimum) * 0.125f)) < 0.02f,
                 "Multiple automation lanes apply together");
-        session.applyTrackAutomationAt(1.5);
+        follow(1.5);
         require(std::abs(patternSynth()->ampAttack->getCurrentValue() - attackMaximum) < 0.02f,
                 "Automation holds its last value past the end of its curve");
-        session.applyTrackAutomationAt(0.5);
+        follow(0.5);
         const auto overrideAttack = juce::jlimit(attackMinimum, attackMaximum, attackMinimum + 0.2f);
         require(session.setDeviceParameter(0, 0, 0, overrideAttack).wasOk(),
                 "Manual parameter edits can override active automation");
-        session.applyTrackAutomationAt(0.75);
+        require(patternSynth()->ampAttack->getCurve().getNumPoints() == 0
+                    && patternSynth()->ampDecay->getCurve().getNumPoints() == 2,
+                "Taking hold of an automated knob takes its curve, and only its curve, off the engine");
+        follow(0.75);
         require(std::abs(patternSynth()->ampAttack->getCurrentValue() - overrideAttack) < 0.02f,
                 "Manual override wins over automation until automation is re-enabled");
         synthMacros = session.deviceParameters(0, 0);
         require(synthMacros[0].automated && synthMacros[0].automationOverridden,
                 "Device panels can show manual automation override state");
-        require(session.toggleParameterAutomationOverride(0, 0, 0).wasOk(),
-                "Automation indicators can return a parameter to automation");
-        session.applyTrackAutomationAt(0.75);
+        require(session.toggleParameterAutomationOverride(0, 0, 0).wasOk()
+                    && patternSynth()->ampAttack->getCurve().getNumPoints() == 2,
+                "Automation indicators can return a parameter to automation, curve and all");
+        follow(0.75);
         require(std::abs(patternSynth()->ampAttack->getCurrentValue()
                          - (attackMinimum + (attackMaximum - attackMinimum) * 0.75f)) < 0.02f,
                 "Re-enabled automation drives the parameter again");
-        const auto sweptAttack = patternSynth()->ampAttack->getCurrentValue();
-        session.beginOfflineAutomation();
-        require(patternSynth()->ampAttack->getCurve().getNumPoints() == 2
-                && patternSynth()->ampDecay->getCurve().getNumPoints() == 2,
-                "An export mirrors every active lane into the engine's own automation curves");
-        require(std::abs(patternSynth()->ampAttack->getCurve().getValueAt(
-                             tracktion::core::TimePosition::fromSeconds(0.75), 0.0f)
-                         - (attackMinimum + (attackMaximum - attackMinimum) * 0.75f)) < 0.02f,
-                "A mirrored curve carries the lane's shape, so the render hears the sweep");
-        session.endOfflineAutomation();
-        require(patternSynth()->ampAttack->getCurve().getNumPoints() == 0
-                && patternSynth()->ampDecay->getCurve().getNumPoints() == 0,
-                "Finishing an export leaves the engine curves as it found them");
-        require(std::abs(patternSynth()->ampAttack->getCurrentValue() - sweptAttack) < 0.0001f,
-                "Finishing an export hands the parameters back to the playback sweep");
         require(session.clearTrackAutomationPoints({0, 0, 1}).wasOk(),
                 "A curve can be deleted without losing its lane");
+        require(patternSynth()->ampDecay->getCurve().getNumPoints() == 0
+                    && std::abs(patternSynth()->ampDecay->getCurrentValue() - restingDecay) < 0.0001f,
+                "A deleted curve leaves the engine and hands its knob back to where it was left by hand");
         require(session.trackAutomations(0).size() == 3 && !session.trackAutomations(0)[1].active()
                 && session.deviceParameters(0, 0)[0].automated && !session.deviceParameters(0, 0)[1].automated
                 && session.deviceParameters(0, 0)[2].automated,

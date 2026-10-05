@@ -109,6 +109,14 @@ void DeviceEditorPanel::setTarget(int nextTrack, const Session::DeviceSlot& devi
     repaint();
 }
 
+bool DeviceEditorPanel::followsAutomation() const
+{
+    return std::any_of(parameters.begin(), parameters.end(), [](const auto& parameter)
+    {
+        return parameter.automated && !parameter.automationOverridden;
+    });
+}
+
 int DeviceEditorPanel::preferredWidth() const
 {
     if (face == Face::AutoTune)

@@ -39,6 +39,8 @@ public:
 
     explicit DeviceEditorPanel(Session&);
     void setTarget(int track, const Session::DeviceSlot&, bool selected);
+    // A lane is moving one of this face's knobs, as of the last setTarget.
+    bool followsAutomation() const;
     int preferredWidth() const;
     void paint(juce::Graphics&) override;
     void resized() override;
@@ -51,6 +53,7 @@ public:
     std::function<void()> selected;
 
 private:
+    friend void runPatternDeviceRackTest();
     enum class Face { Generic, RhinoSpace, Arp, AutoTune, Eq, Vocoder };
     void ensureControls();
     void styleControls();

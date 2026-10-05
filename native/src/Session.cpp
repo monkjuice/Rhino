@@ -38,12 +38,14 @@ Session::Session() : engine(commandLineTestMode ? "Rhino Native Tests" : "Theda 
     engine.getDeviceManager().addChangeListener(midiDeviceWatcher.get());
     initialiseExternalPlugins();
     buildStarterEdit();
+    addChangeListener(&automationMirror);
 }
 
 // The preview and the count-in each hold an audio callback on the engine's
 // device manager, so both have to come off before either of them goes.
 Session::~Session()
 {
+    removeChangeListener(&automationMirror);
     if (midiDeviceWatcher != nullptr)
         engine.getDeviceManager().removeChangeListener(midiDeviceWatcher.get());
     cancelCountIn();
@@ -114,7 +116,9 @@ void Session::newProject()
     playbackStartSeconds = 0.0;
     lastTouchedParameter = {};
     automationRuntime.clear();
-    offlineAutomation.clear();
+    mirroredCurves.clear();
+    mirroredPlugins.clear();
+    automationMirrorStale = true;
     manualLoop = false;
     buildStarterEdit();
     projectFile = juce::File{};
@@ -186,6 +190,9 @@ juce::ValueTree Session::projectSnapshot()
 void Session::markModified()
 {
     ++changeRevision;
+    // Anything that changes the document may have moved a lane, the device a
+    // lane drives, or the track it sits on.
+    automationMirrorStale = true;
     edit->markAsChanged();
 }
 
@@ -211,12 +218,16 @@ juce::Result Session::restoreProject(const juce::ValueTree& state, const juce::F
     recordingStart = -1.0;
     recordingStarted = false;
     playbackStartSeconds = 0.0;
+    // Before the outgoing edit goes: these hold its plugins alive, and a
+    // plugin must not outlive the edit it belongs to.
+    mirroredCurves.clear();
     edit = std::move(candidate);
     // The automation that was being played by hand belonged to the outgoing
     // document's tracks, and is keyed by their indices.
     lastTouchedParameter = {};
     automationRuntime.clear();
-    offlineAutomation.clear();
+    mirroredPlugins.clear();
+    automationMirrorStale = true;
     // A dragged loop span is not part of a document, so it does not survive
     // into the next one, exactly as File > New drops it.
     manualLoop = false;

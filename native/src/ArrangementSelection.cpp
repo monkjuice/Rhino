@@ -299,10 +299,9 @@ juce::String Arrangement::barPositionText(double seconds) const
 {
     const auto beats = session.edit->tempoSequence
         .toBeats(tracktion::core::TimePosition::fromSeconds(std::max(0.0, seconds))).inBeats();
-    const auto perBar = std::max(1.0, session.beatsPerBar());
-    const auto bar = std::floor(beats / perBar);
-    return juce::String(static_cast<int>(bar) + 1) + "."
-         + juce::String(static_cast<int>(std::floor(beats - bar * perBar)) + 1);
+    const auto signature = session.timeSignature();
+    const auto place = musicalPosition(beats, signature.numerator, signature.denominator);
+    return juce::String(place.bar) + "." + juce::String(place.count);
 }
 
 void Arrangement::copySelection()

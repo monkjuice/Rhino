@@ -1614,29 +1614,6 @@ private:
         position.setDeviceInfo(displayAudio ? audioDescription : juce::String());
     }
 
-    // Bars and beats at a point on the timeline, both counted from one, which
-    // is how the position readout and the loop beside it are both written.
-    std::pair<int, int> barAndBeat(double seconds) const
-    {
-        const auto beats = session.edit->tempoSequence
-                               .toBeats(tracktion::core::TimePosition::fromSeconds(seconds)).inBeats();
-        const auto barLength = session.beatsPerBar();
-        const auto bar = static_cast<int>(std::floor(beats / barLength)) + 1;
-        return {bar, static_cast<int>(std::floor(beats - (bar - 1) * barLength)) + 1};
-    }
-
-    // Which sixteenth of the beat the playhead is in, counted from one. The
-    // third field of the position, and the one that actually moves while the
-    // transport rolls: bars and beats change too slowly to tell a stalled
-    // readout from a stopped transport.
-    int subdivision(double seconds) const
-    {
-        const auto beats = session.edit->tempoSequence
-                               .toBeats(tracktion::core::TimePosition::fromSeconds(seconds)).inBeats();
-        const auto intoBeat = beats - std::floor(beats);
-        return juce::jlimit(1, 4, static_cast<int>(std::floor(intoBeat * 4.0)) + 1);
-    }
-
     // The loop, written exactly as the position above it is - bar, beat and
     // sixteenth - because a loop counted differently from the playhead is a
     // loop nobody can read against it. Looping is always on: with no span
@@ -1650,15 +1627,20 @@ private:
              + " - " + placeText(range.getEnd().inSeconds());
     }
 
-    // Bar, beat and sixteenth, which is how the position and the loop beside it
-    // are both written. One formatter for both, because a loop that counts
-    // differently from the playhead is a loop nobody can read against it.
+    // Bar, count and sixteenth, which is how the position and the loop beside
+    // it are both written. One formatter for both, because a loop that counts
+    // differently from the playhead is a loop nobody can read against it. The
+    // sixteenth is the field that moves while the transport rolls: bars and
+    // counts change too slowly to tell a stalled readout from a stopped one.
     juce::String placeText(double seconds) const
     {
-        const auto place = barAndBeat(seconds);
-        return juce::String(place.first).paddedLeft('0', 3)
-             + "." + juce::String(place.second)
-             + "." + juce::String(subdivision(seconds));
+        const auto beats = session.edit->tempoSequence
+                               .toBeats(tracktion::core::TimePosition::fromSeconds(seconds)).inBeats();
+        const auto signature = session.timeSignature();
+        const auto place = musicalPosition(beats, signature.numerator, signature.denominator);
+        return juce::String(place.bar).paddedLeft('0', 3)
+             + "." + juce::String(place.count)
+             + "." + juce::String(place.sixteenth);
     }
 
     // What the engine is actually running on. Sampled with the load meters

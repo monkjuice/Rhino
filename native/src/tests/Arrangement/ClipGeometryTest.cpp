@@ -156,6 +156,30 @@ int runArrangementGeometryTest()
         // been on.
         if (!close(rulerTickSpan(16.0 / 4.0, 4.0 * 4.0), 4.0))
             throw std::runtime_error("Labels four bars apart are marked at each bar");
+        // The readout counts in the note the signature counts in, as the ruler
+        // does. Beats here are the engine's quarter notes.
+        {
+            const auto reads = [](double beats, int numerator, int denominator, MusicalPosition expected)
+            {
+                const auto place = musicalPosition(beats, numerator, denominator);
+                return place.bar == expected.bar && place.count == expected.count && place.sixteenth == expected.sixteenth;
+            };
+            if (!reads(0.0, 4, 4, {1, 1, 1}) || !reads(5.75, 4, 4, {2, 2, 4}))
+                throw std::runtime_error("4/4 reads bar, quarter and sixteenth");
+            // 6/8: three quarters to the bar, read as six eighths.
+            if (!reads(2.5, 6, 8, {1, 6, 1}) || !reads(2.75, 6, 8, {1, 6, 2}) || !reads(3.0, 6, 8, {2, 1, 1}))
+                throw std::runtime_error("6/8 reads six eighths a bar, two sixteenths an eighth");
+            // 7/8: three and a half quarters, read as seven equal eighths
+            // rather than four beats with a short one at the end.
+            if (!reads(3.0, 7, 8, {1, 7, 1}) || !reads(3.5, 7, 8, {2, 1, 1}) || !reads(7.0, 7, 8, {3, 1, 1}))
+                throw std::runtime_error("7/8 reads seven eighths a bar");
+            if (!reads(3.0, 3, 4, {2, 1, 1}) || !reads(1.0, 2, 2, {1, 1, 5}))
+                throw std::runtime_error("3/4 and 2/2 count their own notes");
+            // A tempo-map round trip lands a hair short of a bar line, and the
+            // bar it belongs to is the one it reads as.
+            if (!reads(3.0 - 0.0000000001, 6, 8, {2, 1, 1}))
+                throw std::runtime_error("A position a hair short of a bar line reads as that bar");
+        }
         // The Info View is written to by the hint that follows the pointer and
         // by the status line that reports what just happened. Which of them
         // wins is the whole of how the panel behaves, and both of its rules

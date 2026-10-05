@@ -233,4 +233,32 @@ inline bool isGridLine(double beat, double interval)
     if (interval <= 0.0) return false;
     return std::abs(beat / interval - std::round(beat / interval)) < 0.00001;
 }
+
+// Where a point in the music falls, written as the transport readout and the
+// status line write it: the bar, the count within the bar and the sixteenth
+// within the count, each from one. A count is the note the signature counts in,
+// as on the ruler: 6/8 reads six counts to the bar, and an eighth holds two
+// sixteenths. Counting the engine's quarter-note beats instead read 6/8 as three
+// beats a bar and gave 7/8 a fourth beat half as long as the others.
+struct MusicalPosition
+{
+    int bar = 1, count = 1, sixteenth = 1;
+};
+
+inline MusicalPosition musicalPosition(double beats, int numerator, int denominator)
+{
+    // Tempo-map round trips land a hair short of a boundary; this is far below
+    // anything a reading can show.
+    constexpr double epsilon = 0.000001;
+    const auto counts = std::max(1, numerator);
+    const auto countLength = 4.0 / std::max(1, denominator);
+    const auto barLength = countLength * counts;
+    const auto bar = std::floor(std::max(0.0, beats) / barLength + epsilon);
+    const auto intoBar = std::max(0.0, beats - bar * barLength);
+    const auto count = std::clamp(static_cast<int>(std::floor(intoBar / countLength + epsilon)), 0, counts - 1);
+    const auto intoCount = std::max(0.0, intoBar - count * countLength);
+    const auto sixteenthsPerCount = std::max(1, static_cast<int>(std::lround(countLength / 0.25)));
+    const auto sixteenth = std::clamp(static_cast<int>(std::floor(intoCount / 0.25 + epsilon)), 0, sixteenthsPerCount - 1);
+    return {static_cast<int>(bar) + 1, count + 1, sixteenth + 1};
+}
 }

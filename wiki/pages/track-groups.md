@@ -4,7 +4,7 @@ type: component
 summary: Ctrl+G gathers tracks under a bus track that their audio feeds; the structure is positional and repaired after every reorder.
 tags: [rhino, groups, mixer, arrangement]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-05
 ---
 
 # Track groups (bus tracks)
@@ -14,17 +14,18 @@ A group is a bus: a track of its own, with fader, pan, mute, solo and an audio-e
 ## How it works
 
 - **Grouping.** Ctrl+G (`Session::groupTracks`) appends a bus named `Group N`, gives it a `rhinoGroupBus` id one past the highest the document has used (so an id freed by an undo is never reissued), and gathers the members under it. Ctrl+Shift+G (`ungroupTracks`) deletes the bus and hands the members back to the main output; the tracks survive.
-- **Positional structure.** A group is its bus followed by the run of tracks whose `rhinoGroup` equals the bus's id; no member list is stored. `reconcileTrackGroups` runs after `addTrack`, `moveTrack`, `removeAudioTrack`, every group command and every reopen: a plain track carried between two members joins, anything cut off from its bus leaves, then routing is rewritten to match (`TrackOutput::setOutputToTrack` for members, the default device for the rest).
+- **Positional structure.** A group is its bus followed by the run of tracks whose `rhinoGroup` equals the bus's id; no member list is stored. `reconcileTrackGroups` runs after `addTrack`, `moveTrack`, `removeAudioTrack`, every group command, every lane a drag or paste makes, and every reopen: a plain track carried between two members, or directly under the bus, joins; anything cut off from its bus leaves; then routing is rewritten to match (`TrackOutput::setOutputToTrack` for members, the default device for the rest).
+- **Undo restores the group whole** (commit `8dd3627`). Membership is written through the undo manager, and every caller reconciles inside the transaction of the move, group or delete that decided it, so one Ctrl+Z puts back position, membership and routing together. Ungrouping and deleting a bus let the members go and route them to the main output while the bus still exists (`dissolveGroupInEdit`). Undo replays a transaction backwards, so it brings the bus back before routing anything into it; routed after the deletion, the members lost their routing for good. `Arrangement/scenarios/GroupUndo.inc` covers each case.
 - **Collapse** is a view setting on the bus (`rhinoGroupCollapsed`, no undo). Members are laid out at zero height rather than removed, so geometry code needs no special case.
 - **No nesting.** Grouping refuses a selection that contains a bus, and a bus is never made a member.
-- **A bus refuses** instruments and MIDI effects (`addDevice`), clips (`createClip`, `importAudioAt`), clip slots (`clipSlotAt`) and arming (`trackRecordInput` answers none).
+- **A bus refuses** instruments and MIDI effects (`addDevice`), clips (`createClip`, `importAudioAt`, and since `b5d17e0` moved and pasted ones), clip slots (`clipSlotAt`, `clipLaneRefusal`) and arming (`trackRecordInput` answers none).
 
 ## Pitfalls
 
 - **Ask `usesDefaultAudioOut()`, not `getDestinationTrack() != nullptr`.** Deleting a bus leaves its members naming a track that no longer exists. That reads as "no destination" while the engine still resolves it on every render, and an offline render of the edit never returns ([Offline renders that never return](renders-that-never-return.md)).
 - **A bus is not made by `appendTrack`.** `groupTracks` calls `insertNewAudioTrack` itself, so a bus has no `rhinoTrackType` (it reads as audio), no Utility device and no picked colour (it draws in a fixed grey until coloured).
-- **Skip buses when looking for a playable track**, as `patternTrackOf`, `refreshUtilityPointers` and `restoreProject` do; a bus at index 0 once reopened with an instrument on it, silencing the project (`GroupBusReload.inc`).
-- **Dropping a plain track directly under a bus empties the group** (traced in the code, not reproduced, 2026-10-03). The join rule compares the newcomer's two neighbours' `rhinoGroup`, a bus carries none, and the unjoined newcomer then breaks the run, cutting every member below it loose ([Hazards found while seeding the wiki](known-hazards.md)).
+- **Skip buses when looking for a playable track**, as the note editor's fallback `firstMidiTrackOf` does; a bus at index 0 once reopened with an instrument on it, silencing the project (`GroupBusReload.inc`).
+- **A bus carries no `rhinoGroup` of its own**, so a rule that compares neighbours' membership must treat a bus above as naming its group. The join rule did not, and until `8dd3627` a track dropped directly under a bus broke the run and cut every member below it loose.
 - `migrateLegacyTrackGroups` rebuilds pre-bus documents' groups on load ([No backward compatibility for .rhinoedit](no-rhinoedit-back-compat.md)).
 
 ## Related

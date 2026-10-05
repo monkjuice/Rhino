@@ -1,10 +1,10 @@
 ---
 title: Playhead rendering
 type: component
-summary: Draws both playheads every display refresh from the audio graph's own position, repainting two narrow strips, with a Direct2D fix.
+summary: Draws both playheads every display refresh from the audio graph's own position, repainting two narrow strips whose painters skip everything else, with a Direct2D fix.
 tags: [rhino, ui, rendering, windows]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-05
 ---
 
 # Playhead rendering
@@ -17,7 +17,9 @@ updated: 2026-10-03
 
 ## Damage, not repaints
 
-`movePlayhead` repaints two narrow strips, about six pixels each, at the old and new positions, never the panel. `playheadDamage` rounds them outward to physical pixels for fractional display scales. Note data stays cached between edits, so a strip repaint is cheap.
+`movePlayhead` repaints two narrow strips, about six pixels each, at the old and new positions, never the panel. `playheadDamage` rounds them outward to physical pixels for fractional display scales.
+
+Both painters skip what such a strip does not reach (commit `c9d7d5d`); before, they drew everything and let the clip throw it away, still paying for the text shaping, tempo-map conversions and model queries. The arrangement draws track cards, bar numbers, ruler times, grid lines, the empty-lane hint, notes, automation segments and clip names only where the repaint reaches, measures each clip name once per sync, and reads per-track facts once per sync. The note editor takes its cell size once per paint and skips the header numbers, keys, rows and sustain lines outside the repaint. Measured with `--profile-ui`, a strip fell from 1.3-1.5 ms to 0.4 ms in the arrangement and from about 0.6 ms to 12 µs in the note editor. A hidden note editor skips its vblank update altogether ([What a change costs the interface](ui-cost-of-a-change.md)).
 
 Two cases the strips cannot cover are handled by their callers:
 
@@ -32,7 +34,7 @@ Damage has to be exact on Direct2D: it presents from rotating buffers, so a regi
 
 ## Tests
 
-`ClipGeometryTest.cpp` checks the damage rectangles. `Rendering.inc` moves each playhead through fractional positions, wraparound and hiding, and requires every incremental frame to match a full render pixel for pixel at scales 1.0, 1.25 and 2.0. The Direct2D handoff itself is exercised only when `RHINO_NATIVE_RENDER_TEST=1` is set, because that check needs a real desktop peer: it puts the arrangement on the desktop off-screen, forces the Direct2D engine and queues damage the way a vblank would. None of this measures live frame pacing.
+`ClipGeometryTest.cpp` checks the damage rectangles. `Rendering.inc` moves each playhead through fractional positions, wraparound and hiding, and requires every incremental frame to match a full render pixel for pixel at scales 1.0, 1.25 and 2.0. `PartialRepaint.inc` paints strips, bands and seams of both panels twice under the same clip, culled and with the `cullRepaints` test seam off, and requires identical pixels; it cannot compare against the whole paint ([JUCE's rasteriser is not clip-invariant](juce-rasteriser-not-clip-invariant.md)). The Direct2D handoff itself is exercised only when `RHINO_NATIVE_RENDER_TEST=1` is set, because that check needs a real desktop peer: it puts the arrangement on the desktop off-screen, forces the Direct2D engine and queues damage the way a vblank would. None of this measures live frame pacing.
 
 ## Related
 
@@ -42,3 +44,5 @@ Damage has to be exact on Direct2D: it presents from rotating buffers, so a regi
 - [The executable is RhinoDAW, not Rhino](executable-named-rhinodaw.md)
 - [Tracktion Engine with a native JUCE UI](tracktion-and-juce.md)
 - [Transport, tempo and loop](transport.md)
+- [What a change costs the interface](ui-cost-of-a-change.md)
+- [Profile paint on a software image](profile-paint-on-a-software-image.md)

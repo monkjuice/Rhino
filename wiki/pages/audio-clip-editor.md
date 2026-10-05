@@ -4,7 +4,7 @@ type: component
 summary: Edits one audio clip's own gain, pan, pitch, fades, mute and reverse as clip properties, with one undo step per knob drag.
 tags: [rhino, ui, audio-clips]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-05
 ---
 
 # Audio clip editor
@@ -13,7 +13,7 @@ The editor for one audio clip: `native/src/AudioClipPanel.*` in the UI (its warp
 
 ## The clip's own mix
 
-Gain (-60 to +24 dB), pan, pitch (±24 semitones), fade in, fade out, mute and reverse are properties of the **clip**, not its track: they live on the clip's `ValueTree` through Tracktion's `AudioClipBase`, so they travel with the clip, undo with it and leave its lane-mates alone. The track fader on the card is still how a whole lane moves ([Mixer](mixer.md)). The engine keeps the fades from overlapping by shortening the other one, so the panel reads both back after setting either.
+Gain (-60 to +24 dB), pan, pitch (±24 semitones), fade in, fade out, mute and reverse are properties of the **clip**, not its track: they live on the clip's `ValueTree` through Tracktion's `AudioClipBase`, so they travel with the clip, undo with it and leave its lane-mates alone. A copy or a duplicate carries them, and the clip's warp, since commit `b5d17e0` ([Region editing](region-editing.md)). The track fader on the card is still how a whole lane moves ([Mixer](mixer.md)). The engine keeps the fades from overlapping by shortening the other one, so the panel reads both back after setting either.
 
 **One drag, one undo step.** A knob drag is bracketed by `Session::beginAudioClipGesture`/`endAudioClipGesture` (a depth counter, so nested brackets are safe). The bracket gives one undo entry and one change notification per drag; without it a fader pull left hundreds of undo entries and rebuilt the arrangement's clip cache on every mouse move. The clip-tempo field and warp-marker drags use the same bracket.
 

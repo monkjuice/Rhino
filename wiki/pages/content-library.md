@@ -4,7 +4,7 @@ type: component
 summary: Samples live as files under library/, found at runtime by ContentLibrary, stored with Git LFS and never compiled in.
 tags: [rhino, library, content]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-05
 ---
 
 # Content library
@@ -28,7 +28,7 @@ A candidate counts only if it contains a `Samples` folder. Otherwise an empty `L
 ## Rules
 
 - **Git LFS for audio.** `.gitattributes` routes every audio extension under `library/` through LFS, set up before the library had any history. Set LFS up *before* adding a new content type: converting afterwards means rewriting history ([Git workflow](git-workflow.md)).
-- **Read in `initialise()`, never in the audio callback, and survive absence.** Content is data on disk and can be missing; `ContentLibrary::file` returns a non-existent `File` then, and `DrumDevice::loadSample` logs `drum sample missing` and leaves that pad silent. `AGENTS.md` measures the TR-808 kit at 525 KB in 1.2 ms warm, once per device instance ([Real-time audio rules](real-time-audio-rules.md)).
+- **Read in `initialise()`, never in the audio callback, and survive absence.** Content is data on disk and can be missing; `ContentLibrary::file` returns a non-existent `File` then, and `DrumDevice::loadSample` logs `drum sample missing` and leaves that pad silent. A file that is present but will not decode, which is what a Git LFS pointer that was never pulled looks like, is logged as `drum sample unreadable` (commit `492cc8b`). `AGENTS.md` measures the TR-808 kit at 525 KB in 1.2 ms warm, once per device instance ([Real-time audio rules](real-time-audio-rules.md)).
 - **The browser mirrors the scan.** `--self-test` asserts that the browser's sample rows equal `ContentLibrary::samples().size()`, which also holds with no library present.
 - **An installed build needs `Library` beside the executable**; no build step or script copies it there yet (as of 2026-10-03).
 

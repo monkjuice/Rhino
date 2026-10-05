@@ -4,7 +4,7 @@ type: component
 summary: The message-thread facade over one Tracktion engine and edit, one class split across 24 files, where every rule and refusal lives.
 tags: [rhino, model, tracktion, undo]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-05
 ---
 
 # Session, the model
@@ -28,17 +28,19 @@ The September 2026 split established the responsibility-based `Session*.cpp` lay
 ## What every command does
 
 - **Refuses in the model.** A command that can refuse returns a `juce::Result` whose message the shell prints, so a rule (a track's kind, a bus's limits, chain order) is written once and every UI path inherits it.
-- **Makes one undo step per intent.** A named `beginNewTransaction`, the edit, then an empty one to close it. Drags are bracketed (`beginNoteGesture`, `beginAudioClipGesture`, `beginTempoGesture`, the fader and device-parameter gestures) so a drag is one entry and one notification, not one per pixel. View settings (row height, group collapse) skip undo.
-- **Notifies synchronously** with `sendSynchronousChangeMessage()`, so views re-sync in the same call stack.
+- **Makes one undo step per intent.** A named `beginNewTransaction`, the edit, then an empty one to close it. Drags are bracketed (`beginNoteGesture`, `beginAudioClipGesture`, `beginTempoGesture`, the fader and device-parameter gestures) so a drag is one entry and one notification, not one per pixel. Inside a device-parameter drag a step announces only on `deviceParameterValues`, and inside a fader or pan drag nothing at all, until the gesture ends. Several clips moved or deleted together are one step (`moveClips`, `deleteClips`), as are several files dropped together (`importAudioFilesAt`). View settings (row height, group collapse) skip undo.
+- **Fails whole.** A command that fails after it has begun editing takes back its own transaction with `undoCurrentTransactionOnly`, so a refusal half way, after a lane was made or an instrument switched, leaves the document as it was (`editClip`, `moveClips`, `pasteClipRegion`, `importAudioFilesAt`; commits `b5d17e0`, `d20faa4`).
+- **Notifies synchronously** with `sendSynchronousChangeMessage()`, so views re-sync in the same call stack. The view a command was called from may have rebuilt its own cache by the time the call returns: never hold a reference into a view's list across a `Session` call (commit `2df76f8` fixed two in the arrangement). What each announcement costs is [What a change costs the interface](ui-cost-of-a-change.md).
+- **Mirrors automation after it.** `markModified` marks the lanes stale, and a listener on the session's own announcement writes them onto the engine's curves ([Track automation](automation.md)).
 - **Counts its own dirt.** `changeRevision`/`savedRevision` track user commands, because engine initialisation flips the edit's changed flag asynchronously.
 
-Replacing the document (`newProject`, `restoreProject`) is bracketed by `Listener::editWillChange`/`editDidChange`, so views drop cached rows, clips and pointers before the old edit is freed. Declaration order destroys the preview and the edit before the engine.
+Replacing the document (`newProject`, `restoreProject`) is bracketed by `Listener::editWillChange`/`editDidChange`, so views drop cached rows, clips and pointers before the old edit is freed. Anything holding a `te::Plugin::Ptr` must let go before then: the automation mirror's curves and the rack's floating device window both did not, and a plugin outliving its edit corrupted the heap ([Hold ids, not pointers](ids-not-pointers.md)). Declaration order destroys the preview and the edit before the engine.
 
 ## Pitfalls
 
 - `isCommandLineTestMode()` suppresses machine preferences (browser preview, last track kind) and makes `pickTrackColour` deterministic, so a developer's settings cannot change what the suite sees.
 - `RhinoEngineBehaviour` is the only thing Rhino tells the engine: where a recording goes, and that recording mutes what it covers.
-- Some state is positional and dates from the original pattern-track-plus-audio-track layout: `patternClip` (the note editor's clip, kept valid by `repairPatternClip`), `rhinoPatternInstrument`, the `utility`/`audioUtility` pointers, and track-0 cases in `deviceSlots` and `deleteDevice`. `patternTrackOf` skips group buses because a bus can sit at index 0.
+- The note editor's clip, `patternClip` kept beside `patternClipID`, is the one long-lived pointer. `repairPatternClip` re-finds it after anything that can take it, and a document with no MIDI track has none, so ask `hasPatternClip()` before `pattern()`. The rest of the positional state from the original pattern-track layout was retired in commit `a04b407` ([No track is special for being first](pattern-track.md)).
 - Hold clip ids, not `te::Clip*` ([Hold ids, not pointers](ids-not-pointers.md)).
 
 ## Related
@@ -49,5 +51,6 @@ Replacing the document (`newProject`, `restoreProject`) is bracketed by `Listene
 - [Track automation](automation.md)
 - [Rhino's build targets](rhino-build-targets.md)
 - [Dependency direction](dependency-direction.md)
-- [The first track is still the pattern track](pattern-track.md)
+- [No track is special for being first](pattern-track.md)
+- [What a change costs the interface](ui-cost-of-a-change.md)
 - [Hazards found while seeding the wiki](known-hazards.md)

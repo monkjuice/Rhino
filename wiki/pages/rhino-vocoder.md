@@ -4,7 +4,7 @@ type: component
 summary: A channel vocoder whose carrier arrives as a sidechain from another track, and how Rhino routes a sidechain at all.
 tags: [rhino, devices, dsp, sidechain]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-05
 ---
 
 # Rhino Vocoder and sidechains
@@ -26,12 +26,13 @@ A channel vocoder in the one mode Live calls External: the voice is the track's 
 - The bank (4-40 bands, default 20) is walked band-outer, sample-inner.
 - **Depth** compares each band with the bank average from the previous block: a block of lag on the reference, never on the modulation.
 - **Unvoiced** adds noise to the carrier while the voice is sibilant (energy above 3.5 kHz), since an `s` has no pitch to play.
+- A block bigger than the one prepared for is worked through in pieces of the prepared size (`VocoderEngine::process`). It used to re-prepare, which allocated on the audio thread and cleared every band mid-note. The gate's 3 ms edge smoothing carries its state across blocks, so an edge renders the same wherever a block boundary falls (commit `492cc8b`).
 
 **Audio From** is the only control on any face that edits routing rather than a parameter, so it is drawn rather than a knob ([Device rack and device editors](device-rack.md)). Set to None, the voice passes through dry and the face says what to do.
 
 ## Tests
 
-`native/src/tests/VocoderTest.cpp` builds a carrier of four tones (250 Hz, 1, 2 and 4 kHz), feeds one as the modulator and measures which comes out; the formant check repeats it with the bank an octave up. They span four octaves. `native/src/tests/Arrangement/scenarios/VocoderCarrier.inc` checks the routing: four wires, saved with the project, cleared with the carrier track.
+`native/src/tests/VocoderTest.cpp` builds a carrier of four tones (250 Hz, 1, 2 and 4 kHz), feeds one as the modulator and measures which comes out; the formant check repeats it with the bank an octave up. They span four octaves. Two more require an oversized block to match the same audio in prepared-size pieces, and a gate edge to render the same at block sizes 256 and 100. `native/src/tests/Arrangement/scenarios/VocoderCarrier.inc` checks the routing: four wires, saved with the project, cleared with the carrier track.
 
 ## Related
 

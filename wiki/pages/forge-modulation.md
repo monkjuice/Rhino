@@ -4,7 +4,7 @@ type: component
 summary: Eight matrix slots route envelopes, LFOs, macros and performance sources to any continuous control, per voice, in the knob's own range.
 tags: [forge, modulation, lfo, envelopes]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-05
 ---
 
 # Forge modulation: matrix, envelopes, LFOs and macros
@@ -15,9 +15,11 @@ Everything that moves a control goes through one matrix of eight slots (`modSlot
 
 Sources (`ModSource`): ENV 1-4, LFO 1-6, velocity, note, MACRO 1-8, mod wheel. Destinations are the continuous controls, from oscillator pitch to every rack slot's knobs and the warp depths. Deliberately absent: `output`, bus levels and sends (applied after the voice sum), a rack slot's LEVEL, and every mode, because sweeping unrelated choices is a stutter. Slots store both ends as indices: see [Stored indices are append-only](append-only-stored-indices.md).
 
+The list (`core/ForgeMatrix.h`) runs: the named controls, then every rack slot's knobs and mix (from `fxDestinationBase`), then whatever was appended since, which is the warp depths, the filter's second field and the noise controls. So "is this a rack control" is a range test, `isFxDestination`, never `>= fxDestinationBase`. The lower-bound test counted the appended controls as rack controls, which switched every bus on (commit `7e135cd`; [Forge mixer and effects racks](forge-mixer-and-fx.md)).
+
 ## How slots apply
 
-- Per voice, per sample, in the destination's normalised space. `prepareToPlay` hands Core each destination's `NormalisableRange`, so one depth means the same on a pan as on a skewed frequency.
+- Per voice, per sample, in the destination's normalised space. `prepareToPlay` hands Core each destination's `NormalisableRange`, so one depth means the same on a pan as on a skewed frequency. A voice writes only the fields its live slots point at, onto a scratch copied once a block ([Forge engine (Core)](forge-engine.md)).
 - Offsets are summed per destination, then applied once and clamped. Applied slot by slot, two half-depth slots would not equal one full one.
 - **BI** subtracts 0.5 from a source that only rises; LFOs already swing ±1 and are left alone. It is Serum's POL ([Why a patch copied from Serum sounds different](serum-patches-sound-different.md)).
 - A per-voice source on a rack knob resolves to the loudest voice, because racks run after the voices.

@@ -4,7 +4,7 @@ type: component
 summary: Right-click learn binds a controller's knobs and pads to any control; bindings are kept per machine in MidiMap.xml, not in patches.
 tags: [forge, midi, controllers]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-05
 ---
 
 # Forge MIDI learn
@@ -15,7 +15,7 @@ Right-click any control, choose **MIDI learn**, then move a knob or hit a pad. T
 
 - **Learning replaces at both ends.** The knob you moved drops what it drove, and the control drops whatever drove it: a control with two masters jumps, and the panel could not say which one moved it.
 - **No device knowledge.** A pad and a key are the same message, so there is no table of hardware. A press is read off its target: a discrete parameter, such as a switch, steps to its next value and stays; a knob is held at the pad's velocity while the pad is down and restored on release.
-- **Bound messages are consumed** before the wheels, the arp or the voices see them, so a bound pad does not also sound and a bound CC 1 no longer moves the mod wheel. Note releases always pass through, or a pad bound while held would hang its note.
+- **Bound messages are consumed** before the wheels, the arp or the voices see them, so a bound pad does not also sound and a bound CC 1 no longer moves the mod wheel. Note releases always pass through, or a pad bound while held would hang its note. `Processor::applyMidiMap` gathers the survivors into `midiKept`, sized in `prepareToPlay`, and refills the host's buffer only when something was taken out. It used to build a fresh `MidiBuffer` and swap it in every block, freeing the host's storage on the audio thread, and the default bindings mean that filter runs on every machine (commit `c9a37a6`).
 - The map runs before the on-screen keyboard is merged in, so clicking a panel key never fires a pad binding. Only a press arms a learn, and pitch bend cannot be learned, since brushing the strip would bind it.
 - **Default:** CC 21-28 drive the eight macros (`firstDefaultMacroCc`), written only on a machine with no bindings file and never over a binding. Unconfirmed on real hardware: two captures from the developer's Launchkey Mini caught nothing ([Reading MIDI hardware on Windows](reading-midi-hardware-on-windows.md)).
 

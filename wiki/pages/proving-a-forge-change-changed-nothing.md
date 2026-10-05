@@ -4,7 +4,7 @@ type: guide
 summary: Hash --render audio and --snapshot PNGs against a worktree build of the old revision, and time intended changes by --profile medians.
 tags: [forge, testing, refactoring, performance]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-05
 ---
 
 # Proving a Forge change changed nothing
@@ -40,8 +40,13 @@ bytes and identical PNGs of all five tabs ([Forge's engine splits into headers o
 
 ## When the change is meant to change something
 
-For speed, `--profile [width height]` paints the editor in software and prints the median cost of an idle frame, a
-resize frame, a module switched on and off, a walk through the tabs and a flip between two. Take medians, never means:
+For speed, `--profile [width height]` paints the editor into a plain `juce::Image` and prints the median cost of an idle
+frame, a resize frame, a module switched on and off, a walk through the tabs and a flip between two. On Windows that image
+carries a fixed Direct2D cost per paint, which a comparison cancels and an absolute reading does not
+([Profile paint on a software image](profile-paint-on-a-software-image.md)). For the audio thread,
+`--profile-audio [blocks]` (`tests/ForgeTestRender.cpp`, commit `c9a37a6`) plays the `--render` patch with five voices
+sounding and a bound knob turning, at 64- and 512-sample blocks (4,000 of each by default), and prints the median and
+99th-percentile block time, the share of real time and the heap allocations per block. Take medians, never means:
 one cache rebuild among cached frames is a 30 ms outlier that a mean reports as a regression. Keep the old binary aside
 (a worktree serves; stashing risks sweeping up someone else's uncommitted edits) and run the two alternately for three
 rounds, because the machine drifts by more than some of the differences being measured. For idle CPU, launch the

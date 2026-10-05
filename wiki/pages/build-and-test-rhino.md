@@ -4,7 +4,7 @@ type: guide
 summary: Fetch the pinned engine, build with Visual Studio 2022, and run the five CTest cases without being fooled by a stale or locked build.
 tags: [rhino, build, testing, windows]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-05
 ---
 
 # Build and test Rhino
@@ -70,6 +70,8 @@ ctest --test-dir native/build -C Release -R native_arrangement_workflow --output
   ([Editing only a scenario .inc does not rebuild the tests](inc-edits-do-not-rebuild.md)).
 - A failure that reads only "Moved render timeout" is a 15 s wall-clock budget tripping on a busy machine. Re-run that
   case on an idle machine before investigating.
+- `--profile-ui` is a timing tool in the same binary, not a case: it prints medians and checks nothing
+  ([Writing Rhino tests](writing-rhino-tests.md)).
 
 ## Related
 

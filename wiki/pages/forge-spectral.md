@@ -4,7 +4,7 @@ type: component
 summary: An oscillator mode that resynthesises a loaded sample with a phase vocoder, so pitch and scan position move independently (M16).
 tags: [forge, oscillators, spectral, samples]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-05
 ---
 
 # Forge spectral oscillator
@@ -16,6 +16,7 @@ SPECTRAL is the second oscillator MODE, built on 2026-10-02 and 2026-10-03. It a
 - **Pitch shifts inside the spectrum.** Each peak's region moves whole, with its phases locked to the peak (Laroche–Dolson). A bin-by-bin shift lost 11 dB an octave down. This keeps SCAN independent of pitch and makes every note cost the same.
 - **Unison is summed in the spectrum.** Each channel takes one inverse transform. Each member still costs 4 KB of phases, so `spectralUnisonMax` is 6.
 - **Per-voice state lives on the heap.** It is about 70 KB per oscillator and 3.5 MB per Core, allocated in `initialise`. It cannot live inside `Core`, which is held by value and built on the stack by the tests.
+- **A stolen voice drains.** `SpectralVoice::restart` resets the playhead and phase tracking for the new note but leaves the overlap-add windows already summed to drain under it, as the wavetable path does. Clearing them cut the old note dead at whatever sample it had reached, a click on every steal (commit `2cc79de`).
 - **Analysis** uses a 2048-point Hann window and a 512-sample hop. The root is MIDI 60, labelled C3 on Forge's keyboard.
 
 ## Samples
@@ -43,6 +44,8 @@ Five loop modes are built: ONE-SHOT, FWD LOOP, REV LOOP, FWD/REV and MANUAL, in 
 ## The display
 
 A spectral oscillator draws in a flat, square well (`ui::drawSpectralWell`, `ui/ForgeDisplays.h`), not the CRT tube the wavetable keeps (`src/ForgeEditorPaint.cpp`). On the bowed tube the spectrogram's corners were cut off and its edges ran under the bezel. `Editor::spectralWellFor` spans the display's full width above the loop strip, and `spectralPlotFor` is that well inset by `ui::spectralWellWall` (1 px), so the spectrogram fills it. Tests derive the plot geometry from that constant.
+
+The spectrogram is a cached image (`Editor::spectrogramFor`, `src/ForgeEditorSpectral.cpp`) rebuilt when the sample's revision, the plot's area or the oscillator's colour changes; until commit `2f9d5e0` a recolour kept the old picture. It dims with the rest of a switched-off oscillator. `forge_displays` checks the recolour; the dimming has no automated check.
 
 The playhead (`src/ForgeEditorPaint.cpp`) is normally drawn only while a note sounds (`processor.scanPosition > 0`): at rest the reading is zero, and a line pinned to the left edge looks like a marker. MANUAL always draws it, at `spectralManualPosition(<osc>Scan)` while no voice reports a position and at the voice's position while a note plays, which carries any modulation of SCAN. A reported 0 counts as no voice. The x is clamped so position 1 stays inside the plot.
 

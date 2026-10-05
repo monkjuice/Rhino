@@ -4,7 +4,7 @@ type: component
 summary: Vocal pitch correction with YIN tracking and PSOLA shifting, real reported latency, and correction smoothed on the offset.
 tags: [rhino, devices, dsp, pitch]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-05
 ---
 
 # Rhino Tune
@@ -22,15 +22,19 @@ Vocal pitch correction modelled on Live's Auto Shift. The device, `native/src/de
 
 Real, and reported through `getLatencySeconds`: half the analysis frame, which centres the estimate in its window, plus 3.5 of the longest period the range tracks. At 48 kHz that is 34 ms for High (150-1600 Hz) and 120 ms for Bass (45-500 Hz). Live mode cuts the framing term to an eighth of the frame, at the price of slips at note onsets.
 
-Pitfall: the graph reads latency only when it is built. Switching Range or Live calls `changed()` and the face restarts a running transport; otherwise delay compensation keeps the old figure and the voice drifts out of time.
+Pitfalls (commit `0f50919` unless noted):
+
+- **The graph reads latency only when it is built.** Switching Range or Live calls `changed()` and the face restarts a running transport; otherwise delay compensation keeps the old figure and the voice drifts out of time. A knob release, on any device, rebuilds the graph only if the gesture changed the device's latency (`endDeviceParameterGesture`, `e7c9554`).
+- **Report what the settings cost, not what the audio thread last applied.** The engine takes a new range on its next block, so a graph built between a change (from the face, an undo, a project opening) and that block compensated the old delay. `getLatencySeconds` now answers `AutoTuneEngine::latencyFor` the device's own Range and Live, and `initialise` prepares the engine for the device's own settings (`currentSettings()`) rather than the engine's defaults.
+- **A range change empties the shifter.** It then has nothing to give for its whole latency, up to about a tenth of a second at Bass, and the 20 ms crossfade back from dry left the voice silent for the rest of that time. The engine now holds the output on its dry signal for the shifter's latency (`settleHold`) and then fades over.
 
 ## Parameters and face
 
-Thirteen automatable parameters cover correction, transposition, formants, vibrato and mix; root, scale, note mask, range and the two switches are properties. The face, `native/src/DeviceEditorPanelAutoTune.cpp`, draws and hit-tests its meter, keyboard, choosers and range lamps by rectangle ([Device rack and device editors](device-rack.md)). After a vocoder it tunes the result; before one it feeds it a tuned voice ([Device chain order](device-chain-order.md)).
+Thirteen automatable parameters cover correction, transposition, formants, vibrato and mix; root, scale, note mask, range and the two switches are properties. The face, `native/src/DeviceEditorPanelAutoTune.cpp`, draws and hit-tests its meter, keyboard, choosers and range lamps by rectangle, and writes every property through `Session::editDeviceSettings`, so each is an undo step of its own (commit `63bb3b2`; [Device rack and device editors](device-rack.md)). After a vocoder it tunes the result; before one it feeds it a tuned voice ([Device chain order](device-chain-order.md)).
 
 ## Tests
 
-`native/src/tests/AutoTuneTest.cpp` measures pitch with a windowed transform scanned across a band, which never looks for a period, so its agreement with the tracker is not built in. Two checks were wrong first: one asserted C# corrects to C in C major, a tie that a hundredth of a semitone flips; another measured a formant shift by the tallest partial, which jumped harmonics while the shift worked. Prefer a statistic over the whole spectrum ([Measure sound, don't read the DSP](measure-sound-dont-read-dsp.md)).
+`native/src/tests/AutoTuneTest.cpp` measures pitch with a windowed transform scanned across a band, which never looks for a period, so its agreement with the tracker is not built in. `checkRangeSwitchKeepsSounding` switches Mid to Bass mid-stream and requires no 5 ms window in the next 300 ms below 30% of the steady level, and `checkDevice` requires the reported latency to match new settings at once. Two checks were wrong first: one asserted C# corrects to C in C major, a tie that a hundredth of a semitone flips; another measured a formant shift by the tallest partial, which jumped harmonics while the shift worked. Prefer a statistic over the whole spectrum ([Measure sound, don't read the DSP](measure-sound-dont-read-dsp.md)).
 
 ## Related
 

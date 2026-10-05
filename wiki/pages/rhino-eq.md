@@ -4,7 +4,7 @@ type: component
 summary: Eight-band EQ whose drawn curve comes from the same coefficients as the audio, over a spectrum computed off the audio thread.
 tags: [rhino, devices, dsp, eq]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-05
 ---
 
 # Rhino EQ
@@ -20,7 +20,7 @@ Eight bands, the eight filter types of Live's EQ Eight, and a live spectrum behi
 
 ## Parameters and properties
 
-The 24 per-band numbers plus output and Scale are automatable. Scale rides every band, so the curve is drawn from the scaled bands (`EqEngine::responseDbAt`). Band on/off, type and the analyser mode (Off, Pre, Post) are properties, so automation cannot switch a type. The selected band is stored on the device, because the rack rebuilds its panels on unrelated edits ([Device rack and device editors](device-rack.md)).
+The 24 per-band numbers plus output and Scale are automatable. Scale rides every band, so the curve is drawn from the scaled bands (`EqEngine::responseDbAt`). Band on/off, type and the analyser mode (Off, Pre, Post) are properties, so automation cannot switch a type. The face writes them through `Session::editDeviceSettings`, so each is an undo step of its own and is announced; before commit `63bb3b2` such a write joined whatever the user did before it. The selected band is stored on the device too, because the rack rebuilds its panels on unrelated edits, but without undo: it is a view, so undo passes it by and selecting a band does not mark the document changed ([Device rack and device editors](device-rack.md)).
 
 ## The face
 
@@ -28,7 +28,7 @@ The 24 per-band numbers plus output and Scale are automatable. Scale rides every
 
 ## Tests
 
-`native/src/tests/EqTest.cpp` sweeps a sine through `EqEngine` and compares the measured level with `responseDbAt`: two independent routes to the same coefficients, so agreement is evidence rather than something built in. Its click check (no two consecutive samples more than 0.2 apart) failed on its first run, which is why type changes crossfade ([Measure sound, don't read the DSP](measure-sound-dont-read-dsp.md)).
+`native/src/tests/EqTest.cpp` sweeps a sine through `EqEngine` and compares the measured level with `responseDbAt`: two independent routes to the same coefficients, so agreement is evidence rather than something built in. Its click check (no two consecutive samples more than 0.2 apart) failed on its first run, which is why type changes crossfade ([Measure sound, don't read the DSP](measure-sound-dont-read-dsp.md)). It also checks that a face setting undoes on its own, leaving the edit before it, and that undo passes a band selection by.
 
 Not yet matched to EQ Eight: stereo, L/R and M/S modes, adaptive Q, oversampling.
 

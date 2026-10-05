@@ -4,7 +4,7 @@ type: decision
 summary: A group's bus is a plain te::AudioTrack kept in getAudioTracks(), so every track-indexed path reaches it with no second code path.
 tags: [rhino, groups, mixer, decision]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-05
 ---
 
 # A group is an ordinary bus track
@@ -30,7 +30,8 @@ The structure is **positional**: a bus followed by the run of tracks whose `rhin
 
 ## Consequences
 
-- Anything looking for "the first playable track" must skip buses; `patternTrackOf`, `refreshUtilityPointers` and `restoreProject` now do. Before they did, a project whose stack opened with a group reopened with an instrument on its bus, and silent (`GroupBusReload.inc`).
+- Anything looking for "the first playable track" must skip buses, as the note editor's fallback `firstMidiTrackOf` does. Before the load path skipped them, a project whose stack opened with a group reopened with an instrument on its bus, and silent (`GroupBusReload.inc`); the first-track rules involved are gone since `a04b407` ([No track is special for being first](pattern-track.md)).
+- Group structure lives in two places, a membership property per track and each track's output routing, so both are written inside the undoable transaction that decided them ([Track groups (bus tracks)](track-groups.md)).
 - Deleting a bus leaves members naming a missing track, and asking `getDestinationTrack()` instead of `usesDefaultAudioOut()` made an offline render never return ([Offline renders that never return](renders-that-never-return.md)).
 - Groups do not nest: a routing tree is deliberately not built.
 - Old documents' `rhinoTrackGroup` nodes are rebuilt on load by `migrateLegacyTrackGroups`, an accommodation [No backward compatibility for .rhinoedit](no-rhinoedit-back-compat.md) would remove.

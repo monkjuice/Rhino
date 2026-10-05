@@ -1,58 +1,41 @@
 ---
-title: The first track is still the pattern track
-type: gotcha
-summary: Rhino began as one pattern on one synth track, and several rules still single out the first track, which surprises any change that reorders or empties it.
-tags: [rhino, model, tracks, legacy]
+title: No track is special for being first
+type: decision
+summary: Rhino began as one pattern on one synth track; commit a04b407 retired every rule that singled out the first track, and each track's own chain now records what it plays.
+tags: [rhino, model, tracks, history]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-05
 ---
 
-# The first track is still the pattern track
+# No track is special for being first
 
-Rhino began as a 16-step pattern on one synth track beside one audio track. The tracks are general now, but part of
-the model still treats the **first track that is not a group bus** (`patternTrackOf` in `native/src/SessionInternal.cpp`)
-or index 0 as that pattern track. Nothing on screen says so, which is what makes it a trap.
+## Context
 
-## What still depends on it (as of 2026-10-03)
+Rhino began as a 16-step pattern on one synth track beside one audio track. Long after tracks became general, parts of the model still treated the first track that was not a group bus (`patternTrackOf`), or index 0, as that pattern track. Nothing on screen said so, and reordering or emptying the stack broke it:
 
-- **The note editor's clip.** `Session::pattern()` dereferences `patternClip`. A new document's `Pattern 1` is a hidden
-  placeholder MIDI clip on track 0 (shown only once it has notes), so the note editor works from the first click.
-  `repairPatternClip` re-points the editor when its clip is deleted, and `ensureEditablePatternClip` falls back to the
-  first MIDI clip on the pattern track after undo, redo and load ([Note editor (StepGrid)](note-editor.md)).
-- **`rhinoPatternInstrument`**, an edit property (`synth`, `drums`, `wave` or `forge`). Dropping an instrument, a
-  pattern or a MIDI clip on track 0 writes it, and `restoreProject` switches the first track to it on every reopen
-  ([Pattern presets](pattern-presets.md)).
-- **Opening a project.** `restoreProject` refuses a document whose pattern track lacks a MIDI clip or a Utility
-  ("The project is missing its pattern track devices.").
-- **The rack.** On track 0, `deviceSlots` hides built-in instruments other than the one `rhinoPatternInstrument`
-  names, and `deleteDevice` refuses to remove its Utility, 4OSC or Drums ("Core devices stay in the starter track
-  chain.").
-- **Positional pointers.** `utility` and `audioUtility` point at the Utility devices of the first two non-bus tracks
-  and are re-read by `refreshUtilityPointers` whenever tracks appear, move or go.
+- Deleting or reordering the first track planted the note editor's hidden placeholder MIDI clip on whatever track was now first, an audio track included.
+- `restoreProject` refused a document whose first track lacked a MIDI clip and a Utility, so a reordered stack could be saved and then not reopen.
+- The edit's `rhinoPatternInstrument` was written for index 0 but re-applied on reopen to whichever track was first, and it knew only four instruments.
+- The rack hid other instruments on track 0 and refused to delete its Utility, 4OSC or Drums.
+- The positional `utility` and `audioUtility` pointers were never refreshed on undo and were read only by tests.
 
-## Why it bites
+## Decision
 
-- `patternTrackOf` skips group buses because an instrument switched onto a bus replaces the sum of everything feeding
-  it, so a group at the top of the stack would have silenced the project.
-- A guarded read of `tracks[1]` beside an unguarded write crashed every one-track project on open (fixed 2026-09-16;
-  [Debugging a crash only one project triggers](debugging-a-crashing-project.md)).
-- Reordering the stack moves which track is "first" without telling the bookkeeping: a saved file may then fail the
-  open check above, or reopen with a different instrument on its first track. Both are traced in the code, not yet
-  reproduced ([Hazards found while seeding the wiki](known-hazards.md)).
-- A new catalog instrument is not enough on its own: `restoreProject` knows only `wave`, `forge` and `drums` (4OSC for
-  anything else), so a new instrument on the first track reopens as a 4OSC ([Adding a device to Rhino](adding-a-device.md)).
+All of it was removed in commit `a04b407` (2026-10-05). Each track's own plugin list records its instrument, and reopening restores the document as saved, after collapsing documents that stacked instruments.
 
-## How to work with it
+The one survivor is the note editor's clip: `patternClip`, kept beside `patternClipID`. `Session::repairPatternClip` (`SessionClips.cpp`) finds it again by id. Failing that, it takes the first MIDI clip on the first MIDI track (`firstMidiTrackOf`, which skips buses and never answers an audio track), giving that track a hidden starter clip if it has none. A document with no MIDI track has no editor clip: `hasPatternClip()` says so, every note edit refuses with a message, and the step grid draws an empty editor. A pattern preset loads onto the open clip's own track through `preparePresetTrack`, exactly as a drop on that lane does ([Pattern presets](pattern-presets.md)).
 
-Test any change that touches tracks with a stack whose first track has been reordered, with a group bus at the top,
-and with a single track. Do not add more state keyed on position. Rhino owes old documents nothing
-([No backward compatibility for .rhinoedit](no-rhinoedit-back-compat.md)), so retiring this bookkeeping is a matter of
-making the current save and load paths stop needing it.
+## Consequences
+
+- Ask `hasPatternClip()` before `pattern()`, which asserts.
+- Do not add state keyed on track position; hold ids ([Hold ids, not pointers](ids-not-pointers.md)).
+- `native/src/tests/Pattern/scenarios/NoFirstTrack.inc` removes the first track, moves a track with no clip to the top, saves and reopens, removes the first track's instrument and empties the stack of MIDI tracks. It checks that no MIDI clip lands on an audio track, every track keeps its instrument, and note edits refuse cleanly with no clip open.
+- Older pages still tell the history: [Debugging a crash only one project triggers](debugging-a-crashing-project.md) and [No backward compatibility for .rhinoedit](no-rhinoedit-back-compat.md).
 
 ## Related
 
 - [Session, the model](session-model.md)
+- [Note editor (StepGrid)](note-editor.md)
 - [Project files (.rhinoedit)](project-files.md)
-- [Pattern presets](pattern-presets.md)
 - [Track kinds: audio and MIDI](track-kinds.md)
 - [Hazards found while seeding the wiki](known-hazards.md)

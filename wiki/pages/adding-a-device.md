@@ -24,7 +24,9 @@ Start from `audio/UtilityDevice.*` (one parameter) or `audio/RhinoSpaceDevice.*`
 - Derive from `te::Plugin` with `inline static const char* xmlTypeName = "rhino.<name>.v1"`; documents store it, so never rename it. Override `getName`, `getPluginType`, `getVendor`, `getSelectableDescription` and `getBusses`. An instrument adds `isSynth`, `takesMidiInput` and `producesAudioWhenNoAudioInput`; a MIDI effect declares no buses (`midi/RhinoArpDevice.h`).
 - Per parameter: a `juce::CachedValue` with `referTo`, `addParam`, `attachToCurrentValue`; `notifyListenersOfDeletion()` then `detachFromCurrentValue()` in the destructor; `te::copyPropertiesToCachedValues` and `updateFromAttachedValue()` in `restorePluginStateFromValueTree`. This is about eight mentions per parameter; no helper abstracts it (checked 2026-10-03).
 - Choosers and switches are state properties, not parameters, as in Rhino Tune and Rhino EQ.
-- `applyToBuffer` never allocates, locks or touches files; read content in `initialise()` and survive its absence ([Real-time audio rules](real-time-audio-rules.md)). Report latency through `getLatencySeconds` and restart playback when it changes; the graph reads it only when built. A sidechain is extra input channel names ([Rhino Vocoder and sidechains](rhino-vocoder.md)).
+- `applyToBuffer` never allocates, locks or touches files; read content in `initialise()` and survive its absence ([Real-time audio rules](real-time-audio-rules.md)). The engine may hand it a block bigger than `initialise` was told: work through it in pieces of the prepared size, as `audio/RhinoSpaceDevice.cpp` does.
+- Leave the output unclamped, since the chain is floating point; limit only inside feedback lines. A device that rings on after its input stops reports `getTailLength`, as Rhino Bloom and Rhino Space do ([Built-in devices](built-in-devices.md)).
+- Report latency through `getLatencySeconds`, computed from the device's current settings rather than read back from what the audio thread last applied, and restart playback when it changes; the graph reads it only when built ([Rhino Tune](rhino-tune.md)). A sidechain is extra input channel names ([Rhino Vocoder and sidechains](rhino-vocoder.md)).
 
 ## DSP and its test
 
@@ -32,7 +34,7 @@ Put DSP worth testing in `native/src/core/` as plain C++, with the device a thin
 
 ## A face
 
-Optional; without one the rack shows twelve generic knobs. A face is a new translation unit of `DeviceEditorPanel` (a line in `native/CMakeLists.txt`) and a `Face` value chosen by type in `setTarget`. Draw and hit-test rectangles, keep view state on the device, and reach it through `Session::devicePlugin` ([Device rack and device editors](device-rack.md)).
+Optional; without one the rack shows twelve generic knobs. A face is a new translation unit of `DeviceEditorPanel` (a line in `native/CMakeLists.txt`) and a `Face` value chosen by type in `setTarget`. Draw and hit-test rectangles, keep view state on the device, and reach it through `Session::devicePlugin`. Write the device's own settings through `Session::editDeviceSettings`, so each is an undo step of its own and the session hears of it ([Device rack and device editors](device-rack.md)).
 
 ## Instruments still meet older code
 

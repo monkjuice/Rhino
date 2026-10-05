@@ -4,7 +4,7 @@ type: component
 summary: A working clip launcher, built and tested but switched off in the shell, whose scene and slot model still runs in every project.
 tags: [rhino, session-view, clips, launching]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-05
 ---
 
 # Session view (paused)
@@ -13,7 +13,7 @@ The session view is Rhino's clip launcher: tracks as columns, scenes as rows, ev
 
 ## What still runs
 
-Only the shell is switched off. `Session::ensureSceneSlots` gives every project at least eight scenes (`defaultScenes`) and every track a slot per scene, so documents carry slots whether or not anyone can see them, and the `SessionView` component is still constructed inside `ControlWindow`, just never shown. Model: `SessionSlots.cpp`. UI: `SessionView.cpp`, `SessionViewPainter.cpp`, `SessionViewGestures.cpp`. Tests: `SessionView.inc`, `SharedMixer.inc`, `ClipRoundTrip.inc`.
+Only the shell is switched off. `Session::ensureSceneSlots` gives every project at least eight scenes (`defaultScenes`) and every track a slot per scene, so documents carry slots whether or not anyone can see them, and the `SessionView` component is still constructed inside `ControlWindow`, just never shown. Hidden, it marks itself stale on each change instead of rebuilding, and catches up when shown (commit `e7c9554`; [What a change costs the interface](ui-cost-of-a-change.md)). Model: `SessionSlots.cpp`. UI: `SessionView.cpp`, `SessionViewPainter.cpp`, `SessionViewGestures.cpp`. Tests: `SessionView.inc`, `SharedMixer.inc`, `ClipRoundTrip.inc`.
 
 ## How launching works
 
@@ -26,7 +26,7 @@ Tracks, devices, the [Mixer](mixer.md) and the transport are shared because both
 ## Before turning it back on
 
 - The note editor cannot open a slot clip: `findClip` searches track clip lists, not `ClipSlot`s.
-- The slot paths predate fixed track kinds. `insertDeviceClipInSlot` calls `switchTrackInstrument` directly, and `insertAudioFileInSlot` and `copySlotClipToArrangement` never ask `trackType`, so the refusals of [A track's kind is fixed when it is made](track-kind-fixed-at-creation.md) do not hold there (checked 2026-10-03).
+- The slot paths predate fixed track kinds, but since commit `23de20c` `insertDeviceClipInSlot`, `insertAudioFileInSlot` and `copySlotClipToArrangement` refuse a lane of the wrong kind, or a bus, through `clipLaneRefusal`, the question the arrangement's drops and pastes ask ([A track's kind is fixed when it is made](track-kind-fixed-at-creation.md)). `insertDeviceClipInSlot` still calls `switchTrackInstrument` itself once the lane is accepted.
 - The arrangement's clip menu still offers *Copy to session slot* while the view is off, so a clip can be copied into a slot nobody can see.
 - Still missing: per-track Back to Arrangement, dragging between views, Arrangement Record, meters, sends and returns, follow actions, recording into slots, scene rename.
 

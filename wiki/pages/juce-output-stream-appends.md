@@ -4,7 +4,7 @@ type: gotcha
 summary: JUCE opens an existing file for output at its end, so rewriting a PNG or a render in place leaves the old content in front.
 tags: [both, juce, testing]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-05
 ---
 
 # juce::File::createOutputStream appends
@@ -25,7 +25,7 @@ Use one of the three patterns the code already uses:
 - **Rewind and truncate.** Forge's `--snapshot` (`tests/ForgeTestTools.cpp`) calls `setPosition(0)` and then `truncate()` on the stream.
 - **Write to a new file.** Test fixtures write to a fresh `juce::TemporaryFile`. A project save writes to a `TemporaryFile` and then replaces the project with it through `overwriteTargetFileWithTemporary()` (`native/src/ProjectFiles.cpp`).
 
-Appending is correct for a log: `rhino.log` is a `juce::FileLogger` and is meant to grow. The one write in the app that uses none of the three patterns is `createSample` in `native/src/SessionSamples.cpp`. It writes a built-in sample only when the file is missing or no more than 44 bytes long. A leftover stub of 1 to 44 bytes would therefore stay in front of the new WAV.
+Appending is correct for a log: `rhino.log` is a `juce::FileLogger` and is meant to grow. The last write in the app that used none of the three patterns was `createSample` in `native/src/SessionSamples.cpp`, which rewrites a built-in sample when the file is missing or no more than 44 bytes long: a stub left by an interrupted write stayed in front of the new WAV and the import failed. Since commit `23de20c` it writes to a `juce::TemporaryFile` and moves it into place with `overwriteTargetFileWithTemporary()`. The arrangement's "clip edits are whole" scenario imports the whistle over such a stub.
 
 ## Confirm
 

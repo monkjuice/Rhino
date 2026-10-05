@@ -15,7 +15,7 @@ Until commit `16ef43a` (2026-09-14) a track kept every instrument dropped on it 
 
 ## Decision
 
-`switchTrackInstrument` (`native/src/SessionInternal.cpp`) is the only thing that changes a track's instrument. The replacement goes in at the old instrument's index, after any MIDI effects, so the chain keeps its order ([Device chain order](device-chain-order.md)). The old instrument is removed with its patch, and the track is renamed after the new one. Clips are untouched, so a pattern survives the swap. It writes nothing about the track's kind, because only a MIDI track is offered an instrument at all ([A track's kind is fixed when it is made](track-kind-fixed-at-creation.md)).
+`switchTrackInstrument` (`native/src/SessionInternal.cpp`) is the only thing that changes a track's instrument. The replacement goes in at the old instrument's index, after any MIDI effects, so the chain keeps its order ([Device chain order](device-chain-order.md)). The old instrument is removed with its patch and its automation lanes, in the same undo step (commit `cf85e3f`), and the track is renamed after the new one. Clips are untouched, so a pattern survives the swap. It writes nothing about the track's kind, because only a MIDI track is offered an instrument at all ([A track's kind is fixed when it is made](track-kind-fixed-at-creation.md)).
 
 Rejected: keeping the stack and switching with enable flags.
 
@@ -23,7 +23,7 @@ Rejected: keeping the stack and switching with enable flags.
 
 - **Never cache an instrument pointer**: switching deletes the plugin. `Session` dropped its cached synth, wave and drum pointers; ask `trackInstrument`, `Session::patternInstrument` or `patternInstrumentForTrack` ([Hold ids, not pointers](ids-not-pointers.md)).
 - An instrument drop creates no clip; clips come from a double-click or Ctrl+A.
-- `collapseStackedInstruments` migrates old projects on load, keeping the enabled instrument, or the first. It is the kind of accommodation [No backward compatibility for .rhinoedit](no-rhinoedit-back-compat.md) wants deleted when it next gets in the way.
+- `collapseStackedInstruments` migrates old projects on load, keeping the enabled instrument, or the first, and dropping the lanes of those it removes. It is the kind of accommodation [No backward compatibility for .rhinoedit](no-rhinoedit-back-compat.md) wants deleted when it next gets in the way.
 - A preset dropped into a session slot sets the whole track's instrument, because a preset bundles notes with a sound ([Session view (paused)](session-view.md)).
 
 ## Pitfall: clips carry instruments the other way

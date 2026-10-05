@@ -4,7 +4,7 @@ type: component
 summary: Three identical oscillators, each reading its own band-limited wavetable, plus the table editor, file import and audio-thread hand-off.
 tags: [forge, oscillators, wavetables]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-05
 ---
 
 # Forge oscillators and wavetables
@@ -48,6 +48,8 @@ Tables travel in presets and host state as deflated, base64 `TABLE` nodes ([Forg
 ## The hand-off
 
 `WavetableStore` (`core/ForgeTableStore.h`) publishes a pointer that the audio thread loads once per block. A counter is odd while a block runs. After a publish, an even counter frees the old table at once, and an odd one parks it. All of it is deliberately `seq_cst`. Never hold a `const Wavetable*` across a publish ([Hold ids, not pointers](ids-not-pointers.md)).
+
+A parked object is freed by the next publish or by `collect()`, which the editor's timer calls on both stores (`src/ForgeEditorInput.cpp`). Until commit `2cc79de` it collected only the table store, so a replaced spectral sample, up to about 20 MB, stayed in memory until the next publish. With the editor closed, only a publish collects.
 
 ## Related
 

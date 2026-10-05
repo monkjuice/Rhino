@@ -4,7 +4,7 @@ type: overview
 summary: "Rhino and Rhino Forge at a glance: what they are, how they are built and where to start reading."
 tags: [overview, rhino, forge]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-05
 ---
 
 # Rhino and Rhino Forge
@@ -64,7 +64,8 @@ per-area cases — [Build and test Forge](pages/build-and-test-forge.md). Before
 - **Forge:** [Forge engine (Core)](pages/forge-engine.md), [Forge editor (panel)](pages/forge-editor.md),
   [Forge presets and state](pages/forge-presets-and-state.md).
 - **Before changing anything:** [Keeping files small](pages/keeping-files-small.md),
-  [Real-time audio rules](pages/real-time-audio-rules.md), [Git workflow](pages/git-workflow.md),
+  [Real-time audio rules](pages/real-time-audio-rules.md),
+  [What a change costs the interface](pages/ui-cost-of-a-change.md), [Git workflow](pages/git-workflow.md),
   [Directories not to read](pages/off-limits-directories.md).
 - **The repository's own docs:** the root and Forge READMEs are product and setup entry points; this wiki owns the
   engineering detail. `AGENTS.md` carries the active working rules. Focused test, asset-provenance and research docs
@@ -85,3 +86,4 @@ The full catalog is [index.md](index.md).
 | 2026-09-21 | Rhino Tune, Rhino EQ and Rhino Vocoder; Forge's 34 filter types |
 | 2026-09-28 | Forge's third oscillator (preset format 3) |
 | 2026-09-30 – 10-03 | Time warp; track kind fixed at creation; per-track monitoring; device reordering; Forge's spectral oscillator |
+| 2026-10-05 | The engine plays automation; the pattern-track bookkeeping retired; the seeding's Rhino hazards closed; drags and playhead repaints made cheap |

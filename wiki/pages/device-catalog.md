@@ -15,7 +15,7 @@ updated: 2026-10-05
 
 A `DeviceDescriptor` holds a stable `id`; the engine `typeName` (empty for an external plugin); `displayName` and an optional `browserLabel` ("4OSC synth" in the browser, "4OSC" on the track); `kind`; the browser `category` and `description`; an ARGB `colour` kept as a number so the library needs no `juce_graphics`; a `patternKey`, which nothing has read since the edit's `rhinoPatternInstrument` property was retired in commit `a04b407`; and three flags: `browsable`, `external` (found by scanning, not created by name) and `infrastructure` (a channel-strip facility the rack hides). Entry order is browser order.
 
-As of 2026-10-05 it lists 4OSC, Rhino Forge (external), Rhino Drums (not browsable; the browser offers its five kits), Rhino EQ, Compressor, Utility (infrastructure), Reverb, Delay, Rhino Space, Rhino Bloom, Rhino Tune, Rhino Vocoder and Rhino Arp ([Built-in devices](built-in-devices.md)). Rhino Wave was removed that day.
+As of 2026-10-05 it lists 4OSC, Rhino Forge (external), Rhino Drums (not browsable; the browser offers its five kits), Rhino EQ, Compressor, Utility (infrastructure, and not browsable since commit `23de20c`, because every track already carries one), Reverb, Delay, Rhino Space, Rhino Bloom, Rhino Tune, Rhino Vocoder and Rhino Arp ([Built-in devices](built-in-devices.md)). Rhino Wave was removed that day.
 
 ## Readers
 

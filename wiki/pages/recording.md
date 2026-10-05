@@ -4,7 +4,7 @@ type: component
 summary: Arms tracks, not inputs, lets each take win the ground it lands on, and counts in with Rhino's own click while the playhead stands still.
 tags: [rhino, recording, audio-io]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-05
 ---
 
 # Recording and the count-in
@@ -19,6 +19,7 @@ The arm flag is `rhinoArmed` on the track's state, so it is saved and follows th
 
 - `InputDeviceInstance::setTarget` is called with its `move` flag false. With it true, each arm cleared every other destination and only the last armed track recorded.
 - MIDI inputs replace rather than merge, so a take over a part is a new part.
+- Never rebuild under a running take, which can cut the tracks capturing. Arming, a monitoring change or a MIDI device rescan during a take is kept (`armingDeferred`) and applied when the take finishes (commit `23de20c`). A count-in comes before the take, so a track armed during one is armed for it.
 
 A track monitoring On is routed with `recordEnabled` false: heard, not written ([Track inputs and monitoring](inputs-and-monitoring.md)).
 

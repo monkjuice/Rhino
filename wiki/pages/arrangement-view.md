@@ -4,7 +4,7 @@ type: component
 summary: The timeline UI, one class across eleven files, that previews every drag locally and leaves panel decisions to the shell.
 tags: [rhino, ui, arrangement]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-05
 ---
 
 # Arrangement view
@@ -13,8 +13,8 @@ updated: 2026-10-03
 
 ## How it stays responsive and correct
 
-- **Preview, then one commit.** A drag edits a local `preview`; `Session::editClip` and its undo transaction run once, on release. Mid-drag, a change notification only repaints.
-- **Clip views are a cache.** `sync()` rebuilds the `ClipView` list on each change notification, never per paint; waveforms share one thumbnail per source file.
+- **Preview, then one commit.** A drag edits a local `preview`; `Session::editClip`, or `Session::moveClips` for several clips, and its undo transaction run once, on release. Mid-drag, a change notification only repaints. Arrow nudges move the whole selection the same way (commit `b5d17e0`), and Left and Right are taken only when there is a clip to move, otherwise reaching the window (commit `d20faa4`).
+- **Clip views are a cache.** `sync()` rebuilds the `ClipView` list on each change notification, never per paint; waveforms share one thumbnail per source file. A `Session` call announces synchronously, so the list can be rebuilt before the call returns: copy a `ClipView` before calling `Session` if you read it afterwards (commit `2df76f8`). The sync also reads each track's facts once (`TrackFacts`), and the painter skips whatever a repaint does not reach ([What a change costs the interface](ui-cost-of-a-change.md)).
 - **Ids, not pointers.** Selection stores `te::EditItemID`s, because a `te::Clip*` dies on undo or project replacement ([Hold ids, not pointers](ids-not-pointers.md)).
 - **`rows` is the vertical authority.** Revealed automation lanes stack extra rows under a track and collapsed group members get zero-height rows, so `lane(track)` looks the track up in `rows` rather than multiplying.
 

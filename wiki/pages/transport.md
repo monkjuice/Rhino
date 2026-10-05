@@ -4,7 +4,7 @@ type: component
 summary: Play and stop, the loop that is always on, the single tempo and the time signature, and what Rhino rescales by hand when the tempo moves.
 tags: [rhino, transport, tempo]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-05
 ---
 
 # Transport, tempo and loop
@@ -29,9 +29,9 @@ and otherwise everything up to the end of the last clip, or one bar in an empty 
 function as the transport, and the clip-changing paths in `Session*.cpp` call `refreshLoop` after they edit. Recording
 lifts the loop for its duration, so a take cannot wrap over itself ([Recording and the count-in](recording.md)).
 
-The dragged span lives on `Session`, not in the document: it is not saved with the project, and as of 2026-10-03
-`restoreProject` does not clear it, so a span dragged in one document stays in force after opening another.
-`newProject` does clear it.
+The dragged span lives on `Session`, not in the document: it is not saved with the project, and both `newProject` and
+(since commit `a04b407`) `restoreProject` clear it, so a span dragged in one document no longer stays in force after
+opening another.
 
 ## One tempo, and what follows it by hand
 
@@ -49,7 +49,10 @@ nesting, so one caller cannot close a bracket another opened.
 Any numerator from 1 to 99 over 1, 2, 4, 8 or 16. `beatsPerBar()` is numerator × 4 ÷ denominator, and it is what "one
 bar" means everywhere — a new clip, a pattern, the loop of an empty document. Playback restarts after a signature
 change. The arrangement's bar ruler subdivides a bar into the numerator's counts (eighths in 6/8), not into
-`beatsPerBar()` quarter notes ([Arrangement view](arrangement-view.md)).
+`beatsPerBar()` quarter notes ([Arrangement view](arrangement-view.md)). So, since commit `4416222`, do the control
+bar's position and loop readings and the bar a paste reports: `musicalPosition` (`ArrangementGrid.h`) turns the engine's
+quarter-note beats into bar, count and sixteenth, each from one, so 6/8 reads six eighths of two sixteenths and 7/8
+seven equal eighths. A position a hair short of a bar line, as a tempo-map round trip leaves one, reads as that bar.
 
 The click's on/off, bar emphasis and level are the edit's own `clickTrack*` properties. `clickTrackGain` converts:
 Rhino speaks decibels, the engine stores a linear gain and clamps it to 0.2-1.0, and writing decibels straight in put

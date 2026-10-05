@@ -4,7 +4,7 @@ type: component
 summary: A .rhinoedit is the Tracktion edit's XML plus Rhino's own properties, saved from a snapshot on a worker and opened off-thread.
 tags: [rhino, persistence, files, debugging]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-05
 ---
 
 # Project files (.rhinoedit)
@@ -17,9 +17,7 @@ A `.rhinoedit` is the Tracktion edit's `ValueTree` written as XML. Rhino's own s
 
 ## Opening
 
-The XML is parsed on the worker; `restoreProject` runs on the message thread with the window disabled. It refuses anything that is not an `EDIT` with `rhinoFormatVersion` = 1, and requires the first non-bus track to hold a MIDI clip and a Utility device ("The project is missing its pattern track devices."), all before touching the open document. Then it swaps the edit, re-applies `rhinoPatternInstrument`, runs `collapseStackedInstruments`, `ensureSceneSlots`, `ensureTrackMixers`, `migrateLegacyTrackGroups` and `reconcileTrackGroups`, and clears undo. Those migrations are what [No backward compatibility for .rhinoedit](no-rhinoedit-back-compat.md) targets.
-
-**Trap, traced in the code but not reproduced (2026-10-03):** nothing keeps a MIDI clip on the first track when the stack is reordered, so moving an audio track to the top and saving looks like it writes a file this check refuses. The first track is special in other ways too: [The first track is still the pattern track](pattern-track.md).
+The XML is parsed on the worker; `restoreProject` runs on the message thread with the window disabled. It refuses anything that is not an `EDIT` with `rhinoFormatVersion` = 1, and a document with no tracks, before touching the open document. It runs `collapseStackedInstruments` on the candidate, then swaps the edit. It drops what belonged to the outgoing document: the automation mirror's curves (before the old edit goes, since they hold its plugins), the automation overrides, which are keyed by track index, and the dragged loop span. Then it re-finds the note editor's clip (`repairPatternClip`), runs `ensureSceneSlots`, `ensureTrackMixers`, `migrateLegacyTrackGroups` and `reconcileTrackGroups`, and clears undo. It decides nothing about which track is first or what any track runs; the checks and the `rhinoPatternInstrument` re-application that did were removed in commit `a04b407` ([No track is special for being first](pattern-track.md)). The migrations are what [No backward compatibility for .rhinoedit](no-rhinoedit-back-compat.md) targets.
 
 ## Media
 
@@ -32,7 +30,7 @@ Imported audio is referenced at its original path and never collected. Takes are
 
 ## WAV export
 
-*Export WAV* renders the whole edit on a worker at the audio device's own rate and block size (falling back to 48 kHz and 512), 24-bit, dithered, through the master plugins and with no normalising, so the file matches what the main fader set. `te::Edit::ScopedRenderStatus` detaches the edit from the device meanwhile, and automation lanes are mirrored into engine curves first ([Track automation](automation.md)). Commit `d3ead2a` (2026-09-15) changed export from fixed 48 kHz and peak normalisation to this behaviour.
+*Export WAV* renders the whole edit on a worker at the audio device's own rate and block size (falling back to 48 kHz and 512), 24-bit, dithered, through the master plugins and with no normalising, so the file matches what the main fader set. `te::Edit::ScopedRenderStatus` detaches the edit from the device meanwhile. The render reads automation from the parameters' engine curves, exactly as playback does, so the export only calls `Session::mirrorAutomationToEngine` first to make them current ([Track automation](automation.md)). Commit `d3ead2a` (2026-09-15) changed export from fixed 48 kHz and peak normalisation to this behaviour.
 
 ## Related
 

@@ -4,7 +4,7 @@ type: guide
 summary: Render the real project in a test at the audio device's block size, not the offline default, to catch bugs that live on block boundaries.
 tags: [rhino, debugging, audio, testing]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-05
 ---
 
 # Reproducing a live timing bug offline
@@ -23,9 +23,10 @@ assuming it. At 10 ms a beat at 120 bpm is exactly 50 blocks, so every note of a
 boundary; at 512 almost none do. Anything sensitive to which side of a boundary a note is delivered on flips between
 the two.
 
-Automation differs too. Live, the shell moves track automation from its 30 Hz timer
-(`Session::applyTrackAutomationAt`); an export mirrors the lanes into engine curves read per sub-block
-(`Session::beginOfflineAutomation`). A render made without that call plays every lane frozen.
+Automation no longer differs. Since commit `fe163c8` the engine plays the lanes from parameter curves, read every
+block live and in any render alike, and the session mirrors the lanes onto those curves after every announced change
+([Track automation](automation.md)). Before, the shell moved automation from its 30 Hz timer while a render read curves
+only the export had written, so live and rendered sweeps moved at different rates.
 
 ## Steps
 

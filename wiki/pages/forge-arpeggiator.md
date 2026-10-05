@@ -4,7 +4,7 @@ type: component
 summary: Stands in front of the voices, hands notes back through two callbacks, and opens as an overlay from a plate beside the keys.
 tags: [forge, arpeggiator, midi]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-05
 ---
 
 # Forge arpeggiator
@@ -28,6 +28,8 @@ The ARP plate took the keyboard's bottom octave at exactly that width, so every 
 ## Behaviour worth knowing
 
 - With THRU on, keys also reach the voices directly. Core keys voices by note number, so a held key and the arp's same pitch share one voice and the arp's gate cuts it short.
+- A key's release follows the key, not the switches. The processor remembers which keys went straight to the voices (`directNotes`) and sends their note-off there whatever ARP and THRU say by the time the key comes up; all-notes-off reaches the voices whenever any key did. Before commit `32147e1`, a key pressed with the arp off and released after switching it on (or let through by THRU, then THRU switched off) released only into the arp, and its voice hung until stolen.
+- The arp tracks at most 32 sounding notes (`arpMaxSounding`). When the list is full, which a many-key chord under a long gate with RANGE and SHIFT reaches, the note nearest its own end is stopped to make room. The arp used to start the new note untracked, and nothing ever stopped it (commit `2cc79de`).
 - The sustain pedal (CC 64) works the latch. Switching the arp off mid-phrase releases the notes it holds.
 - `getSampleRate()` is 0 when `prepareToPlay` is called directly, as the tests and the standalone do. The arp divided by it, stepped every sample and stacked voices into a drone; it now keeps the rate `prepareToPlay` was given. The test that caught it checks for silence between notes; an earlier one averaged over a longer window and passed on the broken arp.
 

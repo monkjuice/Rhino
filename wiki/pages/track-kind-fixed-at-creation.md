@@ -4,7 +4,7 @@ type: decision
 summary: A track declares audio or MIDI at creation, nothing dropped on it changes that, and every mismatched drop is refused in the model.
 tags: [rhino, tracks, model, decision]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-05
 ---
 
 # A track's kind is fixed when it is made
@@ -36,7 +36,7 @@ Audio effects go on either kind, and so does a channel-strip facility (an `infra
 
 - The UI has to ask: the `+` button offers MIDI or audio, and Ctrl+T repeats the last choice.
 - A MIDI track holds clips before it runs anything, and taking its instrument off leaves a MIDI track.
-- Leftovers: `createClip`'s refusal on an audio track still suggests "drop an instrument here", which is now refused as well; and the paused session view's slot paths never ask the kind ([Session view (paused)](session-view.md)).
+- Leftover: `createClip`'s refusal on an audio track still suggests "drop an instrument here", which is now refused as well (checked 2026-10-05). The paused session view's slot paths ignored the kind until commit `23de20c`; they now refuse a mismatch through `clipLaneRefusal` ([Session view (paused)](session-view.md)).
 
 ## Related
 

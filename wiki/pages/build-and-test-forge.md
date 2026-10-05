@@ -4,7 +4,7 @@ type: guide
 summary: Configure Forge against Rhino's JUCE checkout, build around the toolchain's traps, and run one test area at a time.
 tags: [forge, build, testing, windows]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-05
 ---
 
 # Build and test Forge
@@ -66,8 +66,12 @@ ctest --test-dir instruments/rhino-forge/build -C Release -j 8 --output-on-failu
 - Never filter the build and run `ctest` in one command (`cmake --build ... | Select-String ...; ctest ...`): a failed
   build leaves the old binary and CTest reports it all passed. Redirect the build to a log, check `$LASTEXITCODE`, and
   only then run CTest ([Editing only a scenario .inc does not rebuild the tests](inc-edits-do-not-rebuild.md)).
-- `--snapshot`, `--profile` and `--render` are development tools in the same binary, not test cases
+- `--snapshot`, `--profile`, `--profile-audio` and `--render` are development tools in the same binary, not test cases
   ([Proving a Forge change changed nothing](proving-a-forge-change-changed-nothing.md)).
+- The test binary replaces the global `operator new` to count allocations (`AllocationCounter`,
+  `tests/ForgeTestSupport.h`), which is how area `engine` proves a block allocates nothing. It cannot see
+  `juce::HeapBlock`, so a growing `MidiBuffer` or `AudioBuffer` needs a check of its own
+  ([Real-time audio rules](real-time-audio-rules.md)).
 
 ## Related
 

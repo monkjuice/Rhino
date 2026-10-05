@@ -539,9 +539,10 @@ bool DeviceEditorPanel::handleEqMouseDown(const juce::MouseEvent& event)
     const auto position = event.getEventRelativeTo(this).getPosition();
     const auto settings = device->currentSettings();
 
+    // A setting is written through editDeviceSettings, which makes it an undo
+    // step and tells the session; this only redraws and reports.
     const auto changed = [this] (const juce::String& message)
     {
-        session.markModified();
         resized();
         repaint();
         if (status) status(message);
@@ -566,7 +567,10 @@ bool DeviceEditorPanel::handleEqMouseDown(const juce::MouseEvent& event)
             continue;
         if (layout.bandLed[band].contains(position))
         {
-            device->setBandEnabled(band, !device->bandEnabled(band));
+            session.editDeviceSettings(track, pluginSlot, "Switch EQ band", [device, band]
+            {
+                device->setBandEnabled(band, !device->bandEnabled(band));
+            });
             device->setSelectedBand(band);
             changed("Rhino EQ: band " + juce::String(band + 1)
                     + (device->bandEnabled(band) ? " on" : " off"));
@@ -595,7 +599,10 @@ bool DeviceEditorPanel::handleEqMouseDown(const juce::MouseEvent& event)
         const auto next = settings.analyser == EqEngine::AnalyserMode::Off ? EqEngine::AnalyserMode::Pre
             : settings.analyser == EqEngine::AnalyserMode::Pre ? EqEngine::AnalyserMode::Post
             : EqEngine::AnalyserMode::Off;
-        device->setAnalyserMode(next);
+        session.editDeviceSettings(track, pluginSlot, "Change EQ analyser", [device, next]
+        {
+            device->setAnalyserMode(next);
+        });
         if (next == EqEngine::AnalyserMode::Off)
         {
             stopTimer();
@@ -693,8 +700,10 @@ bool DeviceEditorPanel::handleEqDoubleClick(const juce::MouseEvent& event)
         // moved, so there is nothing to undo -- just stop holding the band.
         eqDragging = false;
         eqDragBand = -1;
-        device->setBandEnabled(band, !device->bandEnabled(band));
-        session.markModified();
+        session.editDeviceSettings(track, pluginSlot, "Switch EQ band", [device, band]
+        {
+            device->setBandEnabled(band, !device->bandEnabled(band));
+        });
         resized();
         repaint();
         if (status)
@@ -757,21 +766,27 @@ void DeviceEditorPanel::showEqTypeMenu(int band)
             juce::String message;
             if (result == 1)
             {
-                target->setBandEnabled(band, !target->bandEnabled(band));
+                safe->session.editDeviceSettings(safe->track, safe->pluginSlot, "Switch EQ band", [target, band]
+                {
+                    target->setBandEnabled(band, !target->bandEnabled(band));
+                });
                 message = "Rhino EQ: band " + juce::String(band + 1)
                         + (target->bandEnabled(band) ? " on" : " off");
             }
             else
             {
                 const auto type = static_cast<EqFilterType>(result - 2);
-                target->setBandType(band, type);
-                // A band nobody can hear that has just been given a shape was
-                // almost certainly meant to be heard.
-                target->setBandEnabled(band, true);
+                safe->session.editDeviceSettings(safe->track, safe->pluginSlot, "Change EQ band shape", [target, band, type]
+                {
+                    target->setBandType(band, type);
+                    // A band nobody can hear that has just been given a shape
+                    // was almost certainly meant to be heard.
+                    target->setBandEnabled(band, true);
+                });
                 message = "Rhino EQ: band " + juce::String(band + 1) + " is a "
                         + juce::String(eqFilterTypeName(type)).toLowerCase();
             }
-            safe->session.markModified();
+            if (safe == nullptr) return;
             safe->resized();
             safe->repaint();
             if (safe->status) safe->status(message);

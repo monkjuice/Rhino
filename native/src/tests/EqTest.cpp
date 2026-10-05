@@ -482,6 +482,24 @@ void checkEditorFace(Session& session)
     require(snapshot.getWidth() == panel->getWidth());
     require(snapshot.getHeight() == DeviceEditorPanel::standardHeight);
 
+    // A setting the face writes is an undo step of its own. Written outside
+    // one it joined whatever the user did before, and one Ctrl+Z took both.
+    const auto tempoBefore = session.tempo();
+    session.setTempo(tempoBefore + 7.0);
+    const auto bandWasOn = eq->bandEnabled(2);
+    require(session.editDeviceSettings(0, eqSlot->pluginIndex, "Switch EQ band",
+                                       [eq] { eq->setBandEnabled(2, !eq->bandEnabled(2)); }).wasOk());
+    require(eq->bandEnabled(2) != bandWasOn);
+    session.undo();
+    require(eq->bandEnabled(2) == bandWasOn && std::abs(session.tempo() - (tempoBefore + 7.0)) < 0.001);
+    session.undo();
+    require(std::abs(session.tempo() - tempoBefore) < 0.001);
+    // Which band the face shows is not an edit at all, so undo passes it by.
+    session.setTempo(tempoBefore + 3.0);
+    eq->setSelectedBand(1);
+    session.undo();
+    require(eq->selectedBand() == 1 && std::abs(session.tempo() - tempoBefore) < 0.001);
+
     require(session.deleteDevice(0, eqSlot->pluginIndex).wasOk());
 }
 }

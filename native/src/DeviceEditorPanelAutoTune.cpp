@@ -338,12 +338,15 @@ bool DeviceEditorPanel::handleAutoTuneClick(const juce::MouseEvent& event)
     const auto layout = tuneLayout(getLocalBounds());
     const auto position = event.getEventRelativeTo(this).getPosition();
 
-    // Every one of these edits the device's own state tree, so undo comes for
-    // free; what the tree cannot tell Session is that the project is now
-    // different from the file on disk.
+    // Every one of these edits the device's own state tree, through
+    // editDeviceSettings so that each is an undo step of its own and the
+    // session hears of it; this only redraws and reports.
+    const auto editTune = [this, tune] (const char* actionName, std::function<void(AutoTuneDevice&)> change)
+    {
+        session.editDeviceSettings(track, pluginSlot, actionName, [tune, &change] { change(*tune); });
+    };
     const auto changed = [this] (const juce::String& message)
     {
-        session.markModified();
         repaint();
         if (status) status(message);
     };
@@ -359,7 +362,7 @@ bool DeviceEditorPanel::handleAutoTuneClick(const juce::MouseEvent& event)
 
     if (layout.live.contains(position))
     {
-        tune->setLiveMode(!tune->liveMode());
+        editTune("Switch Rhino Tune live mode", [](AutoTuneDevice& device) { device.setLiveMode(!device.liveMode()); });
         rebuildGraph();
         changed(tune->liveMode() ? "Rhino Tune: live mode, lower latency and rougher onsets"
                                  : "Rhino Tune: studio mode");
@@ -367,7 +370,7 @@ bool DeviceEditorPanel::handleAutoTuneClick(const juce::MouseEvent& event)
     }
     if (layout.natural.contains(position))
     {
-        tune->setNaturalVibrato(!tune->naturalVibrato());
+        editTune("Switch Rhino Tune vibrato", [](AutoTuneDevice& device) { device.setNaturalVibrato(!device.naturalVibrato()); });
         changed(tune->naturalVibrato() ? "Rhino Tune: vibrato wanders" : "Rhino Tune: vibrato is steady");
         return true;
     }
@@ -377,7 +380,7 @@ bool DeviceEditorPanel::handleAutoTuneClick(const juce::MouseEvent& event)
             static const PitchTracker::Range ranges[] {PitchTracker::Range::High, PitchTracker::Range::Mid,
                                                        PitchTracker::Range::Bass};
             static const char* const names[] {"high", "mid", "bass"};
-            tune->setTrackingRange(ranges[i]);
+            editTune("Change Rhino Tune range", [i](AutoTuneDevice& device) { device.setTrackingRange(ranges[i]); });
             rebuildGraph();
             changed(juce::String("Rhino Tune: tracking the ") + names[i] + " range");
             return true;
@@ -389,14 +392,18 @@ bool DeviceEditorPanel::handleAutoTuneClick(const juce::MouseEvent& event)
             return false;
         auto mask = tune->scaleMask();
         mask[static_cast<size_t>(pitchClass)] = !mask[static_cast<size_t>(pitchClass)];
-        tune->setScaleMask(mask);
+        editTune("Change Rhino Tune scale", [mask](AutoTuneDevice& device) { device.setScaleMask(mask); });
         changed(juce::String(pitchClassName(pitchClass))
                 + (mask[static_cast<size_t>(pitchClass)] ? " is in the scale" : " is out of the scale"));
         return true;
     }
     if (layout.shiftDown.contains(position) || layout.shiftUp.contains(position))
     {
-        tune->setScaleDegreeShift(tune->scaleDegreeShift() + (layout.shiftUp.contains(position) ? 1 : -1));
+        const auto steps = layout.shiftUp.contains(position) ? 1 : -1;
+        editTune("Shift Rhino Tune scale", [steps](AutoTuneDevice& device)
+        {
+            device.setScaleDegreeShift(device.scaleDegreeShift() + steps);
+        });
         changed("Rhino Tune: shifted " + juce::String(tune->scaleDegreeShift()) + " scale degrees");
         return true;
     }
@@ -421,8 +428,9 @@ bool DeviceEditorPanel::handleAutoTuneClick(const juce::MouseEvent& event)
                 auto* device = dynamic_cast<AutoTuneDevice*>(
                     safe->session.devicePlugin(safe->track, safe->pluginSlot));
                 if (device == nullptr) return;
-                device->applyScale(result - 1, device->scale());
-                safe->session.markModified();
+                safe->session.editDeviceSettings(safe->track, safe->pluginSlot, "Change Rhino Tune root",
+                                                 [device, result] { device->applyScale(result - 1, device->scale()); });
+                if (safe == nullptr) return;
                 safe->repaint();
                 if (safe->status) safe->status(juce::String("Rhino Tune: root is ") + pitchClassName(result - 1));
             });
@@ -444,8 +452,9 @@ bool DeviceEditorPanel::handleAutoTuneClick(const juce::MouseEvent& event)
                     safe->session.devicePlugin(safe->track, safe->pluginSlot));
                 if (device == nullptr) return;
                 const auto chosen = static_cast<MusicalScale>(result - 1);
-                device->applyScale(device->scaleRoot(), chosen);
-                safe->session.markModified();
+                safe->session.editDeviceSettings(safe->track, safe->pluginSlot, "Change Rhino Tune scale",
+                                                 [device, chosen] { device->applyScale(device->scaleRoot(), chosen); });
+                if (safe == nullptr) return;
                 safe->repaint();
                 if (safe->status) safe->status(juce::String("Rhino Tune: ") + musicalScaleName(chosen));
             });

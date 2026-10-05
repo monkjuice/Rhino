@@ -353,6 +353,11 @@ public:
     // says which parameter it was.
     juce::ChangeBroadcaster deviceParameterValues;
     juce::Result beginDeviceParameterGesture(int track, int slot, int parameter);
+    // A device's own settings, the ones a face writes rather than a knob: an
+    // EQ band switched on, Rhino Tune's scale. change writes them, and they
+    // become one undo step of their own and are announced like any other edit.
+    juce::Result editDeviceSettings(int track, int slot, const juce::String& actionName,
+                                    const std::function<void()>& change);
     juce::Result setDeviceParameter(int track, int slot, int parameter, float value);
     juce::Result endDeviceParameterGesture(int track, int slot, int parameter);
     juce::Result toggleDeviceEnabled(int track, int slot);

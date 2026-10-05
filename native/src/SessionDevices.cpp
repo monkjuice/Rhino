@@ -431,6 +431,23 @@ juce::Result Session::beginDeviceParameterGesture(int track, int slot, int param
     return juce::Result::ok();
 }
 
+// The settings are written through the device's undo manager, so outside a
+// transaction of their own they joined whatever the user had done before:
+// one Ctrl+Z took back both. And nothing else on screen heard of them.
+juce::Result Session::editDeviceSettings(int track, int slot, const juce::String& actionName,
+                                         const std::function<void()>& change)
+{
+    if (devicePlugin(track, slot) == nullptr)
+        return juce::Result::fail("Select a device first.");
+    auto& undoManager = edit->getUndoManager();
+    undoManager.beginNewTransaction(actionName);
+    change();
+    undoManager.beginNewTransaction();
+    markModified();
+    sendSynchronousChangeMessage();
+    return juce::Result::ok();
+}
+
 juce::Result Session::setDeviceParameter(int track, int slot, int parameterIndex, float value)
 {
     auto* list = pluginListForTrack(track);

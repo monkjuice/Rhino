@@ -170,9 +170,11 @@ int RhinoEqDevice::selectedBand() const
     return juce::jlimit(0, bandCount - 1, selected.get());
 }
 
+// Which band the face shows is a view of the device rather than an edit to it:
+// kept with the device so it reopens on the same band, but never an undo step.
 void RhinoEqDevice::setSelectedBand(int band)
 {
-    writeProperty(selectedId, juce::jlimit(0, bandCount - 1, band));
+    state.setProperty(selectedId, juce::jlimit(0, bandCount - 1, band), nullptr);
 }
 
 void RhinoEqDevice::writeProperty(const juce::Identifier& id, const juce::var& value)

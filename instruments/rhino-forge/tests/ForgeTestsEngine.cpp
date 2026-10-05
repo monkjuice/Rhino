@@ -2,11 +2,70 @@
 // off really does silence it, and an extreme patch stays finite and inside full
 // scale.
 #include "ForgeTestSupport.h"
+#include "ForgeTestTools.h"
 
 namespace rhino::forge::tests
 {
 namespace
 {
+// The audio thread's first rule: a block allocates nothing. Checked rather than
+// read off the code, because what allocates is usually a few calls down — a
+// parameter id spelled as a juce::String — and looks like nothing at the call.
+void realtimeSuite()
+{
+    // A bindings file that is not there is the first-run default, knobs 1-8 on
+    // the macros, which is what most machines have and the case that filters
+    // every block. Never written: only learning or the menu saves a map.
+    const auto mapFile = juce::File::getSpecialLocation(juce::File::tempDirectory)
+                             .getChildFile("RhinoForgeRealtimeMidiMap.xml");
+    mapFile.deleteFile();
+    Processor::setMidiMapFile(mapFile);
+
+    auto processor = std::make_unique<Processor>();
+    everythingPatch(*processor);
+    require(processor->midiBindingCount() == macroCount, "a first run binds knobs 1-8 to the macros");
+
+    constexpr int blockSize = 256;
+    processor->prepareToPlay(48000.0, blockSize);
+    juce::AudioBuffer<float> buffer(2, blockSize);
+    juce::MidiBuffer midi;
+    midi.ensureSize(1024);
+    // Notes starting and stopping, and a bound knob turning, so the voices, the
+    // matrix, the racks and the controller filter all run.
+    const auto playBlock = [&] (int index)
+    {
+        midi.clear();
+        if (index % 4 == 0) midi.addEvent(juce::MidiMessage::noteOn(1, 48 + index % 12, 0.8f), 3);
+        if (index % 4 == 2) midi.addEvent(juce::MidiMessage::noteOff(1, 48 + (index - 2) % 12), 17);
+        if (index % 3 == 0)
+            midi.addEvent(juce::MidiMessage::controllerEvent(1, Processor::firstDefaultMacroCc, index % 128), 40);
+        processor->processBlock(buffer, midi);
+    };
+    for (int i = 0; i < 8; ++i) playBlock(i);
+
+    long long allocated = 0;
+    {
+        AllocationCounter counter;
+        for (int i = 8; i < 72; ++i) playBlock(i);
+        allocated = counter.count();
+    }
+    if (allocated != 0) std::cerr << "  " << allocated << " allocations in 64 blocks\n";
+    require(allocated == 0, "a block allocates nothing, with notes playing and a bound knob turning");
+
+    // Taking a bound controller out of the host's buffer leaves the host its own
+    // storage. Swapping a fresh buffer in handed the host's memory to the audio
+    // thread to free.
+    midi.clear();
+    midi.addEvent(juce::MidiMessage::controllerEvent(1, Processor::firstDefaultMacroCc, 64), 0);
+    midi.addEvent(juce::MidiMessage::noteOn(1, 60, 0.8f), 0);
+    const auto* storage = midi.data.begin();
+    processor->processBlock(buffer, midi);
+    require(midi.data.begin() == storage, "filtering a bound controller keeps the host's MIDI storage");
+    require(midi.getNumEvents() == 1, "the bound controller is taken out and the note is kept");
+
+    Processor::setMidiMapFile(juce::File());
+}
+
 void engineSuite()
 {
     // Hosts own plugin instances dynamically. Mirror that here: the engine
@@ -117,5 +176,6 @@ void engineSuite()
 void engineTests()
 {
     engineSuite();
+    realtimeSuite();
 }
 }

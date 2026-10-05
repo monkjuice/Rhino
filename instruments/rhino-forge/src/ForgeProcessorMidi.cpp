@@ -26,21 +26,27 @@ juce::File& midiMapOverride()
 void Processor::setMidiMapFile(const juce::File& file) { midiMapOverride() = file; }
 
 // Takes the bound messages out of a block's MIDI and leaves the rest in place.
-// Runs on the audio thread, allocates nothing the buffer has not already sized,
-// and is called once per block rather than once per sample.
+// Runs on the audio thread and is called once per block rather than once per
+// sample. The survivors are gathered in midiKept, which prepareToPlay sized, and
+// copied back only when something was taken out. The host's buffer is cleared
+// and refilled rather than swapped for another, so it keeps its own storage: a
+// swap allocated a buffer every block and left the host's to be freed here.
 void Processor::applyMidiMap(juce::MidiBuffer& midi)
 {
-    // Nothing bound means nothing to filter, which is the common case and worth
-    // not rebuilding a buffer for.
+    // Nothing bound means nothing to filter.
     if (midiMap.boundCount() == 0 && !midiMap.isLearning()) return;
 
-    juce::MidiBuffer kept;
+    midiKept.clear();
+    auto consumed = false;
     for (const auto metadata : midi)
     {
         const auto message = metadata.getMessage();
-        if (!consumedByMidiMap(message)) kept.addEvent(message, metadata.samplePosition);
+        if (consumedByMidiMap(message)) consumed = true;
+        else midiKept.addEvent(message, metadata.samplePosition);
     }
-    midi.swapWith(kept);
+    if (!consumed) return;
+    midi.clear();
+    midi.addEvents(midiKept, 0, -1, 0);
 }
 
 bool Processor::consumedByMidiMap(const juce::MidiMessage& message)

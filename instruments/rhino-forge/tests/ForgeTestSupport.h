@@ -91,4 +91,24 @@ enum Destination
 
 // Point one modulation slot at one destination.
 void setSlot(Processor& processor, int slot, float source, float destination, float depth);
+
+// Counts the heap allocations this thread makes through operator new while it
+// is alive, so a check can say a block allocated nothing rather than trust a
+// reading of the code. The test binary replaces the global operator new to keep
+// the count (ForgeTestSupport.cpp). It sees juce::String and the standard
+// containers; it does not see juce::HeapBlock, which calls malloc directly, so
+// a MidiBuffer or an AudioBuffer growing is not counted.
+class AllocationCounter
+{
+public:
+    AllocationCounter();
+    ~AllocationCounter();
+    AllocationCounter(const AllocationCounter&) = delete;
+    AllocationCounter& operator=(const AllocationCounter&) = delete;
+    long long count() const noexcept { return counted; }
+
+private:
+    long long counted = 0;
+    long long* outer = nullptr;
+};
 }

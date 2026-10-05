@@ -2,9 +2,34 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
+#include <new>
+
+namespace
+{
+// The tally the innermost live AllocationCounter on this thread keeps, or null
+// while none is. Per thread, so a message-thread allocation made while an
+// audio-thread check runs is not charged to the block.
+thread_local long long* allocationTally = nullptr;
+}
+
+// The replaceable global allocation functions. The array and nothrow forms
+// default to these, so replacing the two plain ones covers them too.
+void* operator new(std::size_t size)
+{
+    if (allocationTally != nullptr) ++*allocationTally;
+    if (auto* memory = std::malloc(size == 0 ? 1 : size)) return memory;
+    throw std::bad_alloc();
+}
+
+void operator delete(void* memory) noexcept { std::free(memory); }
+void operator delete(void* memory, std::size_t) noexcept { std::free(memory); }
 
 namespace rhino::forge::tests
 {
+AllocationCounter::AllocationCounter() : outer(allocationTally) { allocationTally = &counted; }
+AllocationCounter::~AllocationCounter() { allocationTally = outer; }
+
 int failures = 0;
 
 void require(bool condition, const char* message)

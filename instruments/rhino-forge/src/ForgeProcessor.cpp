@@ -14,6 +14,7 @@ Processor::Processor()
     : AudioProcessor(BusesProperties().withOutput("Output", juce::AudioChannelSet::stereo(), true)),
       state(*this, nullptr, "RhinoForgeState", parameterLayout())
 {
+    bindParameters();
     // After the parameters exist, because a binding is stored as a name and has
     // to be resolved against the list to become an index.
     loadMidiMap();
@@ -31,6 +32,9 @@ void Processor::prepareToPlay(double sampleRate, int)
     core.initialise(sampleRate);
     arp.reset();
     preparedSampleRate = juce::jmax(1.0, sampleRate);
+    // Room for a few hundred events, which is far more than one block carries;
+    // a block that somehow brings more grows it once and keeps the room.
+    midiKept.ensureSize(4096);
     // Hand the engine each destination's range so modulation happens in the
     // same normalised space the knob moves in. Taken from the parameters
     // themselves, so there is only ever one definition of a range.
@@ -51,12 +55,13 @@ bool Processor::isBusesLayoutSupported(const BusesLayout& layouts) const
 // up quoting different rates.
 float Processor::lfoRateHz(int lfo) const
 {
-    const auto value = [this] (const juce::String& id) { return state.getRawParameterValue(id)->load(); };
-    const auto id = [lfo] (const char* suffix) { return lfoParameterId(lfo, suffix); };
-    if (value(id("RateUnit")) < 0.5f) return value(id("Rate"));
+    if (lfo < 0 || lfo >= lfoCount) return 0.0f;
+    const auto& rate = lfoRateParameters[static_cast<size_t>(lfo)];
+    if (rate.unit == nullptr) return 0.0f;
+    if (rate.unit->load() < 0.5f) return rate.hertz->load();
 
     const auto beats = lfoDivisions()[static_cast<size_t>(
-        juce::jlimit(0, lfoDivisionCount - 1, juce::roundToInt(value(id("Division")))))].beats;
+        juce::jlimit(0, lfoDivisionCount - 1, juce::roundToInt(rate.division->load())))].beats;
     const auto bpm = hostBpm.load(std::memory_order_relaxed);
     // Standing in for a host that reports no tempo, so a synced LFO still runs
     // at a musical rate in a standalone rather than stopping dead.
@@ -188,8 +193,8 @@ void Processor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
     core.setTempo(hostBpm.load(std::memory_order_relaxed));
     core.setPitchWheel((pitchWheelValue() - 8192) / 8192.0f);
     core.setModWheel(modWheelValue() / 127.0f);
-    const auto values = patch();
-    const auto mods = modulation();
+    const auto& values = patch();
+    const auto& mods = modulation();
     const auto arpValues = arpSettings();
 
     // The arp holds its notes on a gate clock of its own, so switching it off
@@ -515,167 +520,182 @@ juce::String Processor::fxKnobText(int rack, int slot, int knob, float value) co
     return percent();
 }
 
-Patch Processor::patch() const
+void Processor::bindParameters()
 {
     // Assigned by name, not positionally: the parameter list and the Patch
-    // layout no longer have to be kept in the same order to stay correct.
+    // layout do not have to be kept in the same order to stay correct.
     // Nothing is remapped on the way through — the macros that used to bend
     // these values were hardwired offsets, and return as real assignable
     // sources with the modulation matrix.
-    const auto value = [this] (const juce::String& id) { return state.getRawParameterValue(id)->load(); };
-    const auto readOscillator = [&value] (const char* prefix)
+    const auto bindInto = [this] (std::vector<ParameterBinding>& bindings)
     {
-        const auto id = [prefix] (const char* suffix) { return juce::String(prefix) + suffix; };
-        Oscillator osc;
-        osc.enable = value(id("Enable"));
-        osc.mode = value(id("Mode"));
-        osc.position = value(id("Position"));
-        osc.octave = value(id("Octave"));
-        osc.semitone = value(id("Semitone"));
-        osc.fine = value(id("Fine"));
-        osc.unison = value(id("Unison"));
-        osc.detune = value(id("Detune"));
-        osc.blend = value(id("Blend"));
-        osc.pan = value(id("Pan"));
-        osc.level = value(id("Level"));
-        osc.scan = value(id("Scan"));
-        osc.cut = value(id("Cut"));
-        osc.mix = value(id("Mix"));
-        osc.loopMode = value(id("LoopMode"));
-        osc.start = value(id("Start"));
-        osc.end = value(id("End"));
-        osc.loopStart = value(id("LoopStart"));
-        osc.loopEnd = value(id("LoopEnd"));
+        return [this, &bindings] (float& field, const juce::String& id)
+        {
+            auto* value = state.getRawParameterValue(id);
+            jassert(value != nullptr);
+            if (value != nullptr) bindings.push_back({&field, value});
+        };
+    };
+    const auto bind = bindInto(patchBindings);
+    auto& result = blockPatch;
+
+    for (int oscillator = 0; oscillator < oscillatorCount; ++oscillator)
+    {
+        const juce::String prefix(oscillatorPrefix(oscillator));
+        auto& osc = result.oscillators[static_cast<size_t>(oscillator)];
+        bind(osc.enable, prefix + "Enable");
+        bind(osc.mode, prefix + "Mode");
+        bind(osc.position, prefix + "Position");
+        bind(osc.octave, prefix + "Octave");
+        bind(osc.semitone, prefix + "Semitone");
+        bind(osc.fine, prefix + "Fine");
+        bind(osc.unison, prefix + "Unison");
+        bind(osc.detune, prefix + "Detune");
+        bind(osc.blend, prefix + "Blend");
+        bind(osc.pan, prefix + "Pan");
+        bind(osc.level, prefix + "Level");
+        bind(osc.scan, prefix + "Scan");
+        bind(osc.cut, prefix + "Cut");
+        bind(osc.mix, prefix + "Mix");
+        bind(osc.loopMode, prefix + "LoopMode");
+        bind(osc.start, prefix + "Start");
+        bind(osc.end, prefix + "End");
+        bind(osc.loopStart, prefix + "LoopStart");
+        bind(osc.loopEnd, prefix + "LoopEnd");
         for (int slot = 0; slot < warpSlots; ++slot)
         {
-            const auto stage = juce::String(prefix) + "Warp" + juce::String(slot + 1);
-            osc.warpMode[static_cast<size_t>(slot)] = value(stage + "Mode");
-            osc.warpAmount[static_cast<size_t>(slot)] = value(stage);
+            const auto stage = prefix + "Warp" + juce::String(slot + 1);
+            bind(osc.warpMode[static_cast<size_t>(slot)], stage + "Mode");
+            bind(osc.warpAmount[static_cast<size_t>(slot)], stage);
         }
-        return osc;
-    };
-
-    Patch result;
-    // Picked up once per block and used for the whole of it, never re-read
-    // mid-block: that is the property the table hand-over rule depends on.
-    for (int oscillator = 0; oscillator < oscillatorCount; ++oscillator)
-    {
-        const auto index = static_cast<size_t>(oscillator);
-        result.oscillators[index] = readOscillator(oscillatorPrefix(oscillator));
-        result.oscillators[index].table = tables.table(oscillator);
-        result.oscillators[index].sample = samples.sample(oscillator);
     }
-    result.subEnable = value("subEnable");
-    result.subWave = value("subWave");
-    result.subOctave = value("subOctave");
-    result.subLevel = value("subLevel");
-    result.subPan = value("subPan");
-    result.noiseEnable = value("noiseEnable");
-    result.noiseSource = value("noiseSource");
-    result.noiseTone = value("noiseTone");
-    result.noiseStereo = value("noiseStereo");
-    result.noiseLevel = value("noiseLevel");
-    result.noisePan = value("noisePan");
-    result.filterEnable = value("filterEnable");
-    result.filterType = value("filterType");
+    bind(result.subEnable, "subEnable");
+    bind(result.subWave, "subWave");
+    bind(result.subOctave, "subOctave");
+    bind(result.subLevel, "subLevel");
+    bind(result.subPan, "subPan");
+    bind(result.noiseEnable, "noiseEnable");
+    bind(result.noiseSource, "noiseSource");
+    bind(result.noiseTone, "noiseTone");
+    bind(result.noiseStereo, "noiseStereo");
+    bind(result.noiseLevel, "noiseLevel");
+    bind(result.noisePan, "noisePan");
+    bind(result.filterEnable, "filterEnable");
+    bind(result.filterType, "filterType");
     for (int oscillator = 0; oscillator < oscillatorCount; ++oscillator)
-        result.routeOscillators[static_cast<size_t>(oscillator)] =
-            value("route" + oscillatorLetter(oscillator));
-    result.routeSub = value("routeSub");
-    result.routeNoise = value("routeNoise");
-    result.cutoff = value("cutoff");
-    result.filterKeyTrack = value("filterKeyTrack");
-    result.resonance = value("resonance");
-    result.drive = value("drive");
-    result.filterFreq = value("filterFreq");
-    result.filterPan = value("filterPan");
-    result.filterMix = value("filterMix");
-    result.filterLevel = value("filterLevel");
-    const auto readSends = [&value] (const char* prefix)
+        bind(result.routeOscillators[static_cast<size_t>(oscillator)], "route" + oscillatorLetter(oscillator));
+    bind(result.routeSub, "routeSub");
+    bind(result.routeNoise, "routeNoise");
+    bind(result.cutoff, "cutoff");
+    bind(result.filterKeyTrack, "filterKeyTrack");
+    bind(result.resonance, "resonance");
+    bind(result.drive, "drive");
+    bind(result.filterFreq, "filterFreq");
+    bind(result.filterPan, "filterPan");
+    bind(result.filterMix, "filterMix");
+    bind(result.filterLevel, "filterLevel");
+    const auto bindSends = [&bind] (Sends& sends, const char* prefix)
     {
-        Sends sends;
         for (int bus = 0; bus < busCount; ++bus)
-            sends.amount[static_cast<size_t>(bus)] =
-                value(juce::String(prefix) + "Send" + juce::String(bus + 1));
-        return sends;
+            bind(sends.amount[static_cast<size_t>(bus)], juce::String(prefix) + "Send" + juce::String(bus + 1));
     };
     for (int oscillator = 0; oscillator < oscillatorCount; ++oscillator)
-        result.oscillatorSends[static_cast<size_t>(oscillator)] =
-            readSends(oscillatorPrefix(oscillator));
-    result.sendSub = readSends("sub");
-    result.sendNoise = readSends("noise");
-    result.sendFilter = readSends("filter");
+        bindSends(result.oscillatorSends[static_cast<size_t>(oscillator)], oscillatorPrefix(oscillator));
+    bindSends(result.sendSub, "sub");
+    bindSends(result.sendNoise, "noise");
+    bindSends(result.sendFilter, "filter");
     for (int bus = 0; bus < busCount; ++bus)
     {
-        const auto id = [bus] (const char* suffix)
-        {
-            return "bus" + juce::String(bus + 1) + suffix;
-        };
+        const auto id = [bus] (const char* suffix) { return "bus" + juce::String(bus + 1) + suffix; };
         auto& settings = result.buses[static_cast<size_t>(bus)];
-        settings.enable = value(id("Enable"));
-        settings.dest = value(id("Dest"));
-        settings.pan = value(id("Pan"));
-        settings.level = value(id("Level"));
+        bind(settings.enable, id("Enable"));
+        bind(settings.dest, id("Dest"));
+        bind(settings.pan, id("Pan"));
+        bind(settings.level, id("Level"));
     }
     for (int env = 0; env < envCount; ++env)
     {
         auto& shape = result.envs[static_cast<size_t>(env)];
-        shape.attack = value(envParameterId(env, "Attack"));
-        shape.decay = value(envParameterId(env, "Decay"));
-        shape.sustain = value(envParameterId(env, "Sustain"));
-        shape.release = value(envParameterId(env, "Release"));
+        bind(shape.attack, envParameterId(env, "Attack"));
+        bind(shape.decay, envParameterId(env, "Decay"));
+        bind(shape.sustain, envParameterId(env, "Sustain"));
+        bind(shape.release, envParameterId(env, "Release"));
     }
     for (int lfo = 0; lfo < lfoCount; ++lfo)
     {
         auto& setting = result.lfos[static_cast<size_t>(lfo)];
-        setting.rate = lfoRateHz(lfo);
-        setting.shape = value(lfoParameterId(lfo, "Shape"));
-        setting.mode = value(lfoParameterId(lfo, "Mode"));
-        setting.table = lfoTable(lfo);
+        bind(setting.shape, lfoParameterId(lfo, "Shape"));
+        bind(setting.mode, lfoParameterId(lfo, "Mode"));
+        // The rate is worked out rather than read, so its three parameters
+        // are held for lfoRateHz instead of being copied into a field.
+        auto& rate = lfoRateParameters[static_cast<size_t>(lfo)];
+        rate.unit = state.getRawParameterValue(lfoParameterId(lfo, "RateUnit"));
+        rate.hertz = state.getRawParameterValue(lfoParameterId(lfo, "Rate"));
+        rate.division = state.getRawParameterValue(lfoParameterId(lfo, "Division"));
+        jassert(rate.unit != nullptr && rate.hertz != nullptr && rate.division != nullptr);
     }
     for (int rack = 0; rack < rackCount; ++rack)
     {
         auto& held = result.racks[static_cast<size_t>(rack)];
-        held.bypass = value(fxRackParameterId(rack, "Bypass"));
+        bind(held.bypass, fxRackParameterId(rack, "Bypass"));
         for (int slot = 0; slot < fxSlotCount; ++slot)
         {
-            const auto id = [rack, slot] (const char* suffix)
-            {
-                return fxParameterId(rack, slot, suffix);
-            };
+            const auto id = [rack, slot] (const char* suffix) { return fxParameterId(rack, slot, suffix); };
             auto& settings = held.slots[static_cast<size_t>(slot)];
-            settings.type = value(id("Type"));
-            settings.modeA = value(id("ModeA"));
-            settings.modeB = value(id("ModeB"));
-            settings.bypass = value(id("Bypass"));
+            bind(settings.type, id("Type"));
+            bind(settings.modeA, id("ModeA"));
+            bind(settings.modeB, id("ModeB"));
+            bind(settings.bypass, id("Bypass"));
             for (int knob = 0; knob < fxKnobCount; ++knob)
-                settings.knobs[static_cast<size_t>(knob)] =
-                    value(id("Knob") + juce::String(knob + 1));
-            settings.mix = value(id("Mix"));
-            settings.level = value(id("Level"));
+                bind(settings.knobs[static_cast<size_t>(knob)], id("Knob") + juce::String(knob + 1));
+            bind(settings.mix, id("Mix"));
+            bind(settings.level, id("Level"));
         }
     }
-    result.polyphony = value("polyphony");
-    result.mono = value("mono");
-    result.legato = value("legato");
-    result.glide = value("glide");
-    result.output = value("output");
+    bind(result.polyphony, "polyphony");
+    bind(result.mono, "mono");
+    bind(result.legato, "legato");
+    bind(result.glide, "glide");
+    bind(result.output, "output");
     for (int macro = 0; macro < macroCount; ++macro)
-        result.macros[static_cast<size_t>(macro)] = value("macro" + juce::String(macro + 1));
-    return result;
-}
+        bind(result.macros[static_cast<size_t>(macro)], "macro" + juce::String(macro + 1));
 
-Modulation Processor::modulation() const
-{
-    const auto value = [this] (const juce::String& id) { return state.getRawParameterValue(id)->load(); };
-    Modulation result;
+    const auto bindModulation = bindInto(modulationBindings);
     for (int slot = 0; slot < modSlotCount; ++slot)
     {
         const auto id = [slot] (const char* suffix) { return "mod" + juce::String(slot + 1) + suffix; };
-        result.slots[static_cast<size_t>(slot)] = {value(id("Source")), value(id("Dest")),
-                                                   value(id("Depth")), value(id("Bipolar"))};
+        auto& held = blockModulation.slots[static_cast<size_t>(slot)];
+        bindModulation(held.source, id("Source"));
+        bindModulation(held.destination, id("Dest"));
+        bindModulation(held.depth, id("Depth"));
+        bindModulation(held.bipolar, id("Bipolar"));
     }
-    return result;
+}
+
+const Patch& Processor::patch()
+{
+    for (const auto& binding : patchBindings) *binding.field = binding.value->load();
+    // Picked up once per block and used for the whole of it, never re-read
+    // mid-block: that is the property the table hand-over rule depends on.
+    for (int oscillator = 0; oscillator < oscillatorCount; ++oscillator)
+    {
+        auto& osc = blockPatch.oscillators[static_cast<size_t>(oscillator)];
+        osc.table = tables.table(oscillator);
+        osc.sample = samples.sample(oscillator);
+    }
+    for (int lfo = 0; lfo < lfoCount; ++lfo)
+    {
+        auto& setting = blockPatch.lfos[static_cast<size_t>(lfo)];
+        setting.rate = lfoRateHz(lfo);
+        setting.table = lfoTable(lfo);
+    }
+    return blockPatch;
+}
+
+const Modulation& Processor::modulation()
+{
+    for (const auto& binding : modulationBindings) *binding.field = binding.value->load();
+    return blockModulation;
 }
 
 juce::AudioProcessorEditor* Processor::createEditor() { return new Editor(*this); }

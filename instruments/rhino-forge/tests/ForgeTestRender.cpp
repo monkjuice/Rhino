@@ -1,13 +1,14 @@
 #include "ForgeTestTools.h"
+#include "ForgeTestSupport.h"
 
 #include "../src/ForgeProcessor.h"
 
+#include <algorithm>
 #include <iostream>
 #include <memory>
+#include <vector>
 
 namespace rhino::forge::tests
-{
-namespace
 {
 // A patch that exercises as much of the voice at once as a single render can:
 // all three oscillators detuned and stacked, both warp stages working, the sub and
@@ -114,6 +115,70 @@ void everythingPatch(Processor& processor)
     set("polyphony", 6.0f);
     set("output", 0.8f);
 }
+
+// What a block of that patch costs, and how many heap allocations it makes, at
+// a small block size (where per-block overhead is a larger share of the work)
+// and at an ordinary one. Medians over many blocks, for the reason --profile
+// takes medians: a cold block is an outlier no steady block pays. Compare two
+// builds by running them alternately, as with --profile.
+int runProfileAudio(int argc, char** argv)
+{
+    const auto blocksToTime = juce::jmax(100, argc > 2 ? juce::String(argv[2]).getIntValue() : 4000);
+    // A bindings file that is not there: the first-run default, knobs 1-8 on the
+    // macros, which is what most machines run with.
+    const auto mapFile = juce::File::getSpecialLocation(juce::File::tempDirectory)
+                             .getChildFile("RhinoForgeProfileMidiMap.xml");
+    mapFile.deleteFile();
+    Processor::setMidiMapFile(mapFile);
+
+    for (const auto blockSize : {64, 512})
+    {
+        auto processor = std::make_unique<Processor>();
+        everythingPatch(*processor);
+        processor->prepareToPlay(48000.0, blockSize);
+        juce::AudioBuffer<float> buffer(2, blockSize);
+        juce::MidiBuffer midi;
+        midi.ensureSize(1024);
+        for (const auto note : {45, 52, 57, 61, 64})
+            midi.addEvent(juce::MidiMessage::noteOn(1, note, 0.85f), 0);
+        for (int i = 0; i < 50; ++i)
+        {
+            processor->processBlock(buffer, midi);
+            midi.clear();
+        }
+
+        std::vector<double> times;
+        times.reserve(static_cast<size_t>(blocksToTime));
+        long long allocations = 0;
+        for (int i = 0; i < blocksToTime; ++i)
+        {
+            midi.clear();
+            // A bound knob turning now and then, which is what the controller
+            // filter in front of the voices runs on.
+            if (i % 8 == 0)
+                midi.addEvent(juce::MidiMessage::controllerEvent(1, Processor::firstDefaultMacroCc, i % 128), 0);
+            juce::int64 start = 0, end = 0;
+            {
+                AllocationCounter counter;
+                start = juce::Time::getHighResolutionTicks();
+                processor->processBlock(buffer, midi);
+                end = juce::Time::getHighResolutionTicks();
+                allocations += counter.count();
+            }
+            times.push_back(juce::Time::highResolutionTicksToSeconds(end - start) * 1.0e6);
+        }
+        std::sort(times.begin(), times.end());
+        const auto median = times[times.size() / 2];
+        const auto realTime = blockSize / 48000.0 * 1.0e6;
+        std::cout << "block " << blockSize
+                  << "  median " << juce::String(median, 1) << " us"
+                  << "  p99 " << juce::String(times[times.size() * 99 / 100], 1) << " us"
+                  << "  (" << juce::String(100.0 * median / realTime, 1) << "% of real time)"
+                  << "  allocations/block " << juce::String(static_cast<double>(allocations) / blocksToTime, 1)
+                  << '\n';
+    }
+    Processor::setMidiMapFile(juce::File());
+    return 0;
 }
 
 // Render that patch and write the samples raw, for comparing one build against

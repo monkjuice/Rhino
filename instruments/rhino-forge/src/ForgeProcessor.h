@@ -319,8 +319,35 @@ private:
     // The host's tempo as of the last block, for a synced LFO to divide.
     std::atomic<double> hostBpm {0.0};
     std::array<std::atomic<float>, destinationCount> meterOffsets {};
-    Patch patch() const;
-    Modulation modulation() const;
+    // Every parameter a block reads, paired once, by the constructor, with the
+    // field it fills. A parameter's id is a juce::String, so building one is a
+    // heap allocation and finding it a map lookup; a block did several hundred
+    // of each before this. Now a block copies values across these pointers and
+    // spells no id at all. Audio thread only, past the constructor.
+    struct ParameterBinding
+    {
+        float* field;
+        std::atomic<float>* value;
+    };
+    void bindParameters();
+    Patch blockPatch;
+    Modulation blockModulation;
+    std::vector<ParameterBinding> patchBindings, modulationBindings;
+    // The three an LFO's rate is worked out from, held for lfoRateHz, which
+    // both threads call and which therefore must not build ids either.
+    struct LfoRateParameters
+    {
+        std::atomic<float>* unit = nullptr;
+        std::atomic<float>* hertz = nullptr;
+        std::atomic<float>* division = nullptr;
+    };
+    std::array<LfoRateParameters, lfoCount> lfoRateParameters {};
+    // The messages a block keeps once the bound ones are taken out. Sized in
+    // prepareToPlay and reused, so filtering allocates nothing and the host's
+    // own buffer keeps its storage.
+    juce::MidiBuffer midiKept;
+    const Patch& patch();
+    const Modulation& modulation();
     juce::ValueTree migrated(const juce::ValueTree& savedState) const;
     // A table is not a parameter, so it travels beside the parameter state
     // rather than inside it: written as a child node when an oscillator's table

@@ -302,9 +302,12 @@ public:
         if (modulated)
             for (const auto& slot : modulation.slots)
                 if (slot.depth != 0.0f && slot.source >= 0.5f
-                    && juce::roundToInt(slot.destination) >= fxDestinationBase)
+                    && isFxDestination(juce::roundToInt(slot.destination)))
                     fxModulated = true;
-        const Patch* fxPatch = &patch;
+        // Only the racks are ever taken from the loudest voice. Everything else
+        // applied after the voices are summed (the busses, the output) is not a
+        // destination, so it is read from the patch as it stands.
+        const auto* fxRacks = &patch.racks;
 
         meterEnvelope = {};
         meterStage = {};
@@ -417,7 +420,7 @@ public:
             // The loudest voice is the one every display already follows, and
             // it is the one a rack follows too: one process fed by every note
             // cannot have a value per note.
-            if (fxModulated && loudest) { fxScratch.racks = active.racks; fxPatch = &fxScratch; }
+            if (fxModulated && loudest) { fxScratch = active.racks; fxRacks = &fxScratch; }
 
             Buses buses;
             renderOscillators(voiceIndex, voice, active, buses);
@@ -477,12 +480,12 @@ public:
             }
         }
 
-        resolveBuses(*fxPatch, busLeft, busRight, left, right, racks, tempo);
+        resolveBuses(patch, *fxRacks, busLeft, busRight, left, right, racks, tempo);
 
         // Everything that reached the main output, through the main rack, and
         // only then through the master level — which is the order Serum states:
         // audio routed to MAIN passes the modules, and then the master volume.
-        racks[0].process(fxPatch->racks[0], tempo, left, right);
+        racks[0].process((*fxRacks)[0], tempo, left, right);
 
         // The values the panel draws, worked out once from the phases the loop
         // settled on rather than per voice: a sample and hold's step cannot be
@@ -506,7 +509,8 @@ private:
     // main output instead, which is a setting the panel then never has to
     // refuse. Written for two busses, because "the other bus" is only a thing
     // there are two of.
-    static void resolveBuses(const Patch& patch, std::array<float, busCount>& busLeft,
+    static void resolveBuses(const Patch& patch, const std::array<Rack, rackCount>& rackSettings,
+                             std::array<float, busCount>& busLeft,
                              std::array<float, busCount>& busRight, float& left, float& right,
                              std::array<FxRack, rackCount>& racks, double tempo)
     {
@@ -532,7 +536,7 @@ private:
             // so the fader sets how much of the processed signal is heard
             // rather than how hard the rack is driven. Rack 0 is the main
             // output's, so bus n uses rack n + 1.
-            racks[static_cast<size_t>(bus + 1)].process(patch.racks[static_cast<size_t>(bus + 1)],
+            racks[static_cast<size_t>(bus + 1)].process(rackSettings[static_cast<size_t>(bus + 1)],
                                                         tempo, busLeft[index], busRight[index]);
 
             const auto gain = juce::jlimit(0.0f, 1.0f, settings.level);
@@ -1339,7 +1343,7 @@ private:
     // Where the loudest voice's modulated rack settings are kept, so the racks
     // can be run from them once the loop is over. Only touched when something
     // is actually pointed at a rack.
-    Patch fxScratch {};
+    std::array<Rack, rackCount> fxScratch {};
 
     std::array<int, 16> heldNotes {};
     int heldCount = 0;

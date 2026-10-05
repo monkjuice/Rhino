@@ -182,10 +182,46 @@ void mixerSuite()
     for (const auto* id : {"oscASend1", "oscASend2", "subSend1", "filterSend1"})
         require(value(fresh, id) == 0.0f, "nothing is sent anywhere until it is asked for");
 }
+
+// Modulating anything leaves the busses as they are set. A modulated rack is
+// taken from the loudest voice, and that once took the busses with it from a
+// copy where they stood at their defaults: switched on, at the main output. A
+// warp depth, FLT FREQ or a noise control also counted as a rack, because they
+// were appended after the racks in the destination list.
+void modulatedBusSuite()
+{
+    constexpr int samples = 8192;
+    const auto render = [] (int destination)
+    {
+        auto processor = std::make_unique<rhino::forge::Processor>();
+        soloSineOnA(*processor);
+        // A send to a bus that is switched off: heard only if the bus comes back.
+        setValue(*processor, "oscASend1", 1.0f);
+        setValue(*processor, "bus1Level", 1.0f);
+        setValue(*processor, "bus1Enable", 0.0f);
+        if (destination != destOff)
+            setSlot(*processor, 1, static_cast<float>(srcLfo1), static_cast<float>(destination), 1.0f);
+        auto buffer = std::make_unique<juce::AudioBuffer<float>>(2, samples);
+        renderNote(*processor, *buffer);
+        return buffer;
+    };
+
+    const auto unmodulated = render(destOff);
+    // Oscillator C is off, so sweeping its warp changes nothing audible...
+    require(identical(*unmodulated, *render(rhino::forge::warpDestinationBase + 4)),
+            "modulating a warp depth leaves a switched-off bus switched off");
+    // ...and the noise is off, so sweeping its stereo spread does nothing either.
+    require(identical(*unmodulated, *render(rhino::forge::noiseStereoDestination)),
+            "modulating a noise control leaves a switched-off bus switched off");
+    // A real rack control, on a slot with nothing in it.
+    require(identical(*unmodulated, *render(rhino::forge::fxDestinationBase)),
+            "modulating a rack leaves a switched-off bus switched off");
+}
 }
 
 void mixerTests()
 {
     mixerSuite();
+    modulatedBusSuite();
 }
 }

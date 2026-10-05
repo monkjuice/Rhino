@@ -132,6 +132,14 @@ inline constexpr int fxDestinationBase = namedDestinationCount;
 inline constexpr int fxDestinationsPerSlot = fxKnobCount + 1;
 inline constexpr int fxDestinationCount = rackCount * fxSlotCount * fxDestinationsPerSlot;
 
+// Whether a destination is one of a rack's controls. A range, not a lower bound:
+// the warp depths, the filter's second field and the noise controls were all
+// appended after the racks, so "at or past the racks" takes them in too.
+inline constexpr bool isFxDestination(int destination)
+{
+    return destination >= fxDestinationBase && destination < fxDestinationBase + fxDestinationCount;
+}
+
 // Output is deliberately absent, and so are the bus levels and the sends: all
 // of them are applied once the voices are summed, so a per-voice modulation of
 // one would not mean anything.

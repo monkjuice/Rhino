@@ -1,5 +1,6 @@
 #pragma once
 #include <tracktion_engine/tracktion_engine.h>
+#include <functional>
 #include <vector>
 
 namespace rhino
@@ -64,9 +65,6 @@ struct DeviceDescriptor
     // its own. Stored as a number so this library needs no juce_graphics.
     juce::uint32 colour = 0;
 
-    // Which pattern instrument selects this device, "" if none does.
-    juce::String patternKey;
-
     // Listed in the browser. A device can be real and still not be offered
     // directly -- the drum rack is reached through its kits instead.
     bool browsable = false;
@@ -77,6 +75,12 @@ struct DeviceDescriptor
     // A permanent channel-strip facility the engine keeps in the graph, not
     // something the user added.
     bool infrastructure = false;
+
+    // Makes the device when the engine asks for typeName. Rhino's own devices
+    // carry one, and it is the whole of their registration. Tracktion's
+    // built-ins need none, since the engine already knows them, and neither
+    // does an external plugin, which is found by scanning.
+    std::function<te::Plugin::Ptr(te::PluginCreationInfo)> create;
 };
 
 // The one list of Rhino's devices. Adding a device is a new file under
@@ -96,8 +100,8 @@ public:
     // browserLabel if it has one, displayName otherwise.
     static juce::String labelFor(const DeviceDescriptor&);
 
-    // Teaches the engine to create every Rhino device. Called once, from
-    // Session's constructor, in place of a createBuiltInType line per device.
+    // Teaches the engine to create every entry that carries a factory. Called
+    // once per engine, from Session's constructor.
     static void registerBuiltInTypes(te::Engine&);
 };
 }

@@ -68,7 +68,7 @@ A device reading its own samples does so in `initialise()`, which is prepare-to-
 
 ## Adding a device is three edits
 
-A device is its source under `native/src/devices/`, a line in that target's `CMakeLists.txt`, and an entry in `DeviceCatalog.cpp`. The catalog carries the id, engine type name, display name, kind, browser group, blurb, colour and pattern key, and the browser, the drop targets, the rack's add menu, the engine registration and the instrument rules all read it. Nothing in `Session` or the UI should ever need editing to add one; if it does, that is the bug. `--self-test` holds the line by asserting every browsable catalog device has a browser row and can be added.
+A device is its source under `native/src/devices/`, a line in that target's `CMakeLists.txt`, and an entry in `DeviceCatalog.cpp`. The catalog carries the id, engine type name, display name, kind, browser group, blurb, colour and, for Rhino's own devices, the factory that makes one (`.create = factory<YourDevice>()`), and the browser, the drop targets, the rack's add menu, the engine registration and the instrument rules all read it. Nothing in `Session` or the UI should ever need editing to add one; if it does, that is the bug. `--self-test` holds the line by asserting every browsable catalog device has a browser row and can be added.
 
 Never self-register a device from a static initialiser: a static library's unreferenced objects are dropped by the linker and the registration disappears without an error.
 

@@ -11,6 +11,11 @@
 namespace rhino
 {
 
+juce::Rectangle<float> Arrangement::repaintArea(const juce::Graphics& g) const
+{
+    return cullRepaints ? g.getClipBounds().toFloat() : getLocalBounds().toFloat();
+}
+
 // Bar numbers, drawn from the bars themselves rather than from whichever grid
 // line happened to land on one. Stepping by the snap division made the ruler
 // read in whatever the grid was set to; stepping by bars keeps the numbering
@@ -86,15 +91,25 @@ void Arrangement::paintBarNumbers(juce::Graphics& g, double firstBeat, double la
     const auto start = firstLabelledBar(firstBar, step);
     const auto right = static_cast<float>(getWidth()) - 14.0f;
     g.setFont(uiFont(10.0f));
+    // Only the marks whose line or label can reach the repainted columns: a
+    // label runs 68 pixels right of its mark, so the first mark worth reading
+    // is that far left of them. The index stays counted from the labelled bar,
+    // so which marks carry a label does not change with where a repaint starts.
+    const auto dirty = repaintArea(g);
+    const auto firstWorthBeat = session.edit->tempoSequence.toBeats(
+        tracktion::core::TimePosition::fromSeconds(std::max(0.0, timeAt(dirty.getX() - 72.0f)))).inBeats();
+    const auto firstMark = std::max(0, static_cast<int>(std::floor(
+        (firstWorthBeat - (start - 1.0) * barLength) / (tickSpan * countLength))) - 1);
+    const auto lastX = std::min(right, dirty.getRight() + 1.0f);
     // Counted from a labelled bar rather than from the edge of the view, so
     // which marks are labelled is a property of the music and does not
     // shuffle as the arrangement is scrolled.
-    for (int mark = 0; mark < 4096; ++mark)
+    for (int mark = firstMark; mark < 4096; ++mark)
     {
         const auto counts = tickSpan * mark;
         const auto x = xFor(timeOfBeat((start - 1.0) * barLength + counts * countLength));
         if (x < headerWidth - 1.0f) continue;
-        if (x > right) break;
+        if (x > lastX) break;
         if (mark % marksPerLabel != 0)
         {
             g.setColour(palette::border.brighter(0.12f));
@@ -185,14 +200,22 @@ void Arrangement::paintTimeRuler(juce::Graphics& g, double firstBeat, double las
     // characters a stub is wide enough to read as one.
     const auto labelWidth = static_cast<float>(
         juce::GlyphArrangement::getStringWidthInt(g.getCurrentFont(), "00:00:000"));
-    for (int mark = 0; mark < 4096; ++mark)
+    // Only the marks whose line or reading can reach the repainted columns;
+    // the index stays counted from the labelled bar, as above.
+    const auto dirty = repaintArea(g);
+    const auto firstWorthBar = session.edit->tempoSequence.toBeats(
+        tracktion::core::TimePosition::fromSeconds(std::max(0.0, timeAt(dirty.getX() - labelWidth - 84.0f))))
+        .inBeats() / barLength + 1.0;
+    const auto firstMark = std::max(0, static_cast<int>(std::floor((firstWorthBar - start) / tick)) - 1);
+    const auto lastX = std::min(right, dirty.getRight() + 1.0f);
+    for (int mark = firstMark; mark < 4096; ++mark)
     {
         const auto bar = start + tick * mark;
         if (bar > lastBar + step) break;
         const auto time = timeOfBar(bar);
         const auto x = xFor(time);
         if (x < headerWidth - 1.0f) continue;
-        if (x > right) break;
+        if (x > lastX) break;
         const auto labelled = mark % divisions == 0;
         g.setColour(labelled ? palette::border.brighter(0.55f) : palette::border.brighter(0.12f));
         g.drawVerticalLine(static_cast<int>(x), strip.getY(),
@@ -216,6 +239,11 @@ void Arrangement::paintTimeRuler(juce::Graphics& g, double firstBeat, double las
 // the main row and the scrollbar strip under it.
 void Arrangement::paintTrackCards(juce::Graphics& g)
 {
+    // A playhead strip lies to the right of the cards, so it repaints the
+    // lanes' ground and nothing else here: the names, colours and marks of
+    // the cards are only worth drawing when the repaint reaches them.
+    const auto dirty = repaintArea(g);
+    const auto reachesCards = dirty.getX() < headerWidth;
     juce::Graphics::ScopedSaveState scope(g);
     g.reduceClipRegion(juce::Rectangle<int>(0, static_cast<int>(lanesTop), getWidth() - 14,
                                             std::max(1, static_cast<int>(laneContentHeight()))));
@@ -226,6 +254,7 @@ void Arrangement::paintTrackCards(juce::Graphics& g)
         // draws nothing here and the band above it speaks for it.
         if (row.getHeight() <= 0.0f) continue;
         if (row.getBottom() < lanesTop || row.getY() > lanesTop + laneContentHeight()) continue;
+        if (row.getBottom() < dirty.getY() || row.getY() > dirty.getBottom()) continue;
         if (rows[static_cast<size_t>(index)].automation >= 0)
         {
             paintGhostRow(g, index);
@@ -236,11 +265,13 @@ void Arrangement::paintTrackCards(juce::Graphics& g)
         // lane is the light surface the grid is ruled into. They were a single
         // fill while they were a single colour, and a card lit to the lane's
         // new shade would have been the brightest block in the window.
-        g.setColour(palette::trackCard);
-        g.fillRect(row.withX(0.0f).withWidth(headerWidth));
         g.setColour(palette::arrangement);
         g.fillRect(row.withX(headerWidth)
                       .withWidth(std::max(0.0f, static_cast<float>(getWidth()) - 14.0f - headerWidth)));
+        if (!reachesCards)
+            continue;
+        g.setColour(palette::trackCard);
+        g.fillRect(row.withX(0.0f).withWidth(headerWidth));
         // The card is two columns with the panel grey between them: the
         // controls keep the panel background, and the name sits on the track
         // colour. The clips on the track keep whatever colours they were given.
@@ -249,7 +280,7 @@ void Arrangement::paintTrackCards(juce::Graphics& g)
         const auto nameColumn = juce::Rectangle<float>(indent + cardControlsWidth + cardDividerWidth, row.getY(),
                                                        headerWidth - indent - cardControlsWidth - cardDividerWidth,
                                                        row.getHeight());
-        const auto colour = session.trackColour(track);
+        const auto colour = factsFor(track).colour;
         const auto cardColour = colour.isTransparent() ? palette::control.brighter(0.18f) : colour;
         g.setColour(cardColour);
         g.fillRect(nameColumn);
@@ -298,7 +329,7 @@ void Arrangement::paintTrackCards(juce::Graphics& g)
             // Elided rather than shrunk to fit: a scaled-down line lands on a
             // fractional em again, which is the blur this is avoiding.
             const auto nameArea = trackNameBounds(track);
-            drawSnappedText(g, juce::String(track + 1).paddedLeft('0', 2) + "  " + session.trackName(track),
+            drawSnappedText(g, juce::String(track + 1).paddedLeft('0', 2) + "  " + factsFor(track).name,
                             nameArea, juce::Justification::centredLeft, true);
         }
         g.setFont(uiFont(10.0f));
@@ -307,6 +338,12 @@ void Arrangement::paintTrackCards(juce::Graphics& g)
 
 void Arrangement::paint(juce::Graphics& g)
 {
+    // What this repaint actually has to cover. A moving playhead invalidates a
+    // strip a few pixels wide every display refresh, and everything below that
+    // is not inside it is skipped rather than drawn and thrown away: the clip
+    // region would discard the pixels, but not the text layout, the tempo-map
+    // conversions and the model queries spent producing them.
+    const auto dirty = repaintArea(g);
     g.fillAll(palette::sideSurface);
     // The timeline is one field, from the first lane to the foot of the main
     // row, and every row paints its own ground over it. What is left showing is
@@ -320,8 +357,8 @@ void Arrangement::paint(juce::Graphics& g)
                std::max(0.0f, masterLane().getBottom() - lanesTop));
     g.setFont(uiFont(10.0f));
     g.setColour(palette::textDim);
-    drawSnappedText(g, "Drop browser items or files / drag clips to move / trim edges",
-                    {360, 0, getWidth() - 370, 30});
+    if (const juce::Rectangle<int> hintArea {360, 0, getWidth() - 370, 30}; dirty.intersects(hintArea.toFloat()))
+        drawSnappedText(g, "Drop browser items or files / drag clips to move / trim edges", hintArea);
     paintTrackCards(g);
 
     // Every row is bounded, header and timeline alike, so a track reads as one
@@ -391,9 +428,18 @@ void Arrangement::paint(juce::Graphics& g)
     const auto bandBars = paintBarBands(g, firstBeat, lastBeat);
     const auto barLength = std::max(0.25, session.beatsPerBar());
     const auto gridBeat = resolvedGridBeats();
-    const auto firstGrid = std::floor(firstBeat / gridBeat) * gridBeat;
+    // Only the lines inside the repainted columns, which a playhead strip
+    // makes one or two rather than the hundreds across the view.
+    const auto beatAtX = [this](float x)
+    {
+        return session.edit->tempoSequence.toBeats(
+            tracktion::core::TimePosition::fromSeconds(std::max(0.0, timeAt(x)))).inBeats();
+    };
+    const auto dirtyFirstBeat = std::max(firstBeat, beatAtX(dirty.getX() - 2.0f));
+    const auto dirtyLastBeat = std::min(lastBeat, beatAtX(dirty.getRight() + 2.0f));
+    const auto firstGrid = std::floor(dirtyFirstBeat / gridBeat) * gridBeat;
     int paintedTicks = 0;
-    for (auto beat = firstGrid; beat <= lastBeat + gridBeat && paintedTicks++ < 2000; beat += gridBeat)
+    for (auto beat = firstGrid; beat <= dirtyLastBeat + gridBeat && paintedTicks++ < 2000; beat += gridBeat)
     {
         const auto time = session.edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(beat)).inSeconds();
         const auto x = xFor(time);
@@ -443,24 +489,20 @@ void Arrangement::paint(juce::Graphics& g)
             }
         }
     }
-    const auto dirty = g.getClipBounds().toFloat();
     // A clip wears the colour of the lane it is drawn on, so the two read as
     // one band; a clip that has been coloured by hand keeps its own. Darkened,
     // because a card is a solid block behind dark text and a clip is a
     // translucent fill behind light text, and the same value cannot do both.
-    // Read per paint rather than per clip: trackColour walks the edit's track
+    // Read from the facts sync gathered: trackColour walks the edit's track
     // list, and a busy arrangement asks this hundreds of times a frame.
-    std::vector<juce::Colour> laneColours;
-    laneColours.reserve(static_cast<size_t>(session.trackCount()));
-    for (int track = 0; track < session.trackCount(); ++track)
-        laneColours.push_back(session.trackColour(track));
-    const auto laneTint = [&laneColours](int track)
+    const auto laneTint = [this](int track)
     {
-        const auto own = juce::isPositiveAndBelow(track, static_cast<int>(laneColours.size()))
-                             ? laneColours[static_cast<size_t>(track)] : juce::Colour();
+        const auto own = factsFor(track).colour;
         return own.isTransparent() ? palette::control.brighter(track == 0 ? 0.12f : 0.06f) : own.darker(0.5f);
     };
     std::set<int> tracksWithClips;
+    // The face every clip's name is set in, and measured in below.
+    g.setFont(uiFont(10.0f));
     for (const auto& clip : clips)
     {
         tracksWithClips.insert(clip.track);
@@ -487,8 +529,21 @@ void Arrangement::paint(juce::Graphics& g)
         g.fillRect(visible.getX(), box.getY() + headerHeight, visible.getWidth(), 1.0f);
         g.setColour(palette::text);
         if (visible.getWidth() >= 24.0f)
-            drawSnappedText(g, clip.name, visible.reduced(6.0f, 0).withHeight(headerHeight).toNearestInt(),
-                            juce::Justification::centredLeft, true);
+        {
+            // Set left, so the name's ink stops near its own width: a repaint
+            // right of that has nothing of it to draw. Shaping a name is the
+            // dearest thing a clip draws, and a playhead strip crosses a clip
+            // on every lane, so each name is measured once and kept. The
+            // margins cover the rounding to whole pixels and a glyph's overhang.
+            const auto nameArea = visible.reduced(6.0f, 0).withHeight(headerHeight);
+            auto& width = clipNameWidths[clip.name];
+            if (width <= 0.0f)
+                width = juce::GlyphArrangement::getStringWidth(g.getCurrentFont(), clip.name) + 1.0f;
+            const auto inkLeft = nameArea.getX() - 3.0f;
+            const auto inkRight = nameArea.getX() + std::min(nameArea.getWidth(), width) + 3.0f;
+            if (dirty.getRight() >= inkLeft && dirty.getX() <= inkRight)
+                drawSnappedText(g, clip.name, nameArea.toNearestInt(), juce::Justification::centredLeft, true);
+        }
         if (clip.clipPlugins > 0)
         {
             const auto badge = visible.withSizeKeepingCentre(28.0f, 16.0f).withRightX(visible.getRight() - 5.0f).withY(visible.getY() + 5.0f);
@@ -559,7 +614,9 @@ void Arrangement::paint(juce::Graphics& g)
                 const auto h = std::max(4.0f, noteArea.getHeight() / Session::pitches - 1.0f);
                 const auto y = noteArea.getBottom() - h - pitchScale * (noteArea.getHeight() - h);
                 const juce::Rectangle<float> noteBox {x1, y, w, h};
-                if (!noteBox.intersects(visible)) continue;
+                // Against the repaint too: a playhead strip crosses a clip on
+                // every lane, and each would otherwise issue all its notes.
+                if (!noteBox.intersects(visible) || !noteBox.intersects(dirty)) continue;
                 g.setColour(palette::selection);
                 g.fillRect(noteBox);
                 g.setColour(palette::selection.brighter(0.3f));
@@ -575,17 +632,20 @@ void Arrangement::paint(juce::Graphics& g)
     }
     // The hint belongs on the first empty track, and says what that track is
     // for rather than assuming audio: a MIDI track wants an instrument.
-    for (int track = 0; track < session.trackCount(); ++track)
-        if (!tracksWithClips.contains(track) && !session.trackHasInstrument(track) && !isTrackHidden(track)
-            && !session.isGroupBusTrack(track))
+    for (int track = 0; track < static_cast<int>(trackFacts.size()); ++track)
+    {
+        const auto& facts = factsFor(track);
+        if (tracksWithClips.contains(track) || facts.holdsInstrument || isTrackHidden(track) || facts.bus)
+            continue;
+        if (const auto hintArea = lane(track).reduced(16, 0); hintArea.intersects(dirty))
         {
             g.setColour(palette::textDim);
-            drawSnappedText(g, session.trackType(track) == Session::TrackType::midi
-                                ? "Double-click to add a clip, or drop an instrument here"
-                                : "Drop audio here",
-                            lane(track).reduced(16, 0).toNearestInt(), juce::Justification::centredLeft, true);
-            break;
+            drawSnappedText(g, facts.midi ? "Double-click to add a clip, or drop an instrument here"
+                                          : "Drop audio here",
+                            hintArea.toNearestInt(), juce::Justification::centredLeft, true);
         }
+        break;
+    }
     // Curves sit on top of the clips they modulate, and are clipped to the
     // scrolling lane area so a scrolled-off row cannot draw into the ruler.
     {
@@ -598,6 +658,7 @@ void Arrangement::paint(juce::Graphics& g)
             const auto row = rowBounds(index);
             if (row.getHeight() <= 0.0f) continue;
             if (row.getBottom() < lanesTop || row.getY() > lanesTop + laneContentHeight()) continue;
+            if (row.getBottom() < dirty.getY() || row.getY() > dirty.getBottom()) continue;
             paintAutomationRow(g, index);
         }
     }

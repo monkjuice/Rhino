@@ -32,6 +32,7 @@ public:
     void resized() override;
 private:
     friend int runArrangementTest();
+    friend int runUiProfile();
     enum class Gesture { none, draw, move, resize, select, keyboard };
     // The visible pitch range is a zoom, not a constant: Session::pitches is
     // only where it starts. These bound how far the lanes may be squeezed, and
@@ -67,6 +68,10 @@ private:
     void zoomPitchAt(double factor, float pointerY);
     void scrollPitchBy(int semitones);
     void paintKeyboard(juce::Graphics&);
+    // What a paint has to cover, as the arrangement has it: the clip, or with
+    // cullRepaints off the whole panel, for a test to compare against.
+    juce::Rectangle<float> repaintArea(const juce::Graphics&) const;
+    bool cullRepaints = true;
     juce::Rectangle<float> footerBounds() const;
     float cellWidth() const;
     float gridRight() const;

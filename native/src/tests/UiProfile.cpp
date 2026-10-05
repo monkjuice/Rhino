@@ -3,6 +3,7 @@
 #include "../DeviceRack.h"
 #include "../SessionView.h"
 #include "../AudioClipPanel.h"
+#include "../Playhead.h"
 #include "../Theme.h"
 #include <algorithm>
 #include <cstdio>
@@ -56,6 +57,15 @@ void paintArea(juce::Component& component, juce::Image& canvas, juce::Rectangle<
     juce::Graphics g(canvas);
     g.reduceClipRegion(area);
     component.paintEntireComponent(g, false);
+}
+
+// A software image, not the platform's default. On Windows the default is a
+// Direct2D bitmap, and opening a context on one cost about 3 ms for the
+// arrangement's size whatever was drawn - which buried the painters' own cost,
+// the thing being compared, under a cost no on-screen repaint pays.
+juce::Image canvasFor(const juce::Component& component)
+{
+    return {juce::Image::ARGB, component.getWidth(), component.getHeight(), true, juce::SoftwareImageType()};
 }
 
 void fillDocument(Session& session)
@@ -169,29 +179,42 @@ int runUiProfile()
             session.applyTrackAutomationAt(0.05 * i);
         }));
 
-        // A frame of the arrangement: the whole panel, then the narrow strip a
-        // moving playhead invalidates.
-        juce::Image arrangementCanvas(juce::Image::ARGB, arrangement->getWidth(), arrangement->getHeight(), true);
+        // A frame of the arrangement: the whole panel, then what a playhead
+        // moving three pixels invalidates - the columns at its old and new
+        // places, between the ruler and the foot, as updatePlayhead asks.
+        auto arrangementCanvas = canvasFor(*arrangement);
         report("arrangement full paint", medianMicroseconds(20, [&] (int)
         {
             paintArea(*arrangement, arrangementCanvas, arrangement->getLocalBounds());
         }));
+        const auto arrangementSweep = arrangement->getLocalBounds()
+            .withTrimmedTop(static_cast<int>(Arrangement::rulerTop))
+            .withTrimmedBottom(18 + static_cast<int>(arrangement->bottomInset));
+        arrangement->playheadSweepsLanes = true;
         report("arrangement playhead strip", medianMicroseconds(60, [&] (int i)
         {
-            paintArea(*arrangement, arrangementCanvas, {600 + (i % 8) * 3, 0, 4, arrangement->getHeight()});
+            const auto x = 600.0f + static_cast<float>(i % 8) * 3.0f;
+            arrangement->playhead = x + 3.0f;
+            paintArea(*arrangement, arrangementCanvas, playheadDamage(x, x + 3.0f, arrangementSweep));
         }));
 
-        juce::Image gridCanvas(juce::Image::ARGB, grid->getWidth(), grid->getHeight(), true);
+        auto gridCanvas = canvasFor(*grid);
         report("note editor full paint", medianMicroseconds(20, [&] (int)
         {
             paintArea(*grid, gridCanvas, grid->getLocalBounds());
         }));
+        const auto gridSweep = grid->getLocalBounds()
+            .withTrimmedTop(static_cast<int>(StepGrid::headerHeight))
+            .withTrimmedBottom(static_cast<int>(StepGrid::footerHeight)
+                               + (grid->horizontalScroll.isVisible() ? static_cast<int>(StepGrid::scrollHeight) : 0));
         report("note editor playhead strip", medianMicroseconds(60, [&] (int i)
         {
-            paintArea(*grid, gridCanvas, {600 + (i % 8) * 3, 0, 4, grid->getHeight()});
+            const auto x = 600.0f + static_cast<float>(i % 8) * 3.0f;
+            grid->playhead = x + 3.0f;
+            paintArea(*grid, gridCanvas, playheadDamage(x, x + 3.0f, gridSweep));
         }));
 
-        juce::Image rackCanvas(juce::Image::ARGB, rack->getWidth(), rack->getHeight(), true);
+        auto rackCanvas = canvasFor(*rack);
         report("device rack full paint", medianMicroseconds(20, [&] (int)
         {
             paintArea(*rack, rackCanvas, rack->getLocalBounds());

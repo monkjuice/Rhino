@@ -9,6 +9,11 @@
 namespace rhino
 {
 
+juce::Rectangle<float> StepGrid::repaintArea(const juce::Graphics& g) const
+{
+    return cullRepaints ? g.getClipBounds().toFloat() : getLocalBounds().toFloat();
+}
+
 // The lanes are one row per semitone, so the keys are drawn the way a piano
 // looks from directly above rather than in true piano geometry: a black key
 // keeps its own full-height row and is only narrower than its neighbours.
@@ -27,10 +32,14 @@ void StepGrid::paintKeyboard(juce::Graphics& g)
     // rasterise every key name at a fractional em, which is the one thing
     // uiFont exists to avoid.
     g.setFont(uiFont(std::round(std::clamp(height - 3.0f, 7.5f, 11.0f) * 0.825f)));
+    const auto dirty = repaintArea(g);
     for (int row = 0; row < rows; ++row)
     {
         const auto pitch = lowestVisiblePitch + rows - 1 - row;
-        const auto key = cell(0, row).withX(0.0f).withWidth(width);
+        const auto key = juce::Rectangle<float>(0.0f, headerHeight + row * height, width, height);
+        // A key's name can stand a little taller than a squeezed row.
+        if (!dirty.intersects(key.expanded(0.0f, height)))
+            continue;
         const bool black = juce::MidiMessage::isMidiNoteBlack(pitch);
         if (drums)
         {
@@ -77,19 +86,45 @@ void StepGrid::paint(juce::Graphics& g)
         g.fillRect(getLocalBounds().removeFromTop(static_cast<int>(headerHeight)));
     }
     g.setFont(uiFont(10.0f));
-    const auto dirty = g.getClipBounds().toFloat();
+    // What this repaint has to cover. The playhead invalidates a strip a few
+    // pixels wide every display refresh, below the header and right of the
+    // keys, and everything outside it is skipped rather than drawn and thrown
+    // away: the clip region discards the pixels, but not the text layout spent
+    // producing them.
+    const auto dirty = repaintArea(g);
     const auto steps = session.editorStepCount();
     const auto firstVisibleStep = std::max(0, static_cast<int>(std::floor(stepScroll)));
     const auto lastVisibleStep = std::min(steps - 1, static_cast<int>(std::ceil(stepScroll + visibleStepSpan())));
-    for (int step = 0; step < steps; ++step)
+    // cell() works the clip's length out through the tempo map on every call -
+    // four conversions - and a paint asks for thousands of cells. The same
+    // arithmetic on sizes read once gives the same rectangles.
+    const auto stepWidth = cellWidth();
+    const auto laneHeight = rowHeight();
+    const auto cellAt = [this, stepWidth, laneHeight](int step, int row)
     {
-        const auto headerCell = cell(step, 0).withY(0).withHeight(headerHeight);
-        if (headerCell.getRight() < labelWidth || headerCell.getX() > gridRight())
-            continue;
-        g.setColour(juce::Colour(step % 4 == 0 ? 0xffd4dacd : 0xff78818a));
-        drawSnappedText(g, juce::String(step + 1), headerCell.toNearestInt(), juce::Justification::centred);
-    }
-    paintKeyboard(g);
+        return juce::Rectangle<float> {labelWidth + static_cast<float>(step - stepScroll) * stepWidth,
+                                       headerHeight + row * laneHeight, stepWidth, laneHeight};
+    };
+    // The steps whose cells can touch the repainted columns, one either side
+    // to be sure of a cell the rounding puts on the boundary.
+    const auto dirtyFirstStep = std::max(firstVisibleStep,
+        static_cast<int>(std::floor(stepScroll + (dirty.getX() - labelWidth) / stepWidth)) - 1);
+    const auto dirtyLastStep = std::min(lastVisibleStep,
+        static_cast<int>(std::ceil(stepScroll + (dirty.getRight() - labelWidth) / stepWidth)) + 1);
+    if (dirty.getY() < headerHeight)
+        for (int step = 0; step < steps; ++step)
+        {
+            const auto headerCell = cellAt(step, 0).withY(0).withHeight(headerHeight);
+            if (headerCell.getRight() < labelWidth || headerCell.getX() > gridRight())
+                continue;
+            // A number is centred on its cell and may be wider than it.
+            if (!dirty.intersects(headerCell.expanded(16.0f, 0.0f)))
+                continue;
+            g.setColour(juce::Colour(step % 4 == 0 ? 0xffd4dacd : 0xff78818a));
+            drawSnappedText(g, juce::String(step + 1), headerCell.toNearestInt(), juce::Justification::centred);
+        }
+    if (dirty.getX() < labelWidth)
+        paintKeyboard(g);
     const auto rows = visiblePitchRows();
     const auto scaleIndex = scaleHighlight - 2;
     const bool scaleEnabled = !session.isPatternDrums() && scaleIndex >= 0;
@@ -103,9 +138,14 @@ void StepGrid::paint(juce::Graphics& g)
         const auto pitch = lowestVisiblePitch + rows - 1 - row;
         const auto pitchClass = pitchClassOf(pitch);
         const bool inScale = !scaleEnabled || std::find(scale.begin(), scale.end(), (pitchClass - root + 12) % 12) != scale.end();
-        for (int step = firstVisibleStep; step <= lastVisibleStep; ++step)
+        // Cells and notes stay inside their row's height, so a row the repaint
+        // misses has nothing to draw.
+        const auto rowTop = headerHeight + row * laneHeight;
+        if (rowTop + laneHeight < dirty.getY() || rowTop > dirty.getBottom())
+            continue;
+        for (int step = dirtyFirstStep; step <= dirtyLastStep; ++step)
         {
-            const auto bounds = cell(step, row);
+            const auto bounds = cellAt(step, row);
             if (!dirty.intersects(bounds)) continue;
             const auto barColour = step / 4 % 2 == 0 ? juce::Colour(0xff46515a) : juce::Colour(0xff3b4650);
             g.setColour(barColour);
@@ -143,11 +183,15 @@ void StepGrid::paint(juce::Graphics& g)
     g.setColour(juce::Colour(0xff202930));
     for (int row = 0; row <= rows; ++row)
     {
-        const auto y = headerHeight + row * rowHeight();
+        const auto y = headerHeight + row * laneHeight;
         g.fillRect(juce::Rectangle<float>(labelWidth, std::floor(y), gridWidth(), 1.0f));
     }
     for (int row = 0; row < rows; ++row)
     {
+        const auto rowTop = headerHeight + row * laneHeight;
+        const auto rowBottom = headerHeight + (row + 1) * laneHeight;
+        if (rowBottom < dirty.getY() || rowTop > dirty.getBottom())
+            continue;
         std::array<int, Session::steps + 2> sustainedBoundaryDeltas {};
         for (const auto& note : visibleNotes)
         {
@@ -167,15 +211,15 @@ void StepGrid::paint(juce::Graphics& g)
             }
         }
 
+        // Counted from the first step whatever the repaint covers, because
+        // whether a line is under a note depends on every note before it.
         int sustainedNotes = 0;
-        const auto rowTop = headerHeight + row * rowHeight();
-        const auto rowBottom = headerHeight + (row + 1) * rowHeight();
-        for (int step = 0; step <= lastVisibleStep + 1; ++step)
+        for (int step = 0; step <= dirtyLastStep + 1; ++step)
         {
             sustainedNotes += sustainedBoundaryDeltas[static_cast<size_t>(step)];
-            if (step >= firstVisibleStep && sustainedNotes == 0)
+            if (step >= dirtyFirstStep && sustainedNotes == 0)
             {
-                const auto x = cell(step, 0).getX();
+                const auto x = cellAt(step, 0).getX();
                 g.setColour(juce::Colour(step % 4 == 0 ? 0xff252d35 : 0xff303941));
                 g.drawVerticalLine(juce::roundToInt(x), rowTop, rowBottom);
             }

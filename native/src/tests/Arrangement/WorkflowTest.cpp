@@ -136,6 +136,8 @@ int runArrangementTest()
        #include "scenarios/ClipEdits.inc"
         scenario("what a drag costs the rest of the interface");
        #include "scenarios/UiCost.inc"
+        scenario("a culled repaint matches drawing everything");
+       #include "scenarios/PartialRepaint.inc"
         // Last: it clears the pattern to control the whole clip, so nothing
         // downstream should be relying on the notes it replaces.
         scenario("note selection");

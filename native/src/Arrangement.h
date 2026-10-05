@@ -79,6 +79,7 @@ public:
     std::function<void(te::EditItemID)> clipOpened;
 private:
     friend int runArrangementTest();
+    friend int runUiProfile();
     struct Waveform;
     struct MidiNoteView
     {
@@ -300,6 +301,13 @@ private:
     // the bottom edge has to stop at it rather than paint the height it was
     // given, which is what used to run a track's colour through the main row.
     void paintTrackCards(juce::Graphics&);
+    // What a paint has to cover. The painters skip what lies outside it; with
+    // cullRepaints off they draw everything and leave the clip to discard it,
+    // which is what a test compares a culled repaint against. JUCE's
+    // rasteriser is not exactly clip-invariant, so a strip cannot simply be
+    // compared with the whole paint.
+    juce::Rectangle<float> repaintArea(const juce::Graphics&) const;
+    bool cullRepaints = true;
     void showAutomationMenu(Session::DeviceTarget);
     // ArrangementGestures.cpp
     // Middle-button pan: carries both the timeline and the row stack so that
@@ -388,6 +396,21 @@ private:
     // Read once per sync rather than per repaint: answering it costs the
     // engine's track list, and the painter asks for every visible row.
     std::vector<bool> armedTracks;
+    // The rest of what the painter asks about every track, read once per sync
+    // for the same reason: each question walks the engine's track list, so
+    // asking it per row per frame grew with the square of the track count.
+    struct TrackFacts
+    {
+        juce::String name;
+        juce::Colour colour;
+        bool midi = false, holdsInstrument = false, bus = false;
+    };
+    std::vector<TrackFacts> trackFacts;
+    const TrackFacts& factsFor(int track) const;
+    // How wide each clip name is set, measured the first time a repaint
+    // reaches it and forgotten at every sync, so a renamed clip is measured
+    // again and the table holds only names the arrangement still shows.
+    std::map<juce::String, float> clipNameWidths;
     std::vector<int> trackRowIndex;
     float rowsHeight = 0.0f;
     // Two faces of one setting, never two settings: gridControl is Live's

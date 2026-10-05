@@ -46,6 +46,15 @@ void Arrangement::paintAutomationRow(juce::Graphics& g, int row)
     if (right <= left)
         return;
 
+    // A segment or a node wholly outside the columns being repainted is left
+    // out: a curve runs the width of the view, and a playhead strip needs the
+    // one or two segments that cross it. The margin covers the line's
+    // thickness and the widest node.
+    const auto dirty = repaintArea(g);
+    const auto reaches = [&dirty](float x1, float x2)
+    {
+        return std::max(x1, x2) >= dirty.getX() - 6.0f && std::min(x1, x2) <= dirty.getRight() + 6.0f;
+    };
     const auto& lanes = trackLanes[static_cast<size_t>(entry.track)];
     for (int index = 0; index < static_cast<int>(lanes.size()); ++index)
     {
@@ -80,10 +89,12 @@ void Arrangement::paintAutomationRow(juce::Graphics& g, int row)
         for (const auto& point : points)
         {
             const juce::Point<float> next {xFor(point.timeSeconds), automationYFor(row, automation, point.value)};
-            g.drawLine(previous.x, previous.y, next.x, next.y, 1.6f);
+            if (reaches(previous.x, next.x))
+                g.drawLine(previous.x, previous.y, next.x, next.y, 1.6f);
             previous = next;
         }
-        g.drawLine(previous.x, previous.y, right, previous.y, 1.6f);
+        if (reaches(previous.x, right))
+            g.drawLine(previous.x, previous.y, right, previous.y, 1.6f);
         // Nothing is proposed while a node is actually being carried: the node
         // itself is already drawn where the ghost would go.
         if (hovered && automationHover.point < 0 && !automationHover.dragging)
@@ -92,7 +103,7 @@ void Arrangement::paintAutomationRow(juce::Graphics& g, int row)
         {
             const auto& point = points[static_cast<size_t>(i)];
             const juce::Point<float> handle {xFor(point.timeSeconds), automationYFor(row, automation, point.value)};
-            if (handle.x < left - 6.0f || handle.x > right + 6.0f)
+            if (handle.x < left - 6.0f || handle.x > right + 6.0f || !reaches(handle.x, handle.x))
                 continue;
             // The node under the pointer is filled rather than outlined: it is
             // the one a press would pick up, and at six pixels across a ring

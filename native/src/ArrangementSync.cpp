@@ -36,10 +36,19 @@ public:
 };
 }
 
+const Arrangement::TrackFacts& Arrangement::factsFor(int track) const
+{
+    static const TrackFacts none;
+    return juce::isPositiveAndBelow(track, static_cast<int>(trackFacts.size()))
+        ? trackFacts[static_cast<size_t>(track)] : none;
+}
+
 void Arrangement::sync()
 {
     clips.clear();
     armedTracks.clear();
+    trackFacts.clear();
+    clipNameWidths.clear();
     std::set<juce::String> usedFiles;
     const auto tracks = te::getAudioTracks(*session.edit);
     syncTrackControls();
@@ -65,6 +74,9 @@ void Arrangement::sync()
         // starts recording MIDI instead of audio. The shell shows them in the
         // Info View while the pointer rests on the control.
         const auto name = session.trackName(track);
+        trackFacts.push_back({name, session.trackColour(track),
+                              session.trackType(track) == Session::TrackType::midi,
+                              session.trackHasInstrument(track), session.isGroupBusTrack(track)});
         mute[index]->setTooltip("Mute " + name + " - silences this track while the rest keeps playing.");
         solo[index]->setTooltip("Solo " + name + " - silences every track that is not soloed.");
         // The dot is the same whatever the track records, because the track

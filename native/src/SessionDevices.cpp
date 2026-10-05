@@ -583,6 +583,7 @@ juce::Result Session::deleteDevice(int track, int slot)
     if (isTrackInfrastructure(plugin->getPluginType()))
         return juce::Result::fail("The track's channel strip stays on the track.");
     edit->getUndoManager().beginNewTransaction("Delete device");
+    removeDeviceLanes(automationOwnerState(track), *plugin, &edit->getUndoManager());
     plugin->removeFromParent();
     edit->getUndoManager().beginNewTransaction();
     markModified();

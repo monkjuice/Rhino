@@ -9,8 +9,9 @@ const juce::Identifier clipColourID {"rhinoClipColour"};
 const juce::Identifier editorStepsID {"rhinoEditorSteps"};
 const juce::Identifier trackAutomationID {"rhinoTrackAutomation"};
 const juce::Identifier automationPointID {"point"};
-const juce::Identifier automationSlotID {"slot"};
+const juce::Identifier automationDeviceID {"device"};
 const juce::Identifier automationParameterID {"parameter"};
+const juce::Identifier deviceKeyID {"rhinoDeviceKey"};
 const juce::Identifier automationOwnLaneID {"ownLane"};
 const juce::Identifier automationTimeID {"time"};
 const juce::Identifier automationValueID {"value"};
@@ -137,28 +138,79 @@ bool sameDeviceTarget(Session::DeviceTarget a, Session::DeviceTarget b)
     return a.track == b.track && a.slot == b.slot && a.parameter == b.parameter;
 }
 
+juce::String deviceKeyOf(const te::Plugin& plugin)
+{
+    return plugin.state.getProperty(deviceKeyID).toString();
+}
+
+juce::String ensureDeviceKey(te::Plugin& plugin)
+{
+    auto key = deviceKeyOf(plugin);
+    if (key.isEmpty())
+    {
+        key = juce::Uuid().toString();
+        plugin.state.setProperty(deviceKeyID, key, nullptr);
+    }
+    return key;
+}
+
+void removeDeviceLanes(juce::ValueTree owner, const te::Plugin& plugin, juce::UndoManager* undoManager)
+{
+    const auto key = deviceKeyOf(plugin);
+    if (key.isEmpty())
+        return;
+    for (int i = owner.getNumChildren(); --i >= 0;)
+        if (const auto lane = owner.getChild(i);
+            lane.hasType(trackAutomationID) && lane.getProperty(automationDeviceID).toString() == key)
+            owner.removeChild(i, undoManager);
+}
+
+int slotOfDevice(const te::PluginList& list, const juce::String& key)
+{
+    if (key.isEmpty())
+        return -1;
+    for (int slot = 0; slot < list.size(); ++slot)
+        if (const auto* plugin = list[slot]; plugin != nullptr && deviceKeyOf(*plugin) == key)
+            return slot;
+    return -1;
+}
+
 // A lane only drives its parameter once it holds a curve. Revealing a lane on
 // its own leaves the knob alone, which is what makes "show automation" safe.
 // The lane is looked up where it lives - on its own track - because a lane
-// keeps no copy of its track index for a track deletion to invalidate.
-bool hasActiveTrackAutomation(const te::Edit& edit, Session::DeviceTarget target)
+// keeps no copy of its track index for a track deletion to invalidate, and by
+// the key of the device in the slot asked about, because it keeps no copy of
+// that slot for a reorder to invalidate either.
+bool hasActiveTrackAutomation(te::Edit& edit, Session::DeviceTarget target)
 {
     if (target.track < 0 || target.slot < 0 || target.parameter < 0)
         return false;
     const auto tracks = te::getAudioTracks(edit);
     juce::ValueTree owner;
+    te::PluginList* list = nullptr;
     if (target.track == tracks.size())
+    {
         owner = edit.state;
+        list = &edit.getMasterPluginList();
+    }
     else if (juce::isPositiveAndBelow(target.track, tracks.size()))
+    {
         owner = tracks[target.track]->state;
+        list = &tracks[target.track]->pluginList;
+    }
     else
+        return false;
+    if (!juce::isPositiveAndBelow(target.slot, list->size()) || (*list)[target.slot] == nullptr)
+        return false;
+    const auto key = deviceKeyOf(*(*list)[target.slot]);
+    if (key.isEmpty())
         return false;
 
     for (int i = 0; i < owner.getNumChildren(); ++i)
     {
         const auto state = owner.getChild(i);
         if (!state.hasType(trackAutomationID)
-            || static_cast<int>(state.getProperty(automationSlotID, -1)) != target.slot
+            || state.getProperty(automationDeviceID).toString() != key
             || static_cast<int>(state.getProperty(automationParameterID, -1)) != target.parameter)
             continue;
         int points = 0;
@@ -282,7 +334,10 @@ void collapseStackedInstruments(te::Edit& edit)
             keep = instruments.getFirst();
         for (auto* plugin : instruments)
             if (plugin != keep)
+            {
+                removeDeviceLanes(track->state, *plugin, nullptr);
                 plugin->removeFromParent();
+            }
         if (!keep->isEnabled())
             keep->setEnabled(true);
     }
@@ -358,6 +413,7 @@ juce::Result switchTrackInstrument(te::Edit& edit, te::AudioTrack& track, const 
     for (auto* plugin : existingInstruments)
         if (plugin != selected)
         {
+            removeDeviceLanes(track.state, *plugin, &edit.getUndoManager());
             plugin->removeFromParent();
             changed = true;
         }

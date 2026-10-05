@@ -913,6 +913,10 @@ private:
     struct AutomationRuntime
     {
         DeviceTarget target;
+        // The device's key, so a knob taken over by hand stays taken over
+        // when its device is dragged to another place in the chain. Empty for
+        // a device no lane has ever referred to, found by target instead.
+        juce::String deviceKey;
         float baseValue = 0.0f;
         bool hasBaseValue = false;
         bool overridden = false;
@@ -1087,13 +1091,15 @@ private:
     juce::ValueTree findTrackAutomationState(DeviceTarget) const;
     juce::ValueTree ensureTrackAutomationState(DeviceTarget, bool ownLane, bool keepExistingLane);
     std::vector<TrackAutomation> readTrackAutomations(int track, bool resolveParameterInfo) const;
-    // The same, from an owner already found: a caller walking every track
-    // finds them all at once rather than through the track list each time.
-    std::vector<TrackAutomation> readTrackAutomations(const juce::ValueTree& owner, int track,
-                                                      bool resolveParameterInfo) const;
+    // The same, from a track's lanes and devices already found: a caller
+    // walking every track finds them all at once rather than through the track
+    // list each time.
+    std::vector<TrackAutomation> readTrackAutomations(const juce::ValueTree& owner, const te::PluginList* devices,
+                                                      int track, bool resolveParameterInfo) const;
     AutomationRuntime& automationRuntimeFor(DeviceTarget);
     AutomationRuntime* findAutomationRuntime(DeviceTarget);
     const AutomationRuntime* findAutomationRuntime(DeviceTarget) const;
+    const AutomationRuntime* findAutomationRuntime(const juce::String& deviceKey, int parameter) const;
     te::MidiClip* patternClip = nullptr; // owned by edit
     te::EditItemID patternClipID;
     // Engine initialization also changes its edit flag asynchronously. Track

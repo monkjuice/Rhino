@@ -311,3 +311,75 @@
             require(session.pattern().getSequence().getNumNotes() == notesBeforeSwap,
                     "Notes survive switching back as well");
         }
+
+        // A lane belongs to its device, not to the place the device happens to
+        // occupy. Dragging the device along its chain used to leave the lane
+        // behind on the slot, driving whichever device was moved into it.
+        {
+            auto laneDocument = std::make_unique<Session>();
+            auto& lanes = *laneDocument;
+            const auto fxTrack = 1;
+            require(lanes.addAudioEffect(Session::AudioEffect::RhinoSpace, fxTrack).wasOk()
+                        && lanes.addAudioEffect(Session::AudioEffect::RhinoSpace, fxTrack).wasOk(),
+                    "Two of the same effect on one track, so a lane could land on the wrong one");
+            const auto spaces = [&lanes]
+            {
+                std::vector<int> found;
+                for (const auto& slot : lanes.deviceSlots(fxTrack))
+                    if (dynamic_cast<RhinoSpaceDevice*>(lanes.devicePlugin(fxTrack, slot.pluginIndex)) != nullptr)
+                        found.push_back(slot.pluginIndex);
+                return found;
+            };
+            const auto positionOf = [&lanes](int pluginIndex)
+            {
+                const auto slots = lanes.deviceSlots(fxTrack);
+                for (int i = 0; i < static_cast<int>(slots.size()); ++i)
+                    if (slots[static_cast<size_t>(i)].pluginIndex == pluginIndex)
+                        return i;
+                return -1;
+            };
+            const auto curvePoints = [](te::Plugin* plugin)
+            {
+                auto points = 0;
+                for (auto* parameter : plugin->getAutomatableParameters())
+                    points += parameter->getCurve().getNumPoints();
+                return points;
+            };
+            require(spaces().size() == 2, "Both effects are in the chain");
+            auto* first = lanes.devicePlugin(fxTrack, spaces()[0]);
+            auto* second = lanes.devicePlugin(fxTrack, spaces()[1]);
+            require(lanes.setTrackAutomationPoints({fxTrack, spaces()[0], 0}, {{0.0, 0.1f}, {2.0, 0.9f}}).wasOk(),
+                    "A lane is drawn on the first effect's first knob");
+
+            require(lanes.moveDevice(fxTrack, positionOf(spaces()[0]), positionOf(spaces()[1])).wasOk()
+                        && lanes.devicePlugin(fxTrack, spaces()[1]) == first,
+                    "The automated effect is dragged behind the other one");
+            const auto moved = lanes.trackAutomations(fxTrack);
+            require(moved.size() == 1 && lanes.devicePlugin(fxTrack, moved.front().target.slot) == first,
+                    "The lane goes with its device to its new place");
+            require(curvePoints(first) == 2 && curvePoints(second) == 0,
+                    "and the engine plays it on that device, not on the one now in its old place");
+            require(lanes.deviceParameters(fxTrack, spaces()[1])[0].automated
+                        && !lanes.deviceParameters(fxTrack, spaces()[0])[0].automated,
+                    "The rack marks the knob on the device that is automated");
+
+            // A knob taken over by hand stays taken over wherever its device goes.
+            require(lanes.setDeviceParameter(fxTrack, spaces()[1], 0, 0.5f).wasOk()
+                        && lanes.deviceParameters(fxTrack, spaces()[1])[0].automationOverridden,
+                    "Touching the automated knob takes it over");
+            require(lanes.moveDevice(fxTrack, positionOf(spaces()[1]), positionOf(spaces()[0])).wasOk()
+                        && lanes.devicePlugin(fxTrack, spaces()[0]) == first,
+                    "The effect is dragged back in front");
+            require(lanes.deviceParameters(fxTrack, spaces()[0])[0].automationOverridden
+                        && !lanes.deviceParameters(fxTrack, spaces()[1])[0].automationOverridden,
+                    "The override stays with the device rather than with the place");
+
+            // Deleting the device takes its lane in the same step.
+            require(lanes.deleteDevice(fxTrack, spaces()[0]).wasOk() && lanes.trackAutomations(fxTrack).empty(),
+                    "Deleting an automated device deletes its lane");
+            lanes.undo();
+            const auto restored = lanes.trackAutomations(fxTrack);
+            require(restored.size() == 1 && spaces().size() == 2 && restored.front().target.slot == spaces()[0],
+                    "and one undo brings back the device and the lane on it together");
+            laneDocument->releaseAudioDevice();
+        }

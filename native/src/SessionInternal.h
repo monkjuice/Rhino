@@ -31,8 +31,11 @@ extern const juce::Identifier clipColourID;
 extern const juce::Identifier editorStepsID;
 extern const juce::Identifier trackAutomationID;
 extern const juce::Identifier automationPointID;
-extern const juce::Identifier automationSlotID;
+// Which device a lane drives, by the device's key rather than its place in
+// the chain: a place changes whenever a device is moved, added or deleted.
+extern const juce::Identifier automationDeviceID;
 extern const juce::Identifier automationParameterID;
+extern const juce::Identifier deviceKeyID;
 extern const juce::Identifier automationOwnLaneID;
 extern const juce::Identifier automationTimeID;
 extern const juce::Identifier automationValueID;
@@ -135,7 +138,19 @@ const DeviceDescriptor* audioEffectDescriptor(Session::AudioEffect effect);
 void resetPluginList(te::PluginList* list);
 double stepDurationBeats(int steps);
 bool sameDeviceTarget(Session::DeviceTarget a, Session::DeviceTarget b);
-bool hasActiveTrackAutomation(const te::Edit& edit, Session::DeviceTarget target);
+// A device's own key: Rhino's, written onto the plugin's state the first time
+// something has to refer to the device wherever it sits, and saved with it.
+// Outside the undo history, because naming a device is not an edit to it.
+// Empty for a device nothing has referred to yet.
+juce::String deviceKeyOf(const te::Plugin&);
+juce::String ensureDeviceKey(te::Plugin&);
+// Where the device with a key sits in a chain now, or -1 if it is not there.
+int slotOfDevice(const te::PluginList&, const juce::String& key);
+// A device's lanes, taken off the track they are stored on as the device
+// leaves it: left behind they name a device that is nowhere and drive nothing.
+// Through the caller's transaction, so one undo brings device and lanes back.
+void removeDeviceLanes(juce::ValueTree owner, const te::Plugin&, juce::UndoManager*);
+bool hasActiveTrackAutomation(te::Edit& edit, Session::DeviceTarget target);
 te::Plugin* findPlugin(te::AudioTrack& track, const juce::String& type);
 te::FourOscPlugin* findFourOsc(te::AudioTrack& track);
 RhinoWaveDevice* findRhinoWave(te::AudioTrack& track);

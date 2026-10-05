@@ -1,6 +1,7 @@
 #include "SessionInternal.h"
 #include <algorithm>
 #include <set>
+#include <utility>
 
 // Track automation. Serves Arrangement and the device rack.
 //
@@ -20,11 +21,13 @@ double pointTime(const juce::ValueTree& state)
 }
 
 // A lane's track is where it is stored, never a copy of the index: deleting a
-// track renumbers every track below it, and a stored index would go stale.
-bool addressesDevice(const juce::ValueTree& state, Session::DeviceTarget target)
+// track renumbers every track below it, and a stored index would go stale. Its
+// device is named by the device's key for the same reason: a stored slot sent
+// the lane to whichever device was dragged into that place.
+bool addressesDevice(const juce::ValueTree& state, const juce::String& deviceKey, int parameter)
 {
-    return static_cast<int>(state.getProperty(automationSlotID, -1)) == target.slot
-        && static_cast<int>(state.getProperty(automationParameterID, -1)) == target.parameter;
+    return deviceKey.isNotEmpty() && state.getProperty(automationDeviceID).toString() == deviceKey
+        && static_cast<int>(state.getProperty(automationParameterID, -1)) == parameter;
 }
 }
 
@@ -66,12 +69,14 @@ juce::ValueTree Session::automationOwnerState(int track) const
 juce::ValueTree Session::findTrackAutomationState(DeviceTarget target) const
 {
     const auto owner = automationOwnerState(target.track);
-    if (!owner.isValid())
+    auto* plugin = devicePlugin(target.track, target.slot);
+    if (!owner.isValid() || plugin == nullptr)
         return {};
+    const auto key = deviceKeyOf(*plugin);
     for (int i = 0; i < owner.getNumChildren(); ++i)
     {
         const auto state = owner.getChild(i);
-        if (state.hasType(trackAutomationID) && addressesDevice(state, target))
+        if (state.hasType(trackAutomationID) && addressesDevice(state, key, target.parameter))
             return state;
     }
     return {};
@@ -79,14 +84,15 @@ juce::ValueTree Session::findTrackAutomationState(DeviceTarget target) const
 
 std::vector<Session::TrackAutomation> Session::readTrackAutomations(int track, bool resolveParameterInfo) const
 {
-    return readTrackAutomations(automationOwnerState(track), track, resolveParameterInfo);
+    return readTrackAutomations(automationOwnerState(track), pluginListForTrack(track), track, resolveParameterInfo);
 }
 
-std::vector<Session::TrackAutomation> Session::readTrackAutomations(const juce::ValueTree& owner, int track,
+std::vector<Session::TrackAutomation> Session::readTrackAutomations(const juce::ValueTree& owner,
+                                                                    const te::PluginList* devices, int track,
                                                                     bool resolveParameterInfo) const
 {
     std::vector<TrackAutomation> automations;
-    if (!owner.isValid())
+    if (!owner.isValid() || devices == nullptr)
         return automations;
 
     std::vector<DeviceSlot> slots;
@@ -98,8 +104,10 @@ std::vector<Session::TrackAutomation> Session::readTrackAutomations(const juce::
         if (!state.hasType(trackAutomationID))
             continue;
         TrackAutomation automation;
+        // The slot is wherever the lane's device sits now. A lane whose device
+        // has gone drives and shows nothing.
         automation.target = {track,
-                             static_cast<int>(state.getProperty(automationSlotID, -1)),
+                             slotOfDevice(*devices, state.getProperty(automationDeviceID).toString()),
                              static_cast<int>(state.getProperty(automationParameterID, -1))};
         if (!automation.target.isValid())
             continue;
@@ -200,10 +208,11 @@ juce::ValueTree Session::ensureTrackAutomationState(DeviceTarget target, bool ow
         return state;
     }
     auto owner = automationOwnerState(target.track);
-    if (!owner.isValid())
+    auto* plugin = devicePlugin(target.track, target.slot);
+    if (!owner.isValid() || plugin == nullptr)
         return {};
     juce::ValueTree lane(trackAutomationID);
-    lane.setProperty(automationSlotID, target.slot, nullptr);
+    lane.setProperty(automationDeviceID, ensureDeviceKey(*plugin), nullptr);
     lane.setProperty(automationParameterID, target.parameter, nullptr);
     lane.setProperty(automationOwnLaneID, ownLane, nullptr);
     owner.addChild(lane, -1, &edit->getUndoManager());
@@ -320,23 +329,37 @@ juce::Result Session::clearTrackAutomationPoints(DeviceTarget target)
 Session::AutomationRuntime& Session::automationRuntimeFor(DeviceTarget target)
 {
     if (auto* runtime = findAutomationRuntime(target))
+    {
+        runtime->target = target;
         return *runtime;
-    automationRuntime.push_back({target});
+    }
+    const auto* plugin = devicePlugin(target.track, target.slot);
+    automationRuntime.push_back({target, plugin != nullptr ? deviceKeyOf(*plugin) : juce::String()});
     return automationRuntime.back();
 }
 
 Session::AutomationRuntime* Session::findAutomationRuntime(DeviceTarget target)
 {
-    for (auto& runtime : automationRuntime)
-        if (sameDeviceTarget(runtime.target, target))
+    return const_cast<AutomationRuntime*>(std::as_const(*this).findAutomationRuntime(target));
+}
+
+// By the device's key wherever it has one, so the answer follows the device
+// through a reorder; by place only for a device no lane has named.
+const Session::AutomationRuntime* Session::findAutomationRuntime(DeviceTarget target) const
+{
+    const auto* plugin = devicePlugin(target.track, target.slot);
+    if (const auto key = plugin != nullptr ? deviceKeyOf(*plugin) : juce::String(); key.isNotEmpty())
+        return findAutomationRuntime(key, target.parameter);
+    for (const auto& runtime : automationRuntime)
+        if (runtime.deviceKey.isEmpty() && sameDeviceTarget(runtime.target, target))
             return &runtime;
     return nullptr;
 }
 
-const Session::AutomationRuntime* Session::findAutomationRuntime(DeviceTarget target) const
+const Session::AutomationRuntime* Session::findAutomationRuntime(const juce::String& deviceKey, int parameter) const
 {
     for (const auto& runtime : automationRuntime)
-        if (sameDeviceTarget(runtime.target, target))
+        if (runtime.deviceKey == deviceKey && runtime.target.parameter == parameter)
             return &runtime;
     return nullptr;
 }
@@ -414,7 +437,7 @@ void Session::mirrorAutomationToEngine()
     for (int track = 0; track < static_cast<int>(owners.size()); ++track)
     {
         auto* list = &owners[static_cast<size_t>(track)].devices;
-        for (const auto& automation : readTrackAutomations(owners[static_cast<size_t>(track)].lanes, track, false))
+        for (const auto& automation : readTrackAutomations(owners[static_cast<size_t>(track)].lanes, list, track, false))
         {
             if (!automation.active() || !juce::isPositiveAndBelow(automation.target.slot, list->size()))
                 continue;
@@ -496,7 +519,9 @@ void Session::mirrorAutomationToEngine()
         if (findWanted(before.parameter.get()) != nullptr || before.plugin == nullptr
             || !before.plugin->state.isAChildOf(edit->state))
             continue;
-        const auto* runtime = findAutomationRuntime(before.target);
+        // By the device it drove rather than the place it drove it from, which
+        // a reorder since the last mirror may have handed to another device.
+        const auto* runtime = findAutomationRuntime(deviceKeyOf(*before.plugin), before.target.parameter);
         if (runtime == nullptr || runtime->overridden || !runtime->hasBaseValue)
             continue;
         const auto range = before.parameter->getValueRange();

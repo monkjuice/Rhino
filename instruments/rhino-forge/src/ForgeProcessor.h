@@ -5,6 +5,7 @@
 #include "../core/ForgeTableStore.h"
 #include "../core/ForgeSampleStore.h"
 #include <juce_audio_utils/juce_audio_utils.h>
+#include <bitset>
 #include <map>
 
 namespace rhino::forge
@@ -274,6 +275,12 @@ private:
     // which has to drop the chord no finger is on.
     bool arpWasEnabled = false;
     bool arpWasLatched = false;
+    // The keys that went straight to the voices - the arp off, or THRU on -
+    // so their release goes there too, whatever ARP and THRU have been
+    // switched to since. Routed by the switches as they stood at the release,
+    // a key pressed with the arp off and let go with it on reached only the
+    // arp, and its voice sounded until something stole it.
+    std::bitset<128> directNotes;
     // The rate prepareToPlay was given, kept rather than read back from
     // AudioProcessor::getSampleRate(). That one is set by the host calling
     // setRateAndBufferSizeDetails, which nothing does when prepareToPlay is

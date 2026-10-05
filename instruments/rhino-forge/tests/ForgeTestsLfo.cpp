@@ -436,6 +436,25 @@ void lfoSuite()
                      "a mono note without legato restarts the LFO");
     }
 
+    // Legato joins notes that overlap. A key lifted before the next goes down
+    // left the voice releasing, and joining that let the new note fade out
+    // under a held key: it is a new note, and starts again.
+    {
+        rhino::forge::Core core;
+        core.initialise(48000.0);
+        auto patch = patchFor(rhino::forge::LfoMode::trigger);
+        patch.mono = 1.0f;
+        patch.legato = 1.0f;
+        core.noteOn(57, 1.0f, patch);
+        runCore(core, patch, cycle / 4);
+        core.noteOff(57);
+        runCore(core, patch, 64);
+        core.noteOn(60, 1.0f, patch);
+        runCore(core, patch, 48000);
+        require(core.envelopeLevel() > 0.1f,
+                "a detached note in mono legato sounds for as long as its key is held");
+    }
+
     // --- Six of them, and each one per voice -----------------------------------
     //
     // An LFO that answers the keyboard lives inside the voice, so a new note

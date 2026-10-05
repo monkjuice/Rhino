@@ -31,6 +31,7 @@ void Processor::prepareToPlay(double sampleRate, int)
 {
     core.initialise(sampleRate);
     arp.reset();
+    directNotes.reset();
     preparedSampleRate = juce::jmax(1.0, sampleRate);
     // Room for a few hundred events, which is far more than one block carries;
     // a block that somehow brings more grows it once and keeps the room.
@@ -267,11 +268,31 @@ void Processor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
                 else if (message.isSustainPedalOff()) arp.sustain(false);
             }
 
-            if (!arpValues.enabled || arpValues.thru)
+            // A key reaches the voices if the switches let it through when it
+            // goes down, and its release follows it there whatever they say by
+            // the time it comes up.
+            const auto direct = !arpValues.enabled || arpValues.thru;
+            const auto note = message.getNoteNumber() & 127;
+            if (message.isNoteOn())
             {
-                if (message.isNoteOn()) core.noteOn(message.getNoteNumber(), message.getFloatVelocity(), values);
-                else if (message.isNoteOff()) core.noteOff(message.getNoteNumber());
-                else if (message.isAllNotesOff()) core.allNotesOff();
+                if (direct)
+                {
+                    core.noteOn(note, message.getFloatVelocity(), values);
+                    directNotes.set(static_cast<size_t>(note));
+                }
+            }
+            else if (message.isNoteOff())
+            {
+                if (directNotes[static_cast<size_t>(note)])
+                {
+                    core.noteOff(note);
+                    directNotes.reset(static_cast<size_t>(note));
+                }
+            }
+            else if (message.isAllNotesOff() && (direct || directNotes.any()))
+            {
+                core.allNotesOff();
+                directNotes.reset();
             }
             ++event;
         }

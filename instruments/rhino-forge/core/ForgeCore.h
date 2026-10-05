@@ -116,7 +116,11 @@ public:
         {
             hold(note);
             auto& voice = voices[0];
-            const auto continueEnvelope = voice.active && patch.legato >= 0.5f;
+            // Legato joins notes that overlap. A voice already releasing has no
+            // key down, so a note after it is detached and starts again: joined
+            // instead, it carried on the release and faded out under a held key.
+            const auto continueEnvelope = voice.active && patch.legato >= 0.5f
+                && voice.envStage[ampEnv] != EnvelopeStage::release;
             if (!continueEnvelope)
             {
                 startVoice(voice, note, velocity);

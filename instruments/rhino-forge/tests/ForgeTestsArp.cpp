@@ -512,6 +512,37 @@ void processorSuite()
         require(rms(buffer, 0, 0) < 0.001f, "switching the arp off leaves no note sounding");
     }
 
+    // A key the voices heard go down, they hear come up, whatever ARP and THRU
+    // were switched to while it was held. Routed by the switches as they stood
+    // at the release, it reached only the arp and the voice sounded on. CHANCE
+    // is zero so the arp itself plays nothing: whatever sounds is the held key.
+    for (const auto thruCase : {false, true})
+    {
+        rhino::forge::Processor processor;
+        soloSineOnA(processor);
+        setValue(processor, "env1Release", 0.01f);
+        setValue(processor, "arpChance", 0.0f);
+        // Pressed with the arp off, or with the arp on and THRU letting it by.
+        setValue(processor, "arpEnable", thruCase ? 1.0f : 0.0f);
+        setValue(processor, "arpThru", thruCase ? 1.0f : 0.0f);
+        processor.prepareToPlay(48000.0, samples);
+        juce::MidiBuffer press;
+        press.addEvent(juce::MidiMessage::noteOn(1, 60, 1.0f), 0);
+        processor.processBlock(buffer, press);
+        require(rms(buffer, 0, 0) > 0.01f, "the held key reaches the voices");
+
+        // Released after the arp is switched on, or after THRU is switched off.
+        setValue(processor, thruCase ? "arpThru" : "arpEnable", thruCase ? 0.0f : 1.0f);
+        juce::MidiBuffer release;
+        release.addEvent(juce::MidiMessage::noteOff(1, 60), 0);
+        processor.processBlock(buffer, release);
+        juce::MidiBuffer none;
+        processor.processBlock(buffer, none);
+        require(rms(buffer, 0, 0) < 0.001f,
+                thruCase ? "a key let through by THRU stops when released after THRU is switched off"
+                         : "a key held while the arp is switched on stops when released");
+    }
+
     // A tempo-synced step is a division of the host's beat. With no host tempo
     // the standalone stands in 120 BPM, so 1/16 is 125 ms and the panel and the
     // engine must both say so.

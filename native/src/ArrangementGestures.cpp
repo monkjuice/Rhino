@@ -233,7 +233,9 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
         repaint();
         return;
     }
-    const auto& clip = clips[static_cast<size_t>(index)];
+    // A copy, not a reference: selecting the clip opens it in the note editor,
+    // the session announces that, and the clip list is rebuilt under it.
+    const auto clip = clips[static_cast<size_t>(index)];
     // Ctrl or Shift gathers: the clip joins the selection or leaves it, the
     // rest is untouched, and the press is over. It must not also start
     // carrying, or every attempt to add one clip to a group would nudge the

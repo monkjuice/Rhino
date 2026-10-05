@@ -89,7 +89,9 @@ void Arrangement::itemDropped(const juce::DragAndDropTarget::SourceDetails& deta
                 if (status) status("That browser item cannot be inserted here.");
                 return;
             }
-            const auto& clip = clips[static_cast<size_t>(clipIndex)];
+            // A copy: adding the device is announced, and the clip list is
+            // rebuilt before the fallback below reads it.
+            const auto clip = clips[static_cast<size_t>(clipIndex)];
             const auto result = session.addClipDevice(effect->id, clip.id);
             if (result.failed())
             {

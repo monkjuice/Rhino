@@ -1,7 +1,7 @@
 ---
 title: Adding a device to Rhino
 type: guide
-summary: The three edits that add a device, the shape every device follows, and the enum-era code a new instrument still meets.
+summary: The three edits that add a device, the SDK base a new one is written on, the shape the older devices follow, and the enum-era code a new instrument still meets.
 tags: [rhino, devices, cmake, testing]
 sources: []
 updated: 2026-10-05
@@ -13,13 +13,17 @@ updated: 2026-10-05
 
 1. The source under `native/src/devices/instruments/`, `audio/` or `midi/`.
 2. A line in `native/src/devices/CMakeLists.txt`.
-3. An entry in `native/src/devices/DeviceCatalog.cpp`, plus a `createBuiltInType<>()` line in `registerBuiltInTypes`.
+3. An entry in `native/src/devices/DeviceCatalog.cpp` with `.create = factory<YourDevice>()`, which is the device's whole registration.
 
-Then run `cmake -S native -B native/build`: the build never reconfigures itself ([A new source file needs an explicit CMake configure](cmake-does-not-reconfigure.md)). The browser, drop targets, rack menu and `Session::addDevice` read the [Device catalog](device-catalog.md), and `--self-test` checks the device has a browser row and can be added. No enum. If an effect needs `Session` or the UI edited, that is the bug.
+Then run `cmake -S native -B native/build`: the build never reconfigures itself ([A new source file needs an explicit CMake configure](cmake-does-not-reconfigure.md)). The browser, drop targets, rack menu and `Session::addDevice` read the [Device catalog](device-catalog.md). `--self-test` checks the device has a browser row and can be added, and `--device-test` renders it against [the native device standard](native-device-standard.md). No enum. If an effect needs `Session` or the UI edited, that is the bug.
 
-## The shape
+## On the SDK
 
-Start from `audio/UtilityDevice.*` (one parameter) or `audio/RhinoSpaceDevice.*` (six).
+Write a new device on the base in `native/src/devices/sdk/`: derive from `NativeInstrument` or `NativeAudioEffect`, declare each control once as a `Param` member (`Param mix = param("mix", "Mix").range(0.0f, 1.0f).unit(ParamUnit::percent);`), and implement `prepare`, `clear` and `process`, plus the note calls for an instrument and `tailSeconds` for an effect that rings on. The base handles saving, MIDI timing, oversized blocks, all-notes-off, the non-finite guard, latency and tail reporting, which the list below has to do by hand. As of 2026-10-05 no shipping device uses the base yet; the probe devices in `DeviceConformance.cpp` are the smallest examples.
+
+## The older shape
+
+The existing devices are still hand-written on `te::Plugin`. Start from `audio/UtilityDevice.*` (one parameter) or `audio/RhinoSpaceDevice.*` (six) when changing one.
 
 - Derive from `te::Plugin` with `inline static const char* xmlTypeName = "rhino.<name>.v1"`; documents store it, so never rename it. Override `getName`, `getPluginType`, `getVendor`, `getSelectableDescription` and `getBusses`. An instrument adds `isSynth`, `takesMidiInput` and `producesAudioWhenNoAudioInput`; a MIDI effect declares no buses (`midi/RhinoArpDevice.h`).
 - Per parameter: a `juce::CachedValue` with `referTo`, `addParam`, `attachToCurrentValue`; `notifyListenersOfDeletion()` then `detachFromCurrentValue()` in the destructor; `te::copyPropertiesToCachedValues` and `updateFromAttachedValue()` in `restorePluginStateFromValueTree`. This is about eight mentions per parameter; no helper abstracts it (checked 2026-10-03).
@@ -52,3 +56,4 @@ Two older traps are gone as of 2026-10-05: a moved or pasted MIDI clip carries i
 - [Rhino's build targets](rhino-build-targets.md)
 - [Device rack and device editors](device-rack.md)
 - [Writing Rhino tests](writing-rhino-tests.md)
+- [The native device standard](native-device-standard.md)

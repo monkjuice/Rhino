@@ -72,13 +72,14 @@ The catalog of this wiki: every page, grouped by type, one line each (`- [Title]
 - [No track is special for being first](pages/pattern-track.md) — Rhino began as one pattern on one synth track; commit a04b407 retired every rule that singled out the first track, and each track's own chain now records what it plays.
 - [One instrument per track](pages/one-instrument-per-track.md) — A track runs exactly one instrument; a new one replaces the old in place, and nothing may cache an instrument pointer.
 - [The executable is RhinoDAW, not Rhino](pages/executable-named-rhinodaw.md) — The binary is RhinoDAW.exe because NVIDIA's driver profile for Rhinoceros 3D, keyed on Rhino.exe, corrupted the app's Direct2D repaints.
+- [The native device standard](pages/native-device-standard.md) — Rhino's own devices are written on one SDK base and held to one conformance runner, and will save as .rnd device files with generated faces; VST3 stays the format for outside instruments.
 - [Tracktion Engine with a native JUCE UI](pages/tracktion-and-juce.md) — Rhino runs on Tracktion Engine with a hand-built JUCE interface, chosen in September 2026 over a custom engine, Qt Quick, WebView or Tauri.
 
 ## Guides
 
-- [Adding a device to Rhino](pages/adding-a-device.md) — The three edits that add a device, the shape every device follows, and the enum-era code a new instrument still meets.
+- [Adding a device to Rhino](pages/adding-a-device.md) — The three edits that add a device, the SDK base a new one is written on, the shape the older devices follow, and the enum-era code a new instrument still meets.
 - [Build and test Forge](pages/build-and-test-forge.md) — Configure Forge against Rhino's JUCE checkout, build around the toolchain's traps, and run one test area at a time.
-- [Build and test Rhino](pages/build-and-test-rhino.md) — Fetch the pinned engine, build with Visual Studio 2022, and run the five CTest cases without being fooled by a stale or locked build.
+- [Build and test Rhino](pages/build-and-test-rhino.md) — Fetch the pinned engine, build with Visual Studio 2022, and run the six CTest cases without being fooled by a stale or locked build.
 - [Comparing Forge with Serum](pages/comparing-forge-with-serum.md) — Settle "it sounds different in Serum" by capturing and measuring both synths, reading screenshots by pixel, and using Serum's own tables.
 - [Debugging a crash only one project triggers](pages/debugging-a-crashing-project.md) — Turn a project file that crashes Rhino into a ten-second repro, name the faulting module, and bisect the XML against a control.
 - [Development environment and reference material](pages/development-environment.md) — What the Windows development machine offers (shells, CMake, Python, ffmpeg, PDF tools, the reference manuals) and the habits it demands.

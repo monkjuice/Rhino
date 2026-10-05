@@ -9,7 +9,7 @@ The command-line suite deliberately has two layers:
 
 **Anything that renders has to come before `scenarios/GesturesAndPersistence.inc`.** That scenario calls `Session::releaseAudioDevice`, and an offline render attempted afterwards never returns - `RenderTask::runJob` simply never reports `jobHasFinished`, so the symptom is the whole runner timing out rather than a failed assertion. `scenarios/GroupBusRouting.inc` sits where it does for exactly this reason.
 
-**Every scenario shares the runner function's stack frame, so a large local is a stack overflow waiting for the deepest call in the suite.** A `StepGrid` carries about 200 KB of row-addressed note caches, and the third one declared across the scenarios put the runner past the 1 MB Windows stack - the crash landed in the middle of `scenarios/Rendering.inc`, nowhere near the scenario that added the object, and reported only as `SegFault` with exception code `0xC00000FD`. Declare a `StepGrid`, an `Arrangement` or anything else of that size with `std::make_unique` rather than by value. The Windows event log names the exception code, which is what separates this from an ordinary null dereference:
+**Every scenario shares the runner function's stack frame, so a large local is a stack overflow waiting for the deepest call in the suite.** A `StepGrid` carries about 200 KB of row-addressed note caches, and the third one declared across the scenarios put the runner past the 1 MB Windows stack - the crash landed in the middle of `scenarios/Rendering.inc`, nowhere near the scenario that added the object, and reported only as `SegFault` with exception code `0xC00000FD`. Declare a `StepGrid`, an `Arrangement` or anything else of that size with `std::make_unique` rather than by value. `RhinoDAW.exe` has reserved an 8 MB stack since commit `3f6bb4e` (`/STACK:8388608` in `native/CMakeLists.txt`), which is headroom, not permission. The Windows event log names the exception code, which is what separates this from an ordinary null dereference:
 
 ```powershell
 Get-WinEvent -FilterHashtable @{LogName='Application'; ProviderName='Application Error'; StartTime=(Get-Date).AddMinutes(-20)}
@@ -29,6 +29,7 @@ CTest entry points:
 
 - `native_arrangement_geometry`: clip edit bounds and playhead damage calculations
 - `native_device_correctness`: device DSP and state restoration, including Rhino Tune's and Rhino EQ's measured checks in `AutoTuneTest.cpp` and `EqTest.cpp`
+- `native_device_conformance`: every device Rhino makes, rendered offline against the device standard, plus the SDK's own checks through two probe devices (`DeviceConformance.cpp`)
 - `native_pattern_workflow`: notes, presets, automation, renders, and project persistence
 - `native_arrangement_workflow`: browser drops, drawing, editing, tracks, and arrangement persistence
 - `native_startup_lifecycle`: application startup

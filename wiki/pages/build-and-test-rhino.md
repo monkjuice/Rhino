@@ -1,7 +1,7 @@
 ---
 title: Build and test Rhino
 type: guide
-summary: Fetch the pinned engine, build with Visual Studio 2022, and run the five CTest cases without being fooled by a stale or locked build.
+summary: Fetch the pinned engine, build with Visual Studio 2022, and run the six CTest cases without being fooled by a stale or locked build.
 tags: [rhino, build, testing, windows]
 sources: []
 updated: 2026-10-05
@@ -55,13 +55,18 @@ ctest --test-dir native/build -C Release -R native_arrangement_workflow --output
 | --- | --- | --- |
 | `native_arrangement_geometry` | `--arrangement-geometry-test` | 10 s |
 | `native_device_correctness` | `--self-test` | 30 s |
+| `native_device_conformance` | `--device-test` | 120 s |
 | `native_pattern_workflow` | `--pattern-test` | 120 s |
 | `native_arrangement_workflow` | `--arrangement-test` | 120 s |
 | `native_startup_lifecycle` | `--startup-test` | 30 s |
 
-(From `native/CMakeLists.txt`, 2026-10-03, whose comment puts each workflow run at 20-26 s; what each case covers is in
+(From `native/CMakeLists.txt`, 2026-10-05, whose comment puts each workflow run at 20-26 s; what each case covers is in
 `native/src/tests/README.md`.) The generous limit is there to catch a render that never returns
-([Offline renders that never return](renders-that-never-return.md)).
+([Offline renders that never return](renders-that-never-return.md)). The conformance run takes about 3 s and opens no
+audio device ([The native device standard](native-device-standard.md)).
+
+- Run the cases through `ctest`. On 2026-10-05, `Start-Process RhinoDAW.exe --device-test` opened the full app on the
+  user's screen instead of running the check, and the cause was not found.
 
 - An unrecognised flag is not an error. `Application::initialise` takes it for a project path, finds no such file and
   opens the GUI, which waits until killed.

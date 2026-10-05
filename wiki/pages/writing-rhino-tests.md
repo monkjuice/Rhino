@@ -15,7 +15,9 @@ Rhino's tests are compiled into the app and selected by flag ([Build and test Rh
 - **Unit-style checks**, for whatever needs no `Session`, render, desktop peer or pointer sequence. Geometry over pure
   headers such as `ClipGeometry.h` goes in `tests/Arrangement/ClipGeometryTest.cpp` (`--arrangement-geometry-test`, no
   audio device). DSP lives in `src/core` as a plain class driven from `--self-test` (`SelfTest.cpp`, `AutoTuneTest.cpp`,
-  `EqTest.cpp`, `VocoderTest.cpp`).
+  `EqTest.cpp`, `VocoderTest.cpp`). Every device Rhino makes is also rendered by `--device-test`
+  (`DeviceConformance.cpp`) against [the native device standard](native-device-standard.md); a new device gets those
+  checks without writing any.
 - **Workflow scenarios**, for contracts that cross the engine, undo, rendering, persistence or real pointer events.
 
 ## How a scenario works
@@ -73,7 +75,7 @@ as with Forge's `--profile`, because the machine drifts by more than some differ
 Classes under test befriend the runner (`friend int runArrangementTest();` in `Arrangement`, `Session`, `StepGrid`,
 `AudioClipPanel`, `SessionView`; `friend int runUiProfile();` in `Arrangement`, `StepGrid` and `DeviceRack`), one reason
 big classes are split across translation units rather than into new types ([Keeping files small](keeping-files-small.md)).
-The four runner flags, `--arp-snapshot` and `--profile-ui` set `Session::setCommandLineTestMode`: machine
+The four runner flags, `--device-test`, `--arp-snapshot` and `--profile-ui` set `Session::setCommandLineTestMode`: machine
 preferences (browser preview, last track kind) are neither read nor written, and `pickTrackColour` takes the first
 unused colour, so pixel comparisons repeat.
 

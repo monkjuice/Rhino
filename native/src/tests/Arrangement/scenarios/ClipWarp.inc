@@ -158,6 +158,26 @@
     warp.setTempo(120.0);
     require(std::abs(clipLength() - 2.0) < 0.05, "and the clip comes back with the tempo");
 
+    // A Repitch clip follows the tempo by its speed and stays the beats it was:
+    // halving the tempo doubles its seconds exactly as it doubles those of the
+    // clip after it, so the two still meet rather than overlap.
+    {
+        require(warp.importAudioAt(warpSource.getFile(), 1, 2.0).wasOk(), "A second tone lands right after the first");
+        const auto next = warpTrack->getClips().getLast()->itemID;
+        require(warp.setClipWarpMode(warpClip, Session::WarpMode::repitch).wasOk(), "The first is set to Repitch");
+        warp.setTempo(60.0);
+        const auto* first = warp.findAudioClip(warpClip);
+        const auto* second = warp.findAudioClip(next);
+        require(first != nullptr && second != nullptr
+                    && first->getPosition().time.getEnd().inSeconds() <= second->getPosition().time.getStart().inSeconds() + 0.001
+                    && std::abs(first->getPosition().time.getLength().inSeconds() - 4.0) < 0.05,
+                "Halving the tempo doubles a Repitch clip and keeps it clear of the clip after it");
+        warp.setTempo(120.0);
+        require(warp.setClipWarpMode(warpClip, Session::WarpMode::tones).wasOk(), "Back to Tones");
+        warp.deleteClip(next);
+        require(std::abs(clipLength() - 2.0) < 0.05, "and the clip is back at its own length");
+    }
+
     // The clip's own tempo, which is Live's :2 and *2. Saying the loop is
     // twice as fast as Rhino thought means it holds twice as many beats, and
     // twice as many beats need twice the room at the song's tempo - so the

@@ -57,16 +57,16 @@ void Arrangement::filesDropped(const juce::StringArray& files, int x, int y)
         if (status) status("Drop audio on the arrangement lanes.");
         return;
     }
+    std::vector<juce::File> audio;
     for (const auto& path : files)
-    {
-        const auto file = juce::File(path);
-        if (!isSupportedAudioFile(file)) continue;
-        // The lane under the pointer is the lane it lands on. Nudging a drop
-        // off track 0 used to hide that a MIDI lane takes no audio by quietly
-        // using the next lane down instead.
-        const auto result = session.importAudioAt(file, targetTrack, snapped(std::max(0.0, timeAt(static_cast<float>(x))), false));
-        if (result.failed() && status) status(result.getErrorMessage());
-    }
+        if (const auto file = juce::File(path); isSupportedAudioFile(file))
+            audio.push_back(file);
+    // The lane under the pointer is the lane they land on, end to end from
+    // the drop point. Nudging a drop off track 0 used to hide that a MIDI lane
+    // takes no audio by quietly using the next lane down instead.
+    const auto result = session.importAudioFilesAt(audio, targetTrack,
+                                                   snapped(std::max(0.0, timeAt(static_cast<float>(x))), false));
+    if (result.failed() && status) status(result.getErrorMessage());
     fit();
 }
 

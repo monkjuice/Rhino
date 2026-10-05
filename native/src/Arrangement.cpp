@@ -275,7 +275,9 @@ bool Arrangement::keyPressed(const juce::KeyPress& key)
         session.redo();
         return true;
     }
-    if (key.getKeyCode() == juce::KeyPress::leftKey || key.getKeyCode() == juce::KeyPress::rightKey)
+    // Only with a clip to move: otherwise the arrows go on to the window.
+    if ((key.getKeyCode() == juce::KeyPress::leftKey || key.getKeyCode() == juce::KeyPress::rightKey)
+        && session.findClip(selected) != nullptr)
     {
         nudgeSelected(key.getKeyCode() == juce::KeyPress::rightKey ? 1 : -1, key.getModifiers().isShiftDown());
         return true;
@@ -571,8 +573,8 @@ void Arrangement::nudgeSelected(int direction, bool byBar)
 
 void Arrangement::changeListenerCallback(juce::ChangeBroadcaster*)
 {
-    // Playback automation can publish parameter changes every block. Keep the
-    // gesture snapshot stable until the pointer is released.
+    // A change can be announced in the middle of a drag. Keep the gesture
+    // snapshot stable until the pointer is released.
     if (dragging || automationGesture != AutomationGesture::none)
     {
         repaint();

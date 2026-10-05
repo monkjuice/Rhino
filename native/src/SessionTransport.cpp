@@ -87,7 +87,30 @@ juce::Result Session::importAudioAt(const juce::File& file, int trackIndex, doub
     return juce::Result::ok();
 }
 
-juce::Result Session::importAudioInEdit(const juce::File& file, int trackIndex, double startSeconds)
+// Imported one at a time at the drop point, each file made room for itself by
+// trimming away the one before, and only the last of a multi-file drop was left.
+juce::Result Session::importAudioFilesAt(const std::vector<juce::File>& files, int trackIndex, double startSeconds)
+{
+    if (files.empty())
+        return juce::Result::fail("Drop an audio file.");
+    auto& undoManager = edit->getUndoManager();
+    undoManager.beginNewTransaction(files.size() > 1 ? "Import audio files" : "Import audio");
+    auto next = startSeconds;
+    for (const auto& file : files)
+        if (const auto imported = importAudioInEdit(file, trackIndex, next, &next); imported.failed())
+        {
+            undoManager.undoCurrentTransactionOnly();
+            undoManager.beginNewTransaction();
+            return files.size() > 1 ? juce::Result::fail(file.getFileName() + ": " + imported.getErrorMessage())
+                                    : imported;
+        }
+    undoManager.beginNewTransaction();
+    markModified();
+    sendSynchronousChangeMessage();
+    return juce::Result::ok();
+}
+
+juce::Result Session::importAudioInEdit(const juce::File& file, int trackIndex, double startSeconds, double* endSeconds)
 {
     jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
     if (!std::isfinite(startSeconds) || startSeconds < 0.0)
@@ -117,6 +140,8 @@ juce::Result Session::importAudioInEdit(const juce::File& file, int trackIndex, 
         return juce::Result::fail("The audio clip could not be added.");
     makeRoomForClip(*clip);
     refreshLoop();
+    if (endSeconds != nullptr)
+        *endSeconds = clip->getPosition().time.getEnd().inSeconds();
     return juce::Result::ok();
 }
 

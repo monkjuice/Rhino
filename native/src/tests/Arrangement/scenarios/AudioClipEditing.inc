@@ -50,6 +50,13 @@
         require(close(clip->getPosition().time.getStart().inSeconds(), 0.125), "Right arrow nudges selected audio by one sixteenth");
         session.undo();
         require(close(clip->getPosition().time.getStart().inSeconds(), 0.0), "Undo restores nudge");
+        // With nothing selected the arrows are not the arrangement's to keep:
+        // they go on to the window rather than being swallowed doing nothing.
+        view.setSelection({}, {});
+        require(!view.keyPressed(juce::KeyPress(juce::KeyPress::rightKey))
+                    && !view.keyPressed(juce::KeyPress(juce::KeyPress::leftKey)),
+                "The arrows with nothing selected are left for the window");
+        view.setSelection({id}, id);
         view.gridSettings.fixedDivision = GridDivision::eighth;
         view.keyPressed(juce::KeyPress(juce::KeyPress::rightKey));
         require(close(clip->getPosition().time.getStart().inSeconds(), 0.25), "Right arrow follows the selected one-eighth snap grid");
@@ -251,3 +258,26 @@
         session.undo();
         require(te::getAudioTracks(*session.edit)[1]->getClips().size() == 1, "Undo restores dropped audio import");
         require(session.trackCount() == 4, "An import onto a free starter lane creates no track");
+        // Several files dropped together land end to end from the drop point,
+        // and one undo takes the whole drop back. Imported one by one at the
+        // same point, each trimmed away the one before it.
+        {
+            auto* audioLane = te::getAudioTracks(*session.edit)[1];
+            std::vector<te::EditItemID> existing;
+            for (auto* clip : audioLane->getClips())
+                existing.push_back(clip->itemID);
+            juce::StringArray several;
+            several.add(source.getFile().getFullPathName());
+            several.add(source.getFile().getFullPathName());
+            view.filesDropped(several, static_cast<int>(view.xFor(1.0)), static_cast<int>(audioLaneY));
+            std::vector<double> landed;
+            for (auto* clip : audioLane->getClips())
+                if (std::find(existing.begin(), existing.end(), clip->itemID) == existing.end())
+                    landed.push_back(clip->getPosition().time.getStart().inSeconds());
+            std::sort(landed.begin(), landed.end());
+            require(landed.size() == 2 && close(landed[1] - landed[0], 1.0),
+                    "Two files dropped together both land, the second where the first ends");
+            session.undo();
+            require(static_cast<size_t>(audioLane->getClips().size()) == existing.size(),
+                    "One undo takes the whole drop back");
+        }

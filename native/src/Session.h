@@ -163,6 +163,10 @@ public:
     juce::ListenerList<Listener> listeners;
     juce::Result importAudio(const juce::File&);
     juce::Result importAudioAt(const juce::File&, int track, double startSeconds);
+    // Files dropped together, laid end to end on one lane from startSeconds
+    // in the order given, as one undo step. Should any of them fail, none of
+    // them lands.
+    juce::Result importAudioFilesAt(const std::vector<juce::File>&, int track, double startSeconds);
     juce::Result importBuiltInSample(BuiltInSample, int track = 1, double startSeconds = -1.0);
     // Auditioning a library sound. The preview is mixed alongside the edit
     // rather than routed through it, so it chooses no track, opens no undo
@@ -950,7 +954,7 @@ private:
                                 bool& changed);
     // SessionTransport.cpp - an import without a transaction, so importAudio
     // can add the lane it lands on in the same undo step.
-    juce::Result importAudioInEdit(const juce::File&, int track, double startSeconds);
+    juce::Result importAudioInEdit(const juce::File&, int track, double startSeconds, double* endSeconds = nullptr);
     // SessionRegion.cpp - the region edit itself, without a transaction or a
     // notification, so paste can clear and insert inside one undo step.
     bool clearClipRegionInEdit(double startSeconds, double endSeconds, int firstTrack, int lastTrack,

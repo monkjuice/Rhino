@@ -173,3 +173,8 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/adding-a-device.md (the factory is the whole registration; new devices are written on the SDK; the hand-written shape is the older one)
 - updated: pages/build-and-test-rhino.md, pages/writing-rhino-tests.md (six CTest cases with native_device_conformance; run the cases through ctest)
 - updated: index.md (the new decision and two summaries)
+
+## [2026-10-05] update | Utility and Rhino Space move onto the device SDK
+- updated: pages/native-device-standard.md (both devices on the base, proved byte-identical to the hand-written versions over 16 renders; per-block cost before and after; the remaining steps)
+- updated: pages/adding-a-device.md (start a new device from Utility or Space; Bloom is the closest hand-written one)
+- updated: pages/built-in-devices.md (which devices are on the SDK; how Utility declares its pass-through bus and smooths its gain)

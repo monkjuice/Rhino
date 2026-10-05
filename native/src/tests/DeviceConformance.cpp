@@ -52,6 +52,8 @@ public:
     Param glide = param("glide", "Glide").range(0.0f, 1.0f).defaultValue(0.5f)
                       .unit(ParamUnit::percent).smoothing(0.01f);
     Param poison = param("poison", "Poison").toggle();
+    Param cutoff = param("cutoff", "Cutoff").range(20.0f, 20000.0f).defaultValue(1000.0f)
+                       .skewAround(1000.0f).unit(ParamUnit::hertz);
 
     // What the device was asked to do, read back by the checks.
     std::vector<int> stretches;
@@ -149,8 +151,8 @@ void checkProbeDeclarations(te::Edit& edit)
 
     // One declaration is the engine parameter, in declaration order.
     const auto parameters = device.getAutomatableParameters();
-    require(parameters.size() == 5 && device.parameterCount() == 5, "Five controls declared, five engine parameters");
-    const juce::StringArray ids { "gain", "mode", "bypass", "glide", "poison" };
+    require(parameters.size() == 6 && device.parameterCount() == 6, "Six controls declared, six engine parameters");
+    const juce::StringArray ids { "gain", "mode", "bypass", "glide", "poison", "cutoff" };
     for (int i = 0; i < ids.size(); ++i)
         require(parameters[i]->paramID == ids[i] && device.parameterSpec(i).id == ids[i],
                 "Engine parameters keep declaration order");
@@ -170,6 +172,14 @@ void checkProbeDeclarations(te::Edit& edit)
     require(!device.gain.automatable().isDiscrete(), "A continuous control is not discrete");
     require(device.gain.automatable().getDefaultValue() == std::optional<float>(-6.0f),
             "The engine knows a control's default");
+
+    // A knob's travel is linear unless a skew is declared, even for a range
+    // that straddles zero; and a declared skew puts its centre mid-travel.
+    require(near(device.gain.automatable().valueRange.convertTo0to1(-24.0f), 0.5f),
+            "A control that declares no skew moves linearly across zero");
+    require(near(device.cutoff.automatable().valueRange.convertTo0to1(1000.0f), 0.5f, 1.0e-4f)
+                && device.cutoff.automatable().getCurrentValueAsString() == "1.00 kHz",
+            "A skewed control puts its declared centre in the middle of its travel");
 
     // Typed readings parse back through the unit.
     require(near(device.gain.spec().parse("3 dB"), 3.0f) && near(device.glide.spec().parse("25%"), 0.25f)

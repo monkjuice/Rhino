@@ -1,22 +1,16 @@
 #pragma once
-#include <tracktion_engine/tracktion_engine.h>
+#include "sdk/NativeDevice.h"
 
 namespace rhino
 {
-namespace te = tracktion::engine;
-
-// Stable device and parameter IDs are persisted by Tracktion's edit model.
-class UtilityDevice final : public te::Plugin
+// The gain trim every track carries as its channel strip. Stable device and
+// parameter ids are persisted by Tracktion's edit model.
+class UtilityDevice final : public NativeAudioEffect
 {
 public:
     inline static const char* xmlTypeName = "rhino.utility.v1";
-    static const char* getPluginName() { return "Utility"; }
-    explicit UtilityDevice(te::PluginCreationInfo);
-    ~UtilityDevice() override;
-    juce::String getName() const override { return getPluginName(); }
-    juce::String getPluginType() override { return xmlTypeName; }
-    juce::String getVendor() override { return "Rhino"; }
-    juce::String getSelectableDescription() override { return getName(); }
+    explicit UtilityDevice(te::PluginCreationInfo info) : NativeAudioEffect(std::move(info), xmlTypeName) {}
+
     BusLayout getBusses() const override { return BusLayout::singlePassThrough(); }
     // A gain stage passes out exactly what it was handed. Saying so matters:
     // the engine's default answer is "however many channels I have names for",
@@ -27,15 +21,16 @@ public:
     // being mono - so an honest answer here is what keeps a mono recording
     // from playing out of the left side alone.
     int getNumOutputChannelsGivenInputs(int numInputChannels) override { return numInputChannels; }
-    void initialise(const te::PluginInitialisationInfo&) override;
-    void deinitialise() override {}
-    void applyToBuffer(const te::PluginRenderContext&) override;
-    void restorePluginStateFromValueTree(const juce::ValueTree&) override;
-    te::AutomatableParameter& gain() { return *gainParameter; }
+    te::AutomatableParameter& gain() { return gainDb.automatable(); }
 
 private:
-    juce::CachedValue<float> gainDb;
-    te::AutomatableParameter::Ptr gainParameter;
+    void prepare(double newRate, int maximumBlockSize) override;
+    void clear() override;
+    void process(RenderBlock&) override;
+
+    Param gainDb = param("gainDb", "Gain").range(-60.0f, 6.0f).defaultValue(0.0f).unit(ParamUnit::decibels);
+    // Smoothed as a gain rather than in decibels, so a block costs one
+    // conversion instead of one per sample.
     juce::SmoothedValue<float> amplitude;
 };
 }

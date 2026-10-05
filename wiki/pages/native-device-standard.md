@@ -46,13 +46,16 @@ Rejected:
 
 ## State on 2026-10-05
 
-The base, the factories and the runner exist. No shipping device is written on the base yet, and all eight devices with a factory pass the runner, so `pending` is empty. The plan, one step per commit:
+The base, the factories and the runner exist, and all eight devices with a factory pass the runner, so `pending` is empty.
 
-1. Move Utility and Rhino Space onto the base.
-2. Add the generated face.
-3. Build a new synth on the base, with no `Session` special case.
-4. Add `.rnd` files with factory presets.
-5. Move the remaining devices.
+Utility and Rhino Space are written on the base. Each device's output was dumped for one fixed input at its defaults and at three random settings, in normal and in oversized blocks, and compared byte for byte with the hand-written versions: all 16 renders were identical. Per 512-sample block, Utility costs about 1.45 µs against 1.53 µs before, guard and meter included, and Space about 55.8 µs against 57.2 µs.
+
+Still to do, one step per commit:
+
+1. Add the generated face.
+2. Build a new synth on the base, with no `Session` special case.
+3. Add `.rnd` files with factory presets.
+4. Move the remaining devices.
 
 ## Consequences
 

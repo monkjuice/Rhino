@@ -27,11 +27,13 @@ Every device in the [Device catalog](device-catalog.md) on 2026-10-05. Rhino's o
 
 Rhino Wave, the first built-in synth (a morphing wavetable instrument), was removed on 2026-10-05. Its replacement is to be a new catalog-only synth that needs no special case in `Session`.
 
+Utility and Rhino Space are written on the device SDK, and the rest are hand-written on `te::Plugin` ([The native device standard](native-device-standard.md)). Every device with a catalog factory is held to the same checks by `--device-test`.
+
 ## Utility
 
 `rhino.utility.v1` has one parameter, `gainDb` (-60 to +6 dB), behind a 5 ms smoother. Every ordinary track gets one when it is made (a group bus does not), and the catalog flags it `infrastructure`, so the Device View hides it. Since commit `23de20c` it is not `browsable` either: a dropped Utility found the track's own, added nothing visible and appeared to do nothing. It is deliberately not the track fader; that is the engine's Volume & Pan ([Mixer](mixer.md)).
 
-Declaring `singlePassThrough` was not enough: it also overrides `getNumOutputChannelsGivenInputs` to return what it was given. The engine's default answer is two, which widened a mono take to stereo with the second channel never written, so a one-input recording played from the left speaker only ([Recording and the count-in](recording.md)).
+On the SDK it overrides `getBusses` with `singlePassThrough`, and the gain is smoothed as a gain rather than in decibels, so a block costs one conversion rather than one per sample. Declaring `singlePassThrough` was not enough: it also overrides `getNumOutputChannelsGivenInputs` to return what it was given. The engine's default answer is two, which widened a mono take to stereo with the second channel never written, so a one-input recording played from the left speaker only ([Recording and the count-in](recording.md)).
 
 ## Rhino Drums
 

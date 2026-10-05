@@ -4,114 +4,62 @@
 
 namespace rhino
 {
-RhinoSpaceDevice::RhinoSpaceDevice(te::PluginCreationInfo info) : Plugin(info)
+void RhinoSpaceDevice::prepare(double newRate, int maximumBlockSize)
 {
-    mix.referTo(state, "mix", getUndoManager(), 0.35f);
-    size.referTo(state, "size", getUndoManager(), 0.55f);
-    smear.referTo(state, "smear", getUndoManager(), 0.32f);
-    drive.referTo(state, "drive", getUndoManager(), 0.12f);
-    width.referTo(state, "width", getUndoManager(), 1.15f);
-    outputDb.referTo(state, "outputDb", getUndoManager(), 0.0f);
-
-    mixParam = addParam("mix", "Mix", {0.0f, 1.0f});
-    sizeParam = addParam("size", "Size", {0.0f, 1.0f});
-    smearParam = addParam("smear", "Smear", {0.0f, 0.95f});
-    driveParam = addParam("drive", "Drive", {0.0f, 1.0f});
-    widthParam = addParam("width", "Width", {0.0f, 2.0f});
-    outputParam = addParam("outputDb", "Output", {-24.0f, 12.0f});
-
-    mixParam->attachToCurrentValue(mix);
-    sizeParam->attachToCurrentValue(size);
-    smearParam->attachToCurrentValue(smear);
-    driveParam->attachToCurrentValue(drive);
-    widthParam->attachToCurrentValue(width);
-    outputParam->attachToCurrentValue(outputDb);
-
-    mixParam->valueToStringFunction = [] (float v) { return juce::String(juce::roundToInt(v * 100.0f)) + "%"; };
-    sizeParam->valueToStringFunction = [] (float v) { return juce::String(juce::roundToInt(v * 100.0f)) + "%"; };
-    smearParam->valueToStringFunction = [] (float v) { return juce::String(juce::roundToInt(v * 100.0f)) + "%"; };
-    driveParam->valueToStringFunction = [] (float v) { return juce::String(juce::roundToInt(v * 100.0f)) + "%"; };
-    widthParam->valueToStringFunction = [] (float v) { return juce::String(v, 2) + "x"; };
-    outputParam->valueToStringFunction = [] (float v) { return juce::String(v, 1) + " dB"; };
+    rate = newRate;
+    const auto delaySamples = static_cast<size_t>(std::max(1, static_cast<int>(rate * 2.0)));
+    delayL.assign(delaySamples, 0.0f);
+    delayR.assign(delaySamples, 0.0f);
+    // The base never hands over more than this at once, so the dry copy
+    // never has to grow on the audio thread.
+    dryL.assign(static_cast<size_t>(maximumBlockSize), 0.0f);
+    dryR.assign(static_cast<size_t>(maximumBlockSize), 0.0f);
+    reverb.setSampleRate(rate);
 }
 
-RhinoSpaceDevice::~RhinoSpaceDevice()
-{
-    notifyListenersOfDeletion();
-    mixParam->detachFromCurrentValue();
-    sizeParam->detachFromCurrentValue();
-    smearParam->detachFromCurrentValue();
-    driveParam->detachFromCurrentValue();
-    widthParam->detachFromCurrentValue();
-    outputParam->detachFromCurrentValue();
-}
-
-void RhinoSpaceDevice::initialise(const te::PluginInitialisationInfo& info)
-{
-    sampleRate = info.sampleRate > 0.0 ? info.sampleRate : 48000.0;
-    const auto delaySamples = std::max(1, static_cast<int>(sampleRate * 2.0));
-    delayL.assign(static_cast<size_t>(delaySamples), 0.0f);
-    delayR.assign(static_cast<size_t>(delaySamples), 0.0f);
-    dryL.assign(static_cast<size_t>(std::max(1, info.blockSizeSamples)), 0.0f);
-    dryR.assign(static_cast<size_t>(std::max(1, info.blockSizeSamples)), 0.0f);
-    writeIndex = 0;
-    smoothedDelaySamples = static_cast<float>(juce::jlimit(1, delaySamples - 1,
-        static_cast<int>((0.045f + std::clamp(sizeParam->getCurrentValue(), 0.0f, 1.0f) * 0.72f) * static_cast<float>(sampleRate))));
-    reverb.setSampleRate(sampleRate);
-    reset();
-}
-
-void RhinoSpaceDevice::reset()
+void RhinoSpaceDevice::clear()
 {
     std::fill(delayL.begin(), delayL.end(), 0.0f);
     std::fill(delayR.begin(), delayR.end(), 0.0f);
     writeIndex = 0;
-    if (delayL.size() > 2)
-        smoothedDelaySamples = static_cast<float>(juce::jlimit(1, static_cast<int>(delayL.size()) - 1,
-            static_cast<int>((0.045f + std::clamp(sizeParam->getCurrentValue(), 0.0f, 1.0f) * 0.72f) * static_cast<float>(sampleRate))));
-    else
-        smoothedDelaySamples = 1.0f;
+    smoothedDelaySamples = delayL.size() > 2 ? delayFor(size.value()) : 1.0f;
     reverb.reset();
 }
 
-void RhinoSpaceDevice::applyToBuffer(const te::PluginRenderContext& context)
+float RhinoSpaceDevice::delayFor(float room) const
 {
-    if (context.destBuffer == nullptr || context.bufferNumSamples == 0 || delayL.empty() || delayR.empty()
-        || dryL.empty() || context.destBuffer->getNumChannels() == 0)
-        return;
-
-    SCOPED_REALTIME_CHECK
-    // A block may be bigger than the one initialise was told about. The dry
-    // copy is sized for that one, so a bigger block is worked through in
-    // pieces of that size rather than growing the copy on the audio thread.
-    const auto chunk = static_cast<int>(dryL.size());
-    for (int done = 0; done < context.bufferNumSamples; done += chunk)
-        process(*context.destBuffer, context.bufferStartSample + done,
-                std::min(chunk, context.bufferNumSamples - done));
+    return static_cast<float>(juce::jlimit(1, static_cast<int>(delayL.size()) - 1,
+                                           static_cast<int>((0.045 + std::clamp(room, 0.0f, 1.0f) * 0.72) * rate)));
 }
 
 // The echo's repeats until they are 60 dB down, plus the reverb's own decay.
 // Read on the message thread from the settings as they stand.
-double RhinoSpaceDevice::getTailLength() const
+double RhinoSpaceDevice::tailSeconds() const
 {
-    const auto room = std::clamp(sizeParam->getCurrentValue(), 0.0f, 1.0f);
-    const auto feedback = std::clamp(static_cast<double>(smearParam->getCurrentValue()), 0.01, 0.95);
+    const auto room = std::clamp(size.value(), 0.0f, 1.0f);
+    const auto feedback = std::clamp(static_cast<double>(smear.value()), 0.01, 0.95);
     const auto delaySeconds = 0.045 + room * 0.72;
     const auto repeats = std::log(0.001) / std::log(feedback);
     return std::min(30.0, delaySeconds * repeats + 4.0);
 }
 
-void RhinoSpaceDevice::process(juce::AudioBuffer<float>& buffer, int startSample, int numSamples)
+void RhinoSpaceDevice::process(RenderBlock& block)
 {
-    const auto channels = buffer.getNumChannels();
-    const auto wetMix = std::clamp(mixParam->getCurrentValue(), 0.0f, 1.0f);
-    const auto room = std::clamp(sizeParam->getCurrentValue(), 0.0f, 1.0f);
-    const auto feedback = std::clamp(smearParam->getCurrentValue(), 0.0f, 0.95f);
-    const auto driveAmount = 1.0f + std::clamp(driveParam->getCurrentValue(), 0.0f, 1.0f) * 8.0f;
-    const auto stereoWidth = std::clamp(widthParam->getCurrentValue(), 0.0f, 2.0f);
-    const auto output = juce::Decibels::decibelsToGain(outputParam->getCurrentValue());
-    const auto targetDelaySamples = static_cast<float>(juce::jlimit(1, static_cast<int>(delayL.size()) - 1,
-        static_cast<int>((0.045 + room * 0.72) * sampleRate)));
+    if (block.numChannels == 0)
+        return;
+    const auto channels = block.numChannels;
+    const auto numSamples = block.numSamples;
+    auto* left = block.channels[0];
+    auto* right = channels > 1 ? block.channels[1] : left;
+    const auto wetMix = std::clamp(mix.value(), 0.0f, 1.0f);
+    const auto room = std::clamp(size.value(), 0.0f, 1.0f);
+    const auto feedback = std::clamp(smear.value(), 0.0f, 0.95f);
+    const auto driveAmount = 1.0f + std::clamp(drive.value(), 0.0f, 1.0f) * 8.0f;
+    const auto driveScale = std::tanh(driveAmount);
+    const auto stereoWidth = std::clamp(width.value(), 0.0f, 2.0f);
+    const auto output = juce::Decibels::decibelsToGain(outputDb.value());
+    const auto targetDelaySamples = delayFor(room);
+    const auto length = static_cast<int>(delayL.size());
 
     juce::Reverb::Parameters params;
     params.roomSize = room;
@@ -124,66 +72,49 @@ void RhinoSpaceDevice::process(juce::AudioBuffer<float>& buffer, int startSample
 
     for (int i = 0; i < numSamples; ++i)
     {
-        const auto frame = startSample + i;
-        const auto inL = buffer.getSample(0, frame);
-        const auto inR = channels > 1 ? buffer.getSample(1, frame) : inL;
+        const auto inL = left[i];
+        const auto inR = channels > 1 ? right[i] : inL;
         dryL[static_cast<size_t>(i)] = inL;
         dryR[static_cast<size_t>(i)] = inR;
 
         smoothedDelaySamples += (targetDelaySamples - smoothedDelaySamples) * 0.0015f;
-        smoothedDelaySamples = juce::jlimit(1.0f, static_cast<float>(delayL.size() - 2), smoothedDelaySamples);
+        smoothedDelaySamples = juce::jlimit(1.0f, static_cast<float>(length - 2), smoothedDelaySamples);
         auto readPosition = static_cast<float>(writeIndex) - smoothedDelaySamples;
         while (readPosition < 0.0f)
-            readPosition += static_cast<float>(delayL.size());
-        const auto readIndex0 = static_cast<int>(readPosition) % static_cast<int>(delayL.size());
-        const auto readIndex1 = (readIndex0 + 1) % static_cast<int>(delayL.size());
+            readPosition += static_cast<float>(length);
+        const auto readIndex0 = static_cast<int>(readPosition) % length;
+        const auto readIndex1 = (readIndex0 + 1) % length;
         const auto fraction = readPosition - std::floor(readPosition);
         const auto delayedL = delayL[static_cast<size_t>(readIndex0)]
             + (delayL[static_cast<size_t>(readIndex1)] - delayL[static_cast<size_t>(readIndex0)]) * fraction;
         const auto delayedR = delayR[static_cast<size_t>(readIndex0)]
             + (delayR[static_cast<size_t>(readIndex1)] - delayR[static_cast<size_t>(readIndex0)]) * fraction;
-        const auto drivenL = std::tanh((inL + delayedR * 0.18f) * driveAmount) / std::tanh(driveAmount);
-        const auto drivenR = std::tanh((inR + delayedL * 0.18f) * driveAmount) / std::tanh(driveAmount);
+        const auto drivenL = std::tanh((inL + delayedR * 0.18f) * driveAmount) / driveScale;
+        const auto drivenR = std::tanh((inR + delayedL * 0.18f) * driveAmount) / driveScale;
         delayL[static_cast<size_t>(writeIndex)] = std::clamp(drivenL + delayedL * feedback, -1.5f, 1.5f);
         delayR[static_cast<size_t>(writeIndex)] = std::clamp(drivenR + delayedR * feedback, -1.5f, 1.5f);
-        writeIndex = (writeIndex + 1) % static_cast<int>(delayL.size());
+        writeIndex = (writeIndex + 1) % length;
 
-        buffer.setSample(0, frame, delayedL);
+        left[i] = delayedL;
         if (channels > 1)
-            buffer.setSample(1, frame, delayedR);
+            right[i] = delayedR;
     }
 
-    auto* left = buffer.getWritePointer(0, startSample);
-    auto* right = channels > 1 ? buffer.getWritePointer(1, startSample) : left;
     reverb.processStereo(left, right, numSamples);
 
     for (int i = 0; i < numSamples; ++i)
     {
-        const auto frame = startSample + i;
-        auto wetL = buffer.getSample(0, frame);
-        auto wetR = channels > 1 ? buffer.getSample(1, frame) : wetL;
+        auto wetL = left[i];
+        auto wetR = channels > 1 ? right[i] : wetL;
         const auto mid = (wetL + wetR) * 0.5f;
         const auto side = (wetL - wetR) * 0.5f * stereoWidth;
         wetL = mid + side;
         wetR = mid - side;
         // Not clamped: the chain is floating point, and a hard limit here
         // would square off a hot track before its fader could bring it down.
-        const auto outL = (dryL[static_cast<size_t>(i)] * (1.0f - wetMix) + wetL * wetMix) * output;
-        const auto outR = (dryR[static_cast<size_t>(i)] * (1.0f - wetMix) + wetR * wetMix) * output;
-        buffer.setSample(0, frame, outL);
+        left[i] = (dryL[static_cast<size_t>(i)] * (1.0f - wetMix) + wetL * wetMix) * output;
         if (channels > 1)
-            buffer.setSample(1, frame, outR);
+            right[i] = (dryR[static_cast<size_t>(i)] * (1.0f - wetMix) + wetR * wetMix) * output;
     }
-}
-
-void RhinoSpaceDevice::restorePluginStateFromValueTree(const juce::ValueTree& source)
-{
-    te::copyPropertiesToCachedValues(source, mix, size, smear, drive, width, outputDb);
-    mixParam->updateFromAttachedValue();
-    sizeParam->updateFromAttachedValue();
-    smearParam->updateFromAttachedValue();
-    driveParam->updateFromAttachedValue();
-    widthParam->updateFromAttachedValue();
-    outputParam->updateFromAttachedValue();
 }
 }

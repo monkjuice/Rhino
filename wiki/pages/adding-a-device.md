@@ -19,11 +19,11 @@ Then run `cmake -S native -B native/build`: the build never reconfigures itself 
 
 ## On the SDK
 
-Write a new device on the base in `native/src/devices/sdk/`: derive from `NativeInstrument` or `NativeAudioEffect`, declare each control once as a `Param` member (`Param mix = param("mix", "Mix").range(0.0f, 1.0f).unit(ParamUnit::percent);`), and implement `prepare`, `clear` and `process`, plus the note calls for an instrument and `tailSeconds` for an effect that rings on. The base handles saving, MIDI timing, oversized blocks, all-notes-off, the non-finite guard, latency and tail reporting, which the list below has to do by hand. As of 2026-10-05 no shipping device uses the base yet; the probe devices in `DeviceConformance.cpp` are the smallest examples.
+Write a new device on the base in `native/src/devices/sdk/`: derive from `NativeInstrument` or `NativeAudioEffect`, declare each control once as a `Param` member (`Param mix = param("mix", "Mix").range(0.0f, 1.0f).unit(ParamUnit::percent);`), and implement `prepare`, `clear` and `process`, plus the note calls for an instrument and `tailSeconds` for an effect that rings on. The base handles saving, MIDI timing, oversized blocks, all-notes-off, the non-finite guard, latency and tail reporting, which the list below has to do by hand. Start from `audio/UtilityDevice.*` (one control) or `audio/RhinoSpaceDevice.*` (six, with a tail); the probe devices in `native/src/tests/DeviceConformance.cpp` show an instrument's note calls.
 
 ## The older shape
 
-The existing devices are still hand-written on `te::Plugin`. Start from `audio/UtilityDevice.*` (one parameter) or `audio/RhinoSpaceDevice.*` (six) when changing one.
+The other devices are still hand-written on `te::Plugin`, and this is what changing one involves. Rhino Bloom (`audio/RhinoBloomDevice.*`) is the closest to Space.
 
 - Derive from `te::Plugin` with `inline static const char* xmlTypeName = "rhino.<name>.v1"`; documents store it, so never rename it. Override `getName`, `getPluginType`, `getVendor`, `getSelectableDescription` and `getBusses`. An instrument adds `isSynth`, `takesMidiInput` and `producesAudioWhenNoAudioInput`; a MIDI effect declares no buses (`midi/RhinoArpDevice.h`).
 - Per parameter: a `juce::CachedValue` with `referTo`, `addParam`, `attachToCurrentValue`; `notifyListenersOfDeletion()` then `detachFromCurrentValue()` in the destructor; `te::copyPropertiesToCachedValues` and `updateFromAttachedValue()` in `restorePluginStateFromValueTree`. This is about eight mentions per parameter; no helper abstracts it (checked 2026-10-03).

@@ -1,38 +1,35 @@
 #pragma once
-#include <tracktion_engine/tracktion_engine.h>
+#include "sdk/NativeDevice.h"
 #include <vector>
 
 namespace rhino
 {
-namespace te = tracktion::engine;
-
-class RhinoSpaceDevice final : public te::Plugin
+// A floating multi-effect: a driven, cross-fed echo into a reverb, widened.
+class RhinoSpaceDevice final : public NativeAudioEffect
 {
 public:
     inline static const char* xmlTypeName = "rhino.space.v1";
-    static const char* getPluginName() { return "Rhino Space"; }
-    explicit RhinoSpaceDevice(te::PluginCreationInfo);
-    ~RhinoSpaceDevice() override;
-    juce::String getName() const override { return getPluginName(); }
-    juce::String getPluginType() override { return xmlTypeName; }
-    juce::String getVendor() override { return "Rhino"; }
-    juce::String getSelectableDescription() override { return getName(); }
-    BusLayout getBusses() const override { return BusLayout::singleStereoInOut(); }
-    void initialise(const te::PluginInitialisationInfo&) override;
-    void deinitialise() override {}
-    void reset() override;
-    void applyToBuffer(const te::PluginRenderContext&) override;
-    void restorePluginStateFromValueTree(const juce::ValueTree&) override;
-    double getTailLength() const override;
+    explicit RhinoSpaceDevice(te::PluginCreationInfo info) : NativeAudioEffect(std::move(info), xmlTypeName) {}
 
 private:
-    // One stretch of a block, no longer than the dry copy initialise sized.
-    void process(juce::AudioBuffer<float>&, int startSample, int numSamples);
-    juce::CachedValue<float> mix, size, smear, drive, width, outputDb;
-    te::AutomatableParameter::Ptr mixParam, sizeParam, smearParam, driveParam, widthParam, outputParam;
+    void prepare(double newRate, int maximumBlockSize) override;
+    void clear() override;
+    void process(RenderBlock&) override;
+    double tailSeconds() const override;
+    // The echo's length in samples for a room size, inside the delay line.
+    float delayFor(float room) const;
+
+    // Automation addresses these by position, so append, never reorder.
+    Param mix = param("mix", "Mix").range(0.0f, 1.0f).defaultValue(0.35f).unit(ParamUnit::percent);
+    Param size = param("size", "Size").range(0.0f, 1.0f).defaultValue(0.55f).unit(ParamUnit::percent);
+    Param smear = param("smear", "Smear").range(0.0f, 0.95f).defaultValue(0.32f).unit(ParamUnit::percent);
+    Param drive = param("drive", "Drive").range(0.0f, 1.0f).defaultValue(0.12f).unit(ParamUnit::percent);
+    Param width = param("width", "Width").range(0.0f, 2.0f).defaultValue(1.15f).unit(ParamUnit::ratio);
+    Param outputDb = param("outputDb", "Output").range(-24.0f, 12.0f).defaultValue(0.0f).unit(ParamUnit::decibels);
+
     juce::Reverb reverb;
     std::vector<float> delayL, delayR, dryL, dryR;
-    double sampleRate = 48000.0;
+    double rate = 48000.0;
     int writeIndex = 0;
     float smoothedDelaySamples = 1.0f;
 };

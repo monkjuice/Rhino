@@ -1,6 +1,7 @@
 #pragma once
 #include <tracktion_engine/tracktion_engine.h>
 #include <functional>
+#include <optional>
 
 namespace rhino
 {
@@ -36,8 +37,9 @@ struct ParamSpec
     float defaultValue = 0.0f;
     // The step between values; 0 is continuous.
     float interval = 0.0f;
-    // The value at the middle of a knob's travel; 0 keeps the travel linear.
-    float skewCentre = 0.0f;
+    // The value at the middle of a knob's travel. Unset keeps the travel
+    // linear; zero cannot mean that, since many ranges straddle it.
+    std::optional<float> skewCentre;
     ParamUnit unit = ParamUnit::none;
     // A chooser when not empty. Its values are 0 to choices.size() - 1, and
     // the list is append-only: a saved value is a position in it.

@@ -1,6 +1,8 @@
 #include "sdk/NativeDevice.h"
 #include <algorithm>
+#include <bit>
 #include <cmath>
+#include <cstdint>
 
 namespace rhino
 {
@@ -9,8 +11,8 @@ namespace
 juce::NormalisableRange<float> rangeFor(const ParamSpec& spec)
 {
     juce::NormalisableRange<float> range(spec.minimum, spec.maximum, spec.interval);
-    if (spec.skewCentre > spec.minimum && spec.skewCentre < spec.maximum)
-        range.setSkewForCentre(spec.skewCentre);
+    if (spec.skewCentre.has_value() && *spec.skewCentre > spec.minimum && *spec.skewCentre < spec.maximum)
+        range.setSkewForCentre(*spec.skewCentre);
     return range;
 }
 
@@ -231,28 +233,25 @@ void NativeDevice::applyToBuffer(const te::PluginRenderContext& context)
     // silence and its state is cleared, so the next block starts clean. A
     // finite signal is passed on untouched, however loud: the chain is
     // floating point and the fader after this decides the level.
-    auto loudest = 0.0f;
-    auto broken = false;
-    for (int channel = 0; channel < channels && !broken; ++channel)
+    //
+    // Both questions are one pass over the bit patterns, without a branch: a
+    // float's magnitude orders the same way as its bits once the sign is
+    // masked off, and everything from the infinity pattern up is non-finite.
+    constexpr std::uint32_t magnitude = 0x7fffffffu, infinity = 0x7f800000u;
+    std::uint32_t loudest = 0;
+    for (int channel = 0; channel < channels; ++channel)
     {
         const auto* samples = buffer.getReadPointer(channel, context.bufferStartSample);
         for (int i = 0; i < total; ++i)
-        {
-            if (!std::isfinite(samples[i]))
-            {
-                broken = true;
-                break;
-            }
-            loudest = std::max(loudest, std::abs(samples[i]));
-        }
+            loudest = std::max(loudest, std::bit_cast<std::uint32_t>(samples[i]) & magnitude);
     }
-    if (broken)
+    if (loudest >= infinity)
     {
         for (int channel = 0; channel < channels; ++channel)
             juce::FloatVectorOperations::clear(buffer.getWritePointer(channel, context.bufferStartSample), total);
         clear();
-        loudest = 0.0f;
+        loudest = 0;
     }
-    peak.store(loudest, std::memory_order_relaxed);
+    peak.store(std::bit_cast<float>(loudest), std::memory_order_relaxed);
 }
 }

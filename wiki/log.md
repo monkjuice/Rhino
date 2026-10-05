@@ -178,3 +178,9 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/native-device-standard.md (both devices on the base, proved byte-identical to the hand-written versions over 16 renders; per-block cost before and after; the remaining steps)
 - updated: pages/adding-a-device.md (start a new device from Utility or Space; Bloom is the closest hand-written one)
 - updated: pages/built-in-devices.md (which devices are on the SDK; how Utility declares its pass-through bus and smooths its gain)
+
+## [2026-10-05] update | Rhino FM, the first instrument on the device SDK; .rnd files are presets
+- created: pages/rhino-fm.md (four operators, eight routings, the index scale and its Bessel check, the Nyquist guard and depth taper, mono and pedal, the electric-piano defaults, cost)
+- updated: pages/built-in-devices.md (Rhino FM in the table; it replaces Rhino Wave; three devices on the SDK)
+- updated: pages/native-device-standard.md (.rnd corrected to mean a device's presets, with each device a folder in the browser; the user's priorities; Rhino FM done; remaining steps)
+- updated: index.md (Rhino FM, and the standard's summary)

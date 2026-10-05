@@ -38,6 +38,7 @@ The catalog of this wiki: every page, grouped by type, one line each (`- [Title]
 - [Project files (.rhinoedit)](pages/project-files.md) — A .rhinoedit is the Tracktion edit's XML plus Rhino's own properties, saved from a snapshot on a worker and opened off-thread.
 - [Recording and the count-in](pages/recording.md) — Arms tracks, not inputs, lets each take win the ground it lands on, and counts in with Rhino's own click while the playhead stands still.
 - [Rhino EQ](pages/rhino-eq.md) — Eight-band EQ whose drawn curve comes from the same coefficients as the audio, over a spectrum computed off the audio thread.
+- [Rhino FM](pages/rhino-fm.md) — A four-operator FM synth in eight routings, written on the device SDK, whose modulation index is checked against Bessel functions.
 - [Rhino Forge](pages/forge.md) — Rhino's independent wavetable and spectral synth, a VST3 and standalone app built from one JUCE AudioProcessor.
 - [Rhino Tune](pages/rhino-tune.md) — Vocal pitch correction with YIN tracking and PSOLA shifting, real reported latency, and correction smoothed on the offset.
 - [Rhino Vocoder and sidechains](pages/rhino-vocoder.md) — A channel vocoder whose carrier arrives as a sidechain from another track, and how Rhino routes a sidechain at all.
@@ -72,7 +73,7 @@ The catalog of this wiki: every page, grouped by type, one line each (`- [Title]
 - [No track is special for being first](pages/pattern-track.md) — Rhino began as one pattern on one synth track; commit a04b407 retired every rule that singled out the first track, and each track's own chain now records what it plays.
 - [One instrument per track](pages/one-instrument-per-track.md) — A track runs exactly one instrument; a new one replaces the old in place, and nothing may cache an instrument pointer.
 - [The executable is RhinoDAW, not Rhino](pages/executable-named-rhinodaw.md) — The binary is RhinoDAW.exe because NVIDIA's driver profile for Rhinoceros 3D, keyed on Rhino.exe, corrupted the app's Direct2D repaints.
-- [The native device standard](pages/native-device-standard.md) — Rhino's own devices are written on one SDK base and held to one conformance runner, and will save as .rnd device files with generated faces; VST3 stays the format for outside instruments.
+- [The native device standard](pages/native-device-standard.md) — Rhino's own devices are written on one SDK base, held to one conformance runner and given generated faces, with their presets as .rnd files; VST3 stays the format for outside instruments.
 - [Tracktion Engine with a native JUCE UI](pages/tracktion-and-juce.md) — Rhino runs on Tracktion Engine with a hand-built JUCE interface, chosen in September 2026 over a custom engine, Qt Quick, WebView or Tauri.
 
 ## Guides

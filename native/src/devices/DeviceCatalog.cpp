@@ -1,5 +1,6 @@
 #include "DeviceCatalog.h"
 #include "instruments/DrumDevice.h"
+#include "instruments/RhinoFmDevice.h"
 #include "audio/UtilityDevice.h"
 #include "audio/RhinoSpaceDevice.h"
 #include "audio/RhinoBloomDevice.h"
@@ -31,6 +32,10 @@ std::vector<DeviceDescriptor> buildCatalog()
          .displayName = "4OSC", .browserLabel = "4OSC synth",
          .kind = DeviceKind::Instrument, .category = "Synths", .description = "Subtractive synth",
          .colour = 0xff3d6f8b, .browsable = true});
+
+    add({.id = "RhinoFM", .typeName = RhinoFmDevice::xmlTypeName, .displayName = "Rhino FM",
+         .kind = DeviceKind::Instrument, .category = "Synths", .description = "Four-operator FM synth",
+         .colour = 0xffd08a3c, .browsable = true, .create = factory<RhinoFmDevice>()});
 
     // Forge is a VST3 discovered by scanning, so it has no type name to
     // create from -- see SessionExternalPlugins.cpp.

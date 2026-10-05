@@ -13,6 +13,7 @@ add_library(RhinoDevices STATIC
     sdk/NativeParameter.cpp
     sdk/NativeDevice.cpp
     instruments/DrumDevice.cpp
+    instruments/RhinoFmDevice.cpp
     audio/UtilityDevice.cpp
     audio/RhinoSpaceDevice.cpp
     audio/RhinoBloomDevice.cpp

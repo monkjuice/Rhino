@@ -14,6 +14,7 @@ Every device in the [Device catalog](device-catalog.md) on 2026-10-05. Rhino's o
 | Device | Kind | Source | What it is |
 | --- | --- | --- | --- |
 | 4OSC | instrument | Tracktion `te::FourOscPlugin` | Subtractive synth; the rack shows six macros |
+| Rhino FM | instrument | `instruments/RhinoFmDevice.*` | [Rhino FM](rhino-fm.md) |
 | Rhino Forge | instrument | external VST3 | [Hosting Forge in Rhino](forge-hosting.md) |
 | Rhino Drums | instrument | `instruments/DrumDevice.*` | Sample drum rack, offered as five kits |
 | Rhino EQ | audio FX | `audio/RhinoEqDevice.*` | [Rhino EQ](rhino-eq.md) |
@@ -25,9 +26,9 @@ Every device in the [Device catalog](device-catalog.md) on 2026-10-05. Rhino's o
 | Rhino Vocoder | audio FX | `audio/VocoderDevice.*` | [Rhino Vocoder and sidechains](rhino-vocoder.md) |
 | Rhino Arp | MIDI FX | `midi/RhinoArpDevice.*` | [Rhino Arp](rhino-arp.md) |
 
-Rhino Wave, the first built-in synth (a morphing wavetable instrument), was removed on 2026-10-05. Its replacement is to be a new catalog-only synth that needs no special case in `Session`.
+Rhino Wave, the first built-in synth (a morphing wavetable instrument), was removed on 2026-10-05. Rhino FM replaced it the same day, as a catalog entry with no special case in `Session`.
 
-Utility and Rhino Space are written on the device SDK, and the rest are hand-written on `te::Plugin` ([The native device standard](native-device-standard.md)). Every device with a catalog factory is held to the same checks by `--device-test`.
+Utility, Rhino Space and Rhino FM are written on the device SDK, and the rest are hand-written on `te::Plugin` ([The native device standard](native-device-standard.md)). Every device with a catalog factory is held to the same checks by `--device-test`.
 
 ## Utility
 

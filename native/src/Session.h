@@ -1183,4 +1183,5 @@ int runUiProfile();
 void checkAutoTuneDsp(Session&);
 void checkRhinoEqDsp(Session&);
 void checkVocoderDsp(Session&);
+void checkFmDsp(Session&);
 }

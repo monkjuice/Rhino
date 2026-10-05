@@ -9,7 +9,8 @@ add_library(RhinoCore STATIC
     PitchTracker.cpp
     PsolaShifter.cpp
     AutoTuneEngine.cpp
-    VocoderEngine.cpp)
+    VocoderEngine.cpp
+    FmEngine.cpp)
 target_include_directories(RhinoCore PUBLIC .)
 target_link_libraries(RhinoCore
     PUBLIC juce::juce_core

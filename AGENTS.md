@@ -108,7 +108,7 @@ Two classes are still defined inline inside a single `.cpp` and are the next thi
 
 ## Tests
 
-Five CTest cases, all the same binary with different flags. Build and run:
+Six CTest cases, all the same binary with different flags. One of them, `native_device_conformance` (`--device-test`, `tests/DeviceConformance.cpp`), renders every device Rhino makes offline and holds it to the device standard; a device that cannot pass a check yet is listed in its `pending` table with the reason. Run them through `ctest` only: launched directly, a runner flag opened the full app on the user's screen. Build and run:
 
 ```powershell
 cmake --build native/build --config Release --parallel 2

@@ -1852,6 +1852,14 @@ public:
             quit();
             return;
         }
+        // Renders every device offline, so it opens no audio device either.
+        if (args == "--device-test")
+        {
+            Session::setCommandLineTestMode(true);
+            setApplicationReturnValue(runDeviceConformance());
+            quit();
+            return;
+        }
         // Timings, not checks, and no audio device: it measures the message
         // thread, and leaves the audio backend to any Rhino already running.
         if (args == "--profile-ui")

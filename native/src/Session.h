@@ -1156,6 +1156,9 @@ int runSelfTest();
 int runPatternTest();
 int runArrangementTest();
 int runArrangementGeometryTest();
+// Every device Rhino makes, held to the device standard. See
+// tests/DeviceConformance.cpp.
+int runDeviceConformance();
 // Not a test: times what the interface costs and prints medians. See
 // tests/UiProfile.cpp.
 int runUiProfile();

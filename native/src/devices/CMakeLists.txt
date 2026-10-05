@@ -10,6 +10,8 @@
 # device needs a line here, a line in DeviceCatalog.cpp, and nothing else.
 add_library(RhinoDevices STATIC
     DeviceCatalog.cpp
+    sdk/NativeParameter.cpp
+    sdk/NativeDevice.cpp
     instruments/DrumDevice.cpp
     audio/UtilityDevice.cpp
     audio/RhinoSpaceDevice.cpp

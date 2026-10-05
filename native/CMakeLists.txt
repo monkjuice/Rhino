@@ -110,6 +110,7 @@ target_sources(RhinoNative PRIVATE
     src/ProjectFiles.cpp
     # Tests
     src/tests/SelfTest.cpp
+    src/tests/DeviceConformance.cpp
     src/tests/AutoTuneTest.cpp
     src/tests/EqTest.cpp
     src/tests/VocoderTest.cpp
@@ -147,6 +148,8 @@ add_test(NAME native_arrangement_geometry COMMAND RhinoNative --arrangement-geom
 set_tests_properties(native_arrangement_geometry PROPERTIES TIMEOUT 10)
 add_test(NAME native_device_correctness COMMAND RhinoNative --self-test)
 set_tests_properties(native_device_correctness PROPERTIES TIMEOUT 30)
+add_test(NAME native_device_conformance COMMAND RhinoNative --device-test)
+set_tests_properties(native_device_conformance PROPERTIES TIMEOUT 120)
 # The two workflow runs take 20-26 seconds each on this machine, so a 30 second
 # limit is a 15% margin and a busy machine trips it. The limit is here to catch
 # a render that never returns - which hangs outright rather than running slowly -

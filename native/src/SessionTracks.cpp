@@ -107,6 +107,10 @@ juce::Result Session::removeAudioTrack(int track)
     // both back; left behind, it would route a device to a bus nothing sends
     // to, which is a device that has gone silent for no visible reason.
     clearSidechainSourcesNaming(tracks[track]->itemID);
+    // A bus lets its members go first, while it is still there to be routed
+    // away from - see dissolveGroupInEdit for why the order matters to undo.
+    if (const auto groupId = trackGroupBusId(track); groupId != 0)
+        dissolveGroupInEdit(groupId);
     edit->deleteTrack(tracks[track]);
     // The note editor's clip may have gone with the track.
     repairPatternClip();
@@ -259,10 +263,11 @@ juce::Result Session::moveTrack(int track, int destination)
         return juce::Result::ok();
     edit->getUndoManager().beginNewTransaction("Move track");
     moveTrackInEdit(track, destination);
-    edit->getUndoManager().beginNewTransaction();
     // Where a track lands decides which group it is in: carried into a group it
-    // joins, carried out of one it leaves.
+    // joins, carried out of one it leaves. Inside the move's own transaction,
+    // so undoing the move undoes that too.
     reconcileTrackGroups();
+    edit->getUndoManager().beginNewTransaction();
     markModified();
     sendSynchronousChangeMessage();
     return juce::Result::ok();

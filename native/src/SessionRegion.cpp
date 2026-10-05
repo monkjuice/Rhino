@@ -224,6 +224,7 @@ juce::Result Session::pasteClipRegion(const ClipRegion& region, double destinati
     }
 
     edit->getUndoManager().beginNewTransaction("Paste clips");
+    auto addedLanes = false;
     while (te::getAudioTracks(*edit).size() < destinationTrack + region.trackSpan + 1)
     {
         const auto row = te::getAudioTracks(*edit).size() - destinationTrack;
@@ -232,6 +233,15 @@ juce::Result Session::pasteClipRegion(const ClipRegion& region, double destinati
                               : TrackType::audio;
         if (appendTrack(type) == nullptr)
             return juce::Result::fail("Could not create a track for pasted clips.");
+        addedLanes = true;
+    }
+    // A lane a paste made is a lane like any other from the start: its fader,
+    // its scene slots and its routing, not at the next addTrack.
+    if (addedLanes)
+    {
+        ensureTrackMixers();
+        ensureSceneSlots();
+        reconcileTrackGroups();
     }
 
     // Pasting replaces what it lands on, as it does in Live: what arrives is

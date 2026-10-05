@@ -986,6 +986,9 @@ private:
     void moveTrackInEdit(int track, int destination);
     void arrangeTrackOrder(const std::vector<te::EditItemID>& desired);
     juce::Result assignTracksToGroup(std::vector<int> tracks, int groupId);
+    // A group's members let go and routed to the main output, inside the
+    // caller's transaction and before its bus is deleted.
+    void dissolveGroupInEdit(int groupId);
     // A group is a bus followed by one run of members, and a member's audio
     // goes to its bus. Anything that reorders or removes tracks can break both,
     // so this repairs the runs and then makes the routing follow them.

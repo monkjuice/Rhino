@@ -73,6 +73,11 @@ juce::Result Session::editClip(te::EditItemID id, ClipGeometry next, ClipGesture
         if (appendTrack(movingMidi ? TrackType::midi : TrackType::audio) == nullptr)
             return juce::Result::fail("Could not create a track for the moved clip.");
         targetTrack = tracks.size();
+        // A lane made by a drop is a lane like any other from the start: its
+        // fader, its scene slots and its routing, not at the next addTrack.
+        ensureTrackMixers();
+        ensureSceneSlots();
+        reconcileTrackGroups();
     }
     const auto refreshedTracks = te::getAudioTracks(*edit);
     if (targetTrack != oldTrackIndex)

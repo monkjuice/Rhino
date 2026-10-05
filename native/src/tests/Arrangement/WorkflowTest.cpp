@@ -130,6 +130,8 @@ int runArrangementTest()
        #include "scenarios/MasterTrack.inc"
         scenario("track groups");
        #include "scenarios/TrackGroups.inc"
+        scenario("group undo and new lanes");
+       #include "scenarios/GroupUndo.inc"
         // Last: it clears the pattern to control the whole clip, so nothing
         // downstream should be relying on the notes it replaces.
         scenario("note selection");

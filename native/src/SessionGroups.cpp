@@ -169,8 +169,8 @@ juce::Result Session::assignTracksToGroup(std::vector<int> tracks, int groupId)
         for (int track = 0; track < moved.size(); ++track)
             if (moved[track]->itemID == id)
                 setMemberGroup(*moved[track], groupId, &undoManager);
-    undoManager.beginNewTransaction();
     reconcileTrackGroups();
+    undoManager.beginNewTransaction();
     markModified();
     sendSynchronousChangeMessage();
     return juce::Result::ok();
@@ -258,8 +258,8 @@ juce::Result Session::removeTrackFromGroup(int track)
     if (!juce::isPositiveAndBelow(track, tracks.size()))
         return juce::Result::fail("Select a track to remove from its group.");
     setMemberGroup(*tracks[track], noGroup, &undoManager);
-    undoManager.beginNewTransaction();
     reconcileTrackGroups();
+    undoManager.beginNewTransaction();
     markModified();
     sendSynchronousChangeMessage();
     return juce::Result::ok();
@@ -290,6 +290,24 @@ juce::Result Session::removeTracksFromGroup(std::vector<int> tracks)
     return juce::Result::ok();
 }
 
+// Lets a group's members go and sends their audio to the main output, while the
+// bus is still there. The order is the point: undo replays a transaction
+// backwards, so deleting the bus after this means undo brings the bus back
+// first and only then routes the members into it. Routed after the deletion,
+// undo pointed them at a bus that did not exist yet and the routing was lost.
+// Inside the caller's transaction.
+void Session::dissolveGroupInEdit(int groupId)
+{
+    const auto group = trackGroup(groupId);
+    if (!group)
+        return;
+    const auto tracks = te::getAudioTracks(*edit);
+    for (int track = group->firstTrack; track <= group->lastTrack(); ++track)
+        if (juce::isPositiveAndBelow(track, tracks.size()))
+            setMemberGroup(*tracks[track], noGroup, &edit->getUndoManager());
+    reconcileTrackGroups();
+}
+
 // Ungrouping takes the bus away and hands its members back to the main output.
 // The tracks themselves, and everything on them, survive: what goes is the
 // mixing point, which is the only thing the group added.
@@ -301,14 +319,12 @@ juce::Result Session::ungroupTracks(int groupId)
     const auto busTrack = group->busTrack;
     auto& undoManager = edit->getUndoManager();
     undoManager.beginNewTransaction("Ungroup tracks");
+    dissolveGroupInEdit(groupId);
     const auto tracks = te::getAudioTracks(*edit);
-    for (int track = group->firstTrack; track <= group->lastTrack(); ++track)
-        if (juce::isPositiveAndBelow(track, tracks.size()))
-            setMemberGroup(*tracks[track], noGroup, &undoManager);
     if (juce::isPositiveAndBelow(busTrack, tracks.size()))
         edit->deleteTrack(tracks[busTrack]);
-    undoManager.beginNewTransaction();
     reconcileTrackGroups();
+    undoManager.beginNewTransaction();
     refreshLoop();
     markModified();
     sendSynchronousChangeMessage();
@@ -334,17 +350,30 @@ juce::Result Session::setTrackGroupCollapsed(int groupId, bool collapsed)
 // Where every track sends its audio, decided entirely by where it sits. This is
 // the one place routing is written, so a track carried into a band starts
 // feeding it and one carried out stops, with nothing left over to go stale.
+//
+// Every write goes through the undo manager, and every caller runs this inside
+// the transaction of the move, group or delete that decided it. One Ctrl+Z
+// then puts back where the tracks sat, who is in which group and where their
+// audio goes together, rather than leaving the membership behind.
 void Session::reconcileTrackGroups()
 {
+    auto* undoManager = &edit->getUndoManager();
     const auto tracks = te::getAudioTracks(*edit);
     // A track carried into the middle of a group joins it, the way a clip
-    // dropped on a lane belongs to that lane. A bus never does: a group inside
-    // a group is a routing tree this deliberately does not build.
+    // dropped on a lane belongs to that lane. Directly under the bus is the
+    // middle too: the bus is what opens the group, so the track above a
+    // newcomer there names the group by being its bus. A bus never joins: a
+    // group inside a group is a routing tree this deliberately does not build.
     for (int track = 1; track + 1 < tracks.size(); ++track)
-        if (memberGroupOf(tracks, track) == noGroup && busGroupOf(tracks, track) == noGroup
-            && memberGroupOf(tracks, track + 1) != noGroup
-            && memberGroupOf(tracks, track + 1) == memberGroupOf(tracks, track - 1))
-            setMemberGroup(*tracks[track], memberGroupOf(tracks, track - 1), nullptr);
+    {
+        if (memberGroupOf(tracks, track) != noGroup || busGroupOf(tracks, track) != noGroup)
+            continue;
+        const auto above = busGroupOf(tracks, track - 1) != noGroup ? busGroupOf(tracks, track - 1)
+                                                                    : memberGroupOf(tracks, track - 1);
+        const auto below = memberGroupOf(tracks, track + 1);
+        if (below != noGroup && below == above)
+            setMemberGroup(*tracks[track], above, undoManager);
+    }
 
     // A group is its bus followed by one run of members. Anything else claiming
     // that group was carried away from it, so it comes out.
@@ -354,13 +383,13 @@ void Session::reconcileTrackGroups()
         if (const auto bus = busGroupOf(tracks, track); bus != noGroup)
         {
             // A bus is never a member, of its own group or of anyone else's.
-            setMemberGroup(*tracks[track], noGroup, nullptr);
+            setMemberGroup(*tracks[track], noGroup, undoManager);
             openGroup = bus;
             continue;
         }
         if (memberGroupOf(tracks, track) != openGroup)
         {
-            setMemberGroup(*tracks[track], noGroup, nullptr);
+            setMemberGroup(*tracks[track], noGroup, undoManager);
             openGroup = noGroup;
         }
     }

@@ -135,6 +135,12 @@ target_link_libraries(RhinoNative PRIVATE
     juce::juce_recommended_warning_flags)
 if(MSVC)
     target_compile_options(RhinoNative PRIVATE /bigobj)
+    # The main thread's stack, reserved at 8 MB as macOS gives it, rather than
+    # Windows' 1 MB. The test runners are this binary, and each one holds every
+    # scenario's locals in a single frame: two panels added to one scenario
+    # overflowed it, which CTest reports as a SegFault before anything prints.
+    # Reserved address space only; nothing is committed until it is touched.
+    target_link_options(RhinoNative PRIVATE /STACK:8388608)
 endif()
 enable_testing()
 add_test(NAME native_arrangement_geometry COMMAND RhinoNative --arrangement-geometry-test)

@@ -117,3 +117,4 @@
                         && firstInstrument->getWrappedAudioProcessor()->getName().containsIgnoreCase("Forge"),
                         "The Forge VST3 is what the first track now plays");
             }
+        }

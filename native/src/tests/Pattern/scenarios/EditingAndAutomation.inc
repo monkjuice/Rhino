@@ -1,4 +1,3 @@
-        }
         auto& sequence = session.pattern().getSequence();
         require(sequence.getNumNotes() == 0, "New pattern must be empty");
         session.beginNoteGesture();

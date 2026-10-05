@@ -134,6 +134,8 @@ private:
 
     void rebuildBank();
     void flushDenormals();
+    // One stretch of a block, no longer than the scratch prepare sized.
+    void processChunk(float* const* data, const float* const* carrier, int channels, int count);
 
     Settings settings;
     // What the bank was last built for. Rebuilding is coefficient arithmetic
@@ -158,6 +160,10 @@ private:
     float carrierLevel = 0.0f, modulatorLevel = 0.0f;
     float sibilantLevel = 0.0f, fullLevel = 0.0f;
     double sibilanceLowpass = 0.0;
+    // Where the gate's edge smoothing stood at the end of the last block, so
+    // an edge that falls near a block boundary is smoothed across it rather
+    // than restarted from the raw gate.
+    float gateSmoothed = 0.0f;
     // A 32-bit xorshift: the noise has to be cheap and does not have to be
     // good, and std::mt19937 allocates a 2.5 KB state per instance.
     unsigned int noiseSeed = 0x9e3779b9u;

@@ -238,6 +238,61 @@ void checkVocoderDsp(Session& session)
                         "A modulator under the gate plays nothing");
     }
 
+    // ---- block size: an oversized block, and a gate edge on a boundary ------
+    {
+        const auto total = testBlock * 24;
+        std::vector<float> modulator(static_cast<size_t>(total));
+        // Room tone under the gate, then a voice over it, so the gate opens
+        // part of the way through and its smoothed edge is in the render.
+        for (int i = 0; i < total; ++i)
+            modulator[static_cast<size_t>(i)] = static_cast<float>(
+                (i < testBlock * 10 + 37 ? 0.01 : 0.5) * std::sin(2.0 * pi * 1000.0 * i / testRate));
+        const auto carrier = renderCarrier(total);
+        const auto render = [&] (const VocoderEngine::Settings& settings, auto&& blockAt)
+        {
+            auto audio = modulator;
+            VocoderEngine engine;
+            engine.prepare(testRate, 1, testBlock);
+            engine.setSettings(settings);
+            for (int start = 0, block = 0; start < total; ++block)
+            {
+                const auto count = std::min(blockAt(block), total - start);
+                float* channels[1] {audio.data() + start};
+                const float* carrierChannels[1] {carrier.data() + start};
+                engine.process(channels, carrierChannels, 1, count);
+                start += count;
+            }
+            return audio;
+        };
+        const auto sameAudio = [] (const std::vector<float>& a, const std::vector<float>& b, float tolerance = 1.0e-6f)
+        {
+            for (size_t i = 0; i < a.size(); ++i)
+                if (std::abs(a[i] - b[i]) > tolerance) return false;
+            return true;
+        };
+
+        // A block four times what prepare was told about is the same audio as
+        // that stretch in prepared-size pieces. Re-preparing for it cleared
+        // every band mid-note.
+        auto gated = plainSettings();
+        gated.gateDb = -20.0f;
+        const auto steady = render(gated, [] (int) { return testBlock; });
+        const auto oversized = render(gated, [] (int block) { return block == 6 ? testBlock * 4 : testBlock; });
+        require(sameAudio(steady, oversized));
+
+        // With depth and enhance at one, the bank takes almost nothing per
+        // block (only the floor under a band the carrier leaves empty), so
+        // the gate's smoothing is what a block boundary could change, and it
+        // must not: its edge is smoothed across the boundary rather than
+        // restarted from the raw gate. A restart is a jump of tenths; the
+        // floor moves the fifth decimal.
+        auto perSample = gated;
+        perSample.enhance = 1.0f;
+        const auto inQuarters = render(perSample, [] (int) { return testBlock; });
+        const auto inOddPieces = render(perSample, [] (int) { return 100; });
+        require(sameAudio(inQuarters, inOddPieces, 1.0e-3f));
+    }
+
     // ---- no carrier: the voice passes through rather than going silent -----
     {
         const auto total = testBlock * 8;

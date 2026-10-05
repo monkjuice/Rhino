@@ -23,8 +23,11 @@ public:
     void reset() override;
     void applyToBuffer(const te::PluginRenderContext&) override;
     void restorePluginStateFromValueTree(const juce::ValueTree&) override;
+    double getTailLength() const override;
 
 private:
+    // One stretch of a block, no longer than the dry copy initialise sized.
+    void process(juce::AudioBuffer<float>&, int startSample, int numSamples);
     juce::CachedValue<float> mix, size, smear, drive, width, outputDb;
     te::AutomatableParameter::Ptr mixParam, sizeParam, smearParam, driveParam, widthParam, outputParam;
     juce::Reverb reverb;

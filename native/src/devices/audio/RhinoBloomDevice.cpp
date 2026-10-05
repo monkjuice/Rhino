@@ -89,22 +89,34 @@ float RhinoBloomDevice::readDelay(const std::vector<float>& delay, float offsetS
 
 void RhinoBloomDevice::applyToBuffer(const te::PluginRenderContext& context)
 {
-    if (context.destBuffer == nullptr || context.bufferNumSamples == 0 || delayL.empty() || delayR.empty())
+    if (context.destBuffer == nullptr || context.bufferNumSamples == 0 || delayL.empty() || delayR.empty()
+        || dryL.empty() || context.destBuffer->getNumChannels() == 0)
         return;
 
     SCOPED_REALTIME_CHECK
-    auto& buffer = *context.destBuffer;
+    // A block may be bigger than the one initialise was told about. The dry
+    // copy is sized for that one, so a bigger block is worked through in
+    // pieces of that size rather than growing the copy on the audio thread.
+    const auto chunk = static_cast<int>(dryL.size());
+    for (int done = 0; done < context.bufferNumSamples; done += chunk)
+        process(*context.destBuffer, context.bufferStartSample + done,
+                std::min(chunk, context.bufferNumSamples - done));
+}
+
+// The longest echo's repeats until they are 60 dB down, plus the plate's own
+// decay. Read on the message thread from the settings as they stand.
+double RhinoBloomDevice::getTailLength() const
+{
+    const auto bloomAmount = std::clamp(bloomParam->getCurrentValue(), 0.0f, 1.0f);
+    const auto feedback = 0.14 + std::clamp(cloudsParam->getCurrentValue(), 0.0f, 1.0f) * 0.58;
+    const auto longestDelay = 0.37 + bloomAmount * 0.52;
+    const auto repeats = std::log(0.001) / std::log(feedback);
+    return std::min(30.0, longestDelay * repeats + 4.0);
+}
+
+void RhinoBloomDevice::process(juce::AudioBuffer<float>& buffer, int startSample, int numSamples)
+{
     const auto channels = buffer.getNumChannels();
-    if (channels == 0)
-        return;
-
-    const auto needed = static_cast<size_t>(context.bufferNumSamples);
-    if (dryL.size() < needed)
-    {
-        dryL.resize(needed, 0.0f);
-        dryR.resize(needed, 0.0f);
-    }
-
     const auto bloomAmount = std::clamp(bloomParam->getCurrentValue(), 0.0f, 1.0f);
     const auto chorusAmount = std::clamp(chorusParam->getCurrentValue(), 0.0f, 1.0f);
     const auto cloudAmount = std::clamp(cloudsParam->getCurrentValue(), 0.0f, 1.0f);
@@ -122,9 +134,9 @@ void RhinoBloomDevice::applyToBuffer(const te::PluginRenderContext& context)
     params.freezeMode = 0.0f;
     reverb.setParameters(params);
 
-    for (int i = 0; i < context.bufferNumSamples; ++i)
+    for (int i = 0; i < numSamples; ++i)
     {
-        const auto frame = context.bufferStartSample + i;
+        const auto frame = startSample + i;
         const auto inL = buffer.getSample(0, frame);
         const auto inR = channels > 1 ? buffer.getSample(1, frame) : inL;
         dryL[static_cast<size_t>(i)] = inL;
@@ -160,25 +172,27 @@ void RhinoBloomDevice::applyToBuffer(const te::PluginRenderContext& context)
             buffer.setSample(1, frame, wetR);
     }
 
-    auto* left = buffer.getWritePointer(0, context.bufferStartSample);
-    auto* right = channels > 1 ? buffer.getWritePointer(1, context.bufferStartSample) : left;
-    reverb.processStereo(left, right, context.bufferNumSamples);
+    auto* left = buffer.getWritePointer(0, startSample);
+    auto* right = channels > 1 ? buffer.getWritePointer(1, startSample) : left;
+    reverb.processStereo(left, right, numSamples);
 
     const auto wetMix = std::clamp(0.18f + bloomAmount * 0.62f, 0.0f, 0.86f);
-    for (int i = 0; i < context.bufferNumSamples; ++i)
+    for (int i = 0; i < numSamples; ++i)
     {
-        const auto frame = context.bufferStartSample + i;
+        const auto frame = startSample + i;
         auto wetL = buffer.getSample(0, frame);
         auto wetR = channels > 1 ? buffer.getSample(1, frame) : wetL;
         const auto side = (wetL - wetR) * (0.56f + chorusAmount * 0.44f);
         const auto mid = (wetL + wetR) * 0.5f;
         wetL = mid + side;
         wetR = mid - side;
+        // Not clamped: the chain is floating point, and a hard limit here
+        // would square off a hot track before its fader could bring it down.
         const auto outL = (dryL[static_cast<size_t>(i)] * (1.0f - wetMix) + wetL * wetMix) * output;
         const auto outR = (dryR[static_cast<size_t>(i)] * (1.0f - wetMix) + wetR * wetMix) * output;
-        buffer.setSample(0, frame, std::clamp(outL, -1.0f, 1.0f));
+        buffer.setSample(0, frame, outL);
         if (channels > 1)
-            buffer.setSample(1, frame, std::clamp(outR, -1.0f, 1.0f));
+            buffer.setSample(1, frame, outR);
     }
 }
 

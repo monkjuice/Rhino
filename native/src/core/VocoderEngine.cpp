@@ -89,6 +89,7 @@ void VocoderEngine::reset()
     }
     carrierLevel = modulatorLevel = sibilantLevel = fullLevel = 0.0f;
     sibilanceLowpass = 0.0;
+    gateSmoothed = 0.0f;
     for (auto& level : readoutLevel)
         level.store(0.0f, std::memory_order_relaxed);
     readoutCarrier.store(false, std::memory_order_relaxed);
@@ -151,11 +152,35 @@ void VocoderEngine::rebuildBank()
 
 void VocoderEngine::process(float* const* data, const float* const* carrier, int channels, int count)
 {
-    if (data == nullptr || channels <= 0 || count <= 0)
+    if (data == nullptr || channels <= 0 || count <= 0 || monoModulator.empty())
         return;
-    if (static_cast<size_t>(count) > monoModulator.size())
-        prepare(sampleRate, channels, count);
+    // A block bigger than prepare was told about is worked through in pieces
+    // of the prepared size. Growing the scratch here allocated on the audio
+    // thread, and re-preparing cleared every band too, which clicked.
+    const auto chunk = static_cast<int>(monoModulator.size());
+    if (count <= chunk)
+    {
+        processChunk(data, carrier, channels, count);
+        return;
+    }
+    constexpr int maxChannels = 16;
+    channels = std::min(channels, maxChannels);
+    std::array<float*, maxChannels> dataAt {};
+    std::array<const float*, 2> carrierAt {};
+    for (int done = 0; done < count; done += chunk)
+    {
+        for (int channel = 0; channel < channels; ++channel)
+            dataAt[static_cast<size_t>(channel)] = data[channel] + done;
+        if (carrier != nullptr)
+            for (int channel = 0; channel < std::min(channels, 2); ++channel)
+                carrierAt[static_cast<size_t>(channel)] = carrier[channel] + done;
+        processChunk(dataAt.data(), carrier != nullptr ? carrierAt.data() : nullptr, channels,
+                     std::min(chunk, count - done));
+    }
+}
 
+void VocoderEngine::processChunk(float* const* data, const float* const* carrier, int channels, int count)
+{
     const auto bands = settings.bands;
     if (builtBands != bands || builtLow != settings.lowHz || builtHigh != settings.highHz
         || builtBandwidth != settings.bandwidth || builtFormant != settings.formantSemitones
@@ -206,9 +231,10 @@ void VocoderEngine::process(float* const* data, const float* const* carrier, int
         gateScratch[static_cast<size_t>(n)] = modulatorLevel > gateLinear ? 1.0f : 0.0f;
     }
     // Smooth the gate's own edges, so a syllable that crosses the threshold is
-    // let in rather than clicked in.
+    // let in rather than clicked in. Carried from the last block, so an edge
+    // is smoothed the same wherever the block boundary falls.
     {
-        auto smoothed = gateScratch[0];
+        auto smoothed = gateSmoothed;
         const auto edge = followerCoefficient(3.0f, sampleRate);
         for (int n = 0; n < count; ++n)
         {
@@ -216,6 +242,7 @@ void VocoderEngine::process(float* const* data, const float* const* carrier, int
             smoothed = target + (smoothed - target) * edge;
             gateScratch[static_cast<size_t>(n)] = smoothed;
         }
+        gateSmoothed = smoothed;
     }
 
     const auto haveModulator = modulatorPeak > tinyLevel;

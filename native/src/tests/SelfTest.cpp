@@ -337,6 +337,27 @@ int runSelfTest()
         // already far closer than a pattern can write: the shortest thing the
         // grid offers, a sixty-fourth at 200 bpm, is nineteen.
         require(blockAfter({0.0, 96.0 / 48000.0}) != oneStrike);
+
+        // The 808 kick is a second and a half long and decays to its own end.
+        // Reading only one second of the file stopped it dead at about 1.09 s.
+        drums->reset();
+        {
+            constexpr int tailBlock = 480;
+            juce::AudioBuffer<float> tail(2, tailBlock);
+            auto lateLevel = 0.0f;
+            for (int block = 0; block * tailBlock < static_cast<int>(1.35 * 48000.0); ++block)
+            {
+                tail.clear();
+                midi.clear();
+                if (block == 0)
+                    midi.addMidiMessage(juce::MidiMessage::noteOn(1, 48, 1.0f), 0.0, {});
+                te::PluginRenderContext tailContext(&tail, 0, tailBlock, &midi, 0.0, {}, true, false, true, false);
+                drums->applyToBuffer(tailContext);
+                if (block * tailBlock >= static_cast<int>(1.12 * 48000.0))
+                    lateLevel = std::max(lateLevel, tail.getMagnitude(0, 0, tailBlock));
+            }
+            require(lateLevel > 0.0f);
+        }
         drums->deinitialise();
 
         auto bloomPlugin = session.edit->getPluginCache().createNewPlugin(RhinoBloomDevice::xmlTypeName, {});
@@ -370,6 +391,48 @@ int runSelfTest()
         bloom->restorePluginStateFromValueTree(bloomState);
         require(std::abs(bloom->getAutomatableParameterByID("chorus")->getCurrentValue() - 0.25f) < 1.0e-5f);
         bloom->deinitialise();
+
+        // Bloom and Space each keep a dry copy sized at initialise. A bigger
+        // block is the same audio as that stretch in prepared-size pieces,
+        // rather than a reason to grow the copy on the audio thread. And a hot
+        // signal leaves hot: the chain is floating point, so a hard limit at
+        // full scale would square off a track before its fader.
+        for (const auto* type : {RhinoBloomDevice::xmlTypeName, RhinoSpaceDevice::xmlTypeName})
+        {
+            constexpr int prepared = 256;
+            constexpr int total = prepared * 8;
+            const auto signal = [] (int i) { return 1.8f * std::sin(static_cast<float>(i) * 0.031f); };
+            const auto render = [&] (int oversizedAt)
+            {
+                auto plugin = session.edit->getPluginCache().createNewPlugin(type, {});
+                require(plugin != nullptr);
+                if (auto mix = plugin->getAutomatableParameterByID("mix"))
+                    mix->setParameter(0.0f, juce::dontSendNotification);
+                if (auto amount = plugin->getAutomatableParameterByID("bloom"))
+                    amount->setParameter(0.0f, juce::dontSendNotification);
+                plugin->getAutomatableParameterByID("outputDb")->setParameter(0.0f, juce::dontSendNotification);
+                plugin->initialise({{}, 48000.0, prepared});
+                juce::AudioBuffer<float> audio(2, total);
+                for (int i = 0; i < total; ++i)
+                    for (int c = 0; c < 2; ++c)
+                        audio.setSample(c, i, signal(i));
+                for (int start = 0, block = 0; start < total; ++block)
+                {
+                    const auto count = block == oversizedAt ? prepared * 4 : prepared;
+                    te::PluginRenderContext context(&audio, start, count, nullptr, 0.0, {}, false, false, true, false);
+                    plugin->applyToBuffer(context);
+                    start += count;
+                }
+                plugin->deinitialise();
+                return audio;
+            };
+            const auto steady = render(-1);
+            const auto oversized = render(1);
+            for (int c = 0; c < 2; ++c)
+                for (int i = 0; i < total; ++i)
+                    require(std::abs(steady.getSample(c, i) - oversized.getSample(c, i)) < 1.0e-6f);
+            require(steady.getMagnitude(0, total) > 1.2f);
+        }
 
         auto wavePlugin = session.edit->getPluginCache().createNewPlugin(RhinoWaveDevice::xmlTypeName, {});
         auto* wave = dynamic_cast<RhinoWaveDevice*>(wavePlugin.get());

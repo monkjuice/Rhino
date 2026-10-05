@@ -245,16 +245,17 @@ void DrumDevice::applyToBuffer(const te::PluginRenderContext& context)
 
     SCOPED_REALTIME_CHECK
     const auto* midiMessages = context.bufferForMidiMessages;
+    // Summed without a limit: the chain is floating point, and clipping here
+    // would square off stacked hits before the track's fader saw them.
     const auto renderFrame = [this, &context](int localFrame)
     {
         float sample = 0.0f;
         for (auto& voice : voices)
             if (voice.active)
                 sample += render(voice);
-        sample = std::clamp(sample, -0.95f, 0.95f);
         const auto frame = context.bufferStartSample + localFrame;
         for (int channel = 0; channel < context.destBuffer->getNumChannels(); ++channel)
-            context.destBuffer->setSample(channel, frame, std::clamp(context.destBuffer->getSample(channel, frame) + sample, -0.95f, 0.95f));
+            context.destBuffer->addSample(channel, frame, sample);
     };
 
     if (midiMessages == nullptr)
@@ -320,13 +321,27 @@ void DrumDevice::loadSample(juce::AudioBuffer<float>& destination, double& sourc
     formats.registerBasicFormats();
     std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(source));
     if (reader == nullptr || reader->lengthInSamples <= 0)
+    {
+        // Present but not audio, which is what a Git LFS pointer that was
+        // never pulled looks like.
+        juce::Logger::writeToLog("Rhino: drum sample unreadable: " + relativePath);
         return;
+    }
 
+    // The whole file, up to a ceiling only a mistake would reach. Reading one
+    // second of it cut the 1.5 s 808 kick off mid-decay with an audible step.
+    constexpr double longestSampleSeconds = 10.0;
     sourceRate = reader->sampleRate > 0.0 ? reader->sampleRate : 44100.0;
-    const auto samples = static_cast<int>(std::min<juce::int64>(reader->lengthInSamples,
-                                                               static_cast<juce::int64>(std::ceil(sampleRate))));
+    const auto samples = static_cast<int>(std::min<juce::int64>(
+        reader->lengthInSamples, static_cast<juce::int64>(std::ceil(sourceRate * longestSampleSeconds))));
     destination.setSize(static_cast<int>(reader->numChannels), samples);
     reader->read(&destination, 0, samples, 0, true, true);
+    // A file past the ceiling ends in a short fade rather than a cut.
+    if (samples < reader->lengthInSamples)
+    {
+        const auto fade = std::min(samples, static_cast<int>(sourceRate * 0.005));
+        destination.applyGainRamp(samples - fade, fade, 1.0f, 0.0f);
+    }
 }
 
 float DrumDevice::renderSample(Voice& voice, const juce::AudioBuffer<float>& sample, double sourceRate)

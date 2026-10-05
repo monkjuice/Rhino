@@ -23,9 +23,12 @@ public:
     void reset() override;
     void applyToBuffer(const te::PluginRenderContext&) override;
     void restorePluginStateFromValueTree(const juce::ValueTree&) override;
+    double getTailLength() const override;
 
 private:
     float readDelay(const std::vector<float>& delay, float offsetSamples) const;
+    // One stretch of a block, no longer than the dry copy initialise sized.
+    void process(juce::AudioBuffer<float>&, int startSample, int numSamples);
 
     juce::CachedValue<float> bloom, chorus, clouds, plate, colour, outputDb;
     te::AutomatableParameter::Ptr bloomParam, chorusParam, cloudsParam, plateParam, colourParam, outputParam;

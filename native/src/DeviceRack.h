@@ -13,6 +13,14 @@ class DeviceRack final : public juce::Component,
                          private Session::Listener
 {
 public:
+    // Where the chain starts below the rack's own header row, the scrollbar a
+    // chain wider than the rack grows, and the margin under the chain.
+    static constexpr int chainTop = 29, chainScrollBarThickness = 8, chainBottomMargin = 6;
+    // The shortest rack that shows a whole device face, even with the chain's
+    // scrollbar showing. The shell keeps the Device View at least this tall.
+    static constexpr int minimumHeight = chainTop + DeviceEditorPanel::standardHeight
+                                       + chainScrollBarThickness + chainBottomMargin;
+
     explicit DeviceRack(Session&);
     ~DeviceRack() override;
     void paint(juce::Graphics&) override;

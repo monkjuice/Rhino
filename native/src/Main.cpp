@@ -739,9 +739,13 @@ public:
             // doing on every machine with a tall display.
             if (lowerPaneHeight <= 0)
                 lowerPaneHeight = getHeight() / 5;
-            lowerPaneHeight = juce::jlimit(minimumPaneHeight,
-                                           std::max(minimumPaneHeight,
-                                                    getHeight() - arrangementTop - 150 - toggleStripHeight),
+            // A device face has a fixed height, and a Device View shorter than
+            // one cuts every device off at its knobs, so that face of the pane
+            // has a taller floor than the clip editors.
+            const auto paneFloor = lowerPane == LowerPane::devices
+                ? std::max(minimumPaneHeight, DeviceRack::minimumHeight) : minimumPaneHeight;
+            lowerPaneHeight = juce::jlimit(paneFloor,
+                                           std::max(paneFloor, getHeight() - arrangementTop - 150 - toggleStripHeight),
                                            lowerPaneHeight);
             paneH = lowerPaneHeight;
         }
@@ -1778,8 +1782,8 @@ private:
     // handle that resizes the browser.
     static constexpr int browserDividerWidth = 3;
     static constexpr int browserTop = controlBarHeight;
-    // A pane shorter than this shows neither a usable editor nor a device, so
-    // it is the floor for both the pane and the Device View inside it.
+    // A pane shorter than this shows no usable clip editor. The Device View's
+    // floor is taller, DeviceRack::minimumHeight, so it shows a whole device.
     static constexpr int minimumPaneHeight = 112;
     static constexpr int infoViewHeight = 132;
     // Room under the arrangement for the Clip and Devices toggles, which stay

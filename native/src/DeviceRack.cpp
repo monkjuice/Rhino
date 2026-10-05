@@ -339,7 +339,7 @@ DeviceRack::DeviceRack(Session& s) : session(s)
     };
     chainViewport.setViewedComponent(&chainContent, false);
     chainViewport.setScrollBarsShown(false, true);
-    chainViewport.setScrollBarThickness(8);
+    chainViewport.setScrollBarThickness(chainScrollBarThickness);
     chainContent.addAndMakeVisible(add);
     chainContent.addAndMakeVisible(outputLabel);
     for (auto* component : std::initializer_list<juce::Component*>{&title, &context, &open, &remove, &chainViewport})
@@ -401,7 +401,8 @@ void DeviceRack::resized()
     context.setBounds(106, 3, std::max(40, getWidth() - 282), 22);
     open.setBounds(getWidth() - 148, 3, 52, 22);
     remove.setBounds(getWidth() - 90, 3, 78, 22);
-    chainViewport.setBounds(12, 29, getWidth() - 24, std::max(0, getHeight() - 35));
+    chainViewport.setBounds(12, chainTop, getWidth() - 24,
+                            std::max(0, getHeight() - chainTop - chainBottomMargin));
 
     constexpr auto panelHeight = DeviceEditorPanel::standardHeight;
     int x = 0;

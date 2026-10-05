@@ -277,6 +277,13 @@ void runPatternDeviceRackTest()
         else
             require(false, "Rhino Arp snapshot path is writable");
     }
+    // The shell's floor for the Device View: a chain too wide for the rack
+    // grows a scrollbar, and a whole device face must still show above it.
+    chainView.setSize(900, DeviceRack::minimumHeight);
+    require(chainView.chainViewport.getHorizontalScrollBar().isVisible()
+            && chainView.chainViewport.getViewHeight() >= DeviceEditorPanel::standardHeight,
+            "A Device View at its minimum height shows a whole device above the chain's scrollbar");
+    chainView.setSize(1400, 280);
     const auto gapAt = [&chainView](juce::Point<int> point) { return chainView.dropGapFor(point); };
     const auto* second = chainView.devicePanels[1];
     require(gapAt({0, 60}) == 0, "A drop at the far left lands in front of the first device");

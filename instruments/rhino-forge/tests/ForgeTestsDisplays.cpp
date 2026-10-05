@@ -75,6 +75,36 @@ void chromeCacheSuite()
     // and drawn again rather than swapped back.
     require(same(render({"FX"}), render({"OSC", "TABLE", "MATRIX", "MIX", "FX"})),
             "a tab reached after every other one draws what it draws on its own");
+
+    // An oscillator's picture tube is in the cached layer, and a spectral
+    // oscillator trades it for a flat well: switching the mode has to throw
+    // the layer away, or the tube stays behind the spectrogram.
+    {
+        const auto drawOscPage = [] (rhino::forge::Processor& processor, juce::AudioProcessorEditor& editor)
+        {
+            for (auto* child : editor.getChildren())
+                if (auto* tab = dynamic_cast<rhino::forge::ui::PageTab*>(child))
+                    if (tab->getButtonText() == "OSC" && tab->onClick) tab->onClick();
+            juce::Image canvas(juce::Image::ARGB, editor.getWidth(), editor.getHeight(), true);
+            juce::Graphics g(canvas);
+            editor.paint(g);
+            juce::ignoreUnused(processor);
+            return canvas;
+        };
+        const auto spectral = static_cast<float>(rhino::forge::OscMode::spectral);
+
+        auto switched = std::make_unique<rhino::forge::Processor>();
+        std::unique_ptr<juce::AudioProcessorEditor> switchedEditor(switched->createEditor());
+        drawOscPage(*switched, *switchedEditor);
+        setValue(*switched, "oscAMode", spectral);
+        const auto afterSwitch = drawOscPage(*switched, *switchedEditor);
+
+        auto fresh = std::make_unique<rhino::forge::Processor>();
+        setValue(*fresh, "oscAMode", spectral);
+        std::unique_ptr<juce::AudioProcessorEditor> freshEditor(fresh->createEditor());
+        require(same(afterSwitch, drawOscPage(*fresh, *freshEditor)),
+                "an oscillator switched to spectral draws what one opened spectral draws");
+    }
 }
 
 // Compare consecutive resize frames with opening the editor at each size.

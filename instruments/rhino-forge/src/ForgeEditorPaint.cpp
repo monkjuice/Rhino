@@ -23,9 +23,13 @@ juce::String Editor::chromeKey(float scale) const
     {
         key << (!moduleShown(*module.descriptor) ? '-' : module.on() ? '1' : '0');
         // A plate is drawn in its module's colour, so a colour that has been
-        // changed has to throw the cached layer away like anything else.
+        // changed has to throw the cached layer away like anything else. And
+        // its picture tube is in the layer too, which a spectral oscillator
+        // trades for a flat well.
         if (module.descriptor->display == ui::Display::oscillator)
-            key << processor.panelColour(module.descriptor->id);
+            key << processor.panelColour(module.descriptor->id)
+                << (oscillatorIsSpectral(juce::jmax(0, oscillatorIndexFromId(juce::String(module.descriptor->id))))
+                        ? 'S' : 'W');
     }
     return key;
 }
@@ -51,6 +55,22 @@ void Editor::paintPlates(juce::Graphics& g)
         if (!moduleShown(descriptor)) continue;
         ui::drawModuleShell(g, moduleAreaFor(descriptor), descriptor, module.on(),
                             accentOf(descriptor), ui::plateCode(descriptor, pageOf(descriptor)));
+    }
+
+    // The picture tubes are glass and bezel that do not change from one frame
+    // to the next, so they are drawn here with the plates and blitted with
+    // them. Stroked live, three tubes of gradient fills and bezel strokes ran
+    // 24 times a second whether anything had moved or not. Only the trace on
+    // each is live. A spectral oscillator draws a flat well instead, live,
+    // under its picture.
+    for (const auto& module : moduleUis)
+    {
+        const auto& descriptor = *module.descriptor;
+        if (!moduleShown(descriptor) || descriptor.display != ui::Display::oscillator) continue;
+        if (oscillatorIsSpectral(juce::jmax(0, oscillatorIndexFromId(juce::String(descriptor.id))))) continue;
+        const auto display = ui::displayBounds(moduleAreaFor(descriptor), descriptor);
+        if (!display.isEmpty())
+            ui::drawCrtScreen(g, display, accentOf(descriptor), module.on() ? 1.0f : 0.35f);
     }
 }
 
@@ -156,10 +176,9 @@ void Editor::paint(juce::Graphics& g)
         // cuts its corners off. See drawSpectralWell.
         if (descriptor.display == ui::Display::oscillator)
         {
+            // The tube itself is in the cached layer; see paintPlates.
             if (oscillatorIsSpectral(juce::jmax(0, oscillatorIndexFromId(juce::String(descriptor.id)))))
                 ui::drawSpectralWell(g, spectralWellFor(descriptor), alpha);
-            else
-                ui::drawCrtScreen(g, display, accent, alpha);
         }
         else if (descriptor.display == ui::Display::envelope)
             // Short of the full strip: the zoom control has its own well beside

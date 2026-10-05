@@ -703,6 +703,9 @@ public:
     static juce::Colour clipColour(const te::Clip&);
     juce::Result cycleClipColour(te::EditItemID);
     int clipPluginCount(te::EditItemID) const;
+    // The same for a clip already in hand, which a caller walking every clip
+    // has: asking by id finds it again by walking every clip in the edit.
+    static int clipPluginCount(te::Clip&);
     // An audio clip's own mix. Gain, pan, pitch, the two fades, mute and
     // reverse all live on the clip's state rather than its track, so they
     // travel with the clip, are undone with it, and leave every other clip on

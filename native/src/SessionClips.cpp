@@ -362,10 +362,16 @@ juce::Result Session::cycleClipColour(te::EditItemID id)
 
 int Session::clipPluginCount(te::EditItemID id) const
 {
-    auto* clip = dynamic_cast<te::AudioClipBase*>(findClip(id));
-    if (clip == nullptr || clip->getPluginList() == nullptr)
+    auto* clip = findClip(id);
+    return clip != nullptr ? clipPluginCount(*clip) : 0;
+}
+
+int Session::clipPluginCount(te::Clip& clip)
+{
+    auto* audio = dynamic_cast<te::AudioClipBase*>(&clip);
+    if (audio == nullptr || audio->getPluginList() == nullptr)
         return 0;
-    return clip->getPluginList()->size();
+    return audio->getPluginList()->size();
 }
 
 void Session::toggleTrackMute(int track)

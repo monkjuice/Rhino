@@ -174,6 +174,17 @@ int runUiProfile()
         }));
         session.endTempoGesture();
 
+        // What every announced change costs the arrangement: the rebuild, and
+        // the layout pass it ends with.
+        report("arrangement sync", medianMicroseconds(30, [&] (int)
+        {
+            arrangement->sync();
+        }));
+        report("arrangement resized", medianMicroseconds(60, [&] (int)
+        {
+            arrangement->resized();
+        }));
+
         // What the lanes cost the message thread now that the engine plays
         // them: one mirror onto the engine's curves for each change to the
         // document, and, every frame while playing, the rack reading back the

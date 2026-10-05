@@ -119,7 +119,7 @@ void Arrangement::sync()
             const auto p = clip->getPosition();
             ClipView view {clip->itemID, clip->getName(), {p.time.getStart().inSeconds(), p.time.getEnd().inSeconds(), p.offset.inSeconds()}, nullptr, {}, clip->getSpeedRatio(),
                            p.offset.inSeconds() + p.time.getLength().inSeconds(), track, Session::clipColour(*clip),
-                           session.clipPluginCount(clip->itemID)};
+                           Session::clipPluginCount(*clip)};
             if (auto* audio = dynamic_cast<te::WaveAudioClip*>(clip))
             {
                 const auto file = clip->getSourceFileReference().getFile();
@@ -144,7 +144,9 @@ void Arrangement::sync()
                 // or by pasting a region that began part-way through a clip -
                 // full of notes it never plays, with the ones it does play
                 // pushed off the right-hand end.
-                for (auto* note : midi->getSequence().getNotes())
+                const auto& notes = midi->getSequence().getNotes();
+                view.midiNotes.reserve(static_cast<size_t>(notes.size()));
+                for (auto* note : notes)
                 {
                     const auto noteStart = session.edit->tempoSequence.toTime(note->getStartBeat()).inSeconds()
                                          - p.offset.inSeconds();
@@ -154,7 +156,7 @@ void Arrangement::sync()
                 }
             }
             songEnd = std::max(songEnd, view.position.end);
-            clips.push_back(view);
+            clips.push_back(std::move(view));
         }
     }
     if (!masterVolume.isMouseButtonDown())

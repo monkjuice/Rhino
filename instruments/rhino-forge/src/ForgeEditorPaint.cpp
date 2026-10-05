@@ -211,7 +211,13 @@ void Editor::paint(juce::Graphics& g)
                         const auto& picture = spectrogramFor(which, plot, accent);
                         if (picture.isValid())
                         {
-                            g.drawImageAt(picture, plot.getX(), plot.getY());
+                            // Dimmed with the rest of a switched-off module,
+                            // rather than drawn at full brightness on it.
+                            {
+                                juce::Graphics::ScopedSaveState dimmed(g);
+                                g.setOpacity(alpha);
+                                g.drawImageAt(picture, plot.getX(), plot.getY());
+                            }
                             paintSpectralMarkers(g, which, plot, accent, alpha);
                             // The playhead, where the loudest voice has got to.
                             // Drawn only while a note is actually sounding: at

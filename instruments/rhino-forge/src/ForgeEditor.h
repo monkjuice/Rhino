@@ -350,10 +350,11 @@ private:
     void showSampleMenu(int oscillator);
     void loadSampleInto(int oscillator);
     // The drawn spectrogram, and what it was drawn from. Rebuilt only when the
-    // sample or the size changes; see spectrogramFor.
+    // sample, the size or the colour changes; see spectrogramFor.
     std::array<juce::Image, oscillatorCount> spectrogramCache {};
     std::array<int, oscillatorCount> spectrogramRevision {};
     std::array<juce::Rectangle<int>, oscillatorCount> spectrogramArea {};
+    std::array<juce::Colour, oscillatorCount> spectrogramColour {};
 
     // The loop field, which is driven the way MODE is: what is stored and what
     // is listed are two orders. ForgeEditorSpectral.cpp.

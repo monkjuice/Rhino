@@ -81,17 +81,20 @@ bool Editor::oscillatorIsSpectral(int oscillator) const
 // The picture, kept rather than redrawn. The panel repaints whole at 24 Hz, so
 // anything worked out inside paint() is worked out twenty-four times a second
 // whether or not it has changed — and a spectrogram is a pass over every bin of
-// every frame. It is rebuilt when the sample changes or the module is resized,
-// and blitted on every other frame.
+// every frame. It is rebuilt when the sample changes, the module is resized or
+// the oscillator is recoloured - the picture is drawn in its colour, and kept
+// the old one until the sample changed - and blitted on every other frame.
 const juce::Image& Editor::spectrogramFor(int oscillator, juce::Rectangle<int> area,
                                           juce::Colour accent)
 {
     const auto index = static_cast<size_t>(juce::jlimit(0, oscillatorCount - 1, oscillator));
     const auto revision = processor.sampleStore().revision(oscillator);
-    if (spectrogramRevision[index] != revision || spectrogramArea[index] != area)
+    if (spectrogramRevision[index] != revision || spectrogramArea[index] != area
+        || spectrogramColour[index] != accent)
     {
         spectrogramRevision[index] = revision;
         spectrogramArea[index] = area;
+        spectrogramColour[index] = accent;
         // Read on the message thread, which is also the only thread that
         // publishes one, so what is read here cannot be freed underneath it.
         const auto* sample = processor.sampleStore().sample(oscillator);

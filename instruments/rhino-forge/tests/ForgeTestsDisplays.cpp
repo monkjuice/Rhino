@@ -76,34 +76,63 @@ void chromeCacheSuite()
     require(same(render({"FX"}), render({"OSC", "TABLE", "MATRIX", "MIX", "FX"})),
             "a tab reached after every other one draws what it draws on its own");
 
+    const auto drawOscPage = [] (juce::AudioProcessorEditor& editor)
+    {
+        for (auto* child : editor.getChildren())
+            if (auto* tab = dynamic_cast<rhino::forge::ui::PageTab*>(child))
+                if (tab->getButtonText() == "OSC" && tab->onClick) tab->onClick();
+        juce::Image canvas(juce::Image::ARGB, editor.getWidth(), editor.getHeight(), true);
+        juce::Graphics g(canvas);
+        editor.paint(g);
+        return canvas;
+    };
+    const auto spectral = static_cast<float>(rhino::forge::OscMode::spectral);
+
     // An oscillator's picture tube is in the cached layer, and a spectral
     // oscillator trades it for a flat well: switching the mode has to throw
     // the layer away, or the tube stays behind the spectrogram.
     {
-        const auto drawOscPage = [] (rhino::forge::Processor& processor, juce::AudioProcessorEditor& editor)
-        {
-            for (auto* child : editor.getChildren())
-                if (auto* tab = dynamic_cast<rhino::forge::ui::PageTab*>(child))
-                    if (tab->getButtonText() == "OSC" && tab->onClick) tab->onClick();
-            juce::Image canvas(juce::Image::ARGB, editor.getWidth(), editor.getHeight(), true);
-            juce::Graphics g(canvas);
-            editor.paint(g);
-            juce::ignoreUnused(processor);
-            return canvas;
-        };
-        const auto spectral = static_cast<float>(rhino::forge::OscMode::spectral);
-
         auto switched = std::make_unique<rhino::forge::Processor>();
         std::unique_ptr<juce::AudioProcessorEditor> switchedEditor(switched->createEditor());
-        drawOscPage(*switched, *switchedEditor);
+        drawOscPage(*switchedEditor);
         setValue(*switched, "oscAMode", spectral);
-        const auto afterSwitch = drawOscPage(*switched, *switchedEditor);
+        const auto afterSwitch = drawOscPage(*switchedEditor);
 
         auto fresh = std::make_unique<rhino::forge::Processor>();
         setValue(*fresh, "oscAMode", spectral);
         std::unique_ptr<juce::AudioProcessorEditor> freshEditor(fresh->createEditor());
-        require(same(afterSwitch, drawOscPage(*fresh, *freshEditor)),
+        require(same(afterSwitch, drawOscPage(*freshEditor)),
                 "an oscillator switched to spectral draws what one opened spectral draws");
+    }
+
+    // A spectrogram is drawn in its oscillator's colour, so recolouring the
+    // oscillator redraws the picture. It used to keep the old colour until
+    // the sample changed.
+    {
+        std::vector<float> sine(48000);
+        for (size_t i = 0; i < sine.size(); ++i)
+            sine[i] = 0.5f * std::sin(juce::MathConstants<float>::twoPi * 440.0f * static_cast<float>(i) / 48000.0f);
+        const auto spectralWithSample = [&sine, spectral] ()
+        {
+            auto processor = std::make_unique<rhino::forge::Processor>();
+            setValue(*processor, "oscAMode", spectral);
+            processor->sampleStore().publish(0, std::make_unique<rhino::forge::Sample>(
+                sine.data(), static_cast<int>(sine.size()), 48000.0, "SINE"));
+            return processor;
+        };
+        const auto red = static_cast<int>(rhino::forge::ui::PanelColour::red);
+
+        auto recoloured = spectralWithSample();
+        std::unique_ptr<juce::AudioProcessorEditor> recolouredEditor(recoloured->createEditor());
+        drawOscPage(*recolouredEditor);
+        recoloured->setPanelColour("oscA", red);
+        const auto afterRecolour = drawOscPage(*recolouredEditor);
+
+        auto fresh = spectralWithSample();
+        fresh->setPanelColour("oscA", red);
+        std::unique_ptr<juce::AudioProcessorEditor> freshEditor(fresh->createEditor());
+        require(same(afterRecolour, drawOscPage(*freshEditor)),
+                "a recoloured spectral oscillator draws its picture in the new colour");
     }
 }
 

@@ -1872,6 +1872,15 @@ public:
             quit();
             return;
         }
+        // Timings, not checks, and no audio device: it measures the message
+        // thread, and leaves the audio backend to any Rhino already running.
+        if (args == "--profile-ui")
+        {
+            Session::setCommandLineTestMode(true);
+            setApplicationReturnValue(runUiProfile());
+            quit();
+            return;
+        }
         if (args == "--self-test" || args == "--pattern-test" || args == "--arrangement-test"
             || args == "--arrangement-geometry-test")
         {

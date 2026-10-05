@@ -1053,6 +1053,9 @@ int runSelfTest();
 int runPatternTest();
 int runArrangementTest();
 int runArrangementGeometryTest();
+// Not a test: times what the interface costs and prints medians. See
+// tests/UiProfile.cpp.
+int runUiProfile();
 // Rhino Tune's and Rhino EQ's checks are their own translation units because
 // they measure rendered audio rather than reading state back, and that needs
 // a page of scaffolding -- a transform, a tone generator -- that nothing else

@@ -113,6 +113,7 @@ target_sources(RhinoNative PRIVATE
     src/tests/AutoTuneTest.cpp
     src/tests/EqTest.cpp
     src/tests/VocoderTest.cpp
+    src/tests/UiProfile.cpp
     src/tests/Pattern/DeviceRackTest.cpp
     src/tests/Pattern/WorkflowTest.cpp
     src/tests/Arrangement/ClipGeometryTest.cpp

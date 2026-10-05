@@ -2,11 +2,13 @@
 #include "Session.h"
 #include "DeviceIds.h"
 // Session's public header reaches the device library through its catalog
-// only. These two are included here, in the private header, because the
-// Session implementation genuinely manipulates them: it inserts a Utility and
-// sets a drum kit. Nothing outside Session's own .cpp files sees this.
+// only. These are included here, in the private header, because the Session
+// implementation genuinely uses them: it inserts a Utility, sets a drum kit,
+// and reads what a native device declares about its controls. Nothing outside
+// Session's own .cpp files sees this.
 #include "audio/UtilityDevice.h"
 #include "instruments/DrumDevice.h"
+#include "sdk/NativeDevice.h"
 
 // Shared internals of the Session implementation.
 //

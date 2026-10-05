@@ -71,6 +71,12 @@ public:
         int pluginIndex = -1;
         bool enabled = true;
         bool removable = false;
+        // The catalog id, so a face is chosen by what the device is rather
+        // than by its engine type. Empty for a device the catalog lacks.
+        juce::String deviceId;
+        // Written on the device SDK: its controls declare their own shape,
+        // and the rack generates a face from them.
+        bool native = false;
     };
     struct DeviceParameter
     {
@@ -82,6 +88,14 @@ public:
         bool discrete = false;
         bool automated = false;
         bool automationOverridden = false;
+        // The shape of the control, as far as the device says. A native
+        // device says all of it; for anything else these keep their defaults
+        // or what the engine parameter reports.
+        juce::String section;
+        juce::StringArray choices;  // a chooser's names, in value order
+        bool toggle = false;
+        std::optional<float> defaultValue;
+        double skew = 1.0;          // the knob's travel, as NormalisableRange::skew
     };
     struct DeviceTarget
     {

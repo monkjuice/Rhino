@@ -325,8 +325,10 @@ std::vector<Session::DeviceSlot> Session::deviceSlots(int track) const
         const auto type = plugin->getPluginType();
         if (isTrackInfrastructure(type))
             continue;
+        const auto* entry = isForgePlugin(*plugin) ? DeviceCatalog::byId("RhinoForge") : DeviceCatalog::byTypeName(type);
         slots.push_back({plugin->getDisplayName(), type, deviceKind(*plugin), pluginIndex,
-                         plugin->isEnabled(), true});
+                         plugin->isEnabled(), true, entry != nullptr ? entry->id : juce::String(),
+                         dynamic_cast<NativeDevice*>(plugin) != nullptr});
     }
     return slots;
 }
@@ -362,6 +364,9 @@ std::vector<Session::DeviceParameter> Session::deviceParameters(int track, int s
         return parameters;
     }
 
+    // A native device declares each control once, in the order the engine
+    // lists them, so its exposed index is its declaration index.
+    auto* native = dynamic_cast<NativeDevice*>(plugin);
     int parameterIndex = 0;
     for (auto* parameter : plugin->getAutomatableParameters())
     {
@@ -373,14 +378,26 @@ std::vector<Session::DeviceParameter> Session::deviceParameters(int track, int s
             continue;
         const DeviceTarget target {track, slot, currentIndex};
         const auto* runtime = findAutomationRuntime(target);
-        parameters.push_back({parameter->getParameterShortName(18),
-                              parameter->getCurrentValueAsStringWithLabel(),
-                              parameter->getCurrentValue(),
-                              range.getStart(),
-                              range.getEnd(),
-                              parameter->isDiscrete(),
-                              hasActiveTrackAutomation(*edit, target),
-                              runtime != nullptr && runtime->overridden});
+        DeviceParameter exposed {parameter->getParameterShortName(18),
+                                 parameter->getCurrentValueAsStringWithLabel(),
+                                 parameter->getCurrentValue(),
+                                 range.getStart(),
+                                 range.getEnd(),
+                                 parameter->isDiscrete(),
+                                 hasActiveTrackAutomation(*edit, target),
+                                 runtime != nullptr && runtime->overridden};
+        exposed.defaultValue = parameter->getDefaultValue();
+        exposed.skew = parameter->valueRange.skew;
+        // Only a native device is asked for its labels: an external plugin
+        // may answer by formatting every state it has, on every rack sync.
+        if (native != nullptr && currentIndex < native->parameterCount())
+        {
+            const auto& spec = native->parameterSpec(currentIndex);
+            exposed.section = spec.section;
+            exposed.toggle = spec.toggle;
+            exposed.choices = spec.choices;
+        }
+        parameters.push_back(std::move(exposed));
     }
     return parameters;
 }

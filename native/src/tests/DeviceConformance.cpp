@@ -50,10 +50,10 @@ public:
     Param mode = param("mode", "Mode").choices({ "Clean", "Warm", "Hot" }, 1);
     Param bypass = param("bypass", "Bypass").toggle();
     Param glide = param("glide", "Glide").range(0.0f, 1.0f).defaultValue(0.5f)
-                      .unit(ParamUnit::percent).smoothing(0.01f);
+                      .unit(ParamUnit::percent).smoothing(0.01f).section("Tone");
     Param poison = param("poison", "Poison").toggle();
     Param cutoff = param("cutoff", "Cutoff").range(20.0f, 20000.0f).defaultValue(1000.0f)
-                       .skewAround(1000.0f).unit(ParamUnit::hertz);
+                       .skewAround(1000.0f).unit(ParamUnit::hertz).section("Tone");
 
     // What the device was asked to do, read back by the checks.
     std::vector<int> stretches;
@@ -311,6 +311,47 @@ void checkProbeProcessing(te::Edit& edit)
         require(device.controllers == 1, "Controllers arrive as calls");
         device.deinitialise();
     }
+}
+
+// What the session tells the rack about a native device: that it is one, its
+// catalog id, and the shape each control declares. A face is generated from
+// exactly this, so it is checked here rather than through a face.
+void checkNativeDevicesThroughSession(Session& session)
+{
+    constexpr auto trackIndex = 1;
+    auto* track = te::getAudioTracks(*session.edit)[trackIndex];
+    require(track != nullptr, "The starter stack has a second track");
+    track->pluginList.insertPlugin(session.edit->getPluginCache().createNewPlugin(ProbeEffect::xmlTypeName, {}), -1, nullptr);
+    require(session.addDevice("RhinoSpace", trackIndex).wasOk(), "Rhino Space goes on the second track");
+
+    const Session::DeviceSlot* probe = nullptr;
+    const Session::DeviceSlot* space = nullptr;
+    const auto slots = session.deviceSlots(trackIndex);
+    for (const auto& slot : slots)
+    {
+        if (slot.type == ProbeEffect::xmlTypeName)
+            probe = &slot;
+        if (slot.type == "rhino.space.v1")
+            space = &slot;
+    }
+    require(probe != nullptr && probe->native && probe->deviceId.isEmpty(),
+            "A native device the catalog lacks is reported native, with no catalog id");
+    require(space != nullptr && space->native && space->deviceId == "RhinoSpace",
+            "A catalog device on the SDK is reported native, under its catalog id");
+
+    const auto controls = session.deviceParameters(trackIndex, probe->pluginIndex);
+    require(controls.size() == 6, "Every declared control is reported");
+    require(controls[0].defaultValue == std::optional<float>(-6.0f) && controls[0].choices.isEmpty()
+                && !controls[0].toggle && controls[0].section.isEmpty() && controls[0].skew == 1.0,
+            "A plain knob reports its default and a linear travel");
+    require(controls[1].choices == juce::StringArray { "Clean", "Warm", "Hot" } && controls[1].discrete
+                && !controls[1].toggle && controls[1].valueText == "Warm",
+            "A chooser reports its choices and reads as one");
+    require(controls[2].toggle && controls[2].discrete && controls[2].choices.isEmpty(),
+            "A toggle reports itself as one");
+    require(controls[3].section == "Tone" && controls[5].section == "Tone",
+            "A control reports the section it is declared in");
+    require(controls[5].skew != 1.0, "A skewed control reports its travel");
 }
 
 // ---- The catalog -------------------------------------------------------------
@@ -637,6 +678,8 @@ int runDeviceConformance()
         checkProbeDeclarations(*session.edit);
         juce::Logger::writeToLog("Rhino: device conformance, the SDK's processing");
         checkProbeProcessing(*session.edit);
+        juce::Logger::writeToLog("Rhino: device conformance, native devices through the session");
+        checkNativeDevicesThroughSession(session);
 
         std::vector<juce::String> unexpected;
         std::set<juce::String> ran;

@@ -423,6 +423,9 @@ bool Session::ensurePatternLengthSteps(int requiredSteps)
     const auto end = edit->tempoSequence.toTime(startBeat + tracktion::core::BeatDuration::fromBeats(
         requiredSteps * stepDurationBeats(editorStepResolution())));
     pattern().setLength(end - position.time.getStart(), true);
+    // A clip grown to hold pasted notes wins the ground it grew over, as every
+    // other clip edit does, rather than lying on top of its neighbour.
+    makeRoomForClip(pattern());
     markModified();
     refreshLoop();
     sendSynchronousChangeMessage();

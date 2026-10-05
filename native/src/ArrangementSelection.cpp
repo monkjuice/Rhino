@@ -413,16 +413,19 @@ void Arrangement::deleteSelection()
     // that cross its edges. Without one, Delete takes the selected clips whole.
     if (timeSelection.active && timeSelection.isRange())
     {
-        const auto result = session.clearClipRegion(timeSelection.start, timeSelection.end,
-                                                    timeSelection.firstTrack, timeSelection.lastTrack);
+        // Read before the selection is cleared, which clears the region too:
+        // the line goes where the region started, not to the top of track one.
+        const auto region = timeSelection;
+        const auto result = session.clearClipRegion(region.start, region.end, region.firstTrack, region.lastTrack);
         if (result.failed() && status) status(result.getErrorMessage());
         setSelection({});
-        setInsertPoint(timeSelection.start, timeSelection.firstTrack);
+        setInsertPoint(region.start, region.firstTrack);
         focus = Focus::region;
         return;
     }
     if (selectedClips.empty() && selected != te::EditItemID()) selectedClips = {selected};
-    for (const auto id : selectedClips) session.deleteClip(id);
+    // One undo step for the whole selection.
+    session.deleteClips(selectedClips);
     setSelection({});
 }
 

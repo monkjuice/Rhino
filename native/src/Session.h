@@ -574,6 +574,18 @@ public:
     // delete it on the way past.
     juce::Result editClip(te::EditItemID, ClipGeometry, ClipGesture, int targetTrack = -1,
                           const std::vector<te::EditItemID>& movingWith = {});
+    // Several clips carried by one drag: one undo step, one restart of
+    // playback, and all or nothing - a clip that may not land where it is
+    // going refuses the whole move rather than leaving the others moved.
+    struct ClipMove
+    {
+        te::EditItemID id;
+        ClipGeometry position;
+        int track = -1;
+    };
+    juce::Result moveClips(const std::vector<ClipMove>&);
+    // Every clip in the list, in one undo step.
+    void deleteClips(const std::vector<te::EditItemID>&);
     juce::Result splitClip(te::EditItemID, double splitTimeSeconds);
     // Every clip in the list cut at the same time, in one undo step, so a line
     // drawn across four lanes cuts all four and one Ctrl+Z puts all four back.
@@ -628,8 +640,22 @@ public:
         juce::Colour colour;
         juce::File sourceFile;                        // audio only
         double speed = 1.0;                           // audio only
+        // audio only: the clip's own mix and warp, so a copy plays what the
+        // original plays rather than the raw file at speed one.
+        float gainDb = 0.0f, pan = 0.0f, pitchSemitones = 0.0f;
+        double fadeInSeconds = 0.0, fadeOutSeconds = 0.0;
+        bool muted = false, reversed = false;
+        // Held as plain values because the warp types are declared below:
+        // the mode as its WarpMode value, each marker as (source, warp) seconds.
+        bool warped = false, warpMarkers = false;
+        int warpMode = 0;
+        double warpBeats = 0.0;
+        std::vector<std::pair<double, double>> markers;
         std::vector<Note> notes;                      // midi only
-        Instrument instrument = Instrument::Utility;  // midi only: what its track played
+        // midi only: the catalog id of what its track played, or empty for a
+        // track that played nothing - in which case the paste leaves the
+        // destination's instrument alone.
+        juce::String instrumentId;
         // Relative to the copied region's corner, so pasting is a translation
         // and nothing else.
         int track = 0;
@@ -893,6 +919,16 @@ private:
     // gesture already has one open, apply, and notify once it is over.
     juce::Result applyAudioClipEdit(te::EditItemID, const juce::String& actionName,
                                     const std::function<void(te::WaveAudioClip&)>&);
+    // SessionClips.cpp - one clip's move or trim without a transaction, a
+    // notification or a playback restart, so moveClips can carry several
+    // inside one undo step. trackChanged says whether it changed lanes, and
+    // changed whether it moved at all.
+    juce::Result editClipInEdit(te::EditItemID, ClipGeometry, ClipGesture, int targetTrack,
+                                const std::vector<te::EditItemID>& movingWith, bool& trackChanged,
+                                bool& changed);
+    // SessionTransport.cpp - an import without a transaction, so importAudio
+    // can add the lane it lands on in the same undo step.
+    juce::Result importAudioInEdit(const juce::File&, int track, double startSeconds);
     // SessionRegion.cpp - the region edit itself, without a transaction or a
     // notification, so paste can clear and insert inside one undo step.
     bool clearClipRegionInEdit(double startSeconds, double endSeconds, int firstTrack, int lastTrack,

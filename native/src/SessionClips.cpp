@@ -29,9 +29,33 @@ bool Session::shouldShowClipInArrangement(te::Clip& clip) const
         || midi->getSequence().getNumNotes() > 0;
 }
 
-juce::Result Session::editClip(te::EditItemID id, ClipGeometry next, ClipGesture gesture, int targetTrack,
-                               const std::vector<te::EditItemID>& movingWith)
+namespace
 {
+// A clip that changed lanes needs a new playback graph, not a restart of the
+// old one: the old graph has no node for it on the lane it arrived on.
+void resumePlaybackAfterClipEdit(te::Edit& edit, bool laneChanged, bool wasPlaying, bool hadPlaybackContext)
+{
+    auto& transport = edit.getTransport();
+    if (laneChanged && (wasPlaying || hadPlaybackContext))
+    {
+        transport.freePlaybackContext();
+        transport.ensureContextAllocated(true);
+        if (wasPlaying)
+            transport.play(true);
+    }
+    else if (wasPlaying)
+    {
+        edit.restartPlayback();
+    }
+}
+}
+
+juce::Result Session::editClipInEdit(te::EditItemID id, ClipGeometry next, ClipGesture gesture, int targetTrack,
+                                     const std::vector<te::EditItemID>& movingWith, bool& trackChanged,
+                                     bool& changed)
+{
+    trackChanged = false;
+    changed = false;
     auto* clip = findClip(id);
     if (!clip) return juce::Result::fail("Select a clip first.");
     if (!std::isfinite(next.start) || !std::isfinite(next.end) || !std::isfinite(next.offset)
@@ -42,8 +66,6 @@ juce::Result Session::editClip(te::EditItemID id, ClipGeometry next, ClipGesture
     auto* oldTrack = clip->getClipTrack();
     const auto oldTrackIndex = tracks.indexOf(dynamic_cast<te::AudioTrack*>(oldTrack));
     const auto movingMidi = dynamic_cast<te::MidiClip*>(clip) != nullptr;
-    const auto sourceInstrument = movingMidi && oldTrackIndex >= 0 ? activeTrackInstrument(*tracks[oldTrackIndex])
-                                                                   : Instrument::Utility;
     if (targetTrack < 0 || gesture != ClipGesture::move)
         targetTrack = oldTrackIndex;
     if (targetTrack < 0 || targetTrack > tracks.size())
@@ -51,21 +73,21 @@ juce::Result Session::editClip(te::EditItemID id, ClipGeometry next, ClipGesture
     // A clip only ever lands on a lane of its own kind. Dropping one on the
     // wrong lane used to drag the lane's kind along with it - a MIDI clip
     // carried its instrument onto an audio track and silently made it MIDI.
-    if (targetTrack != oldTrackIndex && targetTrack < tracks.size()
-        && trackType(targetTrack) != (movingMidi ? TrackType::midi : TrackType::audio))
-        return juce::Result::fail(movingMidi
-            ? "That is an audio track. Move MIDI clips to a MIDI track."
-            : "That is a MIDI track. Move audio clips to an audio track.");
+    if (targetTrack != oldTrackIndex && targetTrack < tracks.size())
+    {
+        if (isGroupBusTrack(targetTrack))
+            return juce::Result::fail("A group track carries its members' audio, so it takes no clips.");
+        if (trackType(targetTrack) != (movingMidi ? TrackType::midi : TrackType::audio))
+            return juce::Result::fail(movingMidi
+                ? "That is an audio track. Move MIDI clips to a MIDI track."
+                : "That is a MIDI track. Move audio clips to an audio track.");
+    }
     const auto old = clip->getPosition();
     if (std::abs(old.time.getStart().inSeconds() - next.start) < 1.0e-8
         && std::abs(old.time.getEnd().inSeconds() - next.end) < 1.0e-8
         && std::abs(old.offset.inSeconds() - next.offset) < 1.0e-8
         && targetTrack == oldTrackIndex)
         return juce::Result::ok();
-    auto& transport = edit->getTransport();
-    const auto wasPlaying = transport.isPlaying();
-    const auto hadPlaybackContext = transport.isPlayContextActive();
-    edit->getUndoManager().beginNewTransaction(gesture == ClipGesture::move ? "Move clip" : "Trim clip");
     if (targetTrack == tracks.size())
     {
         // Dragged off the bottom of the stack: the new lane is made for the
@@ -83,16 +105,20 @@ juce::Result Session::editClip(te::EditItemID id, ClipGeometry next, ClipGesture
     if (targetTrack != oldTrackIndex)
     {
         auto* target = refreshedTracks[targetTrack];
-        if (movingMidi)
+        // A MIDI clip brings its instrument with it, bypassed or not. A clip
+        // from a track that plays nothing changes nothing where it lands.
+        if (const auto* instrument = movingMidi && oldTrackIndex >= 0 ? carriedInstrument(*tracks[oldTrackIndex])
+                                                                      : nullptr)
         {
             bool instrumentChanged = false;
-            const auto result = switchTrackInstrument(*edit, *target, sourceInstrument, instrumentChanged,
+            const auto result = switchTrackInstrument(*edit, *target, *instrument, instrumentChanged,
                                                       forgeDescription ? &*forgeDescription : nullptr);
             if (result.failed())
                 return result;
         }
         if (!clip->moveTo(*target))
             return juce::Result::fail("The clip could not be moved to that track.");
+        trackChanged = true;
     }
     clip->setPosition({{tracktion::core::TimePosition::fromSeconds(next.start),
                        tracktion::core::TimePosition::fromSeconds(next.end)},
@@ -101,20 +127,83 @@ juce::Result Session::editClip(te::EditItemID id, ClipGeometry next, ClipGesture
     // are spared: a run carried one beat to the right must not have its
     // leading clip delete the one behind it.
     makeRoomForClip(*clip, movingWith);
+    changed = true;
+    return juce::Result::ok();
+}
+
+juce::Result Session::editClip(te::EditItemID id, ClipGeometry next, ClipGesture gesture, int targetTrack,
+                               const std::vector<te::EditItemID>& movingWith)
+{
+    auto& transport = edit->getTransport();
+    const auto wasPlaying = transport.isPlaying();
+    const auto hadPlaybackContext = transport.isPlayContextActive();
+    auto& undoManager = edit->getUndoManager();
+    undoManager.beginNewTransaction(gesture == ClipGesture::move ? "Move clip" : "Trim clip");
+    bool trackChanged = false, changed = false;
+    const auto result = editClipInEdit(id, next, gesture, targetTrack, movingWith, trackChanged, changed);
+    if (result.failed())
+    {
+        // Whatever part of the edit had happened is taken back, so a refusal
+        // halfway through - a lane made, an instrument switched - leaves the
+        // document as it was rather than half done.
+        undoManager.undoCurrentTransactionOnly();
+        repairPatternClip();
+        return result;
+    }
+    // A press that never moved the clip is not an edit: nothing to mark,
+    // nothing to restart, nothing to announce.
+    if (!changed)
+    {
+        undoManager.beginNewTransaction();
+        return juce::Result::ok();
+    }
     refreshLoop();
-    edit->getUndoManager().beginNewTransaction();
+    undoManager.beginNewTransaction();
     markModified();
-    if (targetTrack != oldTrackIndex && (wasPlaying || hadPlaybackContext))
+    resumePlaybackAfterClipEdit(*edit, trackChanged, wasPlaying, hadPlaybackContext);
+    sendSynchronousChangeMessage();
+    return juce::Result::ok();
+}
+
+juce::Result Session::moveClips(const std::vector<ClipMove>& moves)
+{
+    if (moves.empty())
+        return juce::Result::ok();
+    if (moves.size() == 1)
+        return editClip(moves.front().id, moves.front().position, ClipGesture::move, moves.front().track);
+    std::vector<te::EditItemID> travelling;
+    for (const auto& move : moves)
+        travelling.push_back(move.id);
+    auto& transport = edit->getTransport();
+    const auto wasPlaying = transport.isPlaying();
+    const auto hadPlaybackContext = transport.isPlayContextActive();
+    auto& undoManager = edit->getUndoManager();
+    undoManager.beginNewTransaction("Move clips");
+    auto anyTrackChanged = false, anyChanged = false;
+    for (const auto& move : moves)
     {
-        transport.freePlaybackContext();
-        transport.ensureContextAllocated(true);
-        if (wasPlaying)
-            transport.play(true);
+        bool trackChanged = false, changed = false;
+        const auto result = editClipInEdit(move.id, move.position, ClipGesture::move, move.track, travelling,
+                                           trackChanged, changed);
+        if (result.failed())
+        {
+            undoManager.undoCurrentTransactionOnly();
+            repairPatternClip();
+            sendSynchronousChangeMessage();
+            return result;
+        }
+        anyTrackChanged = anyTrackChanged || trackChanged;
+        anyChanged = anyChanged || changed;
     }
-    else if (wasPlaying)
+    if (!anyChanged)
     {
-        edit->restartPlayback();
+        undoManager.beginNewTransaction();
+        return juce::Result::ok();
     }
+    refreshLoop();
+    undoManager.beginNewTransaction();
+    markModified();
+    resumePlaybackAfterClipEdit(*edit, anyTrackChanged, wasPlaying, hadPlaybackContext);
     sendSynchronousChangeMessage();
     return juce::Result::ok();
 }
@@ -220,16 +309,28 @@ void Session::repairPatternClip()
 
 void Session::deleteClip(te::EditItemID id)
 {
-    if (auto* clip = findClip(id))
-    {
-        edit->getUndoManager().beginNewTransaction("Delete audio clip");
-        clip->removeFromParent();
-        repairPatternClip();
-        refreshLoop();
-        edit->getUndoManager().beginNewTransaction();
-        markModified();
-        sendSynchronousChangeMessage();
-    }
+    deleteClips({id});
+}
+
+void Session::deleteClips(const std::vector<te::EditItemID>& ids)
+{
+    auto found = 0;
+    for (const auto id : ids)
+        if (findClip(id) != nullptr)
+            ++found;
+    if (found == 0)
+        return;
+    edit->getUndoManager().beginNewTransaction(found == 1 ? "Delete clip" : "Delete clips");
+    // Found again by id each time: removing one clip rebuilds its track's clip
+    // list, and a pointer gathered before that may not survive it.
+    for (const auto id : ids)
+        if (auto* clip = findClip(id))
+            clip->removeFromParent();
+    repairPatternClip();
+    refreshLoop();
+    edit->getUndoManager().beginNewTransaction();
+    markModified();
+    sendSynchronousChangeMessage();
 }
 
 juce::Colour Session::clipColour(const te::Clip& clip)

@@ -542,6 +542,8 @@ void Arrangement::mergeSelected()
     repaint();
 }
 
+// The whole selection moves by the step the primary clip moves by, in one undo
+// step, so nudging never splits a group apart.
 void Arrangement::nudgeSelected(int direction, bool byBar)
 {
     cancelDrag();
@@ -552,9 +554,18 @@ void Arrangement::nudgeSelected(int direction, bool byBar)
     const auto startBeat = session.edit->tempoSequence.toBeats(old.time.getStart()).inBeats();
     const auto target = session.edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(startBeat + beats * (direction < 0 ? -1.0 : 1.0)));
     const auto delta = target.inSeconds() - old.time.getStart().inSeconds();
-    const auto length = old.time.getLength().inSeconds();
-    const auto start = std::max(0.0, old.time.getStart().inSeconds() + delta);
-    const auto result = session.editClip(selected, {start, start + length, old.offset.inSeconds()}, ClipGesture::move);
+    auto moving = selectedClips;
+    if (std::find(moving.begin(), moving.end(), selected) == moving.end())
+        moving.push_back(selected);
+    std::vector<Session::ClipMove> moves;
+    for (const auto id : moving)
+        if (auto* each = session.findClip(id))
+        {
+            const auto position = each->getPosition();
+            const auto start = std::max(0.0, position.time.getStart().inSeconds() + delta);
+            moves.push_back({id, {start, start + position.time.getLength().inSeconds(), position.offset.inSeconds()}, -1});
+        }
+    const auto result = session.moveClips(moves);
     if (result.failed() && status) status(result.getErrorMessage());
 }
 

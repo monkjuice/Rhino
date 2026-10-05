@@ -74,7 +74,8 @@ Session::ClipRegion Session::copyClipRegion(double startSeconds, double endSecon
             if (auto* midi = dynamic_cast<te::MidiClip*>(clip))
             {
                 snapshot.midi = true;
-                snapshot.instrument = activeTrackInstrument(*tracks[track]);
+                if (const auto* instrument = carriedInstrument(*tracks[track]))
+                    snapshot.instrumentId = instrument->id;
                 // The whole sequence, not the part inside the region: a MIDI
                 // clip is trimmed by its position and offset, so cropping the
                 // notes as well would silence what a later trim should reveal.
@@ -87,6 +88,23 @@ Session::ClipRegion Session::copyClipRegion(double startSeconds, double endSecon
                 snapshot.sourceFile = clip->getSourceFileReference().getFile();
                 if (snapshot.sourceFile == juce::File())
                     continue;
+                // The clip's own mix and warp go with it, or a copy plays the
+                // raw file at speed one instead of what the original plays.
+                const auto mix = audioClipMix(clip->itemID);
+                snapshot.gainDb = mix.gainDb;
+                snapshot.pan = mix.pan;
+                snapshot.pitchSemitones = mix.pitchSemitones;
+                snapshot.fadeInSeconds = mix.fadeInSeconds;
+                snapshot.fadeOutSeconds = mix.fadeOutSeconds;
+                snapshot.muted = mix.muted;
+                snapshot.reversed = mix.reversed;
+                const auto warp = clipWarp(clip->itemID);
+                snapshot.warped = warp.followsTempo;
+                snapshot.warpMode = static_cast<int>(warp.mode);
+                snapshot.warpBeats = warp.beats;
+                snapshot.warpMarkers = warp.markersEnabled;
+                for (const auto& marker : warp.markers)
+                    snapshot.markers.emplace_back(marker.sourceSeconds, marker.warpSeconds);
             }
             else
             {
@@ -217,6 +235,8 @@ juce::Result Session::pasteClipRegion(const ClipRegion& region, double destinati
         const auto index = destinationTrack + static_cast<int>(row);
         if (!rowType[row].has_value() || index >= trackCountBefore)
             continue;
+        if (isGroupBusTrack(index))
+            return juce::Result::fail("A group track carries its members' audio, so it takes no clips.");
         if (trackType(index) != *rowType[row])
             return juce::Result::fail(*rowType[row] == TrackType::midi
                 ? "That is an audio track. Paste MIDI clips on a MIDI track."
@@ -224,6 +244,16 @@ juce::Result Session::pasteClipRegion(const ClipRegion& region, double destinati
     }
 
     edit->getUndoManager().beginNewTransaction("Paste clips");
+    // A paste that fails part of the way through - a source file gone, an
+    // instrument that will not load - takes back what it had already done,
+    // the cleared destination and any lanes it made included.
+    const auto rollBack = [this](juce::Result failure)
+    {
+        edit->getUndoManager().undoCurrentTransactionOnly();
+        repairPatternClip();
+        sendSynchronousChangeMessage();
+        return failure;
+    };
     auto addedLanes = false;
     while (te::getAudioTracks(*edit).size() < destinationTrack + region.trackSpan + 1)
     {
@@ -232,7 +262,7 @@ juce::Result Session::pasteClipRegion(const ClipRegion& region, double destinati
                               ? rowType[static_cast<size_t>(row)].value_or(TrackType::audio)
                               : TrackType::audio;
         if (appendTrack(type) == nullptr)
-            return juce::Result::fail("Could not create a track for pasted clips.");
+            return rollBack(juce::Result::fail("Could not create a track for pasted clips."));
         addedLanes = true;
     }
     // A lane a paste made is a lane like any other from the start: its fader,
@@ -265,12 +295,18 @@ juce::Result Session::pasteClipRegion(const ClipRegion& region, double destinati
         if (snapshot.midi)
         {
             // A MIDI clip carries its instrument with it, the same way moving
-            // one between tracks does.
-            bool instrumentChanged = false;
-            const auto instrumentResult = switchTrackInstrument(*edit, *target, snapshot.instrument, instrumentChanged,
-                                                                forgeDescription ? &*forgeDescription : nullptr);
-            if (instrumentResult.failed())
-                return instrumentResult;
+            // one between tracks does - bypassed or not, so duplicating a clip
+            // on its own track never swaps that track's instrument. A clip from
+            // a track that played nothing changes nothing where it lands.
+            if (const auto* instrument = snapshot.instrumentId.isEmpty() ? nullptr
+                                                                          : DeviceCatalog::byId(snapshot.instrumentId))
+            {
+                bool instrumentChanged = false;
+                const auto instrumentResult = switchTrackInstrument(*edit, *target, *instrument, instrumentChanged,
+                                                                    forgeDescription ? &*forgeDescription : nullptr);
+                if (instrumentResult.failed())
+                    return rollBack(instrumentResult);
+            }
             if (auto midiCopy = target->insertMIDIClip(snapshot.name, range, nullptr))
             {
                 auto& sequence = midiCopy->getSequence();
@@ -285,16 +321,49 @@ juce::Result Session::pasteClipRegion(const ClipRegion& region, double destinati
         else if (snapshot.sourceFile.existsAsFile())
         {
             copy = target->insertWaveClip(snapshot.name, snapshot.sourceFile, {range, offset}, false).get();
-            // Speed is restored before the position is re-asserted, because
-            // changing it rescales what the clip covers.
-            if (auto* audio = dynamic_cast<te::AudioClipBase*>(copy); audio != nullptr && snapshot.speed > 0.0)
+            if (auto* audio = dynamic_cast<te::WaveAudioClip*>(copy))
             {
-                audio->setSpeedRatio(snapshot.speed);
+                // Warp or speed first, then the position re-asserted, because
+                // both rescale what the clip covers; the fades last, because
+                // they are limited by the length the clip ends up with.
+                if (snapshot.warped)
+                {
+                    if (snapshot.warpBeats > 0.0)
+                        audio->getLoopInfo().setNumBeats(snapshot.warpBeats);
+                    applyWarpState(*audio, true, static_cast<WarpMode>(juce::jlimit(0, warpModeCount - 1,
+                                                                                    snapshot.warpMode)));
+                    if (snapshot.warpMarkers && snapshot.markers.size() >= 2)
+                    {
+                        auto& manager = audio->getWarpTimeManager();
+                        audio->setWarpTime(true);
+                        // Straightened, the manager keeps the two ends of the
+                        // file; the copy's own markers go between them and the
+                        // ends move to where the copy had them.
+                        manager.removeAllMarkers();
+                        for (size_t marker = 1; marker + 1 < snapshot.markers.size(); ++marker)
+                            manager.insertMarker({tracktion::core::TimePosition::fromSeconds(snapshot.markers[marker].first),
+                                                  tracktion::core::TimePosition::fromSeconds(snapshot.markers[marker].second)});
+                        manager.moveMarker(0, tracktion::core::TimePosition::fromSeconds(snapshot.markers.front().second));
+                        manager.moveMarker(manager.getMarkers().size() - 1,
+                                           tracktion::core::TimePosition::fromSeconds(snapshot.markers.back().second));
+                    }
+                }
+                else if (snapshot.speed > 0.0)
+                {
+                    audio->setSpeedRatio(snapshot.speed);
+                }
                 audio->setPosition({range, offset});
+                audio->setGainDB(snapshot.gainDb);
+                audio->setPan(snapshot.pan);
+                audio->setPitchChange(snapshot.pitchSemitones);
+                audio->setMuted(snapshot.muted);
+                audio->setIsReversed(snapshot.reversed);
+                audio->setFadeIn(tracktion::core::TimeDuration::fromSeconds(snapshot.fadeInSeconds));
+                audio->setFadeOut(tracktion::core::TimeDuration::fromSeconds(snapshot.fadeOutSeconds));
             }
         }
         if (copy == nullptr)
-            return juce::Result::fail("The clip could not be pasted.");
+            return rollBack(juce::Result::fail("The clip could not be pasted."));
         if (!snapshot.colour.isTransparent())
             setClipColour(*copy, snapshot.colour, &edit->getUndoManager());
         pasted.push_back(copy->itemID);

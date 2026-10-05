@@ -494,20 +494,16 @@ void Arrangement::mouseUp(const juce::MouseEvent& event)
             });
             const auto timeDelta = preview.start - original.start;
             const auto trackDelta = previewTrack - originalTrack;
-            // Every clip in the gesture is named to every move, so one landing
-            // on ground another has not vacated yet cannot delete it.
-            std::vector<te::EditItemID> travelling;
-            for (const auto& move : moves) travelling.push_back(move.id);
-            juce::Result result = juce::Result::ok();
+            // One move for the whole gesture: one undo step, one restart of
+            // playback, and refused whole if any clip may not land.
+            std::vector<Session::ClipMove> carried;
             for (const auto& move : moves)
             {
                 const auto length = move.position.end - move.position.start;
-                result = session.editClip(move.id, {std::max(0.0, move.position.start + timeDelta),
-                                                    std::max(0.0, move.position.start + timeDelta) + length,
-                                                    move.position.offset}, ClipGesture::move,
-                                          move.track + trackDelta, travelling);
-                if (result.failed()) break;
+                const auto start = std::max(0.0, move.position.start + timeDelta);
+                carried.push_back({move.id, {start, start + length, move.position.offset}, move.track + trackDelta});
             }
+            const auto result = session.moveClips(carried);
             if (result.failed() && status) status(result.getErrorMessage());
             else selectTrack(juce::jlimit(0, std::max(0, session.trackCount() - 1), previewTrack));
         }

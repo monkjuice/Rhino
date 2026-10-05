@@ -196,18 +196,15 @@ DrumDevice* findDrumDevice(te::AudioTrack& track)
     return nullptr;
 }
 
-Session::Instrument activeTrackInstrument(te::AudioTrack& track)
+const DeviceDescriptor* carriedInstrument(te::AudioTrack& track)
 {
-    if (auto* drums = findDrumDevice(track))
-        if (drums->isEnabled())
-            return Session::Instrument::Drums;
-    if (auto* wave = findRhinoWave(track))
-        if (wave->isEnabled())
-            return Session::Instrument::RhinoWave;
-    for (auto* plugin : track.pluginList)
-        if (plugin != nullptr && plugin->isEnabled() && isForgePlugin(*plugin))
-            return Session::Instrument::RhinoForge;
-    return Session::Instrument::FourOsc;
+    auto* plugin = trackInstrument(track);
+    if (plugin == nullptr)
+        return nullptr;
+    // Forge is an external plugin, so it has no type name to look up.
+    if (isForgePlugin(*plugin))
+        return DeviceCatalog::byId("RhinoForge");
+    return DeviceCatalog::byTypeName(plugin->getPluginType());
 }
 
 bool isForgePlugin(const te::Plugin& plugin)

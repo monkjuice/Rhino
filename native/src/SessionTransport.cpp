@@ -48,19 +48,46 @@ juce::Result Session::importAudio(const juce::File& file)
     // A document opens with audio lanes waiting for something, so an import
     // with no target fills the first free one rather than stacking a track on
     // top of it. Free means empty: a lane with a clip on it is never landed
-    // on, and if none is free the import still brings a track of its own.
+    // on, and if none is free the import still brings a track of its own -
+    // in the same undo step, so one Ctrl+Z takes both the clip and its lane.
     const auto tracks = te::getAudioTracks(*edit);
     for (int track = 0; track < tracks.size(); ++track)
         if (trackType(track) == TrackType::audio && !isGroupBusTrack(track)
             && tracks[track]->getClips().isEmpty())
             return importAudioAt(file, track, 0.0);
-    const auto added = addAudioTrack();
-    if (added.failed())
-        return added;
-    return importAudioAt(file, trackCount() - 1, 0.0);
+    auto& undoManager = edit->getUndoManager();
+    undoManager.beginNewTransaction("Import audio");
+    if (appendTrack(TrackType::audio) == nullptr)
+        return juce::Result::fail("Could not create an audio track for the import.");
+    ensureSceneSlots();
+    ensureTrackMixers();
+    reconcileTrackGroups();
+    if (const auto imported = importAudioInEdit(file, trackCount() - 1, 0.0); imported.failed())
+    {
+        undoManager.undoCurrentTransactionOnly();
+        return imported;
+    }
+    undoManager.beginNewTransaction();
+    markModified();
+    sendSynchronousChangeMessage();
+    return juce::Result::ok();
 }
 
 juce::Result Session::importAudioAt(const juce::File& file, int trackIndex, double startSeconds)
+{
+    auto& undoManager = edit->getUndoManager();
+    undoManager.beginNewTransaction("Import audio");
+    const auto imported = importAudioInEdit(file, trackIndex, startSeconds);
+    // Closed either way, so the next edit is never folded into this one.
+    undoManager.beginNewTransaction();
+    if (imported.failed())
+        return imported;
+    markModified();
+    sendSynchronousChangeMessage();
+    return juce::Result::ok();
+}
+
+juce::Result Session::importAudioInEdit(const juce::File& file, int trackIndex, double startSeconds)
 {
     jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
     if (!std::isfinite(startSeconds) || startSeconds < 0.0)
@@ -84,15 +111,12 @@ juce::Result Session::importAudioAt(const juce::File& file, int trackIndex, doub
 
     auto* track = tracks[trackIndex];
     const auto start = tracktion::core::TimePosition::fromSeconds(startSeconds);
-    edit->getUndoManager().beginNewTransaction("Import audio");
     auto clip = track->insertWaveClip(file.getFileNameWithoutExtension(), file,
         {{start, start + tracktion::core::TimeDuration::fromSeconds(duration)}, {}}, false);
     if (clip == nullptr)
         return juce::Result::fail("The audio clip could not be added.");
     makeRoomForClip(*clip);
     refreshLoop();
-    markModified();
-    sendSynchronousChangeMessage();
     return juce::Result::ok();
 }
 

@@ -256,6 +256,9 @@ juce::Result Session::setClipFollowsTempo(te::EditItemID id, bool follows)
         // wait for the next time the switch is turned on.
         if (!follows && target.getWarpTime())
             target.setWarpTime(false);
+        // Warping can lengthen the clip, and a clip that grew wins the ground
+        // it grew over, as every other clip edit does.
+        makeRoomForClip(target);
     });
 }
 
@@ -268,6 +271,7 @@ juce::Result Session::setClipWarpMode(te::EditItemID id, WarpMode mode)
     return applyAudioClipEdit(id, "Warp mode", [this, on, mode](te::WaveAudioClip& target)
     {
         applyWarpState(target, on, mode);
+        makeRoomForClip(target);
     });
 }
 
@@ -294,6 +298,9 @@ juce::Result Session::setClipBpm(te::EditItemID id, double bpm)
         if (storedWarpOn(target) && storedMode(target) == WarpMode::repitch)
             target.setSpeedRatio(repitchSpeedFor(target, tempo()));
         rescaleWarpedClip(target, before);
+        // Halving the clip tempo doubles the clip, and a clip that grew wins
+        // the ground it grew over, as every other clip edit does.
+        makeRoomForClip(target);
     });
 }
 
@@ -333,6 +340,7 @@ juce::Result Session::detectClipBpm(te::EditItemID id)
     if (storedWarpOn(*clip) && storedMode(*clip) == WarpMode::repitch)
         clip->setSpeedRatio(repitchSpeedFor(*clip, tempo()));
     rescaleWarpedClip(*clip, before);
+    makeRoomForClip(*clip);
     edit->getUndoManager().beginNewTransaction();
     markModified();
     sendSynchronousChangeMessage();

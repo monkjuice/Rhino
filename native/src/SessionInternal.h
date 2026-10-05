@@ -140,7 +140,12 @@ te::Plugin* findPlugin(te::AudioTrack& track, const juce::String& type);
 te::FourOscPlugin* findFourOsc(te::AudioTrack& track);
 RhinoWaveDevice* findRhinoWave(te::AudioTrack& track);
 DrumDevice* findDrumDevice(te::AudioTrack& track);
-Session::Instrument activeTrackInstrument(te::AudioTrack& track);
+// The instrument a MIDI clip carries when it is moved or pasted onto another
+// track: whatever its own track plays, bypassed or not, by catalog entry so a
+// device with no Session::Instrument value is carried too. Null for a track
+// that plays nothing, which leaves the destination's instrument alone rather
+// than installing one.
+const DeviceDescriptor* carriedInstrument(te::AudioTrack& track);
 bool isForgePlugin(const te::Plugin& plugin);
 bool isInstrumentPlugin(te::Plugin& plugin);
 te::Plugin* trackInstrument(te::AudioTrack& track);

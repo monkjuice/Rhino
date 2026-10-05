@@ -111,6 +111,14 @@ private:
                   te::MidiMessageArray& output);
     void generateUntil(double endBeat, double blockStartSeconds, double blockEndSeconds,
                        te::MidiMessageArray& output);
+    // The clock a block is scheduled on, as edit seconds and beats. While the
+    // transport plays it is the edit's tempo map. While it is stopped the
+    // edit's time stands still, so the arp runs a clock of its own on from
+    // where it got to, at the tempo where the playhead stands: a chord held
+    // with the transport stopped arpeggiates, as it does in Live, instead of
+    // every block reading as a jump back and replaying the first step.
+    double toSeconds(double beat) const;
+    double toBeat(double seconds) const;
 
     juce::CachedValue<float> style, rateIndex, gatePercent, distance, steps, offset;
     juce::CachedValue<float> groove, hold, retrigger, interval, repeats, root, scale;
@@ -132,6 +140,12 @@ private:
     bool clockValid = false;
     double nextTickBeat = 0.0;
     double lastBlockEndBeat = 0.0;
+    // The stopped-transport clock: this block's start in edit seconds, the
+    // beat it stands for, and the length of a beat at the playhead's tempo.
+    bool freeRunning = false;
+    double freeAnchorSeconds = 0.0;
+    double freeAnchorBeat = 0.0;
+    double freeSecondsPerBeat = 0.5;
     int sequenceStep = 0;
     std::int64_t lastBeatRetriggerCycle = std::numeric_limits<std::int64_t>::min();
     double sampleRate = 48000.0;

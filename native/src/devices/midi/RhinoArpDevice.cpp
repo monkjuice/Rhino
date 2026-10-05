@@ -244,18 +244,29 @@ double RhinoArpDevice::grooveMultiplier(int step) const
     return 1.0;
 }
 
+double RhinoArpDevice::toSeconds(double beat) const
+{
+    if (freeRunning)
+        return freeAnchorSeconds + (beat - freeAnchorBeat) * freeSecondsPerBeat;
+    return edit.tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(beat)).inSeconds();
+}
+
+double RhinoArpDevice::toBeat(double seconds) const
+{
+    if (freeRunning)
+        return freeAnchorBeat + (seconds - freeAnchorSeconds) / freeSecondsPerBeat;
+    return edit.tempoSequence.toBeats(tracktion::core::TimePosition::fromSeconds(seconds)).inBeats();
+}
+
 double RhinoArpDevice::nextStepBeat(double tickBeat, int step) const
 {
     const auto multiplier = grooveMultiplier(step);
     if (rateModeParam->getCurrentValue() < 0.5f)
         return tickBeat + rateBeats() * multiplier;
 
-    const auto tickSeconds = edit.tempoSequence.toTime(
-        tracktion::core::BeatPosition::fromBeats(tickBeat)).inSeconds();
-    const auto nextSeconds = tickSeconds
+    const auto nextSeconds = toSeconds(tickBeat)
         + juce::jlimit(10.0f, 2000.0f, freeRateParam->getCurrentValue()) * 0.001 * multiplier;
-    return edit.tempoSequence.toBeats(
-        tracktion::core::TimePosition::fromSeconds(nextSeconds)).inBeats();
+    return toBeat(nextSeconds);
 }
 
 double RhinoArpDevice::noteOffBeat(double tickBeat, double nextBeat, int step) const
@@ -264,13 +275,10 @@ double RhinoArpDevice::noteOffBeat(double tickBeat, double nextBeat, int step) c
     if (rateModeParam->getCurrentValue() < 0.5f)
         return tickBeat + (nextBeat - tickBeat) * gate;
 
-    const auto tickSeconds = edit.tempoSequence.toTime(
-        tracktion::core::BeatPosition::fromBeats(tickBeat)).inSeconds();
-    const auto offSeconds = tickSeconds
+    const auto offSeconds = toSeconds(tickBeat)
         + juce::jlimit(10.0f, 2000.0f, freeRateParam->getCurrentValue()) * 0.001
             * grooveMultiplier(step) * gate;
-    return edit.tempoSequence.toBeats(
-        tracktion::core::TimePosition::fromSeconds(offSeconds)).inBeats();
+    return toBeat(offSeconds);
 }
 
 int RhinoArpDevice::activeNoteCount() const
@@ -379,8 +387,7 @@ void RhinoArpDevice::flushPendingOffs(double blockStartSeconds, double blockEndS
     {
         if (!pending.active)
             continue;
-        const auto offSeconds = edit.tempoSequence.toTime(
-            tracktion::core::BeatPosition::fromBeats(pending.beat)).inSeconds();
+        const auto offSeconds = toSeconds(pending.beat);
         if (offSeconds >= blockEndSeconds)
             continue;
         output.addMidiMessage(juce::MidiMessage::noteOff(pending.channel, pending.pitch),
@@ -403,13 +410,11 @@ void RhinoArpDevice::emitNote(double tickBeat, double offBeat, int sourcePitch,
     const auto movement = juce::roundToInt(distanceParam->getCurrentValue()) * transposeIndex;
     const auto pitch = juce::jlimit(0, 127, transposedPitch(sourcePitch, movement));
     const auto& source = heldNotes[static_cast<size_t>(sourcePitch)];
-    const auto tickSeconds = edit.tempoSequence.toTime(
-        tracktion::core::BeatPosition::fromBeats(tickBeat)).inSeconds();
+    const auto tickSeconds = toSeconds(tickBeat);
     output.addMidiMessage(juce::MidiMessage::noteOn(source.channel, pitch, source.velocity),
                           std::max(0.0, tickSeconds - blockStartSeconds), source.source);
 
-    const auto offSeconds = edit.tempoSequence.toTime(
-        tracktion::core::BeatPosition::fromBeats(offBeat)).inSeconds();
+    const auto offSeconds = toSeconds(offBeat);
     if (offSeconds < blockEndSeconds)
         output.addMidiMessage(juce::MidiMessage::noteOff(source.channel, pitch),
                               std::max(0.0, offSeconds - blockStartSeconds), source.source);
@@ -472,10 +477,24 @@ void RhinoArpDevice::applyToBuffer(const te::PluginRenderContext& context)
     auto blockEndSeconds = context.editTime.getEnd().inSeconds();
     if (blockEndSeconds <= blockStartSeconds && context.bufferNumSamples > 0)
         blockEndSeconds = blockStartSeconds + context.bufferNumSamples / sampleRate;
-    const auto blockStartBeat = edit.tempoSequence.toBeats(
-        tracktion::core::TimePosition::fromSeconds(blockStartSeconds)).inBeats();
-    const auto blockEndBeat = edit.tempoSequence.toBeats(
-        tracktion::core::TimePosition::fromSeconds(blockEndSeconds)).inBeats();
+
+    // Stopped, the edit's time does not move, so every block would start where
+    // the last one did. The arp's own clock carries on instead: from the beat
+    // the previous block ended on while a sequence is running, otherwise from
+    // the beat under the playhead, either way at the tempo there.
+    freeRunning = !context.isPlaying;
+    if (freeRunning)
+    {
+        const auto here = edit.tempoSequence.toBeats(
+            tracktion::core::TimePosition::fromSeconds(blockStartSeconds)).inBeats();
+        const auto beatLater = edit.tempoSequence.toTime(
+            tracktion::core::BeatPosition::fromBeats(here + 1.0)).inSeconds();
+        freeSecondsPerBeat = std::max(1.0e-3, beatLater - blockStartSeconds);
+        freeAnchorSeconds = blockStartSeconds;
+        freeAnchorBeat = clockValid ? lastBlockEndBeat : here;
+    }
+    const auto blockStartBeat = toBeat(blockStartSeconds);
+    const auto blockEndBeat = toBeat(blockEndSeconds);
 
     auto& output = firstRender ? firstOutput : steadyOutput;
     firstRender = false;
@@ -502,8 +521,7 @@ void RhinoArpDevice::applyToBuffer(const te::PluginRenderContext& context)
         const auto relativeSeconds = juce::jlimit(0.0, blockEndSeconds - blockStartSeconds,
                                                    message.getTimeStamp());
         const auto eventSeconds = blockStartSeconds + relativeSeconds;
-        const auto eventBeat = edit.tempoSequence.toBeats(
-            tracktion::core::TimePosition::fromSeconds(eventSeconds)).inBeats();
+        const auto eventBeat = toBeat(eventSeconds);
         // Everything already held is allowed to play up to, but not across,
         // the instant at which this input changes the chord.
         generateUntil(eventBeat, blockStartSeconds, blockEndSeconds, output);

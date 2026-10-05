@@ -186,6 +186,49 @@ int runSelfTest()
             require(freeRateOnsets.size() == 4);
             for (int i = 0; i < static_cast<int>(freeRateOnsets.size()); ++i)
                 require(std::abs(freeRateOnsets[static_cast<size_t>(i)] - (0.10 + i * 0.08)) < 1.0e-5);
+
+            // With the transport stopped the edit's time stands still, and a
+            // chord held from the keyboard still arpeggiates: up through the
+            // chord at an even 1/16, block after block. Reading each frozen
+            // block as a jump replayed the first step every block instead.
+            setArp("style", 0.0f);       // Up
+            setArp("rateMode", 0.0f);
+            setArp("rate", 1.0f);        // 1/16
+            arp->reset();
+            constexpr int stoppedBlock = 480;
+            constexpr int stoppedBlocks = 60;
+            const auto stoppedBlockSeconds = stoppedBlock / 48000.0;
+            const tracktion::core::TimeRange frozen {tracktion::core::TimePosition::fromSeconds(2.0),
+                                                     tracktion::core::TimePosition::fromSeconds(2.0)};
+            std::vector<std::pair<double, int>> stoppedOnsets;
+            auto allNotesOffAfterFirst = false;
+            for (int block = 0; block < stoppedBlocks; ++block)
+            {
+                te::MidiMessageArray stoppedMidi;
+                if (block == 0)
+                    for (const auto pitch : {60, 63, 67})
+                        stoppedMidi.addMidiMessage(juce::MidiMessage::noteOn(1, pitch, 0.8f), 0.0, {});
+                te::PluginRenderContext stopped(nullptr, 0, stoppedBlock, &stoppedMidi, 0.0, frozen,
+                                                false, false, false, false);
+                arp->applyToBuffer(stopped);
+                allNotesOffAfterFirst = allNotesOffAfterFirst || (block > 0 && stoppedMidi.isAllNotesOff);
+                for (const auto& message : stoppedMidi)
+                    if (message.isNoteOn())
+                        stoppedOnsets.emplace_back(block * stoppedBlockSeconds + message.getTimeStamp(),
+                                                   message.getNoteNumber());
+            }
+            // Not a jump on every block, and at the rate rather than once a block.
+            require(!allNotesOffAfterFirst);
+            require(stoppedOnsets.size() >= 3 && stoppedOnsets.size() < static_cast<size_t>(stoppedBlocks / 2));
+            // Up through the held chord, evenly spaced across block boundaries.
+            const std::array<int, 3> upward {60, 63, 67};
+            const auto spacing = stoppedOnsets.size() > 1 ? stoppedOnsets[1].first - stoppedOnsets[0].first : 0.0;
+            for (size_t i = 0; i < stoppedOnsets.size(); ++i)
+            {
+                require(stoppedOnsets[i].second == upward[i % upward.size()]);
+                if (i > 0)
+                    require(std::abs(stoppedOnsets[i].first - stoppedOnsets[i - 1].first - spacing) < 1.0e-4);
+            }
             arp->deinitialise();
         }
 

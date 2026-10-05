@@ -1,23 +1,24 @@
 ---
 title: Pattern presets
 type: component
-summary: The fourteen built-in one-bar patterns, each a set of notes plus the instrument and patch that play them, and what dropping one does to a track.
+summary: The eleven built-in one-bar patterns, each a set of notes plus the instrument and patch that play them, and what dropping one does to a track.
 tags: [rhino, presets, browser]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-05
 ---
 
 # Pattern presets
 
-The browser's **Patterns** section offers fourteen one-bar patterns, grouped Synth, Bass, Lead, Pad and Drums
+The browser's **Patterns** section offers eleven one-bar patterns, grouped Synth, Bass, Lead and Drums
 (`native/src/BrowserPanel.cpp`). Each is a `Session::PatternPreset`. The model side is two files:
-`native/src/SessionPatches.cpp` holds the note tables (`presetPattern`), the 4OSC patches (`applySynthPatch`) and the
-Rhino Wave patches (`applyRhinoWavePatch`); `native/src/SessionPresets.cpp` puts them on a track.
+`native/src/SessionPatches.cpp` holds the note tables (`presetPattern`) and the 4OSC patches (`applySynthPatch`);
+`native/src/SessionPresets.cpp` puts them on a track. The three Wave presets (pad, bass, pluck) left with Rhino Wave
+on 2026-10-05 ([Built-in devices](built-in-devices.md)).
 
 ## A pattern is notes plus the sound that plays them
 
 A `PresetPattern` (declared in `SessionInternal.h`) carries the notes, a name, and which instrument plays them: Rhino
-Drums, Rhino Wave, or 4OSC with one of its patches. So dropping a pattern on a lane does two things at once.
+Drums, or 4OSC with one of its patches. So dropping a pattern on a lane does two things at once.
 
 1. `preparePresetTrack` readies the track. It refuses an audio track ("Drop patterns on a MIDI track instead"), then
    switches the track's instrument through `switchTrackInstrument` — replacing whatever was there, since a track has
@@ -33,13 +34,12 @@ A drum pattern switches the track to Rhino Drums but does not pick a kit. A fres
 and an existing one keeps its kit. The five kits are separate drops under Instruments / Drum Rack, each tuned for one
 pattern ([Built-in devices](built-in-devices.md)).
 
-## The pattern track is a leftover
+## Loading into the open clip
 
-Rhino began as one pattern on one track, and some of that remains. `applyPatternPreset` loads a preset into
-`Pattern 1` on track 0, and `preparePresetTrack` treats track 0 specially. The edit carries a `rhinoPatternInstrument`
-property (`synth`, `drums` or `wave`) for that track, and `patternTrackOf` finds it. `patternTrackOf` skips group
-buses on purpose: an instrument on a bus replaces the sum of everything feeding it, so a group at the top of the
-stack would turn a whole project silent ([Track groups (bus tracks)](track-groups.md)).
+`applyPatternPreset` loads a preset into the clip the note editor has open, and its sound onto that clip's own track,
+through the same `preparePresetTrack`: it does exactly what a drop on that lane does. No track is special for being
+first. The pattern-track bookkeeping that once made track 0 the preset's home, including the edit's
+`rhinoPatternInstrument` property, was retired in commit `a04b407`.
 
 ## Not yet content files
 

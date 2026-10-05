@@ -17,7 +17,7 @@
             scenario("vocoder: the carrier is another track's audio");
             require(session.addTrack(Session::TrackType::midi).wasOk(), "A track for the synth");
             const auto carrierTrack = session.trackCount() - 1;
-            require(session.addDevice("RhinoWave", carrierTrack).wasOk(), "which runs one");
+            require(session.addDevice("FourOsc", carrierTrack).wasOk(), "which runs one");
             require(session.addAudioTrack().wasOk(), "and an audio track for the voice");
             const auto voiceTrack = session.trackCount() - 1;
             require(session.addDevice("RhinoVocoder", voiceTrack).wasOk(), "which takes the vocoder");

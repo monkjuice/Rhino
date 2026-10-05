@@ -30,9 +30,6 @@ public:
         SubBass,
         ReeseBass,
         SirenLead,
-        WavePad,
-        WaveBass,
-        WavePluck,
         HouseKit,
         BreakKit,
         MinimalKit,
@@ -50,7 +47,6 @@ public:
     enum class Instrument
     {
         FourOsc,
-        RhinoWave,
         RhinoForge,
         Drums,
         Utility
@@ -1083,7 +1079,7 @@ private:
     void ensureSceneSlots(int minimumScenes = defaultScenes);
     std::optional<te::MonotonicBeat> nextLaunchBeat() const;
     void startTransportForLaunch();
-    juce::Result preparePresetTrack(int trackIndex, const PresetPattern&, PatternPreset);
+    juce::Result preparePresetTrack(int trackIndex, const PresetPattern&);
     // Every path that makes a track goes through here, so no track can exist
     // without having said what it is for. It appends the row, names it,
     // colours it, writes its type and gives it its utility device; the caller

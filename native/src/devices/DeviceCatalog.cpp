@@ -1,6 +1,5 @@
 #include "DeviceCatalog.h"
 #include "instruments/DrumDevice.h"
-#include "instruments/RhinoWaveDevice.h"
 #include "audio/UtilityDevice.h"
 #include "audio/RhinoSpaceDevice.h"
 #include "audio/RhinoBloomDevice.h"
@@ -25,10 +24,6 @@ std::vector<DeviceDescriptor> buildCatalog()
     add({"FourOsc", te::FourOscPlugin::xmlTypeName, "4OSC", "4OSC synth",
          DeviceKind::Instrument, "Synths", "Subtractive synth",
          0xff3d6f8b, "synth", true, false, false});
-
-    add({"RhinoWave", RhinoWaveDevice::xmlTypeName, "Rhino Wave", {},
-         DeviceKind::Instrument, "Synths", "Morphing wavetable-style synth",
-         0xff574ec8, "wave", true, false, false});
 
     // Forge is a VST3 discovered by scanning, so it has no type name to
     // create from -- see SessionExternalPlugins.cpp.
@@ -149,6 +144,5 @@ void DeviceCatalog::registerBuiltInTypes(te::Engine& engine)
     plugins.createBuiltInType<AutoTuneDevice>();
     plugins.createBuiltInType<VocoderDevice>();
     plugins.createBuiltInType<RhinoArpDevice>();
-    plugins.createBuiltInType<RhinoWaveDevice>();
 }
 }

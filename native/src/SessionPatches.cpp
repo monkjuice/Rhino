@@ -16,9 +16,6 @@ PresetPattern presetPattern(Session::PatternPreset preset)
     static constexpr PresetNote reeseBass[] {{0, 36, 8}, {8, 39, 4}, {12, 41, 4}};
     static constexpr PresetNote sirenLead[] {{0, 48, 1}, {1, 55, 1}, {2, 60, 1}, {3, 67, 1}, {4, 72, 2}, {7, 67, 1},
                                              {8, 60, 1}, {9, 55, 1}, {10, 48, 1}, {12, 60, 1}, {14, 67, 1}, {15, 72, 1}};
-    static constexpr PresetNote wavePad[] {{0, 48, 8}, {0, 55, 8}, {0, 60, 8}, {8, 50, 8}, {8, 57, 8}, {8, 62, 8}};
-    static constexpr PresetNote waveBass[] {{0, 36, 3}, {3, 36, 1}, {4, 43, 2}, {8, 34, 4}, {12, 39, 3}, {15, 41, 1}};
-    static constexpr PresetNote wavePluck[] {{0, 60, 1}, {2, 67, 1}, {4, 72, 2}, {7, 67, 1}, {8, 62, 1}, {10, 69, 1}, {12, 74, 2}, {15, 69, 1}};
     static constexpr PresetNote houseKit[] {{0, 48, 1}, {4, 48, 1}, {8, 48, 1}, {12, 48, 1}, {4, 53, 1}, {12, 53, 1},
                                             {2, 58, 1}, {6, 58, 1}, {10, 58, 1}, {14, 58, 1}};
     static constexpr PresetNote breakKit[] {{0, 48, 1}, {3, 48, 1}, {8, 48, 1}, {11, 48, 1}, {4, 53, 1}, {10, 53, 1},
@@ -28,20 +25,17 @@ PresetPattern presetPattern(Session::PatternPreset preset)
 
     switch (preset)
     {
-        case Session::PatternPreset::WarmPulse:  return {warmPulse,  static_cast<int>(std::size(warmPulse)),  "Warm pulse", false, false, SynthPatch::Default};
-        case Session::PatternPreset::AcidSteps:  return {acidSteps,  static_cast<int>(std::size(acidSteps)),  "Acid steps", false, false, SynthPatch::Default};
-        case Session::PatternPreset::ArpRun:     return {arpRun,     static_cast<int>(std::size(arpRun)),     "Arp run", false, false, SynthPatch::Default};
-        case Session::PatternPreset::ChordPad:   return {chordPad,   static_cast<int>(std::size(chordPad)),   "Chord pad", false, false, SynthPatch::ChordPad};
-        case Session::PatternPreset::SubBass:    return {subBass,    static_cast<int>(std::size(subBass)),    "Sub bass", false, false, SynthPatch::SubBass};
-        case Session::PatternPreset::ReeseBass:  return {reeseBass,  static_cast<int>(std::size(reeseBass)),  "Reese bass", false, false, SynthPatch::ReeseBass};
-        case Session::PatternPreset::SirenLead:  return {sirenLead,  static_cast<int>(std::size(sirenLead)),  "Siren lead", false, false, SynthPatch::Default};
-        case Session::PatternPreset::WavePad:    return {wavePad,    static_cast<int>(std::size(wavePad)),    "Wave pad", false, true,  SynthPatch::Default};
-        case Session::PatternPreset::WaveBass:   return {waveBass,   static_cast<int>(std::size(waveBass)),   "Wave bass", false, true,  SynthPatch::Default};
-        case Session::PatternPreset::WavePluck:  return {wavePluck,  static_cast<int>(std::size(wavePluck)),  "Wave pluck", false, true,  SynthPatch::Default};
-        case Session::PatternPreset::HouseKit:   return {houseKit,   static_cast<int>(std::size(houseKit)),   "House kit", true,  false, SynthPatch::Default};
-        case Session::PatternPreset::BreakKit:   return {breakKit,   static_cast<int>(std::size(breakKit)),   "Break kit", true,  false, SynthPatch::Default};
-        case Session::PatternPreset::MinimalKit: return {minimalKit, static_cast<int>(std::size(minimalKit)), "Minimal kit", true,  false, SynthPatch::Default};
-        case Session::PatternPreset::ClapKit:    return {clapKit,    static_cast<int>(std::size(clapKit)),    "Clap kit", true,  false, SynthPatch::Default};
+        case Session::PatternPreset::WarmPulse:  return {warmPulse,  static_cast<int>(std::size(warmPulse)),  "Warm pulse", false, SynthPatch::Default};
+        case Session::PatternPreset::AcidSteps:  return {acidSteps,  static_cast<int>(std::size(acidSteps)),  "Acid steps", false, SynthPatch::Default};
+        case Session::PatternPreset::ArpRun:     return {arpRun,     static_cast<int>(std::size(arpRun)),     "Arp run", false, SynthPatch::Default};
+        case Session::PatternPreset::ChordPad:   return {chordPad,   static_cast<int>(std::size(chordPad)),   "Chord pad", false, SynthPatch::ChordPad};
+        case Session::PatternPreset::SubBass:    return {subBass,    static_cast<int>(std::size(subBass)),    "Sub bass", false, SynthPatch::SubBass};
+        case Session::PatternPreset::ReeseBass:  return {reeseBass,  static_cast<int>(std::size(reeseBass)),  "Reese bass", false, SynthPatch::ReeseBass};
+        case Session::PatternPreset::SirenLead:  return {sirenLead,  static_cast<int>(std::size(sirenLead)),  "Siren lead", false, SynthPatch::Default};
+        case Session::PatternPreset::HouseKit:   return {houseKit,   static_cast<int>(std::size(houseKit)),   "House kit", true,  SynthPatch::Default};
+        case Session::PatternPreset::BreakKit:   return {breakKit,   static_cast<int>(std::size(breakKit)),   "Break kit", true,  SynthPatch::Default};
+        case Session::PatternPreset::MinimalKit: return {minimalKit, static_cast<int>(std::size(minimalKit)), "Minimal kit", true,  SynthPatch::Default};
+        case Session::PatternPreset::ClapKit:    return {clapKit,    static_cast<int>(std::size(clapKit)),    "Clap kit", true,  SynthPatch::Default};
     }
     return {};
 }
@@ -220,88 +214,6 @@ void applySynthPatch(SynthPatch patch, te::FourOscPlugin& synth, juce::UndoManag
         case SynthPatch::ChordPad:  applyChordPadPatch(synth, undoManager); break;
         case SynthPatch::SubBass:   applySubBassPatch(synth, undoManager); break;
         case SynthPatch::ReeseBass: applyReeseBassPatch(synth, undoManager); break;
-    }
-}
-
-void applyRhinoWavePatch(Session::PatternPreset preset, RhinoWaveDevice& wave)
-{
-    const auto set = [&wave] (int parameterIndex, float value)
-    {
-        int active = 0;
-        for (auto* parameter : wave.getAutomatableParameters())
-        {
-            if (parameter == nullptr || !parameter->isParameterActive())
-                continue;
-            if (active++ != parameterIndex)
-                continue;
-            const auto range = parameter->getValueRange();
-            parameter->setParameter(juce::jlimit(range.getStart(), range.getEnd(), value), juce::sendNotification);
-            return;
-        }
-    };
-
-    if (preset == Session::PatternPreset::WavePad)
-    {
-        set(0, 0.38f);    // Position
-        set(1, 0.72f);    // Shape
-        set(2, 0.35f);    // Motion
-        set(3, 5200.0f);  // Cutoff
-        set(4, 0.22f);    // Env
-        set(5, 4.0f);     // Drive
-        set(6, 0.08f);    // Sub
-        set(7, 0.18f);    // Resonance
-        set(8, 0.22f);    // Attack
-        set(9, 0.85f);    // Decay
-        set(10, 0.78f);   // Sustain
-        set(11, 1.15f);   // Release
-        set(12, 3.0f);    // Unison
-        set(13, 0.13f);   // Detune
-        set(14, 0.78f);   // Width
-        set(15, -12.0f);  // Output
-        set(16, 0.34f);   // Osc 2
-        set(17, 12.0f);   // Tune 2
-    }
-    else if (preset == Session::PatternPreset::WaveBass)
-    {
-        set(0, 0.58f);
-        set(1, 0.34f);
-        set(2, 0.12f);
-        set(3, 2600.0f);
-        set(4, -0.08f);
-        set(5, 7.5f);
-        set(6, 0.42f);
-        set(7, 0.12f);
-        set(8, 0.006f);
-        set(9, 0.16f);
-        set(10, 0.7f);
-        set(11, 0.18f);
-        set(12, 1.0f);
-        set(13, 0.02f);
-        set(14, 0.18f);
-        set(15, -10.0f);
-        set(16, 0.28f);
-        set(17, -12.0f);
-    }
-    else if (preset == Session::PatternPreset::WavePluck)
-    {
-        set(0, 0.64f);
-        set(1, 0.82f);
-        set(2, 0.55f);
-        set(3, 4200.0f);
-        set(4, 0.65f);
-        set(5, 8.0f);
-        set(6, 0.1f);
-        set(7, 0.28f);
-        set(8, 0.004f);
-        set(9, 0.24f);
-        set(10, 0.18f);
-        set(11, 0.22f);
-        set(12, 2.0f);
-        set(13, 0.06f);
-        set(14, 0.52f);
-        set(15, -11.0f);
-        set(16, 0.22f);
-        set(17, 7.0f);
     }
 }
 

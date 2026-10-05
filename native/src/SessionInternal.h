@@ -3,11 +3,10 @@
 #include "DeviceIds.h"
 // Session's public header reaches the device library through its catalog
 // only. These two are included here, in the private header, because the
-// Session implementation genuinely manipulates them: it sets a drum kit and
-// reads wave parameters. Nothing outside Session's own .cpp files sees this.
+// Session implementation genuinely manipulates them: it inserts a Utility and
+// sets a drum kit. Nothing outside Session's own .cpp files sees this.
 #include "audio/UtilityDevice.h"
 #include "instruments/DrumDevice.h"
-#include "instruments/RhinoWaveDevice.h"
 
 // Shared internals of the Session implementation.
 //
@@ -98,7 +97,6 @@ struct PresetPattern
     int count = 0;
     juce::String name;
     bool useDrums = false;
-    bool useRhinoWave = false;
     SynthPatch synthPatch = SynthPatch::Default;
 };
 
@@ -107,16 +105,12 @@ PresetPattern presetPattern(Session::PatternPreset preset);
 void fillMidiClip(te::MidiClip& clip, const PresetPattern& preset, juce::UndoManager& undoManager);
 void setPluginParameter(te::AutomatableParameter::Ptr parameter, float value);
 void applySynthPatch(SynthPatch patch, te::FourOscPlugin& synth, juce::UndoManager& undoManager);
-void applyRhinoWavePatch(Session::PatternPreset preset, RhinoWaveDevice& wave);
 
 // Device parameter and macro mapping (DeviceMacros.cpp)
 te::AutomatableParameter* activeParameterAt(te::Plugin& plugin, int index);
 te::AutomatableParameter* fourOscMacroParameterAt(te::FourOscPlugin& synth, int index);
-te::AutomatableParameter* rhinoWaveMacroParameterAt(RhinoWaveDevice& wave, int index);
 juce::String fourOscMacroName(int index);
-juce::String rhinoWaveMacroName(int index);
 juce::String formatFourOscMacroValue(int index, float value, te::AutomatableParameter& parameter);
-juce::String formatRhinoWaveMacroValue(int index, float value, te::AutomatableParameter& parameter);
 juce::String formatExposedParameterValue(te::Plugin& plugin, int index, float value,
                                          te::AutomatableParameter& parameter);
 te::AutomatableParameter* exposedParameterAt(te::Plugin& plugin, int index);
@@ -153,7 +147,6 @@ void removeDeviceLanes(juce::ValueTree owner, const te::Plugin&, juce::UndoManag
 bool hasActiveTrackAutomation(te::Edit& edit, Session::DeviceTarget target);
 te::Plugin* findPlugin(te::AudioTrack& track, const juce::String& type);
 te::FourOscPlugin* findFourOsc(te::AudioTrack& track);
-RhinoWaveDevice* findRhinoWave(te::AudioTrack& track);
 DrumDevice* findDrumDevice(te::AudioTrack& track);
 // The instrument a MIDI clip carries when it is moved or pasted onto another
 // track: whatever its own track plays, bypassed or not, by catalog entry so a

@@ -94,39 +94,6 @@
         }
 
         {
-            Session waveSession;
-            require(waveSession.addInstrument(Session::Instrument::RhinoWave, 0).wasOk(), "Rhino Wave can be activated on the pattern track");
-            waveSession.setNote(0, 48, true);
-            waveSession.setNote(4, 55, true);
-            juce::TemporaryFile waveOutput(".wav");
-            te::Renderer::Parameters waveParameters(*waveSession.edit);
-            waveParameters.destFile = waveOutput.getFile();
-            waveParameters.audioFormat = &wav;
-            waveParameters.sampleRateForAudio = 48000;
-            waveParameters.bitDepth = 24;
-            waveParameters.time = waveSession.pattern().getPosition().time;
-            {
-                te::Renderer::RenderTask task("Rhino Wave render test", waveParameters, nullptr, nullptr);
-                const auto deadline = juce::Time::getMillisecondCounterHiRes() + 15000.0;
-                while (task.runJob() != juce::ThreadPoolJob::jobHasFinished)
-                    require(juce::Time::getMillisecondCounterHiRes() < deadline, "Rhino Wave render timed out");
-                require(task.errorMessage.isEmpty(), task.errorMessage.toRawUTF8());
-            }
-            std::unique_ptr<juce::AudioFormatReader> waveReader(formats.createReaderFor(waveOutput.getFile()));
-            require(waveReader != nullptr, "Read Rhino Wave render");
-            juce::AudioBuffer<float> waveAudio(static_cast<int>(waveReader->numChannels), static_cast<int>(waveReader->lengthInSamples));
-            require(waveReader->read(&waveAudio, 0, waveAudio.getNumSamples(), 0, true, true), "Read Rhino Wave samples");
-            float wavePeak = 0.0f;
-            for (int c = 0; c < waveAudio.getNumChannels(); ++c)
-                for (int frame = 0; frame < waveAudio.getNumSamples(); ++frame)
-                {
-                    const auto sample = waveAudio.getSample(c, frame);
-                    require(std::isfinite(sample), "Rhino Wave render must stay finite");
-                    wavePeak = std::max(wavePeak, std::abs(sample));
-                }
-            require(wavePeak > 0.0001f && wavePeak < 1.0f, "Rhino Wave output must be audible and below clipping");
-        }
-        {
             Session arpSession;
             arpSession.applyPatternPreset(Session::PatternPreset::ArpRun);
             require(arpSession.addMidiEffect(Session::MidiEffect::RhinoArp, 0).wasOk(), "Rhino Arp can be inserted on the pattern synth");

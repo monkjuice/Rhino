@@ -5,7 +5,6 @@
 #include "audio/RhinoBloomDevice.h"
 #include "audio/RhinoSpaceDevice.h"
 #include "instruments/DrumDevice.h"
-#include "instruments/RhinoWaveDevice.h"
 #include "midi/RhinoArpDevice.h"
 #include "DeviceRackTest.h"
 #include "../../StepGrid.h"

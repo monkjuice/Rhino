@@ -4,7 +4,7 @@ type: component
 summary: The Device View strip that shows a track's chain, its per-device faces, and the rebuild rule that shapes how a face is written.
 tags: [rhino, devices, ui]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-05
 ---
 
 # Device rack and device editors
@@ -14,8 +14,8 @@ The Device View is `DeviceRack` (`native/src/DeviceRack.*`). It shares the lower
 ## Pieces
 
 - `DeviceRack` shows `Session::deviceSlots(track)`, the plugin list minus the hidden channel strip, as one `DeviceEditorPanel` per device, with a `+` menu built from the [Device catalog](device-catalog.md) and Edit and Delete buttons.
-- `DeviceEditorPanel` picks a face by plugin type. The generic face is a grid of up to twelve knobs from `Session::deviceParameters`; `native/src/DeviceMacros.cpp` chooses them for 4OSC and Rhino Wave. Rhino Space's layout is in `DeviceEditorPanel.cpp`; Rhino Tune, Rhino EQ and Rhino Vocoder are extra translation units of the same class (`DeviceEditorPanelAutoTune.cpp`, `DeviceEditorPanelEq.cpp`, `DeviceEditorPanelVocoder.cpp`).
-- Edit opens `FloatingDeviceWindow`, still defined inline in `DeviceRack.cpp`: a VST3's own editor (Forge's), else Tracktion's plugin editor, else Rhino's fallback, which holds the large Rhino Wave editor. The previous window is destroyed first, because JUCE allows one active editor per processor.
+- `DeviceEditorPanel` picks a face by plugin type. The generic face is a grid of up to twelve knobs from `Session::deviceParameters`; `native/src/DeviceMacros.cpp` chooses them for 4OSC. Rhino Space's layout is in `DeviceEditorPanel.cpp`; Rhino Tune, Rhino EQ and Rhino Vocoder are extra translation units of the same class (`DeviceEditorPanelAutoTune.cpp`, `DeviceEditorPanelEq.cpp`, `DeviceEditorPanelVocoder.cpp`).
+- Edit opens `FloatingDeviceWindow`, still defined inline in `DeviceRack.cpp`: a VST3's own editor (Forge's), else Tracktion's plugin editor, else Rhino's fallback, a window of up to six knobs. The previous window is destroyed first, because JUCE allows one active editor per processor.
 
 ## The rebuild rule
 

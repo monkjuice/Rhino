@@ -4,7 +4,7 @@ type: component
 summary: The one table of Rhino's devices that the browser, drop targets, rack menu, engine registration and instrument rules all read.
 tags: [rhino, devices, catalog]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-05
 ---
 
 # Device catalog
@@ -13,13 +13,13 @@ updated: 2026-10-03
 
 ## An entry
 
-A `DeviceDescriptor` holds a stable `id`; the engine `typeName` (empty for an external plugin); `displayName` and an optional `browserLabel` ("4OSC synth" in the browser, "4OSC" on the track); `kind`; the browser `category` and `description`; an ARGB `colour` kept as a number so the library needs no `juce_graphics`; the `patternKey` written to the edit's `rhinoPatternInstrument`; and three flags: `browsable`, `external` (found by scanning, not created by name) and `infrastructure` (a channel-strip facility the rack hides). Entry order is browser order.
+A `DeviceDescriptor` holds a stable `id`; the engine `typeName` (empty for an external plugin); `displayName` and an optional `browserLabel` ("4OSC synth" in the browser, "4OSC" on the track); `kind`; the browser `category` and `description`; an ARGB `colour` kept as a number so the library needs no `juce_graphics`; a `patternKey`, which nothing has read since the edit's `rhinoPatternInstrument` property was retired in commit `a04b407`; and three flags: `browsable`, `external` (found by scanning, not created by name) and `infrastructure` (a channel-strip facility the rack hides). Entry order is browser order.
 
-As of 2026-10-03 it lists 4OSC, Rhino Wave, Rhino Forge (external), Rhino Drums (not browsable; the browser offers its five kits), Rhino EQ, Compressor, Utility (infrastructure), Reverb, Delay, Rhino Space, Rhino Bloom, Rhino Tune, Rhino Vocoder and Rhino Arp ([Built-in devices](built-in-devices.md)).
+As of 2026-10-05 it lists 4OSC, Rhino Forge (external), Rhino Drums (not browsable; the browser offers its five kits), Rhino EQ, Compressor, Utility (infrastructure), Reverb, Delay, Rhino Space, Rhino Bloom, Rhino Tune, Rhino Vocoder and Rhino Arp ([Built-in devices](built-in-devices.md)). Rhino Wave was removed that day.
 
 ## Readers
 
-The browser's device rows; the drop targets (`deviceFromId` in `native/src/BrowserIds.h`, `deviceFromBrowserDrop` in `native/src/DeviceRack.cpp`); the rack's `+` menu, which leaves out infrastructure and greys an external device until it is found; `Session::addDevice`, which dispatches on `kind`; the instrument rules (`isInstrumentPlugin`, the MIDI-effect skip in `switchTrackInstrument`); and `registerBuiltInTypes`, called once from `Session`'s constructor to teach the engine Rhino's nine own types. Tracktion's built-ins need no registration and Forge arrives as a VST3 ([Hosting Forge in Rhino](forge-hosting.md)).
+The browser's device rows; the drop targets (`deviceFromId` in `native/src/BrowserIds.h`, `deviceFromBrowserDrop` in `native/src/DeviceRack.cpp`); the rack's `+` menu, which leaves out infrastructure and greys an external device until it is found; `Session::addDevice`, which dispatches on `kind`; the instrument rules (`isInstrumentPlugin`, the MIDI-effect skip in `switchTrackInstrument`); and `registerBuiltInTypes`, called once from `Session`'s constructor to teach the engine Rhino's eight own types. Tracktion's built-ins need no registration and Forge arrives as a VST3 ([Hosting Forge in Rhino](forge-hosting.md)).
 
 ## Rules
 
@@ -31,7 +31,7 @@ The browser's device rows; the drop targets (`deviceFromId` in `native/src/Brows
 
 ## Not yet the only list
 
-Effects are fully catalog-driven; instruments are not. The paused session view's slot menu lists four instruments by hand, `activeTrackInstrument` and the `rhinoPatternInstrument` restore know only 4OSC, Rhino Wave, Drums and Forge, and `native/src/DeviceMacros.cpp` curates rack knobs for 4OSC and Rhino Wave only ([Adding a device to Rhino](adding-a-device.md)).
+Effects are fully catalog-driven; instruments are not. The paused session view's slot menu lists three instruments by hand (4OSC, Drums and Forge), and `native/src/DeviceMacros.cpp` curates rack knobs for 4OSC only ([Adding a device to Rhino](adding-a-device.md)). A MIDI clip moved or pasted to another track carries its instrument by catalog entry (`carriedInstrument`), so that path already knows every instrument.
 
 ## Related
 

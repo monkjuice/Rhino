@@ -72,9 +72,6 @@ juce::Colour presetColour(Session::PatternPreset preset)
         case Session::PatternPreset::SubBass:    return juce::Colour(0xff34535f);
         case Session::PatternPreset::ReeseBass:  return juce::Colour(0xff4a5f38);
         case Session::PatternPreset::SirenLead:  return juce::Colour(0xff8f4f67);
-        case Session::PatternPreset::WavePad:    return juce::Colour(0xff5e55b8);
-        case Session::PatternPreset::WaveBass:   return juce::Colour(0xff355a86);
-        case Session::PatternPreset::WavePluck:  return juce::Colour(0xff4c7a95);
         case Session::PatternPreset::HouseKit:   return juce::Colour(0xff657844);
         case Session::PatternPreset::BreakKit:   return juce::Colour(0xff6f7f43);
         case Session::PatternPreset::MinimalKit: return juce::Colour(0xff506d45);
@@ -233,11 +230,6 @@ te::Plugin* findPlugin(te::AudioTrack& track, const juce::String& type)
 te::FourOscPlugin* findFourOsc(te::AudioTrack& track)
 {
     return dynamic_cast<te::FourOscPlugin*>(findPlugin(track, te::FourOscPlugin::xmlTypeName));
-}
-
-RhinoWaveDevice* findRhinoWave(te::AudioTrack& track)
-{
-    return dynamic_cast<RhinoWaveDevice*>(findPlugin(track, RhinoWaveDevice::xmlTypeName));
 }
 
 DrumDevice* findDrumDevice(te::AudioTrack& track)

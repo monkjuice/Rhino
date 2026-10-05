@@ -4,7 +4,7 @@ type: convention
 summary: Knowledge flows one way in both products, UI to model to devices to core, and every rule lives in the model so each UI path inherits it.
 tags: [both, architecture, includes]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-05
 ---
 
 # Dependency direction
@@ -20,7 +20,7 @@ In Rhino, knowledge flows downward only: UI, then model, then devices, then core
 | Devices (`native/src/devices/`) | Tracktion, `RhinoCore` | `Session.h`, any UI header |
 | `RhinoCore` (`native/src/core/`) | JUCE only | Tracktion, `Session`, UI |
 
-`Session.h` reaches the device library through `DeviceCatalog.h` alone. The private `SessionInternal.h` includes the three device headers the implementation genuinely manipulates (Utility, Drums and Rhino Wave).
+`Session.h` reaches the device library through `DeviceCatalog.h` alone. The private `SessionInternal.h` includes the two device headers the implementation genuinely manipulates (Utility and Drums).
 
 ## Why
 

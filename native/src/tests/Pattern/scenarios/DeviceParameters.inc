@@ -58,22 +58,6 @@
                     && arpParameters[RhinoArpDevice::rateModeParameter].valueText == "Beats"
                     && arpParameters[RhinoArpDevice::freeRateParameter].valueText == "125 ms",
                     "Rhino Arp opens with the Bouncy Chords controls and defaults");
-            require(parameterSession.addInstrument(Session::Instrument::RhinoWave, 2).wasOk(), "A MIDI track hosts Rhino Wave");
-            int waveSlot = -1;
-            for (int i = 0; i < parameterTrack->pluginList.size(); ++i)
-            {
-                auto* plugin = parameterTrack->pluginList[i];
-                if (plugin != nullptr && plugin->getPluginType() == RhinoWaveDevice::xmlTypeName)
-                    waveSlot = i;
-            }
-            require(waveSlot >= 0, "Rhino Wave is inserted in the target track chain");
-            auto waveParameters = parameterSession.deviceParameters(2, waveSlot);
-            require(waveParameters.size() >= 23 && waveParameters[0].name == "Position"
-                    && waveParameters[2].name == "Motion" && waveParameters[3].name == "Osc 2"
-                    && waveParameters[4].name == "Tune 2" && waveParameters[5].name == "Cutoff"
-                    && waveParameters[10].name == "Attack" && waveParameters[17].name == "Output"
-                    && waveParameters[18].name == "LFO Rate" && waveParameters[22].name == "LFO Motion",
-                    "Rhino Wave exposes a full synth panel surface after the Device View macros");
             const auto developmentForge = juce::File(juce::String(RHINO_SOURCE_DIR))
                 .getChildFile("../instruments/rhino-forge/build/RhinoForge_artefacts/Release/VST3/Rhino Forge.vst3");
             if (developmentForge.exists())

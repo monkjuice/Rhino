@@ -27,7 +27,7 @@ void Session::applyPatternPreset(PatternPreset preset)
     if (trackIndex < 0) return;
     const auto data = presetPattern(preset);
     edit->getUndoManager().beginNewTransaction("Load " + data.name);
-    if (preparePresetTrack(trackIndex, data, preset).failed())
+    if (preparePresetTrack(trackIndex, data).failed())
     {
         edit->getUndoManager().beginNewTransaction();
         return;
@@ -53,7 +53,7 @@ juce::Result Session::insertPatternPreset(PatternPreset preset, int trackIndex, 
     const auto end = edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(startBeat + beatsPerBar()));
     edit->getUndoManager().beginNewTransaction("Add " + data.name);
     auto* track = tracks[trackIndex];
-    if (const auto prepared = preparePresetTrack(trackIndex, data, preset); prepared.failed())
+    if (const auto prepared = preparePresetTrack(trackIndex, data); prepared.failed())
         return prepared;
     auto clip = track->insertMIDIClip(data.name, {start, end}, nullptr);
     if (clip == nullptr)
@@ -160,7 +160,6 @@ Session::Instrument Session::patternInstrumentKind() const
     {
         const auto type = plugin->getPluginType();
         if (type == DrumDevice::xmlTypeName) return Instrument::Drums;
-        if (type == RhinoWaveDevice::xmlTypeName) return Instrument::RhinoWave;
         if (isForgePlugin(*plugin)) return Instrument::RhinoForge;
     }
     return Instrument::FourOsc;
@@ -174,7 +173,7 @@ bool Session::isPatternDrums() const
 // Puts a track into the state a preset expects: the right instrument and its
 // patch. Shared by the timeline and clip-slot insertion paths so the two cannot
 // drift apart, and the same for every track: none is special for being first.
-juce::Result Session::preparePresetTrack(int trackIndex, const PresetPattern& data, PatternPreset preset)
+juce::Result Session::preparePresetTrack(int trackIndex, const PresetPattern& data)
 {
     const auto tracks = te::getAudioTracks(*edit);
     if (!juce::isPositiveAndBelow(trackIndex, tracks.size()))
@@ -186,18 +185,13 @@ juce::Result Session::preparePresetTrack(int trackIndex, const PresetPattern& da
     auto* track = tracks[trackIndex];
     bool instrumentChanged = false;
     const auto result = switchTrackInstrument(*edit, *track,
-                                              data.useDrums ? Instrument::Drums
-                                                  : data.useRhinoWave ? Instrument::RhinoWave
-                                                  : Instrument::FourOsc,
+                                              data.useDrums ? Instrument::Drums : Instrument::FourOsc,
                                               instrumentChanged);
     if (result.failed())
         return result;
     if (data.synthPatch != SynthPatch::Default)
         if (auto* fourOsc = findFourOsc(*track))
             applySynthPatch(data.synthPatch, *fourOsc, edit->getUndoManager());
-    if (data.useRhinoWave)
-        if (auto* wave = findRhinoWave(*track))
-            applyRhinoWavePatch(preset, *wave);
     return juce::Result::ok();
 }
 

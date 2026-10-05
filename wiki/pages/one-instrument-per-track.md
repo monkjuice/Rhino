@@ -4,7 +4,7 @@ type: decision
 summary: A track runs exactly one instrument; a new one replaces the old in place, and nothing may cache an instrument pointer.
 tags: [rhino, devices, instruments]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-05
 ---
 
 # One instrument per track
@@ -28,7 +28,7 @@ Rejected: keeping the stack and switching with enable flags.
 
 ## Pitfall: clips carry instruments the other way
 
-A swap leaves clips alone, but the converse does not hold. Moving a MIDI clip to another track (`Session::editClip`) and pasting one (`pasteClipRegion`, which duplicating also uses) switch the destination to the instrument of the track the clip came from, replacing the destination's instrument and patch in the same undo step. The source is read by `activeTrackInstrument`, which knows Drums, Rhino Wave and Forge and answers 4OSC for anything else, including a track with no instrument. Duplicating a clip on an empty MIDI track therefore installs a 4OSC and renames the track. This is read from the code on 2026-10-03; no scenario covers it and `AGENTS.md` does not mention it.
+A swap leaves clips alone, but the converse does not hold. Moving a MIDI clip to another track (`Session::editClip`) and pasting one (`pasteClipRegion`, which duplicating also uses) switch the destination to the instrument of the track the clip came from, replacing the destination's instrument and patch in the same undo step. The source is read by `carriedInstrument` (`native/src/SessionInternal.cpp`), which names the source track's instrument by catalog entry, bypassed or not, so every instrument travels. A clip from a track that plays nothing leaves the destination's instrument alone. Until commit `b5d17e0` (2026-10-05) the reader knew only a few instruments and answered 4OSC for the rest, so duplicating a clip on an empty MIDI track installed a 4OSC; `native/src/tests/Arrangement/scenarios/ClipEdits.inc` now covers a bypassed instrument and a lane that plays nothing.
 
 ## Related
 

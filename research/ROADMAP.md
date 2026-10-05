@@ -80,6 +80,8 @@ The web source has been removed from the active tree. A small native engine eval
 
 ## Long-Term Instrument Plan: Rhino Wave
 
+> **2026-10-05:** Rhino Wave has been removed from the app. Its replacement is planned as a new built-in synth that is declared only in the device catalog and needs no special case in `Session`. The phases below are the removed device's plan, kept for reference.
+
 Rhino Wave is the long-running path toward a built-in wavetable instrument in the spirit of Ableton Wavetable, adapted to Rhino's simpler native workflow. The goal is not to clone every feature at once; it is to grow a musical instrument in stable layers.
 
 ### Phase 1: Playable Wavetable Core

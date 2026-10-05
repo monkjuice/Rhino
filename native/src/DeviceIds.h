@@ -31,7 +31,6 @@ inline juce::String deviceIdFor(Session::Instrument instrument)
     switch (instrument)
     {
         case Session::Instrument::FourOsc:    return "FourOsc";
-        case Session::Instrument::RhinoWave:  return "RhinoWave";
         case Session::Instrument::RhinoForge: return "RhinoForge";
         case Session::Instrument::Drums:      return "Drums";
         case Session::Instrument::Utility:    return "Utility";

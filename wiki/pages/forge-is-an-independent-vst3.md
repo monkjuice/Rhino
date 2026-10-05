@@ -4,7 +4,7 @@ type: decision
 summary: Why Forge is its own JUCE plugin project, hosted by Rhino through Tracktion's external-plugin wrapper rather than built in.
 tags: [forge, vst3, hosting, architecture]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-05
 ---
 
 # Forge is an independent VST3
@@ -13,7 +13,7 @@ updated: 2026-10-03
 
 Rhino's instrument work has two parts:
 
-- **Milestone A** finishes Rhino Wave, Rhino's built-in synth: a Tracktion plugin in `native/src/devices/instruments/`.
+- **Milestone A** finishes Rhino Wave, Rhino's built-in synth: a Tracktion plugin in `native/src/devices/instruments/`. (Rhino Wave was removed on 2026-10-05; a new catalog-only built-in synth is to replace it.)
 - **Milestone B** is Forge, a far larger synth modelled on Serum 2's workflow.
 
 Making Forge another built-in device would have tied its DSP, state, automation and editor to Tracktion.
@@ -30,7 +30,7 @@ Forge is developed as an independent VST3 and loaded through Tracktion rather th
 
 Forge's DSP, state, automation surface and editor stay host-independent. Forge therefore runs in any VST3 host, and that is how it gets A/B-tested against Serum in another DAW ([Comparing Forge with Serum](comparing-forge-with-serum.md)).
 
-The rejected alternative was a built-in Tracktion device like Rhino Wave. That approach is still used for Wave and for the catalog devices ([Device catalog](device-catalog.md)).
+The rejected alternative was a built-in Tracktion device like Rhino Wave. That approach is still used for every catalog device ([Device catalog](device-catalog.md)).
 
 ## Consequences
 

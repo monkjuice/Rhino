@@ -9,7 +9,6 @@
 #include "audio/RhinoBloomDevice.h"
 #include "audio/RhinoSpaceDevice.h"
 #include "instruments/DrumDevice.h"
-#include "instruments/RhinoWaveDevice.h"
 #include "midi/RhinoArpDevice.h"
 #include <algorithm>
 #include <cmath>
@@ -439,78 +438,6 @@ int runSelfTest()
                     require(std::abs(steady.getSample(c, i) - oversized.getSample(c, i)) < 1.0e-6f);
             require(steady.getMagnitude(0, total) > 1.2f);
         }
-
-        auto wavePlugin = session.edit->getPluginCache().createNewPlugin(RhinoWaveDevice::xmlTypeName, {});
-        auto* wave = dynamic_cast<RhinoWaveDevice*>(wavePlugin.get());
-        require(wave != nullptr);
-        wave->initialise({{}, 48000.0, 512});
-        juce::AudioBuffer<float> waveBuffer(2, 4096);
-        waveBuffer.clear();
-        te::MidiMessageArray lowMidi;
-        lowMidi.addMidiMessage(juce::MidiMessage::noteOn(1, 5, 1.0f), 0.0, {});
-        te::PluginRenderContext waveContext(&waveBuffer, 0, waveBuffer.getNumSamples(), &lowMidi, 0.0, {}, true, false, true, false);
-        wave->applyToBuffer(waveContext);
-        float wavePeak = 0.0f;
-        for (int c = 0; c < waveBuffer.getNumChannels(); ++c)
-            for (int i = 0; i < waveBuffer.getNumSamples(); ++i)
-            {
-                const auto sample = waveBuffer.getSample(c, i);
-                require(std::isfinite(sample));
-                wavePeak = std::max(wavePeak, std::abs(sample));
-            }
-        require(wavePeak < 1.0f);
-        wave->reset();
-        auto wavePosition = wave->getAutomatableParameterByID("position");
-        auto waveShape = wave->getAutomatableParameterByID("shape");
-        auto waveMotion = wave->getAutomatableParameterByID("motion");
-        auto waveOsc2 = wave->getAutomatableParameterByID("osc2Level");
-        auto waveTune2 = wave->getAutomatableParameterByID("osc2Tune");
-        auto waveCutoff = wave->getAutomatableParameterByID("cutoff");
-        auto waveLfoRate = wave->getAutomatableParameterByID("lfoRate");
-        auto waveLfoPosition = wave->getAutomatableParameterByID("lfoPosition");
-        auto waveLfoCutoff = wave->getAutomatableParameterByID("lfoCutoff");
-        auto waveLfoPitch = wave->getAutomatableParameterByID("lfoPitch");
-        auto waveLfoMotion = wave->getAutomatableParameterByID("lfoMotion");
-        require(wavePosition != nullptr && waveShape != nullptr && waveMotion != nullptr
-                && waveOsc2 != nullptr && waveTune2 != nullptr && waveCutoff != nullptr
-                && waveLfoRate != nullptr && waveLfoPosition != nullptr && waveLfoCutoff != nullptr
-                && waveLfoPitch != nullptr && waveLfoMotion != nullptr);
-        juce::AudioBuffer<float> sweepBuffer(2, 512);
-        te::MidiMessageArray sweepMidi;
-        float sweepPeak = 0.0f, maxJump = 0.0f, previousSample = 0.0f;
-        for (int block = 0; block < 32; ++block)
-        {
-            sweepBuffer.clear();
-            sweepMidi.clear();
-            if (block == 0)
-                sweepMidi.addMidiMessage(juce::MidiMessage::noteOn(1, 61, 0.8f), 0.0, {});
-            if (block == 16)
-                sweepMidi.addMidiMessage(juce::MidiMessage::noteOn(1, 73, 0.55f), 0.0, {});
-            const auto phase = static_cast<float>(block) / 31.0f;
-            wavePosition->setParameter(phase, juce::dontSendNotification);
-            waveShape->setParameter(1.0f - phase * 0.7f, juce::dontSendNotification);
-            waveMotion->setParameter(0.1f + phase * 0.75f, juce::dontSendNotification);
-            waveOsc2->setParameter(phase, juce::dontSendNotification);
-            waveTune2->setParameter(block % 2 == 0 ? 12.0f : -12.0f, juce::dontSendNotification);
-            waveCutoff->setParameter(350.0f + phase * 12000.0f, juce::dontSendNotification);
-            waveLfoRate->setParameter(0.25f + phase * 12.0f, juce::dontSendNotification);
-            waveLfoPosition->setParameter(-0.6f + phase * 1.2f, juce::dontSendNotification);
-            waveLfoCutoff->setParameter(0.5f - phase, juce::dontSendNotification);
-            waveLfoPitch->setParameter(-4.0f + phase * 8.0f, juce::dontSendNotification);
-            waveLfoMotion->setParameter(phase * 0.75f, juce::dontSendNotification);
-            te::PluginRenderContext sweepContext(&sweepBuffer, 0, sweepBuffer.getNumSamples(), &sweepMidi, 0.0, {}, true, false, true, false);
-            wave->applyToBuffer(sweepContext);
-            for (int i = 0; i < sweepBuffer.getNumSamples(); ++i)
-            {
-                const auto sample = sweepBuffer.getSample(0, i);
-                require(std::isfinite(sample));
-                sweepPeak = std::max(sweepPeak, std::abs(sample));
-                maxJump = std::max(maxJump, std::abs(sample - previousSample));
-                previousSample = sample;
-            }
-        }
-        require(sweepPeak > 0.0001f && sweepPeak < 1.0f && maxJump < 0.9f);
-        wave->deinitialise();
 
         // The count-in generator, driven directly rather than through a device.
         // It is a pure function of tempo, meter and sample rate, so the whole

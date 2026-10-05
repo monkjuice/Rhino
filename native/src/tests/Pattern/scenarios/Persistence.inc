@@ -75,4 +75,32 @@
         session.deleteClip(session.pattern().itemID);
         require(patternTrack->getClips().size() >= 1, "Deleting the last edited pattern keeps an editable clip alive");
         require(session.pattern().getSequence().getNumNotes() == 0, "Replacement pattern clip is empty and readable");
+
+        // A document can name a device this build does not have: Rhino Wave
+        // was removed on 2026-10-05, and documents saved before then carry it.
+        // Opening one must not crash, and loses that device alone.
+        {
+            auto document = std::make_unique<Session>();
+            auto& older = *document;
+            require(older.addInstrument(Session::Instrument::FourOsc, 0).wasOk(), "A synth on the first MIDI lane");
+            auto saved = older.projectSnapshot();
+            auto renamed = 0;
+            std::function<void(juce::ValueTree)> rename = [&](juce::ValueTree node)
+            {
+                if (node.hasType(te::IDs::PLUGIN) && node[te::IDs::type].toString() == te::FourOscPlugin::xmlTypeName)
+                {
+                    node.setProperty(te::IDs::type, "rhino.wave.v1", nullptr);
+                    ++renamed;
+                }
+                for (auto child : node)
+                    rename(child);
+            };
+            rename(saved);
+            require(renamed == 1, "The saved synth now names a device this build lacks");
+            juce::TemporaryFile olderFile(".rhinoedit");
+            require(older.restoreProject(saved, olderFile.getFile()).wasOk(),
+                    "A document naming a device this build lacks still opens");
+            require(!older.trackHasInstrument(0) && older.trackType(0) == Session::TrackType::midi,
+                    "and the track keeps its kind, losing only the missing device");
+        }
         session.releaseAudioDevice();

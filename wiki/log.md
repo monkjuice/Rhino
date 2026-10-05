@@ -129,3 +129,12 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 ## [2026-10-03] update | Forge filter remains stable under cutoff and modulation sweeps
 - updated: pages/forge-filter.md (FAT's level-dependent damping is part of both sides of the implicit SVF solve; recorded the rapid-cutoff failure mode and live-cadence regression)
 - updated: pages/forge-modulation.md (recorded the eight-slot, six-LFO multi-filter stress scenario and its finite, bounded and audible-output contract)
+
+## [2026-10-05] update | Rhino Wave removed
+- updated: pages/built-in-devices.md (dropped the Rhino Wave row; the Arp row links its own page)
+- updated: pages/pattern-presets.md (eleven presets without the three Wave ones; a preset loads into the open clip's own track, not track 0)
+- updated: pages/device-catalog.md (the catalog as of 2026-10-05, eight registered types, and patternKey no longer read)
+- updated: pages/adding-a-device.md (dropped the instrument traps retired by a04b407 and b5d17e0)
+- updated: pages/one-instrument-per-track.md (carriedInstrument carries every instrument by catalog entry)
+- updated: pages/device-rack.md, pages/dependency-direction.md, pages/rhino-build-targets.md, pages/forge-is-an-independent-vst3.md (Rhino Wave mentions)
+- updated: index.md (pattern presets summary)

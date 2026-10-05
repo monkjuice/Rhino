@@ -4,7 +4,7 @@ type: component
 summary: Rhino builds as three targets (RhinoCore, RhinoDevices, the app) so that editing a device does not rebuild the app.
 tags: [rhino, build, cmake, architecture]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-05
 ---
 
 # Rhino's build targets
@@ -21,7 +21,7 @@ updated: 2026-10-03
 
 A device may not include `Session.h` or any UI header, and `Session.h` reaches the device library only through `DeviceCatalog.h` (it forward-declares `UtilityDevice`). Until commit `24826df` (2026-09-19) `Session.h` included all six device headers, so editing any device rebuilt nearly every translation unit. `RhinoCore` likewise knows nothing of Session, the UI or Tracktion, so both other targets can link it without depending on each other.
 
-The rule is narrower than "the app never sees a device header". `native/src/SessionInternal.h`, private to the `Session*.cpp` files, includes the Utility, Drum and Rhino Wave headers, and the `DeviceEditorPanel*.cpp` faces include the four devices they draw. Editing one of those headers rebuilds those files, not the whole app.
+The rule is narrower than "the app never sees a device header". `native/src/SessionInternal.h`, private to the `Session*.cpp` files, includes the Utility and Drum headers, and the `DeviceEditorPanel*.cpp` faces include the four devices they draw. Editing one of those headers rebuilds those files, not the whole app.
 
 Inside `RhinoCore` only `ContentLibrary` includes JUCE; the DSP classes use the standard library alone, which is what keeps them testable without an engine. Only the `devices/` root is a public include directory, so an include names the kind: `#include "audio/RhinoEqDevice.h"`.
 

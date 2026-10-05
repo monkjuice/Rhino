@@ -4,7 +4,7 @@ type: guide
 summary: The three edits that add a device, the shape every device follows, and the enum-era code a new instrument still meets.
 tags: [rhino, devices, cmake, testing]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-05
 ---
 
 # Adding a device to Rhino
@@ -36,11 +36,12 @@ Optional; without one the rack shows twelve generic knobs. A face is a new trans
 
 ## Instruments still meet older code
 
-Effects need nothing more; a new instrument also meets code written for the four that predate the catalog:
+Effects need nothing more; a new instrument also meets code written for the instruments that predate the catalog:
 
-- `activeTrackInstrument` answers 4OSC for it, so a MIDI clip moved or pasted off its track puts a 4OSC on the destination ([One instrument per track](one-instrument-per-track.md)).
-- `restoreProject` re-applies the edit's `rhinoPatternInstrument` to the first track and knows only `wave`, `forge` and `drums`; any other value means 4OSC. Once that property is set, a new instrument on the first track is swapped out when the project reopens, until `restoreProject` learns its `patternKey`.
-- The paused session view's slot menu lists instruments by hand, and `native/src/DeviceMacros.cpp` curates rack knobs only for 4OSC and Rhino Wave.
+- The paused session view's slot menu lists instruments by hand.
+- `native/src/DeviceMacros.cpp` curates rack knobs only for 4OSC; any other device shows its active parameters in order.
+
+Two older traps are gone as of 2026-10-05: a moved or pasted MIDI clip carries its instrument by catalog entry ([One instrument per track](one-instrument-per-track.md)), and reopening a project no longer re-applies an instrument to the first track (commit `a04b407`).
 
 ## Related
 

@@ -31,7 +31,7 @@
                 "The main track takes no audio");
         require(view.applyBrowserDrop("rhino-browser:preset:HouseKit", mainTrack).failed(),
                 "A pattern cannot be dropped on the main track");
-        require(view.applyBrowserDrop("rhino-browser:instrument:RhinoWave", mainTrack).failed(),
+        require(view.applyBrowserDrop("rhino-browser:instrument:FourOsc", mainTrack).failed(),
                 "An instrument cannot be dropped on the main track");
         require(view.applyBrowserDrop("rhino-browser:drumkit:HouseKit", mainTrack).failed(),
                 "A drum kit cannot be dropped on the main track");

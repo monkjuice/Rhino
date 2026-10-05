@@ -4,17 +4,16 @@ type: component
 summary: Every device Rhino ships, what each one is and where its source lives, with the details of Utility and the drum rack.
 tags: [rhino, devices, dsp]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-05
 ---
 
 # Built-in devices
 
-Every device in the [Device catalog](device-catalog.md) on 2026-10-03. Rhino's own live under `native/src/devices/`; four come from Tracktion.
+Every device in the [Device catalog](device-catalog.md) on 2026-10-05. Rhino's own live under `native/src/devices/`; four come from Tracktion.
 
 | Device | Kind | Source | What it is |
 | --- | --- | --- | --- |
 | 4OSC | instrument | Tracktion `te::FourOscPlugin` | Subtractive synth; the rack shows six macros |
-| Rhino Wave | instrument | `instruments/RhinoWaveDevice.*` | 12-voice morphing wavetable synth over band-limited tables (`RhinoWaveTables.h`) |
 | Rhino Forge | instrument | external VST3 | [Hosting Forge in Rhino](forge-hosting.md) |
 | Rhino Drums | instrument | `instruments/DrumDevice.*` | Sample drum rack, offered as five kits |
 | Rhino EQ | audio FX | `audio/RhinoEqDevice.*` | [Rhino EQ](rhino-eq.md) |
@@ -24,7 +23,9 @@ Every device in the [Device catalog](device-catalog.md) on 2026-10-03. Rhino's o
 | Rhino Bloom | audio FX | `audio/RhinoBloomDevice.*` | Bloom, chorus, clouds, plate, colour |
 | Rhino Tune | audio FX | `audio/AutoTuneDevice.*` | [Rhino Tune](rhino-tune.md) |
 | Rhino Vocoder | audio FX | `audio/VocoderDevice.*` | [Rhino Vocoder and sidechains](rhino-vocoder.md) |
-| Rhino Arp | MIDI FX | `midi/RhinoArpDevice.*` | Plays held notes upward; rate 1/8 to 1/32, one to three octaves, gate 10-90% |
+| Rhino Arp | MIDI FX | `midi/RhinoArpDevice.*` | [Rhino Arp](rhino-arp.md) |
+
+Rhino Wave, the first built-in synth (a morphing wavetable instrument), was removed on 2026-10-05. Its replacement is to be a new catalog-only synth that needs no special case in `Session`.
 
 ## Utility
 

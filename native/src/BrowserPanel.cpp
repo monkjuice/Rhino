@@ -33,9 +33,6 @@ juce::String presetId(Session::PatternPreset preset)
         case Session::PatternPreset::SubBass:    return "SubBass";
         case Session::PatternPreset::ReeseBass:  return "ReeseBass";
         case Session::PatternPreset::SirenLead:  return "SirenLead";
-        case Session::PatternPreset::WavePad:    return "WavePad";
-        case Session::PatternPreset::WaveBass:   return "WaveBass";
-        case Session::PatternPreset::WavePluck:  return "WavePluck";
         case Session::PatternPreset::HouseKit:   return "HouseKit";
         case Session::PatternPreset::BreakKit:   return "BreakKit";
         case Session::PatternPreset::MinimalKit: return "MinimalKit";
@@ -209,10 +206,7 @@ BrowserPanel::BrowserPanel(Session& s) : session(s)
         {"Patterns", "Synth", "Chord pad", "Soft sustaining 4OSC chord synth", Session::PatternPreset::ChordPad},
         {"Patterns", "Bass", "Sub bass", "Clean mono low-end bass line", Session::PatternPreset::SubBass},
         {"Patterns", "Bass", "Reese bass", "Wide detuned electronic bass", Session::PatternPreset::ReeseBass},
-        {"Patterns", "Bass", "Wave bass", "Rhino Wave rounded low pulse", Session::PatternPreset::WaveBass},
         {"Patterns", "Lead", "Siren lead", "Rising and falling emergency lead", Session::PatternPreset::SirenLead},
-        {"Patterns", "Lead", "Wave pluck", "Rhino Wave bright moving pluck", Session::PatternPreset::WavePluck},
-        {"Patterns", "Pad", "Wave pad", "Rhino Wave wide glassy chords", Session::PatternPreset::WavePad},
         {"Patterns", "Drums", "House kit", "Four-on-floor kick, backbeat, hats", Session::PatternPreset::HouseKit},
         {"Patterns", "Drums", "Break kit", "Syncopated kick/snare/hats groove", Session::PatternPreset::BreakKit},
         {"Patterns", "Drums", "Minimal kit", "Sparse kick/snare/hats sketch", Session::PatternPreset::MinimalKit},

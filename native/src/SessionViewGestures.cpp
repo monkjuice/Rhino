@@ -28,9 +28,6 @@ constexpr PresetMenuEntry presetMenu[] {
     {Session::PatternPreset::SubBass, "Sub Bass"},
     {Session::PatternPreset::ReeseBass, "Reese Bass"},
     {Session::PatternPreset::SirenLead, "Siren Lead"},
-    {Session::PatternPreset::WavePad, "Wave Pad"},
-    {Session::PatternPreset::WaveBass, "Wave Bass"},
-    {Session::PatternPreset::WavePluck, "Wave Pluck"},
     {Session::PatternPreset::HouseKit, "House Kit"},
     {Session::PatternPreset::BreakKit, "Break Kit"},
     {Session::PatternPreset::MinimalKit, "Minimal Kit"},
@@ -152,7 +149,6 @@ void SessionView::showSlotMenu(int track, int scene)
         presets.addItem(100 + i, presetMenu[i].name);
     juce::PopupMenu instruments;
     instruments.addItem(10, "4OSC synth");
-    instruments.addItem(11, "Rhino Wave");
     instruments.addItem(12, "Rhino Drums");
     instruments.addItem(13, "Rhino Forge", session.isForgeAvailable());
     juce::PopupMenu menu;
@@ -176,7 +172,6 @@ void SessionView::showSlotMenu(int track, int scene)
             if (result >= 100 && result < 100 + presetMenuCount)
                 outcome = session.insertPatternPresetInSlot(presetMenu[result - 100].preset, track, scene);
             else if (result == 10) outcome = session.insertInstrumentClipInSlot(Session::Instrument::FourOsc, track, scene);
-            else if (result == 11) outcome = session.insertInstrumentClipInSlot(Session::Instrument::RhinoWave, track, scene);
             else if (result == 12) outcome = session.insertInstrumentClipInSlot(Session::Instrument::Drums, track, scene);
             else if (result == 13) outcome = session.insertInstrumentClipInSlot(Session::Instrument::RhinoForge, track, scene);
             else if (result == 20) outcome = session.insertBuiltInSampleInSlot(Session::BuiltInSample::Whistle, track, scene);

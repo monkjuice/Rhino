@@ -11,7 +11,6 @@
 add_library(RhinoDevices STATIC
     DeviceCatalog.cpp
     instruments/DrumDevice.cpp
-    instruments/RhinoWaveDevice.cpp
     audio/UtilityDevice.cpp
     audio/RhinoSpaceDevice.cpp
     audio/RhinoBloomDevice.cpp

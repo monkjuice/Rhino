@@ -285,7 +285,7 @@ juce::Result Session::insertPatternPresetInSlot(PatternPreset preset, int track,
         return juce::Result::fail("Drop clips on a session slot.");
     const auto data = presetPattern(preset);
     edit->getUndoManager().beginNewTransaction("Add " + data.name + " to slot");
-    if (const auto prepared = preparePresetTrack(track, data, preset); prepared.failed())
+    if (const auto prepared = preparePresetTrack(track, data); prepared.failed())
         return prepared;
     const auto beats = static_cast<double>(presetSlotBars) * beatsPerBar();
     const auto end = edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(beats));

@@ -91,14 +91,13 @@
                                  ClipGesture::move, 2).wasOk(),
                 "Can move a duplicated drum MIDI clip to another track");
         const auto movedDrumSlots = session.deviceSlots(2);
-        auto movedDrumsEnabled = false, movedSynthDisabled = true, movedWaveDisabled = true;
+        auto movedDrumsEnabled = false, movedSynthDisabled = true;
         for (const auto& slot : movedDrumSlots)
         {
             if (slot.type == DrumDevice::xmlTypeName) movedDrumsEnabled = slot.enabled;
             if (slot.type == te::FourOscPlugin::xmlTypeName) movedSynthDisabled = !slot.enabled;
-            if (slot.type == RhinoWaveDevice::xmlTypeName) movedWaveDisabled = !slot.enabled;
         }
-        require(movedDrumsEnabled && movedSynthDisabled && movedWaveDisabled,
+        require(movedDrumsEnabled && movedSynthDisabled,
                 "Moving duplicated drum MIDI to another track enables the drum instrument there");
         session.undo();
         session.undo();
@@ -270,17 +269,6 @@
         session.applyPatternPreset(Session::PatternPreset::SirenLead);
         require(!session.isPatternDrums() && session.hasNote(4, 72) && session.hasNote(10, 48),
                 "Siren lead preset loads a rising and falling synth line");
-        session.applyPatternPreset(Session::PatternPreset::WavePad);
-        require(session.patternInstrumentKind() == Session::Instrument::RhinoWave,
-                "Wave pad preset enables Rhino Wave");
-        require(!session.isPatternDrums() && session.hasNote(0, 48) && session.hasNote(8, 62),
-                "Wave pad preset loads sustained wavetable chords");
-        session.applyPatternPreset(Session::PatternPreset::WaveBass);
-        require(session.patternInstrumentKind() == Session::Instrument::RhinoWave && session.hasNote(0, 36) && session.hasNote(12, 39),
-                "Wave bass preset keeps Rhino Wave active with low notes");
-        session.applyPatternPreset(Session::PatternPreset::WavePluck);
-        require(session.patternInstrumentKind() == Session::Instrument::RhinoWave && session.hasNote(0, 60) && session.hasNote(12, 74),
-                "Wave pluck preset keeps Rhino Wave active with bright notes");
 
         // Swapping a track's instrument is a device change, not a clip change:
         // the pattern stays put and the instrument under it is replaced. This
@@ -288,9 +276,11 @@
         {
             const auto notesBeforeSwap = session.pattern().getSequence().getNumNotes();
             require(notesBeforeSwap > 0, "The pattern has notes to preserve");
-            require(session.addInstrument(Session::Instrument::FourOsc, 0).wasOk(),
+            require(dynamic_cast<te::FourOscPlugin*>(session.patternInstrument()) != nullptr,
+                    "The swap starts from the synth the last preset loaded");
+            require(session.addInstrument(Session::Instrument::Drums, 0).wasOk(),
                     "The pattern track accepts a different instrument");
-            require(session.patternInstrumentKind() == Session::Instrument::FourOsc,
+            require(session.patternInstrumentKind() == Session::Instrument::Drums,
                     "Dropping an instrument switches the track to it");
             const auto patternInstruments = [&session]
             {
@@ -303,10 +293,10 @@
                     "The instrument it replaced is gone rather than left dormant");
             require(session.pattern().getSequence().getNumNotes() == notesBeforeSwap,
                     "Switching instrument leaves the pattern notes untouched");
-            require(session.addInstrument(Session::Instrument::RhinoWave, 0).wasOk(),
+            require(session.addInstrument(Session::Instrument::FourOsc, 0).wasOk(),
                     "The track accepts the previous instrument back");
-            require(session.patternInstrumentKind() == Session::Instrument::RhinoWave,
-                    "Switching back restores Rhino Wave");
+            require(dynamic_cast<te::FourOscPlugin*>(session.patternInstrument()) != nullptr,
+                    "Switching back restores 4OSC");
             require(session.pattern().getSequence().getNumNotes() == notesBeforeSwap,
                     "Notes survive switching back as well");
         }

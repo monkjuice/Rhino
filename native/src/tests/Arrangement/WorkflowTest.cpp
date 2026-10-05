@@ -2,7 +2,6 @@
 // The scenarios drive devices directly, so this runner needs the definitions
 // rather than their catalog entries.
 #include "instruments/DrumDevice.h"
-#include "instruments/RhinoWaveDevice.h"
 #include "audio/VocoderDevice.h"
 #include "../../Theme.h"
 #include "../../TransportDisplay.h"

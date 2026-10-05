@@ -362,28 +362,6 @@ std::vector<Session::DeviceParameter> Session::deviceParameters(int track, int s
         return parameters;
     }
 
-    if (auto* wavePlugin = dynamic_cast<RhinoWaveDevice*>(plugin))
-    {
-        for (int i = 0; i < 23; ++i)
-            if (auto* parameter = rhinoWaveMacroParameterAt(*wavePlugin, i))
-            {
-                const auto range = parameter->getValueRange();
-                if (!std::isfinite(range.getStart()) || !std::isfinite(range.getEnd()) || range.getLength() <= 0.0f)
-                    continue;
-                const DeviceTarget target {track, slot, i};
-                const auto* runtime = findAutomationRuntime(target);
-                parameters.push_back({rhinoWaveMacroName(i),
-                                      formatRhinoWaveMacroValue(i, parameter->getCurrentValue(), *parameter),
-                                      parameter->getCurrentValue(),
-                                      range.getStart(),
-                                      range.getEnd(),
-                                      parameter->isDiscrete(),
-                                      hasActiveTrackAutomation(*edit, target),
-                                      runtime != nullptr && runtime->overridden});
-            }
-        return parameters;
-    }
-
     int parameterIndex = 0;
     for (auto* parameter : plugin->getAutomatableParameters())
     {

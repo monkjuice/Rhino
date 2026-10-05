@@ -33,7 +33,7 @@ The catalog of this wiki: every page, grouped by type, one line each (`- [Title]
 - [Hosting Forge in Rhino](pages/forge-hosting.md) — How Rhino finds, loads and talks to the Forge VST3, and what does and does not cross the plugin boundary.
 - [Mixer](pages/mixer.md) — One mixer serves both views, with a VolumeAndPanPlugin ending each chain, mute and solo on the track, and the master volume for Main.
 - [Note editor (StepGrid)](pages/note-editor.md) — Edits the notes of the open MIDI clip in steps, with a draw mode, a step region and caches that tie it closely to Session.
-- [Pattern presets](pages/pattern-presets.md) — The fourteen built-in one-bar patterns, each a set of notes plus the instrument and patch that play them, and what dropping one does to a track.
+- [Pattern presets](pages/pattern-presets.md) — The eleven built-in one-bar patterns, each a set of notes plus the instrument and patch that play them, and what dropping one does to a track.
 - [Playhead rendering](pages/playhead.md) — Draws both playheads every display refresh from the audio graph's own position, repainting two narrow strips, with a Direct2D fix.
 - [Project files (.rhinoedit)](pages/project-files.md) — A .rhinoedit is the Tracktion edit's XML plus Rhino's own properties, saved from a snapshot on a worker and opened off-thread.
 - [Recording and the count-in](pages/recording.md) — Arms tracks, not inputs, lets each take win the ground it lands on, and counts in with Rhino's own click while the playhead stands still.

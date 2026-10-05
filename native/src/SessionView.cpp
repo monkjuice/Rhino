@@ -1,5 +1,6 @@
 #include "SessionView.h"
 #include "Theme.h"
+#include "UiVisibility.h"
 #include <algorithm>
 
 // Session view lifecycle, layout and geometry.
@@ -353,12 +354,26 @@ void SessionView::scrollBarMoved(juce::ScrollBar* bar, double start)
 
 void SessionView::changeListenerCallback(juce::ChangeBroadcaster*)
 {
+    if (isHiddenInShell(*this))
+    {
+        staleWhileHidden = true;
+        return;
+    }
     selectedTrack = juce::jlimit(0, std::max(0, session.trackCount() - 1), selectedTrack);
     syncTrackControls();
     layOutTrackControls();
     refreshControls();
     updateScroll();
     repaint();
+}
+
+void SessionView::visibilityChanged()
+{
+    if (staleWhileHidden && !isHiddenInShell(*this))
+    {
+        staleWhileHidden = false;
+        changeListenerCallback(nullptr);
+    }
 }
 
 void SessionView::slotUpdated(int, int)

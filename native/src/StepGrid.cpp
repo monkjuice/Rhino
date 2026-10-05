@@ -1,5 +1,6 @@
 #include "StepGridInternal.h"
 #include "Playhead.h"
+#include "UiVisibility.h"
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -410,8 +411,22 @@ int StepGrid::automaticLowestPitch() const
     return juce::jlimit(0, 127 - rows + 1, base);
 }
 
+void StepGrid::visibilityChanged()
+{
+    if (staleWhileHidden && !isHiddenInShell(*this))
+    {
+        staleWhileHidden = false;
+        changeListenerCallback(nullptr);
+    }
+}
+
 void StepGrid::changeListenerCallback(juce::ChangeBroadcaster*)
 {
+    if (isHiddenInShell(*this))
+    {
+        staleWhileHidden = true;
+        return;
+    }
     syncHorizontalScroll();
     const auto previousLowestPitch = lowestVisiblePitch;
     if (session.isPatternDrums())
@@ -508,6 +523,10 @@ void StepGrid::rebuildVisibleNotes()
 
 void StepGrid::updatePlayhead()
 {
+    // Every display refresh asks, shown or not; a hidden editor has no
+    // playhead anyone can see.
+    if (isHiddenInShell(*this))
+        return;
     float next = -1.0f;
     auto& transport = session.edit->getTransport();
     next = playheadXForTime(playheadTime(transport));

@@ -1,5 +1,6 @@
 #include "DeviceEditorPanel.h"
 #include "Theme.h"
+#include "UiVisibility.h"
 #include "audio/AutoTuneDevice.h"
 #include <algorithm>
 #include <cmath>
@@ -455,6 +456,10 @@ bool DeviceEditorPanel::handleAutoTuneClick(const juce::MouseEvent& event)
 
 void DeviceEditorPanel::timerCallback()
 {
+    // A face in a hidden rack has nothing to animate for anyone, and the EQ's
+    // spectrum was being analysed at 24 Hz behind a closed pane.
+    if (isHiddenInShell(*this))
+        return;
     if (face == Face::Eq)
     {
         tickEqSpectrum();

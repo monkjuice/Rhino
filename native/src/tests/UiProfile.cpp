@@ -114,16 +114,27 @@ int runUiProfile()
 
         Theme theme;
         juce::LookAndFeel::setDefaultLookAndFeel(&theme);
+        // Laid out as the shell lays them out while a device is being edited:
+        // the arrangement and the rack showing, the note editor and the clip
+        // panel - the lower pane's other two faces - and the paused session
+        // view present but switched off.
+        juce::Component shell;
+        shell.setBounds(0, 0, 1400, 1000);
         auto arrangement = std::make_unique<Arrangement>(session);
         auto grid = std::make_unique<StepGrid>(session);
         auto rack = std::make_unique<DeviceRack>(session);
         auto sessionView = std::make_unique<SessionView>(session);
         auto clipPanel = std::make_unique<AudioClipPanel>(session);
+        shell.addAndMakeVisible(*arrangement);
+        shell.addAndMakeVisible(*rack);
+        shell.addChildComponent(*grid);
+        shell.addChildComponent(*sessionView);
+        shell.addChildComponent(*clipPanel);
         arrangement->setBounds(0, 0, 1400, 620);
-        grid->setBounds(0, 0, 1400, 300);
-        rack->setBounds(0, 0, 1400, 260);
+        grid->setBounds(0, 620, 1400, 300);
+        rack->setBounds(0, 620, 1400, 260);
         sessionView->setBounds(0, 0, 1400, 620);
-        clipPanel->setBounds(0, 0, 1400, 260);
+        clipPanel->setBounds(0, 620, 1400, 260);
         rack->selectTrack(0);
         session.sendSynchronousChangeMessage();
 

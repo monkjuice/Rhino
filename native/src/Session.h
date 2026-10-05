@@ -341,6 +341,13 @@ public:
     // meter, or a scale. Null unless that slot holds a plugin.
     te::Plugin* devicePlugin(int track, int slot) const;
     DeviceTarget lastTouchedDeviceParameter() const { return lastTouchedParameter; }
+    // A device parameter moved inside a drag is announced here instead of to
+    // the whole session. One value changed, and every view rebuilding itself
+    // for each pixel of a knob turn is what made the turn stutter: the rack
+    // listens here to keep the dragged device's readings live, and everything
+    // else hears once, when the gesture ends. lastTouchedDeviceParameter()
+    // says which parameter it was.
+    juce::ChangeBroadcaster deviceParameterValues;
     juce::Result beginDeviceParameterGesture(int track, int slot, int parameter);
     juce::Result setDeviceParameter(int track, int slot, int parameter, float value);
     juce::Result endDeviceParameterGesture(int track, int slot, int parameter);
@@ -1024,6 +1031,10 @@ private:
     // SessionSlots.cpp - why a lane may not take a clip of this kind, or ok.
     juce::Result clipLaneRefusal(int track, bool midi) const;
     te::VolumeAndPanPlugin* trackVolumePlugin(int track) const;
+    // SessionMixer.cpp - a fader or pan change is announced at once outside a
+    // drag and once at the drag's end inside one.
+    void announceMixerChange();
+    void endMixerGesture();
     void ensureTrackMixers();
     // The reorder itself, without a transaction or a notification, so the group
     // calls can move several tracks inside one of their own.
@@ -1061,6 +1072,12 @@ private:
     // user commands separately so startup cannot dirty an untouched document.
     juce::int64 changeRevision = 0, savedRevision = 0;
     int audioClipGestureDepth = 0, tempoGestureDepth = 0;
+    // Open knob and fader drags. Inside one, a value change is not announced
+    // to the whole session; the gesture's end announces it once.
+    int parameterGestureDepth = 0, mixerGestureDepth = 0;
+    // The dragged device's latency when the drag began, so its end can tell
+    // whether the playback graph has to be rebuilt for delay compensation.
+    double latencyAtGestureStart = 0.0;
     bool manualLoop = false;
     tracktion::core::TimeRange manualLoopRange;
     DeviceTarget lastTouchedParameter;

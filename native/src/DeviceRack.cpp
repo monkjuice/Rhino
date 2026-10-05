@@ -1,6 +1,7 @@
 #include "DeviceRack.h"
 #include "Theme.h"
 #include "BrowserIds.h"
+#include "UiVisibility.h"
 #include <cmath>
 #include <optional>
 
@@ -552,11 +553,13 @@ DeviceRack::DeviceRack(Session& s) : session(s)
     for (auto* component : std::initializer_list<juce::Component*>{&title, &context, &open, &remove, &chainViewport})
         addAndMakeVisible(component);
     session.addChangeListener(this);
+    session.deviceParameterValues.addChangeListener(this);
     selectTrack(0);
 }
 
 DeviceRack::~DeviceRack()
 {
+    session.deviceParameterValues.removeChangeListener(this);
     session.removeChangeListener(this);
 }
 
@@ -784,9 +787,38 @@ void DeviceRack::rebuildDevicePanels()
     }
 }
 
-void DeviceRack::changeListenerCallback(juce::ChangeBroadcaster*)
+void DeviceRack::changeListenerCallback(juce::ChangeBroadcaster* source)
 {
-    sync();
+    if (isHiddenInShell(*this))
+    {
+        staleWhileHidden = true;
+        return;
+    }
+    if (source == &session.deviceParameterValues)
+        refreshTouchedDevice();
+    else
+        sync();
+}
+
+void DeviceRack::visibilityChanged()
+{
+    if (staleWhileHidden && !isHiddenInShell(*this))
+    {
+        staleWhileHidden = false;
+        sync();
+    }
+}
+
+// One knob is being dragged, so one panel's readings move: that panel is
+// refreshed and the chain, the other panels and their layout are left alone.
+void DeviceRack::refreshTouchedDevice()
+{
+    const auto touched = session.lastTouchedDeviceParameter();
+    if (touched.track != selectedTrack)
+        return;
+    for (int i = 0; i < devicePanels.size() && i < static_cast<int>(slots.size()); ++i)
+        if (slots[static_cast<size_t>(i)].pluginIndex == touched.slot)
+            devicePanels[i]->setTarget(selectedTrack, slots[static_cast<size_t>(i)], i == selectedDevice);
 }
 
 void DeviceRack::selectTrack(int track)

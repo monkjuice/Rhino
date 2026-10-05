@@ -1,6 +1,7 @@
 #include "AudioClipPanel.h"
 #include "Playhead.h"
 #include "Theme.h"
+#include "UiVisibility.h"
 #include "WaveformLanes.h"
 #include <cmath>
 
@@ -282,7 +283,21 @@ void AudioClipPanel::changeListenerCallback(juce::ChangeBroadcaster* source)
         repaint(waveArea);
         return;
     }
+    if (isHiddenInShell(*this))
+    {
+        staleWhileHidden = true;
+        return;
+    }
     sync();
+}
+
+void AudioClipPanel::visibilityChanged()
+{
+    if (staleWhileHidden && !isHiddenInShell(*this))
+    {
+        staleWhileHidden = false;
+        sync();
+    }
 }
 
 void AudioClipPanel::editWillChange()

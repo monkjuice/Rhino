@@ -90,11 +90,15 @@ private:
     void report(const juce::Result&);
     void timerCallback() override;
     void changeListenerCallback(juce::ChangeBroadcaster*) override;
+    void visibilityChanged() override;
     void editWillChange() override;
     void editDidChange() override;
 
     Session& session;
     te::EditItemID clip;
+    // A change arrived while the shell had this pane switched off; caught up
+    // when it is shown. See UiVisibility.h.
+    bool staleWhileHidden = false;
     Session::AudioClipMix mix;
     // One clip at a time, so one thumbnail: the cache is sized for the handful
     // a user cycles through rather than for a whole arrangement.

@@ -420,6 +420,8 @@ juce::Result Session::beginDeviceParameterGesture(int track, int slot, int param
     if (auto* runtime = findAutomationRuntime(lastTouchedParameter); runtime != nullptr && runtime->active)
         runtime->overridden = true;
     parameter->parameterChangeGestureBegin();
+    if (parameterGestureDepth++ == 0)
+        latencyAtGestureStart = plugin->getLatencySeconds();
     return juce::Result::ok();
 }
 
@@ -442,7 +444,12 @@ juce::Result Session::setDeviceParameter(int track, int slot, int parameterIndex
         runtime.overridden = true;
     parameter->setParameter(next, juce::sendNotification);
     markModified();
-    sendSynchronousChangeMessage();
+    // Inside a drag only the rack hears it, to keep the dragged device's
+    // readings live; the gesture's end tells everyone else once.
+    if (parameterGestureDepth > 0)
+        deviceParameterValues.sendSynchronousChangeMessage();
+    else
+        sendSynchronousChangeMessage();
     return juce::Result::ok();
 }
 
@@ -456,8 +463,14 @@ juce::Result Session::endDeviceParameterGesture(int track, int slot, int paramet
     auto* parameter = exposedParameterAt(*plugin, parameterIndex);
     if (parameter == nullptr) return juce::Result::fail("Select a parameter first.");
     parameter->parameterChangeGestureEnd();
+    parameterGestureDepth = std::max(0, parameterGestureDepth - 1);
     edit->getUndoManager().beginNewTransaction();
-    if (edit->getTransport().isPlaying())
+    // A parameter reaches the plugin as it moves, so the graph is rebuilt only
+    // when what moved was the device's latency - Rhino Tune's range does that -
+    // which the delay compensation has to hear about. Rebuilding on every knob
+    // release was an audible gap each time one was let go during playback.
+    if (parameterGestureDepth == 0 && edit->getTransport().isPlaying()
+        && std::abs(plugin->getLatencySeconds() - latencyAtGestureStart) > 1.0e-9)
         edit->restartPlayback();
     sendSynchronousChangeMessage();
     return juce::Result::ok();

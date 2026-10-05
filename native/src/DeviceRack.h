@@ -28,6 +28,7 @@ private:
     class FloatingDeviceWindow;
     class DropMarker;
     void changeListenerCallback(juce::ChangeBroadcaster*) override;
+    void visibilityChanged() override;
     void openSelectedDevice();
     void showAddMenu();
     void selectDevice(int device);
@@ -40,6 +41,7 @@ private:
     void showDropMarker(int gap);
     void hideDropMarker();
     void sync();
+    void refreshTouchedDevice();
 
     Session& session;
     int selectedTrack = 0, selectedDevice = 0;
@@ -51,5 +53,8 @@ private:
     juce::OwnedArray<DeviceEditorPanel> devicePanels;
     std::unique_ptr<DropMarker> dropMarker;
     std::unique_ptr<FloatingDeviceWindow> floatingWindow;
+    // A change arrived while the shell had this pane switched off; caught up
+    // when it is shown. See UiVisibility.h.
+    bool staleWhileHidden = false;
 };
 }

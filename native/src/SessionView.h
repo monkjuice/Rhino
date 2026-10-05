@@ -74,6 +74,7 @@ private:
     float mixerTop() const;
     float mixerHeight() const;
     void changeListenerCallback(juce::ChangeBroadcaster*) override;
+    void visibilityChanged() override;
     void slotUpdated(int audioTrackIndex, int slotIndex) override;
     void scrollBarMoved(juce::ScrollBar*, double) override;
     void editWillChange() override;
@@ -93,6 +94,9 @@ private:
     int selectedTrack = 0;
     bool updatingQuantisation = false;
     bool mixerOpen = true;
+    // A change arrived while the shell had this switched off; caught up when
+    // it is shown. See UiVisibility.h.
+    bool staleWhileHidden = false;
     static constexpr float toolbarHeight = 30.0f, trackHeaderHeight = 32.0f;
     static constexpr float slotHeight = 26.0f, columnWidth = 116.0f;
     static constexpr float sceneColumnWidth = 128.0f, stopRowHeight = 24.0f;

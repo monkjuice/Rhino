@@ -138,10 +138,14 @@ private:
     void rebuildVisibleNotes();
     float playheadXForTime(double seconds) const;
     void changeListenerCallback(juce::ChangeBroadcaster*) override;
+    void visibilityChanged() override;
     void scrollBarMoved(juce::ScrollBar*, double) override;
     void timerCallback() override;
     void updatePlayhead();
     Session& session;
+    // A change arrived while the shell had this pane switched off; caught up
+    // when it is shown. See UiVisibility.h.
+    bool staleWhileHidden = false;
     std::bitset<Session::steps * maxPitchRows> notes, visited, selectedNotes;
     std::array<float, Session::steps * maxPitchRows> noteLengths {}, noteStartOffsets {};
     std::vector<VisibleNote> visibleNotes;

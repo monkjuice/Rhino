@@ -134,6 +134,8 @@ int runArrangementTest()
        #include "scenarios/GroupUndo.inc"
         scenario("clip edits are whole");
        #include "scenarios/ClipEdits.inc"
+        scenario("what a drag costs the rest of the interface");
+       #include "scenarios/UiCost.inc"
         // Last: it clears the pattern to control the whole clip, so nothing
         // downstream should be relying on the notes it replaces.
         scenario("note selection");

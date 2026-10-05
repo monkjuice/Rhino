@@ -52,14 +52,31 @@ Session::TrackMixer Session::trackMixer(int track) const
     return mixer;
 }
 
+// Inside a fader or pan drag the views are not told of every pixel: the control
+// being dragged draws its own value, and rebuilding every panel per pixel is
+// what made a drag stutter. The gesture's end tells them once.
+void Session::announceMixerChange()
+{
+    markModified();
+    if (mixerGestureDepth == 0)
+        sendSynchronousChangeMessage();
+}
+
+void Session::endMixerGesture()
+{
+    mixerGestureDepth = std::max(0, mixerGestureDepth - 1);
+    edit->getUndoManager().beginNewTransaction();
+    if (mixerGestureDepth == 0)
+        sendSynchronousChangeMessage();
+}
+
 juce::Result Session::setTrackVolumeDb(int track, float decibels)
 {
     auto* volume = trackVolumePlugin(track);
     if (volume == nullptr)
         return juce::Result::fail("That track has no fader.");
     volume->setVolumeDb(juce::jlimit(minimumVolumeDb, maximumVolumeDb, decibels));
-    markModified();
-    sendSynchronousChangeMessage();
+    announceMixerChange();
     return juce::Result::ok();
 }
 
@@ -69,8 +86,7 @@ juce::Result Session::setTrackPan(int track, float pan)
     if (volume == nullptr)
         return juce::Result::fail("That track has no fader.");
     volume->setPan(juce::jlimit(-1.0f, 1.0f, pan));
-    markModified();
-    sendSynchronousChangeMessage();
+    announceMixerChange();
     return juce::Result::ok();
 }
 
@@ -82,6 +98,7 @@ void Session::beginTrackVolumeGesture(int track)
     {
         edit->getUndoManager().beginNewTransaction("Track volume");
         volume->volParam->parameterChangeGestureBegin();
+        ++mixerGestureDepth;
     }
 }
 
@@ -90,7 +107,7 @@ void Session::endTrackVolumeGesture(int track)
     if (auto* volume = trackVolumePlugin(track))
     {
         volume->volParam->parameterChangeGestureEnd();
-        edit->getUndoManager().beginNewTransaction();
+        endMixerGesture();
     }
 }
 
@@ -100,6 +117,7 @@ void Session::beginTrackPanGesture(int track)
     {
         edit->getUndoManager().beginNewTransaction("Track pan");
         volume->panParam->parameterChangeGestureBegin();
+        ++mixerGestureDepth;
     }
 }
 
@@ -108,7 +126,7 @@ void Session::endTrackPanGesture(int track)
     if (auto* volume = trackVolumePlugin(track))
     {
         volume->panParam->parameterChangeGestureEnd();
-        edit->getUndoManager().beginNewTransaction();
+        endMixerGesture();
     }
 }
 
@@ -140,8 +158,7 @@ void Session::setMasterVolumeDb(float decibels)
     if (auto master = edit->getMasterVolumePlugin())
     {
         master->setVolumeDb(juce::jlimit(minimumVolumeDb, maximumVolumeDb, decibels));
-        markModified();
-        sendSynchronousChangeMessage();
+        announceMixerChange();
     }
 }
 
@@ -157,8 +174,7 @@ void Session::setMasterPan(float pan)
     if (auto master = edit->getMasterVolumePlugin())
     {
         master->setPan(juce::jlimit(-1.0f, 1.0f, pan));
-        markModified();
-        sendSynchronousChangeMessage();
+        announceMixerChange();
     }
 }
 
@@ -168,6 +184,7 @@ void Session::beginMasterPanGesture()
     {
         edit->getUndoManager().beginNewTransaction("Main pan");
         master->panParam->parameterChangeGestureBegin();
+        ++mixerGestureDepth;
     }
 }
 
@@ -176,7 +193,7 @@ void Session::endMasterPanGesture()
     if (auto master = edit->getMasterVolumePlugin())
     {
         master->panParam->parameterChangeGestureEnd();
-        edit->getUndoManager().beginNewTransaction();
+        endMixerGesture();
     }
 }
 
@@ -186,6 +203,7 @@ void Session::beginMasterVolumeGesture()
     {
         edit->getUndoManager().beginNewTransaction("Main volume");
         master->volParam->parameterChangeGestureBegin();
+        ++mixerGestureDepth;
     }
 }
 
@@ -194,7 +212,7 @@ void Session::endMasterVolumeGesture()
     if (auto master = edit->getMasterVolumePlugin())
     {
         master->volParam->parameterChangeGestureEnd();
-        edit->getUndoManager().beginNewTransaction();
+        endMixerGesture();
     }
 }
 

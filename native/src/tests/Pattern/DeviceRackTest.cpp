@@ -1,6 +1,7 @@
 #include "DeviceRackTest.h"
 #include "../../DeviceRack.h"
 #include "../../Session.h"
+#include "../../Theme.h"
 #include "audio/AutoTuneDevice.h"
 #include "audio/UtilityDevice.h"
 #include "midi/RhinoArpDevice.h"
@@ -155,6 +156,11 @@ void runPatternDeviceRackTest()
     juce::TextButton* arpMillisecondRate = nullptr;
     juce::Slider* arpInterval = nullptr;
     juce::Slider* arpRepeats = nullptr;
+    juce::Slider* arpSteps = nullptr;
+    juce::Slider* arpDistance = nullptr;
+    juce::Slider* arpOffset = nullptr;
+    juce::ComboBox* arpStyle = nullptr;
+    juce::ComboBox* arpRetrigger = nullptr;
     for (auto* child : arpPanel->getChildren())
     {
         if (child->isVisible())
@@ -167,6 +173,9 @@ void runPatternDeviceRackTest()
             auto* slider = dynamic_cast<juce::Slider*>(child);
             if (slider->getTooltip().startsWith("Interval:")) arpInterval = slider;
             if (slider->getTooltip().startsWith("Repeats:")) arpRepeats = slider;
+            if (slider->getTooltip().startsWith("Steps:")) arpSteps = slider;
+            if (slider->getTooltip().startsWith("Distance:")) arpDistance = slider;
+            if (slider->getTooltip().startsWith("Offset:")) arpOffset = slider;
         }
         if (child->isVisible())
             if (auto* choice = dynamic_cast<juce::ComboBox*>(child))
@@ -175,6 +184,8 @@ void runPatternDeviceRackTest()
                 arpControls.push_back(choice->getBounds());
                 if (choice->getTooltip().startsWith("Root:")) arpRoot = choice;
                 if (choice->getTooltip().startsWith("Scale:")) arpScale = choice;
+                if (choice->getTooltip().startsWith("Style:")) arpStyle = choice;
+                if (choice->getTooltip().startsWith("Retrigger:")) arpRetrigger = choice;
             }
         if (child->isVisible())
             if (auto* button = dynamic_cast<juce::TextButton*>(child); button != nullptr && button->getName() == "Hold")
@@ -191,15 +202,31 @@ void runPatternDeviceRackTest()
                 arpControls.push_back(button->getBounds());
             }
     }
-    require(arpKnobCount == 5 && arpChoiceCount == 7 && arpHold != nullptr
+    require(arpKnobCount == 7 && arpChoiceCount == 5 && arpHold != nullptr
             && arpBeatRate != nullptr && arpMillisecondRate != nullptr
             && arpControls.size() == RhinoArpDevice::parameterCount,
-            "Rhino Arp uses tactile rate, interval, repeat, distance, and gate controls");
+            "Rhino Arp uses tactile rate, offset, interval, repeat, steps, distance, and gate controls");
     require(arpInterval != nullptr
             && arpInterval->getSliderStyle() == juce::Slider::RotaryHorizontalVerticalDrag
             && arpRepeats != nullptr
             && arpRepeats->getSliderStyle() == juce::Slider::LinearBarVertical,
             "Rhino Arp presents Interval as a knob and Repeats as a vertically dragged value bar");
+    require(arpSteps != nullptr && arpSteps->getSliderStyle() == juce::Slider::RotaryHorizontalVerticalDrag,
+            "Rhino Arp presents Steps as a knob");
+    // A LinearBarVertical is what gives Offset its up-and-down drag; the
+    // property is what makes the theme fill it across instead of upwards.
+    require(arpOffset != nullptr && arpOffset->getSliderStyle() == juce::Slider::LinearBarVertical
+            && static_cast<bool>(arpOffset->getProperties()[barFillsAcross])
+            && !arpOffset->getSliderSnapsToMousePosition()
+            && !static_cast<bool>(arpRepeats->getProperties()[barFillsAcross]),
+            "Rhino Arp's Offset is dragged up and down and fills left to right, unlike Repeats");
+    require(arpStyle != nullptr && arpRetrigger != nullptr && arpRoot != nullptr
+            && arpStyle->getRight() <= arpPanel->visualArea.getX()
+            && arpHold->getRight() <= arpPanel->visualArea.getX()
+            && arpMillisecondRate->getRight() <= arpPanel->visualArea.getX()
+            && arpRetrigger->getX() >= arpPanel->visualArea.getRight()
+            && arpRoot->getX() >= arpPanel->visualArea.getRight(),
+            "Rhino Arp's Pattern and Rate stand left of its sequence display, Timing and Harmony right of it");
     require(arpRoot != nullptr && arpScale != nullptr && arpRoot->getNumItems() == 12
             && arpScale->getNumItems() == 3 && arpRoot->getText() == "G#" && arpScale->getText() == "Minor",
             "Rhino Arp exposes its root and scale as named dropdowns");
@@ -219,7 +246,23 @@ void runPatternDeviceRackTest()
     arpBeatRate->onClick();
     arpRoot->setSelectedId(9, juce::sendNotificationSync);
     arpHold->onClick();
+    // The knob is turned the way the hand turns it, so the refresh that
+    // follows is the rack's own, not one the test calls for.
+    require(arpDistance != nullptr && arpDistance->isEnabled(),
+            "Rhino Arp's Distance is available while there are steps for it to move");
+    arpSteps->setValue(0.0, juce::sendNotificationSync);
+    require(session.deviceParameters(0, session.deviceSlots(0).front().pluginIndex)
+                [RhinoArpDevice::stepsParameter].value == 0.0f
+            && !arpDistance->isEnabled(),
+            "Rhino Arp's Distance is unavailable while Steps is 0");
+    arpSteps->setValue(2.0, juce::sendNotificationSync);
+    require(arpDistance->isEnabled(), "Turning Steps back up makes Distance available again");
+    // Painted in the app's own look, or the reference image would show JUCE's
+    // stock knobs and an Offset bar with no fill and no number in it.
+    Theme snapshotTheme;
+    arpPanel->setLookAndFeel(&snapshotTheme);
     const auto arpSnapshot = arpPanel->createComponentSnapshot(arpPanel->getLocalBounds());
+    arpPanel->setLookAndFeel(nullptr);
     require(arpSnapshot.getWidth() == arpPanel->getWidth()
             && arpSnapshot.getHeight() == DeviceEditorPanel::standardHeight,
             "Rhino Arp's dedicated face paints at its promised size");

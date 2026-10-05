@@ -60,10 +60,12 @@ inline const juce::Colour displayTextFaint {0xff76856f};
 inline const juce::Colour volume           {0xff45d0d4};
 inline const juce::Colour pan              {0xffd4564e};
 
-// MIDI processors use cyan because they transform events rather than audio;
-// it also gives Rhino Arp's moving-note display a colour with a job, not a
-// decorative tint that competes with track colours.
+// MIDI processors use cyan because they transform events rather than audio.
 inline const juce::Colour midiEffect       {0xff55c7d5};
+// Rhino Arp's sequence display: the notes the arp will play, in a colour no
+// control on its face wears, so the picture of the output stands apart from
+// the cyan controls that shape it.
+inline const juce::Colour arpSequence      {0xffff7f27};
 
 // What the chrome uses to mark a selection or a focused row, kept grey so it
 // never competes with a track colour sitting next to it.
@@ -183,6 +185,11 @@ public:
 private:
     Kind kind;
 };
+
+// A bar slider fills along the axis it is dragged on. Set this property on a
+// LinearBarVertical slider to keep its up-and-down drag but fill it left to
+// right instead, for a field that is wide and short: Rhino Arp's Offset.
+inline const juce::Identifier barFillsAcross {"rhinoBarFillsAcross"};
 
 class Theme final : public juce::LookAndFeel_V4
 {
@@ -377,8 +384,15 @@ public:
                                                    static_cast<float>(width), static_cast<float>(height));
         const auto trough = slider.findColour(juce::Slider::backgroundColourId);
         const auto fill = slider.findColour(juce::Slider::trackColourId);
-        const auto filled = slider.isHorizontal() ? bounds.withRight(sliderPos) : bounds.withTop(sliderPos);
-        const auto unfilled = slider.isHorizontal() ? bounds.withLeft(sliderPos) : bounds.withBottom(sliderPos);
+        // JUCE hands a vertical bar its position as a y, so a bar that fills
+        // across works its edge out from the value instead.
+        const auto fillsAcross = !slider.isHorizontal() && static_cast<bool>(slider.getProperties()[barFillsAcross]);
+        const auto across = slider.isHorizontal() || fillsAcross;
+        const auto edge = fillsAcross
+            ? bounds.getX() + bounds.getWidth() * static_cast<float>(slider.valueToProportionOfLength(slider.getValue()))
+            : sliderPos;
+        const auto filled = across ? bounds.withRight(edge) : bounds.withTop(edge);
+        const auto unfilled = across ? bounds.withLeft(edge) : bounds.withBottom(edge);
         g.setColour(trough);
         g.fillRect(bounds);
         g.setColour(fill);

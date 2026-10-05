@@ -334,6 +334,9 @@ void DeviceEditorPanel::styleControls()
     const auto beatRate = !juce::isPositiveAndBelow(RhinoArpDevice::rateModeParameter,
                                                      static_cast<int>(parameters.size()))
         || parameters[RhinoArpDevice::rateModeParameter].value < 0.5f;
+    const auto noArpSteps = juce::isPositiveAndBelow(RhinoArpDevice::stepsParameter,
+                                                     static_cast<int>(parameters.size()))
+        && parameters[RhinoArpDevice::stepsParameter].value < 0.5f;
     syncing = true;
     for (int i = 0; i < parameterLabels.size(); ++i)
     {
@@ -342,6 +345,8 @@ void DeviceEditorPanel::styleControls()
         // put under the hand.
         const auto arpSlider = i == RhinoArpDevice::gateParameter
             || i == RhinoArpDevice::distanceParameter
+            || i == RhinoArpDevice::stepsParameter
+            || i == RhinoArpDevice::offsetParameter
             || i == RhinoArpDevice::intervalParameter
             || i == RhinoArpDevice::repeatsParameter
             || (i == RhinoArpDevice::rateParameter && beatRate)
@@ -357,14 +362,29 @@ void DeviceEditorPanel::styleControls()
         parameterValues[i]->setVisible(genericChromeVisible || arpRepeatReadout);
         parameterSliders[i]->setVisible(visible);
         parameterAutomation[i]->setVisible(genericChromeVisible);
-        parameterSliders[i]->setSliderStyle(face == Face::Arp && i == RhinoArpDevice::repeatsParameter
+        // Offset reads left to right, as a place in the pattern does, but is
+        // dragged up and down like everything else on the face. It does not
+        // snap to the pointer: on a bar that fills across, the height a press
+        // lands at would mean nothing.
+        const auto arpOffset = face == Face::Arp && i == RhinoArpDevice::offsetParameter;
+        parameterSliders[i]->setSliderStyle(arpOffset || (face == Face::Arp && i == RhinoArpDevice::repeatsParameter)
             ? juce::Slider::LinearBarVertical : juce::Slider::RotaryHorizontalVerticalDrag);
+        parameterSliders[i]->setSliderSnapsToMousePosition(!arpOffset);
+        if (arpOffset)
+            parameterSliders[i]->getProperties().set(barFillsAcross, true);
+        else
+            parameterSliders[i]->getProperties().remove(barFillsAcross);
         parameterSliders[i]->setSkewFactor(1.0);
         parameterSliders[i]->textFromValueFunction = {};
+        // Distance is how far each step moves, so with no steps it moves
+        // nothing. It stays on the face, shown as unavailable.
+        const auto idle = face == Face::Arp && i == RhinoArpDevice::distanceParameter && noArpSteps;
+        parameterSliders[i]->setEnabled(!idle);
         if (!visible) continue;
 
         const auto& parameter = parameters[static_cast<size_t>(i)];
-        const auto accent = face == Face::RhinoSpace ? juce::Colour(0xff75b9cc)
+        const auto accent = idle ? palette::disabled
+            : face == Face::RhinoSpace ? juce::Colour(0xff75b9cc)
             : face == Face::AutoTune ? juce::Colour(0xffb2739c)
             : face == Face::Vocoder ? juce::Colour(0xff7d8fc4)
             : face == Face::Arp ? palette::midiEffect
@@ -384,6 +404,7 @@ void DeviceEditorPanel::styleControls()
         if (face == Face::Arp && i == RhinoArpDevice::freeRateParameter)
             parameterSliders[i]->setSkewFactorFromMidPoint(250.0);
         if (face == Face::Arp && (i == RhinoArpDevice::rateParameter
+                                 || i == RhinoArpDevice::offsetParameter
                                  || i == RhinoArpDevice::intervalParameter
                                  || i == RhinoArpDevice::repeatsParameter))
             parameterSliders[i]->textFromValueFunction = [i] (double value)
@@ -398,7 +419,8 @@ void DeviceEditorPanel::styleControls()
                 return juce::String(juce::roundToInt(value)) + " ms";
             };
         parameterSliders[i]->setValue(parameter.value, juce::dontSendNotification);
-        parameterSliders[i]->setTooltip(parameter.name + ": " + parameter.valueText);
+        parameterSliders[i]->setTooltip(parameter.name + ": " + parameter.valueText
+                                        + (idle ? ". Does nothing while Steps is 0." : ""));
         parameterSliders[i]->setColour(juce::Slider::trackColourId, accent);
         parameterSliders[i]->setColour(juce::Slider::rotarySliderFillColourId, accent);
         parameterSliders[i]->setColour(juce::Slider::backgroundColourId, juce::Colour(0xff20282e));

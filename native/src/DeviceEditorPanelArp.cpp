@@ -36,15 +36,19 @@ struct ArpLayout
     juce::Rectangle<int> pattern, rate, timing, harmony;
 };
 
+// The two cards that shape the sequence come first, then the display of it,
+// then the two that retrigger and transpose it.
 ArpLayout arpLayout(juce::Rectangle<int> bounds)
 {
     ArpLayout layout;
-    layout.visual = bounds.removeFromLeft(202);
-    bounds.removeFromLeft(8);
     layout.pattern = bounds.removeFromLeft(160);
     bounds.removeFromLeft(6);
     layout.rate = bounds.removeFromLeft(92);
-    bounds.removeFromLeft(6);
+    // The display paints itself five pixels inside its area, so these three
+    // leave it an eight-pixel gutter on either side.
+    bounds.removeFromLeft(3);
+    layout.visual = bounds.removeFromLeft(210);
+    bounds.removeFromLeft(3);
     layout.timing = bounds.removeFromLeft(150);
     bounds.removeFromLeft(6);
     layout.harmony = bounds;
@@ -66,10 +70,8 @@ void DeviceEditorPanel::ensureArpControls()
         return;
     arpControlsCreated = true;
 
-    constexpr std::array<int, 7> choiceParameters {
+    constexpr std::array<int, 5> choiceParameters {
         RhinoArpDevice::styleParameter,
-        RhinoArpDevice::stepsParameter,
-        RhinoArpDevice::offsetParameter,
         RhinoArpDevice::grooveParameter,
         RhinoArpDevice::retriggerParameter,
         RhinoArpDevice::rootParameter,
@@ -245,8 +247,9 @@ void DeviceEditorPanel::layoutArp()
            {layout.pattern.getX() + patternInset, patternTopY, wideControl, 22});
     arpHold.setBounds(layout.pattern.getX() + patternInset + wideControl + patternGap,
                       patternTopY, narrowControl, 22);
-    choice(RhinoArpDevice::offsetParameter,
-           {layout.pattern.getX() + patternInset, patternBottomY, narrowControl, 22});
+    if (juce::isPositiveAndBelow(RhinoArpDevice::offsetParameter, parameterSliders.size()))
+        parameterSliders[RhinoArpDevice::offsetParameter]->setBounds(
+            layout.pattern.getX() + patternInset, patternBottomY, narrowControl, 22);
     choice(RhinoArpDevice::grooveParameter,
            {layout.pattern.getX() + patternInset + narrowControl + patternGap,
             patternBottomY, wideControl, 22});
@@ -279,16 +282,20 @@ void DeviceEditorPanel::layoutArp()
     choice(RhinoArpDevice::rootParameter, harmonyTop[0]);
     choice(RhinoArpDevice::scaleParameter, harmonyTop[1]);
 
+    // Steps, Distance and Gate share the lower row in equal thirds, Steps
+    // first because Distance means nothing without it.
     const auto& harmony = layout.harmony;
-    choice(RhinoArpDevice::stepsParameter, {harmony.getX() + 7, harmony.getY() + 78, 69, 22});
-    const auto placeKnob = [this, &harmony] (int parameter, int x)
+    const auto knobCell = (harmony.getWidth() - 14) / 3;
+    const auto placeKnob = [this, &harmony, knobCell] (int parameter, int column)
     {
         if (!juce::isPositiveAndBelow(parameter, parameterSliders.size()))
             return;
-        parameterSliders[parameter]->setBounds(harmony.getX() + x, harmony.getY() + 73, 43, 43);
+        parameterSliders[parameter]->setBounds(juce::Rectangle<int>(43, 43).withCentre(
+            {harmony.getX() + 7 + knobCell * column + knobCell / 2, harmony.getY() + 94}));
     };
-    placeKnob(RhinoArpDevice::distanceParameter, 82);
-    placeKnob(RhinoArpDevice::gateParameter, harmony.getWidth() - 50);
+    placeKnob(RhinoArpDevice::stepsParameter, 0);
+    placeKnob(RhinoArpDevice::distanceParameter, 1);
+    placeKnob(RhinoArpDevice::gateParameter, 2);
 }
 
 void DeviceEditorPanel::paintArp(juce::Graphics& g)
@@ -344,16 +351,16 @@ void DeviceEditorPanel::paintArp(juce::Graphics& g)
     path.startNewSubPath(position(0));
     for (int point = 1; point < points; ++point)
         path.lineTo(position(point));
-    g.setColour(palette::midiEffect.withAlpha(0.32f));
+    g.setColour(palette::arpSequence.withAlpha(0.4f));
     g.strokePath(path, juce::PathStrokeType(1.0f, juce::PathStrokeType::curved,
                                             juce::PathStrokeType::rounded));
     for (int point = 0; point < points; ++point)
     {
         const auto centre = position(point);
         const auto note = juce::Rectangle<float>(4.0f, 11.0f).withCentre(centre);
-        g.setColour(palette::midiEffect.withAlpha(point == 0 ? 0.95f : 0.74f));
+        g.setColour(palette::arpSequence.withAlpha(point == 0 ? 1.0f : 0.86f));
         g.fillRoundedRectangle(note, 1.5f);
-        g.setColour(palette::midiEffect.brighter(0.32f).withAlpha(0.75f));
+        g.setColour(palette::arpSequence.brighter(0.32f).withAlpha(0.75f));
         g.drawRoundedRectangle(note.reduced(0.5f), 1.2f, 0.8f);
     }
 
@@ -392,21 +399,25 @@ void DeviceEditorPanel::paintArp(juce::Graphics& g)
         if (auto* control = arpChoiceFor(parameter))
             drawCaption(g, parameters[static_cast<size_t>(parameter)].name, control->getBounds());
     };
-    for (const auto parameter : {RhinoArpDevice::styleParameter,
-                                 RhinoArpDevice::offsetParameter, RhinoArpDevice::grooveParameter,
+    for (const auto parameter : {RhinoArpDevice::styleParameter, RhinoArpDevice::grooveParameter,
                                  RhinoArpDevice::retriggerParameter, RhinoArpDevice::rootParameter,
-                                 RhinoArpDevice::scaleParameter, RhinoArpDevice::stepsParameter})
+                                 RhinoArpDevice::scaleParameter})
         caption(parameter);
+    for (const auto parameter : {RhinoArpDevice::offsetParameter, RhinoArpDevice::repeatsParameter})
+        if (juce::isPositiveAndBelow(parameter, parameterSliders.size()))
+            drawCaption(g, parameters[static_cast<size_t>(parameter)].name,
+                        parameterSliders[parameter]->getBounds());
 
     const auto knobCaption = [this, &g] (int parameter, const juce::String& name)
     {
         if (!juce::isPositiveAndBelow(parameter, parameterSliders.size()))
             return;
         const auto bounds = parameterSliders[parameter]->getBounds();
-        g.setColour(palette::textDim);
+        const auto enabled = parameterSliders[parameter]->isEnabled();
+        g.setColour(enabled ? palette::textDim : palette::disabled);
         g.setFont(uiFontBold(7.0f));
         drawSnappedText(g, name, bounds.withY(bounds.getY() - 10).withHeight(9), juce::Justification::centred);
-        g.setColour(palette::text);
+        g.setColour(enabled ? palette::text : palette::disabled);
         g.setFont(uiFont(7.0f));
         drawSnappedText(g, parameters[static_cast<size_t>(parameter)].valueText,
                         bounds.withY(bounds.getBottom() - 1).withHeight(10), juce::Justification::centred);
@@ -415,8 +426,7 @@ void DeviceEditorPanel::paintArp(juce::Graphics& g)
                                        : RhinoArpDevice::rateParameter;
     knobCaption(rateParameter, {});
     knobCaption(RhinoArpDevice::intervalParameter, "INTERVAL");
-    if (juce::isPositiveAndBelow(RhinoArpDevice::repeatsParameter, parameterSliders.size()))
-        drawCaption(g, "REPEATS", parameterSliders[RhinoArpDevice::repeatsParameter]->getBounds());
+    knobCaption(RhinoArpDevice::stepsParameter, "STEPS");
     knobCaption(RhinoArpDevice::distanceParameter, "DIST");
     knobCaption(RhinoArpDevice::gateParameter, "GATE");
 }

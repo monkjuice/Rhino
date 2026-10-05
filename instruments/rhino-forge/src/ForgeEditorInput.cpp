@@ -639,9 +639,11 @@ void Editor::timerCallback()
         applyTableCounts();
     }
     // Frees whatever the audio thread has demonstrably moved past. Publishing
-    // does this too; here it catches the table retired by the last edit of a
-    // session, which would otherwise sit there until the next one.
+    // does this too; here it catches the table or sample retired by the last
+    // edit of a session, which would otherwise sit there until the next one -
+    // and a replaced spectral sample can be twenty megabytes.
     processor.tableStore().collect();
+    processor.sampleStore().collect();
     repaint();
 }
 }

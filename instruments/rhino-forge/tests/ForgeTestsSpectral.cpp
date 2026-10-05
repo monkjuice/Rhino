@@ -573,6 +573,49 @@ void levelSuite()
                          "a spectral oscillator keeps a sample's level at the root and an octave either way");
 }
 
+// Taking a voice from a spectral note that is still sounding is heard as the
+// new note arriving and nothing else. The steal used to clear the voice's
+// overlap-add as well as its playhead, so the old note stopped dead at whatever
+// sample it had reached - a step of most of full scale, where a held note's own
+// largest step is a few hundredths. Two notes briefly overlapping can double a
+// step, so the margin is three times the held note's.
+void spectralStealSuite()
+{
+    const auto sample = sineSample(440.0);
+    auto patch = spectralOnly(*sample);
+    patch.envs[ampEnv].release = 2.0f;
+    patch.polyphony = 1.0f;
+    const auto largestStep = [&patch] (const std::vector<int>& notes, int spacing)
+    {
+        Core core;
+        core.initialise(testRate);
+        auto largest = 0.0f, previous = 0.0f;
+        const auto count = static_cast<int>(notes.size());
+        for (int i = 0; i < (count + 1) * spacing; ++i)
+        {
+            if (i % spacing == 0 && i / spacing < count)
+                core.noteOn(notes[static_cast<size_t>(i / spacing)], 1.0f, patch);
+            auto left = 0.0f, right = 0.0f;
+            core.renderSample(patch, left, right);
+            // Past the first few hops, while the overlap-add is still filling
+            // from silence at the very first note.
+            if (i > 4096) largest = std::max(largest, std::abs(left - previous));
+            previous = left;
+        }
+        return largest;
+    };
+    const std::vector<int> run {60, 62, 64, 65, 67};
+    auto held = 0.0f;
+    for (const auto note : run)
+        held = std::max(held, largestStep({note}, 9000));
+    const auto stealing = largestStep(run, 9000);
+    require(held > 0.0f, "a held spectral note makes sound");
+    require(stealing < held * 3.0f,
+            "a spectral voice taken from a sounding note is no louder a step than the notes themselves");
+    if (stealing >= held * 3.0f)
+        std::cerr << "       largest step " << stealing << " stealing, " << held << " held" << std::endl;
+}
+
 // Every sample peaks at full scale once it is loaded, wherever it was recorded,
 // so a quiet file and a loud one sit at the level a wavetable does.
 void normalisedSuite()
@@ -1076,6 +1119,7 @@ void spectralTests()
     persistenceSuite();
     playheadSuite();
     levelSuite();
+    spectralStealSuite();
     normalisedSuite();
     sampleRateSuite();
     loopModesSuite();

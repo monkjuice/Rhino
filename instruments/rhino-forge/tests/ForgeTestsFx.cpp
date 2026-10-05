@@ -359,6 +359,27 @@ void fxSuite()
                 "the phaser's allpass cascade changes the signal rather than only filling a menu row");
     }
 
+    // A NaN that reaches a rack is let go of, not fed back for ever: nothing
+    // else clears a rack's lines, all-notes-off included.
+    {
+        rhino::forge::Rack echoing;
+        auto& slot = echoing.slots[0];
+        slot.type = static_cast<float>(FxType::delay);
+        slot.knobs = rhino::forge::fxTypes()[static_cast<size_t>(FxType::delay)].init;
+        rhino::forge::FxRack rack;
+        rack.prepare(48000.0);
+        auto left = std::numeric_limits<float>::quiet_NaN(), right = left;
+        rack.process(echoing, 120.0, left, right);
+        auto finite = std::isfinite(left) && std::isfinite(right);
+        for (int sample = 0; sample < 96000; ++sample)
+        {
+            auto quietLeft = 0.0f, quietRight = 0.0f;
+            rack.process(echoing, 120.0, quietLeft, quietRight);
+            finite = finite && std::isfinite(quietLeft) && std::isfinite(quietRight);
+        }
+        require(finite, "a NaN reaching a rack does not ring on in its feedback");
+    }
+
     // --- The matrix reaches the rack ------------------------------------------
     //
     // FX run on the summed voices, so a per-voice source has to resolve to one

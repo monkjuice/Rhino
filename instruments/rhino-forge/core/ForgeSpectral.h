@@ -215,18 +215,28 @@ struct SpectralVoice
 
     void reset() noexcept
     {
-        frame = 0.0;
-        running = false;
-        bounce = 1.0f;
-        looping = false;
-        ended = false;
-        lastFrame = -1;
+        restart();
         for (auto& member : synthPhase) member.fill(0.0f);
         olaLeft.fill(0.0f);
         olaRight.fill(0.0f);
         writeIndex = 0;
         pending = 0;
         readIndex = 0;
+    }
+
+    // A new note on a voice that is still sounding. The playhead goes back to
+    // its start and the next hop takes the sample's own phases, as for any new
+    // note, but the windows the overlap-add already holds drain out under it.
+    // Clearing them as well cut the old note dead at whatever sample it had
+    // reached: a click on every steal, which the wavetable path never makes.
+    void restart() noexcept
+    {
+        frame = 0.0;
+        running = false;
+        bounce = 1.0f;
+        looping = false;
+        ended = false;
+        lastFrame = -1;
     }
 };
 

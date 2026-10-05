@@ -351,6 +351,10 @@ public:
     // declared, top to bottom, which is the order they are drawn in.
     void process(const Rack& rack, double bpm, float& left, float& right)
     {
+        // A NaN or an infinity goes no further than the rack it reaches. Fed
+        // into a line with feedback it rang on for good: nothing clears a rack
+        // in the ordinary course of playing, all-notes-off included.
+        if (!std::isfinite(left) || !std::isfinite(right)) left = right = 0.0f;
         if (fxOn(rack.bypass)) return;
         for (int index = 0; index < fxSlotCount; ++index)
         {
@@ -363,6 +367,13 @@ public:
             // implement it for itself.
             auto wetLeft = left, wetRight = right;
             render(states[static_cast<size_t>(index)], slot, type, bpm, wetLeft, wetRight);
+            // And one a slot makes for itself - a filter driven unstable - is
+            // cleared out of that slot rather than fed back.
+            if (!std::isfinite(wetLeft) || !std::isfinite(wetRight))
+            {
+                states[static_cast<size_t>(index)].reset();
+                wetLeft = wetRight = 0.0f;
+            }
 
             const auto mix = juce::jlimit(0.0f, 1.0f, slot.mix);
             const auto level = juce::jlimit(0.0f, 2.0f, slot.level);

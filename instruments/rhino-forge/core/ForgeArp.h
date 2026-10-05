@@ -595,9 +595,21 @@ private:
             // over 100% with a repeating pattern would otherwise start the same
             // pitch twice and only ever stop it once.
             stopSounding(note, stopNote);
+            // Every note started is a note tracked, or nothing would ever stop
+            // it. With the list full - a chord of many keys under a long gate,
+            // RANGE and SHIFT - the note nearest its own end makes room, rather
+            // than the new one sounding with no record of it.
+            if (soundingCount == arpMaxSounding)
+            {
+                auto soonest = 0;
+                for (auto i = 1; i < soundingCount; ++i)
+                    if (sounding[static_cast<size_t>(i)].samplesLeft < sounding[static_cast<size_t>(soonest)].samplesLeft)
+                        soonest = i;
+                stopNote(sounding[static_cast<size_t>(soonest)].note);
+                sounding[static_cast<size_t>(soonest)] = sounding[static_cast<size_t>(--soundingCount)];
+            }
             startNote(note, velocityFor(settings, key.velocity));
-            if (soundingCount < arpMaxSounding)
-                sounding[static_cast<size_t>(soundingCount++)] = {note, gateSamples};
+            sounding[static_cast<size_t>(soundingCount++)] = {note, gateSamples};
         };
 
         if (arpShapePlaysChord(settings.shape))

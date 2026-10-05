@@ -455,6 +455,29 @@ void lfoSuite()
                 "a detached note in mono legato sounds for as long as its key is held");
     }
 
+    // CC123 lets every note go into its release, as lifted keys do. It used to
+    // reset the Core instead: every voice cut dead inside one sample, and every
+    // rack's delay and reverb line zeroed with it.
+    {
+        rhino::forge::Core core;
+        core.initialise(48000.0);
+        auto patch = patchFor(rhino::forge::LfoMode::trigger);
+        patch.polyphony = 8.0f;
+        patch.envs[rhino::forge::ampEnv].attack = 0.001f;
+        patch.envs[rhino::forge::ampEnv].decay = 0.001f;
+        patch.envs[rhino::forge::ampEnv].sustain = 1.0f;
+        patch.envs[rhino::forge::ampEnv].release = 0.2f;
+        core.noteOn(57, 1.0f, patch);
+        core.noteOn(61, 1.0f, patch);
+        runCore(core, patch, cycle / 4);
+        core.allNotesOff();
+        runCore(core, patch, 16);
+        require(core.envelopeStage() == 4 && core.envelopeLevel() > 0.5f,
+                "all notes off lets the voices go into their release rather than cutting them");
+        runCore(core, patch, cycle * 2);
+        require(core.envelopeLevel() < 0.001f, "and the release then runs out");
+    }
+
     // --- Six of them, and each one per voice -----------------------------------
     //
     // An LFO that answers the keyboard lives inside the voice, so a new note

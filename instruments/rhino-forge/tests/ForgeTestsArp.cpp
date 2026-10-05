@@ -241,6 +241,41 @@ void sequenceSuite()
             arp.advance(settings, 1000.0, [&count] (int, float) { ++count; }, [] (int) {});
         require(count == 0, "nothing held is nothing played");
     }
+
+    // Every note the arp starts, it stops. Sixteen keys as a chord, under a gate
+    // four steps long and carried up four octaves, keep 64 notes sounding at
+    // once - twice what the arp keeps a record of. The ones it could not record
+    // used to sound with nothing ever stopping them.
+    {
+        auto settings = plainSettings();
+        settings.shape = ArpShape::chord;
+        settings.gate = 4.0f;
+        settings.range = 4;
+        settings.shift = 12;
+        Arp arp;
+        arp.reset();
+        for (int note = 36; note < 52; ++note) arp.noteOn(note, 1.0f, settings);
+        std::array<int, 128> sounding {};
+        auto live = 0, peak = 0;
+        const auto start = [&sounding, &live, &peak] (int note, float)
+        {
+            ++sounding[static_cast<size_t>(note)];
+            peak = std::max(peak, ++live);
+        };
+        const auto stop = [&sounding, &live] (int note)
+        {
+            if (sounding[static_cast<size_t>(note)] > 0)
+            {
+                --sounding[static_cast<size_t>(note)];
+                --live;
+            }
+        };
+        for (int i = 0; i < 2000; ++i) arp.advance(settings, 1000.0, start, stop);
+        require(peak >= rhino::forge::arpMaxSounding, "the chord fills every note the arp can keep track of");
+        for (int note = 36; note < 52; ++note) arp.noteOff(note, settings);
+        for (int i = 0; i < 2000; ++i) arp.advance(settings, 1000.0, start, stop);
+        require(live == 0, "every note the arp starts it also stops, however many overlap");
+    }
 }
 
 // --- Transposition, playback and velocity ---------------------------------------

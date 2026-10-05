@@ -155,20 +155,22 @@ public:
                 return;
             }
         }
-        // Every envelope is released by the key that started it, the auxiliary
-        // ones included: an envelope that only fell when the amp did would be a
-        // second shape with no release of its own.
         for (auto& voice : voices)
-            if (voice.active && voice.note == note && voice.envStage[ampEnv] != EnvelopeStage::release)
-                for (int env = 0; env < envCount; ++env)
-                {
-                    const auto i = static_cast<size_t>(env);
-                    voice.envStage[i] = EnvelopeStage::release;
-                    voice.envReleaseStart[i] = voice.envelope[i];
-                }
+            if (voice.note == note)
+                releaseVoice(voice);
     }
 
-    void allNotesOff() { reset(); }
+    // CC123 lets every note go into its release, as lifted keys do, and leaves
+    // the racks ringing. It used to reset the Core: every voice cut dead and
+    // every delay and reverb line zeroed - about 20 MB at 48 kHz - inside one
+    // sample, which clicked, killed the tails and could miss a small buffer's
+    // deadline. Hosts send it on stop and on every loop.
+    void allNotesOff()
+    {
+        heldCount = 0;
+        for (auto& voice : voices)
+            releaseVoice(voice);
+    }
 
     // What an envelope is doing, for the display to draw. Taken from the
     // loudest sounding voice, which is the one a player is listening to — the
@@ -652,6 +654,21 @@ private:
         std::array<bool, lfoCount> lfoStopped {};
     };
 
+    // Every envelope is released by the key that started it, the auxiliary
+    // ones included: an envelope that only fell when the amp did would be a
+    // second shape with no release of its own.
+    static void releaseVoice(Voice& voice)
+    {
+        if (!voice.active || voice.envStage[ampEnv] == EnvelopeStage::release)
+            return;
+        for (int env = 0; env < envCount; ++env)
+        {
+            const auto i = static_cast<size_t>(env);
+            voice.envStage[i] = EnvelopeStage::release;
+            voice.envReleaseStart[i] = voice.envelope[i];
+        }
+    }
+
     // Each live slot nudges its destination in normalised space and the result
     // is converted back to the destination's own units, so one depth control
     // behaves the same whether it points at a percentage, a frequency with a
@@ -855,13 +872,20 @@ private:
         // spectral bank — and is reached by the same index, which is what this
         // recovers: `voices` is an array member and `voice` is always one of
         // its elements, so the subtraction is the index and nothing else.
+        // A voice taken from a note still sounding keeps what its overlap-add
+        // holds, so the old note drains out under the new one; see
+        // SpectralVoice::restart.
+        const auto sounding = voice.active;
         if (spectral != nullptr)
         {
             const auto index = static_cast<size_t>(&voice - voices.data());
             if (index < spectral->voices.size())
-                for (auto& oscillator : spectral->voices[index]) oscillator.reset();
+                for (auto& oscillator : spectral->voices[index])
+                {
+                    if (sounding) oscillator.restart();
+                    else oscillator.reset();
+                }
         }
-        const auto sounding = voice.active;
         if (!sounding)
         {
             voice = {};

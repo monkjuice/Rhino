@@ -94,7 +94,7 @@
         auto movedDrumsEnabled = false, movedSynthDisabled = true;
         for (const auto& slot : movedDrumSlots)
         {
-            if (slot.type == DrumDevice::xmlTypeName) movedDrumsEnabled = slot.enabled;
+            if (slot.type == DrumRackDevice::xmlTypeName) movedDrumsEnabled = slot.enabled;
             if (slot.type == te::FourOscPlugin::xmlTypeName) movedSynthDisabled = !slot.enabled;
         }
         require(movedDrumsEnabled && movedSynthDisabled,

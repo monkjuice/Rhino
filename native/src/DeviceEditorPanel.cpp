@@ -73,20 +73,22 @@ void DeviceEditorPanel::setTarget(int nextTrack, const Session::DeviceSlot& devi
          : deviceId == "RhinoTune" ? Face::AutoTune
          : deviceId == "Equaliser" ? Face::Eq
          : deviceId == "RhinoVocoder" ? Face::Vocoder
+         : deviceId == "Drums" ? Face::DrumRack
          : device.native ? Face::Generated
          : Face::Generic;
     // A freshly rebuilt built-in plugin can briefly have no display name while
     // Tracktion refreshes its state. The face still has a stable catalog name.
     if (face == Face::Arp)
         deviceName = RhinoArpDevice::getPluginName();
-    // The tuner's meter and the EQ's spectrum are the only things on any face
-    // that move on their own, so they are the only devices that ask for
-    // frames. The EQ stops asking when its analyser is switched off.
+    // The tuner's meter, the vocoder's bank, the EQ's spectrum and the drum
+    // pads lighting as they are struck are the only things on any face that
+    // move on their own, so they are the only devices that ask for frames.
+    // The EQ stops asking when its analyser is switched off.
     const auto* eqDevice = face == Face::Eq
         ? dynamic_cast<RhinoEqDevice*>(session.devicePlugin(track, pluginSlot)) : nullptr;
     const auto eqAnalysing = eqDevice != nullptr && device.enabled
         && eqDevice->analyserMode() != EqEngine::AnalyserMode::Off;
-    if (face == Face::AutoTune || face == Face::Vocoder || eqAnalysing)
+    if (face == Face::AutoTune || face == Face::Vocoder || face == Face::DrumRack || eqAnalysing)
         startTimerHz(24);
     else
         stopTimer();
@@ -127,8 +129,21 @@ void DeviceEditorPanel::setTarget(int nextTrack, const Session::DeviceSlot& devi
         for (auto* choice : arpChoiceControls)
             choice->setVisible(false);
     }
+    if (face == Face::DrumRack)
+    {
+        ensureDrumControls();
+        styleDrumControls();
+    }
+    else
+    {
+        for (auto* slider : drumSliders)
+            slider->setVisible(false);
+    }
     resized();
-    repaint();
+    if (face == Face::DrumRack)
+        repaintDrums();
+    else
+        repaint();
 }
 
 bool DeviceEditorPanel::followsAutomation() const
@@ -147,6 +162,8 @@ int DeviceEditorPanel::preferredWidth() const
         return 752;
     if (face == Face::Eq)
         return 660;
+    if (face == Face::DrumRack)
+        return drumFaceWidth;
     if (face == Face::Generated)
         return generatedWidth();
     if (face == Face::Arp)
@@ -195,8 +212,13 @@ void DeviceEditorPanel::mouseDown(const juce::MouseEvent& event)
     if (selected) selected();
     // The EQ face hit-tests its own children as well as itself: its knobs
     // follow the selected band, so which parameter a right-click means is
-    // not known until the click happens.
-    if (face == Face::Eq)
+    // not known until the click happens. The Drum Rack's follow its pad.
+    if (face == Face::DrumRack)
+    {
+        if (handleDrumMouseDown(event))
+            return;
+    }
+    else if (face == Face::Eq)
     {
         if (handleEqMouseDown(event))
             return;
@@ -342,8 +364,11 @@ int DeviceEditorPanel::visibleParameterCount() const
     // faces can expose more because they give each control an intentional home,
     // and a generated face lays out every control a device declares, in
     // sections, up to a limit no device comes near.
+    // A Drum Rack's ninety-six controls are reached through its six knobs
+    // that follow the selected pad, so it builds none of the generic ones.
     const auto limit = face == Face::Arp ? RhinoArpDevice::parameterCount
         : face == Face::Generated ? 48
+        : face == Face::DrumRack ? 0
         : face == Face::AutoTune || face == Face::Vocoder ? 13 : 12;
     return std::min(limit, static_cast<int>(parameters.size()));
 }
@@ -547,6 +572,11 @@ void DeviceEditorPanel::paint(juce::Graphics& g)
         paintArp(g);
         return;
     }
+    if (face == Face::DrumRack)
+    {
+        paintDrums(g);
+        return;
+    }
     if (face == Face::Generated)
         paintGenerated(g);
 }
@@ -561,7 +591,12 @@ void DeviceEditorPanel::resized()
     if (face != Face::Eq)
         for (auto* slider : eqSliders)
             slider->setVisible(false);
-    if (face == Face::AutoTune && contentArea.getWidth() >= 620 && contentArea.getHeight() >= 120)
+    if (face != Face::DrumRack)
+        for (auto* slider : drumSliders)
+            slider->setVisible(false);
+    if (face == Face::DrumRack)
+        layoutDrums();
+    else if (face == Face::AutoTune && contentArea.getWidth() >= 620 && contentArea.getHeight() >= 120)
         layoutAutoTune();
     else if (face == Face::Eq && contentArea.getWidth() >= 560 && contentArea.getHeight() >= 110)
         layoutEq();

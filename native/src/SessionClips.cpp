@@ -115,6 +115,10 @@ juce::Result Session::editClipInEdit(te::EditItemID id, ClipGeometry next, ClipG
                                                       forgeDescription ? &*forgeDescription : nullptr);
             if (result.failed())
                 return result;
+            // A drum clip brings its sounds too: a Drum Rack that arrives
+            // blank takes the kit of the one the clip came from.
+            if (const auto kit = drumKitOf(*tracks[oldTrackIndex]))
+                fillBlankDrumRack(*target, *kit);
         }
         if (!clip->moveTo(*target))
             return juce::Result::fail("The clip could not be moved to that track.");

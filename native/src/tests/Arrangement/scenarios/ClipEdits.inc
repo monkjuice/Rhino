@@ -89,14 +89,14 @@
 
             // Duplicating a clip on a track whose instrument is bypassed keeps
             // that instrument rather than swapping in a 4OSC.
-            require(stack.addDrumKit(DrumKit::Rhino808, 0).wasOk(), "Drums on the first lane");
+            require(stack.addDrumKit(ContentLibrary::file("Drums/Kits/808 Kit.rdk"), 0).wasOk(), "Drums on the first lane");
             int drumSlot = -1;
             for (const auto& slot : stack.deviceSlots(0))
                 if (slot.kind == Session::DeviceKind::Instrument) drumSlot = slot.pluginIndex;
             require(drumSlot >= 0 && stack.toggleDeviceEnabled(0, drumSlot).wasOk(), "and the drums bypassed");
             require(stack.duplicateClip(a).wasOk(), "A clip on the bypassed lane duplicates");
             require(stack.patternInstrumentForTrack(0) != nullptr
-                        && stack.patternInstrumentForTrack(0)->getPluginType() == DrumDevice::xmlTypeName,
+                        && stack.patternInstrumentForTrack(0)->getPluginType() == DrumRackDevice::xmlTypeName,
                     "and the lane still plays its drums");
 
             // A clip from a lane that plays nothing leaves the destination's
@@ -109,7 +109,7 @@
                                           12.0 * barSeconds, 0, pasted).wasOk(),
                     "pastes onto the drum lane");
             require(stack.patternInstrumentForTrack(0) != nullptr
-                        && stack.patternInstrumentForTrack(0)->getPluginType() == DrumDevice::xmlTypeName,
+                        && stack.patternInstrumentForTrack(0)->getPluginType() == DrumRackDevice::xmlTypeName,
                     "and the drum lane keeps its drums");
 
             // An import with no free lane brings one, in the same undo step.

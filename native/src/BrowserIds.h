@@ -85,14 +85,22 @@ inline const DeviceDescriptor* deviceForPresetDrop(const juce::String& descripti
     return file == juce::File() ? nullptr : DeviceCatalog::byId(file.getParentDirectory().getFileName());
 }
 
-inline std::optional<DrumKit> drumKitFromId(const juce::String& id)
+// A drum kit drop carries the .rdk file's path, and a drum preset drop the
+// .rdp's. Each returns a default File for any other kind.
+inline juce::File browserDropKitFile(const juce::String& description)
 {
-    if (id == "Rhino808")   return DrumKit::Rhino808;
-    if (id == "HouseKit")   return DrumKit::House;
-    if (id == "BreakKit")   return DrumKit::Break;
-    if (id == "MinimalKit") return DrumKit::Minimal;
-    if (id == "ClapKit")    return DrumKit::Clap;
-    return std::nullopt;
+    if (browserDropKind(description) != "drumkit")
+        return {};
+    const auto path = browserDropId(description);
+    return path.isEmpty() ? juce::File() : juce::File(path);
+}
+
+inline juce::File browserDropDrumPresetFile(const juce::String& description)
+{
+    if (browserDropKind(description) != "drum-preset")
+        return {};
+    const auto path = browserDropId(description);
+    return path.isEmpty() ? juce::File() : juce::File(path);
 }
 
 inline std::optional<Session::BuiltInSample> builtInSampleFromId(const juce::String& id)

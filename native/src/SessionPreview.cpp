@@ -75,14 +75,18 @@ juce::Result Session::previewSample(const juce::File& file)
     if (reader == nullptr)
         return juce::Result::fail("Rhino cannot read " + file.getFileName() + ".");
     const auto rate = reader->sampleRate;
-    auto source = std::make_unique<juce::AudioFormatReaderSource>(reader.release(), true);
+    startPreview(std::make_unique<juce::AudioFormatReaderSource>(reader.release(), true), rate);
+    return juce::Result::ok();
+}
+
+void Session::startPreview(std::unique_ptr<juce::PositionableAudioSource> source, double sampleRate)
+{
     // Read ahead on the preview thread: the audio callback must never wait on
     // a disk seek, and a library sample is a file like any other.
-    previewTransport.setSource(source.get(), 32768, &previewThread, rate);
-    previewReader = std::move(source);
+    previewTransport.setSource(source.get(), 32768, &previewThread, sampleRate);
+    previewSource = std::move(source);
     previewTransport.setPosition(0.0);
     previewTransport.start();
-    return juce::Result::ok();
 }
 
 bool Session::isPreviewing() const
@@ -94,7 +98,7 @@ void Session::stopPreview()
 {
     previewTransport.stop();
     previewTransport.setSource(nullptr);
-    previewReader.reset();
+    previewSource.reset();
 }
 
 // Called before the device closes and again from the destructor, because either

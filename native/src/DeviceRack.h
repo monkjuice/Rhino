@@ -8,6 +8,7 @@ namespace rhino
 {
 class DeviceRack final : public juce::Component,
                          public juce::DragAndDropTarget,
+                         public juce::FileDragAndDropTarget,
                          private juce::ChangeListener,
                          private juce::Timer,
                          private Session::Listener
@@ -31,12 +32,19 @@ public:
     void itemDragMove(const juce::DragAndDropTarget::SourceDetails&) override;
     void itemDragExit(const juce::DragAndDropTarget::SourceDetails&) override;
     void itemDropped(const juce::DragAndDropTarget::SourceDetails&) override;
+    // Sound files dragged in from the desktop land on a Drum Rack's pads.
+    bool isInterestedInFileDrag(const juce::StringArray&) override;
+    void fileDragEnter(const juce::StringArray&, int x, int y) override;
+    void fileDragMove(const juce::StringArray&, int x, int y) override;
+    void fileDragExit(const juce::StringArray&) override;
+    void filesDropped(const juce::StringArray&, int x, int y) override;
     std::function<void(juce::String)> status;
     // A device's preset was saved from its panel.
     std::function<void()> presetsChanged;
 
 private:
     friend void runPatternDeviceRackTest();
+    friend void runDrumRackFaceTest();
     friend int runUiProfile();
     class FloatingDeviceWindow;
     class DropMarker;
@@ -61,6 +69,17 @@ private:
     int devicePositionFor(int pluginIndex) const;
     void showDropMarker(int gap);
     void hideDropMarker();
+    // The Drum Rack panel under a point in the rack, and the pad under it
+    // there, or -1 between pads.
+    DeviceEditorPanel* drumPanelAt(juce::Point<int> rackPosition, int& pad) const;
+    bool chainHasDrumRack() const;
+    // Lights the pad a sound would land on, and no other.
+    void showDrumDropTarget(juce::Point<int> rackPosition);
+    void clearDrumDropTargets();
+    // Sounds dropped on a Drum Rack panel: on the pad under the pointer, or
+    // on the rack's selected pad between pads, and several files on pads one
+    // after another from there.
+    void dropOnDrumPads(DeviceEditorPanel&, int pad, const std::vector<juce::File>& sounds, bool presets);
     void sync();
     void refreshTouchedDevice();
 

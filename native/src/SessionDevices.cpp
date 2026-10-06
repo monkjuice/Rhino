@@ -276,38 +276,6 @@ juce::Result Session::addMidiEffectDevice(const DeviceDescriptor& device, int tr
     return juce::Result::ok();
 }
 
-juce::Result Session::addDrumKit(DrumKit kit, int trackIndex)
-{
-    const auto tracks = te::getAudioTracks(*edit);
-    if (!juce::isPositiveAndBelow(trackIndex, tracks.size()))
-        return juce::Result::fail("Drop drum kits on a track.");
-    // A kit is an instrument, so it goes where an instrument goes.
-    if (trackType(trackIndex) != TrackType::midi)
-        return juce::Result::fail("That is an audio track. Drop drum kits on a MIDI track instead.");
-    const auto name = DrumDevice::kitName(kit);
-    edit->getUndoManager().beginNewTransaction("Add " + name);
-    bool changed = false;
-    const auto* drumDevice = DeviceCatalog::byId("Drums");
-    if (drumDevice == nullptr)
-        return juce::Result::fail("The drum instrument is not in this build.");
-    if (const auto result = switchTrackInstrument(*edit, *tracks[trackIndex], *drumDevice, changed);
-        result.failed())
-        return result;
-    auto* drums = findDrumDevice(*tracks[trackIndex]);
-    if (drums == nullptr)
-        return juce::Result::fail("The drum instrument could not be created.");
-    drums->setKit(kit);
-    // The track is named after its instrument, and the kit is what the
-    // instrument now is.
-    tracks[trackIndex]->setName(name);
-    edit->getUndoManager().beginNewTransaction();
-    markModified();
-    if (edit->getTransport().isPlaying())
-        edit->restartPlayback();
-    sendSynchronousChangeMessage();
-    return juce::Result::ok();
-}
-
 // A device with a face of its own needs the device itself, not a copy of its
 // numbers: a meter reads what the DSP is doing right now, and a scale is a
 // dozen booleans that no parameter list has a shape for.  Callers cast to the

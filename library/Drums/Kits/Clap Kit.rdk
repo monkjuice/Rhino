@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<RHINO_DRUM_KIT format="1">
+  <PAD index="0" name="Kick" sample="library:Samples/TR808/TR808Kick.wav" tune="-0.71" decay="10" tone="1" velocity="1" level="0.67" pan="0" choke="0"/>
+  <PAD index="2" name="Low Tom" sample="library:Samples/TR808/TR808LowTom.wav" tune="0" decay="10" tone="1" velocity="1" level="-0.45" pan="0" choke="0"/>
+  <PAD index="4" name="Mid Tom" sample="library:Samples/TR808/TR808MidTom.wav" tune="0" decay="10" tone="1" velocity="1" level="-0.45" pan="0" choke="0"/>
+  <PAD index="5" name="Clap" sample="library:Samples/HandClap/HandClap-01_09.flac" tune="0" decay="10" tone="1" velocity="1" level="1.21" pan="0" choke="0"/>
+  <PAD index="6" name="High Tom" sample="library:Samples/TR808/TR808HighTom.wav" tune="0" decay="10" tone="1" velocity="1" level="-0.45" pan="0" choke="0"/>
+  <PAD index="8" name="Clap" sample="library:Samples/HandClap/HandClap-01_09.flac" tune="0" decay="10" tone="1" velocity="1" level="1.21" pan="0" choke="0"/>
+  <PAD index="10" name="Closed Hat" sample="library:Samples/TR808/TR808ClosedHat.wav" tune="1.01" decay="0.092" tone="1" velocity="1" level="-1.94" pan="0" choke="1"/>
+  <PAD index="11" name="Open Hat" sample="library:Samples/TR808/TR808OpenHat.wav" tune="0" decay="0.451" tone="1" velocity="1" level="-2.5" pan="0" choke="1"/>
+</RHINO_DRUM_KIT>

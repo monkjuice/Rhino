@@ -165,6 +165,9 @@ private:
     std::vector<MovingNote> movingNotes;
     Gesture gesture = Gesture::none;
     bool adding = true, showingDrumLabels = false, noteMoved = false, manualPitchScroll = false, movingGroup = false, resizingFromLeft = false;
+    // What the drum rows were last called. A Drum Rack names its rows after
+    // its pads' sounds, which change without a single note changing.
+    juce::StringArray drumRowNames;
     // The gesture clock repeats the drag while autoscrolling. Remember the
     // snapped edge so a stationary pointer does not rewrite the model at 60 Hz.
     bool hasResizeTarget = false;

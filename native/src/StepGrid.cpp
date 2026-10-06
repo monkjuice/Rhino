@@ -503,8 +503,14 @@ void StepGrid::rebuildVisibleNotes()
                             [&state](const auto& note) { return note.state == state; });
     });
     setSelectedStates(selectedNoteStates);
+    juce::StringArray nextRowNames;
+    if (nextDrumLabels)
+        for (int row = 0; row < rows; ++row)
+            nextRowNames.add(session.patternNoteName(lowestVisiblePitch + rows - 1 - row).value_or(juce::String()));
+    const auto rowNamesChanged = nextRowNames != drumRowNames;
+    drumRowNames = std::move(nextRowNames);
     if (stepCountChanged || rows != previousRows || lengthsChanged || offsetsChanged
-        || showingDrumLabels != nextDrumLabels)
+        || showingDrumLabels != nextDrumLabels || rowNamesChanged)
     {
         showingDrumLabels = nextDrumLabels;
         repaint();

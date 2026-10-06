@@ -76,6 +76,8 @@ Session::ClipRegion Session::copyClipRegion(double startSeconds, double endSecon
                 snapshot.midi = true;
                 if (const auto* instrument = carriedInstrument(*tracks[track]))
                     snapshot.instrumentId = instrument->id;
+                if (const auto kit = drumKitOf(*tracks[track]))
+                    snapshot.drumKit = DrumFiles::toXml(*kit)->toString();
                 // The whole sequence, not the part inside the region: a MIDI
                 // clip is trimmed by its position and offset, so cropping the
                 // notes as well would silence what a later trim should reveal.
@@ -306,6 +308,9 @@ juce::Result Session::pasteClipRegion(const ClipRegion& region, double destinati
                                                                     forgeDescription ? &*forgeDescription : nullptr);
                 if (instrumentResult.failed())
                     return rollBack(instrumentResult);
+                DrumKit kit;
+                if (const auto xml = juce::parseXML(snapshot.drumKit); xml != nullptr && DrumFiles::fromXml(*xml, kit).wasOk())
+                    fillBlankDrumRack(*target, kit);
             }
             if (auto midiCopy = target->insertMIDIClip(snapshot.name, range, nullptr))
             {

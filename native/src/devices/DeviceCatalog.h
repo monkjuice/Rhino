@@ -17,19 +17,6 @@ enum class DeviceKind
     AudioEffect
 };
 
-// The drum rack's kits. They live here rather than on DrumDevice because the
-// browser and Session name a kit, and neither should have to include a device
-// header to do it. DrumDevice aliases this as DrumDevice::Kit.
-enum class DrumKit
-{
-    Rhino808,
-    House,
-    Break,
-    Minimal,
-    Clap
-};
-inline constexpr int drumKitCount = 5;
-
 // Everything the rest of Rhino needs to know about one device.
 //
 // This replaces metadata that used to be spread across five files: an enum in
@@ -66,7 +53,7 @@ struct DeviceDescriptor
     juce::uint32 colour = 0;
 
     // Listed in the browser. A device can be real and still not be offered
-    // directly -- the drum rack is reached through its kits instead.
+    // directly: every track already carries a Utility of its own.
     bool browsable = false;
 
     // Discovered as a VST3 rather than created from typeName.

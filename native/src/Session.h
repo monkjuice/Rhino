@@ -258,6 +258,10 @@ public:
     bool trackHasInstrument(int track) const;
     juce::Result selectPatternClip(te::EditItemID);
     bool isPatternDrums() const;
+    // What the instrument on the open clip's track calls a note, when it
+    // names it: a Drum Rack names each of its pads after its sound. The note
+    // editor labels its drum rows with it.
+    std::optional<juce::String> patternNoteName(int pitch) const;
     // Adding a device by its catalog id is the general form; the three enum
     // overloads below are shorthand for the devices that had an enum before
     // the catalog existed. A device added from now on needs no enum.
@@ -280,10 +284,30 @@ public:
     juce::Result addAudioEffect(AudioEffect, int track);
     juce::Result addClipAudioEffect(AudioEffect, te::EditItemID);
     juce::Result addInstrument(Instrument, int track);
-    // A drum kit is the drum instrument plus a kit selection, so these behave
-    // like any other instrument drop: the track switches to Rhino Drums and
-    // takes that kit's name.
-    juce::Result addDrumKit(DrumKit, int track);
+    // The Drum Rack (SessionDrums.cpp). A kit (.rdk) is a whole rack and a
+    // drum preset (.rdp) one pad's sound (core/DrumKitFile.h); both are files
+    // under library/Drums and the person's own Drums folder.
+    //
+    // A kit dropped on a track behaves like any other instrument drop: the
+    // track's instrument becomes a Drum Rack playing the kit, in one undo
+    // step, and the track takes the kit's name. A rack the track already
+    // runs takes the kit instead.
+    juce::Result addDrumKit(const juce::File& kit, int track);
+    juce::Result loadDrumKit(int track, int slot, const juce::File& kit);
+    juce::Result saveDrumKit(int track, int slot, const juce::File& kit);
+    // One pad of the rack in a slot, each one undo step. A sample is any audio
+    // file; a preset is one drum sound.
+    juce::Result loadDrumPadSample(int track, int slot, int pad, const juce::File& sample);
+    juce::Result loadDrumPadPreset(int track, int slot, int pad, const juce::File& preset);
+    juce::Result saveDrumPadPreset(int track, int slot, int pad, const juce::File& preset);
+    // A drum sound dropped on a track rather than on a pad lands on the first
+    // empty pad of the track's Drum Rack. A drum preset brings a blank rack to
+    // a MIDI track running something else or nothing, as an instrument drop
+    // would; a sample needs the rack to be there already.
+    juce::Result addDrumSound(const juce::File& soundOrSample, int track);
+    bool trackHasDrumRack(int track) const;
+    // Auditions a drum preset exactly as a pad would play it.
+    juce::Result previewDrumSound(const juce::File& preset);
     bool isForgeAvailable() const { return forgeDescription.has_value(); }
     juce::Result addMidiEffect(MidiEffect, int track);
     int trackCount() const;
@@ -705,6 +729,9 @@ public:
         // track that played nothing - in which case the paste leaves the
         // destination's instrument alone.
         juce::String instrumentId;
+        // midi only: when that was a Drum Rack, its kit, as a kit file's XML,
+        // which a rack arriving blank where the paste lands takes.
+        juce::String drumKit;
         // Relative to the copied region's corner, so pasting is a translation
         // and nothing else.
         int track = 0;
@@ -1084,6 +1111,8 @@ private:
     static bool readPreviewPreference();
     void ensurePreviewAttached();
     void releasePreview();
+    // Plays a sound through the preview, in place of whatever it was playing.
+    void startPreview(std::unique_ptr<juce::PositionableAudioSource>, double sampleRate);
     void buildStarterEdit();
     void refreshAfterUndoRedo(bool changed);
     te::PluginList* pluginListForTrack(int track) const;
@@ -1165,7 +1194,8 @@ private:
     juce::AudioFormatManager previewFormats;
     juce::AudioTransportSource previewTransport;
     juce::AudioSourcePlayer previewPlayer;
-    std::unique_ptr<juce::AudioFormatReaderSource> previewReader;
+    // A file being read, or a drum sound rendered into memory.
+    std::unique_ptr<juce::PositionableAudioSource> previewSource;
     bool browserPreview = readPreviewPreference();
     bool previewAttached = false;
     // Built on first use and, like the preview, detached before the device it
@@ -1206,6 +1236,9 @@ void checkAutoTuneDsp(Session&);
 void checkRhinoEqDsp(Session&);
 void checkVocoderDsp(Session&);
 void checkFmDsp(Session&);
+// The Drum Rack: its engine measured, its two files, the library's drums and
+// the session's paths onto pads and tracks. See tests/DrumRackTest.cpp.
+void checkDrumRack(Session&);
 // Device presets: the .rnd format, every factory preset against its device,
 // and saving, loading and adding through the session. Run by --device-test.
 void checkDevicePresets(Session&);

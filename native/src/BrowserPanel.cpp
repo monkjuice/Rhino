@@ -1,6 +1,7 @@
 #include "BrowserPanel.h"
 #include "BrowserIds.h"
 #include "ContentLibrary.h"
+#include "DrumKitFile.h"
 #include "Theme.h"
 #include <algorithm>
 #include <map>
@@ -45,19 +46,37 @@ juce::String presetId(Session::PatternPreset preset)
 }
 
 
-juce::String drumKitId(DrumKit kit)
+// What a kit is made of, read from the kit itself: Live files its kits the
+// same way, and whether the pads play samples or synths is the first thing
+// worth knowing about one.
+juce::String describeKit(const juce::File& file)
 {
-    switch (kit)
-    {
-        case DrumKit::Rhino808: return "Rhino808";
-        case DrumKit::House:    return "HouseKit";
-        case DrumKit::Break:    return "BreakKit";
-        case DrumKit::Minimal:  return "MinimalKit";
-        case DrumKit::Clap:     return "ClapKit";
-    }
-    return {};
+    DrumKit kit;
+    if (DrumFiles::read(file, kit).failed())
+        return "Drum kit that cannot be read";
+    auto samples = 0, synths = 0;
+    for (const auto& pad : kit.pads)
+        if (pad.has_value())
+            ++(pad->source == DrumRackEngine::Source::synth ? synths : samples);
+    const auto pads = juce::String(samples + synths) + " pads";
+    if (synths == 0)
+        return "Sampled kit, " + pads;
+    if (samples == 0)
+        return "Synthesised kit, " + pads;
+    return "Samples and synths, " + pads;
 }
 
+juce::String describeDrumPreset(const juce::File& file)
+{
+    DrumSound sound;
+    if (DrumFiles::read(file, sound).failed())
+        return "Drum preset that cannot be read";
+    if (sound.source == DrumRackEngine::Source::synth)
+        return juce::String("Synthesised ") + juce::String(drumModelInfo(sound.model).name).toLowerCase();
+    // The file underneath, not the name the preset gives it.
+    sound.name.clear();
+    return "Sampled: " + sound.displayName();
+}
 
 juce::String sampleId(Session::BuiltInSample sample)
 {
@@ -248,11 +267,6 @@ BrowserPanel::BrowserPanel(Session& s) : session(s)
         {"Patterns", "Drums", "Break kit", "Syncopated kick/snare/hats groove", Session::PatternPreset::BreakKit},
         {"Patterns", "Drums", "Minimal kit", "Sparse kick/snare/hats sketch", Session::PatternPreset::MinimalKit},
         {"Patterns", "Drums", "Clap kit", "Kick, clap backbeat, tight hats", Session::PatternPreset::ClapKit},
-        {"Instruments", "Drum Rack", "Rhino 808", "TR-808 kit: kick, snare, toms, hats", std::nullopt, {}, std::nullopt, {}, DrumKit::Rhino808},
-        {"Instruments", "Drum Rack", "House Kit", "Deep kick, tight hats, for the House pattern", std::nullopt, {}, std::nullopt, {}, DrumKit::House},
-        {"Instruments", "Drum Rack", "Break Kit", "Snappy snare, bright hats, for the Break pattern", std::nullopt, {}, std::nullopt, {}, DrumKit::Break},
-        {"Instruments", "Drum Rack", "Minimal Kit", "Short, quiet pads, for the Minimal pattern", std::nullopt, {}, std::nullopt, {}, DrumKit::Minimal},
-        {"Instruments", "Drum Rack", "Clap Kit", "Clap on the backbeat, for the Clap pattern", std::nullopt, {}, std::nullopt, {}, DrumKit::Clap},
         {"Samples", "Built-in", "Whistle", "Built-in audio sample", std::nullopt, {}, Session::BuiltInSample::Whistle},
         {"Samples", "Built-in", "Siren", "Built-in audio sample", std::nullopt, {}, Session::BuiltInSample::Siren},
     };
@@ -277,6 +291,7 @@ BrowserPanel::BrowserPanel(Session& s) : session(s)
                          device.description, std::nullopt, device.id});
     }
     addPresetItems();
+    addDrumItems();
 
     for (auto* component : std::initializer_list<juce::Component*>{&title, &search, &categoryList, &tree})
         addAndMakeVisible(component);
@@ -306,12 +321,58 @@ void BrowserPanel::addPresetItems()
     }
 }
 
+void BrowserPanel::addDrumItems()
+{
+    constexpr const char* section = "Drums";
+    if (const auto* rack = DeviceCatalog::byId("Drums"); rack != nullptr && rack->browsable)
+        items.push_back({section, {}, rack->displayName, "Sixteen empty pads to drop sounds on",
+                         std::nullopt, rack->id});
+    for (const auto& kit : ContentLibrary::drumKits())
+    {
+        Item item;
+        item.category = section;
+        item.folder = "Kits";
+        item.name = kit.name;
+        item.detail = (kit.user ? "Your kit. " : "") + describeKit(kit.file);
+        item.drumKit = kit.file;
+        items.push_back(std::move(item));
+    }
+
+    // Each kind of drum is a folder: its presets first, then the samples of
+    // that kind, which the Samples section lists by pack as well.
+    const auto presets = ContentLibrary::drumPresets();
+    auto types = ContentLibrary::drumTypes();
+    for (const auto& preset : presets)
+        if (preset.type.isNotEmpty())
+            types.addIfNotAlreadyThere(preset.type);
+    for (const auto& type : types)
+    {
+        for (const auto& preset : presets)
+        {
+            if (preset.type != type)
+                continue;
+            Item item;
+            item.category = section;
+            item.folder = type;
+            item.name = preset.name;
+            item.detail = (preset.user ? "Your preset. " : "") + describeDrumPreset(preset.file);
+            item.drumPreset = preset.file;
+            items.push_back(std::move(item));
+        }
+        for (const auto& sample : ContentLibrary::samples())
+            if (sample.drumType == type)
+                items.push_back({section, type, sample.name, spacedFolderName(sample.pack) + " one-shot",
+                                 std::nullopt, {}, std::nullopt, sample.file});
+    }
+}
+
 void BrowserPanel::refreshPresets()
 {
     items.erase(std::remove_if(items.begin(), items.end(),
-                               [] (const Item& item) { return item.devicePreset != juce::File(); }),
+                               [] (const Item& item) { return item.devicePreset != juce::File() || item.category == "Drums"; }),
                 items.end());
     addPresetItems();
+    addDrumItems();
     rebuildTree();
 }
 
@@ -396,13 +457,16 @@ juce::Colour BrowserPanel::colourFor(const Item& item) const
 {
     if (item.sample || item.file != juce::File()) return juce::Colour(0xffe09a70);
     if (item.preset) return juce::Colour(0xffc6d58c);
+    if (item.drumKit != juce::File()) return juce::Colour(0xff8cc5d2);
+    if (item.drumPreset != juce::File())
+        if (const auto* rack = DeviceCatalog::byId("Drums"); rack != nullptr && rack->colour != 0)
+            return juce::Colour(rack->colour);
     if (const auto* device = DeviceCatalog::byId(item.deviceId))
     {
         if (device->kind == DeviceKind::AudioEffect) return juce::Colour(0xffffb15f);
         if (device->kind == DeviceKind::MidiEffect)  return juce::Colour(0xffbda4ff);
         return juce::Colour(0xff8cc5d2);
     }
-    if (item.drumKit) return juce::Colour(0xff8cc5d2);
     return juce::Colour(0xff6f7b85);
 }
 
@@ -439,6 +503,10 @@ void BrowserPanel::rebuildTree()
     {
         if (!searching)
             return item.category == category;
+        // Drums lists the drum hits Samples already lists by pack. A search
+        // shows each file once, where it was found first.
+        if (item.category == "Drums" && item.file != juce::File())
+            return false;
         return item.name.toLowerCase().contains(query) || item.detail.toLowerCase().contains(query)
             || item.folder.toLowerCase().contains(query);
     };
@@ -510,6 +578,7 @@ void BrowserPanel::previewItem(const Item& item)
 {
     const auto result = item.sample      ? session.previewBuiltInSample(*item.sample)
                       : item.file != juce::File() ? session.previewSample(item.file)
+                      : item.drumPreset != juce::File() ? session.previewDrumSound(item.drumPreset)
                                         : juce::Result::ok();
     if (result.failed() && status) status(result.getErrorMessage());
 }
@@ -520,6 +589,10 @@ juce::String BrowserPanel::dragDescriptionFor(const Item& item) const
         return "rhino-browser:preset:" + presetId(*item.preset);
     if (item.devicePreset != juce::File())
         return "rhino-browser:device-preset:" + item.devicePreset.getFullPathName();
+    if (item.drumKit != juce::File())
+        return "rhino-browser:drumkit:" + item.drumKit.getFullPathName();
+    if (item.drumPreset != juce::File())
+        return "rhino-browser:drum-preset:" + item.drumPreset.getFullPathName();
     // The kind still appears in the description because each drop target
     // accepts only some of them; the catalog is what decides which it is.
     if (const auto* device = DeviceCatalog::byId(item.deviceId))
@@ -528,8 +601,6 @@ juce::String BrowserPanel::dragDescriptionFor(const Item& item) const
         return "rhino-browser:file:" + item.file.getFullPathName();
     if (item.sample)
         return "rhino-browser:sample:" + sampleId(*item.sample);
-    if (item.drumKit)
-        return "rhino-browser:drumkit:" + drumKitId(*item.drumKit);
     return "rhino-browser:info:" + item.name;
 }
 

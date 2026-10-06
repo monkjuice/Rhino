@@ -441,7 +441,7 @@
         {
             const auto [count, type] = instrumentsOnAudio2();
             require(count == 1, "A track holds one instrument, so dropping another replaces it rather than stacking");
-            require(type == DrumDevice::xmlTypeName, "The dropped instrument is the one the track now runs");
+            require(type == DrumRackDevice::xmlTypeName, "The dropped instrument is the one the track now runs");
         }
         require(session.deviceSlots(2).size() == audio2DevicesAfterSound,
                 "Replacing an instrument leaves the rest of the device chain alone");

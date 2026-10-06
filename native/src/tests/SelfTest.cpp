@@ -9,8 +9,9 @@
 #include "audio/UtilityDevice.h"
 #include "audio/RhinoBloomDevice.h"
 #include "audio/RhinoSpaceDevice.h"
-#include "instruments/DrumDevice.h"
+#include "instruments/DrumRackDevice.h"
 #include "midi/RhinoArpDevice.h"
+#include "DrumKitFile.h"
 #include <algorithm>
 #include <cmath>
 #include <source_location>
@@ -117,13 +118,60 @@ int runSelfTest()
             // the source. Zero on both sides is a pass: a build without the
             // library present still has a working browser.
             const auto libraryRows = std::count_if(rows.begin(), rows.end(),
-                [](const BrowserPanel::Item& row) { return row.file != juce::File(); });
+                [](const BrowserPanel::Item& row) { return row.category == "Samples" && row.file != juce::File(); });
             require(static_cast<size_t>(libraryRows) == ContentLibrary::samples().size());
             for (const auto& row : rows)
                 if (row.file != juce::File())
                     require(row.file.existsAsFile());
             juce::Logger::writeToLog("Rhino: browser lists " + juce::String(libraryRows)
                                      + " library samples");
+
+            // Drums opens on a blank Drum Rack, then the kits, then each kind
+            // of drum with its presets before its samples: every drum hit the
+            // library holds, the same files Samples lists by pack.
+            std::vector<const BrowserPanel::Item*> drums;
+            for (const auto& row : rows)
+                if (row.category == "Drums")
+                    drums.push_back(&row);
+            require(!drums.empty() && drums.front()->deviceId == "Drums" && drums.front()->folder.isEmpty());
+            for (const auto& kit : ContentLibrary::drumKits())
+            {
+                const auto row = std::find_if(drums.begin(), drums.end(),
+                    [&kit](const BrowserPanel::Item* candidate) { return candidate->drumKit == kit.file; });
+                require(row != drums.end() && (*row)->folder == "Kits" && (*row)->name == kit.name);
+                const auto description = browser.dragDescriptionFor(**row);
+                require(description == "rhino-browser:drumkit:" + kit.file.getFullPathName()
+                        && browserDropKitFile(description) == kit.file);
+            }
+            for (const auto& preset : ContentLibrary::drumPresets())
+            {
+                const auto row = std::find_if(drums.begin(), drums.end(),
+                    [&preset](const BrowserPanel::Item* candidate) { return candidate->drumPreset == preset.file; });
+                require(row != drums.end() && (*row)->folder == preset.type);
+                const auto description = browser.dragDescriptionFor(**row);
+                require(description == "rhino-browser:drum-preset:" + preset.file.getFullPathName()
+                        && browserDropDrumPresetFile(description) == preset.file);
+                // A kind of drum lists its presets before any of its samples.
+                const auto firstSample = std::find_if(drums.begin(), drums.end(),
+                    [&preset](const BrowserPanel::Item* candidate)
+                    { return candidate->folder == preset.type && candidate->file != juce::File(); });
+                require(firstSample == drums.end() || row < firstSample);
+            }
+            auto drumHits = 0;
+            for (const auto& sample : ContentLibrary::samples())
+            {
+                if (sample.drumType.isEmpty())
+                    continue;
+                ++drumHits;
+                require(std::any_of(drums.begin(), drums.end(), [&sample](const BrowserPanel::Item* candidate)
+                {
+                    return candidate->file == sample.file && candidate->folder == sample.drumType;
+                }));
+            }
+            require(ContentLibrary::drumKits().empty() || ContentLibrary::drumKits().size() >= 8);
+            juce::Logger::writeToLog("Rhino: Drums lists " + juce::String(static_cast<int>(ContentLibrary::drumKits().size()))
+                                     + " kits, " + juce::String(static_cast<int>(ContentLibrary::drumPresets().size()))
+                                     + " drum presets and " + juce::String(drumHits) + " drum hits");
         }
         for (const auto& device : DeviceCatalog::all())
         {
@@ -257,9 +305,19 @@ int runSelfTest()
         }
 
 
-        auto drumPlugin = session.edit->getPluginCache().createNewPlugin(DrumDevice::xmlTypeName, {});
-        auto* drums = dynamic_cast<DrumDevice*>(drumPlugin.get());
-        require(drums != nullptr);
+        // A Drum Rack playing the 808 kit, the kit the drum patterns were
+        // written for: its kick on C2 and its clap on G#2.
+        auto drumPlugin = session.edit->getPluginCache().createNewPlugin(DrumRackDevice::xmlTypeName, {});
+        auto* drums = dynamic_cast<DrumRackDevice*>(drumPlugin.get());
+        require(drums != nullptr && drums->isBlank());
+        DrumKit eightOhEight;
+        require(DrumFiles::read(ContentLibrary::file("Drums/Kits/808 Kit.rdk"), eightOhEight).wasOk());
+        const auto kitStart = juce::Time::getHighResolutionTicks();
+        drums->setKit(eightOhEight);
+        juce::Logger::writeToLog("Rhino: the 808 Kit's eight samples are read onto their pads in "
+                                 + juce::String(juce::Time::highResolutionTicksToSeconds(juce::Time::getHighResolutionTicks()
+                                                                                         - kitStart) * 1000.0, 2) + " ms");
+        require(!drums->isBlank() && !drums->pad(0).unreadable && !drums->pad(8).unreadable);
         drums->initialise({{}, 48000.0, 512});
         juce::AudioBuffer<float> drumBuffer(2, 4096);
         drumBuffer.clear();
@@ -275,7 +333,9 @@ int runSelfTest()
                 require(std::isfinite(sample));
                 clapPeak = std::max(clapPeak, std::abs(sample));
             }
-        require(clapPeak > 0.0001f && clapPeak < 1.0f);
+        // A pad plays as loud as its file, so the bound is the file's own
+        // full scale, with room for the interpolation's overshoot.
+        require(clapPeak > 0.0001f && clapPeak < 1.05f);
 
         // Tracktion timestamps plugin MIDI relative to the render block. A hit
         // must begin at that sample rather than at the start of the callback.
@@ -647,6 +707,7 @@ int runSelfTest()
         checkRhinoEqDsp(session);
         checkVocoderDsp(session);
         checkFmDsp(session);
+        checkDrumRack(session);
 
         session.releaseAudioDevice();
         return 0;

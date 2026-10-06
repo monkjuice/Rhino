@@ -469,6 +469,11 @@ void DeviceEditorPanel::timerCallback()
     // spectrum was being analysed at 24 Hz behind a closed pane.
     if (isHiddenInShell(*this))
         return;
+    if (face == Face::DrumRack)
+    {
+        tickDrums();
+        return;
+    }
     if (face == Face::Eq)
     {
         tickEqSpectrum();

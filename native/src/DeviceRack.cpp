@@ -1,7 +1,9 @@
 #include "DeviceRack.h"
 #include "Theme.h"
 #include "BrowserIds.h"
+#include "DrumKitFile.h"
 #include "UiVisibility.h"
+#include "instruments/DrumRackDevice.h"
 #include <cmath>
 #include <optional>
 
@@ -20,6 +22,11 @@ const DeviceDescriptor* deviceFromBrowserDrop(const juce::String& description)
         if (description.startsWith(prefix))
             return DeviceCatalog::byId(browserDropId(description));
     return nullptr;
+}
+
+bool isSoundFile(const juce::File& file)
+{
+    return file.hasFileExtension("wav;aif;aiff;flac;ogg;mp3");
 }
 
 void styleAutomationButton(juce::TextButton& button, const Session::DeviceParameter& parameter)
@@ -447,6 +454,13 @@ bool DeviceRack::isInterestedInDragSource(const juce::DragAndDropTarget::SourceD
     const auto description = details.description.toString();
     if (deviceChainDragSlot(description, selectedTrack).has_value())
         return true;
+    const auto kind = browserDropKind(description);
+    // A kit or a drum preset brings a Drum Rack with it; a bare sample has
+    // nowhere to go in a chain without one.
+    if (kind == "drumkit" || kind == "drum-preset")
+        return true;
+    if (kind == "file")
+        return chainHasDrumRack();
     return deviceFromBrowserDrop(description) != nullptr || deviceForPresetDrop(description) != nullptr;
 }
 
@@ -457,14 +471,128 @@ void DeviceRack::itemDragEnter(const juce::DragAndDropTarget::SourceDetails& det
 
 void DeviceRack::itemDragMove(const juce::DragAndDropTarget::SourceDetails& details)
 {
-    if (!deviceChainDragSlot(details.description.toString(), selectedTrack).has_value())
+    const auto description = details.description.toString();
+    if (deviceChainDragSlot(description, selectedTrack).has_value())
+    {
+        showDropMarker(dropGapFor(details.localPosition));
         return;
-    showDropMarker(dropGapFor(details.localPosition));
+    }
+    const auto kind = browserDropKind(description);
+    if (kind == "file" || kind == "drum-preset")
+        showDrumDropTarget(details.localPosition);
 }
 
 void DeviceRack::itemDragExit(const juce::DragAndDropTarget::SourceDetails&)
 {
     hideDropMarker();
+    clearDrumDropTargets();
+}
+
+bool DeviceRack::chainHasDrumRack() const
+{
+    return std::any_of(slots.begin(), slots.end(), [] (const auto& slot) { return slot.deviceId == "Drums"; });
+}
+
+DeviceEditorPanel* DeviceRack::drumPanelAt(juce::Point<int> rackPosition, int& pad) const
+{
+    pad = -1;
+    // Asked in the chain's own coordinates, so the viewport's scroll offset
+    // is already accounted for.
+    const auto under = chainContent.getLocalPoint(this, rackPosition);
+    for (auto* panel : devicePanels)
+        if (panel->showsDrumRack() && panel->getBounds().contains(under))
+        {
+            pad = panel->drumPadAt(panel->getLocalPoint(&chainContent, under));
+            return panel;
+        }
+    return nullptr;
+}
+
+void DeviceRack::showDrumDropTarget(juce::Point<int> rackPosition)
+{
+    auto pad = -1;
+    auto* target = drumPanelAt(rackPosition, pad);
+    for (auto* panel : devicePanels)
+        panel->showDrumDropTarget(panel == target ? pad : -1);
+}
+
+void DeviceRack::clearDrumDropTargets()
+{
+    for (auto* panel : devicePanels)
+        panel->showDrumDropTarget(-1);
+}
+
+void DeviceRack::dropOnDrumPads(DeviceEditorPanel& panel, int pad, const std::vector<juce::File>& sounds, bool presets)
+{
+    const auto slot = panel.devicePluginIndex();
+    if (pad < 0)
+        if (const auto* drums = dynamic_cast<DrumRackDevice*>(session.devicePlugin(selectedTrack, slot)))
+            pad = drums->selectedPad();
+    auto loaded = 0;
+    juce::String failure;
+    // Several files fill the pads one after another from the one dropped on;
+    // the rack stops at its last pad.
+    for (const auto& sound : sounds)
+    {
+        const auto target = pad + loaded;
+        if (!juce::isPositiveAndBelow(target, DrumRackDevice::padCount))
+            break;
+        const auto result = presets ? session.loadDrumPadPreset(selectedTrack, slot, target, sound)
+                                    : session.loadDrumPadSample(selectedTrack, slot, target, sound);
+        if (result.failed())
+        {
+            failure = result.getErrorMessage();
+            break;
+        }
+        ++loaded;
+    }
+    if (status == nullptr)
+        return;
+    if (failure.isNotEmpty())
+        status(failure);
+    else if (loaded == 1)
+        status("Loaded " + sounds.front().getFileNameWithoutExtension() + " on pad " + juce::String(pad + 1));
+    else if (loaded > 1)
+        status("Loaded " + juce::String(loaded) + " sounds on pads " + juce::String(pad + 1) + " to "
+               + juce::String(pad + loaded));
+}
+
+bool DeviceRack::isInterestedInFileDrag(const juce::StringArray& files)
+{
+    return chainHasDrumRack()
+        && std::any_of(files.begin(), files.end(), [] (const juce::String& path) { return isSoundFile(juce::File(path)); });
+}
+
+void DeviceRack::fileDragEnter(const juce::StringArray& files, int x, int y)
+{
+    fileDragMove(files, x, y);
+}
+
+void DeviceRack::fileDragMove(const juce::StringArray&, int x, int y)
+{
+    showDrumDropTarget({x, y});
+}
+
+void DeviceRack::fileDragExit(const juce::StringArray&)
+{
+    clearDrumDropTargets();
+}
+
+void DeviceRack::filesDropped(const juce::StringArray& files, int x, int y)
+{
+    clearDrumDropTargets();
+    std::vector<juce::File> sounds;
+    for (const auto& path : files)
+        if (const juce::File file(path); isSoundFile(file))
+            sounds.push_back(file);
+    auto pad = -1;
+    auto* panel = drumPanelAt({x, y}, pad);
+    if (panel == nullptr || sounds.empty())
+    {
+        if (status) status("Drop samples on a pad of the Drum Rack.");
+        return;
+    }
+    dropOnDrumPads(*panel, pad, sounds, false);
 }
 
 int DeviceRack::dropGapFor(juce::Point<int> rackPosition) const
@@ -512,7 +640,43 @@ void DeviceRack::hideDropMarker()
 void DeviceRack::itemDropped(const juce::DragAndDropTarget::SourceDetails& details)
 {
     hideDropMarker();
+    clearDrumDropTargets();
     const auto description = details.description.toString();
+    const auto kind = browserDropKind(description);
+    // A kit dropped on a Drum Rack loads into it. Anywhere else in the chain
+    // it makes the track's instrument a rack playing it, as on the track.
+    if (kind == "drumkit")
+    {
+        const auto kit = browserDropKitFile(description);
+        auto pad = -1;
+        auto* panel = drumPanelAt(details.localPosition, pad);
+        const auto result = panel != nullptr ? session.loadDrumKit(selectedTrack, panel->devicePluginIndex(), kit)
+                                             : session.addDrumKit(kit, selectedTrack);
+        if (status)
+            status(result.wasOk() ? "Loaded " + DrumFiles::nameOf(kit) + " on " + session.trackName(selectedTrack)
+                                  : result.getErrorMessage());
+        return;
+    }
+    // A sound dropped on a Drum Rack goes on a pad. A drum preset dropped
+    // anywhere else fills the first empty pad, bringing a rack if need be.
+    if (kind == "file" || kind == "drum-preset")
+    {
+        const auto presets = kind == "drum-preset";
+        const auto sound = presets ? browserDropDrumPresetFile(description) : browserDropFile(description);
+        auto pad = -1;
+        if (auto* panel = drumPanelAt(details.localPosition, pad))
+        {
+            dropOnDrumPads(*panel, pad, {sound}, presets);
+            return;
+        }
+        const auto result = presets ? session.addDrumSound(sound, selectedTrack)
+                                    : juce::Result::fail("Drop samples on a pad of the Drum Rack.");
+        if (status)
+            status(result.wasOk() ? "Added " + sound.getFileNameWithoutExtension() + " to the Drum Rack on "
+                                        + session.trackName(selectedTrack)
+                                  : result.getErrorMessage());
+        return;
+    }
     // A device dragged out of this same chain is a reorder, not an add.
     if (const auto dragged = deviceChainDragSlot(description, selectedTrack))
     {

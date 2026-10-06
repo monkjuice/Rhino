@@ -33,7 +33,8 @@
                 "A pattern cannot be dropped on the main track");
         require(view.applyBrowserDrop("rhino-browser:instrument:FourOsc", mainTrack).failed(),
                 "An instrument cannot be dropped on the main track");
-        require(view.applyBrowserDrop("rhino-browser:drumkit:HouseKit", mainTrack).failed(),
+        require(view.applyBrowserDrop("rhino-browser:drumkit:" + ContentLibrary::file("Drums/Kits/House Kit.rdk").getFullPathName(),
+                                      mainTrack).failed(),
                 "A drum kit cannot be dropped on the main track");
         require(view.applyBrowserDrop("rhino-browser:effect:Delay", mainTrack).wasOk(),
                 "An effect can be dropped on the main track");

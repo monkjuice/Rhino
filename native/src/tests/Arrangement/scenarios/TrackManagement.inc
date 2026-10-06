@@ -467,8 +467,8 @@
             // that could not, and no gesture put it back.
             require(session.addInstrument(Session::Instrument::FourOsc, audioTrack).failed(),
                     "An audio track refuses an instrument");
-            require(session.addDrumKit(DrumKit::Rhino808, audioTrack).failed(),
-                    "and a drum kit, which is an instrument wearing a kit");
+            require(session.addDrumKit(ContentLibrary::file("Drums/Kits/808 Kit.rdk"), audioTrack).failed(),
+                    "and a drum kit, which is a Drum Rack with its pads filled");
             require(session.addMidiEffect(Session::MidiEffect::RhinoArp, audioTrack).failed(),
                     "and a MIDI effect, which would have no notes to act on");
             require(session.trackType(audioTrack) == Session::TrackType::audio

@@ -42,4 +42,15 @@
             require(session.previewSample(source.getFile()).wasOk(), "Switching it back on auditions again");
             require(session.isPreviewing(), "and the sound plays");
             session.stopPreview();
+
+            // A drum preset is heard as its pad would play it: one strike,
+            // rendered into memory, which lasts as long as the strike does.
+            const auto clapPreset = ContentLibrary::file("Drums/Presets/Clap/Analog Clap.rdp");
+            require(session.previewDrumSound(clapPreset).wasOk() && session.isPreviewing(),
+                    "A drum preset can be auditioned");
+            const auto strike = session.previewTransport.getLengthInSeconds();
+            require(strike > 0.2 && strike < 1.0, "for as long as one strike of it lasts");
+            require(session.edit->getUndoManager().canUndo() == couldUndo && session.trackCount() == tracksBefore,
+                    "and that changes nothing about the project either");
+            session.stopPreview();
         }

@@ -27,19 +27,11 @@ inline int pitchClassOf(int pitch)
 
 // The last argument is the octave number middle C carries: 3, so MIDI 60 reads
 // C3 the way Ableton, FL and Logic name it, and the way Forge's own keyboard
-// does. It was 4, which was consistent inside Rhino and wrong against every
-// DAW a pattern gets compared with. StepGridPainter names its rows the same
-// way; the two have to move together.
-inline juce::String drumLaneName(int pitch)
+// and the Drum Rack's pads do. It was 4, which was consistent inside Rhino and
+// wrong against every DAW a pattern gets compared with. Both of
+// StepGridPainter's keyboards name their rows through this.
+inline juce::String pitchName(int pitch)
 {
-    if (pitch == 48) return "Kick";
-    if (pitch == 50) return "Low Tom";
-    if (pitch == 52) return "Mid Tom";
-    if (pitch == 53) return "Snare";
-    if (pitch == 54) return "High Tom";
-    if (pitch == 56) return "Clap";
-    if (pitch == 58) return "Closed Hat";
-    if (pitch == 59) return "Open Hat";
     return juce::MidiMessage::getMidiNoteName(pitch, true, true, 3);
 }
 

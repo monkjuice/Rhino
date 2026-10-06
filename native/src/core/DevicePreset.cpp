@@ -1,7 +1,5 @@
 #include "DevicePreset.h"
-#include <array>
-#include <charconv>
-#include <cmath>
+#include "ExactFloatText.h"
 
 namespace rhino
 {
@@ -9,26 +7,6 @@ namespace
 {
 const juce::Identifier presetTag { "RHINO_PRESET" };
 const juce::Identifier parameterTag { "PARAM" };
-
-// The shortest text that reads back as exactly the same float, so saving a
-// preset and loading it changes nothing.
-juce::String textOf(float value)
-{
-    std::array<char, 32> buffer {};
-    const auto written = std::to_chars(buffer.data(), buffer.data() + buffer.size(), value);
-    return juce::String(buffer.data(), static_cast<size_t>(written.ptr - buffer.data()));
-}
-
-std::optional<float> valueFrom(const juce::String& text)
-{
-    const auto utf8 = text.trim().toStdString();
-    auto value = 0.0f;
-    const auto end = utf8.data() + utf8.size();
-    const auto read = std::from_chars(utf8.data(), end, value);
-    if (utf8.empty() || read.ec != std::errc() || read.ptr != end || !std::isfinite(value))
-        return std::nullopt;
-    return value;
-}
 }
 
 std::optional<float> DevicePreset::valueOf(const juce::String& parameterId) const
@@ -48,7 +26,7 @@ std::unique_ptr<juce::XmlElement> DevicePreset::toXml() const
     {
         auto* parameter = xml->createNewChildElement(parameterTag.toString());
         parameter->setAttribute("id", id);
-        parameter->setAttribute("value", textOf(value));
+        parameter->setAttribute("value", exactFloatText(value));
     }
     return xml;
 }
@@ -67,7 +45,7 @@ juce::Result DevicePreset::fromXml(const juce::XmlElement& xml, DevicePreset& in
     for (const auto* parameter : xml.getChildWithTagNameIterator(parameterTag.toString()))
     {
         const auto id = parameter->getStringAttribute("id");
-        const auto value = valueFrom(parameter->getStringAttribute("value"));
+        const auto value = exactFloatFrom(parameter->getStringAttribute("value"));
         if (id.isEmpty() || !value.has_value())
             return juce::Result::fail("This preset has a setting with no name or no number for its value.");
         if (preset.valueOf(id).has_value())

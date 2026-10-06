@@ -20,6 +20,21 @@ struct LibrarySample
     juce::String pack;   // the folder under Samples/, e.g. "VinylDrums"
     juce::String group;  // the folder inside the pack, empty if the file is loose
     juce::String name;   // the file name without its extension
+    // The kind of drum it is, one of ContentLibrary::drumTypes(), or empty
+    // for a sound that is not a drum hit. The browser's Drums section files
+    // the sample under it.
+    juce::String drumType;
+};
+
+// A drum kit (.rdk) or a drum preset (.rdp) on disk (DrumKitFile.h). Kits sit
+// in Drums/Kits; presets in Drums/Presets/<kind of drum>, so the browser files
+// a preset beside the samples of its kind without opening it.
+struct LibraryDrumFile
+{
+    juce::File file;
+    juce::String name;   // the file name without its extension
+    juce::String type;   // a preset's kind of drum, from its folder; empty for a kit
+    bool user = false;   // saved by the person, rather than shipped with Rhino
 };
 
 // One device preset on disk (see DevicePreset.h). The folder it sits in is
@@ -63,6 +78,32 @@ public:
     // Where the person's own presets are kept: Documents/Rhino/Presets, or
     // RHINO_USER_PRESETS_DIR when that is set, as a test sets it.
     static juce::File userPresets();
+
+    // The kinds of drum, in the order the Drums section lists them.
+    static const juce::StringArray& drumTypes();
+    // The kind of drum a sample is, from its folder when the folder says,
+    // otherwise from the words of its name; empty when neither does.
+    static juce::String drumTypeOf(const juce::String& group, const juce::String& name);
+
+    // Kits and drum presets: Rhino's own, then the person's, read from disk
+    // on every call as presets are. Kits are sorted by name; presets by kind,
+    // in drumTypes() order, then by name.
+    static std::vector<LibraryDrumFile> drumKits();
+    static std::vector<LibraryDrumFile> drumPresets();
+    // The same, under one root: the root's Kits or Presets folder.
+    static std::vector<LibraryDrumFile> drumKitsIn(const juce::File& root, bool user);
+    static std::vector<LibraryDrumFile> drumPresetsIn(const juce::File& root, bool user);
+    // Where the person's own kits and drum presets are kept:
+    // Documents/Rhino/Drums, or RHINO_USER_DRUMS_DIR when that is set.
+    static juce::File userDrums();
+
+    // A sound as a kit or a project names it. A file in the library is
+    // "library:" and its path under the root, so it is found wherever the
+    // library is installed; anything else is its full path.
+    static juce::String storedPath(const juce::File&);
+    // The file a stored path names now, which may not exist: content is data
+    // on disk and can be absent.
+    static juce::File resolveStoredPath(const juce::String&);
 
 private:
     static juce::File resolveRoot();

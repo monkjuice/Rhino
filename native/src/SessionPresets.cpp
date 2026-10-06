@@ -159,7 +159,7 @@ Session::Instrument Session::patternInstrumentKind() const
     if (auto* plugin = patternInstrument())
     {
         const auto type = plugin->getPluginType();
-        if (type == DrumDevice::xmlTypeName) return Instrument::Drums;
+        if (type == DrumRackDevice::xmlTypeName) return Instrument::Drums;
         if (isForgePlugin(*plugin)) return Instrument::RhinoForge;
     }
     return Instrument::FourOsc;
@@ -168,6 +168,15 @@ Session::Instrument Session::patternInstrumentKind() const
 bool Session::isPatternDrums() const
 {
     return patternInstrumentKind() == Instrument::Drums;
+}
+
+std::optional<juce::String> Session::patternNoteName(int pitch) const
+{
+    juce::String name;
+    if (auto* plugin = patternInstrument(); plugin != nullptr && plugin->hasNameForMidiNoteNumber(pitch, 1, name)
+                                             && name.isNotEmpty())
+        return name;
+    return std::nullopt;
 }
 
 // Puts a track into the state a preset expects: the right instrument and its
@@ -192,6 +201,11 @@ juce::Result Session::preparePresetTrack(int trackIndex, const PresetPattern& da
     if (data.synthPatch != SynthPatch::Default)
         if (auto* fourOsc = findFourOsc(*track))
             applySynthPatch(data.synthPatch, *fourOsc, edit->getUndoManager());
+    // A rack that already holds sounds keeps them: the pattern plays whatever
+    // kit the person has built.
+    if (data.useDrums)
+        if (auto* drums = findDrumRack(*track); drums != nullptr && drums->isBlank())
+            loadDefaultDrumKit(*drums);
     return juce::Result::ok();
 }
 

@@ -11,6 +11,9 @@ add_library(RhinoCore STATIC
     AutoTuneEngine.cpp
     VocoderEngine.cpp
     FmEngine.cpp
+    DrumSynth.cpp
+    DrumRackEngine.cpp
+    DrumKitFile.cpp
     DevicePreset.cpp)
 target_include_directories(RhinoCore PUBLIC .)
 target_link_libraries(RhinoCore

@@ -477,6 +477,9 @@ juce::String DeviceEditorPanel::roleOfSection(const juce::String& section) const
 // is where a carrier is told from a modulator in words.
 juce::String DeviceEditorPanel::getTooltip()
 {
+    if (face == Face::DrumRack)
+        if (const auto tip = drumTooltip(getMouseXYRelative()); tip.isNotEmpty())
+            return tip;
     if (face == Face::Generated)
     {
         const auto position = getMouseXYRelative();

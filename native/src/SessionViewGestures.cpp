@@ -149,7 +149,7 @@ void SessionView::showSlotMenu(int track, int scene)
         presets.addItem(100 + i, presetMenu[i].name);
     juce::PopupMenu instruments;
     instruments.addItem(10, "4OSC synth");
-    instruments.addItem(12, "Rhino Drums");
+    instruments.addItem(12, "Drum Rack");
     instruments.addItem(13, "Rhino Forge", session.isForgeAvailable());
     juce::PopupMenu menu;
     menu.addSectionHeader(session.trackName(track) + "  /  " + session.sceneName(scene));
@@ -312,9 +312,9 @@ void SessionView::applyBrowserDrop(const juce::String& description, int track, i
     }
     else if (kind == "drumkit")
     {
-        if (const auto kit = drumKitFromId(id))
+        if (const auto kit = browserDropKitFile(description); kit != juce::File())
         {
-            result = session.addDrumKit(*kit, track);
+            result = session.addDrumKit(kit, track);
             message = "Track " + juce::String(track + 1) + " now runs " + session.trackName(track);
         }
     }

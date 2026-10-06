@@ -40,7 +40,9 @@ public:
         // A file in the content library. Set for library samples, empty for
         // everything else. Dragged and applied by path.
         juce::File file;
-        std::optional<DrumKit> drumKit;
+        // A Drum Rack kit (.rdk), or a drum preset (.rdp), dragged by path.
+        juce::File drumKit;
+        juce::File drumPreset;
         // A .rnd preset of the device named by deviceId. Its row sits under
         // the device's own, which is dragged for the device at its defaults.
         juce::File devicePreset;
@@ -63,6 +65,10 @@ private:
 
     void rebuildTree();
     void addPresetItems();
+    // The Drums section: the blank Drum Rack first, then the kits, then each
+    // kind of drum with its presets before its samples. Read from disk, so a
+    // kit or a preset just saved is there the next time it is built.
+    void addDrumItems();
     void previewItem(const Item&);
     void reportSelection(const Item&);
     juce::Colour colourFor(const Item&) const;
@@ -75,7 +81,10 @@ private:
     juce::TreeView tree;
     std::unique_ptr<FolderNode> root;
     std::vector<Item> items;
-    std::array<juce::String, 5> categories {"Instruments", "Patterns", "Samples", "Audio FX", "MIDI FX"};
+    // Drums comes before Instruments, as it does in Live: it is the one
+    // section that holds every kind of thing -- a device, kits, presets and
+    // samples -- for one job.
+    std::array<juce::String, 6> categories {"Drums", "Instruments", "Patterns", "Samples", "Audio FX", "MIDI FX"};
     int selectedCategory = 0;
     int lastLayoutWidth = 0;
     juce::String selectionToRestore;

@@ -43,14 +43,17 @@ void StepGrid::paintKeyboard(juce::Graphics& g)
         const bool black = juce::MidiMessage::isMidiNoteBlack(pitch);
         if (drums)
         {
-            const bool namedDrum = pitch == 48 || pitch == 50 || pitch == 52 || pitch == 53
-                                || pitch == 54 || pitch == 56 || pitch == 58 || pitch == 59;
+            // A row is named for the sound on its pad of the Drum Rack, and
+            // a row whose pad is empty reads as its note.
+            const auto padName = session.patternNoteName(pitch);
+            const bool namedDrum = padName.has_value();
             g.setColour(juce::Colour(namedDrum ? 0xff3a3325 : black ? 0xff15191e : 0xff30373e));
             g.fillRect(key.reduced(0.0f, 1.0f));
             if (labelEvery > 0)
             {
                 g.setColour(juce::Colour(namedDrum ? 0xffffc16a : 0xffbac2ca));
-                drawSnappedText(g, drumLaneName(pitch), key.toNearestInt(), juce::Justification::centred, true);
+                drawSnappedText(g, padName.value_or(pitchName(pitch)), key.toNearestInt(),
+                                juce::Justification::centred, true);
             }
             continue;
         }
@@ -70,10 +73,9 @@ void StepGrid::paintKeyboard(juce::Graphics& g)
         if (labelEvery == 0 || black || (labelEvery == 12 && pitchClassOf(pitch) != 0))
             continue;
         g.setColour(juce::Colour(pitchClassOf(pitch) == 0 ? 0xff2f353c : 0xff70767d));
-        // Middle C is C3 here, matching drumLaneName and Forge's keyboard — see
-        // StepGridInternal.h for why the three of them have to agree.
-        drawSnappedText(g, juce::MidiMessage::getMidiNoteName(pitch, true, true, 3),
-                        key.reduced(3.0f, 0.0f).toNearestInt(), juce::Justification::centredRight);
+        // Middle C is C3 here, matching the drum rows and Forge's keyboard —
+        // see StepGridInternal.h for why they have to agree.
+        drawSnappedText(g, pitchName(pitch), key.reduced(3.0f, 0.0f).toNearestInt(), juce::Justification::centredRight);
     }
 }
 

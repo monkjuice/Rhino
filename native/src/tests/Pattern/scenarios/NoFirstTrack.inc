@@ -40,7 +40,7 @@
             require(stack.patternInstrumentForTrack(0) != nullptr
                     && stack.patternInstrumentForTrack(0)->getPluginType() == te::FourOscPlugin::xmlTypeName
                     && stack.patternInstrumentForTrack(2) != nullptr
-                    && stack.patternInstrumentForTrack(2)->getPluginType() == DrumDevice::xmlTypeName,
+                    && stack.patternInstrumentForTrack(2)->getPluginType() == DrumRackDevice::xmlTypeName,
                     "Reopening gives every track back its own instrument, whichever is first");
             require(midiClipsOnAudioTracks() == 0, "Reopening puts no MIDI clip on an audio track");
 

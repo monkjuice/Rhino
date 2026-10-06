@@ -21,6 +21,13 @@ bool hasPresets(const juce::String& deviceId)
 
 void DeviceEditorPanel::showPresetMenu()
 {
+    // A Drum Rack's presets are its kits, which carry its pads' sounds as
+    // well as its knobs.
+    if (face == Face::DrumRack)
+    {
+        showDrumKitMenu();
+        return;
+    }
     juce::PopupMenu menu;
     menu.addSectionHeader(deviceName.toUpperCase() + " PRESETS");
     std::vector<juce::File> files;
@@ -72,40 +79,52 @@ void DeviceEditorPanel::showPresetMenu()
 
 void DeviceEditorPanel::askToSavePreset()
 {
-    auto* window = new juce::AlertWindow("Save preset", "A name for this " + deviceName + " preset:",
-                                         juce::MessageBoxIconType::NoIcon, this);
-    window->addTextEditor("name", deviceName);
+    askToSaveFile("preset", "A name for this " + deviceName + " preset:", deviceName,
+                  ContentLibrary::userPresets().getChildFile(deviceId), DevicePreset::extension,
+                  [this] (const juce::File& file) { savePreset(file); });
+}
+
+// Asks for a name, asks again before replacing a file of that name, and saves.
+// Shared by a device's presets, a Drum Rack's kits and its drum presets, which
+// are all the person's own files in a folder of their own.
+void DeviceEditorPanel::askToSaveFile(const juce::String& noun, const juce::String& prompt,
+                                      const juce::String& suggestedName, const juce::File& folder,
+                                      const juce::String& extension, std::function<void(const juce::File&)> save)
+{
+    auto* window = new juce::AlertWindow("Save " + noun, prompt, juce::MessageBoxIconType::NoIcon, this);
+    window->addTextEditor("name", suggestedName);
     window->addButton("Save", 1, juce::KeyPress(juce::KeyPress::returnKey));
     window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
     window->enterModalState(true, juce::ModalCallbackFunction::create(
-        [safe = juce::Component::SafePointer<DeviceEditorPanel>(this), window, id = deviceId] (int result)
+        [safe = juce::Component::SafePointer<DeviceEditorPanel>(this), window, noun, folder, extension,
+         save = std::move(save)] (int result)
         {
             if (result != 1 || safe == nullptr)
                 return;
             const auto name = juce::File::createLegalFileName(window->getTextEditorContents("name").trim());
             if (name.isEmpty())
             {
-                if (safe->status) safe->status("A preset needs a name.");
+                if (safe->status) safe->status("A " + noun + " needs a name.");
                 return;
             }
-            const auto file = ContentLibrary::userPresets().getChildFile(id).getChildFile(name + DevicePreset::extension);
+            const auto file = folder.getChildFile(name + extension);
             if (!file.existsAsFile())
             {
-                safe->savePreset(file);
+                save(file);
                 return;
             }
             juce::AlertWindow::showAsync(juce::MessageBoxOptions()
                                              .withIconType(juce::MessageBoxIconType::QuestionIcon)
-                                             .withTitle("Replace preset?")
-                                             .withMessage("You already have a preset called " + name + ". Replace it?")
+                                             .withTitle("Replace " + noun + "?")
+                                             .withMessage("You already have a " + noun + " called " + name + ". Replace it?")
                                              .withButton("Replace")
                                              .withButton("Cancel")
                                              .withAssociatedComponent(safe.getComponent()),
-                                         [safe, file] (int choice)
+                                         [safe, file, save] (int choice)
                                          {
                                              // The first button answers 1.
                                              if (choice == 1 && safe != nullptr)
-                                                 safe->savePreset(file);
+                                                 save(file);
                                          });
         }), true);
 }

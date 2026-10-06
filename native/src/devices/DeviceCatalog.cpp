@@ -1,5 +1,5 @@
 #include "DeviceCatalog.h"
-#include "instruments/DrumDevice.h"
+#include "instruments/DrumRackDevice.h"
 #include "instruments/RhinoFmDevice.h"
 #include "audio/UtilityDevice.h"
 #include "audio/RhinoSpaceDevice.h"
@@ -43,11 +43,13 @@ std::vector<DeviceDescriptor> buildCatalog()
          .kind = DeviceKind::Instrument, .category = "Synths", .description = "Three-oscillator Forge synth",
          .colour = 0xff3a9aa9, .browsable = true, .external = true});
 
-    // The drum rack is reached through its kits, which the browser lists
-    // instead of the bare device, so it is not browsable itself.
-    add({.id = "Drums", .typeName = DrumDevice::xmlTypeName, .displayName = "Rhino Drums",
-         .kind = DeviceKind::Instrument, .category = "Drum Rack", .description = "Sample drum rack",
-         .colour = 0xff738044, .create = factory<DrumDevice>()});
+    // Keeps the id the drum instrument it replaced had, so Instrument::Drums,
+    // the drum patterns and the note editor's drum rows still name it. The
+    // browser offers it blank at the top of Drums, with its kits below.
+    add({.id = "Drums", .typeName = DrumRackDevice::xmlTypeName, .displayName = "Drum Rack",
+         .kind = DeviceKind::Instrument, .category = "Drum Rack",
+         .description = "Sixteen pads of samples and synthesised drums",
+         .colour = 0xff9bbf4a, .browsable = true, .create = factory<DrumRackDevice>()});
 
     // ---- Audio FX ----------------------------------------------------------
     // Keeps the id the Tracktion four-band EQ had: presets, browser drops

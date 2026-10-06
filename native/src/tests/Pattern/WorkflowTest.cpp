@@ -4,7 +4,7 @@
 #include "audio/UtilityDevice.h"
 #include "audio/RhinoBloomDevice.h"
 #include "audio/RhinoSpaceDevice.h"
-#include "instruments/DrumDevice.h"
+#include "instruments/DrumRackDevice.h"
 #include "midi/RhinoArpDevice.h"
 #include "DeviceRackTest.h"
 #include "../../StepGrid.h"
@@ -27,6 +27,8 @@ int runPatternTest()
         };
         scenario("device rack");
         runPatternDeviceRackTest();
+        scenario("drum rack face");
+        runDrumRackFaceTest();
         scenario("no track is first");
        #include "scenarios/NoFirstTrack.inc"
         Session session;

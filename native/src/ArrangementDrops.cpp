@@ -23,7 +23,8 @@ bool isSupportedAudioFile(const juce::File& file)
 // Nothing is returned for an item that does not land on a lane at all.
 std::optional<Session::TrackType> trackTypeForDropKind(const juce::String& kind)
 {
-    if (kind == "preset" || kind == "instrument" || kind == "midi-effect" || kind == "drumkit")
+    if (kind == "preset" || kind == "instrument" || kind == "midi-effect" || kind == "drumkit"
+        || kind == "drum-preset")
         return Session::TrackType::midi;
     if (kind == "sample" || kind == "file" || kind == "effect")
         return Session::TrackType::audio;
@@ -62,6 +63,22 @@ void Arrangement::filesDropped(const juce::StringArray& files, int x, int y)
     for (const auto& path : files)
         if (const auto file = juce::File(path); isSupportedAudioFile(file))
             audio.push_back(file);
+    // A drum track takes each file onto its next empty pad, as it takes a
+    // sample from the browser.
+    if (session.trackHasDrumRack(targetTrack))
+    {
+        for (const auto& file : audio)
+            if (const auto result = session.addDrumSound(file, targetTrack); result.failed())
+            {
+                if (status) status(result.getErrorMessage());
+                return;
+            }
+        if (status && !audio.empty())
+            status("Added " + (audio.size() == 1 ? audio.front().getFileNameWithoutExtension()
+                                                 : juce::String(static_cast<int>(audio.size())) + " sounds")
+                   + " to the Drum Rack on " + session.trackName(targetTrack));
+        return;
+    }
     // The lane under the pointer is the lane they land on, end to end from
     // the drop point. Nudging a drop off track 0 used to hide that a MIDI lane
     // takes no audio by quietly using the next lane down instead.
@@ -194,14 +211,29 @@ juce::Result Arrangement::applyBrowserDrop(const juce::String& description, int 
 
     if (kind == "drumkit")
     {
-        const auto kit = drumKitFromId(id);
-        if (!kit) return juce::Result::fail("That browser item cannot be inserted here.");
+        const auto kit = browserDropKitFile(description);
+        if (kit == juce::File()) return juce::Result::fail("That browser item cannot be inserted here.");
         if (track < 0) return juce::Result::fail("Drop drum kits on a track.");
-        const auto result = session.addDrumKit(*kit, track);
+        const auto result = session.addDrumKit(kit, track);
         if (result.failed()) return result;
         selectTrack(track);
         if (status) status("Track " + juce::String(track + 1) + " now runs " + session.trackName(track)
                            + ". Double-click the lane to add a clip.");
+        return juce::Result::ok();
+    }
+
+    // A drum sound on a lane fills the first empty pad of the lane's Drum
+    // Rack, bringing a blank rack with it when the track has none.
+    if (kind == "drum-preset")
+    {
+        const auto sound = browserDropDrumPresetFile(description);
+        if (sound == juce::File()) return juce::Result::fail("That browser item cannot be inserted here.");
+        if (track < 0) return juce::Result::fail("Drop drum sounds on a track.");
+        const auto result = session.addDrumSound(sound, track);
+        if (result.failed()) return result;
+        selectTrack(track);
+        if (status) status("Added " + sound.getFileNameWithoutExtension() + " to the Drum Rack on "
+                           + session.trackName(track));
         return juce::Result::ok();
     }
 
@@ -238,6 +270,16 @@ juce::Result Arrangement::applyBrowserDrop(const juce::String& description, int 
         // Any track index is offered: importAudioAt is what knows an audio
         // clip cannot share a track with an instrument, and says so.
         if (track < 0) return juce::Result::fail("Drop audio on a track.");
+        // A drum track takes a sample onto its next empty pad instead.
+        if (session.trackHasDrumRack(track))
+        {
+            const auto result = session.addDrumSound(file, track);
+            if (result.failed()) return result;
+            selectTrack(track);
+            if (status) status("Added " + file.getFileNameWithoutExtension() + " to the Drum Rack on "
+                               + session.trackName(track));
+            return juce::Result::ok();
+        }
         const auto result = session.importAudioAt(file, track, startSeconds);
         if (result.failed()) return result;
         selectTrack(track);

@@ -12,7 +12,7 @@ add_library(RhinoDevices STATIC
     DeviceCatalog.cpp
     sdk/NativeParameter.cpp
     sdk/NativeDevice.cpp
-    instruments/DrumDevice.cpp
+    instruments/DrumRackDevice.cpp
     instruments/RhinoFmDevice.cpp
     audio/UtilityDevice.cpp
     audio/RhinoSpaceDevice.cpp
@@ -22,7 +22,7 @@ add_library(RhinoDevices STATIC
     audio/VocoderDevice.cpp
     midi/RhinoArpDevice.cpp)
 # Only the devices/ root is public, so an include names the kind it wants:
-# #include "instruments/DrumDevice.h".
+# #include "instruments/DrumRackDevice.h".
 target_include_directories(RhinoDevices PUBLIC .)
 target_link_libraries(RhinoDevices
     PUBLIC

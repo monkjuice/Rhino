@@ -3,11 +3,11 @@
 #include "DeviceIds.h"
 // Session's public header reaches the device library through its catalog
 // only. These are included here, in the private header, because the Session
-// implementation genuinely uses them: it inserts a Utility, sets a drum kit,
-// and reads what a native device declares about its controls. Nothing outside
-// Session's own .cpp files sees this.
+// implementation genuinely uses them: it inserts a Utility, fills a Drum
+// Rack's pads, and reads what a native device declares about its controls.
+// Nothing outside Session's own .cpp files sees this.
 #include "audio/UtilityDevice.h"
-#include "instruments/DrumDevice.h"
+#include "instruments/DrumRackDevice.h"
 #include "sdk/NativeDevice.h"
 
 // Shared internals of the Session implementation.
@@ -149,7 +149,15 @@ void removeDeviceLanes(juce::ValueTree owner, const te::Plugin&, juce::UndoManag
 bool hasActiveTrackAutomation(te::Edit& edit, Session::DeviceTarget target);
 te::Plugin* findPlugin(te::AudioTrack& track, const juce::String& type);
 te::FourOscPlugin* findFourOsc(te::AudioTrack& track);
-DrumDevice* findDrumDevice(te::AudioTrack& track);
+DrumRackDevice* findDrumRack(te::AudioTrack& track);
+// A drum pattern on a blank rack would play nothing, so the rack takes the
+// kit the patterns were written for. In SessionDrums.cpp.
+void loadDefaultDrumKit(DrumRackDevice&);
+// A drum clip moved or pasted onto another track brings its sounds: the kit of
+// the Drum Rack it came from, which a rack that arrives blank takes. A rack
+// already holding sounds keeps them. In SessionDrums.cpp.
+std::optional<DrumKit> drumKitOf(te::AudioTrack&);
+void fillBlankDrumRack(te::AudioTrack&, const DrumKit&);
 // The instrument a MIDI clip carries when it is moved or pasted onto another
 // track: whatever its own track plays, bypassed or not, by catalog entry so a
 // device with no Session::Instrument value is carried too. Null for a track

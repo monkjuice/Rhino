@@ -232,10 +232,10 @@ te::FourOscPlugin* findFourOsc(te::AudioTrack& track)
     return dynamic_cast<te::FourOscPlugin*>(findPlugin(track, te::FourOscPlugin::xmlTypeName));
 }
 
-DrumDevice* findDrumDevice(te::AudioTrack& track)
+DrumRackDevice* findDrumRack(te::AudioTrack& track)
 {
     for (auto* plugin : track.pluginList)
-        if (auto* drums = dynamic_cast<DrumDevice*>(plugin))
+        if (auto* drums = dynamic_cast<DrumRackDevice*>(plugin))
             return drums;
     return nullptr;
 }

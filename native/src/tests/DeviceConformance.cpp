@@ -1,4 +1,6 @@
 #include "../Session.h"
+#include "ContentLibrary.h"
+#include "instruments/DrumRackDevice.h"
 #include "sdk/NativeDevice.h"
 #include <algorithm>
 #include <array>
@@ -467,6 +469,21 @@ void setRandomly(te::Plugin& plugin, juce::Random& random)
     }
 }
 
+// A new Drum Rack is blank and plays nothing at all, which would pass the
+// checks that listen for trouble and fail every one that listens for a note.
+// So it is held to the standard with pads on the notes the chord strikes:
+// three synthesised drums and a sample.
+void prime(te::Plugin& plugin)
+{
+    if (auto* drums = dynamic_cast<DrumRackDevice*>(&plugin))
+    {
+        drums->setPadSynth(0, DrumModel::Kick);
+        drums->setPadSynth(5, DrumModel::Snare);
+        drums->setPadSynth(10, DrumModel::ClosedHat);
+        drums->setPadSample(12, ContentLibrary::file("Samples/TR808/TR808Kick.wav"));
+    }
+}
+
 // Each check answers an empty string for a pass, or what went wrong.
 using Check = std::function<juce::String()>;
 
@@ -478,6 +495,7 @@ void conform(Session& session, const DeviceDescriptor& descriptor, std::vector<j
     {
         auto plugin = edit.getPluginCache().createNewPlugin(descriptor.typeName, {});
         require(plugin != nullptr, descriptor.id + " is created from its type name");
+        prime(*plugin);
         return plugin;
     };
     const auto audio = descriptor.kind != DeviceKind::MidiEffect;

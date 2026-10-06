@@ -189,3 +189,10 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/device-rack.md (faces chosen by catalog id; the generated face for SDK devices and how it lays out)
 - updated: pages/adding-a-device.md (a device on the SDK gets a generated face; name controls in full)
 - updated: pages/native-device-standard.md (generated faces done; the undo-staleness and discrete-step bugs they found; remaining steps)
+
+## [2026-10-05] update | Rhino FM's face: operator tabs, routing diagram, waveform
+- updated: pages/rhino-fm.md (carriers and modulators; the face's tabs, diagram and picture; what they cost; the picture's tests)
+- updated: pages/native-device-standard.md (tab groups and describe/DeviceDisplay on the SDK; the undo race on a removed value; stale 'not built yet' corrected)
+- updated: pages/adding-a-device.md (tab groups and a described display)
+- updated: pages/device-rack.md (tabs, the display, click and repaint behaviour)
+- updated: index.md (Rhino FM summary)

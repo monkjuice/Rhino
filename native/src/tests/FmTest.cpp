@@ -2,6 +2,7 @@
 #include "FmEngine.h"
 #include "instruments/RhinoFmDevice.h"
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <functional>
 #include <stdexcept>
@@ -398,8 +399,70 @@ void checkNyquistGuard()
     require(peakFor(1.0f) > 0.01f, "C8 at ratio 1 does not sound");
 }
 
-// The device is a shell: its controls reach the engine, and the bottom of the
-// Output knob is silence.
+// The face's picture is the engine playing, so it is measured the way sound
+// is. Over exactly two cycles a sine puts all its energy in the second bin of
+// a transform, and anything brighter spreads it over the bins above.
+void checkPicture()
+{
+    using Picture = std::array<float, FmEngine::pictureLength>;
+    const auto energy = [] (const Picture& points)
+    {
+        auto sum = 0.0;
+        for (const auto point : points)
+            sum += static_cast<double>(point) * point;
+        return sum;
+    };
+    // The share of the energy that is the note's own fundamental.
+    const auto fundamentalShare = [&energy] (const Picture& points)
+    {
+        constexpr auto count = static_cast<int>(FmEngine::pictureLength);
+        auto real = 0.0, imaginary = 0.0;
+        for (int i = 0; i < count; ++i)
+        {
+            real += points[static_cast<size_t>(i)] * std::cos(2.0 * pi * 2.0 * i / count);
+            imaginary -= points[static_cast<size_t>(i)] * std::sin(2.0 * pi * 2.0 * i / count);
+        }
+        const auto total = energy(points);
+        return total > 0.0 ? 2.0 * (real * real + imaginary * imaginary) / (count * total) : 0.0;
+    };
+    Picture peak {}, held {};
+
+    // A lone carrier: two cycles of a sine at the loudness a played note has,
+    // and half as tall when it holds at half sustain.
+    auto settings = plain();
+    settings.ops[0].level = 1.0f;
+    settings.ops[0].sustain = 0.5f;
+    FmEngine::picture(settings, peak.data(), held.data());
+    require(fundamentalShare(peak) > 0.999, "a lone carrier's picture is not two cycles of a sine: "
+                                                + describe(fundamentalShare(peak)) + " of it is the fundamental");
+    const auto wantedRms = FmEngine::headroom / FmEngine::carrierCount(settings.algorithm) / std::sqrt(2.0);
+    const auto peakRms = std::sqrt(energy(peak) / FmEngine::pictureLength);
+    require(std::abs(peakRms - wantedRms) < 0.01 * wantedRms,
+            "a lone carrier's picture has an RMS of " + describe(peakRms, 5) + ", a note has " + describe(wantedRms, 5));
+    const auto heldRatio = std::sqrt(energy(held) / energy(peak));
+    require(std::abs(heldRatio - 0.5) < 0.01, "half sustain draws the held cycle " + describe(heldRatio) + " as tall");
+
+    // A modulator that dies away: at the peak it is at full depth, and once
+    // held it is gone and the cycle is a sine again. At ratio 4 no sideband
+    // lands on the fundamental, so the fundamental keeps J0(beta) of the
+    // amplitude and J0(beta) squared of the energy.
+    settings = plain();
+    settings.algorithm = 0;
+    settings.ops[0].level = 1.0f;
+    settings.ops[1].level = 0.45f;
+    settings.ops[1].ratio = 4.0f;
+    settings.ops[1].sustain = 0.0f;
+    FmEngine::picture(settings, peak.data(), held.data());
+    const auto beta = 2.0 * pi * FmEngine::modulationCycles * 0.45 * 0.45;
+    const auto wantedShare = std::pow(std::cyl_bessel_j(0.0, beta), 2.0);
+    require(std::abs(fundamentalShare(peak) - wantedShare) < 0.02 * wantedShare,
+            "at beta " + describe(beta, 3) + " the peak picture keeps " + describe(fundamentalShare(peak))
+                + " of its energy in the fundamental, Bessel says " + describe(wantedShare));
+    require(fundamentalShare(held) > 0.999, "with its modulator gone the held picture is not a sine");
+}
+
+// The device is a shell: its controls reach the engine, the face is told the
+// routing the engine has, and the bottom of the Output knob is silence.
 void checkDevice(Session& session)
 {
     auto plugin = session.edit->getPluginCache().createNewPlugin(RhinoFmDevice::xmlTypeName, {});
@@ -410,6 +473,41 @@ void checkDevice(Session& session)
     require(parameters[0]->getAllLabels().size() == FmEngine::algorithms
                 && parameters[0]->getAllLabels()[0] == FmEngine::algorithmName(0),
             "the algorithm chooser names every routing");
+
+    auto* device = dynamic_cast<RhinoFmDevice*>(plugin.get());
+    const auto described = [device]
+    {
+        DeviceDisplay display;
+        device->describe(display);
+        return display;
+    };
+    const auto links = [] (const DeviceDisplay& display)
+    {
+        juce::StringArray wires;
+        for (const auto& link : display.links)
+            wires.add(juce::String(link.from + 1) + ">" + juce::String(link.to + 1));
+        return wires.joinIntoString(" ");
+    };
+    auto display = described();
+    require(display.blocks.size() == FmEngine::operators && display.traces.size() == 2
+                && display.traces[0].points.size() == FmEngine::pictureLength,
+            "the face is told four operators and two traces");
+    require(display.blocks[0].output && !display.blocks[1].output && display.blocks[2].output && !display.blocks[3].output
+                && display.blocks[0].role == "carrier" && display.blocks[1].role == "modulates 1",
+            "in 4>3 | 2>1 the carriers are 1 and 3, and 2 modulates 1");
+    require(links(display) == "2>1 4>3", "4>3 | 2>1 is drawn as " + links(display));
+    auto peakEnergy = 0.0f;
+    for (const auto point : display.traces[0].points)
+        peakEnergy += point * point;
+    require(peakEnergy > 0.0f, "the default patch draws a silent peak");
+    plugin->getAutomatableParameterByID("algorithm")->setParameter(5.0f, juce::sendNotificationSync);
+    plugin->getAutomatableParameterByID("feedback")->setParameter(0.5f, juce::sendNotificationSync);
+    display = described();
+    require(links(display) == "4>1 4>2 4>3 4>4" && display.blocks[3].role == "modulates 1, 2 and 3, feeds back",
+            "4>(3|2|1) with feedback is drawn as " + links(display) + ", operator 4 said to "
+                + display.blocks[3].role);
+    plugin->getAutomatableParameterByID("algorithm")->setParameter(4.0f, juce::sendNotificationSync);
+    plugin->getAutomatableParameterByID("feedback")->setParameter(0.0f, juce::sendNotificationSync);
 
     const auto peakWithOutput = [&plugin] (float outputDb)
     {
@@ -454,6 +552,18 @@ void reportCost()
     const auto seconds = juce::Time::highResolutionTicksToSeconds(juce::Time::getHighResolutionTicks() - start);
     juce::Logger::writeToLog("Rhino FM: sixteen voices took " + juce::String(seconds / 2.0 * 100.0, 2)
                              + "% of real time at 48 kHz");
+
+    // The face asks for a new picture on every frame a knob is dragged.
+    std::array<float, FmEngine::pictureLength> peak {}, held {};
+    constexpr int pictures = 200;
+    const auto pictureStart = juce::Time::getHighResolutionTicks();
+    for (int i = 0; i < pictures; ++i)
+    {
+        settings.ops[3].level = 0.2f + 0.001f * static_cast<float>(i);
+        FmEngine::picture(settings, peak.data(), held.data());
+    }
+    const auto pictureSeconds = juce::Time::highResolutionTicksToSeconds(juce::Time::getHighResolutionTicks() - pictureStart);
+    juce::Logger::writeToLog("Rhino FM: a face picture took " + juce::String(pictureSeconds / pictures * 1.0e6, 1) + " us");
 }
 }
 
@@ -469,6 +579,7 @@ void checkFmDsp(Session& session)
     checkPolyphonyAndPedal();
     checkMonoGlide();
     checkNyquistGuard();
+    checkPicture();
     checkDevice(session);
     reportCost();
 }

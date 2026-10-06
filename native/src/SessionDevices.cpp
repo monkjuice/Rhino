@@ -395,12 +395,21 @@ std::vector<Session::DeviceParameter> Session::deviceParameters(int track, int s
         {
             const auto& spec = native->parameterSpec(currentIndex);
             exposed.section = spec.section;
+            exposed.tabGroup = spec.tabGroup;
             exposed.toggle = spec.toggle;
             exposed.choices = spec.choices;
         }
         parameters.push_back(std::move(exposed));
     }
     return parameters;
+}
+
+DeviceDisplay Session::deviceDisplay(int track, int slot) const
+{
+    DeviceDisplay display;
+    if (auto* native = dynamic_cast<NativeDevice*>(devicePlugin(track, slot)))
+        native->describe(display);
+    return display;
 }
 
 juce::Result Session::beginDeviceParameterGesture(int track, int slot, int parameterIndex)

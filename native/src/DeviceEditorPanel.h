@@ -70,6 +70,22 @@ private:
     int generatedParameterForComponent(const juce::Component*) const;
     bool isKnob(int parameter) const;
     juce::Colour faceAccent() const;
+    // Sections of one tab group take turns in one place. Which one shows is
+    // remembered against the device, not the panel, because the rack builds
+    // its panels afresh whenever the chain or the track changes.
+    juce::String selectedTab(const juce::String& tabGroup) const;
+    void selectTab(const juce::String& tabGroup, const juce::String& section);
+    bool onHiddenTab(int parameter) const;
+    bool handleGeneratedClick(const juce::MouseEvent&);
+    juce::String getTooltip() override;
+    // What a device describes beside its controls (DeviceDisplay): a diagram
+    // of blocks and a set of traces. It stands after the face's first group.
+    // Laid out and drawn in DeviceEditorPanelDisplay.cpp.
+    int displayWidth() const;
+    void layoutDisplay(juce::Rectangle<int>, int titleHeight);
+    void paintDisplay(juce::Graphics&);
+    int displayBlockAt(juce::Point<float>) const;
+    juce::String roleOfSection(const juce::String& section) const;
     // Sets a parameter as one undo step, the way a click on a chooser or a
     // switch does, and Reset to default.
     void writeParameter(int parameter, float value);
@@ -152,10 +168,21 @@ private:
     juce::OwnedArray<juce::TextButton> generatedToggles;
     struct GeneratedSection
     {
-        juce::String title;
+        juce::String title;         // for a tab group, the section showing
         juce::Rectangle<int> area;
+        // A tab group's name and its tabs, each a section and where it is.
+        juce::String tabGroup;
+        std::vector<std::pair<juce::String, juce::Rectangle<int>>> tabs;
     };
     std::vector<GeneratedSection> generatedSections;
+    // The device's own engine id, which a tab choice is remembered under.
+    juce::String deviceKey;
+    DeviceDisplay display;
+    juce::Rectangle<int> displayArea, diagramArea, traceArea, captionArea;
+    std::vector<juce::Rectangle<float>> displayBlocks;
+    std::vector<juce::Path> displayTraces;
+    float displayBusY = 0.0f;
+    int displaySelected = -1;   // the block whose section is showing
     // What the meter last drew, so an idle device asks for no frames at all.
     float lastDrawnCents = 0.0f, lastDrawnNote = 0.0f;
     int lastDrawnBand = -2;

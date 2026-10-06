@@ -221,7 +221,8 @@ void checkProbeDeclarations(te::Edit& edit)
     undo.beginNewTransaction();
     require(near(device.glide.value(), 0.9f), "A control takes a new value");
     undo.undo();
-    require(near(device.glide.value(), 0.5f), "Undoing it reaches the engine parameter at once");
+    require(!device.state.hasProperty("glide") && near(device.glide.value(), 0.5f),
+            "Undoing it reaches the engine parameter at once, even by removing the stored value");
     undo.redo();
     require(near(device.glide.value(), 0.9f), "and so does redoing it");
 }

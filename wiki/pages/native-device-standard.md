@@ -36,7 +36,9 @@ Agreed on 2026-10-05:
   A device that cannot pass a check yet goes in the runner's `pending` table with the reason. A line that starts passing fails the run until it is deleted (commit `0806c97`).
 - **Presets are `.rnd` files; devices are not files.** A device stays code, kept apart from the core. A `.rnd` is a preset of one device: XML holding the device's id and its settings, so a new patch, kit or arp feel needs no code. In the browser each device is a folder of its presets, such as Rhino Arp > `superCreativeArpeggiation.rnd`. Dragging the folder adds the device at its defaults, and dragging a preset adds it with that preset's settings. Not built yet. This was first written down as a "device file" and corrected the same day.
 - **What decides between options:** top performance, testability and maintainability.
-- **Generated faces by default.** The rack builds a face from the declared controls. A device gets a hand-built face only when it has something true to draw from its DSP. Not built yet.
+- **Generated faces by default.** The rack builds a face from the declared controls. A device gets a hand-built face only when it has something true to draw from its DSP. Short of that, it can do two things on the SDK and keep the generated face:
+  - declare sections that share a tab group, shown one at a time;
+  - describe a display: traces it plays, and a diagram of blocks and links (`DeviceDisplay`).
 - **No compatibility for now.** Devices will change a lot in the short term, so device files, like `.rhinoedit` documents, are owed nothing ([No backward compatibility for .rhinoedit](no-rhinoedit-back-compat.md)). The files keep their version attributes, so the append-only rule can be switched on before a production release. Revisit it then.
 - Choosers are automatable by default. A device file never embeds samples.
 
@@ -56,6 +58,13 @@ Rhino FM, the new synth, is the first instrument on the base: a catalog entry an
 Faces are generated: a device on the SDK without a face of its own gets one from its declarations, and faces are chosen by catalog id rather than engine type ([Device rack and device editors](device-rack.md)). Rhino Space lost its hand-drawn "space field", which drew nothing the DSP computes. Building the face turned up two SDK bugs, both fixed:
 - An undo reached the engine parameter only on a later message, so the rack showed the value just undone. A native device now updates a control the moment its stored value changes.
 - A discrete knob always stepped by 1, so Rhino FM's ratio could not reach its half steps. `DeviceParameter` now carries the declared interval.
+
+The first fix still had a race, fixed when Rhino FM's face got its tabs and display. An undo that *removes* a stored value, taking a control back to a default that was never written, could show the undone value. The cached value hears of the change through its own listener, and the device's could run first. The device now refreshes the cache before reading it. The probe's undo check failed in every parallel CTest run before this fix and passed in every sequential one.
+
+A generated face can now do more than lay out knobs, still without naming any device:
+- **Tab groups.** `.section("Op 1", "Operators")` puts sections that share a group in one place, one at a time. The open tab is remembered per device for the session.
+- **A display.** `NativeDevice::describe(DeviceDisplay&)` is called on the message thread and fills plain data (`native/src/core/DeviceDisplay.h`): traces, and blocks with links between them. The face lays out the diagram from the links alone, with outputs on the bottom row wired to a bus and every other block above what it feeds. It draws the traces at one shared scale.
+- **Picturing without racing.** A device draws what it plays with an engine of its own, never the one on the audio thread. Rhino FM is the example: its operators are tabs, and its display is the routing and two cycles of the note ([Rhino FM](rhino-fm.md)).
 
 Still to do, one step per commit:
 

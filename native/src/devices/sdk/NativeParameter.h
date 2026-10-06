@@ -32,6 +32,9 @@ struct ParamSpec
     juce::String name;
     // Groups controls on a generated face. Empty is the device's main row.
     juce::String section;
+    // Sections that name the same tab group share one place on a generated
+    // face and are shown one at a time, as tabs. Empty stands on its own.
+    juce::String tabGroup;
     float minimum = 0.0f;
     float maximum = 1.0f;
     float defaultValue = 0.0f;
@@ -99,7 +102,7 @@ public:
     ParamBuilder& unit(ParamUnit);
     ParamBuilder& choices(juce::StringArray, int defaultChoice = 0);
     ParamBuilder& toggle(bool defaultOn = false);
-    ParamBuilder& section(juce::String);
+    ParamBuilder& section(juce::String name, juce::String tabGroup = {});
     ParamBuilder& smoothing(float seconds);
     ParamBuilder& format(std::function<juce::String(float)>);
 

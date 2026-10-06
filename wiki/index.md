@@ -38,7 +38,7 @@ The catalog of this wiki: every page, grouped by type, one line each (`- [Title]
 - [Project files (.rhinoedit)](pages/project-files.md) — A .rhinoedit is the Tracktion edit's XML plus Rhino's own properties, saved from a snapshot on a worker and opened off-thread.
 - [Recording and the count-in](pages/recording.md) — Arms tracks, not inputs, lets each take win the ground it lands on, and counts in with Rhino's own click while the playhead stands still.
 - [Rhino EQ](pages/rhino-eq.md) — Eight-band EQ whose drawn curve comes from the same coefficients as the audio, over a spectrum computed off the audio thread.
-- [Rhino FM](pages/rhino-fm.md) — A four-operator FM synth in eight routings, written on the device SDK, whose modulation index is checked against Bessel functions.
+- [Rhino FM](pages/rhino-fm.md) — A four-operator FM synth in eight routings, written on the device SDK, whose modulation index is checked against Bessel functions and whose face shows its operators as tabs, its carriers in a routing diagram, and the waveform it makes.
 - [Rhino Forge](pages/forge.md) — Rhino's independent wavetable and spectral synth, a VST3 and standalone app built from one JUCE AudioProcessor.
 - [Rhino Tune](pages/rhino-tune.md) — Vocal pitch correction with YIN tracking and PSOLA shifting, real reported latency, and correction smoothed on the offset.
 - [Rhino Vocoder and sidechains](pages/rhino-vocoder.md) — A channel vocoder whose carrier arrives as a sidechain from another track, and how Rhino routes a sidechain at all.

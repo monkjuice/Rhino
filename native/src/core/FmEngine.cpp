@@ -125,6 +125,41 @@ const char* FmEngine::algorithmName(int algorithm)
     return routingFor(algorithm).name;
 }
 
+void FmEngine::picture(const Settings& source, float* peak, float* held)
+{
+    // 128 samples to a cycle of the note, so the picture is exactly two. At
+    // this rate the taper and the guard both sit far above anything an A4
+    // reaches, even at ratio 16.
+    constexpr int cycle = pictureLength / 2;
+    constexpr double rate = 440.0 * cycle;
+    const auto play = [&source] (bool open, float* out)
+    {
+        auto settings = source;
+        settings.gain = 1.0f;
+        settings.mono = false;
+        for (auto& op : settings.ops)
+        {
+            // With no attack and no decay, every envelope stands where it
+            // will for the rest of the note within two samples.
+            op.attack = 0.0f;
+            op.decay = 0.0f;
+            if (open)
+                op.sustain = 1.0f;
+        }
+        FmEngine engine;
+        engine.prepare(rate);
+        engine.setSettings(settings);
+        engine.noteOn(69, 1.0f);
+        // Four cycles, for operator 4's feedback to settle.
+        std::array<float, cycle * 4> settling {};
+        engine.render(settling.data(), nullptr, static_cast<int>(settling.size()));
+        std::fill(out, out + pictureLength, 0.0f);
+        engine.render(out, nullptr, pictureLength);
+    };
+    play(true, peak);
+    play(false, held);
+}
+
 void FmEngine::prepare(double rate)
 {
     sampleRate = rate > 0.0 ? rate : 48000.0;

@@ -2,6 +2,7 @@
 #include "FmEngine.h"
 #include "sdk/NativeDevice.h"
 #include <array>
+#include <optional>
 
 namespace rhino
 {
@@ -10,11 +11,17 @@ namespace rhino
 // settings and the MIDI into its calls. Its defaults are an electric piano: a
 // pair of stacks, one carrying a 14:1 tine that dies away in a fifth of a
 // second.
+//
+// Its face shows the four operators as tabs, the routing as a diagram in
+// which the carriers -- the operators heard -- are wired to the output, and
+// two cycles of the note the controls make.
 class RhinoFmDevice final : public NativeInstrument
 {
 public:
     inline static const char* xmlTypeName = "rhino.fm.v1";
     explicit RhinoFmDevice(te::PluginCreationInfo info) : NativeInstrument(std::move(info), xmlTypeName) {}
+
+    void describe(DeviceDisplay&) override;
 
 private:
     struct OperatorControls
@@ -27,6 +34,9 @@ private:
     };
     static juce::StringArray algorithmNames();
     OperatorControls operatorControls(int number, OperatorDefaults);
+    // The engine's settings, read from the controls as they stand. Both the
+    // audio thread and the face's picture work from this one reading.
+    FmEngine::Settings currentSettings() const;
 
     void prepare(double rate, int maximumBlockSize) override;
     void clear() override;
@@ -57,6 +67,10 @@ private:
     };
 
     FmEngine engine;
-    FmEngine::Settings settings;
+    // The face's last picture and the settings it was made from. A knob
+    // being dragged asks for a picture every frame; one that changes nothing
+    // is answered from here. Message thread only.
+    std::optional<FmEngine::Settings> pictured;
+    std::array<float, FmEngine::pictureLength> peakPicture {}, heldPicture {};
 };
 }

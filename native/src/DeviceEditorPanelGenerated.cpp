@@ -1,18 +1,22 @@
 #include "DeviceEditorPanel.h"
 #include "Theme.h"
 #include <algorithm>
+#include <map>
 
 // The face a device on the SDK gets when it has none of its own, generated
 // from what its controls declare (Session::DeviceParameter):
 //
 // - Controls group by section, in the order a section first appears, under
 //   its title. A section a device leaves unnamed has no title.
+// - Sections that name the same tab group share one place and show one at a
+//   time, under a row of tabs, so four operators do not make a wall of knobs.
 // - A continuous control is a knob, which steps and skews the way it declares
 //   and goes back to its default on a double-click. A choice is a chooser, and
 //   a toggle is a switch.
-// - A group fills columns two controls tall when the face has several
-//   sections or a long one. Otherwise its controls stand in one row of
-//   larger knobs.
+// - A group fills columns two controls tall when the face has several places
+//   or a long group. Otherwise its controls stand in one row of larger knobs.
+// - Whatever the device describes beside its controls -- a diagram, traces --
+//   stands after the first group (DeviceEditorPanelDisplay.cpp).
 //
 // Nothing here knows a device by name. A new device gets a usable, consistent
 // face from its declarations alone, and draws its own only when it has
@@ -24,6 +28,7 @@ namespace
 constexpr int padding = 6;
 constexpr int sectionGap = 12;
 constexpr int titleHeight = 13;
+constexpr int tabPadding = 9;       // either side of a tab's name
 constexpr int choiceWidth = 116;
 constexpr int compactWidth = 54;    // a knob or a switch, two rows to a column
 constexpr int roomyWidth = 66;      // the same, in a single row
@@ -31,30 +36,51 @@ constexpr int roomyWidth = 66;      // the same, in a single row
 struct Group
 {
     juce::String title;
+    juce::String tabGroup;
     std::vector<int> controls;
 };
 
-std::vector<Group> groupsOf(const std::vector<Session::DeviceParameter>& parameters, int count)
+// What stands in one place on the face: a section, or every section of a tab
+// group, of which one shows at a time.
+struct Block
+{
+    std::vector<Group> sections;
+    bool tabbed() const { return sections.size() > 1; }
+};
+
+std::vector<Block> blocksOf(const std::vector<Session::DeviceParameter>& parameters, int count)
 {
     std::vector<Group> groups;
     for (int i = 0; i < count; ++i)
     {
-        const auto& section = parameters[static_cast<size_t>(i)].section;
-        auto found = std::find_if(groups.begin(), groups.end(), [&section] (const Group& group) { return group.title == section; });
+        const auto& parameter = parameters[static_cast<size_t>(i)];
+        auto found = std::find_if(groups.begin(), groups.end(),
+                                  [&parameter] (const Group& group) { return group.title == parameter.section; });
         if (found == groups.end())
         {
-            groups.push_back({ section, {} });
+            groups.push_back({ parameter.section, parameter.tabGroup, {} });
             found = groups.end() - 1;
         }
         found->controls.push_back(i);
     }
-    return groups;
+    std::vector<Block> blocks;
+    for (auto& group : groups)
+    {
+        auto found = group.tabGroup.isEmpty() ? blocks.end()
+            : std::find_if(blocks.begin(), blocks.end(),
+                           [&group] (const Block& block) { return block.sections.front().tabGroup == group.tabGroup; });
+        if (found != blocks.end())
+            found->sections.push_back(std::move(group));
+        else
+            blocks.push_back({ { std::move(group) } });
+    }
+    return blocks;
 }
 
-int rowsFor(const Group& group, size_t groupCount)
+int rowsFor(const Group& group, size_t blockCount)
 {
     const auto controls = group.controls.size();
-    return controls > 6 || (groupCount > 1 && controls > 3) ? 2 : 1;
+    return controls > 6 || (blockCount > 1 && controls > 3) ? 2 : 1;
 }
 
 int widthOf(const Session::DeviceParameter& parameter, int rows)
@@ -79,9 +105,45 @@ std::vector<int> columnWidths(const Group& group, int rows, const std::vector<Se
     return widths;
 }
 
-bool hasTitles(const std::vector<Group>& groups)
+juce::Font tabFont()
 {
-    return std::any_of(groups.begin(), groups.end(), [] (const Group& group) { return group.title.isNotEmpty(); });
+    return uiFontBold(7.5f);
+}
+
+int tabWidth(const juce::String& section)
+{
+    return juce::GlyphArrangement::getStringWidthInt(tabFont(), section.toUpperCase()) + tabPadding * 2;
+}
+
+// As wide as its widest section, so changing tabs never moves the rest of the
+// face, and never narrower than its row of tabs.
+int blockWidth(const Block& block, size_t blockCount, const std::vector<Session::DeviceParameter>& parameters)
+{
+    auto width = 0, tabs = 0;
+    for (const auto& section : block.sections)
+    {
+        auto columns = 0;
+        for (const auto column : columnWidths(section, rowsFor(section, blockCount), parameters))
+            columns += column;
+        width = std::max(width, columns);
+        tabs += tabWidth(section.title);
+    }
+    return block.tabbed() ? std::max(width, tabs) : width;
+}
+
+bool hasTitles(const std::vector<Block>& blocks)
+{
+    return std::any_of(blocks.begin(), blocks.end(),
+                       [] (const Block& block) { return block.sections.front().title.isNotEmpty(); });
+}
+
+// Every tab choice made this run, by device and tab group. Kept for the life of
+// the app, not saved: which operator is open is how the face was left, not
+// part of the song.
+std::map<juce::String, juce::String>& rememberedTabs()
+{
+    static std::map<juce::String, juce::String> tabs;
+    return tabs;
 }
 }
 
@@ -100,18 +162,55 @@ juce::Colour DeviceEditorPanel::faceAccent() const
     return palette::deviceAccent;
 }
 
+// The section last chosen in a tab group, or else the group's first.
+juce::String DeviceEditorPanel::selectedTab(const juce::String& tabGroup) const
+{
+    juce::String first;
+    auto chosenExists = false;
+    const auto remembered = rememberedTabs().find(deviceKey + "/" + tabGroup);
+    for (const auto& parameter : parameters)
+    {
+        if (parameter.tabGroup != tabGroup)
+            continue;
+        if (first.isEmpty())
+            first = parameter.section;
+        if (remembered != rememberedTabs().end() && parameter.section == remembered->second)
+            chosenExists = true;
+    }
+    return chosenExists ? remembered->second : first;
+}
+
+void DeviceEditorPanel::selectTab(const juce::String& tabGroup, const juce::String& section)
+{
+    if (tabGroup.isEmpty() || selectedTab(tabGroup) == section)
+        return;
+    rememberedTabs()[deviceKey + "/" + tabGroup] = section;
+    styleControls();
+    styleGeneratedControls();
+    resized();
+    repaint();
+}
+
+bool DeviceEditorPanel::onHiddenTab(int parameter) const
+{
+    if (!juce::isPositiveAndBelow(parameter, static_cast<int>(parameters.size())))
+        return false;
+    const auto& control = parameters[static_cast<size_t>(parameter)];
+    return control.tabGroup.isNotEmpty() && control.section != selectedTab(control.tabGroup);
+}
+
 int DeviceEditorPanel::generatedWidth() const
 {
-    const auto groups = groupsOf(parameters, visibleParameterCount());
+    const auto blocks = blocksOf(parameters, visibleParameterCount());
     auto width = padding * 2;
-    for (size_t g = 0; g < groups.size(); ++g)
+    for (size_t g = 0; g < blocks.size(); ++g)
     {
-        const auto rows = rowsFor(groups[g], groups.size());
-        for (const auto column : columnWidths(groups[g], rows, parameters))
-            width += column;
+        width += blockWidth(blocks[g], blocks.size(), parameters);
         if (g > 0)
             width += sectionGap;
     }
+    if (!display.empty())
+        width += displayWidth() + (blocks.empty() ? 0 : sectionGap);
     return std::max(190, width);
 }
 
@@ -150,7 +249,7 @@ void DeviceEditorPanel::styleGeneratedControls()
     {
         auto* choice = generatedChoices[i];
         auto* toggle = generatedToggles[i];
-        if (i >= count)
+        if (i >= count || onHiddenTab(i))
         {
             choice->setVisible(false);
             toggle->setVisible(false);
@@ -201,25 +300,48 @@ void DeviceEditorPanel::styleGeneratedControls()
 void DeviceEditorPanel::layoutGenerated()
 {
     visualArea = {};
+    displayArea = {};
     const auto count = visibleParameterCount();
-    const auto groups = groupsOf(parameters, count);
-    const auto titled = hasTitles(groups);
+    const auto blocks = blocksOf(parameters, count);
+    const auto titled = hasTitles(blocks);
     generatedSections.clear();
     auto x = contentArea.getX() + padding;
     const auto top = contentArea.getY() + (titled ? titleHeight : 0);
     const auto height = contentArea.getBottom() - top;
-    for (size_t g = 0; g < groups.size(); ++g)
+    const auto placeDisplay = [this, &x]
+    {
+        const auto width = displayWidth();
+        layoutDisplay({ x, contentArea.getY(), width, contentArea.getHeight() }, titleHeight);
+        x += width;
+    };
+    if (blocks.empty() && !display.empty())
+        placeDisplay();
+    for (size_t g = 0; g < blocks.size(); ++g)
     {
         if (g > 0)
             x += sectionGap;
-        const auto& group = groups[g];
-        const auto rows = rowsFor(group, groups.size());
+        const auto& block = blocks[g];
+        const auto chosen = block.tabbed() ? selectedTab(block.sections.front().tabGroup) : juce::String();
+        const auto shown = std::find_if(block.sections.begin(), block.sections.end(),
+                                        [&chosen] (const Group& section) { return section.title == chosen; });
+        const auto& group = shown != block.sections.end() ? *shown : block.sections.front();
+        const auto rows = rowsFor(group, blocks.size());
         const auto widths = columnWidths(group, rows, parameters);
         const auto cellHeight = height / rows;
-        auto sectionWidth = 0;
-        for (const auto width : widths)
-            sectionWidth += width;
-        generatedSections.push_back({ group.title, { x, contentArea.getY(), sectionWidth, contentArea.getHeight() } });
+        const auto width = blockWidth(block, blocks.size(), parameters);
+        GeneratedSection placed { group.title, { x, contentArea.getY(), width, contentArea.getHeight() }, {}, {} };
+        if (block.tabbed())
+        {
+            placed.tabGroup = group.tabGroup;
+            auto tabX = x;
+            for (const auto& section : block.sections)
+            {
+                const auto tab = tabWidth(section.title);
+                placed.tabs.push_back({ section.title, { tabX, contentArea.getY(), tab, titleHeight } });
+                tabX += tab;
+            }
+        }
+        generatedSections.push_back(std::move(placed));
 
         auto columnX = x;
         for (size_t k = 0; k < group.controls.size(); ++k)
@@ -245,34 +367,134 @@ void DeviceEditorPanel::layoutGenerated()
                 // than over its caption, which a short cell has no room for.
                 auto* control = parameters[static_cast<size_t>(i)].toggle
                     ? static_cast<juce::Component*>(generatedToggles[i]) : generatedChoices[i];
-                auto row = inner.withSizeKeepingCentre(inner.getWidth(), 22);
-                parameterAutomation[i]->setBounds(row.removeFromRight(16).withSizeKeepingCentre(16, 14));
-                row.removeFromRight(3);
-                control->setBounds(row);
+                auto line = inner.withSizeKeepingCentre(inner.getWidth(), 22);
+                parameterAutomation[i]->setBounds(line.removeFromRight(16).withSizeKeepingCentre(16, 14));
+                line.removeFromRight(3);
+                control->setBounds(line);
             }
         }
-        x += sectionWidth;
+        x += width;
+        if (g == 0 && !display.empty())
+        {
+            x += sectionGap;
+            placeDisplay();
+        }
     }
 }
 
 void DeviceEditorPanel::paintGenerated(juce::Graphics& g)
 {
+    const auto accent = faceAccent();
+    const auto separator = [&g] (int left, const juce::Rectangle<int>& area)
+    {
+        g.setColour(palette::border);
+        g.fillRect(left - sectionGap / 2, area.getY() + 3, 1, area.getHeight() - 6);
+    };
     for (size_t s = 0; s < generatedSections.size(); ++s)
     {
         const auto& section = generatedSections[s];
-        if (s > 0)
-        {
-            g.setColour(palette::border);
-            const auto x = section.area.getX() - sectionGap / 2;
-            g.fillRect(x, section.area.getY() + 3, 1, section.area.getHeight() - 6);
-        }
-        if (section.title.isEmpty())
+        // A knob turning repaints only itself, and its section's titles and
+        // tabs are not worth measuring and drawing again for it.
+        if (!g.clipRegionIntersects(section.area.withTrimmedLeft(-sectionGap)))
             continue;
-        g.setColour(palette::textDim);
-        g.setFont(uiFontBold(7.5f));
-        drawSnappedText(g, section.title.toUpperCase(), section.area.withHeight(titleHeight),
-                        juce::Justification::centredLeft, true);
+        if (s > 0)
+            separator(section.area.getX(), section.area);
+        g.setFont(tabFont());
+        if (section.tabs.empty())
+        {
+            if (section.title.isEmpty())
+                continue;
+            g.setColour(palette::textDim);
+            drawSnappedText(g, section.title.toUpperCase(), section.area.withHeight(titleHeight),
+                            juce::Justification::centredLeft, true);
+            continue;
+        }
+        // The tab showing is lit and underlined. A tab whose section the
+        // display says is heard -- an FM carrier -- carries a dot.
+        for (const auto& [name, area] : section.tabs)
+        {
+            const auto showing = name == section.title;
+            g.setColour(showing ? palette::text : palette::textDim);
+            drawSnappedText(g, name.toUpperCase(), area, juce::Justification::centred);
+            if (showing)
+            {
+                g.setColour(accent);
+                g.fillRect(area.getX() + 3, area.getBottom() - 1, area.getWidth() - 6, 2);
+            }
+            const auto heard = std::any_of(display.blocks.begin(), display.blocks.end(),
+                                           [&name] (const DeviceDisplay::Block& block)
+                                           { return block.output && block.section == name; });
+            if (heard)
+            {
+                g.setColour(accent);
+                g.fillEllipse(static_cast<float>(area.getX()) + 2.0f, static_cast<float>(area.getCentreY()) - 2.0f,
+                              4.0f, 4.0f);
+            }
+        }
     }
+    if (!displayArea.isEmpty())
+    {
+        if (!generatedSections.empty())
+            separator(displayArea.getX(), displayArea);
+        paintDisplay(g);
+    }
+}
+
+// A click on a tab shows its section, and so does a click on a block of the
+// display that names a section in a tab group.
+bool DeviceEditorPanel::handleGeneratedClick(const juce::MouseEvent& event)
+{
+    const auto position = event.getPosition();
+    for (const auto& section : generatedSections)
+        for (const auto& [name, area] : section.tabs)
+            if (area.expanded(0, 2).contains(position))
+            {
+                selectTab(section.tabGroup, name);
+                return true;
+            }
+    if (const auto block = displayBlockAt(position.toFloat()); block >= 0)
+    {
+        const auto& wanted = display.blocks[static_cast<size_t>(block)].section;
+        for (const auto& parameter : parameters)
+            if (parameter.section == wanted && parameter.tabGroup.isNotEmpty())
+            {
+                selectTab(parameter.tabGroup, wanted);
+                return true;
+            }
+    }
+    return false;
+}
+
+juce::String DeviceEditorPanel::roleOfSection(const juce::String& section) const
+{
+    for (const auto& block : display.blocks)
+        if (block.section == section)
+            return block.role;
+    return {};
+}
+
+// The display's blocks and the tabs say what they are when pointed at, which
+// is where a carrier is told from a modulator in words.
+juce::String DeviceEditorPanel::getTooltip()
+{
+    if (face == Face::Generated)
+    {
+        const auto position = getMouseXYRelative();
+        if (const auto block = displayBlockAt(position.toFloat()); block >= 0)
+        {
+            const auto& shown = display.blocks[static_cast<size_t>(block)];
+            return shown.section + (shown.role.isNotEmpty() ? ": " + shown.role : juce::String())
+                 + ". Click to show its controls.";
+        }
+        for (const auto& section : generatedSections)
+            for (const auto& [name, area] : section.tabs)
+                if (area.contains(position))
+                {
+                    const auto role = roleOfSection(name);
+                    return name + (role.isNotEmpty() ? ": " + role : juce::String());
+                }
+    }
+    return SettableTooltipClient::getTooltip();
 }
 
 int DeviceEditorPanel::generatedParameterForComponent(const juce::Component* component) const

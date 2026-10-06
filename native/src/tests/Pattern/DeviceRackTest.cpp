@@ -5,7 +5,9 @@
 #include "audio/AutoTuneDevice.h"
 #include "audio/UtilityDevice.h"
 #include "midi/RhinoArpDevice.h"
+#include <algorithm>
 #include <stdexcept>
+#include <vector>
 
 namespace rhino
 {
@@ -346,11 +348,20 @@ void runPatternDeviceRackTest()
     require(fmPanel != nullptr && fmPanel->face == DeviceEditorPanel::Face::Generated,
             "Rhino FM, on the SDK with no face of its own, gets a generated one");
     fmPanel->setSize(fmPanel->preferredWidth(), DeviceEditorPanel::standardHeight);
-    std::vector<juce::String> sectionTitles;
-    for (const auto& section : fmPanel->generatedSections)
-        sectionTitles.push_back(section.title);
-    require(sectionTitles == std::vector<juce::String> {"Voice", "Op 1", "Op 2", "Op 3", "Op 4"},
-            "A generated face groups controls by the sections the device declares, in order");
+    const auto fmTitles = [&fmPanel]
+    {
+        std::vector<juce::String> titles;
+        for (const auto& section : fmPanel->generatedSections)
+            titles.push_back(section.title);
+        return titles;
+    };
+    require(fmTitles() == std::vector<juce::String> {"Voice", "Op 1"},
+            "A generated face groups controls by section, and a tab group shows its first section");
+    const auto& operatorTabs = fmPanel->generatedSections.back().tabs;
+    require(operatorTabs.size() == 4 && operatorTabs.front().first == "Op 1" && operatorTabs.back().first == "Op 4",
+            "Rhino FM's four operators are tabs of one place");
+    require(fmPanel->preferredWidth() < 900,
+            ("Rhino FM's face is " + juce::String(fmPanel->preferredWidth()) + " px wide, still a wall of knobs").toRawUTF8());
     std::vector<juce::Rectangle<int>> fmControls;
     juce::ComboBox* algorithm = nullptr;
     juce::TextButton* mono = nullptr;
@@ -378,11 +389,33 @@ void runPatternDeviceRackTest()
             mono = button;
         }
     }
-    require(fmControls.size() == 35 && algorithm != nullptr && mono != nullptr && ratio != nullptr && level != nullptr,
-            "Every one of Rhino FM's controls is on its generated face");
+    require(fmControls.size() == 14 && algorithm != nullptr && mono != nullptr && ratio != nullptr && level != nullptr,
+            ("Rhino FM's face shows the voice and the first operator's controls, "
+                + juce::String(static_cast<int>(fmControls.size())) + " in all").toRawUTF8());
     for (size_t i = 0; i < fmControls.size(); ++i)
         for (auto j = i + 1; j < fmControls.size(); ++j)
             require(!fmControls[i].intersects(fmControls[j]), "Generated controls do not overlap");
+
+    // The routing and the sound stand between the voice and the operators,
+    // clear of every control. In 4>3 | 2>1 the carriers, 1 and 3, sit on the
+    // bottom row wired to the output, each under the operator that feeds it.
+    const auto& displayArea = fmPanel->displayArea;
+    require(!displayArea.isEmpty() && fmPanel->getLocalBounds().contains(displayArea)
+                && displayArea.getX() > fmPanel->generatedSections.front().area.getRight()
+                && displayArea.getRight() < fmPanel->generatedSections.back().area.getX(),
+            "Rhino FM's display stands between its voice and its operators");
+    for (const auto& control : fmControls)
+        require(!control.intersects(displayArea), "No control covers the display");
+    const auto& boxes = fmPanel->displayBlocks;
+    require(boxes.size() == 4 && fmPanel->display.traces.size() == 2, "The display draws four operators and two traces");
+    require(boxes[0].getY() == boxes[2].getY() && boxes[1].getBottom() < boxes[0].getY() && boxes[3].getBottom() < boxes[2].getY()
+                && std::abs(boxes[1].getCentreX() - boxes[0].getCentreX()) < 0.5f
+                && std::abs(boxes[3].getCentreX() - boxes[2].getCentreX()) < 0.5f
+                && fmPanel->display.blocks[0].output && fmPanel->display.blocks[2].output,
+            "4>3 | 2>1 is drawn as two stacks over their carriers");
+    for (const auto& box : boxes)
+        require(fmPanel->diagramArea.toFloat().contains(box), "Every operator is drawn inside the diagram");
+    require(fmPanel->displaySelected == 0, "The diagram marks the operator whose controls are showing");
     require(algorithm->getNumItems() == 8 && algorithm->getText() == "4>3 | 2>1" && mono->getButtonText() == "Off",
             "A choice is a chooser of its names, and a toggle a switch that reads Off");
     require(ratio->getInterval() == 0.5 && ratio->getValue() == 1.0,
@@ -420,6 +453,67 @@ void runPatternDeviceRackTest()
         else
             require(false, "Rhino FM snapshot path is writable");
     }
+
+    // A tab shows its operator, and so does the operator's block in the
+    // diagram. Every other operator's controls leave the face.
+    const auto clickFm = [&fmPanel] (juce::Point<float> at)
+    {
+        fmPanel->mouseDown(juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), at, juce::ModifierKeys(),
+                                            1.0f, 0, 0, 0, 0, fmPanel, fmPanel, juce::Time::getCurrentTime(), at,
+                                            juce::Time::getCurrentTime(), 1, false));
+    };
+    const auto shows = [&fmPanel] (const juce::String& control)
+    {
+        for (auto* child : fmPanel->getChildren())
+            if (auto* slider = dynamic_cast<juce::Slider*>(child); slider != nullptr && slider->isVisible()
+                && slider->getTooltip().startsWith(control + ":"))
+                return true;
+        return false;
+    };
+    clickFm(fmPanel->generatedSections.back().tabs[2].second.getCentre().toFloat());
+    require(fmTitles().back() == "Op 3" && shows("Op 3 Ratio") && !shows("Op 1 Ratio") && fmPanel->displaySelected == 2,
+            "Clicking the OP 3 tab shows operator 3's controls in place of operator 1's");
+    clickFm(fmPanel->displayBlocks[3].getCentre());
+    require(fmTitles().back() == "Op 4" && shows("Op 4 Level") && !shows("Op 3 Level"),
+            "Clicking operator 4 in the diagram opens its tab");
+
+    // What the face costs while a knob is dragged: every frame the device
+    // draws a new picture and the panel is laid out and painted again.
+    {
+        const auto fmSlotState = session.deviceSlots(2).back();
+        const auto levelIndex = 9;   // Op 1 Level
+        std::vector<double> targets, paints;
+        juce::Image canvas(juce::Image::ARGB, fmPanel->getWidth(), fmPanel->getHeight(), true, juce::SoftwareImageType());
+        for (int frame = 0; frame < 60; ++frame)
+        {
+            require(session.setDeviceParameter(2, fmSlotState.pluginIndex, levelIndex, 0.3f + 0.01f * static_cast<float>(frame)).wasOk(),
+                    "Op 1 Level can be set");
+            auto start = juce::Time::getHighResolutionTicks();
+            fmPanel->setTarget(2, fmSlotState, false);
+            targets.push_back(juce::Time::highResolutionTicksToSeconds(juce::Time::getHighResolutionTicks() - start));
+            juce::Graphics g(canvas);
+            start = juce::Time::getHighResolutionTicks();
+            fmPanel->paint(g);
+            paints.push_back(juce::Time::highResolutionTicksToSeconds(juce::Time::getHighResolutionTicks() - start));
+        }
+        const auto median = [] (std::vector<double> values)
+        {
+            std::nth_element(values.begin(), values.begin() + static_cast<long>(values.size() / 2), values.end());
+            return values[values.size() / 2] * 1.0e6;
+        };
+        juce::Logger::writeToLog("Rhino FM face: a knob frame refreshes in " + juce::String(median(targets), 1)
+                                 + " us and paints in " + juce::String(median(paints), 1) + " us (medians)");
+    }
+
+    // The open tab belongs to the device, not to the panel, which the rack
+    // builds again whenever the track changes.
+    chainView.selectTrack(0);
+    chainView.selectTrack(2);
+    fmPanel = nullptr;
+    for (auto* panel : chainView.devicePanels)
+        if (panel->deviceId == "RhinoFM")
+            fmPanel = panel;
+    require(fmPanel != nullptr && fmTitles().back() == "Op 4", "Rhino FM's face reopens on the operator left open");
 
     // Rhino Space, with six controls and no sections, keeps a single row of
     // larger knobs and no titles. Adding it rebuilds every panel, so nothing

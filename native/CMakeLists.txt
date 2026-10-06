@@ -99,6 +99,7 @@ target_sources(RhinoNative PRIVATE
     src/DeviceEditorPanelEq.cpp
     src/DeviceEditorPanelVocoder.cpp
     src/DeviceEditorPanelGenerated.cpp
+    src/DeviceEditorPanelDisplay.cpp
     src/DeviceRack.cpp
     src/Playhead.cpp
     src/CountInClick.cpp

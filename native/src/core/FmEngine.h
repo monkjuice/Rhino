@@ -69,6 +69,14 @@ public:
     static int carrierCount(int algorithm);
     static const char* algorithmName(int algorithm);
 
+    // Two cycles of an A4 held with these settings, played through an engine
+    // of its own: `peak` with every envelope fully open, and `held` once each
+    // has settled at its sustain level. The output gain is left out. Both
+    // start where a cycle does. It allocates nothing and touches no engine
+    // that is playing, so any thread may ask.
+    static constexpr int pictureLength = 256;
+    static void picture(const Settings&, float* peak, float* held);
+
     // Message thread, before any rendering.
     void prepare(double sampleRate);
     // Everything below is the audio thread's.

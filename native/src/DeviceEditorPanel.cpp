@@ -93,6 +93,9 @@ void DeviceEditorPanel::setTarget(int nextTrack, const Session::DeviceSlot& devi
     if (face == Face::Eq && spectrum == nullptr)
         spectrum = std::make_unique<SpectrumReader>();
     parameters = session.deviceParameters(track, pluginSlot);
+    const auto* plugin = session.devicePlugin(track, pluginSlot);
+    deviceKey = plugin != nullptr ? plugin->itemID.toString() : juce::String();
+    display = face == Face::Generated ? session.deviceDisplay(track, pluginSlot) : DeviceDisplay {};
     title.setText(deviceName, juce::dontSendNotification);
     power.setButtonText(device.enabled ? juce::String::fromUTF8("\xe2\x97\x8f") : juce::String::fromUTF8("\xe2\x97\x8b"));
     power.setColour(juce::TextButton::textColourOffId,
@@ -200,6 +203,8 @@ void DeviceEditorPanel::mouseDown(const juce::MouseEvent& event)
         if (face == Face::AutoTune && handleAutoTuneClick(event))
             return;
         if (face == Face::Vocoder && handleVocoderClick(event))
+            return;
+        if (face == Face::Generated && handleGeneratedClick(event))
             return;
     }
     if (event.eventComponent != this)
@@ -403,7 +408,8 @@ void DeviceEditorPanel::styleControls()
             || i == RhinoArpDevice::repeatsParameter
             || (i == RhinoArpDevice::rateParameter && beatRate)
             || (i == RhinoArpDevice::freeRateParameter && !beatRate);
-        const auto visible = i < count && (face != Face::Arp || arpSlider);
+        const auto visible = i < count && (face != Face::Arp || arpSlider)
+            && !(face == Face::Generated && onHiddenTab(i));
         // A generated face puts a chooser or a switch where a control is one;
         // only a continuous control gets a knob and a reading under it.
         const auto knob = face != Face::Generated || isKnob(i);

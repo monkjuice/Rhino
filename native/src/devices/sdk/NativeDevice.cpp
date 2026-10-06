@@ -164,6 +164,11 @@ void NativeDevice::valueTreePropertyChanged(juce::ValueTree& tree, const juce::I
     for (auto& slot : slots)
         if (slot->property == property)
         {
+            // The cached value hears of the change through a listener of its
+            // own, which may not have run yet. An undo that removes the
+            // property, taking the control back to its default, showed the
+            // undone value when it had not.
+            slot->stored.forceUpdateOfCachedValue();
             slot->parameter->updateFromAttachedValue();
             return;
         }

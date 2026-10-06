@@ -188,9 +188,10 @@ ParamBuilder& ParamBuilder::toggle(bool defaultOn)
     return *this;
 }
 
-ParamBuilder& ParamBuilder::section(juce::String name)
+ParamBuilder& ParamBuilder::section(juce::String name, juce::String tabGroup)
 {
     spec.section = std::move(name);
+    spec.tabGroup = std::move(tabGroup);
     return *this;
 }
 

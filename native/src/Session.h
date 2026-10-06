@@ -2,6 +2,7 @@
 // The device library is reached through its catalog, never through a device
 // header: what Session needs is a device's identity and metadata, not its DSP.
 #include "DeviceCatalog.h"
+#include "DeviceDisplay.h"
 #include "ClipGeometry.h"
 #include <array>
 #include <functional>
@@ -92,6 +93,7 @@ public:
         // device says all of it; for anything else these keep their defaults
         // or what the engine parameter reports.
         juce::String section;
+        juce::String tabGroup;      // sections sharing one shows one at a time
         juce::StringArray choices;  // a chooser's names, in value order
         bool toggle = false;
         std::optional<float> defaultValue;
@@ -352,6 +354,9 @@ public:
     juce::Result setTrackGroupCollapsed(int groupId, bool collapsed);
     std::vector<DeviceSlot> deviceSlots(int track) const;
     std::vector<DeviceParameter> deviceParameters(int track, int slot) const;
+    // What a native device's face shows beside its controls, worked out by
+    // the device from its controls as they stand. Empty for anything else.
+    DeviceDisplay deviceDisplay(int track, int slot) const;
     // For a device whose editor needs more than a list of knobs -- a live
     // meter, or a scale. Null unless that slot holds a plugin.
     te::Plugin* devicePlugin(int track, int slot) const;

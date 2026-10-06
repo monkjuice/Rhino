@@ -1,5 +1,6 @@
 #pragma once
 #include "DeviceCatalog.h"
+#include "DeviceDisplay.h"
 #include "sdk/NativeParameter.h"
 #include <atomic>
 #include <memory>
@@ -72,6 +73,13 @@ public:
 
     // The loudest sample of the last block, for a meter. Any thread.
     float outputPeak() const noexcept { return peak.load(std::memory_order_relaxed); }
+
+    // What the generated face shows beside the controls, worked out from the
+    // controls as they stand. Left empty, the face shows nothing more. Called
+    // on the message thread while the audio thread may be inside process(),
+    // so a device that plays something to draw it uses an engine of its own,
+    // never the one playing.
+    virtual void describe(DeviceDisplay&) {}
 
 protected:
     NativeDevice(te::PluginCreationInfo, const char* typeName, DeviceKind);

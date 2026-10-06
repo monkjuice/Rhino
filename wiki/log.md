@@ -205,3 +205,14 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/native-device-standard.md (presets built; remaining step)
 - updated: pages/device-rack.md (the presets menu and preset drops on a panel)
 - updated: index.md (new page; Content library summary)
+
+## [2026-10-05] update | Gaps after Rhino FM's face and device presets
+- created: pages/cachedvalue-lags-its-tree.md (the SDK undo race: a ValueTree listener read a stale CachedValue; failed only under ctest -j 3; forceUpdateOfCachedValue)
+- updated: pages/native-device-standard.md (link to the new gotcha)
+- updated: pages/build-and-test-rhino.md (a check failing only in parallel CTest)
+- updated: pages/session-model.md (25 files, SessionDevicePresets; SessionPresets is pattern presets, and the overwrite it caused)
+- updated: pages/pattern-presets.md, pages/device-presets.md (the two preset kinds and their files told apart; untested opened tree)
+- updated: pages/headless-ui-snapshots.md (an opened TreeView snapshots with no children)
+- updated: pages/rhino-fm.md (stroking was 285 of 789 µs, hence stroking at layout)
+- updated: pages/browser.md (updated date)
+- updated: index.md (new gotcha; Session summary)

@@ -13,7 +13,8 @@ The browser's **Patterns** section offers eleven one-bar patterns, grouped Synth
 (`native/src/BrowserPanel.cpp`). Each is a `Session::PatternPreset`. The model side is two files:
 `native/src/SessionPatches.cpp` holds the note tables (`presetPattern`) and the 4OSC patches (`applySynthPatch`);
 `native/src/SessionPresets.cpp` puts them on a track. The three Wave presets (pad, bass, pluck) left with Rhino Wave
-on 2026-10-05 ([Built-in devices](built-in-devices.md)).
+on 2026-10-05 ([Built-in devices](built-in-devices.md)). A device's `.rnd` presets are a different thing, in
+`SessionDevicePresets.cpp` ([Device presets (.rnd)](device-presets.md)).
 
 ## A pattern is notes plus the sound that plays them
 
@@ -54,3 +55,4 @@ pattern means a note table in `SessionPatches.cpp`, a `PatternPreset` value, and
 - [One instrument per track](one-instrument-per-track.md)
 - [Track kinds: audio and MIDI](track-kinds.md)
 - [Built-in devices](built-in-devices.md)
+- [Device presets (.rnd)](device-presets.md)

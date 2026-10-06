@@ -73,6 +73,8 @@ audio device ([The native device standard](native-device-standard.md)).
 - `--output-on-failure` hides a passing run's output. After editing only a scenario `.inc`, touch the runner `.cpp`
   and confirm its `Arrangement scenario: <name>` line appears
   ([Editing only a scenario .inc does not rebuild the tests](inc-edits-do-not-rebuild.md)).
+- A check that fails only under `ctest -j 3` is not necessarily load: the device SDK's undo race failed in every
+  parallel run and passed every sequential one ([A CachedValue can lag its own ValueTree](cachedvalue-lags-its-tree.md)).
 - A failure that reads only "Moved render timeout" is a 15 s wall-clock budget tripping on a busy machine. Re-run that
   case on an idle machine before investigating.
 - `--profile-ui` is a timing tool in the same binary, not a case: it prints medians and checks nothing

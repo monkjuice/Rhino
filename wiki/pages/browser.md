@@ -4,7 +4,7 @@ type: component
 summary: A five-section library rail whose rows leave only by drag, with samples auditioned through a second audio callback.
 tags: [rhino, ui, browser, library]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-05
 ---
 
 # Browser and library preview

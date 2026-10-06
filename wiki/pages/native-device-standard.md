@@ -59,7 +59,7 @@ Faces are generated: a device on the SDK without a face of its own gets one from
 - An undo reached the engine parameter only on a later message, so the rack showed the value just undone. A native device now updates a control the moment its stored value changes.
 - A discrete knob always stepped by 1, so Rhino FM's ratio could not reach its half steps. `DeviceParameter` now carries the declared interval.
 
-The first fix still had a race, fixed when Rhino FM's face got its tabs and display. An undo that *removes* a stored value, taking a control back to a default that was never written, could show the undone value. The cached value hears of the change through its own listener, and the device's could run first. The device now refreshes the cache before reading it. The probe's undo check failed in every parallel CTest run before this fix and passed in every sequential one.
+The first fix still had a race, fixed when Rhino FM's face got its tabs and display. An undo that *removes* a stored value, taking a control back to a default that was never written, could show the undone value. The cached value hears of the change through its own listener, and the device's could run first. The device now refreshes the cache before reading it. The probe's undo check failed in every parallel CTest run before this fix and passed in every sequential one ([A CachedValue can lag its own ValueTree](cachedvalue-lags-its-tree.md)).
 
 A generated face can now do more than lay out knobs, still without naming any device:
 - **Tab groups.** `.section("Op 1", "Operators")` puts sections that share a group in one place, one at a time. The open tab is remembered per device for the session.
@@ -86,3 +86,4 @@ Still to do: move the remaining devices onto the SDK.
 - [Writing Rhino tests](writing-rhino-tests.md)
 - [Real-time audio rules](real-time-audio-rules.md)
 - [Stored indices are append-only](append-only-stored-indices.md)
+- [A CachedValue can lag its own ValueTree](cachedvalue-lags-its-tree.md)

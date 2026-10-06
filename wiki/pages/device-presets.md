@@ -37,7 +37,7 @@ They are generated so that each lists every control, and the scratch script that
 
 ## Applying one
 
-`SessionDevicePresets.cpp`:
+`SessionDevicePresets.cpp`, not `SessionPresets.cpp`, which holds the pattern presets:
 - **`saveDevicePreset(track, slot, file)`** stores every active control's base value: what was set, not where a lane has moved it.
 - **`loadDevicePreset(track, slot, file)`** is one undo step. It refuses a preset for another device, naming the device it is for.
 - **`addDeviceFromPreset(file, track)`** is `addDevice(id, track, &preset)`. The values are set inside the add's own transaction, so a single undo removes the device and its settings together. An instrument the track already runs takes the preset instead, as a second copy would replace it.
@@ -58,7 +58,7 @@ Only non-external, non-infrastructure catalog devices have presets. A VST3 keeps
 - every factory preset, which must be filed under its device and name only controls the device has, at values it can hold;
 - adding, saving, loading, defaults, one undo step, refusal by the wrong device, an instrument already present, an effect, the Arp, and the scan of a user folder.
 
-Moving the preset out of the add's transaction fails *one undo takes away the device and its preset together*. `--self-test` checks that every preset is a browser row carrying its file. `BrowserDrops.inc` and the rack test drop presets. The menu's dialogs are modal and untested.
+Moving the preset out of the add's transaction fails *one undo takes away the device and its preset together*. `--self-test` checks that every preset is a browser row carrying its file. `BrowserDrops.inc` and the rack test drop presets. The menu's modal save and replace dialogs are untested, and so is how the opened browser tree looks: a headless snapshot shows an opened folder with no children ([Seeing the UI without taking the screen](headless-ui-snapshots.md)).
 
 ## Related
 

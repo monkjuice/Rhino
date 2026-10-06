@@ -1,7 +1,7 @@
 ---
 title: Session, the model
 type: component
-summary: The message-thread facade over one Tracktion engine and edit, one class split across 24 files, where every rule and refusal lives.
+summary: The message-thread facade over one Tracktion engine and edit, one class split across 25 files, where every rule and refusal lives.
 tags: [rhino, model, tracktion, undo]
 sources: []
 updated: 2026-10-05
@@ -13,12 +13,12 @@ updated: 2026-10-05
 
 ## One class, many files
 
-`Session` is one class defined across 24 translation units (the `src/Session*.cpp` lines of `native/CMakeLists.txt`, as of 2026-10-03), split by caller as [Keeping files small](keeping-files-small.md) describes:
+`Session` is one class defined across 25 translation units (the `src/Session*.cpp` lines of `native/CMakeLists.txt` before `SessionView`, as of 2026-10-05), split by caller as [Keeping files small](keeping-files-small.md) describes:
 
 - `Session.cpp`: construction, the starter edit, `restoreProject`, `projectSnapshot`, undo and redo.
 - Notes and patterns: `SessionNotes`, `SessionPresets`, `SessionPatches`.
 - Tracks and mixing: `SessionTracks`, `SessionGroups`, `SessionMixer`, `SessionAutomation`, `SessionTransport`.
-- Devices: `SessionDevices`, `SessionSidechain`, `SessionExternalPlugins`.
+- Devices: `SessionDevices`, `SessionDevicePresets`, `SessionSidechain`, `SessionExternalPlugins`.
 - Clips: `SessionClips`, `SessionRegion`, `SessionAudioClips`, `SessionWarp`, `SessionMerge`, `SessionSamples`, `SessionSlots`.
 - Input and audition: `SessionRecording`, `SessionMidiInput`, `SessionAudioInput`, `SessionPreview`.
 - `SessionInternal.h/.cpp`: property identifiers and helpers private to these files.
@@ -42,6 +42,9 @@ Replacing the document (`newProject`, `restoreProject`) is bracketed by `Listene
 - `RhinoEngineBehaviour` is the only thing Rhino tells the engine: where a recording goes, and that recording mutes what it covers.
 - The note editor's clip, `patternClip` kept beside `patternClipID`, is the one long-lived pointer. `repairPatternClip` re-finds it after anything that can take it, and a document with no MIDI track has none, so ask `hasPatternClip()` before `pattern()`. The rest of the positional state from the original pattern-track layout was retired in commit `a04b407` ([No track is special for being first](pattern-track.md)).
 - Hold clip ids, not `te::Clip*` ([Hold ids, not pointers](ids-not-pointers.md)).
+- `SessionPresets.cpp` is the [pattern presets](pattern-presets.md); [device presets](device-presets.md) are
+  `SessionDevicePresets.cpp`. On 2026-10-05 a file write meant to create the new one overwrote the old one, restored
+  from git at once. Check a name is free before writing a new file here.
 
 ## Related
 

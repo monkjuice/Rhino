@@ -45,7 +45,7 @@ The catalog of this wiki: every page, grouped by type, one line each (`- [Title]
 - [Rhino Vocoder and sidechains](pages/rhino-vocoder.md) — A channel vocoder whose carrier arrives as a sidechain from another track, and how Rhino routes a sidechain at all.
 - [Rhino's build targets](pages/rhino-build-targets.md) — Rhino builds as three targets (RhinoCore, RhinoDevices, the app) so that editing a device does not rebuild the app.
 - [Session view (paused)](pages/session-view.md) — A working clip launcher, built and tested but switched off in the shell, whose scene and slot model still runs in every project.
-- [Session, the model](pages/session-model.md) — The message-thread facade over one Tracktion engine and edit, one class split across 24 files, where every rule and refusal lives.
+- [Session, the model](pages/session-model.md) — The message-thread facade over one Tracktion engine and edit, one class split across 25 files, where every rule and refusal lives.
 - [Time warp](pages/time-warp.md) — Makes an audio clip follow the song's tempo, with five warp modes over two stretchers, a clip tempo and warp markers.
 - [Track automation](pages/automation.md) — Per-track lanes stored as Rhino's own ValueTree children, naming their device by key rather than slot, and played by the engine from parameter curves the session mirrors after every change.
 - [Track groups (bus tracks)](pages/track-groups.md) — Ctrl+G gathers tracks under a bus track that their audio feeds; the structure is positional and repaired after every reorder.
@@ -109,6 +109,7 @@ The catalog of this wiki: every page, grouped by type, one line each (`- [Title]
 
 ## Gotchas
 
+- [A CachedValue can lag its own ValueTree](pages/cachedvalue-lags-its-tree.md) — A ValueTree listener that reads a juce::CachedValue of the same property may run before the cache updates, so force the cache first; in Rhino the race failed only under parallel CTest.
 - [A CTest SegFault may be a stack overflow](pages/stack-overflow-reports-as-segfault.md) — CTest reports a Windows stack overflow (0xC00000FD) as a bare SegFault, and both test binaries put large objects on the stack.
 - [A new source file needs an explicit CMake configure](pages/cmake-does-not-reconfigure.md) — Both projects suppress CMake regeneration, so a file or a flag added to a CMakeLists is silently left out until you configure again.
 - [App icons are baked at configure time](pages/app-icon-baked-at-configure.md) — JUCE turns the icon PNGs into an .ico at configure time, so editing the art and rebuilding still ships the old icon.

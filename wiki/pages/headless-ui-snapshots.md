@@ -4,7 +4,7 @@ type: guide
 summary: Render a Rhino panel, the whole Rhino shell or Forge's editor to a PNG without a window, then measure it instead of eyeballing it.
 tags: [both, ui, testing, snapshots]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-05
 ---
 
 # Seeing the UI without taking the screen
@@ -20,6 +20,10 @@ Build it inside a test ([Writing Rhino tests](writing-rhino-tests.md)) and snaps
 `preferredWidth()` by `DeviceEditorPanel::standardHeight`, its children asserted inside the panel and off each other,
 and the snapshot kept as a paint smoke test. Write a PNG only when an env var names a path, as `ClipWarp.inc`
 (`RHINO_CLIP_PANEL_SNAPSHOT`) and `AutomationLanes.inc` (`RHINO_AUTOMATION_SNAPSHOT`) do.
+
+A `juce::TreeView` cannot be seen this way opened: it lays out its rows asynchronously, so a snapshot shows an opened
+folder with no children, even after `setOpen`, `resized()` or a rebuild at a new width. Test the browser's rows and drag
+payloads instead ([Browser and library preview](browser.md)).
 
 ## The whole Rhino shell
 

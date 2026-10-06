@@ -4,7 +4,7 @@ type: component
 summary: A device's settings saved as a .rnd file by parameter id, filed under the device in the browser, dragged to add the device already set, and loaded or saved from its name bar.
 tags: [rhino, devices, presets, library, browser]
 sources: []
-updated: 2026-10-05
+updated: 2026-10-06
 ---
 
 # Device presets (.rnd)
@@ -23,7 +23,7 @@ A `.rnd` file is a preset of one device: Rhino Arp's `Super Creative Arpeggiatio
 
 - **`device` is the catalog id.** Each value is stored under its control's engine parameter id, in the control's own units. The ids are what documents store and are never renamed, so every built-in device has presets, whether or not it is written on the SDK; the Arp is not.
 - **The name is the file name**, so renaming the file renames the preset.
-- **Values round-trip exactly.** They are written with `std::to_chars` and read with `std::from_chars`; JUCE's decimal formatting does not promise that.
+- **Values round-trip exactly.** They are written with `std::to_chars` and read with `std::from_chars` (`core/ExactFloatText.h`, shared with the Drum Rack's files); JUCE's decimal formatting does not promise that.
 - **Format 1 is all that is read.** Anything else is refused with a message, because no compatibility is owed before a production release. The version is written so that it can be owed then.
 
 ## Where presets live
@@ -44,6 +44,8 @@ They are generated so that each lists every control, and the scratch script that
 - **A control the preset leaves out goes to its default**, so a preset sounds the same whatever was there before. Values are snapped to each control's range, and unchanged values are not written, so they add nothing to undo.
 
 Only non-external, non-infrastructure catalog devices have presets. A VST3 keeps its sound in state that a list of parameters does not capture.
+
+The Drum Rack has no `.rnd` presets for the same reason. Its pads hold samples, synth models, names and choke groups, which no parameter carries. Its whole state is a kit (`.rdk`) and one pad's sound is a drum preset (`.rdp`). Its name bar lists kits and offers *Save kit...* instead of the presets menu ([Drum Rack](drum-rack.md)).
 
 ## In the interface
 
@@ -68,3 +70,4 @@ Moving the preset out of the add's transaction fails *one undo takes away the de
 - [Device rack and device editors](device-rack.md)
 - [Device catalog](device-catalog.md)
 - [Pattern presets](pattern-presets.md)
+- [Drum Rack](drum-rack.md)

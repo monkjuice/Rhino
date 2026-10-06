@@ -1,22 +1,22 @@
 ---
 title: Built-in devices
 type: component
-summary: Every device Rhino ships, what each one is and where its source lives, with the details of Utility and the drum rack.
+summary: Every device Rhino ships, what each one is and where its source lives, with Utility's details and the pitfalls the devices share.
 tags: [rhino, devices, dsp]
 sources: []
-updated: 2026-10-05
+updated: 2026-10-06
 ---
 
 # Built-in devices
 
-Every device in the [Device catalog](device-catalog.md) on 2026-10-05. Rhino's own live under `native/src/devices/`; four come from Tracktion.
+Every device in the [Device catalog](device-catalog.md) on 2026-10-06. Rhino's own live under `native/src/devices/`; four come from Tracktion.
 
 | Device | Kind | Source | What it is |
 | --- | --- | --- | --- |
 | 4OSC | instrument | Tracktion `te::FourOscPlugin` | Subtractive synth; the rack shows six macros |
 | Rhino FM | instrument | `instruments/RhinoFmDevice.*` | [Rhino FM](rhino-fm.md) |
 | Rhino Forge | instrument | external VST3 | [Hosting Forge in Rhino](forge-hosting.md) |
-| Rhino Drums | instrument | `instruments/DrumDevice.*` | Sample drum rack, offered as five kits |
+| Drum Rack | instrument | `instruments/DrumRackDevice.*` | [Drum Rack](drum-rack.md) |
 | Rhino EQ | audio FX | `audio/RhinoEqDevice.*` | [Rhino EQ](rhino-eq.md) |
 | Compressor, Reverb, Delay | audio FX | Tracktion built-ins | |
 | Utility | audio FX | `audio/UtilityDevice.*` | Gain trim inside every track's chain |
@@ -28,7 +28,7 @@ Every device in the [Device catalog](device-catalog.md) on 2026-10-05. Rhino's o
 
 Rhino Wave, the first built-in synth (a morphing wavetable instrument), was removed on 2026-10-05. Rhino FM replaced it the same day, as a catalog entry with no special case in `Session`.
 
-Utility, Rhino Space and Rhino FM are written on the device SDK, and the rest are hand-written on `te::Plugin` ([The native device standard](native-device-standard.md)). Every device with a catalog factory is held to the same checks by `--device-test`.
+Utility, Rhino Space, Rhino FM and the Drum Rack are written on the device SDK, and the rest are hand-written on `te::Plugin` ([The native device standard](native-device-standard.md)). Every device with a catalog factory is held to the same checks by `--device-test`.
 
 ## Utility
 
@@ -36,11 +36,12 @@ Utility, Rhino Space and Rhino FM are written on the device SDK, and the rest ar
 
 On the SDK it overrides `getBusses` with `singlePassThrough`, and the gain is smoothed as a gain rather than in decibels, so a block costs one conversion rather than one per sample. Declaring `singlePassThrough` was not enough: it also overrides `getNumOutputChannelsGivenInputs` to return what it was given. The engine's default answer is two, which widened a mono take to stereo with the second channel never written, so a one-input recording played from the left speaker only ([Recording and the count-in](recording.md)).
 
-## Rhino Drums
+## Rhino Drums, replaced
 
-`rhino.drums.v1` has one parameter, `kit`. The five kits (`DrumKit` in `DeviceCatalog.h`) are one sample set reshaped per voice by rate, decay and level; the Clap kit also moves the snare note onto the clap pad. Pads sit on notes 48-59 (kick 48, snare 53, clap 56, hats 58 and 59), and a closed hat chokes an open one.
-
-Samples come from the [Content library](content-library.md) in `initialise()`, never the audio callback. A missing file is logged (`drum sample missing`) and its pad falls silent. A file that exists but will not decode, such as a Git LFS pointer never pulled, is logged as `drum sample unreadable`. Each sample is read whole, up to a 10 s ceiling that ends in a 5 ms fade; reading one second cut the 1.5 s 808 kick off mid-decay (commit `492cc8b`). A pad ignores a second strike within a millisecond, because the engine can deliver one written note twice when a clip starts just before a block boundary, and the two summed into an accent ([Reproducing a live timing bug offline](reproducing-live-timing-offline.md)).
+Rhino Drums (`rhino.drums.v1`, `DrumDevice`) had one parameter, `kit`, choosing among five hard-coded kits (`DrumKit` in `DeviceCatalog.h`). The Drum Rack replaced it on 2026-10-06 under the same catalog id, `Drums` ([Drum Rack](drum-rack.md)). The five kits became `.rdk` files under `library/Drums/Kits/`. Three of its rules carried over:
+- each sample is read whole, up to a 10 s ceiling that ends in a 5 ms fade, because reading one second cut the 1.5 s 808 kick off mid-decay (commit `492cc8b`);
+- a file that is missing or will not decode is logged and its pad falls silent;
+- a pad ignores a second strike within a millisecond, because the engine can deliver one written note twice when a clip starts just before a block boundary ([Reproducing a live timing bug offline](reproducing-live-timing-offline.md)).
 
 ## Pitfalls
 
@@ -55,6 +56,7 @@ The two pitfalls listed here on 2026-10-03 are gone: Utility is no longer browsa
 ## Related
 
 - [Device catalog](device-catalog.md)
+- [Drum Rack](drum-rack.md)
 - [Adding a device to Rhino](adding-a-device.md)
 - [Device chain order](device-chain-order.md)
 - [Content is files, never compiled in](content-is-files.md)

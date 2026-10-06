@@ -4,7 +4,7 @@ type: convention
 summary: The audio thread never allocates, locks, or touches files or UI; memory is sized at prepare and state crosses threads via atomics and queues.
 tags: [both, real-time, audio-thread]
 sources: []
-updated: 2026-10-05
+updated: 2026-10-06
 ---
 
 # Real-time audio rules
@@ -19,7 +19,7 @@ Each block has a deadline (about 2.7 ms at 48 kHz and 128 samples) that an alloc
 
 ## The patterns
 
-**Size everything at prepare.** Forge's `Core::initialise` builds the shape tables and measures each noise source's level (once per sample rate, cached). It sizes every rack's delay lines for every type a slot might become, gives every voice a comb's delay line whether or not a comb is selected, and allocates the roughly 3.5 MB spectral bank whether or not any oscillator is spectral. Rhino's devices read their samples in `initialise()` and survive the files being absent ([Content is files, never compiled in](content-is-files.md)).
+**Size everything at prepare.** Forge's `Core::initialise` builds the shape tables and measures each noise source's level (once per sample rate, cached). It sizes every rack's delay lines for every type a slot might become, gives every voice a comb's delay line whether or not a comb is selected, and allocates the roughly 3.5 MB spectral bank whether or not any oscillator is spectral. The Drum Rack reads a pad's sample on the message thread whenever the pad changes, never on the audio thread, and survives the file being absent ([Content is files, never compiled in](content-is-files.md)).
 
 - **A block can be bigger than `initialise` was told.** The engine allows it. Work through such a block in pieces of the prepared size, as Rhino Bloom, Rhino Space and the Vocoder do (commit `492cc8b`); growing a buffer there allocated on the audio thread, and the Vocoder's re-prepare also cleared every band mid-note.
 - **Resolve names at construction, not per block.** A `juce::String` id is a heap allocation plus a lookup. Forge's processor spelled about 430 of them a block to build its `Patch` and `Modulation`, some 2,100 allocations, until the constructor paired each parameter with the field it fills (commit `c9a37a6`).
@@ -29,6 +29,12 @@ Each block has a deadline (about 2.7 ms at 48 kHz and 128 samples) that an alloc
 
 **Hand data across without locks.**
 - One pointer load per block plus a parity counter. The audio thread bumps a `seq_cst` guard entering and leaving each block, which tells `WavetableStore` and `SampleStore` when a replaced object can be freed ([Hold ids, not pointers](ids-not-pointers.md)).
+- Counted stretches plus a reader count, when a reader holds on across blocks. A Drum Rack voice reads its sample for as long as it rings, long after its pad has taken another, so a per-block guard is not enough ([Drum Rack](drum-rack.md)).
+  - `DrumRackEngine` publishes each pad's sample as an atomic pointer, stored before the pad's source, so a strike never finds a sample pad with no sample.
+  - Each stretch of audio-thread work that can pick a sample up (`noteOn`, `render`) counts itself in and out on two atomics, `stretchesBegun` and `stretchesEnded`.
+  - Each voice counts itself onto its sample (`DrumSample::playing`).
+  - A replaced sample is retired with the number of stretches begun at that moment. `collect()`, on the message thread, frees it once that many stretches have ended and no voice plays it.
+  - Every pad edit and the face's 24 Hz timer collect, and `prepare()`, when nothing renders, frees everything. `checkSampleHandOff` in `DrumRackTest.cpp` covers it.
 - Atomics. `UtilityDevice` reads its gain atomically into a preallocated smoother; Forge's `Processor` publishes meter readings into `std::atomic` arrays for the panel.
 - A single-producer, single-consumer queue to a timer. MIDI learn pushes bound messages into `MidiControlQueue` (256 slots, no allocation), and the `Processor`'s own 60 Hz timer applies them, because writing a parameter takes locks ([Forge MIDI learn](forge-midi-learn.md)).
 - A split at the thread boundary. Rhino EQ's `SpectrumTap` only copies samples into a ring; `SpectrumReader` transforms them on the panel's timer.
@@ -39,8 +45,11 @@ Each block has a deadline (about 2.7 ms at 48 kHz and 128 samples) that an alloc
 
 **Smooth or crossfade; never step.** Continuous parameters are smoothed inside the DSP. Discrete switches crossfade: an EQ band turning on or changing type, a Forge noise source (6 ms), and a finished Forge voice, faded over 15 ms rather than cut ([Forge engine (Core)](forge-engine.md)). Smoothing state lives across blocks: the Vocoder gate's 3 ms edge restarted every block until `492cc8b`, so an edge near a block boundary stepped at the next one.
 
+**Flush what decays toward zero.** An envelope multiplied down every sample reaches the denormal range long before a drum ends, and x86 is far slower on denormals. So `fall()` in `core/DrumSynth.cpp` zeroes an envelope below 1e-9, and a Drum Rack sample voice's low-pass zeroes its state below 1e-20. In the strike costs `--self-test` logs, in ns a sample, the Kick went from 127 to 32, the Tom from 92 to 21 and the Rim from 97 to 33 (2026-10-06). `juce::ScopedNoDenormals` in a device's render call (the Drum Rack's and Rhino FM's `process`, Rhino EQ's `applyToBuffer`) covers the audio thread only. Pictures and previews render through `renderStrike` on the message thread, where only the explicit flushes help.
+
 ## Related
 
 - [Adding a device to Rhino](adding-a-device.md)
 - [Rhino EQ](rhino-eq.md)
+- [Drum Rack](drum-rack.md)
 - [Recording and the count-in](recording.md)

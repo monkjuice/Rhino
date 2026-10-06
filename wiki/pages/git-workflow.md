@@ -2,9 +2,9 @@
 title: Git workflow
 type: convention
 summary: Focused, verified commits pushed at milestones; stage explicit paths since the user edits Forge in the same tree; never rewrite pushed history.
-tags: [both, git, workflow]
+tags: [both, git, workflow, tooling]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-06
 ---
 
 # Git workflow
@@ -27,6 +27,14 @@ The user edits Forge in the same working tree while an agent works elsewhere, co
 - stage named paths (`git add native/ AGENTS.md`), never `git add -A` or `git add .`;
 - treat changes outside your own area in `git status` as somebody else's;
 - run `git log` again before assuming the branch is where you left it, because the user pushes mid-session too.
+
+## Committing through the HARBIZ `git_commit` tool
+
+The tool commits by pathspec: it runs `git add -A` on the paths it is given and commits only those. So stage nothing by hand: delete or edit the file in the working tree and list its path in `git_commit`, never `git rm` or `git add` first. Learned on 2026-10-06, deleting the old `DrumDevice` files (`0219114`):
+
+- A deletion staged with `git rm --cached` but not listed was left out of the commit, and the deleted files stayed in the committed tree.
+- Listing a path already gone from the index made the tool's `git add -A` fail with "pathspec ... did not match any files", because a pathspec matches the index and the working tree, not `HEAD`. Quoting in PowerShell gives the same message for another reason ([Development environment and reference material](development-environment.md)).
+- The way out: `git restore --staged <paths>`, so the index matches `HEAD` again, then commit those paths through the tool, which stages the deletion itself.
 
 ## What never goes in
 

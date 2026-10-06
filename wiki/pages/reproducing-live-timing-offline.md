@@ -4,7 +4,7 @@ type: guide
 summary: Render the real project in a test at the audio device's block size, not the offline default, to catch bugs that live on block boundaries.
 tags: [rhino, debugging, audio, testing]
 sources: []
-updated: 2026-10-05
+updated: 2026-10-06
 ---
 
 # Reproducing a live timing bug offline
@@ -51,13 +51,15 @@ consumed a MIDI message when its rounded timestamp reached a frame, so a message
 never reached and was dropped, not delayed. Clips dragged into place kept floating-point residue (starts of
 3.999999999999997 beside 6.000000000000003), so the notes of the clips that fell short arrived at the end of the
 preceding block. Such a message now plays on the block's last frame, and a pad refuses a second strike within a
-millisecond, because the engine also delivered a straddling clip's first note twice. `--self-test` drives
-`applyToBuffer` with both cases.
+millisecond, because the engine also delivered a straddling clip's first note twice. The [Drum Rack](drum-rack.md)
+replaced `DrumDevice` on 2026-10-06: the device SDK splits each block at its MIDI events, the millisecond guard lives
+in `DrumRackEngine::strike`, and `--self-test` still drives the rack's `applyToBuffer` with both cases.
 
 ## Related
 
 - [Writing Rhino tests](writing-rhino-tests.md)
 - [Built-in devices](built-in-devices.md)
+- [Drum Rack](drum-rack.md)
 - [Track automation](automation.md)
 - [Offline renders that never return](renders-that-never-return.md)
 - [Measure sound, don't read the DSP](measure-sound-dont-read-dsp.md)

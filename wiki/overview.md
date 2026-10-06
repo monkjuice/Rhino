@@ -4,7 +4,7 @@ type: overview
 summary: "Rhino and Rhino Forge at a glance: what they are, how they are built and where to start reading."
 tags: [overview, rhino, forge]
 sources: []
-updated: 2026-10-05
+updated: 2026-10-06
 ---
 
 # Rhino and Rhino Forge
@@ -31,7 +31,7 @@ is for Forge's.
 | `native/src/core/`, `native/src/devices/` | The `RhinoCore` (JUCE-only DSP, content library) and `RhinoDevices` (built-in plugins, device catalog) targets |
 | `native/assets/` | Fonts and app icons, the only assets compiled in |
 | `instruments/rhino-forge/` | Forge: `core/` engine (headers only), `ui/`, `src/`, `tests/`, `tables/` |
-| `library/` | Rhino's sample content, stored with Git LFS |
+| `library/` | Rhino's content: samples (stored with Git LFS), device presets, drum kits and drum presets |
 | `research/` | The September 2026 DAW study; `research/sources/` is off limits |
 | `native/.deps/` | Pinned JUCE and Tracktion, fetched by script, ignored by git, never read |
 
@@ -48,7 +48,7 @@ See [Session, the model](pages/session-model.md), [Rhino's build targets](pages/
 
 ## Build, run and test
 
-Rhino: fetch the pinned dependencies, configure, build, run the five CTest cases —
+Rhino: fetch the pinned dependencies, configure, build, run the six CTest cases —
 [Build and test Rhino](pages/build-and-test-rhino.md). Forge: configure against Rhino's JUCE checkout and run the
 per-area cases — [Build and test Forge](pages/build-and-test-forge.md). Before the first build on this machine, read
 [LNK1104 means a running binary holds the file](pages/locked-executable-lnk1104.md) and
@@ -87,3 +87,4 @@ The full catalog is [index.md](index.md).
 | 2026-09-28 | Forge's third oscillator (preset format 3) |
 | 2026-09-30 – 10-03 | Time warp; track kind fixed at creation; per-track monitoring; device reordering; Forge's spectral oscillator |
 | 2026-10-05 | The engine plays automation; the pattern-track bookkeeping retired; the seeding's Rhino hazards closed; drags and playhead repaints made cheap |
+| 2026-10-06 | The [Drum Rack](pages/drum-rack.md) replaces Rhino Drums: sixteen sample-or-synth pads, with kits and drum presets as files |

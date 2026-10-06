@@ -4,7 +4,7 @@ type: guide
 summary: The three edits that add a device, the SDK base a new one is written on, the shape the older devices follow, and the enum-era code a new instrument still meets.
 tags: [rhino, devices, cmake, testing]
 sources: []
-updated: 2026-10-05
+updated: 2026-10-06
 ---
 
 # Adding a device to Rhino
@@ -21,6 +21,8 @@ Then run `cmake -S native -B native/build`: the build never reconfigures itself 
 
 Write a new device on the base in `native/src/devices/sdk/`: derive from `NativeInstrument` or `NativeAudioEffect`, declare each control once as a `Param` member (`Param mix = param("mix", "Mix").range(0.0f, 1.0f).unit(ParamUnit::percent);`), and implement `prepare`, `clear` and `process`, plus the note calls for an instrument and `tailSeconds` for an effect that rings on. The base handles saving, MIDI timing, oversized blocks, all-notes-off, the non-finite guard, latency and tail reporting, which the list below has to do by hand. Start from `audio/UtilityDevice.*` (one control) or `audio/RhinoSpaceDevice.*` (six, with a tail); the probe devices in `native/src/tests/DeviceConformance.cpp` show an instrument's note calls.
 
+Content a control cannot carry, such as a sample or a name, goes in a child tree of the device's `state`. Write it through `getUndoManager()` and read it back in the ValueTree listener overrides, so an undo reaches the engine; `instruments/DrumRackDevice.*` is the example ([Drum Rack](drum-rack.md)). Read files on the message thread when that content changes, never in `process`. A device that is silent at its defaults needs a branch in `prime()` in `DeviceConformance.cpp`.
+
 ## The older shape
 
 The other devices are still hand-written on `te::Plugin`, and this is what changing one involves. Rhino Bloom (`audio/RhinoBloomDevice.*`) is the closest to Space.
@@ -28,7 +30,7 @@ The other devices are still hand-written on `te::Plugin`, and this is what chang
 - Derive from `te::Plugin` with `inline static const char* xmlTypeName = "rhino.<name>.v1"`; documents store it, so never rename it. Override `getName`, `getPluginType`, `getVendor`, `getSelectableDescription` and `getBusses`. An instrument adds `isSynth`, `takesMidiInput` and `producesAudioWhenNoAudioInput`; a MIDI effect declares no buses (`midi/RhinoArpDevice.h`).
 - Per parameter: a `juce::CachedValue` with `referTo`, `addParam`, `attachToCurrentValue`; `notifyListenersOfDeletion()` then `detachFromCurrentValue()` in the destructor; `te::copyPropertiesToCachedValues` and `updateFromAttachedValue()` in `restorePluginStateFromValueTree`. This is about eight mentions per parameter; no helper abstracts it (checked 2026-10-03).
 - Choosers and switches are state properties, not parameters, as in Rhino Tune and Rhino EQ.
-- `applyToBuffer` never allocates, locks or touches files; read content in `initialise()` and survive its absence ([Real-time audio rules](real-time-audio-rules.md)). The engine may hand it a block bigger than `initialise` was told: work through it in pieces of the prepared size, as `audio/RhinoSpaceDevice.cpp` does.
+- `applyToBuffer` never allocates, locks or touches files ([Real-time audio rules](real-time-audio-rules.md)). Content is read on the message thread when it changes, as on the SDK above, and its absence is survived. The engine may hand `applyToBuffer` a block bigger than `initialise` was told: work through it in pieces of the prepared size, as `audio/RhinoSpaceDevice.cpp` does.
 - Leave the output unclamped, since the chain is floating point; limit only inside feedback lines. A device that rings on after its input stops reports `getTailLength`, as Rhino Bloom and Rhino Space do ([Built-in devices](built-in-devices.md)).
 - Report latency through `getLatencySeconds`, computed from the device's current settings rather than read back from what the audio thread last applied, and restart playback when it changes; the graph reads it only when built ([Rhino Tune](rhino-tune.md)). A sidechain is extra input channel names ([Rhino Vocoder and sidechains](rhino-vocoder.md)).
 
@@ -42,7 +44,7 @@ Optional. A device on the SDK without one gets a face generated from its declara
 
 Two declarations go further without a hand-built face:
 - Sections that repeat, such as Rhino FM's four operators, can share a tab group, `.section("Op 1", "Operators")`, and show one at a time.
-- A device can override `describe(DeviceDisplay&)` to put a display after the face's first group: traces of what it plays, and a diagram of blocks and links. Draw a trace with an engine of the device's own, since `describe` runs on the message thread while the audio thread plays. Keep its last answer while the controls are unchanged, because a dragged knob asks every frame. Anything not on the SDK gets twelve generic knobs. A hand-built face is a new translation unit of `DeviceEditorPanel` (a line in `native/CMakeLists.txt`) and a `Face` value chosen by type in `setTarget`. Draw and hit-test rectangles, keep view state on the device, and reach it through `Session::devicePlugin`. Write the device's own settings through `Session::editDeviceSettings`, so each is an undo step of its own and the session hears of it ([Device rack and device editors](device-rack.md)).
+- A device can override `describe(DeviceDisplay&)` to put a display after the face's first group: traces of what it plays, and a diagram of blocks and links. Draw a trace with an engine of the device's own, since `describe` runs on the message thread while the audio thread plays. Keep its last answer while the controls are unchanged, because a dragged knob asks every frame. Anything not on the SDK gets twelve generic knobs. A hand-built face is a new translation unit of `DeviceEditorPanel` (a line in `native/CMakeLists.txt`) and a `Face` value chosen by catalog id in `setTarget`. Draw and hit-test rectangles, keep view state on the device, and reach it through `Session::devicePlugin`. Write the device's own settings through `Session::editDeviceSettings`, so each is an undo step of its own and the session hears of it ([Device rack and device editors](device-rack.md)).
 
 ## Instruments still meet older code
 

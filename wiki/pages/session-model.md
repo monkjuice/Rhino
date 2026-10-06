@@ -1,10 +1,10 @@
 ---
 title: Session, the model
 type: component
-summary: The message-thread facade over one Tracktion engine and edit, one class split across 25 files, where every rule and refusal lives.
+summary: The message-thread facade over one Tracktion engine and edit, one class split across 26 files, where every rule and refusal lives.
 tags: [rhino, model, tracktion, undo]
 sources: []
-updated: 2026-10-05
+updated: 2026-10-06
 ---
 
 # Session, the model
@@ -13,12 +13,12 @@ updated: 2026-10-05
 
 ## One class, many files
 
-`Session` is one class defined across 25 translation units (the `src/Session*.cpp` lines of `native/CMakeLists.txt` before `SessionView`, as of 2026-10-05), split by caller as [Keeping files small](keeping-files-small.md) describes:
+`Session` is one class defined across 26 translation units (the `src/Session*.cpp` lines of `native/CMakeLists.txt` before `SessionView`, as of 2026-10-06), split by caller as [Keeping files small](keeping-files-small.md) describes:
 
 - `Session.cpp`: construction, the starter edit, `restoreProject`, `projectSnapshot`, undo and redo.
 - Notes and patterns: `SessionNotes`, `SessionPresets`, `SessionPatches`.
 - Tracks and mixing: `SessionTracks`, `SessionGroups`, `SessionMixer`, `SessionAutomation`, `SessionTransport`.
-- Devices: `SessionDevices`, `SessionDevicePresets`, `SessionSidechain`, `SessionExternalPlugins`.
+- Devices: `SessionDevices`, `SessionDevicePresets`, `SessionDrums` (the [Drum Rack](drum-rack.md)'s kits, pads and drops), `SessionSidechain`, `SessionExternalPlugins`.
 - Clips: `SessionClips`, `SessionRegion`, `SessionAudioClips`, `SessionWarp`, `SessionMerge`, `SessionSamples`, `SessionSlots`.
 - Input and audition: `SessionRecording`, `SessionMidiInput`, `SessionAudioInput`, `SessionPreview`.
 - `SessionInternal.h/.cpp`: property identifiers and helpers private to these files.

@@ -4,7 +4,7 @@ type: decision
 summary: Rhino's own devices are written on one SDK base, held to one conformance runner and given generated faces, with their presets as .rnd files; VST3 stays the format for outside instruments.
 tags: [rhino, devices, sdk, testing]
 sources: []
-updated: 2026-10-05
+updated: 2026-10-06
 ---
 
 # The native device standard
@@ -34,7 +34,7 @@ Agreed on 2026-10-05:
   - the tail, for an effect, as the time to fall 60 dB.
 
   A device that cannot pass a check yet goes in the runner's `pending` table with the reason. A line that starts passing fails the run until it is deleted (commit `0806c97`).
-- **Presets are `.rnd` files; devices are not files.** A device stays code, kept apart from the core. A `.rnd` is a preset of one device: XML holding the device's id and its settings, so a new patch, kit or arp feel needs no code. In the browser each device is a folder of its presets, such as Rhino Arp > `Super Creative Arpeggiation.rnd`. Dragging the folder adds the device at its defaults, and dragging a preset adds it with that preset's settings. This was first written down as a "device file" and corrected the same day. Built: [Device presets (.rnd)](device-presets.md).
+- **Presets are `.rnd` files; devices are not files.** A device stays code, kept apart from the core. A `.rnd` is a preset of one device: XML holding the device's id and its settings, so a new patch, kit or arp feel needs no code. In the browser each device is a folder of its presets, such as Rhino Arp > `Super Creative Arpeggiation.rnd`. Dragging the folder adds the device at its defaults, and dragging a preset adds it with that preset's settings. This was first written down as a "device file" and corrected the same day. Built: [Device presets (.rnd)](device-presets.md). The Drum Rack is the exception: its presets are kits and drum presets, because a `.rnd` holds parameter values only ([Drum Rack](drum-rack.md)).
 - **What decides between options:** top performance, testability and maintainability.
 - **Generated faces by default.** The rack builds a face from the declared controls. A device gets a hand-built face only when it has something true to draw from its DSP. Short of that, it can do two things on the SDK and keep the generated face:
   - declare sections that share a tab group, shown one at a time;
@@ -68,6 +68,11 @@ A generated face can now do more than lay out knobs, still without naming any de
 
 Presets are built ([Device presets (.rnd)](device-presets.md)): a device's settings by parameter id, ten factory presets for Rhino FM, Space and Arp, filed under each device in the browser, and loaded or saved from the device's name bar.
 
+On 2026-10-06 the Drum Rack replaced the hand-written Rhino Drums as the second instrument on the base ([Drum Rack](drum-rack.md)). It stretches the base in three ways:
+- **Content beside the controls.** A pad's sample, synth, name, choke group, mute and solo are not controls. They live in a child tree of the device's `state`, written through the undo manager and read back by ValueTree listeners, so an undo reaches the engine like any control.
+- **Its own face**, because its picture is a strike rendered by the engine's own voice.
+- **Primed for conformance.** A blank rack is silent, so `--device-test` gives it pads first.
+
 Still to do: move the remaining devices onto the SDK.
 
 ## Consequences
@@ -82,6 +87,7 @@ Still to do: move the remaining devices onto the SDK.
 - [Adding a device to Rhino](adding-a-device.md)
 - [Built-in devices](built-in-devices.md)
 - [Rhino FM](rhino-fm.md)
+- [Drum Rack](drum-rack.md)
 - [Device presets (.rnd)](device-presets.md)
 - [Writing Rhino tests](writing-rhino-tests.md)
 - [Real-time audio rules](real-time-audio-rules.md)

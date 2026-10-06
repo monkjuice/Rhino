@@ -4,7 +4,7 @@ type: convention
 summary: Session announces every change synchronously to every listening panel, so a drag announces once, a hidden panel goes stale, painters skip what a repaint does not reach, and --profile-ui measures it.
 tags: [rhino, ui, performance]
 sources: []
-updated: 2026-10-05
+updated: 2026-10-06
 ---
 
 # What a change costs the interface
@@ -19,16 +19,26 @@ updated: 2026-10-05
 - **A rebuild reads each fact once.** The arrangement reads what its painter asks about each track once per sync (`TrackFacts`), not per row per frame, because each question walks the engine's track list. It also hands `Session::clipPluginCount` the clip in hand rather than an id to look up again.
 - **A painter draws only what the repaint reaches** (`repaintArea(g)`; [Playhead rendering](playhead.md)). Check it with the `cullRepaints` seam, under the same clip ([JUCE's rasteriser is not clip-invariant](juce-rasteriser-not-clip-invariant.md)).
 - **Releasing a knob does not rebuild the playback graph** unless the gesture changed the device's latency (`endDeviceParameterGesture`), which delay compensation has to hear about.
+- **A face repaints what changed and keeps what it has shaped.** The [Drum Rack](drum-rack.md) face (`DeviceEditorPanelDrums.cpp`) shows the pattern:
+  - `repaintDrums` compares one string of everything the pads are drawn from, so a knob drag repaints only the selected pad's side.
+  - `drawLine` keeps each shaped line as a `juce::GlyphArrangement`, keyed by text, box, justification and font and cleared past 2,048 entries, because shaping text was most of the paint.
+  - `padPicture` renders its strike at 16 kHz instead of the device's rate, and keeps it while sound, settings and width are unchanged.
 
 ## Measuring
 
 `RhinoDAW.exe --profile-ui` prints median message-thread costs ([Writing Rhino tests](writing-rhino-tests.md)). It paints on a software image for a reason: [Profile paint on a software image](profile-paint-on-a-software-image.md). Medians from the commits, before and after: knob drag step 1.8 ms to 63 µs, fader step 1.8 ms to 4 µs, arrangement sync 1.8 ms to 0.9 ms, arrangement playhead strip 1.3-1.5 ms to 0.4 ms. Most of what is left of a sync is note positions converted through the tempo map. Caching them would need a content revision per clip, which the engine does not expose.
+
+The Drum Rack face is timed by `runDrumRackFaceTest`, not `--profile-ui`. Its medians on 2026-10-06:
+- a knob frame refreshes in about 0.27 ms and paints the selected pad's side in 0.95 ms;
+- the strike picture takes about 0.36 ms of that, against 1.4 ms when it rendered at 48 kHz;
+- the whole face paints in 1.27 ms, down from 7 ms before these changes, against about 0.69 ms for Rhino FM's face in the same runner.
 
 ## Related
 
 - [Session, the model](session-model.md)
 - [App shell and control bar](app-shell.md)
 - [Device rack and device editors](device-rack.md)
+- [Drum Rack](drum-rack.md)
 - [Arrangement view](arrangement-view.md)
 - [Playhead rendering](playhead.md)
 - [Forge's panel repaints whole at 24 Hz](forge-panel-repaint-cost.md)

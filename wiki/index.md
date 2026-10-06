@@ -12,13 +12,14 @@ The catalog of this wiki: every page, grouped by type, one line each (`- [Title]
 - [App shell and control bar](pages/app-shell.md) — Main.cpp's window, control bar, docked browser and single lower pane, plus the 30 Hz timer that polls what the engine never broadcasts.
 - [Arrangement view](pages/arrangement-view.md) — The timeline UI, one class across eleven files, that previews every drag locally and leaves panel decisions to the shell.
 - [Audio clip editor](pages/audio-clip-editor.md) — Edits one audio clip's own gain, pan, pitch, fades, mute and reverse as clip properties, with one undo step per knob drag.
-- [Browser and library preview](pages/browser.md) — A five-section library rail whose rows leave only by drag, with samples auditioned through a second audio callback.
-- [Built-in devices](pages/built-in-devices.md) — Every device Rhino ships, what each one is and where its source lives, with the details of Utility and the drum rack.
+- [Browser and library preview](pages/browser.md) — A six-section library rail, Drums first, whose rows leave only by drag, with samples and drum presets auditioned through a second audio callback.
+- [Built-in devices](pages/built-in-devices.md) — Every device Rhino ships, what each one is and where its source lives, with Utility's details and the pitfalls the devices share.
 - [Computer MIDI keyboard](pages/computer-keyboard.md) — Plays notes from the typing keyboard into the MIDI input with Forge's exact key mapping, so arming and recording need no special case.
-- [Content library](pages/content-library.md) — Samples and device presets live as files under library/, found at runtime by ContentLibrary, audio stored with Git LFS, nothing compiled in.
+- [Content library](pages/content-library.md) — Samples, device presets, drum kits and drum presets live as files under library/, found at runtime by ContentLibrary, audio stored with Git LFS, nothing compiled in.
 - [Device catalog](pages/device-catalog.md) — The one table of Rhino's devices that the browser, drop targets, rack menu, engine registration and instrument rules all read.
 - [Device presets (.rnd)](pages/device-presets.md) — A device's settings saved as a .rnd file by parameter id, filed under the device in the browser, dragged to add the device already set, and loaded or saved from its name bar.
 - [Device rack and device editors](pages/device-rack.md) — The Device View strip that shows a track's chain and its per-device faces, the rebuild rule that shapes how a face is written, and the timer that follows automated knobs.
+- [Drum Rack](pages/drum-rack.md) — Sixteen pads on C2-D#3, each a sample or one of eight synthesised drums with six controls of its own, blank until a kit (.rdk), a drum preset (.rdp) or a dropped sample fills it.
 - [Forge arpeggiator](pages/forge-arpeggiator.md) — Stands in front of the voices, hands notes back through two callbacks, and opens as an overlay from a plate beside the keys.
 - [Forge editor (panel)](pages/forge-editor.md) — One Editor class across fifteen files builds the panel from declared modules and decides what is visible in one place.
 - [Forge engine (Core)](pages/forge-engine.md) — The header-only voice engine that allocates sixteen voices, modulates per voice per sample and scales the output by 0.28.
@@ -45,7 +46,7 @@ The catalog of this wiki: every page, grouped by type, one line each (`- [Title]
 - [Rhino Vocoder and sidechains](pages/rhino-vocoder.md) — A channel vocoder whose carrier arrives as a sidechain from another track, and how Rhino routes a sidechain at all.
 - [Rhino's build targets](pages/rhino-build-targets.md) — Rhino builds as three targets (RhinoCore, RhinoDevices, the app) so that editing a device does not rebuild the app.
 - [Session view (paused)](pages/session-view.md) — A working clip launcher, built and tested but switched off in the shell, whose scene and slot model still runs in every project.
-- [Session, the model](pages/session-model.md) — The message-thread facade over one Tracktion engine and edit, one class split across 25 files, where every rule and refusal lives.
+- [Session, the model](pages/session-model.md) — The message-thread facade over one Tracktion engine and edit, one class split across 26 files, where every rule and refusal lives.
 - [Time warp](pages/time-warp.md) — Makes an audio clip follow the song's tempo, with five warp modes over two stretchers, a clip tempo and warp markers.
 - [Track automation](pages/automation.md) — Per-track lanes stored as Rhino's own ValueTree children, naming their device by key rather than slot, and played by the engine from parameter curves the session mirrors after every change.
 - [Track groups (bus tracks)](pages/track-groups.md) — Ctrl+G gathers tracks under a bus track that their audio feeds; the structure is positional and repaired after every reorder.

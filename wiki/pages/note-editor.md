@@ -4,7 +4,7 @@ type: component
 summary: Edits the notes of the open MIDI clip in steps, with a draw mode, a step region and caches that tie it closely to Session.
 tags: [rhino, ui, notes]
 sources: []
-updated: 2026-10-05
+updated: 2026-10-06
 ---
 
 # Note editor (StepGrid)
@@ -27,13 +27,17 @@ Copy, cut, paste, duplicate and delete act on a span of steps: the arrangement's
 
 The marquee anchors in steps and pitch, not pixels: a drag past an edge scrolls the view from the gesture timer, and a pixel anchor would travel with it, dropping notes that had scrolled out.
 
+## Drum rows
+
+When the open clip's track plays drums (`Session::isPatternDrums`), the grid pins its lowest row at C2 (`Session::lowestNote`, 48) and shows `Session::pitches` (16) rows at its default zoom. Those rows are the [Drum Rack](drum-rack.md)'s 16 pads. Each row takes its name from `Session::patternNoteName`, which asks the instrument's `hasNameForMidiNoteNumber`, and a row whose pad is empty reads as its note. Pad names change without any note changing, so the grid keeps the names it last drew (`drumRowNames`) and repaints when they differ.
+
 ## Pitfalls
 
 - **Size.** Its row-addressed caches (512 steps × 48 pitch rows) make one `StepGrid` about 200 KB; in a test scenario create it with `std::make_unique` ([A CTest SegFault may be a stack overflow](stack-overflow-reports-as-segfault.md)).
 - **It is welded to `Session`.** The four files reach into `Session` 101 times (counted 2026-10-03), and `Session.h` pulls in Tracktion. That is why Forge's planned arp pattern editor cannot simply reuse it: first extract a Session-free note-grid header, as `ClipGeometry.h` was.
 - **The clip can vanish under it.** `Session::repairPatternClip` is the single place that re-points the editor when its clip goes: by id first, else to the first MIDI clip on the first MIDI track, else to a hidden starter clip it makes there, never onto an audio track ([No track is special for being first](pattern-track.md), [Hold ids, not pointers](ids-not-pointers.md)).
 - **Hidden, it waits.** While another face holds the lower pane the grid marks itself stale instead of rebuilding on every change, and skips its playhead every display refresh ([What a change costs the interface](ui-cost-of-a-change.md)).
-- **Octave names.** Middle C reads C3 (`drumLaneName` in `StepGridInternal.h` and the painter), matching Live and Forge; the two must change together.
+- **Octave names.** Middle C reads C3, matching Live, Forge and the Drum Rack's pads (`DrumRackDevice::noteName`). Both of the painter's keyboards name rows through `pitchName` in `StepGridInternal.h` (until 2026-10-06, `drumLaneName`). Change it in both places or the rows and the pads disagree.
 
 ## Related
 
@@ -43,3 +47,4 @@ The marquee anchors in steps and pitch, not pixels: a drag past an edge scrolls 
 - [Forge arpeggiator](forge-arpeggiator.md)
 - [Writing Rhino tests](writing-rhino-tests.md)
 - [No track is special for being first](pattern-track.md)
+- [Drum Rack](drum-rack.md)

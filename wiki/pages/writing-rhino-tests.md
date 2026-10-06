@@ -4,7 +4,7 @@ type: guide
 summary: Choose between a unit check and a workflow scenario, follow the rules that keep scenarios sharing one Session honest, and time the interface with --profile-ui.
 tags: [rhino, testing, conventions]
 sources: []
-updated: 2026-10-05
+updated: 2026-10-06
 ---
 
 # Writing Rhino tests
@@ -15,9 +15,11 @@ Rhino's tests are compiled into the app and selected by flag ([Build and test Rh
 - **Unit-style checks**, for whatever needs no `Session`, render, desktop peer or pointer sequence. Geometry over pure
   headers such as `ClipGeometry.h` goes in `tests/Arrangement/ClipGeometryTest.cpp` (`--arrangement-geometry-test`, no
   audio device). DSP lives in `src/core` as a plain class driven from `--self-test` (`SelfTest.cpp`, `AutoTuneTest.cpp`,
-  `EqTest.cpp`, `VocoderTest.cpp`). Every device Rhino makes is also rendered by `--device-test`
-  (`DeviceConformance.cpp`) against [the native device standard](native-device-standard.md); a new device gets those
-  checks without writing any.
+  `EqTest.cpp`, `VocoderTest.cpp`, `FmTest.cpp`, `DrumRackTest.cpp`). Every device Rhino makes is also rendered by
+  `--device-test` (`DeviceConformance.cpp`) against [the native device standard](native-device-standard.md); a new
+  device gets those checks without writing any. A device that is silent at its defaults, as a blank
+  [Drum Rack](drum-rack.md) is, needs a branch in that file's `prime()`, or it fails every check that listens for a
+  note.
 - **Workflow scenarios**, for contracts that cross the engine, undo, rendering, persistence or real pointer events.
 
 ## How a scenario works

@@ -1,7 +1,7 @@
 ---
 title: Content library
 type: component
-summary: Samples live as files under library/, found at runtime by ContentLibrary, stored with Git LFS and never compiled in.
+summary: Samples and device presets live as files under library/, found at runtime by ContentLibrary, audio stored with Git LFS, nothing compiled in.
 tags: [rhino, library, content]
 sources: []
 updated: 2026-10-05
@@ -23,7 +23,9 @@ A candidate counts only if it contains a `Samples` folder. Otherwise an empty `L
 
 ## Layout
 
-`Samples/<pack>/<group>/<file>`, with one level of grouping or loose files in a small pack. `samples()` scans once on first use for `.wav`, `.flac`, `.aif`, `.aiff`, `.ogg` and `.mp3`, ignoring the `SOURCE.md` and licence files kept beside the audio, and sorts by pack, group and name. The browser splits camel case for display ("VinylDrums" reads "Vinyl Drums"). Packs as of 2026-10-03: `Cumbia`, `HandClap`, `TR808`, `VinylDrums`. Presets and patterns are meant to join them; today the pattern presets are still compiled tables in `SessionPatches.cpp`.
+`Samples/<pack>/<group>/<file>`, with one level of grouping or loose files in a small pack. `samples()` scans once on first use for `.wav`, `.flac`, `.aif`, `.aiff`, `.ogg` and `.mp3`, ignoring the `SOURCE.md` and licence files kept beside the audio, and sorts by pack, group and name. The browser splits camel case for display ("VinylDrums" reads "Vinyl Drums"). Packs as of 2026-10-03: `Cumbia`, `HandClap`, `TR808`, `VinylDrums`.
+
+`Presets/<device id>/*.rnd` holds the factory device presets, and `presets()` lists them with the person's own from `userPresets()` (`Documents/Rhino/Presets`, or `RHINO_USER_PRESETS_DIR`). They are re-read on every call, unlike samples ([Device presets (.rnd)](device-presets.md)). `.rnd` is XML, so it stays ordinary text rather than going to LFS. Pattern presets are still compiled tables in `SessionPatches.cpp`.
 
 ## Rules
 
@@ -40,3 +42,4 @@ A candidate counts only if it contains a `Samples` folder. Otherwise an empty `L
 - [Rhino's build targets](rhino-build-targets.md)
 - [Git workflow](git-workflow.md)
 - [Pattern presets](pattern-presets.md)
+- [Device presets (.rnd)](device-presets.md)

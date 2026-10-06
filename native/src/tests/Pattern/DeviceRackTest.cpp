@@ -2,6 +2,7 @@
 #include "../../DeviceRack.h"
 #include "../../Session.h"
 #include "../../Theme.h"
+#include "ContentLibrary.h"
 #include "audio/AutoTuneDevice.h"
 #include "audio/UtilityDevice.h"
 #include "midi/RhinoArpDevice.h"
@@ -514,6 +515,19 @@ void runPatternDeviceRackTest()
         if (panel->deviceId == "RhinoFM")
             fmPanel = panel;
     require(fmPanel != nullptr && fmTitles().back() == "Op 4", "Rhino FM's face reopens on the operator left open");
+
+    // A preset dropped on the device it is for goes into that device, rather
+    // than adding a second one.
+    {
+        const auto bells = ContentLibrary::file("Presets/RhinoFM/Glass Bells.rnd");
+        const auto devicesBefore = session.deviceSlots(2).size();
+        const auto at = chainView.getLocalPoint(&chainView.chainContent, fmPanel->getBounds().getCentre());
+        chainView.itemDropped({"rhino-browser:device-preset:" + bells.getFullPathName(), nullptr, at});
+        require(session.deviceSlots(2).size() == devicesBefore && fmValue(14) == "x3.5",
+                "Glass Bells dropped on Rhino FM loads into it: operator 2 at x3.5");
+        session.undo();
+        require(fmValue(14) == "x1", "and undoing it puts the patch back");
+    }
 
     // Rhino Space, with six controls and no sections, keeps a single row of
     // larger knobs and no titles. Adding it rebuilds every panel, so nothing

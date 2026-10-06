@@ -39,6 +39,7 @@ Application code, `native/src`:
 | Renaming a track card or a group band in place | `ArrangementRename.cpp` |
 | Merging audio clips into one, Ctrl+J | `SessionMerge.cpp` in the model, `Arrangement::mergeSelected` in the UI. It renders, so it is the one clip command that writes a file |
 | Auditioning a library sound | `SessionPreview.cpp` |
+| Device presets (`.rnd`): saving, loading, adding a device from one | The file format is `core/DevicePreset.*`, found by `ContentLibrary::presets()`; the model is `SessionDevicePresets.cpp`; the name-bar menu is `DeviceEditorPanelPresets.cpp`. `SessionPresets.cpp` is the older *pattern* presets. See [Device presets](wiki/pages/device-presets.md) |
 | Session view (clip launcher) UI, paused, see [Session view](wiki/pages/session-view.md) | `SessionView.h`, `SessionView.cpp`, `SessionViewPainter.cpp`, `SessionViewGestures.cpp` |
 | Scenes, clip slots and launching | `SessionSlots.cpp` |
 | Mixer: track volume, pan, mute, solo, main output | `SessionMixer.cpp` |
@@ -63,7 +64,7 @@ The UI depends on `Session`; `Session` knows nothing about the UI. Keep that dir
 
 ## Content is files, never compiled in
 
-Samples, and the presets and patterns that will join them, live under `library/` at the repository root and are found at runtime by `ContentLibrary`. Nothing there is compiled. `juce_add_binary_data` expands an asset to roughly three bytes of C++ per byte of data and rebuilds all of it on a clean build, which is why `native/assets/` is now only the fonts and app icons — what the UI needs before it can read from disk. Audio under `library/` is stored with Git LFS, declared in `.gitattributes`; set that up *before* adding a new content type, because converting afterwards means rewriting history.
+Samples and device presets (`library/Presets/<device id>/*.rnd`), and the patterns that will join them, live under `library/` at the repository root and are found at runtime by `ContentLibrary`. Nothing there is compiled. `juce_add_binary_data` expands an asset to roughly three bytes of C++ per byte of data and rebuilds all of it on a clean build, which is why `native/assets/` is now only the fonts and app icons — what the UI needs before it can read from disk. Audio under `library/` is stored with Git LFS, declared in `.gitattributes`; set that up *before* adding a new content type, because converting afterwards means rewriting history.
 
 A device reading its own samples does so in `initialise()`, which is prepare-to-play and never the audio callback, and must survive the files being absent — `DrumDevice` logs and falls silent. Measured cost of that read for the TR-808 kit: 525 KB in 1.2 ms warm, once per device instance.
 

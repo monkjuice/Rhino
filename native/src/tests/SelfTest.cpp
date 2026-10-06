@@ -1,5 +1,6 @@
 #include "../Session.h"
 #include "../BrowserPanel.h"
+#include "../BrowserIds.h"
 #include "../CountInClick.h"
 #include "../ComputerKeyboard.h"
 #include "ContentLibrary.h"
@@ -92,6 +93,24 @@ int runSelfTest()
             for (const auto& row : rows)
                 if (row.deviceId.isNotEmpty())
                     require(DeviceCatalog::byId(row.deviceId) != nullptr);
+
+            // Every preset on disk is a row under its device, and dragging it
+            // carries its file, which the drop targets file under that device.
+            for (const auto& preset : ContentLibrary::presets())
+            {
+                // The person's own folder may hold a preset for a device this
+                // build does not offer, and the browser rightly leaves it out.
+                if (const auto* device = DeviceCatalog::byId(preset.deviceId); device == nullptr || !device->browsable)
+                    continue;
+                const auto row = std::find_if(rows.begin(), rows.end(),
+                    [&preset](const BrowserPanel::Item& candidate) { return candidate.devicePreset == preset.file; });
+                require(row != rows.end() && row->deviceId == preset.deviceId && row->name == preset.name);
+                const auto description = browser.dragDescriptionFor(*row);
+                require(description == "rhino-browser:device-preset:" + preset.file.getFullPathName());
+                require(browserDropPresetFile(description) == preset.file);
+                const auto* device = deviceForPresetDrop(description);
+                require(device != nullptr && device->id == preset.deviceId);
+            }
 
             // The sample library is content on disk, so the browser has to be
             // showing what is actually there rather than a list written into

@@ -15,8 +15,9 @@ The catalog of this wiki: every page, grouped by type, one line each (`- [Title]
 - [Browser and library preview](pages/browser.md) — A five-section library rail whose rows leave only by drag, with samples auditioned through a second audio callback.
 - [Built-in devices](pages/built-in-devices.md) — Every device Rhino ships, what each one is and where its source lives, with the details of Utility and the drum rack.
 - [Computer MIDI keyboard](pages/computer-keyboard.md) — Plays notes from the typing keyboard into the MIDI input with Forge's exact key mapping, so arming and recording need no special case.
-- [Content library](pages/content-library.md) — Samples live as files under library/, found at runtime by ContentLibrary, stored with Git LFS and never compiled in.
+- [Content library](pages/content-library.md) — Samples and device presets live as files under library/, found at runtime by ContentLibrary, audio stored with Git LFS, nothing compiled in.
 - [Device catalog](pages/device-catalog.md) — The one table of Rhino's devices that the browser, drop targets, rack menu, engine registration and instrument rules all read.
+- [Device presets (.rnd)](pages/device-presets.md) — A device's settings saved as a .rnd file by parameter id, filed under the device in the browser, dragged to add the device already set, and loaded or saved from its name bar.
 - [Device rack and device editors](pages/device-rack.md) — The Device View strip that shows a track's chain and its per-device faces, the rebuild rule that shapes how a face is written, and the timer that follows automated knobs.
 - [Forge arpeggiator](pages/forge-arpeggiator.md) — Stands in front of the voices, hands notes back through two callbacks, and opens as an overlay from a plate beside the keys.
 - [Forge editor (panel)](pages/forge-editor.md) — One Editor class across fifteen files builds the panel from declared modules and decides what is visible in one place.

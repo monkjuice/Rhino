@@ -59,6 +59,32 @@ inline const DeviceDescriptor* deviceFromId(const juce::String& id, DeviceKind k
     return device != nullptr && device->kind == kind ? device : nullptr;
 }
 
+// The kind a device's own drag carries, which decides the targets that take it.
+inline juce::String deviceDropKind(const DeviceDescriptor& device)
+{
+    return device.kind == DeviceKind::Instrument ? "instrument"
+         : device.kind == DeviceKind::MidiEffect ? "midi-effect" : "effect";
+}
+
+// A device preset drop carries the .rnd file's path. Returns a default File
+// for any other kind.
+inline juce::File browserDropPresetFile(const juce::String& description)
+{
+    if (browserDropKind(description) != "device-preset")
+        return {};
+    const auto path = browserDropId(description);
+    return path.isEmpty() ? juce::File() : juce::File(path);
+}
+
+// The device a dragged preset is for, from the folder it is filed in, which
+// is named for the device's catalog id. That is enough to pick a lane while
+// the drag is in the air; the file itself is read when it lands.
+inline const DeviceDescriptor* deviceForPresetDrop(const juce::String& description)
+{
+    const auto file = browserDropPresetFile(description);
+    return file == juce::File() ? nullptr : DeviceCatalog::byId(file.getParentDirectory().getFileName());
+}
+
 inline std::optional<DrumKit> drumKitFromId(const juce::String& id)
 {
     if (id == "Rhino808")   return DrumKit::Rhino808;

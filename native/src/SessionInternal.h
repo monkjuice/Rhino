@@ -169,4 +169,9 @@ juce::Result switchTrackInstrument(te::Edit& edit, te::AudioTrack& track, const 
 juce::Result switchTrackInstrument(te::Edit& edit, te::AudioTrack& track, Session::Instrument instrument, bool& changed,
                                    const juce::PluginDescription* forgeDescription = nullptr);
 
+// Sets every control a preset names and every other to its default, clamped
+// and snapped to each control's range, inside whatever undo transaction is
+// open. Returns whether anything moved. In SessionDevicePresets.cpp.
+bool applyDevicePreset(te::Plugin&, const DevicePreset&);
+
 }

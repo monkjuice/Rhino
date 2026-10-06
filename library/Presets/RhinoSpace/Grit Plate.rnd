@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<RHINO_PRESET format="1" device="RhinoSpace">
+  <PARAM id="mix" value="0.35"/>
+  <PARAM id="size" value="0.5"/>
+  <PARAM id="smear" value="0.4"/>
+  <PARAM id="drive" value="0.6"/>
+  <PARAM id="width" value="1.1"/>
+  <PARAM id="outputDb" value="-2"/>
+</RHINO_PRESET>

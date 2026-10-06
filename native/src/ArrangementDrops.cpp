@@ -1,5 +1,6 @@
 #include "ArrangementInternal.h"
 #include "BrowserIds.h"
+#include "DevicePreset.h"
 #include <optional>
 #include <set>
 
@@ -117,7 +118,9 @@ void Arrangement::itemDropped(const juce::DragAndDropTarget::SourceDetails& deta
         && session.trackCount() > 0
         && static_cast<float>(details.localPosition.y) > lane(session.trackCount() - 1).getBottom())
     {
-        if (const auto wanted = trackTypeForDropKind(kind))
+        // A preset needs the lane its device would.
+        const auto* presetDevice = deviceForPresetDrop(description);
+        if (const auto wanted = trackTypeForDropKind(presetDevice != nullptr ? deviceDropKind(*presetDevice) : kind))
         {
             const auto result = session.addTrack(*wanted);
             if (result.failed())
@@ -140,8 +143,12 @@ juce::Result Arrangement::applyBrowserDrop(const juce::String& description, int 
     const auto kind = browserDropKind(description);
     const auto id = browserDropId(description);
 
-    // The main track carries effects and nothing else.
-    if (session.isMasterTrack(track) && kind != "effect" && kind != "info")
+    // The main track carries effects and nothing else, a preset of one
+    // included.
+    const auto* presetDevice = deviceForPresetDrop(description);
+    const auto carriesEffect = kind == "effect"
+        || (presetDevice != nullptr && presetDevice->kind == DeviceKind::AudioEffect);
+    if (session.isMasterTrack(track) && !carriesEffect && kind != "info")
         return juce::Result::fail("The main track takes audio effects only.");
 
     if (kind == "preset")
@@ -207,6 +214,19 @@ juce::Result Arrangement::applyBrowserDrop(const juce::String& description, int 
         if (result.failed()) return result;
         selectTrack(track);
         if (status) status("Added MIDI FX to " + session.trackName(track) + " Device View");
+        return juce::Result::ok();
+    }
+
+    // A preset adds the device it is for, already set; an instrument the
+    // track already runs takes the preset instead.
+    if (kind == "device-preset")
+    {
+        const auto file = browserDropPresetFile(description);
+        if (track < 0) return juce::Result::fail("Drop presets on a track.");
+        const auto result = session.addDeviceFromPreset(file, track);
+        if (result.failed()) return result;
+        selectTrack(track);
+        if (status) status("Loaded " + DevicePreset::nameOf(file) + " on " + session.trackName(track));
         return juce::Result::ok();
     }
 

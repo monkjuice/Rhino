@@ -298,6 +298,7 @@ public:
         // A browser double-click has no drop target of its own, so it follows
         // whichever track the visible arrangement has selected.
         rack.status = files.status;
+        rack.presetsChanged = [this] { browser.refreshPresets(); };
         editorToggle.onClick = [this] { toggleClipEditor(); };
         rackToggle.onClick = [this] { toggleDeviceView(); };
         editorToggle.setButtonText("Clip");

@@ -1,4 +1,5 @@
 #include "../../Arrangement.h"
+#include "ContentLibrary.h"
 // The scenarios drive devices directly, so this runner needs the definitions
 // rather than their catalog entries.
 #include "instruments/DrumDevice.h"

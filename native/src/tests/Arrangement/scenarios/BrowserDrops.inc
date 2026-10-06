@@ -62,3 +62,28 @@
         const auto effectSlots = static_cast<int>(session.deviceSlots(1).size());
         require(view.applyBrowserDrop("rhino-browser:effect:Delay", 1).wasOk(), "Browser effect drop inserts on the target audio track");
         require(static_cast<int>(session.deviceSlots(1).size()) == effectSlots + 1, "Dropped effect appears in the target audio Device View");
+
+        // A preset dragged out of the browser adds the device it is for,
+        // already set, wherever that device may go: the main track takes an
+        // effect's preset and refuses an instrument's. Both drops are undone,
+        // since later scenarios count these tracks' devices.
+        {
+            const auto hall = ContentLibrary::file("Presets/RhinoSpace/Vast Hall.rnd");
+            const auto hallDrop = "rhino-browser:device-preset:" + hall.getFullPathName();
+            require(view.isInterestedInDragSource({hallDrop, nullptr, {160, 82}}), "The arrangement takes a dragged preset");
+            const auto before = static_cast<int>(session.deviceSlots(1).size());
+            require(view.applyBrowserDrop(hallDrop, 1).wasOk(), "A Rhino Space preset drops on an audio track");
+            const auto after = session.deviceSlots(1);
+            require(static_cast<int>(after.size()) == before + 1 && after.back().deviceId == "RhinoSpace"
+                        && std::abs(session.deviceParameters(1, after.back().pluginIndex)[1].value - 0.9f) < 1.0e-6f,
+                    "and adds Rhino Space set as Vast Hall says, Size 90%");
+            require(view.applyBrowserDrop(hallDrop, session.masterTrackIndex()).wasOk(),
+                    "An effect's preset drops on the main track");
+            const auto bass = ContentLibrary::file("Presets/RhinoFM/Hard Bass.rnd");
+            require(view.applyBrowserDrop("rhino-browser:device-preset:" + bass.getFullPathName(),
+                                          session.masterTrackIndex()).failed(),
+                    "but an instrument's preset does not");
+            session.undo();
+            session.undo();
+            require(static_cast<int>(session.deviceSlots(1).size()) == before, "Each preset drop is one undo step");
+        }

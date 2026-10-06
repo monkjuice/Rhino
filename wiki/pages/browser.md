@@ -13,9 +13,11 @@ updated: 2026-10-03
 
 Search looks across every section, groups the hits as *Section / Folder* and opens those folders.
 
+A device's row holds its presets, read from disk by `ContentLibrary::presets()` when the panel is built and again on `refreshPresets()`, which the shell calls after a preset is saved. Dragging the device adds it at its defaults; dragging a preset adds it already set, and a search that finds a preset brings out its device's row, open ([Device presets (.rnd)](device-presets.md)). The rows' order and drag payloads are tested; how the open tree looks is not, since a test cannot run the message loop the tree lays its rows out on.
+
 ## Rows leave only by drag
 
-There is no click-to-add and no double-click action, so browsing and auditioning can never land a device on whatever track happens to be selected. A row's drag description is `rhino-browser:<kind>:<id>` (kinds `preset`, `instrument`, `midi-effect`, `effect`, `file`, `sample`, `drumkit`), parsed by `BrowserIds.h` for every drop target: the [arrangement](arrangement-view.md), the [device rack](device-rack.md) and the paused session view. It exists because the arrangement and rack kept their own id tables, which drifted until the rack silently ignored a Rhino Wave drop the arrangement accepted. The id is read from the front, because a `file` payload is a Windows path with its own colon.
+There is no click-to-add and no double-click action, so browsing and auditioning can never land a device on whatever track happens to be selected. A row's drag description is `rhino-browser:<kind>:<id>` (kinds `preset`, `instrument`, `midi-effect`, `effect`, `device-preset`, `file`, `sample`, `drumkit`), parsed by `BrowserIds.h` for every drop target: the [arrangement](arrangement-view.md), the [device rack](device-rack.md) and the paused session view. It exists because the arrangement and rack kept their own id tables, which drifted until the rack silently ignored a Rhino Wave drop the arrangement accepted. The id is read from the front, because a `file` payload is a Windows path with its own colon.
 
 A drop below the last lane makes a lane of the kind the item needs, since a track cannot change kind later ([Track kinds: audio and MIDI](track-kinds.md)).
 
@@ -37,3 +39,4 @@ Clicking a sample plays it once. The audition is a second `juce::AudioIODeviceCa
 - [Real-time audio rules](real-time-audio-rules.md)
 - [Recording and the count-in](recording.md)
 - [Pattern presets](pattern-presets.md)
+- [Device presets (.rnd)](device-presets.md)

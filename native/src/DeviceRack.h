@@ -32,6 +32,8 @@ public:
     void itemDragExit(const juce::DragAndDropTarget::SourceDetails&) override;
     void itemDropped(const juce::DragAndDropTarget::SourceDetails&) override;
     std::function<void(juce::String)> status;
+    // A device's preset was saved from its panel.
+    std::function<void()> presetsChanged;
 
 private:
     friend void runPatternDeviceRackTest();

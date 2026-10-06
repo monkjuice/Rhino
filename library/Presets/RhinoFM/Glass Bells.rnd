@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<RHINO_PRESET format="1" device="RhinoFM">
+  <PARAM id="algorithm" value="4"/>
+  <PARAM id="feedback" value="0"/>
+  <PARAM id="depth" value="1"/>
+  <PARAM id="velocity" value="0.7"/>
+  <PARAM id="mono" value="0"/>
+  <PARAM id="glide" value="0"/>
+  <PARAM id="outputDb" value="0"/>
+  <PARAM id="op1Ratio" value="1"/>
+  <PARAM id="op1Detune" value="0"/>
+  <PARAM id="op1Level" value="0.8"/>
+  <PARAM id="op1Attack" value="0"/>
+  <PARAM id="op1Decay" value="6"/>
+  <PARAM id="op1Sustain" value="0"/>
+  <PARAM id="op1Release" value="3"/>
+  <PARAM id="op2Ratio" value="3.5"/>
+  <PARAM id="op2Detune" value="0"/>
+  <PARAM id="op2Level" value="0.5"/>
+  <PARAM id="op2Attack" value="0"/>
+  <PARAM id="op2Decay" value="3.5"/>
+  <PARAM id="op2Sustain" value="0"/>
+  <PARAM id="op2Release" value="2"/>
+  <PARAM id="op3Ratio" value="2"/>
+  <PARAM id="op3Detune" value="4"/>
+  <PARAM id="op3Level" value="0.55"/>
+  <PARAM id="op3Attack" value="0"/>
+  <PARAM id="op3Decay" value="4"/>
+  <PARAM id="op3Sustain" value="0"/>
+  <PARAM id="op3Release" value="2.5"/>
+  <PARAM id="op4Ratio" value="7"/>
+  <PARAM id="op4Detune" value="0"/>
+  <PARAM id="op4Level" value="0.35"/>
+  <PARAM id="op4Attack" value="0"/>
+  <PARAM id="op4Decay" value="1.5"/>
+  <PARAM id="op4Sustain" value="0"/>
+  <PARAM id="op4Release" value="1"/>
+</RHINO_PRESET>

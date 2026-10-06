@@ -19,6 +19,8 @@ public:
     void paint(juce::Graphics&) override;
     void resized() override;
     void focusSearch();
+    // Reads the presets on disk again, after one has been saved.
+    void refreshPresets();
     std::function<void(juce::String)> status;
 
     // One row of the library. `folder` is the subfolder inside `category`; an
@@ -39,11 +41,16 @@ public:
         // everything else. Dragged and applied by path.
         juce::File file;
         std::optional<DrumKit> drumKit;
+        // A .rnd preset of the device named by deviceId. Its row sits under
+        // the device's own, which is dragged for the device at its defaults.
+        juce::File devicePreset;
     };
 
     // What the browser offers, in the order it offers it. Exposed so a test
     // can check that the device catalog really is what fills the library.
     const std::vector<Item>& libraryItems() const { return items; }
+    // What dragging a row carries: "rhino-browser:<kind>:<id>" (BrowserIds.h).
+    juce::String dragDescriptionFor(const Item&) const;
 
 private:
     class FolderNode;
@@ -55,9 +62,9 @@ private:
     void selectedRowsChanged(int lastRowSelected) override;
 
     void rebuildTree();
+    void addPresetItems();
     void previewItem(const Item&);
     void reportSelection(const Item&);
-    juce::String dragDescriptionFor(const Item&) const;
     juce::Colour colourFor(const Item&) const;
     const Item* selectedItem() const;
 

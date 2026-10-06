@@ -51,6 +51,8 @@ public:
     void mouseWheelMove(const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
     std::function<void(juce::String)> status;
     std::function<void()> selected;
+    // A preset was saved, so a list of them is out of date.
+    std::function<void()> presetsChanged;
 
 private:
     friend void runPatternDeviceRackTest();
@@ -135,6 +137,11 @@ private:
     void timerCallback() override;
     void showParameterMenu(int index);
     int visibleParameterCount() const;
+    // The name bar's right-click menu: this device's presets to load, and
+    // Save preset. In DeviceEditorPanelPresets.cpp.
+    void showPresetMenu();
+    void askToSavePreset();
+    void savePreset(const juce::File&);
 
     Session& session;
     int track = -1, pluginSlot = -1;

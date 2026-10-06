@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<RHINO_PRESET format="1" device="RhinoArp">
+  <PARAM id="style" value="3"/>
+  <PARAM id="rate" value="4"/>
+  <PARAM id="gate" value="62"/>
+  <PARAM id="distance" value="7"/>
+  <PARAM id="steps" value="3"/>
+  <PARAM id="offset" value="3"/>
+  <PARAM id="groove" value="1"/>
+  <PARAM id="hold" value="1"/>
+  <PARAM id="retrigger" value="1"/>
+  <PARAM id="interval" value="2"/>
+  <PARAM id="repeats" value="2"/>
+  <PARAM id="root" value="0"/>
+  <PARAM id="scale" value="1"/>
+  <PARAM id="rateMode" value="0"/>
+  <PARAM id="freeRate" value="125"/>
+</RHINO_PRESET>

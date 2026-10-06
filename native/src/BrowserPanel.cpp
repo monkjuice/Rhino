@@ -1,6 +1,9 @@
 #include "BrowserPanel.h"
+#include "BrowserIds.h"
 #include "ContentLibrary.h"
 #include "Theme.h"
+#include <algorithm>
+#include <map>
 
 namespace rhino
 {
@@ -65,6 +68,31 @@ juce::String sampleId(Session::BuiltInSample sample)
     }
     return {};
 }
+
+juce::String sectionOf(const DeviceDescriptor& device)
+{
+    return device.kind == DeviceKind::Instrument ? "Instruments"
+         : device.kind == DeviceKind::MidiEffect ? "MIDI FX" : "Audio FX";
+}
+
+// The arrow beside a row that holds others: a folder, or a device holding its
+// presets.
+void paintDisclosure(juce::Graphics& g, const juce::Rectangle<float>& area, bool open)
+{
+    juce::Path arrow;
+    const auto centre = area.getCentre();
+    constexpr auto size = 3.4f;
+    if (open)
+        arrow.addTriangle(centre.x - size, centre.y - size * 0.6f,
+                          centre.x + size, centre.y - size * 0.6f,
+                          centre.x, centre.y + size * 0.9f);
+    else
+        arrow.addTriangle(centre.x - size * 0.6f, centre.y - size,
+                          centre.x - size * 0.6f, centre.y + size,
+                          centre.x + size * 0.9f, centre.y);
+    g.setColour(palette::textDim);
+    g.fillPath(arrow);
+}
 }
 
 
@@ -95,34 +123,32 @@ public:
     void paintOpenCloseButton(juce::Graphics& g, const juce::Rectangle<float>& area, juce::Colour, bool) override
     {
         if (name.isEmpty()) return;
-        juce::Path arrow;
-        const auto centre = area.getCentre();
-        constexpr auto size = 3.4f;
-        if (isOpen())
-            arrow.addTriangle(centre.x - size, centre.y - size * 0.6f,
-                              centre.x + size, centre.y - size * 0.6f,
-                              centre.x, centre.y + size * 0.9f);
-        else
-            arrow.addTriangle(centre.x - size * 0.6f, centre.y - size,
-                              centre.x - size * 0.6f, centre.y + size,
-                              centre.x + size * 0.9f, centre.y);
-        g.setColour(palette::textDim);
-        g.fillPath(arrow);
+        paintDisclosure(g, area, isOpen());
     }
 
     BrowserPanel& panel;
     juce::String name;
 };
 
-// A single library row. This is what carries the drag payload.
+// A single library row. This is what carries the drag payload. A device's row
+// holds its presets, the way Live files a device's presets under it.
 class BrowserPanel::ItemNode final : public juce::TreeViewItem
 {
 public:
     ItemNode(BrowserPanel& p, Item i) : panel(p), item(std::move(i)) {}
 
-    bool mightContainSubItems() override { return false; }
-    juce::String getUniqueName() const override { return "item:" + item.category + "/" + item.name; }
-    int getItemHeight() const override { return 30; }
+    bool isPreset() const { return item.devicePreset != juce::File(); }
+    bool mightContainSubItems() override { return getNumSubItems() > 0; }
+    juce::String getUniqueName() const override
+    {
+        return isPreset() ? "preset:" + item.deviceId + "/" + item.name : "item:" + item.category + "/" + item.name;
+    }
+    int getItemHeight() const override { return isPreset() ? 22 : 30; }
+
+    void paintOpenCloseButton(juce::Graphics& g, const juce::Rectangle<float>& area, juce::Colour, bool) override
+    {
+        paintDisclosure(g, area, isOpen());
+    }
 
     void paintItem(juce::Graphics& g, int width, int height) override
     {
@@ -130,6 +156,17 @@ public:
         {
             g.setColour(palette::hover);
             g.fillRect(0, 0, width, height);
+        }
+        // A preset is one line under its device: the device already says what
+        // it is.
+        if (isPreset())
+        {
+            g.setColour(panel.colourFor(item).withAlpha(0.7f));
+            g.fillRect(4, height / 2 - 2, 4, 4);
+            g.setColour(palette::text);
+            g.setFont(uiFont(10.0f));
+            drawSnappedText(g, item.name, {14, 0, width - 18, height}, juce::Justification::centredLeft, true);
+            return;
         }
         g.setColour(panel.colourFor(item));
         g.fillRect(2, height / 2 - 4, 7, 7);
@@ -231,16 +268,15 @@ BrowserPanel::BrowserPanel(Session& s) : session(s)
                          std::nullopt, {}, std::nullopt, sample.file});
     }
 
-    // Instruments, Audio FX and MIDI FX, in catalog order.
+    // Instruments, Audio FX and MIDI FX, in catalog order, then their presets.
     for (const auto& device : DeviceCatalog::all())
     {
         if (!device.browsable)
             continue;
-        const auto section = device.kind == DeviceKind::Instrument ? "Instruments"
-            : device.kind == DeviceKind::MidiEffect ? "MIDI FX" : "Audio FX";
-        items.push_back({section, device.category, DeviceCatalog::labelFor(device),
+        items.push_back({sectionOf(device), device.category, DeviceCatalog::labelFor(device),
                          device.description, std::nullopt, device.id});
     }
+    addPresetItems();
 
     for (auto* component : std::initializer_list<juce::Component*>{&title, &search, &categoryList, &tree})
         addAndMakeVisible(component);
@@ -250,6 +286,33 @@ BrowserPanel::BrowserPanel(Session& s) : session(s)
 BrowserPanel::~BrowserPanel()
 {
     tree.setRootItem(nullptr);
+}
+
+void BrowserPanel::addPresetItems()
+{
+    for (const auto& preset : ContentLibrary::presets())
+    {
+        const auto* device = DeviceCatalog::byId(preset.deviceId);
+        if (device == nullptr || !device->browsable)
+            continue;
+        Item item;
+        item.category = sectionOf(*device);
+        item.folder = device->category;
+        item.name = preset.name;
+        item.detail = (preset.user ? "Your " : "") + DeviceCatalog::labelFor(*device) + " preset";
+        item.deviceId = device->id;
+        item.devicePreset = preset.file;
+        items.push_back(std::move(item));
+    }
+}
+
+void BrowserPanel::refreshPresets()
+{
+    items.erase(std::remove_if(items.begin(), items.end(),
+                               [] (const Item& item) { return item.devicePreset != juce::File(); }),
+                items.end());
+    addPresetItems();
+    rebuildTree();
 }
 
 void BrowserPanel::paint(juce::Graphics& g)
@@ -372,17 +435,54 @@ void BrowserPanel::rebuildTree()
         root->addSubItem(owned.release());
         return node;
     };
-    for (const auto& item : items)
+    const auto shown = [&] (const Item& item)
     {
-        if (!searching && item.category != category) continue;
-        if (searching
-            && !item.name.toLowerCase().contains(query)
-            && !item.detail.toLowerCase().contains(query)
-            && !item.folder.toLowerCase().contains(query))
-            continue;
+        if (!searching)
+            return item.category == category;
+        return item.name.toLowerCase().contains(query) || item.detail.toLowerCase().contains(query)
+            || item.folder.toLowerCase().contains(query);
+    };
+    // Each device's row in this tree, which its presets go under.
+    std::map<juce::String, ItemNode*> deviceRows;
+    const auto addRow = [&] (const Item& item)
+    {
         const auto groupName = searching ? item.category + " / " + item.folder : item.folder;
         auto* node = new ItemNode(*this, item);
         folderFor(groupName.trimCharactersAtEnd(" /"))->addSubItem(node);
+        if (item.deviceId.isNotEmpty())
+            deviceRows[item.deviceId] = node;
+        return node;
+    };
+    for (const auto& item : items)
+    {
+        if (item.devicePreset != juce::File() || !shown(item))
+            continue;
+        auto* node = addRow(item);
+        if (item.name == selectionToRestore)
+            restored = node;
+    }
+    // A preset a search finds brings out its device's row too, open, even
+    // when the device itself did not match.
+    for (const auto& item : items)
+    {
+        if (item.devicePreset == juce::File() || !shown(item))
+            continue;
+        auto row = deviceRows.find(item.deviceId);
+        if (row == deviceRows.end())
+        {
+            const auto device = std::find_if(items.begin(), items.end(), [&item] (const Item& candidate)
+            {
+                return candidate.deviceId == item.deviceId && candidate.devicePreset == juce::File();
+            });
+            if (device == items.end())
+                continue;
+            addRow(*device);
+            row = deviceRows.find(item.deviceId);
+        }
+        auto* node = new ItemNode(*this, item);
+        row->second->addSubItem(node);
+        if (searching)
+            row->second->setOpen(true);
         if (item.name == selectionToRestore)
             restored = node;
     }
@@ -394,7 +494,8 @@ void BrowserPanel::rebuildTree()
         node->setOpen(searching);
     if (openness != nullptr && !searching)
         tree.restoreOpennessState(*openness, false);
-    if (restored != nullptr && restored->getParentItem() != nullptr && restored->getParentItem()->isOpen())
+    if (restored != nullptr && restored->getParentItem() != nullptr && restored->getParentItem()->isOpen()
+        && (restored->getParentItem()->getParentItem() == nullptr || restored->getParentItem()->getParentItem()->isOpen()))
         restored->setSelected(true, true);
 }
 
@@ -417,14 +518,12 @@ juce::String BrowserPanel::dragDescriptionFor(const Item& item) const
 {
     if (item.preset)
         return "rhino-browser:preset:" + presetId(*item.preset);
+    if (item.devicePreset != juce::File())
+        return "rhino-browser:device-preset:" + item.devicePreset.getFullPathName();
     // The kind still appears in the description because each drop target
     // accepts only some of them; the catalog is what decides which it is.
     if (const auto* device = DeviceCatalog::byId(item.deviceId))
-    {
-        const auto kind = device->kind == DeviceKind::Instrument ? "instrument"
-            : device->kind == DeviceKind::MidiEffect ? "midi-effect" : "effect";
-        return "rhino-browser:" + juce::String(kind) + ":" + device->id;
-    }
+        return "rhino-browser:" + deviceDropKind(*device) + ":" + device->id;
     if (item.file != juce::File())
         return "rhino-browser:file:" + item.file.getFullPathName();
     if (item.sample)

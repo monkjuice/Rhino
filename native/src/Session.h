@@ -12,6 +12,8 @@
 namespace rhino
 {
 struct PresetPattern;
+// A device preset (core/DevicePreset.h), held only by pointer here.
+struct DevicePreset;
 // Held only as a pointer here, so the definition stays where it is used: the
 // count-in click is an audio callback of Rhino's own, and only
 // SessionRecording.cpp needs to see how it works.
@@ -259,8 +261,22 @@ public:
     // Adding a device by its catalog id is the general form; the three enum
     // overloads below are shorthand for the devices that had an enum before
     // the catalog existed. A device added from now on needs no enum.
-    juce::Result addDevice(const juce::String& deviceId, int track);
+    // Given a preset, the device is added already set the way it says, in the
+    // same undo step.
+    juce::Result addDevice(const juce::String& deviceId, int track, const DevicePreset* preset = nullptr);
     juce::Result addClipDevice(const juce::String& deviceId, te::EditItemID);
+    // Device presets, .rnd files (core/DevicePreset.h). A preset stores every
+    // control by the id it is saved under, and only Rhino's own devices have
+    // them. Loading one sets each control it names and puts every other back
+    // to its default, so a preset sounds the same whatever was there before.
+    juce::Result saveDevicePreset(int track, int slot, const juce::File&);
+    // Into the device in a slot, which must be the device the preset is for.
+    // One undo step.
+    juce::Result loadDevicePreset(int track, int slot, const juce::File&);
+    // Adds the device a preset is for to a track, already set: what dragging a
+    // preset out of the browser does. An instrument the track already runs
+    // takes the preset instead, as a second copy would replace it anyway.
+    juce::Result addDeviceFromPreset(const juce::File&, int track);
     juce::Result addAudioEffect(AudioEffect, int track);
     juce::Result addClipAudioEffect(AudioEffect, te::EditItemID);
     juce::Result addInstrument(Instrument, int track);
@@ -923,8 +939,8 @@ public:
 private:
     // Reached only through addDevice, which resolves the id and dispatches
     // on the device's kind.
-    juce::Result addInstrumentDevice(const DeviceDescriptor&, int track);
-    juce::Result addMidiEffectDevice(const DeviceDescriptor&, int track);
+    juce::Result addInstrumentDevice(const DeviceDescriptor&, int track, const DevicePreset*);
+    juce::Result addMidiEffectDevice(const DeviceDescriptor&, int track, const DevicePreset*);
 
     // The arrangement workflow test reaches engine-level slot state through
     // this, the same way it does for StepGrid and Arrangement.
@@ -1190,4 +1206,7 @@ void checkAutoTuneDsp(Session&);
 void checkRhinoEqDsp(Session&);
 void checkVocoderDsp(Session&);
 void checkFmDsp(Session&);
+// Device presets: the .rnd format, every factory preset against its device,
+// and saving, loading and adding through the session. Run by --device-test.
+void checkDevicePresets(Session&);
 }

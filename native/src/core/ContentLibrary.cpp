@@ -1,4 +1,5 @@
 #include "ContentLibrary.h"
+#include "DevicePreset.h"
 #include <algorithm>
 
 namespace rhino
@@ -115,6 +116,39 @@ const std::vector<LibrarySample>& ContentLibrary::samples()
 {
     static const std::vector<LibrarySample> scanned = scanSamples();
     return scanned;
+}
+
+juce::File ContentLibrary::userPresets()
+{
+    const auto overridePath = juce::SystemStats::getEnvironmentVariable("RHINO_USER_PRESETS_DIR", {});
+    if (overridePath.isNotEmpty())
+        return juce::File(overridePath);
+    return juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
+        .getChildFile("Rhino").getChildFile("Presets");
+}
+
+std::vector<LibraryPreset> ContentLibrary::presetsIn(const juce::File& presetsRoot, bool user)
+{
+    std::vector<LibraryPreset> found;
+    if (!presetsRoot.isDirectory())
+        return found;
+    const auto pattern = juce::String("*") + DevicePreset::extension;
+    for (const auto& device : presetsRoot.findChildFiles(juce::File::findDirectories, false))
+        for (const auto& preset : device.findChildFiles(juce::File::findFiles, false, pattern))
+            found.push_back({ preset, device.getFileName(), DevicePreset::nameOf(preset), user });
+    std::sort(found.begin(), found.end(), [] (const LibraryPreset& a, const LibraryPreset& b)
+    {
+        return a.deviceId != b.deviceId ? a.deviceId < b.deviceId : a.name.compareNatural(b.name) < 0;
+    });
+    return found;
+}
+
+std::vector<LibraryPreset> ContentLibrary::presets()
+{
+    auto found = presetsIn(file("Presets"), false);
+    const auto own = presetsIn(userPresets(), true);
+    found.insert(found.end(), own.begin(), own.end());
+    return found;
 }
 
 }

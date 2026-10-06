@@ -51,6 +51,7 @@ target_sources(RhinoNative PRIVATE
     src/SessionPresets.cpp
     src/SessionPatches.cpp
     src/SessionDevices.cpp
+    src/SessionDevicePresets.cpp
     src/SessionTracks.cpp
     src/SessionGroups.cpp
     src/SessionSlots.cpp
@@ -100,6 +101,7 @@ target_sources(RhinoNative PRIVATE
     src/DeviceEditorPanelVocoder.cpp
     src/DeviceEditorPanelGenerated.cpp
     src/DeviceEditorPanelDisplay.cpp
+    src/DeviceEditorPanelPresets.cpp
     src/DeviceRack.cpp
     src/Playhead.cpp
     src/CountInClick.cpp
@@ -117,6 +119,7 @@ target_sources(RhinoNative PRIVATE
     src/tests/EqTest.cpp
     src/tests/VocoderTest.cpp
     src/tests/FmTest.cpp
+    src/tests/PresetTest.cpp
     src/tests/UiProfile.cpp
     src/tests/Pattern/DeviceRackTest.cpp
     src/tests/Pattern/WorkflowTest.cpp

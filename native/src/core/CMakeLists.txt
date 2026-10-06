@@ -10,7 +10,8 @@ add_library(RhinoCore STATIC
     PsolaShifter.cpp
     AutoTuneEngine.cpp
     VocoderEngine.cpp
-    FmEngine.cpp)
+    FmEngine.cpp
+    DevicePreset.cpp)
 target_include_directories(RhinoCore PUBLIC .)
 target_link_libraries(RhinoCore
     PUBLIC juce::juce_core

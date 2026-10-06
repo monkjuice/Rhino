@@ -196,3 +196,12 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/adding-a-device.md (tab groups and a described display)
 - updated: pages/device-rack.md (tabs, the display, click and repaint behaviour)
 - updated: index.md (Rhino FM summary)
+
+## [2026-10-05] create | Device presets (.rnd)
+- created: pages/device-presets.md (the format, where presets live, applying one in one undo step, browser rows, drops, the name-bar menu, tests)
+- updated: pages/browser.md (device rows hold their presets; the device-preset drag kind)
+- updated: pages/content-library.md (Presets/ and the user folder; summary)
+- updated: pages/content-is-files.md (device presets are now files under library/)
+- updated: pages/native-device-standard.md (presets built; remaining step)
+- updated: pages/device-rack.md (the presets menu and preset drops on a panel)
+- updated: index.md (new page; Content library summary)

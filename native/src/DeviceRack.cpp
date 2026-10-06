@@ -447,7 +447,7 @@ bool DeviceRack::isInterestedInDragSource(const juce::DragAndDropTarget::SourceD
     const auto description = details.description.toString();
     if (deviceChainDragSlot(description, selectedTrack).has_value())
         return true;
-    return deviceFromBrowserDrop(description) != nullptr;
+    return deviceFromBrowserDrop(description) != nullptr || deviceForPresetDrop(description) != nullptr;
 }
 
 void DeviceRack::itemDragEnter(const juce::DragAndDropTarget::SourceDetails& details)
@@ -527,6 +527,30 @@ void DeviceRack::itemDropped(const juce::DragAndDropTarget::SourceDetails& detai
         const auto result = session.moveDevice(selectedTrack, from, gap > from ? gap - 1 : gap);
         if (status)
             status(result.wasOk() ? "Moved " + name + " in " + session.trackName(selectedTrack) + "'s chain"
+                                  : result.getErrorMessage());
+        return;
+    }
+    // A preset dropped on a device it is for goes into that device. Anywhere
+    // else in the chain, it adds the device, already set.
+    if (const auto preset = browserDropPresetFile(description); preset != juce::File())
+    {
+        const auto* presetDevice = deviceForPresetDrop(description);
+        const auto under = chainContent.getLocalPoint(this, details.localPosition);
+        for (int i = 0; i < devicePanels.size() && i < static_cast<int>(slots.size()); ++i)
+            if (devicePanels[i]->getBounds().contains(under) && presetDevice != nullptr
+                && slots[static_cast<size_t>(i)].deviceId == presetDevice->id)
+            {
+                const auto result = session.loadDevicePreset(selectedTrack, slots[static_cast<size_t>(i)].pluginIndex, preset);
+                if (status)
+                    status(result.wasOk() ? "Loaded " + preset.getFileNameWithoutExtension() + " into "
+                                                + slots[static_cast<size_t>(i)].name
+                                          : result.getErrorMessage());
+                return;
+            }
+        const auto result = session.addDeviceFromPreset(preset, selectedTrack);
+        if (status)
+            status(result.wasOk() ? "Added " + preset.getFileNameWithoutExtension() + " to "
+                                        + session.trackName(selectedTrack)
                                   : result.getErrorMessage());
         return;
     }
@@ -611,6 +635,7 @@ void DeviceRack::rebuildDevicePanels()
         auto* panel = devicePanels.add(new DeviceEditorPanel(session));
         panel->status = [this](const juce::String& message) { if (status) status(message); };
         panel->selected = [this, i] { selectDevice(i); };
+        panel->presetsChanged = [this] { if (presetsChanged) presetsChanged(); };
         panel->setTarget(selectedTrack, slots[static_cast<size_t>(i)], i == selectedDevice);
         chainContent.addAndMakeVisible(panel);
     }

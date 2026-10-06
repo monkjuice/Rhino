@@ -72,7 +72,7 @@ juce::Result Session::addAudioEffect(AudioEffect effect, int trackIndex)
 // The one entry point for adding a device: everything else, including the
 // enum overloads above, comes through here. A device with no enum of its own
 // is added exactly like one that has.
-juce::Result Session::addDevice(const juce::String& deviceId, int trackIndex)
+juce::Result Session::addDevice(const juce::String& deviceId, int trackIndex, const DevicePreset* preset)
 {
     const auto* device = DeviceCatalog::byId(deviceId);
     if (device == nullptr)
@@ -82,9 +82,9 @@ juce::Result Session::addDevice(const juce::String& deviceId, int trackIndex)
     if (isGroupBusTrack(trackIndex) && device->kind != DeviceKind::AudioEffect)
         return juce::Result::fail("A group track takes audio effects only.");
     if (device->kind == DeviceKind::Instrument)
-        return addInstrumentDevice(*device, trackIndex);
+        return addInstrumentDevice(*device, trackIndex, preset);
     if (device->kind == DeviceKind::MidiEffect)
-        return addMidiEffectDevice(*device, trackIndex);
+        return addMidiEffectDevice(*device, trackIndex, preset);
 
     const auto& name = device->displayName;
     const auto& type = device->typeName;
@@ -107,6 +107,8 @@ juce::Result Session::addDevice(const juce::String& deviceId, int trackIndex)
         auto* track = te::getAudioTracks(*edit)[trackIndex];
         list->insertPlugin(plugin, channelStripInsertIndex(*track), nullptr);
     }
+    if (preset != nullptr)
+        applyDevicePreset(*plugin, *preset);
     edit->getUndoManager().beginNewTransaction();
     markModified();
     if (edit->getTransport().isPlaying())
@@ -161,7 +163,7 @@ juce::Result Session::addInstrument(Instrument instrument, int trackIndex)
     return addDevice(device->id, trackIndex);
 }
 
-juce::Result Session::addInstrumentDevice(const DeviceDescriptor& device, int trackIndex)
+juce::Result Session::addInstrumentDevice(const DeviceDescriptor& device, int trackIndex, const DevicePreset* preset)
 {
     // An external instrument may not have been scanned for yet.
     if (device.external && !forgeDescription)
@@ -183,9 +185,9 @@ juce::Result Session::addInstrumentDevice(const DeviceDescriptor& device, int tr
     bool changed = false;
     // A channel-strip facility is added to the chain rather than becoming the
     // track's instrument, so it does not displace one.
+    te::Plugin* plugin = nullptr;
     if (device.infrastructure)
     {
-        te::Plugin* plugin = nullptr;
         const auto result = ensurePlugin(*edit, *track, device.typeName, track->pluginList.size(), plugin, changed);
         if (result.failed())
             return juce::Result::fail(name + " could not be created.");
@@ -196,7 +198,14 @@ juce::Result Session::addInstrumentDevice(const DeviceDescriptor& device, int tr
                                                   forgeDescription ? &*forgeDescription : nullptr);
         if (result.failed())
             return result;
+        // The instrument now on the track, new or the one already there.
+        for (auto* candidate : track->pluginList)
+            if (candidate != nullptr && candidate->getPluginType() == device.typeName)
+                plugin = candidate;
     }
+    // In the same transaction as the add, so undoing it takes both away.
+    if (preset != nullptr && plugin != nullptr && applyDevicePreset(*plugin, *preset))
+        changed = true;
     edit->getUndoManager().beginNewTransaction();
     if (changed)
         markModified();
@@ -214,7 +223,7 @@ juce::Result Session::addMidiEffect(MidiEffect effect, int trackIndex)
     return addDevice(device->id, trackIndex);
 }
 
-juce::Result Session::addMidiEffectDevice(const DeviceDescriptor& device, int trackIndex)
+juce::Result Session::addMidiEffectDevice(const DeviceDescriptor& device, int trackIndex, const DevicePreset* preset)
 {
     const auto tracks = te::getAudioTracks(*edit);
     if (!juce::isPositiveAndBelow(trackIndex, tracks.size()))
@@ -257,6 +266,8 @@ juce::Result Session::addMidiEffectDevice(const DeviceDescriptor& device, int tr
     }
 
     track->pluginList.insertPlugin(plugin, juce::jlimit(0, track->pluginList.size(), insertIndex), nullptr);
+    if (preset != nullptr)
+        applyDevicePreset(*plugin, *preset);
     edit->getUndoManager().beginNewTransaction();
     markModified();
     if (edit->getTransport().isPlaying())

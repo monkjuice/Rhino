@@ -162,6 +162,12 @@ void DeviceEditorPanel::mouseDown(const juce::MouseEvent& event)
     // the event back from the slider rather than letting it fall through.
     if (event.mods.isPopupMenu())
     {
+        if (event.eventComponent == this && event.y < headerHeight)
+        {
+            if (selected) selected();
+            showPresetMenu();
+            return;
+        }
         if (face == Face::Arp)
             if (const auto parameter = arpParameterForComponent(event.eventComponent); parameter >= 0)
             {

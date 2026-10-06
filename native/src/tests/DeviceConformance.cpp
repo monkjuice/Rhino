@@ -694,6 +694,8 @@ int runDeviceConformance()
         checkProbeProcessing(*session.edit);
         juce::Logger::writeToLog("Rhino: device conformance, native devices through the session");
         checkNativeDevicesThroughSession(session);
+        juce::Logger::writeToLog("Rhino: device conformance, presets");
+        checkDevicePresets(session);
 
         std::vector<juce::String> unexpected;
         std::set<juce::String> ran;

@@ -212,7 +212,9 @@ void NativeDevice::applyToBuffer(const te::PluginRenderContext& context)
     const auto total = context.bufferNumSamples;
     // Which frame of this block an event plays on. A timestamp that lands a
     // hair past the block's end plays on its last frame rather than not at
-    // all; see DrumDevice::applyToBuffer for how that happens.
+    // all: a clip whose start carries floating-point residue a hair before a
+    // block boundary sends its first note stamped at the block's full length.
+    // See wiki/pages/reproducing-live-timing-offline.md.
     const auto frameOf = [this, total] (const juce::MidiMessage& message)
     {
         return std::clamp(juce::roundToInt(message.getTimeStamp() * preparedRate), 0, total - 1);

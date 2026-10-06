@@ -54,11 +54,25 @@ public:
 
 private:
     friend void runPatternDeviceRackTest();
-    enum class Face { Generic, RhinoSpace, Arp, AutoTune, Eq, Vocoder };
+    enum class Face { Generic, Generated, Arp, AutoTune, Eq, Vocoder };
     void ensureControls();
     void styleControls();
     void layoutGeneric();
-    void layoutRhinoSpace();
+    // A native device without a face of its own gets one generated from what
+    // its controls declare: grouped by section, a knob for a continuous
+    // control, a chooser for a choice and a switch for a toggle. Its layout
+    // and drawing live in DeviceEditorPanelGenerated.cpp.
+    void ensureGeneratedControls();
+    void styleGeneratedControls();
+    void layoutGenerated();
+    void paintGenerated(juce::Graphics&);
+    int generatedWidth() const;
+    int generatedParameterForComponent(const juce::Component*) const;
+    bool isKnob(int parameter) const;
+    juce::Colour faceAccent() const;
+    // Sets a parameter as one undo step, the way a click on a chooser or a
+    // switch does, and Reset to default.
+    void writeParameter(int parameter, float value);
     // Rhino Arp uses the same automatable controls as the generic face, but
     // groups them around a diagram of the generated motion. Its layout and
     // drawing live in DeviceEditorPanelArp.cpp.
@@ -129,6 +143,19 @@ private:
     juce::Label title;
     juce::TextButton power;
     juce::Rectangle<int> contentArea, visualArea;
+    juce::String deviceId;
+
+    // ---- Generated face -----------------------------------------------------
+    // One chooser and one switch per parameter, index for index, each shown
+    // only where the parameter is that kind of control.
+    juce::OwnedArray<juce::ComboBox> generatedChoices;
+    juce::OwnedArray<juce::TextButton> generatedToggles;
+    struct GeneratedSection
+    {
+        juce::String title;
+        juce::Rectangle<int> area;
+    };
+    std::vector<GeneratedSection> generatedSections;
     // What the meter last drew, so an idle device asks for no frames at all.
     float lastDrawnCents = 0.0f, lastDrawnNote = 0.0f;
     int lastDrawnBand = -2;

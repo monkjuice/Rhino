@@ -1,6 +1,5 @@
 #include "DeviceEditorPanel.h"
 #include "Theme.h"
-#include "audio/RhinoSpaceDevice.h"
 #include "audio/AutoTuneDevice.h"
 #include "audio/RhinoEqDevice.h"
 #include "audio/VocoderDevice.h"
@@ -29,10 +28,14 @@ void styleAutomationButton(juce::TextButton& button, const Session::DeviceParame
         : "Following automation. Click to hold manual value");
 }
 
-float normalisedValue(const Session::DeviceParameter& parameter)
+// A generated face groups controls under their section's title, so a caption
+// need not repeat it: "Op 1 Ratio" under "OP 1" reads "Ratio". The full name
+// stays on the tooltip and on the automation lane, which are read alone.
+juce::String captionFor(const Session::DeviceParameter& parameter)
 {
-    const auto length = parameter.maximum - parameter.minimum;
-    return length > 0.0f ? std::clamp((parameter.value - parameter.minimum) / length, 0.0f, 1.0f) : 0.0f;
+    const auto prefix = parameter.section + " ";
+    return parameter.section.isNotEmpty() && parameter.name.startsWith(prefix)
+        ? parameter.name.substring(prefix.length()) : parameter.name;
 }
 }
 
@@ -62,11 +65,15 @@ void DeviceEditorPanel::setTarget(int nextTrack, const Session::DeviceSlot& devi
     pluginSlot = device.pluginIndex;
     deviceName = device.name;
     isSelected = nextSelected;
-    face = device.type == RhinoSpaceDevice::xmlTypeName ? Face::RhinoSpace
-         : device.type == RhinoArpDevice::xmlTypeName ? Face::Arp
-         : device.type == AutoTuneDevice::xmlTypeName ? Face::AutoTune
-         : device.type == RhinoEqDevice::xmlTypeName ? Face::Eq
-         : device.type == VocoderDevice::xmlTypeName ? Face::Vocoder
+    deviceId = device.deviceId;
+    // A face is chosen by what the device is. A device on the SDK with no
+    // face of its own gets one generated from its declarations; anything
+    // else, a VST3 or a Tracktion built-in, gets the plain grid.
+    face = deviceId == "RhinoArp" ? Face::Arp
+         : deviceId == "RhinoTune" ? Face::AutoTune
+         : deviceId == "Equaliser" ? Face::Eq
+         : deviceId == "RhinoVocoder" ? Face::Vocoder
+         : device.native ? Face::Generated
          : Face::Generic;
     // A freshly rebuilt built-in plugin can briefly have no display name while
     // Tracktion refreshes its state. The face still has a stable catalog name.
@@ -92,6 +99,18 @@ void DeviceEditorPanel::setTarget(int nextTrack, const Session::DeviceSlot& devi
                     device.enabled ? juce::Colour(0xffc6d58c) : juce::Colour(0xff6f7982));
     ensureControls();
     styleControls();
+    if (face == Face::Generated)
+    {
+        ensureGeneratedControls();
+        styleGeneratedControls();
+    }
+    else
+    {
+        for (auto* choice : generatedChoices)
+            choice->setVisible(false);
+        for (auto* toggle : generatedToggles)
+            toggle->setVisible(false);
+    }
     if (face == Face::Arp)
     {
         ensureArpControls();
@@ -125,8 +144,8 @@ int DeviceEditorPanel::preferredWidth() const
         return 752;
     if (face == Face::Eq)
         return 660;
-    if (face == Face::RhinoSpace)
-        return 460;
+    if (face == Face::Generated)
+        return generatedWidth();
     if (face == Face::Arp)
         return 820;
     const auto columns = std::max(2, std::min(6, visibleParameterCount()));
@@ -142,6 +161,13 @@ void DeviceEditorPanel::mouseDown(const juce::MouseEvent& event)
     {
         if (face == Face::Arp)
             if (const auto parameter = arpParameterForComponent(event.eventComponent); parameter >= 0)
+            {
+                if (selected) selected();
+                showParameterMenu(parameter);
+                return;
+            }
+        if (face == Face::Generated)
+            if (const auto parameter = generatedParameterForComponent(event.eventComponent); parameter >= 0)
             {
                 if (selected) selected();
                 showParameterMenu(parameter);
@@ -245,7 +271,8 @@ void DeviceEditorPanel::showParameterMenu(int index)
         return;
     const Session::DeviceTarget target {track, pluginSlot, index};
     const auto lane = session.trackAutomationState(target);
-    const auto name = parameters[static_cast<size_t>(index)].name;
+    const auto& parameter = parameters[static_cast<size_t>(index)];
+    const auto name = parameter.name;
 
     juce::PopupMenu menu;
     menu.addSectionHeader(name.toUpperCase());
@@ -254,14 +281,36 @@ void DeviceEditorPanel::showParameterMenu(int index)
     menu.addSeparator();
     menu.addItem(3, "Hide automation", lane.visible);
     menu.addItem(4, "Delete automation", lane.active);
+    // Only a control that says what its default is can be put back to it.
+    if (parameter.defaultValue.has_value())
+    {
+        menu.addSeparator();
+        menu.addItem(5, "Reset to default", parameter.value != *parameter.defaultValue);
+    }
     // The EQ face has more parameters than the generic grid has knobs, so the
-    // menu falls back to the panel when there is no slider to point at.
+    // menu falls back to the panel when there is no slider to point at. A
+    // generated chooser or switch has no slider showing, so it points at
+    // itself.
     auto* anchor = index < parameterSliders.size()
         ? static_cast<juce::Component*>(parameterSliders[index]) : this;
+    if (face == Face::Generated && !isKnob(index))
+    {
+        if (index < generatedChoices.size() && generatedChoices[index]->isVisible())
+            anchor = generatedChoices[index];
+        else if (index < generatedToggles.size() && generatedToggles[index]->isVisible())
+            anchor = generatedToggles[index];
+    }
     menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(anchor),
-        [safe = juce::Component::SafePointer<DeviceEditorPanel>(this), target, name] (int result)
+        [safe = juce::Component::SafePointer<DeviceEditorPanel>(this), target, name,
+         reset = parameter.defaultValue] (int result)
         {
             if (safe == nullptr || result == 0) return;
+            if (result == 5)
+            {
+                if (reset.has_value())
+                    safe->writeParameter(target.parameter, *reset);
+                return;
+            }
             const auto outcome = result == 1 ? safe->session.showTrackAutomation(target, false)
                 : result == 2 ? safe->session.showTrackAutomation(target, true)
                 : result == 3 ? safe->session.hideTrackAutomation(target)
@@ -279,8 +328,11 @@ void DeviceEditorPanel::showParameterMenu(int index)
 int DeviceEditorPanel::visibleParameterCount() const
 {
     // Twelve is what the generic grid can lay out and stay readable. Dedicated
-    // faces can expose more because they give each control an intentional home.
+    // faces can expose more because they give each control an intentional home,
+    // and a generated face lays out every control a device declares, in
+    // sections, up to a limit no device comes near.
     const auto limit = face == Face::Arp ? RhinoArpDevice::parameterCount
+        : face == Face::Generated ? 48
         : face == Face::AutoTune || face == Face::Vocoder ? 13 : 12;
     return std::min(limit, static_cast<int>(parameters.size()));
 }
@@ -352,6 +404,9 @@ void DeviceEditorPanel::styleControls()
             || (i == RhinoArpDevice::rateParameter && beatRate)
             || (i == RhinoArpDevice::freeRateParameter && !beatRate);
         const auto visible = i < count && (face != Face::Arp || arpSlider);
+        // A generated face puts a chooser or a switch where a control is one;
+        // only a continuous control gets a knob and a reading under it.
+        const auto knob = face != Face::Generated || isKnob(i);
         // The Arp face draws the two knob captions itself, alongside the
         // compact grouped controls. Leaving the generic captions or A buttons
         // live would retain their previous layout rectangles.
@@ -359,8 +414,8 @@ void DeviceEditorPanel::styleControls()
         parameterLabels[i]->setVisible(genericChromeVisible);
         const auto arpRepeatReadout = face == Face::Arp && visible
             && i == RhinoArpDevice::repeatsParameter;
-        parameterValues[i]->setVisible(genericChromeVisible || arpRepeatReadout);
-        parameterSliders[i]->setVisible(visible);
+        parameterValues[i]->setVisible((genericChromeVisible && knob) || arpRepeatReadout);
+        parameterSliders[i]->setVisible(visible && knob);
         parameterAutomation[i]->setVisible(genericChromeVisible);
         // Offset reads left to right, as a place in the pattern does, but is
         // dragged up and down like everything else on the face. It does not
@@ -384,12 +439,13 @@ void DeviceEditorPanel::styleControls()
 
         const auto& parameter = parameters[static_cast<size_t>(i)];
         const auto accent = idle ? palette::disabled
-            : face == Face::RhinoSpace ? juce::Colour(0xff75b9cc)
+            : face == Face::Generated ? faceAccent()
             : face == Face::AutoTune ? juce::Colour(0xffb2739c)
             : face == Face::Vocoder ? juce::Colour(0xff7d8fc4)
             : face == Face::Arp ? palette::midiEffect
             : juce::Colour(0xffc6d58c);
-        parameterLabels[i]->setText(parameter.name, juce::dontSendNotification);
+        parameterLabels[i]->setText(face == Face::Generated ? captionFor(parameter) : parameter.name,
+                                    juce::dontSendNotification);
         parameterLabels[i]->setColour(juce::Label::textColourId, juce::Colour(0xffdfe6ea));
         parameterValues[i]->setText(parameter.valueText, juce::dontSendNotification);
         parameterValues[i]->setColour(juce::Label::textColourId, juce::Colour(0xffaebbc3));
@@ -400,7 +456,17 @@ void DeviceEditorPanel::styleControls()
                                         juce::dontSendNotification);
             parameterValues[i]->toFront(false);
         }
-        parameterSliders[i]->setRange(parameter.minimum, parameter.maximum, parameter.discrete ? 1.0 : 0.0);
+        // A generated knob steps the way its control declares, and travels
+        // with the control's own skew; double-clicking puts it back to its
+        // default.
+        const auto generated = face == Face::Generated;
+        const auto step = generated && parameter.interval > 0.0f ? static_cast<double>(parameter.interval)
+            : parameter.discrete ? 1.0 : 0.0;
+        parameterSliders[i]->setRange(parameter.minimum, parameter.maximum, step);
+        if (generated)
+            parameterSliders[i]->setSkewFactor(parameter.skew);
+        parameterSliders[i]->setDoubleClickReturnValue(generated && parameter.defaultValue.has_value(),
+                                                       parameter.defaultValue.value_or(0.0f));
         if (face == Face::Arp && i == RhinoArpDevice::freeRateParameter)
             parameterSliders[i]->setSkewFactorFromMidPoint(250.0);
         if (face == Face::Arp && (i == RhinoArpDevice::rateParameter
@@ -469,33 +535,8 @@ void DeviceEditorPanel::paint(juce::Graphics& g)
         paintArp(g);
         return;
     }
-    if (face != Face::RhinoSpace)
-        return;
-
-    if (!visualArea.isEmpty())
-    {
-        const auto area = visualArea.toFloat().reduced(8.0f);
-        g.setColour(juce::Colour(0xff1c252b));
-        g.fillRoundedRectangle(area, 4.0f);
-        g.setColour(juce::Colour(0xff566872));
-        g.drawRoundedRectangle(area, 4.0f, 1.0f);
-        const auto centre = area.getCentre().translated(0.0f, 5.0f);
-        const auto sizeValue = parameters.size() > 1 ? normalisedValue(parameters[1]) : 0.5f;
-        const auto smearValue = parameters.size() > 2 ? normalisedValue(parameters[2]) : 0.3f;
-        const auto radius = std::min(area.getWidth(), area.getHeight()) * (0.16f + sizeValue * 0.25f);
-        for (int ring = 3; ring >= 0; --ring)
-        {
-            const auto expansion = radius * (0.55f + ring * 0.32f + smearValue * 0.25f);
-            g.setColour(juce::Colour(0xff75b9cc).withAlpha(0.16f + (3 - ring) * 0.12f));
-            g.drawEllipse(centre.x - expansion, centre.y - expansion * 0.56f,
-                          expansion * 2.0f, expansion * 1.12f, 1.2f);
-        }
-        g.setColour(juce::Colour(0xffc6d58c));
-        g.fillEllipse(centre.x - 3.0f, centre.y - 3.0f, 6.0f, 6.0f);
-        g.setColour(juce::Colour(0xff89a0ac));
-        g.setFont(uiFontBold(8.0f));
-        drawSnappedText(g, "SPACE FIELD", visualArea.withHeight(18), juce::Justification::centred);
-    }
+    if (face == Face::Generated)
+        paintGenerated(g);
 }
 
 void DeviceEditorPanel::resized()
@@ -516,8 +557,8 @@ void DeviceEditorPanel::resized()
         layoutVocoder();
     else if (face == Face::Arp && contentArea.getWidth() >= 650 && contentArea.getHeight() >= 120)
         layoutArp();
-    else if (face == Face::RhinoSpace && contentArea.getWidth() >= 350 && contentArea.getHeight() >= 80)
-        layoutRhinoSpace();
+    else if (face == Face::Generated)
+        layoutGenerated();
     else
         layoutGeneric();
 }
@@ -543,21 +584,17 @@ void DeviceEditorPanel::layoutGeneric()
     }
 }
 
-void DeviceEditorPanel::layoutRhinoSpace()
+void DeviceEditorPanel::writeParameter(int parameter, float value)
 {
-    auto bounds = contentArea;
-    visualArea = bounds.removeFromLeft(108);
-    bounds.removeFromLeft(4);
-    const auto count = visibleParameterCount();
-    const auto cellWidth = count > 0 ? bounds.getWidth() / count : bounds.getWidth();
-    for (int i = 0; i < count; ++i)
+    const auto started = session.beginDeviceParameterGesture(track, pluginSlot, parameter);
+    if (started.failed())
     {
-        const juce::Rectangle<int> cell(bounds.getX() + i * cellWidth, bounds.getY(), cellWidth, bounds.getHeight());
-        const auto knobSize = std::min({66, std::max(38, cell.getWidth() - 22), std::max(38, cell.getHeight() - 38)});
-        parameterLabels[i]->setBounds(cell.getX() + 3, cell.getY() + 2, cell.getWidth() - 6, 18);
-        parameterSliders[i]->setBounds(cell.withSizeKeepingCentre(knobSize, knobSize).translated(0, 5));
-        parameterValues[i]->setBounds(cell.getX() + 3, cell.getBottom() - 20, cell.getWidth() - 6, 18);
-        parameterAutomation[i]->setBounds(parameterSliders[i]->getRight() - 9, parameterSliders[i]->getY() - 2, 19, 17);
+        if (status) status(started.getErrorMessage());
+        return;
     }
+    const auto changed = session.setDeviceParameter(track, pluginSlot, parameter, value);
+    const auto ended = session.endDeviceParameterGesture(track, pluginSlot, parameter);
+    if (changed.failed() && status) status(changed.getErrorMessage());
+    else if (ended.failed() && status) status(ended.getErrorMessage());
 }
 }

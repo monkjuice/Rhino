@@ -98,6 +98,7 @@ target_sources(RhinoNative PRIVATE
     src/DeviceEditorPanelAutoTune.cpp
     src/DeviceEditorPanelEq.cpp
     src/DeviceEditorPanelVocoder.cpp
+    src/DeviceEditorPanelGenerated.cpp
     src/DeviceRack.cpp
     src/Playhead.cpp
     src/CountInClick.cpp

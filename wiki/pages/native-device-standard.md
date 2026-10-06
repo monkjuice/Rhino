@@ -53,11 +53,14 @@ Utility and Rhino Space are written on the base. Each device's output was dumped
 
 Rhino FM, the new synth, is the first instrument on the base: a catalog entry and two files, with no line in `Session` or the UI. It passes every conformance check with nothing pending ([Rhino FM](rhino-fm.md)).
 
+Faces are generated: a device on the SDK without a face of its own gets one from its declarations, and faces are chosen by catalog id rather than engine type ([Device rack and device editors](device-rack.md)). Rhino Space lost its hand-drawn "space field", which drew nothing the DSP computes. Building the face turned up two SDK bugs, both fixed:
+- An undo reached the engine parameter only on a later message, so the rack showed the value just undone. A native device now updates a control the moment its stored value changes.
+- A discrete knob always stepped by 1, so Rhino FM's ratio could not reach its half steps. `DeviceParameter` now carries the declared interval.
+
 Still to do, one step per commit:
 
-1. Add the generated face.
-2. Add `.rnd` presets, with each device as a folder in the browser.
-3. Move the remaining devices.
+1. Add `.rnd` presets, with each device as a folder in the browser.
+2. Move the remaining devices.
 
 ## Consequences
 

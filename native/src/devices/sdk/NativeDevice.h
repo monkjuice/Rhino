@@ -12,6 +12,7 @@ namespace rhino
 struct ParamSlot
 {
     ParamSpec spec;
+    juce::Identifier property;
     juce::CachedValue<float> stored;
     te::AutomatableParameter::Ptr parameter;
     juce::SmoothedValue<float> smoother;
@@ -109,6 +110,11 @@ protected:
 
     // Content a device keeps beyond its controls, restored with them.
     virtual void loadData(const juce::ValueTree&) {}
+
+    // Tracktion moves an attached parameter to a new stored value on a later
+    // message, so after an undo the rack would read the value it had just
+    // undone. A control of a native device follows its stored value at once.
+    void valueTreePropertyChanged(juce::ValueTree&, const juce::Identifier&) override;
 
 private:
     friend class ParamBuilder;

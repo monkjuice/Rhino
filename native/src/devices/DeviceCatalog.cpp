@@ -81,7 +81,7 @@ std::vector<DeviceDescriptor> buildCatalog()
 
     add({.id = "RhinoSpace", .typeName = RhinoSpaceDevice::xmlTypeName, .displayName = "Rhino Space",
          .kind = DeviceKind::AudioEffect, .category = "Rhino", .description = "Floating multi FX: smear, drive, width",
-         .browsable = true, .create = factory<RhinoSpaceDevice>()});
+         .colour = 0xff75b9cc, .browsable = true, .create = factory<RhinoSpaceDevice>()});
 
     add({.id = "RhinoBloom", .typeName = RhinoBloomDevice::xmlTypeName, .displayName = "Rhino Bloom",
          .kind = DeviceKind::AudioEffect, .category = "Rhino", .description = "Chorus, clouds, plate, colour",

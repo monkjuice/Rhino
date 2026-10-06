@@ -184,3 +184,8 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/built-in-devices.md (Rhino FM in the table; it replaces Rhino Wave; three devices on the SDK)
 - updated: pages/native-device-standard.md (.rnd corrected to mean a device's presets, with each device a folder in the browser; the user's priorities; Rhino FM done; remaining steps)
 - updated: index.md (Rhino FM, and the standard's summary)
+
+## [2026-10-05] update | Generated device faces
+- updated: pages/device-rack.md (faces chosen by catalog id; the generated face for SDK devices and how it lays out)
+- updated: pages/adding-a-device.md (a device on the SDK gets a generated face; name controls in full)
+- updated: pages/native-device-standard.md (generated faces done; the undo-staleness and discrete-step bugs they found; remaining steps)

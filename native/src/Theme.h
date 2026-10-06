@@ -62,6 +62,9 @@ inline const juce::Colour pan              {0xffd4564e};
 
 // MIDI processors use cyan because they transform events rather than audio.
 inline const juce::Colour midiEffect       {0xff55c7d5};
+// A generated device face's knobs, for a device whose catalog entry names no
+// colour of its own.
+inline const juce::Colour deviceAccent     {0xffc6d58c};
 // Rhino Arp's sequence display: the notes the arp will play, in a colour no
 // control on its face wears, so the picture of the output stands apart from
 // the cyan controls that shape it.

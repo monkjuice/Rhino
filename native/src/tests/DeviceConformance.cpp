@@ -211,6 +211,19 @@ void checkProbeDeclarations(te::Edit& edit)
     require(device.gain.value() == 12.0f && device.mode.index() == 1 && !device.bypass.on()
                 && near(device.glide.value(), 0.5f),
             "Restoring clamps what is out of range and defaults what is missing");
+
+    // An undo reaches the engine parameter at once. Tracktion would move it on
+    // a later message, and the rack, which reads straight after an undo, would
+    // show the value that had just been undone.
+    auto& undo = edit.getUndoManager();
+    undo.beginNewTransaction();
+    device.glide.automatable().setParameter(0.9f, juce::sendNotificationSync);
+    undo.beginNewTransaction();
+    require(near(device.glide.value(), 0.9f), "A control takes a new value");
+    undo.undo();
+    require(near(device.glide.value(), 0.5f), "Undoing it reaches the engine parameter at once");
+    undo.redo();
+    require(near(device.glide.value(), 0.9f), "and so does redoing it");
 }
 
 void checkProbeProcessing(te::Edit& edit)

@@ -332,6 +332,117 @@ void runPatternDeviceRackTest()
             "The rack shows where the engine has moved a knob on a lane");
     require(session.clearTrackAutomationPoints({0, synthSlot, 0}).wasOk() && !chainView.devicePanels[1]->followsAutomation(),
             "A face stops following once its lane is cleared");
+
+    // A device on the SDK without a face of its own gets one generated from
+    // what its controls declare: sections, a chooser for a choice, a switch
+    // for a toggle, and knobs that step and reset the way they declare.
+    require(session.addDevice("RhinoFM", 2).wasOk(), "A MIDI track takes Rhino FM");
+    chainView.selectTrack(2);
+    chainView.setSize(2400, 280);
+    DeviceEditorPanel* fmPanel = nullptr;
+    for (auto* panel : chainView.devicePanels)
+        if (panel->deviceId == "RhinoFM")
+            fmPanel = panel;
+    require(fmPanel != nullptr && fmPanel->face == DeviceEditorPanel::Face::Generated,
+            "Rhino FM, on the SDK with no face of its own, gets a generated one");
+    fmPanel->setSize(fmPanel->preferredWidth(), DeviceEditorPanel::standardHeight);
+    std::vector<juce::String> sectionTitles;
+    for (const auto& section : fmPanel->generatedSections)
+        sectionTitles.push_back(section.title);
+    require(sectionTitles == std::vector<juce::String> {"Voice", "Op 1", "Op 2", "Op 3", "Op 4"},
+            "A generated face groups controls by the sections the device declares, in order");
+    std::vector<juce::Rectangle<int>> fmControls;
+    juce::ComboBox* algorithm = nullptr;
+    juce::TextButton* mono = nullptr;
+    juce::Slider* ratio = nullptr;
+    juce::Slider* level = nullptr;
+    for (auto* child : fmPanel->getChildren())
+    {
+        if (!child->isVisible())
+            continue;
+        require(fmPanel->getLocalBounds().contains(child->getBounds()), "Every generated control stays inside its face");
+        if (auto* slider = dynamic_cast<juce::Slider*>(child))
+        {
+            fmControls.push_back(slider->getBounds());
+            if (slider->getTooltip().startsWith("Op 1 Ratio:")) ratio = slider;
+            if (slider->getTooltip().startsWith("Op 1 Level:")) level = slider;
+        }
+        if (auto* choice = dynamic_cast<juce::ComboBox*>(child))
+        {
+            fmControls.push_back(choice->getBounds());
+            if (choice->getTooltip().startsWith("Algorithm:")) algorithm = choice;
+        }
+        if (auto* button = dynamic_cast<juce::TextButton*>(child); button != nullptr && button->getTooltip().startsWith("Mono:"))
+        {
+            fmControls.push_back(button->getBounds());
+            mono = button;
+        }
+    }
+    require(fmControls.size() == 35 && algorithm != nullptr && mono != nullptr && ratio != nullptr && level != nullptr,
+            "Every one of Rhino FM's controls is on its generated face");
+    for (size_t i = 0; i < fmControls.size(); ++i)
+        for (auto j = i + 1; j < fmControls.size(); ++j)
+            require(!fmControls[i].intersects(fmControls[j]), "Generated controls do not overlap");
+    require(algorithm->getNumItems() == 8 && algorithm->getText() == "4>3 | 2>1" && mono->getButtonText() == "Off",
+            "A choice is a chooser of its names, and a toggle a switch that reads Off");
+    require(ratio->getInterval() == 0.5 && ratio->getValue() == 1.0,
+            "A generated knob steps the way its control declares");
+    require(level->isDoubleClickReturnEnabled() && std::abs(level->getDoubleClickReturnValue() - 0.85) < 1.0e-6,
+            "Double-clicking a generated knob puts it back to its declared default");
+    for (int i = 0; i < fmPanel->parameterLabels.size(); ++i)
+        if (fmPanel->parameterLabels[i]->isVisible() && fmPanel->parameters[static_cast<size_t>(i)].name == "Op 1 Ratio")
+            require(fmPanel->parameterLabels[i]->getText() == "Ratio",
+                    "A caption leaves out the section it already sits under");
+
+    const auto fmSlot = session.deviceSlots(2).back().pluginIndex;
+    const auto fmValue = [&session, fmSlot](int parameter)
+    {
+        return session.deviceParameters(2, fmSlot)[static_cast<size_t>(parameter)].valueText;
+    };
+    algorithm->setSelectedId(1, juce::sendNotificationSync);
+    require(fmValue(0) == "4>3>2>1", "A generated chooser writes its parameter");
+    session.undo();
+    require(fmValue(0) == "4>3 | 2>1", "and the write is one undo step");
+    mono->onClick();
+    require(fmValue(4) == "On", "A generated switch turns its toggle on");
+    fmPanel->writeParameter(4, 0.0f);
+    require(fmValue(4) == "Off", "and Reset writes a control back the same way");
+    if (const auto path = juce::SystemStats::getEnvironmentVariable("RHINO_FM_SNAPSHOT", {}); path.isNotEmpty())
+    {
+        Theme faceTheme;
+        fmPanel->setLookAndFeel(&faceTheme);
+        const auto fmSnapshot = fmPanel->createComponentSnapshot(fmPanel->getLocalBounds());
+        fmPanel->setLookAndFeel(nullptr);
+        const juce::File file(path);
+        file.deleteFile();
+        if (auto stream = file.createOutputStream())
+            require(juce::PNGImageFormat().writeImageToStream(fmSnapshot, *stream), "Rhino FM snapshot is writable");
+        else
+            require(false, "Rhino FM snapshot path is writable");
+    }
+
+    // Rhino Space, with six controls and no sections, keeps a single row of
+    // larger knobs and no titles. Adding it rebuilds every panel, so nothing
+    // above may be used past this point.
+    require(session.addDevice("RhinoSpace", 2).wasOk(), "Rhino Space follows the synth");
+    DeviceEditorPanel* spacePanel = nullptr;
+    for (auto* panel : chainView.devicePanels)
+        if (panel->deviceId == "RhinoSpace")
+            spacePanel = panel;
+    require(spacePanel != nullptr && spacePanel->face == DeviceEditorPanel::Face::Generated
+                && spacePanel->generatedSections.size() == 1 && spacePanel->generatedSections.front().title.isEmpty(),
+            "Rhino Space's face is generated too, as one untitled group");
+    spacePanel->setSize(spacePanel->preferredWidth(), DeviceEditorPanel::standardHeight);
+    auto spaceKnobs = 0;
+    auto knobTop = -1;
+    for (auto* child : spacePanel->getChildren())
+        if (auto* slider = dynamic_cast<juce::Slider*>(child); slider != nullptr && slider->isVisible())
+        {
+            ++spaceKnobs;
+            require(knobTop < 0 || slider->getY() == knobTop, "Rhino Space's six knobs stand in one row");
+            knobTop = slider->getY();
+        }
+    require(spaceKnobs == 6, "Rhino Space shows its six knobs");
 }
 
 int runArpSnapshotTest()

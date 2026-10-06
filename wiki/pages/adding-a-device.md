@@ -38,7 +38,7 @@ Put DSP worth testing in `native/src/core/` as plain C++, with the device a thin
 
 ## A face
 
-Optional; without one the rack shows twelve generic knobs. A face is a new translation unit of `DeviceEditorPanel` (a line in `native/CMakeLists.txt`) and a `Face` value chosen by type in `setTarget`. Draw and hit-test rectangles, keep view state on the device, and reach it through `Session::devicePlugin`. Write the device's own settings through `Session::editDeviceSettings`, so each is an undo step of its own and the session hears of it ([Device rack and device editors](device-rack.md)).
+Optional. A device on the SDK without one gets a face generated from its declarations (`DeviceEditorPanelGenerated.cpp`): controls grouped under the sections they declare, a knob for a continuous control that steps, skews and double-click-resets as declared, a chooser for a choice and a switch for a toggle. A section-named caption drops the section's name ("Op 1 Ratio" reads "Ratio" under OP 1), so name a control in full for its automation lane. Rhino FM and Rhino Space use it. Anything not on the SDK gets twelve generic knobs. A hand-built face is a new translation unit of `DeviceEditorPanel` (a line in `native/CMakeLists.txt`) and a `Face` value chosen by type in `setTarget`. Draw and hit-test rectangles, keep view state on the device, and reach it through `Session::devicePlugin`. Write the device's own settings through `Session::editDeviceSettings`, so each is an undo step of its own and the session hears of it ([Device rack and device editors](device-rack.md)).
 
 ## Instruments still meet older code
 

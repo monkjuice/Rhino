@@ -388,6 +388,7 @@ std::vector<Session::DeviceParameter> Session::deviceParameters(int track, int s
                                  runtime != nullptr && runtime->overridden};
         exposed.defaultValue = parameter->getDefaultValue();
         exposed.skew = parameter->valueRange.skew;
+        exposed.interval = parameter->valueRange.interval;
         // Only a native device is asked for its labels: an external plugin
         // may answer by formatting every state it has, on every rack sync.
         if (native != nullptr && currentIndex < native->parameterCount())

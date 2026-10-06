@@ -91,7 +91,8 @@ Param NativeDevice::add(ParamSpec spec)
     spec.defaultValue = spec.clamp(spec.defaultValue);
     auto slot = std::make_unique<ParamSlot>();
     slot->spec = std::move(spec);
-    slot->stored.referTo(state, slot->spec.id, getUndoManager(), slot->spec.defaultValue);
+    slot->property = juce::Identifier(slot->spec.id);
+    slot->stored.referTo(state, slot->property, getUndoManager(), slot->spec.defaultValue);
     slot->parameter = new DeclaredParameter(slot->spec, *this);
     addAutomatableParameter(slot->parameter);
     slot->parameter->attachToCurrentValue(slot->stored);
@@ -153,6 +154,19 @@ void NativeDevice::restorePluginStateFromValueTree(const juce::ValueTree& source
         slot->parameter->updateFromAttachedValue();
     }
     loadData(source);
+}
+
+void NativeDevice::valueTreePropertyChanged(juce::ValueTree& tree, const juce::Identifier& property)
+{
+    Plugin::valueTreePropertyChanged(tree, property);
+    if (tree != state)
+        return;
+    for (auto& slot : slots)
+        if (slot->property == property)
+        {
+            slot->parameter->updateFromAttachedValue();
+            return;
+        }
 }
 
 void NativeDevice::dispatch(const juce::MidiMessage& message)

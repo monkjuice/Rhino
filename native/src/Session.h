@@ -96,6 +96,7 @@ public:
         bool toggle = false;
         std::optional<float> defaultValue;
         double skew = 1.0;          // the knob's travel, as NormalisableRange::skew
+        float interval = 0.0f;      // the step between values; 0 is continuous
     };
     struct DeviceTarget
     {

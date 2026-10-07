@@ -307,7 +307,15 @@ int runSelfTest()
 
         // A Drum Rack playing the 808 kit, the kit the drum patterns were
         // written for: its kick on C2 and its clap on G#2.
+        // A rack declares six controls for each of its 128 pads, and making
+        // one is timed because every drum track pays it.
+        const auto rackStart = juce::Time::getHighResolutionTicks();
         auto drumPlugin = session.edit->getPluginCache().createNewPlugin(DrumRackDevice::xmlTypeName, {});
+        juce::Logger::writeToLog("Rhino: a Drum Rack with " + juce::String(drumPlugin != nullptr
+                                     ? static_cast<int>(drumPlugin->getAutomatableParameters().size()) : 0)
+                                 + " controls is made in "
+                                 + juce::String(juce::Time::highResolutionTicksToSeconds(juce::Time::getHighResolutionTicks()
+                                                                                         - rackStart) * 1000.0, 2) + " ms");
         auto* drums = dynamic_cast<DrumRackDevice*>(drumPlugin.get());
         require(drums != nullptr && drums->isBlank());
         DrumKit eightOhEight;
@@ -317,7 +325,8 @@ int runSelfTest()
         juce::Logger::writeToLog("Rhino: the 808 Kit's eight samples are read onto their pads in "
                                  + juce::String(juce::Time::highResolutionTicksToSeconds(juce::Time::getHighResolutionTicks()
                                                                                          - kitStart) * 1000.0, 2) + " ms");
-        require(!drums->isBlank() && !drums->pad(0).unreadable && !drums->pad(8).unreadable);
+        require(!drums->isBlank() && drums->pad(48).sound.has_value() && !drums->pad(48).unreadable
+                && drums->pad(56).sound.has_value() && !drums->pad(56).unreadable);
         drums->initialise({{}, 48000.0, 512});
         juce::AudioBuffer<float> drumBuffer(2, 4096);
         drumBuffer.clear();

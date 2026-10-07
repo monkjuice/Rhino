@@ -566,7 +566,7 @@ void runDrumRackFaceTest()
             "the first MIDI track takes the 808 kit");
     DeviceRack rack(session);
     rack.selectTrack(0);
-    rack.setSize(1200, 280);
+    rack.setSize(1400, 280);
     DeviceEditorPanel* panel = nullptr;
     for (auto* each : rack.devicePanels)
         if (each->showsDrumRack())
@@ -576,71 +576,133 @@ void runDrumRackFaceTest()
             "at its own width and the standard height");
     auto* drums = dynamic_cast<DrumRackDevice*>(session.devicePlugin(0, panel->devicePluginIndex()));
     require(drums != nullptr, "the face shows the rack on the track");
+    const auto slot = panel->devicePluginIndex();
 
-    // Where each pad is, found by asking the face rather than by repeating
-    // its arithmetic.
-    std::array<juce::Rectangle<int>, DrumRackDevice::padCount> pads;
+    // Where each part of the face is, found by asking the face rather than by
+    // repeating its arithmetic: the pads by the note under a point, the rest
+    // by what the face says a point is.
+    constexpr int shown = DrumRackDevice::bankSize;
+    const auto first = drums->firstShownNote();
+    require(first == DrumRackEngine::defaultFirstNote, "the face shows C2 up at first");
+    std::array<juce::Rectangle<int>, shown> pads;
     for (int y = 0; y < panel->getHeight(); ++y)
         for (int x = 0; x < panel->getWidth(); ++x)
-            if (const auto pad = panel->drumPadAt({x, y}); pad >= 0)
+            if (const auto note = panel->drumPadAt({x, y}); note >= 0)
             {
-                auto& box = pads[static_cast<size_t>(pad)];
+                require(juce::isPositiveAndBelow(note - first, shown), "a point on a pad is a pad of the bank shown");
+                auto& box = pads[static_cast<size_t>(note - first)];
                 box = box.isEmpty() ? juce::Rectangle<int>(x, y, 1, 1) : box.getUnion({x, y, 1, 1});
             }
+    const auto areaSaying = [&panel] (const juce::String& opening)
+    {
+        juce::Rectangle<int> area;
+        for (int y = 0; y < panel->getHeight(); y += 2)
+            for (int x = 0; x < panel->getWidth(); x += 2)
+                if (panel->drumTooltip({x, y}).startsWith(opening))
+                    area = area.isEmpty() ? juce::Rectangle<int>(x, y, 2, 2) : area.getUnion({x, y, 2, 2});
+        return area;
+    };
+    const auto map = areaSaying("All 128 notes");
     for (size_t pad = 0; pad < pads.size(); ++pad)
     {
         require(!pads[pad].isEmpty() && panel->getLocalBounds().contains(pads[pad])
                     && pads[pad].getY() > DeviceEditorPanel::headerHeight,
                 "pad " + juce::String(static_cast<int>(pad) + 1) + " stands on the face, below the name bar");
+        require(!pads[pad].intersects(map), "and clear of the map");
         for (auto other = pad + 1; other < pads.size(); ++other)
             require(!pads[pad].intersects(pads[other]), "no two pads overlap");
     }
     require(pads[0].getX() < pads[1].getX() && pads[0].getY() > pads[4].getY()
                 && pads[15].getY() < pads[11].getY() && pads[15].getX() > pads[14].getX(),
             "the lowest note sits bottom left, and the pads rise along a row and then up");
+    require(!map.isEmpty() && map.getRight() < pads[0].getX() && map.getHeight() > pads[0].getBottom() - pads[12].getY() - 40,
+            "the map stands down the face's left edge, beside the pads");
 
-    // Six knobs stand for the selected pad's controls, clear of every pad.
-    const auto knobs = [&panel]
+    // Six knobs stand for the selected pad's controls, and a sample pad's
+    // own settings stand beside them, all clear of the pads.
+    const auto visible = [] (const juce::OwnedArray<juce::Slider>& sliders)
     {
         std::vector<juce::Slider*> found;
-        for (auto* child : panel->getChildren())
-            if (auto* slider = dynamic_cast<juce::Slider*>(child); slider != nullptr && slider->isVisible())
+        for (auto* slider : sliders)
+            if (slider->isVisible())
                 found.push_back(slider);
         return found;
     };
-    require(knobs().size() == DrumRackDevice::controlCount, "the face shows six knobs");
-    for (auto* knob : knobs())
-    {
-        require(panel->getLocalBounds().contains(knob->getBounds()), "every knob stands inside the face");
-        for (const auto& pad : pads)
-            require(!knob->getBounds().intersects(pad), "and clear of the pads");
-    }
-    require(knobs().front()->getTooltip().startsWith("Pad 1 Tune:"), "the knobs start on the first pad's controls");
+    require(visible(panel->drumSliders).size() == DrumRackDevice::controlCount, "the face shows the pad's six knobs");
+    require(visible(panel->drumSampleSliders).size() == 4, "and a one-shot sample's start, end and two fades");
+    for (auto* knobs : { &panel->drumSliders, &panel->drumSampleSliders })
+        for (auto* knob : visible(*knobs))
+        {
+            require(panel->getLocalBounds().contains(knob->getBounds()), "every knob stands inside the face");
+            for (const auto& pad : pads)
+                require(!knob->getBounds().intersects(pad), "and clear of the pads");
+            for (auto* other : visible(panel->drumSampleSliders))
+                require(other == knob || !other->getBounds().intersects(knob->getBounds()), "and of the other knobs");
+        }
+    require(panel->drumSliders[0]->getTooltip().startsWith("C2 Tune:"), "the knobs start on C2's controls");
 
-    const auto click = [&panel] (juce::Point<int> at, bool right)
+    const auto mouse = [&panel] (juce::Point<int> at, juce::Point<int> down, bool right)
     {
-        const auto point = at.toFloat();
         const auto mods = right ? juce::ModifierKeys(juce::ModifierKeys::rightButtonModifier | juce::ModifierKeys::popupMenuClickModifier)
                                 : juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier);
-        panel->mouseDown(juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), point, mods, 1.0f, 0, 0, 0, 0,
-                                          panel, panel, juce::Time::getCurrentTime(), point, juce::Time::getCurrentTime(),
-                                          1, false));
+        return juce::MouseEvent(juce::Desktop::getInstance().getMainMouseSource(), at.toFloat(), mods, 1.0f, 0, 0, 0, 0,
+                                panel, panel, juce::Time::getCurrentTime(), down.toFloat(), juce::Time::getCurrentTime(),
+                                1, at != down);
+    };
+    const auto click = [&panel, &mouse] (juce::Point<int> at, bool right)
+    {
+        panel->mouseDown(mouse(at, at, right));
+        panel->mouseUp(mouse(at, at, right));
+    };
+    const auto drag = [&panel, &mouse] (juce::Point<int> from, juce::Point<int> to)
+    {
+        panel->mouseDown(mouse(from, from, false));
+        panel->mouseDrag(mouse(to, from, false));
+        panel->mouseUp(mouse(to, from, false));
     };
     click(pads[5].getTopLeft() + juce::Point<int>(8, 6), false);
-    require(drums->selectedPad() == 5 && knobs().front()->getTooltip().startsWith("Pad 6 Tune:"),
+    require(drums->selectedPad() == first + 5 && panel->drumSliders[0]->getTooltip().startsWith("F2 Tune:"),
             "clicking a pad selects it, and the knobs follow");
     juce::Slider* level = nullptr;
-    for (auto* knob : knobs())
-        if (knob->getTooltip().startsWith("Pad 6 Level:"))
+    for (auto* knob : visible(panel->drumSliders))
+        if (knob->getTooltip().startsWith("F2 Level:"))
             level = knob;
     require(level != nullptr, "the selected pad's Level is a knob");
     level->setValue(-12.0, juce::sendNotificationSync);
-    require(std::abs(drums->pad(5).sound->settings.level + 12.0f) < 0.01f, "and turning it sets that pad's level");
+    require(std::abs(drums->pad(first + 5).sound->settings.level + 12.0f) < 0.01f, "and turning it sets that pad's level");
     // M is the first of three buttons along a pad's bottom edge.
     click({pads[5].getX() + 12, pads[5].getBottom() - 8}, false);
-    require(drums->pad(5).muted, "M mutes the pad");
+    require(drums->pad(first + 5).muted, "M mutes the pad");
     session.undo();
-    require(!drums->pad(5).muted, "and an undo unmutes it");
+    require(!drums->pad(first + 5).muted, "and an undo unmutes it");
+
+    // The map shows the other banks: its top row the highest, its bottom the
+    // lowest, and the wheel over the pads moves a row at a time.
+    click({map.getCentreX(), map.getY() + 1}, false);
+    require(drums->firstShownNote() == DrumRackEngine::padCount - shown && panel->drumPadAt(pads[0].getCentre()) == 112,
+            "a click at the map's top shows the highest bank, and the pads are its notes");
+    const auto wheel = [&panel, &mouse] (juce::Point<int> at, float delta)
+    {
+        juce::MouseWheelDetails details {};
+        details.deltaY = delta;
+        panel->mouseWheelMove(mouse(at, at, false), details);
+    };
+    wheel(pads[0].getCentre(), -1.0f);
+    require(drums->firstShownNote() == 108, "the wheel turned towards the hand moves down a row");
+    click({map.getCentreX(), map.getBottom() - 1}, false);
+    require(drums->firstShownNote() == 0, "and the map's bottom shows the lowest");
+    drag({map.getCentreX(), map.getBottom() - 1}, {map.getCentreX(), map.getY() + map.getHeight() / 2});
+    require(drums->firstShownNote() > 40 && drums->firstShownNote() < 72, "a drag on the map carries the bank with it");
+    require(session.showDrumBank(0, slot, first).wasOk() && drums->firstShownNote() == first, "and back to C2");
+
+    // A key arriving lights its note on the map and names it in the name bar.
+    panel->drumNotesSeen[36] = drums->notesReceived(36) - 1;
+    panel->tickDrums();
+    require(panel->drumKeyFlash[36] == 1.0f && panel->drumLastKey == 36 && panel->drumLastKeyGlow == 1.0f,
+            "a note that arrives flashes on the map, even on an empty pad, and is named");
+    for (int frame = 0; frame < 60; ++frame)
+        panel->tickDrums();
+    require(panel->drumKeyFlash[36] == 0.0f && panel->drumLastKey == 36, "and fades, its name left dim");
 
     // A sample from the browser lights the pad it would land on, and lands
     // there; a drum preset becomes a pad's sound; a kit loads into the rack.
@@ -650,21 +712,79 @@ void runDrumRackFaceTest()
     require(rack.isInterestedInDragSource({sampleDrop, nullptr, inRack(pads[9].getCentre())}),
             "the rack takes a sample while it holds a Drum Rack");
     rack.itemDragMove({sampleDrop, nullptr, inRack(pads[9].getCentre())});
-    require(panel->drumDropTarget == 9, "a sample held over a pad lights it");
+    require(panel->drumDropTarget == first + 9, "a sample held over a pad lights it");
     rack.itemDropped({sampleDrop, nullptr, inRack(pads[9].getCentre())});
-    require(panel->drumDropTarget == -1 && drums->pad(9).sound.has_value()
-                && drums->pad(9).sound->sample.contains("Bongo 02") && drums->selectedPad() == 9,
+    require(panel->drumDropTarget == -1 && drums->pad(first + 9).sound.has_value()
+                && drums->pad(first + 9).sound->sample.contains("Bongo 02") && drums->selectedPad() == first + 9,
             "and dropped there, the pad plays it and is selected");
     const auto clap = ContentLibrary::file("Drums/Presets/Clap/Analog Clap.rdp");
     rack.itemDropped({"rhino-browser:drum-preset:" + clap.getFullPathName(), nullptr, inRack(pads[13].getCentre())});
-    require(drums->pad(13).sound.has_value() && drums->pad(13).sound->name == "Analog Clap",
+    require(drums->pad(first + 13).sound.has_value() && drums->pad(first + 13).sound->name == "Analog Clap",
             "a drum preset dropped on a pad becomes its sound");
     const auto devicesBefore = session.deviceSlots(0).size();
     rack.itemDropped({"rhino-browser:drumkit:" + ContentLibrary::file("Drums/Kits/Analog Kit.rdk").getFullPathName(),
                       nullptr, inRack(panel->getLocalBounds().getCentre())});
-    require(session.deviceSlots(0).size() == devicesBefore && drums->pad(9).sound.has_value()
-                && drums->pad(9).sound->source == DrumRackEngine::Source::synth,
+    require(session.deviceSlots(0).size() == devicesBefore && drums->pad(first + 9).sound.has_value()
+                && drums->pad(first + 9).sound->source == DrumRackEngine::Source::synth,
             "a kit dropped on the face loads into the rack rather than adding another");
+
+    // The sample editor: a roll on a pad, its modes, its markers and knobs,
+    // each a single undo step, and its slices spread across pads.
+    const auto roll = ContentLibrary::file("Samples/VinylDrums/Snare/Snare Roll 02 Crisp Tight.wav");
+    rack.itemDropped({"rhino-browser:file:" + roll.getFullPathName(), nullptr, inRack(pads[2].getCentre())});
+    const auto rollPad = first + 2;
+    require(drums->selectedPad() == rollPad && drums->pad(rollPad).sound->source == DrumRackEngine::Source::sample,
+            "a roll dropped on a pad is selected");
+    const auto classicButton = areaSaying("Classic:"), sliceButton = areaSaying("Slice:");
+    const auto picture = areaSaying("The sample, the part a strike plays lit");
+    require(!classicButton.isEmpty() && !sliceButton.isEmpty() && !picture.isEmpty()
+                && classicButton.getRight() < picture.getX() && classicButton.getY() < sliceButton.getY(),
+            "the modes stack beside the picture, Classic above Slice");
+    click(classicButton.getCentre(), false);
+    require(drums->pad(rollPad).sound->playback.mode == DrumRackEngine::PlayMode::classic
+                && visible(panel->drumSampleSliders).size() == 5,
+            "Classic plays it as classic, with a start, an end, an attack, a sustain and a release");
+    session.undo();
+    require(drums->pad(rollPad).sound->playback.mode == DrumRackEngine::PlayMode::oneShot, "one undo takes it back");
+
+    // The start marker dragged a quarter of the way in, one undo step.
+    const auto inner = picture.reduced(2);
+    const auto quarterIn = juce::Point<int>(inner.getX() + inner.getWidth() / 4, inner.getCentreY());
+    drag({inner.getX() + 1, inner.getCentreY()}, quarterIn);
+    const auto movedStart = drums->pad(rollPad).sound->playback.start;
+    require(movedStart > 0.2f && movedStart < 0.3f, "the start marker drags to where it is let go: "
+                                                        + juce::String(movedStart, 3));
+    session.undo();
+    require(drums->pad(rollPad).sound->playback.start == 0.0f, "and the whole drag is one undo step");
+    // A knob of the sample's, dragged, the same.
+    auto* fadeOut = panel->drumSampleSliders[3];
+    require(fadeOut->isVisible() && fadeOut->getTooltip().startsWith("Fade out:"), "the fade out is a knob");
+    fadeOut->onDragStart();
+    fadeOut->setValue(0.05, juce::sendNotificationSync);
+    fadeOut->setValue(0.1, juce::sendNotificationSync);
+    fadeOut->onDragEnd();
+    require(std::abs(drums->pad(rollPad).sound->playback.fadeOut - 0.1f) < 1.0e-6f, "turning it sets the fade");
+    session.undo();
+    require(drums->pad(rollPad).sound->playback.fadeOut == 0.0f, "and one undo takes the whole turn back");
+
+    // Slice, by equal parts, spread from the face's button.
+    click(sliceButton.getCentre(), false);
+    auto parts = drums->pad(rollPad).sound->playback;
+    require(parts.mode == DrumRackEngine::PlayMode::slice, "Slice cuts the sample");
+    parts.sliceBy = DrumRackEngine::SliceBy::divisions;
+    parts.divisions = 8;
+    session.editDeviceSettings(0, slot, "Slice into eight", [drums, rollPad, parts] { drums->setPadPlayback(rollPad, parts); });
+    const auto spreadButton = areaSaying("Put each slice on a pad of its own");
+    require(!spreadButton.isEmpty(), "Slice offers to spread its slices");
+    click(spreadButton.getCentre(), false);
+    for (int index = 0; index < 8; ++index)
+        require(drums->pad(rollPad + index).sound.has_value()
+                    && drums->pad(rollPad + index).sound->playback.mode == DrumRackEngine::PlayMode::oneShot,
+                "the spread fills a pad for each slice: " + DrumRackDevice::noteName(rollPad + index));
+    session.undo();
+    require(drums->pad(rollPad).sound->playback.mode == DrumRackEngine::PlayMode::slice
+                && drums->pad(rollPad + 1).sound->source == DrumRackEngine::Source::synth,
+            "and one undo puts the pads back as they were");
 
     // Painted in the app's own look, at the size it promises.
     Theme faceTheme;
@@ -684,21 +804,21 @@ void runDrumRackFaceTest()
     }
 
     // What the face costs while a knob is dragged: every frame the selected
-    // pad's picture is drawn again from a strike of its own, and the pads,
-    // which did not change, are not drawn at all.
+    // pad's side is drawn again, and the pads and the map, which did not
+    // change, are not drawn at all.
     {
-        const auto slot = session.deviceSlots(0).front();
+        const auto device = session.deviceSlots(0).front();
         const auto selectedSide = panel->getLocalBounds().withTrimmedLeft(pads[3].getRight() + 2);
         std::vector<double> targets, paints;
         juce::Image canvas(juce::Image::ARGB, panel->getWidth(), panel->getHeight(), true, juce::SoftwareImageType());
         for (int frame = 0; frame < 40; ++frame)
         {
-            require(session.setDeviceParameter(0, slot.pluginIndex, DrumRackDevice::parameterIndex(drums->selectedPad(),
-                                                                                                    DrumRackDevice::decay),
+            require(session.setDeviceParameter(0, device.pluginIndex, DrumRackDevice::parameterIndex(drums->selectedPad(),
+                                                                                                      DrumRackDevice::decay),
                                                0.1f + 0.02f * static_cast<float>(frame)).wasOk(),
                     "the selected pad's Decay can be set");
             auto start = juce::Time::getHighResolutionTicks();
-            panel->setTarget(0, slot, true);
+            panel->setTarget(0, device, true);
             targets.push_back(juce::Time::highResolutionTicksToSeconds(juce::Time::getHighResolutionTicks() - start));
             juce::Graphics g(canvas);
             g.reduceClipRegion(selectedSide);
@@ -711,19 +831,7 @@ void runDrumRackFaceTest()
             std::nth_element(values.begin(), values.begin() + static_cast<long>(values.size() / 2), values.end());
             return values[values.size() / 2] * 1.0e6;
         };
-        // The picture alone, drawn afresh for each new Decay.
-        std::vector<double> pictures;
-        for (int frame = 0; frame < 40; ++frame)
-        {
-            require(session.setDeviceParameter(0, slot.pluginIndex, DrumRackDevice::parameterIndex(drums->selectedPad(),
-                                                                                                    DrumRackDevice::decay),
-                                               0.12f + 0.02f * static_cast<float>(frame)).wasOk(),
-                    "the selected pad's Decay can be set again");
-            const auto start = juce::Time::getHighResolutionTicks();
-            juce::ignoreUnused(drums->padPicture(drums->selectedPad(), 328));
-            pictures.push_back(juce::Time::highResolutionTicksToSeconds(juce::Time::getHighResolutionTicks() - start));
-        }
-        // And a frame in which nothing moved, which draws the kept picture.
+        // A frame in which nothing moved, which draws the kept pictures.
         std::vector<double> still;
         for (int frame = 0; frame < 40; ++frame)
         {
@@ -734,7 +842,6 @@ void runDrumRackFaceTest()
         }
         juce::Logger::writeToLog("Drum Rack face: a knob frame refreshes in " + juce::String(median(targets), 1)
                                  + " us and paints the selected pad's side in " + juce::String(median(paints), 1)
-                                 + " us, of which the picture is " + juce::String(median(pictures), 1)
                                  + " us; the whole face paints in " + juce::String(median(still), 1) + " us (medians)");
     }
 }

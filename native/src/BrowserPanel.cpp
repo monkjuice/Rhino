@@ -325,7 +325,7 @@ void BrowserPanel::addDrumItems()
 {
     constexpr const char* section = "Drums";
     if (const auto* rack = DeviceCatalog::byId("Drums"); rack != nullptr && rack->browsable)
-        items.push_back({section, {}, rack->displayName, "Sixteen empty pads to drop sounds on",
+        items.push_back({section, {}, rack->displayName, "A pad on every note, empty, to drop sounds on",
                          std::nullopt, rack->id});
     for (const auto& kit : ContentLibrary::drumKits())
     {

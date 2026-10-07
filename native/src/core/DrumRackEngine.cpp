@@ -9,7 +9,7 @@ namespace
 // The natural log of a thousand: an envelope multiplied by e to the minus this
 // over T seconds has fallen 60 dB by the end of them.
 constexpr float sixtyDecibels = 6.907755279f;
-// Where a sample voice's Decay envelope stops it: 60 dB down.
+// Where a sample voice's Decay envelope or release stops it: 60 dB down.
 constexpr float envelopeFloor = 0.001f;
 // How long a voice takes to fade when it is cut off, and how fast a voice's
 // gains follow a change to its pad's level, pan, mute or solo.
@@ -19,8 +19,18 @@ constexpr double glideSeconds = 0.004;
 // the knob, to the top of hearing just below the top. At the top it is gone.
 constexpr float darkestTone = 120.0f;
 constexpr float brightestTone = 20000.0f;
-// A face's ▶ strikes a pad this hard.
+// A face's play button strikes a pad this hard, and holds a classic pad this
+// long before letting go of it.
 constexpr float previewVelocity = 0.8f;
+constexpr double previewHoldSeconds = 1.0;
+// A loop blends the last of its part into its start over this long, or over a
+// quarter of a part shorter than four times it.
+constexpr double loopCrossfadeSeconds = 0.01;
+// A classic voice that runs off the end of its part, rather than being let
+// go, is faded over a millisecond instead of cut.
+constexpr double declickSeconds = 0.001;
+// The shortest part of a file a pad can play, as a fraction of it.
+constexpr float shortestPart = 0.001f;
 
 bool validPad(int pad)
 {
@@ -59,6 +69,11 @@ float strengthFor(float velocity, float sensitivity)
     return 1.0f - std::clamp(sensitivity, 0.0f, 1.0f) * (1.0f - clamped);
 }
 
+float within(float value, float low, float high, float fallback)
+{
+    return std::clamp(std::isfinite(value) ? value : fallback, low, high);
+}
+
 // Four-point Hermite interpolation. At a whole position it returns the sample
 // itself, so a pad at its file's own rate and untuned plays the file exactly.
 float hermite(const std::vector<float>& data, double position) noexcept
@@ -80,17 +95,58 @@ float hermite(const std::vector<float>& data, double position) noexcept
 }
 }
 
+DrumRackEngine::Playback DrumRackEngine::Playback::clamped() const
+{
+    auto out = *this;
+    const auto modeValue = static_cast<int>(mode);
+    out.mode = modeValue >= 0 && modeValue <= static_cast<int>(PlayMode::slice) ? mode : PlayMode::oneShot;
+    out.start = within(start, 0.0f, 1.0f - shortestPart, 0.0f);
+    out.end = within(end, out.start + shortestPart, 1.0f, 1.0f);
+    out.fadeIn = within(fadeIn, 0.0f, longestFade, 0.0f);
+    out.fadeOut = within(fadeOut, 0.0f, longestFade, 0.0f);
+    out.attack = within(attack, 0.0f, longestFade, 0.0f);
+    out.sustain = within(sustain, 0.0f, 1.0f, 1.0f);
+    out.release = within(release, 0.0f, longestRelease, 0.05f);
+    const auto by = static_cast<int>(sliceBy);
+    out.sliceBy = by == static_cast<int>(SliceBy::divisions) ? SliceBy::divisions : SliceBy::transients;
+    out.divisions = std::clamp(divisions, 2, 64);
+    out.sensitivity = within(sensitivity, 0.0f, 1.0f, 0.5f);
+    return out;
+}
+
 // ---- a voice ----------------------------------------------------------------
 
-void DrumRackEngine::Voice::startSample(const DrumSample& played, const PadSettings& settings, double outputRate)
+void DrumRackEngine::Voice::startSample(const DrumSample& played, const PadSettings& settings,
+                                        const Playback& playback, double outputRate, int holdFrames)
 {
     source = Source::sample;
     sample = &played;
-    position = 0.0;
+    const auto length = static_cast<double>(played.length());
+    const auto last = std::max(1.0, length);
+    partStart = std::clamp(std::floor(static_cast<double>(playback.start) * length), 0.0, last - 1.0);
+    partEnd = std::clamp(std::ceil(static_cast<double>(playback.end) * length), partStart + 1.0, last);
+    position = partStart;
     increment = played.sampleRate / outputRate * tuneRatio(settings.tune);
+    classic = playback.mode == PlayMode::classic;
+    // A loop blends the last moments of its part into its start, so the seam
+    // is a crossfade rather than a click.
+    looping = classic && playback.loop;
+    crossfade = looping ? std::min(played.sampleRate * loopCrossfadeSeconds, (partEnd - partStart) * 0.25) : 0.0;
     decaying = settings.decay < fullDecay;
     envelope = 1.0f;
     envelopeFactor = static_cast<float>(std::exp(-sixtyDecibels / (std::max(0.001, double(settings.decay)) * outputRate)));
+    // A one-shot falls away to nothing; a classic voice, while its key is
+    // held, to its Sustain.
+    sustain = classic ? playback.sustain : 0.0f;
+    const auto riseSeconds = classic ? playback.attack : playback.fadeIn;
+    rise = riseSeconds > 0.0f ? 0.0f : 1.0f;
+    riseStep = riseSeconds > 0.0f ? static_cast<float>(1.0 / (riseSeconds * outputRate)) : 0.0f;
+    fadeOutFrames = !classic ? outputRate * playback.fadeOut : looping ? 0.0 : outputRate * declickSeconds;
+    held = classic;
+    releasing = false;
+    holdRemaining = classic ? holdFrames : -1;
+    releaseGain = 1.0f;
+    releaseFactor = static_cast<float>(std::exp(-sixtyDecibels / (std::max(0.001, double(playback.release)) * outputRate)));
     // A two-pole low-pass in Zavalishin's form, latched for the strike.
     filtered = settings.tone < 0.999f;
     ic1 = {};
@@ -115,7 +171,22 @@ void DrumRackEngine::Voice::startSynth(DrumModel model, const PadSettings& setti
     sample = nullptr;
     decaying = false;
     filtered = false;
+    classic = false;
+    looping = false;
+    held = releasing = false;
+    holdRemaining = -1;
+    riseStep = 0.0f;
+    rise = 1.0f;
+    fadeOutFrames = 0.0;
     synth.start(model, outputRate, tuneRatio(settings.tune), settings.decay, settings.tone, seed);
+}
+
+void DrumRackEngine::Voice::letGo()
+{
+    if (!classic || !held)
+        return;
+    held = false;
+    releasing = true;
 }
 
 int DrumRackEngine::Voice::render(float* left, float* right, int numSamples, float targetLeft, float targetRight,
@@ -136,10 +207,34 @@ int DrumRackEngine::Voice::render(float* left, float* right, int numSamples, flo
         }
         else
         {
-            if (sample == nullptr || position >= sample->length() || (decaying && envelope < envelopeFloor))
+            if (sample == nullptr)
+                return i;
+            if (position >= partEnd)
+            {
+                if (!looping)
+                    return i;
+                // Past the seam the voice carries on from where the crossfade
+                // has already taken it.
+                position = partStart + crossfade + (position - partEnd);
+                if (position >= partEnd)
+                    position = partStart;
+            }
+            if ((decaying && sustain <= 0.0f && envelope < envelopeFloor) || (releasing && releaseGain < envelopeFloor))
                 return i;
             l = hermite(sample->left, position);
             r = sample->stereo() ? hermite(sample->right, position) : l;
+            if (crossfade > 0.0 && position > partEnd - crossfade)
+            {
+                const auto into = position - (partEnd - crossfade);
+                const auto t = static_cast<float>(into / crossfade);
+                const auto echoLeft = hermite(sample->left, partStart + into);
+                const auto echoRight = sample->stereo() ? hermite(sample->right, partStart + into) : echoLeft;
+                l += (echoLeft - l) * t;
+                r += (echoRight - r) * t;
+            }
+            // How much of the part is left to play, in output frames, for a
+            // fade at its end.
+            const auto remaining = (partEnd - position) / increment;
             position += increment;
             if (filtered)
                 for (size_t channel = 0; channel < 2; ++channel)
@@ -156,24 +251,58 @@ int DrumRackEngine::Voice::render(float* left, float* right, int numSamples, flo
                     if (std::abs(ic2[channel]) < 1.0e-20f) ic2[channel] = 0.0f;
                     value = v2;
                 }
+
+            // The shape: rising in, decaying towards Sustain, fading at the
+            // part's end and releasing once let go. Each is a multiply by one
+            // when it does nothing, so an unshaped pad plays its file exactly.
+            auto amount = 1.0f;
+            if (riseStep > 0.0f)
+            {
+                amount *= rise;
+                rise += riseStep;
+                if (rise >= 1.0f)
+                {
+                    rise = 1.0f;
+                    riseStep = 0.0f;
+                }
+            }
             if (decaying)
             {
-                l *= envelope;
-                r *= envelope;
+                amount *= sustain + (1.0f - sustain) * envelope;
                 envelope *= envelopeFactor;
+                // Under a sustain the envelope never ends the voice, and would
+                // fall on into the denormal range.
+                if (envelope < 1.0e-9f)
+                    envelope = 0.0f;
             }
+            if (fadeOutFrames > 0.0 && remaining < fadeOutFrames)
+                amount *= static_cast<float>(std::max(0.0, remaining) / fadeOutFrames);
+            if (classic)
+            {
+                if (holdRemaining == 0)
+                    letGo();
+                else if (holdRemaining > 0)
+                    --holdRemaining;
+                if (releasing)
+                {
+                    amount *= releaseGain;
+                    releaseGain *= releaseFactor;
+                }
+            }
+            l *= amount;
+            r *= amount;
         }
         gainLeft += glide * (targetLeft - gainLeft);
         gainRight += glide * (targetRight - gainRight);
-        const auto amount = strength * fade;
+        const auto level = strength * fade;
         if (right != nullptr)
         {
-            left[i] += l * gainLeft * amount;
-            right[i] += r * gainRight * amount;
+            left[i] += l * gainLeft * level;
+            right[i] += r * gainRight * level;
         }
         else
         {
-            left[i] += (l * gainLeft + r * gainRight) * 0.5f * amount;
+            left[i] += (l * gainLeft + r * gainRight) * 0.5f * level;
         }
         if (fadeStep > 0.0f)
             fade -= fadeStep;
@@ -206,7 +335,9 @@ void DrumRackEngine::prepare(double sampleRate)
     clear();
     // A pad played from the face while nothing was rendering is not played
     // late, whenever rendering starts.
-    previews.store(0);
+    for (auto& word : previews)
+        word.store(0);
+    partPreviewPad.store(-1);
     // Nothing is rendering, so whatever the pads let go of can go now.
     for (const auto& gone : retired)
         owned.erase(std::remove_if(owned.begin(), owned.end(),
@@ -256,6 +387,43 @@ void DrumRackEngine::clearPad(int pad)
     collect();
 }
 
+void DrumRackEngine::setPadPlayback(int pad, const Playback& wanted)
+{
+    if (!validPad(pad))
+        return;
+    const auto playback = wanted.clamped();
+    auto& target = pads[static_cast<size_t>(pad)];
+    target.mode.store(static_cast<int>(playback.mode));
+    target.start.store(playback.start);
+    target.end.store(playback.end);
+    target.fadeIn.store(playback.fadeIn);
+    target.fadeOut.store(playback.fadeOut);
+    target.attack.store(playback.attack);
+    target.sustain.store(playback.sustain);
+    target.release.store(playback.release);
+    target.loop.store(playback.loop);
+}
+
+DrumRackEngine::Playback DrumRackEngine::playbackOf(const Pad& pad) const
+{
+    Playback playback;
+    playback.mode = static_cast<PlayMode>(pad.mode.load());
+    playback.start = pad.start.load();
+    playback.end = pad.end.load();
+    playback.fadeIn = pad.fadeIn.load();
+    playback.fadeOut = pad.fadeOut.load();
+    playback.attack = pad.attack.load();
+    playback.sustain = pad.sustain.load();
+    playback.release = pad.release.load();
+    playback.loop = pad.loop.load();
+    return playback;
+}
+
+DrumRackEngine::Playback DrumRackEngine::padPlayback(int pad) const
+{
+    return validPad(pad) ? playbackOf(pads[static_cast<size_t>(pad)]) : Playback {};
+}
+
 void DrumRackEngine::setPadChoke(int pad, int group)
 {
     if (validPad(pad))
@@ -270,8 +438,8 @@ void DrumRackEngine::setPadMuted(int pad, bool muted)
 
 void DrumRackEngine::setPadSoloed(int pad, bool soloed)
 {
-    if (validPad(pad))
-        pads[static_cast<size_t>(pad)].soloed.store(soloed);
+    if (validPad(pad) && pads[static_cast<size_t>(pad)].soloed.exchange(soloed) != soloed)
+        soloCount.fetch_add(soloed ? 1 : -1);
 }
 
 DrumRackEngine::Source DrumRackEngine::padSource(int pad) const
@@ -307,7 +475,16 @@ int DrumRackEngine::collect()
 void DrumRackEngine::previewPad(int pad)
 {
     if (validPad(pad))
-        previews.fetch_or(1u << static_cast<unsigned>(pad));
+        previews[static_cast<size_t>(pad / 64)].fetch_or(std::uint64_t { 1 } << static_cast<unsigned>(pad % 64));
+}
+
+void DrumRackEngine::previewPart(int pad, float start, float end)
+{
+    if (!validPad(pad))
+        return;
+    partPreviewStart.store(start);
+    partPreviewEnd.store(end);
+    partPreviewPad.store(pad);
 }
 
 std::uint32_t DrumRackEngine::strikes(int pad) const
@@ -315,8 +492,20 @@ std::uint32_t DrumRackEngine::strikes(int pad) const
     return validPad(pad) ? pads[static_cast<size_t>(pad)].struck.load(std::memory_order_relaxed) : 0u;
 }
 
+std::uint32_t DrumRackEngine::notesReceived(int note) const
+{
+    return validPad(note) ? pads[static_cast<size_t>(note)].received.load(std::memory_order_relaxed) : 0u;
+}
+
+float DrumRackEngine::playhead(int pad) const
+{
+    return validPad(pad) ? pads[static_cast<size_t>(pad)].playhead.load(std::memory_order_relaxed) : -1.0f;
+}
+
 void DrumRackEngine::finish(Voice& voice)
 {
+    if (voice.order == newestVoice[static_cast<size_t>(voice.pad)])
+        pads[static_cast<size_t>(voice.pad)].playhead.store(-1.0f, std::memory_order_relaxed);
     if (voice.sample != nullptr)
         voice.sample->playing.fetch_sub(1);
     voice.sample = nullptr;
@@ -346,10 +535,21 @@ void DrumRackEngine::releaseAll()
 void DrumRackEngine::noteOn(int note, float velocity, const Settings& settings)
 {
     const Stretch stretch(*this);
-    strike(note - lowestNote, velocity, settings);
+    if (validPad(note))
+        pads[static_cast<size_t>(note)].received.fetch_add(1, std::memory_order_relaxed);
+    strike(note, velocity, settings, false);
 }
 
-void DrumRackEngine::strike(int pad, float velocity, const Settings& settings)
+void DrumRackEngine::noteOff(int note)
+{
+    // A voice struck from the face lets go of itself; only one a note struck
+    // waits for the note to end.
+    for (auto& voice : voices)
+        if (voice.active && voice.pad == note && voice.holdRemaining < 0)
+            voice.letGo();
+}
+
+void DrumRackEngine::strike(int pad, float velocity, const Settings& settings, bool fromFace, const Part* part)
 {
     if (!validPad(pad))
         return;
@@ -399,8 +599,22 @@ void DrumRackEngine::strike(int pad, float velocity, const Settings& settings)
     const auto& padSettings = settings[static_cast<size_t>(pad)];
     if (source == Source::sample)
     {
+        auto playback = playbackOf(struckPad);
+        if (part != nullptr)
+        {
+            // A part auditioned is heard as the one-shot it would be on a pad
+            // of its own.
+            playback.mode = PlayMode::oneShot;
+            playback.start = part->start;
+            playback.end = part->end;
+            playback.fadeIn = 0.0f;
+            playback = playback.clamped();
+        }
+        // A classic pad struck from the face has no key to be let go of, so it
+        // lets go of itself.
+        const auto hold = fromFace ? static_cast<int>(rate * previewHoldSeconds) : -1;
         sample->playing.fetch_add(1);
-        voice->startSample(*sample, padSettings, rate);
+        voice->startSample(*sample, padSettings, playback, rate, hold);
     }
     else
     {
@@ -414,6 +628,7 @@ void DrumRackEngine::strike(int pad, float velocity, const Settings& settings)
     voice->strength = strengthFor(velocity, padSettings.velocity);
     voice->fade = 1.0f;
     voice->fadeStep = 0.0f;
+    newestVoice[static_cast<size_t>(pad)] = voice->order;
     // The gains start where the pad's level, mute and solo put them, so the
     // attack is not smoothed away and a muted pad makes no sound at all;
     // they glide from there.
@@ -425,11 +640,8 @@ void DrumRackEngine::strike(int pad, float velocity, const Settings& settings)
 
 bool DrumRackEngine::audible(int pad) const
 {
-    auto anySoloed = false;
-    for (const auto& each : pads)
-        anySoloed = anySoloed || each.soloed.load();
     const auto& asked = pads[static_cast<size_t>(pad)];
-    return !asked.muted.load() && (!anySoloed || asked.soloed.load());
+    return !asked.muted.load() && (soloCount.load() == 0 || asked.soloed.load());
 }
 
 void DrumRackEngine::render(float* left, float* right, int numSamples, const Settings& settings)
@@ -437,27 +649,37 @@ void DrumRackEngine::render(float* left, float* right, int numSamples, const Set
     if (left == nullptr || numSamples <= 0)
         return;
     const Stretch stretch(*this);
-    if (const auto wanted = previews.exchange(0); wanted != 0)
-        for (int pad = 0; pad < padCount; ++pad)
-            if ((wanted & (1u << static_cast<unsigned>(pad))) != 0)
-                strike(pad, previewVelocity, settings);
-
-    // Where each pad's voices are heading: its level and pan, or silence when
-    // it is muted, or when some other pad is soloed and it is not.
-    std::array<float, padCount> targetLeft {}, targetRight {};
-    for (int pad = 0; pad < padCount; ++pad)
+    for (size_t word = 0; word < previews.size(); ++word)
+        if (const auto wanted = previews[word].exchange(0); wanted != 0)
+            for (unsigned bit = 0; bit < 64; ++bit)
+                if ((wanted >> bit) & 1u)
+                    strike(static_cast<int>(word * 64 + bit), previewVelocity, settings, true);
+    if (const auto pad = partPreviewPad.exchange(-1); pad >= 0)
     {
-        const auto i = static_cast<size_t>(pad);
-        const auto gain = audible(pad) ? levelGain(settings[i].level) : 0.0f;
-        targetLeft[i] = gain * panLeft(settings[i].pan);
-        targetRight[i] = gain * panRight(settings[i].pan);
+        const Part part { partPreviewStart.load(), partPreviewEnd.load() };
+        strike(pad, previewVelocity, settings, true, &part);
     }
 
     for (auto& voice : voices)
-        if (voice.active
-            && voice.render(left, right, numSamples, targetLeft[static_cast<size_t>(voice.pad)],
-                            targetRight[static_cast<size_t>(voice.pad)], smoothing) < numSamples)
+    {
+        if (!voice.active)
+            continue;
+        // Where the voice's gains are heading: its pad's level and pan, or
+        // silence when the pad is muted, or when some other pad is soloed and
+        // it is not.
+        const auto& padSettings = settings[static_cast<size_t>(voice.pad)];
+        const auto gain = audible(voice.pad) ? levelGain(padSettings.level) : 0.0f;
+        const auto played = voice.render(left, right, numSamples, gain * panLeft(padSettings.pan),
+                                         gain * panRight(padSettings.pan), smoothing);
+        if (played < numSamples)
+        {
             finish(voice);
+            continue;
+        }
+        if (voice.order == newestVoice[static_cast<size_t>(voice.pad)] && voice.sample != nullptr)
+            pads[static_cast<size_t>(voice.pad)].playhead.store(
+                static_cast<float>(voice.position / std::max(1, voice.sample->length())), std::memory_order_relaxed);
+    }
     framesRendered += numSamples;
 }
 
@@ -467,8 +689,8 @@ int DrumRackEngine::activeVoices() const
 }
 
 int DrumRackEngine::renderStrike(Source source, DrumModel model, const DrumSample* sample,
-                                 const PadSettings& settings, float velocity, double sampleRate,
-                                 float* left, float* right, int maxFrames)
+                                 const PadSettings& settings, const Playback& playback, float velocity,
+                                 double sampleRate, float* left, float* right, int maxFrames, int holdFrames)
 {
     for (auto* channel : { left, right })
         if (channel != nullptr)
@@ -480,7 +702,7 @@ int DrumRackEngine::renderStrike(Source source, DrumModel model, const DrumSampl
     // every time it is drawn.
     Voice voice;
     if (source == Source::sample)
-        voice.startSample(*sample, settings, outputRate);
+        voice.startSample(*sample, settings, playback.clamped(), outputRate, holdFrames);
     else
         voice.startSynth(model, settings, outputRate, 0x9e3779b9u);
     voice.strength = strengthFor(velocity, settings.velocity);

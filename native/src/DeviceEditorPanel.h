@@ -1,5 +1,6 @@
 #pragma once
 #include "Session.h"
+#include "DrumRackEngine.h"
 #include "SpectrumAnalyser.h"
 #include <array>
 #include <memory>
@@ -141,21 +142,31 @@ private:
     void paintVocoder(juce::Graphics&);
     bool handleVocoderClick(const juce::MouseEvent&);
     void tickVocoder();
-    // The Drum Rack's face is DeviceEditorPanelDrums.cpp: sixteen pads, each
-    // with its mute, play and solo, beside the selected pad's sound and its
-    // six knobs. The knobs follow whichever pad is selected, as the EQ's
-    // follow its band, and everything else is drawn and hit-tested by
-    // rectangle, so selecting a pad rebuilds nothing.
-    static constexpr int drumFaceWidth = 624;
+    // The Drum Rack's face is DeviceEditorPanelDrums.cpp: a map of all 128
+    // notes, sixteen pads of them at a time, each with its mute, play and
+    // solo, and beside them the selected pad's sound in
+    // DeviceEditorPanelDrumSample.cpp: its play mode, a picture of its sample
+    // or its strike, and its knobs. The knobs follow whichever pad is
+    // selected, as the EQ's follow its band, and everything else is drawn and
+    // hit-tested by rectangle, so selecting a pad rebuilds nothing.
+    static constexpr int drumFaceWidth = 852;
     void layoutDrums();
     void paintDrums(juce::Graphics&);
-    // The pads are drawn again only when something on one of them changed: a
-    // knob turning changes the selected pad's side and nothing else.
+    // The pads and the map are drawn again only when something on them
+    // changed: a knob turning changes the selected pad's side and nothing
+    // else.
     void repaintDrums();
     void ensureDrumControls();
     void styleDrumControls();
+    // A rack has 768 controls and the face shows six, so only the selected
+    // pad's are read; the rest of `parameters` stands empty.
+    void readDrumParameters();
     bool handleDrumMouseDown(const juce::MouseEvent&);
+    void handleDrumDrag(const juce::MouseEvent&);
+    void handleDrumMouseUp(const juce::MouseEvent&);
+    bool handleDrumWheel(const juce::MouseEvent&, const juce::MouseWheelDetails&);
     juce::String drumTooltip(juce::Point<int>) const;
+    void showDrumBank(int firstNote);
     void showDrumPadMenu(int pad);
     void showDrumChokeMenu(int pad);
     void chooseDrumSample(int pad);
@@ -164,6 +175,20 @@ private:
     // The name bar's menu on a Drum Rack: its kits to load, and Save kit.
     void showDrumKitMenu();
     void tickDrums();
+    // The selected pad's side: DeviceEditorPanelDrumSample.cpp.
+    void ensureDrumSampleControls();
+    void styleDrumSampleControls();
+    void paintDrumSample(juce::Graphics&);
+    bool handleDrumSampleMouseDown(const juce::MouseEvent&);
+    juce::String drumSampleTooltip(juce::Point<int>) const;
+    // A sample pad's playback written as one undo step, or, while a drag is
+    // under way, as it goes and without one (see DrumRackDevice).
+    void writeDrumPlayback(const juce::String& actionName, const DrumRackEngine::Playback&);
+    void previewDrumPlayback(const DrumRackEngine::Playback&);
+    void beginDrumPlaybackDrag();
+    void endDrumPlaybackDrag(const juce::String& actionName);
+    void showDrumSliceByMenu();
+    void spreadDrumSlices();
     // Only the meter, the detected note and the target key repaint; the rest
     // of the face is static and stays out of the frame path.
     void timerCallback() override;
@@ -250,18 +275,32 @@ private:
     bool eqDragging = false;
 
     // ---- Drum Rack --------------------------------------------------------
-    // Six knobs, not ninety-six: they stand for the selected pad's controls.
+    // Six knobs, not 768: they stand for the selected pad's controls.
     juce::OwnedArray<juce::Slider> drumSliders;
-    // How often each pad had been struck when the face last looked, and how
-    // brightly each is still lit from it.
-    std::array<std::uint32_t, 16> drumStrikesSeen {};
-    std::array<float, 16> drumFlash {};
+    // The sample editor's knobs, one for each of its settings; a mode shows
+    // the ones it uses.
+    juce::OwnedArray<juce::Slider> drumSampleSliders;
+    // Which of `parameters` were read for the last selected pad.
+    int drumParametersFrom = -1;
+    // How often each pad had been struck, and each note had arrived, when the
+    // face last looked, and how brightly each is still lit from it.
+    std::array<std::uint32_t, 128> drumStrikesSeen {}, drumNotesSeen {};
+    std::array<float, 128> drumFlash {}, drumKeyFlash {};
+    // The last note to arrive, named in the name bar while it glows.
+    int drumLastKey = -1;
+    float drumLastKeyGlow = 0.0f;
     // The device those counts were read from: a face retargeted at another
     // rack starts from that rack's counts rather than flashing every pad.
     juce::String drumStrikesDevice;
-    // Everything the pads were last drawn from, written as one string.
+    // Everything the pads and the map were last drawn from, as one string.
     juce::String drumPadsDrawn;
     int drumDropTarget = -1;
     std::unique_ptr<juce::FileChooser> drumFileChooser;
+    // A drag on the map, or on a marker of the sample, and a pad's playback
+    // as it was when a drag began, to be written as one undo step at its end.
+    enum class DrumDrag { none, map, start, end };
+    DrumDrag drumDrag = DrumDrag::none;
+    std::optional<DrumRackEngine::Playback> drumDragFrom;
+    float drumPlayheadDrawn = -1.0f;
 };
 }

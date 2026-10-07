@@ -13,6 +13,7 @@ add_library(RhinoCore STATIC
     FmEngine.cpp
     DrumSynth.cpp
     DrumRackEngine.cpp
+    DrumSlicer.cpp
     DrumKitFile.cpp
     DevicePreset.cpp)
 target_include_directories(RhinoCore PUBLIC .)

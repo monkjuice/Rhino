@@ -45,7 +45,7 @@ Import samples and recordings, then adjust clip gain, pan, pitch, fades, reverse
 
 ### Build a sound of your own
 
-Rhino includes instruments, a sixteen-pad Drum Rack with sampled and synthesised kits, MIDI effects, and audio effects in a drag-and-drop browser. The independent [Rhino Forge](instruments/rhino-forge/README.md) synth adds wavetable and spectral synthesis, deep modulation, an arpeggiator, flexible routing, and effects as a VST3 or standalone app.
+Rhino includes instruments, a Drum Rack with a pad on every note, sampled and synthesised kits, and a sample editor that slices a loop across pads, MIDI effects, and audio effects in a drag-and-drop browser. The independent [Rhino Forge](instruments/rhino-forge/README.md) synth adds wavetable and spectral synthesis, deep modulation, an arpeggiator, flexible routing, and effects as a VST3 or standalone app.
 
 ### Mix with the essentials in reach
 

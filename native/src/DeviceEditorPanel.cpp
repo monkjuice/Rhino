@@ -94,7 +94,15 @@ void DeviceEditorPanel::setTarget(int nextTrack, const Session::DeviceSlot& devi
         stopTimer();
     if (face == Face::Eq && spectrum == nullptr)
         spectrum = std::make_unique<SpectrumReader>();
-    parameters = session.deviceParameters(track, pluginSlot);
+    if (face == Face::DrumRack)
+    {
+        readDrumParameters();
+    }
+    else
+    {
+        parameters = session.deviceParameters(track, pluginSlot);
+        drumParametersFrom = -1;
+    }
     const auto* plugin = session.devicePlugin(track, pluginSlot);
     deviceKey = plugin != nullptr ? plugin->itemID.toString() : juce::String();
     display = face == Face::Generated ? session.deviceDisplay(track, pluginSlot) : DeviceDisplay {};
@@ -137,6 +145,8 @@ void DeviceEditorPanel::setTarget(int nextTrack, const Session::DeviceSlot& devi
     else
     {
         for (auto* slider : drumSliders)
+            slider->setVisible(false);
+        for (auto* slider : drumSampleSliders)
             slider->setVisible(false);
     }
     resized();
@@ -265,11 +275,18 @@ void DeviceEditorPanel::mouseDrag(const juce::MouseEvent& event)
     }
     if (face == Face::Eq && event.eventComponent == this)
         handleEqDrag(event);
+    if (face == Face::DrumRack && event.eventComponent == this)
+        handleDrumDrag(event);
 }
 
 void DeviceEditorPanel::mouseUp(const juce::MouseEvent& event)
 {
     headerPressed = false;
+    if (face == Face::DrumRack)
+    {
+        handleDrumMouseUp(event);
+        return;
+    }
     if (face != Face::Eq || !eqDragging)
         return;
     juce::ignoreUnused(event);
@@ -292,6 +309,8 @@ void DeviceEditorPanel::mouseWheelMove(const juce::MouseEvent& event,
                                        const juce::MouseWheelDetails& wheel)
 {
     if (face == Face::Eq && event.eventComponent == this && handleEqWheel(event, wheel))
+        return;
+    if (face == Face::DrumRack && event.eventComponent == this && handleDrumWheel(event, wheel))
         return;
     Component::mouseWheelMove(event, wheel);
 }
@@ -364,8 +383,8 @@ int DeviceEditorPanel::visibleParameterCount() const
     // faces can expose more because they give each control an intentional home,
     // and a generated face lays out every control a device declares, in
     // sections, up to a limit no device comes near.
-    // A Drum Rack's ninety-six controls are reached through its six knobs
-    // that follow the selected pad, so it builds none of the generic ones.
+    // A Drum Rack's 768 controls are reached through its six knobs that
+    // follow the selected pad, so it builds none of the generic ones.
     const auto limit = face == Face::Arp ? RhinoArpDevice::parameterCount
         : face == Face::Generated ? 48
         : face == Face::DrumRack ? 0
@@ -592,8 +611,12 @@ void DeviceEditorPanel::resized()
         for (auto* slider : eqSliders)
             slider->setVisible(false);
     if (face != Face::DrumRack)
+    {
         for (auto* slider : drumSliders)
             slider->setVisible(false);
+        for (auto* slider : drumSampleSliders)
+            slider->setVisible(false);
+    }
     if (face == Face::DrumRack)
         layoutDrums();
     else if (face == Face::AutoTune && contentArea.getWidth() >= 620 && contentArea.getHeight() >= 120)

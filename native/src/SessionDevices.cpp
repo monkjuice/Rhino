@@ -1,5 +1,6 @@
 #include "SessionInternal.h"
 #include <algorithm>
+#include <limits>
 #include <set>
 
 // Device creation, inspection and parameter gestures. Serves Device View.
@@ -314,16 +315,48 @@ std::vector<Session::DeviceSlot> Session::deviceSlots(int track) const
 
 std::vector<Session::DeviceParameter> Session::deviceParameters(int track, int slot) const
 {
+    return deviceParameters(track, slot, 0, std::numeric_limits<int>::max());
+}
+
+std::optional<Session::DeviceParameter> Session::deviceParameter(int track, int slot, int index) const
+{
+    if (index < 0)
+        return std::nullopt;
+    auto found = deviceParameters(track, slot, index, 1);
+    if (found.empty())
+        return std::nullopt;
+    return std::move(found.front());
+}
+
+int Session::deviceParameterCount(int track, int slot) const
+{
+    auto* plugin = devicePlugin(track, slot);
+    if (plugin == nullptr)
+        return 0;
+    if (dynamic_cast<te::FourOscPlugin*>(plugin) != nullptr)
+        return static_cast<int>(deviceParameters(track, slot).size());
+    if (const auto* native = dynamic_cast<NativeDevice*>(plugin))
+        return native->parameterCount();
+    auto count = 0;
+    for (auto* parameter : plugin->getAutomatableParameters())
+        if (parameter != nullptr && parameter->isParameterActive())
+            ++count;
+    return count;
+}
+
+std::vector<Session::DeviceParameter> Session::deviceParameters(int track, int slot, int first, int count) const
+{
     std::vector<DeviceParameter> parameters;
     auto* list = pluginListForTrack(track);
-    if (list == nullptr || !juce::isPositiveAndBelow(slot, list->size()))
+    if (list == nullptr || !juce::isPositiveAndBelow(slot, list->size()) || first < 0 || count <= 0)
         return parameters;
     auto* plugin = (*list)[slot];
     if (plugin == nullptr) return parameters;
+    const auto last = count > std::numeric_limits<int>::max() - first ? std::numeric_limits<int>::max() : first + count;
 
     if (auto* synthPlugin = dynamic_cast<te::FourOscPlugin*>(plugin))
     {
-        for (int i = 0; i < 6; ++i)
+        for (int i = first; i < std::min(6, last); ++i)
             if (auto* parameter = fourOscMacroParameterAt(*synthPlugin, i))
             {
                 const auto range = parameter->getValueRange();
@@ -352,6 +385,10 @@ std::vector<Session::DeviceParameter> Session::deviceParameters(int track, int s
         if (parameter == nullptr || !parameter->isParameterActive())
             continue;
         const auto currentIndex = parameterIndex++;
+        if (currentIndex < first)
+            continue;
+        if (currentIndex >= last)
+            break;
         const auto range = parameter->getValueRange();
         if (!std::isfinite(range.getStart()) || !std::isfinite(range.getEnd()) || range.getLength() <= 0.0f)
             continue;

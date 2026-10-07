@@ -48,7 +48,7 @@ std::vector<DeviceDescriptor> buildCatalog()
     // browser offers it blank at the top of Drums, with its kits below.
     add({.id = "Drums", .typeName = DrumRackDevice::xmlTypeName, .displayName = "Drum Rack",
          .kind = DeviceKind::Instrument, .category = "Drum Rack",
-         .description = "Sixteen pads of samples and synthesised drums",
+         .description = "A pad on every note: samples, slices and synthesised drums",
          .colour = 0xff9bbf4a, .browsable = true, .create = factory<DrumRackDevice>()});
 
     // ---- Audio FX ----------------------------------------------------------

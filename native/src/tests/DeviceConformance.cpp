@@ -477,10 +477,10 @@ void prime(te::Plugin& plugin)
 {
     if (auto* drums = dynamic_cast<DrumRackDevice*>(&plugin))
     {
-        drums->setPadSynth(0, DrumModel::Kick);
-        drums->setPadSynth(5, DrumModel::Snare);
-        drums->setPadSynth(10, DrumModel::ClosedHat);
-        drums->setPadSample(12, ContentLibrary::file("Samples/TR808/TR808Kick.wav"));
+        drums->setPadSynth(48, DrumModel::Kick);
+        drums->setPadSynth(53, DrumModel::Snare);
+        drums->setPadSynth(58, DrumModel::ClosedHat);
+        drums->setPadSample(60, ContentLibrary::file("Samples/TR808/TR808Kick.wav"));
     }
 }
 

@@ -96,8 +96,6 @@ std::vector<Session::TrackAutomation> Session::readTrackAutomations(const juce::
         return automations;
 
     std::vector<DeviceSlot> slots;
-    std::vector<DeviceParameter> parameters;
-    int parametersForSlot = -1;
     for (int i = 0; i < owner.getNumChildren(); ++i)
     {
         const auto state = owner.getChild(i);
@@ -127,18 +125,13 @@ std::vector<Session::TrackAutomation> Session::readTrackAutomations(const juce::
 
         if (resolveParameterInfo)
         {
-            if (parametersForSlot != automation.target.slot)
+            // The lane's own control, read alone: a Drum Rack has 768.
+            if (const auto parameter = deviceParameter(track, automation.target.slot, automation.target.parameter))
             {
-                parameters = deviceParameters(track, automation.target.slot);
-                parametersForSlot = automation.target.slot;
-            }
-            if (juce::isPositiveAndBelow(automation.target.parameter, parameters.size()))
-            {
-                const auto& parameter = parameters[static_cast<size_t>(automation.target.parameter)];
-                automation.parameterName = parameter.name;
-                automation.minimum = parameter.minimum;
-                automation.maximum = parameter.maximum;
-                automation.restingValue = juce::jlimit(parameter.minimum, parameter.maximum, parameter.value);
+                automation.parameterName = parameter->name;
+                automation.minimum = parameter->minimum;
+                automation.maximum = parameter->maximum;
+                automation.restingValue = juce::jlimit(parameter->minimum, parameter->maximum, parameter->value);
             }
             if (slots.empty())
                 slots = deviceSlots(track);
@@ -227,8 +220,7 @@ juce::Result Session::showTrackAutomation(DeviceTarget target, bool ownLane)
     // nowhere to stack a lane, so promising one would be a lie.
     if (isMasterTrack(target.track))
         return juce::Result::fail("Main track automation lanes are not shown yet.");
-    const auto parameters = deviceParameters(target.track, target.slot);
-    if (!juce::isPositiveAndBelow(target.parameter, parameters.size()))
+    if (!deviceParameter(target.track, target.slot, target.parameter).has_value())
         return juce::Result::fail("That parameter is no longer available.");
 
     edit->getUndoManager().beginNewTransaction("Show automation");
@@ -264,10 +256,10 @@ juce::Result Session::setTrackAutomationPoints(DeviceTarget target, std::vector<
 {
     if (!target.isValid())
         return juce::Result::fail("Pick a device parameter first.");
-    const auto parameters = deviceParameters(target.track, target.slot);
-    if (!juce::isPositiveAndBelow(target.parameter, parameters.size()))
+    const auto found = deviceParameter(target.track, target.slot, target.parameter);
+    if (!found.has_value())
         return juce::Result::fail("That parameter is no longer available.");
-    const auto& parameter = parameters[static_cast<size_t>(target.parameter)];
+    const auto& parameter = *found;
 
     std::stable_sort(points.begin(), points.end(),
                      [] (const auto& a, const auto& b) { return a.timeSeconds < b.timeSeconds; });

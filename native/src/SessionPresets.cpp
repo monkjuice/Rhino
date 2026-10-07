@@ -170,6 +170,13 @@ bool Session::isPatternDrums() const
     return patternInstrumentKind() == Instrument::Drums;
 }
 
+int Session::patternDrumLowestNote() const
+{
+    if (const auto* drums = dynamic_cast<const DrumRackDevice*>(patternInstrument()))
+        return drums->firstShownNote();
+    return lowestNote;
+}
+
 std::optional<juce::String> Session::patternNoteName(int pitch) const
 {
     juce::String name;

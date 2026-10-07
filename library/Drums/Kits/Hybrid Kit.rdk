@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<RHINO_DRUM_KIT format="1">
-  <PAD index="0" name="Analog Kick" synth="Kick" tune="-1" decay="0.5" tone="0.7" velocity="1" level="0" pan="0" choke="0"/>
-  <PAD index="2" name="Low Tom" synth="Tom" tune="-5" decay="0.6" tone="0.3" velocity="1" level="0" pan="0" choke="0"/>
-  <PAD index="4" name="Mid Tom" synth="Tom" tune="0" decay="0.5" tone="0.3" velocity="1" level="0" pan="0" choke="0"/>
-  <PAD index="5" sample="library:Samples/VinylDrums/Snare/Snare 21 Bright.wav" tune="0" decay="10" tone="1" velocity="1" level="0" pan="0" choke="0"/>
-  <PAD index="6" name="High Tom" synth="Tom" tune="5" decay="0.4" tone="0.3" velocity="1" level="0" pan="0" choke="0"/>
-  <PAD index="7" name="Cowbell" synth="Cowbell" tune="0" decay="0.35" tone="0.5" velocity="1" level="0" pan="0" choke="0"/>
-  <PAD index="8" sample="library:Samples/VinylDrums/Clap/Clap 09 Bright Tight.wav" tune="0" decay="10" tone="1" velocity="1" level="0" pan="0" choke="0"/>
-  <PAD index="10" sample="library:Samples/VinylDrums/Hat/Hat Closed 34 Crisp.wav" tune="0" decay="10" tone="1" velocity="1" level="0" pan="0" choke="1"/>
-  <PAD index="11" name="Open Hat" synth="OpenHat" tune="0" decay="0.45" tone="0.6" velocity="1" level="0" pan="0" choke="1"/>
-  <PAD index="12" sample="library:Samples/VinylDrums/Hat/Ride 16 Dark.wav" tune="0" decay="10" tone="1" velocity="1" level="0" pan="0" choke="0"/>
+<RHINO_DRUM_KIT format="2">
+  <PAD note="48" name="Analog Kick" synth="Kick" tune="-1" decay="0.5" tone="0.7" velocity="1" level="0" pan="0" choke="0"/>
+  <PAD note="50" name="Low Tom" synth="Tom" tune="-5" decay="0.6" tone="0.3" velocity="1" level="0" pan="0" choke="0"/>
+  <PAD note="52" name="Mid Tom" synth="Tom" tune="0" decay="0.5" tone="0.3" velocity="1" level="0" pan="0" choke="0"/>
+  <PAD note="53" sample="library:Samples/VinylDrums/Snare/Snare 21 Bright.wav" tune="0" decay="10" tone="1" velocity="1" level="0" pan="0" choke="0"/>
+  <PAD note="54" name="High Tom" synth="Tom" tune="5" decay="0.4" tone="0.3" velocity="1" level="0" pan="0" choke="0"/>
+  <PAD note="55" name="Cowbell" synth="Cowbell" tune="0" decay="0.35" tone="0.5" velocity="1" level="0" pan="0" choke="0"/>
+  <PAD note="56" sample="library:Samples/VinylDrums/Clap/Clap 09 Bright Tight.wav" tune="0" decay="10" tone="1" velocity="1" level="0" pan="0" choke="0"/>
+  <PAD note="58" sample="library:Samples/VinylDrums/Hat/Hat Closed 34 Crisp.wav" tune="0" decay="10" tone="1" velocity="1" level="0" pan="0" choke="1"/>
+  <PAD note="59" name="Open Hat" synth="OpenHat" tune="0" decay="0.45" tone="0.6" velocity="1" level="0" pan="0" choke="1"/>
+  <PAD note="60" sample="library:Samples/VinylDrums/Hat/Ride 16 Dark.wav" tune="0" decay="10" tone="1" velocity="1" level="0" pan="0" choke="0"/>
 </RHINO_DRUM_KIT>

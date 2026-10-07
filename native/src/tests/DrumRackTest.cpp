@@ -2,6 +2,7 @@
 #include "ContentLibrary.h"
 #include "DrumKitFile.h"
 #include "DrumRackEngine.h"
+#include "DrumSlicer.h"
 #include "instruments/DrumRackDevice.h"
 #include <algorithm>
 #include <cmath>
@@ -20,7 +21,9 @@ namespace
 {
 constexpr double rate = 48000.0;
 constexpr double pi = 3.14159265358979323846;
-constexpr int firstNote = DrumRackEngine::lowestNote;
+// The engine's pads are its notes. These tests strike the pads a rack shows
+// by default, C2 up.
+constexpr int firstNote = DrumRackEngine::defaultFirstNote;
 
 void require(bool valid, const juce::String& what)
 {
@@ -53,6 +56,8 @@ struct Strike
     int frame;
     int note;
     float velocity = 1.0f;
+    // A note-off rather than a note-on.
+    bool off = false;
 };
 
 // Renders frames from the engine, striking each note at its own frame.
@@ -67,7 +72,10 @@ Played play(DrumRackEngine& engine, int frames, std::vector<Strike> strikes, con
     {
         while (next < strikes.size() && strikes[next].frame <= done)
         {
-            engine.noteOn(strikes[next].note, strikes[next].velocity, settings);
+            if (strikes[next].off)
+                engine.noteOff(strikes[next].note);
+            else
+                engine.noteOn(strikes[next].note, strikes[next].velocity, settings);
             ++next;
         }
         auto end = std::min(frames, done + 512);
@@ -148,7 +156,7 @@ void checkSamplePads()
         engine.prepare(rate);
         auto tone = sine(1000.0, rate, 0.1);
         const auto file = tone->left;
-        engine.setPadSample(0, std::move(tone));
+        engine.setPadSample(firstNote, std::move(tone));
         const auto played = play(engine, at(0.2), {{0, firstNote}}, settings);
         for (size_t i = 0; i < file.size(); ++i)
             require(played.left[i] == file[i] && played.right[i] == file[i],
@@ -162,11 +170,11 @@ void checkSamplePads()
     {
         DrumRackEngine engine;
         engine.prepare(rate);
-        engine.setPadSample(0, sine(1000.0, rate, 0.2));
-        engine.setPadSample(1, sine(1000.0, 44100.0, 0.2));
+        engine.setPadSample(firstNote, sine(1000.0, rate, 0.2));
+        engine.setPadSample(firstNote + 1, sine(1000.0, 44100.0, 0.2));
         auto tuned = settings;
-        tuned[0].tune = 12.0f;
-        tuned[1].tune = -7.0f;
+        tuned[firstNote].tune = 12.0f;
+        tuned[firstNote + 1].tune = -7.0f;
         const auto up = play(engine, at(0.3), {{0, firstNote}}, tuned);
         require(std::abs(frequencyOf(up.left, at(0.01), at(0.09)) - 2000.0) < 2.0,
                 "a pad tuned up an octave plays its 1 kHz file at 2 kHz");
@@ -184,9 +192,9 @@ void checkSamplePads()
     {
         DrumRackEngine engine;
         engine.prepare(rate);
-        engine.setPadSample(0, sine(1000.0, rate, 1.0));
+        engine.setPadSample(firstNote, sine(1000.0, rate, 1.0));
         auto shaped = settings;
-        shaped[0].decay = 0.1f;
+        shaped[firstNote].decay = 0.1f;
         const auto played = play(engine, at(0.3), {{0, firstNote}}, shaped);
         const auto early = rmsOf(played.left, 0, at(0.002));
         const auto middle = rmsOf(played.left, at(0.049), at(0.002));
@@ -200,11 +208,11 @@ void checkSamplePads()
     {
         DrumRackEngine engine;
         engine.prepare(rate);
-        engine.setPadSample(0, sine(5000.0, rate, 0.2));
-        engine.setPadSample(1, sine(50.0, rate, 0.4));
+        engine.setPadSample(firstNote, sine(5000.0, rate, 0.2));
+        engine.setPadSample(firstNote + 1, sine(50.0, rate, 0.4));
         auto dark = settings;
-        dark[0].tone = 0.0f;
-        dark[1].tone = 0.0f;
+        dark[firstNote].tone = 0.0f;
+        dark[firstNote + 1].tone = 0.0f;
         const auto open = play(engine, at(0.2), {{0, firstNote}}, settings);
         const auto closed = play(engine, at(0.2), {{0, firstNote}}, dark);
         require(decibels(rmsOf(closed.left, at(0.05), at(0.1)) / rmsOf(open.left, at(0.05), at(0.1))) < -30.0,
@@ -219,28 +227,28 @@ void checkSamplePads()
     {
         DrumRackEngine engine;
         engine.prepare(rate);
-        engine.setPadSample(0, sine(1000.0, rate, 0.1));
+        engine.setPadSample(firstNote, sine(1000.0, rate, 0.1));
         const auto loudest = peakOf(play(engine, at(0.1), {{0, firstNote, 1.0f}}, settings).left);
         const auto halfway = peakOf(play(engine, at(0.1), {{0, firstNote, 0.5f}}, settings).left);
         require(std::abs(halfway / loudest - 0.5f) < 1.0e-4f, "at full Velocity a note at half velocity is half as loud");
         auto deaf = settings;
-        deaf[0].velocity = 0.0f;
+        deaf[firstNote].velocity = 0.0f;
         require(std::abs(peakOf(play(engine, at(0.1), {{0, firstNote, 0.5f}}, deaf).left) - loudest) < 1.0e-5f,
                 "and with none every note is as loud as the loudest");
         auto quieter = settings;
-        quieter[0].level = -6.0f;
+        quieter[firstNote].level = -6.0f;
         require(std::abs(peakOf(play(engine, at(0.1), {{0, firstNote}}, quieter).left) / loudest - 0.50119f) < 1.0e-3f,
                 "Level -6 dB halves the sound");
         auto silent = settings;
-        silent[0].level = DrumRackEngine::silentLevel;
+        silent[firstNote].level = DrumRackEngine::silentLevel;
         require(peakOf(play(engine, at(0.1), {{0, firstNote}}, silent).left) == 0.0f, "and at the bottom it is silence");
         auto left = settings;
-        left[0].pan = -1.0f;
+        left[firstNote].pan = -1.0f;
         const auto panned = play(engine, at(0.1), {{0, firstNote}}, left);
         require(peakOf(panned.right) == 0.0f && std::abs(peakOf(panned.left) - loudest) < 1.0e-5f,
                 "panned hard left, the right side is silent and the left at full level");
         auto halfRight = settings;
-        halfRight[0].pan = 0.5f;
+        halfRight[firstNote].pan = 0.5f;
         const auto balanced = play(engine, at(0.1), {{0, firstNote}}, halfRight);
         require(std::abs(peakOf(balanced.left) / loudest - 0.5f) < 1.0e-4f
                     && std::abs(peakOf(balanced.right) - loudest) < 1.0e-5f,
@@ -257,11 +265,11 @@ void checkChokeMuteAndSolo()
     {
         DrumRackEngine engine;
         engine.prepare(rate);
-        engine.setPadSample(10, sine(1000.0, rate, 1.0));
-        engine.setPadSample(11, sine(500.0, rate, 1.0));
-        engine.setPadSample(12, sine(1500.0, rate, 1.0));
-        engine.setPadChoke(10, 1);
-        engine.setPadChoke(11, 1);
+        engine.setPadSample(firstNote + 10, sine(1000.0, rate, 1.0));
+        engine.setPadSample(firstNote + 11, sine(500.0, rate, 1.0));
+        engine.setPadSample(firstNote + 12, sine(1500.0, rate, 1.0));
+        engine.setPadChoke(firstNote + 10, 1);
+        engine.setPadChoke(firstNote + 11, 1);
         const auto played = play(engine, at(0.3), {{0, firstNote + 11}, {0, firstNote + 12}, {at(0.1), firstNote + 10}},
                                  settings);
         const auto window = at(0.05);
@@ -276,12 +284,12 @@ void checkChokeMuteAndSolo()
     {
         DrumRackEngine engine;
         engine.prepare(rate);
-        engine.setPadSample(0, sine(1000.0, rate, 0.2));
-        engine.setPadSample(1, sine(700.0, rate, 0.2));
-        engine.setPadMuted(0, true);
+        engine.setPadSample(firstNote, sine(1000.0, rate, 0.2));
+        engine.setPadSample(firstNote + 1, sine(700.0, rate, 0.2));
+        engine.setPadMuted(firstNote, true);
         require(peakOf(play(engine, at(0.1), {{0, firstNote}}, settings).left) == 0.0f, "a muted pad is silent");
-        engine.setPadMuted(0, false);
-        engine.setPadSoloed(1, true);
+        engine.setPadMuted(firstNote, false);
+        engine.setPadSoloed(firstNote + 1, true);
         // Both struck, the soloed pad alone is heard: sample for sample what
         // it plays struck on its own.
         const auto both = play(engine, at(0.1), {{0, firstNote}, {0, firstNote + 1}}, settings);
@@ -301,10 +309,10 @@ void checkSynthPads()
         const auto& info = drumModelInfo(model);
         DrumRackEngine engine;
         engine.prepare(rate);
-        engine.setPadSynth(0, model);
+        engine.setPadSynth(firstNote, model);
         auto shaped = settings;
-        shaped[0].decay = info.decay;
-        shaped[0].tone = info.tone;
+        shaped[firstNote].decay = info.decay;
+        shaped[firstNote].tone = info.tone;
         const auto played = play(engine, at(2.0), {{0, firstNote}}, shaped);
         const auto peak = peakOf(played.left);
         require(std::all_of(played.left.begin(), played.left.end(), [] (float sample) { return std::isfinite(sample); }),
@@ -321,11 +329,11 @@ void checkSynthPads()
     {
         DrumRackEngine engine;
         engine.prepare(rate);
-        engine.setPadSynth(0, model);
+        engine.setPadSynth(firstNote, model);
         auto shaped = settings;
-        shaped[0].decay = 2.0f;
-        shaped[0].tone = 0.0f;
-        shaped[0].tune = tune;
+        shaped[firstNote].decay = 2.0f;
+        shaped[firstNote].tone = 0.0f;
+        shaped[firstNote].tune = tune;
         const auto played = play(engine, at(0.8), {{0, firstNote}}, shaped);
         return frequencyOf(played.left, at(0.35), at(0.75));
     };
@@ -338,10 +346,10 @@ void checkSynthPads()
     {
         DrumRackEngine engine;
         engine.prepare(rate);
-        engine.setPadSynth(0, model);
+        engine.setPadSynth(firstNote, model);
         auto shaped = settings;
-        shaped[0].decay = decay;
-        shaped[0].tone = tone;
+        shaped[firstNote].decay = decay;
+        shaped[firstNote].tone = tone;
         return play(engine, at(1.0), {{0, firstNote}}, shaped).left;
     };
     require(decibels(rmsOf(strike(DrumModel::Kick, 0.8f, 0.4f), at(0.15), at(0.02))
@@ -360,12 +368,12 @@ void checkSampleHandOff()
     engine.prepare(rate);
     auto first = sine(1000.0, rate, 1.0);
     const auto* held = first.get();
-    engine.setPadSample(0, std::move(first));
+    engine.setPadSample(firstNote, std::move(first));
     std::vector<float> left(512), right(512);
     engine.noteOn(firstNote, 1.0f, settings);
     engine.render(left.data(), right.data(), 512, settings);
     require(held->playing.load() == 1, "a voice counts itself onto the sample it plays");
-    engine.setPadSample(0, sine(500.0, rate, 1.0));
+    engine.setPadSample(firstNote, sine(500.0, rate, 1.0));
     require(engine.collect() == 1, "a sample let go of while a voice plays it is kept");
     // The voice rings out; the next strike plays the new sample.
     const auto after = play(engine, at(1.2), {{at(1.05), firstNote}}, settings);
@@ -374,10 +382,10 @@ void checkSampleHandOff()
             "a strike after the swap plays the new sample");
     // Nothing playing, nothing waits.
     engine.clear();
-    engine.setPadSample(0, sine(250.0, rate, 0.1));
+    engine.setPadSample(firstNote, sine(250.0, rate, 0.1));
     require(engine.collect() == 0, "a sample nothing plays is freed at once");
-    engine.clearPad(0);
-    require(engine.padSource(0) == DrumRackEngine::Source::empty && engine.collect() == 0,
+    engine.clearPad(firstNote);
+    require(engine.padSource(firstNote) == DrumRackEngine::Source::empty && engine.collect() == 0,
             "and an emptied pad keeps nothing");
 }
 
@@ -386,27 +394,259 @@ void checkSampleHandOff()
 void checkPictures()
 {
     DrumRackEngine::Settings settings {};
-    settings[0] = { 5.0f, 0.3f, 0.4f, 1.0f, -3.0f, 0.25f };
-    settings[1] = { -2.0f, 0.25f, 0.7f, 1.0f, 0.0f, -0.5f };
+    settings[firstNote] = { 5.0f, 0.3f, 0.4f, 1.0f, -3.0f, 0.25f };
+    settings[firstNote + 1] = { -2.0f, 0.25f, 0.7f, 1.0f, 0.0f, -0.5f };
     DrumRackEngine engine;
     engine.prepare(rate);
     auto tone = sine(440.0, 44100.0, 0.5);
     const auto copy = std::make_unique<DrumSample>();
     copy->left = tone->left;
     copy->sampleRate = tone->sampleRate;
-    engine.setPadSample(0, std::move(tone));
-    engine.setPadSynth(1, DrumModel::Cowbell);
+    engine.setPadSample(firstNote, std::move(tone));
+    engine.setPadSynth(firstNote + 1, DrumModel::Cowbell);
+    // The sample pad plays a part of its file, faded at both ends.
+    DrumRackEngine::Playback part;
+    part.start = 0.1f;
+    part.end = 0.8f;
+    part.fadeIn = 0.003f;
+    part.fadeOut = 0.05f;
+    engine.setPadPlayback(firstNote, part);
     for (int pad = 0; pad < 2; ++pad)
     {
         const auto live = play(engine, at(0.6), {{0, firstNote + pad}}, settings);
         std::vector<float> left(static_cast<size_t>(at(0.6))), right(left.size());
         const auto frames = DrumRackEngine::renderStrike(pad == 0 ? DrumRackEngine::Source::sample : DrumRackEngine::Source::synth,
-                                                         DrumModel::Cowbell, copy.get(), settings[static_cast<size_t>(pad)],
-                                                         1.0f, rate, left.data(), right.data(), at(0.6));
+                                                         DrumModel::Cowbell, copy.get(), settings[static_cast<size_t>(firstNote + pad)],
+                                                         pad == 0 ? part : DrumRackEngine::Playback {}, 1.0f, rate,
+                                                         left.data(), right.data(), at(0.6));
         require(frames > 0 && frames < at(0.6), "a picture lasts as long as the strike");
         require(left == live.left && right == live.right,
                 juce::String(pad == 0 ? "a sample pad's" : "a synth pad's") + " picture is exactly what it plays");
     }
+}
+
+// A file that holds one level throughout, so what comes out of a pad is the
+// gain its shape applies, read straight off the samples.
+std::unique_ptr<DrumSample> held(float value, double seconds)
+{
+    auto sample = std::make_unique<DrumSample>();
+    sample->sampleRate = rate;
+    sample->left.assign(static_cast<size_t>(seconds * rate), value);
+    return sample;
+}
+
+// A pad on every note: the lowest and the highest play, and a key with nothing
+// on it is still counted, which is how the face shows a key arriving.
+void checkEveryNote()
+{
+    DrumRackEngine::Settings settings {};
+    DrumRackEngine engine;
+    engine.prepare(rate);
+    engine.setPadSample(0, sine(1000.0, rate, 0.05));
+    engine.setPadSample(DrumRackEngine::padCount - 1, sine(500.0, rate, 0.05));
+    const auto low = play(engine, at(0.1), {{0, 0}}, settings);
+    const auto high = play(engine, at(0.1), {{0, DrumRackEngine::padCount - 1}}, settings);
+    require(peakOf(low.left) > 0.4f && std::abs(frequencyOf(low.left, 0, at(0.04)) - 1000.0) < 2.0,
+            "the pad on the lowest note, C-2, plays");
+    require(peakOf(high.left) > 0.4f && std::abs(frequencyOf(high.left, 0, at(0.04)) - 500.0) < 2.0,
+            "and so does the pad on the highest, G8");
+    const auto before = engine.notesReceived(60);
+    const auto nothing = play(engine, at(0.05), {{0, 60}, {at(0.02), 60}}, settings);
+    require(peakOf(nothing.left) == 0.0f && engine.notesReceived(60) == before + 2 && engine.strikes(60) == 0,
+            "a key with no pad on it sounds nothing and strikes nothing, but every note of it is counted");
+    require(engine.notesReceived(0) == 1 && engine.notesReceived(DrumRackEngine::padCount - 1) == 1,
+            "as is each note that strikes a pad");
+}
+
+// How a sample pad plays its file: the part, the fades, one-shot against
+// classic, the envelope, the loop, and a strike from the face.
+void checkPlayback()
+{
+    DrumRackEngine::Settings settings {};
+    constexpr int pad = firstNote;
+    using Playback = DrumRackEngine::Playback;
+    using Mode = DrumRackEngine::PlayMode;
+
+    // A part of the file, untuned, is exactly that part and nothing after it.
+    {
+        DrumRackEngine engine;
+        engine.prepare(rate);
+        auto tone = sine(440.0, rate, 1.0);
+        const auto file = tone->left;
+        engine.setPadSample(pad, std::move(tone));
+        Playback part;
+        part.start = 0.25f;
+        part.end = 0.5f;
+        engine.setPadPlayback(pad, part);
+        const auto played = play(engine, at(0.5), {{0, pad}}, settings);
+        const auto from = at(0.25), length = at(0.25);
+        for (int i = 0; i < length; ++i)
+            require(played.left[static_cast<size_t>(i)] == file[static_cast<size_t>(from + i)],
+                    "a part plays its own frames exactly, frame " + juce::String(i));
+        require(peakOf(played.left, length) == 0.0f && engine.activeVoices() == 0, "and stops at its end");
+    }
+
+    // Fades at the part's two edges, and the middle left alone.
+    {
+        DrumRackEngine engine;
+        engine.prepare(rate);
+        engine.setPadSample(pad, held(0.5f, 0.2));
+        Playback faded;
+        faded.fadeIn = 0.01f;
+        faded.fadeOut = 0.02f;
+        engine.setPadPlayback(pad, faded);
+        const auto played = play(engine, at(0.3), {{0, pad}}, settings);
+        require(played.left[0] == 0.0f, "a fade in starts from silence");
+        require(std::abs(played.left[static_cast<size_t>(at(0.005))] - 0.25f) < 0.005f, "and is half way at half its length");
+        require(played.left[static_cast<size_t>(at(0.1))] == 0.5f, "the middle of the part is untouched");
+        require(std::abs(played.left[static_cast<size_t>(at(0.19))] - 0.25f) < 0.005f,
+                "a fade out is half way half its length before the end");
+        require(std::abs(played.left[static_cast<size_t>(at(0.2) - 1)]) < 0.001f, "and silent at the end");
+    }
+
+    // A one-shot plays out whatever its key does.
+    {
+        DrumRackEngine engine;
+        engine.prepare(rate);
+        engine.setPadSample(pad, held(0.5f, 0.2));
+        const auto played = play(engine, at(0.3), {{0, pad}, {at(0.05), pad, 0.0f, true}}, settings);
+        require(played.left[static_cast<size_t>(at(0.15))] == 0.5f, "a one-shot plays on past its note-off");
+    }
+
+    // Classic: an attack, a fall by Decay to Sustain while the key is held,
+    // and a release from the note-off, 60 dB in the Release.
+    {
+        DrumRackEngine engine;
+        engine.prepare(rate);
+        engine.setPadSample(pad, held(0.5f, 1.0));
+        Playback classic;
+        classic.mode = Mode::classic;
+        classic.attack = 0.02f;
+        engine.setPadPlayback(pad, classic);
+        const auto rising = play(engine, at(0.1), {{0, pad}}, settings);
+        require(rising.left[0] == 0.0f && std::abs(rising.left[static_cast<size_t>(at(0.01))] - 0.25f) < 0.005f
+                    && rising.left[static_cast<size_t>(at(0.05))] == 0.5f,
+                "a classic attack rises from silence, half way at half its length");
+        // That voice is still held, with no note-off coming.
+        engine.clear();
+
+        classic.attack = 0.0f;
+        classic.sustain = 0.5f;
+        classic.release = 0.1f;
+        engine.setPadPlayback(pad, classic);
+        auto shaped = settings;
+        shaped[pad].decay = 0.05f;
+        const auto played = play(engine, at(0.6), {{0, pad}, {at(0.3), pad, 0.0f, true}}, shaped);
+        require(std::abs(played.left[static_cast<size_t>(at(0.25))] - 0.25f) < 0.001f,
+                "held, it settles at its Sustain, half the file's level");
+        const auto letGo = played.left[static_cast<size_t>(at(0.3) - 1)];
+        const auto later = played.left[static_cast<size_t>(at(0.35))];
+        require(std::abs(decibels(later / letGo) + 30.0) < 1.5,
+                "let go, it falls 30 dB in half its Release: measured " + juce::String(decibels(later / letGo), 1) + " dB");
+        require(peakOf(played.left, at(0.41)) == 0.0f && engine.activeVoices() == 0, "and is gone once it has fallen 60");
+    }
+
+    // Classic with Loop repeats its part while the key is held, and the seam
+    // is a crossfade: a tone whose cycles do not fit the part never jumps.
+    {
+        DrumRackEngine engine;
+        engine.prepare(rate);
+        engine.setPadSample(pad, sine(437.0, rate, 1.0));
+        Playback looped;
+        looped.mode = Mode::classic;
+        looped.start = 0.1f;
+        looped.end = 0.2f;
+        looped.loop = true;
+        engine.setPadPlayback(pad, looped);
+        const auto played = play(engine, at(0.8), {{0, pad}, {at(0.5), pad, 0.0f, true}}, settings);
+        require(peakOf(played.left, at(0.4), at(0.45)) > 0.3f, "a loop sounds long after its part's own length");
+        auto steepest = 0.0f;
+        for (int i = 1; i < at(0.5); ++i)
+            steepest = std::max(steepest, std::abs(played.left[static_cast<size_t>(i)] - played.left[static_cast<size_t>(i - 1)]));
+        require(steepest < 0.04f, "and its seam never jumps: steepest step " + juce::String(steepest, 4));
+        require(peakOf(played.left, at(0.56)) == 0.0f, "let go, it releases like any classic voice");
+    }
+
+    // Struck from the face, a classic pad has no note-off to wait for, so it
+    // lets go of itself; a part struck from the face is a one-shot of it.
+    {
+        DrumRackEngine engine;
+        engine.prepare(rate);
+        auto tone = sine(440.0, rate, 3.0);
+        const auto file = tone->left;
+        engine.setPadSample(pad, std::move(tone));
+        Playback classic;
+        classic.mode = Mode::classic;
+        engine.setPadPlayback(pad, classic);
+        // The face strikes softer than full; heard at full strength here.
+        auto deaf = settings;
+        deaf[pad].velocity = 0.0f;
+        engine.previewPad(pad);
+        const auto previewed = play(engine, at(1.5), {}, deaf);
+        require(peakOf(previewed.left, at(0.5), at(0.6)) > 0.3f && peakOf(previewed.left, at(1.2)) == 0.0f,
+                "a classic pad played from the face holds a moment and lets go");
+        engine.previewPart(pad, 0.5f, 0.6f);
+        const auto slice = play(engine, at(0.5), {}, deaf);
+        const auto from = static_cast<int>(0.5 * static_cast<double>(file.size()));
+        for (int i = 0; i < at(0.3); ++i)
+            require(slice.left[static_cast<size_t>(i)] == file[static_cast<size_t>(from + i)],
+                    "a part played from the face is that part, frame " + juce::String(i));
+        require(peakOf(slice.left, at(0.3) + 1) == 0.0f, "struck as a one-shot of it");
+        require(engine.padPlayback(pad).mode == Mode::classic, "and the pad still plays as it did");
+    }
+}
+
+// Where Slice cuts: at the hits, as finely as its sensitivity, or into parts.
+void checkSlicing()
+{
+    // Four loud hits a quarter of a second apart over a quiet tone, and a
+    // softer one between the last two.
+    DrumSample beat;
+    beat.sampleRate = rate;
+    beat.left.assign(static_cast<size_t>(at(1.0)), 0.0f);
+    for (size_t i = 0; i < beat.left.size(); ++i)
+        beat.left[i] = 0.05f * static_cast<float>(std::sin(2.0 * pi * 200.0 * static_cast<double>(i) / rate));
+    std::uint32_t seed = 12345;
+    const auto hit = [&beat, &seed] (double when, float loudness)
+    {
+        for (int i = 0; i < at(0.08); ++i)
+        {
+            seed = seed * 1664525u + 1013904223u;
+            const auto noise = static_cast<float>(seed >> 8) / static_cast<float>(1u << 24) * 2.0f - 1.0f;
+            beat.left[static_cast<size_t>(at(when) + i)] += loudness * noise * std::exp(-static_cast<float>(i) / at(0.02));
+        }
+    };
+    const double hits[] { 0.0, 0.25, 0.5, 0.75 };
+    for (const auto when : hits)
+        hit(when, 0.8f);
+    hit(0.625, 0.25f);
+
+    DrumRackEngine::Playback cut;
+    cut.mode = DrumRackEngine::PlayMode::slice;
+    cut.sensitivity = 0.0f;
+    const auto coarse = DrumSlicer::slices(beat, cut);
+    require(coarse.size() == 4, "at its least sensitive, Slice cuts at the four loud hits: found "
+                                    + juce::String(static_cast<int>(coarse.size())));
+    for (size_t index = 0; index < coarse.size(); ++index)
+        require(coarse[index] <= hits[index] + 0.001 && coarse[index] > hits[index] - 0.008,
+                "each cut just before its hit: " + juce::String(coarse[index], 4) + " for " + juce::String(hits[index]));
+    cut.sensitivity = 1.0f;
+    const auto fine = DrumSlicer::slices(beat, cut);
+    require(fine.size() == 5 && std::abs(fine[3] - 0.625) < 0.008, "at its most, the soft hit too");
+
+    // A part is cut within itself, its start the first slice.
+    cut.start = 0.3f;
+    const auto within = DrumSlicer::slices(beat, cut);
+    require(within.size() == 4 && within.front() == 0.3f && std::abs(within[1] - 0.5) < 0.008,
+            "a part's slices start at its own start and keep inside it");
+
+    cut.sliceBy = DrumRackEngine::SliceBy::divisions;
+    cut.divisions = 8;
+    cut.start = 0.5f;
+    const auto parts = DrumSlicer::slices(beat, cut);
+    require(parts.size() == 8, "divisions cut the part into equal parts");
+    for (size_t index = 0; index < parts.size(); ++index)
+        require(std::abs(parts[index] - (0.5f + 0.0625f * static_cast<float>(index))) < 1.0e-6f, "each the same length");
 }
 
 // ---- the files ----------------------------------------------------------------
@@ -416,13 +656,13 @@ void checkFiles()
     DrumKit kit;
     auto kick = DrumSound::forSynth(DrumModel::Kick);
     kick.settings = { 1.0f / 3.0f, 0.1f, 1.0e-7f, 0.7f, -2.25f, -0.25f };
-    kit.pads[0] = kick;
+    kit.pads[firstNote] = kick;
     DrumSound snare;
     snare.source = DrumRackEngine::Source::sample;
     snare.name = "Snare & \"friends\"";
     snare.sample = "library:Samples/VinylDrums/Snare/Snare 16 Warm.wav";
     snare.choke = 2;
-    kit.pads[5] = snare;
+    kit.pads[firstNote + 5] = snare;
     DrumKit back;
     require(DrumFiles::fromXml(*DrumFiles::toXml(kit), back).wasOk(), "a kit reads back");
     for (size_t pad = 0; pad < kit.pads.size(); ++pad)
@@ -451,17 +691,51 @@ void checkFiles()
                                                                      : DrumFiles::fromXml(*parsed, kitInto).failed();
         require(refused, juce::String("a file ") + what + " is accepted");
     };
-    rejects(R"(<SOMETHING format="1"/>)", "that is not a kit");
-    rejects(R"(<RHINO_DRUM_KIT format="2"/>)", "in a format this build does not read");
-    rejects(R"(<RHINO_DRUM_KIT format="1"><PAD index="16" synth="Kick"/></RHINO_DRUM_KIT>)", "with a pad past the last");
-    rejects(R"(<RHINO_DRUM_KIT format="1"><PAD index="-1" synth="Kick"/></RHINO_DRUM_KIT>)", "with a pad before the first");
-    rejects(R"(<RHINO_DRUM_KIT format="1"><PAD index="0" synth="Kick"/><PAD index="0" synth="Snare"/></RHINO_DRUM_KIT>)",
+    rejects(R"(<SOMETHING format="2"/>)", "that is not a kit");
+    rejects(R"(<RHINO_DRUM_KIT format="1"/>)", "in the format that numbered sixteen pads from C2");
+    rejects(R"(<RHINO_DRUM_KIT format="2"><PAD note="128" synth="Kick"/></RHINO_DRUM_KIT>)", "with a pad past the last note");
+    rejects(R"(<RHINO_DRUM_KIT format="2"><PAD note="-1" synth="Kick"/></RHINO_DRUM_KIT>)", "with a pad before the first");
+    rejects(R"(<RHINO_DRUM_KIT format="2"><PAD index="0" synth="Kick"/></RHINO_DRUM_KIT>)", "naming a pad by its old index");
+    rejects(R"(<RHINO_DRUM_KIT format="2"><PAD note="48" synth="Kick"/><PAD note="48" synth="Snare"/></RHINO_DRUM_KIT>)",
             "filling one pad twice");
     rejects(R"(<RHINO_DRUM_SOUND format="1" synth="Kick" sample="a.wav"/>)", "naming a synth and a sample");
     rejects(R"(<RHINO_DRUM_SOUND format="1"/>)", "naming neither");
     rejects(R"(<RHINO_DRUM_SOUND format="1" synth="Gong"/>)", "naming a synth there is not");
     rejects(R"(<RHINO_DRUM_SOUND format="1" synth="Kick" tune="high"/>)", "with a setting that is not a number");
     rejects(R"(<RHINO_DRUM_SOUND format="1" synth="Kick" choke="5"/>)", "with a choke group past the fourth");
+    rejects(R"(<RHINO_DRUM_SOUND format="1" sample="a.wav" mode="backwards"/>)", "playing in a mode there is not");
+    rejects(R"(<RHINO_DRUM_SOUND format="1" sample="a.wav" start="0.6" end="0.4"/>)", "whose part ends before it starts");
+    rejects(R"(<RHINO_DRUM_SOUND format="1" sample="a.wav" loop="2"/>)", "with a loop that is not on or off");
+    rejects(R"(<RHINO_DRUM_SOUND format="1" sample="a.wav" divisions="3x"/>)", "cut into a number of parts that is not one");
+    rejects(R"(<RHINO_DRUM_SOUND format="1" sample="a.wav" sliceBy="beats"/>)", "cut by something Slice does not cut by");
+
+    // A sample's playback reads back exactly, and only what differs from a
+    // plain one-shot is written.
+    DrumSound shaped;
+    shaped.source = DrumRackEngine::Source::sample;
+    shaped.sample = "library:Samples/TR808/TR808Snare.wav";
+    shaped.playback.mode = DrumRackEngine::PlayMode::classic;
+    shaped.playback.start = 0.125f;
+    shaped.playback.end = 0.75f;
+    shaped.playback.fadeIn = 0.01f;
+    shaped.playback.fadeOut = 0.02f;
+    shaped.playback.attack = 1.0f / 3.0f;
+    shaped.playback.sustain = 0.5f;
+    shaped.playback.release = 0.3f;
+    shaped.playback.loop = true;
+    shaped.playback.sliceBy = DrumRackEngine::SliceBy::divisions;
+    shaped.playback.divisions = 16;
+    shaped.playback.sensitivity = 0.2f;
+    DrumSound shapedBack;
+    require(DrumFiles::fromXml(*DrumFiles::toXml(shaped), shapedBack).wasOk() && shapedBack.playback == shaped.playback,
+            "a sample's playback reads back exactly as written");
+    DrumSound plainSample;
+    plainSample.source = DrumRackEngine::Source::sample;
+    plainSample.sample = shaped.sample;
+    const auto plainXml = DrumFiles::toXml(plainSample);
+    for (const auto* attribute : { "mode", "start", "end", "fadeIn", "fadeOut", "attack", "sustain", "release", "loop",
+                                   "sliceBy", "divisions", "sensitivity" })
+        require(!plainXml->hasAttribute(attribute), juce::String("a plain one-shot writes no ") + attribute);
 
     // Every factory kit and drum preset reads, names only samples the library
     // holds, and sets each control to a value the control can hold.
@@ -492,7 +766,7 @@ void checkFiles()
         for (size_t pad = 0; pad < factory.pads.size(); ++pad)
             if (factory.pads[pad].has_value())
             {
-                checkSound(*factory.pads[pad], entry.name + " pad " + juce::String(static_cast<int>(pad) + 1));
+                checkSound(*factory.pads[pad], entry.name + " " + padNoteName(static_cast<int>(pad)));
                 ++(factory.pads[pad]->source == DrumRackEngine::Source::synth ? synths : samples);
             }
         synthesisedKits += samples == 0 ? 1 : 0;
@@ -569,7 +843,7 @@ void checkThroughSession()
     require(stack.addDrumKit(eightOhEight, midi).wasOk(), "a MIDI track takes one");
     int slot = -1;
     auto* rack = rackOn(stack, midi, &slot);
-    require(rack != nullptr && rack->pad(0).sound.has_value() && rack->pad(0).sound->name == "Kick"
+    require(rack != nullptr && rack->pad(firstNote).sound.has_value() && rack->pad(firstNote).sound->name == "Kick"
                 && stack.trackName(midi) == "808 Kit",
             "the kit fills the rack and names the track");
     stack.undo();
@@ -577,68 +851,68 @@ void checkThroughSession()
             "one undo takes the rack and its kit away together");
     stack.redo();
     rack = rackOn(stack, midi, &slot);
-    require(rack != nullptr && rack->pad(5).sound.has_value(), "and redo brings them back");
+    require(rack != nullptr && rack->pad(firstNote + 5).sound.has_value(), "and redo brings them back");
 
     // A sample on a pad, one undo step. Another sample in its place keeps the
     // pad's tuning; a sample in place of a synth starts from the defaults.
     const auto warm = ContentLibrary::file("Samples/VinylDrums/Snare/Snare 16 Warm.wav");
     const auto bright = ContentLibrary::file("Samples/VinylDrums/Snare/Snare 21 Bright.wav");
-    require(stack.loadDrumPadSample(midi, slot, 3, warm).wasOk(), "a sample drops on a pad");
-    require(rack->pad(3).sound.has_value()
-                && rack->pad(3).sound->sample == "library:Samples/VinylDrums/Snare/Snare 16 Warm.wav"
-                && rack->selectedPad() == 3 && !rack->pad(3).unreadable,
+    require(stack.loadDrumPadSample(midi, slot, firstNote + 3, warm).wasOk(), "a sample drops on a pad");
+    require(rack->pad(firstNote + 3).sound.has_value()
+                && rack->pad(firstNote + 3).sound->sample == "library:Samples/VinylDrums/Snare/Snare 16 Warm.wav"
+                && rack->selectedPad() == firstNote + 3 && !rack->pad(firstNote + 3).unreadable,
             "and the pad plays it, selected");
-    require(stack.setDeviceParameter(midi, slot, DrumRackDevice::parameterIndex(3, DrumRackDevice::tune), 5.0f).wasOk(),
+    require(stack.setDeviceParameter(midi, slot, DrumRackDevice::parameterIndex(firstNote + 3, DrumRackDevice::tune), 5.0f).wasOk(),
             "the pad can be tuned");
-    require(stack.loadDrumPadSample(midi, slot, 3, bright).wasOk() && rack->pad(3).sound->settings.tune == 5.0f
-                && rack->pad(3).sound->sample.contains("Snare 21"),
+    require(stack.loadDrumPadSample(midi, slot, firstNote + 3, bright).wasOk() && rack->pad(firstNote + 3).sound->settings.tune == 5.0f
+                && rack->pad(firstNote + 3).sound->sample.contains("Snare 21"),
             "a sample replacing a sample keeps the pad's tuning");
     stack.undo();
-    require(rack->pad(3).sound->sample.contains("Snare 16"), "and the replacement is one undo step");
-    stack.editDeviceSettings(midi, slot, "Make pad 5 a tom", [rack] { rack->setPadSynth(4, DrumModel::Tom); });
-    require(rack->pad(4).sound.has_value() && rack->pad(4).sound->source == DrumRackEngine::Source::synth
-                && std::abs(rack->pad(4).sound->settings.decay - drumModelInfo(DrumModel::Tom).decay) < 1.0e-6f,
+    require(rack->pad(firstNote + 3).sound->sample.contains("Snare 16"), "and the replacement is one undo step");
+    stack.editDeviceSettings(midi, slot, "Make pad 5 a tom", [rack] { rack->setPadSynth(firstNote + 4, DrumModel::Tom); });
+    require(rack->pad(firstNote + 4).sound.has_value() && rack->pad(firstNote + 4).sound->source == DrumRackEngine::Source::synth
+                && std::abs(rack->pad(firstNote + 4).sound->settings.decay - drumModelInfo(DrumModel::Tom).decay) < 1.0e-6f,
             "a pad switched to a synth starts at the model's own Decay");
-    require(stack.setDeviceParameter(midi, slot, DrumRackDevice::parameterIndex(4, DrumRackDevice::tune), 7.0f).wasOk()
-                && stack.setDeviceParameter(midi, slot, DrumRackDevice::parameterIndex(4, DrumRackDevice::level), -6.0f).wasOk()
-                && stack.loadDrumPadSample(midi, slot, 4, warm).wasOk(),
+    require(stack.setDeviceParameter(midi, slot, DrumRackDevice::parameterIndex(firstNote + 4, DrumRackDevice::tune), 7.0f).wasOk()
+                && stack.setDeviceParameter(midi, slot, DrumRackDevice::parameterIndex(firstNote + 4, DrumRackDevice::level), -6.0f).wasOk()
+                && stack.loadDrumPadSample(midi, slot, firstNote + 4, warm).wasOk(),
             "a tuned, quieter synth pad takes a sample");
-    require(rack->pad(4).sound->settings.tune == 0.0f && rack->pad(4).sound->settings.decay == DrumRackEngine::fullDecay
-                && rack->pad(4).sound->settings.level == -6.0f,
+    require(rack->pad(firstNote + 4).sound->settings.tune == 0.0f && rack->pad(firstNote + 4).sound->settings.decay == DrumRackEngine::fullDecay
+                && rack->pad(firstNote + 4).sound->settings.level == -6.0f,
             "which starts untuned and plays out, at the level the pad had");
     const juce::TemporaryFile notSound(".txt");
-    require(notSound.getFile().replaceWithText("not a sound") && stack.loadDrumPadSample(midi, slot, 9, notSound.getFile()).failed()
-                && !rack->pad(9).sound.has_value(),
+    require(notSound.getFile().replaceWithText("not a sound") && stack.loadDrumPadSample(midi, slot, firstNote + 9, notSound.getFile()).failed()
+                && !rack->pad(firstNote + 9).sound.has_value(),
             "a file that is not a sound is refused, and the pad stays as it was");
 
     // Mute is an undo step, and the note editor names the rows.
-    stack.editDeviceSettings(midi, slot, "Mute pad", [rack] { rack->setPadMuted(0, true); });
-    require(rack->pad(0).muted, "a pad mutes");
+    stack.editDeviceSettings(midi, slot, "Mute pad", [rack] { rack->setPadMuted(firstNote, true); });
+    require(rack->pad(firstNote).muted, "a pad mutes");
     stack.undo();
-    require(!rack->pad(0).muted, "and unmutes with an undo");
+    require(!rack->pad(firstNote).muted, "and unmutes with an undo");
 
     // A drum preset on a pad, saved back out, and an empty pad that has
     // nothing to save.
     const auto subKick = ContentLibrary::file("Drums/Presets/Kick/Sub Kick.rdp");
-    require(stack.loadDrumPadPreset(midi, slot, 12, subKick).wasOk(), "a drum preset drops on a pad");
-    const auto sub = rack->pad(12).sound;
+    require(stack.loadDrumPadPreset(midi, slot, firstNote + 12, subKick).wasOk(), "a drum preset drops on a pad");
+    const auto sub = rack->pad(firstNote + 12).sound;
     require(sub.has_value() && sub->source == DrumRackEngine::Source::synth && sub->model == DrumModel::Kick
                 && sub->name == "Sub Kick" && sub->settings.tune == -5.0f,
             "and the pad is that sound, named for the preset");
     const juce::TemporaryFile savedSound(DrumFiles::soundExtension);
-    require(stack.saveDrumPadPreset(midi, slot, 12, savedSound.getFile()).wasOk(), "a pad saves as a drum preset");
+    require(stack.saveDrumPadPreset(midi, slot, firstNote + 12, savedSound.getFile()).wasOk(), "a pad saves as a drum preset");
     DrumSound reread;
     require(DrumFiles::read(savedSound.getFile(), reread).wasOk() && reread.settings == sub->settings
                 && reread.model == sub->model && reread.name == sub->name,
             "and the file holds the pad's sound");
-    require(stack.saveDrumPadPreset(midi, slot, 15, savedSound.getFile()).failed(), "an empty pad has nothing to save");
+    require(stack.saveDrumPadPreset(midi, slot, firstNote + 15, savedSound.getFile()).failed(), "an empty pad has nothing to save");
 
     // The person's own kits and drum presets are found under their own Drums
     // folder, a preset filed by the kind of drum its folder names.
     {
         const auto own = juce::File::createTempFile("").getSiblingFile("RhinoDrumsTest" + juce::String(juce::Random().nextInt(1 << 30)));
         require(stack.saveDrumKit(midi, slot, own.getChildFile("Kits").getChildFile("Mine.rdk")).wasOk()
-                    && stack.saveDrumPadPreset(midi, slot, 12, own.getChildFile("Presets").getChildFile("Kick")
+                    && stack.saveDrumPadPreset(midi, slot, firstNote + 12, own.getChildFile("Presets").getChildFile("Kick")
                                                                      .getChildFile("My Kick.rdp")).wasOk(),
                 "a kit and a drum preset save into folders that do not exist yet");
         const auto kits = ContentLibrary::drumKitsIn(own, true);
@@ -655,7 +929,7 @@ void checkThroughSession()
     require(stack.saveDrumKit(midi, slot, savedKit.getFile()).wasOk(), "a rack saves as a kit");
     const auto before = rack->kit();
     require(stack.loadDrumKit(midi, slot, ContentLibrary::file("Drums/Kits/Analog Kit.rdk")).wasOk()
-                && rack->pad(3).sound->source == DrumRackEngine::Source::synth,
+                && rack->pad(firstNote + 3).sound->source == DrumRackEngine::Source::synth,
             "another kit replaces every pad");
     require(stack.loadDrumKit(midi, slot, savedKit.getFile()).wasOk(), "the saved kit loads back");
     const auto after = rack->kit();
@@ -674,10 +948,10 @@ void checkThroughSession()
             "a drum preset brings a Drum Rack to a MIDI track");
     int otherSlot = -1;
     auto* second = rackOn(stack, otherMidi, &otherSlot);
-    require(second != nullptr && second->pad(0).sound.has_value() && second->pad(0).sound->name == "Sub Kick"
-                && !second->pad(1).sound.has_value(),
+    require(second != nullptr && second->pad(firstNote).sound.has_value() && second->pad(firstNote).sound->name == "Sub Kick"
+                && !second->pad(firstNote + 1).sound.has_value(),
             "on its first pad");
-    require(stack.addDrumSound(warm, otherMidi).wasOk() && second->pad(1).sound.has_value(),
+    require(stack.addDrumSound(warm, otherMidi).wasOk() && second->pad(firstNote + 1).sound.has_value(),
             "and the next sound lands on the next pad");
     require(stack.addDrumSound(subKick, 3).failed(), "an audio track refuses a drum sound");
 
@@ -689,10 +963,10 @@ void checkThroughSession()
                 && rackOn(stack, fresh)->isBlank(),
             "a Drum Rack added on its own is blank");
     require(stack.insertPatternPreset(Session::PatternPreset::HouseKit, fresh, 0.0).wasOk()
-                && rackOn(stack, fresh)->pad(0).sound.has_value() && rackOn(stack, fresh)->pad(0).sound->name == "Kick",
+                && rackOn(stack, fresh)->pad(firstNote).sound.has_value() && rackOn(stack, fresh)->pad(firstNote).sound->name == "Kick",
             "a drum pattern on a blank rack brings the kit it was written for");
     require(stack.insertPatternPreset(Session::PatternPreset::HouseKit, otherMidi, 0.0).wasOk()
-                && second->pad(0).sound->name == "Sub Kick",
+                && second->pad(firstNote).sound->name == "Sub Kick",
             "and leaves a filled rack's sounds alone");
 
     // The note editor names a rack's rows after its pads.
@@ -709,7 +983,7 @@ void checkThroughSession()
     // rack it played on, sounds and all, not a blank one.
     {
         int freshSlot = -1;
-        require(rackOn(stack, fresh, &freshSlot) != nullptr && stack.loadDrumPadPreset(fresh, freshSlot, 0, subKick).wasOk(),
+        require(rackOn(stack, fresh, &freshSlot) != nullptr && stack.loadDrumPadPreset(fresh, freshSlot, firstNote, subKick).wasOk(),
                 "the drum track's kick becomes Sub Kick");
         require(stack.addTrack(Session::TrackType::midi).wasOk() && stack.addTrack(Session::TrackType::midi).wasOk(),
                 "two more MIDI tracks");
@@ -717,8 +991,8 @@ void checkThroughSession()
         const auto bar = 4.0 * 60.0 / stack.tempo();
         std::vector<te::EditItemID> pasted;
         require(stack.pasteClipRegion(stack.copyClipRegion(0.0, bar, fresh, fresh), 0.0, pastedTo, pasted).wasOk()
-                    && rackOn(stack, pastedTo) != nullptr && rackOn(stack, pastedTo)->pad(0).sound.has_value()
-                    && rackOn(stack, pastedTo)->pad(0).sound->name == "Sub Kick",
+                    && rackOn(stack, pastedTo) != nullptr && rackOn(stack, pastedTo)->pad(firstNote).sound.has_value()
+                    && rackOn(stack, pastedTo)->pad(firstNote).sound->name == "Sub Kick",
                 "a pasted drum clip brings its rack's kit");
         auto* drumClip = te::getAudioTracks(*stack.edit)[fresh]->getClips().getFirst();
         require(drumClip != nullptr, "the drum track holds its clip");
@@ -726,9 +1000,9 @@ void checkThroughSession()
         require(stack.editClip(drumClip->itemID, {where.time.getStart().inSeconds(), where.time.getEnd().inSeconds(),
                                                   where.offset.inSeconds()},
                                ClipGesture::move, movedTo).wasOk()
-                    && rackOn(stack, movedTo) != nullptr && rackOn(stack, movedTo)->pad(0).sound.has_value()
-                    && rackOn(stack, movedTo)->pad(0).sound->name == "Sub Kick"
-                    && rackOn(stack, movedTo)->pad(5).sound->name == "Snare",
+                    && rackOn(stack, movedTo) != nullptr && rackOn(stack, movedTo)->pad(firstNote).sound.has_value()
+                    && rackOn(stack, movedTo)->pad(firstNote).sound->name == "Sub Kick"
+                    && rackOn(stack, movedTo)->pad(firstNote + 5).sound->name == "Snare",
                 "and so does a moved one");
     }
 
@@ -736,10 +1010,131 @@ void checkThroughSession()
     juce::TemporaryFile project(".rhinoedit");
     require(stack.restoreProject(stack.projectSnapshot(), project.getFile()).wasOk(), "the stack reopens");
     auto* reopened = rackOn(stack, midi);
-    require(reopened != nullptr && reopened->pad(12).sound.has_value() && reopened->pad(12).sound->name == "Sub Kick"
-                && reopened->pad(3).sound.has_value() && reopened->pad(3).sound->sample.contains("Snare 16")
-                && !reopened->pad(3).unreadable,
+    require(reopened != nullptr && reopened->pad(firstNote + 12).sound.has_value() && reopened->pad(firstNote + 12).sound->name == "Sub Kick"
+                && reopened->pad(firstNote + 3).sound.has_value() && reopened->pad(firstNote + 3).sound->sample.contains("Snare 16")
+                && !reopened->pad(firstNote + 3).unreadable,
             "and the pads come back, samples read again");
+}
+
+// The sample editor, the bank a face shows and slicing, through the session,
+// with their undo steps; and a rack's 768 controls read a few at a time.
+void checkSampleEditorThroughSession()
+{
+    Session stack;
+    constexpr int midi = 0;
+    require(stack.addDrumKit(ContentLibrary::file("Drums/Kits/808 Kit.rdk"), midi).wasOk(), "a rack with the 808 Kit");
+    int slot = -1;
+    auto* rack = rackOn(stack, midi, &slot);
+    require(rack != nullptr, "on the first MIDI track");
+    auto& undo = stack.edit->getUndoManager();
+
+    // A pad's playback is an undo step of its own; written as a drag writes
+    // it on the way, it is none.
+    const auto snare = firstNote + 5;
+    auto classic = rack->pad(snare).sound->playback;
+    classic.mode = DrumRackEngine::PlayMode::classic;
+    classic.release = 0.2f;
+    stack.editDeviceSettings(midi, slot, "Play the snare as classic",
+                             [rack, snare, classic] { rack->setPadPlayback(snare, classic); });
+    require(rack->pad(snare).sound->playback == classic.clamped(), "a pad takes a playback");
+    stack.undo();
+    require(rack->pad(snare).sound->playback == DrumRackEngine::Playback {}, "and one undo takes it back");
+    const auto undoneTo = undo.getUndoDescription();
+    rack->setPadPlayback(snare, classic, false);
+    require(rack->pad(snare).sound->playback.mode == DrumRackEngine::PlayMode::classic
+                && undo.getUndoDescription() == undoneTo,
+            "written on the way through a drag, it is no undo step");
+    rack->setPadPlayback(snare, {}, false);
+    require(rack->pad(firstNote + 1).sound->source == DrumRackEngine::Source::synth, "the 808's rimshot is a synth");
+    rack->setPadPlayback(firstNote + 1, classic);
+    require(rack->pad(firstNote + 1).sound->playback == DrumRackEngine::Playback {}, "and a synth pad takes no playback");
+
+    // Slicing to pads: a roll cut into four lands on four pads from C4, one
+    // undo step; near the top it stops at the last note.
+    const auto roll = ContentLibrary::file("Samples/VinylDrums/Snare/Snare Roll 02 Crisp Tight.wav");
+    constexpr int c4 = 72;
+    require(stack.loadDrumPadSample(midi, slot, c4, roll).wasOk(), "a roll on C4");
+    auto quarters = rack->pad(c4).sound->playback;
+    quarters.mode = DrumRackEngine::PlayMode::slice;
+    quarters.sliceBy = DrumRackEngine::SliceBy::divisions;
+    quarters.divisions = 4;
+    stack.editDeviceSettings(midi, slot, "Slice into four", [rack, quarters] { rack->setPadPlayback(c4, quarters); });
+    require(rack->padSlices(c4).size() == 4, "cut into four");
+    auto spread = 0;
+    require(stack.spreadDrumSlices(midi, slot, c4, &spread).wasOk() && spread == 4, "spread across four pads");
+    for (int index = 0; index < 4; ++index)
+    {
+        const auto slice = rack->pad(c4 + index).sound;
+        require(slice.has_value() && slice->sample == rack->pad(c4).sound->sample
+                    && slice->playback.mode == DrumRackEngine::PlayMode::oneShot
+                    && slice->playback.start == 0.25f * static_cast<float>(index)
+                    && slice->playback.end == 0.25f * static_cast<float>(index + 1)
+                    && slice->name == "Snare Roll 02 Crisp Tight " + juce::String(index + 1),
+                "each pad a one-shot of its quarter, named for it: " + padNoteName(c4 + index));
+    }
+    stack.undo();
+    require(rack->pad(c4).sound->playback.mode == DrumRackEngine::PlayMode::slice && !rack->pad(c4 + 1).sound.has_value(),
+            "one undo puts the pad back as it was and empties the rest");
+    constexpr int nearTop = DrumRackEngine::padCount - 2;
+    require(stack.loadDrumPadSample(midi, slot, nearTop, roll).wasOk(), "the roll near the top");
+    stack.editDeviceSettings(midi, slot, "Slice into four", [rack, quarters] { rack->setPadPlayback(nearTop, quarters); });
+    require(stack.spreadDrumSlices(midi, slot, nearTop, &spread).wasOk() && spread == 2,
+            "spreading stops at the last note");
+    require(stack.spreadDrumSlices(midi, slot, firstNote + 1, &spread).failed()
+                && stack.spreadDrumSlices(midi, slot, 20, &spread).failed(),
+            "a synth pad and an empty one have nothing to slice");
+
+    // The bank a face shows, a row of four at a time, and the note editor's
+    // drum rows with it.
+    require(rack->firstShownNote() == DrumRackEngine::defaultFirstNote, "a rack shows C2 to D#3 at first");
+    require(stack.showDrumBank(midi, slot, 37).wasOk() && rack->firstShownNote() == 36, "a bank starts on a row");
+    stack.showDrumBank(midi, slot, 500);
+    require(rack->firstShownNote() == DrumRackEngine::padCount - 16, "and the highest is G#7 to G8");
+    stack.showDrumBank(midi, slot, -5);
+    require(rack->firstShownNote() == 0, "and the lowest C-2 to D#-1");
+    te::EditItemID clip;
+    require(stack.createClip(midi, 0.0, &clip).wasOk() && stack.selectPatternClip(clip).wasOk() && stack.isPatternDrums(),
+            "a drum clip open in the note editor");
+    stack.showDrumBank(midi, slot, 36);
+    require(stack.patternDrumLowestNote() == 36, "whose drum rows are the bank the rack shows");
+    const auto kick = ContentLibrary::file("Samples/TR808/TR808Kick.wav");
+    require(stack.addDrumSound(kick, midi).wasOk() && rack->pad(36).sound.has_value(),
+            "and a sound dropped on the track lands on the first empty pad of that bank");
+
+    // A range of controls is the whole list's slice, and much cheaper.
+    const auto all = stack.deviceParameters(midi, slot);
+    require(static_cast<int>(all.size()) == DrumRackDevice::padCount * DrumRackDevice::controlCount
+                && stack.deviceParameterCount(midi, slot) == static_cast<int>(all.size()),
+            "a rack has six controls for each of its 128 pads");
+    const auto first = DrumRackDevice::parameterIndex(snare, 0);
+    const auto six = stack.deviceParameters(midi, slot, first, DrumRackDevice::controlCount);
+    require(six.size() == 6, "six read on their own");
+    for (size_t i = 0; i < six.size(); ++i)
+        require(six[i].name == all[first + i].name && six[i].value == all[first + i].value
+                    && six[i].valueText == all[first + i].valueText,
+                "each as the whole list reads it: " + six[i].name);
+    require(six.front().name == "F2 Tune" && stack.deviceParameter(midi, slot, 767)->name == "G8 Pan"
+                && !stack.deviceParameter(midi, slot, 768).has_value(),
+            "named for their notes, and none past the last");
+    const auto median = [] (const std::function<void()>& work)
+    {
+        std::vector<double> times;
+        for (int round = 0; round < 9; ++round)
+        {
+            const auto start = juce::Time::getHighResolutionTicks();
+            work();
+            times.push_back(juce::Time::highResolutionTicksToSeconds(juce::Time::getHighResolutionTicks() - start));
+        }
+        std::nth_element(times.begin(), times.begin() + 4, times.end());
+        return times[4] * 1.0e6;
+    };
+    const auto whole = median([&] { juce::ignoreUnused(stack.deviceParameters(midi, slot)); });
+    const auto few = median([&] { juce::ignoreUnused(stack.deviceParameters(midi, slot, first, 6)); });
+    const auto made = median([&] { juce::ignoreUnused(stack.edit->getPluginCache().createNewPlugin(DrumRackDevice::xmlTypeName, {})); });
+    juce::Logger::writeToLog("Rhino: Drum Rack controls read in " + juce::String(whole, 1) + " us all, "
+                             + juce::String(few, 1) + " us for one pad's six; a rack is made in "
+                             + juce::String(made, 1) + " us (medians)");
+    require(few * 10.0 < whole, "reading one pad's six costs a tenth of reading all of them, or less");
 }
 
 // What one strike costs to render, per model and for a sample, in nanoseconds
@@ -755,7 +1150,7 @@ void logStrikeCosts()
         for (int round = 0; round < 9; ++round)
         {
             const auto start = juce::Time::getHighResolutionTicks();
-            const auto frames = DrumRackEngine::renderStrike(source, model, sample, settings, 1.0f, rate, left.data(),
+            const auto frames = DrumRackEngine::renderStrike(source, model, sample, settings, {}, 1.0f, rate, left.data(),
                                                              right.data(), at(2.0));
             const auto seconds = juce::Time::highResolutionTicksToSeconds(juce::Time::getHighResolutionTicks() - start);
             costs.push_back(seconds * 1.0e9 / std::max(1, frames));
@@ -790,9 +1185,13 @@ void checkDrumRack(Session&)
     checkSynthPads();
     checkSampleHandOff();
     checkPictures();
+    checkEveryNote();
+    checkPlayback();
+    checkSlicing();
     checkFiles();
     checkLibrary();
     checkThroughSession();
+    checkSampleEditorThroughSession();
     juce::Logger::writeToLog("Rhino: Drum Rack checks passed");
 }
 }

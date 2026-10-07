@@ -26,7 +26,14 @@ DrumRackDevice* rackIn(const Session& session, int track, int slot)
 
 juce::String padNumber(int pad)
 {
-    return "pad " + juce::String(pad + 1);
+    return padNoteName(pad);
+}
+
+juce::Result checkPad(int pad)
+{
+    return juce::isPositiveAndBelow(pad, DrumRackDevice::padCount)
+        ? juce::Result::ok()
+        : juce::Result::fail("A Drum Rack's pads are on the notes C-2 to G8.");
 }
 
 // Whether a file is a sound a pad can play, asked before anything changes so
@@ -147,8 +154,8 @@ juce::Result Session::loadDrumPadSample(int track, int slot, int pad, const juce
     auto* drums = rackIn(*this, track, slot);
     if (drums == nullptr)
         return juce::Result::fail("Drop samples on a pad of a Drum Rack.");
-    if (!juce::isPositiveAndBelow(pad, DrumRackDevice::padCount))
-        return juce::Result::fail("A Drum Rack has pads 1 to " + juce::String(DrumRackDevice::padCount) + ".");
+    if (const auto valid = checkPad(pad); valid.failed())
+        return valid;
     if (const auto playable = checkSampleFile(sample); playable.failed())
         return playable;
     edit->getUndoManager().beginNewTransaction("Load " + sample.getFileNameWithoutExtension() + " on " + padNumber(pad));
@@ -169,8 +176,8 @@ juce::Result Session::loadDrumPadPreset(int track, int slot, int pad, const juce
     auto* drums = rackIn(*this, track, slot);
     if (drums == nullptr)
         return juce::Result::fail("Drop drum presets on a pad of a Drum Rack.");
-    if (!juce::isPositiveAndBelow(pad, DrumRackDevice::padCount))
-        return juce::Result::fail("A Drum Rack has pads 1 to " + juce::String(DrumRackDevice::padCount) + ".");
+    if (const auto valid = checkPad(pad); valid.failed())
+        return valid;
     // A preset that names nothing takes its own file's name, which is what
     // the browser called it.
     if (sound.name.isEmpty())
@@ -189,11 +196,11 @@ juce::Result Session::saveDrumPadPreset(int track, int slot, int pad, const juce
     const auto* drums = rackIn(*this, track, slot);
     if (drums == nullptr)
         return juce::Result::fail("There is no Drum Rack there to save a pad from.");
-    if (!juce::isPositiveAndBelow(pad, DrumRackDevice::padCount))
-        return juce::Result::fail("A Drum Rack has pads 1 to " + juce::String(DrumRackDevice::padCount) + ".");
+    if (const auto valid = checkPad(pad); valid.failed())
+        return valid;
     const auto view = drums->pad(pad);
     if (!view.sound.has_value())
-        return juce::Result::fail("Pad " + juce::String(pad + 1) + " is empty, so there is no sound on it to save.");
+        return juce::Result::fail("The pad on " + padNoteName(pad) + " is empty, so there is no sound on it to save.");
     return DrumFiles::write(*view.sound, file);
 }
 
@@ -227,7 +234,7 @@ juce::Result Session::addDrumSound(const juce::File& file, int trackIndex)
     // plays in. A bare sample does not replace what a track plays.
     if (drums == nullptr && !preset.has_value())
         return juce::Result::fail("Drop samples on a pad of a Drum Rack, or on an audio track.");
-    if (drums != nullptr && drums->firstEmptyPad() < 0)
+    if (drums != nullptr && drums->firstEmptyPad(drums->firstShownNote()) < 0)
         return juce::Result::fail("Every pad of this Drum Rack holds a sound. Drop it on the pad it should replace.");
     const auto* rack = DeviceCatalog::byId("Drums");
     if (rack == nullptr)
@@ -245,7 +252,8 @@ juce::Result Session::addDrumSound(const juce::File& file, int trackIndex)
         if (drums == nullptr)
             return juce::Result::fail("The Drum Rack could not be created.");
     }
-    const auto pad = drums->firstEmptyPad();
+    // From the bank the face shows, so the sound lands where it can be seen.
+    const auto pad = drums->firstEmptyPad(drums->firstShownNote());
     if (preset.has_value())
         drums->setPadSound(pad, *preset);
     else
@@ -255,6 +263,45 @@ juce::Result Session::addDrumSound(const juce::File& file, int trackIndex)
     markModified();
     if (added && edit->getTransport().isPlaying())
         edit->restartPlayback();
+    sendSynchronousChangeMessage();
+    return juce::Result::ok();
+}
+
+juce::Result Session::showDrumBank(int track, int slot, int firstNote)
+{
+    auto* drums = rackIn(*this, track, slot);
+    if (drums == nullptr)
+        return juce::Result::fail("There is no Drum Rack there.");
+    const auto before = drums->firstShownNote();
+    drums->showNotesFrom(firstNote);
+    // The note editor's drum rows are the bank's pads, so it hears of it.
+    if (drums->firstShownNote() != before)
+        sendSynchronousChangeMessage();
+    return juce::Result::ok();
+}
+
+juce::Result Session::spreadDrumSlices(int track, int slot, int pad, int* spread)
+{
+    auto* drums = rackIn(*this, track, slot);
+    if (drums == nullptr)
+        return juce::Result::fail("There is no Drum Rack there.");
+    if (const auto valid = checkPad(pad); valid.failed())
+        return valid;
+    const auto view = drums->pad(pad);
+    if (!view.sound.has_value() || view.sound->source != DrumRackEngine::Source::sample)
+        return juce::Result::fail("Only a pad playing a sample can be sliced.");
+    if (view.unreadable)
+        return juce::Result::fail(view.sound->displayName() + " cannot be read, so it cannot be sliced.");
+    auto filled = 0;
+    edit->getUndoManager().beginNewTransaction("Slice " + view.sound->displayName() + " to pads");
+    filled = drums->spreadSlices(pad);
+    drums->setSelectedPad(pad);
+    edit->getUndoManager().beginNewTransaction();
+    if (spread != nullptr)
+        *spread = filled;
+    if (filled == 0)
+        return juce::Result::fail("There is nothing in " + view.sound->displayName() + " to slice.");
+    markModified();
     sendSynchronousChangeMessage();
     return juce::Result::ok();
 }
@@ -281,9 +328,9 @@ juce::Result Session::previewDrumSound(const juce::File& file)
     stopPreview();
     const auto most = static_cast<int>(previewRate * previewSeconds);
     juce::AudioBuffer<float> strike(2, most);
-    const auto frames = DrumRackEngine::renderStrike(sound.source, sound.model, sample.get(), sound.settings, 1.0f,
-                                                     previewRate, strike.getWritePointer(0), strike.getWritePointer(1),
-                                                     most);
+    const auto frames = DrumRackEngine::renderStrike(sound.source, sound.model, sample.get(), sound.settings,
+                                                     sound.playback, 1.0f, previewRate, strike.getWritePointer(0),
+                                                     strike.getWritePointer(1), most);
     strike.setSize(2, std::max(1, frames), true);
     startPreview(std::make_unique<juce::MemoryAudioSource>(strike, true, false), previewRate);
     return juce::Result::ok();

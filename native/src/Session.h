@@ -262,6 +262,10 @@ public:
     // names it: a Drum Rack names each of its pads after its sound. The note
     // editor labels its drum rows with it.
     std::optional<juce::String> patternNoteName(int pitch) const;
+    // The lowest of the note editor's drum rows: the first note of the bank
+    // of sixteen pads the open clip's Drum Rack shows, so the rows are the
+    // pads on its face. lowestNote when it plays no rack.
+    int patternDrumLowestNote() const;
     // Adding a device by its catalog id is the general form; the three enum
     // overloads below are shorthand for the devices that had an enum before
     // the catalog existed. A device added from now on needs no enum.
@@ -301,11 +305,20 @@ public:
     juce::Result loadDrumPadPreset(int track, int slot, int pad, const juce::File& preset);
     juce::Result saveDrumPadPreset(int track, int slot, int pad, const juce::File& preset);
     // A drum sound dropped on a track rather than on a pad lands on the first
-    // empty pad of the track's Drum Rack. A drum preset brings a blank rack to
-    // a MIDI track running something else or nothing, as an instrument drop
-    // would; a sample needs the rack to be there already.
+    // empty pad of the track's Drum Rack, from the bank its face shows. A drum
+    // preset brings a blank rack to a MIDI track running something else or
+    // nothing, as an instrument drop would; a sample needs the rack to be
+    // there already.
     juce::Result addDrumSound(const juce::File& soundOrSample, int track);
     bool trackHasDrumRack(int track) const;
+    // Which sixteen pads a rack's face shows, from a note that is a multiple
+    // of four. View state, never an undo step, but announced: the note
+    // editor's drum rows follow it.
+    juce::Result showDrumBank(int track, int slot, int firstNote);
+    // Cuts a sample pad's part where Slice says and puts each slice on a pad
+    // of its own from this one up, as one undo step. `spread` says how many
+    // pads it filled.
+    juce::Result spreadDrumSlices(int track, int slot, int pad, int* spread = nullptr);
     // Auditions a drum preset exactly as a pad would play it.
     juce::Result previewDrumSound(const juce::File& preset);
     bool isForgeAvailable() const { return forgeDescription.has_value(); }
@@ -394,6 +407,13 @@ public:
     juce::Result setTrackGroupCollapsed(int groupId, bool collapsed);
     std::vector<DeviceSlot> deviceSlots(int track) const;
     std::vector<DeviceParameter> deviceParameters(int track, int slot) const;
+    // Only the controls from `first`, `count` of them (fewer at the end), each
+    // read as the whole list reads it. A Drum Rack has 768 controls and a face
+    // shows six, and reading and formatting every one cost each frame of a
+    // knob drag a millisecond.
+    std::vector<DeviceParameter> deviceParameters(int track, int slot, int first, int count) const;
+    std::optional<DeviceParameter> deviceParameter(int track, int slot, int index) const;
+    int deviceParameterCount(int track, int slot) const;
     // What a native device's face shows beside its controls, worked out by
     // the device from its controls as they stand. Empty for anything else.
     DeviceDisplay deviceDisplay(int track, int slot) const;

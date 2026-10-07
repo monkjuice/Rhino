@@ -58,7 +58,7 @@
 
         scenario("drum kits: whole Drum Racks dropped from the browser");
         {
-            // A kit is a Drum Rack's sixteen pads in a file. Dropping one makes
+            // A kit is a Drum Rack's pads in a file. Dropping one makes
             // the track's instrument a rack playing it and names the track.
             //
             // A kit is an instrument, so it goes on a MIDI lane. The lane is
@@ -95,21 +95,21 @@
                     "A kit is a Drum Rack, not a second instrument beside one");
             auto* kitDevice = dynamic_cast<DrumRackDevice*>(session.patternInstrumentForTrack(kitTrack));
             require(kitDevice != nullptr, "The track runs a Drum Rack");
-            const auto breakSnare = kitDevice->pad(5).sound;
+            const auto breakSnare = kitDevice->pad(53).sound;
             require(breakSnare.has_value() && breakSnare->name == "Snare"
                         && std::abs(breakSnare->settings.tune + 1.07f) < 0.005f,
                     "The dropped kit fills the pads: Break Kit tunes its snare down a semitone");
             require(view.applyBrowserDrop(kitDrop("Clap Kit"), kitTrack).wasOk(), "Kits can be swapped");
             require(session.patternInstrumentForTrack(kitTrack) == kitDevice,
                     "Swapping a kit reuses the same Drum Rack");
-            require(kitDevice->pad(5).sound.has_value() && kitDevice->pad(5).sound->name == "Clap",
+            require(kitDevice->pad(53).sound.has_value() && kitDevice->pad(53).sound->name == "Clap",
                     "and Clap Kit puts its clap on the snare's note");
             require(session.trackName(kitTrack) == "Clap Kit", "The track is renamed to the new kit");
             const auto savedKit = session.projectSnapshot();
             juce::TemporaryFile kitProject(".rhinoedit");
             require(session.restoreProject(savedKit, kitProject.getFile()).wasOk(), "Reopen a project using a kit");
             auto* restoredKit = dynamic_cast<DrumRackDevice*>(session.patternInstrumentForTrack(kitTrack));
-            require(restoredKit != nullptr && restoredKit->kit().pads[5].has_value()
-                        && restoredKit->kit().pads[5]->sample.contains("HandClap"),
+            require(restoredKit != nullptr && restoredKit->kit().pads[53].has_value()
+                        && restoredKit->kit().pads[53]->sample.contains("HandClap"),
                     "The kit's pads survive reopen");
         }

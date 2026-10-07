@@ -393,7 +393,10 @@ void StepGrid::focusLost(juce::Component::FocusChangeType)
 
 int StepGrid::automaticLowestPitch() const
 {
-    if (session.isPatternDrums() || !session.hasPatternClip())
+    // A Drum Rack's rows are the bank of pads its face shows.
+    if (session.isPatternDrums())
+        return juce::jlimit(0, 127 - visiblePitchRows() + 1, session.patternDrumLowestNote());
+    if (!session.hasPatternClip())
         return Session::lowestNote;
 
     int minPitch = 128, maxPitch = 0;

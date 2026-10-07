@@ -1,36 +1,15 @@
 #include "DrumRackDevice.h"
+#include "DrumRackDeviceInternal.h"
 #include "ContentLibrary.h"
 #include <algorithm>
 #include <cmath>
 
 namespace rhino
 {
+using namespace drumrack;
+
 namespace
 {
-const juce::Identifier padsId { "PADS" };
-const juce::Identifier padId { "PAD" };
-const juce::Identifier sampleId { "sample" };
-const juce::Identifier synthId { "synth" };
-const juce::Identifier nameId { "name" };
-const juce::Identifier chokeId { "choke" };
-const juce::Identifier muteId { "mute" };
-const juce::Identifier soloId { "solo" };
-const juce::Identifier selectedId { "selPad" };
-
-// The longest stretch of a strike a picture shows. A crash rings on for
-// longer, and the start of it is what tells one sample from another.
-constexpr double pictureSeconds = 3.0;
-// The rate a picture is played at. It is drawn as the lows and highs of a few
-// hundred columns, each tens of samples wide even at this rate, and a dragged
-// Decay asks for a new one every frame: at the device's own rate a long tom
-// took a millisecond and a half.
-constexpr double pictureRate = 16000.0;
-
-bool validPad(int pad)
-{
-    return juce::isPositiveAndBelow(pad, DrumRackDevice::padCount);
-}
-
 juce::String decayText(float seconds)
 {
     if (seconds >= DrumRackEngine::fullDecay - 0.001f)
@@ -49,6 +28,33 @@ juce::String panText(float pan)
     const auto percent = juce::roundToInt(std::abs(pan) * 100.0f);
     return percent == 0 ? juce::String("C") : juce::String(percent) + (pan < 0.0f ? "L" : "R");
 }
+
+// A sample pad's playback as its PAD holds it. Anything a PAD leaves out is a
+// plain one-shot of the whole file.
+DrumRackEngine::Playback playbackFrom(const juce::ValueTree& tree)
+{
+    DrumRackEngine::Playback playback;
+    if (const auto mode = playModeFromId(tree[modeId].toString()))
+        playback.mode = *mode;
+    const auto number = [&tree] (const juce::Identifier& id, float fallback)
+    {
+        return tree.hasProperty(id) ? static_cast<float>(tree[id]) : fallback;
+    };
+    playback.start = number(startId, playback.start);
+    playback.end = number(endId, playback.end);
+    playback.fadeIn = number(fadeInId, playback.fadeIn);
+    playback.fadeOut = number(fadeOutId, playback.fadeOut);
+    playback.attack = number(attackId, playback.attack);
+    playback.sustain = number(sustainId, playback.sustain);
+    playback.release = number(releaseId, playback.release);
+    playback.sensitivity = number(sensitivityId, playback.sensitivity);
+    playback.loop = static_cast<bool>(tree[loopId]);
+    playback.sliceBy = tree[sliceById].toString() == "divisions" ? DrumRackEngine::SliceBy::divisions
+                                                                  : DrumRackEngine::SliceBy::transients;
+    if (tree.hasProperty(divisionsId))
+        playback.divisions = static_cast<int>(tree[divisionsId]);
+    return playback.clamped();
+}
 }
 
 DrumRackDevice::DrumRackDevice(te::PluginCreationInfo info) : NativeInstrument(std::move(info), xmlTypeName)
@@ -58,19 +64,19 @@ DrumRackDevice::DrumRackDevice(te::PluginCreationInfo info) : NativeInstrument(s
     syncPads();
 }
 
-// Each pad's six controls, declared pad by pad. The names carry the pad's
-// number, because an automation lane is read away from the face.
+// Each pad's six controls, declared pad by pad from the lowest note. The names
+// carry the pad's note, because an automation lane is read away from the face.
 std::array<DrumRackDevice::PadControls, DrumRackDevice::padCount> DrumRackDevice::declarePads()
 {
     std::array<PadControls, padCount> declared;
-    for (int pad = 0; pad < padCount; ++pad)
+    for (int note = 0; note < padCount; ++note)
     {
-        const auto prefix = "p" + juce::String(pad + 1);
-        const auto label = "Pad " + juce::String(pad + 1);
+        const auto prefix = "n" + juce::String(note);
+        const auto label = noteName(note);
         // The pads share one place on a face, a tab each, should a generated
         // face ever be asked to show them.
         const juce::String padTabs = "Pads";
-        auto& controls = declared[static_cast<size_t>(pad)];
+        auto& controls = declared[static_cast<size_t>(note)];
         controls.tune = param(prefix + "Tune", label + " Tune").range(-24.0f, 24.0f)
                             .unit(ParamUnit::semitones).section(label, padTabs);
         controls.decay = param(prefix + "Decay", label + " Decay").range(0.01f, DrumRackEngine::fullDecay)
@@ -95,8 +101,20 @@ juce::ValueTree DrumRackDevice::padsTree() const
     return state.getChildWithName(padsId);
 }
 
-juce::ValueTree DrumRackDevice::padState(int pad)
+juce::ValueTree DrumRackDevice::padTree(int note) const
 {
+    const auto tree = padsTree();
+    for (int i = 0; i < tree.getNumChildren(); ++i)
+        if (const auto child = tree.getChild(i); child.hasType(padId) && child.hasProperty(noteId)
+                                                  && static_cast<int>(child[noteId]) == note)
+            return child;
+    return {};
+}
+
+juce::ValueTree DrumRackDevice::padState(int note)
+{
+    if (auto existing = padTree(note); existing.isValid())
+        return existing;
     auto* undo = getUndoManager();
     auto tree = padsTree();
     if (!tree.isValid())
@@ -104,10 +122,10 @@ juce::ValueTree DrumRackDevice::padState(int pad)
         tree = juce::ValueTree(padsId);
         state.appendChild(tree, undo);
     }
-    // A pads tree from anywhere else is made whole before it is written to.
-    while (tree.getNumChildren() < padCount)
-        tree.appendChild(juce::ValueTree(padId), undo);
-    return tree.getChild(pad);
+    juce::ValueTree made(padId);
+    made.setProperty(noteId, note, nullptr);
+    tree.appendChild(made, undo);
+    return made;
 }
 
 bool DrumRackDevice::concernsPads(const juce::ValueTree& tree) const
@@ -115,9 +133,9 @@ bool DrumRackDevice::concernsPads(const juce::ValueTree& tree) const
     return tree.hasType(padsId) || tree.getParent().hasType(padsId);
 }
 
-DrumRackEngine::PadSettings DrumRackDevice::controlsOf(int pad, bool asSet) const
+DrumRackEngine::PadSettings DrumRackDevice::controlsOf(int note, bool asSet) const
 {
-    const auto& controls = pads[static_cast<size_t>(pad)];
+    const auto& controls = pads[static_cast<size_t>(note)];
     const auto read = [asSet] (const Param& control)
     {
         return asSet ? control.automatable().getCurrentBaseValue() : control.value();
@@ -126,12 +144,14 @@ DrumRackEngine::PadSettings DrumRackDevice::controlsOf(int pad, bool asSet) cons
              read(controls.velocity), read(controls.level), read(controls.pan) };
 }
 
-DrumRackDevice::Pad DrumRackDevice::pad(int index) const
+DrumRackDevice::Pad DrumRackDevice::pad(int note) const
 {
     Pad view;
-    if (!validPad(index))
+    if (!validPad(note))
         return view;
-    const auto tree = padsTree().getChild(index);
+    const auto tree = padTree(note);
+    if (!tree.isValid())
+        return view;
     view.muted = static_cast<bool>(tree[muteId]);
     view.soloed = static_cast<bool>(tree[soloId]);
     DrumSound sound;
@@ -147,7 +167,8 @@ DrumRackDevice::Pad DrumRackDevice::pad(int index) const
     {
         sound.source = DrumRackEngine::Source::sample;
         sound.sample = tree[sampleId].toString();
-        view.unreadable = unreadable[static_cast<size_t>(index)];
+        sound.playback = playbackFrom(tree);
+        view.unreadable = unreadable[static_cast<size_t>(note)];
     }
     else
     {
@@ -155,52 +176,67 @@ DrumRackDevice::Pad DrumRackDevice::pad(int index) const
     }
     sound.name = tree[nameId].toString();
     sound.choke = juce::jlimit(0, DrumRackEngine::chokeGroupCount, static_cast<int>(tree[chokeId]));
-    sound.settings = controlsOf(index, true);
+    sound.settings = controlsOf(note, true);
     view.sound = std::move(sound);
     return view;
 }
 
-juce::String DrumRackDevice::padName(int index) const
+juce::String DrumRackDevice::padName(int note) const
 {
-    const auto view = pad(index);
-    return view.sound.has_value() ? view.sound->displayName() : noteName(index);
+    const auto view = pad(note);
+    return view.sound.has_value() ? view.sound->displayName() : noteName(note);
 }
 
-juce::String DrumRackDevice::noteName(int pad)
+juce::String DrumRackDevice::noteName(int note)
 {
-    // Middle C is C3, as the note editor names its rows.
-    return juce::MidiMessage::getMidiNoteName(lowestNote + pad, true, true, 3);
+    return padNoteName(note);
 }
 
 DrumKit DrumRackDevice::kit() const
 {
     DrumKit whole;
-    for (int index = 0; index < padCount; ++index)
-        whole.pads[static_cast<size_t>(index)] = pad(index).sound;
+    const auto tree = padsTree();
+    for (int i = 0; i < tree.getNumChildren(); ++i)
+        if (const auto note = static_cast<int>(tree.getChild(i)[noteId]); validPad(note))
+            whole.pads[static_cast<size_t>(note)] = pad(note).sound;
     return whole;
 }
 
 bool DrumRackDevice::isBlank() const
 {
-    for (int index = 0; index < padCount; ++index)
-        if (pad(index).sound.has_value())
+    const auto tree = padsTree();
+    for (int i = 0; i < tree.getNumChildren(); ++i)
+        if (const auto child = tree.getChild(i); child.hasProperty(sampleId) || child.hasProperty(synthId))
             return false;
     return true;
 }
 
-int DrumRackDevice::firstEmptyPad() const
+std::array<bool, DrumRackDevice::padCount> DrumRackDevice::filledPads() const
 {
-    for (int index = 0; index < padCount; ++index)
-        if (!pad(index).sound.has_value())
-            return index;
+    std::array<bool, padCount> filled {};
+    const auto tree = padsTree();
+    for (int i = 0; i < tree.getNumChildren(); ++i)
+        if (const auto child = tree.getChild(i); child.hasProperty(sampleId) || child.hasProperty(synthId))
+            if (const auto note = static_cast<int>(child[noteId]); validPad(note))
+                filled[static_cast<size_t>(note)] = true;
+    return filled;
+}
+
+int DrumRackDevice::firstEmptyPad(int from) const
+{
+    const auto filled = filledPads();
+    from = juce::jlimit(0, padCount - 1, from);
+    for (int step = 0; step < padCount; ++step)
+        if (const auto note = (from + step) % padCount; !filled[static_cast<size_t>(note)])
+            return note;
     return -1;
 }
 
 // ---- writing the pads ---------------------------------------------------------
 
-void DrumRackDevice::writeControls(int index, const DrumRackEngine::PadSettings& wanted)
+void DrumRackDevice::writeControls(int note, const DrumRackEngine::PadSettings& wanted)
 {
-    const auto& controls = pads[static_cast<size_t>(index)];
+    const auto& controls = pads[static_cast<size_t>(note)];
     const std::pair<const Param*, float> values[] {
         { &controls.tune, wanted.tune },         { &controls.decay, wanted.decay },
         { &controls.tone, wanted.tone },         { &controls.velocity, wanted.velocity },
@@ -216,63 +252,95 @@ void DrumRackDevice::writeControls(int index, const DrumRackEngine::PadSettings&
     }
 }
 
-void DrumRackDevice::writePad(int index, const std::optional<DrumSound>& sound)
+void DrumRackDevice::writePlayback(juce::ValueTree& tree, const DrumRackEngine::Playback& wanted,
+                                   juce::UndoManager* undo)
+{
+    const auto playback = wanted.clamped();
+    const DrumRackEngine::Playback plain;
+    const auto write = [&tree, undo] (const juce::Identifier& id, bool isPlain, const juce::var& value)
+    {
+        if (isPlain)
+            tree.removeProperty(id, undo);
+        else if (tree[id] != value)
+            tree.setProperty(id, value, undo);
+    };
+    write(modeId, playback.mode == plain.mode, playModeId(playback.mode));
+    write(startId, playback.start == plain.start, playback.start);
+    write(endId, playback.end == plain.end, playback.end);
+    write(fadeInId, playback.fadeIn == plain.fadeIn, playback.fadeIn);
+    write(fadeOutId, playback.fadeOut == plain.fadeOut, playback.fadeOut);
+    write(attackId, playback.attack == plain.attack, playback.attack);
+    write(sustainId, playback.sustain == plain.sustain, playback.sustain);
+    write(releaseId, playback.release == plain.release, playback.release);
+    write(loopId, playback.loop == plain.loop, true);
+    write(sliceById, playback.sliceBy == plain.sliceBy, "divisions");
+    write(divisionsId, playback.divisions == plain.divisions, playback.divisions);
+    write(sensitivityId, playback.sensitivity == plain.sensitivity, playback.sensitivity);
+}
+
+void DrumRackDevice::writePad(int note, const std::optional<DrumSound>& sound)
 {
     auto* undo = getUndoManager();
-    auto tree = padState(index);
-    if (sound.has_value())
+    if (!sound.has_value())
     {
-        if (sound->source == DrumRackEngine::Source::synth)
-        {
-            tree.setProperty(synthId, juce::String(drumModelInfo(sound->model).id), undo);
-            tree.removeProperty(sampleId, undo);
-        }
-        else
-        {
-            tree.setProperty(sampleId, sound->sample, undo);
-            tree.removeProperty(synthId, undo);
-        }
-        if (sound->name.trim().isNotEmpty())
-            tree.setProperty(nameId, sound->name.trim(), undo);
-        else
-            tree.removeProperty(nameId, undo);
-        const auto choke = juce::jlimit(0, DrumRackEngine::chokeGroupCount, sound->choke);
-        if (choke > 0)
-            tree.setProperty(chokeId, choke, undo);
-        else
-            tree.removeProperty(chokeId, undo);
-        writeControls(index, sound->settings);
+        // An empty pad holds nothing at all, mute and solo included.
+        if (const auto tree = padTree(note); tree.isValid())
+            padsTree().removeChild(tree, undo);
+        writeControls(note, {});
+        return;
+    }
+    auto tree = padState(note);
+    if (sound->source == DrumRackEngine::Source::synth)
+    {
+        tree.setProperty(synthId, juce::String(drumModelInfo(sound->model).id), undo);
+        tree.removeProperty(sampleId, undo);
+        writePlayback(tree, {}, undo);
     }
     else
     {
-        for (const auto& id : { sampleId, synthId, nameId, chokeId, muteId, soloId })
-            tree.removeProperty(id, undo);
-        writeControls(index, {});
+        tree.setProperty(sampleId, sound->sample, undo);
+        tree.removeProperty(synthId, undo);
+        writePlayback(tree, sound->playback, undo);
     }
+    if (sound->name.trim().isNotEmpty())
+        tree.setProperty(nameId, sound->name.trim(), undo);
+    else
+        tree.removeProperty(nameId, undo);
+    const auto choke = juce::jlimit(0, DrumRackEngine::chokeGroupCount, sound->choke);
+    if (choke > 0)
+        tree.setProperty(chokeId, choke, undo);
+    else
+        tree.removeProperty(chokeId, undo);
+    writeControls(note, sound->settings);
 }
 
-void DrumRackDevice::setPadSound(int index, const std::optional<DrumSound>& sound)
+void DrumRackDevice::setPadSound(int note, const std::optional<DrumSound>& sound)
 {
-    if (!validPad(index))
+    if (!validPad(note))
         return;
     {
         const juce::ScopedValueSetter<bool> batch(writing, true);
-        writePad(index, sound);
+        writePad(note, sound);
     }
     syncPads();
 }
 
-void DrumRackDevice::setPadSample(int index, const juce::File& file)
+void DrumRackDevice::setPadSample(int note, const juce::File& file)
 {
-    if (!validPad(index))
+    if (!validPad(note))
         return;
     auto sound = DrumSound::forSample(file);
-    if (const auto before = pad(index).sound; before.has_value())
+    if (const auto before = pad(note).sound; before.has_value())
     {
         sound.choke = before->choke;
         if (before->source == DrumRackEngine::Source::sample)
         {
             sound.settings = before->settings;
+            // The way the pad plays stays, but not the part of the last file
+            // it played: a new file is played from its start to its end.
+            sound.playback = before->playback;
+            sound.playback.start = 0.0f;
+            sound.playback.end = 1.0f;
         }
         else
         {
@@ -281,14 +349,14 @@ void DrumRackDevice::setPadSample(int index, const juce::File& file)
             sound.settings.velocity = before->settings.velocity;
         }
     }
-    setPadSound(index, sound);
+    setPadSound(note, sound);
 }
 
-void DrumRackDevice::setPadSynth(int index, DrumModel model)
+void DrumRackDevice::setPadSynth(int note, DrumModel model)
 {
-    if (!validPad(index))
+    if (!validPad(note))
         return;
-    const auto before = pad(index).sound;
+    const auto before = pad(note).sound;
     // Choosing the synth the pad already plays changes nothing.
     if (before.has_value() && before->source == DrumRackEngine::Source::synth && before->model == model)
         return;
@@ -300,41 +368,41 @@ void DrumRackDevice::setPadSynth(int index, DrumModel model)
         sound.settings.pan = before->settings.pan;
         sound.settings.velocity = before->settings.velocity;
     }
-    setPadSound(index, sound);
+    setPadSound(note, sound);
 }
 
-void DrumRackDevice::clearPad(int index)
+void DrumRackDevice::clearPad(int note)
 {
-    setPadSound(index, std::nullopt);
+    setPadSound(note, std::nullopt);
 }
 
-void DrumRackDevice::setPadMuted(int index, bool muted)
+void DrumRackDevice::setPadMuted(int note, bool muted)
 {
-    if (!validPad(index))
+    auto tree = padTree(note);
+    if (!tree.isValid())
         return;
-    auto tree = padState(index);
     if (muted)
         tree.setProperty(muteId, true, getUndoManager());
     else
         tree.removeProperty(muteId, getUndoManager());
 }
 
-void DrumRackDevice::setPadSoloed(int index, bool soloed)
+void DrumRackDevice::setPadSoloed(int note, bool soloed)
 {
-    if (!validPad(index))
+    auto tree = padTree(note);
+    if (!tree.isValid())
         return;
-    auto tree = padState(index);
     if (soloed)
         tree.setProperty(soloId, true, getUndoManager());
     else
         tree.removeProperty(soloId, getUndoManager());
 }
 
-void DrumRackDevice::setPadChoke(int index, int group)
+void DrumRackDevice::setPadChoke(int note, int group)
 {
-    if (!validPad(index))
+    auto tree = padTree(note);
+    if (!tree.isValid())
         return;
-    auto tree = padState(index);
     group = juce::jlimit(0, DrumRackEngine::chokeGroupCount, group);
     if (group > 0)
         tree.setProperty(chokeId, group, getUndoManager());
@@ -342,15 +410,27 @@ void DrumRackDevice::setPadChoke(int index, int group)
         tree.removeProperty(chokeId, getUndoManager());
 }
 
-void DrumRackDevice::setPadName(int index, const juce::String& name)
+void DrumRackDevice::setPadName(int note, const juce::String& name)
 {
-    if (!validPad(index))
+    auto tree = padTree(note);
+    if (!tree.isValid())
         return;
-    auto tree = padState(index);
     if (name.trim().isNotEmpty())
         tree.setProperty(nameId, name.trim(), getUndoManager());
     else
         tree.removeProperty(nameId, getUndoManager());
+}
+
+void DrumRackDevice::setPadPlayback(int note, const DrumRackEngine::Playback& playback, bool undoable)
+{
+    auto tree = padTree(note);
+    if (!tree.isValid() || !tree.hasProperty(sampleId))
+        return;
+    {
+        const juce::ScopedValueSetter<bool> batch(writing, true);
+        writePlayback(tree, playback, undoable ? getUndoManager() : nullptr);
+    }
+    syncPads();
 }
 
 // A kit is a fresh start: every pad takes what the kit gives it, nothing for
@@ -359,40 +439,20 @@ void DrumRackDevice::setKit(const DrumKit& kit)
 {
     {
         const juce::ScopedValueSetter<bool> batch(writing, true);
-        for (int index = 0; index < padCount; ++index)
+        for (int note = 0; note < padCount; ++note)
         {
-            writePad(index, kit.pads[static_cast<size_t>(index)]);
-            auto tree = padState(index);
-            tree.removeProperty(muteId, getUndoManager());
-            tree.removeProperty(soloId, getUndoManager());
+            const auto& sound = kit.pads[static_cast<size_t>(note)];
+            if (!sound.has_value() && !padTree(note).isValid())
+                continue;
+            writePad(note, sound);
+            if (auto tree = padTree(note); tree.isValid())
+            {
+                tree.removeProperty(muteId, getUndoManager());
+                tree.removeProperty(soloId, getUndoManager());
+            }
         }
     }
     syncPads();
-}
-
-int DrumRackDevice::selectedPad() const
-{
-    return juce::jlimit(0, padCount - 1, static_cast<int>(state.getProperty(selectedId, 0)));
-}
-
-void DrumRackDevice::setSelectedPad(int index)
-{
-    state.setProperty(selectedId, juce::jlimit(0, padCount - 1, index), nullptr);
-}
-
-void DrumRackDevice::previewPad(int index)
-{
-    engine.previewPad(index);
-}
-
-std::uint32_t DrumRackDevice::padStrikes(int index) const
-{
-    return engine.strikes(index);
-}
-
-void DrumRackDevice::collectSamples()
-{
-    engine.collect();
 }
 
 // ---- the pads into the engine ------------------------------------------------
@@ -441,13 +501,23 @@ std::unique_ptr<DrumSample> DrumRackDevice::readSample(const juce::File& file, j
 
 void DrumRackDevice::syncPads()
 {
+    // Each note's PAD, found once rather than searched for per note.
+    std::array<juce::ValueTree, padCount> byNote;
     const auto tree = padsTree();
-    for (int index = 0; index < padCount; ++index)
+    for (int i = 0; i < tree.getNumChildren(); ++i)
     {
-        const auto padTree = tree.getChild(index);
-        engine.setPadMuted(index, static_cast<bool>(padTree[muteId]));
-        engine.setPadSoloed(index, static_cast<bool>(padTree[soloId]));
-        engine.setPadChoke(index, static_cast<int>(padTree[chokeId]));
+        const auto child = tree.getChild(i);
+        const auto note = child.hasProperty(noteId) ? static_cast<int>(child[noteId]) : -1;
+        if (validPad(note) && !byNote[static_cast<size_t>(note)].isValid())
+            byNote[static_cast<size_t>(note)] = child;
+    }
+    for (int note = 0; note < padCount; ++note)
+    {
+        const auto& padTree = byNote[static_cast<size_t>(note)];
+        engine.setPadMuted(note, static_cast<bool>(padTree[muteId]));
+        engine.setPadSoloed(note, static_cast<bool>(padTree[soloId]));
+        engine.setPadChoke(note, static_cast<int>(padTree[chokeId]));
+        engine.setPadPlayback(note, padTree.hasProperty(sampleId) ? playbackFrom(padTree) : DrumRackEngine::Playback {});
 
         // What the pad's engine slot should hold, written as a single string
         // so that one comparison says whether anything has to be read.
@@ -456,27 +526,27 @@ void DrumRackDevice::syncPads()
             wanted = "synth:" + padTree[synthId].toString();
         else if (padTree.hasProperty(sampleId))
             wanted = "sample:" + padTree[sampleId].toString();
-        auto& slot = loaded[static_cast<size_t>(index)];
+        auto& slot = loaded[static_cast<size_t>(note)];
         if (wanted == slot)
             continue;
         slot = wanted;
-        unreadable[static_cast<size_t>(index)] = false;
+        unreadable[static_cast<size_t>(note)] = false;
         if (padTree.hasProperty(synthId))
         {
             if (const auto model = drumModelFromId(padTree[synthId].toString()))
-                engine.setPadSynth(index, *model);
+                engine.setPadSynth(note, *model);
             else
-                engine.clearPad(index);
+                engine.clearPad(note);
         }
         else if (padTree.hasProperty(sampleId))
         {
             auto sample = readSample(ContentLibrary::resolveStoredPath(padTree[sampleId].toString()), formats);
-            unreadable[static_cast<size_t>(index)] = sample == nullptr;
-            engine.setPadSample(index, std::move(sample));
+            unreadable[static_cast<size_t>(note)] = sample == nullptr;
+            engine.setPadSample(note, std::move(sample));
         }
         else
         {
-            engine.clearPad(index);
+            engine.clearPad(note);
         }
     }
     engine.collect();
@@ -536,8 +606,11 @@ void DrumRackDevice::clear()
 
 void DrumRackDevice::readSettings() noexcept
 {
-    for (int index = 0; index < padCount; ++index)
-        settings[static_cast<size_t>(index)] = controlsOf(index, false);
+    // Only the pads that hold something are read: six controls each on every
+    // pad would be 768 reads each time.
+    for (int note = 0; note < padCount; ++note)
+        if (engine.padSource(note) != DrumRackEngine::Source::empty)
+            settings[static_cast<size_t>(note)] = controlsOf(note, false);
 }
 
 void DrumRackDevice::process(RenderBlock& block)
@@ -557,8 +630,13 @@ void DrumRackDevice::noteOn(int note, float velocity, int)
     engine.noteOn(note, velocity, settings);
 }
 
-// A pad plays its sound out whatever happens to its key, as a drum does, so
-// only all-notes-off and a panic stop one early.
+// A one-shot plays its sound out whatever happens to its key, as a drum does;
+// a classic pad lets go and releases.
+void DrumRackDevice::noteOff(int note, float, int)
+{
+    engine.noteOff(note);
+}
+
 void DrumRackDevice::allNotesOff()
 {
     engine.releaseAll();
@@ -566,61 +644,9 @@ void DrumRackDevice::allNotesOff()
 
 bool DrumRackDevice::hasNameForMidiNoteNumber(int note, int, juce::String& name)
 {
-    const auto index = note - lowestNote;
-    if (!validPad(index) || !pad(index).sound.has_value())
+    if (!validPad(note) || !pad(note).sound.has_value())
         return false;
-    name = padName(index);
+    name = padName(note);
     return true;
-}
-
-// ---- the face's picture --------------------------------------------------------
-
-const DrumRackDevice::Picture& DrumRackDevice::padPicture(int index, int columns)
-{
-    static const Picture none;
-    if (!validPad(index) || columns <= 0)
-        return none;
-    auto& cached = pictures[static_cast<size_t>(index)];
-    const auto controls = controlsOf(index, false);
-    const auto& sound = loaded[static_cast<size_t>(index)];
-    if (cached.columns == columns && cached.sound == sound && cached.settings == controls)
-        return cached.picture;
-    cached.sound = sound;
-    cached.settings = controls;
-    cached.columns = columns;
-    auto& picture = cached.picture;
-    picture = {};
-    picture.lows.assign(static_cast<size_t>(columns), 0.0f);
-    picture.highs.assign(static_cast<size_t>(columns), 0.0f);
-
-    const auto source = engine.padSource(index);
-    const auto most = static_cast<int>(pictureRate * pictureSeconds);
-    pictureLeft.resize(static_cast<size_t>(most));
-    pictureRight.resize(static_cast<size_t>(most));
-    auto& left = pictureLeft;
-    auto& right = pictureRight;
-    const auto frames = DrumRackEngine::renderStrike(source, engine.padModel(index), engine.padSample(index), controls,
-                                                     1.0f, pictureRate, left.data(), right.data(), most);
-    picture.seconds = frames / pictureRate;
-    if (frames <= 0)
-        return picture;
-    for (int column = 0; column < columns; ++column)
-    {
-        const auto from = static_cast<int>(static_cast<juce::int64>(frames) * column / columns);
-        const auto to = std::max(from + 1, static_cast<int>(static_cast<juce::int64>(frames) * (column + 1) / columns));
-        auto low = 0.0f, high = 0.0f;
-        for (int i = from; i < to && i < frames; ++i)
-        {
-            // The louder side, so a pad panned hard over still shows its sound.
-            const auto l = left[static_cast<size_t>(i)], r = right[static_cast<size_t>(i)];
-            const auto value = std::abs(l) >= std::abs(r) ? l : r;
-            low = std::min(low, value);
-            high = std::max(high, value);
-        }
-        picture.lows[static_cast<size_t>(column)] = low;
-        picture.highs[static_cast<size_t>(column)] = high;
-        picture.peak = std::max({ picture.peak, -low, high });
-    }
-    return picture;
 }
 }

@@ -8,7 +8,8 @@
 namespace rhino
 {
 // One drum sound: everything a Drum Rack pad holds, kept apart from any rack.
-// A drum preset is one of these in a file; a kit is sixteen, one per pad.
+// A drum preset is one of these in a file; a kit is a rack's worth, one per
+// note that holds a sound.
 //
 // A sample is named, never embedded. A sound Rhino ships is named as
 // "library:" and its path under the content library, so a kit opens on any
@@ -24,6 +25,9 @@ struct DrumSound
     juce::String sample;
     DrumModel model = DrumModel::Kick;
     DrumRackEngine::PadSettings settings;
+    // How a sample plays: the sample editor's mode, part, fades and
+    // envelope. A synth ignores it.
+    DrumRackEngine::Playback playback;
     int choke = 0;
 
     // A file as dropping it on a pad makes it: untouched, at the defaults.
@@ -34,6 +38,7 @@ struct DrumSound
     juce::String displayName() const;
 };
 
+// A rack's pads, by MIDI note.
 struct DrumKit
 {
     std::array<std::optional<DrumSound>, DrumRackEngine::padCount> pads;
@@ -44,19 +49,27 @@ struct DrumKit
 //   <RHINO_DRUM_SOUND format="1" name="Analog Kick" synth="Kick"
 //                     tune="0" decay="0.6" tone="0.4" velocity="1" level="0" pan="0" choke="0"/>
 //
-// A kit (.rdk) is a rack's pads, each a sound or nothing:
+// A kit (.rdk) is a rack's pads, each on its note:
 //
-//   <RHINO_DRUM_KIT format="1">
-//     <PAD index="0" name="Kick" sample="library:Samples/TR808/TR808Kick.wav" .../>
+//   <RHINO_DRUM_KIT format="2">
+//     <PAD note="48" name="Kick" sample="library:Samples/TR808/TR808Kick.wav" .../>
 //   </RHINO_DRUM_KIT>
+//
+// A sample's playback is written only where it differs from a plain one-shot
+// of the whole file: mode="classic" or "slice", start and end as fractions of
+// the file, fadeIn, fadeOut, attack, sustain and release, loop="1", and how
+// Slice cuts (sliceBy="divisions", divisions, sensitivity).
 //
 // A setting a file leaves out is the control's default, so a sound plays the
 // same whatever the pad held before it. Numbers are written to read back
-// exactly. Format 1 is all that is read: no compatibility is owed before a
+// exactly. One format of each is read: no compatibility is owed before a
 // production release, and the version is written so that it can be owed then.
+// Kits are format 2 since a rack has a pad on every note; format 1 numbered
+// sixteen pads from C2 and is refused.
 struct DrumFiles
 {
-    static constexpr int format = 1;
+    static constexpr int soundFormat = 1;
+    static constexpr int kitFormat = 2;
     static constexpr const char* kitExtension = ".rdk";
     static constexpr const char* soundExtension = ".rdp";
 
@@ -74,4 +87,12 @@ struct DrumFiles
     // A kit's or a preset's name is its file name.
     static juce::String nameOf(const juce::File& file) { return file.getFileNameWithoutExtension(); }
 };
+
+// What a play mode is called in a file.
+juce::String playModeId(DrumRackEngine::PlayMode);
+std::optional<DrumRackEngine::PlayMode> playModeFromId(const juce::String&);
+
+// A pad's note as the face and every message name it. Middle C is C3, as the
+// note editor names its rows, so a rack's first pads by default are C2 up.
+juce::String padNoteName(int note);
 }

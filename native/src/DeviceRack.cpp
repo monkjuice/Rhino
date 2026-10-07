@@ -551,10 +551,10 @@ void DeviceRack::dropOnDrumPads(DeviceEditorPanel& panel, int pad, const std::ve
     if (failure.isNotEmpty())
         status(failure);
     else if (loaded == 1)
-        status("Loaded " + sounds.front().getFileNameWithoutExtension() + " on pad " + juce::String(pad + 1));
+        status("Loaded " + sounds.front().getFileNameWithoutExtension() + " on " + DrumRackDevice::noteName(pad));
     else if (loaded > 1)
-        status("Loaded " + juce::String(loaded) + " sounds on pads " + juce::String(pad + 1) + " to "
-               + juce::String(pad + loaded));
+        status("Loaded " + juce::String(loaded) + " sounds on " + DrumRackDevice::noteName(pad) + " to "
+               + DrumRackDevice::noteName(pad + loaded - 1));
 }
 
 bool DeviceRack::isInterestedInFileDrag(const juce::StringArray& files)

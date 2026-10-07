@@ -1,20 +1,20 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<RHINO_DRUM_KIT format="1">
-  <PAD index="0" sample="library:Samples/VinylDrums/Kick/Kick 07 Round.wav" tune="0" decay="10" tone="1" velocity="1" level="0" pan="0" choke="0"/>
-  <PAD index="1" sample="library:Samples/VinylDrums/Percussion/Rimshot 02 Crisp.wav" tune="0" decay="10" tone="1" velocity="1" level="0" pan="0" choke="0"/>
-  <PAD index="2" sample="library:Samples/VinylDrums/Tom/Tom 01 Low.wav" tune="0" decay="10" tone="1" velocity="1" level="0" pan="0" choke="0"/>
-  <PAD index="3" sample="library:Samples/VinylDrums/Snare/Snare 09 Bright.wav" tune="0" decay="10" tone="1" velocity="1" level="0" pan="0" choke="0"/>
-  <PAD index="4" sample="library:Samples/VinylDrums/Tom/Tom 04 Mid.wav" tune="0" decay="10" tone="1" velocity="1" level="0" pan="0" choke="0"/>
-  <PAD index="5" sample="library:Samples/VinylDrums/Snare/Snare 16 Warm.wav" tune="0" decay="10" tone="1" velocity="1" level="0" pan="0" choke="0"/>
-  <PAD index="6" sample="library:Samples/VinylDrums/Tom/Tom 03 High.wav" tune="0" decay="10" tone="1" velocity="1" level="0" pan="0" choke="0"/>
-  <PAD index="7" sample="library:Samples/VinylDrums/Percussion/Bongo 01 Low.wav" tune="0" decay="10" tone="1" velocity="1" level="0" pan="0" choke="0"/>
-  <PAD index="8" sample="library:Samples/VinylDrums/Clap/Clap 03 Bright.wav" tune="0" decay="10" tone="1" velocity="1" level="0" pan="0" choke="0"/>
-  <PAD index="9" sample="library:Samples/VinylDrums/Percussion/Bongo 02 High.wav" tune="0" decay="10" tone="1" velocity="1" level="0" pan="0" choke="0"/>
-  <PAD index="10" sample="library:Samples/VinylDrums/Hat/Hat Closed 21 Crisp.wav" tune="0" decay="10" tone="1" velocity="1" level="0" pan="0" choke="1"/>
-  <PAD index="11" sample="library:Samples/VinylDrums/Hat/Hat Open 13 Crisp.wav" tune="0" decay="10" tone="1" velocity="1" level="0" pan="0" choke="1"/>
-  <PAD index="12" sample="library:Samples/VinylDrums/Hat/Ride 15 Crisp.wav" tune="0" decay="10" tone="1" velocity="1" level="0" pan="0" choke="0"/>
-  <PAD index="13" sample="library:Samples/VinylDrums/Kick/Kick 12 Sub.wav" tune="0" decay="10" tone="1" velocity="1" level="0" pan="0" choke="0"/>
-  <PAD index="14" sample="library:Samples/VinylDrums/Percussion/Hit 01 Dark Long.wav" tune="0" decay="10" tone="1" velocity="1" level="0" pan="0" choke="0"/>
-  <PAD index="15" sample="library:Samples/VinylDrums/Snare/Snare Roll 02 Crisp Tight.wav" tune="0" decay="10" tone="1" velocity="1" level="0" pan="0" choke="0"/>
+<RHINO_DRUM_KIT format="2">
+  <PAD note="48" sample="library:Samples/VinylDrums/Kick/Kick 07 Round.wav" tune="0" decay="10" tone="1" velocity="1" level="0" pan="0" choke="0"/>
+  <PAD note="49" sample="library:Samples/VinylDrums/Percussion/Rimshot 02 Crisp.wav" tune="0" decay="10" tone="1" velocity="1" level="0" pan="0" choke="0"/>
+  <PAD note="50" sample="library:Samples/VinylDrums/Tom/Tom 01 Low.wav" tune="0" decay="10" tone="1" velocity="1" level="0" pan="0" choke="0"/>
+  <PAD note="51" sample="library:Samples/VinylDrums/Snare/Snare 09 Bright.wav" tune="0" decay="10" tone="1" velocity="1" level="0" pan="0" choke="0"/>
+  <PAD note="52" sample="library:Samples/VinylDrums/Tom/Tom 04 Mid.wav" tune="0" decay="10" tone="1" velocity="1" level="0" pan="0" choke="0"/>
+  <PAD note="53" sample="library:Samples/VinylDrums/Snare/Snare 16 Warm.wav" tune="0" decay="10" tone="1" velocity="1" level="0" pan="0" choke="0"/>
+  <PAD note="54" sample="library:Samples/VinylDrums/Tom/Tom 03 High.wav" tune="0" decay="10" tone="1" velocity="1" level="0" pan="0" choke="0"/>
+  <PAD note="55" sample="library:Samples/VinylDrums/Percussion/Bongo 01 Low.wav" tune="0" decay="10" tone="1" velocity="1" level="0" pan="0" choke="0"/>
+  <PAD note="56" sample="library:Samples/VinylDrums/Clap/Clap 03 Bright.wav" tune="0" decay="10" tone="1" velocity="1" level="0" pan="0" choke="0"/>
+  <PAD note="57" sample="library:Samples/VinylDrums/Percussion/Bongo 02 High.wav" tune="0" decay="10" tone="1" velocity="1" level="0" pan="0" choke="0"/>
+  <PAD note="58" sample="library:Samples/VinylDrums/Hat/Hat Closed 21 Crisp.wav" tune="0" decay="10" tone="1" velocity="1" level="0" pan="0" choke="1"/>
+  <PAD note="59" sample="library:Samples/VinylDrums/Hat/Hat Open 13 Crisp.wav" tune="0" decay="10" tone="1" velocity="1" level="0" pan="0" choke="1"/>
+  <PAD note="60" sample="library:Samples/VinylDrums/Hat/Ride 15 Crisp.wav" tune="0" decay="10" tone="1" velocity="1" level="0" pan="0" choke="0"/>
+  <PAD note="61" sample="library:Samples/VinylDrums/Kick/Kick 12 Sub.wav" tune="0" decay="10" tone="1" velocity="1" level="0" pan="0" choke="0"/>
+  <PAD note="62" sample="library:Samples/VinylDrums/Percussion/Hit 01 Dark Long.wav" tune="0" decay="10" tone="1" velocity="1" level="0" pan="0" choke="0"/>
+  <PAD note="63" sample="library:Samples/VinylDrums/Snare/Snare Roll 02 Crisp Tight.wav" tune="0" decay="10" tone="1" velocity="1" level="0" pan="0" choke="0"/>
 </RHINO_DRUM_KIT>

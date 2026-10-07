@@ -4,7 +4,7 @@ type: convention
 summary: A curve on screen is computed by the same functions the audio runs, never from a second set of formulas, and tests hold the two together.
 tags: [both, ui, dsp, testing]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-07
 ---
 
 # Displays draw from the DSP
@@ -17,6 +17,7 @@ A display is drawn from the arithmetic the engine actually runs, never from a pi
 
 - **[Rhino EQ](rhino-eq.md).** `core/EqFilter.h` is a pure header that the curve and the audio share. The panel draws `EqEngine::responseDbAt` from the scaled bands (`EqEngine::scaledBand`); drawn from the stored bands, display and audio would part once Scale leaves 100%.
 - **[Forge filter](forge-filter.md).** `core/ForgeFilter.h` holds `filterSample`, the audio, and `filterMagnitude`, the picture, written from the same coefficients a few lines apart.
+- **[Drum Rack](drum-rack.md).** A synth pad's picture is a strike rendered by the engine's own voice (`DrumRackEngine::renderStrike`), held sample-identical to live playback by a test, and Slice draws the cuts `DrumSlicer` returns. The sample editor's envelope line is the exception: `shapeAt` in `DeviceEditorPanelDrumSample.cpp` restates the voice's fades, Decay and envelope as a closed form in the UI, and no test holds the two together (2026-10-07; [Drum Rack sample editor](drum-rack-sample-editor.md)).
 - **Forge FX slots** (`ui/ForgeFxDisplay.h`). A distortion's curve is `fxShape` per pixel, an equaliser's response is the magnitude of the very biquads `setBand` builds, and a delay's repeats are placed by `fxDelaySeconds`.
 - **Forge LFO graph.** It draws `lfoShapeTables` or the custom `LfoTable`, the tables the voice reads through `lfoValue`.
 - **Forge oscillator display.** It draws the frames in `WavetableStore` as authored, warped as the voice warps them.
@@ -37,6 +38,7 @@ Put the transfer function in the DSP header as a free function and call it from 
 ## Related
 
 - [Measure sound, don't read the DSP](measure-sound-dont-read-dsp.md)
+- [Drum Rack sample editor](drum-rack-sample-editor.md)
 - [Forge mixer and effects racks](forge-mixer-and-fx.md)
 - [Forge modulation: matrix, envelopes, LFOs and macros](forge-modulation.md)
 - [Forge warp](forge-warp.md)

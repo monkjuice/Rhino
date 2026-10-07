@@ -4,7 +4,7 @@ type: decision
 summary: Samples and other content live as files under library/ and are found at runtime; only fonts and app icons are embedded.
 tags: [rhino, content, build, git-lfs]
 sources: []
-updated: 2026-10-06
+updated: 2026-10-07
 ---
 
 # Content is files, never compiled in
@@ -24,7 +24,7 @@ Rejected: keeping audio embedded, for the build cost above.
 ## Consequences
 
 - **Set up Git LFS before adding a content type.** `.gitattributes` sends WAV, FLAC, AIFF, OGG and MP3 under `library/` to LFS, configured before the library had any history; a type added later would have to be converted by rewriting history. `SOURCE.md` and licence files stay plain text so provenance reads in a diff. Forge's ten factory tables are ordinary `.wav` files marked binary, not LFS ([Git workflow](git-workflow.md)).
-- **Devices read content off the audio thread** and must survive its absence. The Drum Rack reads a pad's sample on the message thread when the pad changes; a missing file is logged and the pad falls silent ([Drum Rack](drum-rack.md)). Reading the 808 Kit's eight samples onto their pads takes about 3 ms warm (2.8-4.0 ms over six runs, 2026-10-06), a figure `--self-test` writes to `rhino.log`. Rhino Drums, its predecessor, read its kit in `initialise()`: 525 KB in 1.2 ms warm.
+- **Devices read content off the audio thread** and must survive its absence. The Drum Rack reads a pad's sample on the message thread when the pad changes; a missing file is logged and the pad falls silent ([Drum Rack](drum-rack.md)). Reading the 808 Kit's eight samples onto their pads took 2.8-4.0 ms warm over six runs on 2026-10-06, and 5.3-6.3 ms warm (51.6 ms cold) on 2026-10-07, after the rack grew to 768 controls; `--self-test` writes the figure to `rhino.log`. Rhino Drums, its predecessor, read its kit in `initialise()`: 525 KB in 1.2 ms warm.
 - **Content names content by place, never by copy.** A kit or a drum preset names its samples as `library:<path>` and embeds none, so the library can move and a kit still opens ([Content library](content-library.md)).
 - **The suite proves the read is real.** When the library moved out, hiding `library/` made `--self-test` fail at its kick assertion, and the browser's sample rows must equal `ContentLibrary::samples()`; zero on both sides passes, so a build without the library still has a working browser.
 - An installed build needs a `Library` folder beside the executable, or `RHINO_LIBRARY_DIR`.

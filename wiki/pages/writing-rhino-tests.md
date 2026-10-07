@@ -4,7 +4,7 @@ type: guide
 summary: Choose between a unit check and a workflow scenario, follow the rules that keep scenarios sharing one Session honest, and time the interface with --profile-ui.
 tags: [rhino, testing, conventions]
 sources: []
-updated: 2026-10-06
+updated: 2026-10-07
 ---
 
 # Writing Rhino tests
@@ -55,10 +55,16 @@ that session's `releaseAudioDevice()` before the block ends (`ClipEdits.inc`, `G
 6. **Snapshot a panel that paints.** Render it with `createComponentSnapshot` on every run as a paint smoke test, assert
    its child controls land inside it and off each other (`checkEditorFace` in `EqTest.cpp`), and write a PNG only when
    an env var names a path (`RHINO_CLIP_PANEL_SNAPSHOT`, `RHINO_AUTOMATION_SNAPSHOT`) — see
-   [Seeing the UI without taking the screen](headless-ui-snapshots.md).
+   [Seeing the UI without taking the screen](headless-ui-snapshots.md). Look at the PNG too: the Drum Rack's envelope
+   line drew nothing, and only a snapshot showed it
+   ([A juce::Path holding only a start point is empty](juce-path-isempty-ignores-a-lone-point.md)).
 7. **Render only what you measure.** A render that measures one clip names that clip's track in `tracksToDo`, as
    `SessionMerge` does. Once the arp's defaults let track 0 play through its window, a whole-edit render failed
    "persistence: trimmed render" on every run, with the product never at fault (commit `89dfd1c`).
+8. **Ask a face where its parts are.** `runDrumRackFaceTest` finds pads, map cells, markers and knobs through the
+   panel's own `drumPadAt` and `drumTooltip` rather than repeating its layout arithmetic, so a layout change cannot
+   leave the test clicking stale coordinates. Live MIDI cannot reach a device in the Pattern runner, so the key-flash
+   check nudges the panel's own counter (`drumNotesSeen`) instead of sending a note.
 
 ## Timing, not checking
 

@@ -4,7 +4,7 @@ type: convention
 summary: Focused, verified commits pushed at milestones; stage explicit paths since the user edits Forge in the same tree; never rewrite pushed history.
 tags: [both, git, workflow, tooling]
 sources: []
-updated: 2026-10-06
+updated: 2026-10-07
 ---
 
 # Git workflow
@@ -35,6 +35,8 @@ The tool commits by pathspec: it runs `git add -A` on the paths it is given and 
 - A deletion staged with `git rm --cached` but not listed was left out of the commit, and the deleted files stayed in the committed tree.
 - Listing a path already gone from the index made the tool's `git add -A` fail with "pathspec ... did not match any files", because a pathspec matches the index and the working tree, not `HEAD`. Quoting in PowerShell gives the same message for another reason ([Development environment and reference material](development-environment.md)).
 - The way out: `git restore --staged <paths>`, so the index matches `HEAD` again, then commit those paths through the tool, which stages the deletion itself.
+
+The tool's hook also screens the message. On 2026-10-07 (`755b4cc`) it refused one as reaching "a file in the home directory or the project" through "an alternate data stream". The message had lines starting `Word: ...` ("Classic: follows ...", "Tested: all six ...") and note ranges such as "C2-D#3"; rewording those let it pass. Which of them tripped it was not established, so if a message is refused this way, rephrase colon-led lines first.
 
 ## What never goes in
 

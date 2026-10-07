@@ -4,7 +4,7 @@ type: convention
 summary: The audio thread never allocates, locks, or touches files or UI; memory is sized at prepare and state crosses threads via atomics and queues.
 tags: [both, real-time, audio-thread]
 sources: []
-updated: 2026-10-06
+updated: 2026-10-07
 ---
 
 # Real-time audio rules
@@ -35,6 +35,7 @@ Each block has a deadline (about 2.7 ms at 48 kHz and 128 samples) that an alloc
   - Each voice counts itself onto its sample (`DrumSample::playing`).
   - A replaced sample is retired with the number of stretches begun at that moment. `collect()`, on the message thread, frees it once that many stretches have ended and no voice plays it.
   - Every pad edit and the face's 24 Hz timer collect, and `prepare()`, when nothing renders, frees everything. `checkSampleHandOff` in `DrumRackTest.cpp` covers it.
+- Field by field, where a torn read is harmless. A Drum Rack pad's playback is a dozen atomics written one at a time, so a strike landing mid-write plays a mix of old and new for one note, which is accepted ([Drum Rack sample editor](drum-rack-sample-editor.md)). Strikes from the face cross as a 128-bit mask of atomics, and a solo count spares each voice a scan of all 128 pads.
 - Atomics. `UtilityDevice` reads its gain atomically into a preallocated smoother; Forge's `Processor` publishes meter readings into `std::atomic` arrays for the panel.
 - A single-producer, single-consumer queue to a timer. MIDI learn pushes bound messages into `MidiControlQueue` (256 slots, no allocation), and the `Processor`'s own 60 Hz timer applies them, because writing a parameter takes locks ([Forge MIDI learn](forge-midi-learn.md)).
 - A split at the thread boundary. Rhino EQ's `SpectrumTap` only copies samples into a ring; `SpectrumReader` transforms them on the panel's timer.

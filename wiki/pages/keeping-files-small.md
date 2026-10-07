@@ -4,7 +4,7 @@ type: convention
 summary: Split a .cpp past about 600 lines or a second responsibility by defining one class across several translation units, not by inventing types.
 tags: [both, code-structure, cmake]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-07
 ---
 
 # Keeping files small
@@ -21,7 +21,7 @@ Five files once held 68% of Rhino, and `Session.cpp` alone was 2,661 lines. Each
 
 As of 2026-10-03:
 
-- **Rhino.** `Session` spans 24 `Session*.cpp` files: 22 define its members, and `SessionInternal.cpp` and `SessionPatches.cpp` hold its private helpers. `Arrangement` spans 11 `Arrangement*.cpp` files and `StepGrid` spans four. `DeviceEditorPanel` keeps its device faces in `DeviceEditorPanelEq.cpp`, `DeviceEditorPanelAutoTune.cpp` and `DeviceEditorPanelVocoder.cpp`.
+- **Rhino.** `Session` spans 24 `Session*.cpp` files: 22 define its members, and `SessionInternal.cpp` and `SessionPatches.cpp` hold its private helpers. `Arrangement` spans 11 `Arrangement*.cpp` files and `StepGrid` spans four. `DeviceEditorPanel` keeps its device faces in `DeviceEditorPanelEq.cpp`, `DeviceEditorPanelAutoTune.cpp` and `DeviceEditorPanelVocoder.cpp`. On 2026-10-07 the Drum Rack's face took five of its units (`DeviceEditorPanelDrums.cpp`, `...DrumParts.cpp`, `...DrumMenus.cpp`, `...DrumSample.cpp`, `...DrumSampleControls.cpp`), sharing `DeviceEditorPanelDrumsInternal.h`: an `Internal.h` can serve one face's units within a larger class. `DrumRackDevice` spans two (`DrumRackDevice.cpp`, `DrumRackDeviceEditing.cpp`) with `DrumRackDeviceInternal.h` ([Drum Rack](drum-rack.md)).
 - **Forge.** `Editor` spans 16 `src/ForgeEditor*.cpp` files, and `Processor` spans five (`ForgeProcessor.cpp`, `ForgeParameters.cpp`, `ForgeProcessorState.cpp`, `ForgeProcessorLfo.cpp`, `ForgeProcessorMidi.cpp`). The engine is the exception and splits into headers only, never into translation units ([Forge's engine splits into headers only](forge-engine-headers-only.md)).
 
 ## How to apply it

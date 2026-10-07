@@ -4,7 +4,7 @@ type: decision
 summary: Rhino's own devices are written on one SDK base, held to one conformance runner and given generated faces, with their presets as .rnd files; VST3 stays the format for outside instruments.
 tags: [rhino, devices, sdk, testing]
 sources: []
-updated: 2026-10-06
+updated: 2026-10-07
 ---
 
 # The native device standard
@@ -68,9 +68,10 @@ A generated face can now do more than lay out knobs, still without naming any de
 
 Presets are built ([Device presets (.rnd)](device-presets.md)): a device's settings by parameter id, ten factory presets for Rhino FM, Space and Arp, filed under each device in the browser, and loaded or saved from the device's name bar.
 
-On 2026-10-06 the Drum Rack replaced the hand-written Rhino Drums as the second instrument on the base ([Drum Rack](drum-rack.md)). It stretches the base in three ways:
-- **Content beside the controls.** A pad's sample, synth, name, choke group, mute and solo are not controls. They live in a child tree of the device's `state`, written through the undo manager and read back by ValueTree listeners, so an undo reaches the engine like any control.
-- **Its own face**, because its picture is a strike rendered by the engine's own voice.
+On 2026-10-06 the Drum Rack replaced the hand-written Rhino Drums as the second instrument on the base ([Drum Rack](drum-rack.md)). It stretches the base in four ways:
+- **Content beside the controls.** A pad's sample, synth, name, choke group, mute, solo and, since 2026-10-07, its sample playback are not controls. They live in a child tree of the device's `state`, written through the undo manager and read back by ValueTree listeners, so an undo reaches the engine like any control.
+- **Many controls.** On 2026-10-07 it went to a pad per note, six controls each: 768. Reading the whole parameter list then cost 1.75 ms, so `Session` gained range reads ([What a change costs the interface](ui-cost-of-a-change.md)), and reading a kit roughly doubled, probably because every state change notifies every control's `CachedValue`. Settings counted per item in the hundreds belong in content: that is why the sample editor's are not automatable ([Drum Rack sample editor](drum-rack-sample-editor.md)).
+- **Its own face**, because it pictures a synth pad's strike with the engine's own voice and a sample with its part, envelope and slices. Its pads still declare a section per note in a "Pads" tab group, should a generated face ever show them.
 - **Primed for conformance.** A blank rack is silent, so `--device-test` gives it pads first.
 
 Still to do: move the remaining devices onto the SDK.

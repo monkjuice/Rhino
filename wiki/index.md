@@ -19,7 +19,8 @@ The catalog of this wiki: every page, grouped by type, one line each (`- [Title]
 - [Device catalog](pages/device-catalog.md) — The one table of Rhino's devices that the browser, drop targets, rack menu, engine registration and instrument rules all read.
 - [Device presets (.rnd)](pages/device-presets.md) — A device's settings saved as a .rnd file by parameter id, filed under the device in the browser, dragged to add the device already set, and loaded or saved from its name bar.
 - [Device rack and device editors](pages/device-rack.md) — The Device View strip that shows a track's chain and its per-device faces, the rebuild rule that shapes how a face is written, and the timer that follows automated knobs.
-- [Drum Rack](pages/drum-rack.md) — Sixteen pads on C2-D#3, each a sample or one of eight synthesised drums with six controls of its own, blank until a kit (.rdk), a drum preset (.rdp) or a dropped sample fills it.
+- [Drum Rack](pages/drum-rack.md) — A pad on every MIDI note, addressed by note, each a sample or one of eight synthesised drums with six automatable controls; the face shows a bank of sixteen beside a map of all 128, and kits (.rdk), drum presets (.rdp) or dropped samples fill it.
+- [Drum Rack sample editor](pages/drum-rack-sample-editor.md) — How a Drum Rack sample pad plays its file (one-shot, classic or slice), kept as undoable pad content rather than automatable controls, cut at transients or into equal parts, and spread onto pads of their own.
 - [Forge arpeggiator](pages/forge-arpeggiator.md) — Stands in front of the voices, hands notes back through two callbacks, and opens as an overlay from a plate beside the keys.
 - [Forge editor (panel)](pages/forge-editor.md) — One Editor class across fifteen files builds the panel from declared modules and decides what is visible in one place.
 - [Forge engine (Core)](pages/forge-engine.md) — The header-only voice engine that allocates sixteen voices, modulates per voice per sample and scales the output by 0.28.
@@ -106,12 +107,13 @@ The catalog of this wiki: every page, grouped by type, one line each (`- [Title]
 - [Measure sound, don't read the DSP](pages/measure-sound-dont-read-dsp.md) — Claims about pitch, level or timbre are settled by rendering audio and measuring it by a route that cannot agree with the DSP by construction.
 - [Real-time audio rules](pages/real-time-audio-rules.md) — The audio thread never allocates, locks, or touches files or UI; memory is sized at prepare and state crosses threads via atomics and queues.
 - [Stored indices are append-only](pages/append-only-stored-indices.md) — Forge saves choices and routings as list indices, so a list is only ever appended to; reordering one is a preset-format change.
-- [What a change costs the interface](pages/ui-cost-of-a-change.md) — Session announces every change synchronously to every listening panel, so a drag announces once, a hidden panel goes stale, painters skip what a repaint does not reach, and --profile-ui measures it.
+- [What a change costs the interface](pages/ui-cost-of-a-change.md) — Session announces every change synchronously to every listening panel, so a drag announces once, a hidden panel goes stale, a frame reads only the controls it shows, painters skip what a repaint does not reach, and --profile-ui measures it.
 
 ## Gotchas
 
 - [A CachedValue can lag its own ValueTree](pages/cachedvalue-lags-its-tree.md) — A ValueTree listener that reads a juce::CachedValue of the same property may run before the cache updates, so force the cache first; in Rhino the race failed only under parallel CTest.
 - [A CTest SegFault may be a stack overflow](pages/stack-overflow-reports-as-segfault.md) — CTest reports a Windows stack overflow (0xC00000FD) as a bare SegFault, and both test binaries put large objects on the stack.
+- [A juce::Path holding only a start point is empty](pages/juce-path-isempty-ignores-a-lone-point.md) — juce::Path::isEmpty() ignores startNewSubPath points, so a loop that asks it whether to start or continue a line starts a new subpath every time and strokes nothing; keep a flag of your own.
 - [A new source file needs an explicit CMake configure](pages/cmake-does-not-reconfigure.md) — Both projects suppress CMake regeneration, so a file or a flag added to a CMakeLists is silently left out until you configure again.
 - [App icons are baked at configure time](pages/app-icon-baked-at-configure.md) — JUCE turns the icon PNGs into an .ico at configure time, so editing the art and rebuilding still ships the old icon.
 - [Build locks from MSBuild nodes and orphaned compilers](pages/orphaned-build-processes.md) — An object or source file that another process holds is usually another session's build, an idle MSBuild node or an orphaned cl.exe.

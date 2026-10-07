@@ -4,7 +4,7 @@ type: component
 summary: The message-thread facade over one Tracktion engine and edit, one class split across 26 files, where every rule and refusal lives.
 tags: [rhino, model, tracktion, undo]
 sources: []
-updated: 2026-10-06
+updated: 2026-10-07
 ---
 
 # Session, the model
@@ -18,7 +18,7 @@ updated: 2026-10-06
 - `Session.cpp`: construction, the starter edit, `restoreProject`, `projectSnapshot`, undo and redo.
 - Notes and patterns: `SessionNotes`, `SessionPresets`, `SessionPatches`.
 - Tracks and mixing: `SessionTracks`, `SessionGroups`, `SessionMixer`, `SessionAutomation`, `SessionTransport`.
-- Devices: `SessionDevices`, `SessionDevicePresets`, `SessionDrums` (the [Drum Rack](drum-rack.md)'s kits, pads and drops), `SessionSidechain`, `SessionExternalPlugins`.
+- Devices: `SessionDevices`, `SessionDevicePresets`, `SessionDrums` (the [Drum Rack](drum-rack.md)'s kits, pads, banks, slices and drops), `SessionSidechain`, `SessionExternalPlugins`.
 - Clips: `SessionClips`, `SessionRegion`, `SessionAudioClips`, `SessionWarp`, `SessionMerge`, `SessionSamples`, `SessionSlots`.
 - Input and audition: `SessionRecording`, `SessionMidiInput`, `SessionAudioInput`, `SessionPreview`.
 - `SessionInternal.h/.cpp`: property identifiers and helpers private to these files.
@@ -42,6 +42,8 @@ Replacing the document (`newProject`, `restoreProject`) is bracketed by `Listene
 - `RhinoEngineBehaviour` is the only thing Rhino tells the engine: where a recording goes, and that recording mutes what it covers.
 - The note editor's clip, `patternClip` kept beside `patternClipID`, is the one long-lived pointer. `repairPatternClip` re-finds it after anything that can take it, and a document with no MIDI track has none, so ask `hasPatternClip()` before `pattern()`. The rest of the positional state from the original pattern-track layout was retired in commit `a04b407` ([No track is special for being first](pattern-track.md)).
 - Hold clip ids, not `te::Clip*` ([Hold ids, not pointers](ids-not-pointers.md)).
+- A device's parameter list can be long: a Drum Rack has 768 controls. On a path that runs per frame or per change, read a range (`deviceParameters(track, slot, first, count)`), one control (`deviceParameter`) or the count (`deviceParameterCount`), not the whole list ([What a change costs the interface](ui-cost-of-a-change.md)).
+- View state a command writes without undo may still announce, so other views follow: `showDrumBank` does, for the note editor's drum rows.
 - `SessionPresets.cpp` is the [pattern presets](pattern-presets.md); [device presets](device-presets.md) are
   `SessionDevicePresets.cpp`. On 2026-10-05 a file write meant to create the new one overwrote the old one, restored
   from git at once. Check a name is free before writing a new file here.

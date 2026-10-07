@@ -4,7 +4,7 @@ type: overview
 summary: "Rhino and Rhino Forge at a glance: what they are, how they are built and where to start reading."
 tags: [overview, rhino, forge]
 sources: []
-updated: 2026-10-06
+updated: 2026-10-07
 ---
 
 # Rhino and Rhino Forge
@@ -88,3 +88,4 @@ The full catalog is [index.md](index.md).
 | 2026-09-30 – 10-03 | Time warp; track kind fixed at creation; per-track monitoring; device reordering; Forge's spectral oscillator |
 | 2026-10-05 | The engine plays automation; the pattern-track bookkeeping retired; the seeding's Rhino hazards closed; drags and playhead repaints made cheap |
 | 2026-10-06 | The [Drum Rack](pages/drum-rack.md) replaces Rhino Drums: sixteen sample-or-synth pads, with kits and drum presets as files |
+| 2026-10-07 | The Drum Rack takes a pad on every note, a map of all 128, and a [sample editor](pages/drum-rack-sample-editor.md) with one-shot, classic and slice |

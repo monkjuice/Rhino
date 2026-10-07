@@ -3,9 +3,12 @@
 #include "instruments/DrumRackDevice.h"
 #include <array>
 
-// Shared by the Drum Rack face's two translation units of DeviceEditorPanel,
-// DeviceEditorPanelDrums.cpp (the map, the pads and their menus) and
-// DeviceEditorPanelDrumSample.cpp (the selected pad's side), and nothing else.
+// Shared by the Drum Rack face's translation units of DeviceEditorPanel, and
+// nothing else: DeviceEditorPanelDrums.cpp (the map and the pads),
+// DeviceEditorPanelDrumParts.cpp (where everything stands, and the drawn
+// controls), DeviceEditorPanelDrumMenus.cpp (menus and dialogs),
+// DeviceEditorPanelDrumSample.cpp (the selected pad's side) and
+// DeviceEditorPanelDrumSampleControls.cpp (its sample's knobs).
 namespace rhino::drumface
 {
 constexpr int padColumns = DrumRackDevice::rowSize;

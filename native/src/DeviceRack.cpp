@@ -141,7 +141,10 @@ public:
             const auto* device = DeviceCatalog::byTypeName(deviceType);
             deviceTypeLabel = device != nullptr && device->kind == DeviceKind::Instrument ? "RHINO INSTRUMENT"
                                                                                          : "RHINO FX";
-            parameters = session.deviceParameters(track, slot);
+            // Six knobs, so six controls are read: a Drum Rack has 768. Its
+            // six are the selected pad's, as on its face.
+            firstParameter = firstShownParameter();
+            parameters = session.deviceParameters(track, slot, firstParameter, shownParameters);
             while (labels.size() < static_cast<int>(parameters.size()))
             {
                 const auto index = labels.size();
@@ -160,32 +163,32 @@ public:
                 slider->setColour(juce::Slider::trackColourId, juce::Colour(0xff8cc5d2));
                 slider->setColour(juce::Slider::backgroundColourId, juce::Colour(0xff242b31));
                 slider->setColour(juce::Slider::thumbColourId, juce::Colour(0xffc6d58c));
-                slider->onDragStart = [this, index] { session.beginDeviceParameterGesture(track, slot, index); };
+                slider->onDragStart = [this, index]
+                {
+                    session.beginDeviceParameterGesture(track, slot, firstParameter + index);
+                };
                 slider->onValueChange = [this, index, slider]
                 {
                     if (!syncing)
                     {
-                        session.setDeviceParameter(track, slot, index, static_cast<float>(slider->getValue()));
+                        session.setDeviceParameter(track, slot, firstParameter + index, static_cast<float>(slider->getValue()));
                         if (juce::isPositiveAndBelow(index, parameters.size()))
-                            parameters[static_cast<size_t>(index)].value = static_cast<float>(slider->getValue());
-                        const auto next = session.deviceParameters(track, slot);
-                        if (juce::isPositiveAndBelow(index, next.size()))
-                        {
-                            parameters[static_cast<size_t>(index)] = next[static_cast<size_t>(index)];
-                            values[index]->setText(parameters[static_cast<size_t>(index)].valueText, juce::dontSendNotification);
-                            slider->setTooltip(parameters[static_cast<size_t>(index)].name + ": "
-                                               + parameters[static_cast<size_t>(index)].valueText);
-                        }
+                            if (const auto next = session.deviceParameter(track, slot, firstParameter + index))
+                            {
+                                parameters[static_cast<size_t>(index)] = *next;
+                                values[index]->setText(next->valueText, juce::dontSendNotification);
+                                slider->setTooltip(next->name + ": " + next->valueText);
+                            }
                     }
                 };
                 slider->onDragEnd = [this, index]
                 {
-                    session.endDeviceParameterGesture(track, slot, index);
+                    session.endDeviceParameterGesture(track, slot, firstParameter + index);
                     refresh();
                 };
                 automation->onClick = [this, index]
                 {
-                    const auto result = session.toggleParameterAutomationOverride(track, slot, index);
+                    const auto result = session.toggleParameterAutomationOverride(track, slot, firstParameter + index);
                     juce::ignoreUnused(result);
                     refresh();
                 };
@@ -226,7 +229,13 @@ public:
         {
             if (syncing)
                 return;
-            const auto next = session.deviceParameters(track, slot);
+            // Another pad selected on a Drum Rack's face is another six.
+            if (firstShownParameter() != firstParameter)
+            {
+                refresh();
+                return;
+            }
+            const auto next = session.deviceParameters(track, slot, firstParameter, shownParameters);
             const auto count = std::min(std::min(static_cast<int>(next.size()), static_cast<int>(parameters.size())),
                                         sliders.size());
             syncing = true;
@@ -242,8 +251,18 @@ public:
             syncing = false;
         }
 
+        int firstShownParameter() const
+        {
+            if (const auto* drums = dynamic_cast<const DrumRackDevice*>(session.devicePlugin(track, slot)))
+                return DrumRackDevice::parameterIndex(drums->selectedPad(), 0);
+            return 0;
+        }
+
+        static constexpr int shownParameters = 6;
         Session& session;
         int track = 0, slot = 0;
+        // The first control the six knobs stand for.
+        int firstParameter = 0;
         bool syncing = false;
         float animationPhase = 0.0f;
         juce::String deviceName, deviceTypeLabel;

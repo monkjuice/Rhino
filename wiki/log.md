@@ -267,3 +267,8 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/git-workflow.md (git_commit's hook refused a message over an "alternate data stream"; trigger not established)
 - updated: overview.md (history row)
 - updated: index.md (two new pages; Drum Rack and ui-cost summaries)
+
+## [2026-10-07] update | Drum Rack: drag a pad onto another note to move or swap it
+- updated: pages/drum-rack.md (Moving a pad: what travels with it, movePad's single batch and both samples re-read, moveDrumPad's undo names, selection and refusals; decision that clip notes and lanes stay on their notes, moving lanes rejected; six face units; checkMovingPads and the face test's drags)
+- updated: pages/device-rack.md (sixth face unit DeviceEditorPanelDrumGestures.cpp; the pad drag: 4 px slack, drumNoteAt, lit pad or map cell, ghost beside the pointer, status reports)
+- updated: pages/keeping-files-small.md (the face's six units; pointer handling split out at 694 lines)

@@ -16,7 +16,7 @@ Rhino's drum instrument since 2026-10-06 (branch `feat/drum-rack`). It replaced 
 | DSP and files (`RhinoCore`) | `core/DrumRackEngine.*` (pads, 32 voices, playback), `core/DrumSynth.*` (the synth models), `core/DrumSlicer.*` (where Slice cuts), `core/DrumKitFile.*` (`DrumSound`, `DrumKit`, both file formats, `padNoteName`) |
 | Device | `devices/instruments/DrumRackDevice.cpp` (pads, their state, playing them) and `DrumRackDeviceEditing.cpp` (what the face asks for: view state, previews, counts, pictures, slices), sharing `DrumRackDeviceInternal.h` |
 | Model | `SessionDrums.cpp`; `findDrumRack`, `loadDefaultDrumKit`, `drumKitOf` and `fillBlankDrumRack` in `SessionInternal.h`; `patternDrumLowestNote` in `SessionPresets.cpp` |
-| UI | the face, five `DeviceEditorPanelDrum*.cpp` units ([Device rack and device editors](device-rack.md)); pad drops in `DeviceRack.cpp`, the Drums section in `BrowserPanel.cpp`, lane drops in `ArrangementDrops.cpp` |
+| UI | the face, six `DeviceEditorPanelDrum*.cpp` units ([Device rack and device editors](device-rack.md)); pad drops in `DeviceRack.cpp`, the Drums section in `BrowserPanel.cpp`, lane drops in `ArrangementDrops.cpp` |
 
 ## A pad on every note
 
@@ -66,10 +66,19 @@ Where the factory and user files live: [Content library](content-library.md).
 - `addDrumSound(file, track)` fills the first empty pad from the bank shown, coming round from the bottom (`firstEmptyPad(from)`), so a sound lands where it can be seen. A drum preset brings a blank rack to a MIDI track; a bare sample is refused unless the track already runs one.
 - `showDrumBank(track, slot, firstNote)` is view state, never an undo step, but announced, so the note editor follows. `patternDrumLowestNote()` is the open clip's rack's first shown note.
 - `spreadDrumSlices` puts a sample's slices on pads of their own ([Drum Rack sample editor](drum-rack-sample-editor.md)).
+- `moveDrumPad(track, slot, from, to)` moves a pad's sound to another note (below).
 - `previewDrumSound` renders one strike into a `MemoryAudioSource` for the browser ([Browser and library preview](browser.md)).
 - A drum pattern on a blank rack loads `Drums/Kits/808 Kit.rdk` (`loadDefaultDrumKit`), the kit the patterns were written for ([Pattern presets](pattern-presets.md)). A MIDI clip moved or pasted onto a track whose rack arrives blank brings its source rack's kit ([One instrument per track](one-instrument-per-track.md)).
 
 Drops: on a lane, a kit goes to `addDrumKit` and a drum preset to `addDrumSound`; a sample dropped on a MIDI track that runs a rack goes to the next empty pad. On the face, a sample or drum preset lands on the pad under the pointer, or on the selected pad between pads; a kit loads the rack; several desktop files fill pads upward from the one dropped on, stopping at note 127. Each file is an undo step of its own, unlike `importAudioFilesAt`.
+
+## Moving a pad
+
+Since commit `6af25c2` (2026-10-07), a filled pad dragged onto an empty note moves there and leaves its own pad empty; dragged onto a filled pad, the two trade places. The target may be a pad in the bank or any note on the map. Everything the pad holds goes with it: sample or synth, name, choke group, mute, solo, playback and the six controls as set, written to the target note's parameters. A vacated pad's controls return to their defaults.
+
+- `DrumRackDevice::movePad(from, to)` writes both pads in one `writing` batch, then calls `syncPads`. Both pads' samples are read from disk again, because `syncPads` caches by note, not by sound.
+- `Session::moveDrumPad` is one undo step, named "Move Kick to D#2" or "Swap Kick and Snare", and selects the target pad. It refuses an empty source and a note outside 0-127. A pad dropped on itself succeeds and changes nothing.
+- The gesture on the face is described in [Device rack and device editors](device-rack.md).
 
 ## Decisions
 
@@ -78,6 +87,7 @@ Drops: on a lane, a kit goes to `addDrumKit` and a drum preset to `addDrumSound`
 - **A pad on every note** (2026-10-07). The user chose 128 pads, as in Live, over sixteen pads that could be moved to other notes. A pad is now its note in every file and call, and the face pages through banks. The price is 768 controls. Until then the rack had 16 pads, matching the note editor's 16 rows from C2.
 - **Kits are their own format, not `.rnd`.** A `.rnd` holds parameter values only ([Device presets (.rnd)](device-presets.md)), and a kit's samples, synth models, names, choke groups and playback are not parameters. So the rack's name-bar menu lists kits instead of `.rnd` presets.
 - **A sample's playback is content, not controls**, so it is not automatable ([Drum Rack sample editor](drum-rack-sample-editor.md)).
+- **Moving a pad takes the sound, not the music** (2026-10-07). Clip notes and automation lanes stay on their notes, as they do when a pad is moved in Live. A moved sound is therefore played by the target note's clips and shaped by that note's lanes. Lanes store `note * 6 + control` and are named by note (`C2 Decay`), which keeps this readable. Moving the lanes with the sound was considered and not done.
 
 ## Tests
 
@@ -85,10 +95,11 @@ Drops: on a lane, a kit goes to `addDrumKit` and a drum preset to `addDrumSound`
   - measures what the rack plays by routes that cannot agree with it by construction ([Measure sound, don't read the DSP](measure-sound-dont-read-dsp.md)): pitch by zero crossings, decay, tone, velocity, level, pan, choke, mute and solo, all eight models finite and dying away, the kick at 52 Hz. `checkEveryNote` and `checkPlayback` render constant-level files, so a gain reads straight off the samples;
   - `checkSlicing` cuts a synthetic beat: a quiet tone, four loud hits and one soft one;
   - covers the sample hand-off, pictures against live playback, file round trips and refusals (playback attributes included), the factory content and `drumTypeOf`;
-  - `checkSampleEditorThroughSession` drives undo steps, the spread, banks, the note editor's rows, the parameter range reads against the full list, and the timing log line.
+  - `checkSampleEditorThroughSession` drives undo steps, the spread, banks, the note editor's rows, the parameter range reads against the full list, and the timing log line;
+  - `checkMovingPads` covers a move carrying everything, its undo, a swap, a move to note 127, the refusals and a self-drop.
 - `--self-test` logs how long making a rack takes and how long the 808 Kit's eight samples take to read onto their pads (`setKit`). It saves a kit and a drum preset under a temporary Drums root, not `userDrums()`, and finds them with `ContentLibrary::drumKitsIn` and `drumPresetsIn` (`user = true`).
 - `--device-test` primes a blank rack (`prime` in `DeviceConformance.cpp`) on the notes its chord strikes: synths on 48, 53 and 58, the 808 kick sample on 60. A blank rack is silent and would fail every check that listens for a note.
-- `runDrumRackFaceTest` (`tests/Pattern/DeviceRackTest.cpp`) covers the face: the map (click, wheel, drag), the key flash, the knobs following selection, mute with an undo, modes, a marker drag and a knob drag (one undo each), the spread button, and drops of samples, presets and kits. It writes `RHINO_DRUMS_SNAPSHOT` and logs the face's cost ([Writing Rhino tests](writing-rhino-tests.md)).
+- `runDrumRackFaceTest` (`tests/Pattern/DeviceRackTest.cpp`) covers the face: the map (click, wheel, drag), the key flash, the knobs following selection, mute with an undo, modes, a marker drag and a knob drag (one undo each), the spread button, drops of samples, presets and kits, and pad drags: onto an empty pad (the target lit mid-drag), onto a filled pad, onto the map's top-left note (124), and a 3 px wobble that moves nothing. It writes `RHINO_DRUMS_SNAPSHOT` and logs the face's cost ([Writing Rhino tests](writing-rhino-tests.md)).
 
 ## Related
 

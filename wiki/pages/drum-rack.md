@@ -80,6 +80,14 @@ Since commit `6af25c2` (2026-10-07), a filled pad dragged onto an empty note mov
 - `Session::moveDrumPad` is one undo step, named "Move Kick to D#2" or "Swap Kick and Snare", and selects the target pad. It refuses an empty source and a note outside 0-127. A pad dropped on itself succeeds and changes nothing.
 - The gesture on the face is described in [Device rack and device editors](device-rack.md).
 
+## Auto Select
+
+Since commit `60442e5` (2026-10-07), a pad played becomes the selected pad, so the face's knobs and sample side follow what is playing. The user asked for it; it is Live's Auto Select (Live 12 manual §24.4.1, p. 476, and the chain list, p. 478; where the manual is: [Development environment and reference material](development-environment.md)).
+
+- **The setting** is view state on the device, like `selPad` and `firstNote`: `DrumRackDevice::autoSelect()` and `setAutoSelect(bool)`, property `autoSelect`, default on, written without undo (`DrumRackDeviceEditing.cpp`). The face's AUTO switch, under the map, toggles it ([Device rack and device editors](device-rack.md)).
+- **The face selects, not the device or the session.** In `tickDrums` (24 Hz) the lowest note whose `notesReceived` count moved since the last frame, on a pad that holds a sound (`filledPads`), becomes the selected pad, then `readDrumParameters`, `styleDrumControls` and partial repaints. An empty note still flashes on the map and selects nothing. The timer idles while the rack is hidden, and so does Auto Select.
+- **Never under the hand.** Nothing is selected while a mouse button is down on the panel or any of its knobs (`isMouseButtonDown(true)`), so a knob being turned never changes pads beneath it.
+
 ## Decisions
 
 - **Blank by default.** Kits, drum presets and dropped samples fill a rack. Only a drum pattern brings a kit, because it needs one to make a sound.
@@ -88,6 +96,7 @@ Since commit `6af25c2` (2026-10-07), a filled pad dragged onto an empty note mov
 - **Kits are their own format, not `.rnd`.** A `.rnd` holds parameter values only ([Device presets (.rnd)](device-presets.md)), and a kit's samples, synth models, names, choke groups and playback are not parameters. So the rack's name-bar menu lists kits instead of `.rnd` presets.
 - **A sample's playback is content, not controls**, so it is not automatable ([Drum Rack sample editor](drum-rack-sample-editor.md)).
 - **Moving a pad takes the sound, not the music** (2026-10-07). Clip notes and automation lanes stay on their notes, as they do when a pad is moved in Live. A moved sound is therefore played by the target note's clips and shaped by that note's lanes. Lanes store `note * 6 + control` and are named by note (`C2 Decay`), which keeps this readable. Moving the lanes with the sound was considered and not done.
+- **Auto Select follows clips as well as live input** (2026-10-07), as Live's does, so a playing clip keeps moving the selection; switch it off to keep one pad in the editor while a clip plays. It never moves the bank shown: a pad selected outside the sixteen is lit only on the map.
 
 ## Tests
 
@@ -99,7 +108,7 @@ Since commit `6af25c2` (2026-10-07), a filled pad dragged onto an empty note mov
   - `checkMovingPads` covers a move carrying everything, its undo, a swap, a move to note 127, the refusals and a self-drop.
 - `--self-test` logs how long making a rack takes and how long the 808 Kit's eight samples take to read onto their pads (`setKit`). It saves a kit and a drum preset under a temporary Drums root, not `userDrums()`, and finds them with `ContentLibrary::drumKitsIn` and `drumPresetsIn` (`user = true`).
 - `--device-test` primes a blank rack (`prime` in `DeviceConformance.cpp`) on the notes its chord strikes: synths on 48, 53 and 58, the 808 kick sample on 60. A blank rack is silent and would fail every check that listens for a note.
-- `runDrumRackFaceTest` (`tests/Pattern/DeviceRackTest.cpp`) covers the face: the map (click, wheel, drag), the key flash, the knobs following selection, mute with an undo, modes, a marker drag and a knob drag (one undo each), the spread button, drops of samples, presets and kits, and pad drags: onto an empty pad (the target lit mid-drag), onto a filled pad, onto the map's top-left note (124), and a 3 px wobble that moves nothing. It writes `RHINO_DRUMS_SNAPSHOT` and logs the face's cost ([Writing Rhino tests](writing-rhino-tests.md)).
+- `runDrumRackFaceTest` (`tests/Pattern/DeviceRackTest.cpp`) covers the face: the map (click, wheel, drag), the key flash, the knobs following selection, mute with an undo, modes, a marker drag and a knob drag (one undo each), the spread button, drops of samples, presets and kits, and pad drags: onto an empty pad (the target lit mid-drag), onto a filled pad, onto the map's top-left note (124), and a 3 px wobble that moves nothing. Auto Select: a nudged `drumNotesSeen` on a filled pad selects it and the knobs follow, the earlier nudge on empty C1 selected nothing, and switched off nothing follows. With `RHINO_NATIVE_INPUT_TEST=1` it also clicks Loop and a pad's M through a desktop peer and requires each to toggle once ([A JUCE component listening to itself hears its own clicks twice](juce-self-listener-hears-clicks-twice.md)). It writes `RHINO_DRUMS_SNAPSHOT` and logs the face's cost ([Writing Rhino tests](writing-rhino-tests.md)).
 
 ## Related
 

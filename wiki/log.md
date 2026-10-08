@@ -272,3 +272,12 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/drum-rack.md (Moving a pad: what travels with it, movePad's single batch and both samples re-read, moveDrumPad's undo names, selection and refusals; decision that clip notes and lanes stay on their notes, moving lanes rejected; six face units; checkMovingPads and the face test's drags)
 - updated: pages/device-rack.md (sixth face unit DeviceEditorPanelDrumGestures.cpp; the pad drag: 4 px slack, drumNoteAt, lit pad or map cell, ghost beside the pointer, status reports)
 - updated: pages/keeping-files-small.md (the face's six units; pointer handling split out at 694 lines)
+
+## [2026-10-07] update | A device face hears each of its clicks once; Drum Rack Auto Select
+- source: commits a033e1a, 60442e5
+- created: pages/juce-self-listener-hears-clicks-twice.md (addMouseListener(this, true) delivered every event on DeviceEditorPanel twice: face toggles flipped back off, the wheel moved double, a double-click ran twice; ChildMouse passes on only the children's events; direct handler calls cannot see it; the RHINO_NATIVE_INPUT_TEST peer check)
+- updated: pages/drum-rack.md (Auto Select: autoSelect view state, default on, no undo; tickDrums selects the lowest filled pad that arrived, never under a held button, idle while hidden; decision that it follows clips and leaves the bank; tests)
+- updated: pages/writing-rhino-tests.md (rule 9: a direct handler call skips JUCE's dispatch; real clicks through ComponentPeer::handleMouseEvent off-screen, gated by RHINO_NATIVE_INPUT_TEST=1; Auto Select nudges drumNotesSeen)
+- updated: pages/device-rack.md (ChildMouse and the self-listener rule in Gestures; the AUTO switch and Auto Select in the drum face bullet; autoSelect as view state; the gated real-click test)
+- updated: pages/headless-ui-snapshots.md (checks that need a desktop peer stay off-screen at -10000,-10000, run only on request)
+- updated: index.md (the new gotcha)

@@ -64,7 +64,15 @@ that session's `releaseAudioDevice()` before the block ends (`ClipEdits.inc`, `G
 8. **Ask a face where its parts are.** `runDrumRackFaceTest` finds pads, map cells, markers and knobs through the
    panel's own `drumPadAt` and `drumTooltip` rather than repeating its layout arithmetic, so a layout change cannot
    leave the test clicking stale coordinates. Live MIDI cannot reach a device in the Pattern runner, so the key-flash
-   check nudges the panel's own counter (`drumNotesSeen`) instead of sending a note.
+   and Auto Select checks nudge the panel's own counter (`drumNotesSeen`) instead of sending a note.
+9. **A direct handler call skips JUCE's dispatch.** The face tests call `panel->mouseDown` and `mouseWheelMove`
+   themselves, so they cannot see a bug in how an event reaches the handler: every face heard each of its own clicks
+   twice, and every test passed ([A JUCE component listening to itself hears its own clicks twice](juce-self-listener-hears-clicks-twice.md)).
+   For a real click, put the component on the desktop off-screen at (-10000, -10000) and send a press and a release
+   through `ComponentPeer::handleMouseEvent`, as `runDrumRackFaceTest` does. A desktop peer is needed, so that check
+   runs only with `RHINO_NATIVE_INPUT_TEST=1`, as the playhead's Direct2D check in `Rendering.inc` runs only with
+   `RHINO_NATIVE_RENDER_TEST=1` ([Playhead rendering](playhead.md)); a plain `ctest` skips both. Set it in the shell
+   that runs `ctest --test-dir native/build -C Release -R native_pattern_workflow`.
 
 ## Timing, not checking
 
@@ -96,3 +104,4 @@ unused colour, so pixel comparisons repeat.
 - [Seeing the UI without taking the screen](headless-ui-snapshots.md)
 - [What a change costs the interface](ui-cost-of-a-change.md)
 - [JUCE's rasteriser is not clip-invariant](juce-rasteriser-not-clip-invariant.md)
+- [A JUCE component listening to itself hears its own clicks twice](juce-self-listener-hears-clicks-twice.md)

@@ -31,6 +31,11 @@ A `juce::TreeView` cannot be seen this way opened: it lays out its rows asynchro
 folder with no children, even after `setOpen`, `resized()` or a rebuild at a new width. Test the browser's rows and drag
 payloads instead ([Browser and library preview](browser.md)).
 
+A snapshot, like a test calling a panel's handlers, never passes through JUCE's event dispatch. A check that needs a
+real desktop peer stays off the screen instead: it puts the component on the desktop at (-10000, -10000) and runs
+only on request, `RHINO_NATIVE_INPUT_TEST=1` for real clicks on the Drum Rack face, `RHINO_NATIVE_RENDER_TEST=1` for
+the playhead's Direct2D handoff ([Writing Rhino tests](writing-rhino-tests.md)).
+
 ## The whole Rhino shell
 
 `ControlWindow` is defined inside `native/src/Main.cpp`, so no test can reach it. Instead, the startup test builds the

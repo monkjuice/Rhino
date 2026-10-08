@@ -27,10 +27,17 @@ bool DeviceEditorPanel::handleDrumMouseDown(const juce::MouseEvent& event)
             }
     if (event.eventComponent != this)
         return handleDrumSampleMouseDown(event);
+    const auto position = event.getPosition();
+    // The name bar's window button. The rest of the name bar is the panel's:
+    // it drags the device along the chain.
+    if (openInWindow != nullptr && windowButtonIn(getLocalBounds()).contains(position))
+    {
+        openInWindow();
+        return true;
+    }
     if (event.y < headerHeight)
         return false;
 
-    const auto position = event.getPosition();
     const auto layout = layoutFor(getLocalBounds());
     const auto chosen = device->selectedPad();
     for (int i = 0; i < controlCells; ++i)
@@ -154,9 +161,7 @@ void DeviceEditorPanel::handleDrumDrag(const juce::MouseEvent& event)
     }
     if (drumDrag == DrumDrag::map)
     {
-        const auto layout = layoutFor(getLocalBounds());
-        const auto row = (layout.map.getBottom() - 1 - event.y) / mapCellHeight;
-        showDrumBank((juce::jlimit(0, mapRows - 1, row) - 1) * padColumns);
+        showDrumBank((mapRowAt(layoutFor(getLocalBounds()), event.y) - 1) * padColumns);
         return;
     }
     if (drumDrag != DrumDrag::start && drumDrag != DrumDrag::end)
@@ -236,6 +241,9 @@ juce::String DeviceEditorPanel::drumTooltip(juce::Point<int> position) const
         return {};
     const auto layout = layoutFor(getLocalBounds());
     const auto first = device->firstShownNote();
+    if (openInWindow != nullptr && windowButtonIn(getLocalBounds()).contains(position))
+        return "Open the Drum Rack in a window of its own, the pads above and the sample editor below the whole "
+               "width, to play and edit it bigger";
     if (layout.autoSelect.contains(position))
         return "Auto Select: a pad that holds a sound is selected as its note arrives, from a keyboard, a controller "
                "or a clip. Switch it off to keep one pad selected while others play.";

@@ -124,6 +124,19 @@ void DrumRackDevice::collectSamples()
 
 // ---- pictures ---------------------------------------------------------------------
 
+DrumRackDevice::CachedPicture& DrumRackDevice::keptPicture(KeptPictures& kept, int note, int columns)
+{
+    for (auto& each : kept)
+        if (each.note == note && each.columns == columns)
+        {
+            each.asked = ++picturesAsked;
+            return each;
+        }
+    auto& older = kept[0].asked <= kept[1].asked ? kept[0] : kept[1];
+    older.asked = ++picturesAsked;
+    return older;
+}
+
 const DrumRackDevice::Picture& DrumRackDevice::padPicture(int note, int columns)
 {
     static const Picture none;
@@ -138,13 +151,14 @@ const DrumRackDevice::Picture& DrumRackDevice::padPicture(int note, int columns)
                    + juce::String(playback.fadeOut) + "|" + juce::String(playback.attack) + "|"
                    + juce::String(playback.sustain) + "|" + juce::String(playback.release) + "|"
                    + (playback.loop ? "loop" : "");
-    if (pictureNote == note && picture.columns == columns && picture.sound == key && picture.settings == controls)
-        return picture.picture;
-    pictureNote = note;
-    picture.sound = key;
-    picture.settings = controls;
-    picture.columns = columns;
-    auto& drawn = picture.picture;
+    auto& kept = keptPicture(pictures, note, columns);
+    if (kept.note == note && kept.columns == columns && kept.sound == key && kept.settings == controls)
+        return kept.picture;
+    kept.note = note;
+    kept.sound = key;
+    kept.settings = controls;
+    kept.columns = columns;
+    auto& drawn = kept.picture;
     drawn = {};
 
     const auto most = static_cast<int>(pictureRate * pictureSeconds);
@@ -168,12 +182,13 @@ const DrumRackDevice::Picture& DrumRackDevice::samplePicture(int note, int colum
     // The file is the same until the pad takes another, so its picture is
     // kept by what the pad was given and how wide it is drawn.
     const auto& sound = loaded[static_cast<size_t>(note)];
-    if (samplePictureNote == note && sampleWave.columns == columns && sampleWave.sound == sound)
-        return sampleWave.picture;
-    samplePictureNote = note;
-    sampleWave.sound = sound;
-    sampleWave.columns = columns;
-    auto& drawn = sampleWave.picture;
+    auto& kept = keptPicture(sampleWaves, note, columns);
+    if (kept.note == note && kept.columns == columns && kept.sound == sound)
+        return kept.picture;
+    kept.note = note;
+    kept.sound = sound;
+    kept.columns = columns;
+    auto& drawn = kept.picture;
     drawn = {};
     drawn.seconds = sample->seconds();
     drawInto(drawn, columns, sample->length(), [sample] (int i) { return sample->left[static_cast<size_t>(i)]; },

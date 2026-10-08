@@ -29,6 +29,8 @@ int runPatternTest()
         runPatternDeviceRackTest();
         scenario("drum rack face");
         runDrumRackFaceTest();
+        scenario("drum rack window");
+        runDrumRackWindowTest();
         scenario("no track is first");
        #include "scenarios/NoFirstTrack.inc"
         Session session;

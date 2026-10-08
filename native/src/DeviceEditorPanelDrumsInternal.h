@@ -71,28 +71,41 @@ juce::String padTitle(int note);
 
 struct Layout
 {
+    // The pads above the selected pad's side rather than beside it, both
+    // grown to fill the panel: the Drum Rack's own window.
+    bool stacked = false;
+    // A note's cell on the map is the map's size over its rows and columns.
     juce::Rectangle<int> map;
     // Auto Select's switch, under the map.
     juce::Rectangle<int> autoSelect;
     // The sixteen shown pads, the lowest note's first.
     std::array<juce::Rectangle<int>, padsShown> pad, mute, play, solo;
     juce::Rectangle<int> editor, nameArea, soundChooser, chokeChooser, picture, loop;
+    // The rule between the pads and the selected pad's side.
+    juce::Rectangle<int> separator;
     // Classic, 1-Shot and Slice, top to bottom, as Live stacks them.
     std::array<juce::Rectangle<int>, 3> mode;
     juce::Rectangle<int> divider;
     std::array<juce::Rectangle<int>, controlCells + sampleCells> cell;
 };
+// Side by side at the rack's height; stacked from
+// DeviceEditorPanel::drumStackedHeight up.
 Layout layoutFor(juce::Rectangle<int> panel);
 juce::Rectangle<int> knobIn(juce::Rectangle<int> cell);
 juce::Rectangle<int> captionIn(juce::Rectangle<int> cell);
 juce::Rectangle<int> valueIn(juce::Rectangle<int> cell);
 juce::Rectangle<int> automationIn(juce::Rectangle<int> cell);
-// A note's cell on the map.
+// A note's cell on the map, and the row of the map at a height on the face,
+// the bottom row 0.
 juce::Rectangle<float> mapCell(const Layout&, int note);
+int mapRowAt(const Layout&, int y);
 // The note the pad at a place on the map belongs to, or -1.
 int mapNoteAt(const Layout&, juce::Point<int>);
 // The mode a stacked button stands for.
 DrumRackEngine::PlayMode modeOfButton(int button);
+// The button at the name bar's right end that opens the rack in a window of
+// its own, on a face the rack shows.
+juce::Rectangle<int> windowButtonIn(juce::Rectangle<int> panel);
 
 DrumRackDevice* drumsIn(Session&, int track, int slot);
 

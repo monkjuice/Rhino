@@ -51,6 +51,17 @@ public:
     bool showsDrumRack() const { return face == Face::DrumRack; }
     int drumPadAt(juce::Point<int>) const;
     void showDrumDropTarget(int pad);
+    // Sounds dropped on the pads: on `pad`, or on the selected pad for -1,
+    // and several files on pads one after another from there, stopping at
+    // the last note. Each file is an undo step of its own.
+    void dropDrumSounds(int pad, const std::vector<juce::File>& sounds, bool presets);
+    // A Drum Rack face at least this tall stands its pads above the selected
+    // pad's side rather than beside it, and grows both to fill the panel. The
+    // rack's faces never are; the Drum Rack's own window always is.
+    static constexpr int drumStackedHeight = 400;
+    // Set by the rack: a Drum Rack face shows a button in its name bar that
+    // opens it in a window of its own (DrumRackWindow).
+    std::function<void()> openInWindow;
     int devicePluginIndex() const { return pluginSlot; }
     void paint(juce::Graphics&) override;
     void resized() override;
@@ -67,6 +78,7 @@ public:
 private:
     friend void runPatternDeviceRackTest();
     friend void runDrumRackFaceTest();
+    friend void runDrumRackWindowTest();
     enum class Face { Generic, Generated, Arp, AutoTune, Eq, Vocoder, DrumRack };
     void ensureControls();
     void styleControls();

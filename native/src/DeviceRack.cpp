@@ -2,6 +2,7 @@
 #include "Theme.h"
 #include "BrowserIds.h"
 #include "DrumKitFile.h"
+#include "DrumRackWindow.h"
 #include "UiVisibility.h"
 #include "instruments/DrumRackDevice.h"
 #include <cmath>
@@ -22,11 +23,6 @@ const DeviceDescriptor* deviceFromBrowserDrop(const juce::String& description)
         if (description.startsWith(prefix))
             return DeviceCatalog::byId(browserDropId(description));
     return nullptr;
-}
-
-bool isSoundFile(const juce::File& file)
-{
-    return file.hasFileExtension("wav;aif;aiff;flac;ogg;mp3");
 }
 
 void styleAutomationButton(juce::TextButton& button, const Session::DeviceParameter& parameter)
@@ -391,6 +387,7 @@ DeviceRack::~DeviceRack()
 void DeviceRack::editWillChange()
 {
     floatingWindow.reset();
+    drumWindow.reset();
 }
 
 void DeviceRack::editDidChange() {}
@@ -450,6 +447,13 @@ void DeviceRack::openSelectedDevice()
     if (slots.empty())
         return;
     selectedDevice = juce::jlimit(0, static_cast<int>(slots.size()) - 1, selectedDevice);
+    // A Drum Rack's own editor is its face, in a window of its own: the
+    // fallback's six knobs reach only the selected pad.
+    if (slots[static_cast<size_t>(selectedDevice)].deviceId == "Drums")
+    {
+        openDrumWindow(selectedPluginIndex());
+        return;
+    }
     // Destroy any active AudioProcessorEditor before asking the wrapped
     // processor for its editor again. JUCE permits one active editor per
     // processor and createEditorIfNeeded may otherwise return the old pointer.
@@ -466,6 +470,43 @@ void DeviceRack::openSelectedDevice()
         });
     };
     if (status) status("Opened " + slots[static_cast<size_t>(selectedDevice)].name + " device panel");
+}
+
+void DeviceRack::openDrumWindow(int pluginIndex)
+{
+    const auto* plugin = session.devicePlugin(selectedTrack, pluginIndex);
+    if (plugin == nullptr)
+        return;
+    if (drumWindow == nullptr || drumWindow->view().device() != plugin->itemID || !drumWindow->isVisible())
+    {
+        drumWindow = std::make_unique<DrumRackWindow>(session, plugin->itemID);
+        auto& view = drumWindow->view();
+        view.status = [this] (const juce::String& message) { if (status) status(message); };
+        view.presetsChanged = [this] { if (presetsChanged) presetsChanged(); };
+        drumWindow->shortcut = [this] (const juce::KeyPress& key) { return shortcut != nullptr && shortcut(key); };
+        // Destroyed after the click that closed it has finished with it, and
+        // only if it is still the window open by then.
+        drumWindow->onClose = [this, window = drumWindow.get()]
+        {
+            juce::MessageManager::callAsync([rack = juce::Component::SafePointer<DeviceRack>(this), window]
+            {
+                if (rack != nullptr && rack->drumWindow.get() == window)
+                    rack->drumWindow.reset();
+            });
+        };
+        if (listenForKeys) listenForKeys(*drumWindow);
+        // Opened from a rack on screen. One nobody can see, as in a test,
+        // makes the window without showing it.
+        if (isShowing())
+            drumWindow->show(*this);
+    }
+    else
+    {
+        if (drumWindow->isMinimised())
+            drumWindow->setMinimised(false);
+        drumWindow->toFront(true);
+    }
+    if (status) status("Opened " + drumWindow->view().title() + " in a window of its own");
 }
 
 bool DeviceRack::isInterestedInDragSource(const juce::DragAndDropTarget::SourceDetails& details)
@@ -541,45 +582,10 @@ void DeviceRack::clearDrumDropTargets()
         panel->showDrumDropTarget(-1);
 }
 
-void DeviceRack::dropOnDrumPads(DeviceEditorPanel& panel, int pad, const std::vector<juce::File>& sounds, bool presets)
-{
-    const auto slot = panel.devicePluginIndex();
-    if (pad < 0)
-        if (const auto* drums = dynamic_cast<DrumRackDevice*>(session.devicePlugin(selectedTrack, slot)))
-            pad = drums->selectedPad();
-    auto loaded = 0;
-    juce::String failure;
-    // Several files fill the pads one after another from the one dropped on;
-    // the rack stops at its last pad.
-    for (const auto& sound : sounds)
-    {
-        const auto target = pad + loaded;
-        if (!juce::isPositiveAndBelow(target, DrumRackDevice::padCount))
-            break;
-        const auto result = presets ? session.loadDrumPadPreset(selectedTrack, slot, target, sound)
-                                    : session.loadDrumPadSample(selectedTrack, slot, target, sound);
-        if (result.failed())
-        {
-            failure = result.getErrorMessage();
-            break;
-        }
-        ++loaded;
-    }
-    if (status == nullptr)
-        return;
-    if (failure.isNotEmpty())
-        status(failure);
-    else if (loaded == 1)
-        status("Loaded " + sounds.front().getFileNameWithoutExtension() + " on " + DrumRackDevice::noteName(pad));
-    else if (loaded > 1)
-        status("Loaded " + juce::String(loaded) + " sounds on " + DrumRackDevice::noteName(pad) + " to "
-               + DrumRackDevice::noteName(pad + loaded - 1));
-}
-
 bool DeviceRack::isInterestedInFileDrag(const juce::StringArray& files)
 {
     return chainHasDrumRack()
-        && std::any_of(files.begin(), files.end(), [] (const juce::String& path) { return isSoundFile(juce::File(path)); });
+        && std::any_of(files.begin(), files.end(), [] (const juce::String& path) { return isDroppedSoundFile(juce::File(path)); });
 }
 
 void DeviceRack::fileDragEnter(const juce::StringArray& files, int x, int y)
@@ -602,7 +608,7 @@ void DeviceRack::filesDropped(const juce::StringArray& files, int x, int y)
     clearDrumDropTargets();
     std::vector<juce::File> sounds;
     for (const auto& path : files)
-        if (const juce::File file(path); isSoundFile(file))
+        if (const juce::File file(path); isDroppedSoundFile(file))
             sounds.push_back(file);
     auto pad = -1;
     auto* panel = drumPanelAt({x, y}, pad);
@@ -611,7 +617,7 @@ void DeviceRack::filesDropped(const juce::StringArray& files, int x, int y)
         if (status) status("Drop samples on a pad of the Drum Rack.");
         return;
     }
-    dropOnDrumPads(*panel, pad, sounds, false);
+    panel->dropDrumSounds(pad, sounds, false);
 }
 
 int DeviceRack::dropGapFor(juce::Point<int> rackPosition) const
@@ -685,7 +691,7 @@ void DeviceRack::itemDropped(const juce::DragAndDropTarget::SourceDetails& detai
         auto pad = -1;
         if (auto* panel = drumPanelAt(details.localPosition, pad))
         {
-            dropOnDrumPads(*panel, pad, {sound}, presets);
+            panel->dropDrumSounds(pad, {sound}, presets);
             return;
         }
         const auto result = presets ? session.addDrumSound(sound, selectedTrack)
@@ -819,6 +825,8 @@ void DeviceRack::rebuildDevicePanels()
         panel->status = [this](const juce::String& message) { if (status) status(message); };
         panel->selected = [this, i] { selectDevice(i); };
         panel->presetsChanged = [this] { if (presetsChanged) presetsChanged(); };
+        // Only a Drum Rack's face offers it.
+        panel->openInWindow = [this, panel] { openDrumWindow(panel->devicePluginIndex()); };
         panel->setTarget(selectedTrack, slots[static_cast<size_t>(i)], i == selectedDevice);
         chainContent.addAndMakeVisible(panel);
     }
@@ -837,6 +845,15 @@ void DeviceRack::changeListenerCallback(juce::ChangeBroadcaster* source)
     // device would keep it alive.
     if (floatingWindow != nullptr && !floatingWindow->showsDeviceIn(*session.edit))
         floatingWindow.reset();
+    // The Drum Rack's window follows its rack wherever it has gone, whether
+    // or not the rack itself is showing, and goes when the rack does.
+    if (drumWindow != nullptr)
+    {
+        if (source == &session.deviceParameterValues)
+            drumWindow->view().refreshTouched();
+        else if (!drumWindow->view().follow())
+            drumWindow.reset();
+    }
     if (isHiddenInShell(*this))
     {
         staleWhileHidden = true;

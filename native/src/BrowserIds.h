@@ -103,6 +103,13 @@ inline juce::File browserDropDrumPresetFile(const juce::String& description)
     return path.isEmpty() ? juce::File() : juce::File(path);
 }
 
+// A sound file dragged in from the desktop, which a Drum Rack's pads take,
+// in the rack and in the Drum Rack's own window.
+inline bool isDroppedSoundFile(const juce::File& file)
+{
+    return file.hasFileExtension("wav;aif;aiff;flac;ogg;mp3");
+}
+
 inline std::optional<Session::BuiltInSample> builtInSampleFromId(const juce::String& id)
 {
     if (id == "Whistle") return Session::BuiltInSample::Whistle;

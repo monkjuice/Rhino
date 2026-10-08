@@ -40,10 +40,31 @@ constexpr float flashFade = 0.2f;
 constexpr float keyFade = 0.12f;
 constexpr float keyNameFade = 0.03f;
 
-// Where the name bar names the last key to arrive.
-juce::Rectangle<int> keyNameArea(juce::Rectangle<int> panel)
+// Where the name bar names the last key to arrive: at its right end, or left
+// of the window button where the face has one.
+juce::Rectangle<int> keyNameArea(juce::Rectangle<int> panel, bool besideButton)
 {
-    return {panel.getRight() - 78, 4, 70, DeviceEditorPanel::headerHeight - 8};
+    return {panel.getRight() - 78 - (besideButton ? 24 : 0), 4, 70, DeviceEditorPanel::headerHeight - 8};
+}
+
+// Two corners pointing apart: open bigger, somewhere else.
+void drawWindowGlyph(juce::Graphics& g, juce::Rectangle<float> area)
+{
+    const auto box = area.withSizeKeepingCentre(10.0f, 10.0f);
+    const auto left = box.getX(), top = box.getY(), right = box.getRight(), bottom = box.getBottom();
+    juce::Path glyph;
+    glyph.startNewSubPath(right - 4.0f, top);
+    glyph.lineTo(right, top);
+    glyph.lineTo(right, top + 4.0f);
+    glyph.startNewSubPath(right, top);
+    glyph.lineTo(right - 4.5f, top + 4.5f);
+    glyph.startNewSubPath(left + 4.0f, bottom);
+    glyph.lineTo(left, bottom);
+    glyph.lineTo(left, bottom - 4.0f);
+    glyph.startNewSubPath(left, bottom);
+    glyph.lineTo(left + 4.5f, bottom - 4.5f);
+    g.setColour(palette::textDim);
+    g.strokePath(glyph, juce::PathStrokeType(1.3f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 }
 }
 }
@@ -82,6 +103,46 @@ void DeviceEditorPanel::showDrumDropTarget(int pad)
     }
     drumDropTarget = pad;
     repaint(layout.picture.expanded(1));
+}
+
+void DeviceEditorPanel::dropDrumSounds(int pad, const std::vector<juce::File>& sounds, bool presets)
+{
+    const auto* device = drumsIn(session, track, pluginSlot);
+    if (device == nullptr)
+        return;
+    if (pad < 0)
+        pad = device->selectedPad();
+    // Each load is announced as it lands, so what is needed afterwards is
+    // copied rather than read from the panel.
+    const auto onTrack = track, slot = pluginSlot;
+    const auto report = status;
+    auto loaded = 0;
+    juce::String failure;
+    // Several files fill the pads one after another from the one dropped on;
+    // the rack stops at its last pad.
+    for (const auto& sound : sounds)
+    {
+        const auto target = pad + loaded;
+        if (!juce::isPositiveAndBelow(target, DrumRackDevice::padCount))
+            break;
+        const auto result = presets ? session.loadDrumPadPreset(onTrack, slot, target, sound)
+                                    : session.loadDrumPadSample(onTrack, slot, target, sound);
+        if (result.failed())
+        {
+            failure = result.getErrorMessage();
+            break;
+        }
+        ++loaded;
+    }
+    if (report == nullptr)
+        return;
+    if (failure.isNotEmpty())
+        report(failure);
+    else if (loaded == 1)
+        report("Loaded " + sounds.front().getFileNameWithoutExtension() + " on " + DrumRackDevice::noteName(pad));
+    else if (loaded > 1)
+        report("Loaded " + juce::String(loaded) + " sounds on " + DrumRackDevice::noteName(pad) + " to "
+               + DrumRackDevice::noteName(pad + loaded - 1));
 }
 
 void DeviceEditorPanel::showDrumBank(int firstNote)
@@ -270,10 +331,13 @@ void DeviceEditorPanel::paintDrums(juce::Graphics& g)
     const auto chosen = device->selectedPad();
     const auto first = device->firstShownNote();
 
-    // ---- the last key, in the name bar -------------------------------------------
-    if (drumLastKey >= 0 && g.clipRegionIntersects(keyNameArea(getLocalBounds())))
+    // ---- the name bar: the window button and the last key -------------------------
+    const auto windowButton = openInWindow != nullptr;
+    if (windowButton && g.clipRegionIntersects(windowButtonIn(getLocalBounds())))
+        drawWindowGlyph(g, windowButtonIn(getLocalBounds()).toFloat());
+    if (drumLastKey >= 0 && g.clipRegionIntersects(keyNameArea(getLocalBounds(), windowButton)))
     {
-        const auto area = keyNameArea(getLocalBounds());
+        const auto area = keyNameArea(getLocalBounds(), windowButton);
         const auto glow = std::max(0.3f, drumLastKeyGlow);
         g.setColour(keyInk.withAlpha(glow));
         g.fillEllipse(juce::Rectangle<float>(5.0f, 5.0f).withCentre({static_cast<float>(area.getX()) + 4.0f,
@@ -312,7 +376,8 @@ void DeviceEditorPanel::paintDrums(juce::Graphics& g)
         const auto top = mapCell(layout, first + padsShown - 1);
         const auto bottom = mapCell(layout, first);
         const auto frame = juce::Rectangle<float>(static_cast<float>(layout.map.getX()) - 1.5f, top.getY() - 1.5f,
-                                                  static_cast<float>(mapWidth) + 2.0f, bottom.getBottom() - top.getY() + 3.0f);
+                                                  static_cast<float>(layout.map.getWidth()) + 2.0f,
+                                                  bottom.getBottom() - top.getY() + 3.0f);
         g.setColour(palette::text.withAlpha(0.85f));
         g.drawRect(frame, 1.0f);
     }
@@ -349,20 +414,30 @@ void DeviceEditorPanel::paintDrums(juce::Graphics& g)
             g.drawRoundedRectangle(box.reduced(0.5f), 2.5f, note == chosen ? 1.5f : 1.0f);
         }
 
-        const juce::Rectangle<int> nameBox(cell.getX() + 4, cell.getY() + 3, cell.getWidth() - 8, 13);
+        // The window's pads are big enough for larger names, and for the
+        // note under a filled pad's name.
+        const auto nameSize = layout.stacked ? 10.5f : 8.5f;
+        const juce::Rectangle<int> nameBox(cell.getX() + 4, cell.getY() + 3, cell.getWidth() - 8, layout.stacked ? 16 : 13);
         if (filled)
         {
             const auto synth = view.sound->source == DrumRackEngine::Source::synth;
             g.setColour(view.unreadable ? missingInk : synth ? synthInk : sampleInk);
             g.fillEllipse(static_cast<float>(cell.getRight()) - 8.0f, static_cast<float>(cell.getY()) + 6.0f, 4.0f, 4.0f);
             g.setColour(view.unreadable ? palette::disabled : palette::text);
-            g.setFont(uiFontBold(8.5f));
+            g.setFont(uiFontBold(nameSize));
             drawLine(g, view.sound->displayName(), nameBox.withTrimmedRight(6), juce::Justification::centredLeft, true);
+            if (layout.stacked && layout.mute[i].getY() >= nameBox.getBottom() + 12)
+            {
+                g.setColour(palette::textDim);
+                g.setFont(uiFont(8.5f));
+                drawLine(g, DrumRackDevice::noteName(note), nameBox.translated(0, nameBox.getHeight()).withHeight(12),
+                         juce::Justification::centredLeft);
+            }
         }
         else
         {
             g.setColour(palette::disabled);
-            g.setFont(uiFont(8.5f));
+            g.setFont(uiFont(nameSize));
             drawLine(g, DrumRackDevice::noteName(note), nameBox, juce::Justification::centredLeft);
         }
         drawToggle(g, layout.mute[i], "M", muteInk, view.muted, filled);
@@ -399,6 +474,15 @@ void DeviceEditorPanel::tickDrums()
     if (device == nullptr)
         return;
     device->collectSamples();
+    // The other face on this rack, the rack's or its window's, may have picked
+    // another pad. This one catches up, so its knobs never stand for a pad
+    // other than the one they would turn.
+    if (DrumRackDevice::parameterIndex(device->selectedPad(), 0) != drumParametersFrom)
+    {
+        readDrumParameters();
+        styleDrumControls();
+        repaintDrums();
+    }
     const auto layout = layoutFor(getLocalBounds());
     const auto first = device->firstShownNote();
     auto keyArrived = false;
@@ -471,7 +555,7 @@ void DeviceEditorPanel::tickDrums()
     const auto glowBefore = drumLastKeyGlow;
     drumLastKeyGlow = keyArrived ? 1.0f : std::max(0.0f, drumLastKeyGlow - keyNameFade);
     if (drumLastKeyGlow != glowBefore || keyArrived)
-        repaint(keyNameArea(getLocalBounds()));
+        repaint(keyNameArea(getLocalBounds(), openInWindow != nullptr));
 
     // The selected pad's playhead, while a voice plays its sample.
     const auto playhead = device->padPlayhead(device->selectedPad());

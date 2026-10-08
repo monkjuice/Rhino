@@ -110,6 +110,7 @@ target_sources(RhinoNative PRIVATE
     src/DeviceEditorPanelDrumSample.cpp
     src/DeviceEditorPanelDrumSampleControls.cpp
     src/DeviceRack.cpp
+    src/DrumRackWindow.cpp
     src/Playhead.cpp
     src/CountInClick.cpp
     src/ComputerKeyboard.cpp
@@ -130,6 +131,7 @@ target_sources(RhinoNative PRIVATE
     src/tests/PresetTest.cpp
     src/tests/UiProfile.cpp
     src/tests/Pattern/DeviceRackTest.cpp
+    src/tests/Pattern/DrumRackWindowTest.cpp
     src/tests/Pattern/WorkflowTest.cpp
     src/tests/Arrangement/ClipGeometryTest.cpp
     src/tests/Arrangement/WorkflowTest.cpp)

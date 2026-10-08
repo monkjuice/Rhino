@@ -299,6 +299,10 @@ public:
         // whichever track the visible arrangement has selected.
         rack.status = files.status;
         rack.presetsChanged = [this] { browser.refreshPresets(); };
+        // The Drum Rack's window is another place the hand works, so Space,
+        // undo and the rest answer there, and the typing keyboard plays its pads.
+        rack.shortcut = [this](const juce::KeyPress& key) { return keyPressed(key); };
+        rack.listenForKeys = [this](juce::Component& window) { computerKeyboard.listenTo(window); };
         editorToggle.onClick = [this] { toggleClipEditor(); };
         rackToggle.onClick = [this] { toggleDeviceView(); };
         editorToggle.setButtonText("Clip");

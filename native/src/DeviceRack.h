@@ -6,6 +6,8 @@
 
 namespace rhino
 {
+class DrumRackWindow;
+
 class DeviceRack final : public juce::Component,
                          public juce::DragAndDropTarget,
                          public juce::FileDragAndDropTarget,
@@ -41,10 +43,16 @@ public:
     std::function<void(juce::String)> status;
     // A device's preset was saved from its panel.
     std::function<void()> presetsChanged;
+    // The Drum Rack's window hears what the main window hears: the shell's
+    // shortcuts, and the typing keyboard, which listens on the window it is
+    // handed. The shell wires both.
+    std::function<bool(const juce::KeyPress&)> shortcut;
+    std::function<void(juce::Component&)> listenForKeys;
 
 private:
     friend void runPatternDeviceRackTest();
     friend void runDrumRackFaceTest();
+    friend void runDrumRackWindowTest();
     friend int runUiProfile();
     class FloatingDeviceWindow;
     class DropMarker;
@@ -59,6 +67,10 @@ private:
     bool wasPlaying = false;
     void visibilityChanged() override;
     void openSelectedDevice();
+    // The Drum Rack in a slot of the selected track, in its own window. One
+    // is open at a time: the rack it shows comes to the front again, and
+    // another rack takes its place.
+    void openDrumWindow(int pluginIndex);
     void showAddMenu();
     void selectDevice(int device);
     int selectedPluginIndex() const;
@@ -76,10 +88,6 @@ private:
     // Lights the pad a sound would land on, and no other.
     void showDrumDropTarget(juce::Point<int> rackPosition);
     void clearDrumDropTargets();
-    // Sounds dropped on a Drum Rack panel: on the pad under the pointer, or
-    // on the rack's selected pad between pads, and several files on pads one
-    // after another from there.
-    void dropOnDrumPads(DeviceEditorPanel&, int pad, const std::vector<juce::File>& sounds, bool presets);
     void sync();
     void refreshTouchedDevice();
 
@@ -93,6 +101,7 @@ private:
     juce::OwnedArray<DeviceEditorPanel> devicePanels;
     std::unique_ptr<DropMarker> dropMarker;
     std::unique_ptr<FloatingDeviceWindow> floatingWindow;
+    std::unique_ptr<DrumRackWindow> drumWindow;
     // A change arrived while the shell had this pane switched off; caught up
     // when it is shown. See UiVisibility.h.
     bool staleWhileHidden = false;

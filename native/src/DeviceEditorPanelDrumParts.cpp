@@ -21,7 +21,66 @@ std::vector<SampleCell> sampleCellsFor(DrumRackEngine::PlayMode mode)
     return { start, end, { SampleCell::knob, SampleKnob::fadeIn }, { SampleCell::knob, SampleKnob::fadeOut } };
 }
 
-Layout layoutFor(juce::Rectangle<int> panel)
+namespace
+{
+// The sixteen pads from a grid's top left, the lowest note bottom left,
+// rising along a row and then up a row, each with M, play and S along its
+// bottom edge. `inset` is how far the buttons stand in from the pad's edges.
+void placePads(Layout& layout, juce::Point<int> topLeft, int width, int height, int gap,
+               int buttonWidth, int buttonHeight, int inset)
+{
+    for (int index = 0; index < padsShown; ++index)
+    {
+        const auto i = static_cast<size_t>(index);
+        const auto column = index % padColumns;
+        const auto row = padRows - 1 - index / padColumns;
+        const juce::Rectangle<int> cell(topLeft.x + column * (width + gap), topLeft.y + row * (height + gap),
+                                        width, height);
+        layout.pad[i] = cell;
+        const auto strip = cell.getBottom() - buttonHeight - inset + 1;
+        layout.mute[i] = {cell.getX() + inset, strip, buttonWidth, buttonHeight};
+        layout.play[i] = {cell.getX() + inset + 2 + buttonWidth, strip, buttonWidth, buttonHeight};
+        layout.solo[i] = {cell.getX() + inset + 4 + 2 * buttonWidth, strip, buttonWidth, buttonHeight};
+    }
+}
+
+// The selected pad's side, in whatever area it is given: its heading, the
+// modes beside the picture, and the row of knobs, `cellHeight` tall and
+// `cellWide` each, under both.
+void placeEditor(Layout& layout, juce::Rectangle<int> editor, int heading, int soundWidth, int chokeWidth,
+                 int modesWidth, int cellHeight, int cellWide, int gap)
+{
+    layout.editor = editor;
+    auto header = editor.removeFromTop(heading);
+    layout.chokeChooser = header.removeFromRight(chokeWidth);
+    header.removeFromRight(4);
+    layout.soundChooser = header.removeFromRight(soundWidth);
+    header.removeFromRight(6);
+    layout.nameArea = header;
+    editor.removeFromTop(gap);
+    auto cells = editor.removeFromBottom(cellHeight);
+    editor.removeFromBottom(gap);
+    auto top = editor;
+    const auto modes = top.removeFromLeft(modesWidth);
+    top.removeFromLeft(4);
+    layout.picture = top;
+    layout.loop = { top.getRight() - 40, top.getY() + 4, 36, 12 };
+    // Three buttons share the picture's height, but never grow past a
+    // button's size: a tall picture keeps them at its top.
+    const auto buttonHeight = std::min(26, (modes.getHeight() - 4) / 3);
+    for (int button = 0; button < 3; ++button)
+        layout.mode[static_cast<size_t>(button)] = { modes.getX(), modes.getY() + button * (buttonHeight + 2),
+                                                     modes.getWidth(), buttonHeight };
+    for (int index = 0; index < controlCells; ++index)
+        layout.cell[static_cast<size_t>(index)] = cells.removeFromLeft(cellWide);
+    layout.divider = cells.removeFromLeft(dividerWidth);
+    for (int index = 0; index < sampleCells; ++index)
+        layout.cell[static_cast<size_t>(controlCells + index)] = cells.removeFromLeft(cellWide);
+}
+
+// The rack's face: the map down the left, the pads beside it, and the
+// selected pad's side to their right.
+Layout besideLayout(juce::Rectangle<int> panel)
 {
     Layout layout;
     const auto area = panel.withTrimmedTop(DeviceEditorPanel::headerHeight + 1).reduced(4);
@@ -31,51 +90,59 @@ Layout layoutFor(juce::Rectangle<int> panel)
                           std::max(10, area.getBottom() - layout.map.getBottom() - 4) };
     const auto gridLeft = area.getX() + mapWidth + gapAfterMap;
     const auto gridTop = area.getY() + std::max(0, (area.getHeight() - gridHeight) / 2);
-    for (int index = 0; index < padsShown; ++index)
-    {
-        // The lowest note bottom left, rising along a row and then up a row.
-        const auto i = static_cast<size_t>(index);
-        const auto column = index % padColumns;
-        const auto row = padRows - 1 - index / padColumns;
-        const juce::Rectangle<int> cell(gridLeft + column * (padWidth + padGap), gridTop + row * (padHeight + padGap),
-                                        padWidth, padHeight);
-        layout.pad[i] = cell;
-        const auto strip = cell.getBottom() - padButtonHeight - 2;
-        layout.mute[i] = {cell.getX() + 3, strip, padButtonWidth, padButtonHeight};
-        layout.play[i] = {cell.getX() + 5 + padButtonWidth, strip, padButtonWidth, padButtonHeight};
-        layout.solo[i] = {cell.getX() + 7 + 2 * padButtonWidth, strip, padButtonWidth, padButtonHeight};
-    }
-
-    auto editor = area.withTrimmedLeft(gridLeft - area.getX() + gridWidth + gapAfterGrid);
-    layout.editor = editor;
-    auto header = editor.removeFromTop(headerRow);
-    layout.chokeChooser = header.removeFromRight(70);
-    header.removeFromRight(4);
-    layout.soundChooser = header.removeFromRight(106);
-    header.removeFromRight(6);
-    layout.nameArea = header;
-    editor.removeFromTop(2);
-    auto top = editor.removeFromTop(pictureHeight);
-    const auto modes = top.removeFromLeft(modeWidth);
-    top.removeFromLeft(4);
-    layout.picture = top;
-    layout.loop = { top.getRight() - 40, top.getY() + 4, 36, 12 };
-    const auto buttonHeight = (modes.getHeight() - 4) / 3;
-    for (int button = 0; button < 3; ++button)
-        layout.mode[static_cast<size_t>(button)] = { modes.getX(), modes.getY() + button * (buttonHeight + 2),
-                                                     modes.getWidth(), buttonHeight };
-    editor.removeFromTop(2);
-    for (int index = 0; index < controlCells; ++index)
-        layout.cell[static_cast<size_t>(index)] = editor.removeFromLeft(cellWidth);
-    layout.divider = editor.removeFromLeft(dividerWidth);
-    for (int index = 0; index < sampleCells; ++index)
-        layout.cell[static_cast<size_t>(controlCells + index)] = editor.removeFromLeft(cellWidth);
+    placePads(layout, {gridLeft, gridTop}, padWidth, padHeight, padGap, padButtonWidth, padButtonHeight, 3);
+    const auto editor = area.withTrimmedLeft(gridLeft - area.getX() + gridWidth + gapAfterGrid);
+    placeEditor(layout, editor, headerRow, 106, 70, modeWidth,
+                editor.getHeight() - headerRow - pictureHeight - 4, cellWidth, 2);
+    layout.separator = { editor.getX() - gapAfterGrid / 2, editor.getY() + 3, 1, editor.getHeight() - 6 };
     return layout;
+}
+
+// The Drum Rack's window: the map and the pads across the top, grown to fill
+// it and centred, and the selected pad's side across the whole width below,
+// where its picture can be as wide as the window.
+Layout stackedLayout(juce::Rectangle<int> panel)
+{
+    constexpr int margin = 10, gapBetween = 16, gap = 6, autoSelectHeight = 12;
+    Layout layout;
+    layout.stacked = true;
+    const auto area = panel.withTrimmedTop(DeviceEditorPanel::headerHeight + 1).reduced(margin);
+    const auto rackHeight = juce::jlimit(4 * padHeight + 3 * gap, 400, area.getHeight() * 45 / 100);
+    const auto rack = area.withHeight(rackHeight);
+
+    // The map as tall as the pads, its cells half again as wide as they are tall.
+    const auto keyHigh = juce::jlimit(mapCellHeight, 12, (rackHeight - autoSelectHeight - 4) / mapRows);
+    const auto keyWide = juce::jlimit(mapCellWidth, 18, keyHigh * 3 / 2);
+    // Pads as tall as a quarter of the rack, and never more than twice as
+    // wide as they are tall, however wide the window.
+    const auto padHigh = (rackHeight - 3 * gap) / padRows;
+    const auto mapAndGap = padColumns * keyWide + gapAfterMap * 2;
+    const auto padWide = juce::jlimit(padWidth, std::max(padWidth, padHigh * 2),
+                                      (rack.getWidth() - mapAndGap - 3 * gap) / padColumns);
+    const auto groupWidth = mapAndGap + padColumns * padWide + 3 * gap;
+    const auto left = rack.getX() + std::max(0, (rack.getWidth() - groupWidth) / 2);
+    layout.map = { left, rack.getY(), padColumns * keyWide, mapRows * keyHigh };
+    layout.autoSelect = { left, layout.map.getBottom() + 4, layout.map.getWidth(), autoSelectHeight };
+    placePads(layout, {left + mapAndGap, rack.getY()}, padWide, padHigh, gap,
+              juce::jlimit(padButtonWidth, 26, padWide / 7), juce::jlimit(padButtonHeight, 16, padHigh / 6), 4);
+
+    const auto editor = area.withTrimmedTop(rackHeight + gapBetween);
+    const auto cellWide = juce::jlimit(cellWidth, 84, (editor.getWidth() - dividerWidth) / (controlCells + sampleCells));
+    placeEditor(layout, editor, 20, 140, 90, 64, 74, cellWide, 4);
+    layout.separator = { area.getX(), editor.getY() - gapBetween / 2, area.getWidth(), 1 };
+    return layout;
+}
+}
+
+Layout layoutFor(juce::Rectangle<int> panel)
+{
+    return panel.getHeight() >= DeviceEditorPanel::drumStackedHeight ? stackedLayout(panel) : besideLayout(panel);
 }
 
 juce::Rectangle<int> knobIn(juce::Rectangle<int> cell)
 {
-    const auto size = std::min({34, cell.getWidth() - 10, cell.getHeight() - 24});
+    // The rack's cells hold a 34-pixel knob; the window's taller ones a larger.
+    const auto size = std::min({48, cell.getWidth() - 10, cell.getHeight() - 24});
     return juce::Rectangle<int>(cell.getX(), cell.getY() + 12, cell.getWidth(), cell.getHeight() - 24)
         .withSizeKeepingCentre(size, size);
 }
@@ -98,18 +165,23 @@ juce::Rectangle<int> automationIn(juce::Rectangle<int> cell)
 juce::Rectangle<float> mapCell(const Layout& layout, int note)
 {
     const auto row = note / padColumns, column = note % padColumns;
-    return juce::Rectangle<int>(layout.map.getX() + column * mapCellWidth,
-                                layout.map.getBottom() - (row + 1) * mapCellHeight,
-                                mapCellWidth - 1, mapCellHeight - 1).toFloat();
+    const auto wide = layout.map.getWidth() / padColumns, high = layout.map.getHeight() / mapRows;
+    return juce::Rectangle<int>(layout.map.getX() + column * wide, layout.map.getBottom() - (row + 1) * high,
+                                wide - 1, high - 1).toFloat();
+}
+
+int mapRowAt(const Layout& layout, int y)
+{
+    return juce::jlimit(0, mapRows - 1, (layout.map.getBottom() - 1 - y) / (layout.map.getHeight() / mapRows));
 }
 
 int mapNoteAt(const Layout& layout, juce::Point<int> position)
 {
     if (!layout.map.expanded(2, 0).contains(position))
         return -1;
-    const auto row = juce::jlimit(0, mapRows - 1, (layout.map.getBottom() - 1 - position.y) / mapCellHeight);
-    const auto column = juce::jlimit(0, padColumns - 1, (position.x - layout.map.getX()) / mapCellWidth);
-    return row * padColumns + column;
+    const auto column = juce::jlimit(0, padColumns - 1,
+                                     (position.x - layout.map.getX()) / (layout.map.getWidth() / padColumns));
+    return mapRowAt(layout, position.y) * padColumns + column;
 }
 
 DrumRackEngine::PlayMode modeOfButton(int button)
@@ -117,6 +189,11 @@ DrumRackEngine::PlayMode modeOfButton(int button)
     return button == 0 ? DrumRackEngine::PlayMode::classic
          : button == 1 ? DrumRackEngine::PlayMode::oneShot
                        : DrumRackEngine::PlayMode::slice;
+}
+
+juce::Rectangle<int> windowButtonIn(juce::Rectangle<int> panel)
+{
+    return {panel.getRight() - 24, 3, 20, DeviceEditorPanel::headerHeight - 6};
 }
 
 DrumRackDevice* drumsIn(Session& session, int track, int slot)

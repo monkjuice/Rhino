@@ -132,8 +132,9 @@ public:
     // A picture of a pad: a synth's strike, played by a voice of its own from
     // the pad's controls as they stand, or a sample's whole file; as the lows
     // and highs of `columns` slices of it, and how long it lasts. Message
-    // thread; the last picture is kept while nothing it was drawn from
-    // changes, since a dragged knob asks every frame.
+    // thread; the last two widths asked for are kept while nothing they were
+    // drawn from changes, since a dragged knob asks every frame. A reference
+    // returned lasts until a picture is asked for at a third width.
     struct Picture
     {
         std::vector<float> lows, highs;
@@ -202,15 +203,23 @@ private:
 
     struct CachedPicture
     {
+        int note = -1;
         juce::String sound;
         DrumRackEngine::PadSettings settings;
         int columns = 0;
+        // When it was last asked for, so the older of two is the one redrawn.
+        std::uint64_t asked = 0;
         Picture picture;
     };
-    // The selected pad's pictures are the ones a face asks for, so one of
-    // each kind is kept.
-    int pictureNote = -1, samplePictureNote = -1;
-    CachedPicture picture, sampleWave;
+    // The selected pad's pictures are the ones a face asks for. Two of each
+    // kind are kept: the rack's face and the Drum Rack's window show the
+    // same pad at two widths, and with one kept they took turns drawing it
+    // afresh, every frame a voice played it.
+    using KeptPictures = std::array<CachedPicture, 2>;
+    // The one kept for a pad at a width, else the older of the two.
+    CachedPicture& keptPicture(KeptPictures&, int note, int columns);
+    KeptPictures pictures, sampleWaves;
+    std::uint64_t picturesAsked = 0;
     // A strike rendered for a picture, kept so that a dragged knob does not
     // allocate one every frame.
     std::vector<float> pictureLeft, pictureRight;

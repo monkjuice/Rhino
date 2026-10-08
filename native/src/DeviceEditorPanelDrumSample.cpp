@@ -83,12 +83,12 @@ void DeviceEditorPanel::paintDrumSample(juce::Graphics& g)
 {
     auto* device = drumsIn(session, track, pluginSlot);
     const auto layout = layoutFor(getLocalBounds());
-    if (device == nullptr || !g.clipRegionIntersects(layout.editor.expanded(gapAfterGrid / 2, 0)))
+    if (device == nullptr || !g.clipRegionIntersects(layout.editor.getUnion(layout.separator)))
         return;
     const auto accent = faceAccent();
     const auto chosen = device->selectedPad();
     g.setColour(palette::border);
-    g.fillRect(layout.editor.getX() - gapAfterGrid / 2, layout.editor.getY() + 3, 1, layout.editor.getHeight() - 6);
+    g.fillRect(layout.separator);
 
     const auto view = device->pad(chosen);
     const auto filled = view.sound.has_value();

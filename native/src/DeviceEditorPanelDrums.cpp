@@ -2,6 +2,7 @@
 #include "Theme.h"
 #include <algorithm>
 #include <cmath>
+#include <optional>
 
 // The Drum Rack's face, left side: a map of all 128 notes and the sixteen pads
 // of the bank it shows, four rows of four with the lowest note at the bottom
@@ -315,6 +316,8 @@ void DeviceEditorPanel::paintDrums(juce::Graphics& g)
         g.setColour(palette::text.withAlpha(0.85f));
         g.drawRect(frame, 1.0f);
     }
+    if (g.clipRegionIntersects(layout.autoSelect))
+        drawToggle(g, layout.autoSelect, "AUTO", keyInk, device->autoSelect(), true, 6.5f);
 
     // ---- the pads ------------------------------------------------------------
     for (int index = 0; index < padsShown; ++index)
@@ -399,6 +402,11 @@ void DeviceEditorPanel::tickDrums()
     const auto layout = layoutFor(getLocalBounds());
     const auto first = device->firstShownNote();
     auto keyArrived = false;
+    // The first note to arrive this frame on a pad that holds a sound, for
+    // Auto Select. An empty pad has nothing to select, though its key still
+    // flashes on the map.
+    auto played = -1;
+    std::optional<std::array<bool, DrumRackDevice::padCount>> filled;
     for (int note = 0; note < DrumRackDevice::padCount; ++note)
     {
         const auto i = static_cast<size_t>(note);
@@ -427,6 +435,13 @@ void DeviceEditorPanel::tickDrums()
             key = 1.0f;
             drumLastKey = note;
             keyArrived = true;
+            if (played < 0)
+            {
+                if (!filled.has_value())
+                    filled = device->filledPads();
+                if ((*filled)[i])
+                    played = note;
+            }
         }
         else if (key > 0.0f)
         {
@@ -435,6 +450,24 @@ void DeviceEditorPanel::tickDrums()
         if (key != keyBefore)
             repaint(mapCell(layout, note).expanded(1.0f).getSmallestIntegerContainer());
     }
+    // Auto Select: the pad just played becomes the selected one, as in Live,
+    // but never under a hand that is turning a knob or dragging on the face,
+    // whose control would change pads beneath it.
+    if (played >= 0 && played != device->selectedPad() && device->autoSelect() && !isMouseButtonDown(true))
+    {
+        const auto before = device->selectedPad();
+        device->setSelectedPad(played);
+        readDrumParameters();
+        styleDrumControls();
+        for (const auto note : {before, played})
+        {
+            if (note >= first && note < first + padsShown)
+                repaint(layout.pad[static_cast<size_t>(note - first)].expanded(2));
+            repaint(mapCell(layout, note).expanded(2.0f).getSmallestIntegerContainer());
+        }
+        repaint(layout.editor.expanded(gapAfterGrid / 2 + 1, 2));
+    }
+
     const auto glowBefore = drumLastKeyGlow;
     drumLastKeyGlow = keyArrived ? 1.0f : std::max(0.0f, drumLastKeyGlow - keyNameFade);
     if (drumLastKeyGlow != glowBefore || keyArrived)

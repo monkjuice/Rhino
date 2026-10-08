@@ -80,6 +80,16 @@ void DrumRackDevice::showNotesFrom(int note)
     state.setProperty(firstShownId, note - note % rowSize, nullptr);
 }
 
+bool DrumRackDevice::autoSelect() const
+{
+    return static_cast<bool>(state.getProperty(autoSelectId, true));
+}
+
+void DrumRackDevice::setAutoSelect(bool on)
+{
+    state.setProperty(autoSelectId, on, nullptr);
+}
+
 // ---- strikes and counts ------------------------------------------------------
 
 void DrumRackDevice::previewPad(int note)

@@ -25,7 +25,10 @@ Layout layoutFor(juce::Rectangle<int> panel)
 {
     Layout layout;
     const auto area = panel.withTrimmedTop(DeviceEditorPanel::headerHeight + 1).reduced(4);
-    layout.map = { area.getX(), area.getY() + std::max(0, (area.getHeight() - mapHeight) / 2), mapWidth, mapHeight };
+    // The map from the top, and Auto Select's switch in what is left below it.
+    layout.map = { area.getX(), area.getY(), mapWidth, mapHeight };
+    layout.autoSelect = { area.getX(), layout.map.getBottom() + 4, mapWidth,
+                          std::max(10, area.getBottom() - layout.map.getBottom() - 4) };
     const auto gridLeft = area.getX() + mapWidth + gapAfterMap;
     const auto gridTop = area.getY() + std::max(0, (area.getHeight() - gridHeight) / 2);
     for (int index = 0; index < padsShown; ++index)

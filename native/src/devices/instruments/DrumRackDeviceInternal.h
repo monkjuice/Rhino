@@ -18,6 +18,7 @@ inline const juce::Identifier muteId { "mute" };
 inline const juce::Identifier soloId { "solo" };
 inline const juce::Identifier selectedId { "selPad" };
 inline const juce::Identifier firstShownId { "firstNote" };
+inline const juce::Identifier autoSelectId { "autoSelect" };
 // A sample pad's playback, each written only where it differs from a plain
 // one-shot of the whole file.
 inline const juce::Identifier modeId { "mode" };

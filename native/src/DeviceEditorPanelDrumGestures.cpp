@@ -46,6 +46,16 @@ bool DeviceEditorPanel::handleDrumMouseDown(const juce::MouseEvent& event)
             }
         }
 
+    if (layout.autoSelect.contains(position))
+    {
+        const auto on = !device->autoSelect();
+        device->setAutoSelect(on);
+        repaint(layout.autoSelect.expanded(2));
+        if (status) status(on ? "Auto Select on: a pad is selected as it is played"
+                              : "Auto Select off: the selected pad stays while others play");
+        return true;
+    }
+
     // The map: the bank shown follows the pointer, the row under it the
     // second of the four.
     if (const auto note = mapNoteAt(layout, position); note >= 0)
@@ -226,6 +236,9 @@ juce::String DeviceEditorPanel::drumTooltip(juce::Point<int> position) const
         return {};
     const auto layout = layoutFor(getLocalBounds());
     const auto first = device->firstShownNote();
+    if (layout.autoSelect.contains(position))
+        return "Auto Select: a pad that holds a sound is selected as its note arrives, from a keyboard, a controller "
+               "or a clip. Switch it off to keep one pad selected while others play.";
     if (const auto note = mapNoteAt(layout, position); note >= 0)
         return "All 128 notes, four to a row. The framed ones, " + DrumRackDevice::noteName(first) + " to "
                + DrumRackDevice::noteName(first + padsShown - 1)

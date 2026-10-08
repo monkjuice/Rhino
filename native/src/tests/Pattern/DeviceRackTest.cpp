@@ -732,6 +732,24 @@ void runDrumRackFaceTest()
         panel->tickDrums();
     require(panel->drumKeyFlash[36] == 0.0f && panel->drumLastKey == 36, "and fades, its name left dim");
 
+    // Auto Select, on from the start: a pad played becomes the selected one
+    // and the knobs follow it, while a key with nothing on it, like C1 above,
+    // selects nothing. Switched off, the selection stays put.
+    require(drums->autoSelect() && drums->selectedPad() != 36, "Auto Select starts on, and the empty C1 selected nothing");
+    panel->drumNotesSeen[static_cast<size_t>(first + 1)] = drums->notesReceived(first + 1) - 1;
+    panel->tickDrums();
+    require(drums->selectedPad() == first + 1 && panel->drumSliders[0]->getTooltip().startsWith("C#2 Tune:"),
+            "a pad played is selected, and the knobs follow it");
+    const auto autoButton = areaSaying("Auto Select");
+    require(!autoButton.isEmpty() && autoButton.getY() >= map.getBottom(), "Auto Select's switch sits under the map");
+    click(autoButton.getCentre(), false);
+    require(!drums->autoSelect(), "a click switches it off");
+    panel->drumNotesSeen[static_cast<size_t>(first + 5)] = drums->notesReceived(first + 5) - 1;
+    panel->tickDrums();
+    require(drums->selectedPad() == first + 1, "after which a pad played leaves the selection where it was");
+    click(autoButton.getCentre(), false);
+    require(drums->autoSelect(), "and another switches it on again");
+
     // A sample from the browser lights the pad it would land on, and lands
     // there; a drum preset becomes a pad's sound; a kit loads into the rack.
     const auto inRack = [&rack, &panel] (juce::Point<int> local) { return rack.getLocalPoint(panel, local); };

@@ -72,6 +72,8 @@ juce::String padTitle(int note);
 struct Layout
 {
     juce::Rectangle<int> map;
+    // Auto Select's switch, under the map.
+    juce::Rectangle<int> autoSelect;
     // The sixteen shown pads, the lowest note's first.
     std::array<juce::Rectangle<int>, padsShown> pad, mute, play, solo;
     juce::Rectangle<int> editor, nameArea, soundChooser, chokeChooser, picture, loop;

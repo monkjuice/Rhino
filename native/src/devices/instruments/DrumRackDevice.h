@@ -113,6 +113,11 @@ public:
     void setSelectedPad(int);
     int firstShownNote() const;
     void showNotesFrom(int note);
+    // Auto Select, as Live has it: while it is on, the face selects a pad as
+    // its note arrives, from a keyboard, a controller or a clip. View state,
+    // on until it is switched off.
+    bool autoSelect() const;
+    void setAutoSelect(bool);
 
     // Strikes a pad, or a part of its sample, from the face. Any thread.
     void previewPad(int note);

@@ -24,7 +24,7 @@ updated: 2026-10-07
   - `repaintDrums` (`DeviceEditorPanelDrums.cpp`) compares one string of everything the pads and map are drawn from (bank, selection, which of the 128 notes are filled, the sixteen shown pads), so a knob drag repaints only the selected pad's side.
   - Its 24 Hz tick repaints only the pads, map cells, key name and playhead strip that moved.
   - `drawLine` keeps each shaped line as a `juce::GlyphArrangement`, keyed by text, box, justification and font and cleared past 2,048 entries, because shaping text was most of the paint.
-  - `padPicture` renders a synth's strike at 16 kHz instead of the device's rate; it and `samplePicture` keep the selected pad's picture while sound, settings and width are unchanged.
+  - `padPicture` renders a synth's strike at 16 kHz instead of the device's rate; it and `samplePicture` keep the selected pad's picture while sound, settings and width are unchanged, at two widths, because the rack's face and the Drum Rack window draw one pad at different widths and evicted each other every frame.
 
 ## Measuring
 

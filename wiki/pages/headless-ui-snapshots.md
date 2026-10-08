@@ -23,6 +23,8 @@ and the snapshot kept as a paint smoke test. Write a PNG only when an env var na
 
 The Drum Rack face does the same in `runDrumRackFaceTest` (`tests/Pattern/DeviceRackTest.cpp`). Set
 `RHINO_DRUMS_SNAPSHOT` to an absolute path and run `ctest --test-dir native/build -C Release -R native_pattern_workflow`.
+`RHINO_DRUM_WINDOW_SNAPSHOT` writes the Drum Rack's own window, stacked, at 1280 x 800 from `runDrumRackWindowTest`, in
+the same run.
 It writes the face at 852 px (`DeviceEditorPanel::drumFaceWidth`) by `standardHeight`, painted with a `Theme`, as the
 test leaves it at its end, showing a sliced roll, and deletes any old file first. A snapshot is what caught the sample
 editor's envelope line drawing nothing ([A juce::Path holding only a start point is empty](juce-path-isempty-ignores-a-lone-point.md)).

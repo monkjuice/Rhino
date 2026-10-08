@@ -1,7 +1,7 @@
 ---
 title: Drum Rack
 type: component
-summary: A pad on every MIDI note, addressed by note, each a sample or one of eight synthesised drums with six automatable controls; the face shows a bank of sixteen beside a map of all 128, and kits (.rdk), drum presets (.rdp) or dropped samples fill it.
+summary: A pad on every MIDI note, addressed by note, each a sample or one of eight synthesised drums with six automatable controls; the face shows a bank of sixteen beside a map of all 128 and opens maximised in a window of its own, and kits (.rdk), drum presets (.rdp) or dropped samples fill it.
 tags: [rhino, devices, drums, dsp, library]
 sources: []
 updated: 2026-10-07
@@ -16,7 +16,7 @@ Rhino's drum instrument since 2026-10-06 (branch `feat/drum-rack`). It replaced 
 | DSP and files (`RhinoCore`) | `core/DrumRackEngine.*` (pads, 32 voices, playback), `core/DrumSynth.*` (the synth models), `core/DrumSlicer.*` (where Slice cuts), `core/DrumKitFile.*` (`DrumSound`, `DrumKit`, both file formats, `padNoteName`) |
 | Device | `devices/instruments/DrumRackDevice.cpp` (pads, their state, playing them) and `DrumRackDeviceEditing.cpp` (what the face asks for: view state, previews, counts, pictures, slices), sharing `DrumRackDeviceInternal.h` |
 | Model | `SessionDrums.cpp`; `findDrumRack`, `loadDefaultDrumKit`, `drumKitOf` and `fillBlankDrumRack` in `SessionInternal.h`; `patternDrumLowestNote` in `SessionPresets.cpp` |
-| UI | the face, six `DeviceEditorPanelDrum*.cpp` units ([Device rack and device editors](device-rack.md)); pad drops in `DeviceRack.cpp`, the Drums section in `BrowserPanel.cpp`, lane drops in `ArrangementDrops.cpp` |
+| UI | the face, six `DeviceEditorPanelDrum*.cpp` units ([Device rack and device editors](device-rack.md)); the face in a window of its own, `DrumRackWindow.*` (below); pad drops in `DeviceRack.cpp` and `DeviceEditorPanel::dropDrumSounds`, the Drums section in `BrowserPanel.cpp`, lane drops in `ArrangementDrops.cpp` |
 
 ## A pad on every note
 
@@ -38,14 +38,14 @@ How a replaced sample is freed without a lock, and the denormal flushes, are in 
 
 **768 controls cost.** `Session::deviceParameters(track, slot)` reads and formats every control, 1.75 ms median for a rack, and the face and automation lanes did that on every frame of a knob drag. Hence the range reads in `SessionDevices.cpp` ([What a change costs the interface](ui-cost-of-a-change.md)). The face reads only the selected pad's six (16.7 µs) into a `parameters` vector kept 768 long, so each entry sits at its own index. On the audio thread `readSettings` reads controls only for pads that hold something. Making a rack takes 2.4-3.0 ms. Reading the 808 Kit onto its pads went from 2.8-4.0 ms warm to 5.3-6.3 ms (51.6 ms cold). That was measured, its cause was not; the likely one is listener fan-out, since every property change on the device state notifies all 768 `CachedValue`s and `NativeDevice::valueTreePropertyChanged` loops over every slot.
 
-**The fallback editor reads six too.** Edit opens `FloatingDeviceWindow`'s fallback editor (`DeviceRack.cpp`) for a device with no editor of its own, a rack among them. It used to make a label, value, knob and automation button per control, 3,072 components for a rack, to show the first six (C-2's), and to re-read all 768 on its 30 Hz timer. Since 2026-10-07 it reads only the six it shows, and on a Drum Rack those are the selected pad's, following the face (`firstShownParameter`).
+**The fallback editor reads six too.** Edit opens `FloatingDeviceWindow`'s fallback editor (`DeviceRack.cpp`) for a device with no editor of its own. It used to make a label, value, knob and automation button per control, 3,072 components for a rack, to show the first six (C-2's), and to re-read all 768 on its 30 Hz timer. Since 2026-10-07 it reads only the six it shows, and on a Drum Rack those are the selected pad's, following the face (`firstShownParameter`). Since commit `94d4d9f` Edit opens a Drum Rack in its own window instead (below), so that branch is no longer reached from Edit.
 
 What a pad holds (`sample` or `synth`, `name`, `choke`, `mute`, `solo`, and a sample's playback) is content no control can carry. It lives in a `PADS` child of the plugin state, written through the edit's undo manager, with a `PAD` child only for a note that holds a sound, keyed by its `note` property. Clearing a pad removes its child, mute and solo with it. ValueTree listeners hand every change, an undo included, to `syncPads()`. That indexes the children by note once per sync and reads into the engine only the pads whose content changed; a `writing` flag holds it back until a multi-property write is done.
 
 - **Samples are read on the message thread**, whenever a pad changes: a drop, a kit, an undo or a document opening. `readSample` reads the whole file up to 10 s, ending in a 5 ms fade. A missing file logs `drum sample missing`; one that will not decode, such as an unpulled Git LFS pointer, logs `drum sample unreadable`. Either way the pad falls silent and the face says "Sample missing".
 - **For the face**, the engine counts every note-on per note, even for an empty pad (`notesReceived`, how the map flashes a key), reports the newest voice's place in its file (`playhead`, -1 when silent), and takes pad strikes from the face as a 128-bit mask (`previews`) at its next render. `prepare` clears the mask, so a pad played while nothing rendered does not sound late.
 - **What a pad keeps.** A sample dropped on a pad that held a sample keeps all six controls and its playback, so auditioning one snare after another keeps the pad's tuning. A sample on a synth or empty pad starts at the defaults but keeps level, pan, velocity and choke. A switch to a synth keeps the same four and takes the model's Decay and Tone. A kit replaces every pad and clears mute and solo.
-- `padPicture` and `samplePicture` cache the selected pad's last picture by sound, settings and width; a synth's strike renders at 16 kHz.
+- `padPicture` and `samplePicture` keep the selected pad's pictures by sound, settings and width, two widths of each, the older redrawn first (`keptPicture`): the rack's face and the Drum Rack window draw one pad at two widths, and with one kept they took turns redrawing it every frame a voice played. A reference returned lasts until a third width is asked for. A synth's strike renders at 16 kHz.
 - `hasNameForMidiNoteNumber` names each filled pad; `Session::patternNoteName` passes the name to the note editor's rows.
 
 ## Kits and drum presets
@@ -88,6 +88,17 @@ Since commit `60442e5` (2026-10-07), a pad played becomes the selected pad, so t
 - **The face selects, not the device or the session.** In `tickDrums` (24 Hz) the lowest note whose `notesReceived` count moved since the last frame, on a pad that holds a sound (`filledPads`), becomes the selected pad, then `readDrumParameters`, `styleDrumControls` and partial repaints. An empty note still flashes on the map and selects nothing. The timer idles while the rack is hidden, and so does Auto Select.
 - **Never under the hand.** Nothing is selected while a mouse button is down on the panel or any of its knobs (`isMouseButtonDown(true)`), so a knob being turned never changes pads beneath it.
 
+## Its own window
+
+Since commit `94d4d9f` (2026-10-07) a rack opens maximised in a window of its own, the pads above and the sample editor across the whole width below, as the user asked. The button at the right end of a Drum Rack's name bar opens it, and so does Edit; `KEY <note>` stands left of the button.
+
+- **The same face, stacked.** `DrumRackWindow.cpp` hosts a second `DeviceEditorPanel` on the rack. `layoutFor` stacks a face at least `DeviceEditorPanel::drumStackedHeight` (400 px) tall, which only the window's is: map and pads across the top, 45% of the height up to 400 px, centred, pads at most twice as wide as tall; then the selected pad's side, its picture as wide as the window, cells 74 px tall and up to 84 px wide with 48 px knobs. Map cells follow the map's size (`mapCell`, `mapRowAt`), so every gesture works at either size. The rack's own face stayed pixel-identical below its name bar.
+- **It follows its rack, not a slot.** `DrumRackView` keeps the rack's `EditItemID` ([Hold ids, not pointers](ids-not-pointers.md)), and the rack's change listener calls `follow()` on every change, hidden rack or not, which finds the rack again by id. A device added in front of it, a track moved or an undo leaves it on the same rack. When the rack leaves the edit the window closes, and `editWillChange` closes it with the document.
+- **One at a time.** `DeviceRack::openDrumWindow` brings the rack's open window to the front, or replaces it with another rack's.
+- **It works like the rack.** It takes browser samples, drum presets and kits, and sound files from the desktop, on its pads (`dropDrumSounds`, shared with the rack). It reads automated knobs back at 30 Hz while the transport rolls. It hands keys to the shell's shortcuts (`DeviceRack::shortcut`) and the typing keyboard (`listenForKeys`), so Space, undo and the computer MIDI keyboard work there.
+- **Two faces on one rack.** Each face's tick catches up when the other has picked another pad (`drumParametersFrom`), so a knob never turns a pad other than the one it shows. The picture cache keeps two widths (above).
+- **Unverified:** a browser drag into the window relies on JUCE's `TreeView` starting drags that may leave their window. No test drives a real cross-window drag (as of 2026-10-07).
+
 ## Decisions
 
 - **Blank by default.** Kits, drum presets and dropped samples fill a rack. Only a drum pattern brings a kit, because it needs one to make a sound.
@@ -109,6 +120,7 @@ Since commit `60442e5` (2026-10-07), a pad played becomes the selected pad, so t
 - `--self-test` logs how long making a rack takes and how long the 808 Kit's eight samples take to read onto their pads (`setKit`). It saves a kit and a drum preset under a temporary Drums root, not `userDrums()`, and finds them with `ContentLibrary::drumKitsIn` and `drumPresetsIn` (`user = true`).
 - `--device-test` primes a blank rack (`prime` in `DeviceConformance.cpp`) on the notes its chord strikes: synths on 48, 53 and 58, the 808 kick sample on 60. A blank rack is silent and would fail every check that listens for a note.
 - `runDrumRackFaceTest` (`tests/Pattern/DeviceRackTest.cpp`) covers the face: the map (click, wheel, drag), the key flash, the knobs following selection, mute with an undo, modes, a marker drag and a knob drag (one undo each), the spread button, drops of samples, presets and kits, and pad drags: onto an empty pad (the target lit mid-drag), onto a filled pad, onto the map's top-left note (124), and a 3 px wobble that moves nothing. Auto Select: a nudged `drumNotesSeen` on a filled pad selects it and the knobs follow, the earlier nudge on empty C1 selected nothing, and switched off nothing follows. With `RHINO_NATIVE_INPUT_TEST=1` it also clicks Loop and a pad's M through a desktop peer and requires each to toggle once ([A JUCE component listening to itself hears its own clicks twice](juce-self-listener-hears-clicks-twice.md)). It writes `RHINO_DRUMS_SNAPSHOT` and logs the face's cost ([Writing Rhino tests](writing-rhino-tests.md)).
+- `runDrumRackWindowTest` (`tests/Pattern/DrumRackWindowTest.cpp`) covers the window, which a rack off the screen makes without showing: the name-bar button and Edit, keys handed on, the stacked layout (pads above the picture, both bigger than the rack's), the map's bigger cells, a lane followed, a pad picked in one face reaching the other, the four kinds of drop, the two kept picture widths, following an arpeggiator added in front and a track moved, and closing on a deleted rack and a new document. It writes `RHINO_DRUM_WINDOW_SNAPSHOT` at 1280 x 800.
 
 ## Related
 
@@ -125,3 +137,4 @@ Since commit `60442e5` (2026-10-07), a pad played becomes the selected pad, so t
 - [Real-time audio rules](real-time-audio-rules.md)
 - [What a change costs the interface](ui-cost-of-a-change.md)
 - [Track automation](automation.md)
+- [Hold ids, not pointers](ids-not-pointers.md)

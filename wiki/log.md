@@ -281,3 +281,13 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/device-rack.md (ChildMouse and the self-listener rule in Gestures; the AUTO switch and Auto Select in the drum face bullet; autoSelect as view state; the gated real-click test)
 - updated: pages/headless-ui-snapshots.md (checks that need a desktop peer stay off-screen at -10000,-10000, run only on request)
 - updated: index.md (the new gotcha)
+
+## [2026-10-07] update | The Drum Rack opens maximised in a window of its own
+- source: commit 94d4d9f
+- updated: pages/drum-rack.md (Its own window: the stacked layout from drumStackedHeight, following the rack by EditItemID, closing with the rack or the document, one window at a time, drops, automation, keys, two faces on one rack, the unverified cross-window browser drag; two kept picture widths; Edit no longer opens the fallback for a rack; summary; tests)
+- updated: pages/device-rack.md (the name bar's window button with KEY left of it; Edit on a Drum Rack opens DrumRackWindow; how the rack owns and closes it; the window test)
+- updated: pages/drum-rack-sample-editor.md (the editor across the window's width)
+- updated: pages/ui-cost-of-a-change.md (pictures kept at two widths, and why)
+- updated: pages/ids-not-pointers.md (the window keeps its rack's itemID)
+- updated: pages/headless-ui-snapshots.md (RHINO_DRUM_WINDOW_SNAPSHOT)
+- updated: index.md (the Drum Rack's summary)

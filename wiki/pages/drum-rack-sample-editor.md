@@ -45,6 +45,7 @@ It is stored as `PAD` properties (`mode`, `start`, `end`, `fadeIn`, `fadeOut`, `
 `DeviceEditorPanelDrumSample.cpp` paints this side and `DeviceEditorPanelDrumSampleControls.cpp` holds its knobs ([Device rack and device editors](device-rack.md)).
 
 - Mode buttons beside the picture stack CLASSIC, 1-SHOT, SLICE, Live's order.
+- In the Drum Rack's own window the editor runs the window's whole width under the pads, its picture as wide as the window less the mode buttons, and its knobs 48 px ([Drum Rack](drum-rack.md)).
 - The picture is the whole file with the part between its start and end markers lit, the envelope drawn over it, numbered slice cuts in Slice, a LOOP toggle in Classic, and a playhead (`DrumRackEngine::playhead`).
 - Under it: the six pad knobs, a divider, then the sample's cells. 1-Shot: start, end, fade in, fade out. Classic: start, end, attack, sustain, release. Slice: start, end, a Hits/Parts chooser, sensitivity or slice count, and TO PADS.
 - The envelope line is `shapeAt`, a closed form of the voice's fades, Decay and envelope written in the face. That departs from [Displays draw from the DSP](displays-draw-from-the-dsp.md), and no test compares it with rendered audio (as of 2026-10-07).

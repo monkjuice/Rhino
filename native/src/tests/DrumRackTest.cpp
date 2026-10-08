@@ -1137,6 +1137,66 @@ void checkSampleEditorThroughSession()
     require(few * 10.0 < whole, "reading one pad's six costs a tenth of reading all of them, or less");
 }
 
+// A pad dragged onto another moves there, or trades places with what is
+// there, taking everything it holds; one undo puts both back.
+void checkMovingPads()
+{
+    Session stack;
+    constexpr int midi = 0;
+    require(stack.addDrumKit(ContentLibrary::file("Drums/Kits/808 Kit.rdk"), midi).wasOk(), "a rack with the 808 Kit");
+    int slot = -1;
+    auto* rack = rackOn(stack, midi, &slot);
+    require(rack != nullptr, "on the first MIDI track");
+    const auto kick = firstNote, empty = firstNote + 3, snare = firstNote + 5;
+    require(!rack->pad(empty).sound.has_value(), "the 808 Kit leaves D#2 empty");
+
+    // Give the kick something of everything a pad holds.
+    require(stack.setDeviceParameter(midi, slot, DrumRackDevice::parameterIndex(kick, DrumRackDevice::tune), 3.0f).wasOk(),
+            "the kick tuned up");
+    auto classic = rack->pad(kick).sound->playback;
+    classic.mode = DrumRackEngine::PlayMode::classic;
+    classic.release = 0.3f;
+    stack.editDeviceSettings(midi, slot, "Shape the kick", [rack, kick, classic]
+    {
+        rack->setPadPlayback(kick, classic);
+        rack->setPadMuted(kick, true);
+        rack->setPadChoke(kick, 2);
+        rack->setPadName(kick, "Boom");
+    });
+
+    require(stack.moveDrumPad(midi, slot, kick, empty).wasOk(), "the kick moves to an empty pad");
+    const auto moved = rack->pad(empty);
+    require(moved.sound.has_value() && moved.sound->sample.contains("TR808Kick") && moved.sound->name == "Boom"
+                && moved.sound->settings.tune == 3.0f && moved.sound->choke == 2 && moved.muted
+                && moved.sound->playback == classic.clamped() && !moved.unreadable,
+            "taking its sample, name, tuning, choke group, mute and playback with it, its file read again");
+    require(!rack->pad(kick).sound.has_value() && rack->selectedPad() == empty
+                && stack.deviceParameter(midi, slot, DrumRackDevice::parameterIndex(kick, DrumRackDevice::tune))->value == 0.0f,
+            "leaving its own pad empty, controls and all, and the pad it landed on selected");
+    stack.undo();
+    require(rack->pad(kick).sound.has_value() && rack->pad(kick).sound->name == "Boom" && rack->pad(kick).muted
+                && rack->pad(kick).sound->settings.tune == 3.0f && !rack->pad(empty).sound.has_value(),
+            "one undo puts it back");
+
+    require(stack.moveDrumPad(midi, slot, kick, snare).wasOk(), "the kick dropped on the snare");
+    require(rack->pad(snare).sound->name == "Boom" && rack->pad(snare).muted && rack->pad(snare).sound->settings.tune == 3.0f
+                && rack->pad(kick).sound.has_value() && rack->pad(kick).sound->name == "Snare" && !rack->pad(kick).muted
+                && rack->pad(kick).sound->settings.tune == 0.0f,
+            "trades places with it, each taking its own settings");
+    stack.undo();
+    require(rack->pad(kick).sound->name == "Boom" && rack->pad(snare).sound->name == "Snare", "and one undo swaps them back");
+
+    // A pad may go anywhere in the rack, out of the bank shown.
+    require(stack.moveDrumPad(midi, slot, snare, DrumRackEngine::padCount - 1).wasOk()
+                && rack->pad(DrumRackEngine::padCount - 1).sound->name == "Snare",
+            "a pad moves to any note");
+    require(stack.moveDrumPad(midi, slot, empty, kick).failed(), "an empty pad has nothing to move");
+    require(stack.moveDrumPad(midi, slot, kick, DrumRackEngine::padCount).failed(), "and no pad lies past the last note");
+    const auto before = rack->kit();
+    require(stack.moveDrumPad(midi, slot, kick, kick).wasOk() && rack->pad(kick).sound->name == before.pads[kick]->name,
+            "a pad dropped on itself stays");
+}
+
 // What one strike costs to render, per model and for a sample, in nanoseconds
 // a sample: the audio thread pays it per voice, and a face per picture.
 void logStrikeCosts()
@@ -1192,6 +1252,7 @@ void checkDrumRack(Session&)
     checkLibrary();
     checkThroughSession();
     checkSampleEditorThroughSession();
+    checkMovingPads();
     juce::Logger::writeToLog("Rhino: Drum Rack checks passed");
 }
 }

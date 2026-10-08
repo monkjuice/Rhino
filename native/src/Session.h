@@ -319,6 +319,10 @@ public:
     // of its own from this one up, as one undo step. `spread` says how many
     // pads it filled.
     juce::Result spreadDrumSlices(int track, int slot, int pad, int* spread = nullptr);
+    // A pad dragged onto another: its sound moves there, trading places with
+    // a sound already on it, as one undo step, and the pad it landed on is
+    // selected. Clips and automation lanes keep their notes.
+    juce::Result moveDrumPad(int track, int slot, int from, int to);
     // Auditions a drum preset exactly as a pad would play it.
     juce::Result previewDrumSound(const juce::File& preset);
     bool isForgeAvailable() const { return forgeDescription.has_value(); }

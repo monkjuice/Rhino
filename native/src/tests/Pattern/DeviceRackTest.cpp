@@ -676,6 +676,34 @@ void runDrumRackFaceTest()
     session.undo();
     require(!drums->pad(first + 5).muted, "and an undo unmutes it");
 
+    // A pad dragged onto an empty pad moves there; onto a filled one, the two
+    // trade places; onto a note on the map, it goes to that note. Each is one
+    // undo step, and the pad it would land on lights on the way.
+    const auto body = [&pads] (int index) { return pads[static_cast<size_t>(index)].getTopLeft() + juce::Point<int>(8, 6); };
+    panel->mouseDown(mouse(body(0), body(0), false));
+    panel->mouseDrag(mouse(body(3), body(0), false));
+    require(panel->drumPadDragging && panel->drumDropTarget == first + 3, "a pad in hand lights the pad it would land on");
+    panel->mouseUp(mouse(body(3), body(0), false));
+    require(!drums->pad(first).sound.has_value() && drums->pad(first + 3).sound.has_value()
+                && drums->pad(first + 3).sound->name == "Kick" && drums->selectedPad() == first + 3
+                && panel->drumDropTarget == -1 && !panel->drumPadDragging,
+            "dropped on an empty pad, it moves there and is selected");
+    session.undo();
+    require(drums->pad(first).sound->name == "Kick" && !drums->pad(first + 3).sound.has_value(), "one undo puts it back");
+    drag(body(0), body(5));
+    require(drums->pad(first).sound->name == "Snare" && drums->pad(first + 5).sound->name == "Kick",
+            "dropped on a filled pad, the two trade places");
+    session.undo();
+    require(drums->pad(first).sound->name == "Kick" && drums->pad(first + 5).sound->name == "Snare",
+            "and trade back with an undo");
+    drag(body(0), {map.getX() + 1, map.getY() + 1});
+    require(drums->pad(124).sound.has_value() && drums->pad(124).sound->name == "Kick" && !drums->pad(first).sound.has_value(),
+            "dropped on the map, it goes to that note, out of the bank shown");
+    session.undo();
+    require(drums->pad(first).sound->name == "Kick" && !drums->pad(124).sound.has_value(), "and comes back with an undo");
+    drag(body(0), body(0) + juce::Point<int>(2, 1));
+    require(drums->pad(first).sound->name == "Kick" && !panel->drumPadDragging, "a click that wavers moves nothing");
+
     // The map shows the other banks: its top row the highest, its bottom the
     // lowest, and the wheel over the pads moves a row at a time.
     click({map.getCentreX(), map.getY() + 1}, false);

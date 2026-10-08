@@ -6,7 +6,8 @@
 // Shared by the Drum Rack face's translation units of DeviceEditorPanel, and
 // nothing else: DeviceEditorPanelDrums.cpp (the map and the pads),
 // DeviceEditorPanelDrumParts.cpp (where everything stands, and the drawn
-// controls), DeviceEditorPanelDrumMenus.cpp (menus and dialogs),
+// controls), DeviceEditorPanelDrumGestures.cpp (clicks, drags and tooltips),
+// DeviceEditorPanelDrumMenus.cpp (menus and dialogs),
 // DeviceEditorPanelDrumSample.cpp (the selected pad's side) and
 // DeviceEditorPanelDrumSampleControls.cpp (its sample's knobs).
 namespace rhino::drumface

@@ -455,6 +455,40 @@ void DrumRackDevice::setKit(const DrumKit& kit)
     syncPads();
 }
 
+bool DrumRackDevice::movePad(int from, int to)
+{
+    if (!validPad(from) || !validPad(to) || from == to)
+        return false;
+    const auto moving = pad(from);
+    if (!moving.sound.has_value())
+        return false;
+    const auto displaced = pad(to);
+    const auto setFlags = [this] (int note, bool muted, bool soloed)
+    {
+        auto tree = padTree(note);
+        if (!tree.isValid())
+            return;
+        for (const auto& [id, on] : { std::pair { muteId, muted }, std::pair { soloId, soloed } })
+        {
+            if (on)
+                tree.setProperty(id, true, getUndoManager());
+            else
+                tree.removeProperty(id, getUndoManager());
+        }
+    };
+    {
+        const juce::ScopedValueSetter<bool> batch(writing, true);
+        writePad(to, moving.sound);
+        setFlags(to, moving.muted, moving.soloed);
+        // What was there goes the other way; when nothing was, the pad the
+        // sound left is empty.
+        writePad(from, displaced.sound);
+        setFlags(from, displaced.muted, displaced.soloed);
+    }
+    syncPads();
+    return true;
+}
+
 // ---- the pads into the engine ------------------------------------------------
 
 std::unique_ptr<DrumSample> DrumRackDevice::readSample(const juce::File& file, juce::AudioFormatManager& formats)

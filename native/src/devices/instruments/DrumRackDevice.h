@@ -90,6 +90,12 @@ public:
     // as one, when the drag ends.
     void setPadPlayback(int note, const DrumRackEngine::Playback&, bool undoable = true);
     void setKit(const DrumKit&);
+    // Moves what a pad holds to another note, trading places with whatever is
+    // there: its sound, name, choke group, mute, solo, playback and six
+    // controls all go with it. Notes in clips and automation lanes stay on
+    // their notes, so a moved sound is played by the notes of the pad it
+    // landed on. False when there is nothing on the pad to move.
+    bool movePad(int from, int to);
 
     // Where Slice cuts a sample pad's part, as the starts of its slices in
     // fractions of the file (DrumSlicer). Empty for anything else.

@@ -163,6 +163,10 @@ private:
     void readDrumParameters();
     bool handleDrumMouseDown(const juce::MouseEvent&);
     void handleDrumDrag(const juce::MouseEvent&);
+    // The note a pad dragged to a point would land on: a pad of the bank
+    // shown, or any note on the map. -1 for anywhere else.
+    int drumNoteAt(juce::Point<int>) const;
+    juce::Rectangle<int> drumGhostArea() const;
     void handleDrumMouseUp(const juce::MouseEvent&);
     bool handleDrumWheel(const juce::MouseEvent&, const juce::MouseWheelDetails&);
     juce::String drumTooltip(juce::Point<int>) const;
@@ -296,11 +300,17 @@ private:
     juce::String drumPadsDrawn;
     int drumDropTarget = -1;
     std::unique_ptr<juce::FileChooser> drumFileChooser;
-    // A drag on the map, or on a marker of the sample, and a pad's playback
-    // as it was when a drag began, to be written as one undo step at its end.
-    enum class DrumDrag { none, map, start, end };
+    // A drag on the map, of a pad, or on a marker of the sample, and a pad's
+    // playback as it was when a drag began, to be written as one undo step
+    // at its end.
+    enum class DrumDrag { none, map, pad, start, end };
     DrumDrag drumDrag = DrumDrag::none;
     std::optional<DrumRackEngine::Playback> drumDragFrom;
+    // A pad being dragged to another: which, whether the pointer has gone
+    // far enough to mean it, and where it is now, for the ghost drawn there.
+    int drumDragPad = -1;
+    bool drumPadDragging = false;
+    juce::Point<int> drumDragPoint;
     float drumPlayheadDrawn = -1.0f;
 };
 }

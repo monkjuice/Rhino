@@ -105,6 +105,7 @@ target_sources(RhinoNative PRIVATE
     src/DeviceEditorPanelPresets.cpp
     src/DeviceEditorPanelDrums.cpp
     src/DeviceEditorPanelDrumParts.cpp
+    src/DeviceEditorPanelDrumGestures.cpp
     src/DeviceEditorPanelDrumMenus.cpp
     src/DeviceEditorPanelDrumSample.cpp
     src/DeviceEditorPanelDrumSampleControls.cpp

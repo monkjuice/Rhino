@@ -21,7 +21,8 @@
 // changes, and sixteen pads of buttons would be a lot to build each time.
 //
 // The rest of the face: where everything stands and the drawn controls it is
-// made of, DeviceEditorPanelDrumParts.cpp; the pad's menus and dialogs,
+// made of, DeviceEditorPanelDrumParts.cpp; clicks, drags and tooltips,
+// DeviceEditorPanelDrumGestures.cpp; the pad's menus and dialogs,
 // DeviceEditorPanelDrumMenus.cpp; the selected pad's side,
 // DeviceEditorPanelDrumSample.cpp, and its sample's knobs,
 // DeviceEditorPanelDrumSampleControls.cpp.
@@ -72,8 +73,12 @@ void DeviceEditorPanel::showDrumDropTarget(int pad)
     const auto first = device != nullptr ? device->firstShownNote() : DrumRackEngine::defaultFirstNote;
     const auto layout = layoutFor(getLocalBounds());
     for (const auto lit : {drumDropTarget, pad})
+    {
         if (juce::isPositiveAndBelow(lit - first, padsShown))
             repaint(layout.pad[static_cast<size_t>(lit - first)].expanded(2));
+        if (lit >= 0)
+            repaint(mapCell(layout, lit).expanded(2.0f).getSmallestIntegerContainer());
+    }
     drumDropTarget = pad;
     repaint(layout.picture.expanded(1));
 }
@@ -296,6 +301,11 @@ void DeviceEditorPanel::paintDrums(juce::Graphics& g)
                 g.setColour(keyInk.withAlpha(drumKeyFlash[i]));
                 g.fillRect(cell.expanded(0.5f));
             }
+            if (note == drumDropTarget)
+            {
+                g.setColour(palette::selection);
+                g.drawRect(cell.expanded(1.0f), 1.0f);
+            }
         }
         // The bank on the pads, framed.
         const auto top = mapCell(layout, first + padsShown - 1);
@@ -359,186 +369,20 @@ void DeviceEditorPanel::paintDrums(juce::Graphics& g)
 
     // ---- the selected pad ------------------------------------------------------
     paintDrumSample(g);
-}
 
-// ---- the hand ------------------------------------------------------------------
-
-bool DeviceEditorPanel::handleDrumMouseDown(const juce::MouseEvent& event)
-{
-    auto* device = drumsIn(session, track, pluginSlot);
-    if (device == nullptr)
-        return false;
-    // A right-click on a knob is the automation menu for whatever the knob
-    // stands for right now.
-    if (event.mods.isPopupMenu())
-        for (int i = 0; i < drumSliders.size(); ++i)
-            if (event.eventComponent == drumSliders[i])
-            {
-                showParameterMenu(DrumRackDevice::parameterIndex(device->selectedPad(), i));
-                return true;
-            }
-    if (event.eventComponent != this)
-        return handleDrumSampleMouseDown(event);
-    if (event.y < headerHeight)
-        return false;
-
-    const auto position = event.getPosition();
-    const auto layout = layoutFor(getLocalBounds());
-    const auto chosen = device->selectedPad();
-    for (int i = 0; i < controlCells; ++i)
-        if (automationIn(layout.cell[static_cast<size_t>(i)]).contains(position))
+    // ---- a pad in hand -------------------------------------------------------
+    if (drumPadDragging && g.clipRegionIntersects(drumGhostArea().expanded(2)))
+        if (const auto held = device->pad(drumDragPad); held.sound.has_value())
         {
-            const auto control = DrumRackDevice::parameterIndex(chosen, i);
-            if (juce::isPositiveAndBelow(control, static_cast<int>(parameters.size()))
-                && parameters[static_cast<size_t>(control)].automated)
-            {
-                const auto result = session.toggleParameterAutomationOverride(track, pluginSlot, control);
-                if (status) status(result.wasOk() ? "Toggled parameter automation" : result.getErrorMessage());
-                return true;
-            }
+            const auto ghost = drumGhostArea().toFloat();
+            g.setColour(filledPadInk.withAlpha(0.9f));
+            g.fillRoundedRectangle(ghost, 2.5f);
+            g.setColour(accent);
+            g.drawRoundedRectangle(ghost.reduced(0.5f), 2.5f, 1.0f);
+            g.setColour(palette::text);
+            g.setFont(uiFontBold(8.5f));
+            drawLine(g, held.sound->displayName(), drumGhostArea().reduced(5, 0), juce::Justification::centredLeft, true);
         }
-
-    // The map: the bank shown follows the pointer, the row under it the
-    // second of the four.
-    if (const auto note = mapNoteAt(layout, position); note >= 0)
-    {
-        drumDrag = DrumDrag::map;
-        showDrumBank((note / padColumns - 1) * padColumns);
-        return true;
-    }
-
-    const auto first = device->firstShownNote();
-    for (int index = 0; index < padsShown; ++index)
-    {
-        const auto i = static_cast<size_t>(index);
-        if (!layout.pad[i].contains(position))
-            continue;
-        const auto note = first + index;
-        // Picking a pad is a view of the rack, not an edit to it.
-        if (note != chosen)
-        {
-            device->setSelectedPad(note);
-            readDrumParameters();
-            styleDrumControls();
-            repaint();
-        }
-        if (event.mods.isPopupMenu())
-        {
-            showDrumPadMenu(note);
-            return true;
-        }
-        const auto view = device->pad(note);
-        const auto label = view.sound.has_value() ? view.sound->displayName() : padTitle(note);
-        if (layout.play[i].contains(position))
-        {
-            device->previewPad(note);
-            return true;
-        }
-        if (view.sound.has_value() && layout.mute[i].contains(position))
-        {
-            const auto muted = !view.muted;
-            session.editDeviceSettings(track, pluginSlot, muted ? "Mute pad" : "Unmute pad",
-                                       [device, note, muted] { device->setPadMuted(note, muted); });
-            if (status) status(label + (muted ? " muted" : " unmuted"));
-            return true;
-        }
-        if (view.sound.has_value() && layout.solo[i].contains(position))
-        {
-            const auto soloed = !view.soloed;
-            session.editDeviceSettings(track, pluginSlot, soloed ? "Solo pad" : "Unsolo pad",
-                                       [device, note, soloed] { device->setPadSoloed(note, soloed); });
-            if (status) status(label + (soloed ? " soloed" : " no longer soloed"));
-            return true;
-        }
-        if (status) status(label + " on " + DrumRackDevice::noteName(note));
-        return true;
-    }
-    return handleDrumSampleMouseDown(event);
-}
-
-void DeviceEditorPanel::handleDrumDrag(const juce::MouseEvent& event)
-{
-    if (drumDrag == DrumDrag::map)
-    {
-        const auto layout = layoutFor(getLocalBounds());
-        const auto row = (layout.map.getBottom() - 1 - event.y) / mapCellHeight;
-        showDrumBank((juce::jlimit(0, mapRows - 1, row) - 1) * padColumns);
-        return;
-    }
-    if (drumDrag != DrumDrag::start && drumDrag != DrumDrag::end)
-        return;
-    auto* device = drumsIn(session, track, pluginSlot);
-    if (device == nullptr)
-        return;
-    const auto view = device->pad(device->selectedPad());
-    if (!view.sound.has_value())
-        return;
-    const auto wave = layoutFor(getLocalBounds()).picture.reduced(3);
-    const auto place = juce::jlimit(0.0f, 1.0f, static_cast<float>(event.x - wave.getX()) / static_cast<float>(wave.getWidth()));
-    auto playback = view.sound->playback;
-    if (drumDrag == DrumDrag::start)
-        playback.start = std::min(place, playback.end - 0.001f);
-    else
-        playback.end = std::max(place, playback.start + 0.001f);
-    previewDrumPlayback(playback);
-}
-
-void DeviceEditorPanel::handleDrumMouseUp(const juce::MouseEvent&)
-{
-    const auto dragged = drumDrag;
-    drumDrag = DrumDrag::none;
-    if (dragged == DrumDrag::start)
-        endDrumPlaybackDrag("Move the sample's start");
-    else if (dragged == DrumDrag::end)
-        endDrumPlaybackDrag("Move the sample's end");
-}
-
-bool DeviceEditorPanel::handleDrumWheel(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel)
-{
-    const auto* device = drumsIn(session, track, pluginSlot);
-    if (device == nullptr || wheel.deltaY == 0.0f)
-        return false;
-    // The wheel over the map or the pads moves a row of four at a time, up
-    // the notes as it turns away.
-    const auto layout = layoutFor(getLocalBounds());
-    const auto grid = layout.pad[0].getUnion(layout.pad[padsShown - 1]);
-    if (!layout.map.expanded(4).contains(event.getPosition()) && !grid.contains(event.getPosition()))
-        return false;
-    showDrumBank(device->firstShownNote() + (wheel.deltaY > 0.0f ? padColumns : -padColumns));
-    return true;
-}
-
-juce::String DeviceEditorPanel::drumTooltip(juce::Point<int> position) const
-{
-    auto* device = drumsIn(session, track, pluginSlot);
-    if (device == nullptr)
-        return {};
-    const auto layout = layoutFor(getLocalBounds());
-    const auto first = device->firstShownNote();
-    if (const auto note = mapNoteAt(layout, position); note >= 0)
-        return "All 128 notes, four to a row. The framed ones, " + DrumRackDevice::noteName(first) + " to "
-               + DrumRackDevice::noteName(first + padsShown - 1)
-               + ", are on the pads; click or drag to show others. Lit notes hold a sound, and a key flashes orange "
-                 "as it is played.";
-    for (int index = 0; index < padsShown; ++index)
-    {
-        const auto i = static_cast<size_t>(index);
-        if (!layout.pad[i].contains(position))
-            continue;
-        const auto note = first + index;
-        const auto view = device->pad(note);
-        if (layout.play[i].contains(position))
-            return "Play this pad";
-        if (layout.mute[i].contains(position))
-            return "Mute this pad";
-        if (layout.solo[i].contains(position))
-            return "Solo this pad: while any pad is soloed, only soloed pads sound";
-        if (!view.sound.has_value())
-            return padTitle(note) + " is empty. Drop a sample or a drum preset on it, or right-click for a synth.";
-        return view.sound->displayName() + " on " + DrumRackDevice::noteName(note)
-               + ". Drop a sound here to replace it; right-click for its synth, choke group and more.";
-    }
-    return drumSampleTooltip(position);
 }
 
 // ---- frames ------------------------------------------------------------------------

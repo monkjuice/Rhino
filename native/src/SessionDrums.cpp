@@ -306,6 +306,32 @@ juce::Result Session::spreadDrumSlices(int track, int slot, int pad, int* spread
     return juce::Result::ok();
 }
 
+juce::Result Session::moveDrumPad(int track, int slot, int from, int to)
+{
+    auto* drums = rackIn(*this, track, slot);
+    if (drums == nullptr)
+        return juce::Result::fail("There is no Drum Rack there.");
+    for (const auto pad : { from, to })
+        if (const auto valid = checkPad(pad); valid.failed())
+            return valid;
+    if (from == to)
+        return juce::Result::ok();
+    const auto moving = drums->pad(from).sound;
+    if (!moving.has_value())
+        return juce::Result::fail("The pad on " + padNoteName(from) + " is empty, so there is nothing on it to move.");
+    const auto displaced = drums->pad(to).sound;
+    edit->getUndoManager().beginNewTransaction(displaced.has_value()
+        ? "Swap " + moving->displayName() + " and " + displaced->displayName()
+        : "Move " + moving->displayName() + " to " + padNoteName(to));
+    drums->movePad(from, to);
+    // The sound that was dragged is the one worth looking at.
+    drums->setSelectedPad(to);
+    edit->getUndoManager().beginNewTransaction();
+    markModified();
+    sendSynchronousChangeMessage();
+    return juce::Result::ok();
+}
+
 // A drum preset is heard as a pad would play it, Tune, Decay and Tone and all,
 // rather than as the bare file underneath: one strike, rendered into memory
 // and played through the preview like any library sound.

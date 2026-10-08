@@ -291,3 +291,9 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/ids-not-pointers.md (the window keeps its rack's itemID)
 - updated: pages/headless-ui-snapshots.md (RHINO_DRUM_WINDOW_SNAPSHOT)
 - updated: index.md (the Drum Rack's summary)
+
+## [2026-10-07] update | Drum Rack window: gaps left by the first record
+- source: commit 94d4d9f
+- updated: pages/drum-rack.md (F12 in the drum window toggles the main window's full screen, since every key goes to the shell)
+- updated: pages/keeping-files-small.md (isDroppedSoundFile in BrowserIds.h; three copies of the extension list remain, and SessionDrums.cpp cannot take the UI-side header)
+- updated: pages/development-environment.md (Pillow's getbbox on RGBA reads only alpha, so opaque snapshot diffs always look identical; convert to RGB)

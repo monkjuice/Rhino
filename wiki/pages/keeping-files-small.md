@@ -27,7 +27,7 @@ As of 2026-10-03:
 ## How to apply it
 
 - Helpers shared by one class's own units go in a private `*Internal.h` beside it: `SessionInternal.h`, `StepGridInternal.h`, `ArrangementInternal.h` and Forge's `ForgeEditorInternal.h`. Nothing else includes them.
-- Helpers shared by *different* classes get an ordinary header. `BrowserIds.h` serves both the arrangement and the device rack; before it existed, their two copies of the tables drifted apart.
+- Helpers shared by *different* classes get an ordinary header. `BrowserIds.h` serves both the arrangement and the device rack; before it existed, their two copies of the tables drifted apart. Its `isDroppedSoundFile` (2026-10-07) serves the rack and the Drum Rack window, but three copies of the same extension list remain, in `ArrangementDrops.cpp`, `SessionViewGestures.cpp` and `SessionDrums.cpp`: a possible cleanup. `SessionDrums.cpp` cannot take it from `BrowserIds.h`, which includes `Session.h` and is UI-side ([Dependency direction](dependency-direction.md)), so a shared one would live lower down.
 - Extract a new type only when it buys testability. `ClipGeometry.h`, `core/ScaleQuantizer.h` and `core/EqFilter.h` are pure headers with no JUCE, so they are tested without a `Session`.
 - List every `.cpp` in a `CMakeLists.txt`, because nothing is globbed. Then reconfigure explicitly, since `cmake --build` never does it for you ([A new source file needs an explicit CMake configure](cmake-does-not-reconfigure.md)).
 - Test scenarios split earlier, near 200 lines ([Writing Rhino tests](writing-rhino-tests.md)).

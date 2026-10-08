@@ -4,7 +4,7 @@ type: guide
 summary: What the Windows development machine offers (shells, CMake, Python, ffmpeg, PDF tools, the reference manuals) and the habits it demands.
 tags: [both, environment, windows, tooling]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-07
 ---
 
 # Development environment and reference material
@@ -49,6 +49,9 @@ Read the figures too: the screenshots carry layout the prose never states, such 
 - **Anchor identifier renames at both ends.** A regex rename of `SpectralMarkers\b` to `SpectralMarkerPair` also
   rewrote `paintSpectralMarkers`, because a `\b` only at the end matches inside a longer name (2026-10-03). Use
   `\bName\b`.
+- **Pillow's `getbbox()` on an RGBA image reads only the alpha channel**, so `ImageChops.difference` of two opaque
+  snapshots always comes back "identical". Convert both to RGB first; that is how the Drum Rack face's pixel-identity
+  across commit `94d4d9f` was checked ([Seeing the UI without taking the screen](headless-ui-snapshots.md)).
 - **Tooling stays out of the repository.** Capture scripts, monitors and skills go in the scratchpad or
   `%USERPROFILE%\.claude\skills\`, where `synth-ab` lives; ask before committing any to the repo
   ([Git workflow](git-workflow.md)).

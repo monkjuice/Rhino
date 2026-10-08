@@ -56,7 +56,12 @@ DeviceEditorPanel::DeviceEditorPanel(Session& s) : session(s)
     setTooltip("Drag this device by its name to move it along the chain");
     addAndMakeVisible(title);
     addAndMakeVisible(power);
-    addMouseListener(this, true);
+    addMouseListener(&childMouse, true);
+}
+
+DeviceEditorPanel::~DeviceEditorPanel()
+{
+    removeMouseListener(&childMouse);
 }
 
 void DeviceEditorPanel::setTarget(int nextTrack, const Session::DeviceSlot& device, bool nextSelected)

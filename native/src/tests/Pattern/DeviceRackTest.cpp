@@ -814,6 +814,52 @@ void runDrumRackFaceTest()
                 && drums->pad(rollPad + 1).sound->source == DrumRackEngine::Source::synth,
             "and one undo puts the pads back as they were");
 
+    // Everything above calls the face's handlers directly, around JUCE's own
+    // dispatch. A click that really arrives goes through the panel's mouse
+    // listener too, and a face that listened to itself heard each of its own
+    // clicks twice, so a toggle went on and straight back off: Loop, M, S.
+    // The real path needs a desktop peer, so it runs only on request, off the
+    // screen.
+    if (juce::SystemStats::getEnvironmentVariable("RHINO_NATIVE_INPUT_TEST", {}) == "1")
+    {
+        auto looping = drums->pad(rollPad).sound->playback;
+        looping.mode = DrumRackEngine::PlayMode::classic;
+        looping.loop = false;
+        session.editDeviceSettings(0, slot, "Play the roll as classic", [drums, rollPad, looping]
+        {
+            drums->setPadPlayback(rollPad, looping);
+        });
+        const auto loopButton = areaSaying("Loop the part");
+        require(!loopButton.isEmpty(), "Classic shows a Loop button");
+        rack.setTopLeftPosition(-10000, -10000);
+        rack.addToDesktop(0);
+        rack.setVisible(true);
+        auto* peer = rack.getPeer();
+        require(peer != nullptr, "the rack has a desktop peer");
+        const auto clickAt = [&rack, &panel, peer] (juce::Point<int> local)
+        {
+            const auto at = rack.getLocalPoint(panel, local).toFloat();
+            const auto time = juce::Time::currentTimeMillis();
+            peer->handleMouseEvent(juce::MouseInputSource::InputSourceType::mouse, at,
+                                   juce::ModifierKeys(juce::ModifierKeys::leftButtonModifier),
+                                   juce::MouseInputSource::defaultPressure, juce::MouseInputSource::defaultOrientation,
+                                   time);
+            peer->handleMouseEvent(juce::MouseInputSource::InputSourceType::mouse, at, juce::ModifierKeys(),
+                                   juce::MouseInputSource::defaultPressure, juce::MouseInputSource::defaultOrientation,
+                                   time + 400);
+        };
+        clickAt(loopButton.getCentre());
+        const auto loopedOnce = drums->pad(rollPad).sound->playback.loop;
+        clickAt(pads[0].getBottomLeft() + juce::Point<int>(12, -8));
+        const auto mutedOnce = drums->pad(first).muted;
+        rack.removeFromDesktop();
+        rack.setVisible(false);
+        require(loopedOnce, "a real click on Loop turns it on, once");
+        require(mutedOnce, "and a real click on M mutes the pad, once");
+        session.undo();
+        session.undo();
+    }
+
     // Painted in the app's own look, at the size it promises.
     Theme faceTheme;
     panel->setLookAndFeel(&faceTheme);

@@ -40,6 +40,7 @@ public:
     static constexpr int headerHeight = 23;
 
     explicit DeviceEditorPanel(Session&);
+    ~DeviceEditorPanel() override;
     void setTarget(int track, const Session::DeviceSlot&, bool selected);
     // A lane is moving one of this face's knobs, as of the last setTarget.
     bool followsAutomation() const;
@@ -206,6 +207,34 @@ private:
     void askToSaveFile(const juce::String& noun, const juce::String& prompt, const juce::String& suggestedName,
                        const juce::File& folder, const juce::String& extension,
                        std::function<void(const juce::File&)> save);
+
+    // The panel hears what happens to its knobs and choosers as well as to
+    // itself: a right-click on a knob is its automation menu. A component
+    // that listens to itself hears each of its own clicks twice, once as
+    // itself and once as a listener, and every toggle on a face went on and
+    // straight back off. So this listens instead, and passes on only what
+    // happens to a child; the panel's own clicks reach it once, directly.
+    class ChildMouse final : public juce::MouseListener
+    {
+    public:
+        explicit ChildMouse(DeviceEditorPanel& owner) : panel(owner) {}
+        void mouseDown(const juce::MouseEvent& event) override { if (fromChild(event)) panel.mouseDown(event); }
+        void mouseDrag(const juce::MouseEvent& event) override { if (fromChild(event)) panel.mouseDrag(event); }
+        void mouseUp(const juce::MouseEvent& event) override { if (fromChild(event)) panel.mouseUp(event); }
+        void mouseDoubleClick(const juce::MouseEvent& event) override
+        {
+            if (fromChild(event)) panel.mouseDoubleClick(event);
+        }
+        void mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel) override
+        {
+            if (fromChild(event)) panel.mouseWheelMove(event, wheel);
+        }
+
+    private:
+        bool fromChild(const juce::MouseEvent& event) const { return event.eventComponent != &panel; }
+        DeviceEditorPanel& panel;
+    };
+    ChildMouse childMouse { *this };
 
     Session& session;
     int track = -1, pluginSlot = -1;

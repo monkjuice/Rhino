@@ -28,10 +28,10 @@ Add a unit-style test when behavior can be exercised without a complete `Session
 CTest entry points:
 
 - `native_arrangement_geometry`: clip edit bounds and playhead damage calculations
-- `native_device_correctness`: device DSP and state restoration, including Rhino Tune's and Rhino EQ's measured checks in `AutoTuneTest.cpp` and `EqTest.cpp`
+- `native_device_correctness`: device DSP and state restoration, including Rhino Tune's and Rhino EQ's measured checks in `AutoTuneTest.cpp` and `EqTest.cpp`, and the DJ booth's engine and analysis measured offline in `DjTest.cpp`
 - `native_device_conformance`: every device Rhino makes, rendered offline against the device standard, plus the SDK's own checks through two probe devices (`DeviceConformance.cpp`)
 - `native_pattern_workflow`: notes, presets, automation, renders, and project persistence
-- `native_arrangement_workflow`: browser drops, drawing, editing, tracks, and arrangement persistence
+- `native_arrangement_workflow`: browser drops, drawing, editing, tracks, arrangement persistence, and the DJ booth through the session (`scenarios/DjBooth.inc`)
 - `native_startup_lifecycle`: application startup
 
 Run all checks with `ctest --test-dir native/build -C Release --output-on-failure`.

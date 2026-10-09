@@ -45,11 +45,15 @@ Session::DjBooth::DjBooth()
     formats.registerBasicFormats();
 }
 
+// The worker is drained before the jobs and the bounces' copies of the
+// document go with the booth, on this thread.
 Session::DjBooth::~DjBooth()
 {
     for (auto& job : jobs)
         job->cancel.store(true);
-    workers.removeAllJobs(true, 4000);
+    workers.removeAllJobs(true, 10000);
+    bounces.clear();
+    jobs.clear();
 }
 
 void Session::DjBooth::audioDeviceIOCallbackWithContext(const float* const*, int, float* const* outputChannelData,

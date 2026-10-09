@@ -7,11 +7,13 @@
 // A file is read whole and analysed on the booth's one worker thread, so a
 // six-minute song does not stall the interface while it is decoded, and the
 // poll installs it. A track or a group of the document is bounced to audio
-// here, on the message thread, exactly as a merge renders: the render reads
-// the edit, and an edit changed under a render on another thread is a race
-// nothing here can win. A bounce is a few bars long, so it is over before a
-// stall could be felt, and the decks play on through it on their own
-// callback.
+// on the same worker, from a copy of the document loaded from a snapshot of
+// its state - the rule the file workers follow: a worker is handed a
+// detached snapshot, never the live edit, so the person can go on editing
+// while the bounce renders and nothing races. The live edit stays on the
+// device throughout, so the decks, and a track being played live, are not
+// interrupted. The copy costs its plugins being made again, which is the
+// price of the isolation.
 //
 // A bounced deck goes stale whenever the document changes, and the poll
 // bounces it again once the document has been quiet for half a second -
@@ -210,10 +212,13 @@ juce::Result Session::rebounceDjDeck(int index)
     return bounceDjDeck(index, info.loaded);
 }
 
-// The bounce. One track, or a bus with its members, rendered from the top of
-// the song to the end of the last clip among them, rounded up to whole bars,
-// through its own devices and fader and nothing else. Solo elsewhere in the
-// edit and session-view slot clips are kept out, as a merge keeps them out.
+// The bounce. One track, or a bus with the members that feed it, rendered
+// from the top of the song to the end of the last clip among them, rounded
+// up to whole bars, through its own devices and fader and nothing else.
+// Solo elsewhere in the edit and session-view slot clips are kept out, as a
+// merge keeps them out. The render runs on the worker against a copy of the
+// document; what this does on the message thread is make the copy and the
+// render, which takes a fraction of a second, and hand them over.
 juce::Result Session::bounceDjDeck(int index, bool keepBeat)
 {
     jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
@@ -263,91 +268,139 @@ juce::Result Session::bounceDjDeck(int index, bool keepBeat)
     const auto endBeats = edit->tempoSequence.toBeats(end).inBeats();
     const auto bars = std::max(1.0, std::ceil(endBeats / beatsPerBar() - 1.0e-6));
     const auto spanEnd = edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(bars * beatsPerBar()));
-    const auto bounceTempo = tempo();
 
     const auto folder = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("Rhino DJ bounces");
     if (!folder.createDirectory().wasOk())
         return fail("Rhino could not create a folder for the bounce.");
     const auto file = folder.getNonexistentChildFile("Deck " + juce::String(index + 1), ".wav");
 
+    // The copy: the document as it stands, lanes mirrored onto the engine's
+    // curves first so the render plays them as playback would.
+    mirrorAutomationToEngine();
+    edit->flushState();
+    auto copy = te::loadEditFromState(engine, edit->state.createCopy());
+    if (copy == nullptr)
+        return fail("The song could not be copied for the bounce.");
+    copy->editFileRetriever = edit->editFileRetriever;
+    std::vector<te::EditItemID> memberIds;
+    for (const auto member : members)
+        memberIds.push_back(tracks[member]->itemID);
+    te::Track::Array isolated;
+    const auto copyTracks = te::getAudioTracks(*copy);
+    for (const auto id : memberIds)
+        for (auto* track : copyTracks)
+            if (track->itemID == id)
+                isolated.add(track);
+    if (isolated.size() != static_cast<int>(memberIds.size()))
+        return fail("The deck's tracks were not found in the copy of the song.");
+
+    // A read already in flight for this deck is let go of: the newer bounce
+    // is the one that counts.
+    for (auto& job : b.jobs)
+        if (job->deck == index)
+            job->cancel.store(true);
+    auto job = std::make_shared<DjLoadJob>();
+    job->deck = index;
+    job->generation = deck.info.generation;
+    job->file = file;
+    job->keepBeat = keepBeat;
+    job->name = info.name;
+    job->tempo = tempo();
+    job->beatsPerBar = std::max(1, static_cast<int>(std::lround(beatsPerBar())));
+    auto work = std::make_unique<DjBounceWork>();
+    work->job = job;
+    work->copy = std::move(copy);
+    work->isolator = std::make_unique<te::FreezePointPlugin::ScopedTrackSoloIsolator>(*work->copy, isolated);
+    work->slotDisabler = std::make_unique<te::Renderer::ScopedClipSlotDisabler>(*work->copy, isolated);
     auto& devices = engine.getDeviceManager();
-    const double sampleRate = devices.getSampleRate() > 7000.0 ? devices.getSampleRate() : 48000.0;
-    const int blockSize = devices.getBlockSize() > 0 ? devices.getBlockSize() : 512;
-    juce::WavAudioFormat wav;
-    juce::String failure;
+    te::Renderer::Parameters parameters(*work->copy);
+    parameters.destFile = file;
+    parameters.audioFormat = &work->wav;
+    parameters.bitDepth = 24;
+    // Rendered at the device's own rate and block size, as a merge is.
+    parameters.sampleRateForAudio = devices.getSampleRate() > 7000.0 ? devices.getSampleRate() : 48000.0;
+    parameters.blockSizeForAudio = devices.getBlockSize() > 0 ? devices.getBlockSize() : 512;
+    parameters.time = {tracktion::core::TimePosition(), spanEnd};
+    // The track, or a group's bus with the members that feed it: the engine
+    // builds a member into its bus's node, and a bus named alone renders
+    // nothing.
+    const auto all = te::getAllTracks(*work->copy);
+    for (auto* track : isolated)
+    {
+        const auto position = all.indexOf(static_cast<te::Track*>(track));
+        if (position >= 0)
+            parameters.tracksToDo.setBit(position);
+    }
+    // The track as it sounds: its instrument, its effects and its fader.
+    // The main chain stays out, as it is the mixer's job here.
+    parameters.usePlugins = true;
+    parameters.useMasterPlugins = false;
+    parameters.canRenderInMono = false;
+    work->task = std::make_unique<te::Renderer::RenderTask>("Bounce to deck", parameters, nullptr, nullptr);
+    job->started = juce::Time::getMillisecondCounterHiRes();
     deck.info.loading = true;
-    const auto started = juce::Time::getMillisecondCounterHiRes();
     juce::Logger::writeToLog("Rhino: bouncing " + info.name.quoted() + " to deck " + juce::String(index + 1) + ": "
                              + juce::String(bars, 0) + " bars, " + juce::String(members.size()) + " track(s)");
+    b.jobs.push_back(job);
+    auto* task = work->task.get();
+    b.bounces.push_back(std::move(work));
+    auto* formats = &b.formats;
+    const auto render = [job, task, formats]
     {
-        // The render drives the edit the device callback is holding, so the
-        // edit comes off the device first and is reattached when this goes.
-        const te::Edit::ScopedRenderStatus renderStatus(*edit, true);
-        te::TransportControl::stopAllTransports(engine, false, true);
-        mirrorAutomationToEngine();
-        te::Renderer::turnOffAllPlugins(*edit);
-        te::Track::Array isolated;
-        for (const auto member : members)
-            isolated.add(tracks[member]);
-        const te::FreezePointPlugin::ScopedTrackSoloIsolator isolator(*edit, isolated);
-        const te::Renderer::ScopedClipSlotDisabler slotDisabler(*edit, isolated);
-        te::Renderer::Parameters parameters(*edit);
-        parameters.destFile = file;
-        parameters.audioFormat = &wav;
-        parameters.bitDepth = 24;
-        parameters.sampleRateForAudio = sampleRate;
-        parameters.blockSizeForAudio = blockSize;
-        parameters.time = {tracktion::core::TimePosition(), spanEnd};
-        // The track, or a group's bus with the members that feed it: the
-        // engine builds a member into its bus's node, and a bus named alone
-        // renders nothing.
-        const auto all = te::getAllTracks(*edit);
-        for (const auto member : members)
+        juce::String error;
+        // A render that returns unfinished for good would hold the worker
+        // for good; a budget turns that into a refusal.
+        const auto deadline = juce::Time::getMillisecondCounterHiRes() + 60000.0;
+        while (task->runJob() != juce::ThreadPoolJob::jobHasFinished)
         {
-            const auto position = all.indexOf(static_cast<te::Track*>(tracks[member]));
-            if (position >= 0)
-                parameters.tracksToDo.setBit(position);
-        }
-        // The track as it sounds: its instrument, its effects and its fader.
-        // The main chain stays out, as it is the mixer's job here.
-        parameters.usePlugins = true;
-        parameters.useMasterPlugins = false;
-        parameters.canRenderInMono = false;
-        te::Renderer::RenderTask task("Bounce to deck", parameters, nullptr, nullptr);
-        // A render that returns unfinished for good would hang the app, as
-        // the known causes of one do; a budget turns that into a refusal.
-        const auto deadline = juce::Time::getMillisecondCounterHiRes() + 30000.0;
-        while (task.runJob() != juce::ThreadPoolJob::jobHasFinished)
-            if (juce::Time::getMillisecondCounterHiRes() > deadline)
+            if (job->cancel.load())
             {
-                failure = "The bounce did not finish in time.";
+                error = "Cancelled.";
                 break;
             }
-        if (failure.isEmpty() && (task.errorMessage.isNotEmpty() || !file.existsAsFile()))
-            failure = task.errorMessage.isNotEmpty() ? task.errorMessage : juce::String("The bounce could not be rendered.");
-        te::Renderer::turnOffAllPlugins(*edit);
-    }
-    juce::Logger::writeToLog("Rhino: bounce to deck " + juce::String(index + 1) + (failure.isEmpty() ? " rendered in " : " failed after ")
-                             + juce::String(juce::Time::getMillisecondCounterHiRes() - started, 0) + " ms"
-                             + (failure.isEmpty() ? juce::String() : ": " + failure));
-    if (failure.isNotEmpty())
-    {
-        file.deleteFile();
-        return fail(failure);
-    }
-    juce::String readError;
-    auto track = readDjTrack(file, b.formats, readError);
-    file.deleteFile();
-    if (track == nullptr)
-        return fail(readError);
-    track->name = info.name;
-    DjAnalysisOptions options;
-    options.knownBpm = bounceTempo;
-    options.knownFirstBeatSeconds = 0.0;
-    options.beatsPerBar = std::max(1, static_cast<int>(std::lround(beatsPerBar())));
-    track->analysis = analyseDjTrack(track->left.data(), track->stereo() ? track->right.data() : nullptr,
-                                     track->length(), track->sampleRate, options);
-    finishDjLoad(index, deck.info.generation, std::move(track), {}, keepBeat);
+            if (juce::Time::getMillisecondCounterHiRes() > deadline)
+            {
+                error = "The bounce did not finish in time.";
+                break;
+            }
+        }
+        if (error.isEmpty() && (task->errorMessage.isNotEmpty() || !job->file.existsAsFile()))
+            error = task->errorMessage.isNotEmpty() ? task->errorMessage : juce::String("The bounce could not be rendered.");
+        std::unique_ptr<DjTrack> track;
+        if (error.isEmpty())
+        {
+            track = readDjTrack(job->file, *formats, error, &job->cancel);
+            if (track != nullptr)
+            {
+                track->name = job->name;
+                DjAnalysisOptions options;
+                options.knownBpm = job->tempo;
+                options.knownFirstBeatSeconds = 0.0;
+                options.beatsPerBar = job->beatsPerBar;
+                options.cancel = &job->cancel;
+                track->analysis = analyseDjTrack(track->left.data(), track->stereo() ? track->right.data() : nullptr,
+                                                 track->length(), track->sampleRate, options);
+            }
+        }
+        job->file.deleteFile();
+        juce::Logger::writeToLog("Rhino: bounce to deck " + juce::String(job->deck + 1) + (error.isEmpty() ? " rendered in " : " failed after ")
+                                 + juce::String(juce::Time::getMillisecondCounterHiRes() - job->started, 0) + " ms"
+                                 + (error.isEmpty() ? juce::String() : ": " + error));
+        job->error = error;
+        job->result = std::move(track);
+        job->done.store(true, std::memory_order_release);
+    };
+    // The render's initialisation takes the message manager's lock, which
+    // the worker is granted only while the message thread dispatches. The
+    // app's always does, as it does for the WAV export; the test runners
+    // have no dispatch loop (modal loops are compiled out), so under the
+    // command-line test mode the render runs here, inline, and the poll
+    // still installs it.
+    if (isCommandLineTestMode())
+        render();
+    else
+        b.workers.addJob(render);
+    sendSynchronousChangeMessage();
     return juce::Result::ok();
 }
 
@@ -583,6 +636,11 @@ void Session::djPoll()
         b.jobs.erase(b.jobs.begin() + static_cast<long>(i));
         if (!finished->cancel.load())
             finishDjLoad(finished->deck, finished->generation, std::move(finished->result), finished->error, finished->keepBeat);
+        // A bounce's copy of the document and its render go now, here on the
+        // message thread: the worker touched neither after raising done.
+        b.bounces.erase(std::remove_if(b.bounces.begin(), b.bounces.end(),
+                                       [&finished](const std::unique_ptr<DjBounceWork>& work) { return work->job == finished; }),
+                        b.bounces.end());
     }
     b.engine.collect();
     // A stale deck is loaded again once the document has been quiet for a
@@ -623,7 +681,12 @@ void Session::djReset()
     auto& b = *dj;
     for (auto& job : b.jobs)
         job->cancel.store(true);
+    // The bounces' copies of the document die here, on the message thread,
+    // so the worker is drained first: a render still running would read a
+    // copy being destroyed.
+    b.workers.removeAllJobs(true, 10000);
     b.jobs.clear();
+    b.bounces.clear();
     for (int i = 0; i < maximumDjDecks; ++i)
     {
         b.decks[static_cast<size_t>(i)] = {};

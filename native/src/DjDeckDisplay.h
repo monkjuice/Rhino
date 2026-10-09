@@ -53,6 +53,9 @@ private:
     void paintReadouts(juce::Graphics&, juce::Rectangle<int> area);
     void seekAt(juce::Point<int> point, juce::Rectangle<int> area);
     static juce::String clock(double seconds);
+    // The readout fields as one string, compared by tick() and drawn by
+    // paintReadouts(), so the row repaints only when a field changes.
+    juce::String readoutText() const;
 
     Session& session;
     int deck;

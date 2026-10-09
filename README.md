@@ -47,6 +47,10 @@ Import samples and recordings, then adjust clip gain, pan, pitch, fades, reverse
 
 Rhino includes instruments, a Drum Rack with a pad on every note, sampled and synthesised kits, and a sample editor that slices a loop across pads, MIDI effects, and audio effects in a drag-and-drop browser. The independent [Rhino Forge](instruments/rhino-forge/README.md) synth adds wavetable and spectral synthesis, deep modulation, an arpeggiator, flexible routing, and effects as a VST3 or standalone app.
 
+### Play the song like a DJ
+
+Tab, or the DJ switch beside the transport, swaps the arrangement for up to six CDJ-style decks around a mixer. A deck plays an audio file, or a track or group of the song bounced to audio and bounced again as you edit it, with hot cues, loops, beat jump, sync and quantised starts; the mixer has a three-band isolator and a colour filter per channel, a crossfader and a beat effect. A track deck's instrument can be played live from the keys over it, which is how a Drum Rack joins a set. Experimental.
+
 ### Mix with the essentials in reach
 
 Every audio and MIDI track has volume, pan, mute, solo, devices, automation, and routing. Group tracks into real bus tracks, process the main output, and use built-in tools including Rhino EQ, Rhino Tune, Rhino Vocoder, Utility, and sidechain routing.
@@ -55,7 +59,7 @@ Every audio and MIDI track has volume, pan, mute, solo, devices, automation, and
 
 The foundations are working: arrangement editing, audio and MIDI recording, project save/open, offline WAV export, track groups, automation, VST3 hosting, built-in devices, and a tested native audio model.
 
-Some production workflows are still being completed. Projects reference imported media in place, plugin discovery is limited, recording has no comping or loop-take workflow yet, and the clip-launching session view is temporarily disabled while its interaction model is finished. macOS remains unvalidated until the release build and installer work begins.
+Some production workflows are still being completed. Projects reference imported media in place, plugin discovery is limited, recording has no comping or loop-take workflow yet, and the clip-launching session view is set aside: its place in the shell is taken by the experimental DJ view. macOS remains unvalidated until the release build and installer work begins.
 
 Keep backups of anything important and expect project compatibility to change during alpha development.
 

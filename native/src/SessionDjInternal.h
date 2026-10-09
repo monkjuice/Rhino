@@ -28,8 +28,9 @@ struct DjDeckSettings
     DjDeckSettings() { hotCueSeconds.fill(-1.0); }
 };
 
-// A file being read and analysed on the worker. The message thread owns the
-// job; the worker writes its result and raises `done`.
+// A load in flight on the worker: a file being read and analysed, or a
+// bounce being rendered. The job is shared with the worker, which writes
+// its result and raises `done`; what a bounce renders is not in it.
 struct DjLoadJob
 {
     int deck = -1;
@@ -40,6 +41,28 @@ struct DjLoadJob
     std::atomic<bool> cancel {false};
     std::unique_ptr<DjTrack> result;
     juce::String error;
+    // A bounce's name, tempo and signature, for the analysis.
+    juce::String name;
+    double tempo = 0.0;
+    int beatsPerBar = 4;
+    double started = 0.0;
+};
+
+// What a bounce renders: a copy of the document loaded from a snapshot of
+// its state, so the live edit is never read from another thread while the
+// person goes on editing it, and the render that drives it. Owned by the
+// message thread alone, made there and destroyed there once its job is
+// done; the worker is handed a plain pointer to the render and touches
+// nothing here after it raises `done`. The copy is declared first so the
+// render and the scopes that refer to it go before it.
+struct DjBounceWork
+{
+    std::shared_ptr<DjLoadJob> job;
+    std::unique_ptr<te::Edit> copy;
+    std::unique_ptr<te::FreezePointPlugin::ScopedTrackSoloIsolator> isolator;
+    std::unique_ptr<te::Renderer::ScopedClipSlotDisabler> slotDisabler;
+    juce::WavAudioFormat wav;
+    std::unique_ptr<te::Renderer::RenderTask> task;
 };
 
 struct Session::DjBooth final : juce::AudioIODeviceCallback
@@ -63,6 +86,8 @@ struct Session::DjBooth final : juce::AudioIODeviceCallback
     juce::AudioFormatManager formats;
     juce::ThreadPool workers {1};
     std::vector<std::shared_ptr<DjLoadJob>> jobs;
+    // The bounces in flight, kept until their jobs are done.
+    std::vector<std::unique_ptr<DjBounceWork>> bounces;
     // When the document last changed under a bounced deck, as a millisecond
     // tick, and zero when nothing is stale. The poll bounces again once it
     // has been quiet for `rebounceQuietMs`.

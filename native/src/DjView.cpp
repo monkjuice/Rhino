@@ -222,7 +222,7 @@ void DjView::resized()
     const auto mixerWidth = juce::jlimit(DjMixerPanel::masterWidth + 40, std::max(DjMixerPanel::masterWidth + 40, bounds.getWidth() / 2),
                                          mixer.preferredWidth());
     const auto mixerArea = bounds.withSizeKeepingCentre(mixerWidth, bounds.getHeight());
-    mixer.setBounds(count > 0 || true ? mixerArea : juce::Rectangle<int>());
+    mixer.setBounds(mixerArea);
     if (count == 0) return;
     const auto left = bounds.withRight(mixerArea.getX() - 4);
     const auto right = bounds.withLeft(mixerArea.getRight() + 4);

@@ -123,7 +123,25 @@ void DjDeckDisplay::tick()
         if (before != after || drawnPosition < 0.0)
             repaint(juce::Rectangle<int>(std::min(before, after) - 2, area.getY(), std::abs(after - before) + 5, area.getHeight()));
     }
-    repaint(readoutArea());
+    // The readouts change a few times a second at most, and a deck standing
+    // still changes none of them; only new text is drawn.
+    if (readoutText() != drawnReadout)
+        repaint(readoutArea());
+}
+
+juce::String DjDeckDisplay::readoutText() const
+{
+    if (track == nullptr) return {};
+    const auto remaining = state.lengthSeconds - state.positionSeconds;
+    const auto bars = state.beat >= 0.0 ? static_cast<int>(std::floor(state.beat / state.beatsPerBar)) + 1 : 0;
+    const auto beatInBar = state.beat >= 0.0 ? static_cast<int>(std::floor(state.beat)) % state.beatsPerBar + 1 : 0;
+    const auto what = state.transport == Session::DjDeckState::Transport::waiting ? juce::String("WAIT")
+                    : state.transport == Session::DjDeckState::Transport::cueing ? juce::String("CUE")
+                    : state.isPlaying() ? juce::String("PLAY") : juce::String("STOP");
+    const auto tempo = state.bpm > 0.0 ? juce::String(state.effectiveBpm, 2) + " BPM" : juce::String("-- BPM");
+    const auto percent = (state.tempoPercent >= 0.0f ? "+" : "") + juce::String(state.tempoPercent, 2) + "%";
+    return clock(state.positionSeconds) + "  " + clock(-remaining) + "|" + what + "|" + tempo + "|"
+         + (state.synced ? "SYNC" : percent) + "|" + juce::String(bars) + "." + juce::String(beatInBar);
 }
 
 void DjDeckDisplay::paint(juce::Graphics& g)
@@ -351,30 +369,27 @@ void DjDeckDisplay::paintReadouts(juce::Graphics& g, juce::Rectangle<int> area)
     g.setColour(palette::displayTextFaint);
     g.fillRect(area.getX(), area.getY(), area.getWidth(), 1);
     if (track == nullptr) return;
+    // The same fields tick() compares, drawn in their columns.
+    drawnReadout = readoutText();
+    juce::StringArray fields;
+    fields.addTokens(drawnReadout, "|", "");
+    if (fields.size() < 5) return;
     g.setFont(uiFont(10.0f));
     auto row = area.reduced(6, 0);
-    const auto remaining = state.lengthSeconds - state.positionSeconds;
-    const auto bars = state.beat >= 0.0 ? static_cast<int>(std::floor(state.beat / state.beatsPerBar)) + 1 : 0;
-    const auto beatInBar = state.beat >= 0.0 ? static_cast<int>(std::floor(state.beat)) % state.beatsPerBar + 1 : 0;
-    const auto what = state.transport == Session::DjDeckState::Transport::waiting ? juce::String("WAIT")
-                    : state.transport == Session::DjDeckState::Transport::cueing ? juce::String("CUE")
-                    : state.isPlaying() ? juce::String("PLAY") : juce::String("STOP");
     g.setColour(palette::displayText);
-    drawSnappedText(g, clock(state.positionSeconds) + "  " + clock(-remaining), row.removeFromLeft(120));
+    drawSnappedText(g, fields[0], row.removeFromLeft(120));
     g.setColour(palette::displayTextDim);
-    drawSnappedText(g, what, row.removeFromLeft(36));
+    drawSnappedText(g, fields[1], row.removeFromLeft(36));
     g.setColour(palette::displayText);
-    const auto tempo = state.bpm > 0.0 ? juce::String(state.effectiveBpm, 2) + " BPM" : juce::String("-- BPM");
-    drawSnappedText(g, tempo, row.removeFromLeft(78));
+    drawSnappedText(g, fields[2], row.removeFromLeft(78));
     g.setColour(palette::displayTextDim);
-    const auto percent = (state.tempoPercent >= 0.0f ? "+" : "") + juce::String(state.tempoPercent, 2) + "%";
-    drawSnappedText(g, state.synced ? "SYNC" : percent, row.removeFromLeft(54));
+    drawSnappedText(g, fields[3], row.removeFromLeft(54));
     if (track->analysis.keyIndex >= 0)
         drawSnappedText(g, DjAnalysis::keyName(track->analysis.keyIndex) + " " + DjAnalysis::camelotName(track->analysis.keyIndex),
                         row.removeFromLeft(52));
     g.setColour(palette::displayText);
     if (state.bpm > 0.0)
-        drawSnappedText(g, juce::String(bars) + "." + juce::String(beatInBar), row, juce::Justification::centredRight);
+        drawSnappedText(g, fields[4], row, juce::Justification::centredRight);
 }
 
 void DjDeckDisplay::seekAt(juce::Point<int> point, juce::Rectangle<int> area)

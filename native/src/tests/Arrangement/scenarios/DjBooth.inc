@@ -16,6 +16,16 @@
                 for (const auto s : samples) sum += static_cast<double>(s) * s;
                 return samples.empty() ? 0.0 : std::sqrt(sum / static_cast<double>(samples.size()));
             };
+            // A bounce renders on the worker; the poll installs it.
+            const auto waitForDeck = [](Session& booth, int deck)
+            {
+                for (int waited = 0; waited < 800 && booth.djDeckInfo(deck).loading; ++waited)
+                {
+                    juce::Thread::sleep(25);
+                    booth.djPoll();
+                }
+                return booth.djDeckInfo(deck).loaded && !booth.djDeckInfo(deck).loading;
+            };
             require(session.djDeckCount() == 0, "A new project has no decks");
             require(session.addDjDeck().wasOk() && session.addDjDeck().wasOk(), "Two decks can be added");
             require(session.djDeckCount() == 2, "and both are counted");
@@ -29,6 +39,8 @@
                 .indexOf(dynamic_cast<te::AudioTrack*>(session.pattern().getClipTrack()));
             require(deckTrack >= 0, "The pattern clip sits on a track");
             require(session.loadDjDeckTrack(0, deckTrack).wasOk(), "A MIDI track bounces onto a deck");
+            require(session.djDeckInfo(0).loading, "on the worker");
+            require(waitForDeck(session, 0), ("The worker finishes the bounce: " + session.djDeckInfo(0).error).toRawUTF8());
             auto info = session.djDeckInfo(0);
             require(info.kind == Session::DjSourceKind::track && info.loaded && !info.loading && info.track == deckTrack,
                     "The deck reports the track it holds");
@@ -65,6 +77,7 @@
             session.applyPatternPreset(Session::PatternPreset::AcidSteps);
             require(session.djDeckInfo(0).stale, "Changing the song marks the bounce stale");
             require(session.rebounceDjDeck(0).wasOk(), "The deck bounces again");
+            require(waitForDeck(session, 0), ("and the worker finishes it: " + session.djDeckInfo(0).error).toRawUTF8());
             require(!session.djDeckInfo(0).stale && session.djDeckInfo(0).loaded, "and is fresh");
             require(session.djDeckInfo(0).generation > generationBefore, "New material has a new generation");
             session.djProcessOffline(512);
@@ -81,6 +94,7 @@
                 const auto group = document->trackGroups().back();
                 require(document->loadDjDeckGroup(0, group.id).wasOk(),
                         ("A group bounces onto a deck: " + document->djDeckInfo(0).error).toRawUTF8());
+                require(waitForDeck(*document, 0), ("and the worker finishes it: " + document->djDeckInfo(0).error).toRawUTF8());
                 const auto groupInfo = document->djDeckInfo(0);
                 require(groupInfo.kind == Session::DjSourceKind::group && groupInfo.loaded && groupInfo.track == group.busTrack,
                         "The deck reports the group and its bus");
@@ -91,6 +105,7 @@
                 require(document->setTrackVolumeDb(group.busTrack, -20.0f).wasOk(), "The bus fader can be turned down");
                 require(document->djDeckInfo(0).stale, "which makes the bounce stale");
                 require(document->rebounceDjDeck(0).wasOk(), "Bounced again");
+                require(waitForDeck(*document, 0), "and finished");
                 const auto* quieter = document->djDeckTrack(0);
                 require(quieter != nullptr && rmsOf(quieter->left) < loud * 0.2,
                         "the group's bounce passes through the bus's fader");

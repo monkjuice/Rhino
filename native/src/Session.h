@@ -1214,8 +1214,11 @@ public:
     // for a moment.
     void djPoll();
     bool djBusy() const;
-    // Drives the booth without an audio device, for the tests.
+    // Drives the booth without an audio device, for the tests, through the
+    // booth's own callback: what a device would hand it is what the test
+    // hands it, the inputs (the first is the mic) included.
     void djProcessOffline(int frames);
+    void djProcessOffline(const float* const* inputs, int inputChannels, int frames);
     bool djEngineAttached() const;
 
     te::Engine engine;

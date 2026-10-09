@@ -97,8 +97,8 @@ struct Session::DjBooth final : juce::AudioIODeviceCallback
     // The last few taps on the effect's TAP key, as millisecond ticks.
     std::vector<juce::uint32> taps;
 
-    void audioDeviceIOCallbackWithContext(const float* const*, int, float* const* outputChannelData,
-                                          int numOutputChannels, int numSamples,
+    void audioDeviceIOCallbackWithContext(const float* const* inputChannelData, int numInputChannels,
+                                          float* const* outputChannelData, int numOutputChannels, int numSamples,
                                           const juce::AudioIODeviceCallbackContext&) override;
     void audioDeviceAboutToStart(juce::AudioIODevice*) override;
     void audioDeviceStopped() override;

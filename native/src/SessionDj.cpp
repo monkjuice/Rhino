@@ -56,14 +56,14 @@ Session::DjBooth::~DjBooth()
     jobs.clear();
 }
 
-void Session::DjBooth::audioDeviceIOCallbackWithContext(const float* const*, int, float* const* outputChannelData,
-                                                        int numOutputChannels, int numSamples,
+void Session::DjBooth::audioDeviceIOCallbackWithContext(const float* const* inputChannelData, int numInputChannels,
+                                                        float* const* outputChannelData, int numOutputChannels, int numSamples,
                                                         const juce::AudioIODeviceCallbackContext&)
 {
     // The scratch buffer a second callback is handed holds this callback's
     // own previous block, as CountInClick explains, so the engine clears it
-    // before it writes.
-    engine.process(outputChannelData, numOutputChannels, numSamples);
+    // before it writes. The device's first input is the mic.
+    engine.process(inputChannelData, numInputChannels, outputChannelData, numOutputChannels, numSamples);
 }
 
 void Session::DjBooth::audioDeviceAboutToStart(juce::AudioIODevice* device)
@@ -822,10 +822,18 @@ void Session::setDjFxTarget(int target)
 
 void Session::djProcessOffline(int frames)
 {
+    djProcessOffline(nullptr, 0, frames);
+}
+
+// Through the booth's own callback rather than the engine, so that what the
+// test hands it is what the device would: the callback once dropped the
+// inputs on the floor and the engine's own test could not tell.
+void Session::djProcessOffline(const float* const* inputs, int inputChannels, int frames)
+{
     if (dj == nullptr || frames <= 0) return;
     std::vector<float> left(static_cast<size_t>(frames)), right(static_cast<size_t>(frames));
     float* outputs[2] {left.data(), right.data()};
-    dj->engine.process(outputs, 2, frames);
+    dj->audioDeviceIOCallbackWithContext(inputs, inputChannels, outputs, 2, frames, juce::AudioIODeviceCallbackContext{});
     dj->engine.collect();
 }
 

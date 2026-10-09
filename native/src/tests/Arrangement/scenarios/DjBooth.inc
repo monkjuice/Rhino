@@ -207,6 +207,24 @@
             require(tapped > 170.0 && tapped < 215.0,
                     ("Four taps 300 ms apart set the effect's tempo near 200: " + juce::String(tapped, 1)).toRawUTF8());
 
+            scenario("dj booth: the mic comes in through the booth's callback");
+            {
+                // The device's first input is the mic. Fed through the same
+                // callback the device calls, with the mic on, the mic's meter
+                // reads the tone; off, it reads nothing.
+                session.setDjMicMode(1);
+                std::vector<float> spoken(512);
+                for (size_t i = 0; i < spoken.size(); ++i)
+                    spoken[i] = 0.5f * static_cast<float>(std::sin(juce::MathConstants<double>::twoPi * 300.0 * static_cast<double>(i) / 48000.0));
+                const float* inputs[1] {spoken.data()};
+                for (int i = 0; i < 4; ++i)
+                    session.djProcessOffline(inputs, 1, 512);
+                require(session.djMic().meter > 0.3f, "The device's first input reaches the mic through the booth's callback");
+                session.setDjMicMode(0);
+                session.djProcessOffline(inputs, 1, 512);
+                require(session.djMic().meter < 0.001f, "and the mic off reads nothing");
+            }
+
             scenario("dj booth: live and the note editor");
             // After every render: switching monitoring on arms the track, and
             // arming allocates the playback context a render must not find.
@@ -240,6 +258,22 @@
                     for (auto* child : panel->getChildren())
                         require(inside(child->getBounds(), panel->getLocalBounds()), "A deck's keys sit inside its console");
                 require(view->mixer.strips.size() == 2, "The mixer has a strip per deck");
+                // A third deck added while the view stands lands its strip
+                // beside the others, not under the master section: the view
+                // syncs the mixer before it lays out (the bug of 2026-10-09).
+                require(session.addDjDeck().wasOk(), "A third deck while the view shows");
+                view->sync();
+                require(view->decks.size() == 3 && view->mixer.strips.size() == 3, "gets its panel and its strip");
+                {
+                    const auto masterLeft = view->mixer.getWidth() - DjMixerPanel::masterWidth - 4;
+                    for (auto& strip : view->mixer.strips)
+                        require(strip->fader.getRight() <= masterLeft && strip->side.getRight() <= masterLeft
+                                && view->mixer.getLocalBounds().contains(strip->fader.getBounds()),
+                                "Every strip stands clear of the master section without a resize");
+                }
+                require(session.removeDjDeck(2).wasOk(), "and the third deck goes again");
+                view->sync();
+                require(view->decks.size() == 2 && view->mixer.strips.size() == 2, "leaving two");
                 view->decks[0]->play.onClick();
                 session.djProcessOffline(2048);
                 require(session.djDeckState(0).isPlaying(), "The Play key plays the deck");

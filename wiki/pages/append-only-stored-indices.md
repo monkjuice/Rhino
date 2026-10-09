@@ -1,10 +1,10 @@
 ---
 title: Stored indices are append-only
 type: convention
-summary: Forge saves choices and routings as list indices, so a list is only ever appended to; reordering one is a preset-format change.
-tags: [forge, presets, compatibility]
+summary: Saved choice lists and parameter arrays are append-only, because inserting an entry silently changes what an old index means.
+tags: [forge, rhino, presets, parameters, compatibility]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-04
 ---
 
 # Stored indices are append-only
@@ -31,7 +31,11 @@ Two traps that bump left behind (checked 2026-10-03):
 - Host state carries no version, so a Rhino project saved before the bump is reconciled, not refused, and its slot destinations past B PITCH now name other controls.
 - A literal survived: slot 1's default destination is `13` in `src/ForgeParameters.cpp`, commented as the cutoff, and 13 is now C PAN. Write indices through named constants such as `cutoffDestination`.
 
-Rhino's analogue is the device catalog id, which drag descriptions carry and which therefore never changes (`Equaliser` still names Rhino EQ; `native/src/devices/DeviceCatalog.h`).
+## Rhino follows the same rule
+
+Rhino device parameter order is also persistent state. When Rhino Arp gained rate mode and a free rate, `rateMode` and `freeRate` were appended after its original 13 parameters rather than inserted beside its musical rate. That keeps old saved automation and parameter indices pointed at the original controls even though the editor presents the related controls together. New parameters therefore need explicit defaults for old state: beat mode and 125 ms in this case.
+
+Device catalog ids are another stable Rhino identity: drag descriptions carry them, so they never change (`Equaliser` still names Rhino EQ; `native/src/devices/DeviceCatalog.h`).
 
 ## Related
 
@@ -40,3 +44,4 @@ Rhino's analogue is the device catalog id, which drag descriptions carry and whi
 - [Forge noise module](forge-noise.md)
 - [Forge warp](forge-warp.md)
 - [Device catalog](device-catalog.md)
+- [Rhino Arp](rhino-arp.md)

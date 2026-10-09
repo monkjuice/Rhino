@@ -130,6 +130,12 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/forge-filter.md (FAT's level-dependent damping is part of both sides of the implicit SVF solve; recorded the rapid-cutoff failure mode and live-cadence regression)
 - updated: pages/forge-modulation.md (recorded the eight-slot, six-LFO multi-filter stress scenario and its finite, bounded and audible-output contract)
 
+## [2026-10-04] update | Rhino Arp gains free-rate timing and a five-area face
+- updated: `pages/rhino-arp.md` (documented the appended rate parameters, wall-clock millisecond scheduler, control layout and exact-spacing regression)
+- updated: `pages/device-rack.md` (recorded that Arp-specific construction and styling live with its dedicated face)
+- updated: `pages/append-only-stored-indices.md` (extended the append-only persistence rule to Rhino device parameter arrays)
+- updated: `index.md` (catalogued Rhino Arp as a component and refreshed the append-only convention summary)
+
 ## [2026-10-05] update | Rhino Wave removed
 - updated: pages/built-in-devices.md (dropped the Rhino Wave row; the Arp row links its own page)
 - updated: pages/pattern-presets.md (eleven presets without the three Wave ones; a preset loads into the open clip's own track, not track 0)
@@ -178,6 +184,14 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/native-device-standard.md (both devices on the base, proved byte-identical to the hand-written versions over 16 renders; per-block cost before and after; the remaining steps)
 - updated: pages/adding-a-device.md (start a new device from Utility or Space; Bloom is the closest hand-written one)
 - updated: pages/built-in-devices.md (which devices are on the SDK; how Utility declares its pass-through bus and smooths its gain)
+
+## [2026-10-05] update | Rhino Arp's face reordered, Steps on a knob, Offset on a bar; the Device View's height floor
+- source: commits d28a687, 67031ba
+- updated: pages/rhino-arp.md (left-to-right order and arpLayout widths; orange arpSequence display; Steps knob and Distance disabled at 0 Steps; Offset bar with barFillsAcross and relative drag; slider styling in the shared styleControls; doubled "All" blemish; new DeviceRackTest assertions; snapshot painted with Theme; Related section)
+- updated: pages/device-rack.md (named chain geometry and DeviceRack::minimumHeight of 219 px, with its test; links Rhino Arp)
+- updated: pages/app-shell.md (lower pane floor per face, the write-back into lowerPaneHeight, the clamp untested)
+- updated: pages/colours-and-typography.md (midiEffect and arpSequence tokens)
+- updated: pages/headless-ui-snapshots.md (RHINO_ARP_SNAPSHOT; set a Theme on a snapshotted panel or it paints in LookAndFeel_V4)
 
 ## [2026-10-05] update | Rhino FM, the first instrument on the device SDK; .rnd files are presets
 - created: pages/rhino-fm.md (four operators, eight routings, the index scale and its Bessel check, the Nyquist guard and depth taper, mono and pedal, the electric-piano defaults, cost)

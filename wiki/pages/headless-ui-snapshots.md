@@ -19,7 +19,10 @@ Build it inside a test ([Writing Rhino tests](writing-rhino-tests.md)) and snaps
 `checkEditorFace` in `native/src/tests/EqTest.cpp` is the pattern: a `DeviceEditorPanel` given `setTarget`, sized to
 `preferredWidth()` by `DeviceEditorPanel::standardHeight`, its children asserted inside the panel and off each other,
 and the snapshot kept as a paint smoke test. Write a PNG only when an env var names a path, as `ClipWarp.inc`
-(`RHINO_CLIP_PANEL_SNAPSHOT`) and `AutomationLanes.inc` (`RHINO_AUTOMATION_SNAPSHOT`) do.
+(`RHINO_CLIP_PANEL_SNAPSHOT`), `AutomationLanes.inc` (`RHINO_AUTOMATION_SNAPSHOT`) and the Arp face in
+`DeviceRackTest.cpp` (`RHINO_ARP_SNAPSHOT`) do. Give the panel a `Theme` with `setLookAndFeel` before the snapshot and
+clear it after: a test component otherwise paints in stock `LookAndFeel_V4`, and the Arp's reference PNG showed JUCE's
+knobs and number-less bars until commit `d28a687`.
 
 The Drum Rack face does the same in `runDrumRackFaceTest` (`tests/Pattern/DeviceRackTest.cpp`). Set
 `RHINO_DRUMS_SNAPSHOT` to an absolute path and run `ctest --test-dir native/build -C Release -R native_pattern_workflow`.

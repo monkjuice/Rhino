@@ -40,6 +40,7 @@ The catalog of this wiki: every page, grouped by type, one line each (`- [Title]
 - [Playhead rendering](pages/playhead.md) — Draws both playheads every display refresh from the audio graph's own position, repainting two narrow strips whose painters skip everything else, with a Direct2D fix.
 - [Project files (.rhinoedit)](pages/project-files.md) — A .rhinoedit is the Tracktion edit's XML plus Rhino's own properties, saved from a snapshot on a worker and opened off-thread.
 - [Recording and the count-in](pages/recording.md) — Arms tracks, not inputs, lets each take win the ground it lands on, and counts in with Rhino's own click while the playhead stands still.
+- [Rhino Arp](pages/rhino-arp.md) — A built-in MIDI arpeggiator with beat or millisecond scheduling and a dedicated five-area rack face.
 - [Rhino EQ](pages/rhino-eq.md) — Eight-band EQ whose drawn curve comes from the same coefficients as the audio, over a spectrum computed off the audio thread.
 - [Rhino FM](pages/rhino-fm.md) — A four-operator FM synth in eight routings, written on the device SDK, whose modulation index is checked against Bessel functions and whose face shows its operators as tabs, its carriers in a routing diagram, and the waveform it makes.
 - [Rhino Forge](pages/forge.md) — Rhino's independent wavetable and spectral synth, a VST3 and standalone app built from one JUCE AudioProcessor.
@@ -106,7 +107,7 @@ The catalog of this wiki: every page, grouped by type, one line each (`- [Title]
 - [Keeping files small](pages/keeping-files-small.md) — Split a .cpp past about 600 lines or a second responsibility by defining one class across several translation units, not by inventing types.
 - [Measure sound, don't read the DSP](pages/measure-sound-dont-read-dsp.md) — Claims about pitch, level or timbre are settled by rendering audio and measuring it by a route that cannot agree with the DSP by construction.
 - [Real-time audio rules](pages/real-time-audio-rules.md) — The audio thread never allocates, locks, or touches files or UI; memory is sized at prepare and state crosses threads via atomics and queues.
-- [Stored indices are append-only](pages/append-only-stored-indices.md) — Forge saves choices and routings as list indices, so a list is only ever appended to; reordering one is a preset-format change.
+- [Stored indices are append-only](pages/append-only-stored-indices.md) — Saved choice lists and parameter arrays are append-only, because inserting an entry silently changes what an old index means.
 - [What a change costs the interface](pages/ui-cost-of-a-change.md) — Session announces every change synchronously to every listening panel, so a drag announces once, a hidden panel goes stale, a frame reads only the controls it shows, painters skip what a repaint does not reach, and --profile-ui measures it.
 
 ## Gotchas
@@ -134,7 +135,3 @@ The catalog of this wiki: every page, grouped by type, one line each (`- [Title]
 ## Analyses
 
 - [Hazards found while seeding the wiki](pages/known-hazards.md) — Probable bugs traced by reading the code on 2026-10-03; every Rhino item was fixed by 2026-10-05, and the four Forge items are still open.
-
-## MIDI devices
-
-- [Rhino Arp](pages/rhino-arp.md) — Architecture, parameter model, beat-domain scheduling, and dedicated rack UI for the built-in arpeggiator.

@@ -1,7 +1,8 @@
 #include "SessionInternal.h"
-// The count-in is held by unique_ptr, so the destructor here needs its
-// definition even though nothing in this file drives it.
+// The count-in and the DJ booth are held by unique_ptr, so the destructor
+// here needs their definitions even though nothing in this file drives them.
 #include "CountInClick.h"
+#include "SessionDjInternal.h"
 #include <algorithm>
 #include <set>
 
@@ -49,6 +50,7 @@ Session::~Session()
     if (midiDeviceWatcher != nullptr)
         engine.getDeviceManager().removeChangeListener(midiDeviceWatcher.get());
     cancelCountIn();
+    releaseDj();
     releasePreview();
 }
 
@@ -121,6 +123,8 @@ void Session::newProject()
     automationMirrorStale = true;
     manualLoop = false;
     buildStarterEdit();
+    // The booth belongs to the document, so a new one starts with no decks.
+    djReset();
     projectFile = juce::File{};
     // A save still running against the old document must not report this one
     // as saved, so the revision moves on rather than resetting to zero.
@@ -182,6 +186,8 @@ void Session::refreshAfterUndoRedo(bool changed)
 juce::ValueTree Session::projectSnapshot()
 {
     edit->flushState();
+    // The booth is written into the state only when a snapshot is taken.
+    writeDjState();
     auto snapshot = edit->state.createCopy();
     snapshot.setProperty("rhinoSnapshotRevision", changeRevision, nullptr);
     return snapshot;
@@ -194,6 +200,8 @@ void Session::markModified()
     // lane drives, or the track it sits on.
     automationMirrorStale = true;
     edit->markAsChanged();
+    // A bounced deck plays what the document said a moment ago.
+    djDocumentChanged();
 }
 
 juce::Result Session::restoreProject(const juce::ValueTree& state, const juce::File& file)
@@ -240,6 +248,9 @@ juce::Result Session::restoreProject(const juce::ValueTree& state, const juce::F
     // which is also what puts every member output back onto its bus.
     migrateLegacyTrackGroups();
     reconcileTrackGroups();
+    // The decks the document saved come back empty and stale; the poll
+    // loads them again.
+    readDjState();
     projectFile = file;
     savedRevision = ++changeRevision;
     edit->getUndoManager().clearUndoHistory();

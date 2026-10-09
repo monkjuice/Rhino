@@ -311,3 +311,8 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/drum-rack.md (F12 in the drum window toggles the main window's full screen, since every key goes to the shell)
 - updated: pages/keeping-files-small.md (isDroppedSoundFile in BrowserIds.h; three copies of the extension list remain, and SessionDrums.cpp cannot take the UI-side header)
 - updated: pages/development-environment.md (Pillow's getbbox on RGBA reads only alpha, so opaque snapshot diffs always look identical; convert to RGB)
+
+## [2026-10-09] update | The DJ view and the booth
+- source: branch feat/dj-view
+- created: pages/dj-view.md (the booth as a second audio callback with Rhino's own engine, decks with hot cues, loops, quantised starts, master and sync with phase lock, the isolator mixer and beat effect, files read on a worker and tracks or groups bounced and re-bounced by beat, Live and Edit, the analysis of waveform, tempo, drops and key, what the document saves, decisions and what is not built)
+- updated: pages/session-view.md (the DJ view took the switch; SessionView is built only by the tests), pages/app-shell.md (the second view, Tab, djPoll on the timer), index.md

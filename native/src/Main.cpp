@@ -3,7 +3,7 @@
 #include "ProjectFiles.h"
 #include "Theme.h"
 #include "Arrangement.h"
-#include "SessionView.h"
+#include "DjView.h"
 #include "BrowserPanel.h"
 #include "DeviceRack.h"
 #include "AudioClipPanel.h"
@@ -209,11 +209,12 @@ static juce::String formatMemory(juce::uint64 bytes)
     return juce::String(juce::roundToInt(megabytes)) + " MB";
 }
 
-// Session view development is paused; see wiki/pages/session-view.md for what
-// exists, what is missing, and how to pick it up. The view and its model are
-// still built and tested, but nothing in the shell reaches them. Setting this
-// to true restores the control-bar switch and the Tab shortcut.
-static constexpr bool sessionViewEnabled = false;
+// The second view. The Arrange/DJ switch in the control bar and Tab open the
+// DJ view (wiki/pages/dj-view.md) in the arrangement's place. The clip
+// launcher it replaced is still built and tested (wiki/pages/session-view.md)
+// but nothing in the shell reaches it; setting this to false hides the switch
+// and the shortcut again.
+static constexpr bool sessionViewEnabled = true;
 
 // The clip and device panes float over the foot of the arrangement, so the
 // split between them has to be a component of its own: the arrangement is
@@ -247,7 +248,7 @@ class ControlWindow final : public juce::Component,
                             private juce::Timer
 {
 public:
-    explicit ControlWindow(Session& s) : session(s), browser(s), grid(s), arrangement(s), sessionView(s), rack(s), audioClip(s), files(s)
+    explicit ControlWindow(Session& s) : session(s), browser(s), grid(s), arrangement(s), djView(s), rack(s), audioClip(s), files(s)
     {
         setOpaque(true);
         files.status = [this](const juce::String& message) { logStatus(message); };
@@ -277,12 +278,31 @@ public:
         // The panel's Split button advertises Ctrl+E, so it has to cut where
         // Ctrl+E cuts. The timeline owns the line; the panel only asks for it.
         audioClip.splitPosition = [this] { return arrangement.insertPointTime(); };
-        sessionView.status = files.status;
-        sessionView.trackSelected = [this](int track) { if (sessionViewOpen) rack.selectTrack(track); };
-        sessionToggle.setButtonText("Session");
+        djView.status = files.status;
+        // A deck that plays a track of the song hands that track to the
+        // Device View, so its chain is a click away while it plays.
+        djView.deckSelected = [this](int track) { if (sessionViewOpen && track >= 0) rack.selectTrack(track); };
+        // A deck's Edit key opens its track's clip in the note editor, which
+        // is the same lower pane under either view: the deck bounces again
+        // a moment after each change, so the edit is heard on the deck.
+        djView.editRequested = [this](int track, te::EditItemID clip)
+        {
+            if (track < 0 || clip == te::EditItemID()) return;
+            arrangement.selectTrack(track);
+            rack.selectTrack(track);
+            const auto result = session.selectPatternClip(clip);
+            if (result.failed())
+            {
+                logStatus(result.getErrorMessage());
+                return;
+            }
+            openClip(clip);
+            logStatus("Editing " + session.trackName(track).quoted() + ": the deck follows each change");
+        };
+        sessionToggle.setButtonText("DJ");
         arrangementToggle.setButtonText("Arrange");
-        sessionToggle.setTooltip("Show the Session view clip launcher");
-        arrangementToggle.setTooltip("Show the Arrangement timeline");
+        sessionToggle.setTooltip("Show the DJ view: decks either side of a mixer, each playing a track, a group or a file. Tab switches.");
+        arrangementToggle.setTooltip("Show the Arrangement timeline. Tab switches.");
         sessionToggle.onClick = [this] { setSessionViewOpen(true); };
         arrangementToggle.onClick = [this] { setSessionViewOpen(false); };
         // Launched clips override a track's timeline clips. This hands those
@@ -503,7 +523,7 @@ public:
         });
         for (auto* component : std::initializer_list<juce::Component*>{
                  &infoView, &position, &play, &stop, &record, &rewind,
-                 &browser, &browserToggle, &editorToggle, &rackToggle, &grid, &audioClip, &arrangement, &sessionView,
+                 &browser, &browserToggle, &editorToggle, &rackToggle, &grid, &audioClip, &arrangement, &djView,
                  &sessionToggle, &arrangementToggle, &backToArrangement, &rack, &tempoBox, &signatureField, &undo, &redo, &metronome, &metronomeMenu, &hint,
                  &patternLabel, &editorResolution, &editorZoomOut, &editorZoomIn, &scaleHighlight,
                  &lowerSplitter})
@@ -789,15 +809,15 @@ public:
                                              : "Show the browser - the instruments, patterns, samples and "
                                                "effects column down the left of the window.");
         arrangement.setVisible(!sessionViewOpen);
-        sessionView.setVisible(sessionViewOpen);
+        djView.setVisible(sessionViewOpen);
         arrangement.setBounds(editorX, arrangementTop, editorW, arrangementH);
         // The arrangement spans the window, so it is told how much of its own
         // foot the pane covers: its main row and its scrollbars ride up to sit
         // above the pane while the lanes behind it stay where they are.
         arrangement.setBottomInset(static_cast<float>(std::max(0, arrangementTop + arrangementH - arrangementBottom)));
-        // The session view has no such inset, so it simply stops at the band.
-        sessionView.setBounds(editorX, arrangementTop, editorW,
-                              std::max(150, arrangementBottom - arrangementTop));
+        // The DJ view has no such inset, so it simply stops at the band.
+        djView.setBounds(editorX, arrangementTop, editorW,
+                         std::max(150, arrangementBottom - arrangementTop));
         const auto notes = lowerPane == LowerPane::notes;
         const auto audio = lowerPane == LowerPane::audio;
         const auto devices = lowerPane == LowerPane::devices;
@@ -994,8 +1014,9 @@ public:
         {
             if (sessionViewOpen == open) return;
             sessionViewOpen = open;
-            rack.selectTrack(open ? sessionView.selectedTrackIndex() : arrangement.selectedTrackIndex());
-            logStatus(open ? "Session view: click a clip to launch it"
+            const auto track = open ? djView.selectedTrack() : arrangement.selectedTrackIndex();
+            if (track >= 0) rack.selectTrack(track);
+            logStatus(open ? "DJ view: add a deck and choose what it plays from its name bar; Tab returns to the arrangement"
                            : "Arrangement view");
             resized();
             repaint();
@@ -1326,6 +1347,14 @@ private:
                      true, clipPaneOpen());
         menu.addItem(3, "Device View", true, lowerPane == LowerPane::devices);
         menu.addItem(4, "Info View", browserOpen, infoVisible && browserOpen);
+        if constexpr (sessionViewEnabled)
+        {
+            juce::PopupMenu::Item dj {"DJ View"};
+            dj.itemID = 6;
+            dj.shortcutKeyDescription = "Tab";
+            dj.isTicked = sessionViewOpen;
+            menu.addItem(std::move(dj));
+        }
         menu.addSeparator();
         juce::PopupMenu::Item fullScreen {"Full Screen"};
         fullScreen.itemID = 5;
@@ -1342,6 +1371,7 @@ private:
                 else if (result == 3) safe->toggleDeviceView();
                 else if (result == 4) safe->toggleInfoView();
                 else if (result == 5 && safe->fullScreenToggleRequested) safe->fullScreenToggleRequested();
+                else if (result == 6) safe->setSessionViewOpen(!safe->sessionViewOpen);
             });
     }
 
@@ -1356,7 +1386,7 @@ private:
                 if (safe == nullptr) return;
                 if (result == 1)
                     juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon, "Keyboard shortcuts",
-                        "Space  Play/Pause\nCtrl+N  New project\nCtrl+O  Open project\nCtrl+S  Save project\nCtrl+Shift+S  Save as\n"
+                        "Space  Play/Pause\nTab  Switch between the Arrangement and the DJ view\nCtrl+N  New project\nCtrl+O  Open project\nCtrl+S  Save project\nCtrl+Shift+S  Save as\n"
                         "Ctrl+Shift+E  Export WAV\nCtrl+Z  Undo\nCtrl+Y / Ctrl+Shift+Z  Redo\nCtrl+F  Search browser\nCtrl+A  Add a clip to the focused track\nDouble-click a lane  Add a clip there\n"
                         "F9  Record into the armed tracks / Click the dot on a track card to arm it\nM  Play MIDI from the typing keyboard: A-P are notes, Z/X octave, C/V velocity\nCtrl+T  Add a track of the kind last picked from the + menu\nF2  Rename the selected track or group\nCtrl+G  Group the selected tracks\nCtrl+Shift+G  Ungroup\n"
                         "Drag an empty lane or cell  Select what it sweeps\nClick  Select that one clip or note\n"
@@ -1567,6 +1597,9 @@ private:
         // the same reason the slot override below is polled rather than
         // listened for.
         session.recordingStopped();
+        // The booth's loads finish on a worker and its stale bounces wait
+        // for a quiet moment; neither is announced, so both are polled.
+        session.djPoll();
         updateRecordButton();
         // The engine raises a track's slot-override flag from the audio thread
         // without broadcasting, so this is polled rather than event-driven.
@@ -1705,7 +1738,7 @@ private:
     BrowserPanel browser;
     StepGrid grid;
     Arrangement arrangement;
-    SessionView sessionView;
+    DjView djView;
     DeviceRack rack;
     AudioClipPanel audioClip;
     ValueDragBox tempoBox;
@@ -1721,7 +1754,7 @@ private:
     RecordButton record;
     IconButton browserToggle {"Browser"};
     juce::TextButton editorToggle {"Clip"}, rackToggle {"Devices"};
-    juce::TextButton sessionToggle {"Session"}, arrangementToggle {"Arrange"};
+    juce::TextButton sessionToggle {"DJ"}, arrangementToggle {"Arrange"};
     juce::TextButton backToArrangement;
     juce::ComboBox editorResolution;
     juce::TextButton editorZoomOut, editorZoomIn;

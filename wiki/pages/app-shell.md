@@ -4,7 +4,7 @@ type: component
 summary: Main.cpp's window, control bar, docked browser and single lower pane, plus the 30 Hz timer that polls what the engine never broadcasts.
 tags: [rhino, ui, shell]
 sources: []
-updated: 2026-10-05
+updated: 2026-10-09
 ---
 
 # App shell and control bar
@@ -23,13 +23,17 @@ Under the 72 px bar sit the docked browser, whose 3 px divider is its resize han
 - `ControlBarIcons.*`: glyphs are paths worn by the borderless `IconButton`, because Unicode transport symbols fell through to a different system face on every machine.
 - `TransportDisplay.*`: three columns in one recess; when narrow it drops whole readings in a fixed order and never moves the position or clock. `WallClock.h` spells every time, here and on the timeline ruler. The position and the loop read bar, count and sixteenth from `musicalPosition` (`ArrangementGrid.h`), counting in the signature's own note as the ruler does, so 6/8 has six counts of two sixteenths (commit `4416222`).
 
+## The second view
+
+The Arrange/DJ switch at the right of the bar, and Tab, swap the arrangement for the [DJ view](dj-view.md) in the same rectangle (`setSessionViewOpen`, gated by `sessionViewEnabled`, true since 2026-10-09). The lower pane is the same under either view, which is how a deck's Edit key opens its track's clip in the note editor. Switching views hands the Device View the track the view being shown has selected: the arrangement's card, or the deck last clicked when it plays a track of the song.
+
 ## The lower pane
 
 Note editor, audio clip editor and Device View are three faces of one pane (`LowerPane`). Double-clicking a clip opens its editor, which then follows the clip selection; a card click opens the Device View only when the pane is free. It floats over the arrangement's foot (`Arrangement::setBottomInset`): pushing the lanes up refitted them under a dragged split, so every clip grew and shrank under the pointer. A layout change asked for by a click waits for the timer and for no mouse button down, because that press may be starting a drag. The three faces became one pane in commit `a33503f` (2026-09-30). `ControlWindow::resized` floors the pane at 112 px (`minimumPaneHeight`) for the clip editors and at `DeviceRack::minimumHeight` (219 px) for the Device View; one 112 px floor for all three let a drag cut devices off (commit `67031ba`). The clamp writes back into `lowerPaneHeight`, so a clip editor opened after the Device View keeps the taller height until dragged, deliberately. No test reaches this clamp. The faces not showing, like the paused session view, mark themselves stale rather than rebuilding on every change, and catch up when shown ([What a change costs the interface](ui-cost-of-a-change.md)).
 
 ## The 30 Hz timer
 
-`ControlWindow`'s timer polls what the engine does not broadcast (`Session::recordingStopped`, the session view's slot override when enabled), applies pending pane layout, updates the Info View hint (`InfoHints.h`), and rewrites the readout. It no longer plays track automation: since commit `fe163c8` the engine does ([Track automation](automation.md)).
+`ControlWindow`'s timer polls what the engine does not broadcast (`Session::recordingStopped`, the session view's slot override when enabled, and `Session::djPoll` for the DJ booth's finished file reads and stale bounces), applies pending pane layout, updates the Info View hint (`InfoHints.h`), and rewrites the readout. It no longer plays track automation: since commit `fe163c8` the engine does ([Track automation](automation.md)).
 
 ## Related
 

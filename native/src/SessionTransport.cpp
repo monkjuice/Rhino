@@ -212,6 +212,7 @@ void Session::releaseAudioDevice()
     // to close, so they come off first rather than being left pointing at a
     // shut device.
     cancelCountIn();
+    releaseDj();
     releasePreview();
     te::TransportControl::stopAllTransports(engine, false, true);
     if (edit != nullptr)

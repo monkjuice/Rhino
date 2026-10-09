@@ -16,6 +16,7 @@ The catalog of this wiki: every page, grouped by type, one line each (`- [Title]
 - [Built-in devices](pages/built-in-devices.md) — Every device Rhino ships, what each one is and where its source lives, with Utility's details and the pitfalls the devices share.
 - [Computer MIDI keyboard](pages/computer-keyboard.md) — Plays notes from the typing keyboard into the MIDI input with Forge's exact key mapping, so arming and recording need no special case.
 - [Content library](pages/content-library.md) — Samples, device presets, drum kits and drum presets live as files under library/, found at runtime by ContentLibrary, audio stored with Git LFS, nothing compiled in.
+- [DJ view and the booth](pages/dj-view.md) — Up to six CDJ-style decks either side of a DJM-style mixer, run by Rhino's own engine as a second audio callback, playing files or the song's tracks and groups bounced to audio and bounced again as they are edited.
 - [Device catalog](pages/device-catalog.md) — The one table of Rhino's devices that the browser, drop targets, rack menu, engine registration and instrument rules all read.
 - [Device presets (.rnd)](pages/device-presets.md) — A device's settings saved as a .rnd file by parameter id, filed under the device in the browser, dragged to add the device already set, and loaded or saved from its name bar.
 - [Device rack and device editors](pages/device-rack.md) — The Device View strip that shows a track's chain and its per-device faces, the rebuild rule that shapes how a face is written, and the timer that follows automated knobs.
@@ -47,7 +48,7 @@ The catalog of this wiki: every page, grouped by type, one line each (`- [Title]
 - [Rhino Tune](pages/rhino-tune.md) — Vocal pitch correction with YIN tracking and PSOLA shifting, real reported latency, and correction smoothed on the offset.
 - [Rhino Vocoder and sidechains](pages/rhino-vocoder.md) — A channel vocoder whose carrier arrives as a sidechain from another track, and how Rhino routes a sidechain at all.
 - [Rhino's build targets](pages/rhino-build-targets.md) — Rhino builds as three targets (RhinoCore, RhinoDevices, the app) so that editing a device does not rebuild the app.
-- [Session view (paused)](pages/session-view.md) — A working clip launcher, built and tested but switched off in the shell, whose scene and slot model still runs in every project.
+- [Session view (paused)](pages/session-view.md) — A working clip launcher, built and tested but no longer reached from the shell, whose place the DJ view took and whose scene and slot model still runs in every project.
 - [Session, the model](pages/session-model.md) — The message-thread facade over one Tracktion engine and edit, one class split across 26 files, where every rule and refusal lives.
 - [Time warp](pages/time-warp.md) — Makes an audio clip follow the song's tempo, with five warp modes over two stretchers, a clip tempo and warp markers.
 - [Track automation](pages/automation.md) — Per-track lanes stored as Rhino's own ValueTree children, naming their device by key rather than slot, and played by the engine from parameter curves the session mirrors after every change.

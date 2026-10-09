@@ -717,6 +717,7 @@ int runSelfTest()
         checkVocoderDsp(session);
         checkFmDsp(session);
         checkDrumRack(session);
+        checkDjCore(session);
 
         session.releaseAudioDevice();
         return 0;

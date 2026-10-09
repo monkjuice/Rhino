@@ -18,6 +18,8 @@ struct DevicePreset;
 // count-in click is an audio callback of Rhino's own, and only
 // SessionRecording.cpp needs to see how it works.
 class CountInClick;
+// A deck's material (core/DjTrack.h), handed out by pointer for the displays.
+struct DjTrack;
 
 // Message-thread facade. The engine owns scheduling, streaming and playback.
 // Member order keeps the engine alive until its edit and devices are released.
@@ -980,6 +982,180 @@ public:
     te::LaunchQType launchQuantisation() const;
     void setLaunchQuantisation(te::LaunchQType);
     te::SceneWatcher* sceneWatcher() const;
+    // ---- The DJ booth (SessionDj.cpp, SessionDjSources.cpp) ----
+    // Up to six decks into a mixer with a beat effect, rendered by Rhino's own
+    // engine (core/DjEngine.h) as a second callback on the audio device,
+    // beside the edit's, the way the library preview is. So every deck has a
+    // transport of its own and none of them is the song's. A deck plays a
+    // file, or a track or group of this document bounced to audio - and
+    // bounced again, after a moment's quiet, whenever the document changes,
+    // which is what lets the note editor edit a deck while it plays.
+    static constexpr int maximumDjDecks = 6;
+    // The booth's private state, defined in SessionDjInternal.h and held
+    // below; declared here so the session's own units can name it.
+    struct DjBooth;
+    enum class DjSourceKind { none, file, track, group };
+    // When a start or a hot cue lands: at once, or on the master deck's next
+    // beat, bar or four bars - the mechanism Live launches clips with.
+    enum class DjQuantise { off, beat, bar, fourBars };
+    static juce::String djQuantiseName(DjQuantise);
+    struct DjDeckInfo
+    {
+        DjSourceKind kind = DjSourceKind::none;
+        juce::String name;        // what the deck shows
+        juce::File file;          // the file a file deck reads
+        te::EditItemID trackId;   // a track deck's track
+        int groupId = 0;          // a group deck's group
+        int track = -1;           // where that track or bus is now; -1 once it is gone
+        bool loaded = false;      // material is on the deck
+        bool loading = false;     // a read is in flight
+        bool stale = false;       // the document changed under a bounced track
+        bool live = false;        // the track's input is heard, so its instrument plays over the deck
+        bool autoRebounce = true; // a stale bounce is made again after a moment's quiet
+        juce::String error;       // why the last load failed
+        int generation = 0;       // bumped with every load, so a display can tell new material from old
+    };
+    struct DjLoop
+    {
+        double startSeconds = -1.0, endSeconds = -1.0;
+        bool active = false;
+        bool valid() const { return startSeconds >= 0.0 && endSeconds > startSeconds; }
+    };
+    struct DjDeckState
+    {
+        enum class Transport { empty, stopped, playing, waiting, cueing };
+        Transport transport = Transport::empty;
+        bool pendingJump = false;
+        double positionSeconds = 0.0, lengthSeconds = 0.0;
+        double bpm = 0.0, effectiveBpm = 0.0;   // the track's own, and at the rate it plays
+        double firstBeatSeconds = 0.0;
+        int beatsPerBar = 4;
+        double beat = 0.0;                      // fractional beats from the first downbeat
+        float tempoPercent = 0.0f;
+        int tempoRange = 6;
+        bool synced = false, master = false, reversed = false;
+        double cueSeconds = 0.0;
+        std::array<double, 8> hotCueSeconds {}; // negative when unset
+        DjLoop loop;
+        float peak = 0.0f;
+        int keyIndex = -1;
+        juce::uint32 jumps = 0;
+        bool isPlaying() const { return transport == Transport::playing || transport == Transport::cueing; }
+    };
+    struct DjChannelState
+    {
+        float trimDb = 0.0f, lowDb = 0.0f, midDb = 0.0f, highDb = 0.0f;
+        float filter = 0.0f, resonance = 0.2f, fader = 1.0f;
+        bool cue = false, fx = false;
+        int crossfaderSide = 1;                 // 0 A, 1 through, 2 B
+        float meter = 0.0f;
+    };
+    struct DjMasterState
+    {
+        float crossfader = 0.0f, crossfaderCurve = 0.0f;
+        float levelDb = 0.0f, lowDb = 0.0f, midDb = 0.0f, highDb = 0.0f, cueMix = 0.0f;
+        float meterLeft = 0.0f, meterRight = 0.0f;
+        double bpm = 0.0;                       // the master deck's, 0 for none
+        int masterDeck = -1;
+    };
+    struct DjFxState
+    {
+        int type = 0;
+        float beats = 0.5f, depth = 0.5f;
+        bool on = false;
+        int target = -1;                        // -1 the master, else a channel
+    };
+    static constexpr float djKillDb = -90.0f;  // an EQ band at or below this is off
+    static juce::String djFxTypeName(int type);
+    static int djFxTypeCount();
+
+    int djDeckCount() const;
+    juce::Result addDjDeck();
+    juce::Result removeDjDeck(int deck);
+    // What a deck plays. A file is read and analysed on a worker thread, and
+    // djPoll installs it; a track or a group is bounced at once, here, as a
+    // merge renders, so a short loop is on the deck when this returns. A
+    // group bounces its bus with the members under it.
+    juce::Result loadDjDeckFile(int deck, const juce::File&);
+    juce::Result loadDjDeckTrack(int deck, int track);
+    juce::Result loadDjDeckGroup(int deck, int groupId);
+    // Bounces a track or group deck again, keeping its place by beat.
+    juce::Result rebounceDjDeck(int deck);
+    void ejectDjDeck(int deck);
+    void setDjDeckAutoRebounce(int deck, bool);
+    DjDeckInfo djDeckInfo(int deck) const;
+    DjDeckState djDeckState(int deck) const;
+    // The material itself, for the displays. Valid until the next change
+    // announcement; a display keys what it keeps on DjDeckInfo::generation.
+    const DjTrack* djDeckTrack(int deck) const;
+    // The deck's transport. Each is a command queued for the audio thread,
+    // which is where every position is changed; the state reads it back.
+    void djPlay(int deck);
+    void djPause(int deck);
+    void djTogglePlay(int deck);
+    void djCueDown(int deck);
+    void djCueUp(int deck);
+    void djHotCue(int deck, int index);
+    void djClearHotCue(int deck, int index);
+    void djLoopIn(int deck);
+    void djLoopOut(int deck);
+    void djBeatLoop(int deck, double beats);
+    void djReloopExit(int deck);
+    void djLoopHalve(int deck);
+    void djLoopDouble(int deck);
+    void djClearLoop(int deck);
+    void djBeatJump(int deck, int beats);
+    void djSeek(int deck, double seconds);
+    void djSetSynced(int deck, bool);
+    void djSetMaster(int deck);
+    void djSetReversed(int deck, bool);
+    void djSetTempoPercent(int deck, float percent);
+    void djSetTempoRange(int deck, int range);     // 6, 10, 16 or 100
+    void djNudge(int deck, float percent);          // held: 0 lets go
+    void djStopAll();
+    DjQuantise djQuantise() const;
+    void setDjQuantise(DjQuantise);
+    bool djPhaseLock() const;
+    void setDjPhaseLock(bool);
+    // The mixer. Knob moves are performance, not edits: no undo step, and
+    // the document is not marked modified by them.
+    DjChannelState djChannel(int channel) const;
+    void setDjChannelTrim(int channel, float decibels);
+    void setDjChannelEq(int channel, int band, float decibels);   // 0 low, 1 mid, 2 high
+    void setDjChannelFilter(int channel, float amount);
+    void setDjChannelResonance(int channel, float amount);
+    void setDjChannelFader(int channel, float position);
+    void setDjChannelCue(int channel, bool);
+    void setDjChannelFx(int channel, bool);
+    void setDjChannelCrossfaderSide(int channel, int side);
+    DjMasterState djMaster() const;
+    void setDjCrossfader(float position);
+    void setDjCrossfaderCurve(float curve);
+    void setDjMasterLevel(float decibels);
+    void setDjMasterEq(int band, float decibels);
+    void setDjCueMix(float mix);
+    DjFxState djFx() const;
+    void setDjFxType(int type);
+    void setDjFxBeats(float beats);
+    void setDjFxDepth(float depth);
+    void setDjFxOn(bool);
+    void setDjFxTarget(int target);
+    // Playing over a deck. A track deck's track can be heard live: its input
+    // is monitored, so a Drum Rack on it plays from the keys over the bounce.
+    // A file or a group has no instrument to play.
+    juce::Result setDjDeckLive(int deck, bool live);
+    bool djDeckHasDrumRack(int deck) const;
+    // The clip the note editor opens to edit a track deck, or an invalid id.
+    te::EditItemID djDeckEditClip(int deck) const;
+    // Polled by the shell at 30 Hz: installs files a worker has finished,
+    // and bounces stale track decks again once the document has been quiet
+    // for a moment.
+    void djPoll();
+    bool djBusy() const;
+    // Drives the booth without an audio device, for the tests.
+    void djProcessOffline(int frames);
+    bool djEngineAttached() const;
+
     te::Engine engine;
     std::unique_ptr<te::Edit> edit;
     // A track has one instrument, so there is nothing stable to cache: switching
@@ -1241,6 +1417,23 @@ private:
     // the transport still reports that it is not recording. Without this the
     // poll would read that window as a recording that had already finished.
     bool recordingStarted = false;
+    // The DJ booth: the engine, its decks' sources and the loads in flight.
+    // Built the first time a deck is added, so a session that never opens
+    // the DJ view registers no callback. SessionDjInternal.h.
+    std::unique_ptr<DjBooth> dj;
+    DjBooth& booth();
+    void ensureDjAttached();
+    void releaseDj();
+    // SessionDjSources.cpp
+    juce::Result bounceDjDeck(int deck, bool keepBeat);
+    juce::Result startDjFileRead(int deck);
+    void finishDjLoad(int deck, int generation, std::unique_ptr<DjTrack>, const juce::String& error, bool keepBeat);
+    void applyDjDeckSettings(int deck);
+    void djDocumentChanged();
+    void djReset();
+    void writeDjState();
+    void readDjState();
+    void markDjModified();
 };
 int runSelfTest();
 int runPatternTest();
@@ -1266,4 +1459,8 @@ void checkDrumRack(Session&);
 // Device presets: the .rnd format, every factory preset against its device,
 // and saving, loading and adding through the session. Run by --device-test.
 void checkDevicePresets(Session&);
+// The DJ booth's engine, measured offline: decks, loops, cues, quantised
+// starts and sync, the mixer's bands and faders, the beat effect, and the
+// analysis of a synthesised beat. See tests/DjTest.cpp.
+void checkDjCore(Session&);
 }

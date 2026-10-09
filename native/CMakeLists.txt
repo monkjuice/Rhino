@@ -71,6 +71,8 @@ target_sources(RhinoNative PRIVATE
     src/SessionAutomation.cpp
     src/SessionTransport.cpp
     src/SessionExternalPlugins.cpp
+    src/SessionDj.cpp
+    src/SessionDjSources.cpp
     src/DeviceMacros.cpp
     # UI
     src/StepGrid.cpp
@@ -92,6 +94,10 @@ target_sources(RhinoNative PRIVATE
     src/SessionView.cpp
     src/SessionViewPainter.cpp
     src/SessionViewGestures.cpp
+    src/DjView.cpp
+    src/DjDeckPanel.cpp
+    src/DjDeckDisplay.cpp
+    src/DjMixerPanel.cpp
     src/BrowserPanel.cpp
     src/AudioClipPanel.cpp
     src/AudioClipWarp.cpp
@@ -128,6 +134,7 @@ target_sources(RhinoNative PRIVATE
     src/tests/VocoderTest.cpp
     src/tests/FmTest.cpp
     src/tests/DrumRackTest.cpp
+    src/tests/DjTest.cpp
     src/tests/PresetTest.cpp
     src/tests/UiProfile.cpp
     src/tests/Pattern/DeviceRackTest.cpp

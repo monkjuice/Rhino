@@ -2,6 +2,7 @@
 #include "BinaryData.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <utility>
 
@@ -73,6 +74,22 @@ inline const juce::Colour arpSequence      {0xffff7f27};
 // What the chrome uses to mark a selection or a focused row, kept grey so it
 // never competes with a track colour sitting next to it.
 inline const juce::Colour selection        {0xffdcdcdc};
+
+// The DJ booth's meaning colours. A deck's play and cue keys light as a
+// CDJ's do, green and orange, and a start held for the beat blinks amber;
+// its eight hot cues wear the colours the CDJ-3000 gives them, A to H; and
+// its waveform is drawn in three bands, the lows blue, the mids amber and
+// the highs white, so a kick, a vocal and a hat read as three colours.
+inline const juce::Colour djPlay           {0xff3ddc84};
+inline const juce::Colour djCue            {0xfff0a030};
+inline const juce::Colour djWaiting        {0xffe8c547};
+inline const juce::Colour djWaveLow        {0xff3e7bff};
+inline const juce::Colour djWaveMid        {0xffe9a23b};
+inline const juce::Colour djWaveHigh       {0xffe6ecf2};
+inline const juce::Colour djDrop           {0xffff6a3d};
+inline const std::array<juce::Colour, 8> djHotCue {
+    juce::Colour(0xffe5484d), juce::Colour(0xff3e8bff), juce::Colour(0xffe8c547), juce::Colour(0xffa96cff),
+    juce::Colour(0xff5fcf6e), juce::Colour(0xfff08a3c), juce::Colour(0xff39c6d6), juce::Colour(0xffea5aa0)};
 }
 
 // A JUCE font height is ascent plus descent, which the face then divides down

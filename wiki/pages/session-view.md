@@ -1,19 +1,19 @@
 ---
 title: Session view (paused)
 type: component
-summary: A working clip launcher, built and tested but switched off in the shell, whose scene and slot model still runs in every project.
+summary: A working clip launcher, built and tested but no longer reached from the shell, whose place the DJ view took and whose scene and slot model still runs in every project.
 tags: [rhino, session-view, clips, launching]
 sources: []
-updated: 2026-10-05
+updated: 2026-10-09
 ---
 
 # Session view (paused)
 
-The session view is Rhino's clip launcher: tracks as columns, scenes as rows, every cell a clip slot. It is built and tested but unreachable: `static constexpr bool sessionViewEnabled = false;` in `native/src/Main.cpp` hides the Session/Arrange switch, the Tab shortcut and *Back to Arrangement*. This page is the resume guide.
+The session view is Rhino's clip launcher: tracks as columns, scenes as rows, every cell a clip slot. It is built and tested but unreachable. Since 2026-10-09 the control bar's switch and Tab open the [DJ view](dj-view.md) instead: `sessionViewEnabled` in `native/src/Main.cpp` is true again, but the component it shows is `DjView`, and `SessionView` is constructed nowhere in the shell. *Back to Arrangement* still appears when slot clips play, which only the tests make happen. This page is the resume guide.
 
 ## What still runs
 
-Only the shell is switched off. `Session::ensureSceneSlots` gives every project at least eight scenes (`defaultScenes`) and every track a slot per scene, so documents carry slots whether or not anyone can see them, and the `SessionView` component is still constructed inside `ControlWindow`, just never shown. Hidden, it marks itself stale on each change instead of rebuilding, and catches up when shown (commit `e7c9554`; [What a change costs the interface](ui-cost-of-a-change.md)). Model: `SessionSlots.cpp`. UI: `SessionView.cpp`, `SessionViewPainter.cpp`, `SessionViewGestures.cpp`. Tests: `SessionView.inc`, `SharedMixer.inc`, `ClipRoundTrip.inc`.
+Only the shell is switched off. `Session::ensureSceneSlots` gives every project at least eight scenes (`defaultScenes`) and every track a slot per scene, so documents carry slots whether or not anyone can see them. The `SessionView` component is built only by the tests now. Hidden, it marks itself stale on each change instead of rebuilding, and catches up when shown (commit `e7c9554`; [What a change costs the interface](ui-cost-of-a-change.md)). Model: `SessionSlots.cpp`. UI: `SessionView.cpp`, `SessionViewPainter.cpp`, `SessionViewGestures.cpp`. Tests: `SessionView.inc`, `SharedMixer.inc`, `ClipRoundTrip.inc`.
 
 ## How launching works
 
@@ -32,6 +32,7 @@ Tracks, devices, the [Mixer](mixer.md) and the transport are shared because both
 
 ## Related
 
+- [DJ view and the booth](dj-view.md)
 - [Mixer](mixer.md)
 - [Clips never overlap](clip-placement.md)
 - [Arrangement view](arrangement-view.md)

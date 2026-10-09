@@ -4,7 +4,7 @@ type: convention
 summary: Split a .cpp past about 600 lines or a second responsibility by defining one class across several translation units, not by inventing types.
 tags: [both, code-structure, cmake]
 sources: []
-updated: 2026-10-07
+updated: 2026-10-09
 ---
 
 # Keeping files small
@@ -26,7 +26,7 @@ As of 2026-10-03:
 
 ## How to apply it
 
-- Helpers shared by one class's own units go in a private `*Internal.h` beside it: `SessionInternal.h`, `StepGridInternal.h`, `ArrangementInternal.h` and Forge's `ForgeEditorInternal.h`. Nothing else includes them.
+- Helpers shared by one class's own units go in a private `*Internal.h` beside it: `SessionInternal.h`, `SessionDjInternal.h` (the DJ booth's state, included only by `SessionDj.cpp` and `SessionDjSources.cpp`), `StepGridInternal.h`, `ArrangementInternal.h` and Forge's `ForgeEditorInternal.h`. Nothing else includes them.
 - Helpers shared by *different* classes get an ordinary header. `BrowserIds.h` serves both the arrangement and the device rack; before it existed, their two copies of the tables drifted apart. Its `isDroppedSoundFile` (2026-10-07) serves the rack and the Drum Rack window, but three copies of the same extension list remain, in `ArrangementDrops.cpp`, `SessionViewGestures.cpp` and `SessionDrums.cpp`: a possible cleanup. `SessionDrums.cpp` cannot take it from `BrowserIds.h`, which includes `Session.h` and is UI-side ([Dependency direction](dependency-direction.md)), so a shared one would live lower down.
 - Extract a new type only when it buys testability. `ClipGeometry.h`, `core/ScaleQuantizer.h` and `core/EqFilter.h` are pure headers with no JUCE, so they are tested without a `Session`.
 - List every `.cpp` in a `CMakeLists.txt`, because nothing is globbed. Then reconfigure explicitly, since `cmake --build` never does it for you ([A new source file needs an explicit CMake configure](cmake-does-not-reconfigure.md)).
@@ -34,7 +34,7 @@ As of 2026-10-03:
 
 ## Still to do
 
-The rule is a target. As of 2026-10-03, nine `.cpp` files under `native/src` are past 600 lines. The largest are `Main.cpp` at about 2,200, `ArrangementGestures.cpp` at about 1,060 and `Arrangement.cpp` at about 890. The two named next candidates, `ControlWindow` in `Main.cpp` and `FloatingDeviceWindow` in `DeviceRack.cpp`, are classes defined inline in a single file. Splitting either means turning inline bodies into declarations plus definitions. That is real restructuring: do it deliberately, never as a side effect.
+The rule is a target. As of 2026-10-03, nine `.cpp` files under `native/src` are past 600 lines. The largest are `Main.cpp` at about 2,200, `ArrangementGestures.cpp` at about 1,060 and `Arrangement.cpp` at about 890. The DJ booth of 2026-10-09 ([DJ view and the booth](dj-view.md)) added six more: `core/DjMixer.cpp` at about 1,150 holds every unit of the mixer (strip, compressor, isolator, filter, master, mic, pitch shifter, send unit and fourteen beat effects) and is the first to split, the send unit and the beat effect being natural files of their own; then `SessionDj.cpp` at about 1,060, `tests/DjTest.cpp` at about 870, `SessionDjSources.cpp` at about 760, and `core/DjDeck.cpp` and `core/DjAnalysis.cpp` at about 670 each. `DjControls.h` defines its pads, faders, meters and jog wheel inline, about 520 lines of header. The two named next candidates, `ControlWindow` in `Main.cpp` and `FloatingDeviceWindow` in `DeviceRack.cpp`, are classes defined inline in a single file. Splitting either means turning inline bodies into declarations plus definitions. That is real restructuring: do it deliberately, never as a side effect.
 
 ## Related
 

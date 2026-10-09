@@ -1,10 +1,10 @@
 ---
 title: Session, the model
 type: component
-summary: The message-thread facade over one Tracktion engine and edit, one class split across 26 files, where every rule and refusal lives.
+summary: The message-thread facade over one Tracktion engine and edit, one class split across 28 files, where every rule and refusal lives.
 tags: [rhino, model, tracktion, undo]
 sources: []
-updated: 2026-10-07
+updated: 2026-10-09
 ---
 
 # Session, the model
@@ -13,7 +13,7 @@ updated: 2026-10-07
 
 ## One class, many files
 
-`Session` is one class defined across 26 translation units (the `src/Session*.cpp` lines of `native/CMakeLists.txt` before `SessionView`, as of 2026-10-06), split by caller as [Keeping files small](keeping-files-small.md) describes:
+`Session` is one class defined across 28 translation units (the `src/Session*.cpp` lines of `native/CMakeLists.txt` before `SessionView`, as of 2026-10-09), split by caller as [Keeping files small](keeping-files-small.md) describes:
 
 - `Session.cpp`: construction, the starter edit, `restoreProject`, `projectSnapshot`, undo and redo.
 - Notes and patterns: `SessionNotes`, `SessionPresets`, `SessionPatches`.
@@ -21,6 +21,7 @@ updated: 2026-10-07
 - Devices: `SessionDevices`, `SessionDevicePresets`, `SessionDrums` (the [Drum Rack](drum-rack.md)'s kits, pads, banks, slices and drops), `SessionSidechain`, `SessionExternalPlugins`.
 - Clips: `SessionClips`, `SessionRegion`, `SessionAudioClips`, `SessionWarp`, `SessionMerge`, `SessionSamples`, `SessionSlots`.
 - Input and audition: `SessionRecording`, `SessionMidiInput`, `SessionAudioInput`, `SessionPreview`.
+- The DJ booth: `SessionDj` (decks, transport, mixer, what the document saves) and `SessionDjSources` (file reads, bounces, Live, the stale re-bounce), sharing `SessionDjInternal.h` ([DJ view and the booth](dj-view.md)). The booth comes off the audio device in `releaseAudioDevice` and the destructor, and `djReset` drains its worker before the bounces' copies of the document go.
 - `SessionInternal.h/.cpp`: property identifiers and helpers private to these files.
 
 The September 2026 split established the responsibility-based `Session*.cpp` layout; most of the files arrived later.
@@ -31,7 +32,7 @@ The September 2026 split established the responsibility-based `Session*.cpp` lay
 - **Makes one undo step per intent.** A named `beginNewTransaction`, the edit, then an empty one to close it. Drags are bracketed (`beginNoteGesture`, `beginAudioClipGesture`, `beginTempoGesture`, the fader and device-parameter gestures) so a drag is one entry and one notification, not one per pixel. Inside a device-parameter drag a step announces only on `deviceParameterValues`, and inside a fader or pan drag nothing at all, until the gesture ends. Several clips moved or deleted together are one step (`moveClips`, `deleteClips`), as are several files dropped together (`importAudioFilesAt`). View settings (row height, group collapse) skip undo.
 - **Fails whole.** A command that fails after it has begun editing takes back its own transaction with `undoCurrentTransactionOnly`, so a refusal half way, after a lane was made or an instrument switched, leaves the document as it was (`editClip`, `moveClips`, `pasteClipRegion`, `importAudioFilesAt`; commits `b5d17e0`, `d20faa4`).
 - **Notifies synchronously** with `sendSynchronousChangeMessage()`, so views re-sync in the same call stack. The view a command was called from may have rebuilt its own cache by the time the call returns: never hold a reference into a view's list across a `Session` call (commit `2df76f8` fixed two in the arrangement). What each announcement costs is [What a change costs the interface](ui-cost-of-a-change.md).
-- **Mirrors automation after it.** `markModified` marks the lanes stale, and a listener on the session's own announcement writes them onto the engine's curves ([Track automation](automation.md)).
+- **Mirrors automation after it.** `markModified` marks the lanes stale, and a listener on the session's own announcement writes them onto the engine's curves ([Track automation](automation.md)). It also marks every bounced DJ deck stale (`djDocumentChanged`); a DJ change the document saves uses `markDjModified` instead, so it dirties the document without re-bouncing anything.
 - **Counts its own dirt.** `changeRevision`/`savedRevision` track user commands, because engine initialisation flips the edit's changed flag asynchronously.
 
 Replacing the document (`newProject`, `restoreProject`) is bracketed by `Listener::editWillChange`/`editDidChange`, so views drop cached rows, clips and pointers before the old edit is freed. Anything holding a `te::Plugin::Ptr` must let go before then: the automation mirror's curves and the rack's floating device window both did not, and a plugin outliving its edit corrupted the heap ([Hold ids, not pointers](ids-not-pointers.md)). Declaration order destroys the preview and the edit before the engine.

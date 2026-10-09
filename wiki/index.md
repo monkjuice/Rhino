@@ -49,7 +49,7 @@ The catalog of this wiki: every page, grouped by type, one line each (`- [Title]
 - [Rhino Vocoder and sidechains](pages/rhino-vocoder.md) — A channel vocoder whose carrier arrives as a sidechain from another track, and how Rhino routes a sidechain at all.
 - [Rhino's build targets](pages/rhino-build-targets.md) — Rhino builds as three targets (RhinoCore, RhinoDevices, the app) so that editing a device does not rebuild the app.
 - [Session view (paused)](pages/session-view.md) — A working clip launcher, built and tested but no longer reached from the shell, whose place the DJ view took and whose scene and slot model still runs in every project.
-- [Session, the model](pages/session-model.md) — The message-thread facade over one Tracktion engine and edit, one class split across 26 files, where every rule and refusal lives.
+- [Session, the model](pages/session-model.md) — The message-thread facade over one Tracktion engine and edit, one class split across 28 files, where every rule and refusal lives.
 - [Time warp](pages/time-warp.md) — Makes an audio clip follow the song's tempo, with five warp modes over two stretchers, a clip tempo and warp markers.
 - [Track automation](pages/automation.md) — Per-track lanes stored as Rhino's own ValueTree children, naming their device by key rather than slot, and played by the engine from parameter curves the session mirrors after every change.
 - [Track groups (bus tracks)](pages/track-groups.md) — Ctrl+G gathers tracks under a bus track that their audio feeds; the structure is positional and repaired after every reorder.
@@ -68,6 +68,7 @@ The catalog of this wiki: every page, grouped by type, one line each (`- [Title]
 
 ## Decisions
 
+- [A deck's bounce renders on a worker against a copy of the document](pages/dj-bounce-on-a-copy.md) — A track or group bounced to a DJ deck renders on the booth's worker from a snapshot copy of the edit, never the live edit nor the message thread; the copy's plugins and the test runners' inline render are the price.
 - [A group is an ordinary bus track](pages/group-is-a-bus-track.md) — A group's bus is a plain te::AudioTrack kept in getAudioTracks(), so every track-indexed path reaches it with no second code path.
 - [A track's kind is fixed when it is made](pages/track-kind-fixed-at-creation.md) — A track declares audio or MIDI at creation, nothing dropped on it changes that, and every mismatched drop is refused in the model.
 - [Content is files, never compiled in](pages/content-is-files.md) — Samples and other content live as files under library/ and are found at runtime; only fonts and app icons are embedded.
@@ -116,7 +117,9 @@ The catalog of this wiki: every page, grouped by type, one line each (`- [Title]
 - [A CachedValue can lag its own ValueTree](pages/cachedvalue-lags-its-tree.md) — A ValueTree listener that reads a juce::CachedValue of the same property may run before the cache updates, so force the cache first; in Rhino the race failed only under parallel CTest.
 - [A CTest SegFault may be a stack overflow](pages/stack-overflow-reports-as-segfault.md) — CTest reports a Windows stack overflow (0xC00000FD) as a bare SegFault, and both test binaries put large objects on the stack.
 - [A JUCE component listening to itself hears its own clicks twice](pages/juce-self-listener-hears-clicks-twice.md) — A component registered as its own mouse listener gets every event on itself twice, so every toggle on Rhino's device faces flipped on and straight back off; hear the children through a separate listener, and test clicks through real dispatch.
+- [A juce::Button fires its click on a right-click too](pages/juce-button-fires-on-right-click.md) — juce::Button presses and clicks for any mouse button, so a key that carries a right-click menu also runs its left-click action unless mouseDown and mouseUp swallow the popup-menu press first, as the DJ console's DjPad does.
 - [A juce::Path holding only a start point is empty](pages/juce-path-isempty-ignores-a-lone-point.md) — juce::Path::isEmpty() ignores startNewSubPath points, so a loop that asks it whether to start or continue a line starts a new subpath every time and strokes nothing; keep a flag of your own.
+- [A layout that reads a child's preferred size must sync the child first](pages/sync-children-before-layout.md) — DjView laid itself out before syncing its mixer, so the layout read the mixer's width from the old strip count and a new deck's strip sat under the master section until the next resize; sync the children a layout measures first, and re-lay out when the measured size changes.
 - [A new source file needs an explicit CMake configure](pages/cmake-does-not-reconfigure.md) — Both projects suppress CMake regeneration, so a file or a flag added to a CMakeLists is silently left out until you configure again.
 - [App icons are baked at configure time](pages/app-icon-baked-at-configure.md) — JUCE turns the icon PNGs into an .ico at configure time, so editing the art and rebuilding still ships the old icon.
 - [Build locks from MSBuild nodes and orphaned compilers](pages/orphaned-build-processes.md) — An object or source file that another process holds is usually another session's build, an idle MSBuild node or an orphaned cl.exe.
@@ -126,7 +129,7 @@ The catalog of this wiki: every page, grouped by type, one line each (`- [Title]
 - [JUCE's rasteriser is not clip-invariant](pages/juce-rasteriser-not-clip-invariant.md) — A path's anti-aliased edge can come out differently under a different clip, so check a culled repaint against an unculled paint under the same clip, never against the whole paint.
 - [juce::File::createOutputStream appends](pages/juce-output-stream-appends.md) — JUCE opens an existing file for output at its end, so rewriting a PNG or a render in place leaves the old content in front.
 - [LNK1104 means a running binary holds the file](pages/locked-executable-lnk1104.md) — A link that fails with LNK1104 after every file compiled means a running RhinoDAW, DAW or Forge standalone holds the output.
-- [Offline renders that never return](pages/renders-that-never-return.md) — Three known causes make an offline render hang for good, and the Moved render timeout failure is usually just a busy machine.
+- [Offline renders that never return](pages/renders-that-never-return.md) — Four known causes make an offline render hang for good, and the Moved render timeout failure is usually just a busy machine.
 - [One knob diameter for the whole Forge panel](pages/forge-knob-diameter-is-panel-wide.md) — Every ordinary knob takes the tightest cell's size, so crowding one module shrinks them all; the test meant to catch it cannot fail.
 - [Profile paint on a software image](pages/profile-paint-on-a-software-image.md) — On Windows a plain juce::Image is a Direct2D bitmap whose context costs about 3 ms a paint whatever is drawn, so time painters on juce::SoftwareImageType() and repaint what the app really invalidates.
 - [Why a patch copied from Serum sounds different](pages/serum-patches-sound-different.md) — Check matrix polarity, PD warp depth, the filter's FREQ and the output stage before suspecting Forge's tuning or DSP.

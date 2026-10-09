@@ -316,3 +316,36 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - source: branch feat/dj-view
 - created: pages/dj-view.md (the booth as a second audio callback with Rhino's own engine, decks with hot cues, loops, quantised starts, master and sync with phase lock, the isolator mixer and beat effect, files read on a worker and tracks or groups bounced and re-bounced by beat, Live and Edit, the analysis of waveform, tempo, drops and key, what the document saves, decisions and what is not built)
 - updated: pages/session-view.md (the DJ view took the switch; SessionView is built only by the tests), pages/app-shell.md (the second view, Tab, djPoll on the timer), index.md
+
+## [2026-10-09] update | The DJ bounce on a copy of the document, and the gaps in the DJ record
+- source: commits e4040dd and 363fd05 (branch feat/dj-view), checked against native/src/core/Dj*, SessionDj*, DjView*, Main.cpp and the tests
+- created: pages/dj-bounce-on-a-copy.md (why the bounce moved from the message thread to the worker with a snapshot copy; DjBounceWork's ownership and the drain before drop; the 60 s budget; the MessageManagerLock that makes the test runners render inline; a group names its bus and its members)
+- updated: pages/dj-view.md (the booth is built and attached on the first deck; the bounce bullet shortened to link the decision; removing a deck closes the gap and reloads the decks that moved; Live refuses audio tracks and tracks without an instrument; Live/Edit/Reload only on track decks; readouts repaint on text change; deck removal deferred with callAsync; which DJ changes dirty the document and why markDjModified bypasses markModified; the scratchpad reference replaced by the method; the stale Not-built item)
+- updated: pages/renders-that-never-return.md (four causes, not three; the bounce's budget), pages/session-model.md (28 units; the SessionDj pair; markModified marks decks stale), pages/keeping-files-small.md (SessionDjInternal.h), pages/writing-rhino-tests.md (DjBooth.inc's place and its own document; import-onto-new-track renders belong before GroupBusReload), pages/headless-ui-snapshots.md (RHINO_DJ_SNAPSHOT), pages/ids-not-pointers.md (a deck holds an EditItemID and keys displays on generation), pages/recording.md (the booth is the third callback that clears its scratch buffer), pages/real-time-audio-rules.md (DjEngine's counted blocks and command queue; djPoll), pages/measure-sound-dont-read-dsp.md (DjTest's measurements; replicate wrong arithmetic outside the binary), pages/ui-cost-of-a-change.md (DjView waits while hidden), pages/app-shell.md (where the switch sits), index.md
+
+## [2026-10-09] update | The DJM-V10 control set, the jog wheel and the mixer at one height
+- source: branch feat/dj-view, the user's second request (the mixer's height fixed, a new channel mislaid until a resize, the V10's missing controls, a jog wheel on every console, a CDJ layout)
+- updated: pages/dj-view.md (the channel's compressor, four-band EQ, send and fader curve; the headphones' level and mono split; the mic with talkover; the send/return unit; fourteen beat effects with band keys, manual time and tap; the deck's brake, scratch, cue search and per-deck quantize; the CDJ console with its jog wheel; the mixer at one height; sync before layout, the resize bug; what the document saves; not built)
+
+## [2026-10-09] update | The second DJ pass checked against the code: the mic's gap, two gotchas, what the tests taught
+- source: branch feat/dj-view, the V10 control set, the jog wheel, the CDJ console and the mixer at one height, checked against native/src/core/DjMixer*, DjEngine.h, SessionDj.cpp, SessionDjSources.cpp, SessionDjInternal.h, DjView.cpp, DjDeckPanel.cpp, DjControls.h, DjMixerPanel.cpp, tests/DjTest.cpp and DjBooth.inc
+- created: pages/juce-button-fires-on-right-click.md (juce::Button clicks for any mouse button; DjPad swallows the popup-menu press in mouseDown and mouseUp; every console key with a second action is a DjPad)
+- created: pages/sync-children-before-layout.md (DjView::sync laid out before mixer.sync(), so the layout read the old strip count; mixer first, and laidOutMixerWidth re-lays out when the measured width changes; why the view test did not see it)
+- updated: pages/dj-view.md (the mic is wired inside DjEngine::process but DjBooth's callback still calls the three-argument form, so nothing feeds it in the app, moved to Not built; loading a track or a group now marks the document, correcting the 363fd05 note; the send unit's glide and the 100 blocks a test waits; the hidden jog's empty bounds; the DjPad rule; links to the three gotchas)
+- updated: pages/juce-self-listener-hears-clicks-twice.md (DjDeckPanel is a second caller of addMouseListener(this, true), deduplicating by event.eventTime, fine for an idempotent select and not for a toggle)
+- updated: pages/measure-sound-dont-read-dsp.md (what DjTest now measures; ask of each band what its crossovers can give, −30 dB outer and −15 dB inner for the LR4 four-band isolator; let smoothing settle before measuring)
+- updated: pages/writing-rhino-tests.md (a containment check reads hidden children too, so a control the layout hides takes empty bounds)
+- updated: pages/keeping-files-small.md (the DJ booth's six files past 600 lines; DjMixer.cpp at about 1,150 is the first to split)
+- updated: pages/real-time-audio-rules.md (a delay's time is smoothed too: DjSendFx's glide and its reset on a type change)
+- updated: pages/ui-cost-of-a-change.md (DjMixerPanel's tempo readout repaints only when its text differs from drawnBpm)
+- updated: index.md (the two gotchas)
+- notes: the entry "The DJM-V10 control set, the jog wheel and the mixer at one height" was first inserted before the bounce entry rather than appended, and was moved below it in the same session.
+
+## [2026-10-09] update | The mic wired through the booth's callback
+- source: branch feat/dj-view, the keeper's finding above, fixed in native/src/SessionDj.cpp, SessionDjInternal.h, Session.h and tests/Arrangement/scenarios/DjBooth.inc
+- updated: pages/dj-view.md (the booth's callback hands the device's inputs to the engine; Session::djProcessOffline drives the booth through that callback, with an overload taking inputs, so the scenario feeds a tone and reads the mic's meter; the Not-built item reduced to the input chooser; the view scenario adds a third deck while the view stands and checks every strip clears the master section)
+
+## [2026-10-09] update | The mic fix checked against the code; two stale lines corrected
+- source: native/src/SessionDj.cpp, SessionDjInternal.h, Session.h and tests/Arrangement/scenarios/DjBooth.inc after the fix; the mixer and Not-built paragraphs of dj-view.md already matched them
+- updated: pages/dj-view.md (the engine bullet no longer says the tests drive djProcessOffline "directly": it goes through the booth's own callback, inputs included)
+- updated: pages/sync-children-before-layout.md (the view scenario now adds a third deck to the standing view and checks every strip clears the master section, replacing the note that no test covered the ordering)

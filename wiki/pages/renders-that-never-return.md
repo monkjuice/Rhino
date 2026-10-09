@@ -1,7 +1,7 @@
 ---
 title: Offline renders that never return
 type: gotcha
-summary: Three known causes make an offline render hang for good, and the Moved render timeout failure is usually just a busy machine.
+summary: Four known causes make an offline render hang for good, and the Moved render timeout failure is usually just a busy machine.
 tags: [rhino, testing, rendering]
 sources: []
 updated: 2026-10-09
@@ -9,11 +9,11 @@ updated: 2026-10-09
 
 # Offline renders that never return
 
-An offline render is a `te::Renderer::RenderTask`, driven by calling `runJob()` until it returns `jobHasFinished`. Three known causes stop it from ever finishing. A fourth error only looks like a hang.
+An offline render is a `te::Renderer::RenderTask`, driven by calling `runJob()` until it returns `jobHasFinished`. Four known causes stop it from ever finishing. A fifth error only looks like a hang.
 
 ## Symptom
 
-A workflow case stops with no failed assertion, and CTest kills it at its time limit. The limit is 120 s for `native_pattern_workflow` and `native_arrangement_workflow`, and `native/CMakeLists.txt` says it is there to catch exactly this. In the app, nothing has a time limit. WAV export loops on a worker thread (`ProjectFiles.cpp`) and Ctrl+J merge loops on the message thread (`SessionMerge.cpp`). There, the same fault means an export that never completes or a window that stops responding.
+A workflow case stops with no failed assertion, and CTest kills it at its time limit. The limit is 120 s for `native_pattern_workflow` and `native_arrangement_workflow`, and `native/CMakeLists.txt` says it is there to catch exactly this. In the app, nothing has a time limit. WAV export loops on a worker thread (`ProjectFiles.cpp`) and Ctrl+J merge loops on the message thread (`SessionMerge.cpp`). There, the same fault means an export that never completes or a window that stops responding. A DJ deck's bounce loops on the booth's worker with a 60 s budget (`SessionDjSources.cpp`), so there it means a deck that reports "did not finish in time" ([A deck's bounce renders on a worker against a copy of the document](dj-bounce-on-a-copy.md)).
 
 ## Known causes
 
@@ -41,3 +41,4 @@ Treat it as a regression only if it fails on an idle machine. The other scenario
 - [Time warp](time-warp.md)
 - [Audio clip editor](audio-clip-editor.md)
 - [Project files (.rhinoedit)](project-files.md)
+- [DJ view and the booth](dj-view.md)

@@ -4,7 +4,7 @@ type: guide
 summary: Render a Rhino panel, the whole Rhino shell or Forge's editor to a PNG without a window, then measure it instead of eyeballing it.
 tags: [both, ui, testing, snapshots]
 sources: []
-updated: 2026-10-07
+updated: 2026-10-09
 ---
 
 # Seeing the UI without taking the screen
@@ -27,7 +27,8 @@ knobs and number-less bars until commit `d28a687`.
 The Drum Rack face does the same in `runDrumRackFaceTest` (`tests/Pattern/DeviceRackTest.cpp`). Set
 `RHINO_DRUMS_SNAPSHOT` to an absolute path and run `ctest --test-dir native/build -C Release -R native_pattern_workflow`.
 `RHINO_DRUM_WINDOW_SNAPSHOT` writes the Drum Rack's own window, stacked, at 1280 x 800 from `runDrumRackWindowTest`, in
-the same run.
+the same run. `RHINO_DJ_SNAPSHOT` writes the DJ view at 1240 x 720, a track deck and a file deck either side of the
+mixer, from `DjBooth.inc` in `native_arrangement_workflow` ([DJ view and the booth](dj-view.md)).
 It writes the face at 852 px (`DeviceEditorPanel::drumFaceWidth`) by `standardHeight`, painted with a `Theme`, as the
 test leaves it at its end, showing a sliced roll, and deletes any old file first. A snapshot is what caught the sample
 editor's envelope line drawing nothing ([A juce::Path holding only a start point is empty](juce-path-isempty-ignores-a-lone-point.md)).

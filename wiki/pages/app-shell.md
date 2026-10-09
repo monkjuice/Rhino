@@ -25,7 +25,7 @@ Under the 72 px bar sit the docked browser, whose 3 px divider is its resize han
 
 ## The second view
 
-The Arrange/DJ switch at the right of the bar, and Tab, swap the arrangement for the [DJ view](dj-view.md) in the same rectangle (`setSessionViewOpen`, gated by `sessionViewEnabled`, true since 2026-10-09). The lower pane is the same under either view, which is how a deck's Edit key opens its track's clip in the note editor. Switching views hands the Device View the track the view being shown has selected: the arrangement's card, or the deck last clicked when it plays a track of the song.
+The Arrange/DJ switch at the right of the bar, left of the metronome, and Tab, swap the arrangement for the [DJ view](dj-view.md) in the same rectangle (`setSessionViewOpen`, gated by `sessionViewEnabled`, true since 2026-10-09). The lower pane is the same under either view, which is how a deck's Edit key opens its track's clip in the note editor. Switching views hands the Device View the track the view being shown has selected: the arrangement's card, or the deck last clicked when it plays a track of the song.
 
 ## The lower pane
 

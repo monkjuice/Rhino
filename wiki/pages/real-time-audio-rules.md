@@ -4,7 +4,7 @@ type: convention
 summary: The audio thread never allocates, locks, or touches files or UI; memory is sized at prepare and state crosses threads via atomics and queues.
 tags: [both, real-time, audio-thread]
 sources: []
-updated: 2026-10-07
+updated: 2026-10-09
 ---
 
 # Real-time audio rules
@@ -35,16 +35,17 @@ Each block has a deadline (about 2.7 ms at 48 kHz and 128 samples) that an alloc
   - Each voice counts itself onto its sample (`DrumSample::playing`).
   - A replaced sample is retired with the number of stretches begun at that moment. `collect()`, on the message thread, frees it once that many stretches have ended and no voice plays it.
   - Every pad edit and the face's 24 Hz timer collect, and `prepare()`, when nothing renders, frees everything. `checkSampleHandOff` in `DrumRackTest.cpp` covers it.
+- Counted blocks for a whole-track swap. `DjEngine` hands a deck its material by pointer and retires the old one with the number of blocks begun; `collect()`, on the message thread, frees it once as many have ended, which is enough because a deck reads nothing across blocks. Its commands cross in a single-producer queue of 256 applied at the start of a block, and every knob is an atomic read once a block and smoothed ([DJ view and the booth](dj-view.md)).
 - Field by field, where a torn read is harmless. A Drum Rack pad's playback is a dozen atomics written one at a time, so a strike landing mid-write plays a mix of old and new for one note, which is accepted ([Drum Rack sample editor](drum-rack-sample-editor.md)). Strikes from the face cross as a 128-bit mask of atomics, and a solo count spares each voice a scan of all 128 pads.
 - Atomics. `UtilityDevice` reads its gain atomically into a preallocated smoother; Forge's `Processor` publishes meter readings into `std::atomic` arrays for the panel.
 - A single-producer, single-consumer queue to a timer. MIDI learn pushes bound messages into `MidiControlQueue` (256 slots, no allocation), and the `Processor`'s own 60 Hz timer applies them, because writing a parameter takes locks ([Forge MIDI learn](forge-midi-learn.md)).
 - A split at the thread boundary. Rhino EQ's `SpectrumTap` only copies samples into a ring; `SpectrumReader` transforms them on the panel's timer.
 
-**Poll what the engine does not broadcast.** Tracktion starts and stops recordings and raises slot overrides on the audio thread without notifying anyone. `ControlWindow` in `Main.cpp` polls them on its one 30 Hz timer. Track automation is no longer applied from there: the engine plays it from parameter curves, and the rack polls the knobs it moves ([Track automation](automation.md)).
+**Poll what the engine does not broadcast.** Tracktion starts and stops recordings and raises slot overrides on the audio thread without notifying anyone. `ControlWindow` in `Main.cpp` polls them on its one 30 Hz timer, with `Session::djPoll` for the DJ booth's finished loads and stale bounces, which a worker and a quiet period decide. Track automation is no longer applied from there: the engine plays it from parameter curves, and the rack polls the knobs it moves ([Track automation](automation.md)).
 
 **Extra device callbacks are lazy and come off first.** The browser preview and the count-in are extra `AudioIODeviceCallback`s on the engine's device manager, built on first use and removed in `releaseAudioDevice` and `~Session` before the device or transport they read goes away.
 
-**Smooth or crossfade; never step.** Continuous parameters are smoothed inside the DSP. Discrete switches crossfade: an EQ band turning on or changing type, a Forge noise source (6 ms), and a finished Forge voice, faded over 15 ms rather than cut ([Forge engine (Core)](forge-engine.md)). Smoothing state lives across blocks: the Vocoder gate's 3 ms edge restarted every block until `492cc8b`, so an edge near a block boundary stepped at the next one.
+**Smooth or crossfade; never step.** Continuous parameters are smoothed inside the DSP. Discrete switches crossfade: an EQ band turning on or changing type, a Forge noise source (6 ms), and a finished Forge voice, faded over 15 ms rather than cut ([Forge engine (Core)](forge-engine.md)). Smoothing state lives across blocks: the Vocoder gate's 3 ms edge restarted every block until `492cc8b`, so an edge near a block boundary stepped at the next one. A delay's time is a parameter too: the DJ send unit (`DjSendFx`, `core/DjMixer.cpp`) glides its read offset a thousandth of the way each sample, so a turn of the time knob bends the repeats as tape would instead of clicking, and clears its lines on a type change rather than replaying another effect's tail; a test of it waits for the glide ([Measure sound, don't read the DSP](measure-sound-dont-read-dsp.md)).
 
 **Flush what decays toward zero.** An envelope multiplied down every sample reaches the denormal range long before a drum ends, and x86 is far slower on denormals. So `fall()` in `core/DrumSynth.cpp` zeroes an envelope below 1e-9, and a Drum Rack sample voice's low-pass zeroes its state below 1e-20. In the strike costs `--self-test` logs, in ns a sample, the Kick went from 127 to 32, the Tom from 92 to 21 and the Rim from 97 to 33 (2026-10-06). `juce::ScopedNoDenormals` in a device's render call (the Drum Rack's and Rhino FM's `process`, Rhino EQ's `applyToBuffer`) covers the audio thread only. Pictures and previews render through `renderStrike` on the message thread, where only the explicit flushes help.
 

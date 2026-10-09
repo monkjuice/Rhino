@@ -4,7 +4,7 @@ type: convention
 summary: Anything kept beyond one call holds an id or a copy, never a raw engine pointer, because undo, moves, reloads and publishes free the object.
 tags: [both, lifetime, undo]
 sources: []
-updated: 2026-10-07
+updated: 2026-10-09
 ---
 
 # Hold ids, not pointers
@@ -23,6 +23,7 @@ Tracktion rebuilds its objects from the edit's `ValueTree`, so a raw `te::Clip*`
 - Never cache an instrument pointer, because switching instruments replaces the plugin. Ask `trackInstrument` or `Session::patternInstrument` each time ([One instrument per track](one-instrument-per-track.md)).
 - A stored automation lane keeps no copy of its track index, since deleting a track renumbers every track below it, and no copy of its device's slot, since a reorder moves devices. A lane is identified by the track state that holds it plus `{device key, parameter}`; the key is a UUID Rhino writes onto the plugin's state (`rhinoDeviceKey`, commit `cf85e3f`; [Track automation](automation.md)).
 - The Drum Rack's own window keeps its rack's `itemID` and finds it again on every change (`DrumRackView::follow`), so a device added in front of it or a track moved leaves it on the same rack, and it closes once the id is gone ([Drum Rack](drum-rack.md)).
+- A DJ deck keeps its track's `EditItemID` or its group's id, and `Session::djDeckInfo` resolves the row on every call (`track`, -1 once it is gone), so a deck follows its track through reorders and refuses to bounce one that was deleted. Material reaches the engine by pointer and is replaced whole, so a display keys what it keeps on `DjDeckInfo::generation`, not on the pointer ([DJ view and the booth](dj-view.md)).
 - `tidyRecordedClips` compares a track's clips with the *ids* held before recording started, because making room for one new clip can delete another.
 - The clipboard goes further and holds `ClipSnapshot` values, not ids: the source of a cut is gone before the paste, and an undo can remove it too ([Region editing](region-editing.md)).
 - A view's own cache is no safer than the engine's objects. Any `Session` command announces synchronously and the arrangement rebuilds its clip list in that call, so a gesture that reads a clip after calling `Session` takes a copy of it first. Two that held a reference read freed or wrong entries until commit `2df76f8`.

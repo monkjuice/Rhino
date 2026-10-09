@@ -1,0 +1,38 @@
+---
+title: A deck's bounce renders on a worker against a copy of the document
+type: decision
+summary: A track or group bounced to a DJ deck renders on the booth's worker from a snapshot copy of the edit, never the live edit nor the message thread; the copy's plugins and the test runners' inline render are the price.
+tags: [rhino, dj, rendering, threads]
+sources: []
+updated: 2026-10-09
+---
+
+# A deck's bounce renders on a worker against a copy of the document
+
+## Context
+
+A DJ deck plays audio, not the edit ([DJ view and the booth](dj-view.md)), so a track or group of the song reaches a deck by being rendered to a file, a bounce, and is bounced again after every edit. The first version (commit `e4040dd`) rendered on the message thread, as Ctrl+J merge does (`SessionMerge.cpp`): a render reads the edit, and an edit changed under it from the message thread is a race, so blocking that thread was the simple way to be safe. Measured on 2026-10-09, one bar took 0.6-1 s with nothing repainting; a long track would have frozen the window for many seconds, on every re-bounce.
+
+## The choice
+
+Commit `363fd05`: the render runs on the booth's one worker thread, against a copy of the document loaded from a snapshot of its state (`te::loadEditFromState(engine, edit->state.createCopy())` in `Session::bounceDjDeck`, `native/src/SessionDjSources.cpp`), given the live edit's `editFileRetriever` so its media resolves. This is the rule the file workers already follow ([Project files (.rhinoedit)](project-files.md)): a worker is handed a detached snapshot, never the live edit. The live edit stays on the device, so the decks and a track played Live are not interrupted, and the person goes on editing while it renders.
+
+Rejected: rendering the live edit from the worker (the race above), and keeping the render synchronous (the freeze).
+
+## What it costs and what it requires
+
+- **The copy's plugins are made again for every bounce**, after `mirrorAutomationToEngine` and `flushState` so the copy carries the lanes as playback would. Making the copy and the `RenderTask` still happens on the message thread, a fraction of a second; that is the stall that remains.
+- **`DjBounceWork` belongs to the message thread alone** (`SessionDjInternal.h`): the copy, a `ScopedTrackSoloIsolator`, a `ScopedClipSlotDisabler`, the `WavAudioFormat` and the `RenderTask`, declared so the render and the scopes die before the copy. It is made in `bounceDjDeck` and destroyed in `djPoll` once the job has raised `done`; the worker holds only a plain pointer to the render plus the shared `DjLoadJob`, and touches neither after `done`. `djReset` and `~DjBooth` drain the pool (`removeAllJobs(true, 10000)`) before dropping jobs and bounces, because a render still running reads a copy being destroyed.
+- **A sixty-second budget.** A render that keeps returning unfinished would hold the only worker for good, so the loop gives up with "The bounce did not finish in time"; the job's `cancel` flag ends it sooner. The WAV goes to `%TEMP%\Rhino DJ bounces`, is read back with `readDjTrack`, analysed with the song's tempo as `knownBpm`, and deleted.
+- **The test runners render inline.** Tracktion's render initialisation takes a `MessageManagerLock`, which a worker is granted only while the message thread dispatches. The app's always does, as it does for the WAV export; the runners have no dispatch loop (`JUCE_MODAL_LOOPS_PERMITTED=0`), so under `isCommandLineTestMode` the render runs on the message thread and `djPoll` installs it as before. The worker path is exercised only by the app, as the export's is.
+- **A group names its bus and the members that feed it in `tracksToDo`**, because the engine builds a member into its bus's node; naming only part of that rendered nothing ("Didn't find any audio to render"). `DjBooth.inc` checks the bus's own fader is in the bounce by turning it down and bouncing again.
+
+The render's parameters are a merge's: from the top of the song to the end of the last clip among the tracks, rounded up to whole bars and at least one, at the device's rate and block size, `usePlugins` on, `useMasterPlugins` off, 24-bit stereo. Solo elsewhere and session-view slot clips are kept out by the two scopes.
+
+## Related
+
+- [DJ view and the booth](dj-view.md)
+- [Project files (.rhinoedit)](project-files.md)
+- [Arrangement view](arrangement-view.md)
+- [Offline renders that never return](renders-that-never-return.md)
+- [Real-time audio rules](real-time-audio-rules.md)

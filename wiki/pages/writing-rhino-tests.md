@@ -4,7 +4,7 @@ type: guide
 summary: Choose between a unit check and a workflow scenario, follow the rules that keep scenarios sharing one Session honest, and time the interface with --profile-ui.
 tags: [rhino, testing, conventions]
 sources: []
-updated: 2026-10-07
+updated: 2026-10-09
 ---
 
 # Writing Rhino tests
@@ -34,12 +34,16 @@ or mixing unrelated behaviour, and read the runner's comments before moving one:
 A scenario closes every brace it opens. `DeviceParameters.inc` once opened a block that `EditingAndAutomation.inc`
 closed, so neither could be moved or skipped without the other (fixed in commit `3f6bb4e`). A scenario that needs a
 clean slate builds a document of its own inside its block, `auto document = std::make_unique<Session>();`, and calls
-that session's `releaseAudioDevice()` before the block ends (`ClipEdits.inc`, `GroupUndo.inc`, `PartialRepaint.inc`).
+that session's `releaseAudioDevice()` before the block ends (`ClipEdits.inc`, `GroupUndo.inc`, `PartialRepaint.inc`, and
+`DjBooth.inc` for the group it bounces).
 
 ## Rules
 
 1. **Render before `GesturesAndPersistence.inc`.** It calls `Session::releaseAudioDevice`, after which a `RenderTask`
    never finishes and the runner times out with no assertion ([Offline renders that never return](renders-that-never-return.md)).
+   `DjBooth.inc` renders too, so it sits between `GroupBusReload.inc` and `Recording.inc`; and from that point on a clip
+   imported onto a newly added track never renders, so a scenario that imports onto a new track and renders it belongs
+   before `GroupBusReload.inc`.
 2. **Allocate anything big.** Every scenario shares the runner's one stack frame. A `StepGrid` carries about 200 KB of
    caches, and the third one declared by value overflowed the old 1 MB stack inside an unrelated scenario; twice more in
    the week of 2026-10-05 a scenario that added two panels did the same. `RhinoDAW.exe` now reserves 8 MB on Windows
@@ -55,7 +59,9 @@ that session's `releaseAudioDevice()` before the block ends (`ClipEdits.inc`, `G
 6. **Snapshot a panel that paints.** Render it with `createComponentSnapshot` on every run as a paint smoke test, assert
    its child controls land inside it and off each other (`checkEditorFace` in `EqTest.cpp`), and write a PNG only when
    an env var names a path (`RHINO_CLIP_PANEL_SNAPSHOT`, `RHINO_AUTOMATION_SNAPSHOT`) — see
-   [Seeing the UI without taking the screen](headless-ui-snapshots.md). Look at the PNG too: the Drum Rack's envelope
+   [Seeing the UI without taking the screen](headless-ui-snapshots.md). Such a check reads every child, shown or not,
+   so a control the layout hides must take empty bounds (`setBounds({})`), as `DjDeckPanel` does with the jog wheel
+   on a short or narrow console; left at its old bounds, a control nobody sees fails the check. Look at the PNG too: the Drum Rack's envelope
    line drew nothing, and only a snapshot showed it
    ([A juce::Path holding only a start point is empty](juce-path-isempty-ignores-a-lone-point.md)).
 7. **Render only what you measure.** A render that measures one clip names that clip's track in `tracksToDo`, as

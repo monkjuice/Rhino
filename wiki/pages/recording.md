@@ -4,7 +4,7 @@ type: component
 summary: Arms tracks, not inputs, lets each take win the ground it lands on, and counts in with Rhino's own click while the playhead stands still.
 tags: [rhino, recording, audio-io]
 sources: []
-updated: 2026-10-05
+updated: 2026-10-09
 ---
 
 # Recording and the count-in
@@ -35,7 +35,7 @@ The engine broadcasts neither start nor end, so the shell polls `Session::record
 
 Tracktion counts in by rolling the playhead backwards, which caps it at two bars and fails at bar one. `CountInClick` instead plays a decaying sine per beat through a second `AudioIODeviceCallback`, attached only while counting, for 1-4 bars (`rhinoCountInBars`), from a standstill only. When it ends the transport starts from the message thread, so the downbeat follows within about a block.
 
-**Pitfalls:** JUCE hands a second callback a scratch buffer still holding its previous block, so the click clears it before mixing; otherwise it summed into a growing tone (commit `775b112`). And `Session::clickTrackGain` converts decibels to the engine's linear gain (clamped to 0.2-1.0); written raw, all three menu levels sounded alike.
+**Pitfalls:** JUCE hands a second callback a scratch buffer still holding its previous block, so the click clears it before mixing; otherwise it summed into a growing tone (commit `775b112`). The DJ booth's engine, the third such callback, clears for the same reason ([DJ view and the booth](dj-view.md)). And `Session::clickTrackGain` converts decibels to the engine's linear gain (clamped to 0.2-1.0); written raw, all three menu levels sounded alike.
 
 Not supported: punch ranges, loop takes, comping.
 

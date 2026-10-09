@@ -4,7 +4,7 @@ type: convention
 summary: Session announces every change synchronously to every listening panel, so a drag announces once, a hidden panel goes stale, a frame reads only the controls it shows, painters skip what a repaint does not reach, and --profile-ui measures it.
 tags: [rhino, ui, performance]
 sources: []
-updated: 2026-10-07
+updated: 2026-10-09
 ---
 
 # What a change costs the interface
@@ -14,7 +14,7 @@ updated: 2026-10-07
 ## The rules
 
 - **A drag announces once, at its end.** Inside a device-parameter gesture, `setDeviceParameter` announces only on `Session::deviceParameterValues`, which the rack hears to refresh the dragged device's panel alone. Inside a fader or pan gesture nothing is announced, and the dragged control draws its own value. `end*Gesture` tells everyone once. `Arrangement/scenarios/UiCost.inc` counts both. A new continuous control needs a gesture bracket, plus a broadcaster of its own if one view must follow it live. Settings that are not parameters can skip the session while dragged: the Drum Rack's sample knobs write the device directly without undo, then restore and write once through `editDeviceSettings` ([Drum Rack sample editor](drum-rack-sample-editor.md)).
-- **A hidden panel waits.** A panel the shell has switched off checks `isHiddenInShell` (`native/src/UiVisibility.h`) in its change callback, marks itself stale and catches up in `visibilityChanged`. This covers the paused session view and whichever lower-pane faces are not showing. Its timers and vblank work skip too: a hidden note editor does not chase the playhead, and hidden device faces stop animating. A component with no parent, as tests and the profiler build them, never counts as hidden. `DeviceRack`, `StepGrid`, `AudioClipPanel` and `SessionView` follow this, and a new panel the shell can hide should too.
+- **A hidden panel waits.** A panel the shell has switched off checks `isHiddenInShell` (`native/src/UiVisibility.h`) in its change callback, marks itself stale and catches up in `visibilityChanged`. This covers the paused session view and whichever lower-pane faces are not showing. Its timers and vblank work skip too: a hidden note editor does not chase the playhead, and hidden device faces stop animating. A component with no parent, as tests and the profiler build them, never counts as hidden. `DeviceRack`, `StepGrid`, `AudioClipPanel`, `SessionView` and `DjView` follow this, and a new panel the shell can hide should too.
 - **Nothing announces per frame.** The engine plays automation, and the rack reads moving knobs back itself ([Track automation](automation.md)).
 - **A frame reads only the controls it shows.** `Session::deviceParameters(track, slot)` reads and formats every control: 1.75 ms median for a [Drum Rack](drum-rack.md)'s 768. So a frame path reads a range (`deviceParameters(track, slot, first, count)`), one (`deviceParameter`, optional) or the count (`deviceParameterCount`), all in `SessionDevices.cpp` (2026-10-07). The drum face reads the selected pad's six (16.7 µs), and `SessionAutomation.cpp`'s three callers read one each. The fallback editor window reads the six it shows, the selected pad's on a Drum Rack, on its 30 Hz timer.
 - **A rebuild reads each fact once.** The arrangement reads what its painter asks about each track once per sync (`TrackFacts`), not per row per frame, because each question walks the engine's track list. It also hands `Session::clipPluginCount` the clip in hand rather than an id to look up again.
@@ -25,6 +25,7 @@ updated: 2026-10-07
   - Its 24 Hz tick repaints only the pads, map cells, key name and playhead strip that moved.
   - `drawLine` keeps each shaped line as a `juce::GlyphArrangement`, keyed by text, box, justification and font and cleared past 2,048 entries, because shaping text was most of the paint.
   - `padPicture` renders a synth's strike at 16 kHz instead of the device's rate; it and `samplePicture` keep the selected pad's picture while sound, settings and width are unchanged, at two widths, because the rack's face and the Drum Rack window draw one pad at different widths and evicted each other every frame.
+  - A readout of text compares before it repaints. `DjMixerPanel`'s tempo readout formats its text on the 30 Hz tick and repaints its rectangle only when that differs from `drawnBpm`, the text the last paint drew, which replaced `DjView`'s blind repaint of the mixer's corner every tick ([DJ view and the booth](dj-view.md)); the deck display's readouts do the same.
 
 ## Measuring
 

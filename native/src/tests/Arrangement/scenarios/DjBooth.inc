@@ -139,6 +139,17 @@
             session.setDjChannelFader(1, 0.25f);
             session.setDjQuantise(Session::DjQuantise::beat);
             session.setDjFxType(2);
+            session.setDjChannelComp(1, 0.4f);
+            session.setDjChannelEq(1, 2, -6.0f);
+            session.setDjChannelSend(1, 0.3f);
+            session.setDjChannelFaderCurve(1, 2);
+            session.djSetBrake(0, 0.5f);
+            session.djSetQuantiseSnap(0, false);
+            session.setDjFxBand(0, false);
+            session.setDjMicMode(2);
+            session.setDjSendFxType(1);
+            session.setDjCueLevel(-6.0f);
+            session.setDjMonoSplit(true);
             {
                 const auto savedSet = session.projectSnapshot();
                 juce::TemporaryFile setProject(".rhinoedit");
@@ -152,6 +163,14 @@
                     "A file deck remembers its file");
             require(close(session.djChannel(1).fader, 0.25) && session.djQuantise() == Session::DjQuantise::beat
                     && session.djFx().type == 2, "The mixer, the quantise and the effect come back");
+            {
+                const auto channel = session.djChannel(1);
+                require(close(channel.comp, 0.4) && close(channel.eqDb[2], -6.0) && close(channel.send, 0.3) && channel.faderCurve == 2,
+                        "The channel's compressor, four-band EQ, send and fader curve come back");
+                require(!session.djFx().bands[0] && session.djMic().mode == 2 && session.djSendFx().type == 1
+                        && close(session.djMaster().cueLevelDb, -6.0) && session.djMaster().monoSplit,
+                        "The effect's bands, the mic, the send unit and the headphones come back");
+            }
             require(!info.loaded && info.stale, "A reopened deck waits for its material");
             juce::Thread::sleep(600);
             for (int waited = 0; waited < 400 && (!session.djDeckInfo(0).loaded || !session.djDeckInfo(1).loaded); ++waited)
@@ -163,7 +182,30 @@
             require(session.djDeckInfo(1).loaded, ("and reads the file deck again: " + session.djDeckInfo(1).error).toRawUTF8());
             session.djProcessOffline(512);
             require(close(session.djDeckState(0).hotCueSeconds[3], 0.5), "The hot cue is where it was");
+            require(close(session.djDeckState(0).brakeSeconds, 0.5) && !session.djDeckState(0).quantiseSnap,
+                    "A deck's brake and quantize come back with it");
             session.setDjQuantise(Session::DjQuantise::bar);
+            session.djSetBrake(0, 0.0f);
+            session.djSetQuantiseSnap(0, true);
+
+            scenario("dj booth: cue search and tap tempo");
+            // The cue point stands at the top and hot cue D at half a second.
+            session.djSeek(0, 0.2);
+            session.djProcessOffline(512);
+            session.djJumpToCue(0, true);
+            session.djProcessOffline(512);
+            require(close(session.djDeckState(0).positionSeconds, 0.5), "Cue search forward lands on the next cue point");
+            session.djJumpToCue(0, false);
+            session.djProcessOffline(512);
+            require(close(session.djDeckState(0).positionSeconds, 0.0), "and back lands on the one before, the cue at the top");
+            for (int tap = 0; tap < 4; ++tap)
+            {
+                session.djTapTempo();
+                juce::Thread::sleep(300);
+            }
+            const auto tapped = session.djMaster().tapBpm;
+            require(tapped > 170.0 && tapped < 215.0,
+                    ("Four taps 300 ms apart set the effect's tempo near 200: " + juce::String(tapped, 1)).toRawUTF8());
 
             scenario("dj booth: live and the note editor");
             // After every render: switching monitoring on arms the track, and

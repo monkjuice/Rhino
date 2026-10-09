@@ -175,6 +175,8 @@ juce::Result Session::loadDjDeckTrack(int index, int track)
     deck.info.generation = generation;
     deck.settings = {};
     deck.settings.loopWhole = true;
+    // A deck's source is saved with the document.
+    markDjModified();
     return bounceDjDeck(index, false);
 }
 
@@ -199,6 +201,7 @@ juce::Result Session::loadDjDeckGroup(int index, int groupId)
     deck.info.generation = generation;
     deck.settings = {};
     deck.settings.loopWhole = true;
+    markDjModified();
     return bounceDjDeck(index, false);
 }
 
@@ -697,14 +700,18 @@ void Session::djReset()
         deck.synced.store(false);
         deck.reversed.store(false);
         deck.nudgePercent.store(0.0f);
+        deck.brakeSeconds.store(0.0f);
+        deck.quantiseSnap.store(true);
+        deck.scratching.store(false);
         auto& strip = b.engine.channel(i);
         strip.trimDb.store(0.0f);
-        strip.lowDb.store(0.0f);
-        strip.midDb.store(0.0f);
-        strip.highDb.store(0.0f);
+        strip.comp.store(0.0f);
+        for (auto& band : strip.eqDb) band.store(0.0f);
         strip.filter.store(0.0f);
         strip.resonance.store(0.2f);
         strip.fader.store(1.0f);
+        strip.faderCurve.store(1);
+        strip.send.store(0.0f);
         strip.cue.store(false);
         strip.fxOn.store(false);
         strip.crossfaderSide.store(1);
@@ -720,11 +727,29 @@ void Session::djReset()
     b.engine.master().midDb.store(0.0f);
     b.engine.master().highDb.store(0.0f);
     b.engine.master().cueMix.store(0.0f);
+    b.engine.master().cueLevelDb.store(0.0f);
+    b.engine.master().monoSplit.store(false);
+    b.engine.tapBpm.store(128.0);
     b.engine.fx().on.store(false);
     b.engine.fx().target.store(-1);
-    b.engine.fx().type.store(0);
+    b.engine.fx().type.store(1);
     b.engine.fx().beats.store(0.5f);
     b.engine.fx().depth.store(0.5f);
+    b.engine.fx().bandLow.store(true);
+    b.engine.fx().bandMid.store(true);
+    b.engine.fx().bandHigh.store(true);
+    b.engine.fx().autoTime.store(true);
+    b.engine.fx().manualSeconds.store(0.25f);
+    b.engine.mic().levelDb.store(0.0f);
+    b.engine.mic().lowDb.store(0.0f);
+    b.engine.mic().highDb.store(0.0f);
+    b.engine.mic().mode.store(0);
+    b.engine.sendFx().type.store(2);
+    b.engine.sendFx().size.store(0.5f);
+    b.engine.sendFx().time.store(0.5f);
+    b.engine.sendFx().tone.store(0.5f);
+    b.engine.sendFx().mix.store(0.5f);
+    b.taps.clear();
     b.staleSince = 0;
     b.engine.collect();
 }

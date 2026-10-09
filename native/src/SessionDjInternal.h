@@ -94,6 +94,8 @@ struct Session::DjBooth final : juce::AudioIODeviceCallback
     juce::uint32 staleSince = 0;
     static constexpr juce::uint32 rebounceQuietMs = 500;
     bool phaseLock = true;
+    // The last few taps on the effect's TAP key, as millisecond ticks.
+    std::vector<juce::uint32> taps;
 
     void audioDeviceIOCallbackWithContext(const float* const*, int, float* const* outputChannelData,
                                           int numOutputChannels, int numSamples,

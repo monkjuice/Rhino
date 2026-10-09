@@ -52,7 +52,7 @@ std::unique_ptr<DjTrack> rampTrack(double sampleRate, double seconds, double bpm
     return track;
 }
 
-std::unique_ptr<DjTrack> toneTrack(double frequency, double sampleRate, double seconds)
+std::unique_ptr<DjTrack> toneTrack(double frequency, double sampleRate, double seconds, float amplitude = 0.5f)
 {
     auto track = std::make_unique<DjTrack>();
     track->sampleRate = sampleRate;
@@ -60,7 +60,18 @@ std::unique_ptr<DjTrack> toneTrack(double frequency, double sampleRate, double s
     const auto frames = static_cast<int>(seconds * sampleRate);
     track->left.resize(static_cast<size_t>(frames));
     for (int i = 0; i < frames; ++i)
-        track->left[static_cast<size_t>(i)] = 0.5f * static_cast<float>(std::sin(2.0 * pi * frequency * i / sampleRate));
+        track->left[static_cast<size_t>(i)] = amplitude * static_cast<float>(std::sin(2.0 * pi * frequency * i / sampleRate));
+    return track;
+}
+
+// Silence with one full-scale sample a little way in.
+std::unique_ptr<DjTrack> clickTrack(double seconds)
+{
+    auto track = std::make_unique<DjTrack>();
+    track->sampleRate = deviceRate;
+    track->name = "click";
+    track->left.assign(static_cast<size_t>(deviceRate * seconds), 0.0f);
+    track->left[1000] = 1.0f;
     return track;
 }
 
@@ -120,6 +131,32 @@ DjEngine::Command command(DjEngine::Command::Type type, int deck)
     c.type = type;
     c.deck = deck;
     return c;
+}
+
+// How often a signal crosses zero, as a frequency.
+double zeroCrossingFrequency(const std::vector<float>& samples)
+{
+    int crossings = 0;
+    for (size_t i = 1; i < samples.size(); ++i)
+        if ((samples[i - 1] < 0.0f) != (samples[i] < 0.0f))
+            ++crossings;
+    return crossings * deviceRate / (2.0 * static_cast<double>(std::max<size_t>(1, samples.size())));
+}
+
+// Counts the runs of loud and of silent 256-frame windows.
+void countRuns(const std::vector<float>& samples, int& silentRuns, int& loudRuns)
+{
+    silentRuns = loudRuns = 0;
+    bool loud = rms(samples, 0, 256) > 0.05f;
+    for (size_t at = 256; at + 256 <= samples.size(); at += 256)
+    {
+        const auto now = rms(samples, at, at + 256) > 0.05f;
+        if (now != loud)
+        {
+            if (now) ++loudRuns; else ++silentRuns;
+            loud = now;
+        }
+    }
 }
 
 void checkDeckTransport()
@@ -279,6 +316,77 @@ void checkDeckTransport()
     require(deck.currentState() == DjDeck::State::empty && deck.hotCues[2].load() < 0.0, "material taken away empties the deck");
 }
 
+// The brake, on the deck itself, and the hand on the platter, through the
+// engine that reads it.
+void checkBrakeAndScratch()
+{
+    DjDeck deck;
+    auto ramp = rampTrack(44100.0, 10.0);
+    deck.track.store(ramp.get());
+    deck.adoptPending();
+    deck.targetRate = deck.baseRate();
+    const auto start = [&deck]
+    {
+        deck.play();
+        deck.landPending(0, 0);
+    };
+    start();
+    renderDeck(deck, 20);
+    // A braked stop winds the rate down from one to nothing over half a
+    // second, which covers a quarter of a second of material.
+    deck.brakeSeconds.store(0.5f);
+    const auto before = deck.position.load();
+    deck.pause();
+    renderDeck(deck, 10);   // 0.1 s in
+    require(deck.isPlaying() && deck.position.load() > before, "a braked stop keeps the platter turning");
+    renderDeck(deck, 50);   // 0.64 s in all
+    require(deck.currentState() == DjDeck::State::stopped, "and stops once the platter has wound down");
+    const auto travelled = deck.position.load() - before;
+    require(std::abs(travelled - 0.25 * 44100.0) < 700.0,
+            "covering a quarter second of material in half a second (" + juce::String(travelled) + " frames)");
+    // A braked start spins up the same way.
+    const auto restart = deck.position.load();
+    start();
+    renderDeck(deck, 47);   // 0.5 s
+    const auto spun = deck.position.load() - restart;
+    require(deck.isPlaying() && std::abs(spun - 0.25 * 44100.0) < 700.0,
+            "a braked start spins up over the brake time (" + juce::String(spun) + " frames)");
+    deck.brakeSeconds.store(0.0f);
+    deck.track.store(nullptr);
+    renderDeck(deck, 1);
+
+    // The scratch: the engine sets the deck's rate from the hand while it
+    // is on the platter, backwards included, and a resting hand holds it.
+    DjEngine engine;
+    engine.prepare(deviceRate, block);
+    engine.setDeckCount(1);
+    engine.quantise.store(static_cast<int>(DjEngine::Quantise::off));
+    engine.setTrack(0, rampTrack(44100.0, 10.0), false);
+    run(engine, 1);
+    auto seek = command(DjEngine::Command::Type::seek, 0);
+    seek.value = 200000.0;
+    engine.push(seek);
+    engine.push(command(DjEngine::Command::Type::play, 0));
+    run(engine, 20);
+    auto& scratched = engine.deck(0);
+    scratched.scratchRate.store(-1.0);
+    scratched.scratching.store(true);
+    run(engine, 30);   // the rate smooths over 30 ms
+    const auto pulled = scratched.position.load();
+    run(engine, 20);
+    require(scratched.position.load() < pulled - 20.0 * block * 0.5, "a hand pulling the platter back runs the deck backwards");
+    scratched.scratchRate.store(0.0);
+    run(engine, 30);
+    const auto held = scratched.position.load();
+    run(engine, 20);
+    require(std::abs(scratched.position.load() - held) < 50.0, "a hand resting on the platter holds it still");
+    scratched.scratching.store(false);
+    run(engine, 30);
+    const auto released = scratched.position.load();
+    run(engine, 20);
+    require(scratched.position.load() > released + 20.0 * block * 0.5, "let go, the deck runs on");
+}
+
 void checkEngineHousekeeping()
 {
     DjEngine engine;
@@ -383,9 +491,9 @@ void checkMixer()
     engine.prepare(deviceRate, block);
     engine.setDeckCount(2);
     engine.quantise.store(static_cast<int>(DjEngine::Quantise::off));
-    const auto level = [&engine](double frequency)
+    const auto level = [&engine](double frequency, float amplitude = 0.5f)
     {
-        engine.setTrack(0, toneTrack(frequency, deviceRate, 4.0), false);
+        engine.setTrack(0, toneTrack(frequency, deviceRate, 4.0, amplitude), false);
         run(engine, 1);
         auto seek = command(DjEngine::Command::Type::seek, 0);
         seek.value = 0.0;
@@ -396,24 +504,32 @@ void checkMixer()
         return rms(out.left);
     };
     auto& strip = engine.channel(0);
-    // The isolator's crossovers are fourth order, 24 dB an octave, so a kill
-    // is measured two octaves clear of the nearest crossover and asked for
-    // thirty of them.
-    const auto flat60 = level(60.0), flat1k = level(1000.0), flat12k = level(12000.0), flat100 = level(100.0);
-    require(flat60 > 0.3f && flat1k > 0.3f && flat12k > 0.3f, "a flat strip passes every band");
-    strip.lowDb.store(DjIsolator::killDb);
-    require(decibels(level(60.0) / flat60) < -30.0f, "a low kill removes 60 Hz");
+    // The EQ's crossovers sit at 150 Hz, 600 Hz and 3 kHz and are fourth
+    // order, 24 dB an octave. The outer bands are killed where a tone is
+    // two octaves clear of the nearest crossover and asked for thirty dB;
+    // the inner bands are only two octaves wide, so a tone in the middle of
+    // one keeps what leaks from the bands either side.
+    const auto flat40 = level(40.0), flat300 = level(300.0), flat1k4 = level(1400.0), flat12k = level(12000.0);
+    const auto flat100 = level(100.0), flat1k = level(1000.0);
+    require(flat40 > 0.3f && flat300 > 0.3f && flat1k4 > 0.3f && flat12k > 0.3f && flat1k > 0.3f, "a flat strip passes every band");
+    strip.eqDb[0].store(DjIsolator::killDb);
+    require(decibels(level(40.0) / flat40) < -30.0f, "a low kill removes 40 Hz");
     require(std::abs(decibels(level(1000.0) / flat1k)) < 1.0f, "and leaves 1 kHz");
-    strip.lowDb.store(0.0f);
-    strip.midDb.store(DjIsolator::killDb);
-    require(decibels(level(1000.0) / flat1k) < -30.0f, "a mid kill removes 1 kHz");
-    require(std::abs(decibels(level(60.0) / flat60)) < 1.0f, "and leaves 60 Hz");
-    strip.midDb.store(0.0f);
-    strip.highDb.store(DjIsolator::killDb);
+    strip.eqDb[0].store(0.0f);
+    strip.eqDb[1].store(DjIsolator::killDb);
+    require(decibels(level(300.0) / flat300) < -15.0f, "a low-mid kill takes 300 Hz down");
+    require(std::abs(decibels(level(40.0) / flat40)) < 1.0f && std::abs(decibels(level(12000.0) / flat12k)) < 1.0f,
+            "and leaves the lows and the highs");
+    strip.eqDb[1].store(0.0f);
+    strip.eqDb[2].store(DjIsolator::killDb);
+    require(decibels(level(1400.0) / flat1k4) < -15.0f, "a high-mid kill takes 1.4 kHz down");
+    require(std::abs(decibels(level(40.0) / flat40)) < 1.0f, "and leaves 40 Hz");
+    strip.eqDb[2].store(0.0f);
+    strip.eqDb[3].store(DjIsolator::killDb);
     require(decibels(level(12000.0) / flat12k) < -30.0f, "a high kill removes 12 kHz");
-    strip.highDb.store(6.0f);
+    strip.eqDb[3].store(6.0f);
     require(std::abs(decibels(level(12000.0) / flat12k) - 6.0f) < 0.7f, "high at +6 dB lifts 12 kHz by 6 dB");
-    strip.highDb.store(0.0f);
+    strip.eqDb[3].store(0.0f);
     strip.trimDb.store(-6.0f);
     require(std::abs(decibels(level(1000.0) / flat1k) + 6.0f) < 0.3f, "trim at -6 dB is -6 dB");
     strip.trimDb.store(0.0f);
@@ -426,7 +542,24 @@ void checkMixer()
     require(level(1000.0) < 1.0e-4f, "the fader down is silence");
     strip.fader.store(0.5f);
     require(std::abs(decibels(level(1000.0) / flat1k) + 12.0f) < 0.5f, "the fader half way is a quarter of the gain");
+    strip.faderCurve.store(2);
+    require(decibels(level(1000.0) / flat1k) < -20.0f, "on the steep curve the fader half way is further down");
+    strip.faderCurve.store(0);
+    require(decibels(level(1000.0) / flat1k) > -4.0f, "and on the gentle one it is nearly up");
+    strip.faderCurve.store(1);
     strip.fader.store(1.0f);
+
+    // The compressor: one knob. Full up, a loud tone is held down and a
+    // quiet one lifted, the way a thin track is filled out.
+    strip.comp.store(1.0f);
+    const auto loudCompressed = decibels(level(1000.0) / flat1k);
+    require(loudCompressed < -2.0f && loudCompressed > -8.0f,
+            "the compressor full up holds a loud tone down (" + juce::String(loudCompressed, 1) + " dB)");
+    const auto quietCompressed = level(1000.0, 0.01f);
+    strip.comp.store(0.0f);
+    const auto quietFlat = level(1000.0, 0.01f);
+    require(decibels(quietCompressed / quietFlat) > 8.0f,
+            "and lifts a quiet one (" + juce::String(decibels(quietCompressed / quietFlat), 1) + " dB)");
 
     // The crossfader: a channel on A is gone with the fader on B, and half
     // way down an equal-power curve it is -3 dB.
@@ -445,10 +578,44 @@ void checkMixer()
     require(std::abs(decibels(level(1000.0) / flat1k) + 6.0f) < 0.3f, "the master level at -6 dB is -6 dB");
     engine.master().levelDb.store(0.0f);
     engine.master().lowDb.store(DjIsolator::killDb);
-    require(decibels(level(60.0) / flat60) < -30.0f, "the master isolator kills 60 Hz");
+    require(decibels(level(40.0) / flat40) < -30.0f, "the master isolator kills 40 Hz");
     engine.master().lowDb.store(0.0f);
     level(1000.0);
     require(engine.master().meterLeft.load() > 0.3f && strip.meter.load() > 0.3f, "the meters read the tone");
+
+    // The send: a click sent to the short delay comes back once the delay
+    // the time knob sets has passed.
+    {
+        engine.setTrack(0, clickTrack(2.0), false);
+        auto& send = engine.sendFx();
+        send.type.store(static_cast<int>(DjSendFx::Type::shortDelay));
+        send.time.store(0.5f);
+        send.size.store(0.0f);
+        send.tone.store(1.0f);
+        send.mix.store(1.0f);
+        strip.send.store(1.0f);
+        run(engine, 100);   // the delay time glides into place
+        auto seek = command(DjEngine::Command::Type::seek, 0);
+        engine.push(seek);
+        engine.push(command(DjEngine::Command::Type::play, 0));
+        const auto out = run(engine, 20);
+        size_t first = 0, repeat = 0;
+        for (size_t i = 0; i < out.left.size(); ++i)
+        {
+            if (first == 0 && std::abs(out.left[i]) > 0.2f) first = i;
+            else if (first != 0 && i > first + 1500 && std::abs(out.left[i]) > 0.1f)
+            {
+                repeat = i;
+                break;
+            }
+        }
+        const auto expected = DjSendFx::secondsFor(DjSendFx::Type::shortDelay, 0.5f) * deviceRate;
+        require(first > 0 && repeat > 0, "the send effect returns the click");
+        require(std::abs(static_cast<double>(repeat - first) - expected) < 60.0,
+                "after the delay the time knob sets (" + juce::String(static_cast<int>(repeat - first)) + " frames for "
+                + juce::String(static_cast<int>(expected)) + ")");
+        strip.send.store(0.0f);
+    }
 
     // The cue bus: a channel cued is on outputs 3 and 4 with the fader down.
     strip.fader.store(0.0f);
@@ -466,6 +633,62 @@ void checkMixer()
     strip.fader.store(1.0f);
 }
 
+void checkMic()
+{
+    // The section on its own: talkover ducks the master by 18 dB while the
+    // mic is spoken into and lets it back up afterwards; on, it does not.
+    DjMicSection mic;
+    mic.prepare(deviceRate);
+    std::vector<float> input(block), out(block);
+    int sample = 0;
+    float duck = 1.0f;
+    const auto feed = [&](bool loud, int blocks)
+    {
+        for (int b = 0; b < blocks; ++b)
+        {
+            for (int i = 0; i < block; ++i, ++sample)
+                input[static_cast<size_t>(i)] = loud ? 0.5f * static_cast<float>(std::sin(2.0 * pi * 300.0 * sample / deviceRate)) : 0.0f;
+            mic.process(input.data(), out.data(), block, duck);
+        }
+    };
+    mic.mode.store(static_cast<int>(DjMicSection::Mode::talkover));
+    feed(true, 100);
+    require(std::abs(decibels(duck) - DjMicSection::talkoverDuckDb) < 2.0f,
+            "talkover ducks the master while the mic is spoken into (" + juce::String(decibels(duck), 1) + " dB)");
+    require(rms(out) > 0.2f && mic.meter.load() > 0.3f, "and the mic is heard and metered");
+    feed(false, 300);
+    require(duck > 0.9f, "and lets the master back up once the mic falls quiet (" + juce::String(duck, 2) + ")");
+    mic.mode.store(static_cast<int>(DjMicSection::Mode::on));
+    feed(true, 100);
+    require(duck > 0.99f, "the mic simply on ducks nothing");
+    mic.mode.store(static_cast<int>(DjMicSection::Mode::off));
+    feed(true, 20);
+    require(rms(out) < 1.0e-4f, "and off, it is silent");
+
+    // Through the engine: the first input, on, reaches the master.
+    DjEngine engine;
+    engine.prepare(deviceRate, block);
+    engine.setDeckCount(1);
+    std::vector<float> micIn(block), l(block), r(block);
+    const float* inputs[1] {micIn.data()};
+    float* outputs[2] {l.data(), r.data()};
+    const auto speak = [&](int blocks)
+    {
+        float heard = 0.0f;
+        for (int b = 0; b < blocks; ++b)
+        {
+            for (int i = 0; i < block; ++i, ++sample)
+                micIn[static_cast<size_t>(i)] = 0.5f * static_cast<float>(std::sin(2.0 * pi * 300.0 * sample / deviceRate));
+            engine.process(inputs, 1, outputs, 2, block);
+            heard = rms(l);
+        }
+        return heard;
+    };
+    require(speak(10) < 1.0e-4f, "the mic off is not heard");
+    engine.mic().mode.store(static_cast<int>(DjMicSection::Mode::on));
+    require(speak(20) > 0.1f, "the mic on is heard on the master");
+}
+
 void checkBeatFx()
 {
     DjEngine engine;
@@ -474,12 +697,8 @@ void checkBeatFx()
     engine.quantise.store(static_cast<int>(DjEngine::Quantise::off));
     // A click, then silence: the echo's repeat is a second click one beat
     // later at the master tempo. With no master playing the effect runs at
-    // 128 BPM, so a beat is 22500 frames.
-    auto track = std::make_unique<DjTrack>();
-    track->sampleRate = deviceRate;
-    track->left.assign(static_cast<size_t>(deviceRate * 4.0), 0.0f);
-    track->left[1000] = 1.0f;
-    engine.setTrack(0, std::move(track), false);
+    // the tapped tempo, 128 BPM, so a beat is 22500 frames.
+    engine.setTrack(0, clickTrack(4.0), false);
     run(engine, 1);
     auto& fx = engine.fx();
     fx.type.store(static_cast<int>(DjBeatFx::Type::echo));
@@ -519,17 +738,45 @@ void checkBeatFx()
     run(engine, 10);
     const auto gated = run(engine, 100);
     int silentRuns = 0, loudRuns = 0;
-    bool loud = rms(gated.left, 0, 256) > 0.05f;
-    for (size_t at = 256; at + 256 <= gated.left.size(); at += 256)
-    {
-        const auto now = rms(gated.left, at, at + 256) > 0.05f;
-        if (now != loud)
-        {
-            if (now) ++loudRuns; else ++silentRuns;
-            loud = now;
-        }
-    }
+    countRuns(gated.left, silentRuns, loudRuns);
     require(silentRuns >= 2 && loudRuns >= 2, "trans chops the tone on and off at the beat");
+    // The band keys: with the mid band taken off the effect, the same tone
+    // passes dry.
+    fx.bandMid.store(false);
+    run(engine, 10);
+    const auto passed = run(engine, 100);
+    countRuns(passed.left, silentRuns, loudRuns);
+    require(silentRuns == 0 && rms(passed.left) > 0.2f, "with its band taken off the effect, the tone passes dry");
+    fx.bandMid.store(true);
+    fx.on.store(false);
+
+    // Pitch at full depth is an octave up: a 440 Hz tone comes out crossing
+    // zero as often as an 880 Hz one.
+    engine.setTrack(0, toneTrack(440.0, deviceRate, 8.0), false);
+    run(engine, 1);
+    fx.type.store(static_cast<int>(DjBeatFx::Type::pitch));
+    fx.depth.store(1.0f);
+    fx.on.store(true);
+    engine.push(seek);
+    engine.push(command(DjEngine::Command::Type::play, 0));
+    run(engine, 30);
+    const auto shifted = run(engine, 50);
+    const auto measured = zeroCrossingFrequency(shifted.left);
+    require(std::abs(measured - 880.0) < 60.0, "pitch at full depth is an octave up (" + juce::String(measured, 1) + " Hz)");
+    fx.on.store(false);
+
+    // The vinyl brake winds the sound down to nothing within its beat.
+    engine.setTrack(0, toneTrack(1000.0, deviceRate, 8.0), false);
+    run(engine, 1);
+    fx.type.store(static_cast<int>(DjBeatFx::Type::vinylBrake));
+    fx.beats.store(1.0f);
+    engine.push(seek);
+    engine.push(command(DjEngine::Command::Type::play, 0));
+    run(engine, 10);
+    fx.on.store(true);
+    const auto braked = run(engine, 100);   // a second; the beat is 0.47 s
+    require(rms(braked.left, 0, 2048) > 0.2f, "the brake starts from the tone");
+    require(rms(braked.left, braked.left.size() - 10240, braked.left.size()) < 0.02f, "and has stopped it a beat later");
     fx.on.store(false);
 }
 
@@ -612,9 +859,11 @@ void checkDjCore(Session&)
 {
     const auto started = juce::Time::getMillisecondCounter();
     checkDeckTransport();
+    checkBrakeAndScratch();
     checkEngineHousekeeping();
     checkQuantisedStartAndSync();
     checkMixer();
+    checkMic();
     checkBeatFx();
     const auto analysisStarted = juce::Time::getMillisecondCounter();
     checkAnalysis();

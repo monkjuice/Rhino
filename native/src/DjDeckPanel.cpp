@@ -3,6 +3,7 @@
 #include "ContentLibrary.h"
 #include <algorithm>
 #include <cmath>
+#include <iterator>
 
 // A deck's console: see DjDeckPanel.h.
 
@@ -20,15 +21,9 @@ juce::String beatsName(double beats)
     return "1/" + juce::String(static_cast<int>(std::round(1.0 / beats)));
 }
 
-void dressMenuButton(juce::TextButton& button, const juce::String& tooltip)
+juce::String rangeName(int range)
 {
-    button.setColour(juce::TextButton::buttonColourId, palette::control);
-    button.setColour(juce::TextButton::buttonOnColourId, palette::hover);
-    button.setColour(juce::TextButton::textColourOffId, palette::text);
-    button.setColour(juce::TextButton::textColourOnId, palette::text);
-    button.setTooltip(tooltip);
-    button.setWantsKeyboardFocus(false);
-    button.setMouseClickGrabsKeyboardFocus(false);
+    return range >= 100 ? juce::String("WIDE") : juce::String::charToString(static_cast<juce::juce_wchar>(0xb1)) + juce::String(range) + "%";
 }
 }
 
@@ -36,9 +31,17 @@ DjDeckPanel::DjDeckPanel(Session& s, int deckIndex) : session(s), deck(deckIndex
 {
     setOpaque(true);
     setWantsKeyboardFocus(false);
+    // A press anywhere on the console selects the deck for the Device View.
+    addMouseListener(this, true);
     display.status = [this](const juce::String& message) { if (status) status(message); };
-    dressMenuButton(source, "What this deck plays: a track or a group of the song, bounced to audio, or a file. "
-                            "Drop an audio file on the deck to load it.");
+    source.setColour(juce::TextButton::buttonColourId, palette::control);
+    source.setColour(juce::TextButton::buttonOnColourId, palette::hover);
+    source.setColour(juce::TextButton::textColourOffId, palette::text);
+    source.setColour(juce::TextButton::textColourOnId, palette::text);
+    source.setTooltip("What this deck plays: a track or a group of the song, bounced to audio, or a file. "
+                      "Drop an audio file on the deck to load it.");
+    source.setWantsKeyboardFocus(false);
+    source.setMouseClickGrabsKeyboardFocus(false);
     source.onClick = [this] { showSourceMenu(); };
     live.setTooltip("Live - play the track's instrument from the keys over the bounce. The track's input is monitored "
                     "while this is lit; a Drum Rack on it plays its pads.");
@@ -60,7 +63,8 @@ DjDeckPanel::DjDeckPanel(Session& s, int deckIndex) : session(s), deck(deckIndex
         }
         if (editRequested) editRequested(info.track, clip);
     };
-    reload.setTooltip("Bounce the track again now. Lit while the bounce is behind the song.");
+    reload.setTooltip("Bounce the track again now. Lit while the bounce is behind the song. Right-click to stop it "
+                      "bouncing by itself after a change.");
     reload.onClick = [this]
     {
         const auto result = session.rebounceDjDeck(deck);
@@ -87,6 +91,7 @@ DjDeckPanel::DjDeckPanel(Session& s, int deckIndex) : session(s), deck(deckIndex
         addAndMakeVisible(*pad);
         hotCues[static_cast<size_t>(i)] = std::move(pad);
     }
+    cue.setRound(true);
     cue.setTooltip("Cue - playing: stop and go back to the cue point. Stopped: set the cue point here, or hold to hear "
                    "from it.");
     cue.setTriggeredOnMouseDown(true);
@@ -95,6 +100,7 @@ DjDeckPanel::DjDeckPanel(Session& s, int deckIndex) : session(s), deck(deckIndex
         if (cue.isDown()) session.djCueDown(deck);
         else session.djCueUp(deck);
     };
+    play.setRound(true);
     play.setTooltip("Play/pause. With quantise on and another deck playing, the start waits for that deck's next beat "
                     "or bar and the key blinks until then.");
     play.onClick = [this] { session.djTogglePlay(deck); };
@@ -108,44 +114,70 @@ DjDeckPanel::DjDeckPanel(Session& s, int deckIndex) : session(s), deck(deckIndex
     loopHalve.onClick = [this] { session.djLoopHalve(deck); };
     loopDouble.setTooltip("Double the loop.");
     loopDouble.onClick = [this] { session.djLoopDouble(deck); };
-    dressMenuButton(beatLoop, "Beat loop - a loop of this many beats from the beat the deck is on. Click to loop, "
-                              "right-click to choose the length.");
+    beatLoop.setTooltip("Beat loop - a loop of this many beats from the beat the deck is on. Press to loop, "
+                        "right-click to choose the length.");
     beatLoop.onClick = [this] { session.djBeatLoop(deck, beatLoopBeats); };
-    beatLoop.addMouseListener(this, false);
+    beatLoop.onRightClick = [this] { showBeatLoopMenu(); };
     jumpBack.setTooltip("Beat jump back.");
     jumpBack.onClick = [this] { session.djBeatJump(deck, -jumpBeats); };
     jumpForward.setTooltip("Beat jump forward.");
     jumpForward.onClick = [this] { session.djBeatJump(deck, jumpBeats); };
-    dressMenuButton(jumpSize, "How many beats a beat jump moves.");
+    jumpSize.setTooltip("How many beats a beat jump moves. Press to choose.");
     jumpSize.onClick = [this] { showJumpMenu(); };
+    searchBack.setTooltip("Back to the previous cue point - a hot cue or the cue - or to the top of the track.");
+    searchBack.onClick = [this] { session.djJumpToCue(deck, false); };
+    searchForward.setTooltip("On to the next cue point.");
+    searchForward.onClick = [this] { session.djJumpToCue(deck, true); };
+    reverse.setTooltip("Reverse - play backwards.");
+    reverse.onClick = [this] { session.djSetReversed(deck, !state.reversed); };
+    quantise.setTooltip("Quantize - cue points and loop points snap to the nearest beat while this is lit.");
+    quantise.onClick = [this] { session.djSetQuantiseSnap(deck, !state.quantiseSnap); };
+    jog.setTooltip("The jog wheel. In vinyl mode, dragging the platter scratches: the deck follows the hand, backwards "
+                   "too, and stands still while the hand rests. The ring, or the platter in CDJ mode, nudges the "
+                   "tempo. A standing deck is scrubbed.");
+    jog.deckPlaying = [this] { return state.isPlaying(); };
+    jog.onScratch = [this](double rate, bool active) { session.djScratch(deck, rate, active); };
+    jog.onNudge = [this](float percent) { session.djNudge(deck, percent); };
+    jog.onScrub = [this](double seconds) { session.djSeek(deck, state.positionSeconds + seconds); };
+    vinyl.setTooltip("Vinyl mode: the platter scratches. Off, it nudges as the ring does.");
+    vinyl.onClick = [this]
+    {
+        jog.setVinylMode(!jog.isVinylMode());
+        vinyl.setLit(jog.isVinylMode());
+    };
+    vinyl.setLit(true);
+    dressDjKnob(brake, palette::activeNeutral, 0.0, 2.0, 0.0, "Brake - how long a stop winds down and a start spins up, as "
+                                                            "a turntable's motor would. At zero both are at once.");
+    brake.onValueChange = [this] { session.djSetBrake(deck, static_cast<float>(brake.getValue())); };
     syncKey.setTooltip("Sync - play at the master deck's tempo, beats locked to its beats.");
     syncKey.onClick = [this] { session.djSetSynced(deck, !state.synced); };
     master.setTooltip("Master - the deck the others sync to and the beat the effect follows. The first deck to play "
                       "takes it until another is chosen.");
     master.onClick = [this] { session.djSetMaster(deck); };
-    reverse.setTooltip("Reverse - play backwards.");
-    reverse.onClick = [this] { session.djSetReversed(deck, !state.reversed); };
-    tempo.setTooltip("Tempo - drag to play faster or slower, within the range beside it. Shift drags fine; double-click "
-                     "returns to zero.");
+    tempoRange.setTooltip("The tempo fader's range: 6, 10, 16 per cent either way, or wide.");
+    tempoRange.onClick = [this] { showTempoRangeMenu(); };
+    tempo.setTooltip("Tempo - drag to play faster or slower, within the range above it. Shift drags fine; double-click "
+                     "returns to zero. The fader runs the CDJ's way: down is faster.");
     tempo.setDefault(0.5f);
     tempo.setDetent(0.5f);
+    tempo.setTicks(9);
     tempo.setValue(0.5f, false);
+    // A CDJ's tempo fader is faster at the bottom: the value is inverted.
     tempo.onChange = [this](float v)
     {
         const auto range = static_cast<float>(state.tempoRange);
-        session.djSetTempoPercent(deck, (v - 0.5f) * 2.0f * range);
+        session.djSetTempoPercent(deck, (0.5f - v) * 2.0f * range);
     };
-    dressMenuButton(tempoRange, "The tempo fader's range: 6, 10, 16 or 100 per cent either way.");
-    tempoRange.onClick = [this] { showTempoRangeMenu(); };
     tempoReset.setTooltip("Tempo reset - back to the track's own tempo.");
     tempoReset.onClick = [this] { session.djSetTempoPercent(deck, 0.0f); };
     for (auto* component : std::initializer_list<juce::Component*>{&display, &source, &live, &edit, &reload, &eject, &cue, &play,
                                                                    &loopIn, &loopOut, &reloop, &loopHalve, &loopDouble, &beatLoop,
-                                                                   &jumpBack, &jumpForward, &jumpSize, &syncKey, &master, &reverse,
-                                                                   &tempo, &tempoRange, &tempoReset})
+                                                                   &jumpBack, &jumpForward, &jumpSize, &searchBack, &searchForward,
+                                                                   &reverse, &quantise, &jog, &vinyl, &brake, &syncKey, &master,
+                                                                   &tempoRange, &tempo, &tempoReset})
         addAndMakeVisible(component);
-    beatLoop.setButtonText(beatsName(beatLoopBeats) + " BEAT");
-    jumpSize.setButtonText(juce::String(jumpBeats));
+    beatLoop.setLabel(beatsName(beatLoopBeats) + " BEAT");
+    jumpSize.setLabel(juce::String(jumpBeats));
     sync();
 }
 
@@ -171,14 +203,16 @@ void DjDeckPanel::sync()
     reload.setLabel(info.autoRebounce ? "RELOAD" : "RELOAD*");
     eject.setEnabled(info.kind != Session::DjSourceKind::none);
     const auto loaded = info.loaded;
-    for (auto* pad : {&cue, &play, &loopIn, &loopOut, &reloop, &loopHalve, &loopDouble, &jumpBack, &jumpForward, &syncKey, &master, &reverse,
-                      &tempoReset})
+    for (auto* pad : {&cue, &play, &loopIn, &loopOut, &reloop, &loopHalve, &loopDouble, &beatLoop, &jumpBack, &jumpForward,
+                      &searchBack, &searchForward, &syncKey, &master, &reverse, &quantise, &tempoReset})
         pad->setEnabled(loaded);
     for (auto& pad : hotCues)
         pad->setEnabled(loaded);
-    beatLoop.setEnabled(loaded);
     tempo.setEnabled(loaded);
-    tempoRange.setButtonText(state.tempoRange >= 100 ? "WIDE" : juce::String::charToString(0xb1) + juce::String(state.tempoRange));
+    jog.setEnabled(loaded);
+    jog.setTrackName(info.loaded ? info.name : juce::String());
+    tempoRange.setLabel(rangeName(state.tempoRange));
+    brake.setValue(state.brakeSeconds, juce::dontSendNotification);
     display.sync();
     tick(true);
     repaint(headerArea());
@@ -204,8 +238,16 @@ void DjDeckPanel::tick(bool blinkPhase)
     syncKey.setLit(state.synced);
     master.setLit(state.master);
     reverse.setLit(state.reversed);
+    quantise.setLit(state.quantiseSnap);
     if (!tempo.isDragging())
-        tempo.setValue(0.5f + state.tempoPercent / (2.0f * static_cast<float>(std::max(1, state.tempoRange))), false);
+        tempo.setValue(0.5f - state.tempoPercent / (2.0f * static_cast<float>(std::max(1, state.tempoRange))), false);
+}
+
+void DjDeckPanel::tickDisplay()
+{
+    display.tick();
+    const auto now = session.djDeckState(deck);
+    jog.setPosition(now.positionSeconds, now.isPlaying());
 }
 
 juce::Rectangle<int> DjDeckPanel::headerArea() const
@@ -228,6 +270,13 @@ void DjDeckPanel::paint(juce::Graphics& g)
     g.setColour(palette::displayText);
     g.setFont(uiFontBold(12.0f));
     drawSnappedText(g, juce::String(deck + 1), header.withWidth(26), juce::Justification::centred);
+    // The small labels: TEMPO over the fader, BRAKE under its knob.
+    g.setColour(palette::textDim);
+    g.setFont(uiFontBold(8.0f));
+    if (tempo.isVisible())
+        drawSnappedText(g, "TEMPO", tempo.getBounds().withHeight(10).translated(0, -11), juce::Justification::centred);
+    if (brake.isVisible())
+        drawSnappedText(g, "BRAKE", brake.getBounds().withHeight(10).translated(0, brake.getHeight() + 1), juce::Justification::centred);
     if (dropHighlight)
     {
         g.setColour(palette::selection.withAlpha(0.25f));
@@ -237,22 +286,27 @@ void DjDeckPanel::paint(juce::Graphics& g)
 
 void DjDeckPanel::layoutRow(juce::Rectangle<int> row, const std::vector<std::pair<juce::Component*, int>>& cells)
 {
-    // Widths are weights; a zero-weight cell is a gap.
+    // Widths are weights; a null cell is a gap.
     int total = 0;
     for (const auto& cell : cells) total += cell.second;
     if (total <= 0) return;
     const auto gap = 3;
     const auto usable = row.getWidth() - gap * (static_cast<int>(cells.size()) - 1);
     auto x = row.getX();
-    for (size_t i = 0; i < cells.size(); ++i)
+    for (const auto& cell : cells)
     {
-        const auto width = usable * cells[i].second / total;
-        if (cells[i].first != nullptr)
-            cells[i].first->setBounds(x, row.getY(), width, row.getHeight());
+        const auto width = usable * cell.second / total;
+        if (cell.first != nullptr)
+            cell.first->setBounds(x, row.getY(), width, row.getHeight());
         x += width + gap;
     }
 }
 
+// The screen takes the top, the hot cues sit under it, and the body below
+// is the CDJ's three columns: keys, the jog wheel, the tempo. The keys at
+// full size want six rows and two big round keys; a short panel squeezes
+// the rows before it touches the screen, and the jog wheel is the first
+// thing to go.
 void DjDeckPanel::resized()
 {
     auto bounds = getLocalBounds();
@@ -266,33 +320,93 @@ void DjDeckPanel::resized()
     live.setBounds(header.removeFromRight(44));
     header.removeFromRight(3);
     source.setBounds(header);
-    bounds.reduce(4, 0);
-    // Three rows of keys and the tempo row at the foot; the screen takes
-    // the rest.
-    auto foot = bounds.removeFromBottom(rowHeight * 4 + rowGap * 4);
-    foot.removeFromTop(rowGap);
-    auto pads = foot.removeFromTop(rowHeight);
+    bounds.reduce(4, 2);
+    constexpr int fullRow = 20, fullGap = 3, bigFull = 52, bigCompact = 30;
+    constexpr int fullKeys = fullRow * 6 + fullGap * 7 + bigFull * 2 + 6;
+    constexpr int screenMinimum = DjDeckDisplay::readoutHeight + DjDeckDisplay::overviewHeight + 36;
+    const auto padsHeight = bounds.getHeight() < 320 ? 16 : padRowHeight;
+    const auto available = bounds.getHeight() - padsHeight - 3;
+    // The body takes what the keys need, then grows with the panel for the
+    // jog wheel, up to a cap past which the screen takes the rest.
+    const auto body = juce::jlimit(std::min(fullKeys, std::max(0, available - screenMinimum)), std::max(fullKeys, 340),
+                                   available * 58 / 100);
+    const auto compact = body < fullKeys;
+    const auto bigKey = compact ? bigCompact : bigFull;
+    const auto gap = compact ? 2 : fullGap;
+    const auto row = juce::jlimit(12, fullRow, (body - bigKey * 2 - 6 - gap * 7) / 6);
+    auto bodyArea = bounds.removeFromBottom(body);
+    auto pads = bounds.removeFromBottom(padsHeight);
     std::vector<std::pair<juce::Component*, int>> cells;
     for (auto& pad : hotCues) cells.push_back({pad.get(), 1});
     layoutRow(pads, cells);
-    foot.removeFromTop(rowGap);
-    layoutRow(foot.removeFromTop(rowHeight), {{&cue, 4}, {&play, 4}, {nullptr, 1}, {&loopIn, 3}, {&loopOut, 3}, {&reloop, 4},
-                                              {&loopHalve, 2}, {&loopDouble, 2}, {&beatLoop, 4}});
-    foot.removeFromTop(rowGap);
-    layoutRow(foot.removeFromTop(rowHeight), {{&jumpBack, 2}, {&jumpSize, 2}, {&jumpForward, 2}, {nullptr, 1}, {&syncKey, 4},
-                                              {&master, 4}, {&reverse, 3}, {nullptr, 1}, {&tempoRange, 3}, {&tempoReset, 3}});
-    foot.removeFromTop(rowGap);
-    tempo.setBounds(foot.removeFromTop(rowHeight));
-    display.setBounds(bounds.reduced(0, 3));
+    bounds.removeFromBottom(3);
+    display.setBounds(bounds);
+
+    bodyArea.removeFromTop(gap);
+    const auto showJog = bodyArea.getHeight() >= 150 && bodyArea.getWidth() >= 230;
+    const auto width = bodyArea.getWidth();
+    const auto leftWidth = showJog ? std::max(96, width * 30 / 100) : width * 58 / 100;
+    const auto rightWidth = showJog ? std::max(64, width * 20 / 100) : width - leftWidth - 4;
+    auto left = bodyArea.removeFromLeft(leftWidth);
+    auto right = bodyArea.removeFromRight(rightWidth);
+    auto centre = bodyArea.reduced(4, 0);
+    // The left column: loops, jump, cue search, direction, then the big keys.
+    const auto nextRow = [&left, row, gap]
+    {
+        auto r = left.removeFromTop(row);
+        left.removeFromTop(gap);
+        return r;
+    };
+    layoutRow(nextRow(), {{&loopIn, 1}, {&loopOut, 1}});
+    layoutRow(nextRow(), {{&reloop, 1}});
+    layoutRow(nextRow(), {{&beatLoop, 3}, {&loopHalve, 1}, {&loopDouble, 1}});
+    layoutRow(nextRow(), {{&jumpBack, 1}, {&jumpSize, 1}, {&jumpForward, 1}});
+    layoutRow(nextRow(), {{&searchBack, 1}, {&searchForward, 1}});
+    layoutRow(nextRow(), {{&reverse, 1}, {&quantise, 1}});
+    const auto keySize = std::min(bigKey, left.getWidth());
+    auto keys = left.removeFromBottom(keySize * 2 + 6);
+    cue.setBounds(keys.removeFromTop(keySize).withSizeKeepingCentre(keySize, keySize));
+    keys.removeFromTop(6);
+    play.setBounds(keys.removeFromTop(keySize).withSizeKeepingCentre(keySize, keySize));
+    // The right column: sync, master, the range, the fader, its reset.
+    const auto nextRight = [&right, row, gap]
+    {
+        auto r = right.removeFromTop(row);
+        right.removeFromTop(gap);
+        return r;
+    };
+    syncKey.setBounds(nextRight());
+    master.setBounds(nextRight());
+    tempoRange.setBounds(nextRight());
+    tempoReset.setBounds(right.removeFromBottom(row));
+    right.removeFromBottom(gap);
+    right.removeFromTop(12);   // the TEMPO label
+    tempo.setBounds(right.withSizeKeepingCentre(std::min(28, right.getWidth()), right.getHeight()));
+    // The centre: the platter, with vinyl and brake beneath it.
+    jog.setVisible(showJog);
+    vinyl.setVisible(showJog);
+    brake.setVisible(showJog);
+    if (!showJog)
+    {
+        jog.setBounds({});
+        vinyl.setBounds({});
+        brake.setBounds({});
+        return;
+    }
+    auto foot = centre.removeFromBottom(row + 20);
+    const auto half = foot.getWidth() / 2;
+    vinyl.setBounds(foot.withWidth(half - 4).withSizeKeepingCentre(std::min(60, half - 4), row).withY(foot.getY()));
+    brake.setBounds(juce::Rectangle<int>(28, 28).withCentre({foot.getX() + half + half / 2, foot.getY() + 14}));
+    centre.removeFromBottom(4);
+    const auto size = std::min(centre.getWidth(), centre.getHeight());
+    jog.setBounds(centre.withSizeKeepingCentre(size, size));
 }
 
 void DjDeckPanel::mouseDown(const juce::MouseEvent& event)
 {
-    if (event.eventComponent == &beatLoop && event.mods.isPopupMenu())
-    {
-        showBeatLoopMenu();
-        return;
-    }
+    // Heard once directly and once as the console's own listener.
+    if (event.eventTime == lastSelectTime) return;
+    lastSelectTime = event.eventTime;
     if (selected) selected();
 }
 
@@ -392,12 +506,12 @@ void DjDeckPanel::showBeatLoopMenu()
     for (int i = 0; i < static_cast<int>(std::size(beatLoopSizes)); ++i)
         menu.addItem(i + 1, beatsName(beatLoopSizes[i]) + (beatLoopSizes[i] == 1.0 ? " beat" : " beats"), true,
                      beatLoopSizes[i] == beatLoopBeats);
-    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(beatLoop),
+    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&beatLoop),
         [safe = juce::Component::SafePointer<DjDeckPanel>(this)](int choice)
         {
             if (safe == nullptr || choice == 0) return;
             safe->beatLoopBeats = beatLoopSizes[choice - 1];
-            safe->beatLoop.setButtonText(beatsName(safe->beatLoopBeats) + " BEAT");
+            safe->beatLoop.setLabel(beatsName(safe->beatLoopBeats) + " BEAT");
         });
 }
 
@@ -407,12 +521,12 @@ void DjDeckPanel::showJumpMenu()
     menu.addSectionHeader("BEAT JUMP");
     for (int i = 0; i < static_cast<int>(std::size(jumpSizes)); ++i)
         menu.addItem(i + 1, juce::String(jumpSizes[i]) + (jumpSizes[i] == 1 ? " beat" : " beats"), true, jumpSizes[i] == jumpBeats);
-    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(jumpSize),
+    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&jumpSize),
         [safe = juce::Component::SafePointer<DjDeckPanel>(this)](int choice)
         {
             if (safe == nullptr || choice == 0) return;
             safe->jumpBeats = jumpSizes[choice - 1];
-            safe->jumpSize.setButtonText(juce::String(safe->jumpBeats));
+            safe->jumpSize.setLabel(juce::String(safe->jumpBeats));
         });
 }
 
@@ -421,9 +535,8 @@ void DjDeckPanel::showTempoRangeMenu()
     juce::PopupMenu menu;
     menu.addSectionHeader("TEMPO RANGE");
     for (int i = 0; i < static_cast<int>(std::size(tempoRanges)); ++i)
-        menu.addItem(i + 1, tempoRanges[i] >= 100 ? juce::String("Wide") : juce::String::charToString(0xb1) + juce::String(tempoRanges[i]) + "%",
-                     true, tempoRanges[i] == state.tempoRange);
-    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(tempoRange),
+        menu.addItem(i + 1, rangeName(tempoRanges[i]), true, tempoRanges[i] == state.tempoRange);
+    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(&tempoRange),
         [safe = juce::Component::SafePointer<DjDeckPanel>(this)](int choice)
         {
             if (safe == nullptr || choice == 0) return;

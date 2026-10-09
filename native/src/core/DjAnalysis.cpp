@@ -7,8 +7,8 @@
 //
 // The tempo comes from the onset envelope - how much louder each band gets
 // from one column to the next - by autocorrelation with a mild preference for
-// dance tempos, then a comb search that settles the period to a hundredth of
-// a beat per minute and finds the phase the beats sit on. The downbeat is the
+// dance tempos, then a comb search that settles the period to five
+// thousandths of a beat per minute and finds the phase the beats sit on. The downbeat is the
 // beat of the four that the low band hits hardest. Drops are bars that come
 // back loud after a quieter passage. The key is a chroma profile against the
 // Krumhansl-Schmuckler key profiles.

@@ -6,12 +6,15 @@
 
 namespace rhino
 {
-// One deck's console: a CDJ laid flat. The name bar chooses what the deck
-// plays; the screen below it; the eight hot cues; cue and play; the loop
-// and beat-jump keys; sync, master and reverse; and the tempo fader with
-// its range. A track deck carries three more keys: Live, which plays the
-// track's instrument over the bounce from the keys; Edit, which opens the
-// track's clip in the note editor; and a reload for a stale bounce.
+// One deck's console, laid out as a CDJ is: the name bar; the screen; the
+// eight hot cues under it; then, left of the jog wheel, the loop keys, the
+// beat loop, the beat jump, the cue search, the direction and quantize
+// keys, and the big round CUE and PLAY; the jog wheel in the middle with
+// its vinyl mode and brake under it; and to its right sync, master, the
+// tempo range and the tempo fader with its reset. A track deck carries
+// three more keys in its name bar: Live, which plays the track's
+// instrument over the bounce from the keys; Edit, which opens the track's
+// clip in the note editor; and a reload for a stale bounce.
 class DjDeckPanel final : public juce::Component,
                           public juce::FileDragAndDropTarget,
                           public juce::DragAndDropTarget
@@ -25,8 +28,8 @@ public:
     // At the view's timer rate: the keys that follow the audio thread, and
     // the blink of a start held for the beat.
     void tick(bool blinkPhase);
-    // Once a display refresh: the screen.
-    void tickDisplay() { display.tick(); }
+    // Once a display refresh: the screen and the platter.
+    void tickDisplay();
     void paint(juce::Graphics&) override;
     void resized() override;
     void mouseDown(const juce::MouseEvent&) override;
@@ -39,7 +42,8 @@ public:
     std::function<void(int track, te::EditItemID clip)> editRequested;
     std::function<void()> removeRequested;
 
-    static constexpr int minimumHeight = 150, preferredHeight = 230;
+    // Below this the keys squash; the view would rather clip a deck.
+    static constexpr int minimumHeight = 240;
 
 private:
     friend int runArrangementTest();
@@ -50,7 +54,7 @@ private:
     void showJumpMenu();
     void showTempoRangeMenu();
     juce::Rectangle<int> headerArea() const;
-    void layoutRow(juce::Rectangle<int> row, const std::vector<std::pair<juce::Component*, int>>& cells);
+    static void layoutRow(juce::Rectangle<int> row, const std::vector<std::pair<juce::Component*, int>>& cells);
 
     Session& session;
     int deck;
@@ -60,14 +64,19 @@ private:
     DjPad eject {"EJECT", palette::activeNeutral};
     std::array<std::unique_ptr<DjPad>, DjDeck::hotCueCount> hotCues;
     DjPad cue {"CUE", palette::djCue}, play {"PLAY", palette::djPlay};
-    DjPad loopIn {"IN", palette::djCue}, loopOut {"OUT", palette::djCue}, reloop {"RELOOP", palette::djCue};
+    DjPad loopIn {"IN", palette::djCue}, loopOut {"OUT", palette::djCue}, reloop {"RELOOP / EXIT", palette::djCue};
     DjPad loopHalve {"1/2", palette::activeNeutral}, loopDouble {"2X", palette::activeNeutral};
-    juce::TextButton beatLoop;
+    DjPad beatLoop {"BEAT LOOP", palette::djCue};
     DjPad jumpBack {"<", palette::activeNeutral}, jumpForward {">", palette::activeNeutral};
-    juce::TextButton jumpSize;
-    DjPad syncKey {"SYNC", palette::midiEffect}, master {"MASTER", palette::djCue}, reverse {"REV", palette::activeNeutral};
-    DjFader tempo {false, palette::activeNeutral};
-    juce::TextButton tempoRange;
+    DjPad jumpSize {"JUMP", palette::activeNeutral};
+    DjPad searchBack {"|<<", palette::activeNeutral}, searchForward {">>|", palette::activeNeutral};
+    DjPad reverse {"REV", palette::activeNeutral}, quantise {"Q", palette::djCue};
+    DjJogWheel jog;
+    DjPad vinyl {"VINYL", palette::djCue};
+    juce::Slider brake;
+    DjPad syncKey {"SYNC", palette::midiEffect}, master {"MASTER", palette::djCue};
+    DjPad tempoRange {"RANGE", palette::activeNeutral};
+    DjFader tempo {true, palette::activeNeutral};
     DjPad tempoReset {"RESET", palette::activeNeutral};
     std::unique_ptr<juce::FileChooser> chooser;
     Session::DjDeckInfo info;
@@ -75,6 +84,7 @@ private:
     double beatLoopBeats = 4.0;
     int jumpBeats = 4;
     bool dropHighlight = false;
-    static constexpr int headerHeight = 24, rowHeight = 22, rowGap = 3;
+    juce::Time lastSelectTime;
+    static constexpr int headerHeight = 24, padRowHeight = 22;
 };
 }

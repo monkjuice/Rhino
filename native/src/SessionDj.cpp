@@ -127,6 +127,17 @@ int Session::djFxTypeCount()
     return DjBeatFx::typeCount;
 }
 
+juce::String Session::djSendFxTypeName(int type)
+{
+    if (type < 0 || type >= DjSendFx::typeCount) return {};
+    return DjSendFx::typeName(static_cast<DjSendFx::Type>(type));
+}
+
+int Session::djSendFxTypeCount()
+{
+    return DjSendFx::typeCount;
+}
+
 // A DJ change the document saves - a deck added, a source loaded, a hot cue
 // set - counts as a change to the document, but not as one that could have
 // moved a bounced track's notes.
@@ -186,15 +197,19 @@ juce::Result Session::removeDjDeck(int index)
         auto& strip = machine.channel(i);
         auto& above = machine.channel(i + 1);
         strip.trimDb.store(above.trimDb.load());
-        strip.lowDb.store(above.lowDb.load());
-        strip.midDb.store(above.midDb.load());
-        strip.highDb.store(above.highDb.load());
+        strip.comp.store(above.comp.load());
+        for (size_t band = 0; band < DjChannelStrip::bandCount; ++band)
+            strip.eqDb[band].store(above.eqDb[band].load());
         strip.filter.store(above.filter.load());
         strip.resonance.store(above.resonance.load());
         strip.fader.store(above.fader.load());
+        strip.faderCurve.store(above.faderCurve.load());
+        strip.send.store(above.send.load());
         strip.cue.store(above.cue.load());
         strip.fxOn.store(above.fxOn.load());
         strip.crossfaderSide.store(above.crossfaderSide.load());
+        to.brakeSeconds.store(from.brakeSeconds.load());
+        to.quantiseSnap.store(from.quantiseSnap.load());
     }
     // Material cannot be moved between engine decks without a copy, so the
     // decks that moved down are bounced or read again by the poll, keeping
@@ -269,6 +284,9 @@ Session::DjDeckState Session::djDeckState(int index) const
     state.tempoRange = deck.tempoRange.load(std::memory_order_relaxed);
     state.synced = deck.synced.load(std::memory_order_relaxed);
     state.reversed = deck.reversed.load(std::memory_order_relaxed);
+    state.brakeSeconds = deck.brakeSeconds.load(std::memory_order_relaxed);
+    state.quantiseSnap = deck.quantiseSnap.load(std::memory_order_relaxed);
+    state.scratching = deck.scratching.load(std::memory_order_relaxed);
     state.master = dj->engine.masterDeck.load(std::memory_order_relaxed) == index;
     state.peak = deck.peak.load(std::memory_order_relaxed);
     state.jumps = deck.jumps.load(std::memory_order_relaxed);
@@ -280,7 +298,7 @@ Session::DjDeckState Session::djDeckState(int index) const
     state.positionSeconds = seconds(deck.position.load(std::memory_order_relaxed));
     state.lengthSeconds = track->seconds();
     state.bpm = track->analysis.bpm;
-    state.effectiveBpm = deck.effectiveBpm();
+    state.effectiveBpm = std::abs(deck.effectiveBpm());
     state.firstBeatSeconds = track->analysis.firstBeatSeconds;
     state.beatsPerBar = track->analysis.beatsPerBar;
     state.beat = track->beatAtFrame(deck.position.load(std::memory_order_relaxed));
@@ -411,6 +429,46 @@ void Session::djNudge(int deck, float percent)
     dj->engine.deck(deck).nudgePercent.store(juce::jlimit(-50.0f, 50.0f, percent), std::memory_order_relaxed);
 }
 
+void Session::djScratch(int deck, double rate, bool active)
+{
+    if (dj == nullptr || !juce::isPositiveAndBelow(deck, dj->count)) return;
+    auto& d = dj->engine.deck(deck);
+    d.scratchRate.store(juce::jlimit(-10.0, 10.0, rate), std::memory_order_relaxed);
+    d.scratching.store(active, std::memory_order_relaxed);
+}
+
+void Session::djSetBrake(int deck, float seconds)
+{
+    if (dj == nullptr || !juce::isPositiveAndBelow(deck, dj->count)) return;
+    dj->engine.deck(deck).brakeSeconds.store(juce::jlimit(0.0f, 4.0f, seconds), std::memory_order_relaxed);
+}
+
+void Session::djSetQuantiseSnap(int deck, bool snap)
+{
+    if (dj == nullptr || !juce::isPositiveAndBelow(deck, dj->count)) return;
+    dj->engine.deck(deck).quantiseSnap.store(snap, std::memory_order_relaxed);
+    sendSynchronousChangeMessage();
+}
+
+void Session::djJumpToCue(int deck, bool forward)
+{
+    const auto state = djDeckState(deck);
+    if (state.transport == DjDeckState::Transport::empty) return;
+    const auto here = state.positionSeconds;
+    std::vector<double> points;
+    points.push_back(state.cueSeconds);
+    for (const auto cue : state.hotCueSeconds)
+        if (cue >= 0.0) points.push_back(cue);
+    auto target = forward ? -1.0 : 0.0;
+    for (const auto point : points)
+    {
+        if (forward && point > here + 0.05 && (target < 0.0 || point < target)) target = point;
+        if (!forward && point < here - 0.05 && point > target) target = point;
+    }
+    if (target >= 0.0)
+        djSeek(deck, target);
+}
+
 void Session::djStopAll()
 {
     if (dj == nullptr) return;
@@ -452,12 +510,14 @@ Session::DjChannelState Session::djChannel(int index) const
         return state;
     const auto& strip = dj->engine.channel(index);
     state.trimDb = strip.trimDb.load(std::memory_order_relaxed);
-    state.lowDb = strip.lowDb.load(std::memory_order_relaxed);
-    state.midDb = strip.midDb.load(std::memory_order_relaxed);
-    state.highDb = strip.highDb.load(std::memory_order_relaxed);
+    state.comp = strip.comp.load(std::memory_order_relaxed);
+    for (size_t band = 0; band < DjChannelStrip::bandCount; ++band)
+        state.eqDb[band] = strip.eqDb[band].load(std::memory_order_relaxed);
     state.filter = strip.filter.load(std::memory_order_relaxed);
     state.resonance = strip.resonance.load(std::memory_order_relaxed);
     state.fader = strip.fader.load(std::memory_order_relaxed);
+    state.faderCurve = strip.faderCurve.load(std::memory_order_relaxed);
+    state.send = strip.send.load(std::memory_order_relaxed);
     state.cue = strip.cue.load(std::memory_order_relaxed);
     state.fx = strip.fxOn.load(std::memory_order_relaxed);
     state.crossfaderSide = strip.crossfaderSide.load(std::memory_order_relaxed);
@@ -485,12 +545,32 @@ void Session::setDjChannelTrim(int index, float decibels)
         strip->trimDb.store(juce::jlimit(DjChannelStrip::minimumTrimDb, DjChannelStrip::maximumTrimDb, decibels), std::memory_order_relaxed);
 }
 
+void Session::setDjChannelComp(int index, float amount)
+{
+    if (auto* strip = stripFor(dj.get(), index))
+        strip->comp.store(juce::jlimit(0.0f, 1.0f, amount), std::memory_order_relaxed);
+}
+
 void Session::setDjChannelEq(int index, int band, float decibels)
 {
     auto* strip = stripFor(dj.get(), index);
-    if (strip == nullptr) return;
-    auto& target = band == 0 ? strip->lowDb : band == 1 ? strip->midDb : strip->highDb;
-    target.store(eqDb(decibels), std::memory_order_relaxed);
+    if (strip == nullptr || !juce::isPositiveAndBelow(band, DjChannelStrip::bandCount)) return;
+    strip->eqDb[static_cast<size_t>(band)].store(eqDb(decibels), std::memory_order_relaxed);
+}
+
+void Session::setDjChannelFaderCurve(int index, int curve)
+{
+    if (auto* strip = stripFor(dj.get(), index))
+    {
+        strip->faderCurve.store(juce::jlimit(0, 2, curve), std::memory_order_relaxed);
+        sendSynchronousChangeMessage();
+    }
+}
+
+void Session::setDjChannelSend(int index, float level)
+{
+    if (auto* strip = stripFor(dj.get(), index))
+        strip->send.store(juce::jlimit(0.0f, 1.0f, level), std::memory_order_relaxed);
 }
 
 void Session::setDjChannelFilter(int index, float amount)
@@ -550,12 +630,82 @@ Session::DjMasterState Session::djMaster() const
     state.midDb = master.midDb.load(std::memory_order_relaxed);
     state.highDb = master.highDb.load(std::memory_order_relaxed);
     state.cueMix = master.cueMix.load(std::memory_order_relaxed);
+    state.cueLevelDb = master.cueLevelDb.load(std::memory_order_relaxed);
+    state.monoSplit = master.monoSplit.load(std::memory_order_relaxed);
     state.meterLeft = master.meterLeft.load(std::memory_order_relaxed);
     state.meterRight = master.meterRight.load(std::memory_order_relaxed);
     state.bpm = dj->engine.masterBpm.load(std::memory_order_relaxed);
+    state.tapBpm = dj->engine.tapBpm.load(std::memory_order_relaxed);
     state.masterDeck = dj->engine.masterDeck.load(std::memory_order_relaxed);
     return state;
 }
+
+void Session::setDjCueLevel(float decibels)
+{
+    booth().engine.master().cueLevelDb.store(juce::jlimit(DjMasterSection::minimumLevelDb, DjMasterSection::maximumLevelDb, decibels),
+                                             std::memory_order_relaxed);
+}
+
+void Session::setDjMonoSplit(bool split)
+{
+    booth().engine.master().monoSplit.store(split, std::memory_order_relaxed);
+    sendSynchronousChangeMessage();
+}
+
+Session::DjMicState Session::djMic() const
+{
+    DjMicState state;
+    if (dj == nullptr) return state;
+    const auto& mic = dj->engine.mic();
+    state.levelDb = mic.levelDb.load(std::memory_order_relaxed);
+    state.lowDb = mic.lowDb.load(std::memory_order_relaxed);
+    state.highDb = mic.highDb.load(std::memory_order_relaxed);
+    state.mode = mic.mode.load(std::memory_order_relaxed);
+    state.meter = mic.meter.load(std::memory_order_relaxed);
+    return state;
+}
+
+void Session::setDjMicLevel(float decibels)
+{
+    booth().engine.mic().levelDb.store(juce::jlimit(DjMicSection::minimumLevelDb, DjMicSection::maximumLevelDb, decibels),
+                                       std::memory_order_relaxed);
+}
+
+void Session::setDjMicEq(int band, float decibels)
+{
+    auto& mic = booth().engine.mic();
+    (band == 0 ? mic.lowDb : mic.highDb).store(juce::jlimit(-12.0f, 12.0f, decibels), std::memory_order_relaxed);
+}
+
+void Session::setDjMicMode(int mode)
+{
+    booth().engine.mic().mode.store(juce::jlimit(0, 2, mode), std::memory_order_relaxed);
+    sendSynchronousChangeMessage();
+}
+
+Session::DjSendFxState Session::djSendFx() const
+{
+    DjSendFxState state;
+    if (dj == nullptr) return state;
+    const auto& send = dj->engine.sendFx();
+    state.type = send.type.load(std::memory_order_relaxed);
+    state.size = send.size.load(std::memory_order_relaxed);
+    state.time = send.time.load(std::memory_order_relaxed);
+    state.tone = send.tone.load(std::memory_order_relaxed);
+    state.mix = send.mix.load(std::memory_order_relaxed);
+    return state;
+}
+
+void Session::setDjSendFxType(int type)
+{
+    booth().engine.sendFx().type.store(juce::jlimit(0, DjSendFx::typeCount - 1, type), std::memory_order_relaxed);
+    sendSynchronousChangeMessage();
+}
+
+void Session::setDjSendFxSize(float amount) { booth().engine.sendFx().size.store(juce::jlimit(0.0f, 1.0f, amount), std::memory_order_relaxed); }
+void Session::setDjSendFxTime(float amount) { booth().engine.sendFx().time.store(juce::jlimit(0.0f, 1.0f, amount), std::memory_order_relaxed); }
+void Session::setDjSendFxTone(float amount) { booth().engine.sendFx().tone.store(juce::jlimit(0.0f, 1.0f, amount), std::memory_order_relaxed); }
+void Session::setDjSendFxMix(float amount) { booth().engine.sendFx().mix.store(juce::jlimit(0.0f, 1.0f, amount), std::memory_order_relaxed); }
 
 void Session::setDjCrossfader(float position)
 {
@@ -595,7 +745,50 @@ Session::DjFxState Session::djFx() const
     state.depth = fx.depth.load(std::memory_order_relaxed);
     state.on = fx.on.load(std::memory_order_relaxed);
     state.target = fx.target.load(std::memory_order_relaxed);
+    state.bands = {fx.bandLow.load(std::memory_order_relaxed), fx.bandMid.load(std::memory_order_relaxed),
+                   fx.bandHigh.load(std::memory_order_relaxed)};
+    state.autoTime = fx.autoTime.load(std::memory_order_relaxed);
+    state.manualSeconds = fx.manualSeconds.load(std::memory_order_relaxed);
     return state;
+}
+
+void Session::setDjFxBand(int band, bool on)
+{
+    auto& fx = booth().engine.fx();
+    (band == 0 ? fx.bandLow : band == 1 ? fx.bandMid : fx.bandHigh).store(on, std::memory_order_relaxed);
+    sendSynchronousChangeMessage();
+}
+
+void Session::setDjFxAutoTime(bool automatic)
+{
+    booth().engine.fx().autoTime.store(automatic, std::memory_order_relaxed);
+    sendSynchronousChangeMessage();
+}
+
+void Session::setDjFxTime(float seconds)
+{
+    booth().engine.fx().manualSeconds.store(juce::jlimit(0.001f, 4.0f, seconds), std::memory_order_relaxed);
+}
+
+// Two taps or more within two seconds of each other: the tempo is the
+// mean of the last few intervals.
+void Session::djTapTempo()
+{
+    auto& b = booth();
+    const auto now = juce::Time::getMillisecondCounter();
+    if (!b.taps.empty() && now - b.taps.back() > 2000)
+        b.taps.clear();
+    b.taps.push_back(now);
+    while (b.taps.size() > 5)
+        b.taps.erase(b.taps.begin());
+    if (b.taps.size() < 2) return;
+    double total = 0.0;
+    for (size_t i = 1; i < b.taps.size(); ++i)
+        total += static_cast<double>(b.taps[i] - b.taps[i - 1]);
+    const auto interval = total / static_cast<double>(b.taps.size() - 1);
+    if (interval <= 0.0) return;
+    b.engine.tapBpm.store(juce::jlimit(40.0, 240.0, 60000.0 / interval), std::memory_order_relaxed);
+    sendSynchronousChangeMessage();
 }
 
 void Session::setDjFxType(int type)
@@ -661,12 +854,31 @@ void Session::writeDjState()
     state.setProperty("masterMid", master.midDb, nullptr);
     state.setProperty("masterHigh", master.highDb, nullptr);
     state.setProperty("cueMix", master.cueMix, nullptr);
+    state.setProperty("cueLevel", master.cueLevelDb, nullptr);
+    state.setProperty("monoSplit", master.monoSplit, nullptr);
+    state.setProperty("tapBpm", master.tapBpm, nullptr);
     const auto fx = djFx();
     state.setProperty("fxType", fx.type, nullptr);
     state.setProperty("fxBeats", fx.beats, nullptr);
     state.setProperty("fxDepth", fx.depth, nullptr);
     state.setProperty("fxOn", fx.on, nullptr);
     state.setProperty("fxTarget", fx.target, nullptr);
+    state.setProperty("fxLow", fx.bands[0], nullptr);
+    state.setProperty("fxMid", fx.bands[1], nullptr);
+    state.setProperty("fxHigh", fx.bands[2], nullptr);
+    state.setProperty("fxAuto", fx.autoTime, nullptr);
+    state.setProperty("fxSeconds", fx.manualSeconds, nullptr);
+    const auto mic = djMic();
+    state.setProperty("micLevel", mic.levelDb, nullptr);
+    state.setProperty("micLow", mic.lowDb, nullptr);
+    state.setProperty("micHigh", mic.highDb, nullptr);
+    state.setProperty("micMode", mic.mode, nullptr);
+    const auto send = djSendFx();
+    state.setProperty("sendType", send.type, nullptr);
+    state.setProperty("sendSize", send.size, nullptr);
+    state.setProperty("sendTime", send.time, nullptr);
+    state.setProperty("sendTone", send.tone, nullptr);
+    state.setProperty("sendMix", send.mix, nullptr);
     for (int i = 0; i < b.count; ++i)
     {
         const auto& deck = b.decks[static_cast<size_t>(i)];
@@ -701,6 +913,8 @@ void Session::writeDjState()
         d.setProperty("tempoRange", settings.tempoRange, nullptr);
         d.setProperty("synced", settings.synced, nullptr);
         d.setProperty("reversed", settings.reversed, nullptr);
+        d.setProperty("brake", live.brakeSeconds, nullptr);
+        d.setProperty("quantise", live.quantiseSnap, nullptr);
         d.setProperty("cue", settings.cueSeconds, nullptr);
         d.setProperty("loopStart", settings.loop.startSeconds, nullptr);
         d.setProperty("loopEnd", settings.loop.endSeconds, nullptr);
@@ -717,12 +931,16 @@ void Session::writeDjState()
         const auto channel = djChannel(i);
         juce::ValueTree c(djChannelID);
         c.setProperty("trim", channel.trimDb, nullptr);
-        c.setProperty("low", channel.lowDb, nullptr);
-        c.setProperty("mid", channel.midDb, nullptr);
-        c.setProperty("high", channel.highDb, nullptr);
+        c.setProperty("comp", channel.comp, nullptr);
+        c.setProperty("low", channel.eqDb[0], nullptr);
+        c.setProperty("lowMid", channel.eqDb[1], nullptr);
+        c.setProperty("highMid", channel.eqDb[2], nullptr);
+        c.setProperty("high", channel.eqDb[3], nullptr);
         c.setProperty("filter", channel.filter, nullptr);
         c.setProperty("resonance", channel.resonance, nullptr);
         c.setProperty("fader", channel.fader, nullptr);
+        c.setProperty("faderCurve", channel.faderCurve, nullptr);
+        c.setProperty("send", channel.send, nullptr);
         c.setProperty("cue", channel.cue, nullptr);
         c.setProperty("fx", channel.fx, nullptr);
         c.setProperty("crossfader", channel.crossfaderSide, nullptr);
@@ -748,7 +966,24 @@ void Session::readDjState()
     setDjMasterEq(1, static_cast<float>(static_cast<double>(state.getProperty("masterMid", 0.0))));
     setDjMasterEq(2, static_cast<float>(static_cast<double>(state.getProperty("masterHigh", 0.0))));
     setDjCueMix(static_cast<float>(static_cast<double>(state.getProperty("cueMix", 0.0))));
-    b.engine.fx().type.store(juce::jlimit(0, DjBeatFx::typeCount - 1, static_cast<int>(state.getProperty("fxType", 0))), std::memory_order_relaxed);
+    setDjCueLevel(static_cast<float>(static_cast<double>(state.getProperty("cueLevel", 0.0))));
+    b.engine.master().monoSplit.store(static_cast<bool>(state.getProperty("monoSplit", false)), std::memory_order_relaxed);
+    b.engine.tapBpm.store(juce::jlimit(40.0, 240.0, static_cast<double>(state.getProperty("tapBpm", 128.0))), std::memory_order_relaxed);
+    b.engine.fx().bandLow.store(static_cast<bool>(state.getProperty("fxLow", true)), std::memory_order_relaxed);
+    b.engine.fx().bandMid.store(static_cast<bool>(state.getProperty("fxMid", true)), std::memory_order_relaxed);
+    b.engine.fx().bandHigh.store(static_cast<bool>(state.getProperty("fxHigh", true)), std::memory_order_relaxed);
+    b.engine.fx().autoTime.store(static_cast<bool>(state.getProperty("fxAuto", true)), std::memory_order_relaxed);
+    setDjFxTime(static_cast<float>(static_cast<double>(state.getProperty("fxSeconds", 0.25))));
+    setDjMicLevel(static_cast<float>(static_cast<double>(state.getProperty("micLevel", 0.0))));
+    setDjMicEq(0, static_cast<float>(static_cast<double>(state.getProperty("micLow", 0.0))));
+    setDjMicEq(1, static_cast<float>(static_cast<double>(state.getProperty("micHigh", 0.0))));
+    b.engine.mic().mode.store(juce::jlimit(0, 2, static_cast<int>(state.getProperty("micMode", 0))), std::memory_order_relaxed);
+    b.engine.sendFx().type.store(juce::jlimit(0, DjSendFx::typeCount - 1, static_cast<int>(state.getProperty("sendType", 2))), std::memory_order_relaxed);
+    setDjSendFxSize(static_cast<float>(static_cast<double>(state.getProperty("sendSize", 0.5))));
+    setDjSendFxTime(static_cast<float>(static_cast<double>(state.getProperty("sendTime", 0.5))));
+    setDjSendFxTone(static_cast<float>(static_cast<double>(state.getProperty("sendTone", 0.5))));
+    setDjSendFxMix(static_cast<float>(static_cast<double>(state.getProperty("sendMix", 0.5))));
+    b.engine.fx().type.store(juce::jlimit(0, DjBeatFx::typeCount - 1, static_cast<int>(state.getProperty("fxType", 1))), std::memory_order_relaxed);
     b.engine.fx().beats.store(juce::jlimit(1.0f / 16.0f, 4.0f, static_cast<float>(static_cast<double>(state.getProperty("fxBeats", 0.5)))), std::memory_order_relaxed);
     b.engine.fx().depth.store(juce::jlimit(0.0f, 1.0f, static_cast<float>(static_cast<double>(state.getProperty("fxDepth", 0.5)))), std::memory_order_relaxed);
     b.engine.fx().on.store(static_cast<bool>(state.getProperty("fxOn", false)), std::memory_order_relaxed);
@@ -793,12 +1028,16 @@ void Session::readDjState()
             {
                 auto& strip = b.engine.channel(index);
                 strip.trimDb.store(static_cast<float>(static_cast<double>(h.getProperty("trim", 0.0))), std::memory_order_relaxed);
-                strip.lowDb.store(eqDb(static_cast<float>(static_cast<double>(h.getProperty("low", 0.0)))), std::memory_order_relaxed);
-                strip.midDb.store(eqDb(static_cast<float>(static_cast<double>(h.getProperty("mid", 0.0)))), std::memory_order_relaxed);
-                strip.highDb.store(eqDb(static_cast<float>(static_cast<double>(h.getProperty("high", 0.0)))), std::memory_order_relaxed);
+                strip.comp.store(static_cast<float>(static_cast<double>(h.getProperty("comp", 0.0))), std::memory_order_relaxed);
+                strip.eqDb[0].store(eqDb(static_cast<float>(static_cast<double>(h.getProperty("low", 0.0)))), std::memory_order_relaxed);
+                strip.eqDb[1].store(eqDb(static_cast<float>(static_cast<double>(h.getProperty("lowMid", 0.0)))), std::memory_order_relaxed);
+                strip.eqDb[2].store(eqDb(static_cast<float>(static_cast<double>(h.getProperty("highMid", 0.0)))), std::memory_order_relaxed);
+                strip.eqDb[3].store(eqDb(static_cast<float>(static_cast<double>(h.getProperty("high", 0.0)))), std::memory_order_relaxed);
                 strip.filter.store(static_cast<float>(static_cast<double>(h.getProperty("filter", 0.0))), std::memory_order_relaxed);
                 strip.resonance.store(static_cast<float>(static_cast<double>(h.getProperty("resonance", 0.2))), std::memory_order_relaxed);
                 strip.fader.store(static_cast<float>(static_cast<double>(h.getProperty("fader", 1.0))), std::memory_order_relaxed);
+                strip.faderCurve.store(juce::jlimit(0, 2, static_cast<int>(h.getProperty("faderCurve", 1))), std::memory_order_relaxed);
+                strip.send.store(static_cast<float>(static_cast<double>(h.getProperty("send", 0.0))), std::memory_order_relaxed);
                 strip.cue.store(static_cast<bool>(h.getProperty("cue", false)), std::memory_order_relaxed);
                 strip.fxOn.store(static_cast<bool>(h.getProperty("fx", false)), std::memory_order_relaxed);
                 strip.crossfaderSide.store(juce::jlimit(0, 2, static_cast<int>(h.getProperty("crossfader", 1))), std::memory_order_relaxed);
@@ -811,6 +1050,8 @@ void Session::readDjState()
         engineDeck.tempoPercent.store(settings.tempoPercent, std::memory_order_relaxed);
         engineDeck.synced.store(settings.synced, std::memory_order_relaxed);
         engineDeck.reversed.store(settings.reversed, std::memory_order_relaxed);
+        engineDeck.brakeSeconds.store(juce::jlimit(0.0f, 4.0f, static_cast<float>(static_cast<double>(d.getProperty("brake", 0.0)))), std::memory_order_relaxed);
+        engineDeck.quantiseSnap.store(static_cast<bool>(d.getProperty("quantise", true)), std::memory_order_relaxed);
         deck.info.stale = deck.info.kind != DjSourceKind::none;
         if (static_cast<bool>(d.getProperty("live", false)) && deck.info.kind == DjSourceKind::track)
             deck.info.live = true;   // applied once the track is found, by setDjDeckLive from the poll

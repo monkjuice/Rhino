@@ -73,6 +73,8 @@ public:
     const DjChannelStrip& channel(int index) const noexcept { return channels[static_cast<size_t>(index)]; }
     DjCrossfader& crossfader() noexcept { return fader; }
     DjMasterSection& master() noexcept { return masterSection; }
+    DjMicSection& mic() noexcept { return micSection; }
+    DjSendFx& sendFx() noexcept { return sendEffect; }
     DjBeatFx& fx() noexcept { return effect; }
 
     std::atomic<int> quantise {static_cast<int>(Quantise::bar)};
@@ -81,14 +83,18 @@ public:
     std::atomic<int> masterDeck {-1};
     // The tempo everything is timed to, from the master deck, or 0 for none.
     std::atomic<double> masterBpm {0.0};
+    // The tempo tapped in, which times the effect when no deck plays.
+    std::atomic<double> tapBpm {128.0};
     // Phase lock: a synced deck is nudged back onto the master's beat when
     // it drifts, rather than only aligned when sync was pressed.
     std::atomic<bool> phaseLock {true};
 
     // ---- audio thread ----
     // Clears the outputs and writes the master to channels 0 and 1 and the
-    // cue bus to 2 and 3 when there are that many.
-    void process(float* const* outputs, int outputChannels, int frames);
+    // headphones to 2 and 3 when there are that many. The first input, when
+    // there is one, is the mic.
+    void process(const float* const* inputs, int inputChannels, float* const* outputs, int outputChannels, int frames);
+    void process(float* const* outputs, int outputChannels, int frames) { process(nullptr, 0, outputs, outputChannels, frames); }
     std::uint64_t blocksBegun() const noexcept { return begun.load(std::memory_order_acquire); }
 
 private:
@@ -102,7 +108,7 @@ private:
     void chooseMaster();
     void setRates();
     void landPendings(int frames, double deviceRate);
-    void renderChunk(float* const* outputs, int outputChannels, int frames);
+    void renderChunk(const float* micInput, float* const* outputs, int outputChannels, int frames);
     bool quantised() const noexcept { return quantise.load(std::memory_order_relaxed) != static_cast<int>(Quantise::off); }
 
     double rate = 48000.0;
@@ -112,6 +118,8 @@ private:
     std::array<DjChannelStrip, maximumDecks> channels;
     DjCrossfader fader;
     DjMasterSection masterSection;
+    DjMicSection micSection;
+    DjSendFx sendEffect;
     DjBeatFx effect;
     std::atomic<int> requestedMaster {-1};
     // A running count of master beats for the effect's sweeps, kept moving
@@ -125,6 +133,7 @@ private:
     std::vector<Retired> retired;
 
     std::array<std::array<std::vector<float>, 2>, maximumDecks> scratch;
-    std::array<std::vector<float>, 2> masterBus, cueBus;
+    std::array<std::vector<float>, 2> masterBus, cueBus, sendBus;
+    std::vector<float> micBuffer;
 };
 }

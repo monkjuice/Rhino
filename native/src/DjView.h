@@ -53,6 +53,8 @@ private:
     DjMixerPanel mixer;
     juce::VBlankAttachment vblank;
     int selected = 0;
+    // The mixer width the decks were last laid out around.
+    int laidOutMixerWidth = -1;
     bool updatingQuantise = false;
     bool blinkPhase = false;
     int blinkTicks = 0;

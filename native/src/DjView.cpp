@@ -117,14 +117,18 @@ void DjView::rebuildDecks()
 
 void DjView::sync()
 {
-    if (static_cast<int>(decks.size()) != session.djDeckCount())
+    // The mixer first: its width follows its strips, and the layout below
+    // reads that width. Laid out before the strips existed, a new channel
+    // sat under the master section until the window was next resized.
+    mixer.sync();
+    const auto count = session.djDeckCount();
+    if (static_cast<int>(decks.size()) != count || mixer.preferredWidth() != laidOutMixerWidth)
     {
         rebuildDecks();
         resized();
     }
     for (auto& deck : decks)
         deck->sync();
-    mixer.sync();
     {
         const juce::ScopedValueSetter<bool> scope(updatingQuantise, true);
         const auto current = session.djQuantise();
@@ -133,7 +137,7 @@ void DjView::sync()
                 quantiseBox.setSelectedId(i + 1, juce::dontSendNotification);
     }
     phaseLock.setLit(session.djPhaseLock());
-    addDeckButton.setEnabled(session.djDeckCount() < Session::maximumDjDecks);
+    addDeckButton.setEnabled(count < Session::maximumDjDecks);
     repaint();
 }
 
@@ -177,8 +181,6 @@ void DjView::timerCallback()
     for (auto& deck : decks)
         deck->tick(blinkPhase);
     mixer.tick();
-    // The master tempo readout lives on the mixer's face.
-    mixer.repaint(mixer.getWidth() - DjMixerPanel::masterWidth, 0, DjMixerPanel::masterWidth, 20);
 }
 
 void DjView::paint(juce::Graphics& g)
@@ -203,7 +205,8 @@ void DjView::paint(juce::Graphics& g)
 }
 
 // Decks stand either side of the mixer, odd on the left and even on the
-// right, each column stacking up to three.
+// right, each column stacking up to three. The mixer keeps its own height
+// at the top of the middle; the decks take the full height of their side.
 void DjView::resized()
 {
     auto bounds = getLocalBounds();
@@ -219,9 +222,11 @@ void DjView::resized()
     bounds.reduce(4, 4);
     const auto count = static_cast<int>(decks.size());
     const auto perSide = (count + 1) / 2;
-    const auto mixerWidth = juce::jlimit(DjMixerPanel::masterWidth + 40, std::max(DjMixerPanel::masterWidth + 40, bounds.getWidth() / 2),
-                                         mixer.preferredWidth());
-    const auto mixerArea = bounds.withSizeKeepingCentre(mixerWidth, bounds.getHeight());
+    const auto narrowest = mixer.minimumWidth();
+    const auto mixerWidth = juce::jlimit(narrowest, std::max(narrowest, bounds.getWidth() / 2), mixer.preferredWidth());
+    laidOutMixerWidth = mixer.preferredWidth();
+    const auto mixerArea = bounds.withSizeKeepingCentre(mixerWidth, bounds.getHeight())
+                               .withHeight(std::min(DjMixerPanel::preferredHeight, bounds.getHeight()));
     mixer.setBounds(mixerArea);
     if (count == 0) return;
     const auto left = bounds.withRight(mixerArea.getX() - 4);

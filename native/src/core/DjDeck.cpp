@@ -149,6 +149,7 @@ void DjDeck::beginPlaying(double fromFrame)
 {
     position.store(clampFrame(fromFrame), std::memory_order_relaxed);
     stopping = false;
+    braking = false;
     returnTo = -1.0;
     gain = 0.0f;
     setState(State::playing);
@@ -205,6 +206,16 @@ void DjDeck::pause()
     if (s == State::playing || s == State::cueing)
     {
         cueHeld = false;
+        const auto brake = brakeSeconds.load(std::memory_order_relaxed);
+        if (brake > 0.01f && !braking)
+        {
+            // The platter winds down rather than stopping dead; the stop
+            // itself comes when the rate reaches nothing.
+            braking = true;
+            spinningUp = false;
+            brakeStep = std::abs(rate) / (brake * grid.sampleRate);
+            return;
+        }
         stopWithFade(-1.0);
     }
 }
@@ -542,8 +553,17 @@ void DjDeck::render(float* left, float* right, int frames, double deviceRate)
                 playing = true;
                 gain = 0.0f;
                 stopping = false;
+                braking = false;
                 returnTo = -1.0;
                 startAt = -1;
+                const auto brake = brakeSeconds.load(std::memory_order_relaxed);
+                if (brake > 0.01f && !cueHeld)
+                {
+                    // Winds up from a standstill over the brake time.
+                    spinningUp = true;
+                    rate = 0.0;
+                    brakeStep = std::max(0.05, std::abs(targetRate)) / (brake * deviceRate);
+                }
                 setState(cueHeld ? State::cueing : State::playing);
                 setPending(Pending::none);
                 pendingPosition.store(-1.0, std::memory_order_relaxed);
@@ -555,7 +575,29 @@ void DjDeck::render(float* left, float* right, int frames, double deviceRate)
                 continue;
             }
         }
-        rate += smoothing * (targetRate - rate);
+        if (braking)
+        {
+            // Winding down; the stop itself follows at nothing.
+            rate = rate > 0.0 ? std::max(0.0, rate - brakeStep * (grid.sampleRate / deviceRate))
+                              : std::min(0.0, rate + brakeStep * (grid.sampleRate / deviceRate));
+            if (std::abs(rate) <= 1.0e-4)
+            {
+                braking = false;
+                stopping = true;
+                returnTo = -1.0;
+            }
+        }
+        else if (spinningUp)
+        {
+            rate += brakeStep;
+            if (rate >= targetRate)
+            {
+                rate = targetRate;
+                spinningUp = false;
+            }
+        }
+        else
+            rate += smoothing * (targetRate - rate);
         const auto step = (backwards ? -1.0 : 1.0) * rate * rateScale;
         const auto l = readInterpolated(leftSamples, pos);
         const auto r = readInterpolated(rightSamples, pos);
@@ -595,6 +637,8 @@ void DjDeck::render(float* left, float* right, int frames, double deviceRate)
         {
             playing = false;
             stopping = false;
+            braking = false;
+            spinningUp = false;
             cueHeld = false;
             if (returnTo >= 0.0)
             {

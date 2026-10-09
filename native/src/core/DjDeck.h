@@ -35,6 +35,15 @@ public:
     std::atomic<float> nudgePercent {0.0f};
     std::atomic<bool> synced {false};
     std::atomic<bool> reversed {false};
+    // The hand on the platter: while scratching, the deck plays at this
+    // rate, backwards for a negative one, whatever the fader says.
+    std::atomic<bool> scratching {false};
+    std::atomic<double> scratchRate {0.0};
+    // How long a stop takes and a start spins up, in seconds: the CDJ's
+    // vinyl speed adjust. Zero is at once.
+    std::atomic<float> brakeSeconds {0.0f};
+    // Whether cue and loop points snap to the grid: the CDJ's Quantize key.
+    std::atomic<bool> quantiseSnap {true};
     // Set before a track is swapped in so the new one picks up at the same
     // beat the old one was at, which is what a re-bounce wants.
     std::atomic<bool> keepBeatOnSwap {false};
@@ -145,5 +154,10 @@ private:
     double returnTo = -1.0;
     int startAt = -1;
     bool cueHeld = false;
+    // The brake: the rate winds down from where it was over brakeSeconds
+    // and the deck stops when it reaches nothing; a start winds up the
+    // same way.
+    bool braking = false, spinningUp = false;
+    double brakeStep = 0.0;
 };
 }

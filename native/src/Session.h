@@ -1034,6 +1034,9 @@ public:
         float tempoPercent = 0.0f;
         int tempoRange = 6;
         bool synced = false, master = false, reversed = false;
+        float brakeSeconds = 0.0f;              // how long a stop winds down and a start spins up
+        bool quantiseSnap = true;               // cue and loop points snap to the grid
+        bool scratching = false;                // a hand is on the platter
         double cueSeconds = 0.0;
         std::array<double, 8> hotCueSeconds {}; // negative when unset
         DjLoop loop;
@@ -1042,10 +1045,16 @@ public:
         juce::uint32 jumps = 0;
         bool isPlaying() const { return transport == Transport::playing || transport == Transport::cueing; }
     };
+    // A channel of the mixer, as the DJM-V10 lays one out: trim, a
+    // compressor, four EQ bands, the colour filter, a send, the fader with
+    // its curve, cue, the effect assign and the crossfader side.
+    static constexpr int djChannelBandCount = 4;   // low, low-mid, high-mid, high
     struct DjChannelState
     {
-        float trimDb = 0.0f, lowDb = 0.0f, midDb = 0.0f, highDb = 0.0f;
-        float filter = 0.0f, resonance = 0.2f, fader = 1.0f;
+        float trimDb = 0.0f, comp = 0.0f;
+        std::array<float, djChannelBandCount> eqDb {};
+        float filter = 0.0f, resonance = 0.2f, fader = 1.0f, send = 0.0f;
+        int faderCurve = 1;                     // 0 gentle, 1 normal, 2 steep
         bool cue = false, fx = false;
         int crossfaderSide = 1;                 // 0 A, 1 through, 2 B
         float meter = 0.0f;
@@ -1053,29 +1062,53 @@ public:
     struct DjMasterState
     {
         float crossfader = 0.0f, crossfaderCurve = 0.0f;
-        float levelDb = 0.0f, lowDb = 0.0f, midDb = 0.0f, highDb = 0.0f, cueMix = 0.0f;
+        float levelDb = 0.0f, lowDb = 0.0f, midDb = 0.0f, highDb = 0.0f;
+        // The headphones: the cue against the master, their level, and
+        // mono split (cue left, master right).
+        float cueMix = 0.0f, cueLevelDb = 0.0f;
+        bool monoSplit = false;
         float meterLeft = 0.0f, meterRight = 0.0f;
         double bpm = 0.0;                       // the master deck's, 0 for none
+        double tapBpm = 128.0;                  // tapped in; times the effect when no deck plays
         int masterDeck = -1;
+    };
+    // The mic: the audio device's first input, with a two-band EQ, off, on
+    // or on with talkover, which ducks the master while it is spoken into.
+    struct DjMicState
+    {
+        float levelDb = 0.0f, lowDb = 0.0f, highDb = 0.0f;
+        int mode = 0;                           // 0 off, 1 on, 2 talkover
+        float meter = 0.0f;
+    };
+    // The send/return unit the channels' sends feed.
+    struct DjSendFxState
+    {
+        int type = 2;                           // djSendFxTypeName
+        float size = 0.5f, time = 0.5f, tone = 0.5f, mix = 0.5f;
     };
     struct DjFxState
     {
-        int type = 0;
+        int type = 1;
         float beats = 0.5f, depth = 0.5f;
         bool on = false;
         int target = -1;                        // -1 the master, else a channel
+        std::array<bool, 3> bands {true, true, true};   // the bands the effect is on: low, mid, high
+        bool autoTime = true;                   // from the beats, else from manualSeconds
+        float manualSeconds = 0.25f;
     };
     static constexpr float djKillDb = -90.0f;  // an EQ band at or below this is off
     static juce::String djFxTypeName(int type);
     static int djFxTypeCount();
+    static juce::String djSendFxTypeName(int type);
+    static int djSendFxTypeCount();
 
     int djDeckCount() const;
     juce::Result addDjDeck();
     juce::Result removeDjDeck(int deck);
-    // What a deck plays. A file is read and analysed on a worker thread, and
-    // djPoll installs it; a track or a group is bounced at once, here, as a
-    // merge renders, so a short loop is on the deck when this returns. A
-    // group bounces its bus with the members under it.
+    // What a deck plays. A file is read and analysed on a worker thread; a
+    // track or a group is bounced to audio on the same worker, against a
+    // copy of the document, and a group bounces its bus with the members
+    // under it. Either way djPoll installs the result when it is done.
     juce::Result loadDjDeckFile(int deck, const juce::File&);
     juce::Result loadDjDeckTrack(int deck, int track);
     juce::Result loadDjDeckGroup(int deck, int groupId);
@@ -1112,6 +1145,14 @@ public:
     void djSetTempoPercent(int deck, float percent);
     void djSetTempoRange(int deck, int range);     // 6, 10, 16 or 100
     void djNudge(int deck, float percent);          // held: 0 lets go
+    // The hand on the platter: the deck plays at this rate, backwards for a
+    // negative one, until the hand lets go.
+    void djScratch(int deck, double rate, bool active);
+    void djSetBrake(int deck, float seconds);
+    void djSetQuantiseSnap(int deck, bool);
+    // The previous or next cue point from where the deck stands, hot cues
+    // and the cue point alike; back past the first is the top of the track.
+    void djJumpToCue(int deck, bool forward);
     void djStopAll();
     DjQuantise djQuantise() const;
     void setDjQuantise(DjQuantise);
@@ -1121,10 +1162,13 @@ public:
     // the document is not marked modified by them.
     DjChannelState djChannel(int channel) const;
     void setDjChannelTrim(int channel, float decibels);
-    void setDjChannelEq(int channel, int band, float decibels);   // 0 low, 1 mid, 2 high
+    void setDjChannelComp(int channel, float amount);
+    void setDjChannelEq(int channel, int band, float decibels);   // 0 low, 1 low-mid, 2 high-mid, 3 high
     void setDjChannelFilter(int channel, float amount);
     void setDjChannelResonance(int channel, float amount);
     void setDjChannelFader(int channel, float position);
+    void setDjChannelFaderCurve(int channel, int curve);
+    void setDjChannelSend(int channel, float level);
     void setDjChannelCue(int channel, bool);
     void setDjChannelFx(int channel, bool);
     void setDjChannelCrossfaderSide(int channel, int side);
@@ -1132,14 +1176,32 @@ public:
     void setDjCrossfader(float position);
     void setDjCrossfaderCurve(float curve);
     void setDjMasterLevel(float decibels);
-    void setDjMasterEq(int band, float decibels);
+    void setDjMasterEq(int band, float decibels);                 // 0 low, 1 mid, 2 high
     void setDjCueMix(float mix);
+    void setDjCueLevel(float decibels);
+    void setDjMonoSplit(bool);
+    DjMicState djMic() const;
+    void setDjMicLevel(float decibels);
+    void setDjMicEq(int band, float decibels);                    // 0 low, 1 high
+    void setDjMicMode(int mode);
+    DjSendFxState djSendFx() const;
+    void setDjSendFxType(int type);
+    void setDjSendFxSize(float);
+    void setDjSendFxTime(float);
+    void setDjSendFxTone(float);
+    void setDjSendFxMix(float);
     DjFxState djFx() const;
     void setDjFxType(int type);
     void setDjFxBeats(float beats);
     void setDjFxDepth(float depth);
     void setDjFxOn(bool);
     void setDjFxTarget(int target);
+    void setDjFxBand(int band, bool on);                          // 0 low, 1 mid, 2 high
+    void setDjFxAutoTime(bool);
+    void setDjFxTime(float seconds);
+    // A tap on the effect's TAP key: two or more within two seconds set
+    // the tempo the effect runs at when no deck plays.
+    void djTapTempo();
     // Playing over a deck. A track deck's track can be heard live: its input
     // is monitored, so a Drum Rack on it plays from the keys over the bounce.
     // A file or a group has no instrument to play.

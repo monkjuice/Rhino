@@ -35,8 +35,12 @@ void DjEngine::prepare(double sampleRate, int maximumBlockSize)
             channel.assign(static_cast<size_t>(maximumBlock), 0.0f);
     for (auto& channel : masterBus) channel.assign(static_cast<size_t>(maximumBlock), 0.0f);
     for (auto& channel : cueBus) channel.assign(static_cast<size_t>(maximumBlock), 0.0f);
+    for (auto& channel : sendBus) channel.assign(static_cast<size_t>(maximumBlock), 0.0f);
+    micBuffer.assign(static_cast<size_t>(maximumBlock), 0.0f);
     for (auto& strip : channels) strip.prepare(rate);
     masterSection.prepare(rate);
+    micSection.prepare(rate);
+    sendEffect.prepare(rate);
     effect.prepare(rate, maximumBlock);
     // Nothing renders while this runs, so everything let go of can go.
     retired.clear();
@@ -121,7 +125,9 @@ void DjEngine::apply(const Command& command)
     // Material swapped in since the last block is taken up first, so a
     // command queued behind the swap addresses the new track.
     d.adoptPending();
-    const auto snap = quantised();
+    // Cue and loop points snap to the deck's grid while its own Quantize
+    // key is lit, as a CDJ's do; the launch quantisation is the booth's.
+    const auto snap = d.quantiseSnap.load(std::memory_order_relaxed);
     switch (command.type)
     {
         case Type::play: d.play(); break;
@@ -188,12 +194,13 @@ void DjEngine::chooseMaster()
             }
     }
     masterDeck.store(current, std::memory_order_relaxed);
-    masterBpm.store(current >= 0 ? deckList[static_cast<size_t>(current)].effectiveBpm() : 0.0,
+    masterBpm.store(current >= 0 ? std::abs(deckList[static_cast<size_t>(current)].effectiveBpm()) : 0.0,
                     std::memory_order_relaxed);
 }
 
 // Each deck's rate for the block: its own fader, or the master's tempo when
-// synced, with a gentle correction back onto the master's beat.
+// synced, with a gentle correction back onto the master's beat; or the hand
+// on the platter, which overrides both while it is there.
 void DjEngine::setRates()
 {
     const auto count = deckCount();
@@ -202,12 +209,17 @@ void DjEngine::setRates()
     for (int i = 0; i < count; ++i)
     {
         auto& d = deckList[static_cast<size_t>(i)];
+        if (d.scratching.load(std::memory_order_relaxed))
+        {
+            d.targetRate = std::clamp(d.scratchRate.load(std::memory_order_relaxed), -10.0, 10.0);
+            continue;
+        }
         auto target = d.baseRate();
         if (d.synced.load(std::memory_order_relaxed) && m >= 0 && m != i)
         {
             const auto& master = deckList[static_cast<size_t>(m)];
             const auto own = d.nativeBpm();
-            const auto masterTempo = master.effectiveBpm();
+            const auto masterTempo = std::abs(master.effectiveBpm());
             if (own > 0.0 && masterTempo > 0.0)
             {
                 target = masterTempo / own;
@@ -258,7 +270,7 @@ void DjEngine::landPendings(int frames, double deviceRate)
         auto next = std::ceil((beat - 0.002) / span) * span;
         if (next < beat) next += span;
         const auto boundaryFrame = masterTrack->frameAtBeat(next);
-        const auto masterStep = std::max(1.0e-6, master.playbackRate.load(std::memory_order_relaxed))
+        const auto masterStep = std::max(1.0e-6, std::abs(master.playbackRate.load(std::memory_order_relaxed)))
                               * masterTrack->sampleRate / deviceRate;
         const auto distance = (boundaryFrame - masterPosition) / masterStep;
         if (distance < frames)
@@ -271,13 +283,14 @@ void DjEngine::landPendings(int frames, double deviceRate)
     }
 }
 
-void DjEngine::process(float* const* outputs, int outputChannels, int frames)
+void DjEngine::process(const float* const* inputs, int inputChannels, float* const* outputs, int outputChannels, int frames)
 {
     begun.fetch_add(1, std::memory_order_acq_rel);
     for (int c = 0; c < outputChannels; ++c)
         if (outputs[c] != nullptr)
             std::fill(outputs[c], outputs[c] + frames, 0.0f);
     applyCommands();
+    const float* mic = inputs != nullptr && inputChannels > 0 ? inputs[0] : nullptr;
     for (int offset = 0; offset < frames; offset += maximumBlock)
     {
         const auto chunk = std::min(maximumBlock, frames - offset);
@@ -285,12 +298,12 @@ void DjEngine::process(float* const* outputs, int outputChannels, int frames)
         const auto used = std::min(outputChannels, 8);
         for (int c = 0; c < used; ++c)
             chunkOutputs[c] = outputs[c] != nullptr ? outputs[c] + offset : nullptr;
-        renderChunk(chunkOutputs, used, chunk);
+        renderChunk(mic != nullptr ? mic + offset : nullptr, chunkOutputs, used, chunk);
     }
     ended.fetch_add(1, std::memory_order_acq_rel);
 }
 
-void DjEngine::renderChunk(float* const* outputs, int outputChannels, int frames)
+void DjEngine::renderChunk(const float* micInput, float* const* outputs, int outputChannels, int frames)
 {
     const auto count = deckCount();
     chooseMaster();
@@ -299,14 +312,16 @@ void DjEngine::renderChunk(float* const* outputs, int outputChannels, int frames
 
     for (auto& channel : masterBus) std::fill(channel.begin(), channel.begin() + frames, 0.0f);
     for (auto& channel : cueBus) std::fill(channel.begin(), channel.begin() + frames, 0.0f);
+    for (auto& channel : sendBus) std::fill(channel.begin(), channel.begin() + frames, 0.0f);
     float gainA = 1.0f, gainB = 1.0f;
     fader.gains(gainA, gainB);
     const auto fxTarget = effect.target.load(std::memory_order_relaxed);
     const auto m = masterDeck.load(std::memory_order_relaxed);
     const auto tempo = masterBpm.load(std::memory_order_relaxed);
-    const auto beatSeconds = tempo > 0.0 ? 60.0 / tempo : 60.0 / 128.0;
+    const auto fallback = std::clamp(tapBpm.load(std::memory_order_relaxed), 40.0, 240.0);
+    const auto beatSeconds = tempo > 0.0 ? 60.0 / tempo : 60.0 / fallback;
     // The effect's beat count follows the master while one plays and keeps
-    // walking at the last tempo when none does.
+    // walking at the tapped tempo when none does.
     if (m >= 0)
         effectBeat = deckList[static_cast<size_t>(m)].beatPosition();
     else
@@ -327,6 +342,13 @@ void DjEngine::renderChunk(float* const* outputs, int outputChannels, int frames
                 cueBus[1][static_cast<size_t>(f)] += right[f];
             }
         strip.applyFader(left, right, frames);
+        const auto sendGain = strip.sendGain();
+        if (sendGain > 0.0001f)
+            for (int f = 0; f < frames; ++f)
+            {
+                sendBus[0][static_cast<size_t>(f)] += left[f] * sendGain;
+                sendBus[1][static_cast<size_t>(f)] += right[f] * sendGain;
+            }
         if (fxTarget == i && strip.fxOn.load(std::memory_order_relaxed))
             effect.process(left, right, frames, beatSeconds, effectBeat);
         const auto side = static_cast<DjChannelStrip::CrossfaderSide>(strip.crossfaderSide.load(std::memory_order_relaxed));
@@ -338,11 +360,27 @@ void DjEngine::renderChunk(float* const* outputs, int outputChannels, int frames
             masterBus[1][static_cast<size_t>(f)] += right[f] * gain;
         }
     }
-    // Decks past the count stay silent but still read their track so a deck
-    // taken away and brought back is where it was left.
+    // The send/return comes back onto the master at its own level.
+    sendEffect.process(sendBus[0].data(), sendBus[1].data(), frames);
+    for (int f = 0; f < frames; ++f)
+    {
+        masterBus[0][static_cast<size_t>(f)] += sendBus[0][static_cast<size_t>(f)];
+        masterBus[1][static_cast<size_t>(f)] += sendBus[1][static_cast<size_t>(f)];
+    }
     if (fxTarget < 0)
         effect.process(masterBus[0].data(), masterBus[1].data(), frames, beatSeconds, effectBeat);
     masterSection.process(masterBus[0].data(), masterBus[1].data(), frames);
+    // The mic joins after the master's own processing, ducking it while
+    // spoken into with talkover on.
+    float duck = 1.0f;
+    micSection.process(micInput, micBuffer.data(), frames, duck);
+    if (duck < 0.999f || micSection.mode.load(std::memory_order_relaxed) != static_cast<int>(DjMicSection::Mode::off))
+        for (int f = 0; f < frames; ++f)
+        {
+            const auto voice = micBuffer[static_cast<size_t>(f)];
+            masterBus[0][static_cast<size_t>(f)] = softClip(masterBus[0][static_cast<size_t>(f)] * duck + voice);
+            masterBus[1][static_cast<size_t>(f)] = softClip(masterBus[1][static_cast<size_t>(f)] * duck + voice);
+        }
 
     if (outputChannels > 0 && outputs[0] != nullptr)
         std::copy(masterBus[0].begin(), masterBus[0].begin() + frames, outputs[0]);
@@ -350,11 +388,27 @@ void DjEngine::renderChunk(float* const* outputs, int outputChannels, int frames
         std::copy(masterBus[1].begin(), masterBus[1].begin() + frames, outputs[1]);
     if (outputChannels > 3 && outputs[2] != nullptr && outputs[3] != nullptr)
     {
+        // The headphones: the cue bus against the master, at their own
+        // level, or with mono split the cue on the left and the master on
+        // the right.
         const auto mix = std::clamp(masterSection.cueMix.load(std::memory_order_relaxed), 0.0f, 1.0f);
+        const auto level = decibelsToGain(std::clamp(masterSection.cueLevelDb.load(std::memory_order_relaxed),
+                                                     DjMasterSection::minimumLevelDb, DjMasterSection::maximumLevelDb));
+        const auto split = masterSection.monoSplit.load(std::memory_order_relaxed);
         for (int f = 0; f < frames; ++f)
         {
-            outputs[2][f] = softClip(cueBus[0][static_cast<size_t>(f)] * (1.0f - mix) + masterBus[0][static_cast<size_t>(f)] * mix);
-            outputs[3][f] = softClip(cueBus[1][static_cast<size_t>(f)] * (1.0f - mix) + masterBus[1][static_cast<size_t>(f)] * mix);
+            const auto cueL = cueBus[0][static_cast<size_t>(f)], cueR = cueBus[1][static_cast<size_t>(f)];
+            const auto mainL = masterBus[0][static_cast<size_t>(f)], mainR = masterBus[1][static_cast<size_t>(f)];
+            if (split)
+            {
+                outputs[2][f] = softClip(0.5f * (cueL + cueR) * level);
+                outputs[3][f] = softClip(0.5f * (mainL + mainR) * level);
+            }
+            else
+            {
+                outputs[2][f] = softClip((cueL * (1.0f - mix) + mainL * mix) * level);
+                outputs[3][f] = softClip((cueR * (1.0f - mix) + mainR * mix) * level);
+            }
         }
     }
 }

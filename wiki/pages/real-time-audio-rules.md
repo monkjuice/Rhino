@@ -4,7 +4,7 @@ type: convention
 summary: The audio thread never allocates, locks, or touches files or UI; memory is sized at prepare and state crosses threads via atomics and queues.
 tags: [both, real-time, audio-thread]
 sources: []
-updated: 2026-10-09
+updated: 2026-10-10
 ---
 
 # Real-time audio rules
@@ -36,6 +36,7 @@ Each block has a deadline (about 2.7 ms at 48 kHz and 128 samples) that an alloc
   - A replaced sample is retired with the number of stretches begun at that moment. `collect()`, on the message thread, frees it once that many stretches have ended and no voice plays it.
   - Every pad edit and the face's 24 Hz timer collect, and `prepare()`, when nothing renders, frees everything. `checkSampleHandOff` in `DrumRackTest.cpp` covers it.
 - Counted blocks for a whole-track swap. `DjEngine` hands a deck its material by pointer and retires the old one with the number of blocks begun; `collect()`, on the message thread, frees it once as many have ended, which is enough because a deck reads nothing across blocks. Its commands cross in a single-producer queue of 256 applied at the start of a block, and every knob is an atomic read once a block and smoothed ([DJ view and the booth](dj-view.md)).
+- **One judged exception: the DJ preview's notes** (2026-10-10). `Session::DjBooth` is the engine's `DjLiveSink`, and `DjEngine::sequence` calls its `noteOn`/`noteOff` from the booth's audio callback. They write into the `keyboardState` of the "All MIDI Ins" and "Computer Keyboard" input devices (`SessionDj.cpp`; the devices are atomics, `previewInputs`, set when a preview begins), the entry the typing keyboard takes from the message thread ([Computer MIDI keyboard](computer-keyboard.md)). That takes `juce::MidiKeyboardState`'s own CriticalSection, briefly, and queues into Tracktion's MIDI input, which is built to be fed from a driver thread, which the booth's callback is to it. Accepted as a risk judged small so that a held knob is heard at once, not as a proven lock-free path; the sink's contract in `DjEngine.h` is to take no lock it could wait on and to allocate nothing, and any other `DjLiveSink` must keep to it ([DJ view and the booth](dj-view.md)).
 - Field by field, where a torn read is harmless. A Drum Rack pad's playback is a dozen atomics written one at a time, so a strike landing mid-write plays a mix of old and new for one note, which is accepted ([Drum Rack sample editor](drum-rack-sample-editor.md)). Strikes from the face cross as a 128-bit mask of atomics, and a solo count spares each voice a scan of all 128 pads.
 - Atomics. `UtilityDevice` reads its gain atomically into a preallocated smoother; Forge's `Processor` publishes meter readings into `std::atomic` arrays for the panel.
 - A single-producer, single-consumer queue to a timer. MIDI learn pushes bound messages into `MidiControlQueue` (256 slots, no allocation), and the `Processor`'s own 60 Hz timer applies them, because writing a parameter takes locks ([Forge MIDI learn](forge-midi-learn.md)).

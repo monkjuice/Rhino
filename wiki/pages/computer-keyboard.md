@@ -4,7 +4,7 @@ type: component
 summary: Plays notes from the typing keyboard into the MIDI input with Forge's exact key mapping, so arming and recording need no special case.
 tags: [rhino, midi, keyboard]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-10
 ---
 
 # Computer MIDI keyboard
@@ -13,7 +13,7 @@ updated: 2026-10-03
 
 ## It plays the input, not a track
 
-Notes go through `Session::sendMidiInputNote` into the `keyboardState` of the engine's MIDI input devices, the entry a controller's notes take. Nothing downstream can tell where a note came from, so arming, monitoring and recording need no second path. It writes into both virtual devices, "All MIDI Ins" and "Computer Keyboard", because a track on either has to hear it ([Track inputs and monitoring](inputs-and-monitoring.md)). `Session::midiInputDevice` is only a fallback.
+Notes go through `Session::sendMidiInputNote` into the `keyboardState` of the engine's MIDI input devices, the entry a controller's notes take. Nothing downstream can tell where a note came from, so arming, monitoring and recording need no second path. It writes into both virtual devices, "All MIDI Ins" and "Computer Keyboard", because a track on either has to hear it ([Track inputs and monitoring](inputs-and-monitoring.md)). `Session::midiInputDevice` is only a fallback. The DJ booth's live preview takes the same entry from its own audio thread (`Session::DjBooth::noteOn`/`noteOff`, since 2026-10-10), which is the one judged exception recorded in [Real-time audio rules](real-time-audio-rules.md); see [DJ view and the booth](dj-view.md).
 
 ## One mapping, not two
 

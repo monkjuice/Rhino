@@ -109,7 +109,7 @@ bool Session::removeNotes(const std::vector<juce::ValueTree>& states)
             // is only needed when the removed note was already sounding;
             // panicking for every edit audibly cuts unrelated notes and FX.
             if (removedActiveNote)
-                panicMidiOnTrack(pattern().getClipTrack());
+                panicMidiOnTrack(trackHoldingClip(*edit, pattern()));
             edit->restartPlayback();
         }
         sendSynchronousChangeMessage();
@@ -222,7 +222,7 @@ void Session::setNote(int step, int pitch, bool enabled)
     {
         if (!edit->getTransport().isPlaying())
             return;
-        panicMidiOnTrack(pattern().getClipTrack());
+        panicMidiOnTrack(trackHoldingClip(*edit, pattern()));
         edit->restartPlayback();
     };
     for (auto* note : sequence.getNotes())
@@ -568,7 +568,7 @@ juce::Result Session::moveNotes(const std::vector<std::pair<int, int>>& sources,
     // graph. Its old note-off can otherwise disappear when the MIDI sequence
     // changes, leaving the instrument sounding indefinitely.
     if (wasPlaying)
-        panicMidiOnTrack(pattern().getClipTrack());
+        panicMidiOnTrack(trackHoldingClip(*edit, pattern()));
     auto* undoManager = &edit->getUndoManager();
     for (const auto& move : moves)
         move.note->setStartAndLength(tracktion::core::BeatPosition::fromBeats(beatForStep(move.targetStep)),
@@ -658,7 +658,7 @@ juce::Result Session::moveNotes(const std::vector<juce::ValueTree>& states, doub
         return juce::Result::ok();
 
     const auto wasPlaying = edit->getTransport().isPlaying();
-    if (wasPlaying) panicMidiOnTrack(pattern().getClipTrack());
+    if (wasPlaying) panicMidiOnTrack(trackHoldingClip(*edit, pattern()));
     auto* undoManager = &edit->getUndoManager();
     for (const auto& move : moves)
     {
@@ -725,7 +725,7 @@ juce::Result Session::redistributeNotes(const std::vector<juce::ValueTree>& stat
     markModified();
     if (edit->getTransport().isPlaying())
     {
-        panicMidiOnTrack(pattern().getClipTrack());
+        panicMidiOnTrack(trackHoldingClip(*edit, pattern()));
         edit->restartPlayback();
     }
     sendSynchronousChangeMessage();

@@ -1,5 +1,6 @@
 #include "DjDeckPanel.h"
 #include "BrowserIds.h"
+#include "ClipDrag.h"
 #include "ContentLibrary.h"
 #include <algorithm>
 #include <cmath>
@@ -27,13 +28,15 @@ juce::String rangeName(int range)
 }
 }
 
-DjDeckPanel::DjDeckPanel(Session& s, int deckIndex) : session(s), deck(deckIndex), display(s, deckIndex)
+DjDeckPanel::DjDeckPanel(Session& s, int deckIndex) : session(s), deck(deckIndex), display(s, deckIndex), grid(s, deckIndex)
 {
     setOpaque(true);
     setWantsKeyboardFocus(false);
     // A press anywhere on the console selects the deck for the Device View.
     addMouseListener(this, true);
     display.status = [this](const juce::String& message) { if (status) status(message); };
+    grid.status = display.status;
+    grid.editRequested = [this](int track, te::EditItemID clip) { if (editRequested) editRequested(track, clip); };
     source.setColour(juce::TextButton::buttonColourId, palette::control);
     source.setColour(juce::TextButton::buttonOnColourId, palette::hover);
     source.setColour(juce::TextButton::textColourOffId, palette::text);
@@ -170,7 +173,7 @@ DjDeckPanel::DjDeckPanel(Session& s, int deckIndex) : session(s), deck(deckIndex
     };
     tempoReset.setTooltip("Tempo reset - back to the track's own tempo.");
     tempoReset.onClick = [this] { session.djSetTempoPercent(deck, 0.0f); };
-    for (auto* component : std::initializer_list<juce::Component*>{&display, &source, &live, &edit, &reload, &eject, &cue, &play,
+    for (auto* component : std::initializer_list<juce::Component*>{&display, &grid, &source, &live, &edit, &reload, &eject, &cue, &play,
                                                                    &loopIn, &loopOut, &reloop, &loopHalve, &loopDouble, &beatLoop,
                                                                    &jumpBack, &jumpForward, &jumpSize, &searchBack, &searchForward,
                                                                    &reverse, &quantise, &jog, &vinyl, &brake, &syncKey, &master,
@@ -185,6 +188,7 @@ void DjDeckPanel::setDeck(int deckIndex)
 {
     deck = deckIndex;
     display.setDeck(deckIndex);
+    grid.setDeck(deckIndex);
     sync();
 }
 
@@ -214,6 +218,12 @@ void DjDeckPanel::sync()
     tempoRange.setLabel(rangeName(state.tempoRange));
     brake.setValue(state.brakeSeconds, juce::dontSendNotification);
     display.sync();
+    grid.sync();
+    if (grid.hasTrack() != grid.isVisible())
+    {
+        grid.setVisible(grid.hasTrack());
+        resized();
+    }
     tick(true);
     repaint(headerArea());
 }
@@ -374,11 +384,31 @@ void DjDeckPanel::resized()
     layoutRow(nextRow(), {{&jumpBack, 1}, {&jumpSize, 1}, {&jumpForward, 1}});
     layoutRow(nextRow(), {{&searchBack, 1}, {&searchForward, 1}});
     layoutRow(nextRow(), {{&reverse, 1}, {&quantise, 1}});
+    // The clips grid stands beside the big keys when the column is wide
+    // enough for both, else above them, and only on a track deck.
     const auto keySize = std::min(bigKey, left.getWidth());
-    auto keys = left.removeFromBottom(keySize * 2 + 6);
-    cue.setBounds(keys.removeFromTop(keySize).withSizeKeepingCentre(keySize, keySize));
-    keys.removeFromTop(6);
-    play.setBounds(keys.removeFromTop(keySize).withSizeKeepingCentre(keySize, keySize));
+    const auto showGrid = grid.isVisible();
+    auto gridArea = juce::Rectangle<int>();
+    if (showGrid && left.getWidth() >= keySize + 70)
+    {
+        auto keysColumn = left.removeFromRight(keySize + 4);
+        auto keys = keysColumn.removeFromBottom(keySize * 2 + 6);
+        cue.setBounds(keys.removeFromTop(keySize).withSizeKeepingCentre(keySize, keySize));
+        keys.removeFromTop(6);
+        play.setBounds(keys.removeFromTop(keySize).withSizeKeepingCentre(keySize, keySize));
+        gridArea = left.withTrimmedRight(4);
+    }
+    else
+    {
+        auto keys = left.removeFromBottom(keySize * 2 + 6);
+        cue.setBounds(keys.removeFromTop(keySize).withSizeKeepingCentre(keySize, keySize));
+        keys.removeFromTop(6);
+        play.setBounds(keys.removeFromTop(keySize).withSizeKeepingCentre(keySize, keySize));
+        if (showGrid)
+            gridArea = left.withTrimmedBottom(4);
+    }
+    // A grid with no room for a cell takes empty bounds inside the console.
+    grid.setBounds(gridArea.getHeight() >= DjClipGrid::cellHeight ? gridArea : juce::Rectangle<int>());
     // The right column: sync, master, the range, the fader, its reset.
     const auto nextRight = [&right, row, gap]
     {
@@ -563,24 +593,42 @@ bool DjDeckPanel::isInterestedInFileDrag(const juce::StringArray& files)
     return false;
 }
 
+// A drop on the console beside the grid: on a track deck it goes into the
+// first free cell and plays, held to the track's kind by the model, as the
+// grid's own drops are; a deck playing a file or nothing takes a sound file
+// as its material, as before.
 void DjDeckPanel::filesDropped(const juce::StringArray& files, int, int)
 {
     for (const auto& path : files)
         if (isDroppedSoundFile(juce::File(path)))
         {
-            load(juce::File(path));
+            if (grid.hasTrack())
+            {
+                const auto result = grid.applyDrop(DjClipGrid::firstFree, "rhino-browser:file:" + path, true);
+                if (status) status(result.failed() ? result.getErrorMessage() : "The deck plays " + juce::File(path).getFileNameWithoutExtension());
+            }
+            else
+                load(juce::File(path));
             return;
         }
 }
 
 bool DjDeckPanel::isInterestedInDragSource(const juce::DragAndDropTarget::SourceDetails& details)
 {
-    return browserDropFile(details.description.toString()) != juce::File();
+    const auto description = details.description.toString();
+    return grid.hasTrack() ? isCrossViewDrag(description) : browserDropFile(description) != juce::File();
 }
 
 void DjDeckPanel::itemDropped(const juce::DragAndDropTarget::SourceDetails& details)
 {
-    const auto file = browserDropFile(details.description.toString());
+    const auto description = details.description.toString();
+    if (grid.hasTrack())
+    {
+        const auto result = grid.applyDrop(DjClipGrid::firstFree, description, true);
+        if (status) status(result.failed() ? result.getErrorMessage() : "Dropped on the deck");
+        return;
+    }
+    const auto file = browserDropFile(description);
     if (file != juce::File())
         load(file);
 }

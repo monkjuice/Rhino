@@ -7,11 +7,19 @@
 namespace rhino
 {
 
+// On a track's timeline first, then in its clip slots: a slot clip opens in
+// the same editors once a console opens it, and the engine's own lookup
+// reads the timeline only.
 te::Clip* Session::findClip(te::EditItemID id) const
 {
-    for (auto* track : te::getAudioTracks(*edit))
+    const auto tracks = te::getAudioTracks(*edit);
+    for (auto* track : tracks)
         if (auto* clip = track->findClipForID(id))
             return clip;
+    for (auto* track : tracks)
+        for (auto* slot : track->getClipSlotList().getClipSlots())
+            if (auto* clip = slot->getClip(); clip != nullptr && clip->itemID == id)
+                return clip;
     return nullptr;
 }
 

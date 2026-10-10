@@ -380,6 +380,27 @@ void Arrangement::mouseDrag(const juce::MouseEvent& event)
         return;
     }
     if (!dragging) return;
+    // A clip carried up out of the panel, past the band where the lanes
+    // scroll, leaves as a drag the rest of the window can take: the DJ
+    // switch shows the consoles and a console's grid takes a copy. The
+    // timeline's own move is cancelled first, so the clip stays put.
+    if (gesture == ClipGesture::move && event.position.y < -24.0f && selected != te::EditItemID())
+        if (auto* container = juce::DragAndDropContainer::findParentDragContainerFor(this))
+        {
+            const auto id = selected;
+            juce::String name;
+            auto colour = palette::selection;
+            for (const auto& clip : clips)
+                if (clip.id == id)
+                {
+                    name = clip.name;
+                    colour = clip.colour;
+                }
+            cancelDrag();
+            repaint();
+            container->startDragging(arrangementClipDragDescription(id), this, clipDragImage(name, colour), true);
+            return;
+        }
     const auto anchor = gesture == ClipGesture::trimRight ? original.end : original.start;
     auto targetTrack = previewTrack;
     if (gesture == ClipGesture::move)

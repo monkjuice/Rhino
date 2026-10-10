@@ -180,6 +180,39 @@ juce::Result Session::loadDjDeckTrack(int index, int track)
     return bounceDjDeck(index, false);
 }
 
+// One of the track's clip slots in place of its arrangement. A deck already
+// playing the same track keeps its beat across the swap, so a slot chosen
+// while the deck runs comes in on the beat the deck is on.
+juce::Result Session::loadDjDeckSlot(int index, int track, int scene)
+{
+    if (dj == nullptr || !juce::isPositiveAndBelow(index, dj->count))
+        return juce::Result::fail("That deck does not exist.");
+    const auto tracks = te::getAudioTracks(*edit);
+    if (!juce::isPositiveAndBelow(track, tracks.size()) || isGroupBusTrack(track))
+        return juce::Result::fail("Choose a track of the song for the deck.");
+    const auto clip = slotClip(track, scene);
+    if (!clip.hasClip)
+        return juce::Result::fail("That slot is empty: double-click it for a new clip, or drop one on it.");
+    auto& deck = dj->decks[static_cast<size_t>(index)];
+    const auto keepBeat = deck.info.loaded && deck.info.kind == DjSourceKind::track && deck.info.trackId == tracks[track]->itemID;
+    if (deck.info.live)
+        setDjDeckLive(index, false);
+    for (auto& job : dj->jobs)
+        if (job->deck == index)
+            job->cancel.store(true);
+    const auto generation = deck.info.generation + 1;
+    deck.info = {};
+    deck.info.kind = DjSourceKind::track;
+    deck.info.trackId = tracks[track]->itemID;
+    deck.info.slot = scene;
+    deck.info.name = trackName(track) + " / " + clip.name;
+    deck.info.generation = generation;
+    deck.settings = {};
+    deck.settings.loopWhole = true;
+    markDjModified();
+    return bounceDjDeck(index, keepBeat);
+}
+
 juce::Result Session::loadDjDeckGroup(int index, int groupId)
 {
     if (dj == nullptr || !juce::isPositiveAndBelow(index, dj->count))
@@ -255,16 +288,29 @@ juce::Result Session::bounceDjDeck(int index, bool keepBeat)
     {
         members.push_back(info.track);
     }
-    // The span: to the end of the last clip, in whole bars, at least one.
+    // A slot deck plays one of the track's clips in place of its arrangement.
+    te::Clip* slotSource = nullptr;
+    if (info.kind == DjSourceKind::track && info.slot >= 0)
+    {
+        auto* slot = clipSlotAt(info.track, info.slot);
+        slotSource = slot != nullptr ? slot->getClip() : nullptr;
+        if (slotSource == nullptr)
+            return fail("The deck's clip slot is empty now.");
+    }
+    // The span: to the end of the last clip, in whole bars, at least one; a
+    // slot deck's span is its clip's own length.
     auto end = tracktion::core::TimePosition::fromSeconds(0.0);
-    bool anyClip = false;
-    for (const auto member : members)
-        for (auto* clip : tracks[member]->getClips())
-            if (clip != nullptr && shouldShowClipInArrangement(*clip))
-            {
-                end = std::max(end, clip->getPosition().time.getEnd());
-                anyClip = true;
-            }
+    bool anyClip = slotSource != nullptr;
+    if (slotSource != nullptr)
+        end = tracktion::core::TimePosition() + slotSource->getPosition().time.getLength();
+    else
+        for (const auto member : members)
+            for (auto* clip : tracks[member]->getClips())
+                if (clip != nullptr && shouldShowClipInArrangement(*clip))
+                {
+                    end = std::max(end, clip->getPosition().time.getEnd());
+                    anyClip = true;
+                }
     if (!anyClip)
         return fail((info.kind == DjSourceKind::group ? "The group " : "The track ") + info.name.quoted()
                     + " has no clips to bounce yet.");
@@ -296,6 +342,26 @@ juce::Result Session::bounceDjDeck(int index, bool keepBeat)
                 isolated.add(track);
     if (isolated.size() != static_cast<int>(memberIds.size()))
         return fail("The deck's tracks were not found in the copy of the song.");
+    if (slotSource != nullptr)
+    {
+        // The copy's track plays the slot's clip from the top, through the
+        // same chain, in place of whatever its arrangement holds. The slot
+        // itself stays disabled for the render, as every slot is.
+        auto* copyTrack = dynamic_cast<te::AudioTrack*>(isolated.getFirst().get());
+        if (copyTrack == nullptr)
+            return fail("The deck's track was not found in the copy of the song.");
+        const auto slots = copyTrack->getClipSlotList().getClipSlots();
+        auto* copySlotClip = juce::isPositiveAndBelow(info.slot, slots.size()) ? slots[info.slot]->getClip() : nullptr;
+        if (copySlotClip == nullptr)
+            return fail("The deck's clip slot was not found in the copy of the song.");
+        const auto arrangementClips = copyTrack->getClips();
+        for (auto* clip : arrangementClips)
+            clip->removeFromParent();
+        auto* laid = copyClipInto(*copyTrack, *copySlotClip, {tracktion::core::TimePosition(), end}, copySlotClip->getName());
+        if (laid == nullptr)
+            return fail("The deck's clip could not be laid out for the bounce.");
+        laid->setLoopRangeBeats({});
+    }
 
     // A read already in flight for this deck is let go of: the newer bounce
     // is the one that counts.
@@ -586,14 +652,17 @@ bool Session::djDeckHasDrumRack(int index) const
     return info.kind == DjSourceKind::track && info.track >= 0 && trackHasDrumRack(info.track);
 }
 
-// The first clip on the deck's track of the kind the track holds: a MIDI
-// clip for the note editor, an audio clip for the audio editor. The empty
-// starter clip counts, because it is what a fresh track edits in.
+// A slot deck's clip, or the first clip on the deck's track of the kind
+// the track holds: a MIDI clip for the note editor, an audio clip for the
+// audio editor. The empty starter clip counts, because it is what a fresh
+// track edits in.
 te::EditItemID Session::djDeckEditClip(int index) const
 {
     const auto info = djDeckInfo(index);
     if (info.kind != DjSourceKind::track || info.track < 0)
         return {};
+    if (info.slot >= 0)
+        return slotClip(info.track, info.slot).clipID;
     const auto midi = trackType(info.track) == TrackType::midi;
     const auto tracks = te::getAudioTracks(*edit);
     te::Clip* first = nullptr;

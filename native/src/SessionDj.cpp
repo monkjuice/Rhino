@@ -897,7 +897,10 @@ void Session::writeDjState()
         if (deck.info.kind == DjSourceKind::file)
             d.setProperty("file", ContentLibrary::storedPath(deck.info.file), nullptr);
         if (deck.info.kind == DjSourceKind::track)
+        {
             d.setProperty("track", deck.info.trackId.toString(), nullptr);
+            d.setProperty("slot", deck.info.slot, nullptr);
+        }
         if (deck.info.kind == DjSourceKind::group)
             d.setProperty("group", deck.info.groupId, nullptr);
         d.setProperty("autoRebounce", deck.info.autoRebounce, nullptr);
@@ -1010,7 +1013,10 @@ void Session::readDjState()
         if (deck.info.kind == DjSourceKind::file)
             deck.info.file = ContentLibrary::resolveStoredPath(d.getProperty("file").toString());
         else if (deck.info.kind == DjSourceKind::track)
+        {
             deck.info.trackId = te::EditItemID::fromString(d.getProperty("track").toString());
+            deck.info.slot = static_cast<int>(d.getProperty("slot", -1));
+        }
         else if (deck.info.kind == DjSourceKind::group)
             deck.info.groupId = static_cast<int>(d.getProperty("group", 0));
         auto& settings = deck.settings;

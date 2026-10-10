@@ -23,7 +23,7 @@ void Session::clearPattern()
 void Session::applyPatternPreset(PatternPreset preset)
 {
     if (patternClip == nullptr) return;
-    const auto trackIndex = te::getAudioTracks(*edit).indexOf(dynamic_cast<te::AudioTrack*>(patternClip->getClipTrack()));
+    const auto trackIndex = te::getAudioTracks(*edit).indexOf(trackHoldingClip(*edit, *patternClip));
     if (trackIndex < 0) return;
     const auto data = presetPattern(preset);
     edit->getUndoManager().beginNewTransaction("Load " + data.name);
@@ -141,7 +141,7 @@ juce::Result Session::createClip(int trackIndex, double startSeconds, te::EditIt
 // lookup rather than a cached flag.
 te::Plugin* Session::patternInstrument() const
 {
-    auto* track = patternClip != nullptr ? patternClip->getClipTrack() : nullptr;
+    auto* track = patternClip != nullptr ? trackHoldingClip(*edit, *patternClip) : nullptr;
     auto* audioTrack = dynamic_cast<te::AudioTrack*>(track);
     if (audioTrack == nullptr) return nullptr;
     return trackInstrument(*audioTrack);

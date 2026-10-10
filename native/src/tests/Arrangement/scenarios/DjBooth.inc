@@ -231,6 +231,86 @@
                 require(session.djMic().meter < 0.001f, "and the mic off reads nothing");
             }
 
+            scenario("dj booth: clips on the console");
+            {
+                // The console's grid is the track's clip slots. A double-click
+                // on an empty cell makes a one-bar clip, the deck plays it
+                // bounced through the track, the editors open it, and a clip
+                // copied across from the timeline keeps the lane's kind.
+                require(session.createSlotClip(deckTrack, 0).wasOk(), "A one-bar clip in the first cell");
+                const auto cell = session.slotClip(deckTrack, 0);
+                require(cell.hasClip && cell.isMidi, "which is a MIDI clip");
+                require(session.findClip(cell.clipID) != nullptr, "that findClip sees in its slot");
+                require(session.createSlotClip(deckTrack, 0).failed(), "A cell already holding a clip refuses another");
+                require(session.loadDjDeckSlot(0, deckTrack, 0).wasOk(), "The deck plays the cell");
+                require(waitForDeck(session, 0), ("and the worker bounces it: " + session.djDeckInfo(0).error).toRawUTF8());
+                require(session.djDeckInfo(0).slot == 0 && session.djDeckEditClip(0) == cell.clipID,
+                        "The deck says which cell it plays, and edits that cell's clip");
+                const auto* slotBounce = session.djDeckTrack(0);
+                require(slotBounce != nullptr && close(slotBounce->seconds(), 60.0 / session.tempo() * session.beatsPerBar()),
+                        "A one-bar clip bounces to one bar");
+                int audioTrack = -1;
+                for (int t = 0; t < session.trackCount(); ++t)
+                    if (!session.isGroupBusTrack(t) && session.trackType(t) == Session::TrackType::audio)
+                    {
+                        audioTrack = t;
+                        break;
+                    }
+                require(audioTrack >= 0, "An audio track to hold the rule against");
+                require(session.copyClipToTrackSlot(session.pattern().itemID, deckTrack, 1).wasOk(),
+                        "The pattern clip copies from the timeline into the second cell");
+                require(session.slotClip(deckTrack, 1).hasClip, "where it sits as a copy");
+                require(session.copyClipToTrackSlot(session.pattern().itemID, audioTrack, 0).failed(),
+                        "but not into an audio track's cell");
+                require(session.createSlotClip(audioTrack, 0).failed(), "and an audio track's cell makes no MIDI clip");
+                require(session.addTrack(Session::TrackType::midi).wasOk(), "A fresh MIDI lane");
+                const auto freshLane = session.trackCount() - 1;
+                require(session.copySlotClipToArrangement(deckTrack, 0, 0.0, freshLane).wasOk(), "takes a cell's clip as a copy");
+                require(te::getAudioTracks(*session.edit)[freshLane]->getClips().size() == 1, "and gains the clip");
+                require(session.copySlotClipToArrangement(deckTrack, 0, 0.0, audioTrack).failed(), "An audio lane refuses it");
+                // The grid, pressed as the console presses it.
+                auto grid = std::make_unique<DjClipGrid>(session, 0);
+                grid->setSize(120, 200);
+                grid->sync();
+                require(grid->hasTrack() && grid->litCell() == 0, "The grid knows its track and lights the cell the deck plays");
+                require(grid->cellAt({10, 1}) == DjClipGrid::songCell
+                        && grid->cellAt({10, DjClipGrid::cellHeight + DjClipGrid::cellGap + 1}) == 0,
+                        "Its cells are the song, then the scenes");
+                require(grid->chooseCell(DjClipGrid::songCell).wasOk(), "Pressing SONG plays the song's track again");
+                require(waitForDeck(session, 0), "and it bounces");
+                require(session.djDeckInfo(0).slot == -1 && grid->litCell() == DjClipGrid::songCell, "with SONG lit");
+                require(grid->createClipAt(2).wasOk(), "A double-click on the third cell makes a clip there");
+                require(waitForDeck(session, 0) && session.djDeckInfo(0).slot == 2, "that the deck plays");
+                require(grid->applyDrop(3, "rhino-clip:" + session.pattern().itemID.toString(), false).wasOk(),
+                        "A clip dragged from the timeline lands in the fourth cell");
+                require(session.slotClip(deckTrack, 3).hasClip, "as a copy");
+                require(grid->applyDrop(4, "rhino-browser:file:" + source.getFile().getFullPathName(), false).failed(),
+                        "A sample dropped on a MIDI track's cell is refused");
+                require(session.deleteSlotClip(deckTrack, 3).wasOk(), "A cell's clip can be deleted");
+                // The cell a deck plays survives a reopen.
+                require(session.loadDjDeckSlot(0, deckTrack, 0).wasOk() && waitForDeck(session, 0), "The deck plays the first cell again");
+                {
+                    const auto saved = session.projectSnapshot();
+                    juce::TemporaryFile project(".rhinoedit");
+                    require(session.restoreProject(saved, project.getFile()).wasOk(), "Reopen with a deck on a cell");
+                }
+                require(session.djDeckInfo(0).slot == 0, "The deck remembers its cell");
+                juce::Thread::sleep(600);
+                for (int waited = 0; waited < 400 && (!session.djDeckInfo(0).loaded || !session.djDeckInfo(1).loaded); ++waited)
+                {
+                    session.djPoll();
+                    juce::Thread::sleep(25);
+                }
+                require(session.djDeckInfo(0).loaded && session.djDeckInfo(1).loaded,
+                        ("and both decks load again: " + session.djDeckInfo(0).error).toRawUTF8());
+                // The cells are cleared again, for the session view's own
+                // scenario, and the deck plays the song for those that follow.
+                for (int scene = 0; scene < 3; ++scene)
+                    if (session.slotClip(deckTrack, scene).hasClip)
+                        require(session.deleteSlotClip(deckTrack, scene).wasOk(), "The cells are cleared again");
+                require(session.loadDjDeckTrack(0, deckTrack).wasOk() && waitForDeck(session, 0), "The deck plays the song again");
+            }
+
             scenario("dj booth: live and the note editor");
             // After every render: switching monitoring on arms the track, and
             // arming allocates the playback context a render must not find.

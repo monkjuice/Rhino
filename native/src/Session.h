@@ -640,6 +640,7 @@ public:
     // dragged on the ruler. refreshLoop is what puts it on the transport.
     tracktion::core::TimeRange loopRange() const;
     void refreshLoop();
+    // A clip by id: on a track's timeline, or in one of its clip slots.
     te::Clip* findClip(te::EditItemID) const;
     te::WaveAudioClip* findAudioClip(te::EditItemID) const;
     bool shouldShowClipInArrangement(te::Clip&) const;
@@ -972,10 +973,17 @@ public:
     juce::Result insertAudioFileInSlot(const juce::File&, int track, int scene);
     juce::Result insertBuiltInSampleInSlot(BuiltInSample, int track, int scene);
     juce::Result deleteSlotClip(int track, int scene);
+    // An empty one-bar MIDI clip in a slot, as a double-click on an empty
+    // slot makes in Live; an audio track's slot takes a file instead. A
+    // scene past the last is made for it.
+    juce::Result createSlotClip(int track, int scene);
     // Session clips and arrangement clips are separate, as they are in Live.
-    // These are the two ways across: -1 for scene picks the first free slot.
-    juce::Result copySlotClipToArrangement(int track, int scene, double startSeconds);
+    // These are the ways across, and each copies: -1 for scene picks the
+    // first free slot, -1 for targetTrack the clip's own track. A clip
+    // copied into another track's slot is held to that track's kind.
+    juce::Result copySlotClipToArrangement(int track, int scene, double startSeconds, int targetTrack = -1);
     juce::Result copyClipToSlot(te::EditItemID, int scene = -1);
+    juce::Result copyClipToTrackSlot(te::EditItemID, int track, int scene);
     int firstFreeSlot(int track) const;
     bool anyTrackPlayingSlots() const;
     void returnToArrangement();
@@ -1006,6 +1014,7 @@ public:
         juce::File file;          // the file a file deck reads
         te::EditItemID trackId;   // a track deck's track
         int groupId = 0;          // a group deck's group
+        int slot = -1;            // a track deck playing one of its clip slots; -1 plays the arrangement
         int track = -1;           // where that track or bus is now; -1 once it is gone
         bool loaded = false;      // material is on the deck
         bool loading = false;     // a read is in flight
@@ -1112,6 +1121,10 @@ public:
     juce::Result loadDjDeckFile(int deck, const juce::File&);
     juce::Result loadDjDeckTrack(int deck, int track);
     juce::Result loadDjDeckGroup(int deck, int groupId);
+    // A track deck playing one of the track's clip slots in place of its
+    // arrangement: the slot's clip is bounced through the track's chain, and
+    // bounced again as it is edited. The console's clips grid is these.
+    juce::Result loadDjDeckSlot(int deck, int track, int scene);
     // Bounces a track or group deck again, keeping its place by beat.
     juce::Result rebounceDjDeck(int deck);
     void ejectDjDeck(int deck);

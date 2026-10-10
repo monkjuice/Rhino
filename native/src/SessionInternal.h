@@ -21,6 +21,11 @@
 namespace rhino
 {
 
+// Rebuilds a clip inside a new owner - a slot or a track, in this document or
+// in a copy of it. SessionSlots.cpp.
+te::Clip* copyClipInto(te::ClipOwner& destination, te::Clip& source, tracktion::core::TimeRange range,
+                       const juce::String& name);
+
 // ValueTree property identifiers owned by the session document.
 extern const juce::Identifier starterPlaceholderID;
 // A clip the person has coloured by hand. Absent means the clip wears its
@@ -125,6 +130,8 @@ float exposedParameterMaximum(te::Plugin& plugin, int index, float maximum);
 // else about a document singles out a track by position.
 te::AudioTrack* firstMidiTrackOf(te::Edit& edit);
 void panicMidiOnTrack(te::ClipTrack* clipTrack);
+// The audio track holding a clip, on its timeline or in one of its slots.
+te::AudioTrack* trackHoldingClip(te::Edit& edit, const te::Clip& clip);
 juce::Colour presetColour(Session::PatternPreset preset);
 juce::Colour instrumentColour(const DeviceDescriptor& device);
 juce::Colour instrumentColour(Session::Instrument instrument);

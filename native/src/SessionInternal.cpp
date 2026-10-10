@@ -61,6 +61,19 @@ void panicMidiOnTrack(te::ClipTrack* clipTrack)
             plugin->midiPanic();
 }
 
+// The audio track holding a clip: its timeline track, or the track whose
+// clip slot it sits in, which the clip's own lookup may not answer for.
+te::AudioTrack* trackHoldingClip(te::Edit& edit, const te::Clip& clip)
+{
+    if (auto* track = dynamic_cast<te::AudioTrack*>(clip.getClipTrack()))
+        return track;
+    for (auto* track : te::getAudioTracks(edit))
+        for (auto* slot : track->getClipSlotList().getClipSlots())
+            if (slot->getClip() == &clip)
+                return track;
+    return nullptr;
+}
+
 juce::Colour presetColour(Session::PatternPreset preset)
 {
     switch (preset)

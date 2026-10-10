@@ -1,4 +1,5 @@
 #pragma once
+#include "DjClipGrid.h"
 #include "DjControls.h"
 #include "DjDeckDisplay.h"
 #include "DjDeck.h"
@@ -62,6 +63,8 @@ private:
     Session& session;
     int deck;
     DjDeckDisplay display;
+    // The track's clips, beside the big keys; shown on a track deck only.
+    DjClipGrid grid;
     juce::TextButton source;
     DjPad live {"LIVE", palette::recordAccent}, edit {"EDIT", palette::activeNeutral}, reload {"RELOAD", palette::djWaiting};
     DjPad eject {"EJECT", palette::activeNeutral};

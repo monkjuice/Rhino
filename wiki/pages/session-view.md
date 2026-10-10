@@ -25,10 +25,11 @@ Tracks, devices, the [Mixer](mixer.md) and the transport are shared because both
 
 ## Before turning it back on
 
-- The note editor cannot open a slot clip: `findClip` searches track clip lists, not `ClipSlot`s.
+- Since 2026-10-10 `findClip` searches a track's clip slots after its timeline, so the note editor and the audio editor open a slot clip: the DJ consoles' clips grids are these slots ([DJ view and the booth](dj-view.md)), and `trackHoldingClip` finds a slot clip's track.
 - The slot paths predate fixed track kinds, but since commit `23de20c` `insertDeviceClipInSlot`, `insertAudioFileInSlot` and `copySlotClipToArrangement` refuse a lane of the wrong kind, or a bus, through `clipLaneRefusal`, the question the arrangement's drops and pastes ask ([A track's kind is fixed when it is made](track-kind-fixed-at-creation.md)). `insertDeviceClipInSlot` still calls `switchTrackInstrument` itself once the lane is accepted.
 - The arrangement's clip menu still offers *Copy to session slot* while the view is off, so a clip can be copied into a slot nobody can see.
-- Still missing: per-track Back to Arrangement, dragging between views, Arrangement Record, meters, sends and returns, follow actions, recording into slots, scene rename.
+- Dragging between views exists since 2026-10-10, through the DJ consoles: a timeline clip carried out of the arrangement lands on a console's cell, a cell carried to a lane lands on the timeline, and the view switch shows the other view while the drag hovers it.
+- Still missing: per-track Back to Arrangement, Arrangement Record, meters, sends and returns, follow actions, recording into slots, scene rename.
 
 ## Related
 

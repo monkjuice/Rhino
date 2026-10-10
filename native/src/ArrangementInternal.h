@@ -1,5 +1,6 @@
 #pragma once
 #include "Arrangement.h"
+#include "ClipDrag.h"
 #include "SelectionInput.h"
 #include "Theme.h"
 

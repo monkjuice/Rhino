@@ -403,11 +403,9 @@ int Session::firstFreeSlot(int track) const
     return -1;
 }
 
-namespace
-{
-// Shared by both directions: rebuild a clip inside a new owner. Wave clips are
-// re-inserted from the same source file rather than copying media, and MIDI
-// clips clone their sequence.
+// Shared by both directions, and by a deck's bounce of a slot clip: rebuild a
+// clip inside a new owner. Wave clips are re-inserted from the same source
+// file rather than copying media, and MIDI clips clone their sequence.
 te::Clip* copyClipInto(te::ClipOwner& destination, te::Clip& source, tracktion::core::TimeRange range,
                        const juce::String& name)
 {
@@ -436,9 +434,8 @@ te::Clip* copyClipInto(te::ClipOwner& destination, te::Clip& source, tracktion::
     }
     return nullptr;
 }
-}
 
-juce::Result Session::copySlotClipToArrangement(int track, int scene, double startSeconds)
+juce::Result Session::copySlotClipToArrangement(int track, int scene, double startSeconds, int targetTrack)
 {
     auto* slot = clipSlotAt(track, scene);
     if (slot == nullptr)
@@ -447,15 +444,16 @@ juce::Result Session::copySlotClipToArrangement(int track, int scene, double sta
     if (source == nullptr)
         return juce::Result::fail("That slot is empty.");
     const auto tracks = te::getAudioTracks(*edit);
-    if (!juce::isPositiveAndBelow(track, tracks.size()))
+    const auto lane = targetTrack < 0 ? track : targetTrack;
+    if (!juce::isPositiveAndBelow(lane, tracks.size()))
         return juce::Result::fail("That track does not exist.");
-    if (const auto refused = clipLaneRefusal(track, dynamic_cast<te::MidiClip*>(source) != nullptr);
+    if (const auto refused = clipLaneRefusal(lane, dynamic_cast<te::MidiClip*>(source) != nullptr);
         refused.failed())
         return refused;
     const auto start = tracktion::core::TimePosition::fromSeconds(std::max(0.0, startSeconds));
     const auto range = tracktion::core::TimeRange(start, start + source->getPosition().time.getLength());
     edit->getUndoManager().beginNewTransaction("Copy clip to arrangement");
-    auto* copy = copyClipInto(*tracks[track], *source, range, source->getName());
+    auto* copy = copyClipInto(*tracks[lane], *source, range, source->getName());
     if (copy == nullptr)
         return juce::Result::fail("That clip could not be copied to the arrangement.");
     // On the timeline a clip occupies its own span rather than repeating, so
@@ -479,27 +477,40 @@ juce::Result Session::copyClipToSlot(te::EditItemID id, int scene)
     auto* source = findClip(id);
     if (source == nullptr)
         return juce::Result::fail("Select a clip to copy.");
+    // The clip keeps its track, as Live does when pasting into the session.
     auto* clipTrack = source->getClipTrack();
-    if (clipTrack == nullptr)
-        return juce::Result::fail("That clip is not on a track.");
     const auto tracks = te::getAudioTracks(*edit);
     int track = -1;
     for (int index = 0; index < tracks.size(); ++index)
-        if (tracks[index] == clipTrack)
+        if (clipTrack != nullptr && tracks[index] == clipTrack)
             track = index;
     if (track < 0)
-        return juce::Result::fail("That clip is not on an audio track.");
-    edit->getUndoManager().beginNewTransaction("Copy clip to session slot");
-    // The clip keeps its track, as Live does when pasting into the session.
+        return juce::Result::fail("That clip is not on a track.");
+    return copyClipToTrackSlot(id, track, scene);
+}
+
+// The copy into any track's slot, which a console's grid takes a clip from
+// the timeline or from another console by; the lane rule holds here as it
+// does for a drop on a lane.
+juce::Result Session::copyClipToTrackSlot(te::EditItemID id, int track, int scene)
+{
+    auto* source = findClip(id);
+    if (source == nullptr)
+        return juce::Result::fail("Select a clip to copy.");
+    const auto tracks = te::getAudioTracks(*edit);
+    if (!juce::isPositiveAndBelow(track, tracks.size()))
+        return juce::Result::fail("That track does not exist.");
+    if (const auto refused = clipLaneRefusal(track, dynamic_cast<te::MidiClip*>(source) != nullptr); refused.failed())
+        return refused;
     if (scene < 0)
     {
         scene = firstFreeSlot(track);
         if (scene < 0)
-        {
             scene = sceneCount();
-            ensureSceneSlots(scene + 1);
-        }
     }
+    edit->getUndoManager().beginNewTransaction("Copy clip to session slot");
+    if (scene >= sceneCount())
+        ensureSceneSlots(scene + 1);
     auto* slot = clipSlotAt(track, scene);
     if (slot == nullptr)
         return juce::Result::fail("That clip slot does not exist.");
@@ -514,6 +525,40 @@ juce::Result Session::copyClipToSlot(te::EditItemID id, int scene)
     const auto beats = edit->tempoSequence.toBeats(tracktion::core::TimePosition() + length).inBeats();
     copy->setLoopRangeBeats({tracktion::core::BeatPosition(), tracktion::core::BeatPosition::fromBeats(beats)});
     copy->state.removeProperty(starterPlaceholderID, &edit->getUndoManager());
+    edit->getUndoManager().beginNewTransaction();
+    markModified();
+    if (edit->getTransport().isPlaying())
+        edit->restartPlayback();
+    sendSynchronousChangeMessage();
+    return juce::Result::ok();
+}
+
+// An empty one-bar MIDI clip in a slot, named for its cell. An audio track's
+// slot takes a file instead, and the message says so rather than naming the
+// lane rule.
+juce::Result Session::createSlotClip(int track, int scene)
+{
+    const auto tracks = te::getAudioTracks(*edit);
+    if (!juce::isPositiveAndBelow(track, tracks.size()) || scene < 0)
+        return juce::Result::fail("That clip slot does not exist.");
+    if (const auto refused = clipLaneRefusal(track, true); refused.failed())
+        return juce::Result::fail(!isGroupBusTrack(track) && trackType(track) == TrackType::audio
+                                      ? "An audio track's cell takes a sample or an audio clip: drop one on it."
+                                      : refused.getErrorMessage());
+    edit->getUndoManager().beginNewTransaction("New clip in slot");
+    if (scene >= sceneCount())
+        ensureSceneSlots(scene + 1);
+    auto* slot = clipSlotAt(track, scene);
+    if (slot == nullptr)
+        return juce::Result::fail("That clip slot does not exist.");
+    if (slot->getClip() != nullptr)
+        return juce::Result::fail("That cell already holds a clip.");
+    const auto beats = beatsPerBar();
+    const auto end = edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(beats));
+    auto clip = te::insertMIDIClip(*slot, "Clip " + juce::String(scene + 1), {tracktion::core::TimePosition(), end});
+    if (clip == nullptr)
+        return juce::Result::fail("The clip could not be added to that slot.");
+    clip->setLoopRangeBeats({tracktion::core::BeatPosition(), tracktion::core::BeatPosition::fromBeats(beats)});
     edit->getUndoManager().beginNewTransaction();
     markModified();
     if (edit->getTransport().isPlaying())

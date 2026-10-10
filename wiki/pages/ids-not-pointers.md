@@ -4,7 +4,7 @@ type: convention
 summary: Anything kept beyond one call holds an id or a copy, never a raw engine pointer, because undo, moves, reloads and publishes free the object.
 tags: [both, lifetime, undo]
 sources: []
-updated: 2026-10-09
+updated: 2026-10-10
 ---
 
 # Hold ids, not pointers
@@ -27,7 +27,7 @@ Tracktion rebuilds its objects from the edit's `ValueTree`, so a raw `te::Clip*`
 - `tidyRecordedClips` compares a track's clips with the *ids* held before recording started, because making room for one new clip can delete another.
 - The clipboard goes further and holds `ClipSnapshot` values, not ids: the source of a cut is gone before the paste, and an undo can remove it too ([Region editing](region-editing.md)).
 - A view's own cache is no safer than the engine's objects. Any `Session` command announces synchronously and the arrangement rebuilds its clip list in that call, so a gesture that reads a clip after calling `Session` takes a copy of it first. Two that held a reference read freed or wrong entries until commit `2df76f8`.
-- The one long-lived pointer is the note editor's pattern clip, kept beside its id. `Session::pattern()` dereferences it, so `repairPatternClip`, which undo, redo, reopening and every path that removes a clip call, finds it again by id or points it at another clip.
+- The one long-lived pointer is the note editor's pattern clip, kept beside its id. `Session::pattern()` dereferences it, so `repairPatternClip`, which undo, redo, reopening and every path that removes a clip call, finds it again by id or points it at another clip. The slot paths were the unstated exception: `findClip` never found a slot clip, so `deleteSlotClip` never needed the repair, and the day `findClip` learnt slots (2026-10-10, for the DJ consoles' cells) the editor could hold one and painted it freed. A path that removes a clip calls the repair whether or not the editor can reach that clip today ([Session view (paused)](session-view.md)).
 
 ## Never keep a plugin alive past its edit
 

@@ -4,7 +4,7 @@ type: guide
 summary: Choose between a unit check and a workflow scenario, follow the rules that keep scenarios sharing one Session honest, and time the interface with --profile-ui.
 tags: [rhino, testing, conventions]
 sources: []
-updated: 2026-10-09
+updated: 2026-10-10
 ---
 
 # Writing Rhino tests
@@ -100,6 +100,12 @@ big classes are split across translation units rather than into new types ([Keep
 The four runner flags, `--device-test`, `--arp-snapshot` and `--profile-ui` set `Session::setCommandLineTestMode`: machine
 preferences (browser preview, last track kind) are neither read nor written, and `pickTrackColour` takes the first
 unused colour, so pixel comparisons repeat.
+
+Nothing in `Main.cpp` is reachable by a test ([App shell and control bar](app-shell.md)), so a shell behaviour is
+checked at the boundary the shell wires, and whatever it needs is put in the view or the model: `DjBooth.inc` replaces
+`DjView::deckSelected` with a lambda to see which deck the shell would be told of, presses a console through its
+`selected` callback and calls `togglePlayFocused` as Space would; what the shell then does with that deck
+(`followDeck`) is unchecked.
 
 ## Related
 

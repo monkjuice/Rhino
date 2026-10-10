@@ -353,3 +353,10 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 ## [2026-10-10] update | The lower pane and Space follow the focused deck
 - source: branch feat/dj-view, the user's request that the clip and device panes follow the focused console and that the arrangement's transport give way to it; native/src/Main.cpp (followDeck, setSessionViewOpen, Space and F9, RecordButton disabled), DjView.*, DjDeckPanel.* (the focus mark), SessionDjSources.cpp (djDeckEditClip by the track's kind), tests/Arrangement/scenarios/DjBooth.inc
 - updated: pages/app-shell.md (the transport dimmed and stopped in the DJ view, Space as the focused deck's play key, the pane following a console as it follows a card, the read-before-move gotcha in followDeck), pages/dj-view.md (the focus mark, focusDeck, togglePlayFocused)
+
+## [2026-10-10] update | The focused-deck record checked against the code; one build tree only
+- source: native/src/Main.cpp (followDeck, setSessionViewOpen, the Edit handler, RecordButton), DjView.*, DjDeckPanel.cpp, SessionDjSources.cpp (djDeckEditClip) and tests/Arrangement/scenarios/DjBooth.inc after the entry above; the user's instruction of 2026-10-10 that only native/build exist
+- updated: pages/app-shell.md (the Edit key opens the audio editor for an audio track's clip; an open clip editor closes when the deck's track has no clip; the updated date)
+- updated: pages/dj-view.md (the Edit key line names both editors and djDeckEditClip; the updated date)
+- updated: pages/writing-rhino-tests.md (a shell behaviour is checked at the view's callback boundary, as DjBooth.inc does with deckSelected and togglePlayFocused; followDeck is unchecked)
+- updated: pages/build-and-test-rhino.md, pages/orphaned-build-processes.md, pages/locked-executable-lnk1104.md (no second native/build-* tree: the user asked on 2026-10-10 that only native/build exist, and native/build-dj was deleted)

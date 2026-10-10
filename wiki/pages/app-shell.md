@@ -4,7 +4,7 @@ type: component
 summary: Main.cpp's window, control bar, docked browser and single lower pane, plus the 30 Hz timer that polls what the engine never broadcasts.
 tags: [rhino, ui, shell]
 sources: []
-updated: 2026-10-09
+updated: 2026-10-10
 ---
 
 # App shell and control bar
@@ -25,9 +25,9 @@ Under the 72 px bar sit the docked browser, whose 3 px divider is its resize han
 
 ## The second view
 
-The Arrange/DJ switch at the right of the bar, left of the metronome, and Tab, swap the arrangement for the [DJ view](dj-view.md) in the same rectangle (`setSessionViewOpen`, gated by `sessionViewEnabled`, true since 2026-10-09). The lower pane is the same under either view, which is how a deck's Edit key opens its track's clip in the note editor. Switching views hands the Device View the track the view being shown has selected: the arrangement's card, or the deck last clicked when it plays a track of the song.
+The Arrange/DJ switch at the right of the bar, left of the metronome, and Tab, swap the arrangement for the [DJ view](dj-view.md) in the same rectangle (`setSessionViewOpen`, gated by `sessionViewEnabled`, true since 2026-10-09). The lower pane is the same under either view, which is how a deck's Edit key opens its track's clip in the note editor, or in the audio editor for an audio track's clip. Switching views hands the Device View the track the view being shown has selected: the arrangement's card, or the deck last clicked when it plays a track of the song.
 
-Since 2026-10-10 the song's transport is out of reach while the DJ view shows: opening the view stops the song if it is rolling, dims rewind, stop, play and record (`RecordButton` paints grey when disabled whatever the tracks say), and makes Space the focused deck's play key (`DjView::togglePlayFocused`; F9 answers with a hint). The lower pane follows the focused console as it follows a track card (`followDeck`): a press on a console puts its track's chain in the Device View, opening the pane if it was closed, and moves an open clip editor to the track's clip - the note editor for a MIDI track, the audio editor for an audio one (`Session::djDeckEditClip` gives the first clip of the track's kind). The view switch follows the focused deck without opening a closed pane. A file or a group deck has no track of the song and changes nothing. `followDeck` reads whether a clip editor was open *before* it moves the arrangement's track selection, because that move re-reads the arrangement's own clip selection through `refreshEditorPanes` and may close the pane on the way.
+Since 2026-10-10 the song's transport is out of reach while the DJ view shows: opening the view stops the song if it is rolling, dims rewind, stop, play and record (`RecordButton` paints grey when disabled whatever the tracks say), and makes Space the focused deck's play key (`DjView::togglePlayFocused`; F9 answers with a hint). The lower pane follows the focused console as it follows a track card (`followDeck`): a press on a console puts its track's chain in the Device View, opening the pane if it was closed, and moves an open clip editor to the track's clip - the note editor for a MIDI track, the audio editor for an audio one (`Session::djDeckEditClip` gives the first clip of the track's kind, and an open clip editor closes when there is none). The view switch follows the focused deck without opening a closed pane. A file or a group deck has no track of the song and changes nothing. `followDeck` reads whether a clip editor was open *before* it moves the arrangement's track selection, because that move re-reads the arrangement's own clip selection through `refreshEditorPanes` and may close the pane on the way.
 
 ## The lower pane
 

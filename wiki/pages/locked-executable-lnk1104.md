@@ -4,7 +4,7 @@ type: gotcha
 summary: A link that fails with LNK1104 after every file compiled means a running RhinoDAW, DAW or Forge standalone holds the output.
 tags: [both, build, windows]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-10
 ---
 
 # LNK1104 means a running binary holds the file
@@ -33,6 +33,7 @@ Windows will not let the linker overwrite an image that a running process has lo
 - **Rename the running binary.** Windows refuses to overwrite a running image but lets it be renamed. `Move-Item RhinoDAW.exe RhinoDAW.exe.inuse` frees the name, and the link succeeds while the app keeps running from the renamed file. This worked twice on `RhinoDAW.exe` in September 2026; it has not been tried on a `.vst3`. Tell the user the app in front of them is now the old build, and delete the `.inuse` copy once they close it.
 - **For Forge, build the targets that are not locked.** `--target RhinoForgeTests RhinoForge_Standalone` covers everything except the plugin wrapper. Report that the VST3 is out of date, and relink it later.
 - **A leftover `Rhino Forge.exe` standalone is safe to kill.** RhinoDAW and a DAW are not. They are the user's working session and may hold unsaved work, so always ask before `taskkill`.
+- **Do not configure a second build tree to get round it.** On 2026-10-10, with RhinoDAW holding the file, the user asked for the app to be closed and for no more build directories to be made; `native/build-dj` was deleted and `native/build` is the one tree ([Build and test Rhino](build-and-test-rhino.md)).
 
 ## Why it misleads
 

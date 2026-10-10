@@ -4,7 +4,7 @@ type: gotcha
 summary: An object or source file that another process holds is usually another session's build, an idle MSBuild node or an orphaned cl.exe.
 tags: [both, build, windows]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-10
 ---
 
 # Build locks from MSBuild nodes and orphaned compilers
@@ -41,7 +41,7 @@ Get-CimInstance Win32_Process -Filter "Name='cmake.exe' OR Name='MSBuild.exe' OR
 - If one `.obj` is still unwritable after every process has gone, nothing holds it. Delete it and build again.
 - A dead run locks only the files it was compiling, so finish the rest of the change first.
 - Ask before killing a process you did not start, because the user and other sessions share the machine. Killing a confirmed orphan loses nothing: the next build regenerates its object files.
-- As a last resort, build into a separate, gitignored `native/build-*` directory. Nothing contends there, but JUCE and Tracktion build from scratch, which takes minutes.
+- Do not build into a separate `native/build-*` directory to get round a lock. Nothing would contend there, but JUCE and Tracktion build from scratch, which takes minutes, and the user asked on 2026-10-10 that only `native/build` exist (`native/build-dj` was deleted; [Build and test Rhino](build-and-test-rhino.md)).
 
 ## Related
 

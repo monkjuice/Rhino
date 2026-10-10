@@ -4,7 +4,7 @@ type: guide
 summary: Fetch the pinned engine, build with Visual Studio 2022, and run the six CTest cases without being fooled by a stale or locked build.
 tags: [rhino, build, testing, windows]
 sources: []
-updated: 2026-10-05
+updated: 2026-10-10
 ---
 
 # Build and test Rhino
@@ -41,8 +41,11 @@ cmake --build native/build --config Release --parallel 2
    wrong ([LNK1104 means a running binary holds the file](locked-executable-lnk1104.md)).
 
 The app lands at `native/build/RhinoNative_artefacts/Release/RhinoDAW.exe`
-([The executable is RhinoDAW, not Rhino](executable-named-rhinodaw.md)). Any `native/build-*` folder is gitignored and
-gives a build nobody else can lock, at the cost of a full engine build of several minutes.
+([The executable is RhinoDAW, not Rhino](executable-named-rhinodaw.md)). `native/build` is the only build tree. A
+`native/build-*` folder would be gitignored and give a build nobody else can lock, at the cost of a full engine build
+of several minutes, but the user asked on 2026-10-10 that no second tree be configured (`native/build-dj` was deleted
+that day): when a running RhinoDAW blocks the link, ask them to close it instead
+([LNK1104 means a running binary holds the file](locked-executable-lnk1104.md)).
 
 ## Test
 

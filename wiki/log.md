@@ -378,3 +378,9 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/dj-bounce-on-a-copy.md (a slot deck's span is its clip's length, laid on the copy's timeline in place of the arrangement's clips)
 - updated: pages/writing-rhino-tests.md (rule 10, leave the clip slots empty: SessionView.inc's first check follows DjBooth.inc; the grid takes empty bounds like the jog wheel; DjClipGrid and the DJ panels befriend the runner)
 - updated: pages/content-is-files.md and index.md (the view switch's two SVGs are embedded beside the fonts, the summary says so), pages/colours-and-typography.md (the SVG icons as the exception to path glyphs), pages/cmake-does-not-reconfigure.md (a new binary-data asset fails at compile on the missing BinaryData symbol, not at link)
+
+## [2026-10-10] update | The Clip toggle opens the focused deck's clip in the DJ view
+- source: branch feat/dj-view, commit d745210; native/src/Main.cpp (ControlWindow::toggleClipEditor reads a new clipForPane(): in the DJ view Session::djDeckEditClip(djView.selectedDeck()), else the arrangement's selected clip, which the arrangement never has while the consoles show; the DJ-view refusal says to focus a deck playing a track of the song). The main agent had already written the clipForPane sentence into pages/app-shell.md's lower-pane section; checked against the code, it is right
+- updated: pages/app-shell.md (the followDeck sentence said djDeckEditClip gives the first clip of the track's kind, which has been incomplete since the clips grid: it gives the cell the deck plays first, as the new sentence beside it says)
+- updated: pages/dj-view.md (the Edit key line says the same, and names the Clip toggle as the other way to that clip)
+- notes: pages/writing-rhino-tests.md and pages/ui-cost-of-a-change.md say nothing about the Clip toggle and needed no change; the shell stays unreachable by tests, so the fix is covered by the build and the suite only

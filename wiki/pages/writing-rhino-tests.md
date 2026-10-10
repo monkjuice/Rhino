@@ -61,7 +61,7 @@ that session's `releaseAudioDevice()` before the block ends (`ClipEdits.inc`, `G
    an env var names a path (`RHINO_CLIP_PANEL_SNAPSHOT`, `RHINO_AUTOMATION_SNAPSHOT`) — see
    [Seeing the UI without taking the screen](headless-ui-snapshots.md). Such a check reads every child, shown or not,
    so a control the layout hides must take empty bounds (`setBounds({})`), as `DjDeckPanel` does with the jog wheel
-   on a short or narrow console; left at its old bounds, a control nobody sees fails the check. Look at the PNG too: the Drum Rack's envelope
+   on a short or narrow console and with the clips grid when no cell fits; left at its old bounds, a control nobody sees fails the check. Look at the PNG too: the Drum Rack's envelope
    line drew nothing, and only a snapshot showed it
    ([A juce::Path holding only a start point is empty](juce-path-isempty-ignores-a-lone-point.md)).
 7. **Render only what you measure.** A render that measures one clip names that clip's track in `tracksToDo`, as
@@ -79,6 +79,9 @@ that session's `releaseAudioDevice()` before the block ends (`ClipEdits.inc`, `G
    runs only with `RHINO_NATIVE_INPUT_TEST=1`, as the playhead's Direct2D check in `Rendering.inc` runs only with
    `RHINO_NATIVE_RENDER_TEST=1` ([Playhead rendering](playhead.md)); a plain `ctest` skips both. Set it in the shell
    that runs `ctest --test-dir native/build -C Release -R native_pattern_workflow`.
+10. **Leave the clip slots empty.** `SessionView.inc` opens with `Slots start empty` and runs after `DjBooth.inc`, so a
+    scenario that fills a slot deletes it before its block ends (`dj booth: clips on the console` clears its cells and
+    puts the deck back on SONG), or the session view's scenario fails on a clip it never made.
 
 ## Timing, not checking
 
@@ -95,7 +98,7 @@ as with Forge's `--profile`, because the machine drifts by more than some differ
 ## Access and determinism
 
 Classes under test befriend the runner (`friend int runArrangementTest();` in `Arrangement`, `Session`, `StepGrid`,
-`AudioClipPanel`, `SessionView`; `friend int runUiProfile();` in `Arrangement`, `StepGrid` and `DeviceRack`), one reason
+`AudioClipPanel`, `SessionView`, `DjClipGrid` and the DJ view's panels; `friend int runUiProfile();` in `Arrangement`, `StepGrid` and `DeviceRack`), one reason
 big classes are split across translation units rather than into new types ([Keeping files small](keeping-files-small.md)).
 The four runner flags, `--device-test`, `--arp-snapshot` and `--profile-ui` set `Session::setCommandLineTestMode`: machine
 preferences (browser preview, last track kind) are neither read nor written, and `pickTrackColour` takes the first

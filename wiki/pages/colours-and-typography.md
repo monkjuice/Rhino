@@ -4,7 +4,7 @@ type: convention
 summary: Rhino names chrome colours in Theme.h's palette and draws text in embedded Inter; Forge has its own metal look, accent colours and four faces.
 tags: [both, ui, theme, fonts]
 sources: []
-updated: 2026-10-05
+updated: 2026-10-10
 ---
 
 # Colours and typography
@@ -28,7 +28,7 @@ The chrome is neutral on purpose. Only what carries meaning is saturated: a trac
 - Inter Regular and SemiBold are embedded (`native/assets/fonts/`, under the SIL OFL) and served by `Theme::getTypefaceForFont`. A face drawn for the screen is bundled because Direct2D's greyscale antialiasing without grid fitting leaves the Windows shell font soft.
 - `uiFont` asks for whole-pixel em sizes. A JUCE font height includes ascent and descent, so a height of 12 rasterises Inter at 9.9 px per em, off the pixel grid.
 - The cut is chosen from the style string, not from `Font::isBold()`, which answers false for SemiBold ([JUCE's isBold() is false for SemiBold](juce-isbold-misses-semibold.md)).
-- Toolbar icons are paths in `ControlBarIcons.*`, not characters. Inter's Latin cuts lack the transport symbols, and a fallback glyph is a different face on every machine.
+- Toolbar icons are paths in `ControlBarIcons.*`, not characters. Inter's Latin cuts lack the transport symbols, and a fallback glyph is a different face on every machine. The view switch's two icons are the exception: SVG files compiled in and drawn as `Drawable`s, with `currentColor` replaced by black in the text (JUCE's SVG reader does not know it) and black swapped for the state's colour, `palette::viewActive` or `viewIdle`, on a copy at paint ([App shell and control bar](app-shell.md)).
 
 ## Forge: its own look
 

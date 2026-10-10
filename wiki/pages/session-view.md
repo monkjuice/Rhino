@@ -4,7 +4,7 @@ type: component
 summary: A working clip launcher, built and tested but no longer reached from the shell, whose place the DJ view took and whose scene and slot model still runs in every project.
 tags: [rhino, session-view, clips, launching]
 sources: []
-updated: 2026-10-09
+updated: 2026-10-10
 ---
 
 # Session view (paused)
@@ -21,7 +21,7 @@ Launching is Tracktion's. `Session` only queues `LaunchHandle` play and stop fro
 
 ## Two presentations, one project
 
-Tracks, devices, the [Mixer](mixer.md) and the transport are shared because both views read one `Session`; selection, focus, scroll and zoom are per view. Clips are separate, as in Live, and the only routes across copy: `copySlotClipToArrangement` and `copyClipToSlot` re-reference a wave clip's file, clone a MIDI sequence, and set or drop the loop to suit the destination.
+Tracks, devices, the [Mixer](mixer.md) and the transport are shared because both views read one `Session`; selection, focus, scroll and zoom are per view. Clips are separate, as in Live, and the only routes across copy: `copySlotClipToArrangement` (onto the slot's own lane, or since 2026-10-10 a named lane) and `copyClipToTrackSlot` (`copyClipToSlot` keeps the clip's own track and delegates to it) re-reference a wave clip's file or clone a MIDI sequence through `copyClipInto` (`SessionInternal.h`, which the DJ bounce uses too), and set or drop the loop to suit the destination. `createSlotClip` makes an empty one-bar MIDI clip in a slot, named `Clip N` for its scene, and grows the scenes to reach it.
 
 ## Before turning it back on
 

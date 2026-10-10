@@ -4,7 +4,7 @@ type: component
 summary: The timeline UI, one class across eleven files, that previews every drag locally and leaves panel decisions to the shell.
 tags: [rhino, ui, arrangement]
 sources: []
-updated: 2026-10-05
+updated: 2026-10-10
 ---
 
 # Arrangement view
@@ -31,7 +31,7 @@ updated: 2026-10-05
 
 ## Clips that leave the panel
 
-A clip dragged up out of the panel by more than the band where the lanes scroll (24 px above the top) stops being a move: `Arrangement::mouseDrag` cancels the gesture, so the clip stays put, and starts a window-wide drag carrying `rhino-clip:<id>` (`ClipDrag.h`) with a small tile for a picture. The DJ toggle in the control bar shows the consoles while that drag hovers it, and a console's clips grid takes a copy. The lanes take the reverse: a console's cell dropped on a lane is copied there at the drop point, held to the lane's kind (`ArrangementDrops.cpp`, `rhino-slot:`). See [DJ view and the booth](dj-view.md).
+A clip dragged up out of the panel by more than the band where the lanes scroll (24 px above the top) stops being a move (one clip leaves, the primary selection, whatever else is selected): `Arrangement::mouseDrag` cancels the gesture, so the clip stays put, and starts a window-wide drag carrying `rhino-clip:<id>` (`ClipDrag.h`) with a small tile for a picture. The DJ toggle in the control bar shows the consoles while that drag hovers it, and a console's clips grid takes a copy. The lanes take the reverse: a console's cell dropped on a lane is copied there at the drop point, held to the lane's kind (`ArrangementDrops.cpp`, `rhino-slot:`). See [DJ view and the booth](dj-view.md).
 
 ## Related
 

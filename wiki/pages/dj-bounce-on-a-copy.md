@@ -4,7 +4,7 @@ type: decision
 summary: A track or group bounced to a DJ deck renders on the booth's worker from a snapshot copy of the edit, never the live edit nor the message thread; the copy's plugins and the test runners' inline render are the price.
 tags: [rhino, dj, rendering, threads]
 sources: []
-updated: 2026-10-09
+updated: 2026-10-10
 ---
 
 # A deck's bounce renders on a worker against a copy of the document
@@ -27,7 +27,7 @@ Rejected: rendering the live edit from the worker (the race above), and keeping 
 - **The test runners render inline.** Tracktion's render initialisation takes a `MessageManagerLock`, which a worker is granted only while the message thread dispatches. The app's always does, as it does for the WAV export; the runners have no dispatch loop (`JUCE_MODAL_LOOPS_PERMITTED=0`), so under `isCommandLineTestMode` the render runs on the message thread and `djPoll` installs it as before. The worker path is exercised only by the app, as the export's is.
 - **A group names its bus and the members that feed it in `tracksToDo`**, because the engine builds a member into its bus's node; naming only part of that rendered nothing ("Didn't find any audio to render"). `DjBooth.inc` checks the bus's own fader is in the bounce by turning it down and bouncing again.
 
-The render's parameters are a merge's: from the top of the song to the end of the last clip among the tracks, rounded up to whole bars and at least one, at the device's rate and block size, `usePlugins` on, `useMasterPlugins` off, 24-bit stereo. Solo elsewhere and session-view slot clips are kept out by the two scopes.
+The render's parameters are a merge's: from the top of the song to the end of the last clip among the tracks, rounded up to whole bars and at least one, at the device's rate and block size, `usePlugins` on, `useMasterPlugins` off, 24-bit stereo. Solo elsewhere and session-view slot clips are kept out by the two scopes. A deck on a clip slot (since 2026-10-10, [the console's clips grid](dj-view.md)) is the one exception: its span is that clip's own length, and before the render the copy track's timeline clips are removed and the slot's clip laid from the top in their place by `copyClipInto` with its loop dropped, the slot itself staying disabled like every other.
 
 ## Related
 

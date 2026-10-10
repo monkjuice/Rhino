@@ -368,3 +368,13 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 ## [2026-10-10] update | The view switch as two icons at the end of the bar
 - source: branch feat/dj-view, the user's request with the two SVGs; native/assets/arrangement_view.svg and dj_view.svg (new, compiled in beside the fonts in native/CMakeLists.txt), Main.cpp (ViewToggle on IconButton, the right of the bar reordered: view switch, metronome, undo and redo), ControlBarIcons.* (setIdleColour), Theme.h (viewActive, viewIdle)
 - updated: pages/app-shell.md (the bar's right-hand order and the switch's icons, colours and currentColor substitution)
+
+## [2026-10-10] update | The clips-grid and view-switch record checked against the code
+- source: native/src/DjClipGrid.*, ClipDrag.h, DjDeckPanel.cpp (the grid's layout and the console's drops), ArrangementGestures.cpp, ArrangementDrops.cpp, SessionSlots.cpp, SessionDjSources.cpp (loadDjDeckSlot, the slot bounce), SessionDj.cpp (the slot property), SessionInternal.cpp, BrowserPanel.cpp (file against sample drops), Main.cpp (ViewToggle, layoutControlBar), Theme.h, ControlBarIcons.h, native/CMakeLists.txt, tests/Arrangement/scenarios/DjBooth.inc and SessionView.inc, after the two entries above
+- updated: pages/dj-view.md (DjClipGrid.* and ClipDrag.h in the file table; where the grid stands and when it takes empty bounds; a Drum Rack track takes a sound file, not a built-in sample, onto a pad; the slot among what the document saves)
+- updated: pages/session-view.md (the routes across name copyClipToTrackSlot, the target lane, copyClipInto and createSlotClip; the updated date, which still read 2026-10-09)
+- updated: pages/arrangement-view.md (one clip leaves, the primary selection; the updated date, which still read 2026-10-05)
+- updated: pages/app-shell.md (a drop on a toggle itself does nothing)
+- updated: pages/dj-bounce-on-a-copy.md (a slot deck's span is its clip's length, laid on the copy's timeline in place of the arrangement's clips)
+- updated: pages/writing-rhino-tests.md (rule 10, leave the clip slots empty: SessionView.inc's first check follows DjBooth.inc; the grid takes empty bounds like the jog wheel; DjClipGrid and the DJ panels befriend the runner)
+- updated: pages/content-is-files.md and index.md (the view switch's two SVGs are embedded beside the fonts, the summary says so), pages/colours-and-typography.md (the SVG icons as the exception to path glyphs), pages/cmake-does-not-reconfigure.md (a new binary-data asset fails at compile on the missing BinaryData symbol, not at link)

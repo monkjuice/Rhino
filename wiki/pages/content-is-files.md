@@ -1,10 +1,10 @@
 ---
 title: Content is files, never compiled in
 type: decision
-summary: Samples and other content live as files under library/ and are found at runtime; only fonts and app icons are embedded.
+summary: Samples and other content live as files under library/ and are found at runtime; only fonts, app icons and two tiny SVG glyphs are embedded.
 tags: [rhino, content, build, git-lfs]
 sources: []
-updated: 2026-10-07
+updated: 2026-10-10
 ---
 
 # Content is files, never compiled in
@@ -17,7 +17,7 @@ Rhino used to embed its samples (the TR-808 kit and a hand clap) with `juce_add_
 
 Samples, device presets, drum kits and drum presets now, and patterns later, live as files under `library/` at the repository root and are found at runtime by `ContentLibrary` (`native/src/core/ContentLibrary.*`). It knows nothing of `Session`, the UI or the engine, so the app and the device library can both use it. `ContentLibrary::root()` tries the `RHINO_LIBRARY_DIR` override, then a `Library` folder beside the executable (inside the bundle on macOS), then the repository's `library/` through the compile-time `RHINO_SOURCE_DIR`. A candidate counts only if it holds `Samples/`, so an empty folder cannot shadow the real library. No build step copies anything. Details are on [Content library](content-library.md).
 
-Only what the UI needs before it can read from disk stays embedded. In Rhino that is the two Inter cuts (`RhinoNativeAssets` in `native/CMakeLists.txt`) and the app icons; the metronome glyph is SVG path data pasted into `native/src/ControlBarIcons.cpp`. Forge embeds its wordmark, two screw images, the performance wheel and four typefaces subset from 988 KB to 79 KB (`instruments/rhino-forge/ui/assets/fonts/README.md`).
+Only what the UI needs before it can read from disk stays embedded. In Rhino that is the two Inter cuts and, since 2026-10-10, the view switch's two icons, `native/assets/arrangement_view.svg` and `dj_view.svg` (`RhinoNativeAssets` in `native/CMakeLists.txt`; tiny, so the three-bytes-per-byte cost was judged nothing, and a new asset there needs a configure, [A new source file needs an explicit CMake configure](cmake-does-not-reconfigure.md)), plus the app icons; the metronome glyph is SVG path data pasted into `native/src/ControlBarIcons.cpp`. Forge embeds its wordmark, two screw images, the performance wheel and four typefaces subset from 988 KB to 79 KB (`instruments/rhino-forge/ui/assets/fonts/README.md`).
 
 Rejected: keeping audio embedded, for the build cost above.
 

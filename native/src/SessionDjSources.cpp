@@ -318,6 +318,34 @@ juce::Result Session::bounceDjDeck(int index, bool keepBeat)
     const auto bars = std::max(1.0, std::ceil(endBeats / beatsPerBar() - 1.0e-6));
     const auto spanEnd = edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(bars * beatsPerBar()));
 
+    // A MIDI track with no instrument renders nothing - the engine's renderer
+    // refuses it outright - so the deck holds silence of the span instead, on
+    // the song's grid, and is bounced again once an instrument arrives, as
+    // any edit bounces it. Without this a cell made on a bare track never
+    // loaded and the deck's keys stayed dark (reported 2026-10-10).
+    if (info.kind == DjSourceKind::track && trackType(info.track) == TrackType::midi
+        && trackInstrument(*tracks[info.track]) == nullptr)
+    {
+        for (auto& job : b.jobs)
+            if (job->deck == index)
+                job->cancel.store(true);
+        auto silent = std::make_unique<DjTrack>();
+        const auto deviceRate = engine.getDeviceManager().getSampleRate();
+        silent->sampleRate = deviceRate > 7000.0 ? deviceRate : 48000.0;
+        silent->name = info.name;
+        silent->left.assign(static_cast<size_t>(std::max(1.0, std::round(spanEnd.inSeconds() * silent->sampleRate))), 0.0f);
+        DjAnalysisOptions options;
+        options.knownBpm = tempo();
+        options.knownFirstBeatSeconds = 0.0;
+        options.beatsPerBar = std::max(1, static_cast<int>(std::lround(beatsPerBar())));
+        options.detectKey = false;
+        silent->analysis = analyseDjTrack(silent->left.data(), nullptr, silent->length(), silent->sampleRate, options);
+        juce::Logger::writeToLog("Rhino: deck " + juce::String(index + 1) + " holds " + juce::String(bars, 0) + " bars of silence: "
+                                 + info.name.quoted() + " has no instrument yet");
+        finishDjLoad(index, deck.info.generation, std::move(silent), {}, keepBeat);
+        return juce::Result::ok();
+    }
+
     const auto folder = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("Rhino DJ bounces");
     if (!folder.createDirectory().wasOk())
         return fail("Rhino could not create a folder for the bounce.");

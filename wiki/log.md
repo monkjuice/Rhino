@@ -384,3 +384,7 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/app-shell.md (the followDeck sentence said djDeckEditClip gives the first clip of the track's kind, which has been incomplete since the clips grid: it gives the cell the deck plays first, as the new sentence beside it says)
 - updated: pages/dj-view.md (the Edit key line says the same, and names the Clip toggle as the other way to that clip)
 - notes: pages/writing-rhino-tests.md and pages/ui-cost-of-a-change.md say nothing about the Clip toggle and needed no change; the shell stays unreachable by tests, so the fix is covered by the build and the suite only
+
+## [2026-10-10] update | Three bugs from the console's clips: a bare track's cell, a copy's name, a delete under the editor
+- source: branch feat/dj-view, the user's report; native/src/SessionDjSources.cpp (a MIDI track with no instrument bounces as silence of the span rather than failing), SessionSlots.cpp (uniqueClipNameOnTrack for copies into cells and new cells; copyClipInto sets the name after cloneFrom; deleteSlotClip, copyClipToTrackSlot and insertAudioFileInSlot call repairPatternClip), tests/Arrangement/scenarios/DjBooth.inc (the reported flow on a bare MIDI track with a Drum Rack and kit added after and a note drawn; the copy named on; a delete under the editor)
+- updated: pages/dj-view.md (the clips grid section: the name rule, the silent bounce, the delete repairing the editor)

@@ -272,6 +272,9 @@ juce::Result Session::deleteSlotClip(int track, int scene)
         handle->stop({});
     edit->getUndoManager().beginNewTransaction("Delete slot clip");
     clip->removeFromParent();
+    // The note editor may have been pointed at it, since a console opens a
+    // slot clip there; left pointing, the next paint read a freed clip.
+    repairPatternClip();
     edit->getUndoManager().beginNewTransaction();
     markModified();
     sendSynchronousChangeMessage();
@@ -379,6 +382,8 @@ juce::Result Session::insertAudioFileInSlot(const juce::File& file, int track, i
                                    te::DeleteExistingClips::yes);
     if (clip == nullptr)
         return juce::Result::fail("The audio clip could not be added to that slot.");
+    // The clip the slot held is gone, and the note editor may have had it.
+    repairPatternClip();
     edit->getUndoManager().beginNewTransaction();
     markModified();
     if (edit->getTransport().isPlaying())
@@ -427,12 +432,41 @@ te::Clip* copyClipInto(te::ClipOwner& destination, te::Clip& source, tracktion::
         if (copy == nullptr)
             return nullptr;
         copy->cloneFrom(midi);
+        // The clone carries the source's name across; the name asked for wins.
+        copy->setName(name);
         copy->setPosition({range, offset});
         copy->setColour(source.getColour());
         setClipColour(*copy, Session::clipColour(source), nullptr);
         return copy.get();
     }
     return nullptr;
+}
+
+// A name no other clip on the track wears, in its slots or on its timeline:
+// a copy of "Clip 1" beside it becomes "Clip 2", a copy of "Break" becomes
+// "Break 2", and a trailing number counts on from where it stood.
+juce::String uniqueClipNameOnTrack(te::AudioTrack& track, const juce::String& wanted)
+{
+    juce::StringArray taken;
+    for (auto* clip : track.getClips())
+        taken.add(clip->getName());
+    for (auto* slot : track.getClipSlotList().getClipSlots())
+        if (auto* clip = slot->getClip())
+            taken.add(clip->getName());
+    if (!taken.contains(wanted))
+        return wanted;
+    auto stem = wanted.trimEnd();
+    int number = 1;
+    const auto digits = stem.length() - stem.trimCharactersAtEnd("0123456789").length();
+    if (digits > 0 && digits < stem.length())
+    {
+        number = stem.getLastCharacters(digits).getIntValue();
+        stem = stem.dropLastCharacters(digits).trimEnd();
+    }
+    for (int n = number + 1; n < number + 1000; ++n)
+        if (const auto candidate = stem + " " + juce::String(n); !taken.contains(candidate))
+            return candidate;
+    return wanted;
 }
 
 juce::Result Session::copySlotClipToArrangement(int track, int scene, double startSeconds, int targetTrack)
@@ -515,10 +549,15 @@ juce::Result Session::copyClipToTrackSlot(te::EditItemID id, int track, int scen
     if (slot == nullptr)
         return juce::Result::fail("That clip slot does not exist.");
     if (auto* existing = slot->getClip())
+    {
         existing->removeFromParent();
+        repairPatternClip();
+    }
     const auto length = source->getPosition().time.getLength();
+    // A name of its own beside the clip it was copied from.
+    const auto name = uniqueClipNameOnTrack(*tracks[track], source->getName());
     auto* copy = copyClipInto(*slot, *source, {tracktion::core::TimePosition(),
-                                               tracktion::core::TimePosition() + length}, source->getName());
+                                               tracktion::core::TimePosition() + length}, name);
     if (copy == nullptr)
         return juce::Result::fail("That clip could not be copied to a slot.");
     // Slot clips repeat until stopped, so the copy loops over its own length.
@@ -555,7 +594,8 @@ juce::Result Session::createSlotClip(int track, int scene)
         return juce::Result::fail("That cell already holds a clip.");
     const auto beats = beatsPerBar();
     const auto end = edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(beats));
-    auto clip = te::insertMIDIClip(*slot, "Clip " + juce::String(scene + 1), {tracktion::core::TimePosition(), end});
+    const auto name = uniqueClipNameOnTrack(*tracks[track], "Clip " + juce::String(scene + 1));
+    auto clip = te::insertMIDIClip(*slot, name, {tracktion::core::TimePosition(), end});
     if (clip == nullptr)
         return juce::Result::fail("The clip could not be added to that slot.");
     clip->setLoopRangeBeats({tracktion::core::BeatPosition(), tracktion::core::BeatPosition::fromBeats(beats)});

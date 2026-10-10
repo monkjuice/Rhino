@@ -119,6 +119,48 @@
                 document->ejectDjDeck(0);
                 require(!document->djDeckInfo(0).loaded && document->djDeckInfo(0).kind == Session::DjSourceKind::none,
                         "Eject empties the deck");
+                // A drum cell bounces to sound: the kit's pads are read in the
+                // copy the bounce renders, as they are when a document opens.
+                int drumLane = -1;
+                for (int t = 0; t < document->trackCount(); ++t)
+                    if (!document->isGroupBusTrack(t) && document->trackType(t) == Session::TrackType::midi)
+                    {
+                        drumLane = t;
+                        break;
+                    }
+                require(drumLane >= 0, "A MIDI lane for a kit");
+                require(document->insertPatternPresetInSlot(Session::PatternPreset::HouseKit, drumLane, 0).wasOk(),
+                        "A drum pattern in its first cell brings a kit");
+                require(document->trackHasDrumRack(drumLane), "on a Drum Rack");
+                require(document->loadDjDeckSlot(0, drumLane, 0).wasOk(), "The deck plays the cell");
+                require(waitForDeck(*document, 0), ("and it bounces: " + document->djDeckInfo(0).error).toRawUTF8());
+                const auto* drums = document->djDeckTrack(0);
+                require(drums != nullptr && rmsOf(drums->left) > 0.001, "with the drums in it");
+                document->ejectDjDeck(0);
+                // The steps reported silent on 2026-10-10: a new cell on a bare
+                // MIDI track, a Drum Rack with a kit added after it, a note
+                // drawn in the editor, and the deck bounced again.
+                int secondMidi = -1;
+                for (int t = drumLane + 1; t < document->trackCount(); ++t)
+                    if (!document->isGroupBusTrack(t) && document->trackType(t) == Session::TrackType::midi)
+                    {
+                        secondMidi = t;
+                        break;
+                    }
+                require(secondMidi >= 0, "A second MIDI lane");
+                require(document->createSlotClip(secondMidi, 0).wasOk(), "A new cell on a bare MIDI track");
+                require(document->loadDjDeckSlot(0, secondMidi, 0).wasOk() && waitForDeck(*document, 0), "The deck plays it, silent so far");
+                require(document->addDrumKit(ContentLibrary::file("Drums/Kits/808 Kit.rdk"), secondMidi).wasOk(),
+                        "A Drum Rack with a kit, added after");
+                require(document->djDeckInfo(0).stale, "which leaves the deck's bounce stale");
+                require(document->selectPatternClip(document->slotClip(secondMidi, 0).clipID).wasOk(), "The editor opens the cell's clip");
+                require(document->isPatternDrums(), "as a drum editor");
+                require(document->addNote(0.0, document->patternDrumLowestNote(), 1.0).wasOk(), "A note drawn on the first pad");
+                require(document->rebounceDjDeck(0).wasOk() && waitForDeck(*document, 0),
+                        ("Bounced again: " + document->djDeckInfo(0).error).toRawUTF8());
+                const auto* drawn = document->djDeckTrack(0);
+                require(drawn != nullptr && rmsOf(drawn->left) > 0.001, "and the deck plays the drawn note");
+                document->ejectDjDeck(0);
                 document->releaseAudioDevice();
             }
 
@@ -284,6 +326,16 @@
                 require(grid->applyDrop(3, "rhino-clip:" + session.pattern().itemID.toString(), false).wasOk(),
                         "A clip dragged from the timeline lands in the fourth cell");
                 require(session.slotClip(deckTrack, 3).hasClip, "as a copy");
+                // A copy beside its source takes a name of its own, and the
+                // note editor lets go of a clip deleted under it.
+                require(grid->applyDrop(4, "rhino-slot:" + juce::String(deckTrack) + ":0", false).wasOk(),
+                        "The first cell copies into the fifth");
+                require(session.slotClip(deckTrack, 4).name == "Clip 2",
+                        ("named on from it: " + session.slotClip(deckTrack, 4).name).toRawUTF8());
+                require(session.selectPatternClip(session.slotClip(deckTrack, 4).clipID).wasOk(), "The note editor opens the copy");
+                require(session.deleteSlotClip(deckTrack, 4).wasOk(), "Deleting it under the editor");
+                require(session.hasPatternClip() && session.findClip(session.pattern().itemID) != nullptr,
+                        "leaves the editor on a clip that still exists");
                 require(grid->applyDrop(4, "rhino-browser:file:" + source.getFile().getFullPathName(), false).failed(),
                         "A sample dropped on a MIDI track's cell is refused");
                 require(session.deleteSlotClip(deckTrack, 3).wasOk(), "A cell's clip can be deleted");

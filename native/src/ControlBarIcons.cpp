@@ -126,7 +126,7 @@ void IconButton::paintButton(juce::Graphics& g, bool highlighted, bool pressed)
         g.setColour(juce::Colour(pressed ? 0x24ffffff : 0x14ffffff));
         g.fillRoundedRectangle(bounds.reduced(1.0f), 3.0f);
     }
-    auto colour = getToggleState() ? active : palette::textDim;
+    auto colour = getToggleState() ? active : idle;
     if (!isEnabled())                colour = palette::disabled;
     else if (pressed)                colour = colour.brighter(0.5f);
     else if (highlighted)            colour = colour.brighter(0.3f);

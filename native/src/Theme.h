@@ -80,6 +80,10 @@ inline const juce::Colour selection        {0xffdcdcdc};
 // its eight hot cues wear the colours the CDJ-3000 gives them, A to H; and
 // its waveform is drawn in three bands, the lows blue, the mids amber and
 // the highs white, so a kick, a vocal and a hat read as three colours.
+// The view switch at the end of the control bar: the view that is showing
+// is green, the other light grey.
+inline const juce::Colour viewActive       {0xff3ddc84};
+inline const juce::Colour viewIdle         {0xffc6cacf};
 inline const juce::Colour djPlay           {0xff3ddc84};
 inline const juce::Colour djCue            {0xfff0a030};
 inline const juce::Colour djWaiting        {0xffe8c547};

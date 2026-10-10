@@ -4,6 +4,7 @@
 #include "Theme.h"
 #include "Arrangement.h"
 #include "DjView.h"
+#include "ClipDrag.h"
 #include "BrowserPanel.h"
 #include "DeviceRack.h"
 #include "AudioClipPanel.h"
@@ -204,6 +205,47 @@ private:
     State state = State::idle;
 };
 
+// The view switch: two icons at the right end of the bar, the view that is
+// showing in green and the other in light grey, drawn from the SVGs in
+// assets (arrangement_view.svg and dj_view.svg) compiled in beside the fonts.
+// A toggle takes a drag too: a clip from the timeline, a console's cell or
+// a browser item hovering it shows its view, so the drag can go on to the
+// other view's targets - a console's grid, a lane - the way a drag crosses
+// Live's view toggles. Nothing is dropped on the toggle itself.
+class ViewToggle final : public IconButton,
+                         public juce::DragAndDropTarget
+{
+public:
+    ViewToggle(const juce::String& name, const char* svg, int svgSize) : IconButton(name)
+    {
+        // JUCE's SVG reader knows nothing of currentColor; black stands in for
+        // it, and the painter swaps black for the state's colour.
+        const auto text = juce::String::fromUTF8(svg, svgSize).replace("currentColor", "#000000");
+        if (const auto xml = juce::XmlDocument::parse(text))
+            glyph = juce::Drawable::createFromSVG(*xml);
+        setGlyphInset(0.18f);
+        setActiveColour(palette::viewActive);
+        setIdleColour(palette::viewIdle);
+        setPainter([this](juce::Graphics& g, juce::Rectangle<float> area, juce::Colour colour)
+        {
+            if (glyph == nullptr) return;
+            auto tinted = glyph->createCopy();
+            tinted->replaceColour(juce::Colours::black, colour);
+            tinted->drawWithin(g, area, juce::RectanglePlacement::centred, 1.0f);
+        });
+    }
+    std::function<void()> dragHovered;
+    bool isInterestedInDragSource(const SourceDetails& details) override
+    {
+        return isCrossViewDrag(details.description.toString());
+    }
+    void itemDragEnter(const SourceDetails&) override { if (dragHovered) dragHovered(); }
+    void itemDropped(const SourceDetails&) override {}
+
+private:
+    std::unique_ptr<juce::Drawable> glyph;
+};
+
 static juce::String formatMemory(juce::uint64 bytes)
 {
     const auto megabytes = static_cast<double>(bytes) / (1024.0 * 1024.0);
@@ -306,12 +348,14 @@ public:
             openClip(clip);
             logStatus("Editing " + session.trackName(track).quoted() + ": the deck follows each change");
         };
-        sessionToggle.setButtonText("DJ");
-        arrangementToggle.setButtonText("Arrange");
         sessionToggle.setTooltip("Show the DJ view: decks either side of a mixer, each playing a track, a group or a file. Tab switches.");
         arrangementToggle.setTooltip("Show the Arrangement timeline. Tab switches.");
         sessionToggle.onClick = [this] { setSessionViewOpen(true); };
         arrangementToggle.onClick = [this] { setSessionViewOpen(false); };
+        // A drag hovering a toggle shows that view, so a clip can be carried
+        // from a lane to a console's grid and back.
+        sessionToggle.dragHovered = [this] { setSessionViewOpen(true); };
+        arrangementToggle.dragHovered = [this] { setSessionViewOpen(false); };
         // Launched clips override a track's timeline clips. This hands those
         // tracks back to the arrangement, as Live's Back to Arrangement does.
         backToArrangement.setButtonText(juce::String(L"\u21ba") + " Arrangement");
@@ -366,9 +410,7 @@ public:
         // showing is marked in grey rather than coloured in: a tab that lights
         // up teal in a neutral bar reads as a warning rather than as "you are
         // here". The restraint is the point.
-        for (auto* toggle : std::initializer_list<juce::TextButton*>{&editorToggle, &rackToggle,
-                                                                     &sessionToggle, &arrangementToggle,
-                                                                     &backToArrangement})
+        for (auto* toggle : std::initializer_list<juce::TextButton*>{&editorToggle, &rackToggle, &backToArrangement})
         {
             toggle->setColour(juce::TextButton::buttonColourId, palette::control);
             toggle->setColour(juce::TextButton::buttonOnColourId, palette::hover);
@@ -692,10 +734,10 @@ public:
         x += sectionGap - barTransportGap;
 
         // The right of the bar, laid out from the right client edge inwards:
-        // undo and redo pinned to it, and the metronome in its own section
-        // beside them. The click belongs with the tools rather than with the
-        // song's settings - it is something switched on while working, not a
-        // property of the document - so it sits over here now.
+        // the view switch pinned to it, then the metronome in a section of its
+        // own, then undo and redo. The click belongs with the tools rather
+        // than with the song's settings - it is something switched on while
+        // working, not a property of the document - so it sits over here.
         auto rightEdge = getWidth() - barEdgeMargin;
         const auto placeRight = [&rightEdge](juce::Component& component, int width, int height, int top, int gap)
         {
@@ -703,25 +745,24 @@ public:
             component.setBounds(rightEdge, top, width, height);
             rightEdge -= gap;
         };
-        placeRight(redo, undoSize, transportSize, transportTop, barTransportGap);
-        placeRight(undo, undoSize, transportSize, transportTop, sectionGap);
-        rule(rightEdge + sectionGap / 2);
-        placeRight(metronomeMenu, metronomeMenuWidth, transportSize, transportTop, 0);
-        placeRight(metronome, transportSize, transportSize, transportTop, sectionGap);
-
         sessionToggle.setVisible(sessionViewEnabled);
         arrangementToggle.setVisible(sessionViewEnabled);
         if constexpr (sessionViewEnabled)
         {
-            constexpr int viewWidth = 112;
-            const auto area = juce::Rectangle<int>(rightEdge - viewWidth, barControlTop, viewWidth, fieldHeight);
-            sessionToggle.setBounds(area.withWidth(viewWidth / 2 - 2));
-            arrangementToggle.setBounds(area.withTrimmedLeft(viewWidth / 2 + 2));
+            // Arrange then DJ, the one showing in green.
+            placeRight(sessionToggle, transportSize, transportSize, transportTop, barTransportGap);
+            placeRight(arrangementToggle, transportSize, transportSize, transportTop, sectionGap);
             sessionToggle.setToggleState(sessionViewOpen, juce::dontSendNotification);
             arrangementToggle.setToggleState(!sessionViewOpen, juce::dontSendNotification);
-            backToArrangement.setBounds(rightEdge - viewWidth, barControlTop + fieldHeight + 2, viewWidth, 0);
-            rightEdge -= viewWidth + barGroupGap;
+            backToArrangement.setBounds(arrangementToggle.getX(), barControlTop + fieldHeight + 2,
+                                        sessionToggle.getRight() - arrangementToggle.getX(), 0);
+            rule(rightEdge + sectionGap / 2);
         }
+        placeRight(metronomeMenu, metronomeMenuWidth, transportSize, transportTop, 0);
+        placeRight(metronome, transportSize, transportSize, transportTop, sectionGap);
+        rule(rightEdge + sectionGap / 2);
+        placeRight(redo, undoSize, transportSize, transportTop, barTransportGap);
+        placeRight(undo, undoSize, transportSize, transportTop, sectionGap);
 
         // Centred in what the two sides have left rather than on the window:
         // the left of the bar carries four sections and the right two, so a
@@ -1809,7 +1850,8 @@ private:
     RecordButton record;
     IconButton browserToggle {"Browser"};
     juce::TextButton editorToggle {"Clip"}, rackToggle {"Devices"};
-    juce::TextButton sessionToggle {"DJ"}, arrangementToggle {"Arrange"};
+    ViewToggle sessionToggle {"DJ", BinaryData::dj_view_svg, BinaryData::dj_view_svgSize};
+    ViewToggle arrangementToggle {"Arrange", BinaryData::arrangement_view_svg, BinaryData::arrangement_view_svgSize};
     juce::TextButton backToArrangement;
     juce::ComboBox editorResolution;
     juce::TextButton editorZoomOut, editorZoomIn;

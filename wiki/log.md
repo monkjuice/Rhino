@@ -360,3 +360,11 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/dj-view.md (the Edit key line names both editors and djDeckEditClip; the updated date)
 - updated: pages/writing-rhino-tests.md (a shell behaviour is checked at the view's callback boundary, as DjBooth.inc does with deckSelected and togglePlayFocused; followDeck is unchecked)
 - updated: pages/build-and-test-rhino.md, pages/orphaned-build-processes.md, pages/locked-executable-lnk1104.md (no second native/build-* tree: the user asked on 2026-10-10 that only native/build exist, and native/build-dj was deleted)
+
+## [2026-10-10] update | The console's clips grid, and clips that cross the views
+- source: branch feat/dj-view, the user's request for a clips grid on each console with drag and drop to and from the arrangement across the view switch, library drops held to the track's kind, and one-bar clips on a double-click; native/src/DjClipGrid.* (new), ClipDrag.h (new), DjDeckPanel.*, Main.cpp (ViewToggle), ArrangementGestures.cpp, ArrangementDrops.cpp, SessionSlots.cpp (createSlotClip, copyClipToTrackSlot, a target lane), SessionClips.cpp (findClip sees slots), SessionInternal.* (copyClipInto shared, trackHoldingClip), SessionDjSources.cpp (loadDjDeckSlot, the slot bounce), SessionDj.cpp (the slot saved), tests/Arrangement/scenarios/DjBooth.inc
+- updated: pages/dj-view.md (a new section, The clips grid), pages/session-view.md (findClip and dragging between views no longer missing), pages/app-shell.md (the toggles take drags), pages/arrangement-view.md (a new section, Clips that leave the panel), AGENTS.md and README.md
+
+## [2026-10-10] update | The view switch as two icons at the end of the bar
+- source: branch feat/dj-view, the user's request with the two SVGs; native/assets/arrangement_view.svg and dj_view.svg (new, compiled in beside the fonts in native/CMakeLists.txt), Main.cpp (ViewToggle on IconButton, the right of the bar reordered: view switch, metronome, undo and redo), ControlBarIcons.* (setIdleColour), Theme.h (viewActive, viewIdle)
+- updated: pages/app-shell.md (the bar's right-hand order and the switch's icons, colours and currentColor substitution)

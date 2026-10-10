@@ -38,7 +38,9 @@ juce_add_gui_app(RhinoNative
 juce_add_binary_data(RhinoNativeAssets
     SOURCES
         assets/fonts/InterRegular.ttf
-        assets/fonts/InterSemiBold.ttf)
+        assets/fonts/InterSemiBold.ttf
+        assets/arrangement_view.svg
+        assets/dj_view.svg)
 add_subdirectory(src/core)
 add_subdirectory(src/devices)
 # Sources are listed explicitly: a new .cpp must be added here or it will not compile.
@@ -96,6 +98,7 @@ target_sources(RhinoNative PRIVATE
     src/SessionViewGestures.cpp
     src/DjView.cpp
     src/DjDeckPanel.cpp
+    src/DjClipGrid.cpp
     src/DjDeckDisplay.cpp
     src/DjMixerPanel.cpp
     src/BrowserPanel.cpp

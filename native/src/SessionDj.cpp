@@ -43,6 +43,8 @@ Session::DjDeckState::Transport transportOf(DjDeck::State s)
 Session::DjBooth::DjBooth()
 {
     formats.registerBasicFormats();
+    // The live preview's notes come back here, on the audio thread.
+    engine.liveSink = this;
 }
 
 // The worker is drained before the jobs and the bounces' copies of the
@@ -64,6 +66,24 @@ void Session::DjBooth::audioDeviceIOCallbackWithContext(const float* const* inpu
     // own previous block, as CountInClick explains, so the engine clears it
     // before it writes. The device's first input is the mic.
     engine.process(inputChannelData, numInputChannels, outputChannelData, numOutputChannels, numSamples);
+}
+
+// The preview's notes: the keyboard state of each input the session named,
+// as the typing keyboard plays, so the track's instrument hears them at
+// once. The state's own lock is brief and the engine's input queue is made
+// for a driver thread, which is what this callback is to it.
+void Session::DjBooth::noteOn(int, int note, int velocity)
+{
+    for (auto& input : previewInputs)
+        if (auto* device = input.load(std::memory_order_acquire))
+            device->keyboardState.noteOn(1, note, juce::jlimit(0.0f, 1.0f, static_cast<float>(velocity) / 127.0f));
+}
+
+void Session::DjBooth::noteOff(int, int note)
+{
+    for (auto& input : previewInputs)
+        if (auto* device = input.load(std::memory_order_acquire))
+            device->keyboardState.noteOff(1, note, 0.0f);
 }
 
 void Session::DjBooth::audioDeviceAboutToStart(juce::AudioIODevice* device)

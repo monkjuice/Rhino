@@ -46,6 +46,8 @@ struct DjLoadJob
     double tempo = 0.0;
     int beatsPerBar = 4;
     double started = 0.0;
+    // A bounce's notes, gathered on the message thread, for the live preview.
+    std::vector<DjMidiEvent> midi;
 };
 
 // What a bounce renders: a copy of the document loaded from a snapshot of
@@ -65,7 +67,8 @@ struct DjBounceWork
     std::unique_ptr<te::Renderer::RenderTask> task;
 };
 
-struct Session::DjBooth final : juce::AudioIODeviceCallback
+struct Session::DjBooth final : juce::AudioIODeviceCallback,
+                                DjLiveSink
 {
     DjBooth();
     ~DjBooth() override;
@@ -77,7 +80,16 @@ struct Session::DjBooth final : juce::AudioIODeviceCallback
         // The track's monitoring before Live switched it on, put back after.
         std::optional<InputMonitoring> monitoringBeforeLive;
         bool rebounceWanted = false;
+        // Whether Live was on before a preview switched it on for itself.
+        bool liveBeforePreview = false;
     };
+
+    // The live preview's notes go in the way the typing keyboard's do: to
+    // the MIDI inputs a monitored track listens to, which the session sets
+    // here when a preview begins. Called from the audio thread.
+    std::array<std::atomic<te::MidiInputDevice*>, 2> previewInputs {};
+    void noteOn(int deck, int note, int velocity) override;
+    void noteOff(int deck, int note) override;
 
     DjEngine engine;
     std::array<Deck, maximumDjDecks> decks;

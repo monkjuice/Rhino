@@ -449,6 +449,9 @@ juce::Result Session::beginDeviceParameterGesture(int track, int slot, int param
     parameter->parameterChangeGestureBegin();
     if (parameterGestureDepth++ == 0)
         latencyAtGestureStart = plugin->getLatencySeconds();
+    // A deck playing this track is heard through the track itself while the
+    // knob is held, so the knob is heard at once rather than after a bounce.
+    djBeginLivePreview(track);
     return juce::Result::ok();
 }
 
@@ -490,7 +493,7 @@ juce::Result Session::setDeviceParameter(int track, int slot, int parameterIndex
         mirrorAutomationToEngine();
     }
     parameter->setParameter(next, juce::sendNotification);
-    markModified();
+    markModified(track);
     // Inside a drag only the rack hears it, to keep the dragged device's
     // readings live; the gesture's end tells everyone else once.
     if (parameterGestureDepth > 0)
@@ -519,6 +522,10 @@ juce::Result Session::endDeviceParameterGesture(int track, int slot, int paramet
     if (parameterGestureDepth == 0 && edit->getTransport().isPlaying()
         && std::abs(plugin->getLatencySeconds() - latencyAtGestureStart) > 1.0e-9)
         edit->restartPlayback();
+    // The knob let go: the decks that previewed it bounce again on the
+    // worker, and keep previewing until the bounce lands.
+    if (parameterGestureDepth == 0)
+        djEndLivePreview(track);
     sendSynchronousChangeMessage();
     return juce::Result::ok();
 }

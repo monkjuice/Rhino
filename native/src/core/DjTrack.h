@@ -10,12 +10,25 @@ namespace rhino
 // Positions in the engine are frames of this track at its own sample rate,
 // whatever rate the device runs at, so a hot cue set at 44.1 kHz still lands
 // on the same beat after the device is switched to 96 kHz.
+// A note of the material, for the live preview: a note-on, or its note-off,
+// at a beat from the material's beat zero. Kept sorted by beat, a note-off
+// before a note-on at the same beat.
+struct DjMidiEvent
+{
+    double beat = 0.0;
+    int note = 60, velocity = 100;
+    bool on = true;
+};
+
 struct DjTrack
 {
     std::vector<float> left, right;   // right is empty for a mono file
     double sampleRate = 44100.0;
     juce::String name;
     DjAnalysis analysis;
+    // The notes a bounced track was rendered from, which the engine plays
+    // out to the track's own instrument while a knob on it is held.
+    std::vector<DjMidiEvent> midi;
 
     int length() const noexcept { return static_cast<int>(left.size()); }
     bool stereo() const noexcept { return !right.empty(); }

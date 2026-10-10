@@ -47,6 +47,10 @@ public:
     // Set before a track is swapped in so the new one picks up at the same
     // beat the old one was at, which is what a re-bounce wants.
     std::atomic<bool> keepBeatOnSwap {false};
+    // A knob on the track's device is held: the deck's audio is muted and
+    // the engine plays the material's notes out to the track's own
+    // instrument instead, so the knob is heard at once.
+    std::atomic<bool> livePreview {false};
 
     // ---- state: the audio thread writes, anyone reads ----
     std::atomic<const DjTrack*> track {nullptr};

@@ -21,6 +21,16 @@ namespace rhino
 // its atomics. A track is handed to a deck by pointer and freed only once
 // no block can still be reading it, counted the way the Drum Rack counts
 // its samples out.
+// Where the live preview's notes go: the session, which plays them into the
+// track's own instrument. Called from the audio thread, so an implementation
+// takes no lock it could wait on and allocates nothing.
+struct DjLiveSink
+{
+    virtual ~DjLiveSink() = default;
+    virtual void noteOn(int deck, int note, int velocity) = 0;
+    virtual void noteOff(int deck, int note) = 0;
+};
+
 class DjEngine
 {
 public:
@@ -88,6 +98,10 @@ public:
     // Phase lock: a synced deck is nudged back onto the master's beat when
     // it drifts, rather than only aligned when sync was pressed.
     std::atomic<bool> phaseLock {true};
+    // The live preview's sink, set once before the engine renders and
+    // outliving it. A deck with livePreview set is silenced here and its
+    // material's notes go to the sink instead.
+    DjLiveSink* liveSink = nullptr;
 
     // ---- audio thread ----
     // Clears the outputs and writes the master to channels 0 and 1 and the
@@ -110,6 +124,17 @@ private:
     void landPendings(int frames, double deviceRate);
     void renderChunk(const float* micInput, float* const* outputs, int outputChannels, int frames);
     bool quantised() const noexcept { return quantise.load(std::memory_order_relaxed) != static_cast<int>(Quantise::off); }
+    // The live preview's sequencer for one deck, run once a block.
+    void sequence(int deck, bool active, int frames);
+    void releaseSounding(int deck);
+    struct Sequencer
+    {
+        double lastBeat = 0.0;
+        std::uint32_t lastJumps = 0;
+        bool wasActive = false;
+        std::array<bool, 128> sounding {};
+    };
+    std::array<Sequencer, maximumDecks> sequencers;
 
     double rate = 48000.0;
     int maximumBlock = 512;

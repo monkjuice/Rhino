@@ -193,15 +193,16 @@ juce::ValueTree Session::projectSnapshot()
     return snapshot;
 }
 
-void Session::markModified()
+void Session::markModified(int changedTrack)
 {
     ++changeRevision;
     // Anything that changes the document may have moved a lane, the device a
     // lane drives, or the track it sits on.
     automationMirrorStale = true;
     edit->markAsChanged();
-    // A bounced deck plays what the document said a moment ago.
-    djDocumentChanged();
+    // A bounced deck plays what the document said a moment ago; a change
+    // known to be one track's leaves the other decks alone.
+    djDocumentChanged(changedTrack);
 }
 
 juce::Result Session::restoreProject(const juce::ValueTree& state, const juce::File& file)

@@ -303,6 +303,90 @@ void DjEngine::process(const float* const* inputs, int inputChannels, float* con
     ended.fetch_add(1, std::memory_order_acq_rel);
 }
 
+void DjEngine::releaseSounding(int index)
+{
+    auto& seq = sequencers[static_cast<size_t>(index)];
+    for (int note = 0; note < 128; ++note)
+        if (seq.sounding[static_cast<size_t>(note)])
+        {
+            seq.sounding[static_cast<size_t>(note)] = false;
+            if (liveSink != nullptr)
+                liveSink->noteOff(index, note);
+        }
+}
+
+// The live preview's sequencer: the material's notes go out as the deck
+// passes their beats, looped as the deck loops, and every note still held
+// is let go when the preview ends, the deck stops, or it lands somewhere it
+// was not travelling to. Notes before where the deck lands are never
+// replayed, so a jump makes no burst of them.
+void DjEngine::sequence(int index, bool active, int frames)
+{
+    auto& seq = sequencers[static_cast<size_t>(index)];
+    auto& d = deckList[static_cast<size_t>(index)];
+    const auto* t = d.track.load(std::memory_order_acquire);
+    if (!active || liveSink == nullptr || t == nullptr || t->midi.empty() || !d.isPlaying())
+    {
+        releaseSounding(index);
+        seq.wasActive = false;
+        return;
+    }
+    const auto beatNow = d.beatPosition();
+    const auto blockBeats = std::abs(d.effectiveBpm()) / 60.0 * static_cast<double>(frames) / rate;
+    const auto emit = [this, index, &seq, t](double from, double to)
+    {
+        auto event = std::upper_bound(t->midi.begin(), t->midi.end(), from,
+                                      [](double beat, const DjMidiEvent& e) { return beat < e.beat; });
+        for (; event != t->midi.end() && event->beat <= to; ++event)
+        {
+            if (!juce::isPositiveAndBelow(event->note, 128)) continue;
+            auto& held = seq.sounding[static_cast<size_t>(event->note)];
+            if (event->on)
+            {
+                liveSink->noteOn(index, event->note, event->velocity);
+                held = true;
+            }
+            else if (held)
+            {
+                liveSink->noteOff(index, event->note);
+                held = false;
+            }
+        }
+    };
+    const auto jumps = d.jumps.load(std::memory_order_relaxed);
+    const auto jumped = jumps != seq.lastJumps;
+    seq.lastJumps = jumps;
+    if (!seq.wasActive || (jumped && beatNow >= seq.lastBeat))
+    {
+        // A start, or a landing ahead: play from the block the deck began
+        // this stretch in, and nothing from before it.
+        releaseSounding(index);
+        seq.lastBeat = beatNow - blockBeats - 1.0e-9;
+        seq.wasActive = true;
+    }
+    if (beatNow + 1.0e-9 < seq.lastBeat)
+    {
+        // Backwards. A loop's wrap plays the loop out to its end and starts
+        // it again; a landing behind, or a reverse, holds nothing over.
+        const auto loopStart = t->beatAtFrame(d.loopStart.load(std::memory_order_relaxed));
+        const auto loopEnd = t->beatAtFrame(d.loopEnd.load(std::memory_order_relaxed));
+        const auto margin = blockBeats * 2.0 + 1.0e-6;
+        const auto wrapped = d.loopActive.load(std::memory_order_relaxed)
+                          && seq.lastBeat > loopEnd - margin && beatNow < loopStart + margin;
+        if (wrapped)
+        {
+            emit(seq.lastBeat, loopEnd);
+            releaseSounding(index);
+            emit(loopStart - 1.0e-9, beatNow);
+        }
+        else
+            releaseSounding(index);
+    }
+    else
+        emit(seq.lastBeat, beatNow);
+    seq.lastBeat = beatNow;
+}
+
 void DjEngine::renderChunk(const float* micInput, float* const* outputs, int outputChannels, int frames)
 {
     const auto count = deckCount();
@@ -334,6 +418,15 @@ void DjEngine::renderChunk(const float* micInput, float* const* outputs, int out
         float* left = scratch[static_cast<size_t>(i)][0].data();
         float* right = scratch[static_cast<size_t>(i)][1].data();
         d.render(left, right, frames, rate);
+        // The live preview: the bounce is silenced and the material's notes
+        // go out to the track's own instrument as the deck passes them.
+        const auto previewing = d.livePreview.load(std::memory_order_relaxed);
+        if (previewing)
+        {
+            std::fill(left, left + frames, 0.0f);
+            std::fill(right, right + frames, 0.0f);
+        }
+        sequence(i, previewing, frames);
         strip.processPreFader(left, right, frames);
         if (strip.cue.load(std::memory_order_relaxed))
             for (int f = 0; f < frames; ++f)

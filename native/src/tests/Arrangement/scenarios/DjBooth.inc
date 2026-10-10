@@ -160,6 +160,29 @@
                         ("Bounced again: " + document->djDeckInfo(0).error).toRawUTF8());
                 const auto* drawn = document->djDeckTrack(0);
                 require(drawn != nullptr && rmsOf(drawn->left) > 0.001, "and the deck plays the drawn note");
+                // A knob held on the track's Drum Rack: the deck is heard
+                // through the track itself while it is held, and bounces
+                // again on the worker when it is let go.
+                int rackIndex = -1;
+                for (const auto& slot : document->deviceSlots(secondMidi))
+                    if (slot.kind == DeviceKind::Instrument)
+                        rackIndex = slot.pluginIndex;
+                require(rackIndex >= 0, "The rack's place in the chain");
+                document->djPlay(0);
+                document->djProcessOffline(1024);
+                require(document->djDeckState(0).isPlaying(), "The deck plays the cell");
+                require(document->beginDeviceParameterGesture(secondMidi, rackIndex, 0).wasOk(), "A knob on the rack is taken hold of");
+                require(document->djDeckInfo(0).previewing && document->djDeckInfo(0).live, "and the deck previews live, with Live on for it");
+                document->djProcessOffline(4096);
+                require(document->djDeckState(0).isPlaying() && !document->djDeckInfo(0).loading, "turning on, with no bounce made while the knob is held");
+                require(document->setDeviceParameter(secondMidi, rackIndex, 0, 0.5f).wasOk(), "The knob moves");
+                require(!document->djDeckInfo(0).loading, "and still no bounce is made");
+                require(document->endDeviceParameterGesture(secondMidi, rackIndex, 0).wasOk(), "The knob let go");
+                require(document->djDeckInfo(0).loading && document->djDeckInfo(0).previewing, "bounces the deck again, previewing until it lands");
+                require(waitForDeck(*document, 0), ("and the bounce lands: " + document->djDeckInfo(0).error).toRawUTF8());
+                require(!document->djDeckInfo(0).previewing && !document->djDeckInfo(0).live, "ending the preview, and Live with it");
+                document->djPause(0);
+                document->djProcessOffline(1024);
                 document->ejectDjDeck(0);
                 document->releaseAudioDevice();
             }

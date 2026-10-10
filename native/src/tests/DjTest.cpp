@@ -387,6 +387,90 @@ void checkBrakeAndScratch()
     require(scratched.position.load() > released + 20.0 * block * 0.5, "let go, the deck runs on");
 }
 
+// The live preview: a deck's notes go out to the sink as it passes their
+// beats, the bounce falls silent meanwhile, a loop plays them round again,
+// and every note still held is let go when the preview ends.
+void checkLivePreview()
+{
+    struct RecordingSink final : DjLiveSink
+    {
+        struct Event { int note = 0, velocity = 0, block = 0; bool on = false; };
+        std::vector<Event> events;
+        int block = 0;
+        void noteOn(int, int note, int velocity) override { events.push_back({note, velocity, block, true}); }
+        void noteOff(int, int note) override { events.push_back({note, 0, block, false}); }
+        const Event* find(int note, bool on, size_t skip = 0) const
+        {
+            for (const auto& e : events)
+                if (e.note == note && e.on == on && skip-- == 0)
+                    return &e;
+            return nullptr;
+        }
+    };
+    RecordingSink sink;
+    DjEngine engine;
+    engine.liveSink = &sink;
+    engine.prepare(deviceRate, block);
+    engine.setDeckCount(1);
+    engine.quantise.store(static_cast<int>(DjEngine::Quantise::off));
+    auto material = rampTrack(48000.0, 20.0, 120.0);   // 24000 frames a beat
+    material->midi = {{1.0, 60, 100, true}, {1.5, 60, 0, false}, {2.0, 62, 90, true}, {3.0, 62, 0, false}};
+    engine.setTrack(0, std::move(material), false);
+    run(engine, 1);
+    auto& deck = engine.deck(0);
+    deck.livePreview.store(true);
+    engine.push(command(DjEngine::Command::Type::play, 0));
+    float loudest = 0.0f;
+    for (int b = 0; b < 100; ++b)
+    {
+        sink.block = b;
+        const auto out = run(engine, 1);
+        loudest = std::max(loudest, rms(out.left));
+    }
+    require(loudest == 0.0f, "a previewing deck is silent in the mixer");
+    // A block is 512 frames and a beat 24000, so beat 1 falls in block 46.
+    const auto* on60 = sink.find(60, true);
+    const auto* off60 = sink.find(60, false);
+    const auto* on62 = sink.find(62, true);
+    require(on60 != nullptr && std::abs(on60->block - 46) <= 1 && on60->velocity == 100,
+            "the note at beat 1 goes out in the block that passes it (block " + juce::String(on60 != nullptr ? on60->block : -1) + ")");
+    require(off60 != nullptr && std::abs(off60->block - 70) <= 1, "and ends at beat 1.5");
+    require(on62 != nullptr && std::abs(on62->block - 93) <= 1, "the note at beat 2 follows");
+    require(sink.find(62, false) == nullptr, "and is still held at beat 3 minus a little");
+    // The preview ending lets the held note go and the bounce is heard again.
+    deck.livePreview.store(false);
+    sink.block = 100;
+    const auto resumed = run(engine, 5);
+    require(sink.find(62, false) != nullptr && sink.find(62, false)->block == 100, "ending the preview lets the held note go");
+    require(rms(resumed.left) > 0.01f, "and the bounce is heard again");
+    // A loop plays the notes round: two beats long, the note at beat 1 comes
+    // again a loop later.
+    engine.push(command(DjEngine::Command::Type::pause, 0));
+    run(engine, 2);
+    auto loop = command(DjEngine::Command::Type::setLoop, 0);
+    loop.value = 0.0;
+    loop.value2 = 48000.0;
+    loop.flag = true;
+    engine.push(loop);
+    auto seek = command(DjEngine::Command::Type::seek, 0);
+    seek.value = 0.0;
+    engine.push(seek);
+    sink.events.clear();
+    deck.livePreview.store(true);
+    engine.push(command(DjEngine::Command::Type::play, 0));
+    for (int b = 0; b < 200; ++b)
+    {
+        sink.block = b;
+        run(engine, 1);
+    }
+    const auto* first = sink.find(60, true);
+    const auto* again = sink.find(60, true, 1);
+    require(first != nullptr && again != nullptr && std::abs((again->block - first->block) - 94) <= 2,
+            "a two-beat loop plays the note again a loop later (" + juce::String(first != nullptr && again != nullptr ? again->block - first->block : -1) + " blocks)");
+    deck.livePreview.store(false);
+    run(engine, 1);
+}
+
 void checkEngineHousekeeping()
 {
     DjEngine engine;
@@ -860,6 +944,7 @@ void checkDjCore(Session&)
     const auto started = juce::Time::getMillisecondCounter();
     checkDeckTransport();
     checkBrakeAndScratch();
+    checkLivePreview();
     checkEngineHousekeeping();
     checkQuantisedStartAndSync();
     checkMixer();

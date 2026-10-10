@@ -175,7 +175,9 @@ public:
     juce::Result restoreProject(const juce::ValueTree&, const juce::File&);
     void projectSaved(const juce::ValueTree&, const juce::File&);
     bool hasUnsavedChanges() const { return changeRevision != savedRevision; }
-    void markModified();
+    // Every edit ends here. A change known to be one track's names it, so
+    // only the DJ decks playing that track are left behind their bounce.
+    void markModified(int changedTrack = -1);
     juce::File projectFile;
     juce::ListenerList<Listener> listeners;
     juce::Result importAudio(const juce::File&);
@@ -1020,6 +1022,7 @@ public:
         bool loading = false;     // a read is in flight
         bool stale = false;       // the document changed under a bounced track
         bool live = false;        // the track's input is heard, so its instrument plays over the deck
+        bool previewing = false;  // a knob is held: the deck's notes play the track's own instrument in place of the bounce
         bool autoRebounce = true; // a stale bounce is made again after a moment's quiet
         juce::String error;       // why the last load failed
         int generation = 0;       // bumped with every load, so a display can tell new material from old
@@ -1508,7 +1511,16 @@ private:
     juce::Result startDjFileRead(int deck);
     void finishDjLoad(int deck, int generation, std::unique_ptr<DjTrack>, const juce::String& error, bool keepBeat);
     void applyDjDeckSettings(int deck);
-    void djDocumentChanged();
+    // A change to the document, or to one track of it, leaves the decks
+    // that play it behind their bounce; -1 is every track.
+    void djDocumentChanged(int track = -1);
+    // While a knob on a track's device is held, the decks playing that
+    // track are heard through the track's own instrument, live, in place of
+    // their bounce; when the knob is let go they bounce again on the worker
+    // and go back to it once the bounce lands.
+    void djBeginLivePreview(int track);
+    void djEndLivePreview(int track);
+    void djFinishPreview(int deck);
     void djReset();
     void writeDjState();
     void readDjState();

@@ -318,6 +318,42 @@ juce::Result Session::bounceDjDeck(int index, bool keepBeat)
     const auto bars = std::max(1.0, std::ceil(endBeats / beatsPerBar() - 1.0e-6));
     const auto spanEnd = edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(bars * beatsPerBar()));
 
+    // The material's notes, for the live preview: a slot clip's own, or
+    // every MIDI clip of the track where it lies, in beats from the top. A
+    // group has several instruments and is not previewed.
+    std::vector<DjMidiEvent> notes;
+    const auto appendNotes = [this, &notes](te::Clip& clip, double startBeat, double lengthBeats)
+    {
+        auto* midi = dynamic_cast<te::MidiClip*>(&clip);
+        if (midi == nullptr) return;
+        const auto offset = clipOffsetBeats(clip);
+        for (auto* note : midi->getSequence().getNotes())
+        {
+            const auto start = note->getStartBeat().inBeats() - offset;
+            const auto end = start + note->getLengthBeats().inBeats();
+            if (end <= 0.0 || start >= lengthBeats) continue;
+            notes.push_back({startBeat + std::max(0.0, start), note->getNoteNumber(), note->getVelocity(), true});
+            notes.push_back({startBeat + std::min(lengthBeats, end), note->getNoteNumber(), 0, false});
+        }
+    };
+    if (info.kind == DjSourceKind::track)
+    {
+        if (slotSource != nullptr)
+            appendNotes(*slotSource, 0.0, edit->tempoSequence.toBeats(end).inBeats());
+        else
+            for (auto* clip : tracks[info.track]->getClips())
+                if (clip != nullptr && shouldShowClipInArrangement(*clip))
+                {
+                    const auto range = clip->getPosition().time;
+                    const auto startBeat = edit->tempoSequence.toBeats(range.getStart()).inBeats();
+                    appendNotes(*clip, startBeat, edit->tempoSequence.toBeats(range.getEnd()).inBeats() - startBeat);
+                }
+        std::sort(notes.begin(), notes.end(), [](const DjMidiEvent& a, const DjMidiEvent& b)
+        {
+            return a.beat < b.beat || (a.beat == b.beat && !a.on && b.on);
+        });
+    }
+
     // A MIDI track with no instrument renders nothing - the engine's renderer
     // refuses it outright - so the deck holds silence of the span instead, on
     // the song's grid, and is bounced again once an instrument arrives, as
@@ -340,6 +376,7 @@ juce::Result Session::bounceDjDeck(int index, bool keepBeat)
         options.beatsPerBar = std::max(1, static_cast<int>(std::lround(beatsPerBar())));
         options.detectKey = false;
         silent->analysis = analyseDjTrack(silent->left.data(), nullptr, silent->length(), silent->sampleRate, options);
+        silent->midi = std::move(notes);
         juce::Logger::writeToLog("Rhino: deck " + juce::String(index + 1) + " holds " + juce::String(bars, 0) + " bars of silence: "
                                  + info.name.quoted() + " has no instrument yet");
         finishDjLoad(index, deck.info.generation, std::move(silent), {}, keepBeat);
@@ -404,6 +441,7 @@ juce::Result Session::bounceDjDeck(int index, bool keepBeat)
     job->name = info.name;
     job->tempo = tempo();
     job->beatsPerBar = std::max(1, static_cast<int>(std::lround(beatsPerBar())));
+    job->midi = std::move(notes);
     auto work = std::make_unique<DjBounceWork>();
     work->job = job;
     work->copy = std::move(copy);
@@ -470,6 +508,7 @@ juce::Result Session::bounceDjDeck(int index, bool keepBeat)
             if (track != nullptr)
             {
                 track->name = job->name;
+                track->midi = std::move(job->midi);
                 DjAnalysisOptions options;
                 options.knownBpm = job->tempo;
                 options.knownFirstBeatSeconds = 0.0;
@@ -513,6 +552,11 @@ void Session::finishDjLoad(int index, int generation, std::unique_ptr<DjTrack> t
     if (deck.info.generation != generation)
         return;   // a later load has taken the deck
     deck.info.loading = false;
+    // A preview held for this bounce ends with it, landed or not: the engine
+    // takes the new material and the bounce is heard again from the beat
+    // the preview reached.
+    if (deck.info.previewing)
+        djFinishPreview(index);
     if (track == nullptr)
     {
         deck.info.error = error;
@@ -705,21 +749,100 @@ te::EditItemID Session::djDeckEditClip(int index) const
 }
 
 // Every change to the document may have moved what a bounced deck plays.
-void Session::djDocumentChanged()
+void Session::djDocumentChanged(int track)
 {
     if (dj == nullptr) return;
     auto any = false;
     for (int i = 0; i < dj->count; ++i)
     {
         auto& deck = dj->decks[static_cast<size_t>(i)];
-        if (deck.info.kind == DjSourceKind::track || deck.info.kind == DjSourceKind::group)
+        if (deck.info.kind != DjSourceKind::track && deck.info.kind != DjSourceKind::group)
+            continue;
+        if (track >= 0)
         {
-            deck.info.stale = true;
-            any = true;
+            // A change known to be one track's: only the decks playing that
+            // track, or a group it belongs to, are behind.
+            const auto info = djDeckInfo(i);
+            auto plays = info.kind == DjSourceKind::track && info.track == track;
+            if (info.kind == DjSourceKind::group)
+                if (const auto group = trackGroup(info.groupId))
+                    plays = track == group->busTrack || (track >= group->firstTrack && track <= group->lastTrack());
+            if (!plays)
+                continue;
         }
+        deck.info.stale = true;
+        any = true;
     }
     if (any)
         dj->staleSince = juce::Time::getMillisecondCounter();
+}
+
+// The live preview: while a knob on a track's device is held, every deck
+// playing that track - a MIDI track running an instrument - is heard through
+// the track itself. Live is switched on for it, as the Live key does, so the
+// instrument is monitored, and the engine plays the bounce's notes into the
+// same inputs the typing keyboard plays into, silencing the bounce meanwhile.
+void Session::djBeginLivePreview(int track)
+{
+    if (dj == nullptr || track < 0) return;
+    auto& b = *dj;
+    auto began = false;
+    for (int i = 0; i < b.count; ++i)
+    {
+        auto& deck = b.decks[static_cast<size_t>(i)];
+        const auto info = djDeckInfo(i);
+        if (deck.info.previewing || info.kind != DjSourceKind::track || info.track != track || !info.loaded)
+            continue;
+        if (trackType(track) != TrackType::midi || !trackHasInstrument(track))
+            continue;
+        const auto state = djDeckState(i);
+        if (!state.isPlaying() && state.transport != DjDeckState::Transport::waiting)
+            continue;
+        deck.liveBeforePreview = deck.info.live;
+        // Live may answer that no input could be routed and leave the deck
+        // live all the same; the deck's state is what counts here.
+        if (!deck.info.live)
+            setDjDeckLive(i, true);
+        if (!deck.info.live)
+            continue;
+        b.previewInputs[0].store(allMidiInsDevice(), std::memory_order_release);
+        b.previewInputs[1].store(computerKeyboardDevice(), std::memory_order_release);
+        deck.info.previewing = true;
+        b.engine.deck(i).livePreview.store(true, std::memory_order_release);
+        juce::Logger::writeToLog("Rhino: deck " + juce::String(i + 1) + " previews " + info.name.quoted() + " live while the knob is held");
+        began = true;
+    }
+    if (began)
+        sendSynchronousChangeMessage();
+}
+
+// The knob let go: the preview goes on until the bounce made now lands.
+void Session::djEndLivePreview(int track)
+{
+    if (dj == nullptr) return;
+    for (int i = 0; i < dj->count; ++i)
+    {
+        auto& deck = dj->decks[static_cast<size_t>(i)];
+        if (!deck.info.previewing) continue;
+        if (track >= 0 && djDeckInfo(i).track != track) continue;
+        if (bounceDjDeck(i, true).failed())
+            djFinishPreview(i);
+    }
+}
+
+void Session::djFinishPreview(int index)
+{
+    if (dj == nullptr || !juce::isPositiveAndBelow(index, dj->count)) return;
+    auto& deck = dj->decks[static_cast<size_t>(index)];
+    dj->engine.deck(index).livePreview.store(false, std::memory_order_release);
+    if (!deck.info.previewing) return;
+    deck.info.previewing = false;
+    if (!deck.liveBeforePreview && deck.info.live)
+        setDjDeckLive(index, false);
+    // Anything the engine had not let go of by the time the preview ended.
+    const auto info = djDeckInfo(index);
+    if (info.track >= 0)
+        panicMidiOnTrack(te::getAudioTracks(*edit)[info.track]);
 }
 
 void Session::djPoll()
@@ -755,7 +878,8 @@ void Session::djPoll()
     for (int i = 0; i < b.count; ++i)
     {
         auto& deck = b.decks[static_cast<size_t>(i)];
-        if (!deck.info.stale || !deck.info.autoRebounce) continue;
+        // A deck previewing a held knob bounces when the knob is let go.
+        if (!deck.info.stale || !deck.info.autoRebounce || deck.info.previewing) continue;
         if (deck.info.kind == DjSourceKind::file)
         {
             startDjFileRead(i);

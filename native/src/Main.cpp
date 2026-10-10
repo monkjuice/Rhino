@@ -1104,21 +1104,39 @@ public:
     {
         if (clipPaneOpen())
             lowerPane = LowerPane::none;
-        else if (const auto id = selectedAudioClipID(); id != te::EditItemID())
+        else if (const auto id = clipForPane(); session.findAudioClip(id) != nullptr)
         {
             audioClip.setClip(id);
             lowerPane = LowerPane::audio;
         }
-        else if (isMidiClipSelected())
+        else if (session.findClip(id) != nullptr)
+        {
+            if (!(session.hasPatternClip() && session.pattern().itemID == id))
+                session.selectPatternClip(id);
             lowerPane = LowerPane::notes;
+        }
         else
         {
-            logStatus("Select a clip first: a MIDI clip opens the note editor, an audio clip the audio editor");
+            logStatus(sessionViewOpen ? "Focus a deck playing a track of the song first: its clip opens here"
+                                      : "Select a clip first: a MIDI clip opens the note editor, an audio clip the audio editor");
             return;
         }
         rememberPaneSelection();
         updateEditorLabel();
         applyPaneLayout();
+    }
+
+    // The clip the Clip toggle opens: in the DJ view the focused deck's clip
+    // - the cell it plays, or its track's first clip - and in the arrangement
+    // the selected clip. The toggle used to ask the arrangement in both
+    // views, and the arrangement selects no clip while the consoles show, so
+    // a clip editor closed for the Device View could not be opened again.
+    te::EditItemID clipForPane() const
+    {
+        if (sessionViewOpen)
+            if (const auto clip = session.djDeckEditClip(djView.selectedDeck()); clip != te::EditItemID())
+                return clip;
+        return arrangement.selectedClipID();
     }
 
     // The other half of the pair. Pressing Devices while a clip editor is open

@@ -586,20 +586,24 @@ bool Session::djDeckHasDrumRack(int index) const
     return info.kind == DjSourceKind::track && info.track >= 0 && trackHasDrumRack(info.track);
 }
 
-// The first MIDI clip on the deck's track, which is what the note editor
-// opens; the empty starter clip counts, because it is what a fresh track
-// edits in.
+// The first clip on the deck's track of the kind the track holds: a MIDI
+// clip for the note editor, an audio clip for the audio editor. The empty
+// starter clip counts, because it is what a fresh track edits in.
 te::EditItemID Session::djDeckEditClip(int index) const
 {
     const auto info = djDeckInfo(index);
     if (info.kind != DjSourceKind::track || info.track < 0)
         return {};
+    const auto midi = trackType(info.track) == TrackType::midi;
     const auto tracks = te::getAudioTracks(*edit);
     te::Clip* first = nullptr;
     for (auto* clip : tracks[info.track]->getClips())
-        if (dynamic_cast<te::MidiClip*>(clip) != nullptr
-            && (first == nullptr || clip->getPosition().time.getStart() < first->getPosition().time.getStart()))
+    {
+        const auto wanted = midi ? dynamic_cast<te::MidiClip*>(clip) != nullptr
+                                 : dynamic_cast<te::WaveAudioClip*>(clip) != nullptr;
+        if (wanted && (first == nullptr || clip->getPosition().time.getStart() < first->getPosition().time.getStart()))
             first = clip;
+    }
     return first != nullptr ? first->itemID : te::EditItemID();
 }
 

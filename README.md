@@ -49,7 +49,7 @@ Rhino includes instruments, a Drum Rack with a pad on every note, sampled and sy
 
 ### Play the song like a DJ
 
-Tab, or the DJ switch beside the transport, swaps the arrangement for up to six CDJ-style decks around a mixer. A deck plays an audio file, or a track or group of the song bounced to audio and bounced again as you edit it, with hot cues, loops, beat jump, a jog wheel that scratches and nudges, sync and quantised starts; the mixer follows the DJM-V10, with a four-band EQ, a compressor, a colour filter and a send on every channel, a mic with talkover, a send/return unit, a crossfader and fourteen beat effects. A track deck's instrument can be played live from the keys over it, which is how a Drum Rack joins a set. Experimental.
+Tab, or the DJ switch beside the transport, swaps the arrangement for up to six CDJ-style decks around a mixer. A deck plays an audio file, or a track or group of the song bounced to audio and bounced again as you edit it, with hot cues, loops, beat jump, a jog wheel that scratches and nudges, sync and quantised starts; the mixer follows the DJM-V10, with a four-band EQ, a compressor, a colour filter and a send on every channel, a mic with talkover, a send/return unit, a crossfader and fourteen beat effects. A track deck's instrument can be played live from the keys over it, which is how a Drum Rack joins a set. The lower pane follows the focused deck, so its clip and its devices are a press away, and Space plays that deck while the view shows. Experimental.
 
 ### Mix with the essentials in reach
 

@@ -255,6 +255,13 @@ juce::Rectangle<int> DjDeckPanel::headerArea() const
     return getLocalBounds().removeFromTop(headerHeight);
 }
 
+void DjDeckPanel::setFocused(bool shouldBeFocused)
+{
+    if (focused == shouldBeFocused) return;
+    focused = shouldBeFocused;
+    repaint(headerArea());
+}
+
 void DjDeckPanel::paint(juce::Graphics& g)
 {
     g.fillAll(palette::sideSurface);
@@ -264,10 +271,14 @@ void DjDeckPanel::paint(juce::Graphics& g)
     g.setColour(palette::border);
     g.fillRect(0, header.getBottom() - 1, getWidth(), 1);
     g.drawRect(getLocalBounds());
-    // The deck's number, as a player's.
-    g.setColour(palette::displayInset);
+    // The deck's number, as a player's. The focused deck's lights up and the
+    // header wears the strip a selected track card wears, because Space and
+    // the lower pane answer to this deck.
+    g.setColour(focused ? palette::selection : palette::displayInset);
     g.fillRect(header.withWidth(26).reduced(3));
-    g.setColour(palette::displayText);
+    if (focused)
+        g.fillRect(0, 0, 3, header.getHeight());
+    g.setColour(focused ? palette::sideSurface : palette::displayText);
     g.setFont(uiFontBold(12.0f));
     drawSnappedText(g, juce::String(deck + 1), header.withWidth(26), juce::Justification::centred);
     // The small labels: TEMPO over the fader, BRAKE under its knob.

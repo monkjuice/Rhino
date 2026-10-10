@@ -25,13 +25,16 @@ public:
     ~DjView() override;
     void paint(juce::Graphics&) override;
     void resized() override;
-    // The deck last clicked, for the Device View to follow: its track, or
-    // -1 when it plays a file or nothing.
+    // The deck last pressed, which Space plays and the lower pane follows:
+    // its index, and its track, or -1 when it plays a file or nothing.
     int selectedDeck() const { return selected; }
     int selectedTrack() const;
+    // What Space does in this view: play or pause the focused deck.
+    void togglePlayFocused();
     std::function<void(juce::String)> status;
     std::function<void(int track, te::EditItemID clip)> editRequested;
-    std::function<void(int track)> deckSelected;
+    // A console was pressed: the index of the deck now focused.
+    std::function<void(int deck)> deckSelected;
 
 private:
     friend int runArrangementTest();
@@ -42,6 +45,8 @@ private:
     void visibilityChanged() override;
     void sync();
     void rebuildDecks();
+    void focusDeck(int index);
+    void markFocus();
     void addDeck();
     void removeDeck(int deck);
 

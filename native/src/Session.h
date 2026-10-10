@@ -1207,7 +1207,8 @@ public:
     // A file or a group has no instrument to play.
     juce::Result setDjDeckLive(int deck, bool live);
     bool djDeckHasDrumRack(int deck) const;
-    // The clip the note editor opens to edit a track deck, or an invalid id.
+    // The clip the lower pane opens for a track deck: the first MIDI clip of
+    // a MIDI track, the first audio clip of an audio track, or an invalid id.
     te::EditItemID djDeckEditClip(int deck) const;
     // Polled by the shell at 30 Hz: installs files a worker has finished,
     // and bounces stale track decks again once the document has been quiet

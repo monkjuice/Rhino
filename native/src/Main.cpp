@@ -175,7 +175,7 @@ public:
         // No box. The dot sits on the bar like every other transport glyph,
         // and the wash under the pointer is what shows the hit area is larger
         // than the twelve pixels the dot occupies.
-        if (highlighted || pressed)
+        if (isEnabled() && (highlighted || pressed))
         {
             g.setColour(juce::Colour(pressed ? 0x24ffffff : 0x14ffffff));
             g.fillRoundedRectangle(bounds.reduced(1.0f), 3.0f);
@@ -183,7 +183,9 @@ public:
         const auto dot = bounds.withSizeKeepingCentre(12.0f, 12.0f);
         // Red is the one colour the neutral chrome keeps, and it keeps it here:
         // record is the only control in the bar whose state is worth a colour.
-        const auto colour = state == State::recording  ? palette::recordAccent
+        // Disabled - the DJ view showing - it is grey whatever the tracks say.
+        const auto colour = !isEnabled()                 ? palette::disabled.withMultipliedAlpha(0.5f)
+                          : state == State::recording  ? palette::recordAccent
                           : state == State::countingIn ? juce::Colour(0xffe0a03c)
                           : state == State::armed      ? palette::recordAccent.withMultipliedSaturation(0.72f).darker(0.25f)
                                                        : palette::disabled;
@@ -279,22 +281,27 @@ public:
         // Ctrl+E cuts. The timeline owns the line; the panel only asks for it.
         audioClip.splitPosition = [this] { return arrangement.insertPointTime(); };
         djView.status = files.status;
-        // A deck that plays a track of the song hands that track to the
-        // Device View, so its chain is a click away while it plays.
-        djView.deckSelected = [this](int track) { if (sessionViewOpen && track >= 0) rack.selectTrack(track); };
-        // A deck's Edit key opens its track's clip in the note editor, which
-        // is the same lower pane under either view: the deck bounces again
-        // a moment after each change, so the edit is heard on the deck.
+        // A press on a console focuses its deck, and a deck that plays a
+        // track of the song hands that track to the lower pane: its chain to
+        // the Device View, its clip to whichever editor is open.
+        djView.deckSelected = [this](int deck) { if (sessionViewOpen) followDeck(deck, true); };
+        // A deck's Edit key opens its track's clip - a MIDI track's in the
+        // note editor, an audio track's in the audio editor - which is the
+        // same lower pane under either view: the deck bounces again a moment
+        // after each change, so the edit is heard on the deck.
         djView.editRequested = [this](int track, te::EditItemID clip)
         {
             if (track < 0 || clip == te::EditItemID()) return;
             arrangement.selectTrack(track);
             rack.selectTrack(track);
-            const auto result = session.selectPatternClip(clip);
-            if (result.failed())
+            if (session.findAudioClip(clip) == nullptr)
             {
-                logStatus(result.getErrorMessage());
-                return;
+                const auto result = session.selectPatternClip(clip);
+                if (result.failed())
+                {
+                    logStatus(result.getErrorMessage());
+                    return;
+                }
             }
             openClip(clip);
             logStatus("Editing " + session.trackName(track).quoted() + ": the deck follows each change");
@@ -981,14 +988,18 @@ public:
                 setSessionViewOpen(!sessionViewOpen);
                 return true;
             }
+        // In the DJ view the song's transport is out of reach: Space is the
+        // focused deck's play key, and F9 waits for the arrangement too.
         if (key.getKeyCode() == juce::KeyPress::spaceKey)
         {
-            session.togglePlayback();
+            if (sessionViewOpen) djView.togglePlayFocused();
+            else session.togglePlayback();
             return true;
         }
         if (key.getKeyCode() == juce::KeyPress::F9Key)
         {
-            toggleRecording();
+            if (sessionViewOpen) logStatus("Recording is the arrangement's: press Tab to return to it");
+            else toggleRecording();
             return true;
         }
         if (key.getModifiers().isCommandDown() && key.getKeyCode() == 'Z')
@@ -1014,9 +1025,19 @@ public:
         {
             if (sessionViewOpen == open) return;
             sessionViewOpen = open;
-            const auto track = open ? djView.selectedTrack() : arrangement.selectedTrackIndex();
-            if (track >= 0) rack.selectTrack(track);
-            logStatus(open ? "DJ view: add a deck and choose what it plays from its name bar; Tab returns to the arrangement"
+            // The decks have transports of their own, and the song's is out
+            // of reach while they show: it stops, its keys dim, and Space is
+            // the focused deck's play key.
+            if (open && session.edit->getTransport().isPlaying())
+                session.stop();
+            for (auto* control : std::initializer_list<juce::Component*>{&play, &stop, &rewind, &record})
+                control->setEnabled(!open);
+            if (open)
+                followDeck(djView.selectedDeck(), false);
+            else if (const auto track = arrangement.selectedTrackIndex(); track >= 0)
+                rack.selectTrack(track);
+            logStatus(open ? "DJ view: add a deck and choose what it plays from its name bar; Space plays the focused deck; "
+                             "Tab returns to the arrangement"
                            : "Arrangement view");
             resized();
             repaint();
@@ -1082,6 +1103,40 @@ public:
     {
         if (lowerPane != LowerPane::none) return;
         lowerPane = LowerPane::devices;
+        updateEditorLabel();
+        requestPaneLayout();
+    }
+
+    // A console pressed in the DJ view hands its track to the lower pane, as
+    // a track card does in the arrangement: the Device View shows the track's
+    // chain, and whichever clip editor is open moves to the track's clip - the
+    // note editor for a MIDI track, the audio editor for an audio one. With
+    // openPane a closed pane opens on the devices, as a card click opens it;
+    // the view switch passes false, so showing the DJ view changes no more
+    // than the arrangement's own selection would. A file or a group deck has
+    // no track of the song and changes nothing. The pane state is read before
+    // the arrangement's selection moves, because that move re-reads the
+    // arrangement's own clip selection and may close the pane on the way.
+    void followDeck(int deck, bool openPane)
+    {
+        const auto info = session.djDeckInfo(deck);
+        if (info.kind != Session::DjSourceKind::track || info.track < 0) return;
+        const auto clipPaneWasOpen = clipPaneOpen();
+        arrangement.selectTrack(info.track);
+        rack.selectTrack(info.track);
+        const auto clip = session.djDeckEditClip(deck);
+        const auto audio = clip != te::EditItemID() && session.findAudioClip(clip) != nullptr;
+        const auto midi = clip != te::EditItemID() && !audio && session.findClip(clip) != nullptr;
+        if (midi && !(session.hasPatternClip() && session.pattern().itemID == clip))
+            session.selectPatternClip(clip);
+        if (clipPaneWasOpen)
+        {
+            if (audio) audioClip.setClip(clip);
+            lowerPane = audio ? LowerPane::audio : midi ? LowerPane::notes : LowerPane::none;
+        }
+        else if (openPane && lowerPane == LowerPane::none)
+            lowerPane = LowerPane::devices;
+        rememberPaneSelection();
         updateEditorLabel();
         requestPaneLayout();
     }

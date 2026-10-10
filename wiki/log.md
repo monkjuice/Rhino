@@ -349,3 +349,7 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - source: native/src/SessionDj.cpp, SessionDjInternal.h, Session.h and tests/Arrangement/scenarios/DjBooth.inc after the fix; the mixer and Not-built paragraphs of dj-view.md already matched them
 - updated: pages/dj-view.md (the engine bullet no longer says the tests drive djProcessOffline "directly": it goes through the booth's own callback, inputs included)
 - updated: pages/sync-children-before-layout.md (the view scenario now adds a third deck to the standing view and checks every strip clears the master section, replacing the note that no test covered the ordering)
+
+## [2026-10-10] update | The lower pane and Space follow the focused deck
+- source: branch feat/dj-view, the user's request that the clip and device panes follow the focused console and that the arrangement's transport give way to it; native/src/Main.cpp (followDeck, setSessionViewOpen, Space and F9, RecordButton disabled), DjView.*, DjDeckPanel.* (the focus mark), SessionDjSources.cpp (djDeckEditClip by the track's kind), tests/Arrangement/scenarios/DjBooth.inc
+- updated: pages/app-shell.md (the transport dimmed and stopped in the DJ view, Space as the focused deck's play key, the pane following a console as it follows a card, the read-before-move gotcha in followDeck), pages/dj-view.md (the focus mark, focusDeck, togglePlayFocused)

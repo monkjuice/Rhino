@@ -30,6 +30,9 @@ public:
     void tick(bool blinkPhase);
     // Once a display refresh: the screen and the platter.
     void tickDisplay();
+    // The focused deck wears a mark: Space and the lower pane answer to it.
+    void setFocused(bool);
+    bool isFocused() const { return focused; }
     void paint(juce::Graphics&) override;
     void resized() override;
     void mouseDown(const juce::MouseEvent&) override;
@@ -83,7 +86,7 @@ private:
     Session::DjDeckState state;
     double beatLoopBeats = 4.0;
     int jumpBeats = 4;
-    bool dropHighlight = false;
+    bool dropHighlight = false, focused = false;
     juce::Time lastSelectTime;
     static constexpr int headerHeight = 24, padRowHeight = 22;
 };

@@ -102,17 +102,37 @@ void DjView::rebuildDecks()
         const auto index = static_cast<int>(decks.size());
         auto deck = std::make_unique<DjDeckPanel>(session, index);
         deck->status = [this](const juce::String& message) { if (status) status(message); };
-        deck->selected = [this, index]
-        {
-            selected = index;
-            if (deckSelected) deckSelected(session.djDeckInfo(index).track);
-        };
+        deck->selected = [this, index] { focusDeck(index); };
         deck->editRequested = [this](int track, te::EditItemID clip) { if (editRequested) editRequested(track, clip); };
         deck->removeRequested = [this, index] { removeDeck(index); };
         addAndMakeVisible(*deck);
         decks.push_back(std::move(deck));
     }
     selected = juce::jlimit(0, std::max(0, count - 1), selected);
+    markFocus();
+}
+
+// A press on a console focuses its deck: the deck wears the mark, Space
+// plays and pauses it, and the shell is told so the lower pane can follow
+// its track.
+void DjView::focusDeck(int index)
+{
+    if (!juce::isPositiveAndBelow(index, static_cast<int>(decks.size()))) return;
+    selected = index;
+    markFocus();
+    if (deckSelected) deckSelected(index);
+}
+
+void DjView::markFocus()
+{
+    for (size_t i = 0; i < decks.size(); ++i)
+        decks[i]->setFocused(static_cast<int>(i) == selected);
+}
+
+void DjView::togglePlayFocused()
+{
+    if (juce::isPositiveAndBelow(selected, static_cast<int>(decks.size())))
+        session.djTogglePlay(selected);
 }
 
 void DjView::sync()

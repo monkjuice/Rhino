@@ -90,6 +90,12 @@
                 require(document->addAudioTrack().wasOk(), "A clean track for the group");
                 const auto fresh = document->trackCount() - 1;
                 require(document->importAudioAt(source.getFile(), fresh, 0.0).wasOk(), "with audio on it");
+                // An audio track on a deck opens its audio clip, for the
+                // audio editor, as a MIDI track opens its clip for the notes.
+                require(document->loadDjDeckTrack(0, fresh).wasOk(), "The audio track goes on the deck");
+                require(document->findAudioClip(document->djDeckEditClip(0)) != nullptr,
+                        "and the deck's clip is the track's audio clip");
+                require(waitForDeck(*document, 0), ("and it bounces: " + document->djDeckInfo(0).error).toRawUTF8());
                 require(document->groupTracks({fresh}, "Deck group").wasOk(), "grouped under a bus");
                 const auto group = document->trackGroups().back();
                 require(document->loadDjDeckGroup(0, group.id).wasOk(),
@@ -274,6 +280,22 @@
                 require(session.removeDjDeck(2).wasOk(), "and the third deck goes again");
                 view->sync();
                 require(view->decks.size() == 2 && view->mixer.strips.size() == 2, "leaving two");
+                // A press on a console focuses its deck: the mark moves, the
+                // shell is told, and Space plays and pauses that deck alone.
+                int focusedDeck = -1;
+                view->deckSelected = [&focusedDeck](int deck) { focusedDeck = deck; };
+                view->decks[1]->selected();
+                require(view->selectedDeck() == 1 && focusedDeck == 1, "A press on the second console focuses it and tells the shell");
+                require(view->decks[1]->isFocused() && !view->decks[0]->isFocused(), "and the mark moves to it");
+                view->togglePlayFocused();
+                session.djProcessOffline(2048);
+                require(session.djDeckState(1).isPlaying() && !session.djDeckState(0).isPlaying(),
+                        "Space plays the focused deck and no other");
+                view->togglePlayFocused();
+                session.djProcessOffline(1024);
+                require(!session.djDeckState(1).isPlaying(), "and pauses it again");
+                view->decks[0]->selected();
+                require(view->decks[0]->isFocused() && !view->decks[1]->isFocused(), "The first console takes the focus back");
                 view->decks[0]->play.onClick();
                 session.djProcessOffline(2048);
                 require(session.djDeckState(0).isPlaying(), "The Play key plays the deck");

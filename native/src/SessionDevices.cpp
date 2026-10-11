@@ -111,7 +111,7 @@ juce::Result Session::addDevice(const juce::String& deviceId, int trackIndex, co
     if (preset != nullptr)
         applyDevicePreset(*plugin, *preset);
     edit->getUndoManager().beginNewTransaction();
-    markModified(trackIndex);
+    markModified(trackIndex, ModelChange::devices);
     if (edit->getTransport().isPlaying())
         edit->restartPlayback();
     sendSynchronousChangeMessage();
@@ -149,7 +149,7 @@ juce::Result Session::addClipDevice(const juce::String& deviceId, te::EditItemID
     edit->getUndoManager().beginNewTransaction("Add " + name + " to clip");
     clip->getPluginList()->insertPlugin(plugin, clip->getPluginList()->size(), nullptr);
     edit->getUndoManager().beginNewTransaction();
-    markModified();
+    markModified(clipTrackIndex(*edit, *clip), ModelChange::devices);
     if (edit->getTransport().isPlaying())
         edit->restartPlayback();
     sendSynchronousChangeMessage();
@@ -183,7 +183,10 @@ juce::Result Session::addInstrumentDevice(const DeviceDescriptor& device, int tr
     const auto& name = device.displayName;
 
     edit->getUndoManager().beginNewTransaction("Add " + name);
-    bool changed = false;
+    // Whether the chain changed. A device already on the track changes none:
+    // a preset dropped with it only sets its values, and the track's name
+    // only follows the instrument.
+    bool changed = false, renamed = false;
     // A channel-strip facility is added to the chain rather than becoming the
     // track's instrument, so it does not displace one.
     te::Plugin* plugin = nullptr;
@@ -195,21 +198,27 @@ juce::Result Session::addInstrumentDevice(const DeviceDescriptor& device, int tr
     }
     else
     {
-        const auto result = switchTrackInstrument(*edit, *track, device, changed,
+        InstrumentSwitch switched;
+        const auto result = switchTrackInstrument(*edit, *track, device, switched,
                                                   forgeDescription ? &*forgeDescription : nullptr);
         if (result.failed())
             return result;
+        changed = switched.devices;
+        renamed = switched.renamed;
         // The instrument now on the track, new or the one already there.
         for (auto* candidate : track->pluginList)
             if (candidate != nullptr && candidate->getPluginType() == device.typeName)
                 plugin = candidate;
     }
     // In the same transaction as the add, so undoing it takes both away.
-    if (preset != nullptr && plugin != nullptr && applyDevicePreset(*plugin, *preset))
-        changed = true;
+    const auto valuesSet = preset != nullptr && plugin != nullptr && applyDevicePreset(*plugin, *preset);
     edit->getUndoManager().beginNewTransaction();
     if (changed)
-        markModified(trackIndex);
+        markModified(trackIndex, ModelChange::devices);
+    else if (valuesSet)
+        markModified(trackIndex, ModelChange::parameters);
+    else if (renamed)
+        markModified(trackIndex, ModelChange::none);
     if (edit->getTransport().isPlaying())
         edit->restartPlayback();
     sendSynchronousChangeMessage();
@@ -270,7 +279,7 @@ juce::Result Session::addMidiEffectDevice(const DeviceDescriptor& device, int tr
     if (preset != nullptr)
         applyDevicePreset(*plugin, *preset);
     edit->getUndoManager().beginNewTransaction();
-    markModified(trackIndex);
+    markModified(trackIndex, ModelChange::devices);
     if (edit->getTransport().isPlaying())
         edit->restartPlayback();
     sendSynchronousChangeMessage();
@@ -467,7 +476,7 @@ juce::Result Session::editDeviceSettings(int track, int slot, const juce::String
     undoManager.beginNewTransaction(actionName);
     change();
     undoManager.beginNewTransaction();
-    markModified(track);
+    markModified(track, ModelChange::devices);
     sendSynchronousChangeMessage();
     return juce::Result::ok();
 }
@@ -493,7 +502,7 @@ juce::Result Session::setDeviceParameter(int track, int slot, int parameterIndex
         mirrorAutomationToEngine();
     }
     parameter->setParameter(next, juce::sendNotification);
-    markModified(track);
+    markModified(track, ModelChange::parameters);
     // Inside a drag only the rack hears it, to keep the dragged device's
     // readings live; the gesture's end tells everyone else once.
     if (parameterGestureDepth > 0)
@@ -540,7 +549,7 @@ juce::Result Session::toggleDeviceEnabled(int track, int slot)
     edit->getUndoManager().beginNewTransaction(plugin->isEnabled() ? "Bypass device" : "Enable device");
     plugin->setEnabled(!plugin->isEnabled());
     edit->getUndoManager().beginNewTransaction();
-    markModified(track);
+    markModified(track, ModelChange::devices);
     if (edit->getTransport().isPlaying())
         edit->restartPlayback();
     sendSynchronousChangeMessage();
@@ -593,7 +602,7 @@ juce::Result Session::moveDevice(int track, int fromDevice, int toDevice)
     plugin->removeFromParent();
     list->insertPlugin(plugin, juce::jlimit(0, list->size(), insertIndex), nullptr);
     edit->getUndoManager().beginNewTransaction();
-    markModified(track);
+    markModified(track, ModelChange::devices);
     if (edit->getTransport().isPlaying())
         edit->restartPlayback();
     sendSynchronousChangeMessage();
@@ -614,7 +623,8 @@ juce::Result Session::deleteDevice(int track, int slot)
     removeDeviceLanes(automationOwnerState(track), *plugin, &edit->getUndoManager());
     plugin->removeFromParent();
     edit->getUndoManager().beginNewTransaction();
-    markModified(track);
+    // The device and the lanes that drove it.
+    markModified(track, ModelChange::devices | ModelChange::curves);
     if (edit->getTransport().isPlaying())
         edit->restartPlayback();
     sendSynchronousChangeMessage();

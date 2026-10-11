@@ -23,7 +23,9 @@ Drum Rack (`useDrums`), or 4OSC with one of its patches. So dropping a pattern o
 
 1. `preparePresetTrack` readies the track. It refuses an audio track ("Drop patterns on a MIDI track instead"), then
    switches the track's instrument through `switchTrackInstrument` — replacing whatever was there, since a track has
-   [one instrument](one-instrument-per-track.md) — and applies the pattern's patch to it.
+   [one instrument](one-instrument-per-track.md) — and applies the pattern's patch to it. It reports whether any of
+   that changed the track's chain, so a pattern dropped where its synth already plays marks the track's `notes` alone
+   rather than its `devices` too ([DJ view and the booth](dj-view.md)).
 2. `insertPatternPreset` inserts a one-bar MIDI clip at the drop position, fills it with the notes, and runs
    `makeRoomForClip`, so the new clip wins the ground it lands on ([Clips never overlap](clip-placement.md)).
 

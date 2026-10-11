@@ -32,6 +32,8 @@ A swap leaves clips alone, but the converse does not hold. Moving a MIDI clip to
 
 A drum clip carries its sounds as well. A Drum Rack that arrives through the switch is blank, so it takes the source rack's kit (`drumKitOf` and `fillBlankDrumRack` in `SessionInternal.h`). A paste carries the kit as XML in `ClipSnapshot::drumKit`, taken at copy time like the rest of the clipboard snapshot. A destination rack that already holds sounds keeps them ([Drum Rack](drum-rack.md)).
 
+The switch says what it did in an `InstrumentSwitch`: `devices` when the chain changed - an instrument made, another removed, the one kept switched back on - and `renamed` when only the track's name followed the instrument; `fillBlankDrumRack` returns whether the rack took the kit. A clip landing on a track that already runs its instrument, as a duplicate on its own track always does, changes no device there, so the move, paste and duplicate mark the destination's `devices` only when one of the two changed something (since 2026-10-11; [DJ view and the booth](dj-view.md)). An instrument dropped on a track already running it is read the same way (`Session::addInstrumentDevice`): no device changed, so a preset dropped with it marks `parameters` and a name that followed it `none`. The rename still happens on such a landing: Ctrl+D on a clip of a track named after its kit renames the track `Drum Rack`, and a name given to a synth track gives way to the synth's (noted on 2026-10-11, not changed).
+
 ## Related
 
 - [Device chain order](device-chain-order.md)

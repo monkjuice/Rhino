@@ -175,9 +175,31 @@ public:
     juce::Result restoreProject(const juce::ValueTree&, const juce::File&);
     void projectSaved(const juce::ValueTree&, const juce::File&);
     bool hasUnsavedChanges() const { return changeRevision != savedRevision; }
-    // Every edit ends here. A change known to be one track's names it, so
-    // only the DJ decks playing that track are left behind their bounce.
-    void markModified(int changedTrack = -1);
+    // What an edit changed, so that what is derived from the document - the
+    // engine's automation curves, a DJ deck's bounce - can tell whether it is
+    // behind. Kinds combine with |. A change nobody has classified is
+    // `unknown`, every kind at once, which is always safe: it costs a deck a
+    // bounce it did not need, never a wrong sound.
+    enum class ModelChange : unsigned
+    {
+        none = 0,              // nothing anything renders: a name, a colour, a view setting
+        parameters = 1u << 0,  // a device parameter's value, the track's fader and pan among them
+        curves = 1u << 1,      // an automation lane
+        notes = 1u << 2,       // what a MIDI track plays: its notes and the clips that hold them
+        audioClips = 1u << 3,  // what an audio track plays: its clips and how each one plays
+        devices = 1u << 4,     // a chain's devices, or a device's own settings
+        tempo = 1u << 5,       // the tempo or the time signature
+        unknown = (1u << 6) - 1
+    };
+    friend constexpr ModelChange operator|(ModelChange a, ModelChange b) noexcept
+    {
+        return static_cast<ModelChange>(static_cast<unsigned>(a) | static_cast<unsigned>(b));
+    }
+    // Every edit ends here, naming the track it changed when it knows it and
+    // what it changed. `none` marks the document and nothing else; anything
+    // else leaves the lanes to be mirrored again and the DJ decks playing
+    // that track - every deck, for -1 - behind their bounce.
+    void markModified(int changedTrack = -1, ModelChange changes = ModelChange::unknown);
     juce::File projectFile;
     juce::ListenerList<Listener> listeners;
     juce::Result importAudio(const juce::File&);
@@ -986,8 +1008,9 @@ public:
     // beside the edit's, the way the library preview is. So every deck has a
     // transport of its own and none of them is the song's. A deck plays a
     // file, or a track or group of this document bounced to audio - and
-    // bounced again, after a moment's quiet, whenever the document changes,
-    // which is what lets the note editor edit a deck while it plays.
+    // bounced again, after a moment's quiet with nothing held, whenever the
+    // document changes in a way the bounce could hear (ModelChange), which is
+    // what lets the note editor edit a deck while it plays.
     static constexpr int maximumDjDecks = 6;
     // The booth's private state, defined in SessionDjInternal.h and held
     // below; declared here so the session's own units can name it.
@@ -1009,6 +1032,10 @@ public:
         bool loaded = false;      // material is on the deck
         bool loading = false;     // a read is in flight
         bool stale = false;       // the document changed under a bounced track
+        // What changed under it since its bounce was begun. A bounced deck
+        // only goes stale on it; a deck running its track's devices live
+        // will tell a parameter from new devices by it.
+        ModelChange behindOn = ModelChange::none;
         bool live = false;        // the track's input is heard, so its instrument plays over the deck
         bool previewing = false;  // a knob is held: the deck's notes play the track's own instrument in place of the bounce
         int previewNotes = 0;     // how many of them have reached the track since the preview began
@@ -1289,11 +1316,13 @@ private:
                                     const std::function<void(te::WaveAudioClip&)>&);
     // SessionClips.cpp - one clip's move or trim without a transaction, a
     // notification or a playback restart, so moveClips can carry several
-    // inside one undo step. trackChanged says whether it changed lanes, and
-    // changed whether it moved at all.
+    // inside one undo step. trackChanged says whether it changed lanes,
+    // changed whether it moved at all, and devicesChanged whether the lane it
+    // reached changed devices for it: a MIDI clip's instrument brought there
+    // or switched back on, or a blank Drum Rack given the clip's kit.
     juce::Result editClipInEdit(te::EditItemID, ClipGeometry, ClipGesture, int targetTrack,
                                 const std::vector<te::EditItemID>& movingWith, bool& trackChanged,
-                                bool& changed);
+                                bool& changed, bool& devicesChanged);
     // SessionTransport.cpp - an import without a transaction, so importAudio
     // can add the lane it lands on in the same undo step.
     juce::Result importAudioInEdit(const juce::File&, int track, double startSeconds, double* endSeconds = nullptr);
@@ -1301,6 +1330,11 @@ private:
     // notification, so paste can clear and insert inside one undo step.
     bool clearClipRegionInEdit(double startSeconds, double endSeconds, int firstTrack, int lastTrack,
                                const std::vector<te::EditItemID>& keep = {});
+    // A clip edit marks each track it reached with what that track plays -
+    // notes on a MIDI track, audio clips on an audio track - and with `also`,
+    // whatever else it changed there. With no track known, every track is
+    // marked. Session.cpp.
+    void markClipsModified(std::vector<int> tracks, ModelChange also = ModelChange::none);
     // Two clips may never overlap on one track. A clip that has just been
     // dropped, dragged or trimmed is the one that wins the span it now covers:
     // the clips already there are split at its edges and the part underneath
@@ -1367,8 +1401,9 @@ private:
     void finishRecording();
     // makeRoomForClip over whatever the recording just added. The engine
     // inserts a recorded clip on top of what is already on the track; Rhino's
-    // rule is that the newcomer wins the ground it landed on.
-    bool tidyRecordedClips();
+    // rule is that the newcomer wins the ground it landed on. Returns the
+    // tracks a take landed on, empty when nothing was recorded.
+    std::vector<int> tidyRecordedClips();
     CountInClick& countInClick();
     // Attaching is separate from building, so a count is configured while
     // nothing is registered on the device and no block can be in flight
@@ -1396,7 +1431,7 @@ private:
     te::VolumeAndPanPlugin* trackVolumePlugin(int track) const;
     // SessionMixer.cpp - a fader or pan change is announced at once outside a
     // drag and once at the drag's end inside one.
-    void announceMixerChange();
+    void announceMixerChange(int track, ModelChange);
     void endMixerGesture();
     void ensureTrackMixers();
     // The reorder itself, without a transaction or a notification, so the group
@@ -1413,7 +1448,11 @@ private:
     void reconcileTrackGroups();
     void migrateLegacyTrackGroups();
     void ensureSceneSlots(int minimumScenes = defaultScenes);
-    juce::Result preparePresetTrack(int trackIndex, const PresetPattern&);
+    // SessionPresets.cpp - the instrument and sound a pattern preset plays its
+    // notes with, put on the track. devicesChanged says whether that changed
+    // the track's chain: an instrument switched, the synth's patch set, or a
+    // blank rack given the default kit. A track already set up changes none.
+    juce::Result preparePresetTrack(int trackIndex, const PresetPattern&, bool& devicesChanged);
     // Every path that makes a track goes through here, so no track can exist
     // without having said what it is for. It appends the row, names it,
     // colours it, writes its type and gives it its utility device; the caller
@@ -1498,9 +1537,18 @@ private:
     juce::Result startDjFileRead(int deck);
     void finishDjLoad(int deck, int generation, std::unique_ptr<DjTrack>, const juce::String& error, bool keepBeat);
     void applyDjDeckSettings(int deck);
-    // A change to the document, or to one track of it, leaves the decks
-    // that play it behind their bounce; -1 is every track.
-    void djDocumentChanged(int track = -1);
+    // What a change to the document, or to one track of it (-1 is every
+    // track), leaves the decks that play it behind on.
+    void djDocumentChanged(int track, ModelChange);
+    // True while a knob, fader, tempo or clip drag is held, or any mouse
+    // button is down: the person is in the middle of something. No deck's
+    // copy of the document is made then, since making one costs the message
+    // thread a document's worth of devices.
+    bool gestureHeld() const;
+    // How many bounces the booth has started, and the folder where a deck's
+    // copies of the document keep their renders, for the tests (SessionDj.cpp).
+    int djBouncesStarted() const;
+    juce::File djCopyFolder(int deck) const;
     // While a knob on a track's device is held, the decks playing that
     // track are heard through the track's own instrument, live, in place of
     // their bounce; when the knob is let go they bounce again on the worker

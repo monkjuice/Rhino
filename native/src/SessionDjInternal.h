@@ -12,6 +12,11 @@
 
 namespace rhino
 {
+// Where the document keeps the booth: a child of the edit's state, written
+// when a snapshot is taken (SessionDj.cpp). A deck's copy of the document
+// leaves it out.
+extern const juce::Identifier djStateID;
+
 // The settings a deck keeps apart from its material: what a document saves
 // and what a load applies once the material is on the deck. Seconds, so a
 // hot cue survives a file at another rate.
@@ -56,12 +61,11 @@ struct DjLoadJob
 // message thread alone, made there and destroyed there once its job is
 // done; the worker is handed a plain pointer to the render and touches
 // nothing here after it raises `done`. The copy is declared first so the
-// render and the scopes that refer to it go before it.
+// render and the scope that refers to it go before it.
 struct DjBounceWork
 {
     std::shared_ptr<DjLoadJob> job;
     std::unique_ptr<te::Edit> copy;
-    std::unique_ptr<te::FreezePointPlugin::ScopedTrackSoloIsolator> isolator;
     std::unique_ptr<te::Renderer::ScopedClipSlotDisabler> slotDisabler;
     juce::WavAudioFormat wav;
     std::unique_ptr<te::Renderer::RenderTask> task;
@@ -71,7 +75,7 @@ struct Session::DjBooth final : juce::AudioIODeviceCallback,
                                 DjLiveSink,
                                 juce::AsyncUpdater
 {
-    DjBooth();
+    explicit DjBooth(te::Engine&);
     ~DjBooth() override;
 
     struct Deck
@@ -114,8 +118,30 @@ struct Session::DjBooth final : juce::AudioIODeviceCallback,
     // audio thread was what made a set stutter while a bounce was made.
     juce::ThreadPool workers {1, 0, juce::Thread::Priority::low};
     std::vector<std::shared_ptr<DjLoadJob>> jobs;
-    // The bounces in flight, kept until their jobs are done.
+    // The bounces in flight, in the order they were begun, each kept until
+    // releaseFinishedBounces lets it go.
     std::vector<std::unique_ptr<DjBounceWork>> bounces;
+    // Every bounce started, each a copy of the document made on the message
+    // thread: what the tests count to hold the rules on when one is made.
+    int bouncesStarted = 0;
+    // The engine keeps an edit's cached renders - a compressed file decoded,
+    // a pitched clip stretched, a reversed one reversed - in a temp folder
+    // named for the edit's project id, and purges the ones its own clips do
+    // not use as the edit is built. So each deck's copies share a project id
+    // of their own, made with the booth (deckCopyState writes it): a deck's
+    // next bounce finds the renders its last one made, the purge reaches
+    // only that deck's, and the song's are never touched. The folders are
+    // recorded as the copies are built, and deleted with the booth and with
+    // the document the decks belonged to.
+    te::Engine& tracktionEngine;
+    std::array<te::ProjectItemID, maximumDjDecks> copyIds;
+    std::array<juce::File, maximumDjDecks> copyFolders;
+    void removeCopyFolders();
+    // Lets each bounce's copy go, on the message thread, once its job is
+    // done: the worker touches neither the copy nor its render after raising
+    // `done`. One that never finished rendering may wait a little longer
+    // (SessionDjSources.cpp says why).
+    void releaseFinishedBounces();
     // When the document last changed under a bounced deck, as a millisecond
     // tick, and zero when nothing is stale. The poll bounces again once it
     // has been quiet for `rebounceQuietMs`.

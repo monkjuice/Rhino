@@ -13,9 +13,10 @@
 
 namespace rhino
 {
+const juce::Identifier djStateID {"rhinoDj"};
+
 namespace
 {
-const juce::Identifier djStateID {"rhinoDj"};
 const juce::Identifier djDeckID {"DECK"};
 const juce::Identifier djChannelID {"CHANNEL"};
 const juce::Identifier djHotCueID {"HOTCUE"};
@@ -40,15 +41,18 @@ Session::DjDeckState::Transport transportOf(DjDeck::State s)
 }
 }
 
-Session::DjBooth::DjBooth()
+Session::DjBooth::DjBooth(te::Engine& songEngine) : tracktionEngine(songEngine)
 {
     formats.registerBasicFormats();
     // The live preview's notes come back here, on the audio thread.
     engine.liveSink = this;
+    for (auto& id : copyIds)
+        id = te::ProjectItemID::createNewID(te::ProjectID{});
 }
 
 // The worker is drained before the jobs and the bounces' copies of the
-// document go with the booth, on this thread.
+// document go with the booth, on this thread, and the renders the copies
+// left go after them.
 Session::DjBooth::~DjBooth()
 {
     cancelPendingUpdate();
@@ -57,12 +61,17 @@ Session::DjBooth::~DjBooth()
     workers.removeAllJobs(true, 10000);
     bounces.clear();
     jobs.clear();
+    removeCopyFolders();
 }
 
 void Session::DjBooth::audioDeviceIOCallbackWithContext(const float* const* inputChannelData, int numInputChannels,
                                                         float* const* outputChannelData, int numOutputChannels, int numSamples,
                                                         const juce::AudioIODeviceCallbackContext&)
 {
+    // Every gain and filter in the booth decays towards zero, and nothing
+    // says the device's thread already flushes denormals; djProcessOffline
+    // comes through here too, so the tests run under the same rule.
+    const juce::ScopedNoDenormals noDenormals;
     // The scratch buffer a second callback is handed holds this callback's
     // own previous block, as CountInClick explains, so the engine clears it
     // before it writes. The device's first input is the mic.
@@ -146,14 +155,18 @@ void Session::DjBooth::audioDeviceStopped() {}
 Session::DjBooth& Session::booth()
 {
     if (dj == nullptr)
-        dj = std::make_unique<DjBooth>();
+        dj = std::make_unique<DjBooth>(engine);
     return *dj;
 }
 
 void Session::ensureDjAttached()
 {
     auto& b = booth();
-    if (b.attached) return;
+    // The test runners drive the booth themselves, a block at a time through
+    // djProcessOffline, and render their bounces inline; a device thread
+    // calling the same callback meanwhile would be a second consumer of the
+    // engine's single-consumer queue and a second renderer of its decks.
+    if (b.attached || isCommandLineTestMode()) return;
     engine.getDeviceManager().deviceManager.addAudioCallback(&b);
     b.attached = true;
 }
@@ -212,8 +225,18 @@ int Session::djSendFxTypeCount()
 // moved a bounced track's notes.
 void Session::markDjModified()
 {
-    ++changeRevision;
-    edit->markAsChanged();
+    markModified(-1, ModelChange::none);
+}
+
+int Session::djBouncesStarted() const
+{
+    return dj != nullptr ? dj->bouncesStarted : 0;
+}
+
+juce::File Session::djCopyFolder(int deck) const
+{
+    return dj != nullptr && juce::isPositiveAndBelow(deck, maximumDjDecks) ? dj->copyFolders[static_cast<size_t>(deck)]
+                                                                         : juce::File();
 }
 
 int Session::djDeckCount() const
@@ -900,6 +923,9 @@ void Session::djProcessOffline(int frames)
 void Session::djProcessOffline(const float* const* inputs, int inputChannels, int frames)
 {
     if (dj == nullptr || frames <= 0) return;
+    // A booth on a device is rendered by the device's thread, which this
+    // would race; under the test runners it never goes on one.
+    jassert(!dj->attached);
     std::vector<float> left(static_cast<size_t>(frames)), right(static_cast<size_t>(frames));
     float* outputs[2] {left.data(), right.data()};
     dj->audioDeviceIOCallbackWithContext(inputs, inputChannels, outputs, 2, frames, juce::AudioIODeviceCallbackContext{});

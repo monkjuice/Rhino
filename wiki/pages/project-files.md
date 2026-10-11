@@ -4,7 +4,7 @@ type: component
 summary: A .rhinoedit is the Tracktion edit's XML plus Rhino's own properties, saved from a snapshot on a worker and opened off-thread.
 tags: [rhino, persistence, files, debugging]
 sources: []
-updated: 2026-10-05
+updated: 2026-10-11
 ---
 
 # Project files (.rhinoedit)
@@ -17,7 +17,7 @@ A `.rhinoedit` is the Tracktion edit's `ValueTree` written as XML. Rhino's own s
 
 ## Opening
 
-The XML is parsed on the worker; `restoreProject` runs on the message thread with the window disabled. It refuses anything that is not an `EDIT` with `rhinoFormatVersion` = 1, and a document with no tracks, before touching the open document. It runs `collapseStackedInstruments` on the candidate, then swaps the edit. It drops what belonged to the outgoing document: the automation mirror's curves (before the old edit goes, since they hold its plugins), the automation overrides, which are keyed by track index, and the dragged loop span. Then it re-finds the note editor's clip (`repairPatternClip`), runs `ensureSceneSlots`, `ensureTrackMixers`, `migrateLegacyTrackGroups` and `reconcileTrackGroups`, and clears undo. It decides nothing about which track is first or what any track runs; the checks and the `rhinoPatternInstrument` re-application that did were removed in commit `a04b407` ([No track is special for being first](pattern-track.md)). The migrations are what [No backward compatibility for .rhinoedit](no-rhinoedit-back-compat.md) targets.
+The XML is parsed on the worker; `restoreProject` runs on the message thread with the window disabled. It refuses anything that is not an `EDIT` with `rhinoFormatVersion` = 1, and a document with no tracks, before touching the open document. The candidate is built by `loadDocumentEdit` (`SessionInternal.cpp`) with the document's file already in its `te::Edit::Options` (since 2026-10-11): a clip resolves its source file while the edit is built and keeps it, and a source stored relative to the document, as every file imported after the document was opened is, came back silent when the edit was told its file afterwards ([A deck's bounce renders on a worker against a copy of the document](dj-bounce-on-a-copy.md)). It runs `collapseStackedInstruments` on the candidate, then swaps the edit. It drops what belonged to the outgoing document: the automation mirror's curves (before the old edit goes, since they hold its plugins), the automation overrides, which are keyed by track index, and the dragged loop span. Then it re-finds the note editor's clip (`repairPatternClip`), runs `ensureSceneSlots`, `ensureTrackMixers`, `migrateLegacyTrackGroups` and `reconcileTrackGroups`, and clears undo. It decides nothing about which track is first or what any track runs; the checks and the `rhinoPatternInstrument` re-application that did were removed in commit `a04b407` ([No track is special for being first](pattern-track.md)). The migrations are what [No backward compatibility for .rhinoedit](no-rhinoedit-back-compat.md) targets.
 
 ## Media
 

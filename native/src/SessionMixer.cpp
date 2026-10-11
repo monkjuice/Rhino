@@ -55,9 +55,9 @@ Session::TrackMixer Session::trackMixer(int track) const
 // Inside a fader or pan drag the views are not told of every pixel: the control
 // being dragged draws its own value, and rebuilding every panel per pixel is
 // what made a drag stutter. The gesture's end tells them once.
-void Session::announceMixerChange()
+void Session::announceMixerChange(int track, ModelChange changes)
 {
-    markModified();
+    markModified(track, changes);
     if (mixerGestureDepth == 0)
         sendSynchronousChangeMessage();
 }
@@ -76,7 +76,9 @@ juce::Result Session::setTrackVolumeDb(int track, float decibels)
     if (volume == nullptr)
         return juce::Result::fail("That track has no fader.");
     volume->setVolumeDb(juce::jlimit(minimumVolumeDb, maximumVolumeDb, decibels));
-    announceMixerChange();
+    // The fader is a parameter of the track's own chain, which its bounce
+    // plays through.
+    announceMixerChange(track, ModelChange::parameters);
     return juce::Result::ok();
 }
 
@@ -86,7 +88,7 @@ juce::Result Session::setTrackPan(int track, float pan)
     if (volume == nullptr)
         return juce::Result::fail("That track has no fader.");
     volume->setPan(juce::jlimit(-1.0f, 1.0f, pan));
-    announceMixerChange();
+    announceMixerChange(track, ModelChange::parameters);
     return juce::Result::ok();
 }
 
@@ -158,7 +160,8 @@ void Session::setMasterVolumeDb(float decibels)
     if (auto master = edit->getMasterVolumePlugin())
     {
         master->setVolumeDb(juce::jlimit(minimumVolumeDb, maximumVolumeDb, decibels));
-        announceMixerChange();
+        // The main output is the song's, which a bounce leaves out.
+        announceMixerChange(masterTrackIndex(), ModelChange::none);
     }
 }
 
@@ -174,7 +177,7 @@ void Session::setMasterPan(float pan)
     if (auto master = edit->getMasterVolumePlugin())
     {
         master->setPan(juce::jlimit(-1.0f, 1.0f, pan));
-        announceMixerChange();
+        announceMixerChange(masterTrackIndex(), ModelChange::none);
     }
 }
 

@@ -47,8 +47,11 @@ void DjEngine::prepare(double sampleRate, int maximumBlockSize)
     micSection.prepare(rate);
     sendEffect.prepare(rate);
     effect.prepare(rate, maximumBlock);
-    // Nothing renders while this runs, so everything let go of can go.
-    retired.clear();
+    // The material let go of is not freed here, though nothing renders while
+    // this runs: a deck that was playing still holds what it last adopted, a
+    // swap made while the device was stopped is taken up by the first block
+    // after it and crossfades from that, and collect() frees it once that
+    // block has ended. The counts run on across a restart.
 }
 
 void DjEngine::setDeckCount(int count)

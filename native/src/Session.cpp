@@ -174,7 +174,8 @@ void Session::redo()
 
 void Session::refreshAfterUndoRedo(bool changed)
 {
-    if (changed) markModified();
+    // An undo can take back any edit at all, so it cannot say what it changed.
+    if (changed) markModified(-1, ModelChange::unknown);
     repairPatternClip();
     edit->tempoSequence.updateTempoData();
     refreshLoop();
@@ -193,25 +194,47 @@ juce::ValueTree Session::projectSnapshot()
     return snapshot;
 }
 
-void Session::markModified(int changedTrack)
+void Session::markModified(int changedTrack, ModelChange changes)
 {
     ++changeRevision;
-    // Anything that changes the document may have moved a lane, the device a
-    // lane drives, or the track it sits on.
-    automationMirrorStale = true;
     edit->markAsChanged();
+    // A name, a colour or a view setting moves no lane and changes nothing a
+    // deck plays.
+    if (changes == ModelChange::none)
+        return;
+    // Anything else may have moved a lane, the device a lane drives, or the
+    // track it sits on.
+    automationMirrorStale = true;
     // A bounced deck plays what the document said a moment ago; a change
     // known to be one track's leaves the other decks alone.
-    djDocumentChanged(changedTrack);
+    djDocumentChanged(changedTrack, changes);
+}
+
+void Session::markClipsModified(std::vector<int> tracks, ModelChange also)
+{
+    const auto count = trackCount();
+    std::erase_if(tracks, [count](int track) { return !juce::isPositiveAndBelow(track, count); });
+    std::sort(tracks.begin(), tracks.end());
+    tracks.erase(std::unique(tracks.begin(), tracks.end()), tracks.end());
+    if (tracks.empty())
+    {
+        markModified(-1, ModelChange::notes | ModelChange::audioClips | also);
+        return;
+    }
+    for (const auto track : tracks)
+        markModified(track, (trackType(track) == TrackType::midi ? ModelChange::notes : ModelChange::audioClips) | also);
 }
 
 juce::Result Session::restoreProject(const juce::ValueTree& state, const juce::File& file)
 {
     if (!state.hasType(te::IDs::EDIT) || static_cast<int>(state.getProperty("rhinoFormatVersion")) != 1)
         return juce::Result::fail("This is not a supported Rhino native project.");
-    auto candidate = te::loadEditFromState(engine, state.createCopy());
+    // The document's file goes in with its state rather than after it: a
+    // clip resolves its source file while the edit is being built, so every
+    // clip stored relative to the document - anything imported after it was
+    // first opened - came back silent when the edit was told afterwards.
+    auto candidate = loadDocumentEdit(engine, state.createCopy(), file, te::Edit::forEditing);
     if (!candidate) return juce::Result::fail("The project could not be loaded.");
-    candidate->editFileRetriever = [file] { return file; };
     if (te::getAudioTracks(*candidate).isEmpty())
         return juce::Result::fail("This project has no tracks.");
     // Documents written when a track could stack instruments collapse here.

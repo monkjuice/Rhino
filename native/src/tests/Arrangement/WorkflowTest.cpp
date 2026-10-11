@@ -116,6 +116,11 @@ int runArrangementTest()
         // the recording scenarios and the audio device closing.
         scenario("clip cells");
        #include "scenarios/ClipCells.inc"
+        // When a deck bounces again and what its bounce holds, in documents
+        // of their own; they render, so they come before the recording
+        // scenarios and the audio device closing too.
+        scenario("dj bounces");
+       #include "scenarios/DjBounces.inc"
         // After everything that renders and before the audio device closes:
         // arming allocates a playback context to hang its input destinations
         // off, and the offline renders above run a RenderTask directly against

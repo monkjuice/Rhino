@@ -41,9 +41,11 @@ that session's `releaseAudioDevice()` before the block ends (`ClipEdits.inc`, `G
 
 1. **Render before `GesturesAndPersistence.inc`.** It calls `Session::releaseAudioDevice`, after which a `RenderTask`
    never finishes and the runner times out with no assertion ([Offline renders that never return](renders-that-never-return.md)).
-   `DjBooth.inc` renders too, so it sits between `GroupBusReload.inc` and `Recording.inc`; and from that point on a clip
-   imported onto a newly added track never renders, so a scenario that imports onto a new track and renders it belongs
-   before `GroupBusReload.inc`.
+   `DjBooth.inc` renders too, so it sits between `GroupBusReload.inc` and `Recording.inc`, with `ClipCells.inc` and
+   `DjBounces.inc` after it; and from that point on a clip imported onto a newly added track never renders, so a
+   scenario that imports onto a new track and renders it belongs before `GroupBusReload.inc`, or works in a document of
+   its own. A document a scenario reopens and then renders is written to disk first: reopened from a path that was never
+   written, a file imported after it resolves one folder too high and the render waits for it for good.
 2. **Allocate anything big.** Every scenario shares the runner's one stack frame. A `StepGrid` carries about 200 KB of
    caches, and the third one declared by value overflowed the old 1 MB stack inside an unrelated scenario; twice more in
    the week of 2026-10-05 a scenario that added two panels did the same. `RhinoDAW.exe` now reserves 8 MB on Windows
@@ -102,8 +104,10 @@ Classes under test befriend the runner (`friend int runArrangementTest();` in `A
 `AudioClipPanel`, `DjClipGrid` and the DJ view's panels; `friend int runUiProfile();` in `Arrangement`, `StepGrid` and `DeviceRack`), one reason
 big classes are split across translation units rather than into new types ([Keeping files small](keeping-files-small.md)).
 The four runner flags, `--device-test`, `--arp-snapshot` and `--profile-ui` set `Session::setCommandLineTestMode`: machine
-preferences (browser preview, last track kind) are neither read nor written, and `pickTrackColour` takes the first
-unused colour, so pixel comparisons repeat.
+preferences (browser preview, last track kind) are neither read nor written, `pickTrackColour` takes the first
+unused colour, so pixel comparisons repeat, and the DJ booth never goes on the audio device, so the scenarios and the
+profile drive it alone through `djProcessOffline` and render its bounces inline. What only a test reads stays private
+behind the friendship, as `Session::djBouncesStarted` does for `DjBounces.inc`.
 
 Nothing in `Main.cpp` is reachable by a test ([App shell and control bar](app-shell.md)), so a shell behaviour is
 checked at the boundary the shell wires, and whatever it needs is put in the view or the model: `DjBooth.inc` replaces

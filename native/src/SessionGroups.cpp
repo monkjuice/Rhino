@@ -171,7 +171,9 @@ juce::Result Session::assignTracksToGroup(std::vector<int> tracks, int groupId)
                 setMemberGroup(*moved[track], groupId, &undoManager);
     reconcileTrackGroups();
     undoManager.beginNewTransaction();
-    markModified();
+    // Tracks moved and a group's members changed, which its deck renders; no
+    // kind says that, so every deck is counted behind.
+    markModified(-1, ModelChange::unknown);
     sendSynchronousChangeMessage();
     return juce::Result::ok();
 }
@@ -260,7 +262,7 @@ juce::Result Session::removeTrackFromGroup(int track)
     setMemberGroup(*tracks[track], noGroup, &undoManager);
     reconcileTrackGroups();
     undoManager.beginNewTransaction();
-    markModified();
+    markModified(-1, ModelChange::unknown);
     sendSynchronousChangeMessage();
     return juce::Result::ok();
 }
@@ -326,7 +328,7 @@ juce::Result Session::ungroupTracks(int groupId)
     reconcileTrackGroups();
     undoManager.beginNewTransaction();
     refreshLoop();
-    markModified();
+    markModified(-1, ModelChange::unknown);
     sendSynchronousChangeMessage();
     return juce::Result::ok();
 }
@@ -342,7 +344,7 @@ juce::Result Session::setTrackGroupCollapsed(int groupId, bool collapsed)
     if (!juce::isPositiveAndBelow(group->busTrack, tracks.size()))
         return juce::Result::fail("That group is no longer there.");
     tracks[group->busTrack]->state.setProperty(trackGroupCollapsedID, collapsed, nullptr);
-    markModified();
+    markModified(group->busTrack, ModelChange::none);
     sendSynchronousChangeMessage();
     return juce::Result::ok();
 }

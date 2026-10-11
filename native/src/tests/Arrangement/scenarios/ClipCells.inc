@@ -164,10 +164,10 @@
                 console->setLookAndFeel(nullptr);
             }
 
-            // Last, because a reopened document has a file: a clip imported
-            // after it stores its source relative to that file, and a deck's
-            // bounce, which loads a copy of the document without it, finds
-            // nothing to render (wiki/pages/dj-bounce-on-a-copy.md).
+            // Last, because the reopen gives the document a file it never
+            // writes: a clip imported after it would be stored relative to a
+            // file that is not there, which resolves one folder too high
+            // (wiki/pages/renders-that-never-return.md).
             scenario("clip cells: the cells survive a reopen");
             {
                 const auto saved = cells.projectSnapshot();

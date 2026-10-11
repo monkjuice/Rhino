@@ -80,7 +80,7 @@ juce::Result Session::deleteSlotClip(int track, int scene)
     // slot clip there; left pointing, the next paint read a freed clip.
     repairPatternClip();
     edit->getUndoManager().beginNewTransaction();
-    markModified(track);
+    markClipsModified({track});
     sendSynchronousChangeMessage();
     return juce::Result::ok();
 }
@@ -91,7 +91,8 @@ juce::Result Session::insertPatternPresetInSlot(PatternPreset preset, int track,
         return juce::Result::fail("Drop clips on a cell.");
     const auto data = presetPattern(preset);
     edit->getUndoManager().beginNewTransaction("Add " + data.name + " to slot");
-    if (const auto prepared = preparePresetTrack(track, data); prepared.failed())
+    auto devicesChanged = false;
+    if (const auto prepared = preparePresetTrack(track, data, devicesChanged); prepared.failed())
         return prepared;
     // A drop on the + row makes its scene here, once nothing is left to
     // refuse it, so a refused drop leaves the grid as it was.
@@ -117,8 +118,9 @@ juce::Result Session::insertPatternPresetInSlot(PatternPreset preset, int track,
     clip->setLoopRangeBeats({tracktion::core::BeatPosition(), tracktion::core::BeatPosition::fromBeats(beats)});
     edit->getUndoManager().beginNewTransaction();
     // A preset may switch the track's instrument, which the track's own
-    // arrangement plays too: every deck on the track is behind, and no other.
-    markModified(track);
+    // arrangement plays too: every deck on the track is behind, and no other,
+    // on its devices only when the preset changed them.
+    markModified(track, devicesChanged ? ModelChange::notes | ModelChange::devices : ModelChange::notes);
     if (edit->getTransport().isPlaying())
         edit->restartPlayback();
     sendSynchronousChangeMessage();
@@ -166,7 +168,7 @@ juce::Result Session::insertAudioFileInSlot(const juce::File& file, int track, i
     // The clip the slot held is gone, and the note editor may have had it.
     repairPatternClip();
     edit->getUndoManager().beginNewTransaction();
-    markModified(track);
+    markModified(track, ModelChange::audioClips);
     if (edit->getTransport().isPlaying())
         edit->restartPlayback();
     sendSynchronousChangeMessage();
@@ -279,7 +281,7 @@ juce::Result Session::copySlotClipToArrangement(int track, int scene, double sta
     refreshLoop();
     edit->getUndoManager().beginNewTransaction();
     // The cell is untouched; the lane's arrangement is what changed.
-    markModified(lane);
+    markClipsModified({lane});
     if (edit->getTransport().isPlaying())
         edit->restartPlayback();
     sendSynchronousChangeMessage();
@@ -345,7 +347,7 @@ juce::Result Session::copyClipToTrackSlot(te::EditItemID id, int track, int scen
     copy->setLoopRangeBeats({tracktion::core::BeatPosition(), tracktion::core::BeatPosition::fromBeats(beats)});
     copy->state.removeProperty(starterPlaceholderID, &edit->getUndoManager());
     edit->getUndoManager().beginNewTransaction();
-    markModified(track);
+    markClipsModified({track});
     if (edit->getTransport().isPlaying())
         edit->restartPlayback();
     sendSynchronousChangeMessage();
@@ -380,7 +382,7 @@ juce::Result Session::createSlotClip(int track, int scene)
         return juce::Result::fail("The clip could not be added to that slot.");
     clip->setLoopRangeBeats({tracktion::core::BeatPosition(), tracktion::core::BeatPosition::fromBeats(beats)});
     edit->getUndoManager().beginNewTransaction();
-    markModified(track);
+    markModified(track, ModelChange::notes);
     if (edit->getTransport().isPlaying())
         edit->restartPlayback();
     sendSynchronousChangeMessage();

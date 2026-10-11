@@ -153,6 +153,13 @@ juce::Result Session::mergeClips(const std::vector<te::EditItemID>& ids, MergeRe
     for (const auto& group : groups)
         if (tracks[group.track]->isMuted(false))
             return juce::Result::fail("Unmute " + trackName(group.track) + " before merging its clips.");
+    // The render below runs on this thread with no way out, and it waits for
+    // every clip's file to open: one whose file is gone would hang the window
+    // for good. Said, naming the file, before anything is written.
+    for (const auto& group : groups)
+        for (auto* clip : group.clips)
+            if (const auto readable = checkClipFile(*clip); readable.failed())
+                return readable;
 
     const auto folder = mergedAudioDirectory();
     if (!folder.createDirectory().wasOk())
@@ -268,8 +275,10 @@ juce::Result Session::mergeClips(const std::vector<te::EditItemID>& ids, MergeRe
     }
 
     edit->getUndoManager().beginNewTransaction("Merge clips");
+    std::vector<int> mergedTracks;
     for (const auto& rendered : merged)
     {
+        mergedTracks.push_back(rendered.track);
         for (const auto id : rendered.sources)
             if (auto* clip = findClip(id))
                 clip->removeFromParent();
@@ -289,7 +298,7 @@ juce::Result Session::mergeClips(const std::vector<te::EditItemID>& ids, MergeRe
     repairPatternClip();
     refreshLoop();
     edit->getUndoManager().beginNewTransaction();
-    markModified();
+    markClipsModified(mergedTracks);
     sendSynchronousChangeMessage();
     if (summary != nullptr)
         *summary = std::move(result);

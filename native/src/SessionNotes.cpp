@@ -82,7 +82,7 @@ juce::Result Session::addNote(double startSteps, int pitch, double lengthSteps,
     if (addedState != nullptr)
         *addedState = added->state;
     pattern().state.removeProperty(starterPlaceholderID, &edit->getUndoManager());
-    markModified(patternTrackIndex());
+    markModified(patternTrackIndex(), ModelChange::notes);
     sendSynchronousChangeMessage();
     return juce::Result::ok();
 }
@@ -111,7 +111,7 @@ bool Session::removeNotes(const std::vector<juce::ValueTree>& states)
         }
     if (changed)
     {
-        markModified(patternTrackIndex());
+        markModified(patternTrackIndex(), ModelChange::notes);
         if (playing)
         {
             // Rebuild so the next pass uses the edited sequence. A MIDI panic
@@ -148,7 +148,7 @@ bool Session::adjustNoteVelocities(const std::vector<juce::ValueTree>& states, i
         }
     if (changed)
     {
-        markModified(patternTrackIndex());
+        markModified(patternTrackIndex(), ModelChange::notes);
         sendSynchronousChangeMessage();
     }
     return changed;
@@ -211,7 +211,7 @@ void Session::setEditorStepCount(int newSteps)
     if (patternClip == nullptr || editorStepResolution() == clamped)
         return;
     patternClip->state.setProperty(editorStepsID, clamped, &edit->getUndoManager());
-    markModified(patternTrackIndex());
+    markModified(patternTrackIndex(), ModelChange::notes);
     sendSynchronousChangeMessage();
 }
 
@@ -241,7 +241,7 @@ void Session::setNote(int step, int pitch, bool enabled)
             if (!enabled)
             {
                 sequence.removeNote(*note, undoManager);
-                markModified(patternTrackIndex());
+                markModified(patternTrackIndex(), ModelChange::notes);
                 restartLivePlayback();
             }
             sendSynchronousChangeMessage();
@@ -262,7 +262,7 @@ void Session::setNote(int step, int pitch, bool enabled)
                 const auto start = tracktion::core::BeatPosition::fromBeats(beatForStep(noteStartStep));
                 const auto length = tracktion::core::BeatDuration::fromBeats((step - noteStartStep) * stepBeats);
                 note->setStartAndLength(start, length, undoManager);
-                markModified(patternTrackIndex());
+                markModified(patternTrackIndex(), ModelChange::notes);
                 break;
             }
         }
@@ -271,7 +271,7 @@ void Session::setNote(int step, int pitch, bool enabled)
         const auto duration = std::max(0.02, stepBeats);
         sequence.addNote(pitch, tracktion::core::BeatPosition::fromBeats(beat),
                          tracktion::core::BeatDuration::fromBeats(duration), 100, 0, undoManager);
-        markModified(patternTrackIndex());
+        markModified(patternTrackIndex(), ModelChange::notes);
         restartLivePlayback();
     }
     sendSynchronousChangeMessage();
@@ -326,7 +326,7 @@ juce::Result Session::resizeNote(int step, int pitch, double lengthSteps)
             const auto start = tracktion::core::BeatPosition::fromBeats(beat);
             const auto length = tracktion::core::BeatDuration::fromBeats(lengthSteps * stepBeats);
             note->setStartAndLength(start, length, undoManager);
-            markModified(patternTrackIndex());
+            markModified(patternTrackIndex(), ModelChange::notes);
             sendSynchronousChangeMessage();
             return juce::Result::ok();
         }
@@ -358,7 +358,7 @@ juce::Result Session::resizeNote(const juce::ValueTree& state, double lengthStep
     note->setStartAndLength(note->getStartBeat(),
                             tracktion::core::BeatDuration::fromBeats(lengthSteps * stepBeats),
                             &edit->getUndoManager());
-    markModified(patternTrackIndex());
+    markModified(patternTrackIndex(), ModelChange::notes);
     sendSynchronousChangeMessage();
     return juce::Result::ok();
 }
@@ -385,7 +385,7 @@ juce::Result Session::resizeNoteFromLeft(double startStep, int pitch, double new
                 return juce::Result::ok();
             note->setStartAndLength(tracktion::core::BeatPosition::fromBeats(beatForStep(newStartStep)),
                                     tracktion::core::BeatDuration::fromBeats((endStep - newStartStep) * stepBeats), undoManager);
-            markModified(patternTrackIndex());
+            markModified(patternTrackIndex(), ModelChange::notes);
             sendSynchronousChangeMessage();
             return juce::Result::ok();
         }
@@ -414,7 +414,7 @@ juce::Result Session::resizeNoteFromLeft(const juce::ValueTree& state, double ne
     note->setStartAndLength(tracktion::core::BeatPosition::fromBeats(beatForStep(newStartStep)),
                             tracktion::core::BeatDuration::fromBeats((endStep - newStartStep) * stepBeats),
                             &edit->getUndoManager());
-    markModified(patternTrackIndex());
+    markModified(patternTrackIndex(), ModelChange::notes);
     sendSynchronousChangeMessage();
     return juce::Result::ok();
 }
@@ -435,7 +435,7 @@ bool Session::ensurePatternLengthSteps(int requiredSteps)
     // A clip grown to hold pasted notes wins the ground it grew over, as every
     // other clip edit does, rather than lying on top of its neighbour.
     makeRoomForClip(pattern());
-    markModified(patternTrackIndex());
+    markModified(patternTrackIndex(), ModelChange::notes);
     refreshLoop();
     sendSynchronousChangeMessage();
     return true;
@@ -469,7 +469,7 @@ juce::Result Session::fillNoteToClipEnd(int step, int pitch)
             const auto start = tracktion::core::BeatPosition::fromBeats(beat);
             const auto length = tracktion::core::BeatDuration::fromBeats(std::max(0.0001, nextNoteBeat - beat));
             note->setStartAndLength(start, length, undoManager);
-            markModified(patternTrackIndex());
+            markModified(patternTrackIndex(), ModelChange::notes);
             sendSynchronousChangeMessage();
             return juce::Result::ok();
         }
@@ -525,7 +525,7 @@ juce::Result Session::moveNote(int sourceStep, int sourcePitch, int targetStep, 
         return juce::Result::fail("Move notes inside the clip.");
     moving->setStartAndLength(targetStart, std::min(moving->getLengthBeats(), maximumLength), undoManager);
     moving->setNoteNumber(targetPitch, undoManager);
-    markModified(patternTrackIndex());
+    markModified(patternTrackIndex(), ModelChange::notes);
     sendSynchronousChangeMessage();
     return juce::Result::ok();
 }
@@ -584,7 +584,7 @@ juce::Result Session::moveNotes(const std::vector<std::pair<int, int>>& sources,
                                      move.note->getLengthBeats(), undoManager);
     for (const auto& move : moves)
         move.note->setNoteNumber(move.targetPitch, undoManager);
-    markModified(patternTrackIndex());
+    markModified(patternTrackIndex(), ModelChange::notes);
     if (wasPlaying)
         edit->restartPlayback();
     sendSynchronousChangeMessage();
@@ -675,7 +675,7 @@ juce::Result Session::moveNotes(const std::vector<juce::ValueTree>& states, doub
                                      move.note->getLengthBeats(), undoManager);
         move.note->setNoteNumber(move.pitch + pitchDelta, undoManager);
     }
-    markModified(patternTrackIndex());
+    markModified(patternTrackIndex(), ModelChange::notes);
     if (wasPlaying) edit->restartPlayback();
     sendSynchronousChangeMessage();
     return juce::Result::ok();
@@ -731,7 +731,7 @@ juce::Result Session::redistributeNotes(const std::vector<juce::ValueTree>& stat
                 tracktion::core::BeatDuration::fromBeats(length), velocity, colour, undoManager))
             replacementStates.push_back(note->state);
 
-    markModified(patternTrackIndex());
+    markModified(patternTrackIndex(), ModelChange::notes);
     if (edit->getTransport().isPlaying())
     {
         panicMidiOnTrack(trackHoldingClip(*edit, pattern()));

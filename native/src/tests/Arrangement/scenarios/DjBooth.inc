@@ -29,7 +29,10 @@
             require(session.djDeckCount() == 0, "A new project has no decks");
             require(session.addDjDeck().wasOk() && session.addDjDeck().wasOk(), "Two decks can be added");
             require(session.djDeckCount() == 2, "and both are counted");
-            require(session.djEngineAttached(), "The booth is on the audio device once a deck exists");
+            // In the app the first deck puts the booth on the audio device. A
+            // runner drives it itself, a block at a time, so it never goes on
+            // one here: the device's thread would render the same decks.
+            require(!session.djEngineAttached(), "Under the test runner the booth stays off the audio device");
             require(session.djDeckInfo(0).kind == Session::DjSourceKind::none && !session.djDeckInfo(0).loaded,
                     "A new deck holds nothing");
 
@@ -156,7 +159,10 @@
                 require(document->djDeckInfo(0).stale, "which leaves the deck's bounce stale");
                 require(document->selectPatternClip(document->slotClip(secondMidi, 0).clipID).wasOk(), "The editor opens the cell's clip");
                 require(document->isPatternDrums(), "as a drum editor");
-                require(document->addNote(0.0, document->patternDrumLowestNote(), 1.0).wasOk(), "A note drawn on the first pad");
+                // Halfway through the cell, so the preview below meets it as
+                // the deck plays on: the booth runs only when this runner
+                // drives it, a block at a time.
+                require(document->addNote(8.0, document->patternDrumLowestNote(), 1.0).wasOk(), "A note drawn on the first pad");
                 require(document->rebounceDjDeck(0).wasOk() && waitForDeck(*document, 0),
                         ("Bounced again: " + document->djDeckInfo(0).error).toRawUTF8());
                 const auto* drawn = document->djDeckTrack(0);
@@ -177,9 +183,9 @@
                         "and the deck previews live, with nothing armed or monitored for it");
                 document->djProcessOffline(4096);
                 require(document->djDeckState(0).isPlaying() && !document->djDeckInfo(0).loading, "turning on, with no bounce made while the knob is held");
-                // The notes reach the track: the poll drains the queue on the
-                // message thread, and the cell's first note replays when the
-                // deck loops round.
+                // The notes reach the track: the deck passes the cell's note
+                // while the knob is held, and the poll drains the queue on the
+                // message thread.
                 for (int i = 0; i < 400 && document->djDeckInfo(0).previewNotes == 0; ++i)
                 {
                     document->djProcessOffline(4096);

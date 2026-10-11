@@ -515,6 +515,13 @@ void checkEngineHousekeeping()
     require(engine.collect() == 1, "the old material waits for the block that adopts the new, which crossfades from it");
     run(engine, 1);
     require(engine.collect() == 0, "and is freed once that block has ended");
+    // A device restart prepares the engine again between the swap and the
+    // block that takes it up, and that block still crossfades from the old.
+    engine.setTrack(0, rampTrack(44100.0, 2.0), false);
+    engine.prepare(deviceRate, block);
+    require(engine.collect() == 1, "a restart keeps the material the next block crossfades from");
+    run(engine, 1);
+    require(engine.collect() == 0, "and the block after it frees it");
     engine.push(command(DjEngine::Command::Type::play, 0));
     const auto out = run(engine, 10);
     require(rms(out.right) > 0.1f, "the engine plays its deck");

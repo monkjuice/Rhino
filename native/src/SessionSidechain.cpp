@@ -98,7 +98,9 @@ juce::Result Session::setDeviceSidechainSource(int track, int slot, int sourceTr
         rewire(*plugin);
     }
     edit->getUndoManager().beginNewTransaction();
-    markModified();
+    // The routing belongs to the device, on its own track: the source track
+    // plays as it did.
+    markModified(track, ModelChange::devices);
     // Changing the id only marks the plugin as changed, which does not rebuild
     // the graph. Without this the routing takes hold at the next transport
     // start, and monitoring a live voice through the device would go on

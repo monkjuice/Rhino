@@ -408,3 +408,7 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/dj-bounce-on-a-copy.md (a bounce carries the material's notes: what is gathered, where, how they ride the job, and that the silent bounce carries them too)
 - updated: pages/session-model.md (markModified names a track so only its decks go stale), pages/computer-keyboard.md (the preview takes the same keyboardState entry from the audio thread)
 - notes: no index change, no summary moved, no new page; the gotcha about setDjDeckLive's Result lives in the preview section beside the code that reads the flag
+
+## [2026-10-10] update | The preview's fade, the preview held off while the song rolls, a smaller screen
+- source: branch feat/dj-view, the user's report of a click on every knob touch and request for a smaller waveform display; native/src/core/DjEngine.h/.cpp (previewGains, the bounce fading into and out of a preview), SessionDjSources.cpp (no preview while the song's transport rolls, since the track then plays its own clips live), DjDeckPanel.cpp (the screen capped at a third of the console and 220 px), tests/DjTest.cpp (silence judged once the fade has passed)
+- updated: pages/dj-view.md (the fade in the preview section; the screen rule in the view section)

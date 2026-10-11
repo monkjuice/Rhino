@@ -785,6 +785,9 @@ void Session::djDocumentChanged(int track)
 void Session::djBeginLivePreview(int track)
 {
     if (dj == nullptr || track < 0) return;
+    // With the song rolling the track already plays its own clips live, and
+    // the deck's notes on top of them would double every hit.
+    if (edit->getTransport().isPlaying()) return;
     auto& b = *dj;
     auto began = false;
     for (int i = 0; i < b.count; ++i)

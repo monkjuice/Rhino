@@ -347,10 +347,13 @@ void DjDeckPanel::resized()
     constexpr int screenMinimum = DjDeckDisplay::readoutHeight + DjDeckDisplay::overviewHeight + 36;
     const auto padsHeight = bounds.getHeight() < 320 ? 16 : padRowHeight;
     const auto available = bounds.getHeight() - padsHeight - 3;
-    // The body takes what the keys need, then grows with the panel for the
-    // jog wheel, up to a cap past which the screen takes the rest.
-    const auto body = juce::jlimit(std::min(fullKeys, std::max(0, available - screenMinimum)), std::max(fullKeys, 340),
-                                   available * 58 / 100);
+    // The screen takes about a third of the console and no more than 220 px;
+    // the body - the keys, the jog wheel and the clips grid - takes the rest,
+    // and never less than the keys need while the screen can give it.
+    const auto screen = juce::jlimit(std::min(screenMinimum, std::max(0, available)), std::max(screenMinimum, 220),
+                                     available * 32 / 100);
+    const auto body = juce::jlimit(std::min(fullKeys, std::max(0, available - screenMinimum)),
+                                   std::max(fullKeys, available - screenMinimum), available - screen);
     const auto compact = body < fullKeys;
     const auto bigKey = compact ? bigCompact : bigFull;
     const auto gap = compact ? 2 : fullGap;

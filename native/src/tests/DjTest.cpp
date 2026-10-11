@@ -425,9 +425,11 @@ void checkLivePreview()
     {
         sink.block = b;
         const auto out = run(engine, 1);
-        loudest = std::max(loudest, rms(out.left));
+        // The bounce fades out over a few milliseconds rather than stepping.
+        if (b >= 6)
+            loudest = std::max(loudest, rms(out.left));
     }
-    require(loudest == 0.0f, "a previewing deck is silent in the mixer");
+    require(loudest < 1.0e-3f, "a previewing deck is silent in the mixer once its fade has passed");
     // A block is 512 frames and a beat 24000, so beat 1 falls in block 46.
     const auto* on60 = sink.find(60, true);
     const auto* off60 = sink.find(60, false);

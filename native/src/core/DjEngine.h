@@ -158,6 +158,9 @@ private:
     std::vector<Retired> retired;
 
     std::array<std::array<std::vector<float>, 2>, maximumDecks> scratch;
+    // Each deck's bounce fades over a few milliseconds into and out of a
+    // live preview; a step to silence and back was a click at each end.
+    std::array<DjSmoothedGain, maximumDecks> previewGains;
     std::array<std::vector<float>, 2> masterBus, cueBus, sendBus;
     std::vector<float> micBuffer;
 };

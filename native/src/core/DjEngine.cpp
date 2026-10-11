@@ -38,6 +38,11 @@ void DjEngine::prepare(double sampleRate, int maximumBlockSize)
     for (auto& channel : sendBus) channel.assign(static_cast<size_t>(maximumBlock), 0.0f);
     micBuffer.assign(static_cast<size_t>(maximumBlock), 0.0f);
     for (auto& strip : channels) strip.prepare(rate);
+    for (auto& gain : previewGains)
+    {
+        gain.prepare(rate, 0.005);
+        gain.current = gain.target = 1.0f;
+    }
     masterSection.prepare(rate);
     micSection.prepare(rate);
     sendEffect.prepare(rate);
@@ -418,14 +423,20 @@ void DjEngine::renderChunk(const float* micInput, float* const* outputs, int out
         float* left = scratch[static_cast<size_t>(i)][0].data();
         float* right = scratch[static_cast<size_t>(i)][1].data();
         d.render(left, right, frames, rate);
-        // The live preview: the bounce is silenced and the material's notes
-        // go out to the track's own instrument as the deck passes them.
+        // The live preview: the bounce fades out, over a few milliseconds
+        // rather than at a step, and the material's notes go out to the
+        // track's own instrument as the deck passes them; it fades back in
+        // the same way when the preview ends.
         const auto previewing = d.livePreview.load(std::memory_order_relaxed);
-        if (previewing)
-        {
-            std::fill(left, left + frames, 0.0f);
-            std::fill(right, right + frames, 0.0f);
-        }
+        auto& previewGain = previewGains[static_cast<size_t>(i)];
+        previewGain.target = previewing ? 0.0f : 1.0f;
+        if (previewing || previewGain.current < 0.9999f)
+            for (int f = 0; f < frames; ++f)
+            {
+                const auto g = previewGain.next();
+                left[f] *= g;
+                right[f] *= g;
+            }
         sequence(i, previewing, frames);
         strip.processPreFader(left, right, frames);
         if (strip.cue.load(std::memory_order_relaxed))

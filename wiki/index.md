@@ -101,7 +101,7 @@ The catalog of this wiki: every page, grouped by type, one line each (`- [Title]
 
 - [Colours and typography](pages/colours-and-typography.md) — Rhino names chrome colours in Theme.h's palette and draws text in embedded Inter; Forge has its own metal look, accent colours and four faces.
 - [Dependency direction](pages/dependency-direction.md) — Knowledge flows one way in both products, UI to model to devices to core, and every rule lives in the model so each UI path inherits it.
-- [Directories not to read](pages/off-limits-directories.md) — native/.deps and research/sources are not Rhino's code and are never searched; Tracktion signatures are checked in curated header snapshots.
+- [Directories not to read](pages/off-limits-directories.md) — native/.deps and research/sources are not Rhino's code and are never searched; Tracktion signatures are checked in curated header snapshots, and a method body in the pinned commit on GitHub.
 - [Documentation ownership](pages/documentation-ownership.md) — READMEs introduce and build the products; the wiki is the canonical home for engineering detail, decisions and gotchas.
 - [Displays draw from the DSP](pages/displays-draw-from-the-dsp.md) — A curve on screen is computed by the same functions the audio runs, never from a second set of formulas, and tests hold the two together.
 - [Git workflow](pages/git-workflow.md) — Focused, verified commits pushed at milestones; stage explicit paths since the user edits Forge in the same tree; never rewrite pushed history.

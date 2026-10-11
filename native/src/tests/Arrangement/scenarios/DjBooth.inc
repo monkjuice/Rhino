@@ -173,9 +173,19 @@
                 document->djProcessOffline(1024);
                 require(document->djDeckState(0).isPlaying(), "The deck plays the cell");
                 require(document->beginDeviceParameterGesture(secondMidi, rackIndex, 0).wasOk(), "A knob on the rack is taken hold of");
-                require(document->djDeckInfo(0).previewing && document->djDeckInfo(0).live, "and the deck previews live, with Live on for it");
+                require(document->djDeckInfo(0).previewing && !document->djDeckInfo(0).live,
+                        "and the deck previews live, with nothing armed or monitored for it");
                 document->djProcessOffline(4096);
                 require(document->djDeckState(0).isPlaying() && !document->djDeckInfo(0).loading, "turning on, with no bounce made while the knob is held");
+                // The notes reach the track: the poll drains the queue on the
+                // message thread, and the cell's first note replays when the
+                // deck loops round.
+                for (int i = 0; i < 400 && document->djDeckInfo(0).previewNotes == 0; ++i)
+                {
+                    document->djProcessOffline(4096);
+                    document->djPoll();
+                }
+                require(document->djDeckInfo(0).previewNotes > 0, "and the preview's notes reach the track");
                 require(document->setDeviceParameter(secondMidi, rackIndex, 0, 0.5f).wasOk(), "The knob moves");
                 require(!document->djDeckInfo(0).loading, "and still no bounce is made");
                 require(document->endDeviceParameterGesture(secondMidi, rackIndex, 0).wasOk(), "The knob let go");
@@ -184,12 +194,17 @@
                 // preview on, and the second release bounces once more.
                 require(document->beginDeviceParameterGesture(secondMidi, rackIndex, 0).wasOk(), "The knob taken hold of again");
                 require(waitForDeck(*document, 0), ("The first bounce lands: " + document->djDeckInfo(0).error).toRawUTF8());
-                require(document->djDeckInfo(0).previewing && document->djDeckInfo(0).live, "and the preview stays on while the knob is held");
+                require(document->djDeckInfo(0).previewing && !document->djDeckInfo(0).live, "and the preview stays on while the knob is held");
                 require(document->endDeviceParameterGesture(secondMidi, rackIndex, 0).wasOk() && document->djDeckInfo(0).loading,
                         "The second release bounces again");
                 require(waitForDeck(*document, 0), ("and the bounce lands: " + document->djDeckInfo(0).error).toRawUTF8());
-                require(!document->djDeckInfo(0).previewing && document->djDeckInfo(0).live,
-                        "ending the preview, with Live left on for a while so the next touch costs no switch");
+                require(!document->djDeckInfo(0).previewing && !document->djDeckInfo(0).live, "ending the preview, Live untouched throughout");
+                // An edit while a bounce is being made does not start over: the
+                // bounce lands and the deck bounces once more for the edit.
+                require(document->rebounceDjDeck(0).wasOk() && document->djDeckInfo(0).loading, "A bounce in flight");
+                require(document->setDeviceParameter(secondMidi, rackIndex, 0, 0.25f).wasOk() && document->djDeckInfo(0).stale
+                        && document->djDeckInfo(0).loading, "An edit under it marks the deck behind without starting over");
+                require(waitForDeck(*document, 0) && !document->djDeckInfo(0).stale, "and once it lands the deck bounces again and catches up");
                 document->djPause(0);
                 document->djProcessOffline(1024);
                 document->ejectDjDeck(0);

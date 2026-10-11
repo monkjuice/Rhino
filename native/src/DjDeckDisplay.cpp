@@ -178,8 +178,50 @@ void DjDeckDisplay::paintTile(juce::Image& image, int index) const
     juce::Graphics g(image);
     g.fillAll(palette::displayInset);
     if (track == nullptr || track->analysis.columns.empty()) return;
-    const auto& columns = track->analysis.columns;
     const auto pps = pixelsPerSecond();
+    // A MIDI track's material shows its notes, as the editor would, rather
+    // than the waveform they rendered to: a bar of notes on a row per pitch,
+    // which is both what a hand reads on a drum or a melody and far less to
+    // paint than three bands of columns.
+    if (!track->midi.empty() && track->analysis.hasGrid())
+    {
+        int lowest = 127, highest = 0;
+        for (const auto& event : track->midi)
+            if (event.on)
+            {
+                lowest = std::min(lowest, event.note);
+                highest = std::max(highest, event.note);
+            }
+        if (lowest > highest) return;
+        const auto rows = std::max(1, highest - lowest + 1);
+        const auto rowHeight = std::max(2.0f, static_cast<float>(image.getHeight() - 4) / static_cast<float>(rows));
+        const auto top = (static_cast<float>(image.getHeight()) - rowHeight * static_cast<float>(rows)) * 0.5f;
+        const auto secondsPerBeat = track->analysis.secondsPerBeat();
+        const auto origin = track->analysis.firstBeatSeconds;
+        const auto tileStart = static_cast<double>(index * tileWidth);
+        for (size_t i = 0; i < track->midi.size(); ++i)
+        {
+            const auto& on = track->midi[i];
+            if (!on.on) continue;
+            auto endBeat = on.beat + 0.25;
+            for (size_t j = i + 1; j < track->midi.size(); ++j)
+                if (track->midi[j].note == on.note && !track->midi[j].on)
+                {
+                    endBeat = track->midi[j].beat;
+                    break;
+                }
+            const auto x0 = (origin + on.beat * secondsPerBeat) * pps - tileStart;
+            const auto x1 = (origin + endBeat * secondsPerBeat) * pps - tileStart;
+            if (x1 < 0.0 || x0 > tileWidth) continue;
+            const auto y = top + rowHeight * static_cast<float>(highest - on.note);
+            const auto velocity = juce::jlimit(0.3f, 1.0f, static_cast<float>(on.velocity) / 127.0f);
+            g.setColour(palette::djWaveMid.withMultipliedBrightness(0.6f + 0.4f * velocity));
+            g.fillRect(juce::Rectangle<float>(static_cast<float>(x0), y + 1.0f,
+                                              static_cast<float>(std::max(2.0, x1 - x0 - 1.0)), std::max(1.0f, rowHeight - 2.0f)));
+        }
+        return;
+    }
+    const auto& columns = track->analysis.columns;
     const auto columnsPerPixel = track->sampleRate / DjAnalysis::columnFrames / pps;
     const auto height = static_cast<float>(image.getHeight());
     const auto centreY = height * 0.5f;

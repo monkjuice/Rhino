@@ -1023,6 +1023,7 @@ public:
         bool stale = false;       // the document changed under a bounced track
         bool live = false;        // the track's input is heard, so its instrument plays over the deck
         bool previewing = false;  // a knob is held: the deck's notes play the track's own instrument in place of the bounce
+        int previewNotes = 0;     // how many of them have reached the track since the preview began
         bool autoRebounce = true; // a stale bounce is made again after a moment's quiet
         juce::String error;       // why the last load failed
         int generation = 0;       // bumped with every load, so a display can tell new material from old
@@ -1521,6 +1522,8 @@ private:
     void djBeginLivePreview(int track);
     void djEndLivePreview(int track);
     void djFinishPreview(int deck);
+    // SessionNotes.cpp: the track the note editor's clip sits on, or -1.
+    int patternTrackIndex() const;
     void djReset();
     void writeDjState();
     void readDjState();

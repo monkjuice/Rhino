@@ -261,6 +261,18 @@ juce::Result Session::bounceDjDeck(int index, bool keepBeat)
     auto& b = *dj;
     auto& deck = b.decks[static_cast<size_t>(index)];
     const auto info = djDeckInfo(index);
+    // A bounce of this deck still being made is let land: the deck is
+    // marked behind it and bounces once more when it does. Starting over on
+    // every edit cancelled a long render under itself again and again, and
+    // the deck never got its material while its devices were worked. A new
+    // source cancels the job first, so it is not held up by this.
+    for (const auto& work : b.bounces)
+        if (work->job->deck == index && !work->job->done.load(std::memory_order_acquire) && !work->job->cancel.load())
+        {
+            deck.info.stale = true;
+            b.staleSince = juce::Time::getMillisecondCounter();
+            return juce::Result::ok();
+        }
     deck.info.stale = false;
     deck.info.error.clear();
     const auto fail = [&deck, this](const juce::String& message)
@@ -598,11 +610,17 @@ void Session::finishDjLoad(int index, int generation, std::unique_ptr<DjTrack> t
     if (deck.info.generation != generation)
         return;   // a later load has taken the deck
     deck.info.loading = false;
+    // Edits that came while this bounce was made leave it behind already: it
+    // lands, and the deck bounces once more at once rather than after the
+    // poll's quiet moment, so a set being worked never waits on a render
+    // that was cancelled under it.
+    const auto bounceAgain = deck.info.stale && deck.info.autoRebounce
+                          && (deck.info.kind == DjSourceKind::track || deck.info.kind == DjSourceKind::group);
     // A preview held for this bounce ends with it, landed or not - the
     // engine takes the new material and the bounce is heard again from the
-    // beat the preview reached - unless a knob is still held, in which case
-    // the preview goes on and the knob's release bounces once more.
-    if (!deck.info.previewing || parameterGestureDepth == 0)
+    // beat the preview reached - unless a knob is still held, or the bounce
+    // is already behind, in which case the preview goes on over the next.
+    if (!deck.info.previewing || (parameterGestureDepth == 0 && !bounceAgain))
         djFinishPreview(index);
     if (track == nullptr)
     {
@@ -610,6 +628,8 @@ void Session::finishDjLoad(int index, int generation, std::unique_ptr<DjTrack> t
         deck.info.loaded = false;
         juce::Logger::writeToLog("Rhino: deck " + juce::String(index + 1) + " could not load: " + error);
         sendSynchronousChangeMessage();
+        if (bounceAgain)
+            bounceDjDeck(index, false);
         return;
     }
     const auto first = !deck.info.loaded;
@@ -634,6 +654,8 @@ void Session::finishDjLoad(int index, int generation, std::unique_ptr<DjTrack> t
         setDjDeckLive(index, true);
     }
     sendSynchronousChangeMessage();
+    if (bounceAgain)
+        bounceDjDeck(index, true);
 }
 
 void Session::applyDjDeckSettings(int index)
@@ -733,7 +755,6 @@ juce::Result Session::setDjDeckLive(int index, bool live)
     if (!live)
     {
         deck.info.live = false;
-        deck.liveCoolsAt = 0;
         if (deck.monitoringBeforeLive.has_value() && info.track >= 0)
             setTrackMonitoring(info.track, *deck.monitoringBeforeLive);
         deck.monitoringBeforeLive.reset();
@@ -827,9 +848,11 @@ void Session::djDocumentChanged(int track)
 
 // The live preview: while a knob on a track's device is held, every deck
 // playing that track - a MIDI track running an instrument - is heard through
-// the track itself. Live is switched on for it, as the Live key does, so the
-// instrument is monitored, and the engine plays the bounce's notes into the
-// same inputs the typing keyboard plays into, silencing the bounce meanwhile.
+// the track itself: the engine plays the bounce's notes straight into the
+// track, as an editor's guide notes go in, and silences the bounce
+// meanwhile. Nothing is armed or monitored for it: switching monitoring on
+// rescanned the MIDI devices and rebuilt the song's graph on every touch,
+// which was the stutter a set had while its devices were worked.
 void Session::djBeginLivePreview(int track)
 {
     if (dj == nullptr || track < 0) return;
@@ -837,6 +860,7 @@ void Session::djBeginLivePreview(int track)
     // the deck's notes on top of them would double every hit.
     if (edit->getTransport().isPlaying()) return;
     auto& b = *dj;
+    const auto tracks = te::getAudioTracks(*edit);
     auto began = false;
     for (int i = 0; i < b.count; ++i)
     {
@@ -849,20 +873,13 @@ void Session::djBeginLivePreview(int track)
         const auto state = djDeckState(i);
         if (!state.isPlaying() && state.transport != DjDeckState::Transport::waiting)
             continue;
-        // Live left on by the last preview is still the preview's, not the
-        // person's; only a Live they switched on themselves is kept after.
-        if (deck.liveCoolsAt == 0)
-            deck.liveBeforePreview = deck.info.live;
-        deck.liveCoolsAt = 0;
-        // Live may answer that no input could be routed and leave the deck
-        // live all the same; the deck's state is what counts here.
-        if (!deck.info.live)
-            setDjDeckLive(i, true);
-        if (!deck.info.live)
-            continue;
-        b.previewInputs[0].store(allMidiInsDevice(), std::memory_order_release);
-        b.previewInputs[1].store(computerKeyboardDevice(), std::memory_order_release);
+        // The track's graph has to be there to take the notes; it is, whenever
+        // the song has played or an input is monitored, and this is cheap
+        // when it is.
+        edit->getTransport().ensureContextAllocated();
+        b.previewTracks[static_cast<size_t>(i)] = tracks[track];
         deck.info.previewing = true;
+        deck.info.previewNotes = 0;
         b.engine.deck(i).livePreview.store(true, std::memory_order_release);
         juce::Logger::writeToLog("Rhino: deck " + juce::String(i + 1) + " previews " + info.name.quoted() + " live while the knob is held");
         began = true;
@@ -890,13 +907,9 @@ void Session::djFinishPreview(int index)
     if (dj == nullptr || !juce::isPositiveAndBelow(index, dj->count)) return;
     auto& deck = dj->decks[static_cast<size_t>(index)];
     dj->engine.deck(index).livePreview.store(false, std::memory_order_release);
+    dj->previewTracks[static_cast<size_t>(index)] = nullptr;
     if (!deck.info.previewing) return;
     deck.info.previewing = false;
-    // Live stays on for a while after the knob is let go, so the next touch
-    // does not switch monitoring on again: the switch rebuilds the song's
-    // graph, which was a click in the live instrument on every touch.
-    if (!deck.liveBeforePreview && deck.info.live)
-        deck.liveCoolsAt = juce::Time::getMillisecondCounter() + DjBooth::liveCooldownMs;
     // Anything the engine had not let go of by the time the preview ended.
     const auto info = djDeckInfo(index);
     if (info.track >= 0)
@@ -907,6 +920,9 @@ void Session::djPoll()
 {
     if (dj == nullptr) return;
     auto& b = *dj;
+    // A preview's notes still queued, should the async update not have
+    // come round yet.
+    b.deliverPreviewNotes();
     // Files the worker has finished, installed in the order they were asked
     // for. A job whose deck has moved on is dropped with its result.
     for (size_t i = 0; i < b.jobs.size();)
@@ -928,17 +944,6 @@ void Session::djPoll()
                         b.bounces.end());
     }
     b.engine.collect();
-    // Live switched on for a preview goes off once the knobs have been left
-    // alone for a while.
-    for (int i = 0; i < b.count; ++i)
-    {
-        auto& deck = b.decks[static_cast<size_t>(i)];
-        if (deck.liveCoolsAt == 0 || deck.info.previewing || juce::Time::getMillisecondCounter() < deck.liveCoolsAt)
-            continue;
-        deck.liveCoolsAt = 0;
-        if (deck.info.live && !deck.liveBeforePreview)
-            setDjDeckLive(i, false);
-    }
     // A stale deck is loaded again once the document has been quiet for a
     // moment - one deck per poll, so several decks do not stall one frame.
     // A file read in a document goes to the worker; a bounce is made here.
@@ -949,6 +954,10 @@ void Session::djPoll()
         auto& deck = b.decks[static_cast<size_t>(i)];
         // A deck previewing a held knob bounces when the knob is let go.
         if (!deck.info.stale || !deck.info.autoRebounce || deck.info.previewing) continue;
+        // A deck whose bounce is still being made bounces once more when it
+        // lands, in finishDjLoad; asking here would only reset the quiet
+        // moment and keep the next stale deck waiting behind it.
+        if (deck.info.loading && deck.info.kind != DjSourceKind::file) continue;
         if (deck.info.kind == DjSourceKind::file)
         {
             startDjFileRead(i);

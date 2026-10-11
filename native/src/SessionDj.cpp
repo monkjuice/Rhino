@@ -51,6 +51,7 @@ Session::DjBooth::DjBooth()
 // document go with the booth, on this thread.
 Session::DjBooth::~DjBooth()
 {
+    cancelPendingUpdate();
     for (auto& job : jobs)
         job->cancel.store(true);
     workers.removeAllJobs(true, 10000);
@@ -68,22 +69,70 @@ void Session::DjBooth::audioDeviceIOCallbackWithContext(const float* const* inpu
     engine.process(inputChannelData, numInputChannels, outputChannelData, numOutputChannels, numSamples);
 }
 
-// The preview's notes: the keyboard state of each input the session named,
-// as the typing keyboard plays, so the track's instrument hears them at
-// once. The state's own lock is brief and the engine's input queue is made
-// for a driver thread, which is what this callback is to it.
-void Session::DjBooth::noteOn(int, int note, int velocity)
+// The preview's notes go into the deck's track itself, the way an editor's
+// guide notes do, so the track's instrument hears them with no input
+// monitored. The engine raises them on the audio thread; the track takes
+// them only on the message thread, so each is queued here and an async
+// update brings the message thread to it at once - a note is heard a turn
+// of the message loop late, inside the song's next block. A full queue
+// drops the note; the panic at the preview's end covers what that leaves.
+void Session::DjBooth::noteOn(int deck, int note, int velocity)
 {
-    for (auto& input : previewInputs)
-        if (auto* device = input.load(std::memory_order_acquire))
-            device->keyboardState.noteOn(1, note, juce::jlimit(0.0f, 1.0f, static_cast<float>(velocity) / 127.0f));
+    queuePreviewNote({deck, note, velocity, true});
 }
 
-void Session::DjBooth::noteOff(int, int note)
+void Session::DjBooth::noteOff(int deck, int note)
 {
-    for (auto& input : previewInputs)
-        if (auto* device = input.load(std::memory_order_acquire))
-            device->keyboardState.noteOff(1, note, 0.0f);
+    queuePreviewNote({deck, note, 0, false});
+}
+
+void Session::DjBooth::queuePreviewNote(PreviewNote event)
+{
+    if (!juce::isPositiveAndBelow(event.deck, maximumDjDecks)) return;
+    {
+        const auto scope = previewFifo.write(1);
+        if (scope.blockSize1 == 1)
+            previewQueue[static_cast<size_t>(scope.startIndex1)] = event;
+        else if (scope.blockSize2 == 1)
+            previewQueue[static_cast<size_t>(scope.startIndex2)] = event;
+        else
+        {
+            previewDropped.fetch_add(1, std::memory_order_relaxed);
+            return;
+        }
+    }
+    triggerAsyncUpdate();
+}
+
+void Session::DjBooth::handleAsyncUpdate()
+{
+    deliverPreviewNotes();
+}
+
+void Session::DjBooth::deliverPreviewNotes()
+{
+    jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
+    if (const auto dropped = previewDropped.exchange(0))
+        juce::Logger::writeToLog("Rhino: the booth's preview queue was full; " + juce::String(dropped) + " notes were dropped");
+    const auto ready = previewFifo.getNumReady();
+    if (ready == 0) return;
+    const auto scope = previewFifo.read(ready);
+    const auto deliver = [this](int start, int count)
+    {
+        for (int i = 0; i < count; ++i)
+        {
+            const auto& event = previewQueue[static_cast<size_t>(start + i)];
+            auto* track = previewTracks[static_cast<size_t>(event.deck)];
+            if (track == nullptr)
+                continue;   // the preview ended; its panic has let the notes go
+            track->injectLiveMidiMessage(event.on ? juce::MidiMessage::noteOn(1, event.note, static_cast<juce::uint8>(juce::jlimit(1, 127, event.velocity)))
+                                                  : juce::MidiMessage::noteOff(1, event.note),
+                                         te::MidiMessageArray::notMPE);
+            ++decks[static_cast<size_t>(event.deck)].info.previewNotes;
+        }
+    };
+    deliver(scope.startIndex1, scope.blockSize1);
+    deliver(scope.startIndex2, scope.blockSize2);
 }
 
 void Session::DjBooth::audioDeviceAboutToStart(juce::AudioIODevice* device)

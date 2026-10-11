@@ -111,7 +111,7 @@ juce::Result Session::addDevice(const juce::String& deviceId, int trackIndex, co
     if (preset != nullptr)
         applyDevicePreset(*plugin, *preset);
     edit->getUndoManager().beginNewTransaction();
-    markModified();
+    markModified(trackIndex);
     if (edit->getTransport().isPlaying())
         edit->restartPlayback();
     sendSynchronousChangeMessage();
@@ -209,7 +209,7 @@ juce::Result Session::addInstrumentDevice(const DeviceDescriptor& device, int tr
         changed = true;
     edit->getUndoManager().beginNewTransaction();
     if (changed)
-        markModified();
+        markModified(trackIndex);
     if (edit->getTransport().isPlaying())
         edit->restartPlayback();
     sendSynchronousChangeMessage();
@@ -270,7 +270,7 @@ juce::Result Session::addMidiEffectDevice(const DeviceDescriptor& device, int tr
     if (preset != nullptr)
         applyDevicePreset(*plugin, *preset);
     edit->getUndoManager().beginNewTransaction();
-    markModified();
+    markModified(trackIndex);
     if (edit->getTransport().isPlaying())
         edit->restartPlayback();
     sendSynchronousChangeMessage();
@@ -467,7 +467,7 @@ juce::Result Session::editDeviceSettings(int track, int slot, const juce::String
     undoManager.beginNewTransaction(actionName);
     change();
     undoManager.beginNewTransaction();
-    markModified();
+    markModified(track);
     sendSynchronousChangeMessage();
     return juce::Result::ok();
 }
@@ -540,7 +540,7 @@ juce::Result Session::toggleDeviceEnabled(int track, int slot)
     edit->getUndoManager().beginNewTransaction(plugin->isEnabled() ? "Bypass device" : "Enable device");
     plugin->setEnabled(!plugin->isEnabled());
     edit->getUndoManager().beginNewTransaction();
-    markModified();
+    markModified(track);
     if (edit->getTransport().isPlaying())
         edit->restartPlayback();
     sendSynchronousChangeMessage();
@@ -593,7 +593,7 @@ juce::Result Session::moveDevice(int track, int fromDevice, int toDevice)
     plugin->removeFromParent();
     list->insertPlugin(plugin, juce::jlimit(0, list->size(), insertIndex), nullptr);
     edit->getUndoManager().beginNewTransaction();
-    markModified();
+    markModified(track);
     if (edit->getTransport().isPlaying())
         edit->restartPlayback();
     sendSynchronousChangeMessage();
@@ -614,7 +614,7 @@ juce::Result Session::deleteDevice(int track, int slot)
     removeDeviceLanes(automationOwnerState(track), *plugin, &edit->getUndoManager());
     plugin->removeFromParent();
     edit->getUndoManager().beginNewTransaction();
-    markModified();
+    markModified(track);
     if (edit->getTransport().isPlaying())
         edit->restartPlayback();
     sendSynchronousChangeMessage();

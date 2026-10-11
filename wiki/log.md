@@ -429,3 +429,7 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/track-groups.md (pitfall: a member's output names its bus by position, so a reduced copy must re-route), pages/group-is-a-bus-track.md (the consequence in one line)
 - updated: pages/real-time-audio-rules.md (the counting rule is begun plus one, and what the extra block is for)
 - notes: no index change, no summary moved, no new page
+
+## [2026-10-10] update | A set worked on while it plays: edits mark their track, bounces land, the worker yields, the preview arms nothing, a MIDI screen
+- source: branch feat/dj-view, the user's report that the deck fell silent while an Arp knob was held and that repeated gestures delayed everything, with rhino.log showing every edit re-rendering both decks and a Forge bounce cancelled under itself; native/src/SessionDevices.cpp, SessionDrums.cpp, SessionNotes.cpp (edits name their track; patternTrackIndex), SessionDjSources.cpp (a bounce in flight is let land and the deck bounces once more at landing; the preview injects into the track with no Live switch; the cooldown removed), SessionDjInternal.h and SessionDj.cpp (previewTracks, injectLiveMidiMessage, the worker at low priority), DjDeckDisplay.cpp (a MIDI track's notes drawn instead of its waveform), tests/Arrangement/scenarios/DjBooth.inc (Live untouched by a preview; an edit under a bounce in flight)
+- updated: pages/dj-view.md (the preview section rewritten for the injection; the knob-touch section rewritten with the six causes and the MIDI screen)

@@ -68,7 +68,8 @@ struct DjBounceWork
 };
 
 struct Session::DjBooth final : juce::AudioIODeviceCallback,
-                                DjLiveSink
+                                DjLiveSink,
+                                juce::AsyncUpdater
 {
     DjBooth();
     ~DjBooth() override;
@@ -80,27 +81,38 @@ struct Session::DjBooth final : juce::AudioIODeviceCallback,
         // The track's monitoring before Live switched it on, put back after.
         std::optional<InputMonitoring> monitoringBeforeLive;
         bool rebounceWanted = false;
-        // Whether Live was on before a preview switched it on for itself,
-        // and when Live switched on for a preview goes off again: a while
-        // after the knob is let go, so the next touch costs no switch.
-        bool liveBeforePreview = false;
-        juce::uint32 liveCoolsAt = 0;
     };
-    static constexpr juce::uint32 liveCooldownMs = 12000;
 
-    // The live preview's notes go in the way the typing keyboard's do: to
-    // the MIDI inputs a monitored track listens to, which the session sets
-    // here when a preview begins. Called from the audio thread.
-    std::array<std::atomic<te::MidiInputDevice*>, 2> previewInputs {};
+    // The live preview's notes go straight into the track the deck plays,
+    // as an editor's guide notes do, so no input need be monitored and no
+    // graph rebuilt for them. The engine raises them on the audio thread,
+    // and the track takes them only on the message thread - it asserts as
+    // much, and its listeners are made and unmade there with the graph - so
+    // they cross in this queue and an async update brings the message
+    // thread to them. The session sets a deck's track when its preview
+    // begins and clears it when the preview ends, on the message thread.
+    struct PreviewNote { int deck = 0, note = 0, velocity = 0; bool on = false; };
+    static constexpr int previewQueueSize = 1024;
+    juce::AbstractFifo previewFifo {previewQueueSize};
+    std::array<PreviewNote, previewQueueSize> previewQueue {};
+    std::atomic<int> previewDropped {0};
+    std::array<te::AudioTrack*, maximumDjDecks> previewTracks {};
     void noteOn(int deck, int note, int velocity) override;
     void noteOff(int deck, int note) override;
+    void queuePreviewNote(PreviewNote);
+    void handleAsyncUpdate() override;
+    // Puts the queued notes into their tracks. Message thread; the poll
+    // calls it too, so a test with no message loop still delivers.
+    void deliverPreviewNotes();
 
     DjEngine engine;
     std::array<Deck, maximumDjDecks> decks;
     int count = 0;
     bool attached = false;
     juce::AudioFormatManager formats;
-    juce::ThreadPool workers {1};
+    // One worker, below normal priority: a render at full tilt beside the
+    // audio thread was what made a set stutter while a bounce was made.
+    juce::ThreadPool workers {1, 0, juce::Thread::Priority::low};
     std::vector<std::shared_ptr<DjLoadJob>> jobs;
     // The bounces in flight, kept until their jobs are done.
     std::vector<std::unique_ptr<DjBounceWork>> bounces;

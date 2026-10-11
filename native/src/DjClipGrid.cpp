@@ -7,6 +7,17 @@
 
 namespace rhino
 {
+namespace
+{
+// A cell's clip wears its track's colour until someone colours it, darkened
+// as the arrangement darkens a clip on its lane (ArrangementPainter.cpp).
+juce::Colour cellColour(const Session::SlotClip& clip, juce::Colour track)
+{
+    if (!clip.colour.isTransparent()) return clip.colour;
+    return track.isTransparent() ? palette::control.brighter(0.06f) : track.darker(0.5f);
+}
+}
+
 DjClipGrid::DjClipGrid(Session& s, int deckIndex) : session(s), deck(deckIndex)
 {
     setWantsKeyboardFocus(false);
@@ -95,9 +106,8 @@ juce::Result DjClipGrid::applyDrop(int scene, const juce::String& description, b
         target = session.firstFreeSlot(track);
         if (target < 0) target = session.sceneCount();
     }
-    if (target >= session.sceneCount())
-        if (const auto grown = session.addScene(); grown.failed())
-            return grown;
+    // A target past the last scene is the + row: the model makes that scene
+    // with the clip it lands, so a drop that makes none adds no row.
     const auto kind = browserDropKind(description);
     const auto id = browserDropId(description);
     auto result = juce::Result::ok();
@@ -205,7 +215,7 @@ void DjClipGrid::paint(juce::Graphics& g)
         }
         else if (const auto info = session.slotClip(track, scene); info.hasClip)
         {
-            auto fill = info.colour.withMultipliedSaturation(0.85f);
+            auto fill = cellColour(info, trackColour).withMultipliedSaturation(0.85f);
             if (!isLit) fill = fill.withMultipliedBrightness(0.62f);
             if (isHovered) fill = fill.brighter(0.12f);
             g.setColour(fill);
@@ -266,7 +276,8 @@ void DjClipGrid::mouseDrag(const juce::MouseEvent& event)
     if (!info.hasClip) return;
     dragStarted = true;
     if (auto* container = juce::DragAndDropContainer::findParentDragContainerFor(this))
-        container->startDragging(slotDragDescription(track, pressedCell), this, clipDragImage(info.name, info.colour), true);
+        container->startDragging(slotDragDescription(track, pressedCell), this,
+                                 clipDragImage(info.name, cellColour(info, session.trackColour(track))), true);
 }
 
 void DjClipGrid::mouseUp(const juce::MouseEvent& event)

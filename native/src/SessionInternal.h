@@ -132,9 +132,6 @@ te::AudioTrack* firstMidiTrackOf(te::Edit& edit);
 void panicMidiOnTrack(te::ClipTrack* clipTrack);
 // The audio track holding a clip, on its timeline or in one of its slots.
 te::AudioTrack* trackHoldingClip(te::Edit& edit, const te::Clip& clip);
-juce::Colour presetColour(Session::PatternPreset preset);
-juce::Colour instrumentColour(const DeviceDescriptor& device);
-juce::Colour instrumentColour(Session::Instrument instrument);
 juce::Colour nextClipColour(juce::Colour current);
 void setClipColour(te::Clip& clip, juce::Colour colour, juce::UndoManager* undoManager);
 const DeviceDescriptor* audioEffectDescriptor(Session::AudioEffect effect);

@@ -4,7 +4,7 @@ type: concept
 summary: Every track is audio or MIDI from creation; one property records it, one call reads it, and the model refuses mismatched content.
 tags: [rhino, tracks, model]
 sources: []
-updated: 2026-10-06
+updated: 2026-10-11
 ---
 
 # Track kinds: audio and MIDI
@@ -25,7 +25,7 @@ A MIDI track carries `rhinoTrackType="midi"` on its state; an audio track carrie
 
 ## What reads the kind
 
-- Notes: `createClip` and `preparePresetTrack` want a MIDI track; `editClip`, `moveClips` and `pasteClipRegion` refuse a clip whose kind does not match the lane, and so do the session view's slot paths (`clipLaneRefusal`).
+- Notes: `createClip` and `preparePresetTrack` want a MIDI track; `editClip`, `moveClips` and `pasteClipRegion` refuse a clip whose kind does not match the lane, and so do the clip-slot paths behind a DJ console's cells (`clipLaneRefusal`).
 - Devices: `addInstrumentDevice`, `addMidiEffectDevice`, `addDrumKit` and `addDrumSound` refuse an audio track. Audio effects, and a channel-strip facility (an `infrastructure` catalog entry such as Utility), go on either kind.
 - Audio: `importAudioAt` refuses a MIDI track. `importAudio` with no target fills the first empty audio lane and adds a track only when none is free. A sample dropped on a MIDI track running a [Drum Rack](drum-rack.md) is not refused: the arrangement checks `trackHasDrumRack` first and hands the file to `addDrumSound`, which puts it on the next empty pad rather than making a clip.
 - `trackRecordInput` records MIDI or audio by kind, and nothing for a bus or the main row.

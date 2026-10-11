@@ -3,10 +3,10 @@
 
 // The mixer: per-track volume, pan, mute and solo, plus the master level.
 //
-// There is one mixer, not one per view. The session view draws it as a
-// vertical strip under each track column and the arrangement draws it as a
-// horizontal strip in each track header, but both read and write the same
-// VolumeAndPanPlugin, so neither view can hold a stale copy of a level.
+// There is one mixer: each track's own VolumeAndPanPlugin. The arrangement
+// draws it in each track header and reads and writes that plugin, so it cannot
+// hold a stale copy of a level, and a deck's bounce of the track passes through
+// the same fader.
 //
 // Rhino's UtilityDevice is a device in a chain, like Live's Utility. It is not
 // the track fader, and the two are deliberately separate.

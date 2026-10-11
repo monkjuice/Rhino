@@ -1043,9 +1043,6 @@ void Arrangement::showMidiInputMenu(int track)
         });
 }
 
-// What the Info View says while the pointer rests on a header control. The
-// controls are the same objects the session view drives, so the text names the
-// track rather than leaving the reader to work out which card it came from.
 void Arrangement::mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel)
 {
     if (dragging) return;

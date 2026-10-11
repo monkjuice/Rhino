@@ -4,7 +4,7 @@ type: concept
 summary: The main output row is the edit's master plugin list, addressed as track index trackCount() so track-indexed calls need no sentinel.
 tags: [rhino, mixer, tracks]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-11
 ---
 
 # The main track
@@ -18,7 +18,7 @@ Every device, parameter and automation call takes a track index, and `DeviceTarg
 ## What it takes
 
 - **Audio effects only.** `addDevice` asks the engine's `canBeAddedToMaster()` for an audio effect; instruments and MIDI effects go to calls that accept only real track indices and are refused there, as are clips, audio files and patterns. A browser drop on it says "The main track takes audio effects only."
-- **Level and pan**, from the edit's master volume plugin, the same in the arrangement and the session view. No mute, solo, arm or input: `trackRecordInput` answers none.
+- **Level and pan**, from the edit's master volume plugin, shown on the arrangement's main row. No mute, solo, arm or input: `trackRecordInput` answers none.
 - It cannot be renamed, coloured, moved or removed; each attempt returns a message.
 - Exported WAVs include its devices and fader because the render sets `useMasterPlugins` ([Project files (.rhinoedit)](project-files.md)).
 

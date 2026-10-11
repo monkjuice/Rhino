@@ -253,13 +253,6 @@ static juce::String formatMemory(juce::uint64 bytes)
     return juce::String(juce::roundToInt(megabytes)) + " MB";
 }
 
-// The second view. The Arrange/DJ switch in the control bar and Tab open the
-// DJ view (wiki/pages/dj-view.md) in the arrangement's place. The clip
-// launcher it replaced is still built and tested (wiki/pages/session-view.md)
-// but nothing in the shell reaches it; setting this to false hides the switch
-// and the shortcut again.
-static constexpr bool sessionViewEnabled = true;
-
 // The clip and device panes float over the foot of the arrangement, so the
 // split between them has to be a component of its own: the arrangement is
 // underneath it and would take every press meant for the handle. Positions are
@@ -305,7 +298,7 @@ public:
         arrangement.enableTypingKeyboard = [this] { computerKeyboard.setEnabled(true); };
         arrangement.trackSelected = [this](int track)
         {
-            if (!sessionViewOpen) rack.selectTrack(track);
+            if (!djViewOpen) rack.selectTrack(track);
             refreshEditorPanes();
         };
         // The two lower panes answer to two different things, and to nothing
@@ -326,7 +319,7 @@ public:
         // A press on a console focuses its deck, and a deck that plays a
         // track of the song hands that track to the lower pane: its chain to
         // the Device View, its clip to whichever editor is open.
-        djView.deckSelected = [this](int deck) { if (sessionViewOpen) followDeck(deck, true); };
+        djView.deckSelected = [this](int deck) { if (djViewOpen) followDeck(deck, true); };
         // A deck's Edit key opens its track's clip - a MIDI track's in the
         // note editor, an audio track's in the audio editor - which is the
         // same lower pane under either view: the deck bounces again a moment
@@ -348,23 +341,14 @@ public:
             openClip(clip);
             logStatus("Editing " + session.trackName(track).quoted() + ": the deck follows each change");
         };
-        sessionToggle.setTooltip("Show the DJ view: decks either side of a mixer, each playing a track, a group or a file. Tab switches.");
+        djToggle.setTooltip("Show the DJ view: decks either side of a mixer, each playing a track, a group or a file. Tab switches.");
         arrangementToggle.setTooltip("Show the Arrangement timeline. Tab switches.");
-        sessionToggle.onClick = [this] { setSessionViewOpen(true); };
-        arrangementToggle.onClick = [this] { setSessionViewOpen(false); };
+        djToggle.onClick = [this] { setDjViewOpen(true); };
+        arrangementToggle.onClick = [this] { setDjViewOpen(false); };
         // A drag hovering a toggle shows that view, so a clip can be carried
         // from a lane to a console's grid and back.
-        sessionToggle.dragHovered = [this] { setSessionViewOpen(true); };
-        arrangementToggle.dragHovered = [this] { setSessionViewOpen(false); };
-        // Launched clips override a track's timeline clips. This hands those
-        // tracks back to the arrangement, as Live's Back to Arrangement does.
-        backToArrangement.setButtonText(juce::String(L"\u21ba") + " Arrangement");
-        backToArrangement.setTooltip("Stop launched clips and play the arrangement again");
-        backToArrangement.onClick = [this]
-        {
-            session.returnToArrangement();
-            logStatus("Tracks returned to the arrangement");
-        };
+        djToggle.dragHovered = [this] { setDjViewOpen(true); };
+        arrangementToggle.dragHovered = [this] { setDjViewOpen(false); };
         browser.status = files.status;
         // A browser double-click has no drop target of its own, so it follows
         // whichever track the visible arrangement has selected.
@@ -410,7 +394,7 @@ public:
         // showing is marked in grey rather than coloured in: a tab that lights
         // up teal in a neutral bar reads as a warning rather than as "you are
         // here". The restraint is the point.
-        for (auto* toggle : std::initializer_list<juce::TextButton*>{&editorToggle, &rackToggle, &backToArrangement})
+        for (auto* toggle : std::initializer_list<juce::TextButton*>{&editorToggle, &rackToggle})
         {
             toggle->setColour(juce::TextButton::buttonColourId, palette::control);
             toggle->setColour(juce::TextButton::buttonOnColourId, palette::hover);
@@ -573,7 +557,7 @@ public:
         for (auto* component : std::initializer_list<juce::Component*>{
                  &infoView, &position, &play, &stop, &record, &rewind,
                  &browser, &browserToggle, &editorToggle, &rackToggle, &grid, &audioClip, &arrangement, &djView,
-                 &sessionToggle, &arrangementToggle, &backToArrangement, &rack, &tempoBox, &signatureField, &undo, &redo, &metronome, &metronomeMenu, &hint,
+                 &djToggle, &arrangementToggle, &rack, &tempoBox, &signatureField, &undo, &redo, &metronome, &metronomeMenu, &hint,
                  &patternLabel, &editorResolution, &editorZoomOut, &editorZoomIn, &scaleHighlight,
                  &lowerSplitter})
             addAndMakeVisible(component);
@@ -745,19 +729,12 @@ public:
             component.setBounds(rightEdge, top, width, height);
             rightEdge -= gap;
         };
-        sessionToggle.setVisible(sessionViewEnabled);
-        arrangementToggle.setVisible(sessionViewEnabled);
-        if constexpr (sessionViewEnabled)
-        {
-            // Arrange then DJ, the one showing in green.
-            placeRight(sessionToggle, transportSize, transportSize, transportTop, barTransportGap);
-            placeRight(arrangementToggle, transportSize, transportSize, transportTop, sectionGap);
-            sessionToggle.setToggleState(sessionViewOpen, juce::dontSendNotification);
-            arrangementToggle.setToggleState(!sessionViewOpen, juce::dontSendNotification);
-            backToArrangement.setBounds(arrangementToggle.getX(), barControlTop + fieldHeight + 2,
-                                        sessionToggle.getRight() - arrangementToggle.getX(), 0);
-            rule(rightEdge + sectionGap / 2);
-        }
+        // Arrange then DJ, the one showing in green.
+        placeRight(djToggle, transportSize, transportSize, transportTop, barTransportGap);
+        placeRight(arrangementToggle, transportSize, transportSize, transportTop, sectionGap);
+        djToggle.setToggleState(djViewOpen, juce::dontSendNotification);
+        arrangementToggle.setToggleState(!djViewOpen, juce::dontSendNotification);
+        rule(rightEdge + sectionGap / 2);
         placeRight(metronomeMenu, metronomeMenuWidth, transportSize, transportTop, 0);
         placeRight(metronome, transportSize, transportSize, transportTop, sectionGap);
         rule(rightEdge + sectionGap / 2);
@@ -856,8 +833,8 @@ public:
                                                "effects column down the left of the window."
                                              : "Show the browser - the instruments, patterns, samples and "
                                                "effects column down the left of the window.");
-        arrangement.setVisible(!sessionViewOpen);
-        djView.setVisible(sessionViewOpen);
+        arrangement.setVisible(!djViewOpen);
+        djView.setVisible(djViewOpen);
         arrangement.setBounds(editorX, arrangementTop, editorW, arrangementH);
         // The arrangement spans the window, so it is told how much of its own
         // foot the pane covers: its main row and its scrollbars ride up to sit
@@ -1023,23 +1000,22 @@ public:
             browser.focusSearch();
             return true;
         }
-        if constexpr (sessionViewEnabled)
-            if (key.getKeyCode() == juce::KeyPress::tabKey && !key.getModifiers().isAnyModifierKeyDown())
-            {
-                setSessionViewOpen(!sessionViewOpen);
-                return true;
-            }
+        if (key.getKeyCode() == juce::KeyPress::tabKey && !key.getModifiers().isAnyModifierKeyDown())
+        {
+            setDjViewOpen(!djViewOpen);
+            return true;
+        }
         // In the DJ view the song's transport is out of reach: Space is the
         // focused deck's play key, and F9 waits for the arrangement too.
         if (key.getKeyCode() == juce::KeyPress::spaceKey)
         {
-            if (sessionViewOpen) djView.togglePlayFocused();
+            if (djViewOpen) djView.togglePlayFocused();
             else session.togglePlayback();
             return true;
         }
         if (key.getKeyCode() == juce::KeyPress::F9Key)
         {
-            if (sessionViewOpen) logStatus("Recording is the arrangement's: press Tab to return to it");
+            if (djViewOpen) logStatus("Recording is the arrangement's: press Tab to return to it");
             else toggleRecording();
             return true;
         }
@@ -1057,36 +1033,31 @@ public:
         return false;
     }
 
-    // The two views show one project, but each keeps its own selection and
-    // focus, as Live does. Switching views therefore hands the Device View
-    // over to whatever the view being shown already had selected.
-    void setSessionViewOpen(bool open)
+    // The second view: the Arrange/DJ switch in the control bar and Tab open
+    // the DJ view (wiki/pages/dj-view.md) in the arrangement's place. The two
+    // views show one project, but each keeps its own selection and focus, as
+    // Live does. Switching views therefore hands the Device View over to
+    // whatever the view being shown already had selected.
+    void setDjViewOpen(bool open)
     {
-        if constexpr (sessionViewEnabled)
-        {
-            if (sessionViewOpen == open) return;
-            sessionViewOpen = open;
-            // The decks have transports of their own, and the song's is out
-            // of reach while they show: it stops, its keys dim, and Space is
-            // the focused deck's play key.
-            if (open && session.edit->getTransport().isPlaying())
-                session.stop();
-            for (auto* control : std::initializer_list<juce::Component*>{&play, &stop, &rewind, &record})
-                control->setEnabled(!open);
-            if (open)
-                followDeck(djView.selectedDeck(), false);
-            else if (const auto track = arrangement.selectedTrackIndex(); track >= 0)
-                rack.selectTrack(track);
-            logStatus(open ? "DJ view: add a deck and choose what it plays from its name bar; Space plays the focused deck; "
-                             "Tab returns to the arrangement"
-                           : "Arrangement view");
-            resized();
-            repaint();
-        }
-        else
-        {
-            juce::ignoreUnused(open);
-        }
+        if (djViewOpen == open) return;
+        djViewOpen = open;
+        // The decks have transports of their own, and the song's is out of
+        // reach while they show: it stops, its keys dim, and Space is the
+        // focused deck's play key.
+        if (open && session.edit->getTransport().isPlaying())
+            session.stop();
+        for (auto* control : std::initializer_list<juce::Component*>{&play, &stop, &rewind, &record})
+            control->setEnabled(!open);
+        if (open)
+            followDeck(djView.selectedDeck(), false);
+        else if (const auto track = arrangement.selectedTrackIndex(); track >= 0)
+            rack.selectTrack(track);
+        logStatus(open ? "DJ view: add a deck and choose what it plays from its name bar; Space plays the focused deck; "
+                         "Tab returns to the arrangement"
+                       : "Arrangement view");
+        resized();
+        repaint();
     }
 
     void toggleBrowser()
@@ -1117,8 +1088,8 @@ public:
         }
         else
         {
-            logStatus(sessionViewOpen ? "Focus a deck playing a track of the song first: its clip opens here"
-                                      : "Select a clip first: a MIDI clip opens the note editor, an audio clip the audio editor");
+            logStatus(djViewOpen ? "Focus a deck playing a track of the song first: its clip opens here"
+                                 : "Select a clip first: a MIDI clip opens the note editor, an audio clip the audio editor");
             return;
         }
         rememberPaneSelection();
@@ -1133,7 +1104,7 @@ public:
     // a clip editor closed for the Device View could not be opened again.
     te::EditItemID clipForPane() const
     {
-        if (sessionViewOpen)
+        if (djViewOpen)
             if (const auto clip = session.djDeckEditClip(djView.selectedDeck()); clip != te::EditItemID())
                 return clip;
         return arrangement.selectedClipID();
@@ -1461,14 +1432,11 @@ private:
                      true, clipPaneOpen());
         menu.addItem(3, "Device View", true, lowerPane == LowerPane::devices);
         menu.addItem(4, "Info View", browserOpen, infoVisible && browserOpen);
-        if constexpr (sessionViewEnabled)
-        {
-            juce::PopupMenu::Item dj {"DJ View"};
-            dj.itemID = 6;
-            dj.shortcutKeyDescription = "Tab";
-            dj.isTicked = sessionViewOpen;
-            menu.addItem(std::move(dj));
-        }
+        juce::PopupMenu::Item dj {"DJ View"};
+        dj.itemID = 6;
+        dj.shortcutKeyDescription = "Tab";
+        dj.isTicked = djViewOpen;
+        menu.addItem(std::move(dj));
         menu.addSeparator();
         juce::PopupMenu::Item fullScreen {"Full Screen"};
         fullScreen.itemID = 5;
@@ -1485,7 +1453,7 @@ private:
                 else if (result == 3) safe->toggleDeviceView();
                 else if (result == 4) safe->toggleInfoView();
                 else if (result == 5 && safe->fullScreenToggleRequested) safe->fullScreenToggleRequested();
-                else if (result == 6) safe->setSessionViewOpen(!safe->sessionViewOpen);
+                else if (result == 6) safe->setDjViewOpen(!safe->djViewOpen);
             });
     }
 
@@ -1707,22 +1675,13 @@ private:
             applyPaneLayout();
         updateHint();
         // The engine both starts and finishes a recording on the audio thread
-        // and broadcasts neither, so the clips it wrote are collected here -
-        // the same reason the slot override below is polled rather than
-        // listened for.
+        // and broadcasts neither, so the clips it wrote are collected here,
+        // polled rather than listened for.
         session.recordingStopped();
         // The booth's loads finish on a worker and its stale bounces wait
         // for a quiet moment; neither is announced, so both are polled.
         session.djPoll();
         updateRecordButton();
-        // The engine raises a track's slot-override flag from the audio thread
-        // without broadcasting, so this is polled rather than event-driven.
-        if constexpr (sessionViewEnabled)
-            if (const auto overriding = session.anyTrackPlayingSlots(); overriding != backToArrangement.isVisible())
-            {
-                backToArrangement.setVisible(overriding);
-                resized();
-            }
         const auto seconds = session.edit->getTransport().getPosition().inSeconds();
         updateReadings(seconds);
         // The loop is where the transport will turn, so it heads the column of
@@ -1868,9 +1827,8 @@ private:
     RecordButton record;
     IconButton browserToggle {"Browser"};
     juce::TextButton editorToggle {"Clip"}, rackToggle {"Devices"};
-    ViewToggle sessionToggle {"DJ", BinaryData::dj_view_svg, BinaryData::dj_view_svgSize};
+    ViewToggle djToggle {"DJ", BinaryData::dj_view_svg, BinaryData::dj_view_svgSize};
     ViewToggle arrangementToggle {"Arrange", BinaryData::arrangement_view_svg, BinaryData::arrangement_view_svgSize};
-    juce::TextButton backToArrangement;
     juce::ComboBox editorResolution;
     juce::TextButton editorZoomOut, editorZoomIn;
     juce::ComboBox scaleHighlight;
@@ -1964,7 +1922,7 @@ private:
     bool paneMidi = false;
     bool paneLayoutPending = false;
     bool browserOpen = true, infoVisible = true;
-    bool sessionViewOpen = false;
+    bool djViewOpen = false;
     bool resizingBrowser = false;
     // Where the bar rules off one group from the next. Recorded by the layout,
     // because only the layout knows where the groups ended up.

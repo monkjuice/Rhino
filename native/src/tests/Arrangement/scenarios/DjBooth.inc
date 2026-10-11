@@ -404,8 +404,8 @@
                 }
                 require(session.djDeckInfo(0).loaded && session.djDeckInfo(1).loaded,
                         ("and both decks load again: " + session.djDeckInfo(0).error).toRawUTF8());
-                // The cells are cleared again, for the session view's own
-                // scenario, and the deck plays the song for those that follow.
+                // The cells are cleared again and the deck plays the song,
+                // for the scenarios that follow.
                 for (int scene = 0; scene < 3; ++scene)
                     if (session.slotClip(deckTrack, scene).hasClip)
                         require(session.deleteSlotClip(deckTrack, scene).wasOk(), "The cells are cleared again");

@@ -4,7 +4,7 @@ type: convention
 summary: Knowledge flows one way in both products, UI to model to devices to core, and every rule lives in the model so each UI path inherits it.
 tags: [both, architecture, includes]
 sources: []
-updated: 2026-10-05
+updated: 2026-10-11
 ---
 
 # Dependency direction
@@ -26,7 +26,7 @@ In Rhino, knowledge flows downward only: UI, then model, then devices, then core
 
 - **Rebuild cost.** `Session.h` used to include all six device headers, so editing any device rebuilt nearly every translation unit. Now a device edit rebuilds only the device library.
 - **One answer per rule.** A rule written in the model is inherited by every UI path, so refusals live there: a mismatched drop on a track ([Track kinds: audio and MIDI](track-kinds.md)), `chainRank` refusing a move that would break MIDI FX, then instrument, then audio FX ([Device chain order](device-chain-order.md)), and `makeRoomForClip` ([Clips never overlap](clip-placement.md)). A UI that checked for itself would be a second answer, free to disagree.
-- **Two views, one project.** The arrangement and the session view read the same `Session` and never cache a copy of tracks, devices or mixer state. Selection, focus, scroll and zoom are the only per-view state.
+- **Two views, one project.** The arrangement and the DJ view read the same `Session` and never cache a copy of tracks, devices or mixer state. Selection, focus, scroll and zoom are the only per-view state.
 - **Reporting, not deciding.** `Arrangement` reports `clipSelected`, `clipOpened`, `trackSelected` and `trackFocused`; the shell in `Main.cpp` decides which panel a click opens.
 
 ## Forge

@@ -4,7 +4,7 @@ type: analysis
 summary: Probable bugs traced by reading the code on 2026-10-03; every Rhino item was fixed by 2026-10-05, and the four Forge items are still open.
 tags: [both, bugs, maintenance]
 sources: []
-updated: 2026-10-05
+updated: 2026-10-11
 ---
 
 # Hazards found while seeding the wiki
@@ -23,7 +23,7 @@ Each item below was **traced in the code on 2026-10-03 while seeding this wiki**
 8. **Fixed in `23de20c`.** A dropped Utility was invisible: Utility is no longer offered in the browser ([Built-in devices](built-in-devices.md)).
 9. **Fixed, but not by `492cc8b`.** Rhino Arp built a `te::MidiMessageArray` on every `applyToBuffer` call. The redesigned arp (wiki log, 2026-10-03 and 10-04) reuses two arrays reserved in `initialise()` ([Real-time audio rules](real-time-audio-rules.md)).
 10. **Fixed in `a04b407`.** The dragged loop span outlived its document: `restoreProject` now drops it, as `newProject` did ([Transport, tempo and loop](transport.md)).
-11. **Fixed in `23de20c`.** The clip-slot paths skipped the track-kind refusals. `insertDeviceClipInSlot`, `insertAudioFileInSlot` and `copySlotClipToArrangement` now ask `clipLaneRefusal` ([Session view (paused)](session-view.md)).
+11. **Fixed in `23de20c`.** The clip-slot paths skipped the track-kind refusals. `insertDeviceClipInSlot` (removed with the session view on 2026-10-11), `insertAudioFileInSlot` and `copySlotClipToArrangement` now ask `clipLaneRefusal` ([Clip slots, the DJ consoles' cells](clip-slots.md)).
 12. **Fixed in `23de20c`.** The built-in sample cache could append to a stub. `createSample` now writes a temporary file and moves it into place ([juce::File::createOutputStream appends](juce-output-stream-appends.md)).
 
 ## Forge

@@ -74,37 +74,6 @@ te::AudioTrack* trackHoldingClip(te::Edit& edit, const te::Clip& clip)
     return nullptr;
 }
 
-juce::Colour presetColour(Session::PatternPreset preset)
-{
-    switch (preset)
-    {
-        case Session::PatternPreset::WarmPulse:  return juce::Colour(0xff4f7d8f);
-        case Session::PatternPreset::AcidSteps:  return juce::Colour(0xff2f6e78);
-        case Session::PatternPreset::ArpRun:     return juce::Colour(0xff77659a);
-        case Session::PatternPreset::ChordPad:   return juce::Colour(0xff5f718f);
-        case Session::PatternPreset::SubBass:    return juce::Colour(0xff34535f);
-        case Session::PatternPreset::ReeseBass:  return juce::Colour(0xff4a5f38);
-        case Session::PatternPreset::SirenLead:  return juce::Colour(0xff8f4f67);
-        case Session::PatternPreset::HouseKit:   return juce::Colour(0xff657844);
-        case Session::PatternPreset::BreakKit:   return juce::Colour(0xff6f7f43);
-        case Session::PatternPreset::MinimalKit: return juce::Colour(0xff506d45);
-        case Session::PatternPreset::ClapKit:    return juce::Colour(0xff8a7a42);
-    }
-    return juce::Colour(0xff4b6671);
-}
-
-juce::Colour instrumentColour(const DeviceDescriptor& device)
-{
-    return device.colour != 0 ? juce::Colour(device.colour) : juce::Colour(0xff4b6671);
-}
-
-juce::Colour instrumentColour(Session::Instrument instrument)
-{
-    if (const auto* device = descriptorFor(instrument))
-        return instrumentColour(*device);
-    return juce::Colour(0xff4b6671);
-}
-
 juce::Colour nextClipColour(juce::Colour current)
 {
     static constexpr juce::uint32 palette[] {

@@ -4,7 +4,7 @@ type: guide
 summary: Choose between a unit check and a workflow scenario, follow the rules that keep scenarios sharing one Session honest, and time the interface with --profile-ui.
 tags: [rhino, testing, conventions]
 sources: []
-updated: 2026-10-10
+updated: 2026-10-11
 ---
 
 # Writing Rhino tests
@@ -79,9 +79,10 @@ that session's `releaseAudioDevice()` before the block ends (`ClipEdits.inc`, `G
    runs only with `RHINO_NATIVE_INPUT_TEST=1`, as the playhead's Direct2D check in `Rendering.inc` runs only with
    `RHINO_NATIVE_RENDER_TEST=1` ([Playhead rendering](playhead.md)); a plain `ctest` skips both. Set it in the shell
    that runs `ctest --test-dir native/build -C Release -R native_pattern_workflow`.
-10. **Leave the clip slots empty.** `SessionView.inc` opens with `Slots start empty` and runs after `DjBooth.inc`, so a
-    scenario that fills a slot deletes it before its block ends (`dj booth: clips on the console` clears its cells and
-    puts the deck back on SONG), or the session view's scenario fails on a clip it never made.
+10. **Leave the shared session's clip slots empty.** `ClipRoundTrip.inc` works in the first track's cells after
+    `DjBooth.inc` has filled and cleared its own, and expects some of them empty, so a scenario that fills a slot of the shared session
+    deletes it before its block ends (`dj booth: clips on the console` clears its cells and puts the deck back on SONG).
+    A check that wants cells it can count on builds its own document, as `ClipCells.inc` does.
 
 ## Timing, not checking
 
@@ -98,7 +99,7 @@ as with Forge's `--profile`, because the machine drifts by more than some differ
 ## Access and determinism
 
 Classes under test befriend the runner (`friend int runArrangementTest();` in `Arrangement`, `Session`, `StepGrid`,
-`AudioClipPanel`, `SessionView`, `DjClipGrid` and the DJ view's panels; `friend int runUiProfile();` in `Arrangement`, `StepGrid` and `DeviceRack`), one reason
+`AudioClipPanel`, `DjClipGrid` and the DJ view's panels; `friend int runUiProfile();` in `Arrangement`, `StepGrid` and `DeviceRack`), one reason
 big classes are split across translation units rather than into new types ([Keeping files small](keeping-files-small.md)).
 The four runner flags, `--device-test`, `--arp-snapshot` and `--profile-ui` set `Session::setCommandLineTestMode`: machine
 preferences (browser preview, last track kind) are neither read nor written, and `pickTrackColour` takes the first

@@ -42,15 +42,15 @@
             // A panel the shell has switched off does not rebuild, and is
             // current again the moment it is shown.
             juce::Component shell;
-            auto launcher = std::make_unique<SessionView>(stack);
-            shell.addChildComponent(*launcher);
-            launcher->setBounds(0, 0, 900, 500);
-            const auto columnsBefore = launcher->mute.size();
-            require(stack.addTrack(Session::TrackType::midi).wasOk(), "A track is added while the panel is hidden");
-            require(launcher->mute.size() == columnsBefore, "A hidden panel does not rebuild for it");
-            launcher->setVisible(true);
-            require(static_cast<int>(launcher->mute.size()) == stack.trackCount(),
+            auto booth = std::make_unique<DjView>(stack);
+            shell.addChildComponent(*booth);
+            booth->setBounds(0, 0, 1240, 720);
+            const auto decksBefore = booth->decks.size();
+            require(stack.addDjDeck().wasOk(), "A deck is added while the panel is hidden");
+            require(booth->decks.size() == decksBefore, "A hidden panel does not rebuild for it");
+            booth->setVisible(true);
+            require(static_cast<int>(booth->decks.size()) == stack.djDeckCount(),
                     "and is current again as soon as it is shown");
-            launcher.reset();
+            booth.reset();
             stack.releaseAudioDevice();
         }

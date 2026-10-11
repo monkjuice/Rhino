@@ -66,7 +66,7 @@
         require(session.importAudioAt(source.getFile(), bus, 0.0).failed(), "and refuses audio");
         require(te::getAudioTracks(*session.edit)[bus]->getClips().isEmpty(), "so it stays empty");
         require(session.insertAudioFileInSlot(source.getFile(), bus, 0).failed(),
-                "and has no session slots to fill either");
+                "and has no cells to fill either");
 
         scenario("track groups: one level only");
         require(session.groupTracks({bus, 4}).failed(), "A group cannot go inside another group");

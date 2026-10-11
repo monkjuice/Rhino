@@ -223,7 +223,7 @@ juce::Result Session::mergeClips(const std::vector<te::EditItemID>& ids, MergeRe
 
             // One track, and only the clips being merged. Solo anywhere else
             // in the edit would otherwise silence this track's render, and a
-            // session-view slot clip would play into it.
+            // clip in one of the track's cells would play into it.
             te::Track::Array isolated;
             isolated.add(track);
             const te::FreezePointPlugin::ScopedTrackSoloIsolator isolator(*edit, isolated);

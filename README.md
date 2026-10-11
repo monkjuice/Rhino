@@ -59,7 +59,7 @@ Every audio and MIDI track has volume, pan, mute, solo, devices, automation, and
 
 The foundations are working: arrangement editing, audio and MIDI recording, project save/open, offline WAV export, track groups, automation, VST3 hosting, built-in devices, and a tested native audio model.
 
-Some production workflows are still being completed. Projects reference imported media in place, plugin discovery is limited, recording has no comping or loop-take workflow yet, and the clip-launching session view is set aside: its place in the shell is taken by the experimental DJ view. macOS remains unvalidated until the release build and installer work begins.
+Some production workflows are still being completed. Projects reference imported media in place, plugin discovery is limited, recording has no comping or loop-take workflow yet, and the DJ view, which took the place of a clip-launching session view, is experimental. macOS remains unvalidated until the release build and installer work begins.
 
 Keep backups of anything important and expect project compatibility to change during alpha development.
 

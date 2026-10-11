@@ -14,6 +14,7 @@ The catalog of this wiki: every page, grouped by type, one line each (`- [Title]
 - [Audio clip editor](pages/audio-clip-editor.md) — Edits one audio clip's own gain, pan, pitch, fades, mute and reverse as clip properties, with one undo step per knob drag.
 - [Browser and library preview](pages/browser.md) — A six-section library rail, Drums first, whose rows leave only by drag, with samples and drum presets auditioned through a second audio callback.
 - [Built-in devices](pages/built-in-devices.md) — Every device Rhino ships, what each one is and where its source lives, with Utility's details and the pitfalls the devices share.
+- [Clip slots, the DJ consoles' cells](pages/clip-slots.md) — Each track's clip slots, one per scene, are the cells a DJ console's clips grid shows; what the model guarantees about them, and the clip launcher that first showed them, removed on 2026-10-11.
 - [Computer MIDI keyboard](pages/computer-keyboard.md) — Plays notes from the typing keyboard into the MIDI input with Forge's exact key mapping, so arming and recording need no special case.
 - [Content library](pages/content-library.md) — Samples, device presets, drum kits and drum presets live as files under library/, found at runtime by ContentLibrary, audio stored with Git LFS, nothing compiled in.
 - [DJ view and the booth](pages/dj-view.md) — Up to six CDJ-style decks either side of a DJM-style mixer, run by Rhino's own engine as a second audio callback, playing files or the song's tracks and groups bounced to audio and bounced again as they are edited.
@@ -35,7 +36,7 @@ The catalog of this wiki: every page, grouped by type, one line each (`- [Title]
 - [Forge spectral oscillator](pages/forge-spectral.md) — An oscillator mode that resynthesises a loaded sample with a phase vocoder, so pitch and scan position move independently (M16).
 - [Forge warp](pages/forge-warp.md) — Two warp stages per oscillator, 38 modes in nine families, chained through one read function and anti-aliased by duller tables.
 - [Hosting Forge in Rhino](pages/forge-hosting.md) — How Rhino finds, loads and talks to the Forge VST3, and what does and does not cross the plugin boundary.
-- [Mixer](pages/mixer.md) — One mixer serves both views, with a VolumeAndPanPlugin ending each chain, mute and solo on the track, and the master volume for Main.
+- [Mixer](pages/mixer.md) — One mixer, drawn in the arrangement's track cards and heard in a deck's bounce, with a VolumeAndPanPlugin ending each chain, mute and solo on the track, and the master volume for Main.
 - [Note editor (StepGrid)](pages/note-editor.md) — Edits the notes of the open MIDI clip in steps, with a draw mode, a step region and caches that tie it closely to Session.
 - [Pattern presets](pages/pattern-presets.md) — The eleven built-in one-bar patterns, each a set of notes plus the instrument and patch that play them, and what dropping one does to a track.
 - [Playhead rendering](pages/playhead.md) — Draws both playheads every display refresh from the audio graph's own position, repainting two narrow strips whose painters skip everything else, with a Direct2D fix.
@@ -48,7 +49,6 @@ The catalog of this wiki: every page, grouped by type, one line each (`- [Title]
 - [Rhino Tune](pages/rhino-tune.md) — Vocal pitch correction with YIN tracking and PSOLA shifting, real reported latency, and correction smoothed on the offset.
 - [Rhino Vocoder and sidechains](pages/rhino-vocoder.md) — A channel vocoder whose carrier arrives as a sidechain from another track, and how Rhino routes a sidechain at all.
 - [Rhino's build targets](pages/rhino-build-targets.md) — Rhino builds as three targets (RhinoCore, RhinoDevices, the app) so that editing a device does not rebuild the app.
-- [Session view (paused)](pages/session-view.md) — A working clip launcher, built and tested but no longer reached from the shell, whose place the DJ view took and whose scene and slot model still runs in every project.
 - [Session, the model](pages/session-model.md) — The message-thread facade over one Tracktion engine and edit, one class split across 28 files, where every rule and refusal lives.
 - [Time warp](pages/time-warp.md) — Makes an audio clip follow the song's tempo, with five warp modes over two stretchers, a clip tempo and warp markers.
 - [Track automation](pages/automation.md) — Per-track lanes stored as Rhino's own ValueTree children, naming their device by key rather than slot, and played by the engine from parameter curves the session mirrors after every change.

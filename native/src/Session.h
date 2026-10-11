@@ -912,8 +912,9 @@ public:
     void endAudioClipGesture();
     void toggleTrackMute(int track);
     void toggleTrackSolo(int track);
-    // The mixer. Session view and the arrangement are two presentations of
-    // these same per-track values, so both read and write them through here.
+    // The mixer. The arrangement's track headers read and write these
+    // per-track values through here, and a deck's bounce of a track passes
+    // through the same fader.
     struct TrackMixer
     {
         float volumeDb = 0.0f;
@@ -944,54 +945,41 @@ public:
     void setMasterPan(float pan);
     void beginMasterPanGesture();
     void endMasterPanGesture();
-    // Session view: scenes are rows of clip slots across every track. The engine
-    // owns launch timing; these calls only queue state changes from the message
-    // thread and report back what the launch handles currently hold.
+    // A track's clip slots (SessionSlots.cpp): one per scene on every track,
+    // each holding at most one clip. They are the cells of a DJ console's
+    // clips grid, where a deck plays one cell's clip, bounced through the
+    // track, in place of the track's arrangement (loadDjDeckSlot).
     static constexpr int defaultScenes = 8;
     struct SlotClip
     {
         bool hasClip = false;
-        bool playing = false;
-        bool playQueued = false;
-        bool stopQueued = false;
         bool isMidi = false;
         juce::String name;
+        // The clip's own colour, transparent until someone gives it one:
+        // until then it wears its track's, as a timeline clip does.
         juce::Colour colour;
         te::EditItemID clipID;
     };
     int sceneCount() const;
-    juce::String sceneName(int scene) const;
     SlotClip slotClip(int track, int scene) const;
-    bool trackHasActiveSlot(int track) const;
-    juce::Result launchSlot(int track, int scene);
-    juce::Result launchScene(int scene);
-    void stopTrackSlots(int track);
-    void stopAllSlots();
-    juce::Result addScene();
-    juce::Result deleteScene(int scene);
+    // Every path that puts a clip in a cell makes the scene it lands in when
+    // that is past the last, inside the same undo step, so a drop on a
+    // console's + row grows the grid only when something actually lands.
     juce::Result insertPatternPresetInSlot(PatternPreset, int track, int scene);
-    juce::Result insertDeviceClipInSlot(const juce::String& deviceId, int track, int scene);
-    juce::Result insertInstrumentClipInSlot(Instrument, int track, int scene);
     juce::Result insertAudioFileInSlot(const juce::File&, int track, int scene);
     juce::Result insertBuiltInSampleInSlot(BuiltInSample, int track, int scene);
     juce::Result deleteSlotClip(int track, int scene);
     // An empty one-bar MIDI clip in a slot, as a double-click on an empty
-    // slot makes in Live; an audio track's slot takes a file instead. A
-    // scene past the last is made for it.
+    // cell makes; an audio track's cell takes a file instead.
     juce::Result createSlotClip(int track, int scene);
-    // Session clips and arrangement clips are separate, as they are in Live.
-    // These are the ways across, and each copies: -1 for scene picks the
-    // first free slot, -1 for targetTrack the clip's own track. A clip
-    // copied into another track's slot is held to that track's kind.
+    // A cell's clip and a timeline clip are separate objects. These are the
+    // ways across, and each copies: -1 for scene picks the first free slot,
+    // -1 for targetTrack the clip's own track. A clip copied into another
+    // track's slot is held to that track's kind.
     juce::Result copySlotClipToArrangement(int track, int scene, double startSeconds, int targetTrack = -1);
     juce::Result copyClipToSlot(te::EditItemID, int scene = -1);
     juce::Result copyClipToTrackSlot(te::EditItemID, int track, int scene);
     int firstFreeSlot(int track) const;
-    bool anyTrackPlayingSlots() const;
-    void returnToArrangement();
-    te::LaunchQType launchQuantisation() const;
-    void setLaunchQuantisation(te::LaunchQType);
-    te::SceneWatcher* sceneWatcher() const;
     // ---- The DJ booth (SessionDj.cpp, SessionDjSources.cpp) ----
     // Up to six decks into a mixer with a beat effect, rendered by Rhino's own
     // engine (core/DjEngine.h) as a second callback on the audio device,
@@ -1425,8 +1413,6 @@ private:
     void reconcileTrackGroups();
     void migrateLegacyTrackGroups();
     void ensureSceneSlots(int minimumScenes = defaultScenes);
-    std::optional<te::MonotonicBeat> nextLaunchBeat() const;
-    void startTransportForLaunch();
     juce::Result preparePresetTrack(int trackIndex, const PresetPattern&);
     // Every path that makes a track goes through here, so no track can exist
     // without having said what it is for. It appends the row, names it,

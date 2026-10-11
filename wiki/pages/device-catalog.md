@@ -4,7 +4,7 @@ type: component
 summary: The one table of Rhino's devices that the browser, drop targets, rack menu, engine registration and instrument rules all read.
 tags: [rhino, devices, catalog]
 sources: []
-updated: 2026-10-06
+updated: 2026-10-11
 ---
 
 # Device catalog
@@ -32,7 +32,7 @@ The browser's device rows; the drop targets (`deviceFromId` in `native/src/Brows
 
 ## Not yet the only list
 
-Effects are fully catalog-driven; instruments are not. The paused session view's slot menu lists three instruments by hand (4OSC, Drum Rack and Forge), and `native/src/DeviceMacros.cpp` curates rack knobs for 4OSC only ([Adding a device to Rhino](adding-a-device.md)). A MIDI clip moved or pasted to another track carries its instrument by catalog entry (`carriedInstrument`), so that path already knows every instrument.
+Effects are fully catalog-driven; instruments nearly so. `native/src/DeviceMacros.cpp` curates rack knobs for 4OSC only ([Adding a device to Rhino](adding-a-device.md)); the session view's slot menu, which listed three instruments by hand, went with that view on 2026-10-11. A MIDI clip moved or pasted to another track carries its instrument by catalog entry (`carriedInstrument`), so that path already knows every instrument.
 
 ## Related
 

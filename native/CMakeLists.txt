@@ -93,9 +93,6 @@ target_sources(RhinoNative PRIVATE
     src/ArrangementAutomationPaint.cpp
     src/ArrangementDrops.cpp
     src/MonitorSelector.cpp
-    src/SessionView.cpp
-    src/SessionViewPainter.cpp
-    src/SessionViewGestures.cpp
     src/DjView.cpp
     src/DjDeckPanel.cpp
     src/DjClipGrid.cpp

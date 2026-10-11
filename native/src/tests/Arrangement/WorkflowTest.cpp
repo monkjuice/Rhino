@@ -9,7 +9,6 @@
 #include "../../ControlBarFields.h"
 #include "../../StepGrid.h"
 #include "../../AudioClipPanel.h"
-#include "../../SessionView.h"
 #include "../../DjView.h"
 #include "../../Playhead.h"
 // The DJ booth scenario reads a deck's material.
@@ -113,6 +112,10 @@ int runArrangementTest()
         // recording scenarios and the audio device closing.
         scenario("dj booth");
        #include "scenarios/DjBooth.inc"
+        // A document of its own whose decks bounce, so it too comes before
+        // the recording scenarios and the audio device closing.
+        scenario("clip cells");
+       #include "scenarios/ClipCells.inc"
         // After everything that renders and before the audio device closes:
         // arming allocates a playback context to hang its input destinations
         // off, and the offline renders above run a RenderTask directly against
@@ -123,12 +126,12 @@ int runArrangementTest()
        #include "scenarios/VocoderCarrier.inc"
         scenario("gestures and persistence");
        #include "scenarios/GesturesAndPersistence.inc"
-        scenario("session view");
-       #include "scenarios/SessionView.inc"
-        scenario("shared mixer");
+        scenario("arrangement mixer");
        #include "scenarios/SharedMixer.inc"
         scenario("clip round trip");
        #include "scenarios/ClipRoundTrip.inc"
+        scenario("drum kits: whole Drum Racks dropped from the browser");
+       #include "scenarios/DrumKitDrops.inc"
         scenario("automation lanes");
        #include "scenarios/AutomationLanes.inc"
         scenario("tempo change");

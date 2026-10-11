@@ -443,7 +443,7 @@ private:
     // that takes an input has one; a group bus and the main row take none, so
     // they are given no control rather than one that refuses.
     std::vector<std::unique_ptr<MonitorSelector>> monitor;
-    // The same mixer values the session view shows, laid out horizontally.
+    // The track's fader and pan, the session's own mixer values.
     std::vector<std::unique_ptr<juce::Slider>> volume, pan;
     juce::Slider masterVolume, masterPan;
     juce::ScrollBar scroll {false}, trackScrollBar {true};

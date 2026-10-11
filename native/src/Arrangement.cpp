@@ -725,12 +725,13 @@ double Arrangement::resolvedGridBeats() const
 }
 
 // The arrangement's half of the route between the two views. The clip stays
-// here; a copy of it lands in a session slot on the same track.
+// here; a copy of it lands in the first free cell of the same track's clips,
+// which a DJ console playing the track shows.
 void Arrangement::showClipMenu(te::EditItemID id)
 {
     juce::PopupMenu menu;
     menu.addSectionHeader("CLIP");
-    menu.addItem(1, "Copy to session slot");
+    menu.addItem(1, "Copy to the track's DJ clips");
     menu.addSeparator();
     menu.addItem(4, "Cut       Ctrl+X");
     menu.addItem(5, "Copy       Ctrl+C");
@@ -777,7 +778,7 @@ void Arrangement::showClipMenu(te::EditItemID id)
                 const auto outcome = safe->session.copyClipToSlot(id);
                 if (safe->status)
                     safe->status(outcome.failed() ? outcome.getErrorMessage()
-                                                  : "Copied the clip into a session slot");
+                                                  : "Copied into the track's first free cell in the DJ view");
                 return;
             }
             // Split is the one command here that is not about the selection,

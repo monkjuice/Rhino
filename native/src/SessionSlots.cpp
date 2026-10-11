@@ -1,27 +1,28 @@
 #include "SessionInternal.h"
 #include <algorithm>
 
-// Session view model: scenes, clip slots and clip launching.
+// A track's clip slots: one per scene on every track, each holding at most one
+// clip. They are the cells a DJ console's clips grid shows (DjClipGrid.cpp),
+// where a deck plays one cell's clip, bounced through the track, in place of
+// the track's arrangement. Nothing launches a slot: the booth starts its decks
+// itself, and every render keeps the slots out of the mix
+// (te::Renderer::ScopedClipSlotDisabler, in the merge and in the bounce).
 //
-// Tracktion owns launch timing. Everything here runs on the message thread and
-// only queues launch-handle state or edits slot contents; the audio thread
-// reads those handles and decides when a slot actually starts or stops.
-//
-// One rule is enforced here rather than by the engine: a track plays at most
-// one slot clip at a time. The engine mixes every playing slot on a track, so
-// launching a clip explicitly stops that track's other clips at the same beat.
+// A cell's clip reaches only the decks that play its track, so every edit here
+// names the track it changed, and the other decks of a set are not left to
+// bounce again for it.
 
 namespace rhino
 {
 namespace
 {
-// Slot clips loop until stopped, so a preset slot clip is one bar long.
+// A cell's clip loops, and a deck plays it round, so a preset's is one bar.
 constexpr int presetSlotBars = 1;
 }
 
-// One guard for every way a slot is reached - launching, reading, filling. A
-// group track carries the audio of the tracks under it, so it has nothing of
-// its own to launch.
+// One guard for every way a slot is reached - reading, filling, copying. A
+// group track carries the audio of the tracks under it, so it has no clips of
+// its own.
 te::ClipSlot* Session::clipSlotAt(int track, int scene) const
 {
     const auto tracks = te::getAudioTracks(*edit);
@@ -48,20 +49,6 @@ int Session::sceneCount() const
     return edit->getSceneList().getNumScenes();
 }
 
-juce::String Session::sceneName(int scene) const
-{
-    const auto scenes = edit->getSceneList().getScenes();
-    if (!juce::isPositiveAndBelow(scene, scenes.size()))
-        return {};
-    const auto name = scenes[scene]->name.get();
-    return name.isNotEmpty() ? name : "Scene " + juce::String(scene + 1);
-}
-
-te::SceneWatcher* Session::sceneWatcher() const
-{
-    return &edit->getSceneList().sceneWatcher;
-}
-
 Session::SlotClip Session::slotClip(int track, int scene) const
 {
     SlotClip info;
@@ -71,193 +58,12 @@ Session::SlotClip Session::slotClip(int track, int scene) const
     if (clip == nullptr) return info;
     info.hasClip = true;
     info.name = clip->getName();
-    info.colour = clip->getColour();
+    // Rhino's colour, not the engine's: te::Clip::getColour makes one up for
+    // a clip nobody has coloured, and such a clip wears its track's.
+    info.colour = clipColour(*clip);
     info.clipID = clip->itemID;
     info.isMidi = dynamic_cast<te::MidiClip*>(clip) != nullptr;
-    if (auto handle = clip->getLaunchHandle())
-    {
-        info.playing = handle->getPlayingStatus() == te::LaunchHandle::PlayState::playing;
-        if (const auto queued = handle->getQueuedStatus())
-        {
-            info.playQueued = *queued == te::LaunchHandle::QueueState::playQueued;
-            info.stopQueued = *queued == te::LaunchHandle::QueueState::stopQueued;
-        }
-    }
     return info;
-}
-
-bool Session::trackHasActiveSlot(int track) const
-{
-    for (int scene = 0; scene < sceneCount(); ++scene)
-    {
-        const auto info = slotClip(track, scene);
-        if (info.playing || info.playQueued)
-            return true;
-    }
-    return false;
-}
-
-te::LaunchQType Session::launchQuantisation() const
-{
-    return edit->getLaunchQuantisation().type.get();
-}
-
-void Session::setLaunchQuantisation(te::LaunchQType type)
-{
-    edit->getLaunchQuantisation().type = type;
-    markModified();
-    sendSynchronousChangeMessage();
-}
-
-// The beat a launch should land on, or nullopt to take effect immediately.
-// Immediate is also the right answer before the playback context exists, which
-// is the case for the very first clip launched from a stopped transport.
-std::optional<te::MonotonicBeat> Session::nextLaunchBeat() const
-{
-    const auto type = edit->getLaunchQuantisation().type.get();
-    if (type == te::LaunchQType::none)
-        return {};
-    if (auto* context = edit->getTransport().getCurrentPlaybackContext())
-        if (const auto sync = context->getSyncPoint())
-        {
-            const auto quantised = te::getNext(type, edit->tempoSequence, sync->beat);
-            return te::MonotonicBeat {sync->monotonicBeat.v + (quantised - sync->beat)};
-        }
-    return {};
-}
-
-void Session::startTransportForLaunch()
-{
-    auto& transport = edit->getTransport();
-    if (transport.isPlaying())
-        return;
-    transport.ensureContextAllocated(true);
-    transport.play(false);
-}
-
-juce::Result Session::launchSlot(int track, int scene)
-{
-    auto* slot = clipSlotAt(track, scene);
-    if (slot == nullptr)
-        return juce::Result::fail("That clip slot does not exist.");
-    auto* clip = slot->getClip();
-    if (clip == nullptr)
-    {
-        // An empty slot is the track's stop button, as it is in Live.
-        stopTrackSlots(track);
-        return juce::Result::ok();
-    }
-    auto handle = clip->getLaunchHandle();
-    if (handle == nullptr)
-        return juce::Result::fail("That clip cannot be launched.");
-    startTransportForLaunch();
-    const auto at = nextLaunchBeat();
-    for (int other = 0; other < sceneCount(); ++other)
-    {
-        if (other == scene) continue;
-        if (auto* otherSlot = clipSlotAt(track, other))
-            if (auto* otherClip = otherSlot->getClip())
-                if (auto otherHandle = otherClip->getLaunchHandle())
-                    otherHandle->stop(at);
-    }
-    handle->play(at);
-    sendSynchronousChangeMessage();
-    return juce::Result::ok();
-}
-
-juce::Result Session::launchScene(int scene)
-{
-    if (!juce::isPositiveAndBelow(scene, sceneCount()))
-        return juce::Result::fail("That scene does not exist.");
-    startTransportForLaunch();
-    const auto at = nextLaunchBeat();
-    const auto tracks = te::getAudioTracks(*edit);
-    for (int track = 0; track < tracks.size(); ++track)
-    {
-        // A track with nothing in this scene stops, matching Live's behaviour.
-        for (int other = 0; other < sceneCount(); ++other)
-        {
-            if (other == scene) continue;
-            if (auto* otherSlot = clipSlotAt(track, other))
-                if (auto* otherClip = otherSlot->getClip())
-                    if (auto handle = otherClip->getLaunchHandle())
-                        handle->stop(at);
-        }
-        if (auto* slot = clipSlotAt(track, scene))
-            if (auto* clip = slot->getClip())
-                if (auto handle = clip->getLaunchHandle())
-                    handle->play(at);
-    }
-    sendSynchronousChangeMessage();
-    return juce::Result::ok();
-}
-
-void Session::stopTrackSlots(int track)
-{
-    const auto at = nextLaunchBeat();
-    for (int scene = 0; scene < sceneCount(); ++scene)
-        if (auto* slot = clipSlotAt(track, scene))
-            if (auto* clip = slot->getClip())
-                if (auto handle = clip->getLaunchHandle())
-                    handle->stop(at);
-    sendSynchronousChangeMessage();
-}
-
-void Session::stopAllSlots()
-{
-    const auto at = nextLaunchBeat();
-    const auto tracks = te::getAudioTracks(*edit);
-    for (int track = 0; track < tracks.size(); ++track)
-        for (int scene = 0; scene < sceneCount(); ++scene)
-            if (auto* slot = clipSlotAt(track, scene))
-                if (auto* clip = slot->getClip())
-                    if (auto handle = clip->getLaunchHandle())
-                        handle->stop(at);
-    sendSynchronousChangeMessage();
-}
-
-// Launching a slot clip makes that track ignore its timeline clips, which is
-// what Live does. Without a way back, the arrangement would stay silent on
-// those tracks for the rest of the session -- this is Live's Back to
-// Arrangement. Clearing the flag also stops any slot clip still playing.
-bool Session::anyTrackPlayingSlots() const
-{
-    for (auto* track : te::getAudioTracks(*edit))
-        if (track->playSlotClips.get())
-            return true;
-    return false;
-}
-
-void Session::returnToArrangement()
-{
-    for (auto* track : te::getAudioTracks(*edit))
-        track->playSlotClips = false;
-    sendSynchronousChangeMessage();
-}
-
-juce::Result Session::addScene()
-{
-    edit->getUndoManager().beginNewTransaction("Add scene");
-    ensureSceneSlots(sceneCount() + 1);
-    edit->getUndoManager().beginNewTransaction();
-    markModified();
-    sendSynchronousChangeMessage();
-    return juce::Result::ok();
-}
-
-juce::Result Session::deleteScene(int scene)
-{
-    const auto scenes = edit->getSceneList().getScenes();
-    if (!juce::isPositiveAndBelow(scene, scenes.size()))
-        return juce::Result::fail("That scene does not exist.");
-    if (scenes.size() <= 1)
-        return juce::Result::fail("Keep at least one scene.");
-    edit->getUndoManager().beginNewTransaction("Delete scene");
-    edit->getSceneList().deleteScene(*scenes[scene]);
-    edit->getUndoManager().beginNewTransaction();
-    markModified();
-    sendSynchronousChangeMessage();
-    return juce::Result::ok();
 }
 
 juce::Result Session::deleteSlotClip(int track, int scene)
@@ -268,50 +74,55 @@ juce::Result Session::deleteSlotClip(int track, int scene)
     auto* clip = slot->getClip();
     if (clip == nullptr)
         return juce::Result::fail("That slot is already empty.");
-    if (auto handle = clip->getLaunchHandle())
-        handle->stop({});
     edit->getUndoManager().beginNewTransaction("Delete slot clip");
     clip->removeFromParent();
     // The note editor may have been pointed at it, since a console opens a
     // slot clip there; left pointing, the next paint read a freed clip.
     repairPatternClip();
     edit->getUndoManager().beginNewTransaction();
-    markModified();
+    markModified(track);
     sendSynchronousChangeMessage();
     return juce::Result::ok();
 }
 
 juce::Result Session::insertPatternPresetInSlot(PatternPreset preset, int track, int scene)
 {
-    auto* slot = clipSlotAt(track, scene);
-    if (slot == nullptr)
-        return juce::Result::fail("Drop clips on a session slot.");
+    if (!juce::isPositiveAndBelow(track, trackCount()) || isGroupBusTrack(track) || scene < 0)
+        return juce::Result::fail("Drop clips on a cell.");
     const auto data = presetPattern(preset);
     edit->getUndoManager().beginNewTransaction("Add " + data.name + " to slot");
     if (const auto prepared = preparePresetTrack(track, data); prepared.failed())
         return prepared;
+    // A drop on the + row makes its scene here, once nothing is left to
+    // refuse it, so a refused drop leaves the grid as it was.
+    if (scene >= sceneCount())
+        ensureSceneSlots(scene + 1);
+    auto* slot = clipSlotAt(track, scene);
+    if (slot == nullptr)
+        return juce::Result::fail("Drop clips on a cell.");
+    // A pattern on a filled cell takes its clip's place. The engine's insert
+    // would remove that clip itself, but the note editor may have it open, as
+    // a console opens a cell's clip there, so it goes here with the repair.
+    if (auto* existing = slot->getClip())
+    {
+        existing->removeFromParent();
+        repairPatternClip();
+    }
     const auto beats = static_cast<double>(presetSlotBars) * beatsPerBar();
     const auto end = edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(beats));
     auto clip = te::insertMIDIClip(*slot, data.name, {tracktion::core::TimePosition(), end});
     if (clip == nullptr)
         return juce::Result::fail("The pattern clip could not be added to that slot.");
-    clip->setColour(presetColour(preset));
     fillMidiClip(*clip, data, edit->getUndoManager());
     clip->setLoopRangeBeats({tracktion::core::BeatPosition(), tracktion::core::BeatPosition::fromBeats(beats)});
     edit->getUndoManager().beginNewTransaction();
-    markModified();
+    // A preset may switch the track's instrument, which the track's own
+    // arrangement plays too: every deck on the track is behind, and no other.
+    markModified(track);
     if (edit->getTransport().isPlaying())
         edit->restartPlayback();
     sendSynchronousChangeMessage();
     return juce::Result::ok();
-}
-
-juce::Result Session::insertInstrumentClipInSlot(Instrument instrument, int track, int scene)
-{
-    const auto* device = descriptorFor(instrument);
-    if (device == nullptr)
-        return juce::Result::fail("That instrument is not in this build.");
-    return insertDeviceClipInSlot(device->id, track, scene);
 }
 
 // Why a lane may not take a clip of this kind, or ok. The slot paths ask the
@@ -327,47 +138,10 @@ juce::Result Session::clipLaneRefusal(int track, bool midi) const
     return juce::Result::ok();
 }
 
-juce::Result Session::insertDeviceClipInSlot(const juce::String& deviceId, int track, int scene)
-{
-    const auto* device = DeviceCatalog::byId(deviceId);
-    if (device == nullptr)
-        return juce::Result::fail("That device is not in this build.");
-    // Only an instrument gives a slot a clip. Anything else joins the track's
-    // chain instead, which is what a Utility drop on a slot has always done.
-    if (device->kind != DeviceKind::Instrument || device->infrastructure)
-        return addDevice(device->id, track);
-    auto* slot = clipSlotAt(track, scene);
-    if (slot == nullptr)
-        return juce::Result::fail("Drop instruments on a session slot.");
-    if (const auto refused = clipLaneRefusal(track, true); refused.failed())
-        return refused;
-    const auto name = DeviceCatalog::labelFor(*device);
-    edit->getUndoManager().beginNewTransaction("Add " + name + " to slot");
-    bool instrumentChanged = false;
-    const auto result = switchTrackInstrument(*edit, *te::getAudioTracks(*edit)[track], *device, instrumentChanged,
-                                              forgeDescription ? &*forgeDescription : nullptr);
-    if (result.failed())
-        return result;
-    const auto beats = static_cast<double>(presetSlotBars) * beatsPerBar();
-    const auto end = edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(beats));
-    auto clip = te::insertMIDIClip(*slot, name, {tracktion::core::TimePosition(), end});
-    if (clip == nullptr)
-        return juce::Result::fail("The instrument clip could not be added to that slot.");
-    clip->setColour(instrumentColour(*device));
-    clip->setLoopRangeBeats({tracktion::core::BeatPosition(), tracktion::core::BeatPosition::fromBeats(beats)});
-    edit->getUndoManager().beginNewTransaction();
-    markModified();
-    if (edit->getTransport().isPlaying())
-        edit->restartPlayback();
-    sendSynchronousChangeMessage();
-    return juce::Result::ok();
-}
-
 juce::Result Session::insertAudioFileInSlot(const juce::File& file, int track, int scene)
 {
-    auto* slot = clipSlotAt(track, scene);
-    if (slot == nullptr)
-        return juce::Result::fail("Drop audio on a session slot.");
+    if (!juce::isPositiveAndBelow(track, trackCount()) || scene < 0)
+        return juce::Result::fail("Drop audio on a cell.");
     if (const auto refused = clipLaneRefusal(track, false); refused.failed())
         return refused;
     if (!file.existsAsFile())
@@ -376,6 +150,13 @@ juce::Result Session::insertAudioFileInSlot(const juce::File& file, int track, i
     if (!audioFile.isValid())
         return juce::Result::fail("Rhino could not read " + file.getFileName() + ".");
     edit->getUndoManager().beginNewTransaction("Add audio to slot");
+    // As for a pattern: the + row's scene is made once the drop is known to
+    // land.
+    if (scene >= sceneCount())
+        ensureSceneSlots(scene + 1);
+    auto* slot = clipSlotAt(track, scene);
+    if (slot == nullptr)
+        return juce::Result::fail("Drop audio on a cell.");
     auto clip = te::insertWaveClip(*slot, file.getFileNameWithoutExtension(), file,
                                    {{tracktion::core::TimePosition(),
                                      tracktion::core::TimePosition::fromSeconds(audioFile.getLength())}},
@@ -385,7 +166,7 @@ juce::Result Session::insertAudioFileInSlot(const juce::File& file, int track, i
     // The clip the slot held is gone, and the note editor may have had it.
     repairPatternClip();
     edit->getUndoManager().beginNewTransaction();
-    markModified();
+    markModified(track);
     if (edit->getTransport().isPlaying())
         edit->restartPlayback();
     sendSynchronousChangeMessage();
@@ -395,9 +176,10 @@ juce::Result Session::insertAudioFileInSlot(const juce::File& file, int track, i
 
 // Crossing between the views.
 //
-// A slot clip and a timeline clip are separate objects, in Rhino as in Live, so
-// moving work between the views means copying rather than revealing. These are
-// the only two routes across, and both copy: the original stays where it was.
+// A cell's clip and a timeline clip are separate objects, so moving work
+// between the DJ view and the arrangement means copying rather than revealing.
+// These are the two directions across, and both copy: the original stays
+// where it was.
 
 int Session::firstFreeSlot(int track) const
 {
@@ -410,7 +192,8 @@ int Session::firstFreeSlot(int track) const
 
 // Shared by both directions, and by a deck's bounce of a slot clip: rebuild a
 // clip inside a new owner. Wave clips are re-inserted from the same source
-// file rather than copying media, and MIDI clips clone their sequence.
+// file rather than copying media, and MIDI clips clone their sequence. The
+// copy carries the source's own colour, or none, as Rhino records it.
 te::Clip* copyClipInto(te::ClipOwner& destination, te::Clip& source, tracktion::core::TimeRange range,
                        const juce::String& name)
 {
@@ -420,10 +203,7 @@ te::Clip* copyClipInto(te::ClipOwner& destination, te::Clip& source, tracktion::
         auto copy = te::insertWaveClip(destination, name, audio->getSourceFileReference().getFile(),
                                        {range, offset}, te::DeleteExistingClips::no);
         if (copy != nullptr)
-        {
-            copy->setColour(source.getColour());
             setClipColour(*copy, Session::clipColour(source), nullptr);
-        }
         return copy.get();
     }
     if (auto* midi = dynamic_cast<te::MidiClip*>(&source))
@@ -435,7 +215,6 @@ te::Clip* copyClipInto(te::ClipOwner& destination, te::Clip& source, tracktion::
         // The clone carries the source's name across; the name asked for wins.
         copy->setName(name);
         copy->setPosition({range, offset});
-        copy->setColour(source.getColour());
         setClipColour(*copy, Session::clipColour(source), nullptr);
         return copy.get();
     }
@@ -499,7 +278,8 @@ juce::Result Session::copySlotClipToArrangement(int track, int scene, double sta
     makeRoomForClip(*copy);
     refreshLoop();
     edit->getUndoManager().beginNewTransaction();
-    markModified();
+    // The cell is untouched; the lane's arrangement is what changed.
+    markModified(lane);
     if (edit->getTransport().isPlaying())
         edit->restartPlayback();
     sendSynchronousChangeMessage();
@@ -511,7 +291,7 @@ juce::Result Session::copyClipToSlot(te::EditItemID id, int scene)
     auto* source = findClip(id);
     if (source == nullptr)
         return juce::Result::fail("Select a clip to copy.");
-    // The clip keeps its track, as Live does when pasting into the session.
+    // The copy stays on the clip's own track.
     auto* clipTrack = source->getClipTrack();
     const auto tracks = te::getAudioTracks(*edit);
     int track = -1;
@@ -542,7 +322,7 @@ juce::Result Session::copyClipToTrackSlot(te::EditItemID id, int track, int scen
         if (scene < 0)
             scene = sceneCount();
     }
-    edit->getUndoManager().beginNewTransaction("Copy clip to session slot");
+    edit->getUndoManager().beginNewTransaction("Copy clip to cell");
     if (scene >= sceneCount())
         ensureSceneSlots(scene + 1);
     auto* slot = clipSlotAt(track, scene);
@@ -560,12 +340,12 @@ juce::Result Session::copyClipToTrackSlot(te::EditItemID id, int track, int scen
                                                tracktion::core::TimePosition() + length}, name);
     if (copy == nullptr)
         return juce::Result::fail("That clip could not be copied to a slot.");
-    // Slot clips repeat until stopped, so the copy loops over its own length.
+    // A cell's clip loops, so the copy loops over its own length.
     const auto beats = edit->tempoSequence.toBeats(tracktion::core::TimePosition() + length).inBeats();
     copy->setLoopRangeBeats({tracktion::core::BeatPosition(), tracktion::core::BeatPosition::fromBeats(beats)});
     copy->state.removeProperty(starterPlaceholderID, &edit->getUndoManager());
     edit->getUndoManager().beginNewTransaction();
-    markModified();
+    markModified(track);
     if (edit->getTransport().isPlaying())
         edit->restartPlayback();
     sendSynchronousChangeMessage();
@@ -600,7 +380,7 @@ juce::Result Session::createSlotClip(int track, int scene)
         return juce::Result::fail("The clip could not be added to that slot.");
     clip->setLoopRangeBeats({tracktion::core::BeatPosition(), tracktion::core::BeatPosition::fromBeats(beats)});
     edit->getUndoManager().beginNewTransaction();
-    markModified();
+    markModified(track);
     if (edit->getTransport().isPlaying())
         edit->restartPlayback();
     sendSynchronousChangeMessage();

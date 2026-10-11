@@ -1,15 +1,15 @@
 ---
 title: Mixer
 type: component
-summary: One mixer serves both views, with a VolumeAndPanPlugin ending each chain, mute and solo on the track, and the master volume for Main.
+summary: One mixer, drawn in the arrangement's track cards and heard in a deck's bounce, with a VolumeAndPanPlugin ending each chain, mute and solo on the track, and the master volume for Main.
 tags: [rhino, mixer, tracks]
 sources: []
-updated: 2026-10-05
+updated: 2026-10-11
 ---
 
 # Mixer
 
-Rhino has one mixer, not one per view. `native/src/SessionMixer.cpp` reads and writes it; the arrangement draws it as a horizontal strip in each track card (`ArrangementSync.cpp`) and the paused session view as a vertical strip per column (`SessionView.cpp`). Both call the same `Session` methods, so neither can show a stale level.
+Rhino has one mixer. `native/src/SessionMixer.cpp` reads and writes it, and the arrangement draws it as a horizontal strip in each track card (`ArrangementSync.cpp`) through the same `Session` methods, so it cannot show a stale level. A DJ deck's bounce of a track passes through the track's fader; the booth's channel strips are a mixer of their own ([DJ view and the booth](dj-view.md)).
 
 ## Where each value lives
 
@@ -39,7 +39,7 @@ No level meters, sends or return tracks (nothing in `native/src` creates a level
 ## Related
 
 - [The main track](main-track.md)
-- [Session view (paused)](session-view.md)
+- [DJ view and the booth](dj-view.md)
 - [Track groups (bus tracks)](track-groups.md)
 - [Device chain order](device-chain-order.md)
 - [Built-in devices](built-in-devices.md)

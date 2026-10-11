@@ -206,7 +206,9 @@ void DjDeckPanel::sync()
     reload.setLit(bounced && info.stale);
     reload.setLabel(info.autoRebounce ? "RELOAD" : "RELOAD*");
     eject.setEnabled(info.kind != Session::DjSourceKind::none);
-    const auto loaded = info.loaded;
+    // A deck keeps playing what it had while a load is in flight, so its
+    // keys stay lit through a cell switch rather than blinking off and on.
+    const auto loaded = info.loaded || (info.loading && session.djDeckTrack(deck) != nullptr);
     for (auto* pad : {&cue, &play, &loopIn, &loopOut, &reloop, &loopHalve, &loopDouble, &beatLoop, &jumpBack, &jumpForward,
                       &searchBack, &searchForward, &syncKey, &master, &reverse, &quantise, &tempoReset})
         pad->setEnabled(loaded);
@@ -214,7 +216,7 @@ void DjDeckPanel::sync()
         pad->setEnabled(loaded);
     tempo.setEnabled(loaded);
     jog.setEnabled(loaded);
-    jog.setTrackName(info.loaded ? info.name : juce::String());
+    jog.setTrackName(loaded ? info.name : juce::String());
     tempoRange.setLabel(rangeName(state.tempoRange));
     brake.setValue(state.brakeSeconds, juce::dontSendNotification);
     display.sync();

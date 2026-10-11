@@ -62,7 +62,9 @@ void DjDeckDisplay::setDeck(int deckIndex)
 void DjDeckDisplay::sync()
 {
     const auto info = session.djDeckInfo(deck);
-    const auto* next = info.loaded ? session.djDeckTrack(deck) : nullptr;
+    // While a load is in flight the deck goes on playing what it had, and
+    // the screen goes on showing it: a cell switch is not a blank screen.
+    const auto* next = info.loaded || info.loading ? session.djDeckTrack(deck) : nullptr;
     if (next != track || info.generation != generation)
     {
         track = next;

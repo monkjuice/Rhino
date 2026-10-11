@@ -80,9 +80,13 @@ struct Session::DjBooth final : juce::AudioIODeviceCallback,
         // The track's monitoring before Live switched it on, put back after.
         std::optional<InputMonitoring> monitoringBeforeLive;
         bool rebounceWanted = false;
-        // Whether Live was on before a preview switched it on for itself.
+        // Whether Live was on before a preview switched it on for itself,
+        // and when Live switched on for a preview goes off again: a while
+        // after the knob is let go, so the next touch costs no switch.
         bool liveBeforePreview = false;
+        juce::uint32 liveCoolsAt = 0;
     };
+    static constexpr juce::uint32 liveCooldownMs = 12000;
 
     // The live preview's notes go in the way the typing keyboard's do: to
     // the MIDI inputs a monitored track listens to, which the session sets

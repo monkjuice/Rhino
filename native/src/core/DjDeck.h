@@ -163,5 +163,13 @@ private:
     // same way.
     bool braking = false, spinningUp = false;
     double brakeStep = 0.0;
+    // A swap while playing crossfades from the material let go of over the
+    // first ten milliseconds of the block that adopts the new, so a bounce
+    // made again lands without a step. The old material is read in that
+    // block only, which the engine keeps it alive for (DjEngine::setTrack).
+    const DjTrack* swapFrom = nullptr;
+    Grid swapGrid;
+    double swapPos = 0.0;
+    int swapRemaining = 0, swapTotal = 0;
 };
 }

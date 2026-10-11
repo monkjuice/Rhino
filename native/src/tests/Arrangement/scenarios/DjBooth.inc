@@ -114,7 +114,8 @@
                 require(waitForDeck(*document, 0), "and finished");
                 const auto* quieter = document->djDeckTrack(0);
                 require(quieter != nullptr && rmsOf(quieter->left) < loud * 0.2,
-                        "the group's bounce passes through the bus's fader");
+                        ("the group's bounce passes through the bus's fader (" + juce::String(loud, 4) + " before, "
+                         + juce::String(quieter != nullptr ? rmsOf(quieter->left) : -1.0, 4) + " after)").toRawUTF8());
                 require(document->setDjDeckLive(0, true).failed(), "A group has nothing to play live");
                 document->ejectDjDeck(0);
                 require(!document->djDeckInfo(0).loaded && document->djDeckInfo(0).kind == Session::DjSourceKind::none,
@@ -179,8 +180,16 @@
                 require(!document->djDeckInfo(0).loading, "and still no bounce is made");
                 require(document->endDeviceParameterGesture(secondMidi, rackIndex, 0).wasOk(), "The knob let go");
                 require(document->djDeckInfo(0).loading && document->djDeckInfo(0).previewing, "bounces the deck again, previewing until it lands");
+                // Taken hold of again before it lands: the landing keeps the
+                // preview on, and the second release bounces once more.
+                require(document->beginDeviceParameterGesture(secondMidi, rackIndex, 0).wasOk(), "The knob taken hold of again");
+                require(waitForDeck(*document, 0), ("The first bounce lands: " + document->djDeckInfo(0).error).toRawUTF8());
+                require(document->djDeckInfo(0).previewing && document->djDeckInfo(0).live, "and the preview stays on while the knob is held");
+                require(document->endDeviceParameterGesture(secondMidi, rackIndex, 0).wasOk() && document->djDeckInfo(0).loading,
+                        "The second release bounces again");
                 require(waitForDeck(*document, 0), ("and the bounce lands: " + document->djDeckInfo(0).error).toRawUTF8());
-                require(!document->djDeckInfo(0).previewing && !document->djDeckInfo(0).live, "ending the preview, and Live with it");
+                require(!document->djDeckInfo(0).previewing && document->djDeckInfo(0).live,
+                        "ending the preview, with Live left on for a while so the next touch costs no switch");
                 document->djPause(0);
                 document->djProcessOffline(1024);
                 document->ejectDjDeck(0);
@@ -308,6 +317,8 @@
                 require(session.findClip(cell.clipID) != nullptr, "that findClip sees in its slot");
                 require(session.createSlotClip(deckTrack, 0).failed(), "A cell already holding a clip refuses another");
                 require(session.loadDjDeckSlot(0, deckTrack, 0).wasOk(), "The deck plays the cell");
+                require(session.djDeckInfo(0).loading && session.djDeckTrack(0) != nullptr,
+                        "while the material it had stays on the deck until the cell's lands");
                 require(waitForDeck(session, 0), ("and the worker bounces it: " + session.djDeckInfo(0).error).toRawUTF8());
                 require(session.djDeckInfo(0).slot == 0 && session.djDeckEditClip(0) == cell.clipID,
                         "The deck says which cell it plays, and edits that cell's clip");

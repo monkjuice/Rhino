@@ -316,6 +316,36 @@ void checkDeckTransport()
     require(deck.currentState() == DjDeck::State::empty && deck.hotCues[2].load() < 0.0, "material taken away empties the deck");
 }
 
+// Material swapped in while the deck plays crossfades from the old over ten
+// milliseconds, so a bounce made again lands without a step.
+void checkSwapCrossfade()
+{
+    DjDeck deck;
+    auto old = rampTrack(48000.0, 10.0);
+    deck.track.store(old.get());
+    deck.adoptPending();
+    deck.targetRate = deck.baseRate();
+    deck.play();
+    deck.landPending(0, 0);
+    renderDeck(deck, 20);
+    auto fresh = std::make_unique<DjTrack>();
+    fresh->sampleRate = 48000.0;
+    fresh->name = "flat";
+    fresh->left.assign(480000, 0.5f);
+    deck.track.store(fresh.get());
+    const auto swapped = renderDeck(deck, 1);
+    float largestStep = 0.0f;
+    for (size_t i = 1; i < swapped.left.size(); ++i)
+        largestStep = std::max(largestStep, std::abs(swapped.left[i] - swapped.left[i - 1]));
+    require(largestStep < 0.01f, "the swap steps by no more than a crossfade does (" + juce::String(largestStep, 4) + ")");
+    require(std::abs(swapped.left.back() - 0.5f) < 1.0e-3f, "and the block ends on the new material");
+    const auto after = renderDeck(deck, 1);
+    require(std::abs(after.left.front() - 0.5f) < 1.0e-3f && std::abs(after.left.back() - 0.5f) < 1.0e-3f,
+            "which plays alone from the next block");
+    deck.track.store(nullptr);
+    renderDeck(deck, 1);
+}
+
 // The brake, on the deck itself, and the hand on the platter, through the
 // engine that reads it.
 void checkBrakeAndScratch()
@@ -482,8 +512,9 @@ void checkEngineHousekeeping()
     run(engine, 1);
     require(engine.deck(0).currentState() == DjDeck::State::stopped, "a track given to the engine reaches its deck");
     engine.setTrack(0, rampTrack(44100.0, 2.0), false);
-    require(engine.collect() == 0, "with no block in flight the old material is freed at once");
+    require(engine.collect() == 1, "the old material waits for the block that adopts the new, which crossfades from it");
     run(engine, 1);
+    require(engine.collect() == 0, "and is freed once that block has ended");
     engine.push(command(DjEngine::Command::Type::play, 0));
     const auto out = run(engine, 10);
     require(rms(out.right) > 0.1f, "the engine plays its deck");
@@ -945,6 +976,7 @@ void checkDjCore(Session&)
 {
     const auto started = juce::Time::getMillisecondCounter();
     checkDeckTransport();
+    checkSwapCrossfade();
     checkBrakeAndScratch();
     checkLivePreview();
     checkEngineHousekeeping();

@@ -95,6 +95,14 @@ void DjDeck::adopt(const DjTrack* next)
 {
     const auto previous = grid;
     const auto keep = keepBeatOnSwap.load(std::memory_order_relaxed) && previous.valid();
+    // A swap while playing: the old material fades into the new over the
+    // first few milliseconds of this block.
+    const auto before = currentState();
+    swapFrom = current != nullptr && next != nullptr && !stopping
+            && (before == State::playing || before == State::cueing) ? current : nullptr;
+    swapGrid = previous;
+    swapPos = position.load(std::memory_order_relaxed);
+    swapRemaining = swapFrom != nullptr ? -1 : 0;
     current = next;
     grid = gridOf(next);
     if (next == nullptr)
@@ -530,7 +538,18 @@ void DjDeck::render(float* left, float* right, int frames, double deviceRate)
         peak.store(0.0f, std::memory_order_relaxed);
         rate = targetRate;
         playbackRate.store(rate, std::memory_order_relaxed);
+        swapFrom = nullptr;
+        swapRemaining = 0;
         return;
+    }
+    // The crossfade from a material just let go of lasts ten milliseconds,
+    // or this block, whichever is shorter: the old material is alive for
+    // this block only.
+    constexpr double swapSeconds = 0.01;
+    if (swapFrom != nullptr && swapRemaining < 0)
+    {
+        swapTotal = std::max(1, std::min(frames, static_cast<int>(std::lround(swapSeconds * deviceRate))));
+        swapRemaining = swapTotal;
     }
 
     const auto fadeStep = static_cast<float>(1.0 / std::max(1.0, fadeSeconds * deviceRate));
@@ -599,8 +618,21 @@ void DjDeck::render(float* left, float* right, int frames, double deviceRate)
         else
             rate += smoothing * (targetRate - rate);
         const auto step = (backwards ? -1.0 : 1.0) * rate * rateScale;
-        const auto l = readInterpolated(leftSamples, pos);
-        const auto r = readInterpolated(rightSamples, pos);
+        auto l = readInterpolated(leftSamples, pos);
+        auto r = readInterpolated(rightSamples, pos);
+        if (swapRemaining > 0 && swapFrom != nullptr)
+        {
+            const auto w = static_cast<float>(swapRemaining) / static_cast<float>(swapTotal);
+            if (swapPos >= 0.0 && swapPos < static_cast<double>(swapFrom->length() - 1))
+            {
+                const auto& oldRight = swapFrom->stereo() ? swapFrom->right : swapFrom->left;
+                l = readInterpolated(swapFrom->left, swapPos) * w + l * (1.0f - w);
+                r = readInterpolated(oldRight, swapPos) * w + r * (1.0f - w);
+            }
+            swapPos += (backwards ? -1.0 : 1.0) * rate * (swapGrid.sampleRate / deviceRate);
+            if (--swapRemaining == 0)
+                swapFrom = nullptr;
+        }
         if (stopping)
             gain = std::max(0.0f, gain - fadeStep);
         else
@@ -663,6 +695,9 @@ void DjDeck::render(float* left, float* right, int frames, double deviceRate)
         // A start past the end of this block waits for the next one.
         startAt -= frames;
     }
+    // The old material is not read past this block.
+    swapFrom = nullptr;
+    swapRemaining = 0;
     position.store(pos, std::memory_order_relaxed);
     playbackRate.store(rate, std::memory_order_relaxed);
     peak.store(blockPeak, std::memory_order_relaxed);

@@ -392,9 +392,30 @@ juce::Result Session::bounceDjDeck(int index, bool keepBeat)
     // curves first so the render plays them as playback would.
     mirrorAutomationToEngine();
     edit->flushState();
-    auto copy = te::loadEditFromState(engine, edit->state.createCopy());
+    auto stateCopy = edit->state.createCopy();
+    // Only the tracks the bounce plays are built in the copy, and the buses,
+    // since a member plays into its bus. Every other track's devices were
+    // instantiated for nothing, and a synth or a kit on one of them was most
+    // of what each bounce cost the message thread.
+    {
+        juce::Array<te::EditItemID> kept;
+        for (const auto member : members)
+            kept.add(tracks[member]->itemID);
+        for (int t = 0; t < tracks.size(); ++t)
+            if (isGroupBusTrack(t))
+                kept.add(tracks[t]->itemID);
+        for (int i = stateCopy.getNumChildren(); --i >= 0;)
+        {
+            const auto child = stateCopy.getChild(i);
+            if (child.hasType(te::IDs::TRACK) && !kept.contains(te::EditItemID::fromProperty(child, te::IDs::id)))
+                stateCopy.removeChild(i, nullptr);
+        }
+    }
+    const auto copyStarted = juce::Time::getMillisecondCounterHiRes();
+    auto copy = te::loadEditFromState(engine, stateCopy);
     if (copy == nullptr)
         return fail("The song could not be copied for the bounce.");
+    const auto copyMs = juce::Time::getMillisecondCounterHiRes() - copyStarted;
     copy->editFileRetriever = edit->editFileRetriever;
     std::vector<te::EditItemID> memberIds;
     for (const auto member : members)
@@ -407,6 +428,30 @@ juce::Result Session::bounceDjDeck(int index, bool keepBeat)
                 isolated.add(track);
     if (isolated.size() != static_cast<int>(memberIds.size()))
         return fail("The deck's tracks were not found in the copy of the song.");
+    // A track's output names its bus by its place in the track list, which
+    // the stripping above has moved: with the full copy a member played into
+    // its bus, with the stripped one it played straight out and the bus's
+    // fader was not heard. The routing is set again in the copy, by the
+    // bus's id, before anything is rendered.
+    for (const auto id : memberIds)
+    {
+        te::AudioTrack* liveTrack = nullptr;
+        for (auto* track : tracks)
+            if (track->itemID == id)
+                liveTrack = track;
+        auto* liveDestination = liveTrack != nullptr ? liveTrack->getOutput().getDestinationTrack() : nullptr;
+        if (liveDestination == nullptr)
+            continue;
+        te::AudioTrack* copyTrack = nullptr;
+        te::AudioTrack* copyDestination = nullptr;
+        for (auto* track : copyTracks)
+        {
+            if (track->itemID == id) copyTrack = track;
+            if (track->itemID == liveDestination->itemID) copyDestination = track;
+        }
+        if (copyTrack != nullptr && copyDestination != nullptr)
+            copyTrack->getOutput().setOutputToTrack(copyDestination);
+    }
     if (slotSource != nullptr)
     {
         // The copy's track plays the slot's clip from the top, through the
@@ -475,7 +520,8 @@ juce::Result Session::bounceDjDeck(int index, bool keepBeat)
     job->started = juce::Time::getMillisecondCounterHiRes();
     deck.info.loading = true;
     juce::Logger::writeToLog("Rhino: bouncing " + info.name.quoted() + " to deck " + juce::String(index + 1) + ": "
-                             + juce::String(bars, 0) + " bars, " + juce::String(members.size()) + " track(s)");
+                             + juce::String(bars, 0) + " bars, " + juce::String(members.size()) + " track(s), copied in "
+                             + juce::String(copyMs, 1) + " ms");
     b.jobs.push_back(job);
     auto* task = work->task.get();
     b.bounces.push_back(std::move(work));
@@ -552,10 +598,11 @@ void Session::finishDjLoad(int index, int generation, std::unique_ptr<DjTrack> t
     if (deck.info.generation != generation)
         return;   // a later load has taken the deck
     deck.info.loading = false;
-    // A preview held for this bounce ends with it, landed or not: the engine
-    // takes the new material and the bounce is heard again from the beat
-    // the preview reached.
-    if (deck.info.previewing)
+    // A preview held for this bounce ends with it, landed or not - the
+    // engine takes the new material and the bounce is heard again from the
+    // beat the preview reached - unless a knob is still held, in which case
+    // the preview goes on and the knob's release bounces once more.
+    if (!deck.info.previewing || parameterGestureDepth == 0)
         djFinishPreview(index);
     if (track == nullptr)
     {
@@ -686,6 +733,7 @@ juce::Result Session::setDjDeckLive(int index, bool live)
     if (!live)
     {
         deck.info.live = false;
+        deck.liveCoolsAt = 0;
         if (deck.monitoringBeforeLive.has_value() && info.track >= 0)
             setTrackMonitoring(info.track, *deck.monitoringBeforeLive);
         deck.monitoringBeforeLive.reset();
@@ -801,7 +849,11 @@ void Session::djBeginLivePreview(int track)
         const auto state = djDeckState(i);
         if (!state.isPlaying() && state.transport != DjDeckState::Transport::waiting)
             continue;
-        deck.liveBeforePreview = deck.info.live;
+        // Live left on by the last preview is still the preview's, not the
+        // person's; only a Live they switched on themselves is kept after.
+        if (deck.liveCoolsAt == 0)
+            deck.liveBeforePreview = deck.info.live;
+        deck.liveCoolsAt = 0;
         // Live may answer that no input could be routed and leave the deck
         // live all the same; the deck's state is what counts here.
         if (!deck.info.live)
@@ -840,8 +892,11 @@ void Session::djFinishPreview(int index)
     dj->engine.deck(index).livePreview.store(false, std::memory_order_release);
     if (!deck.info.previewing) return;
     deck.info.previewing = false;
+    // Live stays on for a while after the knob is let go, so the next touch
+    // does not switch monitoring on again: the switch rebuilds the song's
+    // graph, which was a click in the live instrument on every touch.
     if (!deck.liveBeforePreview && deck.info.live)
-        setDjDeckLive(index, false);
+        deck.liveCoolsAt = juce::Time::getMillisecondCounter() + DjBooth::liveCooldownMs;
     // Anything the engine had not let go of by the time the preview ended.
     const auto info = djDeckInfo(index);
     if (info.track >= 0)
@@ -873,6 +928,17 @@ void Session::djPoll()
                         b.bounces.end());
     }
     b.engine.collect();
+    // Live switched on for a preview goes off once the knobs have been left
+    // alone for a while.
+    for (int i = 0; i < b.count; ++i)
+    {
+        auto& deck = b.decks[static_cast<size_t>(i)];
+        if (deck.liveCoolsAt == 0 || deck.info.previewing || juce::Time::getMillisecondCounter() < deck.liveCoolsAt)
+            continue;
+        deck.liveCoolsAt = 0;
+        if (deck.info.live && !deck.liveBeforePreview)
+            setDjDeckLive(i, false);
+    }
     // A stale deck is loaded again once the document has been quiet for a
     // moment - one deck per poll, so several decks do not stall one frame.
     // A file read in a document goes to the worker; a bounce is made here.

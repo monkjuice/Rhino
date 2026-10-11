@@ -64,8 +64,10 @@ void DjEngine::setTrack(int index, std::unique_ptr<DjTrack> track, bool keepBeat
     auto previous = std::move(owned[static_cast<size_t>(index)]);
     owned[static_cast<size_t>(index)] = std::move(track);
     d.track.store(owned[static_cast<size_t>(index)].get(), std::memory_order_release);
+    // One block more than the counting rule needs: the block that adopts the
+    // new material still reads the old for its crossfade.
     if (previous != nullptr)
-        retired.push_back({std::move(previous), begun.load(std::memory_order_acquire)});
+        retired.push_back({std::move(previous), begun.load(std::memory_order_acquire) + 1});
 }
 
 const DjTrack* DjEngine::trackOf(int index) const noexcept

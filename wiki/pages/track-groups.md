@@ -4,7 +4,7 @@ type: component
 summary: Ctrl+G gathers tracks under a bus track that their audio feeds; the structure is positional and repaired after every reorder.
 tags: [rhino, groups, mixer, arrangement]
 sources: []
-updated: 2026-10-05
+updated: 2026-10-10
 ---
 
 # Track groups (bus tracks)
@@ -26,6 +26,7 @@ A group is a bus: a track of its own, with fader, pan, mute, solo and an audio-e
 - **A bus is not made by `appendTrack`.** `groupTracks` calls `insertNewAudioTrack` itself, so a bus has no `rhinoTrackType` (it reads as audio), no Utility device and no picked colour (it draws in a fixed grey until coloured).
 - **Skip buses when looking for a playable track**, as the note editor's fallback `firstMidiTrackOf` does; a bus at index 0 once reopened with an instrument on it, silencing the project (`GroupBusReload.inc`).
 - **A bus carries no `rhinoGroup` of its own**, so a rule that compares neighbours' membership must treat a bus above as naming its group. The join rule did not, and until `8dd3627` a track dropped directly under a bus broke the run and cut every member below it loose.
+- **A member's output names its bus by position, not id.** `TrackOutput` records the destination by the bus's place in the audio-track list, so an edit built from a copy of the state with tracks removed resolves it to the wrong track or none: the DJ bounce's stripped copy routed a member straight to the output, past its bus's fader (2026-10-10). Anything that loads a reduced copy must call `setOutputToTrack` again for every member, as `bounceDjDeck` does by the bus's id ([A deck's bounce renders on a worker against a copy of the document](dj-bounce-on-a-copy.md)).
 - `migrateLegacyTrackGroups` rebuilds pre-bus documents' groups on load ([No backward compatibility for .rhinoedit](no-rhinoedit-back-compat.md)).
 
 ## Related

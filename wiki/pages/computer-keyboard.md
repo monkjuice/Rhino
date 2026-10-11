@@ -13,7 +13,7 @@ updated: 2026-10-10
 
 ## It plays the input, not a track
 
-Notes go through `Session::sendMidiInputNote` into the `keyboardState` of the engine's MIDI input devices, the entry a controller's notes take. Nothing downstream can tell where a note came from, so arming, monitoring and recording need no second path. It writes into both virtual devices, "All MIDI Ins" and "Computer Keyboard", because a track on either has to hear it ([Track inputs and monitoring](inputs-and-monitoring.md)). `Session::midiInputDevice` is only a fallback. The DJ booth's live preview takes the same entry from its own audio thread (`Session::DjBooth::noteOn`/`noteOff`, since 2026-10-10), which is the one judged exception recorded in [Real-time audio rules](real-time-audio-rules.md); see [DJ view and the booth](dj-view.md).
+Notes go through `Session::sendMidiInputNote` into the `keyboardState` of the engine's MIDI input devices, the entry a controller's notes take. Nothing downstream can tell where a note came from, so arming, monitoring and recording need no second path. It writes into both virtual devices, "All MIDI Ins" and "Computer Keyboard", because a track on either has to hear it ([Track inputs and monitoring](inputs-and-monitoring.md)). `Session::midiInputDevice` is only a fallback. The DJ booth's live preview took this entry too, from its audio thread, for a day on 2026-10-10; it now injects its notes into the deck's track itself (`te::AudioTrack::injectLiveMidiMessage`, from the message thread), because this entry reaches a track only through an input assigned to it and monitored, and switching that on rescanned the MIDI devices on every knob touch ([DJ view and the booth](dj-view.md), [Real-time audio rules](real-time-audio-rules.md)).
 
 ## One mapping, not two
 

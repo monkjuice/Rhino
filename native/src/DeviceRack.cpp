@@ -888,7 +888,13 @@ void DeviceRack::refreshTouchedDevice()
 
 void DeviceRack::selectTrack(int track)
 {
-    selectedTrack = juce::jlimit(0, session.masterTrackIndex(), track);
+    track = juce::jlimit(0, session.masterTrackIndex(), track);
+    // The track already showing keeps its selected device and is not read
+    // again: a DJ deck followed again, or a card clicked twice, changes
+    // nothing here, and re-reading every device's controls is what each such
+    // press cost. A rack that has read no chain yet still reads its first.
+    if (track == selectedTrack && !slots.empty()) return;
+    selectedTrack = track;
     selectedDevice = 0;
     sync();
 }

@@ -1,4 +1,5 @@
 #include "DjView.h"
+#include "Playhead.h"
 #include "UiVisibility.h"
 #include <algorithm>
 
@@ -13,12 +14,7 @@ constexpr Session::DjQuantise quantiseChoices[] {Session::DjQuantise::off, Sessi
 }
 
 DjView::DjView(Session& s)
-    : session(s), mixer(s), vblank(this, [this]
-      {
-          if (isHiddenInShell(*this)) return;
-          for (auto& deck : decks)
-              deck->tickDisplay();
-      })
+    : session(s), mixer(s), vblank(this, [this] { frame(); })
 {
     setOpaque(true);
     setWantsKeyboardFocus(false);
@@ -48,7 +44,6 @@ DjView::DjView(Session& s)
         button->setColour(juce::TextButton::textColourOffId, palette::text);
         button->setWantsKeyboardFocus(false);
     }
-    mixer.status = [this](const juce::String& message) { if (status) status(message); };
     for (auto* component : std::initializer_list<juce::Component*>{&addDeckButton, &stopAllButton, &quantiseBox, &phaseLock, &mixer})
         addAndMakeVisible(component);
     session.addChangeListener(this);
@@ -102,7 +97,8 @@ void DjView::rebuildDecks()
         const auto index = static_cast<int>(decks.size());
         auto deck = std::make_unique<DjDeckPanel>(session, index);
         deck->status = [this](const juce::String& message) { if (status) status(message); };
-        deck->selected = [this, index] { focusDeck(index); };
+        deck->selected = [this, index] { focusDeck(index, false); };
+        deck->nameBarPressed = [this, index] { focusDeck(index, true); };
         deck->editRequested = [this](int track, te::EditItemID clip) { if (editRequested) editRequested(track, clip); };
         deck->removeRequested = [this, index] { removeDeck(index); };
         addAndMakeVisible(*deck);
@@ -114,12 +110,21 @@ void DjView::rebuildDecks()
 
 // A press on a console focuses its deck: the deck wears the mark, Space
 // plays and pauses it, and the shell is told so the lower pane can follow
-// its track.
-void DjView::focusDeck(int index)
+// its track. Pressed again - any key a set is played on - the deck is
+// focused already and the shell has nothing new to follow: telling it
+// re-read the track's whole chain and laid the window out again on every
+// press. What such a press does change that the shell follows, a cell of
+// the track, reaches it from sync(). The name bar still asks, as a second
+// click on a track card brings the Device View back.
+void DjView::focusDeck(int index, bool followAgain)
 {
     if (!juce::isPositiveAndBelow(index, static_cast<int>(decks.size()))) return;
+    const auto moved = index != selected;
     selected = index;
     markFocus();
+    if (!moved && !followAgain) return;
+    const auto info = session.djDeckInfo(index);
+    followedSource = {info.track, info.slot};
     if (deckSelected) deckSelected(index);
 }
 
@@ -135,20 +140,31 @@ void DjView::togglePlayFocused()
         session.djTogglePlay(selected);
 }
 
+// Each deck is read once and what was read is handed to its console and to
+// its strip. Nothing here repaints by itself: every control compares what
+// it is handed with what it shows.
 void DjView::sync()
 {
+    const auto count = session.djDeckCount();
+    std::vector<Session::DjDeckInfo> infos;
+    infos.reserve(static_cast<size_t>(count));
+    for (int i = 0; i < count; ++i)
+        infos.push_back(session.djDeckInfo(i));
     // The mixer first: its width follows its strips, and the layout below
     // reads that width. Laid out before the strips existed, a new channel
     // sat under the master section until the window was next resized.
-    mixer.sync();
-    const auto count = session.djDeckCount();
+    mixer.sync(infos);
     if (static_cast<int>(decks.size()) != count || mixer.preferredWidth() != laidOutMixerWidth)
     {
+        const auto wasEmpty = decks.empty();
         rebuildDecks();
         resized();
+        // What an empty booth says comes and goes with the first deck.
+        if (decks.empty() != wasEmpty)
+            repaint();
     }
-    for (auto& deck : decks)
-        deck->sync();
+    for (size_t i = 0; i < decks.size(); ++i)
+        decks[i]->sync(infos[i]);
     {
         const juce::ScopedValueSetter<bool> scope(updatingQuantise, true);
         const auto current = session.djQuantise();
@@ -158,7 +174,21 @@ void DjView::sync()
     }
     phaseLock.setLit(session.djPhaseLock());
     addDeckButton.setEnabled(count < Session::maximumDjDecks);
-    repaint();
+    // A deck that was focused and now plays another track or another cell
+    // of its track - something else loaded on it, a cell pressed on its
+    // grid, or a lower deck removed under it - hands the lower pane the
+    // track and the clip it plays now, as a press on it would. A press on
+    // the focused console no longer tells the shell anything, so a cell
+    // switched there would otherwise leave the editor on the last clip.
+    if (juce::isPositiveAndBelow(selected, count))
+    {
+        const auto& focused = infos[static_cast<size_t>(selected)];
+        if (const std::pair source {focused.track, focused.slot}; source != followedSource)
+        {
+            followedSource = source;
+            if (focused.track >= 0 && focusedSourceChanged) focusedSourceChanged(selected);
+        }
+    }
 }
 
 void DjView::changeListenerCallback(juce::ChangeBroadcaster*)
@@ -190,6 +220,14 @@ void DjView::visibilityChanged()
     }
 }
 
+void DjView::frame()
+{
+    if (isHiddenInShell(*this)) return;
+    for (size_t i = 0; i < decks.size(); ++i)
+        decks[i]->tickDisplay(session.djDeckState(static_cast<int>(i)));
+    deliverVBlankDamage(*this);
+}
+
 void DjView::timerCallback()
 {
     if (isHiddenInShell(*this)) return;
@@ -198,8 +236,8 @@ void DjView::timerCallback()
         blinkTicks = 0;
         blinkPhase = !blinkPhase;
     }
-    for (auto& deck : decks)
-        deck->tick(blinkPhase);
+    for (size_t i = 0; i < decks.size(); ++i)
+        decks[i]->tick(session.djDeckState(static_cast<int>(i)), blinkPhase);
     mixer.tick();
 }
 
@@ -211,17 +249,10 @@ void DjView::paint(juce::Graphics& g)
     g.setColour(palette::border);
     g.fillRect(0, toolbarHeight - 1, getWidth(), 1);
     g.setColour(palette::textDim);
-    g.setFont(uiFontBold(10.0f));
-    drawSnappedText(g, "DJ", juce::Rectangle<int>(10, 0, 30, toolbarHeight));
-    drawSnappedText(g, "QUANTISE", juce::Rectangle<int>(quantiseBox.getX() - 62, 0, 58, toolbarHeight), juce::Justification::centredRight);
+    titleLine.draw(g);
+    quantiseLine.draw(g);
     if (decks.empty())
-    {
-        g.setColour(palette::textDim);
-        g.setFont(uiFont(12.0f));
-        drawSnappedText(g, "No decks. Press + Deck, then choose a track, a group or a file for it.",
-                        getLocalBounds().withTrimmedTop(toolbarHeight).withTrimmedRight(mixer.isVisible() ? mixer.getWidth() : 0),
-                        juce::Justification::centred, true);
-    }
+        emptyLine.draw(g);
 }
 
 // Decks stand either side of the mixer, odd on the left and even on the
@@ -248,6 +279,13 @@ void DjView::resized()
     const auto mixerArea = bounds.withSizeKeepingCentre(mixerWidth, bounds.getHeight())
                                .withHeight(std::min(DjMixerPanel::preferredHeight, bounds.getHeight()));
     mixer.setBounds(mixerArea);
+    const auto toolbarFont = uiFontBold(10.0f);
+    titleLine.set("DJ", toolbarFont, juce::Rectangle<int>(10, 0, 30, toolbarHeight));
+    quantiseLine.set("QUANTISE", toolbarFont, juce::Rectangle<int>(quantiseBox.getX() - 62, 0, 58, toolbarHeight),
+                     juce::Justification::centredRight);
+    emptyLine.set("No decks. Press + Deck, then choose a track, a group or a file for it.", uiFont(12.0f),
+                  getLocalBounds().withTrimmedTop(toolbarHeight).withTrimmedRight(mixer.isVisible() ? mixer.getWidth() : 0),
+                  juce::Justification::centred, true);
     if (count == 0) return;
     const auto left = bounds.withRight(mixerArea.getX() - 4);
     const auto right = bounds.withLeft(mixerArea.getRight() + 4);

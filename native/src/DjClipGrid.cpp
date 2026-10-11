@@ -1,5 +1,5 @@
 #include "DjClipGrid.h"
-#include "BrowserIds.h"
+#include "BrowserDrops.h"
 #include "ClipDrag.h"
 #include <algorithm>
 
@@ -28,22 +28,51 @@ DjClipGrid::DjClipGrid(Session& s, int deckIndex) : session(s), deck(deckIndex)
                "deletes a clip.");
 }
 
-void DjClipGrid::setDeck(int deckIndex)
-{
-    deck = deckIndex;
-    sync();
-}
-
 void DjClipGrid::sync()
 {
-    const auto info = session.djDeckInfo(deck);
-    const auto before = std::make_tuple(track, scenes, lit);
-    track = info.kind == Session::DjSourceKind::track ? info.track : -1;
-    scenes = track >= 0 ? session.sceneCount() : 0;
-    lit = track >= 0 && info.slot >= 0 ? info.slot : songCell;
-    firstScene = juce::jlimit(0, std::max(0, scenes + 1 - std::max(1, rows() - 1)), firstScene);
-    if (before != std::make_tuple(track, scenes, lit) || track >= 0)
+    sync(session.djDeckInfo(deck));
+}
+
+// Reads every cell of the track, compares it with what is shown, and
+// repaints the cells that changed - all of them only when the track, the
+// number of scenes, its colour or the scroll changed.
+void DjClipGrid::sync(const Session::DjDeckInfo& info)
+{
+    const auto nextTrack = info.kind == Session::DjSourceKind::track ? info.track : -1;
+    const auto nextScenes = nextTrack >= 0 ? session.sceneCount() : 0;
+    const auto nextLit = nextTrack >= 0 && info.slot >= 0 ? info.slot : songCell;
+    const auto nextColour = nextTrack >= 0 ? session.trackColour(nextTrack) : juce::Colour();
+    std::vector<Cell> next(static_cast<size_t>(nextScenes));
+    for (int scene = 0; scene < nextScenes; ++scene)
+    {
+        const auto clip = session.slotClip(nextTrack, scene);
+        if (clip.hasClip)
+            next[static_cast<size_t>(scene)] = {true, clip.name, cellColour(clip, nextColour), clip.clipID};
+    }
+    const auto whole = nextTrack != track || nextScenes != scenes || nextColour != trackColour;
+    if (!whole)
+    {
+        for (int scene = 0; scene < nextScenes; ++scene)
+            if (!(next[static_cast<size_t>(scene)] == cells[static_cast<size_t>(scene)]))
+                repaintCell(scene);
+        if (nextLit != lit)
+        {
+            repaintCell(lit);
+            repaintCell(nextLit);
+        }
+    }
+    track = nextTrack;
+    scenes = nextScenes;
+    lit = nextLit;
+    trackColour = nextColour;
+    cells = std::move(next);
+    names.resize(cells.size());
+    const auto scroll = juce::jlimit(0, lastFirstScene(), firstScene);
+    if (whole || scroll != firstScene)
+    {
+        firstScene = scroll;
         repaint();
+    }
 }
 
 int DjClipGrid::rows() const
@@ -51,11 +80,28 @@ int DjClipGrid::rows() const
     return std::max(0, (getHeight() + cellGap) / (cellHeight + cellGap));
 }
 
+int DjClipGrid::lastFirstScene() const
+{
+    return std::max(0, scenes + 1 - std::max(1, rows() - 1));
+}
+
 juce::Rectangle<int> DjClipGrid::cellBounds(int scene) const
 {
     const auto row = scene == songCell ? 0 : scene - firstScene + 1;
     if (row < 0 || row >= rows()) return {};
     return {0, row * (cellHeight + cellGap), getWidth(), cellHeight};
+}
+
+void DjClipGrid::repaintCell(int scene)
+{
+    if (scene == noCell) return;
+    if (const auto bounds = cellBounds(scene); !bounds.isEmpty())
+        repaint(bounds);
+}
+
+const DjClipGrid::Cell* DjClipGrid::cellFor(int scene) const
+{
+    return juce::isPositiveAndBelow(scene, static_cast<int>(cells.size())) ? &cells[static_cast<size_t>(scene)] : nullptr;
 }
 
 int DjClipGrid::cellAt(juce::Point<int> point) const
@@ -66,6 +112,11 @@ int DjClipGrid::cellAt(juce::Point<int> point) const
     if (row == 0) return songCell;
     const auto scene = firstScene + row - 1;
     return scene <= scenes ? scene : noCell;
+}
+
+void DjClipGrid::resized()
+{
+    firstScene = juce::jlimit(0, lastFirstScene(), firstScene);
 }
 
 void DjClipGrid::report(const juce::Result& result, const juce::String& success)
@@ -100,6 +151,13 @@ juce::Result DjClipGrid::createClipAt(int scene)
 juce::Result DjClipGrid::applyDrop(int scene, const juce::String& description, bool loadOnDeck)
 {
     if (track < 0) return juce::Result::fail("Load a track of the song on this deck first, or drop the file on the deck to play it.");
+    // An instrument, an effect, a kit, a drum sound or a preset joins the
+    // track's chain and makes no clip, as on a lane.
+    if (const auto chain = applyChainDrop(session, description, track))
+    {
+        if (chain->wasOk()) sync();
+        return *chain;
+    }
     auto target = scene;
     if (target == firstFree || target == songCell || target == noCell)
     {
@@ -111,13 +169,9 @@ juce::Result DjClipGrid::applyDrop(int scene, const juce::String& description, b
     const auto kind = browserDropKind(description);
     const auto id = browserDropId(description);
     auto result = juce::Result::ok();
-    bool madeClip = false;
     int fromTrack = -1, fromScene = -1;
     if (const auto clip = draggedArrangementClip(description); clip != te::EditItemID())
-    {
         result = session.copyClipToTrackSlot(clip, track, target);
-        madeClip = true;
-    }
     else if (draggedSlot(description, fromTrack, fromScene))
     {
         if (fromTrack == track && fromScene == target)
@@ -125,72 +179,47 @@ juce::Result DjClipGrid::applyDrop(int scene, const juce::String& description, b
         const auto source = session.slotClip(fromTrack, fromScene);
         if (!source.hasClip) return juce::Result::fail("That cell is empty.");
         result = session.copyClipToTrackSlot(source.clipID, track, target);
-        madeClip = true;
     }
     else if (kind == "file")
     {
         const auto file = browserDropFile(description);
         if (file == juce::File() || !file.existsAsFile())
             return juce::Result::fail("That audio file is missing.");
-        // A drum track takes a sample onto its next empty pad instead, as a
-        // lane does.
-        if (session.trackHasDrumRack(track))
-            result = session.addDrumSound(file, track);
-        else
-        {
-            result = session.insertAudioFileInSlot(file, track, target);
-            madeClip = true;
-        }
+        result = session.insertAudioFileInSlot(file, track, target);
     }
     else if (kind == "sample")
     {
         const auto sample = builtInSampleFromId(id);
         if (!sample) return juce::Result::fail("That browser item cannot be dropped here.");
         result = session.insertBuiltInSampleInSlot(*sample, track, target);
-        madeClip = true;
     }
     else if (kind == "preset")
     {
         const auto preset = patternPresetFromId(id);
         if (!preset) return juce::Result::fail("That browser item cannot be dropped here.");
         result = session.insertPatternPresetInSlot(*preset, track, target);
-        madeClip = true;
     }
-    else if (kind == "instrument" || kind == "effect" || kind == "midi-effect")
-    {
-        // A device joins the track's chain and makes no clip, as on a lane:
-        // an instrument changes what the track runs, never its clips.
-        const auto* device = DeviceCatalog::byId(id);
-        if (device == nullptr) return juce::Result::fail("That device is not in this build.");
-        result = session.addDevice(device->id, track);
-    }
-    else if (kind == "drumkit")
-        result = session.addDrumKit(browserDropKitFile(description), track);
-    else if (kind == "drum-preset")
-        result = session.addDrumSound(browserDropDrumPresetFile(description), track);
-    else if (kind == "device-preset")
-        result = session.addDeviceFromPreset(browserDropPresetFile(description), track);
     else
         return juce::Result::fail("That cannot be dropped on a console.");
     if (result.failed())
         return result;
     sync();
-    if (madeClip && loadOnDeck)
+    if (loadOnDeck)
         return chooseCell(target);
     return juce::Result::ok();
 }
 
+// Draws only the cells a repaint reaches, from what the last sync kept.
 void DjClipGrid::paint(juce::Graphics& g)
 {
     if (track < 0) return;
-    const auto trackColour = session.trackColour(track);
     const auto count = rows();
     for (int row = 0; row < count; ++row)
     {
         const auto scene = row == 0 ? songCell : firstScene + row - 1;
         if (scene > scenes) break;
         const auto cell = cellBounds(scene);
-        if (cell.isEmpty()) continue;
+        if (cell.isEmpty() || (cullRepaints && !g.clipRegionIntersects(cell))) continue;
         const auto isLit = scene == lit, isHovered = scene == hovered, isTarget = scene == dropTarget;
         auto inner = cell.toFloat();
         if (scene == songCell)
@@ -200,8 +229,8 @@ void DjClipGrid::paint(juce::Graphics& g)
             g.setColour(trackColour);
             g.fillRect(inner.removeFromLeft(4.0f));
             g.setColour(palette::text);
-            g.setFont(uiFontBold(9.0f));
-            drawSnappedText(g, "SONG", cell.withTrimmedLeft(8), juce::Justification::centredLeft, true);
+            songLine.set("SONG", keyFont, cell.withTrimmedLeft(8), juce::Justification::centredLeft, true);
+            songLine.draw(g);
         }
         else if (scene == scenes)
         {
@@ -210,19 +239,20 @@ void DjClipGrid::paint(juce::Graphics& g)
             g.setColour(palette::control.withMultipliedAlpha(isHovered ? 0.9f : 0.5f));
             g.fillRect(inner);
             g.setColour(palette::textDim);
-            g.setFont(uiFontBold(9.0f));
-            drawSnappedText(g, "+", cell, juce::Justification::centred, true);
+            addLine.set("+", keyFont, cell, juce::Justification::centred, true);
+            addLine.draw(g);
         }
-        else if (const auto info = session.slotClip(track, scene); info.hasClip)
+        else if (const auto& kept = cells[static_cast<size_t>(scene)]; kept.hasClip)
         {
-            auto fill = cellColour(info, trackColour).withMultipliedSaturation(0.85f);
+            auto fill = kept.colour.withMultipliedSaturation(0.85f);
             if (!isLit) fill = fill.withMultipliedBrightness(0.62f);
             if (isHovered) fill = fill.brighter(0.12f);
             g.setColour(fill);
             g.fillRect(inner);
             g.setColour(fill.contrasting(0.85f));
-            g.setFont(uiFont(9.0f));
-            drawSnappedText(g, info.name, cell.withTrimmedLeft(5).withTrimmedRight(3), juce::Justification::centredLeft, true);
+            auto& name = names[static_cast<size_t>(scene)];
+            name.set(kept.name, nameFont, cell.withTrimmedLeft(5).withTrimmedRight(3), juce::Justification::centredLeft, true);
+            name.draw(g);
         }
         else
         {
@@ -244,19 +274,30 @@ void DjClipGrid::paint(juce::Graphics& g)
     }
 }
 
+void DjClipGrid::setHovered(int scene)
+{
+    if (scene == hovered) return;
+    repaintCell(hovered);
+    hovered = scene;
+    repaintCell(hovered);
+}
+
+void DjClipGrid::setDropTarget(int scene)
+{
+    if (scene == dropTarget) return;
+    repaintCell(dropTarget);
+    dropTarget = scene;
+    repaintCell(dropTarget);
+}
+
 void DjClipGrid::mouseMove(const juce::MouseEvent& event)
 {
-    const auto cell = cellAt(event.getPosition());
-    if (cell == hovered) return;
-    hovered = cell;
-    repaint();
+    setHovered(cellAt(event.getPosition()));
 }
 
 void DjClipGrid::mouseExit(const juce::MouseEvent&)
 {
-    if (hovered == noCell) return;
-    hovered = noCell;
-    repaint();
+    setHovered(noCell);
 }
 
 void DjClipGrid::mouseDown(const juce::MouseEvent& event)
@@ -272,42 +313,47 @@ void DjClipGrid::mouseDrag(const juce::MouseEvent& event)
 {
     if (dragStarted || pressedCell < 0 || pressedCell >= scenes || event.mods.isPopupMenu()) return;
     if (event.getDistanceFromDragStart() < 5) return;
-    const auto info = session.slotClip(track, pressedCell);
-    if (!info.hasClip) return;
+    const auto* cell = cellFor(pressedCell);
+    if (cell == nullptr || !cell->hasClip) return;
     dragStarted = true;
     if (auto* container = juce::DragAndDropContainer::findParentDragContainerFor(this))
-        container->startDragging(slotDragDescription(track, pressedCell), this,
-                                 clipDragImage(info.name, cellColour(info, session.trackColour(track))), true);
+        container->startDragging(slotDragDescription(track, pressedCell), this, clipDragImage(cell->name, cell->colour), true);
 }
 
 void DjClipGrid::mouseUp(const juce::MouseEvent& event)
 {
-    const auto cell = pressedCell;
+    const auto pressed = pressedCell;
     pressedCell = noCell;
-    if (dragStarted || event.mods.isPopupMenu() || !event.mouseWasClicked() || cell == noCell) return;
-    if (cell == songCell || (cell < scenes && session.slotClip(track, cell).hasClip))
-        report(chooseCell(cell), cell == songCell ? "The deck plays the song's track" : "The deck plays " + session.slotClip(track, cell).name.quoted());
+    if (dragStarted || event.mods.isPopupMenu() || !event.mouseWasClicked() || pressed == noCell) return;
+    const auto* cell = cellFor(pressed);
+    if (pressed == songCell || (cell != nullptr && cell->hasClip))
+    {
+        const auto name = cell != nullptr ? cell->name : juce::String();
+        report(chooseCell(pressed), pressed == songCell ? "The deck plays the song's track" : "The deck plays " + name.quoted());
+    }
     else if (status)
         status("An empty cell: double-click it for a new one-bar clip, or drop a clip or a sample on it");
 }
 
 void DjClipGrid::mouseDoubleClick(const juce::MouseEvent& event)
 {
-    const auto cell = cellAt(event.getPosition());
-    if (cell == noCell || cell == songCell) return;
-    if (cell < scenes && session.slotClip(track, cell).hasClip)
+    const auto scene = cellAt(event.getPosition());
+    if (scene == noCell || scene == songCell) return;
+    if (const auto* cell = cellFor(scene); cell != nullptr && cell->hasClip)
     {
-        report(chooseCell(cell), "Editing " + session.slotClip(track, cell).name.quoted() + ": the deck follows each change");
-        if (editRequested) editRequested(track, session.slotClip(track, cell).clipID);
+        const auto name = cell->name;
+        const auto clip = cell->clipID;
+        report(chooseCell(scene), "Editing " + name.quoted() + ": the deck follows each change");
+        if (editRequested) editRequested(track, clip);
         return;
     }
-    report(createClipAt(cell), "A one-bar clip: the deck plays it and the editor is open on it");
+    report(createClipAt(scene), "A one-bar clip: the deck plays it and the editor is open on it");
 }
 
 void DjClipGrid::mouseWheelMove(const juce::MouseEvent&, const juce::MouseWheelDetails& wheel)
 {
     const auto step = wheel.deltaY < 0.0f ? 1 : wheel.deltaY > 0.0f ? -1 : 0;
-    const auto next = juce::jlimit(0, std::max(0, scenes + 1 - std::max(1, rows() - 1)), firstScene + step);
+    const auto next = juce::jlimit(0, lastFirstScene(), firstScene + step);
     if (next == firstScene) return;
     firstScene = next;
     repaint();
@@ -315,10 +361,10 @@ void DjClipGrid::mouseWheelMove(const juce::MouseEvent&, const juce::MouseWheelD
 
 void DjClipGrid::showCellMenu(int scene)
 {
-    const auto info = session.slotClip(track, scene);
-    if (!info.hasClip) return;
+    const auto* cell = cellFor(scene);
+    if (cell == nullptr || !cell->hasClip) return;
     juce::PopupMenu menu;
-    menu.addSectionHeader(info.name.toUpperCase());
+    menu.addSectionHeader(cell->name.toUpperCase());
     menu.addItem(1, "Delete clip");
     menu.showMenuAsync(juce::PopupMenu::Options().withTargetScreenArea(localAreaToGlobal(cellBounds(scene))),
         [safe = juce::Component::SafePointer<DjClipGrid>(this), scene](int choice)
@@ -345,26 +391,20 @@ void DjClipGrid::itemDragEnter(const SourceDetails& details)
 void DjClipGrid::itemDragMove(const SourceDetails& details)
 {
     const auto cell = cellAt(details.localPosition);
-    const auto target = cell == songCell ? noCell : cell;
-    if (target == dropTarget) return;
-    dropTarget = target;
-    repaint();
+    setDropTarget(cell == songCell ? noCell : cell);
 }
 
 void DjClipGrid::itemDragExit(const SourceDetails&)
 {
-    if (dropTarget == noCell) return;
-    dropTarget = noCell;
-    repaint();
+    setDropTarget(noCell);
 }
 
 void DjClipGrid::itemDropped(const SourceDetails& details)
 {
     const auto cell = cellAt(details.localPosition);
-    dropTarget = noCell;
+    setDropTarget(noCell);
     report(applyDrop(cell == songCell || cell == noCell ? firstFree : cell, details.description.toString(), false),
            "Dropped on the console: press the cell to play it");
-    repaint();
 }
 
 bool DjClipGrid::isInterestedInFileDrag(const juce::StringArray& files)
@@ -384,23 +424,18 @@ void DjClipGrid::fileDragEnter(const juce::StringArray& files, int x, int y)
 void DjClipGrid::fileDragMove(const juce::StringArray&, int x, int y)
 {
     const auto cell = cellAt({x, y});
-    const auto target = cell == songCell ? noCell : cell;
-    if (target == dropTarget) return;
-    dropTarget = target;
-    repaint();
+    setDropTarget(cell == songCell ? noCell : cell);
 }
 
 void DjClipGrid::fileDragExit(const juce::StringArray&)
 {
-    if (dropTarget == noCell) return;
-    dropTarget = noCell;
-    repaint();
+    setDropTarget(noCell);
 }
 
 void DjClipGrid::filesDropped(const juce::StringArray& files, int x, int y)
 {
     const auto cell = cellAt({x, y});
-    dropTarget = noCell;
+    setDropTarget(noCell);
     for (const auto& path : files)
         if (isDroppedSoundFile(juce::File(path)))
         {
@@ -408,6 +443,5 @@ void DjClipGrid::filesDropped(const juce::StringArray& files, int x, int y)
                    "Dropped on the console: press the cell to play it");
             break;
         }
-    repaint();
 }
 }

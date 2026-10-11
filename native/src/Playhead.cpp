@@ -40,7 +40,11 @@ void movePlayhead(juce::Component& owner, float& current, float next, juce::Rect
         const auto damage = playheadDamage(-1, x, area);
         if (!damage.isEmpty()) owner.repaint(damage);
     }
+    deliverVBlankDamage(owner);
+}
 
+void deliverVBlankDamage(juce::Component& owner)
+{
    #if JUCE_WINDOWS
     if (auto* peer = owner.getPeer())
     {

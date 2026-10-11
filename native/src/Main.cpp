@@ -21,7 +21,9 @@
 #include <cmath>
 #include <functional>
 #include <stdexcept>
+#include <tuple>
 #include <utility>
+#include <vector>
 
 #if JUCE_WINDOWS
  #ifndef NOMINMAX
@@ -320,6 +322,10 @@ public:
         // track of the song hands that track to the lower pane: its chain to
         // the Device View, its clip to whichever editor is open.
         djView.deckSelected = [this](int deck) { if (djViewOpen) followDeck(deck, true); };
+        // The deck focused now plays another track, or another cell of its
+        // track: the pane follows it to the clip it plays, and is not opened
+        // for it.
+        djView.focusedSourceChanged = [this](int deck) { if (djViewOpen) followDeck(deck, false); };
         // A deck's Edit key opens its track's clip - a MIDI track's in the
         // note editor, an audio track's in the audio editor - which is the
         // same lower pane under either view: the deck bounces again a moment
@@ -1151,6 +1157,7 @@ public:
     {
         const auto info = session.djDeckInfo(deck);
         if (info.kind != Session::DjSourceKind::track || info.track < 0) return;
+        const auto paneBefore = lowerPane;
         const auto clipPaneWasOpen = clipPaneOpen();
         arrangement.selectTrack(info.track);
         rack.selectTrack(info.track);
@@ -1168,7 +1175,12 @@ public:
             lowerPane = LowerPane::devices;
         rememberPaneSelection();
         updateEditorLabel();
-        requestPaneLayout();
+        // The pane is laid out again only when it changed face or clip: a
+        // deck followed again, playing what it played, moves nothing, and
+        // laying the window out repainted all of it.
+        if (lowerPane != paneBefore || clip != followedClip)
+            requestPaneLayout();
+        followedClip = clip;
     }
 
     // The clip a command would act on, when that clip is an audio clip.
@@ -1266,11 +1278,23 @@ public:
     // waits until the button comes up; the 30 Hz timer applies it.
     void requestPaneLayout() { paneLayoutPending = true; }
 
+    // What the window paints itself - the band the toggles stand on, the
+    // browser's divider, the Info View, the control bar's rules - moves only
+    // with the panes, and a pane that moves or resizes repaints itself and
+    // the ground it leaves. So the window repaints only when its own picture
+    // moved: laying out panes that had not moved repainted every panel in it.
     void applyPaneLayout()
     {
         paneLayoutPending = false;
+        const auto before = paintedLayout();
         resized();
-        repaint();
+        if (paintedLayout() != before)
+            repaint();
+    }
+
+    std::tuple<int, int, int, juce::Rectangle<int>, std::vector<int>> paintedLayout() const
+    {
+        return {lowerBandTop, lowerBandLeft, workspaceBottom, infoViewArea(), barDividers};
     }
 
     void updateEditorLabel()
@@ -1921,6 +1945,8 @@ private:
     te::EditItemID paneClip;
     bool paneMidi = false;
     bool paneLayoutPending = false;
+    // The clip the last deck followed handed the lower pane.
+    te::EditItemID followedClip;
     bool browserOpen = true, infoVisible = true;
     bool djViewOpen = false;
     bool resizingBrowser = false;

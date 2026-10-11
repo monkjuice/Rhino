@@ -1,5 +1,6 @@
 #include "ArrangementInternal.h"
 #include "Playhead.h"
+#include "UiVisibility.h"
 #include <optional>
 #include <set>
 
@@ -573,6 +574,15 @@ void Arrangement::nudgeSelected(int direction, bool byBar)
 
 void Arrangement::changeListenerCallback(juce::ChangeBroadcaster*)
 {
+    // Switched off while the DJ view shows in its place, the timeline waits
+    // and catches up when it is shown, as every panel the shell hides does:
+    // otherwise a booth key, a bounce landing or an edit in the lower pane
+    // cost a whole rebuild of a timeline nobody could see.
+    if (isHiddenInShell(*this))
+    {
+        staleWhileHidden = true;
+        return;
+    }
     // A change can be announced in the middle of a drag. Keep the gesture
     // snapshot stable until the pointer is released.
     if (dragging || automationGesture != AutomationGesture::none)
@@ -581,6 +591,15 @@ void Arrangement::changeListenerCallback(juce::ChangeBroadcaster*)
         return;
     }
     sync();
+}
+
+void Arrangement::visibilityChanged()
+{
+    if (staleWhileHidden && !isHiddenInShell(*this))
+    {
+        staleWhileHidden = false;
+        sync();
+    }
 }
 // The row stack indexes tracks that are about to be replaced, so it goes with
 // the clips rather than surviving into the new edit.

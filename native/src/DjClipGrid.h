@@ -1,6 +1,7 @@
 #pragma once
 #include "Session.h"
-#include "Theme.h"
+#include "ShapedText.h"
+#include <vector>
 
 namespace rhino
 {
@@ -14,6 +15,10 @@ namespace rhino
 // arrangement, another console's cell, a library item that makes a clip, or
 // a sound file, each held to the track's kind by the model. The grid shows
 // only on a deck that plays a track of the song.
+//
+// What the cells show is read from the model when the session announces a
+// change, kept, and compared: only a cell that changed repaints, and the
+// painter and the pointer read the kept cells, never the model.
 class DjClipGrid final : public juce::Component,
                          public juce::DragAndDropTarget,
                          public juce::FileDragAndDropTarget,
@@ -21,9 +26,9 @@ class DjClipGrid final : public juce::Component,
 {
 public:
     DjClipGrid(Session&, int deck);
-    void setDeck(int);
-    // Re-reads the deck's track, its scenes and the cell the deck plays.
+    // Re-reads the deck's track, its cells and the cell the deck plays.
     void sync();
+    void sync(const Session::DjDeckInfo&);
     bool hasTrack() const { return track >= 0; }
     int trackIndex() const { return track; }
 
@@ -43,6 +48,7 @@ public:
     int litCell() const { return lit; }
 
     void paint(juce::Graphics&) override;
+    void resized() override;
     void mouseMove(const juce::MouseEvent&) override;
     void mouseExit(const juce::MouseEvent&) override;
     void mouseDown(const juce::MouseEvent&) override;
@@ -67,8 +73,24 @@ public:
 
 private:
     friend int runArrangementTest();
+    friend int runUiProfile();
+    // What a cell shows, as the last sync read it.
+    struct Cell
+    {
+        bool hasClip = false;
+        juce::String name;
+        juce::Colour colour;   // the clip's, or its track's darkened
+        te::EditItemID clipID;
+        bool operator==(const Cell&) const = default;
+    };
     juce::Rectangle<int> cellBounds(int scene) const;
     int rows() const;
+    // The furthest the cells scroll: the + row last in view.
+    int lastFirstScene() const;
+    void repaintCell(int scene);
+    const Cell* cellFor(int scene) const;
+    void setHovered(int scene);
+    void setDropTarget(int scene);
     void showCellMenu(int scene);
     void report(const juce::Result&, const juce::String& success);
 
@@ -81,5 +103,14 @@ private:
     int firstScene = 0;
     int pressedCell = noCell;
     bool dragStarted = false;
+    juce::Colour trackColour;
+    std::vector<Cell> cells;
+    // The cells' names, shaped where each cell stands and laid out again
+    // only when the name or the place changes.
+    std::vector<ShapedLine> names;
+    ShapedLine songLine, addLine;
+    const juce::Font nameFont {uiFont(9.0f)}, keyFont {uiFontBold(9.0f)};
+    // Off for the check that a culled paint matches drawing everything.
+    bool cullRepaints = true;
 };
 }

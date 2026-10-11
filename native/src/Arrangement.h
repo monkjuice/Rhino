@@ -382,6 +382,7 @@ private:
     juce::Rectangle<float> bounds(const ClipView&) const;
     int hit(juce::Point<float>) const;
     void changeListenerCallback(juce::ChangeBroadcaster*) override;
+    void visibilityChanged() override;
     void scrollBarMoved(juce::ScrollBar*, double) override;
     void editWillChange() override;
     void editDidChange() override;
@@ -552,6 +553,10 @@ private:
                            maximumMasterLaneHeight = 120.0f;
     float masterLaneHeight = defaultMasterLaneHeight;
     float bottomInset = 0.0f;
+    // A change arrived while the shell had the timeline switched off - the
+    // DJ view shows in its place - caught up when it is shown. See
+    // UiVisibility.h.
+    bool staleWhileHidden = false;
     static constexpr float automationRowHeight = 44.0f;
     // What rules one track off from the next, header and lane alike, and the
     // line the main row is closed off with.

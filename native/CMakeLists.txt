@@ -95,9 +95,21 @@ target_sources(RhinoNative PRIVATE
     src/MonitorSelector.cpp
     src/DjView.cpp
     src/DjDeckPanel.cpp
+    src/DjDeckPanelLayout.cpp
+    src/DjDeckPanelMenus.cpp
     src/DjClipGrid.cpp
     src/DjDeckDisplay.cpp
+    src/DjDeckDisplayWave.cpp
     src/DjMixerPanel.cpp
+    src/DjMixerPanelStrips.cpp
+    src/DjMixerPanelMaster.cpp
+    src/DjControls.cpp
+    src/DjPad.cpp
+    src/DjFader.cpp
+    src/DjMeter.cpp
+    src/DjJogWheel.cpp
+    src/ShapedText.cpp
+    src/BrowserDrops.cpp
     src/BrowserPanel.cpp
     src/AudioClipPanel.cpp
     src/AudioClipWarp.cpp
@@ -173,13 +185,14 @@ add_test(NAME native_device_correctness COMMAND RhinoNative --self-test)
 set_tests_properties(native_device_correctness PROPERTIES TIMEOUT 30)
 add_test(NAME native_device_conformance COMMAND RhinoNative --device-test)
 set_tests_properties(native_device_conformance PROPERTIES TIMEOUT 120)
-# The two workflow runs take 20-26 seconds each on this machine, so a 30 second
-# limit is a 15% margin and a busy machine trips it. The limit is here to catch
-# a render that never returns - which hangs outright rather than running slowly -
-# so it can be generous without giving that up.
+# The limit is here to catch a render that never returns - which hangs outright
+# rather than running slowly - so it can be generous without giving that up.
+# The pattern run takes about 36 seconds on this machine; the arrangement run,
+# which carries every DJ scenario and their inline bounces, took 114 seconds on
+# 2026-10-11, so its limit leaves room for the work still landing in it.
 add_test(NAME native_pattern_workflow COMMAND RhinoNative --pattern-test)
 set_tests_properties(native_pattern_workflow PROPERTIES TIMEOUT 120)
 add_test(NAME native_arrangement_workflow COMMAND RhinoNative --arrangement-test)
-set_tests_properties(native_arrangement_workflow PROPERTIES TIMEOUT 120)
+set_tests_properties(native_arrangement_workflow PROPERTIES TIMEOUT 300)
 add_test(NAME native_startup_lifecycle COMMAND RhinoNative --startup-test)
 set_tests_properties(native_startup_lifecycle PROPERTIES TIMEOUT 30)

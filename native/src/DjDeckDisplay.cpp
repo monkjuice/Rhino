@@ -3,8 +3,11 @@
 #include "UiVisibility.h"
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 
-// A deck's screen: see DjDeckDisplay.h.
+// A deck's screen: see DjDeckDisplay.h. What it shows changing, and the
+// readouts, are here; its pictures and how they are painted are in
+// DjDeckDisplayWave.cpp.
 
 namespace rhino
 {
@@ -12,35 +15,67 @@ namespace
 {
 constexpr double minimumSecondsAcross = 3.0, maximumSecondsAcross = 48.0;
 
-// The loudest of a run of columns in each band, which is what a pixel shows.
-DjWaveformColumn pooled(const std::vector<DjWaveformColumn>& columns, int from, int to)
+// FNV-1a, a word at a time: what a picture was painted from, read once when
+// the material arrives.
+constexpr juce::uint64 fnvOffset = 14695981039346656037ull, fnvPrime = 1099511628211ull;
+
+juce::uint64 mix(juce::uint64 hash, juce::uint64 word)
 {
-    DjWaveformColumn out;
-    const auto count = static_cast<int>(columns.size());
-    from = std::max(0, from);
-    to = std::min(count, std::max(to, from + 1));
-    for (int c = from; c < to; ++c)
-    {
-        const auto& column = columns[static_cast<size_t>(c)];
-        out.low = std::max(out.low, column.low);
-        out.mid = std::max(out.mid, column.mid);
-        out.high = std::max(out.high, column.high);
-    }
-    return out;
+    return (hash ^ word) * fnvPrime;
 }
 
-// Three bands mirrored about a centre line, lows behind, highs in front.
-void drawColumn(juce::Graphics& g, float x, float width, float centreY, float halfHeight, const DjWaveformColumn& column)
+juce::uint64 mix(juce::uint64 hash, double value)
 {
-    const auto bar = [&](float level, juce::Colour colour)
+    juce::uint64 word = 0;
+    static_assert(sizeof(word) == sizeof(value));
+    std::memcpy(&word, &value, sizeof(word));
+    return mix(hash, word);
+}
+
+juce::uint64 mixColumns(juce::uint64 hash, const std::vector<DjWaveformColumn>& columns)
+{
+    hash = mix(hash, static_cast<juce::uint64>(columns.size()));
+    for (const auto& column : columns)
     {
-        const auto h = std::max(0.5f, level * halfHeight);
-        g.setColour(colour);
-        g.fillRect(x, centreY - h, width, h * 2.0f);
-    };
-    bar(column.low, palette::djWaveLow);
-    bar(column.mid, palette::djWaveMid);
-    bar(column.high * 0.85f, palette::djWaveHigh);
+        juce::uint32 bits[3] {};
+        static_assert(sizeof(bits) == sizeof(float) * 3);
+        std::memcpy(&bits[0], &column.low, sizeof(float));
+        std::memcpy(&bits[1], &column.mid, sizeof(float));
+        std::memcpy(&bits[2], &column.high, sizeof(float));
+        hash = mix(hash, (static_cast<juce::uint64>(bits[0]) << 32) | bits[1]);
+        hash = mix(hash, static_cast<juce::uint64>(bits[2]));
+    }
+    return hash;
+}
+
+// Whole tenths of a second, as clock() shows them.
+int tenthsOf(double seconds)
+{
+    const auto magnitude = std::abs(seconds);
+    const auto whole = static_cast<int>(std::floor(magnitude));
+    return whole * 10 + static_cast<int>(std::floor((magnitude - whole) * 10.0));
+}
+
+juce::String clockText(bool negative, int tenths)
+{
+    const auto whole = tenths / 10;
+    return (negative ? "-" : "") + juce::String(whole / 60).paddedLeft('0', 2) + ":"
+         + juce::String(whole % 60).paddedLeft('0', 2) + "." + juce::String(tenths % 10);
+}
+
+juce::String hundredthsText(long long hundredths)
+{
+    const auto magnitude = std::abs(hundredths);
+    return juce::String(static_cast<juce::int64>(magnitude / 100)) + "."
+         + juce::String(static_cast<int>(magnitude % 100)).paddedLeft('0', 2);
+}
+
+juce::String transportText(Session::DjDeckState::Transport transport)
+{
+    using Transport = Session::DjDeckState::Transport;
+    return transport == Transport::waiting ? "WAIT"
+         : transport == Transport::cueing ? "CUE"
+         : transport == Transport::playing ? "PLAY" : "STOP";
 }
 }
 
@@ -49,33 +84,107 @@ DjDeckDisplay::DjDeckDisplay(Session& s, int deckIndex) : session(s), deck(deckI
     setOpaque(true);
     setWantsKeyboardFocus(false);
     setMouseClickGrabsKeyboardFocus(false);
-    sync();
-}
-
-void DjDeckDisplay::setDeck(int deckIndex)
-{
-    deck = deckIndex;
-    generation = -1;
+    // The cue flag's letter and the eight hot cues', each centred in the
+    // flag's 12 x 11 box at the origin and drawn wherever a flag stands.
+    const auto letterFont = uiFontBold(8.0f);
+    for (size_t i = 0; i < flagLetters.size(); ++i)
+        flagLetters[i].set(i == 0 ? juce::String("C") : juce::String::charToString(static_cast<juce::juce_wchar>('A' + i - 1)),
+                           letterFont, {0, 0, 12, 11}, juce::Justification::centred);
     sync();
 }
 
 void DjDeckDisplay::sync()
 {
-    const auto info = session.djDeckInfo(deck);
+    sync(session.djDeckInfo(deck));
+}
+
+void DjDeckDisplay::sync(const Session::DjDeckInfo& info)
+{
     // While a load is in flight the deck goes on playing what it had, and
-    // the screen goes on showing it: a cell switch is not a blank screen.
+    // the screen goes on showing it, pictures and all: a cell switch is not
+    // a blank screen. A load starting bumps the generation and names the
+    // source on its way while the deck still holds the same material, so
+    // only material that arrives is read again.
     const auto* next = info.loaded || info.loading ? session.djDeckTrack(deck) : nullptr;
-    if (next != track || info.generation != generation)
+    const auto loadStarting = next == track && info.loading;
+    if (next != track || (info.generation != generation && !loadStarting))
     {
+        // A bounce of the same source may show the last bounce's pictures
+        // until its own are painted; another source's material never shows.
+        // Material first seen while a load is in flight came from a source
+        // the deck's info no longer names.
+        std::optional<Source> source;
+        if (!info.loading)
+            source = Source {info.kind, info.file, info.trackId, info.groupId, info.slot};
+        if (!source || source != materialSource)
+            dropPictures();
+        materialSource = source;
         track = next;
-        generation = info.generation;
-        tiles.clear();
-        overview = {};
-        overviewWidth = 0;
-        drawnPosition = -1.0;
+        readMaterial();
+        repaint();
     }
+    generation = info.generation;
+    const auto nextMessage = next != nullptr ? juce::String()
+                           : info.loading ? "Loading " + info.name + "..."
+                           : info.error.isNotEmpty() ? info.error
+                           : juce::String("No track. Choose one from the name above, or drop a file here.");
+    if (nextMessage != message)
+    {
+        message = nextMessage;
+        repaint(waveArea());
+    }
+    // A change the session announces - sync pressed on a standing deck, a
+    // range that clamps the pitch - may change only the readouts, and no
+    // later frame would find them changed.
     state = session.djDeckState(deck);
-    repaint();
+    if (const auto readout = readoutOf(state); !(readout == shownReadout))
+    {
+        shownReadout = readout;
+        repaint(readoutArea());
+    }
+}
+
+// What the pictures are painted from, read once for the material: hashed,
+// so a bounce of the same notes keeps its note tiles and one of the same
+// sound its overview, and with the notes paired once rather than per tile.
+void DjDeckDisplay::readMaterial()
+{
+    drawsNotes = track != nullptr && !track->midi.empty() && track->analysis.hasGrid();
+    notes.clear();
+    lowestNote = 0;
+    highestNote = -1;
+    keyText = {};
+    wavesContent = overviewContent = notesContent = 0;
+    if (track == nullptr) return;
+    const auto& analysis = track->analysis;
+    auto grid = mix(mix(mix(fnvOffset, analysis.bpm), analysis.firstBeatSeconds), static_cast<juce::uint64>(analysis.beatsPerBar));
+    wavesContent = mixColumns(mix(grid, track->sampleRate), analysis.columns);
+    overviewContent = mix(wavesContent, static_cast<juce::uint64>(track->length()));
+    for (const auto bar : analysis.drops)
+        overviewContent = mix(overviewContent, static_cast<juce::uint64>(bar));
+    if (drawsNotes)
+    {
+        notes = djwave::noteSpans(track->midi);
+        notesContent = mix(grid, static_cast<juce::uint64>(analysis.columns.empty() ? 0 : 1));
+        lowestNote = 127;
+        for (const auto& note : notes)
+        {
+            lowestNote = std::min(lowestNote, note.note);
+            highestNote = std::max(highestNote, note.note);
+            notesContent = mix(mix(mix(notesContent, note.startBeat), note.endBeat),
+                               (static_cast<juce::uint64>(note.note) << 32) | static_cast<juce::uint32>(note.velocity));
+        }
+    }
+    if (analysis.keyIndex >= 0)
+        keyText = DjAnalysis::keyName(analysis.keyIndex) + " " + DjAnalysis::camelotName(analysis.keyIndex);
+}
+
+void DjDeckDisplay::dropPictures()
+{
+    tiles = {};
+    standIns = {};
+    overview = {};
+    overviewStandIn = {};
 }
 
 juce::Rectangle<int> DjDeckDisplay::readoutArea() const
@@ -98,314 +207,118 @@ double DjDeckDisplay::pixelsPerSecond() const
     return std::max(1, waveArea().getWidth()) / secondsAcross;
 }
 
-void DjDeckDisplay::resized()
+long long DjDeckDisplay::scrollFor(double seconds) const
 {
-    tiles.clear();
-    overview = {};
-    overviewWidth = 0;
+    return djwave::scrollFor(seconds, pixelsPerSecond(), paintedScale);
 }
 
-// Once a frame. The scrolling strip moves whenever the deck does, and the
-// overview's marker with it; the readouts change at most a few times a
-// second and repaint only when their text does.
+DjDeckDisplay::PictureKey DjDeckDisplay::tileKey() const
+{
+    const auto height = static_cast<int>(std::ceil(static_cast<float>(waveArea().getHeight()) * paintedScale));
+    return {drawsNotes ? notesContent : wavesContent, pixelsPerSecond(), tileWidth, std::max(1, height), paintedScale};
+}
+
+DjDeckDisplay::PictureKey DjDeckDisplay::overviewKey() const
+{
+    const auto area = overviewArea().toFloat() * paintedScale;
+    return {overviewContent, 0.0, std::max(1, static_cast<int>(std::ceil(area.getWidth()))),
+            std::max(1, static_cast<int>(std::ceil(area.getHeight()))), paintedScale};
+}
+
+DjDeckDisplay::Marks DjDeckDisplay::marksOf(const Session::DjDeckState& deckState)
+{
+    Marks marks;
+    marks.cue = deckState.cueSeconds;
+    marks.hotCues = deckState.hotCueSeconds;
+    marks.loopStart = deckState.loop.startSeconds;
+    marks.loopEnd = deckState.loop.endSeconds;
+    marks.loopActive = deckState.loop.active;
+    return marks;
+}
+
+DjDeckDisplay::Readout DjDeckDisplay::readoutOf(const Session::DjDeckState& deckState)
+{
+    Readout readout;
+    readout.elapsedNegative = deckState.positionSeconds < 0.0;
+    readout.elapsedTenths = tenthsOf(deckState.positionSeconds);
+    const auto remaining = deckState.lengthSeconds - deckState.positionSeconds;
+    readout.remainingNegative = -remaining < 0.0;
+    readout.remainingTenths = tenthsOf(remaining);
+    readout.transport = deckState.transport;
+    readout.bpmHundredths = deckState.bpm > 0.0 ? std::llround(deckState.effectiveBpm * 100.0) : -1;
+    readout.synced = deckState.synced;
+    readout.percentHundredths = deckState.synced ? 0 : std::llround(deckState.tempoPercent * 100.0);
+    readout.bar = deckState.beat >= 0.0 ? static_cast<int>(std::floor(deckState.beat / deckState.beatsPerBar)) + 1 : 0;
+    readout.beatInBar = deckState.beat >= 0.0 ? static_cast<int>(std::floor(deckState.beat)) % deckState.beatsPerBar + 1 : 0;
+    return readout;
+}
+
+long long DjDeckDisplay::overviewMarker(double seconds) const
+{
+    return std::llround(overviewArea().getWidth() * paintedScale * std::max(0.0, seconds) / std::max(1.0e-6, state.lengthSeconds));
+}
+
 void DjDeckDisplay::tick()
 {
-    if (isHiddenInShell(*this)) return;
-    state = session.djDeckState(deck);
-    if (track == nullptr)
-        return;
-    if (state.positionSeconds != drawnPosition || state.jumps != drawnJumps)
-    {
-        repaint(waveArea());
-        // The marker in the overview moves by a pixel at a time.
-        const auto area = overviewArea();
-        const auto length = std::max(1.0e-6, state.lengthSeconds);
-        const auto before = area.getX() + static_cast<int>(area.getWidth() * drawnPosition / length);
-        const auto after = area.getX() + static_cast<int>(area.getWidth() * state.positionSeconds / length);
-        if (before != after || drawnPosition < 0.0)
-            repaint(juce::Rectangle<int>(std::min(before, after) - 2, area.getY(), std::abs(after - before) + 5, area.getHeight()));
-    }
-    // The readouts change a few times a second at most, and a deck standing
-    // still changes none of them; only new text is drawn.
-    if (readoutText() != drawnReadout)
-        repaint(readoutArea());
+    tick(session.djDeckState(deck));
 }
 
-juce::String DjDeckDisplay::readoutText() const
+// Once a frame. The strip repaints when it has moved a device pixel, when
+// the deck starts or stops, or when a mark is set or cleared - which on a
+// stopped deck moves nothing else, so it was never shown until the deck
+// moved; the overview's marker repaints a pixel's width at a time; the
+// readouts when what they show changes. Then a picture or two the screen
+// lacks is painted.
+void DjDeckDisplay::tick(const Session::DjDeckState& now)
 {
-    if (track == nullptr) return {};
-    const auto remaining = state.lengthSeconds - state.positionSeconds;
-    const auto bars = state.beat >= 0.0 ? static_cast<int>(std::floor(state.beat / state.beatsPerBar)) + 1 : 0;
-    const auto beatInBar = state.beat >= 0.0 ? static_cast<int>(std::floor(state.beat)) % state.beatsPerBar + 1 : 0;
-    const auto what = state.transport == Session::DjDeckState::Transport::waiting ? juce::String("WAIT")
-                    : state.transport == Session::DjDeckState::Transport::cueing ? juce::String("CUE")
-                    : state.isPlaying() ? juce::String("PLAY") : juce::String("STOP");
-    const auto tempo = state.bpm > 0.0 ? juce::String(state.effectiveBpm, 2) + " BPM" : juce::String("-- BPM");
-    const auto percent = (state.tempoPercent >= 0.0f ? "+" : "") + juce::String(state.tempoPercent, 2) + "%";
-    return clock(state.positionSeconds) + "  " + clock(-remaining) + "|" + what + "|" + tempo + "|"
-         + (state.synced ? "SYNC" : percent) + "|" + juce::String(bars) + "." + juce::String(beatInBar);
+    if (isHiddenInShell(*this)) return;
+    state = now;
+    if (track == nullptr)
+        return;
+    const auto scroll = scrollFor(state.positionSeconds);
+    const auto playing = state.isPlaying();
+    const auto marks = marksOf(state);
+    const auto marksMoved = !(marks == drawnMarks);
+    if (scroll != drawnScroll || playing != drawnPlaying || marksMoved)
+        repaint(waveArea());
+    const auto area = overviewArea();
+    const auto marker = overviewMarker(state.positionSeconds);
+    if (marksMoved || drawnOverviewMarker < 0)
+        repaint(area);
+    else if (marker != drawnOverviewMarker)
+    {
+        const auto from = static_cast<float>(area.getX()) + static_cast<float>(std::min(marker, drawnOverviewMarker)) / paintedScale;
+        const auto to = static_cast<float>(area.getX()) + static_cast<float>(std::max(marker, drawnOverviewMarker)) / paintedScale;
+        repaint(juce::Rectangle<float>(from - 2.0f, static_cast<float>(area.getY()), to - from + 5.0f,
+                                       static_cast<float>(area.getHeight())).getSmallestIntegerContainer());
+    }
+    drawnScroll = scroll;
+    drawnPlaying = playing;
+    drawnMarks = marks;
+    drawnOverviewMarker = marker;
+    if (const auto readout = readoutOf(state); !(readout == shownReadout))
+    {
+        shownReadout = readout;
+        repaint(readoutArea());
+    }
+    paintPictures(picturesPerFrame);
 }
 
 void DjDeckDisplay::paint(juce::Graphics& g)
 {
+    // The pictures are painted for the scale the screen is shown at.
+    paintedScale = g.getInternalContext().getPhysicalPixelScaleFactor();
+    // At a fractional scale the strip, the overview and the readouts meet
+    // inside a device pixel that none of them covers whole, so the ground
+    // goes down first, or what the last frame left there would show through.
     g.fillAll(palette::displayInset);
-    const auto clip = g.getClipBounds();
-    if (clip.intersects(waveArea())) paintWave(g, waveArea());
-    if (clip.intersects(overviewArea())) paintOverview(g, overviewArea());
-    if (clip.intersects(readoutArea())) paintReadouts(g, readoutArea());
+    if (g.clipRegionIntersects(waveArea())) paintWave(g, waveArea());
+    if (g.clipRegionIntersects(overviewArea())) paintOverview(g, overviewArea());
+    if (g.clipRegionIntersects(readoutArea())) paintReadouts(g, readoutArea());
 }
 
-const juce::Image* DjDeckDisplay::tileFor(int index)
-{
-    for (auto& tile : tiles)
-        if (tile.index == index)
-            return &tile.image;
-    if (track == nullptr || index < 0) return nullptr;
-    Tile tile;
-    tile.index = index;
-    tile.image = juce::Image(juce::Image::ARGB, tileWidth, std::max(1, waveArea().getHeight()), true);
-    paintTile(tile.image, index);
-    tiles.push_back(std::move(tile));
-    // Tiles far from the playhead are dropped: a long track at a fine zoom
-    // would otherwise keep a hundred of them.
-    if (tiles.size() > 24)
-        tiles.erase(tiles.begin());
-    return &tiles.back().image;
-}
-
-void DjDeckDisplay::paintTile(juce::Image& image, int index) const
-{
-    juce::Graphics g(image);
-    g.fillAll(palette::displayInset);
-    if (track == nullptr || track->analysis.columns.empty()) return;
-    const auto pps = pixelsPerSecond();
-    // A MIDI track's material shows its notes, as the editor would, rather
-    // than the waveform they rendered to: a bar of notes on a row per pitch,
-    // which is both what a hand reads on a drum or a melody and far less to
-    // paint than three bands of columns.
-    if (!track->midi.empty() && track->analysis.hasGrid())
-    {
-        int lowest = 127, highest = 0;
-        for (const auto& event : track->midi)
-            if (event.on)
-            {
-                lowest = std::min(lowest, event.note);
-                highest = std::max(highest, event.note);
-            }
-        if (lowest > highest) return;
-        const auto rows = std::max(1, highest - lowest + 1);
-        const auto rowHeight = std::max(2.0f, static_cast<float>(image.getHeight() - 4) / static_cast<float>(rows));
-        const auto top = (static_cast<float>(image.getHeight()) - rowHeight * static_cast<float>(rows)) * 0.5f;
-        const auto secondsPerBeat = track->analysis.secondsPerBeat();
-        const auto origin = track->analysis.firstBeatSeconds;
-        const auto tileStart = static_cast<double>(index * tileWidth);
-        for (size_t i = 0; i < track->midi.size(); ++i)
-        {
-            const auto& on = track->midi[i];
-            if (!on.on) continue;
-            auto endBeat = on.beat + 0.25;
-            for (size_t j = i + 1; j < track->midi.size(); ++j)
-                if (track->midi[j].note == on.note && !track->midi[j].on)
-                {
-                    endBeat = track->midi[j].beat;
-                    break;
-                }
-            const auto x0 = (origin + on.beat * secondsPerBeat) * pps - tileStart;
-            const auto x1 = (origin + endBeat * secondsPerBeat) * pps - tileStart;
-            if (x1 < 0.0 || x0 > tileWidth) continue;
-            const auto y = top + rowHeight * static_cast<float>(highest - on.note);
-            const auto velocity = juce::jlimit(0.3f, 1.0f, static_cast<float>(on.velocity) / 127.0f);
-            g.setColour(palette::djWaveMid.withMultipliedBrightness(0.6f + 0.4f * velocity));
-            g.fillRect(juce::Rectangle<float>(static_cast<float>(x0), y + 1.0f,
-                                              static_cast<float>(std::max(2.0, x1 - x0 - 1.0)), std::max(1.0f, rowHeight - 2.0f)));
-        }
-        return;
-    }
-    const auto& columns = track->analysis.columns;
-    const auto columnsPerPixel = track->sampleRate / DjAnalysis::columnFrames / pps;
-    const auto height = static_cast<float>(image.getHeight());
-    const auto centreY = height * 0.5f;
-    const auto halfHeight = height * 0.46f;
-    for (int x = 0; x < tileWidth; ++x)
-    {
-        const auto first = (index * tileWidth + x) * columnsPerPixel;
-        const auto column = pooled(columns, static_cast<int>(first), static_cast<int>(first + columnsPerPixel));
-        drawColumn(g, static_cast<float>(x), 1.0f, centreY, halfHeight, column);
-    }
-}
-
-void DjDeckDisplay::paintWave(juce::Graphics& g, juce::Rectangle<int> area)
-{
-    g.setColour(palette::displayInset);
-    g.fillRect(area);
-    if (track == nullptr)
-    {
-        g.setColour(palette::displayTextFaint);
-        g.setFont(uiFont(11.0f));
-        const auto info = session.djDeckInfo(deck);
-        drawSnappedText(g, info.loading ? "Loading " + info.name + "..."
-                           : info.error.isNotEmpty() ? info.error
-                           : "No track. Choose one from the name above, or drop a file here.",
-                        area.reduced(8, 0), juce::Justification::centred, true);
-        return;
-    }
-    const auto pps = pixelsPerSecond();
-    const auto centreX = area.getX() + area.getWidth() / 2;
-    const auto positionPx = state.positionSeconds * pps;
-    const auto leftEdgePx = positionPx - area.getWidth() / 2.0;
-    // Tiles cover the strip from the left edge; the first one may be cut.
-    {
-        juce::Graphics::ScopedSaveState scope(g);
-        g.reduceClipRegion(area);
-        const auto firstTile = static_cast<int>(std::floor(leftEdgePx / tileWidth));
-        const auto lastTile = static_cast<int>(std::floor((leftEdgePx + area.getWidth()) / tileWidth));
-        for (int index = std::max(0, firstTile); index <= lastTile; ++index)
-        {
-            const auto* image = tileFor(index);
-            if (image == nullptr) continue;
-            const auto x = area.getX() + static_cast<int>(std::round(index * tileWidth - leftEdgePx));
-            g.drawImageAt(*image, x, area.getY());
-        }
-    }
-    const auto xFor = [&](double seconds) { return static_cast<float>(area.getX() + (seconds * pps - leftEdgePx)); };
-    const auto visibleStart = leftEdgePx / pps, visibleEnd = (leftEdgePx + area.getWidth()) / pps;
-    // The beat grid: a bar line full height, a beat a short tick top and bottom.
-    if (track->analysis.hasGrid())
-    {
-        const auto beat = track->analysis.secondsPerBeat();
-        const auto perBar = track->analysis.beatsPerBar;
-        const auto origin = track->analysis.firstBeatSeconds;
-        const auto firstBeat = static_cast<long long>(std::floor((visibleStart - origin) / beat)) - 1;
-        const auto lastBeat = static_cast<long long>(std::ceil((visibleEnd - origin) / beat)) + 1;
-        if (lastBeat - firstBeat < 4000)
-            for (auto b = firstBeat; b <= lastBeat; ++b)
-            {
-                const auto x = xFor(origin + b * beat);
-                if (x < area.getX() || x > area.getRight()) continue;
-                const auto bar = ((b % perBar) + perBar) % perBar == 0;
-                g.setColour(bar ? palette::displayTextDim : palette::displayTextFaint.withMultipliedAlpha(0.6f));
-                if (bar)
-                    g.fillRect(x, static_cast<float>(area.getY()), 1.0f, static_cast<float>(area.getHeight()));
-                else
-                {
-                    g.fillRect(x, static_cast<float>(area.getY()), 1.0f, 4.0f);
-                    g.fillRect(x, static_cast<float>(area.getBottom() - 4), 1.0f, 4.0f);
-                }
-            }
-    }
-    // The loop, shaded, with its edges.
-    if (state.loop.valid())
-    {
-        const auto from = std::max(static_cast<float>(area.getX()), xFor(state.loop.startSeconds));
-        const auto to = std::min(static_cast<float>(area.getRight()), xFor(state.loop.endSeconds));
-        if (to > from)
-        {
-            g.setColour((state.loop.active ? palette::djCue : palette::displayTextDim).withAlpha(state.loop.active ? 0.18f : 0.1f));
-            g.fillRect(from, static_cast<float>(area.getY()), to - from, static_cast<float>(area.getHeight()));
-            g.setColour(state.loop.active ? palette::djCue : palette::displayTextDim);
-            g.fillRect(from, static_cast<float>(area.getY()), 1.0f, static_cast<float>(area.getHeight()));
-            g.fillRect(to - 1.0f, static_cast<float>(area.getY()), 1.0f, static_cast<float>(area.getHeight()));
-        }
-    }
-    // Cue points: a flag at the top in the cue's colour.
-    const auto flag = [&](double seconds, juce::Colour colour, const juce::String& letter)
-    {
-        if (seconds < visibleStart - 1.0 || seconds > visibleEnd + 1.0) return;
-        const auto x = xFor(seconds);
-        g.setColour(colour);
-        g.fillRect(x - 0.5f, static_cast<float>(area.getY()), 2.0f, static_cast<float>(area.getHeight()));
-        const juce::Rectangle<int> box(static_cast<int>(x) + 1, area.getY(), 12, 11);
-        g.fillRect(box);
-        g.setColour(colour.contrasting(0.9f));
-        g.setFont(uiFontBold(8.0f));
-        drawSnappedText(g, letter, box, juce::Justification::centred);
-    };
-    flag(state.cueSeconds, palette::djCue, "C");
-    for (int i = 0; i < 8; ++i)
-        if (state.hotCueSeconds[static_cast<size_t>(i)] >= 0.0)
-            flag(state.hotCueSeconds[static_cast<size_t>(i)], palette::djHotCue[static_cast<size_t>(i)], juce::String::charToString(static_cast<juce::juce_wchar>('A' + i)));
-    // The playhead, fixed in the middle.
-    g.setColour(state.isPlaying() ? palette::djPlay : palette::text);
-    g.fillRect(centreX - 1, area.getY(), 2, area.getHeight());
-    drawnPosition = state.positionSeconds;
-    drawnJumps = state.jumps;
-}
-
-void DjDeckDisplay::buildOverview()
-{
-    const auto area = overviewArea();
-    overviewWidth = area.getWidth();
-    overview = juce::Image(juce::Image::ARGB, std::max(1, area.getWidth()), std::max(1, area.getHeight()), true);
-    juce::Graphics g(overview);
-    g.fillAll(palette::displayInset.brighter(0.04f));
-    if (track == nullptr || track->analysis.columns.empty()) return;
-    const auto& columns = track->analysis.columns;
-    const auto columnsPerPixel = static_cast<double>(columns.size()) / std::max(1, area.getWidth());
-    const auto centreY = area.getHeight() * 0.5f;
-    for (int x = 0; x < area.getWidth(); ++x)
-    {
-        const auto column = pooled(columns, static_cast<int>(x * columnsPerPixel), static_cast<int>((x + 1) * columnsPerPixel));
-        drawColumn(g, static_cast<float>(x), 1.0f, centreY, centreY * 0.9f, column);
-    }
-    // Drops: a marker at the top of the bar they land on.
-    if (track->analysis.hasGrid())
-    {
-        const auto barSeconds = track->analysis.secondsPerBeat() * track->analysis.beatsPerBar;
-        for (const auto bar : track->analysis.drops)
-        {
-            const auto x = static_cast<float>((track->analysis.firstBeatSeconds + bar * barSeconds) / track->seconds() * area.getWidth());
-            juce::Path marker;
-            marker.addTriangle(x - 4.0f, 0.0f, x + 4.0f, 0.0f, x, 6.0f);
-            g.setColour(palette::djDrop);
-            g.fillPath(marker);
-        }
-    }
-}
-
-void DjDeckDisplay::paintOverview(juce::Graphics& g, juce::Rectangle<int> area)
-{
-    if (track == nullptr)
-    {
-        g.setColour(palette::displayInset.brighter(0.04f));
-        g.fillRect(area);
-        return;
-    }
-    if (overview.isNull() || overviewWidth != area.getWidth())
-        buildOverview();
-    g.drawImageAt(overview, area.getX(), area.getY());
-    const auto length = std::max(1.0e-6, state.lengthSeconds);
-    const auto xFor = [&](double seconds) { return area.getX() + static_cast<float>(seconds / length * area.getWidth()); };
-    // What has been played is dimmed, as a CDJ dims it.
-    const auto played = xFor(state.positionSeconds);
-    g.setColour(palette::displayInset.withAlpha(0.45f));
-    g.fillRect(static_cast<float>(area.getX()), static_cast<float>(area.getY()), played - area.getX(), static_cast<float>(area.getHeight()));
-    if (state.loop.valid())
-    {
-        g.setColour((state.loop.active ? palette::djCue : palette::displayTextDim).withAlpha(0.25f));
-        g.fillRect(xFor(state.loop.startSeconds), static_cast<float>(area.getY()),
-                   xFor(state.loop.endSeconds) - xFor(state.loop.startSeconds), static_cast<float>(area.getHeight()));
-    }
-    g.setColour(palette::djCue);
-    g.fillRect(xFor(state.cueSeconds) - 0.5f, static_cast<float>(area.getBottom() - 5), 1.0f, 5.0f);
-    for (int i = 0; i < 8; ++i)
-    {
-        const auto at = state.hotCueSeconds[static_cast<size_t>(i)];
-        if (at < 0.0) continue;
-        g.setColour(palette::djHotCue[static_cast<size_t>(i)]);
-        g.fillRect(xFor(at) - 1.0f, static_cast<float>(area.getBottom() - 6), 3.0f, 6.0f);
-    }
-    g.setColour(palette::text);
-    g.fillRect(played - 0.5f, static_cast<float>(area.getY()), 1.5f, static_cast<float>(area.getHeight()));
-}
-
-juce::String DjDeckDisplay::clock(double seconds)
-{
-    const auto whole = static_cast<int>(std::floor(std::abs(seconds)));
-    const auto tenths = static_cast<int>(std::floor((std::abs(seconds) - whole) * 10.0));
-    return (seconds < 0.0 ? "-" : "") + juce::String(whole / 60).paddedLeft('0', 2) + ":"
-         + juce::String(whole % 60).paddedLeft('0', 2) + "." + juce::String(tenths);
-}
-
+// The numbers tick() compared, made into text: laid out again only when it
+// changes, a few times a second at most.
 void DjDeckDisplay::paintReadouts(juce::Graphics& g, juce::Rectangle<int> area)
 {
     g.setColour(palette::displayInset);
@@ -413,27 +326,28 @@ void DjDeckDisplay::paintReadouts(juce::Graphics& g, juce::Rectangle<int> area)
     g.setColour(palette::displayTextFaint);
     g.fillRect(area.getX(), area.getY(), area.getWidth(), 1);
     if (track == nullptr) return;
-    // The same fields tick() compares, drawn in their columns.
-    drawnReadout = readoutText();
-    juce::StringArray fields;
-    fields.addTokens(drawnReadout, "|", "");
-    if (fields.size() < 5) return;
-    g.setFont(uiFont(10.0f));
+    const auto& shown = shownReadout;
+    const auto hasTempo = shown.bpmHundredths >= 0;
     auto row = area.reduced(6, 0);
+    clockLine.set(clockText(shown.elapsedNegative, shown.elapsedTenths) + "  "
+                      + clockText(shown.remainingNegative, shown.remainingTenths),
+                  readoutFont, row.removeFromLeft(120));
+    transportLine.set(transportText(shown.transport), readoutFont, row.removeFromLeft(36));
+    tempoLine.set(hasTempo ? hundredthsText(shown.bpmHundredths) + " BPM" : juce::String("-- BPM"), readoutFont, row.removeFromLeft(78));
+    pitchLine.set(shown.synced ? juce::String("SYNC")
+                               : (shown.percentHundredths < 0 ? "-" : "+") + hundredthsText(shown.percentHundredths) + "%",
+                  readoutFont, row.removeFromLeft(54));
+    keyLine.set(keyText, readoutFont, keyText.isNotEmpty() ? row.removeFromLeft(52) : juce::Rectangle<int>());
+    barLine.set(hasTempo ? juce::String(shown.bar) + "." + juce::String(shown.beatInBar) : juce::String(), readoutFont, row,
+                juce::Justification::centredRight);
     g.setColour(palette::displayText);
-    drawSnappedText(g, fields[0], row.removeFromLeft(120));
+    clockLine.draw(g);
+    tempoLine.draw(g);
+    barLine.draw(g);
     g.setColour(palette::displayTextDim);
-    drawSnappedText(g, fields[1], row.removeFromLeft(36));
-    g.setColour(palette::displayText);
-    drawSnappedText(g, fields[2], row.removeFromLeft(78));
-    g.setColour(palette::displayTextDim);
-    drawSnappedText(g, fields[3], row.removeFromLeft(54));
-    if (track->analysis.keyIndex >= 0)
-        drawSnappedText(g, DjAnalysis::keyName(track->analysis.keyIndex) + " " + DjAnalysis::camelotName(track->analysis.keyIndex),
-                        row.removeFromLeft(52));
-    g.setColour(palette::displayText);
-    if (state.bpm > 0.0)
-        drawSnappedText(g, fields[4], row, juce::Justification::centredRight);
+    transportLine.draw(g);
+    pitchLine.draw(g);
+    keyLine.draw(g);
 }
 
 void DjDeckDisplay::seekAt(juce::Point<int> point, juce::Rectangle<int> area)
@@ -481,6 +395,8 @@ void DjDeckDisplay::mouseUp(const juce::MouseEvent&)
     }
 }
 
+// The wheel zooms. The tiles of the last zoom stand in, scaled, while the
+// display's refresh paints the new zoom's a couple at a time.
 void DjDeckDisplay::mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel)
 {
     if (!waveArea().contains(event.getPosition())) return;
@@ -488,7 +404,7 @@ void DjDeckDisplay::mouseWheelMove(const juce::MouseEvent& event, const juce::Mo
     const auto next = juce::jlimit(minimumSecondsAcross, maximumSecondsAcross, secondsAcross * factor);
     if (next == secondsAcross) return;
     secondsAcross = next;
-    tiles.clear();
+    drawnScroll = scrollFor(state.positionSeconds);
     repaint(waveArea());
 }
 }

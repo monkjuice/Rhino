@@ -1,9 +1,10 @@
 #pragma once
 #include "DjClipGrid.h"
+#include "DjConsoleLayout.h"
 #include "DjControls.h"
 #include "DjDeckDisplay.h"
-#include "DjDeck.h"
 #include <memory>
+#include <tuple>
 
 namespace rhino
 {
@@ -16,20 +17,28 @@ namespace rhino
 // three more keys in its name bar: Live, which plays the track's
 // instrument over the bounce from the keys; Edit, which opens the track's
 // clip in the note editor; and a reload for a stale bounce.
+//
+// What the deck plays comes from the session's announcements (sync); what
+// it is doing - the keys that light, the tempo, the brake - from the view's
+// 30 Hz tick, so a key the booth changes shows without an announcement;
+// where it is, from the display's refresh. Each control repaints itself
+// when what it shows changes, and the console's own paint draws only what
+// a repaint reaches. DjDeckPanel.cpp, DjDeckPanelLayout.cpp and
+// DjDeckPanelMenus.cpp.
 class DjDeckPanel final : public juce::Component,
                           public juce::FileDragAndDropTarget,
                           public juce::DragAndDropTarget
 {
 public:
     DjDeckPanel(Session&, int deck);
-    int deckIndex() const { return deck; }
-    void setDeck(int);
-    // Everything the session announces: the deck's source, the keys' states.
-    void sync();
+    // What the deck plays, as the session announced it: the source, the
+    // keys that need material, the screen and the clips grid.
+    void sync(const Session::DjDeckInfo&);
     // At the view's timer rate: the keys that follow the audio thread, and
     // the blink of a start held for the beat.
-    void tick(bool blinkPhase);
+    void tick(const Session::DjDeckState&, bool blinkPhase);
     // Once a display refresh: the screen and the platter.
+    void tickDisplay(const Session::DjDeckState&);
     void tickDisplay();
     // The focused deck wears a mark: Space and the lower pane answer to it.
     void setFocused(bool);
@@ -42,7 +51,12 @@ public:
     bool isInterestedInDragSource(const juce::DragAndDropTarget::SourceDetails&) override;
     void itemDropped(const juce::DragAndDropTarget::SourceDetails&) override;
     std::function<void(juce::String)> status;
+    // A press anywhere on the console: the view focuses its deck.
     std::function<void()> selected;
+    // A press on the name bar, which also asks for the deck's track to be
+    // followed again when the deck is focused already, as a second click on
+    // a track card brings the Device View back.
+    std::function<void()> nameBarPressed;
     std::function<void(int track, te::EditItemID clip)> editRequested;
     std::function<void()> removeRequested;
 
@@ -51,6 +65,8 @@ public:
 
 private:
     friend int runArrangementTest();
+    friend int runUiProfile();
+    static constexpr int hotCueCount = static_cast<int>(std::tuple_size_v<decltype(Session::DjDeckState::hotCueSeconds)>);
     void showSourceMenu();
     void chooseFile(const juce::File& startIn);
     void load(const juce::File&);
@@ -58,7 +74,8 @@ private:
     void showJumpMenu();
     void showTempoRangeMenu();
     juce::Rectangle<int> headerArea() const;
-    static void layoutRow(juce::Rectangle<int> row, const std::vector<std::pair<juce::Component*, int>>& cells);
+    // Whether a repaint reaches an area; everything does with culling off.
+    bool reaches(const juce::Graphics&, juce::Rectangle<int> area) const;
 
     Session& session;
     int deck;
@@ -68,7 +85,7 @@ private:
     juce::TextButton source;
     DjPad live {"LIVE", palette::recordAccent}, edit {"EDIT", palette::activeNeutral}, reload {"RELOAD", palette::djWaiting};
     DjPad eject {"EJECT", palette::activeNeutral};
-    std::array<std::unique_ptr<DjPad>, DjDeck::hotCueCount> hotCues;
+    std::array<std::unique_ptr<DjPad>, hotCueCount> hotCues;
     DjPad cue {"CUE", palette::djCue}, play {"PLAY", palette::djPlay};
     DjPad loopIn {"IN", palette::djCue}, loopOut {"OUT", palette::djCue}, reloop {"RELOOP / EXIT", palette::djCue};
     DjPad loopHalve {"1/2", palette::activeNeutral}, loopDouble {"2X", palette::activeNeutral};
@@ -89,8 +106,18 @@ private:
     Session::DjDeckState state;
     double beatLoopBeats = 4.0;
     int jumpBeats = 4;
-    bool dropHighlight = false, focused = false;
+    // The range the RANGE key shows, set only when it changes.
+    int shownRange = -1;
+    // Where a scrub began: a drag's steps land from there.
+    double scrubFrom = 0.0;
+    bool focused = false;
+    // The phase the view's timer last gave, which a sync keeps.
+    bool blinkPhase = false;
     juce::Time lastSelectTime;
-    static constexpr int headerHeight = 24, padRowHeight = 22;
+    // The deck's number and the captions under and over the controls they
+    // name, shaped where the layout puts them.
+    ShapedLine numberLine, tempoCaption, brakeCaption;
+    // Off for the check that a culled paint matches drawing everything.
+    bool cullRepaints = true;
 };
 }

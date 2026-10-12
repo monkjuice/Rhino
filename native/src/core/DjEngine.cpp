@@ -2,10 +2,21 @@
 #include <algorithm>
 #include <cmath>
 
-// The DJ engine: see DjEngine.h.
+// The DJ engine's housekeeping and its command protocol: preparation, the
+// slots, the hand-over of material and its return, the queue. The clock -
+// who is master, sync and the quantised landing - is in DjEngineClock.cpp,
+// and the block itself in DjEngineMix.cpp. See DjEngine.h.
 
 namespace rhino
 {
+namespace
+{
+void deleteMaterial(const void* material)
+{
+    delete static_cast<const DjTrack*>(material);
+}
+}
+
 int DjEngine::boundaryBeats(Quantise q, int perBar)
 {
     const auto bar = std::max(1, perBar);
@@ -19,17 +30,103 @@ int DjEngine::boundaryBeats(Quantise q, int perBar)
     return 0;
 }
 
+DjEngine::Command DjEngine::Command::make(Type type, int slot) noexcept
+{
+    Command c;
+    c.type = type;
+    c.slot = slot;
+    return c;
+}
+
+DjEngine::Command DjEngine::Command::hotCue(int slot, int index) noexcept
+{
+    auto c = make(Type::hotCue, slot);
+    c.index = index;
+    return c;
+}
+
+DjEngine::Command DjEngine::Command::clearHotCue(int slot, int index) noexcept
+{
+    auto c = make(Type::clearHotCue, slot);
+    c.index = index;
+    return c;
+}
+
+DjEngine::Command DjEngine::Command::setCue(int slot, double frame) noexcept
+{
+    auto c = make(Type::setCue, slot);
+    c.frame = frame;
+    return c;
+}
+
+DjEngine::Command DjEngine::Command::setHotCue(int slot, int index, double frame) noexcept
+{
+    auto c = make(Type::setHotCue, slot);
+    c.index = index;
+    c.frame = frame;
+    return c;
+}
+
+DjEngine::Command DjEngine::Command::beatLoop(int slot, double beats) noexcept
+{
+    auto c = make(Type::beatLoop, slot);
+    c.beats = beats;
+    return c;
+}
+
+DjEngine::Command DjEngine::Command::setLoop(int slot, double startFrame, double endFrame, bool active) noexcept
+{
+    auto c = make(Type::setLoop, slot);
+    c.frame = startFrame;
+    c.endFrame = endFrame;
+    c.on = active;
+    return c;
+}
+
+DjEngine::Command DjEngine::Command::beatJump(int slot, int beats) noexcept
+{
+    auto c = make(Type::beatJump, slot);
+    c.index = beats;
+    return c;
+}
+
+DjEngine::Command DjEngine::Command::seek(int slot, double frame) noexcept
+{
+    auto c = make(Type::seek, slot);
+    c.frame = frame;
+    return c;
+}
+
+DjEngine::Command DjEngine::Command::setSource(int slot, DjDeckSource source) noexcept
+{
+    auto c = make(Type::setSource, slot);
+    c.source = source;
+    return c;
+}
+
+DjEngine::Command DjEngine::Command::setSlotActive(int slot, bool active) noexcept
+{
+    auto c = make(Type::setSlotActive, slot);
+    c.on = active;
+    return c;
+}
+
 DjEngine::DjEngine()
 {
+    for (auto& d : deckList)
+        d.releases = &released;
     prepare(48000.0, 512);
 }
 
+// What is still owned goes with the engine: nothing renders by now.
 DjEngine::~DjEngine() = default;
 
 void DjEngine::prepare(double sampleRate, int maximumBlockSize)
 {
     rate = sampleRate > 1000.0 ? sampleRate : 48000.0;
     maximumBlock = std::max(16, maximumBlockSize);
+    for (auto& d : deckList)
+        d.prepare(maximumBlock, rate);
     for (auto& deck : scratch)
         for (auto& channel : deck)
             channel.assign(static_cast<size_t>(maximumBlock), 0.0f);
@@ -38,57 +135,80 @@ void DjEngine::prepare(double sampleRate, int maximumBlockSize)
     for (auto& channel : sendBus) channel.assign(static_cast<size_t>(maximumBlock), 0.0f);
     micBuffer.assign(static_cast<size_t>(maximumBlock), 0.0f);
     for (auto& strip : channels) strip.prepare(rate);
-    for (auto& gain : previewGains)
-    {
-        gain.prepare(rate, 0.005);
-        gain.current = gain.target = 1.0f;
-    }
+    for (auto& port : ports) port.prepare(maximumBlock);
+    for (auto& delay : delays) delay.prepare(maximumBlock);
+    for (auto& count : blockEventCount) count = 0;
     masterSection.prepare(rate);
     micSection.prepare(rate);
     sendEffect.prepare(rate);
     effect.prepare(rate, maximumBlock);
-    // The material let go of is not freed here, though nothing renders while
-    // this runs: a deck that was playing still holds what it last adopted, a
-    // swap made while the device was stopped is taken up by the first block
-    // after it and crossfades from that, and collect() frees it once that
-    // block has ended. The counts run on across a restart.
+    // Nothing a deck plays or fades from is let go of here: a deck that was
+    // playing when the device stopped still holds it, and material handed
+    // over meanwhile waits in the queue for the first block after.
+    preparedRate.store(rate, std::memory_order_release);
+    preparedBlock.store(maximumBlock, std::memory_order_release);
+    preparedGeneration.fetch_add(1, std::memory_order_acq_rel);
 }
 
-void DjEngine::setDeckCount(int count)
+bool DjEngine::setSlotActive(int slot, bool on)
 {
-    decks.store(std::clamp(count, 0, maximumDecks), std::memory_order_relaxed);
+    if (!juce::isPositiveAndBelow(slot, maximumDecks)) return false;
+    if (!push(Command::setSlotActive(slot, on))) return false;
+    active[static_cast<size_t>(slot)] = on;
+    // The slot is emptied either way, so its material is the engine's to
+    // hand back now; the registry lets go of it in the same call.
+    handedOver[static_cast<size_t>(slot)] = nullptr;
+    return true;
 }
 
-void DjEngine::setTrack(int index, std::unique_ptr<DjTrack> track, bool keepBeat)
+bool DjEngine::slotActive(int slot) const noexcept
 {
-    if (index < 0 || index >= maximumDecks) return;
-    auto& d = deckList[static_cast<size_t>(index)];
-    d.keepBeatOnSwap.store(keepBeat, std::memory_order_relaxed);
-    auto previous = std::move(owned[static_cast<size_t>(index)]);
-    owned[static_cast<size_t>(index)] = std::move(track);
-    d.track.store(owned[static_cast<size_t>(index)].get(), std::memory_order_release);
-    // One block more than the counting rule needs: the block that adopts the
-    // new material still reads the old for its crossfade.
-    if (previous != nullptr)
-        retired.push_back({std::move(previous), begun.load(std::memory_order_acquire) + 1});
+    return juce::isPositiveAndBelow(slot, maximumDecks) && active[static_cast<size_t>(slot)];
 }
 
-const DjTrack* DjEngine::trackOf(int index) const noexcept
+bool DjEngine::setDeckSource(int slot, std::unique_ptr<DjTrack>&& material, bool keepBeat)
 {
-    if (index < 0 || index >= maximumDecks) return nullptr;
-    return owned[static_cast<size_t>(index)].get();
+    if (!juce::isPositiveAndBelow(slot, maximumDecks)) return false;
+    const auto* raw = material.get();
+    // Room for the record first, so that once the command is queued nothing
+    // can fail; refused, the material stays with the caller untouched.
+    if (owned.size() == owned.capacity())
+        owned.reserve(std::max<size_t>(8, owned.capacity() * 2));
+    if (!push(Command::setSource(slot, {raw, keepBeat})))
+        return false;
+    if (raw != nullptr)
+        owned.push_back({DjObjectKind::material, {material.release(), &deleteMaterial}});
+    handedOver[static_cast<size_t>(slot)] = raw;
+    return true;
 }
 
-// A block that had begun when a track was let go of may still be reading
-// it; one that begins afterwards loads the new pointer. So a track is free
-// once as many blocks have ended as had begun when it was retired.
+const DjTrack* DjEngine::trackOf(int slot) const noexcept
+{
+    if (!juce::isPositiveAndBelow(slot, maximumDecks)) return nullptr;
+    return handedOver[static_cast<size_t>(slot)];
+}
+
 int DjEngine::collect()
 {
-    const auto finished = ended.load(std::memory_order_acquire);
-    retired.erase(std::remove_if(retired.begin(), retired.end(),
-                                 [finished](const Retired& r) { return finished >= r.after; }),
-                  retired.end());
-    return static_cast<int>(retired.size());
+    DjReleaseQueue::Entry entry;
+    while (released.take(entry))
+    {
+        const auto found = std::find_if(owned.begin(), owned.end(),
+                                        [&entry](const Owned& o) { return o.object.get() == entry.object; });
+        jassert(found != owned.end());
+        if (found != owned.end())
+            owned.erase(found);
+    }
+    if (const auto lost = released.lost(); lost != lostReported)
+    {
+        juce::Logger::writeToLog("Rhino: the DJ booth had no room to hand back " + juce::String(lost - lostReported)
+                                 + " objects; they are kept until the booth goes");
+        lostReported = lost;
+    }
+    return static_cast<int>(std::count_if(owned.begin(), owned.end(), [this](const Owned& o)
+    {
+        return std::find(handedOver.begin(), handedOver.end(), o.object.get()) == handedOver.end();
+    }));
 }
 
 bool DjEngine::push(const Command& command) noexcept
@@ -108,6 +228,24 @@ int DjEngine::pendingCommands() const noexcept
     return (t - h + queueSize) % queueSize;
 }
 
+void DjEngine::resetChannelControls(int slot)
+{
+    if (!juce::isPositiveAndBelow(slot, maximumDecks)) return;
+    auto& strip = channels[static_cast<size_t>(slot)];
+    constexpr auto order = std::memory_order_relaxed;
+    const DjChannelStrip fresh;
+    strip.trimDb.store(fresh.trimDb.load(order), order);
+    strip.comp.store(fresh.comp.load(order), order);
+    for (size_t band = 0; band < DjChannelStrip::bandCount; ++band)
+        strip.eqDb[band].store(fresh.eqDb[band].load(order), order);
+    strip.filter.store(fresh.filter.load(order), order);
+    strip.fader.store(fresh.fader.load(order), order);
+    strip.send.store(fresh.send.load(order), order);
+    strip.cue.store(fresh.cue.load(order), order);
+    strip.fxOn.store(fresh.fxOn.load(order), order);
+    strip.crossfaderSide.store(fresh.crossfaderSide.load(order), order);
+}
+
 void DjEngine::applyCommands()
 {
     auto h = head.load(std::memory_order_relaxed);
@@ -123,21 +261,33 @@ void DjEngine::applyCommands()
 void DjEngine::apply(const Command& command)
 {
     using Type = Command::Type;
-    const auto count = deckCount();
     if (command.type == Type::stopAll)
     {
-        for (int i = 0; i < count; ++i)
-            deckList[static_cast<size_t>(i)].pause();
+        for (int i = 0; i < maximumDecks; ++i)
+            if (rendering[static_cast<size_t>(i)])
+            {
+                deckList[static_cast<size_t>(i)].pause();
+                deckList[static_cast<size_t>(i)].publish();
+            }
         return;
     }
-    if (command.deck < 0 || command.deck >= count) return;
-    auto& d = deckList[static_cast<size_t>(command.deck)];
-    // Material swapped in since the last block is taken up first, so a
-    // command queued behind the swap addresses the new track.
-    d.adoptPending();
-    // Cue and loop points snap to the deck's grid while its own Quantize
-    // key is lit, as a CDJ's do; the launch quantisation is the booth's.
-    const auto snap = d.quantiseSnap.load(std::memory_order_relaxed);
+    if (!juce::isPositiveAndBelow(command.slot, maximumDecks)) return;
+    auto& d = deckList[static_cast<size_t>(command.slot)];
+    if (command.type == Type::setSlotActive)
+    {
+        setSlot(command.slot, command.on);
+        return;
+    }
+    if (command.type == Type::setSource)
+    {
+        d.setSource(command.source.material, command.source.keepBeat);
+        return;
+    }
+    // A slot no deck holds takes no transport.
+    if (!rendering[static_cast<size_t>(command.slot)]) return;
+    // Cue and loop points snap to the deck's grid while its own Quantize key
+    // is lit, as a CDJ's do; the launch quantisation is the booth's.
+    const auto snap = d.controls.quantiseSnap.load(std::memory_order_relaxed);
     switch (command.type)
     {
         case Type::play: d.play(); break;
@@ -145,380 +295,57 @@ void DjEngine::apply(const Command& command)
         case Type::togglePlay: d.togglePlay(); break;
         case Type::cueDown: d.cueDown(snap); break;
         case Type::cueUp: d.cueUp(); break;
-        case Type::hotCue: d.hotCue(command.count, snap); break;
-        case Type::clearHotCue: d.clearHotCue(command.count); break;
-        case Type::setCue: d.setCuePoint(command.value); break;
-        case Type::setHotCue: d.setHotCuePoint(command.count, command.value); break;
+        case Type::hotCue: d.hotCue(command.index, snap); break;
+        case Type::clearHotCue: d.clearHotCue(command.index); break;
+        case Type::setCue: d.setCuePoint(command.frame); break;
+        case Type::setHotCue: d.setHotCuePoint(command.index, command.frame); break;
         case Type::loopIn: d.loopIn(snap); break;
         case Type::loopOut: d.loopOut(snap); break;
-        case Type::beatLoop: d.beatLoop(command.value, snap); break;
+        case Type::beatLoop: d.beatLoop(command.beats, snap); break;
         case Type::reloopExit: d.reloopExit(); break;
         case Type::loopHalve: d.loopHalve(); break;
         case Type::loopDouble: d.loopDouble(); break;
         case Type::clearLoop: d.clearLoop(); break;
-        case Type::setLoop: d.setLoop(command.value, command.value2, command.flag); break;
-        case Type::beatJump: d.beatJump(command.count); break;
-        case Type::seek: d.seek(command.value); break;
-        case Type::syncAlign:
-        {
-            const auto m = masterDeck.load(std::memory_order_relaxed);
-            if (m >= 0 && m < count && m != command.deck)
-            {
-                const auto& master = deckList[static_cast<size_t>(m)];
-                const auto span = std::max(1, boundaryBeats(Quantise::bar, beatsPerBar.load(std::memory_order_relaxed)));
-                const auto beat = master.beatPosition();
-                const auto phase = beat - std::floor(beat / span) * span;
-                d.alignPhase(phase, span);
-            }
+        case Type::setLoop: d.setLoop(command.frame, command.endFrame, command.on); break;
+        case Type::beatJump: d.beatJump(command.index); break;
+        case Type::seek: d.seek(command.frame); break;
+        case Type::syncAlign: alignToMaster(command.slot); break;
+        case Type::setMaster: requestedMaster.store(command.slot, std::memory_order_relaxed); break;
+        case Type::tempoMoved:
+            d.heldTempo = 0.0;
+            d.heldTempoRate.store(0.0, std::memory_order_relaxed);
             break;
-        }
-        case Type::setMaster: requestedMaster.store(command.deck, std::memory_order_relaxed); break;
-        case Type::stopAll: break;
+        case Type::stopAll:
+        case Type::setSource:
+        case Type::setSlotActive:
+            break;
     }
+    d.publish();
 }
 
-// The master is the deck the others follow: the one asked for while it
-// plays, else the one already master while it plays, else the first that
-// does. Nothing playing means no master, and the next deck to start takes
-// the job.
-void DjEngine::chooseMaster()
+// A slot taken off the console is emptied at once, with no fade: what it
+// played and faded from goes back, and nothing of the deck that held it -
+// its sequencer's notes, the master's role - stays behind for the next deck
+// to find. A slot taken up is emptied the same way, so a deck
+// starts there as a new one does even when the slot's letting go never
+// reached the queue (Session::djReset with the queue full).
+void DjEngine::setSlot(int slot, bool on)
 {
-    const auto count = deckCount();
-    const auto playing = [this, count](int i)
-    {
-        return i >= 0 && i < count && deckList[static_cast<size_t>(i)].isPlaying()
-            && deckList[static_cast<size_t>(i)].nativeBpm() > 0.0;
-    };
-    const auto requested = requestedMaster.load(std::memory_order_relaxed);
-    auto current = masterDeck.load(std::memory_order_relaxed);
-    if (playing(requested))
-        current = requested;
-    else if (!playing(current))
-    {
-        current = -1;
-        for (int i = 0; i < count; ++i)
-            if (playing(i))
-            {
-                current = i;
-                break;
-            }
-    }
-    masterDeck.store(current, std::memory_order_relaxed);
-    masterBpm.store(current >= 0 ? std::abs(deckList[static_cast<size_t>(current)].effectiveBpm()) : 0.0,
-                    std::memory_order_relaxed);
-}
-
-// Each deck's rate for the block: its own fader, or the master's tempo when
-// synced, with a gentle correction back onto the master's beat; or the hand
-// on the platter, which overrides both while it is there.
-void DjEngine::setRates()
-{
-    const auto count = deckCount();
-    const auto m = masterDeck.load(std::memory_order_relaxed);
-    const auto lock = phaseLock.load(std::memory_order_relaxed);
-    for (int i = 0; i < count; ++i)
-    {
-        auto& d = deckList[static_cast<size_t>(i)];
-        if (d.scratching.load(std::memory_order_relaxed))
-        {
-            d.targetRate = std::clamp(d.scratchRate.load(std::memory_order_relaxed), -10.0, 10.0);
-            continue;
-        }
-        auto target = d.baseRate();
-        if (d.synced.load(std::memory_order_relaxed) && m >= 0 && m != i)
-        {
-            const auto& master = deckList[static_cast<size_t>(m)];
-            const auto own = d.nativeBpm();
-            const auto masterTempo = std::abs(master.effectiveBpm());
-            if (own > 0.0 && masterTempo > 0.0)
-            {
-                target = masterTempo / own;
-                if (lock && d.isPlaying())
-                {
-                    // The error in beats, wrapped to the nearest, closed over
-                    // about half a second and never by more than two per cent.
-                    auto error = master.beatPosition() - d.beatPosition();
-                    error -= std::round(error);
-                    const auto errorSeconds = error * 60.0 / masterTempo;
-                    if (std::abs(errorSeconds) > 0.001)
-                        target += std::clamp(errorSeconds / 0.5, -0.02, 0.02);
-                }
-            }
-        }
-        d.targetRate = std::max(0.0, target);
-    }
-}
-
-// A deck waiting for its start, or a playing deck waiting to jump, lands at
-// once when nothing is quantised or nothing else is playing, and otherwise
-// on the master's next boundary - which may fall inside this block.
-void DjEngine::landPendings(int frames, double deviceRate)
-{
-    const auto count = deckCount();
-    const auto q = static_cast<Quantise>(quantise.load(std::memory_order_relaxed));
-    const auto span = boundaryBeats(q, beatsPerBar.load(std::memory_order_relaxed));
-    const auto m = masterDeck.load(std::memory_order_relaxed);
-    for (int i = 0; i < count; ++i)
-    {
-        auto& d = deckList[static_cast<size_t>(i)];
-        if (d.currentPending() == DjDeck::Pending::none) continue;
-        if (span <= 0 || m < 0 || m == i)
-        {
-            d.landPending(0, 0);
-            continue;
-        }
-        const auto& master = deckList[static_cast<size_t>(m)];
-        const auto* masterTrack = master.track.load(std::memory_order_acquire);
-        if (masterTrack == nullptr || masterTrack->framesPerBeat() <= 0.0)
-        {
-            d.landPending(0, 0);
-            continue;
-        }
-        const auto masterPosition = master.position.load(std::memory_order_relaxed);
-        const auto beat = masterTrack->beatAtFrame(masterPosition);
-        // A hair short of a boundary counts as on it.
-        auto next = std::ceil((beat - 0.002) / span) * span;
-        if (next < beat) next += span;
-        const auto boundaryFrame = masterTrack->frameAtBeat(next);
-        const auto masterStep = std::max(1.0e-6, std::abs(master.playbackRate.load(std::memory_order_relaxed)))
-                              * masterTrack->sampleRate / deviceRate;
-        const auto distance = (boundaryFrame - masterPosition) / masterStep;
-        if (distance < frames)
-        {
-            // The landing snaps to this deck's own boundary of the same size,
-            // a bar at most, so bars line up with bars.
-            const auto snap = std::min(span, boundaryBeats(Quantise::bar, beatsPerBar.load(std::memory_order_relaxed)));
-            d.landPending(std::max(0, static_cast<int>(distance)), snap);
-        }
-    }
-}
-
-void DjEngine::process(const float* const* inputs, int inputChannels, float* const* outputs, int outputChannels, int frames)
-{
-    begun.fetch_add(1, std::memory_order_acq_rel);
-    for (int c = 0; c < outputChannels; ++c)
-        if (outputs[c] != nullptr)
-            std::fill(outputs[c], outputs[c] + frames, 0.0f);
-    applyCommands();
-    const float* mic = inputs != nullptr && inputChannels > 0 ? inputs[0] : nullptr;
-    for (int offset = 0; offset < frames; offset += maximumBlock)
-    {
-        const auto chunk = std::min(maximumBlock, frames - offset);
-        float* chunkOutputs[8] {};
-        const auto used = std::min(outputChannels, 8);
-        for (int c = 0; c < used; ++c)
-            chunkOutputs[c] = outputs[c] != nullptr ? outputs[c] + offset : nullptr;
-        renderChunk(mic != nullptr ? mic + offset : nullptr, chunkOutputs, used, chunk);
-    }
-    ended.fetch_add(1, std::memory_order_acq_rel);
-}
-
-void DjEngine::releaseSounding(int index)
-{
-    auto& seq = sequencers[static_cast<size_t>(index)];
-    for (int note = 0; note < 128; ++note)
-        if (seq.sounding[static_cast<size_t>(note)])
-        {
-            seq.sounding[static_cast<size_t>(note)] = false;
-            if (liveSink != nullptr)
-                liveSink->noteOff(index, note);
-        }
-}
-
-// The live preview's sequencer: the material's notes go out as the deck
-// passes their beats, looped as the deck loops, and every note still held
-// is let go when the preview ends, the deck stops, or it lands somewhere it
-// was not travelling to. Notes before where the deck lands are never
-// replayed, so a jump makes no burst of them.
-void DjEngine::sequence(int index, bool active, int frames)
-{
-    auto& seq = sequencers[static_cast<size_t>(index)];
-    auto& d = deckList[static_cast<size_t>(index)];
-    const auto* t = d.track.load(std::memory_order_acquire);
-    if (!active || liveSink == nullptr || t == nullptr || t->midi.empty() || !d.isPlaying())
-    {
-        releaseSounding(index);
-        seq.wasActive = false;
-        return;
-    }
-    const auto beatNow = d.beatPosition();
-    const auto blockBeats = std::abs(d.effectiveBpm()) / 60.0 * static_cast<double>(frames) / rate;
-    const auto emit = [this, index, &seq, t](double from, double to)
-    {
-        auto event = std::upper_bound(t->midi.begin(), t->midi.end(), from,
-                                      [](double beat, const DjMidiEvent& e) { return beat < e.beat; });
-        for (; event != t->midi.end() && event->beat <= to; ++event)
-        {
-            if (!juce::isPositiveAndBelow(event->note, 128)) continue;
-            auto& held = seq.sounding[static_cast<size_t>(event->note)];
-            if (event->on)
-            {
-                liveSink->noteOn(index, event->note, event->velocity);
-                held = true;
-            }
-            else if (held)
-            {
-                liveSink->noteOff(index, event->note);
-                held = false;
-            }
-        }
-    };
-    const auto jumps = d.jumps.load(std::memory_order_relaxed);
-    const auto jumped = jumps != seq.lastJumps;
-    seq.lastJumps = jumps;
-    if (!seq.wasActive || (jumped && beatNow >= seq.lastBeat))
-    {
-        // A start, or a landing ahead: play from the block the deck began
-        // this stretch in, and nothing from before it.
-        releaseSounding(index);
-        seq.lastBeat = beatNow - blockBeats - 1.0e-9;
-        seq.wasActive = true;
-    }
-    if (beatNow + 1.0e-9 < seq.lastBeat)
-    {
-        // Backwards. A loop's wrap plays the loop out to its end and starts
-        // it again; a landing behind, or a reverse, holds nothing over.
-        const auto loopStart = t->beatAtFrame(d.loopStart.load(std::memory_order_relaxed));
-        const auto loopEnd = t->beatAtFrame(d.loopEnd.load(std::memory_order_relaxed));
-        const auto margin = blockBeats * 2.0 + 1.0e-6;
-        const auto wrapped = d.loopActive.load(std::memory_order_relaxed)
-                          && seq.lastBeat > loopEnd - margin && beatNow < loopStart + margin;
-        if (wrapped)
-        {
-            emit(seq.lastBeat, loopEnd);
-            releaseSounding(index);
-            emit(loopStart - 1.0e-9, beatNow);
-        }
-        else
-            releaseSounding(index);
-    }
-    else
-        emit(seq.lastBeat, beatNow);
-    seq.lastBeat = beatNow;
-}
-
-void DjEngine::renderChunk(const float* micInput, float* const* outputs, int outputChannels, int frames)
-{
-    const auto count = deckCount();
-    chooseMaster();
-    setRates();
-    landPendings(frames, rate);
-
-    for (auto& channel : masterBus) std::fill(channel.begin(), channel.begin() + frames, 0.0f);
-    for (auto& channel : cueBus) std::fill(channel.begin(), channel.begin() + frames, 0.0f);
-    for (auto& channel : sendBus) std::fill(channel.begin(), channel.begin() + frames, 0.0f);
-    float gainA = 1.0f, gainB = 1.0f;
-    fader.gains(gainA, gainB);
-    const auto fxTarget = effect.target.load(std::memory_order_relaxed);
-    const auto m = masterDeck.load(std::memory_order_relaxed);
-    const auto tempo = masterBpm.load(std::memory_order_relaxed);
-    const auto fallback = std::clamp(tapBpm.load(std::memory_order_relaxed), 40.0, 240.0);
-    const auto beatSeconds = tempo > 0.0 ? 60.0 / tempo : 60.0 / fallback;
-    // The effect's beat count follows the master while one plays and keeps
-    // walking at the tapped tempo when none does.
-    if (m >= 0)
-        effectBeat = deckList[static_cast<size_t>(m)].beatPosition();
-    else
-        effectBeat += frames / (beatSeconds * rate);
-
-    for (int i = 0; i < count; ++i)
-    {
-        auto& d = deckList[static_cast<size_t>(i)];
-        auto& strip = channels[static_cast<size_t>(i)];
-        float* left = scratch[static_cast<size_t>(i)][0].data();
-        float* right = scratch[static_cast<size_t>(i)][1].data();
-        d.render(left, right, frames, rate);
-        // The live preview: the bounce fades out, over a few milliseconds
-        // rather than at a step, and the material's notes go out to the
-        // track's own instrument as the deck passes them; it fades back in
-        // the same way when the preview ends.
-        const auto previewing = d.livePreview.load(std::memory_order_relaxed);
-        auto& previewGain = previewGains[static_cast<size_t>(i)];
-        previewGain.target = previewing ? 0.0f : 1.0f;
-        if (previewing || previewGain.current < 0.9999f)
-            for (int f = 0; f < frames; ++f)
-            {
-                const auto g = previewGain.next();
-                left[f] *= g;
-                right[f] *= g;
-            }
-        sequence(i, previewing, frames);
-        strip.processPreFader(left, right, frames);
-        if (strip.cue.load(std::memory_order_relaxed))
-            for (int f = 0; f < frames; ++f)
-            {
-                cueBus[0][static_cast<size_t>(f)] += left[f];
-                cueBus[1][static_cast<size_t>(f)] += right[f];
-            }
-        strip.applyFader(left, right, frames);
-        const auto sendGain = strip.sendGain();
-        if (sendGain > 0.0001f)
-            for (int f = 0; f < frames; ++f)
-            {
-                sendBus[0][static_cast<size_t>(f)] += left[f] * sendGain;
-                sendBus[1][static_cast<size_t>(f)] += right[f] * sendGain;
-            }
-        if (fxTarget == i && strip.fxOn.load(std::memory_order_relaxed))
-            effect.process(left, right, frames, beatSeconds, effectBeat);
-        const auto side = static_cast<DjChannelStrip::CrossfaderSide>(strip.crossfaderSide.load(std::memory_order_relaxed));
-        const auto gain = side == DjChannelStrip::CrossfaderSide::a ? gainA
-                        : side == DjChannelStrip::CrossfaderSide::b ? gainB : 1.0f;
-        for (int f = 0; f < frames; ++f)
-        {
-            masterBus[0][static_cast<size_t>(f)] += left[f] * gain;
-            masterBus[1][static_cast<size_t>(f)] += right[f] * gain;
-        }
-    }
-    // The send/return comes back onto the master at its own level.
-    sendEffect.process(sendBus[0].data(), sendBus[1].data(), frames);
-    for (int f = 0; f < frames; ++f)
-    {
-        masterBus[0][static_cast<size_t>(f)] += sendBus[0][static_cast<size_t>(f)];
-        masterBus[1][static_cast<size_t>(f)] += sendBus[1][static_cast<size_t>(f)];
-    }
-    if (fxTarget < 0)
-        effect.process(masterBus[0].data(), masterBus[1].data(), frames, beatSeconds, effectBeat);
-    masterSection.process(masterBus[0].data(), masterBus[1].data(), frames);
-    // The mic joins after the master's own processing, ducking it while
-    // spoken into with talkover on.
-    float duck = 1.0f;
-    micSection.process(micInput, micBuffer.data(), frames, duck);
-    if (duck < 0.999f || micSection.mode.load(std::memory_order_relaxed) != static_cast<int>(DjMicSection::Mode::off))
-        for (int f = 0; f < frames; ++f)
-        {
-            const auto voice = micBuffer[static_cast<size_t>(f)];
-            masterBus[0][static_cast<size_t>(f)] = softClip(masterBus[0][static_cast<size_t>(f)] * duck + voice);
-            masterBus[1][static_cast<size_t>(f)] = softClip(masterBus[1][static_cast<size_t>(f)] * duck + voice);
-        }
-
-    if (outputChannels > 0 && outputs[0] != nullptr)
-        std::copy(masterBus[0].begin(), masterBus[0].begin() + frames, outputs[0]);
-    if (outputChannels > 1 && outputs[1] != nullptr)
-        std::copy(masterBus[1].begin(), masterBus[1].begin() + frames, outputs[1]);
-    if (outputChannels > 3 && outputs[2] != nullptr && outputs[3] != nullptr)
-    {
-        // The headphones: the cue bus against the master, at their own
-        // level, or with mono split the cue on the left and the master on
-        // the right.
-        const auto mix = std::clamp(masterSection.cueMix.load(std::memory_order_relaxed), 0.0f, 1.0f);
-        const auto level = decibelsToGain(std::clamp(masterSection.cueLevelDb.load(std::memory_order_relaxed),
-                                                     DjMasterSection::minimumLevelDb, DjMasterSection::maximumLevelDb));
-        const auto split = masterSection.monoSplit.load(std::memory_order_relaxed);
-        for (int f = 0; f < frames; ++f)
-        {
-            const auto cueL = cueBus[0][static_cast<size_t>(f)], cueR = cueBus[1][static_cast<size_t>(f)];
-            const auto mainL = masterBus[0][static_cast<size_t>(f)], mainR = masterBus[1][static_cast<size_t>(f)];
-            if (split)
-            {
-                outputs[2][f] = softClip(0.5f * (cueL + cueR) * level);
-                outputs[3][f] = softClip(0.5f * (mainL + mainR) * level);
-            }
-            else
-            {
-                outputs[2][f] = softClip((cueL * (1.0f - mix) + mainL * mix) * level);
-                outputs[3][f] = softClip((cueR * (1.0f - mix) + mainR * mix) * level);
-            }
-        }
-    }
+    const auto index = static_cast<size_t>(slot);
+    deckList[index].reset();
+    // Its sequencer's notes go with it. The track it played through lets
+    // them go itself: its hidden input releases every note it played once
+    // its port is let go of.
+    sequencers[index] = {};
+    blockEventCount[index] = 0;
+    delays[index].reset();
+    wentThroughPort[index] = false;
+    if (requestedMaster.load(std::memory_order_relaxed) == slot)
+        requestedMaster.store(-1, std::memory_order_relaxed);
+    if (masterDeck.load(std::memory_order_relaxed) == slot)
+        masterDeck.store(-1, std::memory_order_relaxed);
+    // A strip taken up starts from silence, at the controls it was given.
+    channels[index].reset();
+    rendering[index] = on;
 }
 }

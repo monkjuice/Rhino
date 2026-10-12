@@ -4,7 +4,7 @@ type: component
 summary: Rhino builds as three targets (RhinoCore, RhinoDevices, the app) so that editing a device does not rebuild the app.
 tags: [rhino, build, cmake, architecture]
 sources: []
-updated: 2026-10-06
+updated: 2026-10-12
 ---
 
 # Rhino's build targets
@@ -14,14 +14,14 @@ updated: 2026-10-06
 | Target | Source list | Links | Holds |
 | --- | --- | --- | --- |
 | `RhinoCore` (static) | `native/src/core/CMakeLists.txt` | `juce::juce_core` only | `ContentLibrary`, `SystemUsage`, the DSP of Rhino Tune, Rhino EQ, Rhino Vocoder, Rhino FM and the Drum Rack, and the `.rnd`, `.rdk` and `.rdp` file formats |
-| `RhinoDevices` (static) | `native/src/devices/CMakeLists.txt` | `RhinoCore`, Tracktion | Rhino's plugins under `instruments/`, `audio/`, `midi/`, and `DeviceCatalog` |
+| `RhinoDevices` (static) | `native/src/devices/CMakeLists.txt` | `RhinoCore`, Tracktion | Rhino's plugins under `instruments/`, `audio/`, `midi/`, the DJ booth's hidden track ends under `infra/` (since 2026-10-12; they reach the booth only through `core/DjTrackPort.h`), and `DeviceCatalog` |
 | `RhinoNative` (app) | `native/CMakeLists.txt` | both, plus JUCE and Tracktion | `Session`, the UI, the shell, and every test runner |
 
 ## The include rules, and why
 
 A device may not include `Session.h` or any UI header, and `Session.h` reaches the device library only through `DeviceCatalog.h` (it forward-declares `UtilityDevice`). Until commit `24826df` (2026-09-19) `Session.h` included all six device headers, so editing any device rebuilt nearly every translation unit. `RhinoCore` likewise knows nothing of Session, the UI or Tracktion, so both other targets can link it without depending on each other.
 
-The rule is narrower than "the app never sees a device header". `native/src/SessionInternal.h`, private to the `Session*.cpp` files, includes the Utility and Drum Rack headers and the SDK's. The `DeviceEditorPanel*.cpp` faces include the five devices they draw, and `DeviceRack.cpp` includes the Drum Rack's to find a dropped sound's pad. Editing one of those headers rebuilds those files, not the whole app.
+The rule is narrower than "the app never sees a device header". `native/src/SessionInternal.h`, private to the `Session*.cpp` files, includes the Utility, Drum Rack and DJ track-end headers and the SDK's. The `DeviceEditorPanel*.cpp` faces include the five devices they draw, and `DeviceRack.cpp` includes the Drum Rack's to find a dropped sound's pad. Editing one of those headers rebuilds those files, not the whole app.
 
 Inside `RhinoCore` the EQ, Tune, Vocoder and FM DSP use the standard library alone, which is what keeps them testable without an engine. `juce_core` is included by `ContentLibrary`, the file formats (`DevicePreset`, `DrumKitFile`, `ExactFloatText.h`), `DeviceDisplay.h` and `DrumSynth.h`, which `DrumRackEngine` includes in turn (checked 2026-10-06). Only the `devices/` root is a public include directory, so an include names the kind: `#include "audio/RhinoEqDevice.h"`.
 

@@ -24,7 +24,7 @@ struct ConsoleSpace
 struct ConsoleLayout
 {
     // The name bar.
-    juce::Rectangle<int> number, source, live, edit, reload, eject;
+    juce::Rectangle<int> number, source, live, edit, eject;
     juce::Rectangle<int> display;
     std::array<juce::Rectangle<int>, 8> hotCues;
     // The left column.
@@ -72,8 +72,6 @@ inline ConsoleLayout layOutConsole(const ConsoleSpace& space)
     layout.number = header.withWidth(26);
     header = header.withTrimmedLeft(28).reduced(2);
     layout.eject = header.removeFromRight(46);
-    header.removeFromRight(3);
-    layout.reload = header.removeFromRight(52);
     header.removeFromRight(3);
     layout.edit = header.removeFromRight(44);
     header.removeFromRight(3);

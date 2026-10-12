@@ -3,14 +3,13 @@
 
 // A track's clip slots: one per scene on every track, each holding at most one
 // clip. They are the cells a DJ console's clips grid shows (DjClipGrid.cpp),
-// where a deck plays one cell's clip, bounced through the track, in place of
-// the track's arrangement. Nothing launches a slot: the booth starts its decks
-// itself, and every render keeps the slots out of the mix
-// (te::Renderer::ScopedClipSlotDisabler, in the merge and in the bounce).
+// the DJ view's own clips, apart from the arrangement's: a deck plays one
+// cell's clip through the track's live chain. Nothing launches a slot: the
+// booth starts its decks itself, and a merge keeps the slots out of its render
+// (te::Renderer::ScopedClipSlotDisabler).
 //
 // A cell's clip reaches only the decks that play its track, so every edit here
-// names the track it changed, and the other decks of a set are not left to
-// bounce again for it.
+// names the track it changed, and the other decks of a set are left alone.
 
 namespace rhino
 {
@@ -192,8 +191,7 @@ int Session::firstFreeSlot(int track) const
     return -1;
 }
 
-// Shared by both directions, and by a deck's bounce of a slot clip: rebuild a
-// clip inside a new owner. Wave clips are re-inserted from the same source
+// Shared by both directions: rebuild a clip inside a new owner. Wave clips are re-inserted from the same source
 // file rather than copying media, and MIDI clips clone their sequence. The
 // copy carries the source's own colour, or none, as Rhino records it.
 te::Clip* copyClipInto(te::ClipOwner& destination, te::Clip& source, tracktion::core::TimeRange range,

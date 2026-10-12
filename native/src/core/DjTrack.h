@@ -5,14 +5,14 @@
 namespace rhino
 {
 // A deck's material: decoded once, analysed once, and never written again.
-// The session reads the file or renders the track; the engine plays it.
+// The session reads the file or renders the clip; the engine plays it.
 //
 // Positions in the engine are frames of this track at its own sample rate,
 // whatever rate the device runs at, so a hot cue set at 44.1 kHz still lands
 // on the same beat after the device is switched to 96 kHz.
-// A note of the material, for the live preview: a note-on, or its note-off,
-// at a beat from the material's beat zero. Kept sorted by beat, a note-off
-// before a note-on at the same beat.
+// A note of the material: a note-on, or its note-off, at a beat from the
+// material's beat zero. Kept sorted by beat, a note-off before a note-on at
+// the same beat.
 struct DjMidiEvent
 {
     double beat = 0.0;
@@ -26,11 +26,13 @@ struct DjTrack
     double sampleRate = 44100.0;
     juce::String name;
     DjAnalysis analysis;
-    // The notes a bounced track was rendered from, which the engine plays
-    // out to the track's own instrument while a knob on it is held.
+    // The notes a MIDI clip holds, which the engine plays into the clip's
+    // track as the deck passes them. Such material has no audio of its own:
+    // `silentFrames` says how long it is, and the deck reads it as silence.
     std::vector<DjMidiEvent> midi;
+    int silentFrames = 0;
 
-    int length() const noexcept { return static_cast<int>(left.size()); }
+    int length() const noexcept { return left.empty() ? silentFrames : static_cast<int>(left.size()); }
     bool stereo() const noexcept { return !right.empty(); }
     double seconds() const noexcept { return sampleRate > 0.0 ? length() / sampleRate : 0.0; }
 

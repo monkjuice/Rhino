@@ -6,11 +6,12 @@
 namespace rhino
 {
 // The clips grid on a console: the clip slots of the deck's track, one cell
-// a scene, under a SONG cell that is the track's arrangement itself. The
-// deck plays the cell that is lit. A press on a filled cell loads it on the
-// deck; a double-click on an empty cell makes a one-bar clip there, loads it
-// and opens it in the editor; a double-click on a filled one opens it. A
-// cell dragged goes to another console's grid or, through the Arrange
+// a scene. They are the DJ view's own clips; the arrangement's are never
+// here, and the only way between the two is a copy. The deck plays the cell
+// that is lit, through the track's live chain. A press on a filled cell loads
+// it on the deck; a double-click on an empty cell makes a one-bar clip there,
+// loads it and opens it in the editor; a double-click on a filled one opens
+// it. A cell dragged goes to another console's grid or, through the Arrange
 // switch, to the timeline; and a cell takes a clip dragged from the
 // arrangement, another console's cell, a library item that makes a clip, or
 // a sound file, each held to the track's kind by the model. The grid shows
@@ -32,7 +33,6 @@ public:
     bool hasTrack() const { return track >= 0; }
     int trackIndex() const { return track; }
 
-    static constexpr int songCell = -1;   // the arrangement
     static constexpr int firstFree = -2;  // a drop: the first empty slot, a new scene when none is
     static constexpr int noCell = -3;
     static constexpr int cellHeight = 20, cellGap = 2;
@@ -42,8 +42,8 @@ public:
     juce::Result createClipAt(int scene);
     // Lands a drag's description on a cell; loadOnDeck plays what it made.
     juce::Result applyDrop(int scene, const juce::String& description, bool loadOnDeck);
-    // The cell under a point: songCell, a scene, the empty row past the last
-    // scene (which a double-click makes a scene of), or noCell.
+    // The cell under a point: a scene, the empty row past the last scene
+    // (which a double-click makes a scene of), or noCell.
     int cellAt(juce::Point<int>) const;
     int litCell() const { return lit; }
 
@@ -98,7 +98,7 @@ private:
     int deck;
     int track = -1;
     int scenes = 0;
-    int lit = songCell;
+    int lit = noCell;
     int hovered = noCell, dropTarget = noCell;
     int firstScene = 0;
     int pressedCell = noCell;
@@ -108,7 +108,7 @@ private:
     // The cells' names, shaped where each cell stands and laid out again
     // only when the name or the place changes.
     std::vector<ShapedLine> names;
-    ShapedLine songLine, addLine;
+    ShapedLine addLine;
     const juce::Font nameFont {uiFont(9.0f)}, keyFont {uiFontBold(9.0f)};
     // Off for the check that a culled paint matches drawing everything.
     bool cullRepaints = true;

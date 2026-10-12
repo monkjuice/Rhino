@@ -33,6 +33,24 @@ inline TileRange tilesTouching(double left, double right, int tileWidth)
             static_cast<long long>(std::ceil(right / tileWidth)) - 1};
 }
 
+// Whether tiles `width` wide, the first at the top of the material, at
+// `indices` cover the timeline from `left` up to `right` without a gap: the
+// tiles of another zoom, stretched to where their time falls now, standing in
+// for all of it.
+inline bool tilesCover(std::vector<long long> indices, double width, double left, double right)
+{
+    if (right <= left) return true;
+    if (width <= 0.0) return false;
+    std::sort(indices.begin(), indices.end());
+    auto reached = left;
+    for (const auto index : indices)
+    {
+        if (static_cast<double>(index) * width > reached) break;
+        reached = std::max(reached, static_cast<double>(index + 1) * width);
+    }
+    return reached >= right;
+}
+
 // A note of the material as the strip draws it.
 struct NoteSpan
 {

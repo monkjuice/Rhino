@@ -445,6 +445,7 @@ void Arrangement::focusTrack()
 void Arrangement::splitAtInsertPoint()
 {
     cancelDrag();
+    syncIfStale();
     const auto seconds = insertPointTime();
     splitClipsAt(clipsUnderLine(seconds), seconds);
 }
@@ -530,6 +531,9 @@ void Arrangement::mergeSelected()
         return;
     }
     const auto made = static_cast<int>(result.clips.size());
+    // The selection's region is read off the list, which the merge's own
+    // announcement left stale if the timeline is hidden.
+    syncIfStale();
     setSelection(result.clips);
     if (status)
     {
@@ -600,6 +604,16 @@ void Arrangement::visibilityChanged()
         staleWhileHidden = false;
         sync();
     }
+}
+
+// Once per command rather than once per change, so the timeline still waits
+// while hidden. An undo made in the DJ view left the split it took back on
+// the list, and Ctrl+E found no clip under a line drawn through a whole one.
+void Arrangement::syncIfStale()
+{
+    if (!staleWhileHidden) return;
+    staleWhileHidden = false;
+    sync();
 }
 // The row stack indexes tracks that are about to be replaced, so it goes with
 // the clips rather than surviving into the new edit.

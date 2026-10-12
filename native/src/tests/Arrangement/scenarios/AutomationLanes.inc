@@ -1,11 +1,12 @@
         // Automation runs the length of the timeline, so these checks use the
         // row stack rather than clip bounds. Track 0 is the pattern track and
-        // always has a device at slot 0.
+        // always has a device at slot 1, behind the DJ booth's hidden input at
+        // slot 0.
         view.sync();
         view.fit();
-        const auto laneParameters = session.deviceParameters(0, 0);
+        const auto laneParameters = session.deviceParameters(0, 1);
         require(!laneParameters.empty(), "Pattern device exposes a parameter to automate");
-        const Session::DeviceTarget laneTarget {0, 0, 0};
+        const Session::DeviceTarget laneTarget {0, 1, 0};
         const auto rowsWithoutLanes = view.rows.size();
         const auto secondTrackTop = view.lane(1).getY();
 
@@ -80,7 +81,7 @@
             require(written.front().points.front().value > laneParameters.front().minimum,
                     "The lifted curve sits above the parameter minimum");
         }
-        require(session.deviceParameters(0, 0)[0].automated,
+        require(session.deviceParameters(0, 1)[0].automated,
                 "A drawn lane reports the parameter as automated");
 
         // Adding nodes to a curve that is already there. The pointer is asked
@@ -288,15 +289,28 @@
             view.sync();
             const auto lowerTrack = session.trackCount() - 1;
             const auto upperTrack = lowerTrack - 1;
-            const auto lowerParameters = session.deviceParameters(lowerTrack, 0);
+            // A fresh track's one automatable device is its Utility strip,
+            // found by what it is: the DJ booth's hidden ends stand ahead of
+            // it in the chain.
+            const auto stripSlot = [&session](int track)
+            {
+                auto* onTrack = te::getAudioTracks(*session.edit)[track];
+                for (int i = 0; i < onTrack->pluginList.size(); ++i)
+                    if (dynamic_cast<UtilityDevice*>(onTrack->pluginList[i]) != nullptr)
+                        return i;
+                return -1;
+            };
+            const auto strip = stripSlot(lowerTrack);
+            require(strip >= 0 && strip == stripSlot(upperTrack), "Two fresh tracks, each with its Utility strip in the same place");
+            const auto lowerParameters = session.deviceParameters(lowerTrack, strip);
             require(!lowerParameters.empty(), "A fresh track exposes a parameter to automate");
-            const Session::DeviceTarget lowerTarget {lowerTrack, 0, 0};
+            const Session::DeviceTarget lowerTarget {lowerTrack, strip, 0};
             require(session.setTrackAutomationPoints(lowerTarget,
                         {{0.0, lowerParameters.front().minimum},
                          {2.0, lowerParameters.front().maximum}}).wasOk(),
                     "Draw a curve on the lower of the two");
             require(session.removeAudioTrack(upperTrack).wasOk(), "Remove the track above it");
-            const Session::DeviceTarget renumbered {upperTrack, 0, 0};
+            const Session::DeviceTarget renumbered {upperTrack, strip, 0};
             require(session.trackAutomationState(renumbered).active,
                     "A lane follows its track when the tracks above it are renumbered");
             require(session.trackAutomations(upperTrack).size() == 1,

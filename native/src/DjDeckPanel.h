@@ -14,9 +14,9 @@ namespace rhino
 // keys, and the big round CUE and PLAY; the jog wheel in the middle with
 // its vinyl mode and brake under it; and to its right sync, master, the
 // tempo range and the tempo fader with its reset. A track deck carries
-// three more keys in its name bar: Live, which plays the track's
-// instrument over the bounce from the keys; Edit, which opens the track's
-// clip in the note editor; and a reload for a stale bounce.
+// two more keys in its name bar: Live, which plays the track's instrument
+// from the keys through the deck's channel, and Edit, which opens the cell
+// the deck plays in the note editor or the audio editor.
 //
 // What the deck plays comes from the session's announcements (sync); what
 // it is doing - the keys that light, the tempo, the brake - from the view's
@@ -83,7 +83,7 @@ private:
     // The track's clips, beside the big keys; shown on a track deck only.
     DjClipGrid grid;
     juce::TextButton source;
-    DjPad live {"LIVE", palette::recordAccent}, edit {"EDIT", palette::activeNeutral}, reload {"RELOAD", palette::djWaiting};
+    DjPad live {"LIVE", palette::recordAccent}, edit {"EDIT", palette::activeNeutral};
     DjPad eject {"EJECT", palette::activeNeutral};
     std::array<std::unique_ptr<DjPad>, hotCueCount> hotCues;
     DjPad cue {"CUE", palette::djCue}, play {"PLAY", palette::djPlay};
@@ -108,8 +108,9 @@ private:
     int jumpBeats = 4;
     // The range the RANGE key shows, set only when it changes.
     int shownRange = -1;
-    // Where a scrub began: a drag's steps land from there.
-    double scrubFrom = 0.0;
+    // Where a scrub has taken the deck, inside the material it scrubs, and how
+    // far the hand had travelled at the last step.
+    double scrubTo = 0.0, scrubLength = 0.0, scrubTravelled = 0.0;
     bool focused = false;
     // The phase the view's timer last gave, which a sync keeps.
     bool blinkPhase = false;

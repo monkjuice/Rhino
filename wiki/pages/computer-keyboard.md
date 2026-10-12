@@ -4,7 +4,7 @@ type: component
 summary: Plays notes from the typing keyboard into the MIDI input with Forge's exact key mapping, so arming and recording need no special case.
 tags: [rhino, midi, keyboard]
 sources: []
-updated: 2026-10-10
+updated: 2026-10-12
 ---
 
 # Computer MIDI keyboard
@@ -13,7 +13,7 @@ updated: 2026-10-10
 
 ## It plays the input, not a track
 
-Notes go through `Session::sendMidiInputNote` into the `keyboardState` of the engine's MIDI input devices, the entry a controller's notes take. Nothing downstream can tell where a note came from, so arming, monitoring and recording need no second path. It writes into both virtual devices, "All MIDI Ins" and "Computer Keyboard", because a track on either has to hear it ([Track inputs and monitoring](inputs-and-monitoring.md)). `Session::midiInputDevice` is only a fallback. The DJ booth's live preview took this entry too, from its audio thread, for a day on 2026-10-10; it now injects its notes into the deck's track itself (`te::AudioTrack::injectLiveMidiMessage`, from the message thread), because this entry reaches a track only through an input assigned to it and monitored, and switching that on rescanned the MIDI devices on every knob touch ([DJ view and the booth](dj-view.md), [Real-time audio rules](real-time-audio-rules.md)).
+Notes go through `Session::sendMidiInputNote` into the `keyboardState` of the engine's MIDI input devices, the entry a controller's notes take. Nothing downstream can tell where a note came from, so arming, monitoring and recording need no second path. It writes into both virtual devices, "All MIDI Ins" and "Computer Keyboard", because a track on either has to hear it ([Track inputs and monitoring](inputs-and-monitoring.md)). `Session::midiInputDevice` is only a fallback. The DJ booth's knob-held preview took this entry too, from its audio thread, for a day on 2026-10-10, and gave it up because it reaches a track only through an input assigned to it and monitored, and switching that on rescanned the MIDI devices on every knob touch. Since 2026-10-12 a DJ deck's notes reach its track through the track's hidden DJ input on the audio thread, at their frames, and no input is involved ([DJ view and the booth](dj-view.md), [Real-time audio rules](real-time-audio-rules.md)). A deck's Live key still uses this entry's route: it monitors the track's input, so the typing keyboard plays the track through the deck.
 
 ## One mapping, not two
 

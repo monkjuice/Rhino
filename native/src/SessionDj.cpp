@@ -3,13 +3,19 @@
 #include <cmath>
 
 // The DJ booth: decks, their transports, the mixer and what the document
-// saves of it. Loading and bouncing are in SessionDjSources.cpp.
+// saves of it. What a deck plays, and how a track's deck is heard through the
+// track, is in SessionDjSources.cpp.
 //
 // The engine is a second audio callback on the engine's own device, the
 // arrangement the browser preview and the count-in already use: JUCE sums
 // its callbacks, so the booth is simply mixed with whatever the edit plays.
 // It is built the first time a deck is added, and comes off the device in
 // releaseAudioDevice and the destructor, before the device it reads goes.
+//
+// Everything public here names a deck by its place on the console, and a
+// mixer channel by the same place; the booth turns that into the engine slot
+// the deck plays in (DjBooth::slotOfDeck), which stays the deck's while it is
+// on the console.
 
 namespace rhino
 {
@@ -23,6 +29,21 @@ const juce::Identifier djHotCueID {"HOTCUE"};
 
 constexpr int quantiseCount = 4;
 constexpr int tempoRanges[] {6, 10, 16, 100};
+
+// The tempo fader's range on a deck holding a tempo it took over as master:
+// the range it was set to, widened to the narrowest of the four that reaches
+// the held tempo, so the fader stands where the deck plays and the first
+// touch moves on from there. Synced across more than six per cent - common -
+// the held tempo lies past the default range. Zero held is no hold.
+int rangeReaching(int range, double held)
+{
+    if (held <= 0.0) return range;
+    const auto percent = std::abs(held - 1.0) * 100.0;
+    for (const auto wider : tempoRanges)
+        if (wider >= range && percent <= wider + 1.0e-9)
+            return wider;
+    return tempoRanges[std::size(tempoRanges) - 1];
+}
 
 using Command = DjEngine::Command;
 
@@ -41,27 +62,18 @@ Session::DjDeckState::Transport transportOf(DjDeck::State s)
 }
 }
 
-Session::DjBooth::DjBooth(te::Engine& songEngine) : tracktionEngine(songEngine)
+Session::DjBooth::DjBooth()
 {
     formats.registerBasicFormats();
-    // The live preview's notes come back here, on the audio thread.
-    engine.liveSink = this;
-    for (auto& id : copyIds)
-        id = te::ProjectItemID::createNewID(te::ProjectID{});
 }
 
-// The worker is drained before the jobs and the bounces' copies of the
-// document go with the booth, on this thread, and the renders the copies
-// left go after them.
+// The worker is drained before the jobs go with the booth.
 Session::DjBooth::~DjBooth()
 {
-    cancelPendingUpdate();
     for (auto& job : jobs)
         job->cancel.store(true);
     workers.removeAllJobs(true, 10000);
-    bounces.clear();
     jobs.clear();
-    removeCopyFolders();
 }
 
 void Session::DjBooth::audioDeviceIOCallbackWithContext(const float* const* inputChannelData, int numInputChannels,
@@ -78,72 +90,6 @@ void Session::DjBooth::audioDeviceIOCallbackWithContext(const float* const* inpu
     engine.process(inputChannelData, numInputChannels, outputChannelData, numOutputChannels, numSamples);
 }
 
-// The preview's notes go into the deck's track itself, the way an editor's
-// guide notes do, so the track's instrument hears them with no input
-// monitored. The engine raises them on the audio thread; the track takes
-// them only on the message thread, so each is queued here and an async
-// update brings the message thread to it at once - a note is heard a turn
-// of the message loop late, inside the song's next block. A full queue
-// drops the note; the panic at the preview's end covers what that leaves.
-void Session::DjBooth::noteOn(int deck, int note, int velocity)
-{
-    queuePreviewNote({deck, note, velocity, true});
-}
-
-void Session::DjBooth::noteOff(int deck, int note)
-{
-    queuePreviewNote({deck, note, 0, false});
-}
-
-void Session::DjBooth::queuePreviewNote(PreviewNote event)
-{
-    if (!juce::isPositiveAndBelow(event.deck, maximumDjDecks)) return;
-    {
-        const auto scope = previewFifo.write(1);
-        if (scope.blockSize1 == 1)
-            previewQueue[static_cast<size_t>(scope.startIndex1)] = event;
-        else if (scope.blockSize2 == 1)
-            previewQueue[static_cast<size_t>(scope.startIndex2)] = event;
-        else
-        {
-            previewDropped.fetch_add(1, std::memory_order_relaxed);
-            return;
-        }
-    }
-    triggerAsyncUpdate();
-}
-
-void Session::DjBooth::handleAsyncUpdate()
-{
-    deliverPreviewNotes();
-}
-
-void Session::DjBooth::deliverPreviewNotes()
-{
-    jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
-    if (const auto dropped = previewDropped.exchange(0))
-        juce::Logger::writeToLog("Rhino: the booth's preview queue was full; " + juce::String(dropped) + " notes were dropped");
-    const auto ready = previewFifo.getNumReady();
-    if (ready == 0) return;
-    const auto scope = previewFifo.read(ready);
-    const auto deliver = [this](int start, int count)
-    {
-        for (int i = 0; i < count; ++i)
-        {
-            const auto& event = previewQueue[static_cast<size_t>(start + i)];
-            auto* track = previewTracks[static_cast<size_t>(event.deck)];
-            if (track == nullptr)
-                continue;   // the preview ended; its panic has let the notes go
-            track->injectLiveMidiMessage(event.on ? juce::MidiMessage::noteOn(1, event.note, static_cast<juce::uint8>(juce::jlimit(1, 127, event.velocity)))
-                                                  : juce::MidiMessage::noteOff(1, event.note),
-                                         te::MidiMessageArray::notMPE);
-            ++decks[static_cast<size_t>(event.deck)].info.previewNotes;
-        }
-    };
-    deliver(scope.startIndex1, scope.blockSize1);
-    deliver(scope.startIndex2, scope.blockSize2);
-}
-
 void Session::DjBooth::audioDeviceAboutToStart(juce::AudioIODevice* device)
 {
     if (device == nullptr) return;
@@ -155,7 +101,7 @@ void Session::DjBooth::audioDeviceStopped() {}
 Session::DjBooth& Session::booth()
 {
     if (dj == nullptr)
-        dj = std::make_unique<DjBooth>(engine);
+        dj = std::make_unique<DjBooth>();
     return *dj;
 }
 
@@ -221,22 +167,11 @@ int Session::djSendFxTypeCount()
 }
 
 // A DJ change the document saves - a deck added, a source loaded, a hot cue
-// set - counts as a change to the document, but not as one that could have
-// moved a bounced track's notes.
+// set - counts as a change to the document, but not as one that changes what
+// a clip plays.
 void Session::markDjModified()
 {
     markModified(-1, ModelChange::none);
-}
-
-int Session::djBouncesStarted() const
-{
-    return dj != nullptr ? dj->bouncesStarted : 0;
-}
-
-juce::File Session::djCopyFolder(int deck) const
-{
-    return dj != nullptr && juce::isPositiveAndBelow(deck, maximumDjDecks) ? dj->copyFolders[static_cast<size_t>(deck)]
-                                                                         : juce::File();
 }
 
 int Session::djDeckCount() const
@@ -244,91 +179,55 @@ int Session::djDeckCount() const
     return dj != nullptr ? dj->count : 0;
 }
 
+// A new deck takes the first free slot, its controls and its strip back to a
+// new deck's - but for the resonance and the curve the console keeps on every
+// channel - so it inherits nothing from a deck that stood there before.
 juce::Result Session::addDjDeck()
 {
     auto& b = booth();
     if (b.count >= maximumDjDecks)
         return juce::Result::fail("Six decks is the booth: there is no room for another.");
-    auto& deck = b.decks[static_cast<size_t>(b.count)];
-    deck = {};
+    const auto slot = b.slotOfDeck[static_cast<size_t>(b.count)];
+    b.engine.deck(slot).controls.reset();
+    b.engine.resetChannelControls(slot);
+    if (!b.engine.setSlotActive(slot, true))
+        return juce::Result::fail("The DJ booth is busy: try again in a moment.");
+    b.decks[static_cast<size_t>(slot)] = {};
     ++b.count;
-    b.engine.setDeckCount(b.count);
     ensureDjAttached();
     markDjModified();
     sendSynchronousChangeMessage();
     return juce::Result::ok();
 }
 
-// Decks above the one removed close up, as mixer channels would: the deck's
-// material, settings and channel strip all move down one.
+// A deck taken off frees its slot and its track and nothing else. The decks
+// after it close up on the console and in the mixer, as channels would, and go
+// on playing what they play from where they stand, strips and settings
+// untouched: none is read or made again. A beat effect assigned to it stays on the freed
+// slot, which is rendered no more, so it falls silent rather than moving on
+// to the master; the slot's channel stands past the console, and a deck
+// added there later starts with its FX key dark.
 juce::Result Session::removeDjDeck(int index)
 {
     if (dj == nullptr || !juce::isPositiveAndBelow(index, dj->count))
         return juce::Result::fail("That deck does not exist.");
     auto& b = *dj;
-    if (b.decks[static_cast<size_t>(index)].info.live)
+    const auto slot = b.slotOf(index);
+    // The engine empties the slot at its next block and hands its material
+    // back; the registry lets go of it here.
+    if (!b.engine.setSlotActive(slot, false))
+        return juce::Result::fail("The DJ booth is busy: try again in a moment.");
+    if (b.decks[static_cast<size_t>(slot)].info.live)
         setDjDeckLive(index, false);
-    // Every read in flight for this deck and the ones above it is let go of:
-    // the decks above move down and are loaded again where they land.
+    // Its track plays the song again.
+    bindDjTrack(slot, -1);
     for (auto& job : b.jobs)
-        if (job->deck >= index)
+        if (job->slot == slot)
             job->cancel.store(true);
-    for (int i = index; i < b.count - 1; ++i)
-    {
-        auto& lower = b.decks[static_cast<size_t>(i)];
-        auto& upper = b.decks[static_cast<size_t>(i + 1)];
-        lower = std::move(upper);
-        upper = {};
-        auto& machine = b.engine;
-        auto& from = machine.deck(i + 1);
-        auto& to = machine.deck(i);
-        to.tempoPercent.store(from.tempoPercent.load());
-        to.tempoRange.store(from.tempoRange.load());
-        to.synced.store(from.synced.load());
-        to.reversed.store(from.reversed.load());
-        auto& strip = machine.channel(i);
-        auto& above = machine.channel(i + 1);
-        strip.trimDb.store(above.trimDb.load());
-        strip.comp.store(above.comp.load());
-        for (size_t band = 0; band < DjChannelStrip::bandCount; ++band)
-            strip.eqDb[band].store(above.eqDb[band].load());
-        strip.filter.store(above.filter.load());
-        strip.resonance.store(above.resonance.load());
-        strip.fader.store(above.fader.load());
-        strip.faderCurve.store(above.faderCurve.load());
-        strip.send.store(above.send.load());
-        strip.cue.store(above.cue.load());
-        strip.fxOn.store(above.fxOn.load());
-        strip.crossfaderSide.store(above.crossfaderSide.load());
-        to.brakeSeconds.store(from.brakeSeconds.load());
-        to.quantiseSnap.store(from.quantiseSnap.load());
-    }
-    // Material cannot be moved between engine decks without a copy, so the
-    // decks that moved down are bounced or read again by the poll, keeping
-    // the settings they moved with.
-    for (int i = index; i < b.count - 1; ++i)
-    {
-        auto& deck = b.decks[static_cast<size_t>(i)];
-        if (deck.info.loaded)
-        {
-            const auto live = djDeckState(i + 1);
-            deck.settings.cueSeconds = live.cueSeconds;
-            deck.settings.hotCueSeconds = live.hotCueSeconds;
-            deck.settings.loop = live.loop;
-            deck.settings.loopWhole = false;
-        }
-        deck.info.loaded = false;
-        deck.info.loading = false;
-        deck.info.stale = deck.info.kind != DjSourceKind::none;
-        deck.info.generation++;
-    }
-    b.engine.setTrack(index, nullptr, false);
-    for (int i = index + 1; i < b.count; ++i)
-        b.engine.setTrack(i, nullptr, false);
+    b.decks[static_cast<size_t>(slot)] = {};
+    // The console closes up, and the freed slot stands first among the free.
+    std::rotate(b.slotOfDeck.begin() + index, b.slotOfDeck.begin() + index + 1, b.slotOfDeck.begin() + b.count);
     --b.count;
-    b.decks[static_cast<size_t>(b.count)] = {};
-    b.engine.setDeckCount(b.count);
-    b.staleSince = juce::Time::getMillisecondCounter();
     markDjModified();
     sendSynchronousChangeMessage();
     return juce::Result::ok();
@@ -336,9 +235,14 @@ juce::Result Session::removeDjDeck(int index)
 
 Session::DjDeckInfo Session::djDeckInfo(int index) const
 {
-    if (dj == nullptr || !juce::isPositiveAndBelow(index, dj->count))
+    return dj != nullptr ? djSlotInfo(dj->slotOf(index)) : DjDeckInfo {};
+}
+
+Session::DjDeckInfo Session::djSlotInfo(int slot) const
+{
+    if (dj == nullptr || !juce::isPositiveAndBelow(slot, maximumDjDecks))
         return {};
-    auto info = dj->decks[static_cast<size_t>(index)].info;
+    auto info = dj->decks[static_cast<size_t>(slot)].info;
     // Where the track is now, found by id every time: tracks move.
     info.track = -1;
     if (info.kind == DjSourceKind::track)
@@ -348,38 +252,37 @@ Session::DjDeckInfo Session::djDeckInfo(int index) const
             if (tracks[i]->itemID == info.trackId)
                 info.track = i;
     }
-    else if (info.kind == DjSourceKind::group)
-    {
-        if (const auto group = trackGroup(info.groupId))
-            info.track = group->busTrack;
-    }
     return info;
 }
 
 const DjTrack* Session::djDeckTrack(int index) const
 {
-    if (dj == nullptr || !juce::isPositiveAndBelow(index, dj->count))
-        return nullptr;
-    return dj->engine.trackOf(index);
+    return dj != nullptr ? dj->engine.trackOf(dj->slotOf(index)) : nullptr;
 }
 
 Session::DjDeckState Session::djDeckState(int index) const
 {
     DjDeckState state;
-    if (dj == nullptr || !juce::isPositiveAndBelow(index, dj->count))
+    const auto slot = dj != nullptr ? dj->slotOf(index) : -1;
+    if (slot < 0)
         return state;
-    const auto& deck = dj->engine.deck(index);
-    const auto* track = dj->engine.trackOf(index);
+    const auto& deck = dj->engine.deck(slot);
+    const auto& controls = deck.controls;
+    const auto* track = dj->engine.trackOf(slot);
     state.transport = transportOf(deck.currentState());
     state.pendingJump = deck.currentPending() == DjDeck::Pending::jump;
-    state.tempoPercent = deck.tempoPercent.load(std::memory_order_relaxed);
-    state.tempoRange = deck.tempoRange.load(std::memory_order_relaxed);
-    state.synced = deck.synced.load(std::memory_order_relaxed);
-    state.reversed = deck.reversed.load(std::memory_order_relaxed);
-    state.brakeSeconds = deck.brakeSeconds.load(std::memory_order_relaxed);
-    state.quantiseSnap = deck.quantiseSnap.load(std::memory_order_relaxed);
-    state.scratching = deck.scratching.load(std::memory_order_relaxed);
-    state.master = dj->engine.masterDeck.load(std::memory_order_relaxed) == index;
+    // A deck that took over as master holds the tempo it was synced to
+    // until its fader moves, and the fader shows that tempo meanwhile, its
+    // range as wide as it takes to reach it.
+    const auto held = deck.heldTempoRate.load(std::memory_order_relaxed);
+    state.tempoRange = rangeReaching(controls.tempoRange.load(std::memory_order_relaxed), held);
+    state.tempoPercent = held > 0.0 ? static_cast<float>((held - 1.0) * 100.0) : controls.tempoPercent.load(std::memory_order_relaxed);
+    state.synced = controls.synced.load(std::memory_order_relaxed);
+    state.reversed = controls.reversed.load(std::memory_order_relaxed);
+    state.brakeSeconds = controls.brakeSeconds.load(std::memory_order_relaxed);
+    state.quantiseSnap = controls.quantiseSnap.load(std::memory_order_relaxed);
+    state.scratching = controls.scratching.load(std::memory_order_relaxed);
+    state.master = dj->engine.masterDeck.load(std::memory_order_relaxed) == slot;
     state.peak = deck.peak.load(std::memory_order_relaxed);
     state.jumps = deck.jumps.load(std::memory_order_relaxed);
     state.hotCueSeconds.fill(-1.0);
@@ -390,7 +293,9 @@ Session::DjDeckState Session::djDeckState(int index) const
     state.positionSeconds = seconds(deck.position.load(std::memory_order_relaxed));
     state.lengthSeconds = track->seconds();
     state.bpm = track->analysis.bpm;
-    state.effectiveBpm = std::abs(deck.effectiveBpm());
+    // The tempo, as a CDJ's readout shows it: the fader, sync or the held
+    // tempo, never the platter under a hand or a brake.
+    state.effectiveBpm = std::abs(track->analysis.bpm * deck.tempoRate.load(std::memory_order_relaxed));
     state.firstBeatSeconds = track->analysis.firstBeatSeconds;
     state.beatsPerBar = track->analysis.beatsPerBar;
     state.beat = track->beatAtFrame(deck.position.load(std::memory_order_relaxed));
@@ -408,41 +313,41 @@ Session::DjDeckState Session::djDeckState(int index) const
 
 namespace
 {
-void enqueue(Session::DjBooth* booth, Command command)
+// A command for the slot a deck of the console plays in, made by one of the
+// engine's factories and queued for the audio thread.
+template <typename Make>
+void enqueue(Session::DjBooth* booth, int deck, Make&& make)
 {
-    if (booth == nullptr) return;
-    if (!juce::isPositiveAndBelow(command.deck, booth->count) && command.type != Command::Type::stopAll) return;
-    if (!booth->engine.push(command))
+    const auto slot = booth != nullptr ? booth->slotOf(deck) : -1;
+    if (slot < 0) return;
+    if (!booth->engine.push(make(slot)))
         juce::Logger::writeToLog("Rhino: the DJ booth's command queue is full; a command was dropped");
 }
 
-Command command(Command::Type type, int deck)
+// The controls of a deck on the console, or null.
+DjDeckControls* controlsOf(Session::DjBooth* booth, int deck)
 {
-    Command c;
-    c.type = type;
-    c.deck = deck;
-    return c;
+    const auto slot = booth != nullptr ? booth->slotOf(deck) : -1;
+    return slot >= 0 ? &booth->engine.deck(slot).controls : nullptr;
 }
 }
 
-void Session::djPlay(int deck) { enqueue(dj.get(), command(Command::Type::play, deck)); }
-void Session::djPause(int deck) { enqueue(dj.get(), command(Command::Type::pause, deck)); }
-void Session::djTogglePlay(int deck) { enqueue(dj.get(), command(Command::Type::togglePlay, deck)); }
-void Session::djCueDown(int deck) { enqueue(dj.get(), command(Command::Type::cueDown, deck)); }
-void Session::djCueUp(int deck) { enqueue(dj.get(), command(Command::Type::cueUp, deck)); }
-void Session::djLoopIn(int deck) { enqueue(dj.get(), command(Command::Type::loopIn, deck)); }
-void Session::djLoopOut(int deck) { enqueue(dj.get(), command(Command::Type::loopOut, deck)); }
-void Session::djReloopExit(int deck) { enqueue(dj.get(), command(Command::Type::reloopExit, deck)); }
-void Session::djLoopHalve(int deck) { enqueue(dj.get(), command(Command::Type::loopHalve, deck)); }
-void Session::djLoopDouble(int deck) { enqueue(dj.get(), command(Command::Type::loopDouble, deck)); }
-void Session::djClearLoop(int deck) { enqueue(dj.get(), command(Command::Type::clearLoop, deck)); }
-void Session::djSetMaster(int deck) { enqueue(dj.get(), command(Command::Type::setMaster, deck)); }
+void Session::djPlay(int deck) { enqueue(dj.get(), deck, Command::play); }
+void Session::djPause(int deck) { enqueue(dj.get(), deck, Command::pause); }
+void Session::djTogglePlay(int deck) { enqueue(dj.get(), deck, Command::togglePlay); }
+void Session::djCueDown(int deck) { enqueue(dj.get(), deck, Command::cueDown); }
+void Session::djCueUp(int deck) { enqueue(dj.get(), deck, Command::cueUp); }
+void Session::djLoopIn(int deck) { enqueue(dj.get(), deck, Command::loopIn); }
+void Session::djLoopOut(int deck) { enqueue(dj.get(), deck, Command::loopOut); }
+void Session::djReloopExit(int deck) { enqueue(dj.get(), deck, Command::reloopExit); }
+void Session::djLoopHalve(int deck) { enqueue(dj.get(), deck, Command::loopHalve); }
+void Session::djLoopDouble(int deck) { enqueue(dj.get(), deck, Command::loopDouble); }
+void Session::djClearLoop(int deck) { enqueue(dj.get(), deck, Command::clearLoop); }
+void Session::djSetMaster(int deck) { enqueue(dj.get(), deck, Command::setMaster); }
 
 void Session::djHotCue(int deck, int index)
 {
-    auto c = command(Command::Type::hotCue, deck);
-    c.count = index;
-    enqueue(dj.get(), c);
+    enqueue(dj.get(), deck, [index](int slot) { return Command::hotCue(slot, index); });
     // A hot cue set is saved with the document; which of the two this press
     // was is not known until the audio thread has applied it, so the mark is
     // made either way.
@@ -451,94 +356,107 @@ void Session::djHotCue(int deck, int index)
 
 void Session::djClearHotCue(int deck, int index)
 {
-    auto c = command(Command::Type::clearHotCue, deck);
-    c.count = index;
-    enqueue(dj.get(), c);
+    enqueue(dj.get(), deck, [index](int slot) { return Command::clearHotCue(slot, index); });
     if (dj != nullptr) markDjModified();
 }
 
 void Session::djBeatLoop(int deck, double beats)
 {
-    auto c = command(Command::Type::beatLoop, deck);
-    c.value = beats;
-    enqueue(dj.get(), c);
+    enqueue(dj.get(), deck, [beats](int slot) { return Command::beatLoop(slot, beats); });
 }
 
 void Session::djBeatJump(int deck, int beats)
 {
-    auto c = command(Command::Type::beatJump, deck);
-    c.count = beats;
-    enqueue(dj.get(), c);
+    enqueue(dj.get(), deck, [beats](int slot) { return Command::beatJump(slot, beats); });
 }
 
 void Session::djSeek(int deck, double seconds)
 {
     const auto* track = djDeckTrack(deck);
     if (track == nullptr) return;
-    auto c = command(Command::Type::seek, deck);
-    c.value = std::max(0.0, seconds) * track->sampleRate;
-    enqueue(dj.get(), c);
+    const auto frame = std::max(0.0, seconds) * track->sampleRate;
+    enqueue(dj.get(), deck, [frame](int slot) { return Command::seek(slot, frame); });
 }
 
 void Session::djSetSynced(int deck, bool synced)
 {
-    if (dj == nullptr || !juce::isPositiveAndBelow(deck, dj->count)) return;
-    dj->engine.deck(deck).synced.store(synced, std::memory_order_relaxed);
+    auto* controls = controlsOf(dj.get(), deck);
+    if (controls == nullptr) return;
+    controls->synced.store(synced, std::memory_order_relaxed);
     if (synced)
-        enqueue(dj.get(), command(Command::Type::syncAlign, deck));
+        enqueue(dj.get(), deck, Command::syncAlign);
     sendSynchronousChangeMessage();
 }
 
 void Session::djSetReversed(int deck, bool reversed)
 {
-    if (dj == nullptr || !juce::isPositiveAndBelow(deck, dj->count)) return;
-    dj->engine.deck(deck).reversed.store(reversed, std::memory_order_relaxed);
+    auto* controls = controlsOf(dj.get(), deck);
+    if (controls == nullptr) return;
+    controls->reversed.store(reversed, std::memory_order_relaxed);
     sendSynchronousChangeMessage();
 }
 
+// The fader moving is also what lets go of a tempo the deck has held since it
+// took over as master. It moves from where it was shown, on the range it was
+// shown on, which the deck keeps.
 void Session::djSetTempoPercent(int deck, float percent)
 {
-    if (dj == nullptr || !juce::isPositiveAndBelow(deck, dj->count)) return;
-    auto& d = dj->engine.deck(deck);
-    const auto range = static_cast<float>(d.tempoRange.load(std::memory_order_relaxed));
-    d.tempoPercent.store(juce::jlimit(-range, range, percent), std::memory_order_relaxed);
+    const auto slot = dj != nullptr ? dj->slotOf(deck) : -1;
+    if (slot < 0) return;
+    auto& d = dj->engine.deck(slot);
+    const auto held = d.heldTempoRate.load(std::memory_order_relaxed);
+    const auto range = rangeReaching(d.controls.tempoRange.load(std::memory_order_relaxed), held);
+    d.controls.tempoRange.store(range, std::memory_order_relaxed);
+    const auto limit = static_cast<float>(range);
+    d.controls.tempoPercent.store(juce::jlimit(-limit, limit, percent), std::memory_order_relaxed);
+    if (held > 0.0)
+        enqueue(dj.get(), deck, Command::tempoMoved);
 }
 
+// The range belongs to the fader, so choosing one while the deck holds a
+// tempo hands the held tempo to the fader, inside the new range.
 void Session::djSetTempoRange(int deck, int range)
 {
-    if (dj == nullptr || !juce::isPositiveAndBelow(deck, dj->count)) return;
+    const auto slot = dj != nullptr ? dj->slotOf(deck) : -1;
+    if (slot < 0) return;
     if (std::find(std::begin(tempoRanges), std::end(tempoRanges), range) == std::end(tempoRanges)) return;
-    auto& d = dj->engine.deck(deck);
-    d.tempoRange.store(range, std::memory_order_relaxed);
+    auto& d = dj->engine.deck(slot);
+    auto& controls = d.controls;
+    const auto held = d.heldTempoRate.load(std::memory_order_relaxed);
+    const auto percent = held > 0.0 ? static_cast<float>((held - 1.0) * 100.0) : controls.tempoPercent.load(std::memory_order_relaxed);
+    controls.tempoRange.store(range, std::memory_order_relaxed);
     const auto limit = static_cast<float>(range);
-    d.tempoPercent.store(juce::jlimit(-limit, limit, d.tempoPercent.load(std::memory_order_relaxed)), std::memory_order_relaxed);
+    controls.tempoPercent.store(juce::jlimit(-limit, limit, percent), std::memory_order_relaxed);
+    if (held > 0.0)
+        enqueue(dj.get(), deck, Command::tempoMoved);
     sendSynchronousChangeMessage();
 }
 
 void Session::djNudge(int deck, float percent)
 {
-    if (dj == nullptr || !juce::isPositiveAndBelow(deck, dj->count)) return;
-    dj->engine.deck(deck).nudgePercent.store(juce::jlimit(-50.0f, 50.0f, percent), std::memory_order_relaxed);
+    if (auto* controls = controlsOf(dj.get(), deck))
+        controls->nudgePercent.store(juce::jlimit(-50.0f, 50.0f, percent), std::memory_order_relaxed);
 }
 
 void Session::djScratch(int deck, double rate, bool active)
 {
-    if (dj == nullptr || !juce::isPositiveAndBelow(deck, dj->count)) return;
-    auto& d = dj->engine.deck(deck);
-    d.scratchRate.store(juce::jlimit(-10.0, 10.0, rate), std::memory_order_relaxed);
-    d.scratching.store(active, std::memory_order_relaxed);
+    auto* controls = controlsOf(dj.get(), deck);
+    if (controls == nullptr) return;
+    controls->scratchRate.store(juce::jlimit(-10.0, 10.0, rate), std::memory_order_relaxed);
+    controls->scratching.store(active, std::memory_order_relaxed);
 }
 
 void Session::djSetBrake(int deck, float seconds)
 {
-    if (dj == nullptr || !juce::isPositiveAndBelow(deck, dj->count)) return;
-    dj->engine.deck(deck).brakeSeconds.store(juce::jlimit(0.0f, 4.0f, seconds), std::memory_order_relaxed);
+    if (auto* controls = controlsOf(dj.get(), deck))
+        controls->brakeSeconds.store(juce::jlimit(0.0f, 4.0f, seconds), std::memory_order_relaxed);
 }
 
 void Session::djSetQuantiseSnap(int deck, bool snap)
 {
-    if (dj == nullptr || !juce::isPositiveAndBelow(deck, dj->count)) return;
-    dj->engine.deck(deck).quantiseSnap.store(snap, std::memory_order_relaxed);
+    auto* controls = controlsOf(dj.get(), deck);
+    if (controls == nullptr) return;
+    controls->quantiseSnap.store(snap, std::memory_order_relaxed);
     sendSynchronousChangeMessage();
 }
 
@@ -563,10 +481,8 @@ void Session::djJumpToCue(int deck, bool forward)
 
 void Session::djStopAll()
 {
-    if (dj == nullptr) return;
-    Command c;
-    c.type = Command::Type::stopAll;
-    enqueue(dj.get(), c);
+    if (dj != nullptr && !dj->engine.push(Command::stopAll()))
+        juce::Logger::writeToLog("Rhino: the DJ booth's command queue is full; a command was dropped");
 }
 
 Session::DjQuantise Session::djQuantise() const
@@ -598,9 +514,10 @@ void Session::setDjPhaseLock(bool lock)
 Session::DjChannelState Session::djChannel(int index) const
 {
     DjChannelState state;
-    if (dj == nullptr || !juce::isPositiveAndBelow(index, maximumDjDecks))
+    const auto slot = dj != nullptr ? dj->channelSlot(index) : -1;
+    if (slot < 0)
         return state;
-    const auto& strip = dj->engine.channel(index);
+    const auto& strip = dj->engine.channel(slot);
     state.trimDb = strip.trimDb.load(std::memory_order_relaxed);
     state.comp = strip.comp.load(std::memory_order_relaxed);
     for (size_t band = 0; band < DjChannelStrip::bandCount; ++band)
@@ -619,10 +536,12 @@ Session::DjChannelState Session::djChannel(int index) const
 
 namespace
 {
+// The strip behind a channel of the mixer: a deck's, or one of the free
+// slots', which the console sets the booth-wide controls on too.
 DjChannelStrip* stripFor(Session::DjBooth* booth, int index)
 {
-    if (booth == nullptr || !juce::isPositiveAndBelow(index, Session::maximumDjDecks)) return nullptr;
-    return &booth->engine.channel(index);
+    const auto slot = booth != nullptr ? booth->channelSlot(index) : -1;
+    return slot >= 0 ? &booth->engine.channel(slot) : nullptr;
 }
 
 float eqDb(float decibels)
@@ -728,7 +647,7 @@ Session::DjMasterState Session::djMaster() const
     state.meterRight = master.meterRight.load(std::memory_order_relaxed);
     state.bpm = dj->engine.masterBpm.load(std::memory_order_relaxed);
     state.tapBpm = dj->engine.tapBpm.load(std::memory_order_relaxed);
-    state.masterDeck = dj->engine.masterDeck.load(std::memory_order_relaxed);
+    state.masterDeck = dj->deckOfSlot(dj->engine.masterDeck.load(std::memory_order_relaxed));
     return state;
 }
 
@@ -836,7 +755,8 @@ Session::DjFxState Session::djFx() const
     state.beats = fx.beats.load(std::memory_order_relaxed);
     state.depth = fx.depth.load(std::memory_order_relaxed);
     state.on = fx.on.load(std::memory_order_relaxed);
-    state.target = fx.target.load(std::memory_order_relaxed);
+    const auto target = fx.target.load(std::memory_order_relaxed);
+    state.target = target < 0 ? -1 : dj->channelOfSlot(target);
     state.bands = {fx.bandLow.load(std::memory_order_relaxed), fx.bandMid.load(std::memory_order_relaxed),
                    fx.bandHigh.load(std::memory_order_relaxed)};
     state.autoTime = fx.autoTime.load(std::memory_order_relaxed);
@@ -906,9 +826,13 @@ void Session::setDjFxOn(bool on)
     sendSynchronousChangeMessage();
 }
 
+// The effect is put on a channel of the mixer, which the engine knows by the
+// slot behind it.
 void Session::setDjFxTarget(int target)
 {
-    booth().engine.fx().target.store(juce::jlimit(-1, maximumDjDecks - 1, target), std::memory_order_relaxed);
+    auto& b = booth();
+    const auto slot = target < 0 ? -1 : b.channelSlot(juce::jlimit(0, maximumDjDecks - 1, target));
+    b.engine.fx().target.store(slot, std::memory_order_relaxed);
     sendSynchronousChangeMessage();
 }
 
@@ -917,18 +841,23 @@ void Session::djProcessOffline(int frames)
     djProcessOffline(nullptr, 0, frames);
 }
 
+void Session::djProcessOffline(const float* const* inputs, int inputChannels, int frames)
+{
+    std::vector<float> left(static_cast<size_t>(std::max(0, frames))), right(left.size());
+    float* outputs[2] {left.data(), right.data()};
+    djProcessOffline(inputs, inputChannels, outputs, 2, frames);
+}
+
 // Through the booth's own callback rather than the engine, so that what the
 // test hands it is what the device would: the callback once dropped the
 // inputs on the floor and the engine's own test could not tell.
-void Session::djProcessOffline(const float* const* inputs, int inputChannels, int frames)
+void Session::djProcessOffline(const float* const* inputs, int inputChannels, float* const* outputs, int outputChannels, int frames)
 {
     if (dj == nullptr || frames <= 0) return;
     // A booth on a device is rendered by the device's thread, which this
     // would race; under the test runners it never goes on one.
     jassert(!dj->attached);
-    std::vector<float> left(static_cast<size_t>(frames)), right(static_cast<size_t>(frames));
-    float* outputs[2] {left.data(), right.data()};
-    dj->audioDeviceIOCallbackWithContext(inputs, inputChannels, outputs, 2, frames, juce::AudioIODeviceCallbackContext{});
+    dj->audioDeviceIOCallbackWithContext(inputs, inputChannels, outputs, outputChannels, frames, juce::AudioIODeviceCallbackContext{});
     dj->engine.collect();
 }
 
@@ -984,7 +913,7 @@ void Session::writeDjState()
     state.setProperty("sendMix", send.mix, nullptr);
     for (int i = 0; i < b.count; ++i)
     {
-        const auto& deck = b.decks[static_cast<size_t>(i)];
+        const auto& deck = b.decks[static_cast<size_t>(b.slotOf(i))];
         const auto live = djDeckState(i);
         juce::ValueTree d(djDeckID);
         d.setProperty("kind", static_cast<int>(deck.info.kind), nullptr);
@@ -996,10 +925,11 @@ void Session::writeDjState()
             d.setProperty("track", deck.info.trackId.toString(), nullptr);
             d.setProperty("slot", deck.info.slot, nullptr);
         }
-        if (deck.info.kind == DjSourceKind::group)
-            d.setProperty("group", deck.info.groupId, nullptr);
-        d.setProperty("autoRebounce", deck.info.autoRebounce, nullptr);
         d.setProperty("live", deck.info.live, nullptr);
+        // The monitoring Live replaced, which switching Live off puts back:
+        // the track's own monitoring is saved as On while Live holds it.
+        if (deck.info.live && deck.monitoringBeforeLive.has_value())
+            d.setProperty("liveRestore", static_cast<int>(*deck.monitoringBeforeLive), nullptr);
         // The settings as the engine holds them now when material is on the
         // deck, else as they were read in, so a document reopened and saved
         // before its decks loaded loses nothing.
@@ -1093,18 +1023,26 @@ void Session::readDjState()
     b.engine.fx().beats.store(juce::jlimit(1.0f / 16.0f, 4.0f, static_cast<float>(static_cast<double>(state.getProperty("fxBeats", 0.5)))), std::memory_order_relaxed);
     b.engine.fx().depth.store(juce::jlimit(0.0f, 1.0f, static_cast<float>(static_cast<double>(state.getProperty("fxDepth", 0.5)))), std::memory_order_relaxed);
     b.engine.fx().on.store(static_cast<bool>(state.getProperty("fxOn", false)), std::memory_order_relaxed);
-    b.engine.fx().target.store(juce::jlimit(-1, maximumDjDecks - 1, static_cast<int>(state.getProperty("fxTarget", -1))), std::memory_order_relaxed);
+    const auto fxTarget = static_cast<int>(state.getProperty("fxTarget", -1));
+    b.engine.fx().target.store(fxTarget < 0 ? -1 : b.channelSlot(juce::jlimit(0, maximumDjDecks - 1, fxTarget)),
+                               std::memory_order_relaxed);
     for (int i = 0; i < state.getNumChildren() && b.count < maximumDjDecks; ++i)
     {
         const auto d = state.getChild(i);
         if (!d.hasType(djDeckID)) continue;
-        const auto index = b.count;
-        auto& deck = b.decks[static_cast<size_t>(index)];
+        // Decks are read in the console's order, each into the next free
+        // slot, which after the reset is the slot of its own number.
+        const auto slot = b.slotOfDeck[static_cast<size_t>(b.count)];
+        auto& deck = b.decks[static_cast<size_t>(slot)];
         deck = {};
+        if (!b.engine.setSlotActive(slot, true))
+        {
+            juce::Logger::writeToLog("Rhino: the DJ booth's command queue is full; a deck of the document was not set up");
+            break;
+        }
         ++b.count;
-        deck.info.kind = static_cast<DjSourceKind>(juce::jlimit(0, 3, static_cast<int>(d.getProperty("kind", 0))));
+        deck.info.kind = static_cast<DjSourceKind>(juce::jlimit(0, 2, static_cast<int>(d.getProperty("kind", 0))));
         deck.info.name = d.getProperty("name").toString();
-        deck.info.autoRebounce = static_cast<bool>(d.getProperty("autoRebounce", true));
         if (deck.info.kind == DjSourceKind::file)
             deck.info.file = ContentLibrary::resolveStoredPath(d.getProperty("file").toString());
         else if (deck.info.kind == DjSourceKind::track)
@@ -1112,8 +1050,6 @@ void Session::readDjState()
             deck.info.trackId = te::EditItemID::fromString(d.getProperty("track").toString());
             deck.info.slot = static_cast<int>(d.getProperty("slot", -1));
         }
-        else if (deck.info.kind == DjSourceKind::group)
-            deck.info.groupId = static_cast<int>(d.getProperty("group", 0));
         auto& settings = deck.settings;
         settings.tempoPercent = static_cast<float>(static_cast<double>(d.getProperty("tempoPercent", 0.0)));
         settings.tempoRange = static_cast<int>(d.getProperty("tempoRange", 6));
@@ -1135,7 +1071,7 @@ void Session::readDjState()
             }
             else if (h.hasType(djChannelID))
             {
-                auto& strip = b.engine.channel(index);
+                auto& strip = b.engine.channel(slot);
                 strip.trimDb.store(static_cast<float>(static_cast<double>(h.getProperty("trim", 0.0))), std::memory_order_relaxed);
                 strip.comp.store(static_cast<float>(static_cast<double>(h.getProperty("comp", 0.0))), std::memory_order_relaxed);
                 strip.eqDb[0].store(eqDb(static_cast<float>(static_cast<double>(h.getProperty("low", 0.0)))), std::memory_order_relaxed);
@@ -1152,21 +1088,31 @@ void Session::readDjState()
                 strip.crossfaderSide.store(juce::jlimit(0, 2, static_cast<int>(h.getProperty("crossfader", 1))), std::memory_order_relaxed);
             }
         }
-        // The engine's own settings are set now; the rest wait for the
-        // material, which the poll brings.
-        auto& engineDeck = b.engine.deck(index);
-        engineDeck.tempoRange.store(settings.tempoRange, std::memory_order_relaxed);
-        engineDeck.tempoPercent.store(settings.tempoPercent, std::memory_order_relaxed);
-        engineDeck.synced.store(settings.synced, std::memory_order_relaxed);
-        engineDeck.reversed.store(settings.reversed, std::memory_order_relaxed);
-        engineDeck.brakeSeconds.store(juce::jlimit(0.0f, 4.0f, static_cast<float>(static_cast<double>(d.getProperty("brake", 0.0)))), std::memory_order_relaxed);
-        engineDeck.quantiseSnap.store(static_cast<bool>(d.getProperty("quantise", true)), std::memory_order_relaxed);
-        deck.info.stale = deck.info.kind != DjSourceKind::none;
+        // The engine's own settings are set now, a new deck's but for what
+        // the document says; the rest wait for the material, which the poll
+        // brings.
+        DjDeckControls controls;
+        controls.tempoRange.store(settings.tempoRange, std::memory_order_relaxed);
+        controls.tempoPercent.store(settings.tempoPercent, std::memory_order_relaxed);
+        controls.synced.store(settings.synced, std::memory_order_relaxed);
+        controls.reversed.store(settings.reversed, std::memory_order_relaxed);
+        controls.brakeSeconds.store(juce::jlimit(0.0f, 4.0f, static_cast<float>(static_cast<double>(d.getProperty("brake", 0.0)))),
+                                    std::memory_order_relaxed);
+        controls.quantiseSnap.store(static_cast<bool>(d.getProperty("quantise", true)), std::memory_order_relaxed);
+        b.engine.deck(slot).controls.copyFrom(controls);
+        // The poll binds a track deck to its track and reads each deck's
+        // material again: a file from its file, a cell from its clip.
+        deck.materialDirty = deck.info.kind == DjSourceKind::file
+                          || (deck.info.kind == DjSourceKind::track && deck.info.slot >= 0);
         if (static_cast<bool>(d.getProperty("live", false)) && deck.info.kind == DjSourceKind::track)
-            deck.info.live = true;   // applied once the track is found, by setDjDeckLive from the poll
+        {
+            deck.info.live = true;
+            // The track comes back monitoring as Live left it; what it
+            // monitored before Live is what Live gives back when it goes off.
+            if (d.hasProperty("liveRestore"))
+                deck.monitoringBeforeLive = static_cast<InputMonitoring>(juce::jlimit(0, 2, static_cast<int>(d.getProperty("liveRestore"))));
+        }
     }
-    b.engine.setDeckCount(b.count);
-    b.staleSince = juce::Time::getMillisecondCounter();
     ensureDjAttached();
 }
 }

@@ -22,13 +22,14 @@ DjDeckPanel::DjDeckPanel(Session& s, int deckIndex) : session(s), deck(deckIndex
     source.setColour(juce::TextButton::buttonOnColourId, palette::hover);
     source.setColour(juce::TextButton::textColourOffId, palette::text);
     source.setColour(juce::TextButton::textColourOnId, palette::text);
-    source.setTooltip("What this deck plays: a track or a group of the song, bounced to audio, or a file. "
-                      "Drop an audio file on the deck to load it.");
+    source.setTooltip("What this deck plays: a track of the song, heard live through its own instrument and "
+                      "effects, or a file. A track's deck plays the cells below it. Drop an audio file on the deck "
+                      "to load it.");
     source.setWantsKeyboardFocus(false);
     source.setMouseClickGrabsKeyboardFocus(false);
     source.onClick = [this] { showSourceMenu(); };
-    live.setTooltip("Live - play the track's instrument from the keys over the bounce. The track's input is monitored "
-                    "while this is lit; a Drum Rack on it plays its pads.");
+    live.setTooltip("Live - play the track's instrument from the keys through this deck's channel. The track's input "
+                    "is monitored while this is lit; a Drum Rack on it plays its pads.");
     // The session announces the change at once and the console syncs under
     // the call, so what the deck was is read before it is changed.
     live.onClick = [this]
@@ -38,31 +39,17 @@ DjDeckPanel::DjDeckPanel(Session& s, int deckIndex) : session(s), deck(deckIndex
         if (status) status(result.failed() ? result.getErrorMessage()
                                            : wasLive ? "Live off" : "Live: the track's input plays over the deck. Press M for the typing keyboard.");
     };
-    edit.setTooltip("Edit - open the track's clip in the note editor. The deck bounces again a moment after each change, "
-                    "keeping its place.");
+    edit.setTooltip("Edit - open the cell the deck plays in the note editor or the audio editor. The deck follows each "
+                    "change, keeping its place; the track's devices are heard as they are turned.");
     edit.onClick = [this]
     {
         const auto clip = session.djDeckEditClip(deck);
         if (clip == te::EditItemID())
         {
-            if (status) status("Only a track of the song is edited. Load one on this deck first.");
+            if (status) status("Choose one of the track's cells first: the deck edits the cell it plays.");
             return;
         }
         if (editRequested) editRequested(info.track, clip);
-    };
-    reload.setTooltip("Bounce the track again now. Lit while the bounce is behind the song. Right-click to stop it "
-                      "bouncing by itself after a change.");
-    reload.onClick = [this]
-    {
-        const auto result = session.rebounceDjDeck(deck);
-        if (result.failed() && status) status(result.getErrorMessage());
-    };
-    reload.onRightClick = [this]
-    {
-        const auto wasAutomatic = info.autoRebounce;
-        session.setDjDeckAutoRebounce(deck, !wasAutomatic);
-        if (status) status(wasAutomatic ? "The deck bounces again only when Reload is pressed"
-                                        : "The deck bounces again by itself after a change");
     };
     eject.setTooltip("Eject - take the material off the deck. Right-click removes the deck.");
     eject.onClick = [this] { session.ejectDjDeck(deck); };
@@ -128,11 +115,23 @@ DjDeckPanel::DjDeckPanel(Session& s, int deckIndex) : session(s), deck(deckIndex
     jog.onNudge = [this](float percent) { session.djNudge(deck, percent); };
     // Every step of a scrub lands from where the deck stood when the scrub
     // began, read then: from the position the 30 Hz tick last read, every
-    // step but the last between two ticks was lost.
-    jog.onScrub = [this](double seconds, bool starting)
+    // step but the last between two ticks was lost. The place it lands is
+    // held inside the material and the hand's travel past either end is
+    // dropped, so the deck moves the moment the hand turns back: kept, the
+    // travel was a dead zone as long as the overshoot, and rocking the
+    // platter about the first beat of a track left it standing.
+    jog.onScrub = [this](double travelled, bool starting)
     {
-        if (starting) scrubFrom = session.djDeckState(deck).positionSeconds;
-        session.djSeek(deck, std::max(0.0, scrubFrom + seconds));
+        if (starting)
+        {
+            const auto now = session.djDeckState(deck);
+            scrubTo = now.positionSeconds;
+            scrubLength = now.lengthSeconds;
+            scrubTravelled = 0.0;
+        }
+        scrubTo = juce::jlimit(0.0, std::max(0.0, scrubLength), scrubTo + travelled - scrubTravelled);
+        scrubTravelled = travelled;
+        session.djSeek(deck, scrubTo);
     };
     vinyl.setTooltip("Vinyl mode: the platter scratches. Off, it nudges as the ring does.");
     vinyl.onClick = [this]
@@ -173,7 +172,7 @@ DjDeckPanel::DjDeckPanel(Session& s, int deckIndex) : session(s), deck(deckIndex
         key->setTriggeredOnMouseDown(true);
     for (auto& pad : hotCues)
         pad->setTriggeredOnMouseDown(true);
-    for (auto* component : std::initializer_list<juce::Component*>{&display, &grid, &source, &live, &edit, &reload, &eject, &cue, &play,
+    for (auto* component : std::initializer_list<juce::Component*>{&display, &grid, &source, &live, &edit, &eject, &cue, &play,
                                                                    &loopIn, &loopOut, &reloop, &loopHalve, &loopDouble, &beatLoop,
                                                                    &jumpBack, &jumpForward, &jumpSize, &searchBack, &searchForward,
                                                                    &reverse, &quantise, &jog, &vinyl, &brake, &syncKey, &master,
@@ -190,14 +189,11 @@ void DjDeckPanel::sync(const Session::DjDeckInfo& next)
 {
     info = next;
     const auto trackDeck = info.kind == Session::DjSourceKind::track;
-    const auto bounced = trackDeck || info.kind == Session::DjSourceKind::group;
     source.setButtonText(info.kind == Session::DjSourceKind::none ? "Choose a track..." : info.name);
-    live.setEnabled(trackDeck && info.loaded);
+    // Live plays the track from the keys, so it needs the track, not a cell.
+    live.setEnabled(trackDeck && info.track >= 0);
     live.setLit(info.live);
-    edit.setEnabled(trackDeck && info.loaded);
-    reload.setEnabled(bounced);
-    reload.setLit(bounced && info.stale);
-    reload.setLabel(info.autoRebounce ? "RELOAD" : "RELOAD*");
+    edit.setEnabled(trackDeck && info.slot >= 0);
     eject.setEnabled(info.kind != Session::DjSourceKind::none);
     // A deck keeps playing what it had while a load is in flight, so its
     // keys stay lit through a cell switch rather than blinking off and on.

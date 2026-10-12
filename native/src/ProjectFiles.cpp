@@ -38,7 +38,8 @@ void ProjectFiles::write(const juce::File& file, std::function<void(bool)> compl
 {
     busy = true;
     report("Saving " + file.getFileName() + "...");
-    auto snapshot = session.projectSnapshot();
+    // Named for the file it is written to, which a Save As moves.
+    auto snapshot = session.projectSnapshot(file);
     workers.addJob([weak = juce::WeakReference<ProjectFiles>(this), snapshot, file, completion]
     {
         juce::TemporaryFile temporary(file);
@@ -154,6 +155,14 @@ void ProjectFiles::renderWav(const juce::File& file)
         report("There is no arrangement to export.");
         return;
     }
+    // A render waits for every clip's file to open, so one whose file is gone
+    // held the export, and with it every file command and the window's close
+    // button, for good. Said, naming the file, before anything starts.
+    if (const auto readable = session.checkTimelineFiles(); readable.failed())
+    {
+        report("Could not export WAV: " + readable.getErrorMessage());
+        return;
+    }
 
     // Rendering has its own offline playback context. Freeze edit commands
     // until it completes so that the output is one coherent arrangement.
@@ -181,31 +190,14 @@ void ProjectFiles::renderWav(const juce::File& file)
     const int blockSize = devices.getBlockSize() > 0 ? devices.getBlockSize() : 512;
 
     report("Exporting " + file.getFileName() + "...");
-    workers.addJob([weak = juce::WeakReference<ProjectFiles>(this), edit, file, length, sampleRate, blockSize]
+    workers.addJob([weak = juce::WeakReference<ProjectFiles>(this), edit, file, seconds = length.inSeconds(), sampleRate,
+                    blockSize]
     {
         juce::TemporaryFile temporary(file);
-        juce::WavAudioFormat wav;
-        bool success = false;
-        juce::String error;
-        {
-            te::Renderer::Parameters parameters(*edit);
-            parameters.destFile = temporary.getFile();
-            parameters.audioFormat = &wav;
-            parameters.sampleRateForAudio = sampleRate;
-            parameters.bitDepth = 24;
-            parameters.blockSizeForAudio = blockSize;
-            // The main track is the edit's master chain, so its devices and its
-            // fader only reach the file when master plugins are rendered. Export
-            // at unity otherwise: normalising would re-level the mix against what
-            // the main meter showed.
-            parameters.useMasterPlugins = true;
-            parameters.ditheringEnabled = true;
-            parameters.time = {{}, tracktion::core::TimePosition{} + length};
-            te::Renderer::RenderTask task("Export WAV", parameters, nullptr, nullptr);
-            while (task.runJob() != juce::ThreadPoolJob::jobHasFinished) {}
-            error = task.errorMessage;
-            success = error.isEmpty() && temporary.overwriteTargetFileWithTemporary();
-        }
+        // Gives up on a render that stops moving, so `busy` is always let go.
+        const auto rendered = Session::renderTimelineWav(*edit, temporary.getFile(), seconds, sampleRate, blockSize);
+        const auto error = rendered.getErrorMessage();
+        const auto success = rendered.wasOk() && temporary.overwriteTargetFileWithTemporary();
         juce::MessageManager::callAsync([weak, file, success, error]
         {
             if (!weak) return;

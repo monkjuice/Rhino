@@ -75,5 +75,5 @@
                     mixerSeams.push_back(caption.box().expanded(1));
             checkAreas(mixer, mixer.cullRepaints, "The mixer", mixerSeams);
             auto& cells = djView->decks[1]->grid;
-            checkAreas(cells, cells.cullRepaints, "The clips grid", {cells.cellBounds(DjClipGrid::songCell), cells.cellBounds(0).withHeight(3)});
+            checkAreas(cells, cells.cullRepaints, "The clips grid", {cells.cellBounds(0), cells.cellBounds(1).withHeight(3)});
         }

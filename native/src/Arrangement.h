@@ -160,6 +160,11 @@ private:
         bool valid() const { return row >= 0; }
     };
     void sync();
+    // Brings a timeline the shell has hidden up to date before a command reads
+    // its list of the clips. Hidden, the timeline lets the list go stale rather
+    // than rebuilding it for every change, and the shell still sends it Ctrl+E
+    // and Ctrl+J from the DJ view.
+    void syncIfStale();
     void syncTrackControls();
     void configureMasterControls();
     void updateScroll();

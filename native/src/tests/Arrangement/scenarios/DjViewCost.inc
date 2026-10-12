@@ -27,24 +27,7 @@
             djView->timerCallback();
             require(damage.region.isEmpty(), "and a frame and a tick with every deck standing still repaint nothing");
 
-            // RELOAD's right-click: the console words what it did from what
-            // the deck was before the call, since the session announces the
-            // change under it and the console syncs to the new value.
-            juce::String said;
-            djView->status = [&said](const juce::String& message) { said = message; };
             auto& trackDeck = *djView->decks[1];
-            require(booth.djDeckInfo(1).autoRebounce, "A deck bounces again by itself to begin with");
-            trackDeck.reload.onRightClick();
-            djView->sync();
-            require(!booth.djDeckInfo(1).autoRebounce && said == "The deck bounces again only when Reload is pressed",
-                    ("Switching the automatic bounce off says so: " + said).toRawUTF8());
-            require(!damage.region.isEmpty() && damageWithin(inView(trackDeck.reload)),
-                    "and repaints the RELOAD key alone");
-            damage.region.clear();
-            trackDeck.reload.onRightClick();
-            djView->sync();
-            require(booth.djDeckInfo(1).autoRebounce && said == "The deck bounces again by itself after a change",
-                    ("and switching it on again says that: " + said).toRawUTF8());
             damage.region.clear();
 
             // A hot cue set on a stopped deck moves nothing the screen used to
@@ -163,15 +146,10 @@
             // A track loaded on the focused deck hands the pane the new track.
             int followed = -1;
             djView->focusedSourceChanged = [&followed](int deck) { followed = deck; };
-            require(booth.createClip(2, 0.0).wasOk() && booth.loadDjDeckTrack(1, 2).wasOk(), "The focused deck loads another lane");
+            require(booth.loadDjDeckTrack(1, 2).wasOk(), "The focused deck loads another lane");
             djView->sync();
             require(followed == 1, "and the shell is told to follow the deck's new track");
-            require(booth.loadDjDeckTrack(1, 0).wasOk(), "The lane with the notes goes back on the deck");
-            for (int waited = 0; waited < 400 && booth.djBusy(); ++waited)
-            {
-                juce::Thread::sleep(25);
-                booth.djPoll();
-            }
+            require(booth.loadDjDeckSlot(1, 0, 0).wasOk(), "The lane's cell with the notes goes back on the deck");
             djView->sync();
             // A cell of the same track does too, so the editor moves to the
             // clip the deck plays now: a press on the focused console tells
@@ -179,12 +157,12 @@
             // on the clip before it.
             followed = -1;
             require(booth.createSlotClip(0, 2).wasOk() && booth.loadDjDeckSlot(1, 0, 2).wasOk(),
-                    "The focused deck plays a cell of its track");
+                    "The focused deck plays another cell of its track");
             djView->sync();
             require(followed == 1 && booth.djDeckEditClip(1) == booth.slotClip(0, 2).clipID,
                     "and the shell is told to follow the deck to the cell's clip");
             followed = -1;
-            require(booth.loadDjDeckTrack(1, 0).wasOk(), "The deck goes back to the track's song");
+            require(booth.loadDjDeckSlot(1, 0, 0).wasOk(), "The deck goes back to its first cell");
             djView->sync();
             require(followed == 1, "and the shell follows it back");
             require(booth.deleteSlotClip(0, 2).wasOk(), "The cell is cleared again");

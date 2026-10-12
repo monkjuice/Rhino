@@ -25,13 +25,6 @@ void DjDeckPanel::showSourceMenu()
         menu.addItem(100 + track, juce::String(track + 1).paddedLeft('0', 2) + "  " + session.trackName(track) + "  (" + kind + ")",
                      true, info.kind == Session::DjSourceKind::track && info.track == track);
     }
-    const auto groups = session.trackGroups();
-    if (!groups.empty())
-    {
-        menu.addSectionHeader("GROUPS");
-        for (const auto& group : groups)
-            menu.addItem(1000 + group.id, group.name, true, info.kind == Session::DjSourceKind::group && info.groupId == group.id);
-    }
     menu.addSectionHeader("FILES");
     menu.addItem(1, "Choose a file...");
     juce::PopupMenu library;
@@ -74,7 +67,6 @@ void DjDeckPanel::showSourceMenu()
             if (choice == 1) safe->chooseFile(juce::File::getSpecialLocation(juce::File::userMusicDirectory));
             else if (choice == 2) safe->session.ejectDjDeck(safe->deck);
             else if (choice >= 100 && choice < 1000) result = safe->session.loadDjDeckTrack(safe->deck, choice - 100);
-            else if (choice >= 1000 && choice < 2000) result = safe->session.loadDjDeckGroup(safe->deck, choice - 1000);
             else if (choice >= 2000 && choice < 2100) safe->chooseFile(roots[choice - 2000]);
             else if (choice >= 10000 && choice - 10000 < static_cast<int>(samples.size()))
                 safe->load(samples[static_cast<size_t>(choice - 10000)].file);

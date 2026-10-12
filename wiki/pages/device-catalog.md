@@ -4,7 +4,7 @@ type: component
 summary: The one table of Rhino's devices that the browser, drop targets, rack menu, engine registration and instrument rules all read.
 tags: [rhino, devices, catalog]
 sources: []
-updated: 2026-10-11
+updated: 2026-10-12
 ---
 
 # Device catalog
@@ -15,11 +15,11 @@ updated: 2026-10-11
 
 A `DeviceDescriptor` holds a stable `id`; the engine `typeName` (empty for an external plugin); `displayName` and an optional `browserLabel` ("4OSC synth" in the browser, "4OSC" on the track); `kind`; the browser `category` and `description`; an ARGB `colour` kept as a number so the library needs no `juce_graphics`; three flags: `browsable`, `external` (found by scanning, not created by name) and `infrastructure` (a channel-strip facility the rack hides); and `create`, the factory that makes one of Rhino's own devices, which Tracktion's built-ins and an external plugin leave empty. Entries are written with designated initialisers, so each field is named where it is set. Entry order is browser order. The `patternKey` field went in commit `71842c2`: nothing had read it since `a04b407` retired the edit's `rhinoPatternInstrument` property.
 
-As of 2026-10-06 it lists 4OSC, Rhino FM, Rhino Forge (external), Drum Rack, Rhino EQ, Compressor, Utility (infrastructure, and not browsable since commit `23de20c`, because every track already carries one), Reverb, Delay, Rhino Space, Rhino Bloom, Rhino Tune, Rhino Vocoder and Rhino Arp ([Built-in devices](built-in-devices.md)). Rhino Wave was removed on 2026-10-05. On 2026-10-06 the Drum Rack replaced Rhino Drums, which was not browsable because the browser offered its five kits instead.
+As of 2026-10-06 it lists 4OSC, Rhino FM, Rhino Forge (external), Drum Rack, Rhino EQ, Compressor, Utility (infrastructure, and not browsable since commit `23de20c`, because every track already carries one), Reverb, Delay, Rhino Space, Rhino Bloom, Rhino Tune, Rhino Vocoder and Rhino Arp ([Built-in devices](built-in-devices.md)). Rhino Wave was removed on 2026-10-05. On 2026-10-06 the Drum Rack replaced Rhino Drums, which was not browsable because the browser offered its five kits instead. On 2026-10-12 the DJ booth's two hidden track ends joined, `DjTrackInput` and `DjTrackOutput`: infrastructure, not browsable, each with a factory, made with every track by `Session` rather than added by anyone, and saved with it ([DJ decks play live through the track's chain](dj-decks-play-live-through-the-track.md)).
 
 ## Readers
 
-The browser's device rows; the drop targets (`deviceFromId` in `native/src/BrowserIds.h`, `deviceFromBrowserDrop` in `native/src/DeviceRack.cpp`); the rack's `+` menu, which leaves out infrastructure and greys an external device until it is found; `Session::addDevice`, which dispatches on `kind`; the instrument rules (`isInstrumentPlugin`, the MIDI-effect skip in `switchTrackInstrument`); and `registerBuiltInTypes`, called once per engine from `Session`'s constructor, which registers every entry that carries a factory, nine on 2026-10-06. It used to hold a `createBuiltInType<T>()` line per device, a second list to keep in step with the entries (until commit `71842c2`). Tracktion's built-ins need no registration and Forge arrives as a VST3 ([Hosting Forge in Rhino](forge-hosting.md)).
+The browser's device rows; the drop targets (`deviceFromId` in `native/src/BrowserIds.h`, `deviceFromBrowserDrop` in `native/src/DeviceRack.cpp`); the rack's `+` menu, which leaves out infrastructure and greys an external device until it is found; `Session::addDevice`, which dispatches on `kind`; the instrument rules (`isInstrumentPlugin`, the MIDI-effect skip in `switchTrackInstrument`); and `registerBuiltInTypes`, called once per engine from `Session`'s constructor, which registers every entry that carries a factory, nine on 2026-10-06 and eleven on 2026-10-12. It used to hold a `createBuiltInType<T>()` line per device, a second list to keep in step with the entries (until commit `71842c2`). Tracktion's built-ins need no registration and Forge arrives as a VST3 ([Hosting Forge in Rhino](forge-hosting.md)).
 
 ## Rules
 

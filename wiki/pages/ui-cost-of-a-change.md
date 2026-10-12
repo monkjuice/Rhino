@@ -4,7 +4,7 @@ type: convention
 summary: Session announces every change synchronously to every listening panel, so a drag announces once, a hidden panel goes stale, a frame reads only the controls it shows, painters skip what a repaint does not reach, and --profile-ui measures it.
 tags: [rhino, ui, performance]
 sources: []
-updated: 2026-10-11
+updated: 2026-10-12
 ---
 
 # What a change costs the interface
@@ -20,7 +20,7 @@ updated: 2026-10-11
 - **A rebuild reads each fact once.** The arrangement reads what its painter asks about each track once per sync (`TrackFacts`), not per row per frame, because each question walks the engine's track list. It also hands `Session::clipPluginCount` the clip in hand rather than an id to look up again.
 - **A painter draws only what the repaint reaches** (`repaintArea(g)`; [Playhead rendering](playhead.md)). Check it with the `cullRepaints` seam, under the same clip ([JUCE's rasteriser is not clip-invariant](juce-rasteriser-not-clip-invariant.md)).
 - **Releasing a knob does not rebuild the playback graph** unless the gesture changed the device's latency (`endDeviceParameterGesture`), which delay compensation has to hear about.
-- **No document copy mid-gesture.** A DJ deck's bounce starts with a copy of the document on the message thread (0.3-6 ms with built-in devices, 106 ms with Forge; [A deck's bounce renders on a worker against a copy of the document](dj-bounce-on-a-copy.md)), and one started while a knob was held froze the display (2026-10-11). So `finishDjLoad` and `djPoll` start none while `Session::gestureHeld()` - a knob, fader, tempo or audio clip drag, or any mouse button down - and an edit of nothing a deck plays (`ModelChange::none`: a rename, a colour, a lane height, arming, monitoring) marks no deck behind at all ([DJ view and the booth](dj-view.md)).
+- **Nothing made again for a deck mid-gesture.** `djPoll` makes a DJ deck's cell again only while `Session::gestureHeld()` is false - a knob, fader, tempo or audio clip drag, or any mouse button down - so a note dragged in a cell is not cut on every step; and a device, a parameter or a curve asks nothing of a deck at all, being heard live through the track ([DJ view and the booth](dj-view.md)). The same hold used to keep a bounce's document copy (0.3-6 ms with built-in devices, 106 ms with Forge) off the message thread mid-drag, after one started under a held knob froze the display (2026-10-11); the bounce went on 2026-10-12 ([superseded](dj-bounce-on-a-copy.md)).
 - **A face repaints what changed and keeps what it has shaped.** The [Drum Rack](drum-rack.md) face shows the pattern:
   - `repaintDrums` (`DeviceEditorPanelDrums.cpp`) compares one string of everything the pads and map are drawn from (bank, selection, which of the 128 notes are filled, the sixteen shown pads), so a knob drag repaints only the selected pad's side.
   - Its 24 Hz tick repaints only the pads, map cells, key name and playhead strip that moved.

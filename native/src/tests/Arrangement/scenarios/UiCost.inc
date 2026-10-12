@@ -62,6 +62,35 @@
             require(timeline->clips.size() == clipsBefore, "A hidden timeline does not rebuild for it");
             timeline->setVisible(true);
             require(timeline->clips.size() == clipsBefore + 1, "and is current again as soon as it is shown");
+            // A command the shell sends it from the DJ view reads its list of
+            // the clips, so a hidden timeline catches up before it acts. Split
+            // at the line, the split undone while the timeline is hidden -
+            // Ctrl+Z in the DJ view - and Ctrl+E again: the list still held
+            // the two halves, neither with the line inside it, and the whole
+            // clip the line runs through was refused.
+            {
+                const auto onLane = [&stack]
+                {
+                    int count = 0;
+                    for (auto* clip : te::getAudioTracks(*stack.edit)[0]->getClips())
+                        if (stack.shouldShowClipInArrangement(*clip)) ++count;
+                    return count;
+                };
+                juce::String said;
+                timeline->status = [&said](const juce::String& text) { said = text; };
+                timeline->setSelection({});
+                timeline->setInsertPoint(5.0, 0);
+                const auto whole = onLane();
+                timeline->splitAtInsertPoint();
+                require(onLane() == whole + 1, ("Ctrl+E splits the clip the line runs through: " + said).toRawUTF8());
+                timeline->setVisible(false);
+                stack.undo();
+                require(onLane() == whole, "The split undone while the timeline is hidden");
+                timeline->splitAtInsertPoint();
+                require(onLane() == whole + 1,
+                        ("and Ctrl+E sent to the hidden timeline splits the clip as it is now: " + said).toRawUTF8());
+                timeline->status = nullptr;
+            }
             timeline.reset();
             stack.releaseAudioDevice();
         }
@@ -142,12 +171,12 @@
             }
             require(booth.addDjDeck().wasOk() && booth.addDjDeck().wasOk(), "Two decks for the view");
             require(booth.loadDjDeckFile(0, beatFile.getFile()).wasOk(), "The first plays the beat");
-            te::EditItemID notesClip;
-            require(booth.createClip(0, 0.0, &notesClip).wasOk() && booth.selectPatternClip(notesClip).wasOk(),
-                    "A clip on the first MIDI lane, which runs no instrument");
+            require(booth.createSlotClip(0, 0).wasOk(), "A cell on the first MIDI lane, which runs no instrument");
+            const auto notesClip = booth.slotClip(0, 0).clipID;
+            require(booth.selectPatternClip(notesClip).wasOk(), "open in the note editor");
             for (int note = 0; note < 8; ++note)
                 require(booth.addNote(note * 2.0, Session::lowestNote + (note % 4) * 2, 1.5).wasOk(), "with notes in it");
-            require(booth.loadDjDeckTrack(1, 0).wasOk(), "The second deck plays the lane");
+            require(booth.loadDjDeckSlot(1, 0, 0).wasOk(), "The second deck plays the cell");
             for (int waited = 0; waited < 400 && (booth.djBusy() || !booth.djDeckInfo(0).loaded || !booth.djDeckInfo(1).loaded); ++waited)
             {
                 juce::Thread::sleep(25);

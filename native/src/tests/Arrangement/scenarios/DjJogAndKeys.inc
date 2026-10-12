@@ -138,6 +138,42 @@
             booth.djProcessOffline(512);
             djView->timerCallback();
 
+            // Past either end of the material the hand's travel is dropped, so
+            // the deck moves the moment the hand turns back. Kept, it was a
+            // dead zone as long as the overshoot: rocked back from the top and
+            // forward again, the deck stood at the top until the hand came
+            // round to where it had crossed it.
+            const auto scrub = [&](std::initializer_list<float> path, int firstEvent)
+            {
+                const auto from = *path.begin();
+                auto event = firstEvent;
+                wheel.mouseDown(mouseAt(wheel, at(from), at(from), event));
+                for (const auto angle : path)
+                    wheel.mouseDrag(mouseAt(wheel, at(angle), at(from), ++event));
+                wheel.mouseUp(mouseAt(wheel, at(*(path.end() - 1)), at(from), ++event));
+                booth.djProcessOffline(512);
+                djView->timerCallback();
+                return booth.djDeckState(0).positionSeconds;
+            };
+            const auto turned = [](double radians) { return radians / juce::MathConstants<double>::twoPi * 1.8; };
+            // Back 1.6 radians from the top, then forward 0.8.
+            const auto fromTheTop = scrub({1.0f, 0.6f, 0.2f, -0.2f, -0.6f, -0.2f, 0.2f}, 30);
+            require(std::abs(fromTheTop - turned(0.8)) < 0.01,
+                    ("A scrub back past the top and forward again moves the deck as soon as the hand turns: "
+                     + juce::String(fromTheTop, 3) + " s, not " + juce::String(turned(0.8), 3)).toRawUTF8());
+            // Forward 1.6 radians from near the end, then back 0.8.
+            const auto length = booth.djDeckState(0).lengthSeconds;
+            booth.djSeek(0, length - 0.2);
+            booth.djProcessOffline(512);
+            djView->timerCallback();
+            const auto fromTheEnd = scrub({-1.0f, -0.6f, -0.2f, 0.2f, 0.6f, 0.2f, -0.2f}, 50);
+            require(std::abs(fromTheEnd - (length - turned(0.8))) < 0.01,
+                    ("and one past the end and back again likewise: " + juce::String(fromTheEnd, 3) + " s, not "
+                     + juce::String(length - turned(0.8), 3)).toRawUTF8());
+            booth.djSeek(0, 0.0);
+            booth.djProcessOffline(512);
+            djView->timerCallback();
+
             // The keys a set is played on act on the press; the ones that open
             // a menu, and the switches, on the release.
             for (auto* key : {&console.play, &console.loopIn, &console.loopOut, &console.reloop, &console.loopHalve,
@@ -148,7 +184,7 @@
             for (auto& pad : console.hotCues)
                 require(pad->getTriggeredOnMouseDown(), "A hot cue acts on the press");
             for (auto* key : {&console.jumpSize, &console.tempoRange, &console.vinyl, &console.quantise, &console.live,
-                              &console.edit, &console.reload, &console.eject})
+                              &console.edit, &console.eject})
                 require(!key->getTriggeredOnMouseDown(), ("A key that opens a menu or switches acts on the release: " + key->getName()).toRawUTF8());
             require(djView->mixer.fxTap.getTriggeredOnMouseDown() && djView->mixer.fxOn.getTriggeredOnMouseDown(),
                     "The mixer's TAP and effect switch act on the press");
@@ -158,7 +194,7 @@
         {
             const auto inside = [](const djconsole::ConsoleLayout& layout, juce::Rectangle<int> bounds)
             {
-                for (const auto& area : {layout.source, layout.live, layout.edit, layout.reload, layout.eject, layout.display, layout.loopIn,
+                for (const auto& area : {layout.source, layout.live, layout.edit, layout.eject, layout.display, layout.loopIn,
                                          layout.loopOut, layout.reloop, layout.beatLoop, layout.cue, layout.play, layout.grid, layout.sync,
                                          layout.tempo, layout.tempoReset, layout.jog, layout.vinyl, layout.brake})
                     if (!area.isEmpty() && !bounds.contains(area)) return false;

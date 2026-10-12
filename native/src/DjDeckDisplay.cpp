@@ -109,13 +109,14 @@ void DjDeckDisplay::sync(const Session::DjDeckInfo& info)
     const auto loadStarting = next == track && info.loading;
     if (next != track || (info.generation != generation && !loadStarting))
     {
-        // A bounce of the same source may show the last bounce's pictures
-        // until its own are painted; another source's material never shows.
+        // New material from the same source - a clip made again - may show
+        // the last material's pictures until its own are painted; another
+        // source's material never shows.
         // Material first seen while a load is in flight came from a source
         // the deck's info no longer names.
         std::optional<Source> source;
         if (!info.loading)
-            source = Source {info.kind, info.file, info.trackId, info.groupId, info.slot};
+            source = Source {info.kind, info.file, info.trackId, info.slot};
         if (!source || source != materialSource)
             dropPictures();
         materialSource = source;

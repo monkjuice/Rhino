@@ -4,7 +4,7 @@ type: gotcha
 summary: juce::Button presses and clicks for any mouse button, so a key that carries a right-click menu also runs its left-click action unless mouseDown and mouseUp swallow the popup-menu press first, as the DJ console's DjPad does.
 tags: [rhino, juce, ui, input]
 sources: []
-updated: 2026-10-09
+updated: 2026-10-12
 ---
 
 # A juce::Button fires its click on a right-click too
@@ -13,7 +13,7 @@ updated: 2026-10-09
 
 ## What it broke
 
-The DJ console ([DJ view and the booth](dj-view.md)) gives several keys a second action on the right-click: a hot cue is cleared, Reload switches the automatic re-bounce off, Eject removes the deck, and Beat Loop offers its length. Built on stock `TextButton`s in the second pass of 2026-10-09, a right-click on Beat Loop chose a length *and* set a loop, and the other keys did the same with theirs.
+The DJ console ([DJ view and the booth](dj-view.md)) gives several keys a second action on the right-click: a hot cue is cleared, Eject removes the deck, and Beat Loop offers its length (Reload, whose right-click switched the automatic re-bounce off, went with the bounces on 2026-10-12). Built on stock `TextButton`s in the second pass of 2026-10-09, a right-click on Beat Loop chose a length *and* set a loop, and the other keys did the same with theirs.
 
 ## The fix
 

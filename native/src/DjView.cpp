@@ -283,7 +283,7 @@ void DjView::resized()
     titleLine.set("DJ", toolbarFont, juce::Rectangle<int>(10, 0, 30, toolbarHeight));
     quantiseLine.set("QUANTISE", toolbarFont, juce::Rectangle<int>(quantiseBox.getX() - 62, 0, 58, toolbarHeight),
                      juce::Justification::centredRight);
-    emptyLine.set("No decks. Press + Deck, then choose a track, a group or a file for it.", uiFont(12.0f),
+    emptyLine.set("No decks. Press + Deck, then choose a track or a file for it.", uiFont(12.0f),
                   getLocalBounds().withTrimmedTop(toolbarHeight).withTrimmedRight(mixer.isVisible() ? mixer.getWidth() : 0),
                   juce::Justification::centred, true);
     if (count == 0) return;

@@ -17,9 +17,16 @@ add_library(RhinoCore STATIC
     DrumKitFile.cpp
     DevicePreset.cpp
     DjAnalysis.cpp
+    DjReleaseQueue.cpp
+    DjTrackPort.cpp
     DjDeck.cpp
+    DjDeckTransport.cpp
+    DjDeckLoops.cpp
+    DjDeckRender.cpp
     DjMixer.cpp
-    DjEngine.cpp)
+    DjEngine.cpp
+    DjEngineClock.cpp
+    DjEngineMix.cpp)
 target_include_directories(RhinoCore PUBLIC .)
 target_link_libraries(RhinoCore
     PUBLIC juce::juce_core

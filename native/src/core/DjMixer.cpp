@@ -281,6 +281,9 @@ void DjCompressor::process(float* left, float* right, int frames) noexcept
         amount += smoothing * (targetAmount - amount);
         const auto peak = std::max(std::abs(left[f]), right != nullptr ? std::abs(right[f]) : 0.0f);
         envelope += (peak > envelope ? attack : release) * (peak - envelope);
+        // Released into silence it would decay into the denormals and stay
+        // there, every sample slow; a billionth is silence enough.
+        envelope = std::max(envelope, 1.0e-9f);
         if (amount < 0.001f) continue;
         const auto threshold = -30.0f * amount;
         const auto ratio = 1.0f + 3.0f * amount;

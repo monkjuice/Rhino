@@ -22,10 +22,10 @@ DjClipGrid::DjClipGrid(Session& s, int deckIndex) : session(s), deck(deckIndex)
 {
     setWantsKeyboardFocus(false);
     setMouseClickGrabsKeyboardFocus(false);
-    setTooltip("The track's clips. SONG is its arrangement; each cell below is a clip slot. Press a cell to play it on "
-               "the deck, double-click an empty one for a new one-bar clip, drag a cell to another console or to "
-               "the timeline through the Arrange switch, and drop clips, samples and sounds on a cell. Right-click "
-               "deletes a clip.");
+    setTooltip("The track's DJ clips, apart from its arrangement. Press a cell to play it on the deck through the "
+               "track's own instrument and effects, double-click an empty one for a new one-bar clip, drag a cell "
+               "to another console or to the timeline through the Arrange switch, and drop clips, samples and "
+               "sounds on a cell. Right-click deletes a clip.");
 }
 
 void DjClipGrid::sync()
@@ -40,7 +40,7 @@ void DjClipGrid::sync(const Session::DjDeckInfo& info)
 {
     const auto nextTrack = info.kind == Session::DjSourceKind::track ? info.track : -1;
     const auto nextScenes = nextTrack >= 0 ? session.sceneCount() : 0;
-    const auto nextLit = nextTrack >= 0 && info.slot >= 0 ? info.slot : songCell;
+    const auto nextLit = nextTrack >= 0 && info.slot >= 0 ? info.slot : noCell;
     const auto nextColour = nextTrack >= 0 ? session.trackColour(nextTrack) : juce::Colour();
     std::vector<Cell> next(static_cast<size_t>(nextScenes));
     for (int scene = 0; scene < nextScenes; ++scene)
@@ -82,12 +82,13 @@ int DjClipGrid::rows() const
 
 int DjClipGrid::lastFirstScene() const
 {
-    return std::max(0, scenes + 1 - std::max(1, rows() - 1));
+    return std::max(0, scenes + 1 - std::max(1, rows()));
 }
 
 juce::Rectangle<int> DjClipGrid::cellBounds(int scene) const
 {
-    const auto row = scene == songCell ? 0 : scene - firstScene + 1;
+    if (scene < 0) return {};
+    const auto row = scene - firstScene;
     if (row < 0 || row >= rows()) return {};
     return {0, row * (cellHeight + cellGap), getWidth(), cellHeight};
 }
@@ -109,8 +110,7 @@ int DjClipGrid::cellAt(juce::Point<int> point) const
     if (track < 0 || !getLocalBounds().contains(point)) return noCell;
     const auto row = point.y / (cellHeight + cellGap);
     if (row >= rows()) return noCell;
-    if (row == 0) return songCell;
-    const auto scene = firstScene + row - 1;
+    const auto scene = firstScene + row;
     return scene <= scenes ? scene : noCell;
 }
 
@@ -127,7 +127,8 @@ void DjClipGrid::report(const juce::Result& result, const juce::String& success)
 juce::Result DjClipGrid::chooseCell(int scene)
 {
     if (track < 0) return juce::Result::fail("Load a track of the song on this deck first.");
-    const auto result = scene == songCell ? session.loadDjDeckTrack(deck, track) : session.loadDjDeckSlot(deck, track, scene);
+    if (scene < 0) return juce::Result::fail("Choose one of the track's cells.");
+    const auto result = session.loadDjDeckSlot(deck, track, scene);
     if (result.wasOk()) sync();
     return result;
 }
@@ -159,7 +160,7 @@ juce::Result DjClipGrid::applyDrop(int scene, const juce::String& description, b
         return *chain;
     }
     auto target = scene;
-    if (target == firstFree || target == songCell || target == noCell)
+    if (target == firstFree || target == noCell)
     {
         target = session.firstFreeSlot(track);
         if (target < 0) target = session.sceneCount();
@@ -216,23 +217,13 @@ void DjClipGrid::paint(juce::Graphics& g)
     const auto count = rows();
     for (int row = 0; row < count; ++row)
     {
-        const auto scene = row == 0 ? songCell : firstScene + row - 1;
+        const auto scene = firstScene + row;
         if (scene > scenes) break;
         const auto cell = cellBounds(scene);
         if (cell.isEmpty() || (cullRepaints && !g.clipRegionIntersects(cell))) continue;
         const auto isLit = scene == lit, isHovered = scene == hovered, isTarget = scene == dropTarget;
         auto inner = cell.toFloat();
-        if (scene == songCell)
-        {
-            g.setColour(isHovered ? palette::control.brighter(0.12f) : palette::control);
-            g.fillRect(inner);
-            g.setColour(trackColour);
-            g.fillRect(inner.removeFromLeft(4.0f));
-            g.setColour(palette::text);
-            songLine.set("SONG", keyFont, cell.withTrimmedLeft(8), juce::Justification::centredLeft, true);
-            songLine.draw(g);
-        }
-        else if (scene == scenes)
+        if (scene == scenes)
         {
             // The row past the last scene: a double-click makes a scene and
             // a clip in it.
@@ -326,11 +317,8 @@ void DjClipGrid::mouseUp(const juce::MouseEvent& event)
     pressedCell = noCell;
     if (dragStarted || event.mods.isPopupMenu() || !event.mouseWasClicked() || pressed == noCell) return;
     const auto* cell = cellFor(pressed);
-    if (pressed == songCell || (cell != nullptr && cell->hasClip))
-    {
-        const auto name = cell != nullptr ? cell->name : juce::String();
-        report(chooseCell(pressed), pressed == songCell ? "The deck plays the song's track" : "The deck plays " + name.quoted());
-    }
+    if (cell != nullptr && cell->hasClip)
+        report(chooseCell(pressed), "The deck plays " + cell->name.quoted());
     else if (status)
         status("An empty cell: double-click it for a new one-bar clip, or drop a clip or a sample on it");
 }
@@ -338,7 +326,7 @@ void DjClipGrid::mouseUp(const juce::MouseEvent& event)
 void DjClipGrid::mouseDoubleClick(const juce::MouseEvent& event)
 {
     const auto scene = cellAt(event.getPosition());
-    if (scene == noCell || scene == songCell) return;
+    if (scene == noCell) return;
     if (const auto* cell = cellFor(scene); cell != nullptr && cell->hasClip)
     {
         const auto name = cell->name;
@@ -370,10 +358,9 @@ void DjClipGrid::showCellMenu(int scene)
         [safe = juce::Component::SafePointer<DjClipGrid>(this), scene](int choice)
         {
             if (safe == nullptr || choice != 1) return;
-            const auto wasLit = safe->lit == scene;
+            // A deck that played it plays nothing until another cell is
+            // chosen: the model finds the cell empty and lets its clip go.
             safe->report(safe->session.deleteSlotClip(safe->track, scene), "Clip deleted");
-            // The deck that played it goes back to the song's track.
-            if (wasLit) safe->chooseCell(songCell);
             safe->sync();
         });
 }
@@ -390,8 +377,7 @@ void DjClipGrid::itemDragEnter(const SourceDetails& details)
 
 void DjClipGrid::itemDragMove(const SourceDetails& details)
 {
-    const auto cell = cellAt(details.localPosition);
-    setDropTarget(cell == songCell ? noCell : cell);
+    setDropTarget(cellAt(details.localPosition));
 }
 
 void DjClipGrid::itemDragExit(const SourceDetails&)
@@ -403,7 +389,7 @@ void DjClipGrid::itemDropped(const SourceDetails& details)
 {
     const auto cell = cellAt(details.localPosition);
     setDropTarget(noCell);
-    report(applyDrop(cell == songCell || cell == noCell ? firstFree : cell, details.description.toString(), false),
+    report(applyDrop(cell == noCell ? firstFree : cell, details.description.toString(), false),
            "Dropped on the console: press the cell to play it");
 }
 
@@ -423,8 +409,7 @@ void DjClipGrid::fileDragEnter(const juce::StringArray& files, int x, int y)
 
 void DjClipGrid::fileDragMove(const juce::StringArray&, int x, int y)
 {
-    const auto cell = cellAt({x, y});
-    setDropTarget(cell == songCell ? noCell : cell);
+    setDropTarget(cellAt({x, y}));
 }
 
 void DjClipGrid::fileDragExit(const juce::StringArray&)
@@ -439,7 +424,7 @@ void DjClipGrid::filesDropped(const juce::StringArray& files, int x, int y)
     for (const auto& path : files)
         if (isDroppedSoundFile(juce::File(path)))
         {
-            report(applyDrop(cell == songCell || cell == noCell ? firstFree : cell, "rhino-browser:file:" + path, false),
+            report(applyDrop(cell == noCell ? firstFree : cell, "rhino-browser:file:" + path, false),
                    "Dropped on the console: press the cell to play it");
             break;
         }

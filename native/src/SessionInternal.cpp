@@ -277,6 +277,45 @@ te::Plugin* trackInstrument(te::AudioTrack& track)
     return nullptr;
 }
 
+int djInputEnd(const te::AudioTrack& track)
+{
+    const auto& list = track.pluginList;
+    return list.size() > 0 && list[0] != nullptr && list[0]->getPluginType() == DjTrackInjectorDevice::xmlTypeName ? 1 : 0;
+}
+
+void ensureDjPortDevices(te::Edit& edit, te::AudioTrack& track)
+{
+    auto& list = track.pluginList;
+    if (djInputEnd(track) == 0)
+        if (auto input = edit.getPluginCache().createNewPlugin(DjTrackInjectorDevice::xmlTypeName, {}))
+            list.insertPlugin(input, 0, nullptr);
+    for (auto* plugin : list)
+        if (plugin != nullptr && plugin->getPluginType() == DjTrackTapDevice::xmlTypeName)
+            return;
+    auto output = edit.getPluginCache().createNewPlugin(DjTrackTapDevice::xmlTypeName, {});
+    if (output == nullptr)
+        return;
+    // Where the track's own devices end and its channel strip begins - the
+    // first of the Utility, the Volume & Pan and the meter, in whatever order
+    // the track was made with them - so a deck takes the track as its own
+    // devices leave it, and the song's trim, fader, pan and mute stay the
+    // song's. Every device added later lands ahead of it, as every add path
+    // puts a device ahead of the channel strip.
+    auto at = list.size();
+    for (int i = djInputEnd(track); i < list.size(); ++i)
+        if (auto* plugin = list[i]; plugin != nullptr)
+        {
+            const auto type = plugin->getPluginType();
+            const auto* entry = DeviceCatalog::byTypeName(type);
+            if (entry != nullptr ? entry->infrastructure : (type == "volume" || type == "level"))
+            {
+                at = i;
+                break;
+            }
+        }
+    list.insertPlugin(output, at, nullptr);
+}
+
 juce::Result ensurePlugin(te::Edit& edit, te::AudioTrack& track, const juce::String& type,
                           int insertIndex, te::Plugin*& plugin, bool& changed)
 {
@@ -338,7 +377,7 @@ juce::Result switchTrackInstrument(te::Edit& edit, te::AudioTrack& track, const 
                                    InstrumentSwitch& switched, const juce::PluginDescription* forgeDescription)
 {
     // MIDI effects run ahead of the instrument, so a new one goes in after them.
-    int instrumentInsertIndex = 0;
+    int instrumentInsertIndex = djInputEnd(track);
     while (instrumentInsertIndex < track.pluginList.size())
     {
         auto* plugin = track.pluginList[instrumentInsertIndex];

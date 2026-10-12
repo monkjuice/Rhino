@@ -8,6 +8,7 @@
 #include "audio/AutoTuneDevice.h"
 #include "audio/VocoderDevice.h"
 #include "midi/RhinoArpDevice.h"
+#include "infra/DjTrackPortDevices.h"
 
 namespace rhino
 {
@@ -97,6 +98,20 @@ std::vector<DeviceDescriptor> buildCatalog()
     add({.id = "RhinoVocoder", .typeName = VocoderDevice::xmlTypeName, .displayName = "Rhino Vocoder",
          .kind = DeviceKind::AudioEffect, .category = "Rhino", .description = "Plays this track's voice with another track's synth",
          .colour = 0xff7d8fc4, .browsable = true, .create = factory<VocoderDevice>()});
+
+    // ---- The DJ booth's hidden ends of a track --------------------------------
+    // A deck playing a track of the song is heard through the track itself:
+    // these carry the deck's audio and notes in at the chain's head and the
+    // chain's output out where the track's own devices end. Infrastructure, as the
+    // Utility channel strip is: never offered, never shown in the rack, made
+    // with every track and saved with it, and doing nothing until the booth
+    // binds a deck to them.
+    add({.id = "DjTrackInput", .typeName = DjTrackInjectorDevice::xmlTypeName, .displayName = "DJ Input",
+         .kind = DeviceKind::AudioEffect, .description = "Where a DJ deck enters a track",
+         .infrastructure = true, .create = factory<DjTrackInjectorDevice>()});
+    add({.id = "DjTrackOutput", .typeName = DjTrackTapDevice::xmlTypeName, .displayName = "DJ Output",
+         .kind = DeviceKind::AudioEffect, .description = "Where a DJ deck leaves a track",
+         .infrastructure = true, .create = factory<DjTrackTapDevice>()});
 
     // ---- MIDI FX -----------------------------------------------------------
     add({.id = "RhinoArp", .typeName = RhinoArpDevice::xmlTypeName, .displayName = "Rhino Arp",

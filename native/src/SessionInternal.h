@@ -8,6 +8,7 @@
 // Nothing outside Session's own .cpp files sees this.
 #include "audio/UtilityDevice.h"
 #include "instruments/DrumRackDevice.h"
+#include "infra/DjTrackPortDevices.h"
 #include "sdk/NativeDevice.h"
 
 // Shared internals of the Session implementation.
@@ -91,6 +92,13 @@ struct RhinoEngineBehaviour final : te::EngineBehaviour
     // A recording covers what is under it - the same rule every other clip
     // here follows - so the material it replaces is silent while it is made.
     bool muteTrackContentsWhilstRecording() override { return true; }
+    // A muted track - or one left out by another's solo - still runs its
+    // devices, and only its output to the song is silenced, by the muting
+    // node after them. A DJ deck takes its track's sound from inside the
+    // chain, so the song's mute and solo leave the deck its track; without
+    // this the engine skipped the whole chain of a muted track. The price is
+    // the CPU a muted track's devices take.
+    bool shouldProcessMutedTracks() override { return true; }
     std::function<juce::File()> recordingDirectory;
 };
 
@@ -164,6 +172,19 @@ int slotOfDevice(const te::PluginList&, const juce::String& key);
 void removeDeviceLanes(juce::ValueTree owner, const te::Plugin&, juce::UndoManager*);
 bool hasActiveTrackAutomation(te::Edit& edit, Session::DeviceTarget target);
 te::Plugin* findPlugin(te::AudioTrack& track, const juce::String& type);
+// The DJ booth's hidden input sits at the very head of a track's chain while a
+// deck plays the track (devices/infra/DjTrackPortDevices.h): 1 when it is
+// there, else 0. Every path that puts a device at the front of a chain starts
+// after it, so a MIDI effect or an instrument never lands ahead of the notes
+// it is meant to play.
+int djInputEnd(const te::AudioTrack&);
+// Gives a track the booth's hidden input at the head of its chain and its
+// hidden output where its own devices end and its channel strip begins, when
+// it lacks either.
+// Outside the undo history, as the channel strip and the mixer are: it runs
+// as a track is made, inside the step that makes it, and as a document opens,
+// before its history begins, so it never moves a place an undo recorded.
+void ensureDjPortDevices(te::Edit&, te::AudioTrack&);
 te::FourOscPlugin* findFourOsc(te::AudioTrack& track);
 DrumRackDevice* findDrumRack(te::AudioTrack& track);
 // A drum pattern on a blank rack would play nothing, so the rack takes the

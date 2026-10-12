@@ -2,8 +2,8 @@
         // Every track has one per scene, a cell holds what its lane may hold
         // and wears its track's colour, a pattern dropped on the cell the
         // note editor has open leaves the editor on a clip that exists, the
-        // cells survive a reopen, a cell edit leaves the decks on other
-        // tracks alone, and a drop on the grid adds a row only when something
+        // cells survive a reopen, an edit reaches the deck playing that cell
+        // and no other, and a drop on the grid adds a row only when something
         // lands in it. A document of its own, so nothing here depends on what
         // the scenarios before it left in their cells.
         {
@@ -73,7 +73,7 @@
                         "and leaves the editor on a clip that still exists");
             }
 
-            // A bounce renders on the worker; the poll installs it.
+            // An audio cell's sound is read on the worker; the poll installs it.
             const auto waitForDeck = [&cells](int deck)
             {
                 for (int waited = 0; waited < 800 && cells.djDeckInfo(deck).loading; ++waited)
@@ -87,41 +87,45 @@
             {
                 const auto info = cells.djDeckInfo(deck);
                 return " deck " + juce::String(deck) + (info.loaded ? " loaded" : " empty") + (info.loading ? ", loading" : "")
-                     + (info.stale ? ", stale" : "") + (info.error.isNotEmpty() ? ": " + info.error : juce::String()) + ";";
+                     + (info.error.isNotEmpty() ? ": " + info.error : juce::String()) + ";";
             };
 
-            scenario("clip cells: a cell edit is its track's alone");
+            scenario("clip cells: an edit reaches the deck playing that cell alone");
             {
-                // A deck on each of two tracks, both bounced. A cell's clip
-                // reaches only the decks that play its track, so an edit in
-                // one track's cells leaves the other deck's bounce current
-                // rather than asking the whole set to bounce again.
-                require(cells.createClip(midiTrack, 0.0).wasOk() && cells.importAudioAt(source.getFile(), audioTrack, 0.0).wasOk(),
-                        "A clip on each track's timeline for its deck to bounce");
+                // A deck on a cell of each of two tracks. A deck's clip is made
+                // again when the cell it plays changes, and for nothing else: a
+                // cell beside it, a cell of another track and the arrangement's
+                // clips leave it as it is, its material and its place.
+                require(cells.insertAudioFileInSlot(source.getFile(), audioTrack, 0).wasOk(), "A sample in the audio track's cell");
                 require(cells.addDjDeck().wasOk() && cells.addDjDeck().wasOk(), "Two decks");
-                require(cells.loadDjDeckTrack(0, midiTrack).wasOk() && cells.loadDjDeckTrack(1, audioTrack).wasOk(),
-                        "one on each track");
+                require(cells.loadDjDeckSlot(0, midiTrack, 0).wasOk() && cells.loadDjDeckSlot(1, audioTrack, 0).wasOk(),
+                        "each on a cell of its own track");
                 const auto firstLanded = waitForDeck(0);
                 const auto secondLanded = waitForDeck(1);
-                require(firstLanded && secondLanded, ("and both bounce:" + deckState(0) + deckState(1)).toRawUTF8());
-                require(!cells.djDeckInfo(0).stale && !cells.djDeckInfo(1).stale, "Both decks are current");
-                require(cells.createSlotClip(midiTrack, 1).wasOk(), "A new clip in a cell of the first deck's track");
-                require(cells.djDeckInfo(0).stale, "leaves that deck behind");
-                require(!cells.djDeckInfo(1).stale, "and the deck on the other track current");
+                require(firstLanded && secondLanded, ("and both have them:" + deckState(0) + deckState(1)).toRawUTF8());
+                const auto first = cells.djDeckInfo(0).generation, second = cells.djDeckInfo(1).generation;
+                const auto unchanged = [&cells, &first, &second] { return cells.djDeckInfo(0).generation == first && cells.djDeckInfo(1).generation == second; };
+                require(cells.createSlotClip(midiTrack, 1).wasOk(), "A new clip in another cell of the first deck's track");
                 require(cells.copyClipToTrackSlot(cells.slotClip(midiTrack, 1).clipID, midiTrack, 3).wasOk()
                             && cells.deleteSlotClip(midiTrack, 3).wasOk()
                             && cells.insertPatternPresetInSlot(Session::PatternPreset::AcidSteps, midiTrack, 4).wasOk(),
-                        "A cell of the first track copied into, deleted and given a pattern");
+                        "a cell of the track copied into, deleted and given a pattern");
                 require(!cells.slotClip(midiTrack, 3).hasClip, "and the deleted cell reads empty");
-                require(!cells.djDeckInfo(1).stale, "leave the other deck current too");
-                require(cells.insertAudioFileInSlot(source.getFile(), audioTrack, 0).wasOk() && cells.djDeckInfo(1).stale,
-                        "while a sample in the second track's cell leaves its own deck behind");
-                require(cells.rebounceDjDeck(0).wasOk() && cells.rebounceDjDeck(1).wasOk() && waitForDeck(0) && waitForDeck(1)
-                            && !cells.djDeckInfo(0).stale && !cells.djDeckInfo(1).stale,
-                        ("Both decks bounced again:" + deckState(0) + deckState(1)).toRawUTF8());
+                require(cells.createClip(midiTrack, 0.0).wasOk(), "and a clip on the track's timeline");
+                cells.djPoll();
+                require(unchanged(), "leave both decks as they were");
+                require(cells.selectPatternClip(cells.slotClip(midiTrack, 0).clipID).wasOk()
+                            && cells.addNote(2.0, 62, 1.0).wasOk(),
+                        "A note added to the cell the first deck plays");
+                cells.djPoll();
+                require(cells.djDeckInfo(0).generation > first && cells.djDeckInfo(1).generation == second,
+                        "makes the first deck's clip again, and the second's not");
+                const auto remade = cells.djDeckInfo(0).generation;
                 require(cells.copySlotClipToArrangement(midiTrack, 1, 0.0, otherMidiTrack).wasOk(),
                         "A cell's clip copied to a third lane's timeline");
-                require(!cells.djDeckInfo(0).stale && !cells.djDeckInfo(1).stale, "leaves both decks current");
+                cells.djPoll();
+                require(cells.djDeckInfo(0).generation == remade && cells.djDeckInfo(1).generation == second,
+                        "leaves both decks as they were");
             }
 
             scenario("clip cells: a drop on a console adds a row only when something lands");

@@ -37,8 +37,9 @@
                     secondID = onTrack->itemID;
             require(secondID.isValid(), "Found the neighbouring clip");
 
-            const Session::DeviceTarget tempoLane {tempoTrack, 0, 0};
-            require(!session.deviceParameters(tempoTrack, 0).empty(), "The track has a parameter to automate");
+            // Slot 1: the DJ booth's hidden input stands at slot 0 of every chain, so a track's first device is at slot 1.
+            const Session::DeviceTarget tempoLane {tempoTrack, 1, 0};
+            require(!session.deviceParameters(tempoTrack, 1).empty(), "The track has a parameter to automate");
             require(session.showTrackAutomation(tempoLane, true).wasOk(), "Reveal a lane to sweep");
             require(session.setTrackAutomationPoints(tempoLane, {{0.0, 0.2f}, {longLength, 0.8f}}).wasOk(),
                     "Draw a curve that ends on the clip boundary");

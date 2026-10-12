@@ -2,24 +2,20 @@
 #include <algorithm>
 #include <cmath>
 
-// What a deck plays, and how it gets there.
+// What a deck plays, and how it is heard.
 //
-// A file is read whole and analysed on the booth's one worker thread, so a
-// six-minute song does not stall the interface while it is decoded, and the
-// poll installs it. A track or a group of the document is bounced to audio
-// on the same worker, from a copy of the document loaded from a snapshot of
-// its state - the rule the file workers follow: a worker is handed a
-// detached snapshot, never the live edit, so the person can go on editing
-// while the bounce renders and nothing races. The live edit stays on the
-// device throughout, so the decks, and a track being played live, are not
-// interrupted. The copy costs its plugins being made again, which is the
-// price of the isolation.
-//
-// A bounced deck goes stale whenever the document changes in a way its
-// bounce could hear (Session::ModelChange), and the poll bounces it again
-// once the document has been quiet for half a second with nothing held -
-// which is what makes the note editor edit a deck while it plays. The new
-// bounce is swapped in by beat, so the deck does not lose its place.
+// A file is read whole and analysed on the booth's one worker thread, and the
+// poll installs it. A track of the song is heard live: the deck plays one of
+// the track's own clips - its clip slots, the console's cells, which are the
+// DJ view's and never the arrangement's - and the track's chain plays it. A
+// MIDI clip's notes go into the track's instrument and an audio clip's sound
+// into its effects, through the hidden input at the head of the chain, and
+// what the chain makes comes back through the hidden output at its end into
+// the deck's channel strip (DjTrackPort, devices/infra/DjTrackPortDevices.h).
+// So every knob on the track's devices is heard as it turns, an external
+// instrument's own window included, and nothing is rendered between an edit
+// and the sound. What a deck still makes again is its clip, when the clip's
+// notes or sound change: a MIDI clip at once, an audio clip on the worker.
 
 namespace rhino
 {
@@ -27,58 +23,36 @@ namespace
 {
 constexpr int readChunk = 1 << 16;
 
-juce::String djSourceLabel(Session::DjSourceKind kind)
+// The track's two hidden ends, or null where one is missing.
+struct PortDevices
 {
-    switch (kind)
+    DjTrackInjectorDevice* input = nullptr;
+    DjTrackTapDevice* output = nullptr;
+};
+
+PortDevices portDevicesOf(te::AudioTrack& track)
+{
+    PortDevices devices;
+    for (auto* plugin : track.pluginList)
     {
-        case Session::DjSourceKind::none: return "nothing";
-        case Session::DjSourceKind::file: return "a file";
-        case Session::DjSourceKind::track: return "a track";
-        case Session::DjSourceKind::group: return "a group";
+        if (auto* input = dynamic_cast<DjTrackInjectorDevice*>(plugin); input != nullptr && devices.input == nullptr)
+            devices.input = input;
+        if (auto* output = dynamic_cast<DjTrackTapDevice*>(plugin); output != nullptr && devices.output == nullptr)
+            devices.output = output;
     }
-    return {};
+    return devices;
 }
 
-// The state a deck's copy of the document is built from: the edit as it
-// stands with only the tracks the deck plays, built up rather than copied
-// whole and cut down, so the rest of a large song is never copied at all.
-// The main chain stays out, as the render leaves it to the booth's mixer, and
-// so do the booth's own saved settings. So does the song's mute and solo of
-// the tracks played: they say how the song is being listened to, and a deck
-// is a channel of its own (the bounce used to undo them for the render with
-// a solo isolator). And the copy takes its deck's project id rather than the
-// live edit's: with the live edit's it shared the live edit's temp folder,
-// and building it deleted the cached renders of every clip it did not hold -
-// the pitched, reversed and decoded clips of every other track. The deck's
-// own id keeps its renders from one bounce to the next (DjBooth::copyIds).
-juce::ValueTree deckCopyState(const juce::ValueTree& editState, const std::vector<te::EditItemID>& played,
-                              te::ProjectItemID deckId)
+// A clip's length on the deck: its own, rounded up to whole bars and at least
+// one, so a cell loops on the grid and lands quantised where a bar does.
+double wholeBarsBeats(double beats, double beatsPerBar)
 {
-    juce::ValueTree state(editState.getType());
-    state.copyPropertiesFrom(editState, nullptr);
-    state.setProperty(te::IDs::projectID, deckId.toString(), nullptr);
-    for (const auto& child : editState)
-    {
-        if (child.hasType(te::IDs::MASTERPLUGINS) || child.hasType(djStateID))
-            continue;
-        if (!child.hasType(te::IDs::TRACK))
-        {
-            state.appendChild(child.createCopy(), nullptr);
-            continue;
-        }
-        if (std::find(played.begin(), played.end(), te::EditItemID::fromProperty(child, te::IDs::id)) == played.end())
-            continue;
-        auto track = child.createCopy();
-        track.removeProperty(te::IDs::mute, nullptr);
-        track.removeProperty(te::IDs::solo, nullptr);
-        state.appendChild(track, nullptr);
-    }
-    return state;
+    return std::max(1.0, std::ceil(beats / beatsPerBar - 1.0e-6)) * beatsPerBar;
 }
 }
 
 std::unique_ptr<DjTrack> readDjTrack(const juce::File& file, juce::AudioFormatManager& formats, juce::String& error,
-                                     std::atomic<bool>* cancel)
+                                     std::atomic<bool>* cancel, double startSeconds, double lengthSeconds)
 {
     if (!file.existsAsFile())
     {
@@ -94,11 +68,21 @@ std::unique_ptr<DjTrack> readDjTrack(const juce::File& file, juce::AudioFormatMa
     auto track = std::make_unique<DjTrack>();
     track->sampleRate = reader->sampleRate;
     track->name = file.getFileNameWithoutExtension();
+    const auto first = juce::jlimit<juce::int64>(0, reader->lengthInSamples,
+                                                 static_cast<juce::int64>(std::max(0.0, startSeconds) * reader->sampleRate));
+    const auto available = reader->lengthInSamples - first;
+    const auto wanted = lengthSeconds < 0.0 ? available
+                                            : std::min(available, static_cast<juce::int64>(lengthSeconds * reader->sampleRate));
     const auto longest = static_cast<juce::int64>(longestDjTrackSeconds * reader->sampleRate);
-    const auto frames = static_cast<int>(std::min<juce::int64>(reader->lengthInSamples, longest));
-    if (reader->lengthInSamples > longest)
+    const auto frames = static_cast<int>(std::min(wanted, longest));
+    if (wanted > longest)
         juce::Logger::writeToLog("Rhino: " + file.getFileName() + " is longer than a deck takes; the first "
                                  + juce::String(longestDjTrackSeconds / 60.0, 0) + " minutes are loaded");
+    if (frames <= 0)
+    {
+        error = file.getFileName() + " has no audio there.";
+        return nullptr;
+    }
     const auto stereo = reader->numChannels > 1;
     track->left.resize(static_cast<size_t>(frames));
     if (stereo) track->right.resize(static_cast<size_t>(frames));
@@ -111,7 +95,7 @@ std::unique_ptr<DjTrack> readDjTrack(const juce::File& file, juce::AudioFormatMa
             return nullptr;
         }
         const auto count = std::min(readChunk, frames - start);
-        if (!reader->read(&buffer, 0, count, start, true, stereo))
+        if (!reader->read(&buffer, 0, count, first + start, true, stereo))
         {
             error = "Rhino could not read all of " + file.getFileName() + ".";
             return nullptr;
@@ -123,15 +107,98 @@ std::unique_ptr<DjTrack> readDjTrack(const juce::File& file, juce::AudioFormatMa
     return track;
 }
 
+// ---- binding a deck to a track ---------------------------------------------
+
+void Session::bindDjTrack(int slot, int track)
+{
+    auto& b = *dj;
+    auto& deck = b.decks[static_cast<size_t>(slot)];
+    auto& port = b.engine.port(slot);
+    const auto tracks = te::getAudioTracks(*edit);
+    auto* next = juce::isPositiveAndBelow(track, tracks.size()) ? tracks[track] : nullptr;
+    const auto changing = next == nullptr || deck.boundTrack != next->itemID;
+    // The track it played before, when that is another, plays the song again:
+    // the port says so first, so its hidden input lets go of the notes it
+    // played before it is pointed away.
+    if (changing)
+        port.bound.store(false, std::memory_order_release);
+    // Every hidden end pointing at this port but the new track's lets go of
+    // it: the track the deck left, and one an undo brought back with the
+    // devices it had when it went. Found by the port, not by the track the
+    // deck remembers, so no end is ever left reading a port it does not own.
+    for (auto* t : tracks)
+    {
+        if (t == next) continue;
+        const auto devices = portDevicesOf(*t);
+        if (devices.input != nullptr && devices.input->currentPort() == &port) devices.input->setPort(nullptr);
+        if (devices.output != nullptr && devices.output->currentPort() == &port) devices.output->setPort(nullptr);
+    }
+    if (next == nullptr)
+    {
+        deck.boundTrack = {};
+        return;
+    }
+    const auto devices = portDevicesOf(*next);
+    if (devices.input == nullptr || devices.output == nullptr)
+    {
+        // Every track carries both from the start (ensureDjPortDevices); one
+        // without them cannot carry a deck.
+        port.bound.store(false, std::memory_order_release);
+        deck.boundTrack = {};
+        juce::Logger::writeToLog("Rhino: " + next->getName().quoted() + " has no way in for a DJ deck");
+        return;
+    }
+    // The ends point at the port before the port says it is bound, so the
+    // audio thread never finds it bound with nowhere to go.
+    devices.input->setPort(&port);
+    devices.output->setPort(&port);
+    port.bound.store(true, std::memory_order_release);
+    if (changing)
+    {
+        deck.boundTrack = next->itemID;
+        // The track's graph has to run to play the deck; it does whenever the
+        // song has a playback context, stopped or not. The test runners have
+        // no device to run one on, and play a track's chain themselves; a
+        // context left allocated there is one a later offline render must
+        // not find.
+        if (!isCommandLineTestMode())
+            edit->getTransport().ensureContextAllocated();
+    }
+}
+
+void Session::djUnbindAll()
+{
+    if (dj == nullptr) return;
+    for (int slot = 0; slot < maximumDjDecks; ++slot)
+    {
+        dj->engine.port(slot).bound.store(false, std::memory_order_release);
+        dj->decks[static_cast<size_t>(slot)].boundTrack = {};
+    }
+    // Every hidden end of every track, whatever port it points at: nothing
+    // may be left reading the booth once it goes.
+    if (edit == nullptr) return;
+    for (auto* t : te::getAudioTracks(*edit))
+    {
+        const auto devices = portDevicesOf(*t);
+        if (devices.input != nullptr) devices.input->setPort(nullptr);
+        if (devices.output != nullptr) devices.output->setPort(nullptr);
+    }
+}
+
+// ---- loads -----------------------------------------------------------------
+
 juce::Result Session::loadDjDeckFile(int index, const juce::File& file)
 {
-    if (dj == nullptr || !juce::isPositiveAndBelow(index, dj->count))
+    const auto slot = dj != nullptr ? dj->slotOf(index) : -1;
+    if (slot < 0)
         return juce::Result::fail("That deck does not exist.");
     if (!file.existsAsFile())
         return juce::Result::fail(file.getFileName() + " could not be found.");
-    auto& deck = dj->decks[static_cast<size_t>(index)];
+    auto& deck = dj->decks[static_cast<size_t>(slot)];
     if (deck.info.live)
         setDjDeckLive(index, false);
+    // A file plays itself, through no track.
+    bindDjTrack(slot, -1);
     const auto generation = deck.info.generation + 1;
     deck.info = {};
     deck.info.kind = DjSourceKind::file;
@@ -139,33 +206,32 @@ juce::Result Session::loadDjDeckFile(int index, const juce::File& file)
     deck.info.name = file.getFileNameWithoutExtension();
     deck.info.generation = generation;
     deck.settings = {};
-    return startDjFileRead(index);
+    deck.materialDirty = false;
+    return startDjFileRead(slot);
 }
 
 // Hands a file deck's file to the worker. Whatever the deck held, and any
 // read still in flight for it, is let go of; the settings are kept, so a
 // document's hot cues land on the file once it is read.
-juce::Result Session::startDjFileRead(int index)
+juce::Result Session::startDjFileRead(int slot)
 {
     auto& b = *dj;
-    auto& deck = b.decks[static_cast<size_t>(index)];
+    auto& deck = b.decks[static_cast<size_t>(slot)];
     const auto file = deck.info.file;
     for (auto& job : b.jobs)
-        if (job->deck == index)
+        if (job->slot == slot)
             job->cancel.store(true);
     if (!file.existsAsFile())
     {
         deck.info.error = file.getFileName() + " could not be found.";
         deck.info.loading = false;
-        deck.info.stale = false;
         sendSynchronousChangeMessage();
         return juce::Result::fail(deck.info.error);
     }
     deck.info.loading = true;
-    deck.info.stale = false;
     deck.info.error.clear();
     auto job = std::make_shared<DjLoadJob>();
-    job->deck = index;
+    job->slot = slot;
     job->generation = deck.info.generation;
     job->file = file;
     b.jobs.push_back(job);
@@ -190,133 +256,110 @@ juce::Result Session::startDjFileRead(int index)
     return juce::Result::ok();
 }
 
+// The deck becomes the track's: heard through the track's chain from now on,
+// and playing nothing until one of the track's cells is chosen. The
+// arrangement's clips are never a deck's - the two views share the track, not
+// its clips.
 juce::Result Session::loadDjDeckTrack(int index, int track)
 {
-    if (dj == nullptr || !juce::isPositiveAndBelow(index, dj->count))
+    const auto slot = dj != nullptr ? dj->slotOf(index) : -1;
+    if (slot < 0)
         return juce::Result::fail("That deck does not exist.");
     const auto tracks = te::getAudioTracks(*edit);
-    if (!juce::isPositiveAndBelow(track, tracks.size()))
+    if (!juce::isPositiveAndBelow(track, tracks.size()) || isGroupBusTrack(track))
         return juce::Result::fail("Choose a track of the song for the deck.");
-    if (isGroupBusTrack(track))
-        return loadDjDeckGroup(index, trackGroupBusId(track));
-    auto& deck = dj->decks[static_cast<size_t>(index)];
-    if (deck.info.live)
+    for (int other = 0; other < dj->count; ++other)
+        if (other != index && dj->decks[static_cast<size_t>(dj->slotOf(other))].boundTrack == tracks[track]->itemID)
+            return juce::Result::fail(trackName(track).quoted() + " plays on deck " + juce::String(other + 1)
+                                      + " already: a track plays one deck at a time.");
+    auto& deck = dj->decks[static_cast<size_t>(slot)];
+    if (deck.info.live && deck.info.trackId != tracks[track]->itemID)
         setDjDeckLive(index, false);
     for (auto& job : dj->jobs)
-        if (job->deck == index)
+        if (job->slot == slot)
             job->cancel.store(true);
     const auto generation = deck.info.generation + 1;
+    const auto live = deck.info.live;
     deck.info = {};
     deck.info.kind = DjSourceKind::track;
     deck.info.trackId = tracks[track]->itemID;
     deck.info.name = trackName(track);
     deck.info.generation = generation;
+    deck.info.live = live;
     deck.settings = {};
-    deck.settings.loopWhole = true;
-    // A deck's source is saved with the document.
+    deck.materialDirty = false;
+    bindDjTrack(slot, track);
+    // Whatever the deck played before goes: it waits for a cell now.
+    deck.waiting = DjBooth::Deck::WaitingSource {nullptr, false, generation};
+    handOverDjSource(slot);
     markDjModified();
-    return bounceDjDeck(index, false);
+    sendSynchronousChangeMessage();
+    return juce::Result::ok();
 }
 
-// One of the track's clip slots in place of its arrangement. A deck already
-// playing the same track keeps its beat across the swap, so a slot chosen
-// while the deck runs comes in on the beat the deck is on.
+// One of the track's cells on the deck. A deck already playing that track
+// keeps its beat across the switch, so a cell chosen while the deck runs
+// comes in where the deck is.
 juce::Result Session::loadDjDeckSlot(int index, int track, int scene)
 {
-    if (dj == nullptr || !juce::isPositiveAndBelow(index, dj->count))
+    const auto deckSlot = dj != nullptr ? dj->slotOf(index) : -1;
+    if (deckSlot < 0)
         return juce::Result::fail("That deck does not exist.");
     const auto tracks = te::getAudioTracks(*edit);
     if (!juce::isPositiveAndBelow(track, tracks.size()) || isGroupBusTrack(track))
         return juce::Result::fail("Choose a track of the song for the deck.");
     const auto clip = slotClip(track, scene);
     if (!clip.hasClip)
-        return juce::Result::fail("That slot is empty: double-click it for a new clip, or drop one on it.");
-    auto& deck = dj->decks[static_cast<size_t>(index)];
-    const auto keepBeat = deck.info.loaded && deck.info.kind == DjSourceKind::track && deck.info.trackId == tracks[track]->itemID;
-    if (deck.info.live)
+        return juce::Result::fail("That cell is empty: double-click it for a new clip, or drop one on it.");
+    for (int other = 0; other < dj->count; ++other)
+        if (other != index && dj->decks[static_cast<size_t>(dj->slotOf(other))].boundTrack == tracks[track]->itemID)
+            return juce::Result::fail(trackName(track).quoted() + " plays on deck " + juce::String(other + 1)
+                                      + " already: a track plays one deck at a time.");
+    auto& deck = dj->decks[static_cast<size_t>(deckSlot)];
+    const auto sameTrack = deck.info.kind == DjSourceKind::track && deck.info.trackId == tracks[track]->itemID;
+    // The cell it plays, or is reading, chosen again: nothing to do. Made
+    // over, a read in flight would be dropped as stale and not asked again.
+    if (sameTrack && deck.info.slot == scene && (deck.info.loaded || deck.info.loading))
+        return juce::Result::ok();
+    const auto keepBeat = sameTrack && deck.info.loaded;
+    if (deck.info.live && !sameTrack)
         setDjDeckLive(index, false);
-    for (auto& job : dj->jobs)
-        if (job->deck == index)
-            job->cancel.store(true);
     const auto generation = deck.info.generation + 1;
+    const auto live = deck.info.live;
+    const auto wasLoaded = deck.info.loaded;
     deck.info = {};
     deck.info.kind = DjSourceKind::track;
     deck.info.trackId = tracks[track]->itemID;
     deck.info.slot = scene;
     deck.info.name = trackName(track) + " / " + clip.name;
     deck.info.generation = generation;
+    deck.info.live = live;
+    // Material it already plays stays on it until the cell's lands.
+    deck.info.loaded = sameTrack && wasLoaded;
     deck.settings = {};
     deck.settings.loopWhole = true;
+    deck.materialDirty = false;
+    // A deck moving to another track keeps playing what it had until the new
+    // cell lands - at once for a MIDI cell; for an audio cell, read on the
+    // worker, the old material is heard through the new track's chain for
+    // that moment, which is the price of the deck not stopping.
+    bindDjTrack(deckSlot, track);
     markDjModified();
-    return bounceDjDeck(index, keepBeat);
+    return loadDjClip(deckSlot, keepBeat);
 }
 
-juce::Result Session::loadDjDeckGroup(int index, int groupId)
+// The deck's cell made into what the deck plays. A MIDI clip is its notes,
+// over its length in whole bars, read at the song's tempo: the deck sequences
+// them into the track, whose instrument sounds them, so the material carries
+// no audio of its own. An audio clip is its sound, read from its file on the
+// worker, which the deck plays into the track's effects. A cell found empty -
+// its clip deleted under the deck - leaves the deck the track's, playing
+// nothing.
+juce::Result Session::loadDjClip(int slot, bool keepBeat)
 {
-    if (dj == nullptr || !juce::isPositiveAndBelow(index, dj->count))
-        return juce::Result::fail("That deck does not exist.");
-    const auto group = trackGroup(groupId);
-    if (!group)
-        return juce::Result::fail("That group does not exist.");
-    auto& deck = dj->decks[static_cast<size_t>(index)];
-    if (deck.info.live)
-        setDjDeckLive(index, false);
-    for (auto& job : dj->jobs)
-        if (job->deck == index)
-            job->cancel.store(true);
-    const auto generation = deck.info.generation + 1;
-    deck.info = {};
-    deck.info.kind = DjSourceKind::group;
-    deck.info.groupId = groupId;
-    deck.info.name = group->name;
-    deck.info.generation = generation;
-    deck.settings = {};
-    deck.settings.loopWhole = true;
-    markDjModified();
-    return bounceDjDeck(index, false);
-}
-
-juce::Result Session::rebounceDjDeck(int index)
-{
-    if (dj == nullptr || !juce::isPositiveAndBelow(index, dj->count))
-        return juce::Result::fail("That deck does not exist.");
-    const auto& info = dj->decks[static_cast<size_t>(index)].info;
-    if (info.kind != DjSourceKind::track && info.kind != DjSourceKind::group)
-        return juce::Result::fail("Only a track or a group is bounced; a file is read as it is.");
-    return bounceDjDeck(index, info.loaded);
-}
-
-// The bounce. One track, or a bus with the members that feed it, rendered
-// from the top of the song to the end of the last clip among them, rounded
-// up to whole bars, through its own devices and fader and nothing else. The
-// song's mute and solo are left out of the copy, and the clips in the
-// tracks' slots are kept out of the render as a merge keeps them out. The
-// render runs on the worker against a copy of the document; what this does
-// on the message thread is make the copy and the render, which takes a
-// fraction of a second, and hand them over.
-juce::Result Session::bounceDjDeck(int index, bool keepBeat)
-{
-    jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
     auto& b = *dj;
-    auto& deck = b.decks[static_cast<size_t>(index)];
-    const auto info = djDeckInfo(index);
-    // A bounce of this deck still being made is let land: the deck is
-    // marked behind it and bounces once more when it does. Starting over on
-    // every edit cancelled a long render under itself again and again, and
-    // the deck never got its material while its devices were worked. A new
-    // source cancels the job first, so it is not held up by this.
-    for (const auto& work : b.bounces)
-        if (work->job->deck == index && !work->job->done.load(std::memory_order_acquire) && !work->job->cancel.load())
-        {
-            deck.info.stale = true;
-            b.staleSince = juce::Time::getMillisecondCounter();
-            return juce::Result::ok();
-        }
-    // The bounce begun here reads the document as it stands, so it catches
-    // up on everything the deck was behind on.
-    deck.info.stale = false;
-    deck.info.behindOn = ModelChange::none;
-    deck.info.error.clear();
+    auto& deck = b.decks[static_cast<size_t>(slot)];
+    const auto info = djSlotInfo(slot);
     const auto fail = [&deck, this](const juce::String& message)
     {
         deck.info.error = message;
@@ -325,499 +368,298 @@ juce::Result Session::bounceDjDeck(int index, bool keepBeat)
         return juce::Result::fail(message);
     };
     if (info.track < 0)
-        return fail(info.kind == DjSourceKind::group ? "The deck's group is no longer in the song."
-                                                     : "The deck's track is no longer in the song.");
-    const auto tracks = te::getAudioTracks(*edit);
-    std::vector<int> members;
-    if (info.kind == DjSourceKind::group)
+        return fail("The deck's track is no longer in the song.");
+    auto* cell = info.slot >= 0 ? clipSlotAt(info.track, info.slot) : nullptr;
+    auto* clip = cell != nullptr ? cell->getClip() : nullptr;
+    const auto cancelReads = [&b, slot]
     {
-        const auto group = trackGroup(info.groupId);
-        if (!group)
-            return fail("The deck's group is no longer in the song.");
-        members.push_back(group->busTrack);
-        for (int t = group->firstTrack; t <= group->lastTrack(); ++t)
-            members.push_back(t);
-    }
-    else
+        for (auto& job : b.jobs)
+            if (job->slot == slot)
+                job->cancel.store(true);
+    };
+    if (clip == nullptr)
     {
-        members.push_back(info.track);
+        cancelReads();
+        const auto generation = deck.info.generation + 1;
+        deck.clipSignature.clear();
+        deck.info.slot = -1;
+        deck.info.loaded = false;
+        deck.info.loading = false;
+        deck.info.name = trackName(info.track);
+        deck.info.generation = generation;
+        deck.waiting = DjBooth::Deck::WaitingSource {nullptr, false, generation};
+        handOverDjSource(slot);
+        sendSynchronousChangeMessage();
+        return juce::Result::ok();
     }
-    // A slot deck plays one of the track's clips in place of its arrangement.
-    te::Clip* slotSource = nullptr;
-    if (info.kind == DjSourceKind::track && info.slot >= 0)
-    {
-        auto* slot = clipSlotAt(info.track, info.slot);
-        slotSource = slot != nullptr ? slot->getClip() : nullptr;
-        if (slotSource == nullptr)
-            return fail("The deck's clip slot is empty now.");
-    }
-    // The span: to the end of the last clip, in whole bars, at least one; a
-    // slot deck's span is its clip's own length.
-    auto end = tracktion::core::TimePosition::fromSeconds(0.0);
-    bool anyClip = slotSource != nullptr;
-    if (slotSource != nullptr)
-        end = tracktion::core::TimePosition() + slotSource->getPosition().time.getLength();
-    else
-        for (const auto member : members)
-            for (auto* clip : tracks[member]->getClips())
-                if (clip != nullptr && shouldShowClipInArrangement(*clip))
-                {
-                    end = std::max(end, clip->getPosition().time.getEnd());
-                    anyClip = true;
-                }
-    if (!anyClip)
-        return fail((info.kind == DjSourceKind::group ? "The group " : "The track ") + info.name.quoted()
-                    + " has no clips to bounce yet.");
-    const auto endBeats = edit->tempoSequence.toBeats(end).inBeats();
-    const auto bars = std::max(1.0, std::ceil(endBeats / beatsPerBar() - 1.0e-6));
-    const auto spanEnd = edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(bars * beatsPerBar()));
+    deck.info.error.clear();
+    const auto barBeats = std::max(1.0, beatsPerBar());
+    const auto clipSeconds = clip->getPosition().time.getLength().inSeconds();
+    const auto clipBeats = edit->tempoSequence.toBeats(tracktion::core::TimePosition::fromSeconds(clipSeconds)).inBeats();
+    const auto spanBeats = wholeBarsBeats(clipBeats, barBeats);
+    const auto spanSeconds = edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(spanBeats)).inSeconds();
+    const auto bpm = tempo();
+    const auto perBar = std::max(1, static_cast<int>(std::lround(barBeats)));
 
-    // The material's notes, for the live preview: a slot clip's own, or
-    // every MIDI clip of the track where it lies, in beats from the top. A
-    // group has several instruments and is not previewed.
-    std::vector<DjMidiEvent> notes;
-    const auto appendNotes = [this, &notes](te::Clip& clip, double startBeat, double lengthBeats)
+    if (auto* midi = dynamic_cast<te::MidiClip*>(clip))
     {
-        auto* midi = dynamic_cast<te::MidiClip*>(&clip);
-        if (midi == nullptr) return;
-        const auto offset = clipOffsetBeats(clip);
+        auto material = std::make_unique<DjTrack>();
+        const auto rate = b.engine.sampleRate() > 7000.0 ? b.engine.sampleRate() : 48000.0;
+        material->sampleRate = rate;
+        material->name = info.name;
+        material->silentFrames = std::max(1, static_cast<int>(std::lround(spanSeconds * rate)));
+        const auto offset = clipOffsetBeats(*clip);
         for (auto* note : midi->getSequence().getNotes())
         {
             const auto start = note->getStartBeat().inBeats() - offset;
             const auto end = start + note->getLengthBeats().inBeats();
-            if (end <= 0.0 || start >= lengthBeats) continue;
-            notes.push_back({startBeat + std::max(0.0, start), note->getNoteNumber(), note->getVelocity(), true});
-            notes.push_back({startBeat + std::min(lengthBeats, end), note->getNoteNumber(), 0, false});
+            if (end <= 0.0 || start >= clipBeats) continue;
+            material->midi.push_back({std::max(0.0, start), note->getNoteNumber(), note->getVelocity(), true});
+            material->midi.push_back({std::min(clipBeats, end), note->getNoteNumber(), 0, false});
         }
-    };
-    if (info.kind == DjSourceKind::track)
-    {
-        if (slotSource != nullptr)
-            appendNotes(*slotSource, 0.0, edit->tempoSequence.toBeats(end).inBeats());
-        else
-            for (auto* clip : tracks[info.track]->getClips())
-                if (clip != nullptr && shouldShowClipInArrangement(*clip))
-                {
-                    const auto range = clip->getPosition().time;
-                    const auto startBeat = edit->tempoSequence.toBeats(range.getStart()).inBeats();
-                    appendNotes(*clip, startBeat, edit->tempoSequence.toBeats(range.getEnd()).inBeats() - startBeat);
-                }
-        std::sort(notes.begin(), notes.end(), [](const DjMidiEvent& a, const DjMidiEvent& b)
+        std::sort(material->midi.begin(), material->midi.end(), [](const DjMidiEvent& a, const DjMidiEvent& c)
         {
-            return a.beat < b.beat || (a.beat == b.beat && !a.on && b.on);
+            return a.beat < c.beat || (a.beat == c.beat && !a.on && c.on);
         });
-    }
-
-    // A MIDI track with no instrument renders nothing - the engine's renderer
-    // refuses it outright - so the deck holds silence of the span instead, on
-    // the song's grid, and is bounced again once an instrument arrives, as
-    // any edit bounces it. Without this a cell made on a bare track never
-    // loaded and the deck's keys stayed dark (reported 2026-10-10).
-    if (info.kind == DjSourceKind::track && trackType(info.track) == TrackType::midi
-        && trackInstrument(*tracks[info.track]) == nullptr)
-    {
-        for (auto& job : b.jobs)
-            if (job->deck == index)
-                job->cancel.store(true);
-        auto silent = std::make_unique<DjTrack>();
-        const auto deviceRate = engine.getDeviceManager().getSampleRate();
-        silent->sampleRate = deviceRate > 7000.0 ? deviceRate : 48000.0;
-        silent->name = info.name;
-        silent->left.assign(static_cast<size_t>(std::max(1.0, std::round(spanEnd.inSeconds() * silent->sampleRate))), 0.0f);
-        DjAnalysisOptions options;
-        options.knownBpm = tempo();
-        options.knownFirstBeatSeconds = 0.0;
-        options.beatsPerBar = std::max(1, static_cast<int>(std::lround(beatsPerBar())));
-        options.detectKey = false;
-        silent->analysis = analyseDjTrack(silent->left.data(), nullptr, silent->length(), silent->sampleRate, options);
-        silent->midi = std::move(notes);
-        juce::Logger::writeToLog("Rhino: deck " + juce::String(index + 1) + " holds " + juce::String(bars, 0) + " bars of silence: "
-                                 + info.name.quoted() + " has no instrument yet");
-        finishDjLoad(index, deck.info.generation, std::move(silent), {}, keepBeat);
+        juce::StringArray fields {clip->itemID.toString(), juce::String(material->silentFrames), juce::String(bpm, 6),
+                                  juce::String(perBar)};
+        for (const auto& event : material->midi)
+            fields.add(juce::String(event.beat, 6) + " " + juce::String(event.note) + " " + juce::String(event.velocity)
+                       + (event.on ? " on" : " off"));
+        const auto signature = fields.joinIntoString(";");
+        if (deck.info.loaded && keepBeat && signature == deck.clipSignature)
+            return juce::Result::ok();   // the same notes: nothing to hand over
+        cancelReads();
+        deck.clipSignature = signature;
+        // The grid is the song's, and the picture a strip of silence the
+        // length of the clip: the screen draws the notes over it.
+        auto& analysis = material->analysis;
+        analysis.bpm = bpm;
+        analysis.firstBeatSeconds = 0.0;
+        analysis.beatsPerBar = perBar;
+        analysis.confidence = 1.0;
+        analysis.columns.assign(static_cast<size_t>(material->silentFrames / DjAnalysis::columnFrames + 1), {});
+        finishDjLoad(slot, deck.info.generation, std::move(material), {}, keepBeat);
         return juce::Result::ok();
     }
 
-    // A clip whose file is gone would hold the render, and the worker with
-    // it, until the budget below ran out: refused here, naming the file,
-    // before anything is copied.
-    juce::Array<te::Clip*> rendered;
-    if (slotSource != nullptr)
-        rendered.add(slotSource);
-    else
-        for (const auto member : members)
-            rendered.addArray(tracks[member]->getClips());
-    for (auto* clip : rendered)
-        if (const auto readable = checkClipFile(*clip); readable.failed())
-            return fail(readable.getErrorMessage());
-
-    const auto folder = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("Rhino DJ bounces");
-    if (!folder.createDirectory().wasOk())
-        return fail("Rhino could not create a folder for the bounce.");
-    const auto file = folder.getNonexistentChildFile("Deck " + juce::String(index + 1), ".wav");
-
-    // The copy: the document as it stands, lanes mirrored onto the engine's
-    // curves first so the render plays them as playback would. Only the
-    // tracks the bounce plays are built in it: every other track's devices
-    // were instantiated for nothing, and a synth or a kit on one of them was
-    // most of what each bounce cost the message thread.
-    mirrorAutomationToEngine();
-    edit->flushState();
-    std::vector<te::EditItemID> memberIds;
-    for (const auto member : members)
-        memberIds.push_back(tracks[member]->itemID);
-    const auto copyStarted = juce::Time::getMillisecondCounterHiRes();
-    // For rendering, so the engine can never make it a playback context and
-    // run its plugins on the device's thread beside the worker's render; and
-    // told the document's file before it is built, as a document being
-    // opened is, or every clip stored relative to the document rendered
-    // nothing ("Didn't find any audio to render").
-    auto copy = loadDocumentEdit(engine, deckCopyState(edit->state, memberIds, b.copyIds[static_cast<size_t>(index)]),
-                                 edit->editFileRetriever ? edit->editFileRetriever() : juce::File(), te::Edit::forRendering);
-    if (copy == nullptr)
-        return fail("The song could not be copied for the bounce.");
-    const auto copyMs = juce::Time::getMillisecondCounterHiRes() - copyStarted;
-    b.copyFolders[static_cast<size_t>(index)] = copy->getTempDirectory(false);
-    te::Track::Array played;
-    const auto copyTracks = te::getAudioTracks(*copy);
-    for (const auto id : memberIds)
-        for (auto* track : copyTracks)
-            if (track->itemID == id)
-                played.add(track);
-    if (played.size() != static_cast<int>(memberIds.size()))
-        return fail("The deck's tracks were not found in the copy of the song.");
-    if (info.kind == DjSourceKind::group)
-    {
-        // A group plays its bus with the members that feed it. A track's
-        // output names its bus by its place in the track list, which the
-        // stripping has moved: with the full copy a member played into its
-        // bus, with the stripped one it played straight out and the bus's
-        // fader was not heard. So each member's routing is set again in the
-        // copy, by the bus's id, before anything is rendered.
-        for (const auto id : memberIds)
-        {
-            te::AudioTrack* liveTrack = nullptr;
-            for (auto* track : tracks)
-                if (track->itemID == id)
-                    liveTrack = track;
-            auto* liveDestination = liveTrack != nullptr ? liveTrack->getOutput().getDestinationTrack() : nullptr;
-            if (liveDestination == nullptr)
-                continue;
-            te::AudioTrack* copyTrack = nullptr;
-            te::AudioTrack* copyDestination = nullptr;
-            for (auto* track : copyTracks)
-            {
-                if (track->itemID == id) copyTrack = track;
-                if (track->itemID == liveDestination->itemID) copyDestination = track;
-            }
-            if (copyTrack != nullptr && copyDestination != nullptr)
-                copyTrack->getOutput().setOutputToTrack(copyDestination);
-        }
-    }
-    else if (auto* track = dynamic_cast<te::AudioTrack*>(played.getFirst().get());
-             track != nullptr && !track->getOutput().usesDefaultAudioOut())
-    {
-        // A track plays as it sounds on its own: the deck is its channel,
-        // with a fader of its own, so a group the track is in is not part of
-        // it and its bus is not in the copy. The track's output still names
-        // that bus, which an engine left to resolve a missing destination
-        // never finishes rendering, so it goes straight out instead.
-        track->getOutput().setOutputToDefaultDevice(false);
-    }
-    if (slotSource != nullptr)
-    {
-        // The copy's track plays the slot's clip from the top, through the
-        // same chain, in place of whatever its arrangement holds. The slot
-        // itself stays disabled for the render, as every slot is.
-        auto* copyTrack = dynamic_cast<te::AudioTrack*>(played.getFirst().get());
-        if (copyTrack == nullptr)
-            return fail("The deck's track was not found in the copy of the song.");
-        const auto slots = copyTrack->getClipSlotList().getClipSlots();
-        auto* copySlotClip = juce::isPositiveAndBelow(info.slot, slots.size()) ? slots[info.slot]->getClip() : nullptr;
-        if (copySlotClip == nullptr)
-            return fail("The deck's clip slot was not found in the copy of the song.");
-        const auto arrangementClips = copyTrack->getClips();
-        for (auto* clip : arrangementClips)
-            clip->removeFromParent();
-        auto* laid = copyClipInto(*copyTrack, *copySlotClip, {tracktion::core::TimePosition(), end}, copySlotClip->getName());
-        if (laid == nullptr)
-            return fail("The deck's clip could not be laid out for the bounce.");
-        laid->setLoopRangeBeats({});
-    }
-
-    // A read already in flight for this deck is let go of: the newer bounce
-    // is the one that counts.
-    for (auto& job : b.jobs)
-        if (job->deck == index)
-            job->cancel.store(true);
+    auto* wave = dynamic_cast<te::WaveAudioClip*>(clip);
+    if (wave == nullptr)
+        return fail("That clip cannot be played on a deck.");
+    if (const auto readable = checkClipFile(*clip); readable.failed())
+        return fail(readable.getErrorMessage());
+    const auto sourceFile = wave->getAudioFile().getFile();
+    const auto startSeconds = clip->getPosition().getOffset().inSeconds();
+    const auto signature = juce::StringArray {clip->itemID.toString(), sourceFile.getFullPathName(), juce::String(startSeconds, 6),
+                                              juce::String(clipSeconds, 6), juce::String(spanSeconds, 6), juce::String(bpm, 6),
+                                              juce::String(perBar)}
+                               .joinIntoString(";");
+    if (deck.info.loaded && keepBeat && signature == deck.clipSignature)
+        return juce::Result::ok();   // the same stretch of the same file: nothing to read again
+    cancelReads();
+    deck.clipSignature = signature;
     auto job = std::make_shared<DjLoadJob>();
-    job->deck = index;
+    job->slot = slot;
     job->generation = deck.info.generation;
-    job->file = file;
+    job->file = sourceFile;
+    job->startSeconds = startSeconds;
+    job->lengthSeconds = clipSeconds;
     job->keepBeat = keepBeat;
     job->name = info.name;
-    job->tempo = tempo();
-    job->beatsPerBar = std::max(1, static_cast<int>(std::lround(beatsPerBar())));
-    job->midi = std::move(notes);
-    auto work = std::make_unique<DjBounceWork>();
-    work->job = job;
-    work->copy = std::move(copy);
-    work->slotDisabler = std::make_unique<te::Renderer::ScopedClipSlotDisabler>(*work->copy, played);
-    auto& devices = engine.getDeviceManager();
-    te::Renderer::Parameters parameters(*work->copy);
-    parameters.destFile = file;
-    parameters.audioFormat = &work->wav;
-    // Floating point, so a track driven past full scale reaches the deck as
-    // it is and the booth's own gain does the rest, rather than arriving
-    // clipped in the file: 24-bit stopped every sample at 1.0.
-    parameters.bitDepth = 32;
-    // Rendered at the device's own rate and block size, as a merge is.
-    parameters.sampleRateForAudio = devices.getSampleRate() > 7000.0 ? devices.getSampleRate() : 48000.0;
-    parameters.blockSizeForAudio = devices.getBlockSize() > 0 ? devices.getBlockSize() : 512;
-    parameters.time = {tracktion::core::TimePosition(), spanEnd};
-    // The track, or a group's bus with the members that feed it: the engine
-    // builds a member into its bus's node, and a bus named alone renders
-    // nothing.
-    const auto all = te::getAllTracks(*work->copy);
-    for (auto* track : played)
-    {
-        const auto position = all.indexOf(static_cast<te::Track*>(track));
-        if (position >= 0)
-            parameters.tracksToDo.setBit(position);
-    }
-    // The track as it sounds: its instrument, its effects and its fader.
-    // The main chain stays out, as it is the mixer's job here.
-    parameters.usePlugins = true;
-    parameters.useMasterPlugins = false;
-    parameters.canRenderInMono = false;
-    work->task = std::make_unique<te::Renderer::RenderTask>("Bounce to deck", parameters, nullptr, nullptr);
-    job->started = juce::Time::getMillisecondCounterHiRes();
-    deck.info.loading = true;
-    juce::Logger::writeToLog("Rhino: bouncing " + info.name.quoted() + " to deck " + juce::String(index + 1) + ": "
-                             + juce::String(bars, 0) + " bars, " + juce::String(members.size()) + " track(s), copied in "
-                             + juce::String(copyMs, 1) + " ms");
+    job->knownBpm = bpm;
+    job->beatsPerBar = perBar;
     b.jobs.push_back(job);
-    auto* task = work->task.get();
-    b.bounces.push_back(std::move(work));
-    ++b.bouncesStarted;
+    deck.info.loading = true;
     auto* formats = &b.formats;
-    const auto render = [job, task, formats]
+    const auto padTo = spanSeconds;
+    b.workers.addJob([job, formats, padTo]
     {
         juce::String error;
-        // A render that returns unfinished for good would hold the worker
-        // for good; a budget turns that into a refusal.
-        const auto deadline = juce::Time::getMillisecondCounterHiRes() + 60000.0;
-        while (task->runJob() != juce::ThreadPoolJob::jobHasFinished)
+        auto track = readDjTrack(job->file, *formats, error, &job->cancel, job->startSeconds, job->lengthSeconds);
+        if (track != nullptr && !job->cancel.load())
         {
-            if (job->cancel.load())
-            {
-                error = "Cancelled.";
-                break;
-            }
-            if (juce::Time::getMillisecondCounterHiRes() > deadline)
-            {
-                error = "The bounce did not finish in time.";
-                break;
-            }
+            // Whole bars, the rest silence, so the cell loops on the grid.
+            const auto frames = static_cast<size_t>(std::max<double>(static_cast<double>(track->length()),
+                                                                     std::round(padTo * track->sampleRate)));
+            track->left.resize(frames, 0.0f);
+            if (track->stereo()) track->right.resize(frames, 0.0f);
+            track->name = job->name;
+            DjAnalysisOptions options;
+            options.knownBpm = job->knownBpm;
+            options.knownFirstBeatSeconds = 0.0;
+            options.beatsPerBar = job->beatsPerBar;
+            options.cancel = &job->cancel;
+            track->analysis = analyseDjTrack(track->left.data(), track->stereo() ? track->right.data() : nullptr,
+                                             track->length(), track->sampleRate, options);
         }
-        if (error.isEmpty() && (task->errorMessage.isNotEmpty() || !job->file.existsAsFile()))
-            error = task->errorMessage.isNotEmpty() ? task->errorMessage : juce::String("The bounce could not be rendered.");
-        std::unique_ptr<DjTrack> track;
-        if (error.isEmpty())
-        {
-            track = readDjTrack(job->file, *formats, error, &job->cancel);
-            if (track != nullptr)
-            {
-                track->name = job->name;
-                track->midi = std::move(job->midi);
-                DjAnalysisOptions options;
-                options.knownBpm = job->tempo;
-                options.knownFirstBeatSeconds = 0.0;
-                options.beatsPerBar = job->beatsPerBar;
-                options.cancel = &job->cancel;
-                track->analysis = analyseDjTrack(track->left.data(), track->stereo() ? track->right.data() : nullptr,
-                                                 track->length(), track->sampleRate, options);
-            }
-        }
-        job->file.deleteFile();
-        juce::Logger::writeToLog("Rhino: bounce to deck " + juce::String(job->deck + 1) + (error.isEmpty() ? " rendered in " : " failed after ")
-                                 + juce::String(juce::Time::getMillisecondCounterHiRes() - job->started, 0) + " ms"
-                                 + (error.isEmpty() ? juce::String() : ": " + error));
         job->error = error;
         job->result = std::move(track);
         job->done.store(true, std::memory_order_release);
-    };
-    // The render's initialisation takes the message manager's lock, which
-    // the worker is granted only while the message thread dispatches. The
-    // app's always does, as it does for the WAV export; the test runners
-    // have no dispatch loop (modal loops are compiled out), so under the
-    // command-line test mode the render runs here, inline, and the poll
-    // still installs it.
-    if (isCommandLineTestMode())
-        render();
-    else
-        b.workers.addJob(render);
+    });
     sendSynchronousChangeMessage();
     return juce::Result::ok();
 }
 
-// Material arriving on a deck, from a bounce or a read. The settings read
-// from a document, or the whole-loop a fresh bounce asks for, are applied
-// once the engine has adopted it - which it does at its next block, so the
-// commands are queued behind the swap.
-void Session::finishDjLoad(int index, int generation, std::unique_ptr<DjTrack> track, const juce::String& error, bool keepBeat)
+// Material arriving on a deck, from a clip or a read. It reaches the engine
+// as a command, and the settings read from a document, or the whole-loop a
+// fresh clip asks for, are queued behind it, so the block that takes the
+// material up applies them to it.
+void Session::finishDjLoad(int slot, int generation, std::unique_ptr<DjTrack> track, const juce::String& error, bool keepBeat)
 {
-    if (dj == nullptr || !juce::isPositiveAndBelow(index, dj->count)) return;
+    if (dj == nullptr || dj->deckOfSlot(slot) < 0) return;
     auto& b = *dj;
-    auto& deck = b.decks[static_cast<size_t>(index)];
+    auto& deck = b.decks[static_cast<size_t>(slot)];
+    const auto deckNumber = juce::String(b.deckOfSlot(slot) + 1);
     if (deck.info.generation != generation)
         return;   // a later load has taken the deck
     deck.info.loading = false;
-    // Edits that came while this bounce was made leave it behind already: it
-    // lands, and the deck bounces once more at once rather than after the
-    // poll's quiet moment, so a set being worked never waits on a render
-    // that was cancelled under it. Not while the person is in the middle of
-    // a gesture, though: a bounce begins with a copy of the document made on
-    // this thread, and one made under a held knob or a drag froze the
-    // display (2026-10-11). The deck stays behind for the poll instead,
-    // which bounces it once the quiet has passed with nothing held.
-    const auto behind = deck.info.stale && deck.info.autoRebounce
-                     && (deck.info.kind == DjSourceKind::track || deck.info.kind == DjSourceKind::group);
-    const auto bounceAgain = behind && !gestureHeld();
-    if (behind && !bounceAgain && b.staleSince == 0)
-        b.staleSince = juce::Time::getMillisecondCounter();
-    // A preview held for this bounce ends with it, landed or not - the
-    // engine takes the new material and the bounce is heard again from the
-    // beat the preview reached - unless a knob is still held, or the bounce
-    // is already behind, in which case the preview goes on over the next.
-    if (!deck.info.previewing || (parameterGestureDepth == 0 && !behind))
-        djFinishPreview(index);
     if (track == nullptr)
     {
         deck.info.error = error;
         deck.info.loaded = false;
-        juce::Logger::writeToLog("Rhino: deck " + juce::String(index + 1) + " could not load: " + error);
+        juce::Logger::writeToLog("Rhino: deck " + deckNumber + " could not load: " + error);
         sendSynchronousChangeMessage();
-        if (bounceAgain)
-            bounceDjDeck(index, false);
         return;
     }
+    deck.waiting = DjBooth::Deck::WaitingSource {std::move(track), keepBeat, generation};
+    if (!handOverDjSource(slot))
+    {
+        // The engine's queue drains only while blocks run, so it is full when
+        // the device has stopped: the material waits here, and the poll
+        // hands it over once there is room.
+        juce::Logger::writeToLog("Rhino: deck " + deckNumber + " waits for room in the booth's command queue to take its material");
+        sendSynchronousChangeMessage();
+    }
+}
+
+bool Session::handOverDjSource(int slot)
+{
+    auto& b = *dj;
+    auto& deck = b.decks[static_cast<size_t>(slot)];
+    if (!deck.waiting.has_value())
+        return true;
+    if (deck.waiting->generation != deck.info.generation)
+    {
+        // A newer load or eject has taken the deck since: this one is moot.
+        deck.waiting.reset();
+        return true;
+    }
+    auto& source = *deck.waiting;
+    const auto ejecting = source.material == nullptr;
+    const auto keepBeat = source.keepBeat;
     const auto first = !deck.info.loaded;
-    const auto seconds = track->seconds();
-    const auto bpm = track->analysis.bpm;
-    b.engine.setTrack(index, std::move(track), keepBeat);
+    const auto seconds = ejecting ? 0.0 : source.material->seconds();
+    const auto bpm = ejecting ? 0.0 : source.material->analysis.bpm;
+    // The material and the settings queued behind it go together: it waits
+    // until the queue has room for the cue, every hot cue and the loop too.
+    const auto settings = !ejecting && (first || !keepBeat) ? 2 + DjDeck::hotCueCount : 0;
+    if (DjEngine::queueSize - 1 - b.engine.pendingCommands() < 1 + settings
+        || !b.engine.setDeckSource(slot, std::move(source.material), keepBeat))
+    {
+        // The deck goes on with what it had meanwhile; a load is still
+        // loading.
+        deck.info.loading = !ejecting;
+        return false;
+    }
+    deck.waiting.reset();
     b.engine.collect();
+    if (ejecting)
+    {
+        deck.info.loaded = false;
+        return true;
+    }
+    deck.info.loading = false;
     deck.info.loaded = true;
     deck.info.error.clear();
-    // New material, whether a first load or a bounce made again: a display
+    // New material, whether a first load or a clip made again: a display
     // keyed on the generation redraws.
     ++deck.info.generation;
+    // A remake already on its way was asked for after this material, so it
+    // lands on the new generation rather than being dropped as stale.
+    for (auto& job : b.jobs)
+        if (job->slot == slot && !job->cancel.load())
+            job->generation = deck.info.generation;
     if (first || !keepBeat)
-        applyDjDeckSettings(index);
-    juce::Logger::writeToLog("Rhino: deck " + juce::String(index + 1) + " loaded " + deck.info.name.quoted() + ", "
+        applyDjDeckSettings(slot);
+    juce::Logger::writeToLog("Rhino: deck " + juce::String(b.deckOfSlot(slot) + 1) + " loaded " + deck.info.name.quoted() + ", "
                              + juce::String(seconds, 1) + " s" + (bpm > 0.0 ? ", " + juce::String(bpm, 2) + " BPM" : ""));
     if (deck.info.live && deck.info.kind == DjSourceKind::track && !deck.monitoringBeforeLive.has_value())
     {
         // Live was saved with the document: switch the track's input on now
         // that the deck is here.
         deck.info.live = false;
-        setDjDeckLive(index, true);
+        setDjDeckLive(b.deckOfSlot(slot), true);
     }
     sendSynchronousChangeMessage();
-    if (bounceAgain)
-        bounceDjDeck(index, true);
+    return true;
 }
 
-void Session::applyDjDeckSettings(int index)
+void Session::applyDjDeckSettings(int slot)
 {
     auto& b = *dj;
-    auto& deck = b.decks[static_cast<size_t>(index)];
-    const auto* track = b.engine.trackOf(index);
+    auto& deck = b.decks[static_cast<size_t>(slot)];
+    const auto* track = b.engine.trackOf(slot);
     if (track == nullptr) return;
     const auto rate = track->sampleRate;
     auto& settings = deck.settings;
-    auto& engineDeck = b.engine.deck(index);
-    engineDeck.tempoRange.store(settings.tempoRange, std::memory_order_relaxed);
-    engineDeck.tempoPercent.store(settings.tempoPercent, std::memory_order_relaxed);
-    engineDeck.synced.store(settings.synced, std::memory_order_relaxed);
-    engineDeck.reversed.store(settings.reversed, std::memory_order_relaxed);
+    auto& controls = b.engine.deck(slot).controls;
+    controls.tempoRange.store(settings.tempoRange, std::memory_order_relaxed);
+    controls.tempoPercent.store(settings.tempoPercent, std::memory_order_relaxed);
+    controls.synced.store(settings.synced, std::memory_order_relaxed);
+    controls.reversed.store(settings.reversed, std::memory_order_relaxed);
     using Command = DjEngine::Command;
-    const auto push = [&b](Command c)
+    const auto push = [&b](const Command& c)
     {
         if (!b.engine.push(c))
             juce::Logger::writeToLog("Rhino: the DJ booth's command queue is full; a setting was dropped");
     };
-    Command cue;
-    cue.type = Command::Type::setCue;
-    cue.deck = index;
-    cue.value = std::max(0.0, settings.cueSeconds) * rate;
-    push(cue);
+    push(Command::setCue(slot, std::max(0.0, settings.cueSeconds) * rate));
     for (int i = 0; i < DjDeck::hotCueCount; ++i)
-    {
-        const auto at = settings.hotCueSeconds[static_cast<size_t>(i)];
-        if (at < 0.0) continue;
-        Command set;
-        set.type = Command::Type::setHotCue;
-        set.deck = index;
-        set.count = i;
-        set.value = at * rate;
-        push(set);
-    }
-    Command loop;
-    loop.type = Command::Type::setLoop;
-    loop.deck = index;
+        if (const auto at = settings.hotCueSeconds[static_cast<size_t>(i)]; at >= 0.0)
+            push(Command::setHotCue(slot, i, at * rate));
     if (settings.loopWhole)
-    {
-        loop.value = 0.0;
-        loop.value2 = static_cast<double>(track->length());
-        loop.flag = true;
-        push(loop);
-    }
+        push(Command::setLoop(slot, 0.0, static_cast<double>(track->length()), true));
     else if (settings.loop.valid())
-    {
-        loop.value = settings.loop.startSeconds * rate;
-        loop.value2 = settings.loop.endSeconds * rate;
-        loop.flag = settings.loop.active;
-        push(loop);
-    }
+        push(Command::setLoop(slot, settings.loop.startSeconds * rate, settings.loop.endSeconds * rate, settings.loop.active));
     settings.loopWhole = false;
 }
 
 void Session::ejectDjDeck(int index)
 {
-    if (dj == nullptr || !juce::isPositiveAndBelow(index, dj->count)) return;
-    auto& deck = dj->decks[static_cast<size_t>(index)];
+    const auto slot = dj != nullptr ? dj->slotOf(index) : -1;
+    if (slot < 0) return;
+    auto& deck = dj->decks[static_cast<size_t>(slot)];
     if (deck.info.live)
         setDjDeckLive(index, false);
+    bindDjTrack(slot, -1);
     for (auto& job : dj->jobs)
-        if (job->deck == index)
+        if (job->slot == slot)
             job->cancel.store(true);
     const auto generation = deck.info.generation + 1;
     deck.info = {};
     deck.info.generation = generation;
     deck.settings = {};
-    dj->engine.setTrack(index, nullptr, false);
-    dj->engine.collect();
+    deck.materialDirty = false;
+    // An eject the queue has no room for waits, as a load does, and empties
+    // the deck once it has.
+    deck.waiting = DjBooth::Deck::WaitingSource {nullptr, false, generation};
+    if (!handOverDjSource(slot))
+        juce::Logger::writeToLog("Rhino: the DJ booth's command queue is full; deck " + juce::String(index + 1)
+                                 + " empties once it has room");
     markDjModified();
     sendSynchronousChangeMessage();
 }
 
-void Session::setDjDeckAutoRebounce(int index, bool automatic)
-{
-    if (dj == nullptr || !juce::isPositiveAndBelow(index, dj->count)) return;
-    dj->decks[static_cast<size_t>(index)].info.autoRebounce = automatic;
-    if (automatic && dj->decks[static_cast<size_t>(index)].info.stale)
-        dj->staleSince = juce::Time::getMillisecondCounter();
-    sendSynchronousChangeMessage();
-}
-
-// Live: the deck's track takes its input and plays it, so a Drum Rack on it
-// is heard over the bounce. It is monitoring switched On, put back when Live
-// goes off, and it needs a MIDI track with something to play.
+// Live: the deck's track takes its input too and plays it, so a Drum Rack on
+// it is heard from the keys through the deck's channel. It is monitoring
+// switched On, put back when Live goes off, and it needs a MIDI track with
+// something to play.
 juce::Result Session::setDjDeckLive(int index, bool live)
 {
-    if (dj == nullptr || !juce::isPositiveAndBelow(index, dj->count))
+    const auto slot = dj != nullptr ? dj->slotOf(index) : -1;
+    if (slot < 0)
         return juce::Result::fail("That deck does not exist.");
-    auto& deck = dj->decks[static_cast<size_t>(index)];
+    auto& deck = dj->decks[static_cast<size_t>(slot)];
     const auto info = djDeckInfo(index);
     if (live == deck.info.live && (!live || deck.monitoringBeforeLive.has_value()))
         return juce::Result::ok();
@@ -831,9 +673,7 @@ juce::Result Session::setDjDeckLive(int index, bool live)
         return juce::Result::ok();
     }
     if (info.kind != DjSourceKind::track)
-        return juce::Result::fail(info.kind == DjSourceKind::group
-            ? "A group has no instrument to play live. Load one of its tracks on a deck instead."
-            : "Live plays a track's instrument over its bounce. Load a track of the song on this deck first.");
+        return juce::Result::fail("Live plays a track's instrument from the keys. Load a track of the song on this deck first.");
     if (info.track < 0)
         return juce::Result::fail("The deck's track is no longer in the song.");
     if (trackType(info.track) != TrackType::midi)
@@ -862,144 +702,37 @@ bool Session::djDeckHasDrumRack(int index) const
     return info.kind == DjSourceKind::track && info.track >= 0 && trackHasDrumRack(info.track);
 }
 
-// A slot deck's clip, or the first clip on the deck's track of the kind
-// the track holds: a MIDI clip for the note editor, an audio clip for the
-// audio editor. The empty starter clip counts, because it is what a fresh
-// track edits in.
+// The cell the deck plays, for the note editor or the audio editor; nothing
+// while it plays none. The arrangement's clips are the arrangement's.
 te::EditItemID Session::djDeckEditClip(int index) const
 {
     const auto info = djDeckInfo(index);
-    if (info.kind != DjSourceKind::track || info.track < 0)
+    if (info.kind != DjSourceKind::track || info.track < 0 || info.slot < 0)
         return {};
-    if (info.slot >= 0)
-        return slotClip(info.track, info.slot).clipID;
-    const auto midi = trackType(info.track) == TrackType::midi;
-    const auto tracks = te::getAudioTracks(*edit);
-    te::Clip* first = nullptr;
-    for (auto* clip : tracks[info.track]->getClips())
-    {
-        const auto wanted = midi ? dynamic_cast<te::MidiClip*>(clip) != nullptr
-                                 : dynamic_cast<te::WaveAudioClip*>(clip) != nullptr;
-        if (wanted && (first == nullptr || clip->getPosition().time.getStart() < first->getPosition().time.getStart()))
-            first = clip;
-    }
-    return first != nullptr ? first->itemID : te::EditItemID();
+    return slotClip(info.track, info.slot).clipID;
 }
 
-// What a change leaves the decks behind on. Every deck plays a bounce, and
-// any change but `none` may have changed what a bounce of its track holds,
-// so the decks playing that track - or a group it is in, or every deck when
-// the track is not known - go stale and the poll bounces them again. Each
-// gathers the kinds in DjDeckInfo::behindOn until its next bounce begins: what
-// a deck playing the track's devices live will act on instead, where
-// parameters and curves reach it through the mirrors, notes are gathered
-// again, devices rebuild what it runs and a tempo is a new source.
+// What a change leaves a deck to do. A device, a knob, a curve or the track's
+// fader is heard through the live chain and asks for nothing. A change to what
+// a clip plays - its notes, its sound - makes the clip of every deck playing
+// that track again, and a tempo every deck's, since a clip's grid is the
+// song's. The poll makes them once nothing is held.
 void Session::djDocumentChanged(int track, ModelChange changes)
 {
-    if (dj == nullptr || changes == ModelChange::none) return;
-    // The changed track found once, rather than every deck walking the
-    // track list for its own: a knob drag lands here on every step.
+    if (dj == nullptr) return;
+    const auto bits = static_cast<unsigned>(changes);
+    constexpr auto clipBits = static_cast<unsigned>(ModelChange::notes) | static_cast<unsigned>(ModelChange::audioClips);
+    const auto tempoChanged = (bits & static_cast<unsigned>(ModelChange::tempo)) != 0;
+    if ((bits & clipBits) == 0 && !tempoChanged) return;
     const auto tracks = te::getAudioTracks(*edit);
     const auto changedId = juce::isPositiveAndBelow(track, tracks.size()) ? tracks[track]->itemID : te::EditItemID();
-    std::optional<std::vector<TrackGroup>> groups;
-    auto any = false;
     for (int i = 0; i < dj->count; ++i)
     {
-        auto& deck = dj->decks[static_cast<size_t>(i)];
-        if (deck.info.kind != DjSourceKind::track && deck.info.kind != DjSourceKind::group)
-            continue;
-        if (track >= 0)
-        {
-            // A change known to be one track's: only the decks playing that
-            // track, or a group it belongs to, are behind.
-            auto plays = deck.info.kind == DjSourceKind::track && deck.info.trackId == changedId;
-            if (deck.info.kind == DjSourceKind::group)
-            {
-                if (!groups.has_value())
-                    groups = trackGroups();
-                for (const auto& group : *groups)
-                    if (group.id == deck.info.groupId)
-                        plays = group.covers(track);
-            }
-            if (!plays)
-                continue;
-        }
-        deck.info.stale = true;
-        deck.info.behindOn = deck.info.behindOn | changes;
-        any = true;
+        auto& deck = dj->decks[static_cast<size_t>(dj->slotOf(i))];
+        if (deck.info.kind != DjSourceKind::track || deck.info.slot < 0) continue;
+        if (!tempoChanged && track >= 0 && deck.info.trackId != changedId) continue;
+        deck.materialDirty = true;
     }
-    if (any)
-        dj->staleSince = juce::Time::getMillisecondCounter();
-}
-
-// The live preview: while a knob on a track's device is held, every deck
-// playing that track - a MIDI track running an instrument - is heard through
-// the track itself: the engine plays the bounce's notes straight into the
-// track, as an editor's guide notes go in, and silences the bounce
-// meanwhile. Nothing is armed or monitored for it: switching monitoring on
-// rescanned the MIDI devices and rebuilt the song's graph on every touch,
-// which was the stutter a set had while its devices were worked.
-void Session::djBeginLivePreview(int track)
-{
-    if (dj == nullptr || track < 0) return;
-    // With the song rolling the track already plays its own clips live, and
-    // the deck's notes on top of them would double every hit.
-    if (edit->getTransport().isPlaying()) return;
-    auto& b = *dj;
-    const auto tracks = te::getAudioTracks(*edit);
-    auto began = false;
-    for (int i = 0; i < b.count; ++i)
-    {
-        auto& deck = b.decks[static_cast<size_t>(i)];
-        const auto info = djDeckInfo(i);
-        if (deck.info.previewing || info.kind != DjSourceKind::track || info.track != track || !info.loaded)
-            continue;
-        if (trackType(track) != TrackType::midi || !trackHasInstrument(track))
-            continue;
-        const auto state = djDeckState(i);
-        if (!state.isPlaying() && state.transport != DjDeckState::Transport::waiting)
-            continue;
-        // The track's graph has to be there to take the notes; it is, whenever
-        // the song has played or an input is monitored, and this is cheap
-        // when it is.
-        edit->getTransport().ensureContextAllocated();
-        b.previewTracks[static_cast<size_t>(i)] = tracks[track];
-        deck.info.previewing = true;
-        deck.info.previewNotes = 0;
-        b.engine.deck(i).livePreview.store(true, std::memory_order_release);
-        juce::Logger::writeToLog("Rhino: deck " + juce::String(i + 1) + " previews " + info.name.quoted() + " live while the knob is held");
-        began = true;
-    }
-    if (began)
-        sendSynchronousChangeMessage();
-}
-
-// The knob let go: the preview goes on until the bounce made now lands.
-void Session::djEndLivePreview(int track)
-{
-    if (dj == nullptr) return;
-    for (int i = 0; i < dj->count; ++i)
-    {
-        auto& deck = dj->decks[static_cast<size_t>(i)];
-        if (!deck.info.previewing) continue;
-        if (track >= 0 && djDeckInfo(i).track != track) continue;
-        if (bounceDjDeck(i, true).failed())
-            djFinishPreview(i);
-    }
-}
-
-void Session::djFinishPreview(int index)
-{
-    if (dj == nullptr || !juce::isPositiveAndBelow(index, dj->count)) return;
-    auto& deck = dj->decks[static_cast<size_t>(index)];
-    dj->engine.deck(index).livePreview.store(false, std::memory_order_release);
-    dj->previewTracks[static_cast<size_t>(index)] = nullptr;
-    if (!deck.info.previewing) return;
-    deck.info.previewing = false;
-    // Anything the engine had not let go of by the time the preview ended.
-    const auto info = djDeckInfo(index);
-    if (info.track >= 0)
-        panicMidiOnTrack(te::getAudioTracks(*edit)[info.track]);
 }
 
 // A knob, a fader, the tempo field and an audio clip's sliders say when they
@@ -1011,64 +744,12 @@ bool Session::gestureHeld() const
         || juce::Component::isMouseButtonDownAnywhere();
 }
 
-// A deck's copies share its temp folder, and a copy going cancels the proxy
-// renders its clips began - a compressed file being decoded, say - which a
-// newer copy of the same deck may be waiting on: the engine begins a clip's
-// proxy once and after that only looks for the file. So a copy whose render
-// did not finish - cancelled for a new source, or out of time - is kept while
-// a newer copy of its deck still renders. A render that finished waited for
-// every file it reads, so letting its copy go cancels nothing.
-void Session::DjBooth::releaseFinishedBounces()
-{
-    for (size_t i = 0; i < bounces.size();)
-    {
-        const auto& job = *bounces[i]->job;
-        if (!job.done.load(std::memory_order_acquire))
-        {
-            ++i;
-            continue;
-        }
-        const auto newerRendering = std::any_of(bounces.begin() + static_cast<long>(i) + 1, bounces.end(),
-                                                [&job](const std::unique_ptr<DjBounceWork>& later)
-                                                {
-                                                    return later->job->deck == job.deck
-                                                        && !later->job->done.load(std::memory_order_acquire);
-                                                });
-        if (job.error.isNotEmpty() && newerRendering)
-            ++i;
-        else
-            bounces.erase(bounces.begin() + static_cast<long>(i));
-    }
-}
-
-// Run once every copy is gone, so nothing reads these renders any more. The
-// engine's cache lets go of each file before it is deleted, as it does for
-// the files the engine deletes itself.
-void Session::DjBooth::removeCopyFolders()
-{
-    for (auto& folder : copyFolders)
-    {
-        if (folder == juce::File())
-            continue;
-        for (const auto& file : folder.findChildFiles(juce::File::findFiles, false))
-        {
-            tracktionEngine.getAudioFileManager().releaseFile(te::AudioFile(tracktionEngine, file));
-            file.deleteFile();
-        }
-        folder.deleteRecursively();
-        folder = juce::File();
-    }
-}
-
 void Session::djPoll()
 {
     if (dj == nullptr) return;
     auto& b = *dj;
-    // A preview's notes still queued, should the async update not have
-    // come round yet.
-    b.deliverPreviewNotes();
-    // Files the worker has finished, installed in the order they were asked
-    // for. A job whose deck has moved on is dropped with its result.
+    // What the worker has read, installed in the order it was asked for. A
+    // job whose deck has moved on is dropped with its result.
     for (size_t i = 0; i < b.jobs.size();)
     {
         auto& job = b.jobs[i];
@@ -1080,93 +761,110 @@ void Session::djPoll()
         auto finished = job;
         b.jobs.erase(b.jobs.begin() + static_cast<long>(i));
         if (!finished->cancel.load())
-            finishDjLoad(finished->deck, finished->generation, std::move(finished->result), finished->error, finished->keepBeat);
+            finishDjLoad(finished->slot, finished->generation, std::move(finished->result), finished->error, finished->keepBeat);
     }
-    b.releaseFinishedBounces();
-    b.engine.collect();
-    // A stale deck is loaded again once the document has been quiet for a
-    // moment - one deck per poll, so several decks do not stall one frame.
-    // A file read in a document goes to the worker; a bounce is made here.
-    if (b.staleSince == 0) return;
-    if (juce::Time::getMillisecondCounter() - b.staleSince < DjBooth::rebounceQuietMs) return;
-    // Nothing while the person is in the middle of a gesture, for the reason
-    // finishDjLoad gives: the decks stay stale and the next poll asks again.
-    // A deck previewing a held knob is one of them, and bounces when the
-    // knob is let go.
-    if (gestureHeld()) return;
     for (int i = 0; i < b.count; ++i)
     {
-        auto& deck = b.decks[static_cast<size_t>(i)];
-        if (!deck.info.stale || !deck.info.autoRebounce) continue;
-        // A deck whose bounce is still being made bounces once more when it
-        // lands, in finishDjLoad; asking here would only reset the quiet
-        // moment and keep the next stale deck waiting behind it.
-        if (deck.info.loading && deck.info.kind != DjSourceKind::file) continue;
-        if (deck.info.kind == DjSourceKind::file)
+        const auto slot = b.slotOf(i);
+        auto& deck = b.decks[static_cast<size_t>(slot)];
+        // A source a full queue kept waiting goes over once there is room.
+        if (deck.waiting.has_value())
+            handOverDjSource(slot);
+        // The track a deck plays, asserted again. Gone, the deck lets go of it
+        // and of what it played through it, which would otherwise play on
+        // raw through the booth. Back - an undo - it is bound again and its
+        // cell made again; its devices made anew are pointed at the port.
+        if (deck.info.kind == DjSourceKind::track)
         {
-            startDjFileRead(i);
-            return;
+            const auto info = djSlotInfo(slot);
+            if (info.track < 0)
+            {
+                if (deck.boundTrack.isValid() || deck.info.loaded || deck.info.loading)
+                {
+                    bindDjTrack(slot, -1);
+                    for (auto& job : b.jobs)
+                        if (job->slot == slot)
+                            job->cancel.store(true);
+                    const auto generation = deck.info.generation + 1;
+                    deck.info.loaded = false;
+                    deck.info.loading = false;
+                    deck.info.generation = generation;
+                    deck.info.error = "The deck's track is no longer in the song.";
+                    deck.clipSignature.clear();
+                    deck.waiting = DjBooth::Deck::WaitingSource {nullptr, false, generation};
+                    handOverDjSource(slot);
+                    sendSynchronousChangeMessage();
+                }
+            }
+            else
+            {
+                const auto rebinding = !deck.boundTrack.isValid();
+                bindDjTrack(slot, info.track);
+                if (rebinding && deck.info.slot >= 0 && !deck.info.loaded && !deck.info.loading)
+                    deck.materialDirty = true;
+            }
         }
-        if (deck.info.kind != DjSourceKind::track && deck.info.kind != DjSourceKind::group) continue;
-        bounceDjDeck(i, deck.info.loaded);
-        return;
     }
-    b.staleSince = 0;
+    // A slot no deck holds that the engine still renders - letting it go met
+    // a full queue (djReset) - is let go of again, so no deck of a document
+    // gone plays on.
+    for (int slot = 0; slot < maximumDjDecks; ++slot)
+        if (b.engine.slotActive(slot) && b.deckOfSlot(slot) < 0)
+            b.engine.setSlotActive(slot, false);
+    // A deck's material made again: a reopened document's, read for the first
+    // time, or a clip changed under the deck. Not while the person is in the
+    // middle of something, so a note being dragged is not cut on every step.
+    if (!gestureHeld())
+        for (int i = 0; i < b.count; ++i)
+        {
+            const auto slot = b.slotOf(i);
+            auto& deck = b.decks[static_cast<size_t>(slot)];
+            if (!deck.materialDirty) continue;
+            deck.materialDirty = false;
+            if (deck.info.kind == DjSourceKind::file)
+                startDjFileRead(slot);
+            else if (deck.info.kind == DjSourceKind::track && deck.info.slot >= 0)
+                loadDjClip(slot, deck.info.loaded);
+        }
+    b.engine.collect();
 }
 
 bool Session::djBusy() const
 {
     if (dj == nullptr) return false;
     for (int i = 0; i < dj->count; ++i)
-        if (dj->decks[static_cast<size_t>(i)].info.loading)
+        if (dj->decks[static_cast<size_t>(dj->slotOf(i))].info.loading)
             return true;
     return !dj->jobs.empty();
 }
 
 // Everything the booth holds of a document goes with it: the decks, their
-// material and the loads in flight. The engine stays attached, silent.
+// material, the tracks they played and the reads in flight. The engine stays
+// attached, silent.
 void Session::djReset()
 {
     if (dj == nullptr) return;
     auto& b = *dj;
     for (auto& job : b.jobs)
         job->cancel.store(true);
-    // The bounces' copies of the document die here, on the message thread,
-    // so the worker is drained first: a render still running would read a
-    // copy being destroyed.
     b.workers.removeAllJobs(true, 10000);
     b.jobs.clear();
-    b.bounces.clear();
-    // What the copies rendered was the outgoing document's.
-    b.removeCopyFolders();
-    for (int i = 0; i < maximumDjDecks; ++i)
+    djUnbindAll();
+    // Every slot is emptied on the audio thread at its next block, and its
+    // controls and strip go back to a new deck's.
+    for (int slot = 0; slot < maximumDjDecks; ++slot)
     {
-        b.decks[static_cast<size_t>(i)] = {};
-        b.engine.setTrack(i, nullptr, false);
-        auto& deck = b.engine.deck(i);
-        deck.tempoPercent.store(0.0f);
-        deck.tempoRange.store(6);
-        deck.synced.store(false);
-        deck.reversed.store(false);
-        deck.nudgePercent.store(0.0f);
-        deck.brakeSeconds.store(0.0f);
-        deck.quantiseSnap.store(true);
-        deck.scratching.store(false);
-        auto& strip = b.engine.channel(i);
-        strip.trimDb.store(0.0f);
-        strip.comp.store(0.0f);
-        for (auto& band : strip.eqDb) band.store(0.0f);
-        strip.filter.store(0.0f);
-        strip.resonance.store(0.2f);
-        strip.fader.store(1.0f);
-        strip.faderCurve.store(1);
-        strip.send.store(0.0f);
-        strip.cue.store(false);
-        strip.fxOn.store(false);
-        strip.crossfaderSide.store(1);
+        b.decks[static_cast<size_t>(slot)] = {};
+        b.engine.port(slot).bound.store(false, std::memory_order_release);
+        if (!b.engine.setSlotActive(slot, false))
+            juce::Logger::writeToLog("Rhino: the DJ booth's command queue is full; a deck was not emptied");
+        b.engine.deck(slot).controls.reset();
+        b.engine.resetChannelControls(slot);
+        b.engine.channel(slot).resonance.store(0.2f);
+        b.engine.channel(slot).faderCurve.store(1);
     }
+    b.slotOfDeck = {0, 1, 2, 3, 4, 5};
     b.count = 0;
-    b.engine.setDeckCount(0);
     b.engine.quantise.store(static_cast<int>(DjQuantise::bar));
     b.engine.phaseLock.store(true);
     b.engine.crossfader().position.store(0.0f);
@@ -1199,7 +897,6 @@ void Session::djReset()
     b.engine.sendFx().tone.store(0.5f);
     b.engine.sendFx().mix.store(0.5f);
     b.taps.clear();
-    b.staleSince = 0;
     b.engine.collect();
 }
 }

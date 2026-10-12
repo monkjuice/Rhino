@@ -253,22 +253,18 @@
             }
 
             // What a picture shows decides whether it is painted again. The
-            // lane's deck draws its notes; its overview draws the silence they
-            // bounced to.
+            // lane's deck draws its cell's notes over a strip of silence the
+            // length of the cell.
             auto& notesScreen = djView->decks[1]->display;
             const auto settled = [&notesScreen, &booth]
             {
                 for (int frame = 0; frame < 10; ++frame)
                     notesScreen.tick(booth.djDeckState(1));
             };
-            const auto bounceAgain = [&booth, &djView, &require]
+            // A change to the cell is made into the deck at the next poll.
+            const auto polled = [&booth, &djView]
             {
-                require(booth.rebounceDjDeck(1).wasOk(), "The lane's deck bounces again");
-                for (int waited = 0; waited < 400 && booth.djBusy(); ++waited)
-                {
-                    juce::Thread::sleep(25);
-                    booth.djPoll();
-                }
+                booth.djPoll();
                 djView->sync();
             };
             settled();
@@ -277,25 +273,118 @@
             const auto overviewOfSilence = notesScreen.overview.pictures.front().image;
             const auto firstNoteTiles = notesScreen.tiles.key;
             require(booth.selectPatternClip(notesClip).wasOk() && booth.addNote(3.0, Session::lowestNote + 7, 2.0).wasOk(),
-                    "A note added to the lane's clip");
-            bounceAgain();
+                    "A note added to the lane's cell");
+            polled();
             settled();
             require(!(notesScreen.tiles.key == firstNoteTiles), "New notes are painted again");
             require(!notesScreen.overview.pictures.empty() && notesScreen.overview.pictures.front().image == overviewOfSilence,
                     "but the overview of the same silence is kept, not painted again");
             const auto noteTiles = notesScreen.tiles.pictures.front().image;
             const auto noteTileKey = notesScreen.tiles.key;
-            require(booth.createClip(0, 8.0).wasOk(), "An empty clip further along the lane, which lengthens the bounce");
-            bounceAgain();
+            require(booth.createClip(0, 8.0).wasOk(), "A clip on the lane's timeline, which is the arrangement's");
+            polled();
             settled();
             require(notesScreen.tiles.key == noteTileKey && notesScreen.tiles.find(notesScreen.tiles.pictures.front().index) != nullptr,
-                    "The same notes keep their tiles");
+                    "leaves the deck's cell, its notes keeping their tiles");
             bool keptTile = false;
             for (const auto& picture : notesScreen.tiles.pictures)
                 keptTile = keptTile || picture.image == noteTiles;
             require(keptTile, "the very tiles painted before");
+            require(!notesScreen.overview.pictures.empty() && notesScreen.overview.pictures.front().image == overviewOfSilence,
+                    "and its overview");
+            // A slower song plays the cell's bar for longer: the same notes on
+            // a longer silence.
+            const auto songTempo = booth.tempo();
+            booth.setTempo(songTempo * 0.75);
+            polled();
+            settled();
             require(notesScreen.overview.pictures.empty() || !(notesScreen.overview.pictures.front().image == overviewOfSilence),
-                    "while a longer silence paints its overview again");
+                    "A longer silence paints its overview again");
+            booth.setTempo(songTempo);
+            polled();
+            settled();
+        }
+
+        // A jump to where the strip has not been - a hot cue far along, a beat
+        // jump, a seek on the overview - keeps the strip's key, so nothing is
+        // left to stand in for the tiles it lands among: every one the strip
+        // shows is painted that frame, where two a frame left bare ground
+        // between them. The same for the view shown again after its deck
+        // moved on unseen. At the closest zoom the beat's eight seconds run
+        // well past the strip, as a long track does.
+        {
+            auto& screen = djView->decks[0]->display;
+            const auto scale = 2.0f;
+            const auto width = juce::roundToInt(screen.getWidth() * scale), height = juce::roundToInt(screen.getHeight() * scale);
+            // The columns of the strip that show bare ground where the deck
+            // has material, along the middle row, which every column of a
+            // waveform covers at whatever level.
+            const auto bareColumns = [&]
+            {
+                juce::Image drawn(juce::Image::RGB, width, height, true, juce::SoftwareImageType());
+                renderRegion(screen, drawn, juce::RectangleList<int>(screen.getLocalBounds()), scale);
+                const auto strip = screen.waveArea();
+                const auto middle = juce::roundToInt(static_cast<float>(strip.getY()) * scale)
+                                  + static_cast<int>(std::ceil(static_cast<float>(strip.getHeight()) * scale)) / 2;
+                const auto perSecond = screen.pixelsPerSecond() * scale;
+                const auto playhead = static_cast<double>(strip.getX() + strip.getWidth() / 2) * scale;
+                const auto scroll = static_cast<double>(screen.scrollFor(screen.state.positionSeconds));
+                int bare = 0;
+                for (int x = juce::roundToInt(static_cast<float>(strip.getX()) * scale);
+                     x < juce::roundToInt(static_cast<float>(strip.getRight()) * scale); ++x)
+                {
+                    const auto seconds = (scroll + x - playhead) / perSecond;
+                    if (seconds < 0.02 || seconds > screen.state.lengthSeconds - 0.02) continue;
+                    if (drawn.getPixelAt(x, middle) == palette::displayInset) ++bare;
+                }
+                return bare;
+            };
+            const auto zoomBefore = screen.secondsAcross;
+            screen.secondsAcross = 3.0;
+            auto standing = booth.djDeckState(0);
+            standing.positionSeconds = 0.5;
+            // Painted at the scale once, as a window paints it, then settled.
+            bareColumns();
+            for (int settle = 0; settle < 10; ++settle)
+                screen.tick(standing);
+            require(screen.tiles.complete && screen.standIns.pictures.empty() && bareColumns() == 0,
+                    "The strip at the closest zoom is painted where the deck stands");
+            const auto tilesShown = screen.visibleTiles(static_cast<double>(screen.scrollFor(7.0)));
+            require(tilesShown.last - tilesShown.first + 1 > DjDeckDisplay::picturesPerFrame,
+                    "and shows more tiles than a frame paints with something standing in");
+            standing.positionSeconds = 7.0;
+            ++standing.jumps;
+            screen.tick(standing);
+            const auto afterJump = bareColumns();
+            require(afterJump == 0, ("A jump far along shows no bare ground on the frame it lands: " + juce::String(afterJump)
+                                     + " columns do").toRawUTF8());
+
+            // Hidden, the view's displays stand still; shown again, the deck is
+            // somewhere they never painted. A zoom painted nowhere yet.
+            screen.secondsAcross = 3.6;
+            booth.djSeek(0, 0.5);
+            booth.djProcessOffline(512);
+            for (int frame = 0; frame < 10; ++frame)
+                djView->frame();
+            require(screen.tiles.complete && bareColumns() == 0, "The strip of the shown view is painted where the deck stands");
+            djView->setVisible(false);
+            booth.djSeek(0, 7.0);
+            booth.djProcessOffline(512);
+            djView->frame();
+            djView->setVisible(true);
+            djView->frame();
+            const auto afterShowing = bareColumns();
+            require(afterShowing == 0, ("The view shown again after its deck moved on shows no bare ground on its first frame: "
+                                        + juce::String(afterShowing) + " columns do").toRawUTF8());
+
+            screen.secondsAcross = zoomBefore;
+            booth.djSeek(0, 0.0);
+            booth.djProcessOffline(512);
+            djView->timerCallback();
+            juce::Image frame(juce::Image::RGB, screen.getWidth(), screen.getHeight(), true, juce::SoftwareImageType());
+            renderRegion(screen, frame, juce::RectangleList<int>(screen.getLocalBounds()), 1.0f);
+            for (int settle = 0; settle < 10; ++settle)
+                screen.tick(booth.djDeckState(0));
         }
 
         // Another file loaded on a deck showing one: while it is read the deck
@@ -365,6 +454,10 @@
             const auto range = djwave::tilesTouching(-100.0, 300.0, 256);
             require(range.first == -1 && range.last == 1 && djwave::tilesTouching(0.0, 256.0, 256).last == 0,
                     "and shows the tiles its edges touch");
+            require(djwave::tilesCover({0, 1, 2}, 100.0, 50.0, 250.0) && djwave::tilesCover({3, 2}, 50.0, 110.0, 190.0)
+                        && !djwave::tilesCover({0, 2}, 100.0, 50.0, 250.0) && !djwave::tilesCover({}, 100.0, 0.0, 10.0)
+                        && !djwave::tilesCover({1}, 100.0, 50.0, 150.0),
+                    "Tiles stand in for a stretch of the strip only when they cover it without a gap");
             struct Event
             {
                 double beat;

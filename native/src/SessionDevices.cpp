@@ -42,7 +42,9 @@ int chainRank(Session::DeviceKind kind)
 
 int channelStripInsertIndex(te::AudioTrack& track)
 {
-    for (int i = 0; i < track.pluginList.size(); ++i)
+    // The channel strip closes the chain; a DJ deck's hidden input, when it
+    // is there, opens it and is passed over.
+    for (int i = djInputEnd(track); i < track.pluginList.size(); ++i)
         if (auto* plugin = track.pluginList[i]; plugin != nullptr && isTrackInfrastructure(plugin->getPluginType()))
             return i;
     return track.pluginList.size();
@@ -265,7 +267,7 @@ juce::Result Session::addMidiEffectDevice(const DeviceDescriptor& device, int tr
         }
     if (insertIndex < 0)
     {
-        insertIndex = 0;
+        insertIndex = djInputEnd(*track);
         while (insertIndex < track->pluginList.size())
         {
             auto* existing = track->pluginList[insertIndex];
@@ -458,9 +460,6 @@ juce::Result Session::beginDeviceParameterGesture(int track, int slot, int param
     parameter->parameterChangeGestureBegin();
     if (parameterGestureDepth++ == 0)
         latencyAtGestureStart = plugin->getLatencySeconds();
-    // A deck playing this track is heard through the track itself while the
-    // knob is held, so the knob is heard at once rather than after a bounce.
-    djBeginLivePreview(track);
     return juce::Result::ok();
 }
 
@@ -531,10 +530,6 @@ juce::Result Session::endDeviceParameterGesture(int track, int slot, int paramet
     if (parameterGestureDepth == 0 && edit->getTransport().isPlaying()
         && std::abs(plugin->getLatencySeconds() - latencyAtGestureStart) > 1.0e-9)
         edit->restartPlayback();
-    // The knob let go: the decks that previewed it bounce again on the
-    // worker, and keep previewing until the bounce lands.
-    if (parameterGestureDepth == 0)
-        djEndLivePreview(track);
     sendSynchronousChangeMessage();
     return juce::Result::ok();
 }

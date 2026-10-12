@@ -21,13 +21,17 @@ namespace rhino
 // the zoom, the height and the scale they are shown at, and the overview.
 // Each is drawn on whole device pixels of the window, so it is copied as it
 // was painted rather than resampled (DevicePixels.h).
-// Pictures are painted on the display's refresh, two a frame at most and
-// never inside a paint, so new material, a zoom or a resize brings its
-// pictures in over a frame or two, the old ones standing in, scaled, until
-// then; painting them all at once was a frame the screen stopped for (the
-// freeze reported on 2026-10-11). A picture whose content did not change is
-// kept: a bounce that changed only the sound keeps the note tiles, one that
-// changed only the notes keeps the overview.
+// Pictures are painted on the display's refresh, never inside a paint, and
+// two a frame at most where the old ones stand in: a bounce, a zoom or a
+// resize brings its pictures in over a frame or two, the old ones scaled
+// until then; painting them all at once was a frame the screen stopped for
+// (the freeze reported on 2026-10-11). A tile of the strip that nothing
+// stands in for - a jump to where the strip has not been, the view shown
+// again after the deck played on - is painted that frame whatever the
+// budget, at some twenty microseconds a tile: left to the budget, the strip
+// showed bare ground around the two it painted. A picture whose content did not change
+// is kept: a bounce that changed only the sound keeps the note tiles, one
+// that changed only the notes keeps the overview.
 //
 // The strip moves by whole device pixels, so a frame that moved the deck
 // less than one paints nothing, and the waveform, the grid and the marks on
@@ -43,7 +47,8 @@ public:
     void sync();
     void sync(const Session::DjDeckInfo&);
     // Once per display refresh, with the deck as it stands: repaints what
-    // moved, and paints at most two pictures.
+    // moved, and paints the pictures the screen lacks - two at most where the
+    // last ones stand in.
     void tick();
     void tick(const Session::DjDeckState&);
     void paint(juce::Graphics&) override;
@@ -109,22 +114,24 @@ private:
         int bar = 0, beatInBar = 0;
         bool operator==(const Readout&) const = default;
     };
-    // Where a deck's material comes from: its kind, file, track, group and
-    // cell.
-    using Source = std::tuple<Session::DjSourceKind, juce::File, te::EditItemID, int, int>;
+    // Where a deck's material comes from: its kind, file, track and cell.
+    using Source = std::tuple<Session::DjSourceKind, juce::File, te::EditItemID, int>;
 
     double pixelsPerSecond() const;
     PictureKey tileKey() const;
     PictureKey overviewKey() const;
     long long scrollFor(double seconds) const;
-    // The tiles the strip shows at `scroll`, a device pixel either side
-    // included, since the strip is drawn from the device pixel nearest its
-    // middle rather than from the middle itself.
+    // The part of the strip's timeline the strip shows at `scroll`, from and
+    // to, a device pixel either side included, since the strip is drawn from
+    // the device pixel nearest its middle rather than from the middle itself;
+    // and the tiles that touches.
+    std::pair<double, double> visibleSpan(double scroll) const;
     djwave::TileRange visibleTiles(double scroll) const;
     void readMaterial();
     void dropPictures();
     // Paints up to `budget` of the pictures the screen lacks, the tiles
-    // nearest the playhead first; DjDeckDisplayWave.cpp.
+    // nearest the playhead first, and every tile the strip shows that nothing
+    // stands in for, budget or not; DjDeckDisplayWave.cpp.
     void paintPictures(int budget);
     // Whether the tiles of a key the screen has left stand in for the next
     // key's: when they covered the strip, or when nothing else would.
@@ -191,7 +198,8 @@ private:
     bool nudging = false;
     juce::Point<float> nudgeStart;
     static constexpr int tileWidth = 256;   // device pixels
-    // The pictures a frame paints at most, tiles and overview together.
+    // The pictures a frame paints at most, tiles and overview together, while
+    // the last ones stand in for them.
     static constexpr int picturesPerFrame = 2;
 };
 }

@@ -326,10 +326,10 @@ public:
         // track: the pane follows it to the clip it plays, and is not opened
         // for it.
         djView.focusedSourceChanged = [this](int deck) { if (djViewOpen) followDeck(deck, false); };
-        // A deck's Edit key opens its track's clip - a MIDI track's in the
-        // note editor, an audio track's in the audio editor - which is the
-        // same lower pane under either view: the deck bounces again a moment
-        // after each change, so the edit is heard on the deck.
+        // A deck's Edit key opens the cell it plays - a MIDI cell in the note
+        // editor, an audio cell in the audio editor - which is the same lower
+        // pane under either view: the deck makes the cell again at the next
+        // poll after each change, so the edit is heard on the deck.
         djView.editRequested = [this](int track, te::EditItemID clip)
         {
             if (track < 0 || clip == te::EditItemID()) return;
@@ -347,7 +347,7 @@ public:
             openClip(clip);
             logStatus("Editing " + session.trackName(track).quoted() + ": the deck follows each change");
         };
-        djToggle.setTooltip("Show the DJ view: decks either side of a mixer, each playing a track, a group or a file. Tab switches.");
+        djToggle.setTooltip("Show the DJ view: decks either side of a mixer, each playing a track's own clips live, or a file. Tab switches.");
         arrangementToggle.setTooltip("Show the Arrangement timeline. Tab switches.");
         djToggle.onClick = [this] { setDjViewOpen(true); };
         arrangementToggle.onClick = [this] { setDjViewOpen(false); };
@@ -1104,8 +1104,7 @@ public:
     }
 
     // The clip the Clip toggle opens: in the DJ view the focused deck's clip
-    // - the cell it plays, or its track's first clip - and in the arrangement
-    // the selected clip. The toggle used to ask the arrangement in both
+    // - the cell it plays - and in the arrangement the selected clip. The toggle used to ask the arrangement in both
     // views, and the arrangement selects no clip while the consoles show, so
     // a clip editor closed for the Device View could not be opened again.
     te::EditItemID clipForPane() const
@@ -1149,8 +1148,8 @@ public:
     // note editor for a MIDI track, the audio editor for an audio one. With
     // openPane a closed pane opens on the devices, as a card click opens it;
     // the view switch passes false, so showing the DJ view changes no more
-    // than the arrangement's own selection would. A file or a group deck has
-    // no track of the song and changes nothing. The pane state is read before
+    // than the arrangement's own selection would. A file deck has no track of
+    // the song and changes nothing. The pane state is read before
     // the arrangement's selection moves, because that move re-reads the
     // arrangement's own clip selection and may close the pane on the way.
     void followDeck(int deck, bool openPane)
@@ -1702,8 +1701,8 @@ private:
         // and broadcasts neither, so the clips it wrote are collected here,
         // polled rather than listened for.
         session.recordingStopped();
-        // The booth's loads finish on a worker and its stale bounces wait
-        // for a quiet moment; neither is announced, so both are polled.
+        // The booth's reads finish on a worker and a changed cell is made
+        // again once nothing is held; neither is announced, so both are polled.
         session.djPoll();
         updateRecordButton();
         const auto seconds = session.edit->getTransport().getPosition().inSeconds();

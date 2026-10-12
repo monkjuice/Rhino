@@ -1,14 +1,11 @@
-        // The DJ booth through the session: decks added, a track bounced onto
-        // one and a file read onto another, the deck played offline, a bounce
-        // going stale under an edit and made again, a group bounced through
-        // its bus, the set surviving a reopen, Live routing the track's input,
-        // the note editor's clip, and the view painted and pressed. Renders,
-        // so it sits before "recording" and the audio device closing.
-        //
-        // The group is made in a session of its own: from where this scenario
-        // sits in the runner, a clip imported onto a newly added track never
-        // renders (wiki/pages/renders-that-never-return.md), and the booth
-        // was ruled out as the cause before the group moved.
+        // The DJ booth through the session: decks added, a track's cell played
+        // on one and a file read onto another, the deck played offline, the
+        // arrangement's clips left to the arrangement and a cell's own edit
+        // played, an audio cell, a drum cell and a cell on a bare track, the
+        // set surviving a reopen, Live routing the track's input, the note
+        // editor's clip, the view painted and pressed, and a deck taken off
+        // from among four playing. A track's deck heard through its chain is
+        // DjLiveChain.inc's.
         {
             const auto rmsOf = [](const std::vector<float>& samples)
             {
@@ -16,7 +13,8 @@
                 for (const auto s : samples) sum += static_cast<double>(s) * s;
                 return samples.empty() ? 0.0 : std::sqrt(sum / static_cast<double>(samples.size()));
             };
-            // A bounce renders on the worker; the poll installs it.
+            // An audio cell's sound and a file are read on the worker; the poll
+            // installs them.
             const auto waitForDeck = [](Session& booth, int deck)
             {
                 for (int waited = 0; waited < 800 && booth.djDeckInfo(deck).loading; ++waited)
@@ -36,32 +34,36 @@
             require(session.djDeckInfo(0).kind == Session::DjSourceKind::none && !session.djDeckInfo(0).loaded,
                     "A new deck holds nothing");
 
-            scenario("dj booth: a track bounced onto a deck");
+            scenario("dj booth: a track's cell on a deck");
             session.applyPatternPreset(Session::PatternPreset::WarmPulse);
             const auto deckTrack = te::getAudioTracks(*session.edit)
                 .indexOf(dynamic_cast<te::AudioTrack*>(session.pattern().getClipTrack()));
             require(deckTrack >= 0, "The pattern clip sits on a track");
-            require(session.loadDjDeckTrack(0, deckTrack).wasOk(), "A MIDI track bounces onto a deck");
-            require(session.djDeckInfo(0).loading, "on the worker");
-            require(waitForDeck(session, 0), ("The worker finishes the bounce: " + session.djDeckInfo(0).error).toRawUTF8());
+            const auto arrangementPattern = session.pattern().itemID;
+            require(session.loadDjDeckTrack(0, deckTrack).wasOk(), "A track goes on a deck");
+            require(session.djDeckInfo(0).slot == -1 && !session.djDeckInfo(0).loaded && session.djDeckTrack(0) == nullptr,
+                    "and plays nothing until a cell is chosen: the arrangement's pattern is not the deck's");
+            require(session.copyClipToTrackSlot(arrangementPattern, deckTrack, 0).wasOk(),
+                    "The pattern copied into the track's first cell");
+            require(session.loadDjDeckSlot(0, deckTrack, 0).wasOk(), "The deck plays the cell");
             auto info = session.djDeckInfo(0);
-            require(info.kind == Session::DjSourceKind::track && info.loaded && !info.loading && info.track == deckTrack,
-                    "The deck reports the track it holds");
-            require(info.name == session.trackName(deckTrack), "and is named for it");
-            const auto* bounced = session.djDeckTrack(0);
-            require(bounced != nullptr && bounced->length() > 0, "The bounce is on the deck");
-            require(close(bounced->analysis.bpm, session.tempo()) && close(bounced->analysis.firstBeatSeconds, 0.0),
-                    "The bounce carries the song's tempo with its grid from the top");
+            require(info.kind == Session::DjSourceKind::track && info.loaded && !info.loading && info.track == deckTrack && info.slot == 0,
+                    "The deck reports the track and the cell it plays");
+            require(info.name == session.trackName(deckTrack) + " / " + session.slotClip(deckTrack, 0).name, "and is named for them");
+            const auto* material = session.djDeckTrack(0);
+            require(material != nullptr && material->length() > 0, "The cell is on the deck, at once");
+            require(close(material->analysis.bpm, session.tempo()) && close(material->analysis.firstBeatSeconds, 0.0),
+                    "on the song's grid from its top");
             const auto barSeconds = 60.0 / session.tempo() * session.beatsPerBar();
-            const auto bars = bounced->seconds() / barSeconds;
-            require(bars >= 1.0 - 0.001 && std::abs(bars - std::round(bars)) < 0.01, "The bounce is whole bars long");
-            require(rmsOf(bounced->left) > 0.001, "and carries the instrument's sound");
+            const auto bars = material->seconds() / barSeconds;
+            require(bars >= 1.0 - 0.001 && std::abs(bars - std::round(bars)) < 0.01, "whole bars long");
+            require(!material->midi.empty() && material->left.empty(), "as the cell's notes, which the track's instrument sounds");
             session.djProcessOffline(512);
             auto state = session.djDeckState(0);
             require(state.transport == Session::DjDeckState::Transport::stopped, "A loaded deck stands stopped");
-            require(state.loop.active && close(state.loop.startSeconds, 0.0) && close(state.loop.endSeconds, bounced->seconds()),
-                    "A bounced track loops whole");
-            require(close(state.lengthSeconds, bounced->seconds()) && close(state.bpm, session.tempo()), "The state reads the material");
+            require(state.loop.active && close(state.loop.startSeconds, 0.0) && close(state.loop.endSeconds, material->seconds()),
+                    "A cell loops whole");
+            require(close(state.lengthSeconds, material->seconds()) && close(state.bpm, session.tempo()), "The state reads the material");
 
             scenario("dj booth: the deck plays");
             session.djPlay(0);
@@ -75,144 +77,77 @@
             session.djProcessOffline(1024);
             require(!session.djDeckState(0).isPlaying(), "and pauses");
 
-            scenario("dj booth: a bounce goes stale and is made again");
+            scenario("dj booth: the arrangement's clips are the arrangement's; a cell's own edit is the deck's");
             const auto generationBefore = session.djDeckInfo(0).generation;
             session.applyPatternPreset(Session::PatternPreset::AcidSteps);
-            require(session.djDeckInfo(0).stale, "Changing the song marks the bounce stale");
-            require(session.rebounceDjDeck(0).wasOk(), "The deck bounces again");
-            require(waitForDeck(session, 0), ("and the worker finishes it: " + session.djDeckInfo(0).error).toRawUTF8());
-            require(!session.djDeckInfo(0).stale && session.djDeckInfo(0).loaded, "and is fresh");
-            require(session.djDeckInfo(0).generation > generationBefore, "New material has a new generation");
+            session.djPoll();
+            require(session.djDeckInfo(0).generation == generationBefore,
+                    "Changing the arrangement's pattern leaves the deck's cell as it was");
+            require(session.selectPatternClip(session.slotClip(deckTrack, 0).clipID).wasOk()
+                        && session.addNote(14.0, 64, 1.0).wasOk(),
+                    "A note added to the deck's own cell");
+            session.djPoll();
+            require(session.djDeckInfo(0).generation > generationBefore && session.djDeckInfo(0).loaded,
+                    "is on the deck at the next poll, made again from the cell");
             session.djProcessOffline(512);
-            require(session.djDeckState(0).loop.active, "The whole-track loop survives a bounce made again");
+            require(session.djDeckState(0).loop.active, "The whole-cell loop survives the cell made again");
+            require(session.selectPatternClip(arrangementPattern).wasOk(), "The editor goes back to the arrangement's pattern");
 
-            scenario("dj booth: a group bounced through its bus");
+            scenario("dj booth: an audio cell, a drum cell and a cell on a bare track");
             {
                 auto document = std::make_unique<Session>();
                 require(document->addDjDeck().wasOk(), "A deck in a session of its own");
-                require(document->addAudioTrack().wasOk(), "A clean track for the group");
-                const auto fresh = document->trackCount() - 1;
-                require(document->importAudioAt(source.getFile(), fresh, 0.0).wasOk(), "with audio on it");
-                // An audio track on a deck opens its audio clip, for the
-                // audio editor, as a MIDI track opens its clip for the notes.
-                require(document->loadDjDeckTrack(0, fresh).wasOk(), "The audio track goes on the deck");
+                int audioLane = -1, drumLane = -1, secondMidi = -1;
+                for (int t = 0; t < document->trackCount(); ++t)
+                {
+                    if (document->isGroupBusTrack(t)) continue;
+                    if (document->trackType(t) == Session::TrackType::audio)
+                    {
+                        if (audioLane < 0) audioLane = t;
+                    }
+                    else if (drumLane < 0) drumLane = t;
+                    else if (secondMidi < 0) secondMidi = t;
+                }
+                require(audioLane >= 0 && drumLane >= 0 && secondMidi >= 0, "An audio lane and two MIDI lanes");
+                require(document->insertAudioFileInSlot(source.getFile(), audioLane, 0).wasOk(), "A sample in the audio lane's cell");
+                require(document->loadDjDeckSlot(0, audioLane, 0).wasOk(), "goes on the deck");
+                // An audio cell on a deck opens its audio clip, for the audio
+                // editor, as a MIDI cell opens its notes.
                 require(document->findAudioClip(document->djDeckEditClip(0)) != nullptr,
-                        "and the deck's clip is the track's audio clip");
-                require(waitForDeck(*document, 0), ("and it bounces: " + document->djDeckInfo(0).error).toRawUTF8());
-                require(document->groupTracks({fresh}, "Deck group").wasOk(), "grouped under a bus");
-                const auto group = document->trackGroups().back();
-                require(document->loadDjDeckGroup(0, group.id).wasOk(),
-                        ("A group bounces onto a deck: " + document->djDeckInfo(0).error).toRawUTF8());
-                require(waitForDeck(*document, 0), ("and the worker finishes it: " + document->djDeckInfo(0).error).toRawUTF8());
-                const auto groupInfo = document->djDeckInfo(0);
-                require(groupInfo.kind == Session::DjSourceKind::group && groupInfo.loaded && groupInfo.track == group.busTrack,
-                        "The deck reports the group and its bus");
-                const auto* grouped = document->djDeckTrack(0);
-                require(grouped != nullptr && rmsOf(grouped->left) > 0.01, "The group's bounce carries its member's audio");
-                const auto loud = rmsOf(grouped->left);
-                // The discriminating step: the bus's own fader is in the bounce.
-                require(document->setTrackVolumeDb(group.busTrack, -20.0f).wasOk(), "The bus fader can be turned down");
-                require(document->djDeckInfo(0).stale, "which makes the bounce stale");
-                require(document->rebounceDjDeck(0).wasOk(), "Bounced again");
-                require(waitForDeck(*document, 0), "and finished");
-                const auto* quieter = document->djDeckTrack(0);
-                require(quieter != nullptr && rmsOf(quieter->left) < loud * 0.2,
-                        ("the group's bounce passes through the bus's fader (" + juce::String(loud, 4) + " before, "
-                         + juce::String(quieter != nullptr ? rmsOf(quieter->left) : -1.0, 4) + " after)").toRawUTF8());
-                require(document->setDjDeckLive(0, true).failed(), "A group has nothing to play live");
+                        "and the deck's clip is the cell's audio clip");
+                require(waitForDeck(*document, 0), ("and its sound is read: " + document->djDeckInfo(0).error).toRawUTF8());
+                require(document->djDeckTrack(0) != nullptr && rmsOf(document->djDeckTrack(0)->left) > 0.01,
+                        "The cell's sound is on the deck");
+                require(document->setDjDeckLive(0, true).failed(), "An audio track has no instrument to play live");
                 document->ejectDjDeck(0);
                 require(!document->djDeckInfo(0).loaded && document->djDeckInfo(0).kind == Session::DjSourceKind::none,
                         "Eject empties the deck");
-                // A drum cell bounces to sound: the kit's pads are read in the
-                // copy the bounce renders, as they are when a document opens.
-                int drumLane = -1;
-                for (int t = 0; t < document->trackCount(); ++t)
-                    if (!document->isGroupBusTrack(t) && document->trackType(t) == Session::TrackType::midi)
-                    {
-                        drumLane = t;
-                        break;
-                    }
-                require(drumLane >= 0, "A MIDI lane for a kit");
                 require(document->insertPatternPresetInSlot(Session::PatternPreset::HouseKit, drumLane, 0).wasOk(),
-                        "A drum pattern in its first cell brings a kit");
+                        "A drum pattern in a MIDI lane's first cell brings a kit");
                 require(document->trackHasDrumRack(drumLane), "on a Drum Rack");
                 require(document->loadDjDeckSlot(0, drumLane, 0).wasOk(), "The deck plays the cell");
-                require(waitForDeck(*document, 0), ("and it bounces: " + document->djDeckInfo(0).error).toRawUTF8());
-                const auto* drums = document->djDeckTrack(0);
-                require(drums != nullptr && rmsOf(drums->left) > 0.001, "with the drums in it");
+                require(document->djDeckTrack(0) != nullptr && !document->djDeckTrack(0)->midi.empty(),
+                        "at once, with the drums' notes in it");
                 document->ejectDjDeck(0);
                 // The steps reported silent on 2026-10-10: a new cell on a bare
-                // MIDI track, a Drum Rack with a kit added after it, a note
-                // drawn in the editor, and the deck bounced again.
-                int secondMidi = -1;
-                for (int t = drumLane + 1; t < document->trackCount(); ++t)
-                    if (!document->isGroupBusTrack(t) && document->trackType(t) == Session::TrackType::midi)
-                    {
-                        secondMidi = t;
-                        break;
-                    }
-                require(secondMidi >= 0, "A second MIDI lane");
+                // MIDI track, a Drum Rack with a kit added after it, and a note
+                // drawn in the editor.
                 require(document->createSlotClip(secondMidi, 0).wasOk(), "A new cell on a bare MIDI track");
-                require(document->loadDjDeckSlot(0, secondMidi, 0).wasOk() && waitForDeck(*document, 0), "The deck plays it, silent so far");
+                require(document->loadDjDeckSlot(0, secondMidi, 0).wasOk() && document->djDeckInfo(0).loaded,
+                        "The deck plays it at once, though nothing sounds it yet");
+                const auto bare = document->djDeckInfo(0).generation;
                 require(document->addDrumKit(ContentLibrary::file("Drums/Kits/808 Kit.rdk"), secondMidi).wasOk(),
                         "A Drum Rack with a kit, added after");
-                require(document->djDeckInfo(0).stale, "which leaves the deck's bounce stale");
+                document->djPoll();
+                require(document->djDeckInfo(0).generation == bare,
+                        "is the track's to sound at once, with nothing on the deck made again");
                 require(document->selectPatternClip(document->slotClip(secondMidi, 0).clipID).wasOk(), "The editor opens the cell's clip");
                 require(document->isPatternDrums(), "as a drum editor");
-                // Halfway through the cell, so the preview below meets it as
-                // the deck plays on: the booth runs only when this runner
-                // drives it, a block at a time.
                 require(document->addNote(8.0, document->patternDrumLowestNote(), 1.0).wasOk(), "A note drawn on the first pad");
-                require(document->rebounceDjDeck(0).wasOk() && waitForDeck(*document, 0),
-                        ("Bounced again: " + document->djDeckInfo(0).error).toRawUTF8());
+                document->djPoll();
                 const auto* drawn = document->djDeckTrack(0);
-                require(drawn != nullptr && rmsOf(drawn->left) > 0.001, "and the deck plays the drawn note");
-                // A knob held on the track's Drum Rack: the deck is heard
-                // through the track itself while it is held, and bounces
-                // again on the worker when it is let go.
-                int rackIndex = -1;
-                for (const auto& slot : document->deviceSlots(secondMidi))
-                    if (slot.kind == DeviceKind::Instrument)
-                        rackIndex = slot.pluginIndex;
-                require(rackIndex >= 0, "The rack's place in the chain");
-                document->djPlay(0);
-                document->djProcessOffline(1024);
-                require(document->djDeckState(0).isPlaying(), "The deck plays the cell");
-                require(document->beginDeviceParameterGesture(secondMidi, rackIndex, 0).wasOk(), "A knob on the rack is taken hold of");
-                require(document->djDeckInfo(0).previewing && !document->djDeckInfo(0).live,
-                        "and the deck previews live, with nothing armed or monitored for it");
-                document->djProcessOffline(4096);
-                require(document->djDeckState(0).isPlaying() && !document->djDeckInfo(0).loading, "turning on, with no bounce made while the knob is held");
-                // The notes reach the track: the deck passes the cell's note
-                // while the knob is held, and the poll drains the queue on the
-                // message thread.
-                for (int i = 0; i < 400 && document->djDeckInfo(0).previewNotes == 0; ++i)
-                {
-                    document->djProcessOffline(4096);
-                    document->djPoll();
-                }
-                require(document->djDeckInfo(0).previewNotes > 0, "and the preview's notes reach the track");
-                require(document->setDeviceParameter(secondMidi, rackIndex, 0, 0.5f).wasOk(), "The knob moves");
-                require(!document->djDeckInfo(0).loading, "and still no bounce is made");
-                require(document->endDeviceParameterGesture(secondMidi, rackIndex, 0).wasOk(), "The knob let go");
-                require(document->djDeckInfo(0).loading && document->djDeckInfo(0).previewing, "bounces the deck again, previewing until it lands");
-                // Taken hold of again before it lands: the landing keeps the
-                // preview on, and the second release bounces once more.
-                require(document->beginDeviceParameterGesture(secondMidi, rackIndex, 0).wasOk(), "The knob taken hold of again");
-                require(waitForDeck(*document, 0), ("The first bounce lands: " + document->djDeckInfo(0).error).toRawUTF8());
-                require(document->djDeckInfo(0).previewing && !document->djDeckInfo(0).live, "and the preview stays on while the knob is held");
-                require(document->endDeviceParameterGesture(secondMidi, rackIndex, 0).wasOk() && document->djDeckInfo(0).loading,
-                        "The second release bounces again");
-                require(waitForDeck(*document, 0), ("and the bounce lands: " + document->djDeckInfo(0).error).toRawUTF8());
-                require(!document->djDeckInfo(0).previewing && !document->djDeckInfo(0).live, "ending the preview, Live untouched throughout");
-                // An edit while a bounce is being made does not start over: the
-                // bounce lands and the deck bounces once more for the edit.
-                require(document->rebounceDjDeck(0).wasOk() && document->djDeckInfo(0).loading, "A bounce in flight");
-                require(document->setDeviceParameter(secondMidi, rackIndex, 0, 0.25f).wasOk() && document->djDeckInfo(0).stale
-                        && document->djDeckInfo(0).loading, "An edit under it marks the deck behind without starting over");
-                require(waitForDeck(*document, 0) && !document->djDeckInfo(0).stale, "and once it lands the deck bounces again and catches up");
-                document->djPause(0);
-                document->djProcessOffline(1024);
+                require(document->djDeckInfo(0).generation > bare && drawn != nullptr && drawn->midi.size() == 2,
+                        "is on the deck at the next poll");
                 document->ejectDjDeck(0);
                 document->releaseAudioDevice();
             }
@@ -258,8 +193,8 @@
             }
             require(session.djDeckCount() == 2, "The decks come back");
             info = session.djDeckInfo(0);
-            require(info.kind == Session::DjSourceKind::track && info.name == session.trackName(deckTrack) && info.track == deckTrack,
-                    "A track deck remembers its track");
+            require(info.kind == Session::DjSourceKind::track && info.track == deckTrack && info.slot == 0,
+                    "A track deck remembers its track and its cell");
             require(session.djDeckInfo(1).kind == Session::DjSourceKind::file && session.djDeckInfo(1).file == source.getFile(),
                     "A file deck remembers its file");
             require(close(session.djChannel(1).fader, 0.25) && session.djQuantise() == Session::DjQuantise::beat
@@ -272,14 +207,13 @@
                         && close(session.djMaster().cueLevelDb, -6.0) && session.djMaster().monoSplit,
                         "The effect's bands, the mic, the send unit and the headphones come back");
             }
-            require(!info.loaded && info.stale, "A reopened deck waits for its material");
-            juce::Thread::sleep(600);
+            require(!info.loaded, "A reopened deck waits for its material");
             for (int waited = 0; waited < 400 && (!session.djDeckInfo(0).loaded || !session.djDeckInfo(1).loaded); ++waited)
             {
                 session.djPoll();
                 juce::Thread::sleep(25);
             }
-            require(session.djDeckInfo(0).loaded, ("The poll bounces the track deck again: " + session.djDeckInfo(0).error).toRawUTF8());
+            require(session.djDeckInfo(0).loaded, ("The poll puts the cell back on the track deck: " + session.djDeckInfo(0).error).toRawUTF8());
             require(session.djDeckInfo(1).loaded, ("and reads the file deck again: " + session.djDeckInfo(1).error).toRawUTF8());
             session.djProcessOffline(512);
             require(close(session.djDeckState(0).hotCueSeconds[3], 0.5), "The hot cue is where it was");
@@ -328,24 +262,21 @@
 
             scenario("dj booth: clips on the console");
             {
-                // The console's grid is the track's clip slots. A double-click
-                // on an empty cell makes a one-bar clip, the deck plays it
-                // bounced through the track, the editors open it, and a clip
-                // copied across from the timeline keeps the lane's kind.
-                require(session.createSlotClip(deckTrack, 0).wasOk(), "A one-bar clip in the first cell");
-                const auto cell = session.slotClip(deckTrack, 0);
+                // The console's grid is the track's clip slots, the DJ view's
+                // own clips. A double-click on an empty cell makes a one-bar
+                // clip, the deck plays it through the track, the editors open
+                // it, and a clip copied across from the timeline keeps the
+                // lane's kind.
+                require(session.createSlotClip(deckTrack, 1).wasOk(), "A one-bar clip in the second cell");
+                const auto cell = session.slotClip(deckTrack, 1);
                 require(cell.hasClip && cell.isMidi, "which is a MIDI clip");
                 require(session.findClip(cell.clipID) != nullptr, "that findClip sees in its slot");
-                require(session.createSlotClip(deckTrack, 0).failed(), "A cell already holding a clip refuses another");
-                require(session.loadDjDeckSlot(0, deckTrack, 0).wasOk(), "The deck plays the cell");
-                require(session.djDeckInfo(0).loading && session.djDeckTrack(0) != nullptr,
-                        "while the material it had stays on the deck until the cell's lands");
-                require(waitForDeck(session, 0), ("and the worker bounces it: " + session.djDeckInfo(0).error).toRawUTF8());
-                require(session.djDeckInfo(0).slot == 0 && session.djDeckEditClip(0) == cell.clipID,
+                require(session.createSlotClip(deckTrack, 1).failed(), "A cell already holding a clip refuses another");
+                require(session.loadDjDeckSlot(0, deckTrack, 1).wasOk(), "The deck plays the cell");
+                require(session.djDeckInfo(0).slot == 1 && session.djDeckEditClip(0) == cell.clipID,
                         "The deck says which cell it plays, and edits that cell's clip");
-                const auto* slotBounce = session.djDeckTrack(0);
-                require(slotBounce != nullptr && close(slotBounce->seconds(), 60.0 / session.tempo() * session.beatsPerBar()),
-                        "A one-bar clip bounces to one bar");
+                const auto* slotMaterial = session.djDeckTrack(0);
+                require(slotMaterial != nullptr && close(slotMaterial->seconds(), barSeconds), "A one-bar clip plays a bar");
                 int audioTrack = -1;
                 for (int t = 0; t < session.trackCount(); ++t)
                     if (!session.isGroupBusTrack(t) && session.trackType(t) == Session::TrackType::audio)
@@ -354,46 +285,44 @@
                         break;
                     }
                 require(audioTrack >= 0, "An audio track to hold the rule against");
-                require(session.copyClipToTrackSlot(session.pattern().itemID, deckTrack, 1).wasOk(),
-                        "The pattern clip copies from the timeline into the second cell");
-                require(session.slotClip(deckTrack, 1).hasClip, "where it sits as a copy");
-                require(session.copyClipToTrackSlot(session.pattern().itemID, audioTrack, 0).failed(),
+                require(session.copyClipToTrackSlot(arrangementPattern, deckTrack, 2).wasOk(),
+                        "The pattern clip copies from the timeline into the third cell");
+                require(session.slotClip(deckTrack, 2).hasClip, "where it sits as a copy");
+                require(session.copyClipToTrackSlot(arrangementPattern, audioTrack, 0).failed(),
                         "but not into an audio track's cell");
                 require(session.createSlotClip(audioTrack, 0).failed(), "and an audio track's cell makes no MIDI clip");
                 require(session.addTrack(Session::TrackType::midi).wasOk(), "A fresh MIDI lane");
                 const auto freshLane = session.trackCount() - 1;
-                require(session.copySlotClipToArrangement(deckTrack, 0, 0.0, freshLane).wasOk(), "takes a cell's clip as a copy");
+                require(session.copySlotClipToArrangement(deckTrack, 1, 0.0, freshLane).wasOk(), "takes a cell's clip as a copy");
                 require(te::getAudioTracks(*session.edit)[freshLane]->getClips().size() == 1, "and gains the clip");
-                require(session.copySlotClipToArrangement(deckTrack, 0, 0.0, audioTrack).failed(), "An audio lane refuses it");
+                require(session.copySlotClipToArrangement(deckTrack, 1, 0.0, audioTrack).failed(), "An audio lane refuses it");
                 // The grid, pressed as the console presses it.
                 auto grid = std::make_unique<DjClipGrid>(session, 0);
                 grid->setSize(120, 200);
                 grid->sync();
-                require(grid->hasTrack() && grid->litCell() == 0, "The grid knows its track and lights the cell the deck plays");
-                require(grid->cellAt({10, 1}) == DjClipGrid::songCell
-                        && grid->cellAt({10, DjClipGrid::cellHeight + DjClipGrid::cellGap + 1}) == 0,
-                        "Its cells are the song, then the scenes");
-                require(grid->chooseCell(DjClipGrid::songCell).wasOk(), "Pressing SONG plays the song's track again");
-                require(waitForDeck(session, 0), "and it bounces");
-                require(session.djDeckInfo(0).slot == -1 && grid->litCell() == DjClipGrid::songCell, "with SONG lit");
-                require(grid->createClipAt(2).wasOk(), "A double-click on the third cell makes a clip there");
-                require(waitForDeck(session, 0) && session.djDeckInfo(0).slot == 2, "that the deck plays");
-                require(grid->applyDrop(3, "rhino-clip:" + session.pattern().itemID.toString(), false).wasOk(),
-                        "A clip dragged from the timeline lands in the fourth cell");
-                require(session.slotClip(deckTrack, 3).hasClip, "as a copy");
+                require(grid->hasTrack() && grid->litCell() == 1, "The grid knows its track and lights the cell the deck plays");
+                require(grid->cellAt({10, 1}) == 0 && grid->cellAt({10, DjClipGrid::cellHeight + DjClipGrid::cellGap + 1}) == 1,
+                        "Its cells are the scenes, from the top: the arrangement has no cell");
+                require(grid->chooseCell(0).wasOk() && session.djDeckInfo(0).slot == 0 && grid->litCell() == 0,
+                        "Pressing the first cell plays it, lit");
+                require(grid->createClipAt(3).wasOk() && session.djDeckInfo(0).slot == 3,
+                        "A double-click on the fourth cell makes a clip there that the deck plays");
+                require(grid->applyDrop(4, "rhino-clip:" + arrangementPattern.toString(), false).wasOk(),
+                        "A clip dragged from the timeline lands in the fifth cell");
+                require(session.slotClip(deckTrack, 4).hasClip, "as a copy");
                 // A copy beside its source takes a name of its own, and the
                 // note editor lets go of a clip deleted under it.
-                require(grid->applyDrop(4, "rhino-slot:" + juce::String(deckTrack) + ":0", false).wasOk(),
-                        "The first cell copies into the fifth");
-                require(session.slotClip(deckTrack, 4).name == "Clip 2",
-                        ("named on from it: " + session.slotClip(deckTrack, 4).name).toRawUTF8());
-                require(session.selectPatternClip(session.slotClip(deckTrack, 4).clipID).wasOk(), "The note editor opens the copy");
-                require(session.deleteSlotClip(deckTrack, 4).wasOk(), "Deleting it under the editor");
+                require(grid->applyDrop(5, "rhino-slot:" + juce::String(deckTrack) + ":1", false).wasOk(),
+                        "The second cell copies into the sixth");
+                require(session.slotClip(deckTrack, 5).hasClip && session.slotClip(deckTrack, 5).name != session.slotClip(deckTrack, 1).name,
+                        ("named on from it: " + session.slotClip(deckTrack, 5).name).toRawUTF8());
+                require(session.selectPatternClip(session.slotClip(deckTrack, 5).clipID).wasOk(), "The note editor opens the copy");
+                require(session.deleteSlotClip(deckTrack, 5).wasOk(), "Deleting it under the editor");
                 require(session.hasPatternClip() && session.findClip(session.pattern().itemID) != nullptr,
                         "leaves the editor on a clip that still exists");
-                require(grid->applyDrop(4, "rhino-browser:file:" + source.getFile().getFullPathName(), false).failed(),
+                require(grid->applyDrop(5, "rhino-browser:file:" + source.getFile().getFullPathName(), false).failed(),
                         "A sample dropped on a MIDI track's cell is refused");
-                require(session.deleteSlotClip(deckTrack, 3).wasOk(), "A cell's clip can be deleted");
+                require(session.deleteSlotClip(deckTrack, 4).wasOk(), "A cell's clip can be deleted");
                 // The cell a deck plays survives a reopen.
                 require(session.loadDjDeckSlot(0, deckTrack, 0).wasOk() && waitForDeck(session, 0), "The deck plays the first cell again");
                 {
@@ -402,7 +331,6 @@
                     require(session.restoreProject(saved, project.getFile()).wasOk(), "Reopen with a deck on a cell");
                 }
                 require(session.djDeckInfo(0).slot == 0, "The deck remembers its cell");
-                juce::Thread::sleep(600);
                 for (int waited = 0; waited < 400 && (!session.djDeckInfo(0).loaded || !session.djDeckInfo(1).loaded); ++waited)
                 {
                     session.djPoll();
@@ -410,17 +338,16 @@
                 }
                 require(session.djDeckInfo(0).loaded && session.djDeckInfo(1).loaded,
                         ("and both decks load again: " + session.djDeckInfo(0).error).toRawUTF8());
-                // The cells are cleared again and the deck plays the song,
-                // for the scenarios that follow.
-                for (int scene = 0; scene < 3; ++scene)
+                // The cells past the first are cleared again and the deck plays
+                // the first, for the scenarios that follow.
+                for (int scene = 1; scene < session.sceneCount(); ++scene)
                     if (session.slotClip(deckTrack, scene).hasClip)
                         require(session.deleteSlotClip(deckTrack, scene).wasOk(), "The cells are cleared again");
-                require(session.loadDjDeckTrack(0, deckTrack).wasOk() && waitForDeck(session, 0), "The deck plays the song again");
+                require(session.loadDjDeckSlot(0, deckTrack, 0).wasOk() && session.djDeckInfo(0).loaded, "The deck plays its first cell");
+                require(session.selectPatternClip(arrangementPattern).wasOk(), "and the editor the arrangement's pattern");
             }
 
             scenario("dj booth: live and the note editor");
-            // After every render: switching monitoring on arms the track, and
-            // arming allocates the playback context a render must not find.
             const auto monitoringBefore = session.trackMonitoring(deckTrack);
             const auto live = session.setDjDeckLive(0, true);
             require(live.wasOk() || live.getErrorMessage().isNotEmpty(),
@@ -429,7 +356,7 @@
             require(session.djDeckInfo(0).live, "and the deck says it is live");
             require(session.setDjDeckLive(0, false).wasOk(), "Live can be switched off");
             require(session.trackMonitoring(deckTrack) == monitoringBefore, "which puts the monitoring back");
-            require(session.djDeckEditClip(0) == session.pattern().itemID, "Edit opens the track's clip");
+            require(session.djDeckEditClip(0) == session.slotClip(deckTrack, 0).clipID, "Edit opens the cell the deck plays");
             require(session.djDeckHasDrumRack(0) == session.trackHasDrumRack(deckTrack), "A deck knows whether its track runs a Drum Rack");
 
             scenario("dj booth: the view");
@@ -502,16 +429,26 @@
                 view->sync();
                 auto picture = view->createComponentSnapshot(view->getLocalBounds());
                 require(picture.isValid() && picture.getWidth() == 1240, "The view paints");
-                // The display drew the bounce's waveform: the lows are blue.
-                auto bluePixels = 0;
-                const auto wave = view->decks[0]->display.getBounds().translated(view->decks[0]->getX(), view->decks[0]->getY());
-                for (int y = wave.getY(); y < wave.getBottom(); y += 2)
-                    for (int x = wave.getX(); x < wave.getRight(); x += 2)
-                    {
-                        const auto pixel = picture.getPixelAt(x, y);
-                        if (pixel.getBlue() > 180 && pixel.getRed() < 120) ++bluePixels;
-                    }
-                require(bluePixels > 20, "The screen draws the low band of the bounce");
+                // Each screen draws what its deck plays in the mid band's
+                // colour: the file deck its 440 Hz tone, the track deck the
+                // notes of its cell, which the screen draws in place of a
+                // waveform.
+                const auto midPixels = [&picture, &view](int deck)
+                {
+                    auto count = 0;
+                    const auto& panel = *view->decks[static_cast<size_t>(deck)];
+                    const auto area = panel.display.getBounds().translated(panel.getX(), panel.getY());
+                    for (int y = area.getY(); y < area.getBottom(); y += 2)
+                        for (int x = area.getX(); x < area.getRight(); x += 2)
+                        {
+                            const auto pixel = picture.getPixelAt(x, y);
+                            if (pixel.getRed() > 120 && pixel.getRed() > 2 * pixel.getBlue() && pixel.getGreen() > pixel.getBlue())
+                                ++count;
+                        }
+                    return count;
+                };
+                require(midPixels(1) > 20, "The file deck's screen draws its tone");
+                require(midPixels(0) > 20, "and the track deck's screen the notes of its cell");
                 if (const auto shot = juce::SystemStats::getEnvironmentVariable("RHINO_DJ_SNAPSHOT", {}); shot.isNotEmpty())
                 {
                     juce::File(shot).deleteFile();
@@ -521,10 +458,72 @@
                 view->setLookAndFeel(nullptr);
             }
 
+            scenario("dj booth: a deck taken off leaves the others playing");
+            {
+                // Four decks play the fixture and the second is taken off.
+                // The third and fourth close up on the console and play on
+                // from where they stood, a block a block, never silent and
+                // never read again: each deck plays in an engine slot of its
+                // own, and only the one taken off is emptied.
+                auto document = std::make_unique<Session>();
+                auto& booth = *document;
+                for (int deck = 0; deck < 4; ++deck)
+                    require(booth.addDjDeck().wasOk() && booth.loadDjDeckFile(deck, source.getFile()).wasOk(), "Four decks read the fixture");
+                for (int waited = 0; waited < 400 && booth.djBusy(); ++waited)
+                {
+                    juce::Thread::sleep(25);
+                    booth.djPoll();
+                }
+                for (int deck = 0; deck < 4; ++deck)
+                {
+                    require(booth.djDeckInfo(deck).loaded, ("Each deck has the fixture: " + booth.djDeckInfo(deck).error).toRawUTF8());
+                    booth.djPlay(deck);
+                }
+                for (int played = 0; played < 4; ++played)
+                    booth.djProcessOffline(480);
+                require(booth.djDeckState(2).isPlaying() && booth.djDeckState(3).isPlaying(), "All four play");
+                const auto* third = booth.djDeckTrack(2);
+                const auto* fourth = booth.djDeckTrack(3);
+                const auto thirdAt = booth.djDeckState(2).positionSeconds, fourthAt = booth.djDeckState(3).positionSeconds;
+                const auto generation = booth.djDeckInfo(2).generation;
+                // The deck going has settings of its own; the third has a
+                // trim and carries the beat effect.
+                booth.setDjChannelTrim(1, -6.0f);
+                booth.djSetBrake(1, 1.0f);
+                booth.setDjChannelTrim(2, -3.0f);
+                booth.setDjFxTarget(2);
+                require(booth.removeDjDeck(1).wasOk() && booth.djDeckCount() == 3, "The second deck is taken off");
+                require(booth.djDeckTrack(1) == third && booth.djDeckTrack(2) == fourth, "The decks after it close up with their material");
+                require(std::abs(booth.djChannel(1).trimDb + 3.0f) < 0.001f && booth.djFx().target == 1,
+                        "and their strips and the beat effect move up with them");
+                for (int played = 1; played <= 10; ++played)
+                {
+                    booth.djProcessOffline(480);
+                    for (int deck = 1; deck <= 2; ++deck)
+                    {
+                        const auto standing = booth.djDeckState(deck);
+                        const auto from = deck == 1 ? thirdAt : fourthAt;
+                        require(standing.isPlaying() && std::abs(standing.positionSeconds - (from + played * 0.01)) < 1.0e-9
+                                    && booth.djChannel(deck).meter > 0.01f,
+                                ("and play on from where they stood, a block a block, never silent: deck " + juce::String(deck + 1)
+                                 + " at " + juce::String(standing.positionSeconds, 4) + " s").toRawUTF8());
+                    }
+                }
+                require(!booth.djBusy() && booth.djDeckInfo(1).loaded && booth.djDeckInfo(1).generation == generation,
+                        "No deck is read again");
+                // A deck added now takes the slot let go of, and none of what
+                // the deck that played there was set to.
+                require(booth.addDjDeck().wasOk() && booth.djDeckCount() == 4, "A deck added after");
+                require(booth.djChannel(3).trimDb == 0.0f && booth.djDeckState(3).brakeSeconds == 0.0f
+                            && booth.djDeckState(3).transport == Session::DjDeckState::Transport::empty,
+                        "starts as a new deck does, whoever played in its slot");
+                booth.releaseAudioDevice();
+            }
+
             scenario("dj booth: removing decks and refusals");
             require(session.removeDjDeck(0).wasOk() && session.djDeckCount() == 1, "A deck can be removed");
             require(session.djDeckInfo(0).kind == Session::DjSourceKind::file, "and the deck above closes the gap");
-            require(session.loadDjDeckTrack(0, session.masterTrackIndex()).failed(), "The main row cannot be bounced");
+            require(session.loadDjDeckTrack(0, session.masterTrackIndex()).failed(), "The main row cannot go on a deck");
             require(session.loadDjDeckTrack(5, 0).failed(), "A deck that does not exist refuses a load");
             require(session.setDjDeckLive(0, true).failed(), "A file deck has nothing to play live");
             for (int i = 0; i < Session::maximumDjDecks; ++i)

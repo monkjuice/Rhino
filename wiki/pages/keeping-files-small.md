@@ -4,7 +4,7 @@ type: convention
 summary: Split a .cpp past about 600 lines or a second responsibility by defining one class across several translation units, not by inventing types.
 tags: [both, code-structure, cmake]
 sources: []
-updated: 2026-10-11
+updated: 2026-10-12
 ---
 
 # Keeping files small
@@ -34,7 +34,7 @@ As of 2026-10-03:
 
 ## Still to do
 
-The rule is a target. As of 2026-10-03, nine `.cpp` files under `native/src` are past 600 lines. The largest are `Main.cpp` at about 2,200, `ArrangementGestures.cpp` at about 1,060 and `Arrangement.cpp` at about 890. The DJ booth of 2026-10-09 ([DJ view and the booth](dj-view.md)) added six more: `core/DjMixer.cpp` at about 1,150 holds every unit of the mixer (strip, compressor, isolator, filter, master, mic, pitch shifter, send unit and fourteen beat effects) and is the first to split, the send unit and the beat effect being natural files of their own; then `SessionDj.cpp` at about 1,060, `tests/DjTest.cpp` at about 870, `SessionDjSources.cpp` at about 760, and `core/DjDeck.cpp` and `core/DjAnalysis.cpp` at about 670 each. `DjControls.h` defines its pads, faders, meters and jog wheel inline, about 520 lines of header. The two named next candidates, `ControlWindow` in `Main.cpp` and `FloatingDeviceWindow` in `DeviceRack.cpp`, are classes defined inline in a single file. Splitting either means turning inline bodies into declarations plus definitions. That is real restructuring: do it deliberately, never as a side effect.
+The rule is a target. As of 2026-10-03, nine `.cpp` files under `native/src` are past 600 lines. The largest are `Main.cpp` at about 2,200, `ArrangementGestures.cpp` at about 1,060 and `Arrangement.cpp` at about 890. The DJ booth of 2026-10-09 ([DJ view and the booth](dj-view.md)) added six more: `core/DjMixer.cpp` at about 1,150 holds every unit of the mixer (strip, compressor, isolator, filter, master, mic, pitch shifter, send unit and fourteen beat effects) and is the first to split, the send unit and the beat effect being natural files of their own; then `SessionDj.cpp` at about 1,060, `tests/DjTest.cpp` at about 870, `SessionDjSources.cpp` at about 760, and `core/DjDeck.cpp` and `core/DjAnalysis.cpp` at about 670 each. `DjControls.h` defines its pads, faders, meters and jog wheel inline, about 520 lines of header. Step 2 of the DJ live-chain work (2026-10-11) split the deck the repo's way, one class across `DjDeck.cpp`, `DjDeckTransport.cpp`, `DjDeckLoops.cpp` and `DjDeckRender.cpp`, and the engine across `DjEngine.cpp`, `DjEngineClock.cpp` and `DjEngineMix.cpp`, none past 370 lines ([DJ deck engine](dj-deck-engine.md)). `SessionDj.cpp` and `SessionDjSources.cpp` (about 1,200 and 1,240 after the step's review) and `tests/DjTest.cpp` (about 2,280) waited, since splitting them means new lines in `native/CMakeLists.txt`, which another change held at the time; dropping the bounce and the preview on 2026-10-12 brought the two session files to about 1,110 and 860. The two named next candidates, `ControlWindow` in `Main.cpp` and `FloatingDeviceWindow` in `DeviceRack.cpp`, are classes defined inline in a single file. Splitting either means turning inline bodies into declarations plus definitions. That is real restructuring: do it deliberately, never as a side effect.
 
 ## Related
 

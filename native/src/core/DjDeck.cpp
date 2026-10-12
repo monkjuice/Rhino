@@ -2,30 +2,30 @@
 #include <algorithm>
 #include <cmath>
 
-// The deck player: see DjDeck.h.
+// The deck: its controls, what any thread may ask it, and what it plays -
+// material taken up, faded from and let go of. The transport is in
+// DjDeckTransport.cpp, the loops in DjDeckLoops.cpp and the player in
+// DjDeckRender.cpp. See DjDeck.h.
 
 namespace rhino
 {
-namespace
+void DjDeckControls::reset() noexcept
 {
-// Four-point Hermite, as the Drum Rack's sample voices read, bit-exact for an
-// untuned track at the device's own rate.
-inline float readInterpolated(const std::vector<float>& samples, double at) noexcept
-{
-    const auto count = static_cast<int>(samples.size());
-    if (count == 0) return 0.0f;
-    const auto index = static_cast<int>(std::floor(at));
-    const auto fraction = static_cast<float>(at - index);
-    const auto sample = [&samples, count](int i) { return samples[static_cast<size_t>(std::clamp(i, 0, count - 1))]; };
-    const auto x0 = sample(index - 1), x1 = sample(index), x2 = sample(index + 1), x3 = sample(index + 2);
-    const auto c1 = 0.5f * (x2 - x0);
-    const auto c2 = x0 - 2.5f * x1 + 2.0f * x2 - 0.5f * x3;
-    const auto c3 = 0.5f * (x3 - x0) + 1.5f * (x1 - x2);
-    return ((c3 * fraction + c2) * fraction + c1) * fraction + x1;
+    copyFrom(DjDeckControls {});
 }
 
-constexpr double fadeSeconds = 0.002;
-constexpr double rateSmoothingSeconds = 0.03;
+void DjDeckControls::copyFrom(const DjDeckControls& other) noexcept
+{
+    constexpr auto order = std::memory_order_relaxed;
+    tempoPercent.store(other.tempoPercent.load(order), order);
+    tempoRange.store(other.tempoRange.load(order), order);
+    nudgePercent.store(other.nudgePercent.load(order), order);
+    synced.store(other.synced.load(order), order);
+    reversed.store(other.reversed.load(order), order);
+    scratching.store(other.scratching.load(order), order);
+    scratchRate.store(other.scratchRate.load(order), order);
+    brakeSeconds.store(other.brakeSeconds.load(order), order);
+    quantiseSnap.store(other.quantiseSnap.load(order), order);
 }
 
 DjDeck::DjDeck()
@@ -51,6 +51,11 @@ double DjDeck::nativeBpm() const noexcept
     return t != nullptr ? t->analysis.bpm : 0.0;
 }
 
+double DjDeck::tempoBpm() const noexcept
+{
+    return nativeBpm() * tempoRate.load(std::memory_order_relaxed);
+}
+
 double DjDeck::effectiveBpm() const noexcept
 {
     return nativeBpm() * playbackRate.load(std::memory_order_relaxed);
@@ -58,7 +63,7 @@ double DjDeck::effectiveBpm() const noexcept
 
 double DjDeck::baseRate() const noexcept
 {
-    const auto percent = tempoPercent.load(std::memory_order_relaxed) + nudgePercent.load(std::memory_order_relaxed);
+    const auto percent = controls.tempoPercent.load(std::memory_order_relaxed) + controls.nudgePercent.load(std::memory_order_relaxed);
     return std::max(0.0, 1.0 + percent / 100.0);
 }
 
@@ -74,6 +79,11 @@ double DjDeck::clampFrame(double frame) const noexcept
     return std::clamp(frame, 0.0, static_cast<double>(grid.length - 1));
 }
 
+double DjDeck::clampPoint(double frame) const noexcept
+{
+    return std::clamp(frame, 0.0, static_cast<double>(std::max(0, grid.length)));
+}
+
 double DjDeck::snapToGrid(double frame, double beats) const noexcept
 {
     if (!grid.valid() || beats <= 0.0) return clampFrame(frame);
@@ -84,622 +94,272 @@ double DjDeck::snapToGrid(double frame, double beats) const noexcept
 double DjDeck::pendingFrame() const noexcept
 {
     const auto at = pendingPosition.load(std::memory_order_relaxed);
-    return at >= 0.0 ? at : position.load(std::memory_order_relaxed);
+    return at >= 0.0 ? at : pos;
 }
 
-// A new track from the message thread. The old one may already be retired,
-// so everything about it that matters was copied into `grid` when it was
-// adopted: that is what converts a position, the cues and the loop to beats
-// of the new one when asked to.
-void DjDeck::adopt(const DjTrack* next)
+bool DjDeck::steady() const noexcept
 {
+    return !controls.reversed.load(std::memory_order_relaxed) && !controls.scratching.load(std::memory_order_relaxed)
+        && !braking && !spinningUp;
+}
+
+double DjDeck::stepNow() const noexcept
+{
+    const auto direction = controls.reversed.load(std::memory_order_relaxed) ? -1.0 : 1.0;
+    return direction * rate * grid.sampleRate / std::max(1.0, outputRate);
+}
+
+void DjDeck::prepare(int maximumBlock, double deviceRate)
+{
+    const auto frames = static_cast<size_t>(std::max(1, maximumBlock));
+    planPos.assign(frames, 0.0);
+    planFromAt.assign(frames, 0.0);
+    planUnderAt.assign(frames, 0.0);
+    planGain.assign(frames, 0.0f);
+    planFromWeight.assign(frames, 0.0f);
+    planUnderWeight.assign(frames, 0.0f);
+    planFrom.assign(frames, nullptr);
+    planUnder.assign(frames, nullptr);
+    planMark.assign(frames, 0);
+    if (deviceRate > 0.0)
+        outputRate = deviceRate;
+    declickFrames = std::max(1, static_cast<int>(std::lround(declickSeconds * outputRate)));
+}
+
+void DjDeck::letGo(const DjTrack* material) noexcept
+{
+    if (material == nullptr || material == current || material == fade.material || material == under.material
+        || releases == nullptr)
+        return;
+    releases->release(DjObjectKind::material, material);
+}
+
+void DjDeck::beginFade(const DjTrack* from, double at, double step, int frames)
+{
+    if (fade.weight.fresh())
+    {
+        fade.weight.start(std::max(fade.weight.total, frames));
+        return;
+    }
+    const auto* dropped = under.material;
+    under = fade.weight.active() ? fade : Fade {};
+    fade.material = from;
+    fade.at = at;
+    fade.step = step;
+    fade.weight.start(frames);
+    letGo(dropped);
+}
+
+void DjDeck::dropFade()
+{
+    const auto* faded = fade.material;
+    const auto* beneath = under.material;
+    fade = {};
+    under = {};
+    letGo(faded);
+    if (beneath != faded)
+        letGo(beneath);
+}
+
+// One frame of the fades, written into the plan: the material each reads,
+// where, and its weight, which reaches exactly nothing on its last frame -
+// the frame the material is let go of, to go back once the block's reads are
+// done. The fade under the newest is heard only through it, so it goes when
+// that one ends, whatever its own ramp has left.
+void DjDeck::planFadeFrame(int frame) noexcept
+{
+    const auto f = static_cast<size_t>(frame);
+    if (!fade.weight.active())
+    {
+        planFromWeight[f] = 0.0f;
+        return;
+    }
+    planFrom[f] = fade.material;
+    planFromAt[f] = fade.at;
+    planFromWeight[f] = fade.weight.next();
+    fade.at += fade.step;
+    if (under.weight.active())
+    {
+        planUnder[f] = under.material;
+        planUnderAt[f] = under.at;
+        planUnderWeight[f] = under.weight.next();
+        under.at += under.step;
+        if (!under.weight.active())
+        {
+            const auto* ended = under.material;
+            under = {};
+            letGo(ended);
+        }
+    }
+    else
+        planUnderWeight[f] = 0.0f;
+    if (!fade.weight.active())
+        dropFade();
+}
+
+void DjDeck::jumpTo(double frame)
+{
+    if (loopActive.load(std::memory_order_relaxed)
+        && (frame < loopStart.load(std::memory_order_relaxed) || frame >= loopEnd.load(std::memory_order_relaxed)))
+        loopActive.store(false, std::memory_order_relaxed);
+    moveTo(frame);
+}
+
+void DjDeck::moveTo(double frame)
+{
+    if (audible() && current != nullptr)
+        beginFade(current, pos, stepNow(), declickFrames);
+    pos = frame;
+    publish();
+    pendingMark |= jumped;
+    noteJump();
+}
+
+// Material from the message thread, through the engine's queue. Everything
+// about the material let go of that matters was copied into `grid` when it
+// was taken up: that is what converts a position, the cues and the loop to
+// the new material. A deck that is heard goes on reading the old for the
+// declick, at the rate it had, while the new fades in.
+void DjDeck::setSource(const DjTrack* next, bool keepBeat)
+{
+    if (next == current) return;
     const auto previous = grid;
-    const auto keep = keepBeatOnSwap.load(std::memory_order_relaxed) && previous.valid();
-    // A swap while playing: the old material fades into the new over the
-    // first few milliseconds of this block.
-    const auto before = currentState();
-    swapFrom = current != nullptr && next != nullptr && !stopping
-            && (before == State::playing || before == State::cueing) ? current : nullptr;
-    swapGrid = previous;
-    swapPos = position.load(std::memory_order_relaxed);
-    swapRemaining = swapFrom != nullptr ? -1 : 0;
+    const auto keep = keepBeat && previous.valid();
+    const auto* outgoing = current;
+    if (outgoing != nullptr && audible())
+        beginFade(outgoing, pos, stepNow(), declickFrames);
+    else if (outgoing == nullptr)
+    {
+        // An emptied deck still fading its last material out takes the new
+        // from silence.
+        dropFade();
+        gain = 0.0f;
+    }
     current = next;
     grid = gridOf(next);
-    if (next == nullptr)
+    track.store(next, std::memory_order_release);
+    letGo(outgoing);
+    // A tempo held since the deck took over as master is a rate of the
+    // material it was held on; a new track plays at its own fader's.
+    if (!keep)
     {
-        setState(State::empty);
-        setPending(Pending::none);
-        position.store(0.0, std::memory_order_relaxed);
-        pendingPosition.store(-1.0, std::memory_order_relaxed);
-        cuePoint.store(0.0, std::memory_order_relaxed);
-        for (auto& cue : hotCues) cue.store(-1.0, std::memory_order_relaxed);
+        heldTempo = 0.0;
+        following = false;
+        heldTempoRate.store(0.0, std::memory_order_relaxed);
+    }
+    const auto clearLoopPoints = [this]
+    {
         loopStart.store(-1.0, std::memory_order_relaxed);
         loopEnd.store(-1.0, std::memory_order_relaxed);
         loopActive.store(false, std::memory_order_relaxed);
+    };
+    if (next == nullptr)
+    {
+        // Emptied. What it played fades out at the gain it was heard at.
+        setState(State::empty);
+        setPending(Pending::none);
+        pos = 0.0;
+        pendingPosition.store(-1.0, std::memory_order_relaxed);
+        cuePoint.store(0.0, std::memory_order_relaxed);
+        for (auto& cue : hotCues) cue.store(-1.0, std::memory_order_relaxed);
+        clearLoopPoints();
         stopping = false;
-        startAt = -1;
-        cueHeld = false;
-        gain = 0.0f;
+        returnTo = -1.0;
+        startAt = jumpAt = -1;
+        cueHeld = braking = spinningUp = false;
+        if (!fade.weight.active())
+            gain = 0.0f;
+        publish();
         return;
     }
-    // Frames of the old track to frames of the new: by beat when both have
-    // a grid and the swap asked for it, by time otherwise.
-    const auto convert = [&](double frame)
+    const auto wasEmpty = outgoing == nullptr;
+    // A deck looping its whole material loops the new whole too, and a point
+    // past the new one's end comes round by its length rather than stopping
+    // at its last frame: a cell swapped in under a song comes in on the beat
+    // the deck was on.
+    const auto start = loopStart.load(std::memory_order_relaxed), end = loopEnd.load(std::memory_order_relaxed);
+    const auto loopedWhole = !wasEmpty && keep && loopActive.load(std::memory_order_relaxed) && start <= 0.5
+                          && end >= previous.length - 0.5;
+    // Frames of the old material to frames of the new: by beat when both
+    // have a grid and the swap asked for it, by time otherwise.
+    const auto converted = [&](double frame)
     {
-        if (frame < 0.0) return frame;
-        if (keep && grid.valid())
-            return clampFrame(grid.frameAt(previous.beatAt(frame)));
-        return clampFrame(frame * grid.sampleRate / std::max(1.0, previous.sampleRate));
+        auto at = keep && grid.valid() ? grid.frameAt(previous.beatAt(frame))
+                                       : frame * grid.sampleRate / std::max(1.0, previous.sampleRate);
+        if (loopedWhole && at >= grid.length)
+            at = std::fmod(at, static_cast<double>(grid.length));
+        return at;
     };
-    const auto wasEmpty = currentState() == State::empty;
-    position.store(wasEmpty ? 0.0 : convert(position.load(std::memory_order_relaxed)), std::memory_order_relaxed);
+    const auto convert = [&](double frame) { return frame < 0.0 ? frame : clampFrame(converted(frame)); };
+    pos = wasEmpty ? 0.0 : convert(pos);
     pendingPosition.store(convert(pendingPosition.load(std::memory_order_relaxed)), std::memory_order_relaxed);
     cuePoint.store(wasEmpty ? 0.0 : convert(cuePoint.load(std::memory_order_relaxed)), std::memory_order_relaxed);
     for (auto& cue : hotCues)
         cue.store(wasEmpty ? -1.0 : convert(cue.load(std::memory_order_relaxed)), std::memory_order_relaxed);
-    const auto start = loopStart.load(std::memory_order_relaxed), end = loopEnd.load(std::memory_order_relaxed);
-    if (!wasEmpty && start >= 0.0 && end > start)
+    if (loopedWhole)
     {
-        loopStart.store(convert(start), std::memory_order_relaxed);
-        loopEnd.store(convert(end), std::memory_order_relaxed);
+        loopStart.store(0.0, std::memory_order_relaxed);
+        loopEnd.store(static_cast<double>(grid.length), std::memory_order_relaxed);
     }
-    else
+    else if (!wasEmpty && start >= 0.0 && end > start)
     {
-        loopStart.store(-1.0, std::memory_order_relaxed);
-        loopEnd.store(-1.0, std::memory_order_relaxed);
-        loopActive.store(false, std::memory_order_relaxed);
-    }
-    if (wasEmpty)
-        setState(State::stopped);
-}
-
-void DjDeck::beginPlaying(double fromFrame)
-{
-    position.store(clampFrame(fromFrame), std::memory_order_relaxed);
-    stopping = false;
-    braking = false;
-    returnTo = -1.0;
-    gain = 0.0f;
-    setState(State::playing);
-    setPending(Pending::none);
-    pendingPosition.store(-1.0, std::memory_order_relaxed);
-}
-
-void DjDeck::stopWithFade(double returnToFrame)
-{
-    if (!isPlaying())
-    {
-        if (returnToFrame >= 0.0)
-        {
-            position.store(clampFrame(returnToFrame), std::memory_order_relaxed);
-            noteJump();
-        }
-        if (currentState() != State::empty)
-            setState(State::stopped);
-        setPending(Pending::none);
-        pendingPosition.store(-1.0, std::memory_order_relaxed);
-        return;
-    }
-    stopping = true;
-    returnTo = returnToFrame;
-}
-
-void DjDeck::play()
-{
-    const auto s = currentState();
-    if (s == State::empty || s == State::playing || s == State::waiting)
-        return;
-    if (s == State::cueing)
-    {
-        // Play pressed while cue is held: carry on from here, as a CDJ does.
-        cueHeld = false;
-        setState(State::playing);
-        return;
-    }
-    pendingPosition.store(position.load(std::memory_order_relaxed), std::memory_order_relaxed);
-    setPending(Pending::start);
-    setState(State::waiting);
-}
-
-void DjDeck::pause()
-{
-    const auto s = currentState();
-    if (s == State::waiting)
-    {
-        setState(State::stopped);
-        setPending(Pending::none);
-        pendingPosition.store(-1.0, std::memory_order_relaxed);
-        return;
-    }
-    if (s == State::playing || s == State::cueing)
-    {
-        cueHeld = false;
-        const auto brake = brakeSeconds.load(std::memory_order_relaxed);
-        if (brake > 0.01f && !braking)
-        {
-            // The platter winds down rather than stopping dead; the stop
-            // itself comes when the rate reaches nothing.
-            braking = true;
-            spinningUp = false;
-            brakeStep = std::abs(rate) / (brake * grid.sampleRate);
-            return;
-        }
-        stopWithFade(-1.0);
-    }
-}
-
-void DjDeck::togglePlay()
-{
-    const auto s = currentState();
-    if (s == State::playing || s == State::waiting || s == State::cueing)
-        pause();
-    else
-        play();
-}
-
-// The cue button, as a CDJ reads it. Playing: stop and go back to the cue
-// point. Stopped at the cue point: play from it for as long as the button is
-// held. Stopped anywhere else: this is the cue point now.
-void DjDeck::cueDown(bool quantise)
-{
-    const auto s = currentState();
-    if (s == State::empty) return;
-    if (s == State::playing || s == State::waiting)
-    {
-        if (s == State::waiting)
-        {
-            setState(State::stopped);
-            setPending(Pending::none);
-            pendingPosition.store(-1.0, std::memory_order_relaxed);
-        }
-        stopWithFade(cuePoint.load(std::memory_order_relaxed));
-        return;
-    }
-    if (s == State::cueing) return;
-    const auto at = position.load(std::memory_order_relaxed);
-    const auto cue = cuePoint.load(std::memory_order_relaxed);
-    if (std::abs(at - cue) < 1.0)
-    {
-        cueHeld = true;
-        beginPlaying(cue);
-        setState(State::cueing);
-        return;
-    }
-    cuePoint.store(quantise ? snapToGrid(at, 1.0) : at, std::memory_order_relaxed);
-    position.store(cuePoint.load(std::memory_order_relaxed), std::memory_order_relaxed);
-}
-
-void DjDeck::cueUp()
-{
-    if (currentState() != State::cueing || !cueHeld) return;
-    cueHeld = false;
-    stopWithFade(cuePoint.load(std::memory_order_relaxed));
-}
-
-void DjDeck::hotCue(int index, bool quantise)
-{
-    if (index < 0 || index >= hotCueCount || currentState() == State::empty) return;
-    auto& cue = hotCues[static_cast<size_t>(index)];
-    const auto at = cue.load(std::memory_order_relaxed);
-    if (at < 0.0)
-    {
-        const auto here = position.load(std::memory_order_relaxed);
-        cue.store(quantise ? snapToGrid(here, 1.0) : here, std::memory_order_relaxed);
-        return;
-    }
-    // Set already: go there and play. The engine decides when, so a playing
-    // deck lands on the master's next beat when quantised.
-    pendingPosition.store(at, std::memory_order_relaxed);
-    if (isPlaying())
-    {
-        cueHeld = false;
-        setState(State::playing);
-        setPending(Pending::jump);
-    }
-    else
-    {
-        setPending(Pending::start);
-        setState(State::waiting);
-    }
-}
-
-void DjDeck::clearHotCue(int index)
-{
-    if (index < 0 || index >= hotCueCount) return;
-    hotCues[static_cast<size_t>(index)].store(-1.0, std::memory_order_relaxed);
-}
-
-void DjDeck::setCuePoint(double frame)
-{
-    if (currentState() == State::empty) return;
-    cuePoint.store(clampFrame(frame), std::memory_order_relaxed);
-}
-
-void DjDeck::setHotCuePoint(int index, double frame)
-{
-    if (index < 0 || index >= hotCueCount || currentState() == State::empty) return;
-    hotCues[static_cast<size_t>(index)].store(frame < 0.0 ? -1.0 : clampFrame(frame), std::memory_order_relaxed);
-}
-
-void DjDeck::adoptPending()
-{
-    const auto* next = track.load(std::memory_order_acquire);
-    if (next != current)
-        adopt(next);
-}
-
-void DjDeck::loopIn(bool quantise)
-{
-    if (currentState() == State::empty) return;
-    const auto here = position.load(std::memory_order_relaxed);
-    loopStart.store(quantise ? snapToGrid(here, 1.0) : here, std::memory_order_relaxed);
-    loopEnd.store(-1.0, std::memory_order_relaxed);
-    loopActive.store(false, std::memory_order_relaxed);
-}
-
-void DjDeck::loopOut(bool quantise)
-{
-    const auto start = loopStart.load(std::memory_order_relaxed);
-    if (currentState() == State::empty || start < 0.0) return;
-    const auto here = position.load(std::memory_order_relaxed);
-    const auto end = quantise ? snapToGrid(here, 1.0) : here;
-    if (end <= start + 1.0) return;
-    loopEnd.store(end, std::memory_order_relaxed);
-    loopActive.store(true, std::memory_order_relaxed);
-}
-
-void DjDeck::beatLoop(double beats, bool quantise)
-{
-    if (currentState() == State::empty || beats <= 0.0) return;
-    const auto here = position.load(std::memory_order_relaxed);
-    double start = here, end;
-    if (grid.valid())
-    {
-        // From the beat the deck is on - the beat's own start when
-        // quantised - for the given number of beats.
-        const auto beat = grid.beatAt(here);
-        const auto from = quantise ? std::floor(beat) : beat;
-        start = grid.frameAt(from);
-        end = grid.frameAt(from + beats);
-    }
-    else
-    {
-        end = here + beats * 0.5 * grid.sampleRate;
-    }
-    start = clampFrame(start);
-    end = std::min(end, static_cast<double>(std::max(1, grid.length)));
-    if (end <= start + 1.0) return;
-    loopStart.store(start, std::memory_order_relaxed);
-    loopEnd.store(end, std::memory_order_relaxed);
-    loopActive.store(true, std::memory_order_relaxed);
-}
-
-void DjDeck::reloopExit()
-{
-    const auto start = loopStart.load(std::memory_order_relaxed), end = loopEnd.load(std::memory_order_relaxed);
-    if (currentState() == State::empty || start < 0.0 || end <= start) return;
-    if (loopActive.load(std::memory_order_relaxed))
-    {
-        loopActive.store(false, std::memory_order_relaxed);
-        return;
-    }
-    loopActive.store(true, std::memory_order_relaxed);
-    if (isPlaying())
-    {
-        position.store(start, std::memory_order_relaxed);
-        noteJump();
-    }
-    else
-    {
-        pendingPosition.store(start, std::memory_order_relaxed);
-        setPending(Pending::start);
-        setState(State::waiting);
-    }
-}
-
-void DjDeck::loopHalve()
-{
-    const auto start = loopStart.load(std::memory_order_relaxed), end = loopEnd.load(std::memory_order_relaxed);
-    if (start < 0.0 || end <= start) return;
-    const auto length = (end - start) * 0.5;
-    if (length < 32.0) return;
-    loopEnd.store(start + length, std::memory_order_relaxed);
-}
-
-void DjDeck::loopDouble()
-{
-    const auto start = loopStart.load(std::memory_order_relaxed), end = loopEnd.load(std::memory_order_relaxed);
-    if (start < 0.0 || end <= start) return;
-    const auto doubled = std::min(start + (end - start) * 2.0, static_cast<double>(std::max(1, grid.length)));
-    if (doubled <= end) return;
-    loopEnd.store(doubled, std::memory_order_relaxed);
-}
-
-void DjDeck::clearLoop()
-{
-    loopStart.store(-1.0, std::memory_order_relaxed);
-    loopEnd.store(-1.0, std::memory_order_relaxed);
-    loopActive.store(false, std::memory_order_relaxed);
-}
-
-void DjDeck::setLoop(double start, double end, bool active)
-{
-    if (currentState() == State::empty) return;
-    start = clampFrame(start);
-    end = std::min(end, static_cast<double>(std::max(1, grid.length)));
-    if (end <= start + 1.0)
-    {
-        clearLoop();
-        return;
-    }
-    loopStart.store(start, std::memory_order_relaxed);
-    loopEnd.store(end, std::memory_order_relaxed);
-    loopActive.store(active, std::memory_order_relaxed);
-}
-
-void DjDeck::beatJump(int beats)
-{
-    if (currentState() == State::empty || beats == 0) return;
-    const auto here = position.load(std::memory_order_relaxed);
-    double target;
-    if (grid.valid())
-        target = grid.frameAt(std::round(grid.beatAt(here)) + beats);
-    else
-        target = here + beats * 0.5 * grid.sampleRate;
-    target = clampFrame(target);
-    const auto moved = target - here;
-    // An active loop travels with the jump, as a CDJ moves one.
-    const auto start = loopStart.load(std::memory_order_relaxed), end = loopEnd.load(std::memory_order_relaxed);
-    if (loopActive.load(std::memory_order_relaxed) && start >= 0.0 && end > start)
-    {
-        const auto length = end - start;
-        auto newStart = clampFrame(start + moved);
-        auto newEnd = std::min(newStart + length, static_cast<double>(std::max(1, grid.length)));
+        const auto newStart = clampPoint(converted(start)), newEnd = clampPoint(converted(end));
         if (newEnd > newStart + 1.0)
         {
             loopStart.store(newStart, std::memory_order_relaxed);
             loopEnd.store(newEnd, std::memory_order_relaxed);
         }
-    }
-    position.store(target, std::memory_order_relaxed);
-    if (currentState() == State::waiting)
-        pendingPosition.store(target, std::memory_order_relaxed);
-    noteJump();
-}
-
-void DjDeck::seek(double frame)
-{
-    if (currentState() == State::empty) return;
-    const auto target = clampFrame(frame);
-    position.store(target, std::memory_order_relaxed);
-    if (currentState() == State::waiting)
-        pendingPosition.store(target, std::memory_order_relaxed);
-    noteJump();
-}
-
-void DjDeck::alignPhase(double masterPhase, int boundaryBeats)
-{
-    if (!grid.valid() || currentState() == State::empty) return;
-    const auto span = std::max(1, boundaryBeats);
-    const auto here = position.load(std::memory_order_relaxed);
-    const auto beat = grid.beatAt(here);
-    // The master's phase within its boundary, placed into this deck's
-    // nearest boundary of the same size.
-    const auto base = std::floor(beat / span) * span;
-    auto target = base + masterPhase;
-    if (target - beat > span * 0.5) target -= span;
-    else if (beat - target > span * 0.5) target += span;
-    position.store(clampFrame(grid.frameAt(target)), std::memory_order_relaxed);
-    noteJump();
-}
-
-void DjDeck::landPending(int frameOffset, int snapBeats)
-{
-    const auto what = currentPending();
-    if (what == Pending::none) return;
-    auto at = pendingFrame();
-    if (snapBeats > 0)
-        at = snapToGrid(at, snapBeats);
-    if (what == Pending::jump)
-    {
-        // Lands at the block's start: the few frames of difference are below
-        // what a beat boundary can be heard to.
-        position.store(clampFrame(at), std::memory_order_relaxed);
-        setPending(Pending::none);
-        pendingPosition.store(-1.0, std::memory_order_relaxed);
-        noteJump();
-        return;
-    }
-    position.store(clampFrame(at), std::memory_order_relaxed);
-    startAt = std::max(0, frameOffset);
-    noteJump();
-}
-
-void DjDeck::render(float* left, float* right, int frames, double deviceRate)
-{
-    adoptPending();
-    const auto clear = [left, right, frames]
-    {
-        std::fill(left, left + frames, 0.0f);
-        if (right != nullptr) std::fill(right, right + frames, 0.0f);
-    };
-    if (current == nullptr || grid.length <= 0 || deviceRate <= 0.0)
-    {
-        clear();
-        peak.store(0.0f, std::memory_order_relaxed);
-        playbackRate.store(targetRate, std::memory_order_relaxed);
-        return;
-    }
-    auto s = currentState();
-    auto playing = s == State::playing || s == State::cueing;
-    if (!playing && startAt < 0)
-    {
-        clear();
-        peak.store(0.0f, std::memory_order_relaxed);
-        rate = targetRate;
-        playbackRate.store(rate, std::memory_order_relaxed);
-        swapFrom = nullptr;
-        swapRemaining = 0;
-        return;
-    }
-    // The crossfade from a material just let go of lasts ten milliseconds,
-    // or this block, whichever is shorter: the old material is alive for
-    // this block only.
-    constexpr double swapSeconds = 0.01;
-    if (swapFrom != nullptr && swapRemaining < 0)
-    {
-        swapTotal = std::max(1, std::min(frames, static_cast<int>(std::lround(swapSeconds * deviceRate))));
-        swapRemaining = swapTotal;
-    }
-
-    const auto fadeStep = static_cast<float>(1.0 / std::max(1.0, fadeSeconds * deviceRate));
-    const auto smoothing = 1.0 - std::exp(-1.0 / (rateSmoothingSeconds * deviceRate));
-    const auto rateScale = grid.sampleRate / deviceRate;
-    const auto backwards = reversed.load(std::memory_order_relaxed);
-    auto pos = position.load(std::memory_order_relaxed);
-    const auto end = static_cast<double>(grid.length);
-    float blockPeak = 0.0f;
-    const auto& leftSamples = current->left;
-    const auto& rightSamples = current->stereo() ? current->right : current->left;
-    bool stoppedThisBlock = false;
-
-    for (int f = 0; f < frames; ++f)
-    {
-        if (!playing)
-        {
-            if (f == startAt)
-            {
-                playing = true;
-                gain = 0.0f;
-                stopping = false;
-                braking = false;
-                returnTo = -1.0;
-                startAt = -1;
-                const auto brake = brakeSeconds.load(std::memory_order_relaxed);
-                if (brake > 0.01f && !cueHeld)
-                {
-                    // Winds up from a standstill over the brake time.
-                    spinningUp = true;
-                    rate = 0.0;
-                    brakeStep = std::max(0.05, std::abs(targetRate)) / (brake * deviceRate);
-                }
-                setState(cueHeld ? State::cueing : State::playing);
-                setPending(Pending::none);
-                pendingPosition.store(-1.0, std::memory_order_relaxed);
-            }
-            else
-            {
-                left[f] = 0.0f;
-                if (right != nullptr) right[f] = 0.0f;
-                continue;
-            }
-        }
-        if (braking)
-        {
-            // Winding down; the stop itself follows at nothing.
-            rate = rate > 0.0 ? std::max(0.0, rate - brakeStep * (grid.sampleRate / deviceRate))
-                              : std::min(0.0, rate + brakeStep * (grid.sampleRate / deviceRate));
-            if (std::abs(rate) <= 1.0e-4)
-            {
-                braking = false;
-                stopping = true;
-                returnTo = -1.0;
-            }
-        }
-        else if (spinningUp)
-        {
-            rate += brakeStep;
-            if (rate >= targetRate)
-            {
-                rate = targetRate;
-                spinningUp = false;
-            }
-        }
         else
-            rate += smoothing * (targetRate - rate);
-        const auto step = (backwards ? -1.0 : 1.0) * rate * rateScale;
-        auto l = readInterpolated(leftSamples, pos);
-        auto r = readInterpolated(rightSamples, pos);
-        if (swapRemaining > 0 && swapFrom != nullptr)
-        {
-            const auto w = static_cast<float>(swapRemaining) / static_cast<float>(swapTotal);
-            if (swapPos >= 0.0 && swapPos < static_cast<double>(swapFrom->length() - 1))
-            {
-                const auto& oldRight = swapFrom->stereo() ? swapFrom->right : swapFrom->left;
-                l = readInterpolated(swapFrom->left, swapPos) * w + l * (1.0f - w);
-                r = readInterpolated(oldRight, swapPos) * w + r * (1.0f - w);
-            }
-            swapPos += (backwards ? -1.0 : 1.0) * rate * (swapGrid.sampleRate / deviceRate);
-            if (--swapRemaining == 0)
-                swapFrom = nullptr;
-        }
-        if (stopping)
-            gain = std::max(0.0f, gain - fadeStep);
-        else
-            gain = std::min(1.0f, gain + fadeStep);
-        left[f] = l * gain;
-        if (right != nullptr) right[f] = r * gain;
-        blockPeak = std::max(blockPeak, std::max(std::abs(left[f]), std::abs(r * gain)));
-        pos += step;
+            clearLoopPoints();
+    }
+    else
+        clearLoopPoints();
+    if (wasEmpty)
+        setState(State::stopped);
+    publish();
+}
 
-        // The loop, and the ends of the track.
-        const auto lStart = loopStart.load(std::memory_order_relaxed), lEnd = loopEnd.load(std::memory_order_relaxed);
-        if (loopActive.load(std::memory_order_relaxed) && lStart >= 0.0 && lEnd > lStart + 1.0)
-        {
-            const auto length = lEnd - lStart;
-            if (step > 0.0 && pos >= lEnd)
-            {
-                pos -= length;
-                noteJump();
-            }
-            else if (step < 0.0 && pos < lStart)
-            {
-                pos += length;
-                noteJump();
-            }
-        }
-        if (pos >= end - 1.0 || pos < 0.0)
-        {
-            pos = pos < 0.0 ? 0.0 : end - 1.0;
-            stopping = true;
-            returnTo = -1.0;
-            gain = 0.0f;
-        }
-        if (stopping && gain <= 0.0f)
-        {
-            playing = false;
-            stopping = false;
-            braking = false;
-            spinningUp = false;
-            cueHeld = false;
-            if (returnTo >= 0.0)
-            {
-                pos = clampFrame(returnTo);
-                noteJump();
-            }
-            returnTo = -1.0;
-            stoppedThisBlock = true;
-            setState(State::stopped);
-            setPending(Pending::none);
-            pendingPosition.store(-1.0, std::memory_order_relaxed);
-            for (int rest = f + 1; rest < frames; ++rest)
-            {
-                left[rest] = 0.0f;
-                if (right != nullptr) right[rest] = 0.0f;
-            }
-            break;
-        }
-    }
-    if (!playing && !stoppedThisBlock && startAt >= frames)
-    {
-        // A start past the end of this block waits for the next one.
-        startAt -= frames;
-    }
-    // The old material is not read past this block.
-    swapFrom = nullptr;
-    swapRemaining = 0;
-    position.store(pos, std::memory_order_relaxed);
-    playbackRate.store(rate, std::memory_order_relaxed);
-    peak.store(blockPeak, std::memory_order_relaxed);
+void DjDeck::reset()
+{
+    const auto* played = current;
+    const auto* faded = fade.material;
+    const auto* beneath = under.material;
+    current = nullptr;
+    fade = {};
+    under = {};
+    grid = {};
+    track.store(nullptr, std::memory_order_release);
+    letGo(played);
+    if (faded != played)
+        letGo(faded);
+    if (beneath != played && beneath != faded)
+        letGo(beneath);
+    pos = 0.0;
+    targetRate = rate = 1.0;
+    gain = 0.0f;
+    stopping = false;
+    returnTo = -1.0;
+    startAt = jumpAt = -1;
+    jumpTarget = 0.0;
+    cueHeld = braking = spinningUp = false;
+    brakeStep = 0.0;
+    tempo = 1.0;
+    heldTempo = 0.0;
+    following = false;
+    pendingMark = 0;
+    setState(State::empty);
+    setPending(Pending::none);
+    pendingPosition.store(-1.0, std::memory_order_relaxed);
+    cuePoint.store(0.0, std::memory_order_relaxed);
+    for (auto& cue : hotCues) cue.store(-1.0, std::memory_order_relaxed);
+    loopStart.store(-1.0, std::memory_order_relaxed);
+    loopEnd.store(-1.0, std::memory_order_relaxed);
+    loopActive.store(false, std::memory_order_relaxed);
+    playbackRate.store(1.0, std::memory_order_relaxed);
+    tempoRate.store(1.0, std::memory_order_relaxed);
+    heldTempoRate.store(0.0, std::memory_order_relaxed);
+    peak.store(0.0f, std::memory_order_relaxed);
+    publish();
+    noteJump();
 }
 }

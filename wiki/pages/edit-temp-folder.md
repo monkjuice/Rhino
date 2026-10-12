@@ -1,10 +1,10 @@
 ---
 title: An edit's project id names its temp folder
 type: gotcha
-summary: Tracktion keeps an edit's cached renders in a folder named for its project id and purges it whenever an edit is built, so each DJ deck's copies of the document take an id of the deck's own, and the booth deletes the folders.
+summary: Tracktion keeps an edit's cached renders in a folder named for its project id and purges it whenever an edit is built, so a second edit built from a document's state must not take the document's id; learnt from the DJ deck copies, removed on 2026-10-12.
 tags: [rhino, tracktion, dj, rendering, files]
 sources: []
-updated: 2026-10-11
+updated: 2026-10-12
 ---
 
 # An edit's project id names its temp folder
@@ -23,27 +23,21 @@ A clip asks for its render while a render's graph is built, and starts it 600 ms
 
 **Building an edit purges its folder** (`purgeOrphanFreezeAndProxyFiles`): the `clip_` and reversed renders its own clips do not use go. `proxy_` files are never purged. `Edit::~Edit` deletes only the proxies its timeline clips are still making, cancelling them (`cancelAllProxyGeneratorJobs`, below); a finished render stays.
 
-## Which id a deck's copy takes
+**So an edit built from a document's state alongside the document must not take the document's id.** With it, building the copy purges the document's renders of every clip the copy does not hold; with a fresh id per build, every build makes its renders again in an empty folder and leaves the folder behind. Nothing in Rhino builds such a second edit since 2026-10-12: the one other edit built from a document's state is the one `restoreProject` swaps in for the document (`loadDocumentEdit`, checked 2026-10-12).
 
-A DJ deck's bounce renders a copy of the document holding only the deck's tracks ([A deck's bounce renders on a worker against a copy of the document](dj-bounce-on-a-copy.md)), so the id it is built with decides whose renders it purges and finds:
+## History: the DJ decks' copies (until 2026-10-12)
+
+A DJ deck's bounce rendered a copy of the document holding only the deck's tracks ([superseded](dj-bounce-on-a-copy.md)); decks now play live through the track and copy nothing ([DJ decks play live through the track's chain](dj-decks-play-live-through-the-track.md)). The id the copy was built with decided whose renders it purged and found:
 
 - **The live edit's id** (until 2026-10-11): building the copy purged the song's renders of every clip on every other track.
 - **A new id per bounce** (the first fix of 2026-10-11): every bounce made its renders again in an empty folder - for a five-minute MP3, the 600 ms timer and a whole decode, holding the booth's only worker - and left the folder behind, about the track's size each time.
-- **One id per deck slot** (since 2026-10-11): `DjBooth::copyIds`, made with the booth and written into the copy by `deckCopyState`. A deck's next bounce finds its last one's renders, the purge reaches only that deck's, and the song's are never touched. A deck's first bounce still makes its own.
+- **One id per deck slot** (2026-10-11 to 10-12): `DjBooth::copyIds`, written into the copy by `deckCopyState`. A deck's next bounce found its last one's renders, the purge reached only that deck's, and the song's were never touched.
 
-## Two copies of one deck
-
-A copy cancelled for a new source can still be alive when its deck's next copy is built, and the two share the folder. Destroying a copy cancels the proxy renders its clips began (`Edit::cancelAllProxyGeneratorJobs`), and a clip begins its proxy once and afterwards only looks for the file, so the newer copy would wait out its sixty seconds. `DjBooth::releaseFinishedBounces` therefore keeps a copy whose render did not finish while a newer copy of its deck still renders; a render that finished waited for every file it reads, so its copy goes at once.
-
-## Cleanup
-
-`copyFolders` records each folder as a copy is built; `removeCopyFolders` deletes them after the copies, in `djReset` (a new or reopened document) and `~DjBooth`, letting each file go from the engine's cache first (`AudioFileManager::releaseFile`). A crash leaves up to six; the live edit's own folder is the engine's business.
-
-`DjBounces.inc` leaves stand-in renders in a deck's folder and in the song's, and checks that the next bounce keeps the deck's folder and its render, purges nothing of the song's, and that a reopened document and the booth's end each remove the deck's folder.
+Two copies of one deck shared the folder, and destroying a copy cancels the proxy renders its clips began (`Edit::cancelAllProxyGeneratorJobs`) while a clip begins its proxy once and afterwards only looks for the file, so `releaseFinishedBounces` kept a copy whose render had not finished while a newer copy of its deck still rendered. `copyFolders` and `removeCopyFolders` deleted the folders in `djReset` and `~DjBooth`, letting each file go from the engine's cache first (`AudioFileManager::releaseFile`). All of it went with the bounce.
 
 ## Related
 
-- [A deck's bounce renders on a worker against a copy of the document](dj-bounce-on-a-copy.md)
-- [DJ view and the booth](dj-view.md)
 - [Offline renders that never return](renders-that-never-return.md)
 - [Time warp](time-warp.md)
+- [A deck's bounce renders on a worker against a copy of the document](dj-bounce-on-a-copy.md)
+- [DJ view and the booth](dj-view.md)

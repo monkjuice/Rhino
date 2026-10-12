@@ -330,11 +330,11 @@ int runUiProfile()
         }));
 
         // The DJ view, showing as the shell shows it in the arrangement's
-        // place, with six decks playing: three on a file and three on a track
-        // of the song. The tracks run no instrument, so they bounce at once to
-        // the silence such a track holds, carrying its notes: their screens
-        // draw notes, the files' screens waveforms. Every line paints what its
-        // work invalidated, collected as the peer would collect it.
+        // place, with six decks playing: three on a file and three on a cell
+        // of a track of the song, the track's first clip copied into it. The
+        // cells' screens draw notes, the files' screens waveforms. Every line
+        // paints what its work invalidated, collected as the peer would
+        // collect it.
         juce::TemporaryFile beat(".wav");
         writeBeat(beat.getFile());
         session.setDjQuantise(Session::DjQuantise::off);
@@ -347,8 +347,17 @@ int runUiProfile()
         {
             if (session.addDjDeck().failed())
                 throw std::runtime_error("Could not add a profile deck");
+            const auto playCell = [&session](int onDeck, int lane)
+            {
+                const auto clips = te::getAudioTracks(*session.edit)[lane]->getClips();
+                if (clips.isEmpty()) return juce::Result::fail("The profile track has no clip");
+                if (!session.slotClip(lane, 0).hasClip)
+                    if (const auto copied = session.copyClipToTrackSlot(clips.getFirst()->itemID, lane, 0); copied.failed())
+                        return copied;
+                return session.loadDjDeckSlot(onDeck, lane, 0);
+            };
             const auto loaded = deck % 2 == 0 ? session.loadDjDeckFile(deck, beat.getFile())
-                                              : session.loadDjDeckTrack(deck, pressedTrack + (deck / 2) * 2);
+                                              : playCell(deck, pressedTrack + (deck / 2) * 2);
             if (loaded.failed())
                 throw std::runtime_error(("Could not load a profile deck: " + loaded.getErrorMessage()).toStdString());
         }

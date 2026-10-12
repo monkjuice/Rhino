@@ -107,13 +107,21 @@ private:
     float envelope = 0.0f, attack = 0.01f, release = 0.001f, smoothing = 0.01f;
 };
 
+// A one-pole glide towards its target that lands on it: within a millionth,
+// or once a step no longer moves it, it snaps there, so a fade ends at
+// exactly 0 or 1 and never parks a hair away. Heading for 0, a float that
+// only approaches stops at a denormal, and every sample multiplied by it is
+// slow from then on; heading for 1, it stops some millionths short, where a
+// step is smaller than the float can tell.
 struct DjSmoothedGain
 {
     float current = 1.0f, target = 1.0f, coefficient = 0.01f;
     void prepare(double rate, double seconds) { coefficient = static_cast<float>(1.0 - std::exp(-1.0 / (seconds * rate))); }
     float next() noexcept
     {
-        current += coefficient * (target - current);
+        const auto distance = target - current;
+        const auto moved = current + coefficient * distance;
+        current = std::abs(distance) < 1.0e-6f || moved == current ? target : moved;
         return current;
     }
 };

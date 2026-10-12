@@ -184,12 +184,17 @@ bool DjDeckDisplay::tilesStandIn() const
     return tiles.complete || standIns.pictures.empty();
 }
 
-djwave::TileRange DjDeckDisplay::visibleTiles(double scroll) const
+std::pair<double, double> DjDeckDisplay::visibleSpan(double scroll) const
 {
     const auto area = waveArea();
     const auto centreX = area.getX() + area.getWidth() / 2;
-    return djwave::tilesTouching(scroll - (centreX - area.getX()) * paintedScale - 1.0,
-                                 scroll + (area.getRight() - centreX) * paintedScale + 1.0, tileWidth);
+    return {scroll - (centreX - area.getX()) * paintedScale - 1.0, scroll + (area.getRight() - centreX) * paintedScale + 1.0};
+}
+
+djwave::TileRange DjDeckDisplay::visibleTiles(double scroll) const
+{
+    const auto span = visibleSpan(scroll);
+    return djwave::tilesTouching(span.first, span.second, tileWidth);
 }
 
 // The visible tiles the strip lacks first, nearest the playhead, then the
@@ -200,7 +205,11 @@ djwave::TileRange DjDeckDisplay::visibleTiles(double scroll) const
 // covered the strip keeps the stand-ins they were painted over: a drag
 // that changes the key every frame - a splitter, the window's edge, the
 // wheel spun - put the two tiles a frame paints in place of the whole set,
-// and the strip went bare around them.
+// and the strip went bare around them. A visible tile nothing stands in for
+// is painted whatever the budget: a jump keeps the key, so once the strip
+// was covered no stand-ins were left, and a hot cue, a beat jump or the view
+// shown again landed the strip among tiles it had never painted, two of
+// them coming in a frame with bare ground between.
 void DjDeckDisplay::paintPictures(int budget)
 {
     if (track == nullptr || getWidth() <= 0 || getHeight() <= 0) return;
@@ -216,6 +225,7 @@ void DjDeckDisplay::paintPictures(int budget)
     if (!area.isEmpty())
     {
         const auto scroll = static_cast<double>(scrollFor(state.positionSeconds));
+        const auto span = visibleSpan(scroll);
         const auto visible = visibleTiles(scroll);
         const auto distance = [scroll](long long index) { return std::abs((static_cast<double>(index) + 0.5) * tileWidth - scroll); };
         std::vector<long long> wanted;
@@ -223,9 +233,18 @@ void DjDeckDisplay::paintPictures(int budget)
             if (tiles.find(index) == nullptr)
                 wanted.push_back(index);
         std::sort(wanted.begin(), wanted.end(), [&distance](long long a, long long b) { return distance(a) < distance(b); });
+        // The stand-ins on this key's timeline, as paintWave stretches them.
+        std::vector<long long> standing;
+        for (const auto& picture : standIns.pictures)
+            standing.push_back(picture.index);
+        const auto standingWidth = standIns.key.pixelsPerSecond > 0.0 && standIns.key.scale > 0.0f
+            ? standIns.key.width * key.pixelsPerSecond * key.scale / (standIns.key.pixelsPerSecond * standIns.key.scale)
+            : 0.0;
         for (const auto index : wanted)
         {
-            if (budget <= 0) break;
+            const auto shownFrom = std::max(span.first, static_cast<double>(index) * tileWidth);
+            const auto shownTo = std::min(span.second, static_cast<double>(index + 1) * tileWidth);
+            if (budget <= 0 && djwave::tilesCover(standing, standingWidth, shownFrom, shownTo)) continue;
             tiles.pictures.push_back({index, paintTile(key, index), false});
             paintedVisible = true;
             --budget;

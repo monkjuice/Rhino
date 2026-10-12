@@ -1,13 +1,15 @@
 ---
 title: A deck's bounce renders on a worker against a copy of the document
 type: decision
-summary: A track or group bounced to a DJ deck renders on the booth's worker from a snapshot copy of the edit, never the live edit nor the message thread; the copy's plugins and the test runners' inline render are the price.
-tags: [rhino, dj, rendering, threads]
+summary: Superseded on 2026-10-12, when decks stopped bouncing - how a track or group bounced to a DJ deck rendered on the booth's worker from a snapshot copy of the edit, kept for what it found about copies of a document, relative sources and the renderer.
+tags: [rhino, dj, rendering, threads, superseded]
 sources: []
-updated: 2026-10-11
+updated: 2026-10-12
 ---
 
 # A deck's bounce renders on a worker against a copy of the document
+
+> **Superseded on 2026-10-12.** A deck no longer bounces: it plays a track's own cells live through the track's chain ([DJ decks play live through the track's chain](dj-decks-play-live-through-the-track.md)). `bounceDjDeck`, `deckCopyState`, `DjBounceWork`, the copy folders, group decks, Reload, the automatic re-bounce and `DjBounces.inc` are gone. The page is kept for history and for what it found that still holds: a document's file goes into `te::Edit::Options` before the edit is built (`loadDocumentEdit`, which `restoreProject` uses; [Project files](project-files.md)); a clip whose file is missing is refused before anything renders or reads it (`checkClipFile`; [Offline renders that never return](renders-that-never-return.md)); a reduced copy of the state must route group members again ([Track groups](track-groups.md)); and an edit's project id names its temp folder ([gotcha](edit-temp-folder.md)). Everything below describes the code as it was.
 
 ## Context
 
@@ -39,6 +41,7 @@ The render's parameters are a merge's: from the top of the song to the end of th
 
 ## Related
 
+- [DJ decks play live through the track's chain](dj-decks-play-live-through-the-track.md), which replaced it
 - [DJ view and the booth](dj-view.md)
 - [An edit's project id names its temp folder](edit-temp-folder.md)
 - [Project files (.rhinoedit)](project-files.md)

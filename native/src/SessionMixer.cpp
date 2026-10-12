@@ -5,8 +5,9 @@
 //
 // There is one mixer: each track's own VolumeAndPanPlugin. The arrangement
 // draws it in each track header and reads and writes that plugin, so it cannot
-// hold a stale copy of a level, and a deck's bounce of the track passes through
-// the same fader.
+// hold a stale copy of a level. A DJ deck takes its track from where the
+// track's own devices end, ahead of the channel strip, so the song's trim,
+// fader and pan are the song's and the deck's are the booth's.
 //
 // Rhino's UtilityDevice is a device in a chain, like Live's Utility. It is not
 // the track fader, and the two are deliberately separate.
@@ -27,6 +28,9 @@ void Session::ensureTrackMixers()
 {
     for (auto* track : te::getAudioTracks(*edit))
     {
+        // Every track carries the DJ booth's two hidden ends from the start,
+        // made with it here as the mixer is.
+        ensureDjPortDevices(*edit, *track);
         if (track->getVolumePlugin() != nullptr)
             continue;
         auto plugin = edit->getPluginCache().createNewPlugin(te::VolumeAndPanPlugin::xmlTypeName, {});
@@ -76,8 +80,7 @@ juce::Result Session::setTrackVolumeDb(int track, float decibels)
     if (volume == nullptr)
         return juce::Result::fail("That track has no fader.");
     volume->setVolumeDb(juce::jlimit(minimumVolumeDb, maximumVolumeDb, decibels));
-    // The fader is a parameter of the track's own chain, which its bounce
-    // plays through.
+    // The fader is a parameter of the track's own chain.
     announceMixerChange(track, ModelChange::parameters);
     return juce::Result::ok();
 }
@@ -160,7 +163,7 @@ void Session::setMasterVolumeDb(float decibels)
     if (auto master = edit->getMasterVolumePlugin())
     {
         master->setVolumeDb(juce::jlimit(minimumVolumeDb, maximumVolumeDb, decibels));
-        // The main output is the song's, which a bounce leaves out.
+        // The main output is the song's, which no deck plays through.
         announceMixerChange(masterTrackIndex(), ModelChange::none);
     }
 }

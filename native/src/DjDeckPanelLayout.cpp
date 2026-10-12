@@ -63,7 +63,6 @@ void DjDeckPanel::resized()
     source.setBounds(layout.source);
     live.setBounds(layout.live);
     edit.setBounds(layout.edit);
-    reload.setBounds(layout.reload);
     eject.setBounds(layout.eject);
     display.setBounds(layout.display);
     for (size_t i = 0; i < hotCues.size(); ++i)

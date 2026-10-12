@@ -13,8 +13,7 @@
 namespace rhino
 {
 // Where the document keeps the booth: a child of the edit's state, written
-// when a snapshot is taken (SessionDj.cpp). A deck's copy of the document
-// leaves it out.
+// when a snapshot is taken (SessionDj.cpp).
 extern const juce::Identifier djStateID;
 
 // The settings a deck keeps apart from its material: what a document saves
@@ -28,54 +27,39 @@ struct DjDeckSettings
     double cueSeconds = 0.0;
     std::array<double, DjDeck::hotCueCount> hotCueSeconds;
     Session::DjLoop loop;
-    // A bounce loops whole when it first lands, as a stem would be left to.
+    // A clip loops whole when it first lands, so it plays round.
     bool loopWhole = false;
     DjDeckSettings() { hotCueSeconds.fill(-1.0); }
 };
 
-// A load in flight on the worker: a file being read and analysed, or a
-// bounce being rendered. The job is shared with the worker, which writes
-// its result and raises `done`; what a bounce renders is not in it.
+// A read in flight on the worker: a file, or the sound of an audio clip,
+// read and analysed. The job is shared with the worker, which writes its
+// result and raises `done`.
 struct DjLoadJob
 {
-    int deck = -1;
+    // The engine slot of the deck the read is for: it stays the deck's
+    // however the console moves around it.
+    int slot = -1;
     int generation = 0;
     juce::File file;
+    // The stretch of the file to read, in seconds; a length below zero reads
+    // to the end.
+    double startSeconds = 0.0, lengthSeconds = -1.0;
     bool keepBeat = false;
     std::atomic<bool> done {false};
     std::atomic<bool> cancel {false};
     std::unique_ptr<DjTrack> result;
     juce::String error;
-    // A bounce's name, tempo and signature, for the analysis.
+    // A clip's name and the song's tempo and signature, which lay its grid;
+    // a file's tempo is found by the analysis instead.
     juce::String name;
-    double tempo = 0.0;
+    double knownBpm = 0.0;
     int beatsPerBar = 4;
-    double started = 0.0;
-    // A bounce's notes, gathered on the message thread, for the live preview.
-    std::vector<DjMidiEvent> midi;
 };
 
-// What a bounce renders: a copy of the document loaded from a snapshot of
-// its state, so the live edit is never read from another thread while the
-// person goes on editing it, and the render that drives it. Owned by the
-// message thread alone, made there and destroyed there once its job is
-// done; the worker is handed a plain pointer to the render and touches
-// nothing here after it raises `done`. The copy is declared first so the
-// render and the scope that refers to it go before it.
-struct DjBounceWork
+struct Session::DjBooth final : juce::AudioIODeviceCallback
 {
-    std::shared_ptr<DjLoadJob> job;
-    std::unique_ptr<te::Edit> copy;
-    std::unique_ptr<te::Renderer::ScopedClipSlotDisabler> slotDisabler;
-    juce::WavAudioFormat wav;
-    std::unique_ptr<te::Renderer::RenderTask> task;
-};
-
-struct Session::DjBooth final : juce::AudioIODeviceCallback,
-                                DjLiveSink,
-                                juce::AsyncUpdater
-{
-    explicit DjBooth(te::Engine&);
+    DjBooth();
     ~DjBooth() override;
 
     struct Deck
@@ -84,70 +68,71 @@ struct Session::DjBooth final : juce::AudioIODeviceCallback,
         DjDeckSettings settings;
         // The track's monitoring before Live switched it on, put back after.
         std::optional<InputMonitoring> monitoringBeforeLive;
-        bool rebounceWanted = false;
+        // The track whose hidden ends play this deck's port, or none.
+        te::EditItemID boundTrack;
+        // The deck's clip changed under it - its notes, its sound, the song's
+        // tempo - and its material is made again once nothing is held.
+        bool materialDirty = false;
+        // What the material on the deck was made from: the clip, its notes or
+        // its stretch of file, its length and the tempo. A remake that would
+        // come out the same - an edit to another clip of the track, the
+        // arrangement's among them - hands nothing over, so the deck neither
+        // crossfades nor lets a held note go for it.
+        juce::String clipSignature;
+        // A source the engine's queue had no room for: the material a load
+        // brought, or nothing for an eject. It waits here, for the load it
+        // came from, and the poll hands it over once the queue has room
+        // (handOverDjSource). A newer load or eject takes its place.
+        struct WaitingSource
+        {
+            std::unique_ptr<DjTrack> material;
+            bool keepBeat = false;
+            int generation = 0;
+        };
+        std::optional<WaitingSource> waiting;
     };
 
-    // The live preview's notes go straight into the track the deck plays,
-    // as an editor's guide notes do, so no input need be monitored and no
-    // graph rebuilt for them. The engine raises them on the audio thread,
-    // and the track takes them only on the message thread - it asserts as
-    // much, and its listeners are made and unmade there with the graph - so
-    // they cross in this queue and an async update brings the message
-    // thread to them. The session sets a deck's track when its preview
-    // begins and clears it when the preview ends, on the message thread.
-    struct PreviewNote { int deck = 0, note = 0, velocity = 0; bool on = false; };
-    static constexpr int previewQueueSize = 1024;
-    juce::AbstractFifo previewFifo {previewQueueSize};
-    std::array<PreviewNote, previewQueueSize> previewQueue {};
-    std::atomic<int> previewDropped {0};
-    std::array<te::AudioTrack*, maximumDjDecks> previewTracks {};
-    void noteOn(int deck, int note, int velocity) override;
-    void noteOff(int deck, int note) override;
-    void queuePreviewNote(PreviewNote);
-    void handleAsyncUpdate() override;
-    // Puts the queued notes into their tracks. Message thread; the poll
-    // calls it too, so a test with no message loop still delivers.
-    void deliverPreviewNotes();
-
     DjEngine engine;
+    // Each engine slot's deck, by slot: its source, settings and loads.
     std::array<Deck, maximumDjDecks> decks;
     int count = 0;
+    // The console's decks in its order, each the engine slot it plays in,
+    // which stays its own while it is on the console: taking a deck off
+    // closes the console's gap and moves nothing the engine plays. Past the
+    // console the free slots follow, in the order a new deck takes them, so a
+    // control the console sets on every channel at once - the filters'
+    // resonance, the faders' curve - has reached a slot before a deck does.
+    std::array<int, maximumDjDecks> slotOfDeck {0, 1, 2, 3, 4, 5};
+    // The slot of a deck on the console, or -1.
+    int slotOf(int deck) const noexcept
+    {
+        return juce::isPositiveAndBelow(deck, count) ? slotOfDeck[static_cast<size_t>(deck)] : -1;
+    }
+    // The slot behind any of the six channels: a deck's, or past the console
+    // the free slot the next deck would take.
+    int channelSlot(int channel) const noexcept
+    {
+        return juce::isPositiveAndBelow(channel, maximumDjDecks) ? slotOfDeck[static_cast<size_t>(channel)] : -1;
+    }
+    // Which channel a slot stands behind, and which deck of the console holds
+    // it, -1 for none.
+    int channelOfSlot(int slot) const noexcept
+    {
+        for (int i = 0; i < maximumDjDecks; ++i)
+            if (slotOfDeck[static_cast<size_t>(i)] == slot)
+                return i;
+        return -1;
+    }
+    int deckOfSlot(int slot) const noexcept
+    {
+        const auto channel = channelOfSlot(slot);
+        return channel < count ? channel : -1;
+    }
     bool attached = false;
     juce::AudioFormatManager formats;
-    // One worker, below normal priority: a render at full tilt beside the
-    // audio thread was what made a set stutter while a bounce was made.
+    // One worker, below normal priority, for reading files and clips' sound.
     juce::ThreadPool workers {1, 0, juce::Thread::Priority::low};
     std::vector<std::shared_ptr<DjLoadJob>> jobs;
-    // The bounces in flight, in the order they were begun, each kept until
-    // releaseFinishedBounces lets it go.
-    std::vector<std::unique_ptr<DjBounceWork>> bounces;
-    // Every bounce started, each a copy of the document made on the message
-    // thread: what the tests count to hold the rules on when one is made.
-    int bouncesStarted = 0;
-    // The engine keeps an edit's cached renders - a compressed file decoded,
-    // a pitched clip stretched, a reversed one reversed - in a temp folder
-    // named for the edit's project id, and purges the ones its own clips do
-    // not use as the edit is built. So each deck's copies share a project id
-    // of their own, made with the booth (deckCopyState writes it): a deck's
-    // next bounce finds the renders its last one made, the purge reaches
-    // only that deck's, and the song's are never touched. The folders are
-    // recorded as the copies are built, and deleted with the booth and with
-    // the document the decks belonged to.
-    te::Engine& tracktionEngine;
-    std::array<te::ProjectItemID, maximumDjDecks> copyIds;
-    std::array<juce::File, maximumDjDecks> copyFolders;
-    void removeCopyFolders();
-    // Lets each bounce's copy go, on the message thread, once its job is
-    // done: the worker touches neither the copy nor its render after raising
-    // `done`. One that never finished rendering may wait a little longer
-    // (SessionDjSources.cpp says why).
-    void releaseFinishedBounces();
-    // When the document last changed under a bounced deck, as a millisecond
-    // tick, and zero when nothing is stale. The poll bounces again once it
-    // has been quiet for `rebounceQuietMs`.
-    juce::uint32 staleSince = 0;
-    static constexpr juce::uint32 rebounceQuietMs = 500;
-    bool phaseLock = true;
     // The last few taps on the effect's TAP key, as millisecond ticks.
     std::vector<juce::uint32> taps;
 
@@ -158,9 +143,12 @@ struct Session::DjBooth final : juce::AudioIODeviceCallback,
     void audioDeviceStopped() override;
 };
 
-// Reads a whole audio file into a track, up to the longest a deck takes.
-// Null, with the reason in `error`, when it cannot. Any thread.
+// Reads an audio file, or the stretch of it from `startSeconds` for
+// `lengthSeconds` (to the end for a negative length), into a track, up to the
+// longest a deck takes. Null, with the reason in `error`, when it cannot. Any
+// thread.
 std::unique_ptr<DjTrack> readDjTrack(const juce::File&, juce::AudioFormatManager&, juce::String& error,
-                                     std::atomic<bool>* cancel = nullptr);
+                                     std::atomic<bool>* cancel = nullptr, double startSeconds = 0.0,
+                                     double lengthSeconds = -1.0);
 constexpr double longestDjTrackSeconds = 15.0 * 60.0;
 }

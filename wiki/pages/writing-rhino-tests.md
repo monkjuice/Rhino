@@ -4,7 +4,7 @@ type: guide
 summary: Choose between a unit check and a workflow scenario, follow the rules that keep scenarios sharing one Session honest, and time the interface with --profile-ui.
 tags: [rhino, testing, conventions]
 sources: []
-updated: 2026-10-11
+updated: 2026-10-12
 ---
 
 # Writing Rhino tests
@@ -35,16 +35,16 @@ A scenario closes every brace it opens. `DeviceParameters.inc` once opened a blo
 closed, so neither could be moved or skipped without the other (fixed in commit `3f6bb4e`). A scenario that needs a
 clean slate builds a document of its own inside its block, `auto document = std::make_unique<Session>();`, and calls
 that session's `releaseAudioDevice()` before the block ends (`ClipEdits.inc`, `GroupUndo.inc`, `PartialRepaint.inc`, and
-`DjBooth.inc` for the group it bounces).
+every scenario of `DjLiveChain.inc`).
 
 ## Rules
 
 1. **Render before `GesturesAndPersistence.inc`.** It calls `Session::releaseAudioDevice`, after which a `RenderTask`
    never finishes and the runner times out with no assertion ([Offline renders that never return](renders-that-never-return.md)).
-   `DjBooth.inc` renders too, so it sits between `GroupBusReload.inc` and `Recording.inc`, with `ClipCells.inc` and
-   `DjBounces.inc` after it; and from that point on a clip imported onto a newly added track never renders, so a
-   scenario that imports onto a new track and renders it belongs before `GroupBusReload.inc`, or works in a document of
-   its own. A document a scenario reopens and then renders is written to disk first: reopened from a path that was never
+   The DJ scenarios - `DjBooth.inc`, `ClipCells.inc`, `DjLiveChain.inc`, `DjBoothEdges.inc` - sit between
+   `GroupBusReload.inc` and `Recording.inc`, whose arming allocates a playback context. From `GroupBusReload.inc` on, a
+   clip imported onto a newly added track never renders, so a scenario that imports onto a new track and renders it
+   belongs before it, or works in a document of its own. A document a scenario reopens and then renders is written to disk first: reopened from a path that was never
    written, a file imported after it resolves one folder too high and the render waits for it for good.
 2. **Allocate anything big.** Every scenario shares the runner's one stack frame. A `StepGrid` carries about 200 KB of
    caches, and the third one declared by value overflowed the old 1 MB stack inside an unrelated scenario; twice more in
@@ -83,8 +83,30 @@ that session's `releaseAudioDevice()` before the block ends (`ClipEdits.inc`, `G
    that runs `ctest --test-dir native/build -C Release -R native_pattern_workflow`.
 10. **Leave the shared session's clip slots empty.** `ClipRoundTrip.inc` works in the first track's cells after
     `DjBooth.inc` has filled and cleared its own, and expects some of them empty, so a scenario that fills a slot of the shared session
-    deletes it before its block ends (`dj booth: clips on the console` clears its cells and puts the deck back on SONG).
-    A check that wants cells it can count on builds its own document, as `ClipCells.inc` does.
+    deletes it before its block ends (`dj booth: clips on the console` clears every cell past the first and leaves the
+    deck on the first). A check that wants cells it can count on builds its own document, as `ClipCells.inc` does.
+11. **A track's chain runs in a runner only if the scenario runs it.** The runners open no audio device, so the
+    song's graph never processes a track on its own, and `bindDjTrack` allocates no playback context under them, since
+    a context left allocated is one a later offline render must not find. A scenario has two ways in
+    ([DJ decks play live through the track's chain](dj-decks-play-live-through-the-track.md)):
+    - Play the chain by hand, as most of `DjLiveChain.inc` does with its `run`: one block of the booth through
+      `djProcessOffline`, then every enabled plugin's `applyToBuffer` in order over one buffer and one
+      `te::MidiMessageArray` with `isPlaying` false, after `initialise` on each. Cheap, and right for levels and knobs.
+    - Run Tracktion's real graph through its hosted audio device, in a document of its own whose machine device is
+      released first, calling `hosted.processBlock` before the booth each block, as "dj live: the song's own graph
+      plays a deck's track while the song stands still" does (2026-10-12). This is what proves what only the graph
+      decides: play-in-stop, the transport, mute and solo. It stays silent until the engine's posted device preparation
+      is dispatched by hand ([Tracktion's hosted device is silent until its start is dispatched](hosted-device-silent-until-dispatched.md)).
+
+    Levels compare only on a sound that holds: `DjLiveChain.inc` plays Rhino FM's Drawbar Organ preset (sustain 1,
+    release 60 ms, no velocity) with chords struck on every beat, and checks the input's guard by the chain's own
+    output falling silent while the song plays. One track plays one deck, so two decks need two tracks
+    (`DjBoothEdges.inc`).
+12. **Find a device by `deviceSlots`, not by slot 0.** Every track's plugin 0 is the hidden DJ input since 2026-10-12,
+    so its first visible device is plugin 1; four scenarios that said slot 0 moved to 1. `DjLiveChain.inc` looks a
+    device up by kind and takes its `pluginIndex`, and a hidden plugin is found by its type, as `AutomationLanes.inc`
+    finds a fresh track's Utility: a channel strip's order differs between starter and added tracks
+    ([Device chain order](device-chain-order.md)).
 
 ## Timing, not checking
 
@@ -98,16 +120,25 @@ as with Forge's `--profile`, because the machine drifts by more than some differ
 ([Profile paint on a software image](profile-paint-on-a-software-image.md)); what the numbers mean is in
 [What a change costs the interface](ui-cost-of-a-change.md).
 
+A timed check inside a CTest case spends that case's limit. `--self-test` has 30 s (`native/CMakeLists.txt`), and the
+DJ booth's cost check (`checkBoothCost` in `tests/DjTest.cpp`, which logs its numbers and requires no allocation) renders
+10 s of silence rather than 30 for that reason: while the mixer's filters take denormals in silence, 30 s cost the case
+eight seconds and left it at 25 s of its 30 (2026-10-11; [DJ deck engine](dj-deck-engine.md)).
+
 ## Access and determinism
 
 Classes under test befriend the runner (`friend int runArrangementTest();` in `Arrangement`, `Session`, `StepGrid`,
 `AudioClipPanel`, `DjClipGrid` and the DJ view's panels; `friend int runUiProfile();` in `Arrangement`, `StepGrid` and `DeviceRack`), one reason
 big classes are split across translation units rather than into new types ([Keeping files small](keeping-files-small.md)).
+`DjDeck` keeps its audio-thread methods private to `DjEngine` and to `DjDeckTest`, a class in `tests/DjTest.cpp` whose
+static checks drive one deck alone, as the engine does at a block boundary.
 The four runner flags, `--device-test`, `--arp-snapshot` and `--profile-ui` set `Session::setCommandLineTestMode`: machine
 preferences (browser preview, last track kind) are neither read nor written, `pickTrackColour` takes the first
 unused colour, so pixel comparisons repeat, and the DJ booth never goes on the audio device, so the scenarios and the
-profile drive it alone through `djProcessOffline` and render its bounces inline. What only a test reads stays private
-behind the friendship, as `Session::djBouncesStarted` does for `DjBounces.inc`.
+profile drive it alone through `djProcessOffline`; its five-argument form hands back what the device would play, which
+`DjBoothEdges.inc` compares sample for sample between two documents. A file or an audio cell is still read on the
+booth's worker, so a scenario polls `djPoll` until `djBusy` is false. What only a test reads stays private behind the
+friendship.
 
 Nothing in `Main.cpp` is reachable by a test ([App shell and control bar](app-shell.md)), so a shell behaviour is
 checked at the boundary the shell wires, and whatever it needs is put in the view or the model: `DjBooth.inc` replaces
@@ -125,3 +156,4 @@ checked at the boundary the shell wires, and whatever it needs is put in the vie
 - [What a change costs the interface](ui-cost-of-a-change.md)
 - [JUCE's rasteriser is not clip-invariant](juce-rasteriser-not-clip-invariant.md)
 - [A JUCE component listening to itself hears its own clicks twice](juce-self-listener-hears-clicks-twice.md)
+- [Tracktion's hosted device is silent until its start is dispatched](hosted-device-silent-until-dispatched.md)

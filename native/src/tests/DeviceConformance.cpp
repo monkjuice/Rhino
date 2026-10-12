@@ -30,6 +30,8 @@
 
 namespace rhino
 {
+void runArpMechanicsTests(te::Edit&);
+
 namespace
 {
 constexpr double rate = 48000.0;
@@ -703,6 +705,7 @@ int runDeviceConformance()
     try
     {
         Session session;
+        runArpMechanicsTests(*session.edit);
         auto& plugins = session.engine.getPluginManager();
         plugins.createBuiltInType<ProbeEffect>();
         plugins.createBuiltInType<ProbeInstrument>();

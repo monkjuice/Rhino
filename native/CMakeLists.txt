@@ -122,6 +122,7 @@ target_sources(RhinoNative PRIVATE
     src/ProjectFiles.cpp
     # Tests
     src/tests/SelfTest.cpp
+    src/tests/ArpTest.cpp
     src/tests/DeviceConformance.cpp
     src/tests/AutoTuneTest.cpp
     src/tests/EqTest.cpp

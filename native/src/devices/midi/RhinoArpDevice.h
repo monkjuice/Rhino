@@ -1,8 +1,8 @@
 #pragma once
 #include <tracktion_engine/tracktion_engine.h>
 #include <array>
+#include <atomic>
 #include <cstdint>
-#include <limits>
 
 namespace rhino
 {
@@ -69,13 +69,11 @@ private:
     enum class Style { Up, Down, UpDown, DownUp, Chord };
     enum class Groove { Straight, Swing8, Swing16 };
     enum class Retrigger { Off, Note, Beat };
-    enum class Scale { Chromatic, Major, Minor };
 
     struct HeldNote
     {
         bool active = false;
         bool physicallyHeld = false;
-        int channel = 1;
         float velocity = 0.8f;
         te::MPESourceID source = {};
     };
@@ -84,33 +82,31 @@ private:
     {
         bool active = false;
         double beat = 0.0;
-        int pitch = 60;
-        int channel = 1;
+        double startedBeat = 0.0;
+        int inputKey = 0;
         te::MPESourceID source = {};
     };
 
     double rateBeats() const;
-    double nextStepBeat(double tickBeat, int step) const;
-    double noteOffBeat(double tickBeat, double nextBeat, int step) const;
-    double grooveMultiplier(int step) const;
+    double nextStepBeat(double tickBeat, std::int64_t step) const;
+    double noteOffBeat(double tickBeat, double nextBeat, std::int64_t step) const;
+    double grooveMultiplier(std::int64_t step) const;
     double intervalBeats() const;
     int activeNoteCount() const;
     int physicallyHeldCount() const;
     int noteAtOrdinal(int ordinal) const;
     int styleLength(int noteCount) const;
-    int ordinalForStep(int step, int noteCount) const;
+    int ordinalForStep(std::int64_t step, int noteCount) const;
     int transposedPitch(int pitch, int transposition) const;
+    void clearState();
     void clearActiveNotes();
     void releaseLatchedNotes();
     void resetSequence(double beat);
-    void addPendingOff(double beat, int pitch, int channel, te::MPESourceID source);
-    void flushPendingOffs(double blockStartSeconds, double blockEndSeconds,
-                          te::MidiMessageArray& output);
-    void emitNote(double tickBeat, double offBeat, int sourcePitch,
-                  double blockStartSeconds, double blockEndSeconds,
-                  te::MidiMessageArray& output);
-    void generateUntil(double endBeat, double blockStartSeconds, double blockEndSeconds,
-                       te::MidiMessageArray& output);
+    void endOutputNote(int key, double timestamp, te::MidiMessageArray& output);
+    void releaseInactiveNotes(double timestamp, te::MidiMessageArray& output);
+    void flushPendingOffs(double endBeat, double blockStartSeconds, bool inclusive, te::MidiMessageArray& output);
+    void emitNote(double tickBeat, double offBeat, int inputKey, double blockStartSeconds, te::MidiMessageArray& output);
+    void generateUntil(double endBeat, double blockStartSeconds, te::MidiMessageArray& output);
     // The clock a block is scheduled on, as edit seconds and beats. While the
     // transport plays it is the edit's tempo map. While it is stopped the
     // edit's time stands still, so the arp runs a clock of its own on from
@@ -128,15 +124,17 @@ private:
     te::AutomatableParameter::Ptr intervalParam, repeatsParam, rootParam, scaleParam;
     te::AutomatableParameter::Ptr rateModeParam, freeRateParam;
 
-    std::array<HeldNote, 128> heldNotes;
-    // A full MIDI chord can schedule one release per pitch. Four banks leave
-    // room for overlapping gates without ever allocating in the callback.
-    std::array<PendingOff, 512> pendingOffs;
+    // One input and output slot per channel/pitch. Repeated output pitches
+    // release their old instance first, so release storage cannot overflow.
+    std::array<HeldNote, 128 * 16> heldNotes;
+    std::array<PendingOff, 128 * 16> pendingOffs;
     // The first swap hands one pre-sized array to Tracktion; the steady-state
     // array is used from the second block onward, when both sides of the swap
     // already own reserved storage.
     te::MidiMessageArray firstOutput, steadyOutput;
     bool firstRender = true;
+    std::atomic<bool> resetPending {false};
+    bool wasPlaying = false;
     bool clockValid = false;
     double nextTickBeat = 0.0;
     double lastBlockEndBeat = 0.0;
@@ -146,8 +144,9 @@ private:
     double freeAnchorSeconds = 0.0;
     double freeAnchorBeat = 0.0;
     double freeSecondsPerBeat = 0.5;
-    int sequenceStep = 0;
-    std::int64_t lastBeatRetriggerCycle = std::numeric_limits<std::int64_t>::min();
+    std::int64_t sequenceStep = 0;
+    double nextRetriggerBeat = 0.0;
+    double lastRetriggerInterval = 0.0;
     double sampleRate = 48000.0;
 };
 }

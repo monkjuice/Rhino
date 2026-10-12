@@ -52,9 +52,11 @@
                     && arpParameters[RhinoArpDevice::distanceParameter].valueText == "-7 sd"
                     && arpParameters[RhinoArpDevice::stepsParameter].valueText == "2"
                     && arpParameters[RhinoArpDevice::grooveParameter].valueText == "Swing 16"
+                    && arpParameters[RhinoArpDevice::holdParameter].valueText == "Off"
                     && arpParameters[RhinoArpDevice::retriggerParameter].valueText == "Beat"
                     && arpParameters[RhinoArpDevice::rootParameter].valueText == "G#"
                     && arpParameters[RhinoArpDevice::scaleParameter].valueText == "Minor"
+                    && arpParameters[RhinoArpDevice::scaleParameter].maximum == 12.0f
                     && arpParameters[RhinoArpDevice::rateModeParameter].valueText == "Beats"
                     && arpParameters[RhinoArpDevice::freeRateParameter].valueText == "125 ms",
                     "Rhino Arp opens with the Bouncy Chords controls and defaults");

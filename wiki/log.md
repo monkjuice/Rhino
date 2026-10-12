@@ -540,3 +540,8 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/mixer.md (the mute rule heard through the real graph)
 - updated: index.md (the new gotcha; the decision's summary)
 - notes: this supersedes two notes in the entries above, that the song graph running a stopped track's plugins was relied on and untested, and that a test could assert only the mute flag. The comment at the head of DjLiveChain.inc still says the song's graph never runs there; that is the code's to fix, and was reported. pages/headless-ui-snapshots.md is about pictures, not audio, and was left alone
+
+## [2026-10-12] update | The hosted-device scenario as committed: the machine device released first, no reopen
+- source: the coordinator's account of commit b6fd822 on feat/dj-view, checked against tests/Arrangement/scenarios/DjLiveChain.inc (its head comment and the scenario "dj live: the song's own graph plays a deck's track while the song stands still"); devices/infra/DjTrackPortDevices.* end unchanged, the diagnostic counters removed
+- updated: pages/hosted-device-silent-until-dispatched.md (how the silence was diagnosed; why the machine's device is released first; no reopen needed, and the reopen tried as a dead end)
+- notes: confirmed right and left alone: pages/dj-decks-play-live-through-the-track.md (the real graph's play, stop, mute, solo and eject), pages/writing-rhino-tests.md, pages/reproducing-live-timing-offline.md, pages/dj-view.md and pages/mixer.md (no reopen step anywhere). The head comment of DjLiveChain.inc, reported stale in the previous entry, now says one scenario drives the engine's real graph

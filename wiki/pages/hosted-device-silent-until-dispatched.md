@@ -13,15 +13,17 @@ The test runners open no audio device, so a scenario that needs the engine's own
 
 ## What went wrong
 
-The first version heard total silence: the song's transport did not even advance while it played. Read at the pinned engine commit `4536d8a` (`tracktion_DeviceManager.cpp`): `DeviceManager::audioDeviceAboutToStart` sets `isSuspended` and posts `prepareToStart` to the message thread, and until that runs `audioDeviceIOCallbackWithContext` clears its outputs and returns without rendering any context. The runners run on the message thread and never dispatch it, so it never ran. Two more early outs sit on the same path: `audioDeviceIOCallbackInternal` skips the contexts while the CPU usage is over the engine's limit, and `addContext` waits up to 200 × 1 ms for the stream time to move.
+The first version heard total silence: the song's transport did not even advance while it played, and temporary atomic counters on the DJ input (calls, playing, stopped, events; since removed) showed the device was never called, which put the fault upstream of Rhino's devices. Read at the pinned engine commit `4536d8a` (`tracktion_DeviceManager.cpp`): `DeviceManager::audioDeviceAboutToStart` sets `isSuspended` and posts `prepareToStart` to the message thread, and until that runs `audioDeviceIOCallbackWithContext` clears its outputs and returns without rendering any context. The runners run on the message thread and never dispatch it, so it never ran. Two more early outs sit on the same path: `audioDeviceIOCallbackInternal` skips the contexts while the CPU usage is over the engine's limit, and `addContext` waits up to 200 × 1 ms for the stream time to move.
 
 ## The recipe
 
-1. Release the machine's device: a Rhino `Session` opens it as it is made (`Session::releaseAudioDevice`). Tracktion's own engine-in-a-plugin pattern avoids that by building its `Engine` with `autoInitialiseDeviceManager()` false.
+1. Release the machine's device (`Session::releaseAudioDevice`): a Rhino `Session` opens it as it is made, and the hosted device takes over only once it is closed. Tracktion's own engine-in-a-plugin pattern avoids that by building its `Engine` with `autoInitialiseDeviceManager()` false.
 2. `engine.getDeviceManager().getHostedAudioDeviceInterface()`, `initialise` with 0 inputs, 2 outputs, 48 kHz and 512, then `prepareToPlay`.
 3. `engine.getDeviceManager().dispatchPendingUpdates()`, which runs the posted preparation.
 4. `edit->getTransport().ensureContextAllocated()`, `edit->dispatchPendingUpdatesSynchronously()`, and `dispatchPendingUpdates()` once more.
 5. Each block, `hosted.processBlock(buffer, midi)`: the graph renders into the buffer as the device would hear it.
+
+No reopen is needed: allocating the context in step 4 builds the graph against the hosted device. Reopening the document so the song would be rebuilt against it was tried while hunting the silence, and removed as a dead end.
 
 Work in a document of its own, so that only its engine leaves the machine's device, and release it at the block's end ([Writing Rhino tests](writing-rhino-tests.md)).
 

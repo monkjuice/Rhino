@@ -4,7 +4,7 @@ type: component
 summary: Rhino's independent wavetable and spectral synth, a VST3 and standalone app built from one JUCE AudioProcessor.
 tags: [forge, synth, overview]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-12
 ---
 
 # Rhino Forge
@@ -66,9 +66,14 @@ As of 2026-10-03:
   - M15, a second filter.
   - MPE.
 
+## Known issue
+
+Forge can freeze its host when its DLL unloads after its editor has painted. Four static Direct2D images in `ui/` are released under the loader lock, where NVIDIA's driver deadlocks. This was found on 2026-10-12. The fix belongs in Forge and is proposed, not yet applied ([A plugin's static Direct2D images deadlock NVIDIA's driver at unload](plugin-static-images-deadlock-on-unload.md)).
+
 ## Related
 
 - [Overview](../overview.md)
 - [Forge presets and state](forge-presets-and-state.md)
 - [Build and test Forge](build-and-test-forge.md)
 - [Hosting Forge in Rhino](forge-hosting.md)
+- [A plugin's static Direct2D images deadlock NVIDIA's driver at unload](plugin-static-images-deadlock-on-unload.md)

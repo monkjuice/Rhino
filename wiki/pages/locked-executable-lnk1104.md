@@ -4,7 +4,7 @@ type: gotcha
 summary: A link that fails with LNK1104 after every file compiled means a running RhinoDAW, DAW or Forge standalone holds the output.
 tags: [both, build, windows]
 sources: []
-updated: 2026-10-10
+updated: 2026-10-12
 ---
 
 # LNK1104 means a running binary holds the file
@@ -26,6 +26,7 @@ Windows will not let the linker overwrite an image that a running process has lo
 ## Confirm
 
 - `tasklist | findstr /i rhino` names the holder. Also check for any DAW the user has open.
+- The holder may have no visible window. On 2026-10-12, one of two RhinoDAWs blocking a build had frozen during shutdown and stayed alive unseen. To check its windows, see [Reading a hung RhinoDAW's stacks without a debugger](reading-a-hung-process.md).
 - Grep the build output for `error C`. If the only error is `LNK1104`, the code compiled and is fine. The compiler diagnostics from the same run can still be trusted.
 
 ## What to do
@@ -46,3 +47,4 @@ It comes as a fatal error at the end of a long build, which invites a search thr
 - [Hosting Forge in Rhino](forge-hosting.md)
 - [Driving Forge's standalone on Windows](driving-the-forge-standalone.md)
 - [Build locks from MSBuild nodes and orphaned compilers](orphaned-build-processes.md)
+- [Reading a hung RhinoDAW's stacks without a debugger](reading-a-hung-process.md)

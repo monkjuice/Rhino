@@ -4,7 +4,7 @@ type: component
 summary: How Rhino finds, loads and talks to the Forge VST3, and what does and does not cross the plugin boundary.
 tags: [both, vst3, devices, hosting]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-12
 ---
 
 # Hosting Forge in Rhino
@@ -37,6 +37,7 @@ A description qualifies if its name contains "Rhino Forge", or "Forge" with a ma
 - A running RhinoDAW with Forge loaded holds the `.vst3`, and Forge's build then fails to relink with LNK1104. Build the tests and the standalone instead and say the VST3 is stale ([LNK1104 means a running binary holds the file](locked-executable-lnk1104.md)).
 - The suite covers Forge only where one can be found: `--self-test` skips external devices, and `native/src/tests/Pattern/scenarios/DeviceParameters.inc` runs its Forge checks only when discovery succeeded. A green run on a machine without a Forge build proves nothing about hosting.
 - A VST3 counts as shipped only after it has been loaded and automated in at least one external host.
+- **Unloading Forge after its editor has painted can freeze RhinoDAW.** Forge's static Direct2D images are released at DLL detach under the loader lock, and NVIDIA's driver deadlocks there. This was seen at RhinoDAW's shutdown on 2026-10-12. It is believed, not proven, to be the freeze on deleting Forge from the rack. Pinning the module in Rhino only moves the freeze to exit; the fix belongs in Forge ([A plugin's static Direct2D images deadlock NVIDIA's driver at unload](plugin-static-images-deadlock-on-unload.md)).
 
 ## Related
 
@@ -46,3 +47,4 @@ A description qualifies if its name contains "Rhino Forge", or "Forge" with a ma
 - [Forge presets and state](forge-presets-and-state.md)
 - [LNK1104 means a running binary holds the file](locked-executable-lnk1104.md)
 - [Track automation](automation.md)
+- [A plugin's static Direct2D images deadlock NVIDIA's driver at unload](plugin-static-images-deadlock-on-unload.md)

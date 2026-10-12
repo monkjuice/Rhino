@@ -4,7 +4,7 @@ type: guide
 summary: What the Windows development machine offers (shells, CMake, Python, ffmpeg, PDF tools, the reference manuals) and the habits it demands.
 tags: [both, environment, windows, tooling]
 sources: []
-updated: 2026-10-07
+updated: 2026-10-12
 ---
 
 # Development environment and reference material
@@ -25,6 +25,10 @@ checked there on 2026-10-03; build prerequisites are in [Build and test Rhino](b
   cannot render a page: install PyMuPDF into the scratchpad (`python -m pip install --target <scratch>\pylibs pymupdf`,
   about two minutes), save `page.get_pixmap(dpi=140)` as a PNG and read that.
 - **Git LFS** is installed; the audio under `library/` needs it.
+- **No debugger is installed** (checked 2026-10-12). Visual Studio's `dumpbin` disassembles. Its
+  `Common7\IDE\CommonExtensions\Platform\DiagnosticsHub\amd64` folder holds `dbghelp.dll` with `symsrv.dll`, which
+  System32 lacks. With Python's `ctypes`, that is enough to read a live process's stacks
+  ([Reading a hung RhinoDAW's stacks without a debugger](reading-a-hung-process.md)).
 
 ## Reference material
 
@@ -42,6 +46,8 @@ Read the figures too: the screenshots carry layout the prose never states, such 
 - **Bash-tool heredocs collapse backslashes**, even with a quoted delimiter, and truncate long payloads. A patch script
   matching `"\n"` in C++ then fails silently or writes a broken literal (`error C2001`). Write anything longer than a
   few lines, or holding a backslash, to a file with the Write tool and run it by path.
+- **Git Bash rewrites a Windows tool's slash options as paths.** dumpbin's `/nologo` arrived as a path on 2026-10-12.
+  Set `MSYS_NO_PATHCONV=1`, or run the tool from PowerShell.
 - **Commit messages go through a file in PowerShell 5.1.** A `git commit -m @'...'@` message that contains double
   quotes is split into extra arguments, and git fails with "pathspec ... did not match". Write the message to a file in
   the scratchpad and run `git commit -F <file>`. Do not hide the commit's stderr with `2>$null`: on 2026-10-03 that hid
@@ -70,3 +76,4 @@ Read the figures too: the screenshots carry layout the prose never states, such 
 - [Git workflow](git-workflow.md)
 - [Directories not to read](off-limits-directories.md)
 - [Reading MIDI hardware on Windows](reading-midi-hardware-on-windows.md)
+- [Reading a hung RhinoDAW's stacks without a debugger](reading-a-hung-process.md)

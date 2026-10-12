@@ -545,3 +545,21 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - source: the coordinator's account of commit b6fd822 on feat/dj-view, checked against tests/Arrangement/scenarios/DjLiveChain.inc (its head comment and the scenario "dj live: the song's own graph plays a deck's track while the song stands still"); devices/infra/DjTrackPortDevices.* end unchanged, the diagnostic counters removed
 - updated: pages/hosted-device-silent-until-dispatched.md (how the silence was diagnosed; why the machine's device is released first; no reopen needed, and the reopen tried as a dead end)
 - notes: confirmed right and left alone: pages/dj-decks-play-live-through-the-track.md (the real graph's play, stop, mute, solo and eject), pages/writing-rhino-tests.md, pages/reproducing-live-timing-offline.md, pages/dj-view.md and pages/mixer.md (no reopen step anywhere). The head comment of DjLiveChain.inc, reported stale in the previous entry, now says one scenario drives the engine's real graph
+
+## [2026-10-12] update | A RhinoDAW freeze traced to Forge's static Direct2D images released at DLL unload
+- source: the main agent's brief on investigating the user's freeze report. No repository code changed: a temporary scenario, native/src/tests/Arrangement/scenarios/DjDeleteHangRepro.inc, and its include in WorkflowTest.cpp were reverted without ever being built. The four statics were checked in instruments/rhino-forge/ui/ForgeChrome.h (`brushedGrain`, `fastenerImage`) and ui/ForgePerformanceWheel.h (`ForgePerformanceWheel::paint`)
+- created: pages/plugin-static-images-deadlock-on-unload.md (the hang, the loader-lock deadlock, the four images, why pinning the module only moves the freeze to exit, the proposed fix in Forge, and what is unproven)
+- created: pages/reading-a-hung-process.md (a hang told from a crash, a windowless frozen instance, `IsHungAppWindow` over `Responding`, dbghelp and symsrv from Visual Studio, `SizeOfStruct` 88, unloaded modules named by `GetMappedFileNameW`, classes named from RTTI with dumpbin, and the replay that was never built)
+- updated: pages/forge.md (a known-issue section)
+- updated: pages/forge-hosting.md (a pitfall: unloading Forge after its editor painted)
+- updated: pages/forge-editor.md (a rule: no image outlives the editor)
+- updated: pages/debugging-a-crashing-project.md (a freeze leaves no Application Error and no dump)
+- updated: pages/locked-executable-lnk1104.md (the holder may be a frozen RhinoDAW with no visible window)
+- updated: pages/profile-paint-on-a-software-image.md (the Direct2D backing's second consequence)
+- updated: pages/development-environment.md (no debugger, and the tools that stand in; Git Bash rewrites slash options as paths)
+- updated: index.md (the two new pages)
+- corrected, after the coordinator's review the same day:
+  - pages/plugin-static-images-deadlock-on-unload.md: the fix is proposed, not decided, since the user has not chosen one. The `std::shared_ptr` and `juce::ReferenceCountedObject` links are marked as read from the disassembly, not from symbols: a two-counter control block at +8 and +0xC, and a later frame loading the vftable.
+  - pages/forge.md: the fix is proposed, not decided.
+  - pages/reading-a-hung-process.md: section 1's command is replaced with the Windows Error Reporting query actually run, with what the hang looked like in it. A clause adds that `vftable[-1]` is an absolute pointer at the preferred base. The review confirmed both x64 details the first draft took from general MSVC knowledge: dumpbin's `/range` at preferred-base addresses, and the descriptor's offset at +12 with the name at +16.
+- notes: recorded as believed, not proven: that the user's own freeze, deleting Forge from the rack after opening its window in the 18:30 session, is the same deadlock. That depends on whether JUCE's VST3 hosting frees the module when the last instance goes, still under research. No fix applied; the user gets the assessment first

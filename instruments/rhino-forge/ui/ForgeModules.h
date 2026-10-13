@@ -93,6 +93,11 @@ inline Control gatedBy(Control control, const char* modeId)
 // picture above it, and every pixel it takes is a pixel of spectrogram.
 inline constexpr int spectralStripHeight = 22;
 
+// The strip along the top of a wavetable oscillator's tube that the table field
+// is seated in. The spectral strip's height, for the same reason: every pixel
+// it takes is a pixel of picture.
+inline constexpr int tableStripHeight = 22;
+
 // One oscillator's rows. The three are identical but for their prefix, and
 // writing them out three times is what let the mode gate drift between them,
 // so they are built once here instead.
@@ -153,7 +158,21 @@ inline std::vector<Row> oscillatorRows(const char* mode, const char* octave, con
         // what it is putting them on; a pair of numeric fields beside them was
         // the same setting twice. See displayParameters.
         {spectralStripHeight, {strip(loopMode, "LOOP", Style::selector, 1)},
-         1, 0, 0, Seat::displayFoot, mode, static_cast<int>(OscMode::spectral)}};
+         1, 0, 0, Seat::displayFoot, mode, static_cast<int>(OscMode::spectral)},
+        // The table the oscillator reads, along the top edge of its tube: a
+        // field that steps through the wavetables on disk and opens them as a
+        // menu of their folders. It names the picture under it, as the
+        // filter's TYPE names its curve, so it sits in the display rather than
+        // in the header beside MODE, which names the module. A wavetable
+        // oscillator's alone: a spectral one reads a sample, and keeps the
+        // whole of its picture.
+        //
+        // Declared with no controls, because the table is not a parameter -- it
+        // travels in a preset as frames, not as a choice. The editor seats a
+        // field of its own here (see tableStripRow); the row is declared so the
+        // picture is carved around it by the same walk as every other strip,
+        // and held to the same rules by the layout test.
+        {tableStripHeight, {}, 1, 0, 0, Seat::displayTop, mode, static_cast<int>(OscMode::wavetable)}};
 }
 
 // The parameters a module's display is the control for, rather than a cell in

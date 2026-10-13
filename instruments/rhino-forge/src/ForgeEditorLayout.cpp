@@ -216,6 +216,7 @@ void Editor::resized()
             }
         }
     }
+    placeTableFields();
 }
 
 // The envelope module is painted straight onto the editor rather than being a

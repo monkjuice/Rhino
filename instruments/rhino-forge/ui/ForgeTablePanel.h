@@ -1,7 +1,9 @@
 #pragma once
 
 #include "ForgeControls.h"
+#include "ForgeFxVisuals.h"
 #include "../core/ForgeTableStore.h"
+#include "../core/ForgeTableFiles.h"
 #include <functional>
 
 // The wavetable editor: the selected frame drawn large enough to draw on, the
@@ -276,6 +278,58 @@ private:
     }
 };
 
+// --- The table list -----------------------------------------------------------
+//
+// The wavetables on disk as a menu: the built-in ten first and on their own,
+// then the root's tree, a folder a submenu and a file an item. An item's id is
+// its entry's index plus `firstId`, so a choice turns straight back into an
+// entry. listTables walks the tree depth first, so a folder's tables sit
+// together in the list and each submenu is one run of it.
+namespace detail
+{
+inline void addTableItems(juce::PopupMenu& menu, const std::vector<TableEntry>& entries,
+                          int begin, int end, int depth, int current, int firstId)
+{
+    for (auto i = begin; i < end;)
+    {
+        const auto& entry = entries[static_cast<size_t>(i)];
+        if (entry.folders.size() > depth)
+        {
+            const auto folder = entry.folders[depth];
+            auto last = i + 1;
+            while (last < end && entries[static_cast<size_t>(last)].folders.size() > depth
+                   && entries[static_cast<size_t>(last)].folders[depth] == folder)
+                ++last;
+            juce::PopupMenu submenu;
+            addTableItems(submenu, entries, i, last, depth + 1, current, firstId);
+            // Ticked while the table playing is somewhere inside, so a closed
+            // menu still says which way to go.
+            menu.addSubMenu(folder, submenu, true, nullptr, current >= i && current < last);
+            i = last;
+            continue;
+        }
+        juce::PopupMenu::Item item(entry.name);
+        item.itemID = firstId + i;
+        item.isTicked = i == current;
+        menu.addItem(item);
+        ++i;
+    }
+}
+}
+
+inline juce::PopupMenu tableMenu(const std::vector<TableEntry>& entries, int current, int firstId = 1)
+{
+    juce::PopupMenu menu;
+    if (entries.empty()) return menu;
+    detail::addTableItems(menu, entries, 0, 1, 0, current, firstId);
+    if (entries.size() > 1)
+    {
+        menu.addSeparator();
+        detail::addTableItems(menu, entries, 1, static_cast<int>(entries.size()), 0, current, firstId);
+    }
+    return menu;
+}
+
 // --- The panel ----------------------------------------------------------------
 
 class TablePanel final : public juce::Component,
@@ -289,9 +343,19 @@ public:
     // Raised whenever the table changes, so the oscillator displays and the
     // POSITION readouts on the other tab follow it.
     std::function<void()> onTableChanged;
+    // The table field, and NEW and SAVE beside RESET. The editor fills the
+    // field from the tables on disk and answers all three, because it holds
+    // the list the oscillators' own fields share; the panel only says which
+    // oscillator it is editing.
+    FxSelector tableField;
+    std::function<void(int)> onNewTable, onSaveTable;
 
     explicit TablePanel(WavetableStore& tableStore) : store(tableStore)
     {
+        tableField.forceList = true;
+        tableField.wheelSteps = true;
+        addAndMakeVisible(tableField);
+
         for (int i = 0; i < oscillatorCount; ++i)
         {
             const auto letter = oscillatorLetter(i);
@@ -338,6 +402,8 @@ public:
             button.onClick = [this, run = std::move(run)] { remember(); run(); };
             addAndMakeVisible(button);
         };
+        action(newButton, "Start a table from scratch: name its file, then draw on its one blank frame",
+               [this] { if (onNewTable != nullptr) onNewTable(oscillator); });
         action(loadButton, "Load a wavetable from a .wav file of single-cycle frames", [this] { chooseFile(); });
         action(resetButton, "Throw the table away and go back to the ten built-in shapes",
                [this] { store.resetToBuiltIn(oscillator); selected = 0; changed(); });
@@ -351,6 +417,14 @@ public:
                [this] { selected = edit().insertFrame(selected, true); changed(); });
         action(removeButton, "Remove this frame from the table",
                [this] { selected = edit().removeFrame(selected); changed(); });
+
+        // Writing a file changes nothing that undo could take back, so SAVE
+        // takes no step.
+        saveButton.accent = electricBlue;
+        saveButton.setTooltip("Write this table back to its file in your tables. One that has no file "
+                              "there yet -- a factory table, the built-in ten -- is saved as a new file");
+        saveButton.onClick = [this] { if (onSaveTable != nullptr) onSaveTable(oscillator); };
+        addAndMakeVisible(saveButton);
 
         canvas.onStrokeStart = [this] { remember(); };
         canvas.onStroke = [this] { publishFrame(); };
@@ -419,10 +493,15 @@ public:
         chip(gridButton, 62);
         chip(snapChip, 46);
         // The file controls sit at the far end, away from the tools, because
-        // they change the whole table rather than a frame of it.
-        loadButton.setBounds(toolbar.removeFromRight(70).reduced(1, 0));
-        toolbar.removeFromRight(4);
-        resetButton.setBounds(toolbar.removeFromRight(70).reduced(1, 0));
+        // they change the whole table rather than a frame of it: the field
+        // that picks one, then NEW, RESET, LOAD and SAVE.
+        for (auto* button : {&saveButton, &loadButton, &resetButton, &newButton})
+        {
+            button->setBounds(toolbar.removeFromRight(56).reduced(1, 0));
+            toolbar.removeFromRight(4);
+        }
+        toolbar.removeFromRight(2);
+        tableField.setBounds(toolbar.removeFromRight(juce::jlimit(0, 260, toolbar.getWidth() - 10)));
 
         area.removeFromTop(5);
         auto actions = area.removeFromBottom(22);
@@ -516,9 +595,14 @@ private:
         if (onTableChanged != nullptr) onTableChanged();
     }
 
+public:
     // An undo step is the whole table, not a diff. A frame is 8 KB and the
     // history is short, so the simple thing costs little and cannot get a
     // partial edit wrong.
+    //
+    // Public, with report below, for the table field and NEW: the editor
+    // replaces the table for them, and takes the step and reports the result
+    // through here exactly as LOAD does for itself.
     void remember()
     {
         Step step;
@@ -541,6 +625,16 @@ private:
         }
     }
 
+    void report(const juce::Result& result)
+    {
+        status = result.wasOk() ? juce::String() : "COULD NOT LOAD // " + result.getErrorMessage();
+        if (!result.wasOk() && !history.empty()) history.pop_back();
+        selected = 0;
+        refresh();
+        if (onTableChanged != nullptr) onTableChanged();
+    }
+
+private:
     void chooseFile()
     {
         chooser = std::make_unique<juce::FileChooser>("Load a wavetable", lastFolder(), "*.wav;*.wt", true);
@@ -556,31 +650,14 @@ private:
             });
     }
 
-    // Forge's own tables, when they can be found: the standalone and the plugin
-    // both sit several directories below the source tree in a development
-    // build, so the folder is looked for upward from the binary rather than
-    // assumed. Falling back to the last folder used, and then to home, means a
-    // packaged build simply opens where the person last was.
+    // The last folder used, then Forge's own tables (see tableRoot), then home,
+    // so a packaged build with no tables yet simply opens where the person is.
     juce::File lastFolder() const
     {
         if (folder != juce::File {} && folder.isDirectory()) return folder;
-        auto here = juce::File::getSpecialLocation(juce::File::currentExecutableFile);
-        for (int step = 0; step < 8 && here != juce::File {}; ++step)
-        {
-            const auto candidate = here.getChildFile("tables");
-            if (candidate.isDirectory()) return candidate;
-            here = here.getParentDirectory();
-        }
+        const auto root = tableRoot();
+        if (root.isDirectory()) return root;
         return juce::File::getSpecialLocation(juce::File::userHomeDirectory);
-    }
-
-    void report(const juce::Result& result)
-    {
-        status = result.wasOk() ? juce::String() : "COULD NOT LOAD // " + result.getErrorMessage();
-        if (!result.wasOk() && !history.empty()) history.pop_back();
-        selected = 0;
-        refresh();
-        if (onTableChanged != nullptr) onTableChanged();
     }
 
     WavetableStore& store;
@@ -590,7 +667,7 @@ private:
     FrameStrip strip;
     std::vector<std::unique_ptr<ToggleChip>> oscChips, toolChips;
     ToggleChip gridButton {"GRID 16"}, snapChip {"SNAP"};
-    PanelButton loadButton {"LOAD"}, resetButton {"RESET"};
+    PanelButton loadButton {"LOAD"}, resetButton {"RESET"}, newButton {"NEW"}, saveButton {"SAVE"};
     PanelButton initButton {"INIT"}, normaliseButton {"NORMALISE"};
     PanelButton addButton {"ADD"}, duplicateButton {"DUPLICATE"}, removeButton {"REMOVE"};
     std::vector<Step> history;

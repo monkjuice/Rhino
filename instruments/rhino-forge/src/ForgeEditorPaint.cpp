@@ -68,9 +68,10 @@ void Editor::paintPlates(juce::Graphics& g)
         const auto& descriptor = *module.descriptor;
         if (!moduleShown(descriptor) || descriptor.display != ui::Display::oscillator) continue;
         if (oscillatorIsSpectral(juce::jmax(0, oscillatorIndexFromId(juce::String(descriptor.id))))) continue;
-        const auto display = ui::displayBounds(moduleAreaFor(descriptor), descriptor);
-        if (!display.isEmpty())
-            ui::drawCrtScreen(g, display, accentOf(descriptor), module.on() ? 1.0f : 0.35f);
+        // Below the table field seated along the top of the display.
+        const auto tube = ui::wavetableTubeBounds(moduleAreaFor(descriptor), descriptor);
+        if (!tube.isEmpty())
+            ui::drawCrtScreen(g, tube, accentOf(descriptor), module.on() ? 1.0f : 0.35f);
     }
 }
 
@@ -267,7 +268,8 @@ void Editor::paint(juce::Graphics& g)
                     // off the picture -- see drawWaveform.
                     const auto oscillator = juce::jmax(
                         0, oscillatorIndexFromId(juce::String(descriptor.id)));
-                    ui::drawWaveform(g, display, processor.tableStore().edit(oscillator),
+                    ui::drawWaveform(g, ui::wavetableTubeBounds(area, descriptor),
+                                     processor.tableStore().edit(oscillator),
                                      value(source), warpStagesOf(oscillatorPrefix(oscillator)),
                                      accent, alpha);
                 }

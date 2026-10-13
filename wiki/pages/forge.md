@@ -42,7 +42,7 @@ Forge follows Serum 2's manual for structure: layout, routing and drag-to-modula
 | `ui/` | The declarative layout and the visuals, all headers |
 | `src/` | The translation units for the Processor and the Editor |
 | `tests/` | One file per area, 18 areas (`forge_test_areas` in `CMakeLists.txt`) |
-| `tables/` | Ten factory wavetables and `make-tables.py`, the script that writes them |
+| `tables/` | Ten factory wavetables, `make-tables.py` that writes them, and the git-ignored `user/` where the panel's NEW and SAVE write ([Forge oscillators and wavetables](forge-oscillators.md)) |
 | `presets/` | `aLiLBitDark.forgepreset`, a format 1 file that the current build refuses |
 
 ## Documentation

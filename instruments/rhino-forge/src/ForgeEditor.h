@@ -182,6 +182,14 @@ private:
         revisions.fill(-1);
         return revisions;
     }();
+    // The wavetables on disk, as every table field lists them, and a field per
+    // oscillator seated along the top of its tube. The TABLE tab's field is the
+    // panel's own and is filled from the same list. The fields hold their
+    // choices by pointer into this, so it is only ever replaced by
+    // rescanTables, which points every field at the new one. See
+    // ForgeEditorTables.cpp.
+    std::vector<TableEntry> tableEntries;
+    std::array<std::unique_ptr<ui::FxSelector>, oscillatorCount> tableFields;
     ui::PresetButton loadPreset {"LOAD"}, savePreset {"SAVE"};
     juce::Label presetName;
     std::unique_ptr<juce::FileChooser> fileChooser;
@@ -202,6 +210,24 @@ private:
     // POSITION steps through frames, and how many there are depends on the
     // table. Re-applied whenever a table changes.
     void applyTableCounts();
+    // The table fields: built once, the list behind them read off the disk
+    // again whenever it could have changed, and what each shows refreshed on
+    // every tick because a table can be replaced from anywhere.
+    void buildTableFields();
+    void rescanTables();
+    void refreshTableFields();
+    void placeTableFields();
+    void applyTableFieldStates();
+    void showTableMenu(int oscillator, ui::FxSelector&);
+    juce::Result chooseTable(int oscillator, int entry);
+    // Everything a replaced table moves: POSITION's detents and readout, the
+    // TABLE tab, the fields and the tube.
+    void tableChanged();
+    void showTableStatus(const juce::String&, bool failed);
+    // NEW and SAVE on the TABLE tab, for whichever oscillator it is editing.
+    void newTable(int oscillator);
+    void saveTable(int oscillator);
+    void writeTable(int oscillator, const juce::File&);
     void buildTabs();
     void buildNoteGuide();
     void refreshNoteGuide();

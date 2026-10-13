@@ -655,6 +655,7 @@ void Editor::timerCallback()
     refreshNoiseField();
     refreshOscModeFields();
     refreshLoopFields();
+    refreshTableFields();
     refreshModulationRings();
     refreshMidiLearn();
 

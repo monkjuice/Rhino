@@ -620,3 +620,10 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/forge-warp.md (43 modes and the per-family counts; the appended previous-oscillator modes; new "Names and shown order" section; the Sources ring now goes both ways; the behavioural direction test; summary changed)
 - updated: pages/append-only-stored-indices.md (warp modes as the second case where stored and shown order differ)
 - updated: index.md (forge-warp's summary)
+
+## [2026-10-13] update | Forge's table field on every oscillator and the TABLE tab, with NEW and SAVE (commit 8975d57 on feat/forge-table-browser)
+- source: the main agent's brief, checked against instruments/rhino-forge/core/ForgeTableFiles.h, core/ForgeWavetable.h (touch titles CUSTOM), src/ForgeEditorTables.cpp, src/ForgeProcessorState.cpp (newTable, saveTable, importTable's tableNameOf), src/ForgeEditorPages.cpp (applyTableFieldStates from applyEnableStates), ui/ForgeTablePanel.h (tableMenu, toolbar order, undo steps), ui/ForgeFxVisuals.h (FxSelector::caption), ui/ForgeModules.h (tableStripHeight, the control-less displayTop row), ui/ForgePlacement.h (tableStripRow, wavetableTubeBounds), tests/ForgeTestsTable.cpp (tableLibrarySuite), .gitignore
+- updated: pages/forge-oscillators.md (TABLE tab toolbar and undo steps; titles from tableNameOf; NEW, SAVE and its save-as rule; writeTableFile's Serum layout; new "The table field" section: root, listing order, menu, the decision that the table is title-matched rather than a parameter, tables/user git-ignored; summary changed)
+- updated: pages/forge-editor.md (seventeen units with ForgeEditorTables.cpp; a control-less row carving a display; the table fields as the exception to FxSelector's copy rule, and when the disk is rescanned; summary changed)
+- updated: pages/forge.md (tables/ row names the git-ignored user/ folder)
+- updated: index.md (summaries of forge-oscillators and forge-editor)

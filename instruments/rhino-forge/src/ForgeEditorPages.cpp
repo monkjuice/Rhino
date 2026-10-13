@@ -135,6 +135,15 @@ void Editor::applyPanelColours()
             }
         }
         for (auto& card : module.bankButtons) card->accent = accent;
+        // The table field is the editor's own rather than a declared control,
+        // so it is told here as well.
+        const auto oscillator = oscillatorIndexFromId(juce::String(descriptor.id));
+        if (oscillator >= 0)
+            if (auto& field = tableFields[static_cast<size_t>(oscillator)])
+            {
+                field->accent = accent;
+                field->repaint();
+            }
     }
     // The plates are in the cached layer, so this is what actually redraws
     // them: the key carries every module's colour and has just changed.
@@ -309,6 +318,7 @@ void Editor::applyEnableStates()
                                      ui::labelText.withAlpha(on ? 1.0f : 0.4f));
         }
     }
+    applyTableFieldStates();
 }
 
 // The rate LFO 1 is actually running at, for its header. Set in beats that is a

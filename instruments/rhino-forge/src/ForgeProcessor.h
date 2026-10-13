@@ -4,6 +4,7 @@
 #include "../core/ForgeMidiMap.h"
 #include "../core/ForgeNoteFlash.h"
 #include "../core/ForgeTableStore.h"
+#include "../core/ForgeTableFiles.h"
 #include "../core/ForgeSampleStore.h"
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <bitset>
@@ -63,6 +64,14 @@ public:
     // single-cycle frames laid end to end. Message thread only — it opens a
     // file and builds a table.
     juce::Result importTable(int oscillator, const juce::File&);
+
+    // NEW: write a blank one-frame table to a file and load it into one
+    // oscillator, so there is a file to draw into from the first stroke.
+    juce::Result newTable(int oscillator, const juce::File&);
+    // SAVE: write one oscillator's table to a file, and name the table after
+    // it so the table field reads the file it is now in. Message thread only,
+    // like importTable.
+    juce::Result saveTable(int oscillator, const juce::File&);
 
     // Read an audio file into one oscillator's spectral source: any format
     // JUCE can decode, mixed to mono and analysed into a spectrogram. Message

@@ -98,6 +98,7 @@ set(forge_sources
     core/ForgeTableStore.h
     core/ForgeWarp.h
     core/ForgeWavetable.h
+    core/ForgeTableFiles.h
     ui/ForgeChrome.h
     ui/ForgeFxDisplay.h
     ui/ForgeModule.h
@@ -145,6 +146,7 @@ set(forge_sources
     src/ForgeEditorPages.cpp
     src/ForgeEditorSpectral.cpp
     src/ForgeEditorPaint.cpp
+    src/ForgeEditorTables.cpp
     src/ForgeEditorWarp.cpp)
 
 target_sources(RhinoForge PRIVATE ${forge_sources})

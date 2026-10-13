@@ -18,7 +18,11 @@ OSC A, B and C are identical. `oscillatorCount` in `core/ForgeVoiceParts.h` has 
 - two warp stages ([Forge warp](forge-warp.md))
 - a MODE, either wavetable or spectral ([Forge spectral oscillator](forge-spectral.md))
 
-SEMI and POSITION are continuous so the matrix can sweep them, but a drag by hand snaps SEMI to semitones and POSITION to frames.
+SEMI and POSITION are continuous so the matrix can sweep them, but a drag by hand snaps SEMI to semitones and POSITION to frames. FINE is not a continuous parameter: it is declared with an interval of 1 (`{-100, 100, 1}`, `src/ForgeParameters.cpp`), so its knob stops on whole cents, yet the matrix moves it smoothly, because a modulated value never snaps to the interval (see below; `modulatedTuningSuite` checks 25.5 cents).
+
+## OCT steps under modulation
+
+Since 2026-10-13 (commit `e8702e4`) OCT and FINE are matrix destinations as SEMI already was, and OCT moves in whole octaves: `tuningRatio` (`core/ForgePatch.h`) uses `std::round(osc.octave)`. Serum 2's manual (p. 29) suggests an LFO on OCT to jump octaves "without having to count in 12 semitones" and keeps smooth sweeps for CRS; Forge has no CRS and SEMI is its continuous coarse pitch, so OCT steps and FINE does not. Nearest rather than floor, so a bipolar LFO steps symmetrically. The rounding has to live in `tuningRatio`: a destination's offset goes through `NormalisableRange::convertFrom0to1`, which does not snap to the parameter's interval of 1 (the same reason FINE moves smoothly under modulation). Unmodulated patches are unchanged, since OCT then always holds a whole number ([Forge modulation](forge-modulation.md)).
 
 ## The built-in ten
 
@@ -66,6 +70,7 @@ A parked object is freed by the next publish or by `collect()`, which the editor
 ## Related
 
 - [Forge engine (Core)](forge-engine.md)
+- [Forge modulation: matrix, envelopes, LFOs and macros](forge-modulation.md)
 - [Forge warp](forge-warp.md)
 - [Forge spectral oscillator](forge-spectral.md)
 - [Real-time audio rules](real-time-audio-rules.md)

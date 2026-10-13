@@ -689,3 +689,13 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 
 ## [2026-10-13] update | Arp waterfall trace redesign committed as 90246e1 and verified
 - updated: pages/forge-arp-plate.md, pages/headless-ui-snapshots.md (uncommitted/untested caveats replaced with commit 90246e1; 18 Forge CTest areas pass incl. sparkSuite, no-warning builds, ARPHELD reviewed by eye)
+
+## [2026-10-13] update | Forge matrix reaches the envelope knobs and OCT/FINE
+- source: the change's brief and the coordinator's follow-up (verified: no-warning build, all 18 Forge CTest areas pass; committed as e8702e4 and pushed to origin/main), checked against instruments/rhino-forge/core/ForgeMatrix.h, core/ForgePatch.h (tuningRatio, envelopeField) and core/ForgeCore.h (modulateEnvelopes, slotAmount, envScratch)
+- updated: pages/forge-modulation.md (22 appended destinations, the env and tuning banks, envelopes moved before they run, one-sample self-feedback and the unguarded −100% case, no UI change needed, the envelope display gap, new suites; summary changed)
+- updated: pages/forge-oscillators.md (OCT steps in whole octaves under modulation, why, nearest not floor, why the rounding lives in tuningRatio; FINE's knob stops on whole cents while the matrix moves it smoothly)
+- updated: pages/forge-engine.md (per-voice order: LFOs read, envelopes, then the matrix; slotAmount returns false rather than zero)
+- updated: pages/append-only-stored-indices.md (the destinations appended after noiseStereoDestination, no format bump)
+- updated: pages/serum-patches-sound-different.md (OCT and FINE are destinations now; SEMI stays continuous)
+- updated: pages/displays-draw-from-the-dsp.md (the envelope display draws knob values, not the modulated shape)
+- updated: index.md (summary of forge-modulation)

@@ -22,6 +22,7 @@ A display is drawn from the arithmetic the engine actually runs, never from a pi
 - **Forge LFO graph.** `drawLfo` (`ui/ForgeEnvelopeVisuals.h`) samples `lfoOutputAt`, the one function the voice reads, across a cycle for a NORMAL shape and for an S&H staircase, the staircase being the loudest voice's own steps published once a block; a PATH is drawn from its route, which `lfoOutputAt` walks by the same `LfoPath::at` ([Forge LFOs](forge-lfos.md)).
 - **Forge oscillator display.** It draws the frames in `WavetableStore` as authored, warped as the voice warps them, at the POSITION and warp depths the loudest voice is modulated to (`Editor::modulatedValue`, since `2d14aba`).
 - **Forge modulation rings.** `modulationOffset` is the reading the loudest voice renders with, the same voice ENV 1's display follows.
+- **Forge envelope display, the known gap.** Since envelope knobs became matrix destinations (commit `e8702e4`, 2026-10-13) it still draws the knob values, not the modulated shape, because the picture is also the hit-test for dragging its nodes; while those knobs are modulated the playhead dot may leave the curve ([Forge modulation](forge-modulation.md)).
 
 ## Honest exceptions
 

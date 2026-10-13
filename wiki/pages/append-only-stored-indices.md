@@ -22,7 +22,7 @@ Forge saves a choice as its index into a list: a filter type, a warp mode, a noi
 
 LFO 2-6 and ENV 2-4 were inserted into the source list. `Processor::migrated` (`src/ForgeProcessorState.cpp`) detects states that predate them by the old `lfoShape`/`attack` names, renames those, and shifts every saved source index past the insertion point, oldest change first. LFO 1's old position is written as a literal, because the enum constant has moved since. Renaming clears the mark, so a second run does nothing.
 
-The rule done right, on 2026-10-13: the six LFO Y sources went in as `ModSource::lfo1Y..` after `modWheel`, at the end (22-27), so no saved source moved, and `modSourceCount` is now derived from `lfo1Y + lfoCount` ([Forge LFOs](forge-lfos.md)).
+The rule done right, on 2026-10-13: the six LFO Y sources went in as `ModSource::lfo1Y..` after `modWheel`, at the end (22-27), so no saved source moved, and `modSourceCount` is now derived from `lfo1Y + lfoCount` ([Forge LFOs](forge-lfos.md)). So were the 22 destinations of the same day (commit `e8702e4`): ENV 1-4 ATTACK, DECAY, SUSTAIN and RELEASE, then OCT and FINE of A to C, appended after `noiseStereoDestination` with no format bump, and `destinationCount` derived from the last bank, `tuningDestinationBase + tuningDestinationCount` ([Forge modulation](forge-modulation.md)).
 
 ## When an entry leaves the end of a list
 

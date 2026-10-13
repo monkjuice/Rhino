@@ -4,7 +4,7 @@ type: gotcha
 summary: Check matrix polarity, PD warp depth, the filter's FREQ and the output stage before suspecting Forge's tuning or DSP.
 tags: [forge, serum, sound-design]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-13
 ---
 
 # Why a patch copied from Serum sounds different
@@ -15,7 +15,7 @@ Patches copied knob for knob from Serum 2 have sounded an octave out, thin or wr
 
 A Serum matrix row has a POL switch that makes its source bipolar. With POL on, a macro *at rest* pulls the destination as far negative as the depth reaches, which on a pitch destination at full depth is a whole octave. Forge's equivalent is the per-slot **BI** chip (`mod{n}Bipolar`, off by default so older patches are unchanged). It subtracts 0.5 from a source that only rises and leaves LFOs alone. Compare absolute offsets, not the steps between macro positions: `2m × 12` and `m × 24` take the same steps. Against a Serum capture with POL on, the macro at 0% gave −11.96 st in Serum and −12.00 in Forge.
 
-Serum also floors a modulated SEM to whole semitones. Forge stays continuous on purpose: with no CRS control, `A/B/C PITCH` are its only pitch destinations, and snapping would kill vibrato and slides.
+Serum also floors a modulated SEM to whole semitones. Forge stays continuous on purpose: with no CRS control, `A/B/C PITCH` (SEMI) are its continuous coarse pitch destinations, and snapping would kill vibrato and slides. Since commit `e8702e4` (2026-10-13) `A/B/C OCT` are destinations that step in whole octaves, as Serum's manual suggests for OCT, and `A/B/C FINE` stay continuous ([Forge oscillators and wavetables](forge-oscillators.md)).
 
 ## 2. PD warp depth
 
@@ -34,6 +34,7 @@ Note names misled too: Forge called MIDI 60 C4, so keys labelled alike sounded a
 ## Related
 
 - [Forge modulation: matrix, envelopes, LFOs and macros](forge-modulation.md)
+- [Forge oscillators and wavetables](forge-oscillators.md)
 - [Forge warp](forge-warp.md)
 - [Forge filter](forge-filter.md)
 - [Comparing Forge with Serum](comparing-forge-with-serum.md)

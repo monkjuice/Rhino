@@ -4,7 +4,7 @@ type: gotcha
 summary: Forge's editor repaints the entire panel 24 times a second, so anything added to its paint path is paid on every frame.
 tags: [forge, ui, performance]
 sources: []
-updated: 2026-10-05
+updated: 2026-10-13
 ---
 
 # Forge's panel repaints whole at 24 Hz
@@ -23,13 +23,17 @@ Path stroking, not rasterisation: in a metal piece the gradient `strokePath` cal
 
 ## The cached layers
 
-- `chassisLayer`: the backdrop alone, keyed on size and raster scale (`Editor::chassisKey`), about 30 ms of a 50 ms full rebuild.
+- `chassisLayer`: the backdrop alone, keyed on size and raster scale (`Editor::chassisKey`), about 30 ms of a 50 ms full rebuild. Since 2026-10-13 it also carries the ARP plate's housing, well, engraved rule and star sky (`drawArpPlateHousing`, `ui/ForgePanels.h`): drawn live, the plate cost about 3 ms a frame, `drawMetalPiece` and `drawEdgeWear` being the expensive primitives.
 - `chrome`: chassis plus module plates, keyed by `Editor::chromeKey` (page, FX view state, each module's shown/on state, oscillator colours, and whether each oscillator is spectral). **Anything drawn in `paintPlates` needs its state in `chromeKey`**, or a stale layer stays on screen. That is why `drawModuleDetail`, whose envelope stage and LFO rate change per frame, is drawn live. The oscillators' picture tubes, glass and bezel only, moved into this layer in commit `abdd73d`; only the trace on them stays live. A spectral oscillator trades its tube for a flat well, so the mode joined the key. The idle frame at 1440×900 fell from 9.2-9.6 ms to 8.0-8.2 ms. Other cached pictures follow the same rule: the spectrogram is keyed on its oscillator's colour as well as its sample ([Forge spectral oscillator](forge-spectral.md)).
 - `previousChrome`: the last tab's layer, so flipping between two tabs is a swap (60 to 11 ms).
 
 `chromeCacheSuite` (`tests/ForgeTestsDisplays.cpp`, area `displays`) checks a page reached by walking the tabs against a fresh editor's, and switches oscillator A to spectral on an editor that has already drawn the page. To prove it still bites, take both the page and the per-module character out of `chromeKey`; either alone is covered by the other.
 
 A half-resolution layer during window drags was added and removed the same day (commit `226d892`) because headings went soft. `resizeSharpnessSuite` now fails if a resize frame differs from a fresh editor at that size.
+
+## The ARP plate's live pass
+
+`drawArpPlateState` (`ui/ForgeArpPlate.h`) draws what moves on the plate - the lamp, the lit outline, four buttons and up to 48 falling sparks - as fills of small shapes; the only stroked path is the open state's outline. A spark is drawn from its age alone, so nothing is stepped per frame ([Forge ARP plate, slots and waterfall](forge-arp-plate.md)). `--profile` at 1440x900 after the change read 8.6 ms median idle (2026-10-13) against the 8.0-8.2 ms recorded after `abdd73d`, with no same-session baseline, so the difference is unattributed.
 
 ## Text
 

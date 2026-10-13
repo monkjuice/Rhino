@@ -1,19 +1,19 @@
 ---
 title: Forge arpeggiator
 type: component
-summary: Stands in front of the voices, hands notes back through two callbacks, and opens as an overlay from a plate beside the keys.
+summary: Stands in front of the voices, hands notes back through two callbacks, keeps four pattern slots, and opens as an overlay from a plate between the keys and the note guide.
 tags: [forge, arpeggiator, midi]
 sources: []
-updated: 2026-10-05
+updated: 2026-10-13
 ---
 
 # Forge arpeggiator
 
-One arpeggiator modelled on Serum's ARP (manual pp. 244-266). The logic is `core/ForgeArp.h`, `Processor::processBlock` (`src/ForgeProcessor.cpp`) drives it, and its six panes are declared in `ui/ForgeModules.h`.
+One arpeggiator modelled on Serum's ARP (manual pp. 244-266). The logic is `core/ForgeArp.h`, `Processor::processBlock` (`src/ForgeProcessor.cpp`) drives it, and its six panes (ARP, then PATTERN, TRANSPOSE, PLAYBACK, RETRIGGER and VELOCITY) are declared in `ui/ForgeModules.h`.
 
 ## In front of the voices
 
-The arp decides which notes Core plays, so it is not part of `Core` and Core knows nothing of it. It hands notes back through two callbacks, so `tests/ForgeTestsArp.cpp` drives it with two lambdas and checks lists of note numbers, not waveforms; only the last suite uses a `Processor`, to prove notes reach the voices.
+The arp decides which notes Core plays, so it is not part of `Core` and Core knows nothing of it. It hands notes back through two callbacks, so `tests/ForgeTestsArp.cpp` drives it with two lambdas and checks lists of note numbers, not waveforms; only the processor suites use a `Processor`, to prove notes reach the voices, the slots and the panel's note queue.
 
 Nothing allocates: `advance` runs every sample, so held keys (up to 16, oldest dropped), play order and sounding notes are fixed arrays. The Processor converts tempo to a step length, using 120 BPM when the host reports none.
 
@@ -21,9 +21,13 @@ Nothing allocates: `advance` runs every sample, so held keys (up to 16, oldest d
 
 Eighteen shapes (`ArpShape`, append-only), and **one list serves twice**: `arpOrder` works on indices, so it orders the held keys and, called again, the transposition stages. The tests pin down the turning points: Up/Down plays the top note once, Up+Down plays it twice. TRIP and DOT scale the division instead of adding entries, so the list stays at seven (1/1 to 1/64, default 1/16). LAUNCH QUANT delays a starting pattern to the next division of the host's bar, only while the host plays.
 
+## Slots
+
+Since 2026-10-13 the five pattern panes' 25 parameters are one of four slots; the ARP pane (the lamp, LAUNCH QUANT and the `arpSlot` choice) is shared. The arp itself reads the live parameters and knows nothing about slots: the `Processor` moves the parameters between slots kept as `ARPSLOT` nodes on the state tree. The mechanism, its timing and its tests are on [Forge ARP plate, slots and waterfall](forge-arp-plate.md).
+
 ## On the panel
 
-The ARP plate took the keyboard's bottom octave at exactly that width, so every key kept its size. Its lamp switches the arp on; the rest of the plate opens an **overlay on ENV and LFO**, not a tab, leaving the macros, oscillators and filter in view. It is still declared as a page, `Page::arp`, that no tab is ever set to; `everyPage` means every *tab*, so nothing shares a page with the arp and the layout test's no-overlap check holds. `coveredByArp` derives what it covers from its panes' grid cells. The overlay and the expanded FX rack close each other.
+The ARP plate stands on the keyboard shelf between the keys and the note guide (at the keys' left end until 2026-10-13). Its lamp switches the arp on, its four buttons choose the slot, its well shows the notes the voices play falling, and the rest of it opens an **overlay on ENV and LFO**, not a tab, leaving the macros, oscillators and filter in view ([Forge ARP plate, slots and waterfall](forge-arp-plate.md)). The overlay is still declared as a page, `Page::arp`, that no tab is ever set to; `everyPage` means every *tab*, so nothing shares a page with the arp and the layout test's no-overlap check holds. `coveredByArp` derives what it covers from its panes' grid cells. The overlay and the expanded FX rack close each other.
 
 ## Behaviour worth knowing
 
@@ -33,11 +37,13 @@ The ARP plate took the keyboard's bottom octave at exactly that width, so every 
 - The sustain pedal (CC 64) works the latch. Switching the arp off mid-phrase releases the notes it holds.
 - `getSampleRate()` is 0 when `prepareToPlay` is called directly, as the tests and the standalone do. The arp divided by it, stepped every sample and stacked voices into a drone; it now keeps the rate `prepareToPlay` was given. The test that caught it checks for silence between notes; an earlier one averaged over a longer window and passed on the broken arp.
 
-Not started: the twelve launchable slots (M13b) and the pattern editor (M13c), which plans to reuse Rhino's `StepGrid` once a Session-free core is extracted from it ([Note editor (StepGrid)](note-editor.md)).
+Not started: of M13b, the manual's bank field is now the four slot buttons, but EDIT ALL has not arrived; the pattern editor (M13c) plans to reuse Rhino's `StepGrid` once a Session-free core is extracted from it ([Note editor (StepGrid)](note-editor.md)).
 
 ## Related
 
 - [Rhino Forge](forge.md)
+- [Forge ARP plate, slots and waterfall](forge-arp-plate.md)
 - [Forge engine (Core)](forge-engine.md)
 - [Forge editor (panel)](forge-editor.md)
+- [Forge presets and state](forge-presets-and-state.md)
 - [Real-time audio rules](real-time-audio-rules.md)

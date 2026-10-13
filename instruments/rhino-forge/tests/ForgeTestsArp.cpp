@@ -598,6 +598,142 @@ void processorSuite()
                      "DOT makes a step half again as long");
     }
 }
+
+// --- The slots ------------------------------------------------------------------
+//
+// Four configurations, one of them live. Choosing another moves the pattern's
+// parameters and nothing else, what was left in a slot comes back when the
+// slot does, and all of it travels in a preset and in the host's state.
+void slotSuite()
+{
+    rhino::forge::Processor processor;
+    require(processor.liveArpSlotIndex() == 0, "a new patch is on slot 1");
+    const auto defaultShape = value(processor, "arpShape");
+    const auto defaultGate = value(processor, "arpGate");
+    setValue(processor, "arpShape", 3.0f);
+    setValue(processor, "arpGate", 0.5f);
+    setValue(processor, "arpEnable", 1.0f);
+    setValue(processor, "arpLaunchQuant", 2.0f);
+
+    // Choosing a slot is a parameter, and the Processor acts on it on its own
+    // tick — driven by hand here, as the MIDI crossing is.
+    setValue(processor, "arpSlot", 1.0f);
+    require(processor.liveArpSlotIndex() == 0, "the parameter alone moves nothing");
+    processor.applyArpSlot();
+    require(processor.liveArpSlotIndex() == 1, "the tick moves the live slot");
+    requireClose(value(processor, "arpShape"), defaultShape, 0.001f,
+                 "a slot never visited opens on the defaults");
+    requireClose(value(processor, "arpGate"), defaultGate, 0.001f,
+                 "every one of its controls does");
+    requireClose(value(processor, "arpEnable"), 1.0f, 0.001f, "the lamp is shared across slots");
+    requireClose(value(processor, "arpLaunchQuant"), 2.0f, 0.001f,
+                 "LAUNCH QUANT is shared across slots");
+
+    setValue(processor, "arpShape", 5.0f);
+    setValue(processor, "arpSlot", 0.0f);
+    processor.applyArpSlot();
+    requireClose(value(processor, "arpShape"), 3.0f, 0.001f,
+                 "returning to a slot brings back what was left in it");
+    requireClose(value(processor, "arpGate"), 0.5f, 0.001f, "all of what was left in it");
+    // A slot holds whatever it was left with, edits made after a return
+    // included.
+    setValue(processor, "arpGate", 0.75f);
+    setValue(processor, "arpSlot", 1.0f);
+    processor.applyArpSlot();
+    requireClose(value(processor, "arpShape"), 5.0f, 0.001f, "the other slot kept its own edit");
+    setValue(processor, "arpSlot", 0.0f);
+    processor.applyArpSlot();
+    requireClose(value(processor, "arpGate"), 0.75f, 0.001f,
+                 "a slot holds the edits made after it was first left");
+    processor.applyArpSlot();
+    requireClose(value(processor, "arpGate"), 0.75f, 0.001f, "a tick with nothing chosen changes nothing");
+
+    // Through a preset: saved on slot 2 with slot 1 holding its own values, a
+    // fresh processor opens on slot 2 and finds slot 1 intact.
+    setValue(processor, "arpSlot", 1.0f);
+    processor.applyArpSlot();
+    const auto directory = juce::File::getSpecialLocation(juce::File::tempDirectory)
+        .getNonexistentChildFile("rhino-forge-arp-slots", {}, true);
+    require(directory.createDirectory(), "temporary preset directory can be created");
+    const auto preset = directory.getChildFile("Slots.forgepreset");
+    require(processor.savePreset(preset, "Slots").wasOk(), "a patch with slots saves");
+
+    rhino::forge::Processor loaded;
+    require(loaded.loadPreset(preset).wasOk(), "a patch with slots loads");
+    require(loaded.liveArpSlotIndex() == 1, "a preset opens on the slot it was saved on");
+    requireClose(value(loaded, "arpShape"), 5.0f, 0.001f, "with that slot's values live");
+    setValue(loaded, "arpSlot", 0.0f);
+    loaded.applyArpSlot();
+    requireClose(value(loaded, "arpShape"), 3.0f, 0.001f, "a preset carries the slots that are not live");
+    requireClose(value(loaded, "arpGate"), 0.75f, 0.001f, "all of them");
+    setValue(loaded, "arpSlot", 2.0f);
+    loaded.applyArpSlot();
+    requireClose(value(loaded, "arpShape"), defaultShape, 0.001f,
+                 "a slot the preset never visited opens on the defaults");
+
+    // And through the host's state, the same way.
+    juce::MemoryBlock block;
+    processor.getStateInformation(block);
+    rhino::forge::Processor restored;
+    restored.setStateInformation(block.getData(), static_cast<int>(block.getSize()));
+    require(restored.liveArpSlotIndex() == 1, "host state opens on the slot it was saved on");
+    setValue(restored, "arpSlot", 0.0f);
+    restored.applyArpSlot();
+    requireClose(value(restored, "arpShape"), 3.0f, 0.001f, "host state carries the slots");
+
+    // What a slot holds is a list the preset format depends on: it names real
+    // parameters and leaves the shared ones out. The layout suite holds the
+    // same list to the panes the panel declares.
+    for (const auto* id : rhino::forge::arpSlotParameterIds())
+        require(processor.state.getParameter(id) != nullptr, "a slot names real parameters");
+    for (const auto* shared : {"arpEnable", "arpLaunchQuant", "arpSlot"})
+    {
+        auto held = false;
+        for (const auto* id : rhino::forge::arpSlotParameterIds())
+            if (juce::String(id) == shared) held = true;
+        require(!held, "the shared settings are not kept in a slot");
+    }
+    directory.deleteRecursively();
+}
+
+// --- The notes handed to the panel ------------------------------------------------
+//
+// Every note the voices are told to play is also handed to the panel's queue,
+// so the plate can draw it falling: the keys themselves when they reach the
+// voices, and the arp's notes when the arp is what plays.
+void flashSuite()
+{
+    rhino::forge::Processor processor;
+    processor.prepareToPlay(48000.0, 512);
+    juce::AudioBuffer<float> buffer(2, 512);
+    juce::MidiBuffer midi;
+    midi.addEvent(juce::MidiMessage::noteOn(1, 60, 0.5f), 0);
+    midi.addEvent(juce::MidiMessage::noteOn(1, 67, 1.0f), 10);
+    processor.processBlock(buffer, midi);
+
+    rhino::forge::NoteFlash flash;
+    require(processor.popNoteFlash(flash) && flash.note == 60,
+            "a key played reaches the panel's queue");
+    requireClose(flash.velocity, 0.5f, 0.02f, "with the velocity it was struck at");
+    require(processor.popNoteFlash(flash) && flash.note == 67, "in the order it was played");
+    require(!processor.popNoteFlash(flash), "and nothing else");
+
+    // With the arp on, the keys are consumed and the notes it starts are what
+    // the panel is told about. At 20 Hz a step is 2400 samples, and a block of
+    // 4800 fires one at its start and one at each boundary inside it: three.
+    setValue(processor, "arpEnable", 1.0f);
+    setValue(processor, "arpRateUnit", 0.0f);
+    setValue(processor, "arpRate", 20.0f);
+    processor.prepareToPlay(48000.0, 4800);
+    juce::AudioBuffer<float> longer(2, 4800);
+    juce::MidiBuffer chord;
+    for (const auto note : {60, 64, 67}) chord.addEvent(juce::MidiMessage::noteOn(1, note, 1.0f), 0);
+    processor.processBlock(longer, chord);
+    std::vector<int> reported;
+    while (processor.popNoteFlash(flash)) reported.push_back(flash.note);
+    require(reported == std::vector<int> {60, 64, 67},
+            "with the arp on, the panel is told the notes the arp plays");
+}
 }
 
 void arpTests()
@@ -606,5 +742,7 @@ void arpTests()
     sequenceSuite();
     patternSuite();
     processorSuite();
+    slotSuite();
+    flashSuite();
 }
 }

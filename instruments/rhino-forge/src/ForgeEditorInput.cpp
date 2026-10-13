@@ -3,6 +3,8 @@
 // that carries the engine's live values back onto the panel.
 #include "ForgeEditorInternal.h"
 
+#include <algorithm>
+
 namespace rhino::forge
 {
 // What a dragged source can be dropped on. A knob always answers, whether or not
@@ -179,6 +181,7 @@ void Editor::mouseDown(const juce::MouseEvent& event)
         if (ui::arpPlateBounds(getLocalBounds()).contains(at))
         {
             if (ui::arpPlateLedBounds(getLocalBounds()).contains(at)) toggleArpEnabled();
+            else if (const auto slot = ui::arpSlotAt(getLocalBounds(), at); slot >= 0) chooseArpSlot(slot);
             else toggleArpOpen();
             return;
         }
@@ -564,9 +567,42 @@ void Editor::fadeValueBubble()
     bubbleControl = nullptr;
 }
 
+// The notes the voices were told to play since the last tick become sparks in
+// the plate's well, and the sparks that have reached the floor are let go.
+// Where a spark falls is the note's place on the keyboard, so a rising
+// arpeggio drifts across the well the way it walks along the keys; how big it
+// is, is the velocity; the rest is a roll of the dice, so a chord falls as
+// several lights rather than one.
+void Editor::gatherNoteSparks()
+{
+    const auto now = juce::Time::getMillisecondCounterHiRes();
+    sparks.erase(std::remove_if(sparks.begin(), sparks.end(),
+                                [now] (const ui::NoteSpark& spark)
+                                { return ui::sparkProgress(spark, now) >= 1.0f; }),
+                 sparks.end());
+
+    auto& random = juce::Random::getSystemRandom();
+    const auto span = static_cast<float>(ui::keyboardHighestNote - ui::keyboardLowestNote);
+    NoteFlash flash;
+    while (processor.popNoteFlash(flash))
+    {
+        if (static_cast<int>(sparks.size()) >= ui::maxSparks) sparks.erase(sparks.begin());
+        ui::NoteSpark spark;
+        spark.across = juce::jlimit(0.0f, 1.0f,
+                                    static_cast<float>(flash.note - ui::keyboardLowestNote) / span
+                                        + (random.nextFloat() - 0.5f) * 0.02f);
+        spark.weight = juce::jlimit(0.0f, 1.0f, flash.velocity);
+        spark.pace = 0.85f + random.nextFloat() * 0.3f;
+        spark.warmth = random.nextFloat();
+        spark.bornMs = now;
+        sparks.push_back(spark);
+    }
+}
+
 void Editor::timerCallback()
 {
     fadeValueBubble();
+    gatherNoteSparks();
     pitchWheel.setDisplayValue(processor.pitchWheelValue() / 16383.0f);
     modulationWheel.setDisplayValue(processor.modWheelValue() / 127.0f);
     // Cheap to re-apply every tick, and it catches a dependency changing from

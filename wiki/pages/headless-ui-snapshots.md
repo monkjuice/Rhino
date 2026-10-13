@@ -74,7 +74,11 @@ The Forge test binary renders the real editor, controls and cached layers includ
 RhinoForgeTests --snapshot out.png [width height [OSC|TABLE|MATRIX|MIX|FX|ARP [scale [preset.forgepreset]]]]
 ```
 
-Paths resolve against the working directory. `ARP` presses the plate beside the keyboard, the only way in. The preset
+Paths resolve against the working directory. `ARP` presses the name column of the ARP plate on the keyboard shelf
+(`arpPlateNameBounds`; the lamp and the slot buttons beside it do other things), the only way in, then plays an
+eight-note chord through the voices, runs the due timers by hand with `juce::Timer::callPendingTimersSynchronously()`
+(nothing runs a message loop, and the editor's timer is what carries a note from the Processor to the plate) and waits
+450 ms, so the PNG shows notes falling through the plate's well ([Forge ARP plate, slots and waterfall](forge-arp-plate.md)). The preset
 is loaded before the editor is built, which is the only way to review what the panel draws from the patch, such as
 modulation rings. A hand-written one needs only `<RhinoForgePreset formatVersion="3" name="x">` around a
 `<RhinoForgeState>` holding the `<PARAM id="..." value="..."/>` entries you care about; `Processor::migrated` defaults

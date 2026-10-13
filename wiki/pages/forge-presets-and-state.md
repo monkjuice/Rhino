@@ -4,7 +4,7 @@ type: component
 summary: Presets and host state carry one tree; a preset of another format version is refused, and within a version everything is reconciled.
 tags: [forge, presets, state, compatibility]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-13
 ---
 
 # Forge presets and state
@@ -16,12 +16,13 @@ Persistence is `src/ForgeProcessorState.cpp`, with LFO tables in `src/ForgeProce
 - A `<PARAM id value>` per parameter, as plain values.
 - Properties: each oscillator's plate colour (`panelColour_<module>`) and the macro names (`macroName_<n>`), one property each so one changing shifts nothing else.
 - Child nodes, only when they differ from what every copy of Forge already has: `TABLE` (a drawn or loaded wavetable, deflated then base64), `SAMPLE` (a spectral sample as 16-bit FLAC then base64; the spectrogram is re-analysed on load) and `ForgeLfoTable` (a custom LFO shape or grid). A patch never points at a file on disk.
+- `ARPSLOT` nodes (since 2026-10-13), one per arp slot that has been left at least once: property `slot` (0-3) and one property per id in `arpSlotParameterIds()` holding the plain value ([Forge ARP plate, slots and waterfall](forge-arp-plate.md)). They are read from the parameter state itself, so they ride through `copyState` with no append or apply step, and `migrated` keeps them because they carry no `id`. **A slot's node is written only when the slot is left**, so the live slot's node is stale in a saved file whenever a knob moved since; harmless, because the only read is a switch *to* a slot, preceded by the write of the slot being left. A slot never visited has no node and opens on the defaults, as does a control a node predates. `liveArpSlot` is set from `arpSlot` after `setStateInformation` and `loadPreset`.
 
 Not in it: view settings (tab, the bank on show, envelope zoom, FX scroll) and MIDI bindings, which describe the desk rather than the sound ([Forge MIDI learn](forge-midi-learn.md)). The standalone keeps its patch as `filterState` in `%APPDATA%\Rhino Forge\Rhino Forge.settings`.
 
 ## A format version is a hard boundary
 
-`Processor::loadPreset` refuses any `formatVersion` but `presetFormatVersion` (3) with "This preset was saved by a different version of Forge." Format 1 described the synth stripped back; format 3 came with the third oscillator, whose reordered destination list gave format-2 slot indices new meanings ([Stored indices are append-only](append-only-stored-indices.md)). An additive change does not bump it: wavetable nodes arrived inside format 2, at the accepted cost that an older build loads such a preset and ignores the table.
+`Processor::loadPreset` refuses any `formatVersion` but `presetFormatVersion` (3) with "This preset was saved by a different version of Forge." Format 1 described the synth stripped back; format 3 came with the third oscillator, whose reordered destination list gave format-2 slot indices new meanings ([Stored indices are append-only](append-only-stored-indices.md)). An additive change does not bump it: wavetable nodes arrived inside format 2, at the accepted cost that an older build loads such a preset and ignores the table, and the `arpSlot` parameter and `ARPSLOT` nodes arrived inside format 3.
 
 ## Within a version, reconcile
 
@@ -39,6 +40,7 @@ Not in it: view settings (tab, the bank on show, envelope zoom, FX scroll) and M
 ## Related
 
 - [Forge modulation: matrix, envelopes, LFOs and macros](forge-modulation.md)
+- [Forge ARP plate, slots and waterfall](forge-arp-plate.md)
 - [Forge oscillators and wavetables](forge-oscillators.md)
 - [Forge spectral oscillator](forge-spectral.md)
 - [Hosting Forge in Rhino](forge-hosting.md)

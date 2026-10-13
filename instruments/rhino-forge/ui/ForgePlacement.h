@@ -65,8 +65,8 @@ inline juce::Rectangle<int> deckRightBounds(juce::Rectangle<int> bounds)
     return strip.withLeft(strip.getRight() - deckPlateWidth(bounds));
 }
 
-// What the strip has left once both end plates have taken theirs: the ARP plate and
-// the keys share this between them.
+// What the strip has left once both end plates have taken theirs: the keys and
+// the ARP plate share this between them.
 inline juce::Rectangle<int> keyboardShelf(juce::Rectangle<int> bounds)
 {
     const auto flank = deckPlateWidth(bounds) + deckPlateGap;
@@ -74,7 +74,7 @@ inline juce::Rectangle<int> keyboardShelf(juce::Rectangle<int> bounds)
 }
 
 // The keyboard was eighty-eight keys and is now seventy-six: the bottom octave
-// came off, and the ARP plate stands where it was. Both counts are kept because
+// came off, and the ARP plate is the width it was. Both counts are kept because
 // the plate is sized as the difference between them — the keys are divided out
 // of the span they always had, so every key is exactly the width it was before
 // the arp existed and the octave is what actually pays for the plate.
@@ -92,41 +92,101 @@ inline int arpPlateWidth(juce::Rectangle<int> bounds)
     return juce::jmax(48, octave - arpPlateGap);
 }
 
-// Serum puts the ARP switch immediately left of the keys, and so does this: it
-// is a thing you reach for with the hand that is already on the keyboard. The
-// plate outboard of it holds the pitch and modulation wheels.
-inline juce::Rectangle<int> arpPlateBounds(juce::Rectangle<int> bounds)
+// The keys themselves: what the shelf has left once the ARP plate and the note
+// guide have taken theirs. They start at the shelf's left edge, against the
+// wheels.
+inline juce::Rectangle<int> keyboardBounds(juce::Rectangle<int> bounds)
 {
-    return keyboardShelf(bounds).withWidth(arpPlateWidth(bounds));
+    const auto shelf = keyboardShelf(bounds);
+    // Work from the pre-guide key width. The keyboard loses seven white keys
+    // (the twelve high MIDI notes) and the recovered span joins the old right
+    // deck plate, so no surviving key changes size.
+    const auto originalKeys = shelf.getWidth() - arpPlateWidth(bounds) - arpPlateGap;
+    const auto recovered = originalKeys * 7 / keyboardWhiteKeysWithoutArp;
+    return shelf.withTrimmedRight(arpPlateWidth(bounds) + arpPlateGap + recovered + noteGuidePlateGap);
 }
 
+// The ARP plate stands between the keys and the note guide. Serum puts its
+// switch at the keyboard's left end and so did this until 2026-10-13; it moved
+// to the right so the lamp, the slot buttons and the chord helper are found
+// together at the same end, and so the keys start where the wheels end.
+inline juce::Rectangle<int> arpPlateBounds(juce::Rectangle<int> bounds)
+{
+    return keyboardShelf(bounds).withX(keyboardBounds(bounds).getRight() + arpPlateGap)
+                                .withWidth(arpPlateWidth(bounds));
+}
+
+// The face inside the plate's housing: the well everything on the plate stands
+// in. The lit state is drawn to its outline, so the two are worked out from
+// the one rectangle and the one cut.
+inline juce::Rectangle<int> arpPlateFace(juce::Rectangle<int> bounds)
+{
+    return arpPlateBounds(bounds).reduced(7, 9);
+}
+
+inline constexpr float arpPlateFaceCut = 5.0f;
+
 // The power circle on that plate. Pressing it switches the arp on; pressing the
-// rest of the plate opens its settings. Two things one plate, exactly as
-// Serum's is, because "is it running" and "let me see it" are different
-// questions and a patch asks them at different times.
+// name beside it, or any of the plate the buttons and the well do not cover,
+// opens its settings. Two things one plate, exactly as Serum's is, because "is
+// it running" and "let me see it" are different questions and a patch asks
+// them at different times.
 inline juce::Rectangle<int> arpPlateLedBounds(juce::Rectangle<int> bounds)
 {
     const auto plate = arpPlateBounds(bounds);
     return juce::Rectangle<int>(plate.getX() + 13, plate.getCentreY() - 9, 18, 18);
 }
 
-// The keys themselves: what the shelf has left once the ARP plate has taken
-// its octave.
-inline juce::Rectangle<int> keyboardBounds(juce::Rectangle<int> bounds)
+// The column carrying the lamp, the name and the word under it: the door.
+inline constexpr int arpPlateNameWidth = 72;
+
+inline juce::Rectangle<int> arpPlateNameBounds(juce::Rectangle<int> bounds)
 {
-    const auto shelf = keyboardShelf(bounds);
-    // Work from the pre-guide key width. The keyboard loses seven white keys
-    // (the twelve high MIDI notes) and the recovered span joins the old right
-    // deck plate, so neither surviving key nor the left edge moves.
-    const auto originalKeys = shelf.getWidth() - arpPlateWidth(bounds) - arpPlateGap;
-    const auto recovered = originalKeys * 7 / keyboardWhiteKeysWithoutArp;
-    return shelf.withTrimmedLeft(arpPlateWidth(bounds) + arpPlateGap)
-                .withTrimmedRight(recovered + noteGuidePlateGap);
+    return arpPlateFace(bounds).withWidth(arpPlateNameWidth);
+}
+
+// The four slot buttons, two by two, after the name. Square, and sized by the
+// face's height: two rows of them have to fit in it with their gap, and they
+// are not worth more than 24 pixels a side.
+inline constexpr int arpSlotButtonGap = 4;
+
+inline juce::Rectangle<int> arpSlotGridBounds(juce::Rectangle<int> bounds)
+{
+    const auto face = arpPlateFace(bounds);
+    const auto side = juce::jlimit(14, 24, (face.getHeight() - arpSlotButtonGap) / 2);
+    const auto size = side * 2 + arpSlotButtonGap;
+    return {face.getX() + arpPlateNameWidth + 12, face.getCentreY() - size / 2, size, size};
+}
+
+inline juce::Rectangle<int> arpSlotButtonBounds(juce::Rectangle<int> bounds, int slot)
+{
+    const auto grid = arpSlotGridBounds(bounds);
+    const auto side = (grid.getWidth() - arpSlotButtonGap) / 2;
+    const auto column = slot % 2, row = slot / 2;
+    return {grid.getX() + column * (side + arpSlotButtonGap),
+            grid.getY() + row * (side + arpSlotButtonGap), side, side};
+}
+
+// Which slot button is under a point, or -1.
+inline int arpSlotAt(juce::Rectangle<int> bounds, juce::Point<int> at)
+{
+    for (int slot = 0; slot < arpSlotCount; ++slot)
+        if (arpSlotButtonBounds(bounds, slot).contains(at)) return slot;
+    return -1;
+}
+
+// The well the notes fall through: whatever the face has left past the slot
+// buttons. It gives up width first when the window narrows, because a spark is
+// a spark at any width and a button is not.
+inline juce::Rectangle<int> arpWaterfallBounds(juce::Rectangle<int> bounds)
+{
+    const auto face = arpPlateFace(bounds);
+    return face.withLeft(arpSlotGridBounds(bounds).getRight() + 10).withTrimmedRight(5).reduced(0, 4);
 }
 
 inline juce::Rectangle<int> noteGuidePlateBounds(juce::Rectangle<int> bounds)
 {
-    return keyboardStrip(bounds).withLeft(keyboardBounds(bounds).getRight() + noteGuidePlateGap);
+    return keyboardStrip(bounds).withLeft(arpPlateBounds(bounds).getRight() + noteGuidePlateGap);
 }
 
 // --- The title bar's right-hand end -----------------------------------------

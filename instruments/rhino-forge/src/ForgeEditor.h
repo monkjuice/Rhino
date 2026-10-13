@@ -440,6 +440,14 @@ private:
     bool arpOpen = false;
     void toggleArpOpen();
     void toggleArpEnabled();
+    // One of the four slot buttons on the same plate. The slot is a parameter,
+    // and the Processor moves the pattern's parameters to match.
+    void chooseArpSlot(int slot);
+    // The notes falling through the plate's well: one spark per note the
+    // voices were told to play, gathered from the Processor on every tick and
+    // let go once it has reached the floor. View state, like the bubble.
+    std::vector<ui::NoteSpark> sparks;
+    void gatherNoteSparks();
 
     // View state only. Expansion hides the lower synth row and lets the rack
     // use it; folding the list leaves a mark-only rail. Neither belongs in a

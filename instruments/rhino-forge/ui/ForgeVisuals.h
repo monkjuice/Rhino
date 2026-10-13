@@ -1,5 +1,6 @@
 #pragma once
 
+#include "ForgeArpPlate.h"
 #include "ForgeControls.h"
 #include "ForgeEnvelopeVisuals.h"
 #include "ForgeFilterVisuals.h"
@@ -12,6 +13,7 @@
 // top what it is for:
 //
 //   ForgeStyle.h             colours, and the geometry a control's look needs
+//   ForgeArpPlate.h          what moves on the ARP plate: lamp, slots, falling notes
 //   ForgeLookAndFeel.h       the knob, slider and menu, as JUCE asks for them
 //   ForgeDisplays.h          the picture tube and the traces drawn on it
 //   ForgeControls.h          the components a module is built out of

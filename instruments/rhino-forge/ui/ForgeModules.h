@@ -167,6 +167,15 @@ inline std::vector<juce::String> displayParameters(const Module& module)
     return {prefix + "Start", prefix + "End", prefix + "LoopStart", prefix + "LoopEnd"};
 }
 
+// The parameters whose control stands on the chassis rather than in any
+// module: the slot buttons on the ARP plate beside the keys. Named for the same
+// reason the display parameters are, so the layout test's rule that every
+// parameter is reachable from the panel has somewhere to find them.
+inline std::vector<juce::String> chassisParameters()
+{
+    return {"arpSlot"};
+}
+
 inline const std::vector<Module>& modules()
 {
     static const std::vector<Module> declared {
@@ -702,8 +711,10 @@ inline const std::vector<Module>& modules()
         // have carried the same word. This is also the pane wearing the arp's
         // power lamp, so its own name is the one that belongs on it.
         //
-        // The bank field and EDIT ALL the manual puts here belong to the twelve
-        // launchable slots and arrive with them.
+        // The manual's bank field is the row of slot buttons on the plate
+        // beside the keys, and every pane after this one belongs to the slot
+        // (arpSlotParameterIds); this pane is what the slots share. EDIT ALL
+        // has not arrived.
         {"arpGlobal", "ARP", "", "arpEnable", true, Display::none, 1, 3, 2, true,
          {{100, {{"arpLaunchQuant", "LAUNCH QUANT", Style::stepper}}}},
          0, only(Page::arp), 1, 0, 0, 0, 0, "ARPEGGIATOR"},

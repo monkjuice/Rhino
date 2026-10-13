@@ -2,6 +2,7 @@
 
 #include "../core/ForgeCore.h"
 #include "../core/ForgeMidiMap.h"
+#include "../core/ForgeNoteFlash.h"
 #include "../core/ForgeTableStore.h"
 #include "../core/ForgeSampleStore.h"
 #include <juce_audio_utils/juce_audio_utils.h>
@@ -128,6 +129,24 @@ public:
     // panel and the arp cannot end up quoting different rates. The triplet and
     // dotted switches are applied here, which is the one place they are.
     float arpStepSeconds() const;
+
+    // The arp's slots. The live arp parameters are one of four configurations
+    // kept on the state tree, `arpSlot` names which, and this is what moves
+    // the parameters when that changes. Message thread only, because it
+    // writes parameters. The Processor's own timer calls it, so a slot chosen
+    // by a host lane or a learned pad takes effect with no editor open, and
+    // the panel calls it the moment a button is pressed so the knobs follow
+    // the press rather than the next tick. Public for the same reason
+    // drainMidiControl is: a test drives the crossing directly.
+    void applyArpSlot();
+    // Which slot the live parameters are. Trails `arpSlot` by at most one
+    // tick of the timer.
+    int liveArpSlotIndex() const { return liveArpSlot; }
+
+    // The notes the voices have been told to play since the last time anyone
+    // asked, in order, for the panel to draw falling. Message thread; the
+    // audio thread fills it from inside processBlock.
+    bool popNoteFlash(NoteFlash& flash) noexcept { return noteFlashes.pop(flash); }
 
     // The tempo as of the last block. A synced delay draws its repeats where
     // they will actually land, which needs the same tempo the engine divides.
@@ -269,6 +288,15 @@ private:
     // arriving and hands Core the ones the pattern actually plays.
     Arp arp;
     ArpSettings arpSettings() const;
+    // Every note handed to Core is handed here too, for the panel.
+    NoteFlashQueue noteFlashes;
+    // Which slot the live arp parameters are. Set from `arpSlot` whenever a
+    // state is loaded and moved by applyArpSlot; see ForgeProcessorState.cpp.
+    int liveArpSlot = 0;
+    int chosenArpSlot() const;
+    juce::ValueTree arpSlotNode(int slot, bool create);
+    void storeArpSlot(int slot);
+    void recallArpSlot(int slot);
     // What the arp was doing last block, so the two transitions that need
     // acting on can be spotted: switched off mid-phrase, which has to let go of
     // the notes its own gate clock was still holding, and the latch released,

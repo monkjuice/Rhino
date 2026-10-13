@@ -142,6 +142,11 @@ Editor::Editor(Processor& p)
     applyMacroNames();
     refreshModulationRings();
     applyPage();
+    // Whatever the voices played before this panel existed is not a spark:
+    // the queue holds the last sixty-odd notes of a session with no editor,
+    // and opening one would otherwise start with a burst of them.
+    NoteFlash stale;
+    while (processor.popNoteFlash(stale)) {}
     startTimerHz(24);
 }
 

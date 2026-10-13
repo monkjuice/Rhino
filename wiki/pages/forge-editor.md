@@ -4,7 +4,7 @@ type: component
 summary: One Editor class across fifteen files builds the panel from declared modules and decides what is visible in one place.
 tags: [forge, ui, layout]
 sources: []
-updated: 2026-10-12
+updated: 2026-10-13
 ---
 
 # Forge editor (panel)
@@ -17,11 +17,11 @@ The panel is one `Editor` (`src/ForgeEditor.h`) defined across sixteen `.cpp` fi
 
 `Module` is an aggregate initialised positionally, so its optional trailing fields (`pages` through `group`) are reached by counting. Adding or removing one means revisiting every initialiser in `ui/ForgeModules.h` that reaches past it; when `plateName` went (commit `7be9a56`), the six arp panes were the ones easy to miss.
 
-**Adding a control** is its parameter in `src/ForgeParameters.cpp` plus a line in `ui/ForgeModules.h`. The layout test (`tests/ForgeTestsLayout.cpp`) fails if the two disagree in either direction, if a control or enable lacks a real tooltip in `ui/ForgeTooltips.h`, or if a module escapes or overlaps at any allowed size, swept in 20 px steps (about 800 sizes between 1180×820 and 2000×1180). A parameter set by dragging on a display rather than from a cell must be listed in `displayParameters` (`ui/ForgeModules.h`) for that test to find it. As of `bbc2b85` these are the spectral oscillator's four markers, Start, End, LoopStart and LoopEnd ([Forge spectral oscillator](forge-spectral.md)).
+**Adding a control** is its parameter in `src/ForgeParameters.cpp` plus a line in `ui/ForgeModules.h`. The layout test (`tests/ForgeTestsLayout.cpp`) fails if the two disagree in either direction, if a control or enable lacks a real tooltip in `ui/ForgeTooltips.h`, or if a module escapes or overlaps at any allowed size, swept in 20 px steps (about 800 sizes between 1180×820 and 2000×1180). A parameter set by dragging on a display rather than from a cell must be listed in `displayParameters` (`ui/ForgeModules.h`) for that test to find it. As of `bbc2b85` these are the spectral oscillator's four markers, Start, End, LoopStart and LoopEnd ([Forge spectral oscillator](forge-spectral.md)). A parameter whose control is painted on the chassis rather than declared in any module is listed in `chassisParameters()` beside it, and needs a tooltip like any other; since 2026-10-13 that is `arpSlot`, the ARP plate's buttons ([Forge ARP plate, slots and waterfall](forge-arp-plate.md)).
 
 ## Pages
 
-OSC, TABLE and MATRIX swap only the oscillator columns; MIX and FX take the whole signal row. The arp overlay is a sixth page, `Page::arp`, that is never a tab ([Forge arpeggiator](forge-arpeggiator.md)). Switching hides and shows components instead of rebuilding them, so a hidden knob stays attached, automated and modulated.
+OSC, TABLE and MATRIX swap only the oscillator columns; MIX and FX take the whole signal row. The arp overlay is a sixth page, `Page::arp`, that is never a tab ([Forge arpeggiator](forge-arpeggiator.md)); it is opened from the ARP plate on the keyboard shelf, which is painted on the chassis rather than built of components and is hit-tested in `Editor::mouseDown` before anything a tab owns ([Forge ARP plate, slots and waterfall](forge-arp-plate.md)). Switching hides and shows components instead of rebuilding them, so a hidden knob stays attached, automated and modulated.
 
 ## Note guide
 
@@ -40,12 +40,13 @@ The guide uses ASCII-only musical and directional spellings (`C#/Db`, `7#5`, `m7
 - **A caption that does not fit its box changes font.** A `juce::Label` narrower than its text first squashes the glyphs (default minimum horizontal scale 0.7), then drops the font size, so the word reads as another face; POSITION did in a box its knob's width. So `ui::knobLabelBounds(block, cell)` (`ui/ForgeControlBlock.h`) spans the wider of the knob, fader or rocker block and its cell, and `dressControlLabel` (`src/ForgeEditor.cpp`) sets a `{1, 0, 1, 0}` border with no side padding, without which WARP 1/WARP 2 still overflowed their weight-2 cells at the minimum window. `captionsKeepTheirSizeSuite` (`forge_layout`) checks every caption-size label's string width against its box on OSC, MATRIX, MIX and FX at the minimum and default sizes. It walks visibility flags, because `isShowing()` is always false in a headless editor with no peer.
 - **Plates carry no legend.** A plate's foot is only `plateFootMargin` (6 px, `ui/ForgeModule.h`), kept clear of the housing's rail and rivet. The 20 px stamped legend strip (OSCILLATOR A … A-03) was removed in `7be9a56` because it repeated the header, and its height went to the knobs, displays, lower row and mixer strips. Part numbers (B-01…, A-06) stay in the header via `plateCode`; a group such as SUB / NOISE is keyed only by its `group` string, and `drawGroupPlate` draws just the housing.
 
-Every frame repaints the whole panel and every ordinary knob shares one size: see [Forge's panel repaints whole at 24 Hz](forge-panel-repaint-cost.md) and [One knob diameter for the whole Forge panel](forge-knob-diameter-is-panel-wide.md). Lettering is four subset faces chosen by job (`ui/ForgeType.h`); the static metal is drawn by `ui/ForgePanels.h` and cached.
+Every frame repaints the whole panel and every ordinary knob shares one size: see [Forge's panel repaints whole at 24 Hz](forge-panel-repaint-cost.md) and [One knob diameter for the whole Forge panel](forge-knob-diameter-is-panel-wide.md). Lettering is four subset faces chosen by job (`ui/ForgeType.h`); the static metal is drawn by `ui/ForgePanels.h` and cached, and what moves on the ARP plate by `ui/ForgeArpPlate.h`, included from `ui/ForgeVisuals.h`.
 
 ## Related
 
 - [Rhino Forge](forge.md)
 - [Forge modulation: matrix, envelopes, LFOs and macros](forge-modulation.md)
+- [Forge ARP plate, slots and waterfall](forge-arp-plate.md)
 - [Seeing the UI without taking the screen](headless-ui-snapshots.md)
 - [Colours and typography](colours-and-typography.md)
 - [A plugin's static Direct2D images deadlock NVIDIA's driver at unload](plugin-static-images-deadlock-on-unload.md)

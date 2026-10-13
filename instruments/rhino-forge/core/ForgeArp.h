@@ -3,6 +3,7 @@
 #include <juce_core/juce_core.h>
 #include <array>
 #include <cmath>
+#include <vector>
 
 // The arpeggiator: what turns the keys being held down into a sequence.
 //
@@ -229,6 +230,33 @@ inline constexpr int arpDivisionCount = 7;
 // 1/16 is where an arpeggio is reached for before it is adjusted, and it is
 // what Serum opens on.
 inline constexpr int arpDefaultDivision = 4;
+
+// --- Slots --------------------------------------------------------------------
+//
+// Four configurations kept in memory and saved with the patch, one of them
+// live. A slot holds the five panes that describe a pattern — PATTERN,
+// TRANSPOSE, PLAYBACK, RETRIGGER and VELOCITY — and not the ARP pane: whether
+// the arp is running and what it waits for before it starts are shared, so
+// that choosing another slot while playing changes the pattern and nothing
+// else. The Processor keeps the slots and moves the parameters between them;
+// the arp itself reads the live parameters and knows nothing about slots.
+//
+// The ids are listed here rather than derived from the panel, because this is
+// what a preset stores and the panel is what may move. The layout test holds
+// the two to each other.
+inline constexpr int arpSlotCount = 4;
+
+inline const std::vector<const char*>& arpSlotParameterIds()
+{
+    static const std::vector<const char*> ids {
+        "arpShape", "arpRate", "arpRateUnit", "arpDivision", "arpTriplet", "arpDotted",
+        "arpShift", "arpRange", "arpRangeShape",
+        "arpLatch", "arpThru", "arpOffset", "arpRepeats", "arpGate", "arpChance", "arpChancePre",
+        "arpRetrigLaunch", "arpRetrigRateOn", "arpRetrigRate", "arpRetrigNote", "arpRetrigFirst",
+        "arpVelEnable", "arpVelRetrig", "arpVelDecay", "arpVelTarget",
+    };
+    return ids;
+}
 
 // Everything the arp reads, gathered once per block the way the Patch is. Held
 // as plain values rather than parameter pointers so `advance` touches no

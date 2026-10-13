@@ -280,6 +280,7 @@ void Processor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
                 {
                     core.noteOn(note, message.getFloatVelocity(), values);
                     directNotes.set(static_cast<size_t>(note));
+                    noteFlashes.push({note, message.getFloatVelocity()});
                 }
             }
             else if (message.isNoteOff())
@@ -300,7 +301,11 @@ void Processor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
         // Between the events and the render, so a note the arp starts on this
         // sample is sounding in this sample rather than the next one.
         arp.advance(arpValues, preparedSampleRate,
-                    [this, &values] (int note, float velocity) { core.noteOn(note, velocity, values); },
+                    [this, &values] (int note, float velocity)
+                    {
+                        core.noteOn(note, velocity, values);
+                        noteFlashes.push({note, velocity});
+                    },
                     [this] (int note) { core.noteOff(note); });
 
         float left, right; core.renderSample(values, mods, left, right);

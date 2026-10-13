@@ -49,7 +49,7 @@ The mixer gives the sub, three oscillators, noise, and filter their own level, p
 
 ### Play patterns, not just notes
 
-Forge's arpeggiator turns held chords into musical motion with multiple directions, scale-aware intervals, swing, gate, repeats, retriggering, octave movement, and launch quantization. MIDI learn maps hardware knobs and pads directly to the panel.
+Forge's arpeggiator turns held chords into musical motion with multiple directions, scale-aware intervals, swing, gate, repeats, retriggering, octave movement, and launch quantization. Four arp slots keep separate configurations inside one preset and switch while you play, and the plate beside the keys shows every note as it falls. MIDI learn maps hardware knobs and pads directly to the panel.
 
 ## Use Forge three ways
 

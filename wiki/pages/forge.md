@@ -4,7 +4,7 @@ type: component
 summary: Rhino's independent wavetable and spectral synth, a VST3 and standalone app built from one JUCE AudioProcessor.
 tags: [forge, synth, overview]
 sources: []
-updated: 2026-10-12
+updated: 2026-10-13
 ---
 
 # Rhino Forge
@@ -15,7 +15,7 @@ Forge is the polyphonic synth under `instruments/rhino-forge/`. One JUCE `AudioP
 
 - **Signal row:** SUB and NOISE share one housing, then OSC A, OSC B, OSC C and FILTER.
 - **Lower row:** GLOBAL, ENV (four envelopes, one shown at a time), LFO (six, one shown at a time) and eight MACROS.
-- **Keyboard:** 76 keys. The ARP plate takes the place of the bottom octave.
+- **Keyboard:** A1 to C7 (`keyboardLowestNote` 33 to `keyboardHighestNote` 96, 38 white keys), starting against the wheels. The ARP plate stands between the keys and the note guide since 2026-10-13 ([Forge ARP plate, slots and waterfall](forge-arp-plate.md)).
 - **Tabs:** OSC, TABLE and MATRIX swap only the oscillator columns. MIX and FX take over the whole signal row. The arp's settings are an overlay (`Page::arp`), not a tab.
 
 Each module has its own page:
@@ -27,7 +27,7 @@ Each module has its own page:
 - [Forge noise module](forge-noise.md)
 - [Forge modulation: matrix, envelopes, LFOs and macros](forge-modulation.md)
 - [Forge mixer and effects racks](forge-mixer-and-fx.md)
-- [Forge arpeggiator](forge-arpeggiator.md)
+- [Forge arpeggiator](forge-arpeggiator.md) and its [ARP plate, slots and waterfall](forge-arp-plate.md)
 - [Forge MIDI learn](forge-midi-learn.md)
 
 The panel itself is covered in [Forge editor (panel)](forge-editor.md).
@@ -52,11 +52,10 @@ state and hosting guides, are the canonical engineering documentation ([Document
 
 ## Status
 
-As of 2026-10-03:
+As of 2026-10-13:
 
-- **Done:** everything from M1 to M14b except the items below, plus M16a to M16c. M16d is partly done.
+- **Done:** everything from M1 to M14b except the items below, plus M16a to M16c. M16d is partly done. M13b is partly done: four arp slots arrived on 2026-10-13 as the ARP plate's buttons (commit `8f28dc7`); EDIT ALL has not.
 - **Not started:**
-  - M13b, the twelve arp slots.
   - M13c, the pattern editor.
   - M14c, sample noise sources.
   - The factory preset set planned in M8.

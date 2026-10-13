@@ -232,6 +232,80 @@ void Processor::setMacroName(int macro, const juce::String& name)
     else state.state.setProperty(macroNameProperty(macro), tag, nullptr);
 }
 
+// --- The arp's slots ----------------------------------------------------------
+//
+// Four configurations, one of them the live parameters. The others ride on the
+// state tree as a child node each, holding a plain value per parameter under
+// the parameter's own id, so a preset and a project carry them without the
+// host seeing four copies of every arp lane.
+//
+// A slot's node is written when the slot is left and read when it is returned
+// to, and that is all. The live slot's own node is therefore stale whenever a
+// knob has moved since the slot was last left — and it is never read while it
+// is the live one, because the only read is the switch *to* a slot and the
+// write that precedes it is of the slot being left. So nothing keeps it fresh
+// on every edit, nothing touches the tree on the way to a save, and a stale
+// node in a preset is harmless. A slot never visited has no node and opens on
+// the defaults, as a parameter a preset never mentioned does.
+namespace
+{
+const juce::Identifier arpSlotNodeType("ARPSLOT");
+const juce::Identifier arpSlotIndexProperty("slot");
+}
+
+int Processor::chosenArpSlot() const
+{
+    return juce::jlimit(0, arpSlotCount - 1,
+                        juce::roundToInt(state.getRawParameterValue("arpSlot")->load()));
+}
+
+juce::ValueTree Processor::arpSlotNode(int slot, bool create)
+{
+    for (auto child : state.state)
+        if (child.hasType(arpSlotNodeType)
+            && static_cast<int>(child.getProperty(arpSlotIndexProperty, -1)) == slot)
+            return child;
+    if (!create) return {};
+    juce::ValueTree node(arpSlotNodeType);
+    node.setProperty(arpSlotIndexProperty, slot, nullptr);
+    state.state.addChild(node, -1, nullptr);
+    return node;
+}
+
+void Processor::storeArpSlot(int slot)
+{
+    auto node = arpSlotNode(slot, true);
+    for (const auto* id : arpSlotParameterIds())
+        if (const auto* parameter = state.getParameter(id))
+            node.setProperty(juce::Identifier(id), parameter->convertFrom0to1(parameter->getValue()),
+                             nullptr);
+}
+
+void Processor::recallArpSlot(int slot)
+{
+    const auto node = arpSlotNode(slot, false);
+    for (const auto* id : arpSlotParameterIds())
+    {
+        auto* parameter = state.getParameter(id);
+        if (parameter == nullptr) continue;
+        const auto stored = node.isValid() ? node.getProperty(juce::Identifier(id)) : juce::var();
+        // A control the slot has no record of — a slot never visited, or one
+        // written before the control existed — opens on its default.
+        const auto plain = stored.isVoid() ? parameter->convertFrom0to1(parameter->getDefaultValue())
+                                           : static_cast<float>(stored);
+        parameter->setValueNotifyingHost(parameter->convertTo0to1(plain));
+    }
+}
+
+void Processor::applyArpSlot()
+{
+    const auto chosen = chosenArpSlot();
+    if (chosen == liveArpSlot) return;
+    storeArpSlot(liveArpSlot);
+    recallArpSlot(chosen);
+    liveArpSlot = chosen;
+}
+
 void Processor::getStateInformation(juce::MemoryBlock& destination)
 {
     auto tree = state.copyState();
@@ -257,6 +331,9 @@ void Processor::setStateInformation(const void* data, int size)
             applySamples(saved);
             applyLfoTables(saved);
             state.replaceState(migrated(saved));
+            // The parameters just restored are whichever slot the state says
+            // they are; the other slots came with the tree.
+            liveArpSlot = chosenArpSlot();
         }
 }
 
@@ -300,6 +377,7 @@ juce::Result Processor::loadPreset(const juce::File& source)
     applySamples(savedState);
     applyLfoTables(savedState);
     state.replaceState(migrated(savedState));
+    liveArpSlot = chosenArpSlot();
     return juce::Result::ok();
 }
 
@@ -406,7 +484,9 @@ juce::ValueTree Processor::migrated(const juce::ValueTree& savedState) const
     for (int i = result.getNumChildren(); --i >= 0;)
     {
         // A table is data rather than a parameter and is applied separately, so
-        // it is taken out here and never reaches the parameter state.
+        // it is taken out here and never reaches the parameter state. An arp
+        // slot's node stays: it is read from the parameter state itself, and
+        // carries no id for the check below to mistake for a parameter.
         if (result.getChild(i).hasType(tableNodeType) || result.getChild(i).hasType("ForgeLfoTable")
             || result.getChild(i).hasType(sampleNodeType))
         { result.removeChild(i, nullptr); continue; }

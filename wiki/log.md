@@ -314,3 +314,6 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 
 ## [2026-10-12] update | Arp note lifetime, retrigger semantics, and scales
 - updated: pages/rhino-arp.md (stopped-clock and channel/pitch gate ownership, panic/reset handling, Hold-off defaults, repeat/retrigger semantics, shared scale choices, and conformance regression placement)
+
+## [2026-10-13] update | Arp cadence, scale correction, and plain defaults
+- updated: pages/rhino-arp.md (rate-preserving Beat retrigger, stopped timeline continuity, nearest-scale correction, shared output ownership, factory defaults, and timing regression coverage)

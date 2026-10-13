@@ -134,6 +134,14 @@ target_sources(RhinoNative PRIVATE
     src/app/ComputerKeyboard.cpp
     # App
     src/app/Main.cpp
+    src/app/MainWindow.cpp
+    src/app/MainComponent.cpp
+    src/app/MainComponentLayout.cpp
+    src/app/MainComponentControlBar.cpp
+    src/app/MainComponentPanes.cpp
+    src/app/MainComponentCommands.cpp
+    src/app/MainComponentTimer.cpp
+    src/app/AppPlatform.cpp
     src/app/TransportDisplay.cpp
     src/app/ControlBarFields.cpp
     src/app/ControlBarIcons.cpp
@@ -150,6 +158,7 @@ target_sources(RhinoNative PRIVATE
     src/tests/DjTest.cpp
     src/tests/PresetTest.cpp
     src/tests/UiProfile.cpp
+    src/tests/TestRunners.cpp
     src/tests/Pattern/DeviceRackTest.cpp
     src/tests/Pattern/DrumRackWindowTest.cpp
     src/tests/Pattern/WorkflowTest.cpp

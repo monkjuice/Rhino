@@ -435,7 +435,7 @@ int runUiProfile()
         // A key pressed on the focused console: the press focuses its deck and
         // the shell follows it, which a test reaches as far as the
         // arrangement's selection and the rack; the shell's own pane layout is
-        // in Main.cpp, out of reach.
+        // MainComponent's, which no runner builds.
         djView->deckSelected = [&] (int deck)
         {
             const auto info = session.djDeckInfo(deck);

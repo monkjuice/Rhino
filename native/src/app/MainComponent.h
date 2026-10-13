@@ -69,10 +69,10 @@ public:
 
     void requestClose() { files.confirmUnsaved([] { juce::JUCEApplication::getInstance()->quit(); }); }
     void openProjectFile(const juce::File& file) { files.openFile(file); }
-    void showFileMenuFrom(juce::Component& target) { showFileMenu(&target); }
-    void showEditMenuFrom(juce::Component& target) { showEditMenu(&target); }
-    void showViewMenuFrom(juce::Component& target) { showViewMenu(&target); }
-    void showHelpMenuFrom(juce::Component& target) { showHelpMenu(&target); }
+    void showFileMenuFrom(juce::Component& target) { showFileMenu(target); }
+    void showEditMenuFrom(juce::Component& target) { showEditMenu(target); }
+    void showViewMenuFrom(juce::Component& target) { showViewMenu(target); }
+    void showHelpMenuFrom(juce::Component& target) { showHelpMenu(target); }
     // The typing keyboard has to be heard wherever focus is, including where
     // it is nowhere: keys then go to the window, which is above this component
     // and so is never reached by walking up from here.
@@ -84,11 +84,11 @@ public:
     std::function<bool()> fullScreenActive;
 
 private:
-    void showFileMenu(juce::Component* target = nullptr);
+    void showFileMenu(juce::Component& target);
     void sendClipboardShortcut(int keyCode, bool toNoteEditor);
-    void showEditMenu(juce::Component* target = nullptr);
-    void showViewMenu(juce::Component* target = nullptr);
-    void showHelpMenu(juce::Component* target = nullptr);
+    void showEditMenu(juce::Component& target);
+    void showViewMenu(juce::Component& target);
+    void showHelpMenu(juce::Component& target);
     void showMetronomeMenu();
     void showDisplayMenu();
     void editWillChange() override;
@@ -108,7 +108,7 @@ private:
     bool isOverSplitter(juce::Point<float> point) const;
 
     Session& session;
-    juce::Label hint, patternLabel;
+    juce::Label patternLabel;
     juce::TextEditor infoView;
     // The control the Info View is currently explaining, and what it said about
     // it. Both are needed: the control alone misses a button that relabels
@@ -143,7 +143,6 @@ private:
     juce::ComboBox scaleHighlight;
     ComputerKeyboard computerKeyboard;
     juce::Component::SafePointer<juce::DialogWindow> audioSettings;
-    juce::TextButton fileMenu {"File"}, editMenu {"Edit"}, viewMenu {"View"}, helpMenu {"Help"};
     ProjectFiles files;
     SplitterBar lowerSplitter;
     // Zero until the pane is opened for the first time, which is what asks for
@@ -211,12 +210,9 @@ private:
     // at the top of the strip and the pane, when it is open, slides out from
     // under the bottom of it.
     static constexpr int toggleStripHeight = 34;
-    // The clip pane and the Device View are two independent panels that happen
-    // to stack in the same strip, and each answers to one thing: this says
-    // which clip editor the clip pane is showing, and rackOpen whether the
-    // Device View is up. Both start hidden - double-clicking a clip reveals the
-    // editor that clip belongs in, and clicking a track card the devices.
-    // One pane showing one thing. The clip editors and the Device View used to
+    // One pane showing one thing. Both start hidden: double-clicking a clip
+    // reveals the editor that clip belongs in, and clicking a track card the
+    // devices. The clip editors and the Device View used to
     // stack inside it, which asked for a window tall enough for both and left
     // neither of them tall enough to work in. They are a pair of toggles now:
     // opening either closes the other, the way Live's Clip and Device views

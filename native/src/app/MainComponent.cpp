@@ -166,9 +166,6 @@ MainComponent::MainComponent(Session& s) : session(s), browser(s), grid(s), arra
     infoView.setColour(juce::TextEditor::outlineColourId, juce::Colours::transparentBlack);
     infoView.setColour(juce::TextEditor::textColourId, palette::textDim);
     infoView.setFont(uiFont(10.5f));
-    hint.setText({}, juce::dontSendNotification);
-    hint.setVisible(false);
-    hint.setColour(juce::Label::textColourId, palette::textDim);
     // Tempo is a field you drag, which is how every DAW sets one: press
     // and move the mouse up or down, Ctrl for hundredths, double-click to
     // type an exact number. The range and the steps are the model's, so the
@@ -288,7 +285,7 @@ MainComponent::MainComponent(Session& s) : session(s), browser(s), grid(s), arra
     for (auto* component : std::initializer_list<juce::Component*>{
              &infoView, &position, &play, &stop, &record, &rewind,
              &browser, &browserToggle, &editorToggle, &rackToggle, &grid, &audioClip, &arrangement, &djView,
-             &djToggle, &arrangementToggle, &rack, &tempoBox, &signatureField, &undo, &redo, &metronome, &metronomeMenu, &hint,
+             &djToggle, &arrangementToggle, &rack, &tempoBox, &signatureField, &undo, &redo, &metronome, &metronomeMenu,
              &patternLabel, &editorResolution, &editorZoomOut, &editorZoomIn, &scaleHighlight,
              &lowerSplitter})
         addAndMakeVisible(component);

@@ -187,7 +187,6 @@ void MainComponent::resized()
     browserToggle.toFront(false);
     editorToggle.toFront(false);
     rackToggle.toFront(false);
-    hint.setBounds(0, 0, 0, 0);
 }
 
 void MainComponent::mouseMove(const juce::MouseEvent& event)

@@ -114,7 +114,7 @@ bool MainComponent::keyPressed(const juce::KeyPress& key)
     return false;
 }
 
-void MainComponent::showFileMenu(juce::Component* target)
+void MainComponent::showFileMenu(juce::Component& target)
 {
     juce::PopupMenu menu;
     menu.addItem(1, "New project");
@@ -125,7 +125,7 @@ void MainComponent::showFileMenu(juce::Component* target)
     menu.addItem(5, "Export WAV...", true, false);
     menu.addSeparator();
     menu.addItem(6, "Quit");
-    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(target != nullptr ? *target : fileMenu),
+    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(target),
         [safe = juce::Component::SafePointer<MainComponent>(this)](int result)
         {
             if (safe == nullptr) return;
@@ -151,7 +151,7 @@ void MainComponent::sendClipboardShortcut(int keyCode, bool toNoteEditor)
     editor.keyPressed(juce::KeyPress(keyCode, juce::ModifierKeys::commandModifier, 0));
 }
 
-void MainComponent::showEditMenu(juce::Component* target)
+void MainComponent::showEditMenu(juce::Component& target)
 {
     juce::PopupMenu menu;
     menu.addItem(1, "Undo", session.edit->getUndoManager().canUndo(), false);
@@ -178,7 +178,7 @@ void MainComponent::showEditMenu(juce::Component* target)
     // restarts. Clear pattern, the other symbol that used to sit up there,
     // was already in this menu.
     menu.addItem(12, "Panic reset audio");
-    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(target != nullptr ? *target : editMenu),
+    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(target),
         [safe = juce::Component::SafePointer<MainComponent>(this), noteEditorHasFocus](int result)
         {
             if (safe == nullptr) return;
@@ -208,7 +208,7 @@ void MainComponent::showEditMenu(juce::Component* target)
         });
 }
 
-void MainComponent::showViewMenu(juce::Component* target)
+void MainComponent::showViewMenu(juce::Component& target)
 {
     juce::PopupMenu menu;
     menu.addItem(1, "Browser", true, browserOpen);
@@ -228,7 +228,7 @@ void MainComponent::showViewMenu(juce::Component* target)
     fullScreen.isEnabled = fullScreenToggleRequested != nullptr;
     fullScreen.isTicked = fullScreenActive != nullptr && fullScreenActive();
     menu.addItem(std::move(fullScreen));
-    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(target != nullptr ? *target : viewMenu),
+    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(target),
         [safe = juce::Component::SafePointer<MainComponent>(this)](int result)
         {
             if (safe == nullptr) return;
@@ -241,12 +241,12 @@ void MainComponent::showViewMenu(juce::Component* target)
         });
 }
 
-void MainComponent::showHelpMenu(juce::Component* target)
+void MainComponent::showHelpMenu(juce::Component& target)
 {
     juce::PopupMenu menu;
     menu.addItem(1, "Keyboard shortcuts");
     menu.addItem(2, "About Rhino");
-    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(target != nullptr ? *target : helpMenu),
+    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(target),
         [safe = juce::Component::SafePointer<MainComponent>(this)](int result)
         {
             if (safe == nullptr) return;

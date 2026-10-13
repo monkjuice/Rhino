@@ -84,10 +84,7 @@ void MainComponent::toggleDeviceView()
 
 // Clicking a track card asks for its devices. Every track has a chain -
 // an audio track's effects and the main row's are as much a chain as an
-// instrument track's - so this refuses nothing and consults no clip. The
-// card click arrives from a mouse *down* that may be starting a card drag,
-// so the layout waits for the button, as the clip panes do.
-// Clicking a card still asks for that track's devices, but only when the
+// instrument track's - so this consults no clip, but it opens only when the
 // pane is free. A clip editor that is open is being worked in, and having
 // it swapped out by a click on the card beside it would be a surprise; the
 // Devices toggle is the way across while one is open.

@@ -7,6 +7,7 @@
 #include <array>
 #include <functional>
 #include <optional>
+#include <utility>
 #include <vector>
 
 namespace rhino
@@ -511,6 +512,44 @@ public:
     int deviceSidechainSource(int track, int slot) const;
     juce::Result setDeviceSidechainSource(int track, int slot, int sourceTrack);
     juce::Result clearDeviceSidechainSource(int track, int slot);
+    // The knobs an external plugin shows (SessionMappedParameters.cpp).
+    // Rhino's own devices and the engine's built-ins show every control they
+    // declare. An external plugin - Rhino Forge is the one there is - declares
+    // hundreds, so its rack is a chosen list: the controls a synth is played
+    // by until someone says otherwise, and from then on whatever has been
+    // mapped from its own window. The list is kept on the device, by the
+    // plugin's own parameter ids, so it is saved with the document, follows
+    // the device along the chain and survives the plugin gaining parameters.
+    // A lane names a knob by its place in the list, so a knob only ever joins
+    // at the end, and taking one off moves the lanes above it down.
+    static constexpr int maximumMappedParameters = 32;
+    bool deviceHasMappedParameters(int track, int slot) const;
+    // Puts the plugin's parameter `pluginParameter` - its index in the
+    // plugin's own list - at the end of the rack, as one undo step. One
+    // already there, or one the plugin says cannot be automated, is refused.
+    juce::Result mapDeviceParameter(int track, int slot, int pluginParameter);
+    // Takes the knob at `index` off the rack with its lane, moving the lanes
+    // of the knobs after it down one, as one undo step.
+    juce::Result unmapDeviceParameter(int track, int slot, int index);
+    // Mapping from the window: while it is on, every control touched in the
+    // device's own window joins its rack. One device at a time. It ends when
+    // asked, when the device leaves the chain, and with the document.
+    juce::Result beginParameterMapping(int track, int slot);
+    void endParameterMapping();
+    bool isMappingParameters(int track, int slot) const;
+    // Applies what the window has reported since the last message. The queue
+    // drains on the message loop by itself; a test, which runs no loop, calls
+    // this.
+    void flushParameterMapping();
+    // What the last control touched in the window did - mapped, already on
+    // the rack, refused - for the status line. The serial moves with every
+    // touch, so a line can tell a new report from the one it has shown.
+    struct MappingReport
+    {
+        int serial = 0;
+        juce::String text;
+    };
+    MappingReport parameterMappingReport() const { return mappingReport; }
 
     double tempo() const;
     void setTempo(double bpm);
@@ -1516,6 +1555,42 @@ private:
     // Set by every document change; the next announcement mirrors the lanes.
     bool automationMirrorStale = true;
     AutomationMirror automationMirror {*this};
+    // SessionMappedParameters.cpp. Hears the window of the device being
+    // mapped from while mapping is on. A control touched there reports a
+    // gesture, or only a value for the controls that send none; both are
+    // queued and applied on the next message, never inside the plugin's own
+    // callback and never from the audio thread.
+    struct ParameterMapper final : juce::AudioProcessorListener, juce::AsyncUpdater
+    {
+        explicit ParameterMapper(Session& owner) : session(owner) {}
+        void audioProcessorParameterChanged(juce::AudioProcessor*, int parameter, float) override;
+        void audioProcessorChanged(juce::AudioProcessor*, const ChangeDetails&) override {}
+        void audioProcessorParameterChangeGestureBegin(juce::AudioProcessor*, int parameter) override;
+        void handleAsyncUpdate() override;
+        Session& session;
+        std::vector<int> gestured, changed;
+    };
+    ParameterMapper parameterMapper {*this};
+    // The device being mapped from, by id, and the processor its listener
+    // went on: compared and never followed, since a device brought back by
+    // undo is a new processor the listener was never on.
+    std::optional<te::EditItemID> mappingDevice;
+    const juce::AudioProcessor* mappingProcessor = nullptr;
+    MappingReport mappingReport;
+    // The map itself, without the announcement, so the window's mapping can
+    // say what it did and announce once. `alreadyMapped` reports that kind
+    // of refusal apart, which the window's mapping passes over in silence.
+    juce::Result mapDeviceParameterInEdit(int track, int slot, int pluginParameter, juce::String& name,
+                                          bool* alreadyMapped = nullptr);
+    // Where a device sits now, as (track, slot), or nothing once it has gone.
+    std::optional<std::pair<int, int>> locateDevice(te::EditItemID) const;
+    // Takes the listener off the device's processor and forgets the mapping,
+    // without a word: for a device or a document on its way out.
+    void detachParameterMapping();
+    void dropParameterMapping();
+    // Called by markModified for a change to a chain, which may have taken
+    // the device being mapped from, and its processor, with it.
+    void dropParameterMappingIfDeviceGone();
     std::optional<juce::PluginDescription> forgeDescription;
     // Declared after the engine, so the preview is torn down before the device
     // manager it is registered with. The destructor detaches it either way.

@@ -579,6 +579,73 @@ void runPatternDeviceRackTest()
             knobTop = slider->getY();
         }
     require(spaceKnobs == 6, "Rhino Space shows its six knobs");
+
+    // An external plugin's face is a chosen list of its parameters: two rows
+    // deep once it passes six knobs, as wide as it needs, with MAP in its
+    // name bar to add to it from the plugin's own window. Only where a Forge
+    // build is found. Forge replaces Rhino FM on the track, so nothing above
+    // may be used past this point.
+    if (session.isForgeAvailable())
+    {
+        require(session.addDevice("RhinoForge", 2).wasOk(), "The MIDI track takes Rhino Forge in place of Rhino FM");
+        DeviceEditorPanel* forgePanel = nullptr;
+        for (auto* panel : chainView.devicePanels)
+            if (panel->deviceId == "RhinoForge")
+                forgePanel = panel;
+        require(forgePanel != nullptr && forgePanel->face == DeviceEditorPanel::Face::Generic && forgePanel->mappable,
+                "Forge gets the plain grid, as a chosen list");
+        const auto forgeSlot = forgePanel->devicePluginIndex();
+        require(forgePanel->getWidth() == forgePanel->preferredWidth() && forgePanel->preferredWidth() == 46 + 5 * 66,
+                "Nine knobs stand five across, in two rows");
+        const auto forgeKnobs = [forgePanel]
+        {
+            std::vector<juce::Slider*> knobs;
+            for (auto* child : forgePanel->getChildren())
+                if (auto* slider = dynamic_cast<juce::Slider*>(child); slider != nullptr && slider->isVisible())
+                    knobs.push_back(slider);
+            return knobs;
+        };
+        require(forgeKnobs().size() == 9 && forgeKnobs()[0]->getTooltip().startsWith("Cutoff:")
+                    && forgeKnobs()[8]->getTooltip().startsWith("Env 1 Release:"),
+                "and all nine show, Cutoff first and Env 1 Release last");
+        const auto mapButton = forgePanel->mapButtonArea();
+        require(!mapButton.isEmpty() && mapButton.getBottom() <= DeviceEditorPanel::headerHeight
+                    && mapButton.getRight() <= forgePanel->getWidth(),
+                "MAP stands in the name bar");
+        for (auto* knob : forgeKnobs())
+            require(forgePanel->getLocalBounds().contains(knob->getBounds()) && !knob->getBounds().intersects(mapButton),
+                    "Every knob stands inside the face, clear of MAP");
+        // MAP opens the device's window and starts mapping; a second click
+        // stops it and leaves the window. The window is the rack's own; here
+        // a stand-in counts the openings, so no window reaches the screen.
+        auto opened = 0;
+        forgePanel->openEditor = [&opened] { ++opened; };
+        forgePanel->mouseDown(press(*forgePanel, mapButton.getCentre().toFloat()));
+        require(opened == 1 && session.isMappingParameters(2, forgeSlot) && forgePanel->mapping,
+                "A click on MAP opens the window and starts mapping");
+        forgePanel->mouseDown(press(*forgePanel, mapButton.getCentre().toFloat()));
+        require(opened == 1 && !session.isMappingParameters(2, forgeSlot) && !forgePanel->mapping,
+                "A second click stops it, leaving the window");
+        // A knob mapped onto the face widens it, and the rack makes room.
+        auto* forgeProcessor = session.devicePlugin(2, forgeSlot)->getWrappedAudioProcessor();
+        const auto forgeParameter = [forgeProcessor] (const juce::String& name)
+        {
+            const auto& parameters = forgeProcessor->getParameters();
+            for (int i = 0; i < parameters.size(); ++i)
+                if (parameters[i]->getName(1024) == name)
+                    return i;
+            return -1;
+        };
+        require(session.mapDeviceParameter(2, forgeSlot, forgeParameter("LFO 1 Rate")).wasOk(), "LFO 1 Rate is mapped");
+        require(forgePanel->getWidth() == 46 + 5 * 66 && forgeKnobs().size() == 10, "Ten knobs still stand five across");
+        require(session.mapDeviceParameter(2, forgeSlot, forgeParameter("LFO 2 Rate")).wasOk(), "LFO 2 Rate is mapped");
+        require(forgePanel->getWidth() == 46 + 6 * 66 && forgeKnobs().size() == 11
+                    && forgeKnobs()[10]->getTooltip().startsWith("LFO 2 Rate:"),
+                "Eleven stand six across, and the rack has laid the wider face out");
+        require(forgeKnobs()[0]->getY() == forgeKnobs()[5]->getY() && forgeKnobs()[6]->getY() > forgeKnobs()[0]->getY()
+                    && forgeKnobs()[6]->getX() == forgeKnobs()[0]->getX(),
+                "The second row starts under the first");
+    }
 }
 
 void runDrumRackFaceTest()

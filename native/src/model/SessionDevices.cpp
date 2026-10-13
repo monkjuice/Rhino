@@ -346,6 +346,8 @@ int Session::deviceParameterCount(int track, int slot) const
         return 0;
     if (dynamic_cast<te::FourOscPlugin*>(plugin) != nullptr)
         return static_cast<int>(deviceParameters(track, slot).size());
+    if (hasMappedParameters(*plugin))
+        return mappedParameterCount(*plugin);
     if (const auto* native = dynamic_cast<NativeDevice*>(plugin))
         return native->parameterCount();
     auto count = 0;
@@ -384,6 +386,42 @@ std::vector<Session::DeviceParameter> Session::deviceParameters(int track, int s
                                       hasActiveTrackAutomation(*edit, target),
                                       runtime != nullptr && runtime->overridden});
             }
+        return parameters;
+    }
+
+    // An external plugin's rack is a chosen list of its parameters, each read
+    // as the engine's own parameter for it. A knob the plugin no longer has
+    // keeps its place and reads as missing, so every knob after it stays on
+    // its lane; Remove from rack is the way to take it off.
+    if (hasMappedParameters(*plugin))
+    {
+        const auto count = mappedParameterCount(*plugin);
+        for (int i = first; i < std::min(count, last); ++i)
+        {
+            const DeviceTarget target {track, slot, i};
+            const auto* runtime = findAutomationRuntime(target);
+            auto* parameter = mappedParameterAt(*plugin, i);
+            const auto range = parameter != nullptr ? parameter->getValueRange() : juce::Range<float>(0.0f, 1.0f);
+            if (parameter == nullptr || !std::isfinite(range.getStart()) || !std::isfinite(range.getEnd())
+                || range.getLength() <= 0.0f)
+            {
+                parameters.push_back({"Missing control", "not in this plugin", 0.0f, 0.0f, 1.0f, false,
+                                      hasActiveTrackAutomation(*edit, target), runtime != nullptr && runtime->overridden});
+                continue;
+            }
+            DeviceParameter exposed {parameter->getParameterShortName(18),
+                                     parameter->getCurrentValueAsStringWithLabel(),
+                                     parameter->getCurrentValue(),
+                                     range.getStart(),
+                                     range.getEnd(),
+                                     parameter->isDiscrete(),
+                                     hasActiveTrackAutomation(*edit, target),
+                                     runtime != nullptr && runtime->overridden};
+            exposed.defaultValue = parameter->getDefaultValue();
+            exposed.skew = parameter->valueRange.skew;
+            exposed.interval = parameter->valueRange.interval;
+            parameters.push_back(std::move(exposed));
+        }
         return parameters;
     }
 
@@ -614,6 +652,10 @@ juce::Result Session::deleteDevice(int track, int slot)
         return juce::Result::fail("Select a removable device first.");
     if (isTrackInfrastructure(plugin->getPluginType()))
         return juce::Result::fail("The track's channel strip stays on the track.");
+    // Its window was being mapped from: the listener comes off while the
+    // processor is still there to take it off.
+    if (isMappingParameters(track, slot))
+        detachParameterMapping();
     edit->getUndoManager().beginNewTransaction("Delete device");
     removeDeviceLanes(automationOwnerState(track), *plugin, &edit->getUndoManager());
     plugin->removeFromParent();

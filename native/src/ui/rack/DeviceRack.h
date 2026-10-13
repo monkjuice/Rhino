@@ -67,6 +67,10 @@ private:
     bool wasPlaying = false;
     void visibilityChanged() override;
     void openSelectedDevice();
+    // A device of the selected track in the rack's floating window: its own
+    // editor where it has one. The window open before it goes first, and
+    // with it any mapping from that window.
+    void openDevice(int pluginIndex);
     // The Drum Rack in a slot of the selected track, in its own window. One
     // is open at a time: the rack it shows comes to the front again, and
     // another rack takes its place.
@@ -105,5 +109,8 @@ private:
     // A change arrived while the shell had this pane switched off; caught up
     // when it is shown. See UiVisibility.h.
     bool staleWhileHidden = false;
+    // The last report of a control touched in a plugin's window that the
+    // status line has shown (Session::parameterMappingReport).
+    int mappingReportShown = 0;
 };
 }

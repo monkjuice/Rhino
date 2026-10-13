@@ -124,6 +124,9 @@ Session::~Session()
     removeChangeListener(&automationMirror);
     if (midiDeviceWatcher != nullptr)
         engine.getDeviceManager().removeChangeListener(midiDeviceWatcher.get());
+    // Off the plugin's processor while the edit still holds it: the mapper is
+    // destroyed before the edit is, and the audio thread may still be running.
+    detachParameterMapping();
     cancelCountIn();
     // The tracks' hidden DJ ends point into the booth, which goes before the
     // document does: they let go of it first.
@@ -199,6 +202,7 @@ void Session::newProject()
     mirroredCurves.clear();
     mirroredPlugins.clear();
     automationMirrorStale = true;
+    detachParameterMapping();
     manualLoop = false;
     buildStarterEdit();
     // The booth belongs to the document, so a new one starts with no decks.
@@ -292,6 +296,9 @@ void Session::markModified(int changedTrack, ModelChange changes)
     // Anything else may have moved a lane, the device a lane drives, or the
     // track it sits on.
     automationMirrorStale = true;
+    // A chain that changed may have lost the device being mapped from.
+    if ((static_cast<unsigned>(changes) & static_cast<unsigned>(ModelChange::devices)) != 0)
+        dropParameterMappingIfDeviceGone();
     // A deck playing a clip of the track makes it again when what the clip
     // plays changed; a change known to be one track's leaves the others alone.
     djDocumentChanged(changedTrack, changes);
@@ -340,6 +347,7 @@ juce::Result Session::restoreProject(const juce::ValueTree& state, const juce::F
     // Before the outgoing edit goes: these hold its plugins alive, and a
     // plugin must not outlive the edit it belongs to.
     mirroredCurves.clear();
+    detachParameterMapping();
     edit = std::move(candidate);
     // The automation that was being played by hand belonged to the outgoing
     // document's tracks, and is keyed by their indices.

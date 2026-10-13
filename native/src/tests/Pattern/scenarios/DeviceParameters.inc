@@ -92,9 +92,13 @@
                 require(reopenedForgeEditor != nullptr && reopenedForgeEditor->getWidth() >= 900,
                         "Forge custom editor reopens after its previous window closes");
                 reopenedForgeEditor.reset();
-                const auto forgeParameters = parameterSession.deviceParameters(2, forgeSlot);
-                require(forgeParameters.size() >= 35,
+                require(forgeProcessor->getParameters().size() >= 35,
                         "Tracktion exposes Forge VST3 parameters to Rhino");
+                // The rack shows a chosen few of them, not the list: see
+                // MappedParameters.inc for what the list does.
+                const auto forgeParameters = parameterSession.deviceParameters(2, forgeSlot);
+                require(forgeParameters.size() == 9,
+                        "and the rack shows the nine Forge is played by, not every one");
                 require(parameterSession.addInstrument(Session::Instrument::RhinoForge, 0).wasOk(),
                         "The Forge VST3 can replace the Pattern synth");
                 // The track's own plugin list is what records it, so it is

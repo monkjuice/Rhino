@@ -62,6 +62,10 @@ public:
     // Set by the rack: a Drum Rack face shows a button in its name bar that
     // opens it in a window of its own (DrumRackWindow).
     std::function<void()> openInWindow;
+    // Set by the rack: opens this device's own editor, in the rack's floating
+    // window. An external plugin's face shows MAP in its name bar, which
+    // opens the window and maps every control touched there onto the rack.
+    std::function<void()> openEditor;
     int devicePluginIndex() const { return pluginSlot; }
     void paint(juce::Graphics&) override;
     void resized() override;
@@ -83,6 +87,8 @@ private:
     void ensureControls();
     void styleControls();
     void layoutGeneric();
+    // How many knobs stand in a row of the plain grid.
+    int genericColumns() const;
     // A native device without a face of its own gets one generated from what
     // its controls declare: grouped by section, a knob for a continuous
     // control, a chooser for a choice and a switch for a toggle. Its layout
@@ -211,6 +217,11 @@ private:
     void timerCallback() override;
     void showParameterMenu(int index);
     int visibleParameterCount() const;
+    // An external plugin's rack is a chosen list of its parameters, which
+    // the name bar's MAP button adds to from the plugin's own window. Lit
+    // while mapping is on; a click starts or stops it.
+    juce::Rectangle<int> mapButtonArea() const;
+    void toggleParameterMapping();
     // The name bar's right-click menu: this device's presets to load, and
     // Save preset. In DeviceEditorPanelPresets.cpp.
     void showPresetMenu();
@@ -256,6 +267,10 @@ private:
     bool headerPressed = false;
     Face face = Face::Generic;
     juce::String deviceName;
+    // The face is a chosen list of the device's parameters, with a MAP button
+    // to add to it and Remove from rack on each knob; and whether its window
+    // is being mapped from right now.
+    bool mappable = false, mapping = false;
     std::vector<Session::DeviceParameter> parameters;
     juce::OwnedArray<juce::Label> parameterLabels, parameterValues;
     juce::OwnedArray<juce::Slider> parameterSliders;

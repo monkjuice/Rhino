@@ -111,6 +111,8 @@ void DeviceEditorPanel::setTarget(int nextTrack, const Session::DeviceSlot& devi
     const auto* plugin = session.devicePlugin(track, pluginSlot);
     deviceKey = plugin != nullptr ? plugin->itemID.toString() : juce::String();
     display = face == Face::Generated ? session.deviceDisplay(track, pluginSlot) : DeviceDisplay {};
+    mappable = face == Face::Generic && session.deviceHasMappedParameters(track, pluginSlot);
+    mapping = mappable && session.isMappingParameters(track, pluginSlot);
     title.setText(deviceName, juce::dontSendNotification);
     power.setButtonText(device.enabled ? juce::String::fromUTF8("\xe2\x97\x8f") : juce::String::fromUTF8("\xe2\x97\x8b"));
     power.setColour(juce::TextButton::textColourOffId,
@@ -183,8 +185,42 @@ int DeviceEditorPanel::preferredWidth() const
         return generatedWidth();
     if (face == Face::Arp)
         return 820;
+    // A chosen list grows along the face, two rows deep once it passes six,
+    // rather than stopping at the twelve the plain grid lays out.
+    if (mappable)
+        return std::max(190, 46 + genericColumns() * 66);
     const auto columns = std::max(2, std::min(6, visibleParameterCount()));
     return juce::jlimit(190, 470, 46 + columns * 66);
+}
+
+int DeviceEditorPanel::genericColumns() const
+{
+    const auto count = visibleParameterCount();
+    if (mappable)
+        return count <= 6 ? std::max(2, count) : (count + 1) / 2;
+    return std::max(1, std::min(count, 6));
+}
+
+juce::Rectangle<int> DeviceEditorPanel::mapButtonArea() const
+{
+    return mappable ? juce::Rectangle<int>(getWidth() - 46, 4, 40, headerHeight - 8) : juce::Rectangle<int>();
+}
+
+void DeviceEditorPanel::toggleParameterMapping()
+{
+    if (session.isMappingParameters(track, pluginSlot))
+    {
+        session.endParameterMapping();
+        if (status) status("Stopped mapping " + deviceName + "'s controls");
+        return;
+    }
+    // The window first, so a window open on another device goes before the
+    // mapping begins rather than taking it with it.
+    if (openEditor) openEditor();
+    const auto result = session.beginParameterMapping(track, pluginSlot);
+    if (status)
+        status(result.wasOk() ? "Touch a control in " + deviceName + "'s window to put it on this rack"
+                              : result.getErrorMessage());
 }
 
 void DeviceEditorPanel::mouseDown(const juce::MouseEvent& event)
@@ -242,7 +278,12 @@ void DeviceEditorPanel::mouseDown(const juce::MouseEvent& event)
     {
         // A face is asked before the name bar is, because a face may put a
         // control up there: Rhino Tune's LIVE and NAT toggles share that row
-        // with the device's own name.
+        // with the device's own name, and MAP sits at the row's end.
+        if (mappable && mapButtonArea().contains(event.getPosition()))
+        {
+            toggleParameterMapping();
+            return;
+        }
         if (face == Face::AutoTune && handleAutoTuneClick(event))
             return;
         if (face == Face::Vocoder && handleVocoderClick(event))
@@ -344,6 +385,12 @@ void DeviceEditorPanel::showParameterMenu(int index)
         menu.addSeparator();
         menu.addItem(5, "Reset to default", parameter.value != *parameter.defaultValue);
     }
+    // A knob of a chosen list can leave it, taking its lane with it.
+    if (mappable)
+    {
+        menu.addSeparator();
+        menu.addItem(6, "Remove from rack");
+    }
     // The EQ face has more parameters than the generic grid has knobs, so the
     // menu falls back to the panel when there is no slider to point at. A
     // generated chooser or switch has no slider showing, so it points at
@@ -368,6 +415,16 @@ void DeviceEditorPanel::showParameterMenu(int index)
                     safe->writeParameter(target.parameter, *reset);
                 return;
             }
+            if (result == 6)
+            {
+                // Removing rebuilds this panel's knobs, so what is said
+                // afterwards goes through a copy of the callback.
+                const auto report = safe->status;
+                const auto removed = safe->session.unmapDeviceParameter(target.track, target.slot, target.parameter);
+                if (report)
+                    report(removed.wasOk() ? "Removed " + name + " from the rack" : removed.getErrorMessage());
+                return;
+            }
             const auto outcome = result == 1 ? safe->session.showTrackAutomation(target, false)
                 : result == 2 ? safe->session.showTrackAutomation(target, true)
                 : result == 3 ? safe->session.hideTrackAutomation(target)
@@ -389,11 +446,14 @@ int DeviceEditorPanel::visibleParameterCount() const
     // and a generated face lays out every control a device declares, in
     // sections, up to a limit no device comes near.
     // A Drum Rack's 768 controls are reached through its six knobs that
-    // follow the selected pad, so it builds none of the generic ones.
+    // follow the selected pad, so it builds none of the generic ones. A
+    // chosen list is whatever has been mapped, up to the rack's limit, and
+    // the face grows along the chain to hold it.
     const auto limit = face == Face::Arp ? RhinoArpDevice::parameterCount
         : face == Face::Generated ? 48
         : face == Face::DrumRack ? 0
-        : face == Face::AutoTune || face == Face::Vocoder ? 13 : 12;
+        : face == Face::AutoTune || face == Face::Vocoder ? 13
+        : mappable ? Session::maximumMappedParameters : 12;
     return std::min(limit, static_cast<int>(parameters.size()));
 }
 
@@ -499,8 +559,9 @@ void DeviceEditorPanel::styleControls()
         if (!visible) continue;
 
         const auto& parameter = parameters[static_cast<size_t>(i)];
+        // A chosen list wears its device's colour, as a generated face does.
         const auto accent = idle ? palette::disabled
-            : face == Face::Generated ? faceAccent()
+            : face == Face::Generated || mappable ? faceAccent()
             : face == Face::AutoTune ? juce::Colour(0xffb2739c)
             : face == Face::Vocoder ? juce::Colour(0xff7d8fc4)
             : face == Face::Arp ? palette::midiEffect
@@ -568,11 +629,26 @@ void DeviceEditorPanel::paint(juce::Graphics& g)
     g.setColour(isSelected ? juce::Colour(0xff75b9cc) : juce::Colour(0xff3a454d));
     g.drawRoundedRectangle(bounds.reduced(0.5f), 3.0f, isSelected ? 1.5f : 1.0f);
 
+    // MAP, at the name bar's end, lit in the device's colour while its window
+    // is being mapped from. Drawn before anything the knobs decide, so a rack
+    // with every knob taken off still offers the way to put one back.
+    if (mappable)
+    {
+        const auto button = mapButtonArea();
+        g.setColour(mapping ? faceAccent() : juce::Colour(0xff1b1d20));
+        g.fillRoundedRectangle(button.toFloat(), 2.0f);
+        g.setColour(mapping ? palette::appBackground : palette::textDim);
+        g.setFont(uiFontBold(7.5f));
+        drawSnappedText(g, "MAP", button, juce::Justification::centred);
+    }
+
     if (parameters.empty())
     {
         g.setColour(juce::Colour(0xff75818a));
         g.setFont(uiFont(9.0f));
-        drawSnappedText(g, "No exposed parameters", contentArea, juce::Justification::centred, true);
+        drawSnappedText(g, mappable ? "No knobs on the rack. MAP adds them from the plugin's window"
+                                    : "No exposed parameters",
+                        contentArea, juce::Justification::centred, true);
         return;
     }
 
@@ -608,7 +684,7 @@ void DeviceEditorPanel::paint(juce::Graphics& g)
 void DeviceEditorPanel::resized()
 {
     power.setBounds(3, 2, 20, 19);
-    title.setBounds(27, 1, getWidth() - 32, 21);
+    title.setBounds(27, 1, getWidth() - 32 - (mappable ? 46 : 0), 21);
     contentArea = getLocalBounds().withTrimmedTop(24).reduced(4);
     // A panel can be retargeted from one device to another without being
     // rebuilt, so the EQ's own knobs go away when the face does.
@@ -642,7 +718,7 @@ void DeviceEditorPanel::layoutGeneric()
 {
     visualArea = {};
     const auto count = visibleParameterCount();
-    const auto columns = std::max(1, std::min(count, 6));
+    const auto columns = genericColumns();
     const auto rows = count > 0 ? (count + columns - 1) / columns : 1;
     const auto cellWidth = contentArea.getWidth() / columns;
     const auto cellHeight = contentArea.getHeight() / rows;

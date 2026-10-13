@@ -43,6 +43,9 @@ extern const juce::Identifier automationPointID;
 extern const juce::Identifier automationDeviceID;
 extern const juce::Identifier automationParameterID;
 extern const juce::Identifier deviceKeyID;
+// The knobs an external plugin shows, as its own parameter ids in rack
+// order, comma-separated. Absent means the device's defaults.
+extern const juce::Identifier mappedParametersID;
 extern const juce::Identifier automationOwnLaneID;
 extern const juce::Identifier automationTimeID;
 extern const juce::Identifier automationValueID;
@@ -130,6 +133,16 @@ juce::String formatExposedParameterValue(te::Plugin& plugin, int index, float va
                                          te::AutomatableParameter& parameter);
 te::AutomatableParameter* exposedParameterAt(te::Plugin& plugin, int index);
 float exposedParameterMaximum(te::Plugin& plugin, int index, float maximum);
+
+// The knobs an external plugin shows (SessionMappedParameters.cpp): a chosen
+// list of its parameters, kept on its state by the plugin's own parameter
+// ids and resolved to the engine's parameters here. Only an external plugin
+// has one; everything else shows what it declares. An entry the plugin no
+// longer has keeps its place, so the lanes above it stay on their knobs, and
+// resolves to null.
+bool hasMappedParameters(const te::Plugin&);
+int mappedParameterCount(te::Plugin&);
+te::AutomatableParameter* mappedParameterAt(te::Plugin&, int index);
 
 // Engine and model helpers (SessionInternal.cpp)
 // An edit made from a document's state, given the document's file and its

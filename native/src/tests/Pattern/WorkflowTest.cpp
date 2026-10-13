@@ -37,6 +37,8 @@ int runPatternTest()
 
         scenario("device parameters");
        #include "scenarios/DeviceParameters.inc"
+        scenario("mapped parameters");
+       #include "scenarios/MappedParameters.inc"
         scenario("editing and automation");
        #include "scenarios/EditingAndAutomation.inc"
         scenario("rendering");

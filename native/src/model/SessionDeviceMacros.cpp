@@ -92,6 +92,9 @@ te::AutomatableParameter* exposedParameterAt(te::Plugin& plugin, int index)
 {
     if (auto* synthPlugin = dynamic_cast<te::FourOscPlugin*>(&plugin))
         return fourOscMacroParameterAt(*synthPlugin, index);
+    // An external plugin's rack is a chosen list of its parameters.
+    if (hasMappedParameters(plugin))
+        return mappedParameterAt(plugin, index);
     return activeParameterAt(plugin, index);
 }
 

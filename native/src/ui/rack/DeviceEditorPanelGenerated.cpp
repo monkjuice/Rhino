@@ -480,6 +480,11 @@ juce::String DeviceEditorPanel::getTooltip()
     if (face == Face::DrumRack)
         if (const auto tip = drumTooltip(getMouseXYRelative()); tip.isNotEmpty())
             return tip;
+    if (mappable && mapButtonArea().contains(getMouseXYRelative()))
+        return mapping ? "Mapping from " + deviceName + "'s window: every control touched there joins this rack. "
+                         "Click to stop"
+                       : "Map knobs: opens " + deviceName + "'s own window, and every control touched there joins "
+                         "this rack, to automate it from here. Right-click a knob to take it off again";
     if (face == Face::Generated)
     {
         const auto position = getMouseXYRelative();

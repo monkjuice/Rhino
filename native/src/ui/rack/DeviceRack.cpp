@@ -447,29 +447,46 @@ void DeviceRack::openSelectedDevice()
     if (slots.empty())
         return;
     selectedDevice = juce::jlimit(0, static_cast<int>(slots.size()) - 1, selectedDevice);
+    openDevice(selectedPluginIndex());
+}
+
+void DeviceRack::openDevice(int pluginIndex)
+{
+    const auto position = devicePositionFor(pluginIndex);
+    if (position < 0)
+        return;
+    const auto& slot = slots[static_cast<size_t>(position)];
     // A Drum Rack's own editor is its face, in a window of its own: the
     // fallback's six knobs reach only the selected pad.
-    if (slots[static_cast<size_t>(selectedDevice)].deviceId == "Drums")
+    if (slot.deviceId == "Drums")
     {
-        openDrumWindow(selectedPluginIndex());
+        openDrumWindow(pluginIndex);
         return;
     }
+    // A mapping from the window about to go ends with it: a control touched
+    // in the window that replaces it is another device's. The same device's
+    // window made again keeps its mapping, which is on the device.
+    if (!session.isMappingParameters(selectedTrack, pluginIndex))
+        session.endParameterMapping();
     // Destroy any active AudioProcessorEditor before asking the wrapped
     // processor for its editor again. JUCE permits one active editor per
     // processor and createEditorIfNeeded may otherwise return the old pointer.
     floatingWindow.reset();
-    floatingWindow = std::make_unique<FloatingDeviceWindow>(session, selectedTrack, selectedPluginIndex());
+    floatingWindow = std::make_unique<FloatingDeviceWindow>(session, selectedTrack, pluginIndex);
     // Destroyed after the click that closed it has finished with it, and only
-    // if it is still the window open by then.
+    // if it is still the window open by then. A mapping from it ends with it:
+    // there is nothing left to touch.
     floatingWindow->onClose = [this, window = floatingWindow.get()]
     {
         juce::MessageManager::callAsync([rack = juce::Component::SafePointer<DeviceRack>(this), window]
         {
-            if (rack != nullptr && rack->floatingWindow.get() == window)
-                rack->floatingWindow.reset();
+            if (rack == nullptr || rack->floatingWindow.get() != window)
+                return;
+            rack->floatingWindow.reset();
+            rack->session.endParameterMapping();
         });
     };
-    if (status) status("Opened " + slots[static_cast<size_t>(selectedDevice)].name + " device panel");
+    if (status) status("Opened " + slot.name + " device panel");
 }
 
 void DeviceRack::openDrumWindow(int pluginIndex)
@@ -827,6 +844,8 @@ void DeviceRack::rebuildDevicePanels()
         panel->presetsChanged = [this] { if (presetsChanged) presetsChanged(); };
         // Only a Drum Rack's face offers it.
         panel->openInWindow = [this, panel] { openDrumWindow(panel->devicePluginIndex()); };
+        // Only an external plugin's face offers this, through MAP.
+        panel->openEditor = [this, panel] { openDevice(panel->devicePluginIndex()); };
         panel->setTarget(selectedTrack, slots[static_cast<size_t>(i)], i == selectedDevice);
         chainContent.addAndMakeVisible(panel);
     }
@@ -924,6 +943,20 @@ void DeviceRack::sync()
         rebuildDevicePanels();
     for (int i = 0; i < devicePanels.size() && i < static_cast<int>(slots.size()); ++i)
         devicePanels[i]->setTarget(selectedTrack, slots[static_cast<size_t>(i)], i == selectedDevice);
+    // A knob mapped onto a face widens it, and the chain moves up to make
+    // room, though no device came or went.
+    auto widthChanged = false;
+    for (auto* panel : devicePanels)
+        widthChanged = widthChanged || panel->getWidth() != panel->preferredWidth();
+    if (widthChanged && getWidth() > 24 && getHeight() > 0)
+        resized();
+    // What the last control touched in a plugin's window did.
+    if (const auto report = session.parameterMappingReport(); report.serial != mappingReportShown)
+    {
+        mappingReportShown = report.serial;
+        if (status && report.text.isNotEmpty())
+            status(report.text);
+    }
     open.setEnabled(!slots.empty());
     remove.setEnabled(!slots.empty() && slots[static_cast<size_t>(selectedDevice)].removable);
 }

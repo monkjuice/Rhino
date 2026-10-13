@@ -76,6 +76,7 @@ target_sources(RhinoNative PRIVATE
     src/model/SessionDj.cpp
     src/model/SessionDjSources.cpp
     src/model/SessionDeviceMacros.cpp
+    src/model/SessionMappedParameters.cpp
     # UI
     src/ui/notes/StepGrid.cpp
     src/ui/notes/StepGridPainter.cpp

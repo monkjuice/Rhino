@@ -29,7 +29,7 @@ CTest entry points:
 
 - `native_arrangement_geometry`: clip edit bounds and playhead damage calculations
 - `native_device_correctness`: device DSP and state restoration, including Rhino Tune's and Rhino EQ's measured checks in `AutoTuneTest.cpp` and `EqTest.cpp`
-- `native_device_conformance`: every device Rhino makes, rendered offline against the device standard, plus the SDK's own checks through two probe devices (`DeviceConformance.cpp`)
+- `native_device_conformance`: every device Rhino makes, rendered offline against the device standard, the SDK's own checks through two probe devices (`DeviceConformance.cpp`), and Rhino Arp's MIDI lifecycle, timing, repeats and scale intervals (`ArpTest.cpp`)
 - `native_pattern_workflow`: notes, presets, automation, renders, and project persistence
 - `native_arrangement_workflow`: browser drops, drawing, editing, tracks, and arrangement persistence
 - `native_startup_lifecycle`: application startup

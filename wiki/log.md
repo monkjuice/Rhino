@@ -311,3 +311,6 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/drum-rack.md (F12 in the drum window toggles the main window's full screen, since every key goes to the shell)
 - updated: pages/keeping-files-small.md (isDroppedSoundFile in BrowserIds.h; three copies of the extension list remain, and SessionDrums.cpp cannot take the UI-side header)
 - updated: pages/development-environment.md (Pillow's getbbox on RGBA reads only alpha, so opaque snapshot diffs always look identical; convert to RGB)
+
+## [2026-10-12] update | Arp note lifetime, retrigger semantics, and scales
+- updated: pages/rhino-arp.md (stopped-clock and channel/pitch gate ownership, panic/reset handling, Hold-off defaults, repeat/retrigger semantics, shared scale choices, and conformance regression placement)

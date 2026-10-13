@@ -3,6 +3,7 @@
 #include "../../Session.h"
 #include "../../Theme.h"
 #include "ContentLibrary.h"
+#include "ScaleQuantizer.h"
 #include "audio/AutoTuneDevice.h"
 #include "audio/UtilityDevice.h"
 #include "instruments/DrumRackDevice.h"
@@ -10,6 +11,7 @@
 #include <algorithm>
 #include <array>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 namespace rhino
@@ -233,16 +235,29 @@ void runPatternDeviceRackTest()
             && arpRoot->getX() >= arpPanel->visualArea.getRight(),
             "Rhino Arp's Pattern and Rate stand left of its sequence display, Timing and Harmony right of it");
     require(arpRoot != nullptr && arpScale != nullptr && arpRoot->getNumItems() == 12
-            && arpScale->getNumItems() == 3 && arpRoot->getText() == "G#" && arpScale->getText() == "Minor",
+            && arpScale->getNumItems() == musicalScaleCount
+            && arpRoot->getText() == "G#" && arpScale->getText() == "Minor",
             "Rhino Arp exposes its root and scale as named dropdowns");
+    require(!arpHold->getToggleState(), "A new Rhino Arp leaves Hold off so released notes stop the pattern");
     for (size_t i = 0; i < arpControls.size(); ++i)
         for (auto j = i + 1; j < arpControls.size(); ++j)
             require(!arpControls[i].intersects(arpControls[j]), "Rhino Arp controls do not overlap");
     arpRoot->setSelectedId(1, juce::sendNotificationSync);
+    for (const auto& [choice, name] : std::array<std::pair<int, const char*>, 3> {
+             {{4, "Harm Minor"}, {10, "Major Pent"}, {13, "Whole Tone"}}})
+    {
+        arpScale->setSelectedId(choice, juce::sendNotificationSync);
+        const auto scaleParameters = session.deviceParameters(0, session.deviceSlots(0).front().pluginIndex);
+        require(scaleParameters[RhinoArpDevice::scaleParameter].value == static_cast<float>(choice - 1)
+                && scaleParameters[RhinoArpDevice::scaleParameter].valueText == name
+                && arpScale->getText() == name,
+                "Rhino Arp's new scale choices reach the automatable parameter and remain selected");
+    }
     arpHold->onClick();
     const auto arpParameters = session.deviceParameters(0, session.deviceSlots(0).front().pluginIndex);
     require(arpParameters[RhinoArpDevice::rootParameter].valueText == "C"
-            && arpParameters[RhinoArpDevice::holdParameter].valueText == "Off",
+            && arpParameters[RhinoArpDevice::holdParameter].valueText == "On"
+            && arpHold->getToggleState(),
             "Rhino Arp's dropdown and Hold switch write ordinary automatable parameters");
     arpMillisecondRate->onClick();
     const auto freeRateParameters = session.deviceParameters(0, session.deviceSlots(0).front().pluginIndex);
@@ -250,7 +265,14 @@ void runPatternDeviceRackTest()
             "Rhino Arp's tiny rate buttons switch the scheduler between beats and milliseconds");
     arpBeatRate->onClick();
     arpRoot->setSelectedId(9, juce::sendNotificationSync);
+    arpScale->setSelectedId(3, juce::sendNotificationSync);
     arpHold->onClick();
+    const auto restoredArpParameters = session.deviceParameters(0, session.deviceSlots(0).front().pluginIndex);
+    require(restoredArpParameters[RhinoArpDevice::scaleParameter].valueText == "Minor"
+            && arpScale->getText() == "Minor"
+            && restoredArpParameters[RhinoArpDevice::holdParameter].valueText == "Off"
+            && !arpHold->getToggleState(),
+            "Rhino Arp can return to an existing scale and release Hold after using the new choices");
     // The knob is turned the way the hand turns it, so the refresh that
     // follows is the rack's own, not one the test calls for.
     require(arpDistance != nullptr && arpDistance->isEnabled(),

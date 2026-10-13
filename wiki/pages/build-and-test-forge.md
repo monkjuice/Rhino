@@ -4,7 +4,7 @@ type: guide
 summary: Configure Forge against Rhino's JUCE checkout, build around the toolchain's traps, and run one test area at a time.
 tags: [forge, build, testing, windows]
 sources: []
-updated: 2026-10-05
+updated: 2026-10-13
 ---
 
 # Build and test Forge
@@ -35,7 +35,13 @@ cmake --build instruments/rhino-forge/build --config Release --parallel 2 -- /p:
   files ([Build locks from MSBuild nodes and orphaned compilers](orphaned-build-processes.md)).
 
 Outputs land under `instruments/rhino-forge/build/RhinoForge_artefacts/Release/`: `Standalone/Rhino Forge.exe` and
-`VST3/Rhino Forge.vst3`. The VST3 cannot relink while RhinoDAW or a DAW has it loaded, which is the normal state
+`VST3/Rhino Forge.vst3`. The plugin's binary is `VST3/Rhino Forge.vst3/Contents/x86_64-win/Rhino Forge.vst3`, and
+that, not the host, is what `currentExecutableFile` names inside the plugin: eight folders below
+`instruments/rhino-forge`, against five for the standalone, so anything found by walking up from the binary must walk
+that far ([Forge oscillators and wavetables](forge-oscillators.md)). Hosts load this build-tree copy directly: RhinoDAW
+by its discovery ([Hosting Forge in Rhino](forge-hosting.md)), and Ableton Live 12 on the development machine because
+its plugin database (`%LOCALAPPDATA%\Ableton\Live Database\Live-plugins-1.db`, checked 2026-10-13) records that path.
+The VST3 cannot relink while RhinoDAW or a DAW has it loaded, which is the normal state
 mid-session; build `--target RhinoForgeTests RhinoForge_Standalone` instead and report the VST3 as stale
 ([LNK1104 means a running binary holds the file](locked-executable-lnk1104.md)). Never commit a bundle, and install one
 only after validating it in a host.

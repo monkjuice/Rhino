@@ -260,6 +260,23 @@ juce::StringArray describeMenu(const juce::PopupMenu& menu, const std::vector<rh
 void tableLibrarySuite()
 {
     using rhino::forge::wavetableFrameSize;
+
+    // --- Finding the root ------------------------------------------------------
+    //
+    // Both builds find the factory tables from where their binary sits in the
+    // build tree. The paths need not exist: only the tables folder is looked for.
+    const auto below = [] (juce::File folder, std::initializer_list<const char*> parts)
+    {
+        for (const auto* part : parts) folder = folder.getChildFile(part);
+        return folder;
+    };
+    const auto artefacts = below(juce::File(RHINO_FORGE_SOURCE_DIR), {"build", "RhinoForge_artefacts", "Release"});
+    require(rhino::forge::tableRootAbove(below(artefacts, {"Standalone", "Rhino Forge.exe"})) == factoryTables(),
+            "the standalone finds the factory tables");
+    require(rhino::forge::tableRootAbove(below(artefacts, {"VST3", "Rhino Forge.vst3", "Contents", "x86_64-win",
+                                                           "Rhino Forge.vst3"})) == factoryTables(),
+            "the plugin finds the factory tables from inside its bundle");
+
     const auto root = juce::File::getSpecialLocation(juce::File::tempDirectory)
         .getNonexistentChildFile("rhino-forge-table-library", {}, true);
     require(root.createDirectory(), "a temporary table root can be created");

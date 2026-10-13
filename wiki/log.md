@@ -651,3 +651,13 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/forge-modulation.md (thirty slots, no format bump; the per-block live list; the table's growth rule, fixed row height, whole-row window, wheel and reveal; summary changed)
 - updated: pages/forge-editor.md (eighteen units with ForgeEditorMatrixView.cpp; the rack and the matrix as the two scrolled windows and what they share; summary changed)
 - updated: index.md (summaries of forge-modulation and forge-editor)
+
+## [2026-10-13] update | The Forge VST3 finds tables/ from inside its bundle
+- source: the fix itself, checked against instruments/rhino-forge/core/ForgeTableFiles.h (tableRootAbove, tableRoot) and tests/ForgeTestsTable.cpp (tableLibrarySuite)
+- updated: pages/forge-oscillators.md (the walk is ten folders; the plugin binary sits eight under the source tree, and the eight-step walk listed only the built-in ten in the VST3)
+
+## [2026-10-13] update | Where the Forge VST3 binary sits, and two builds sharing Forge's build tree
+- source: the same fix's brief, checked against instruments/rhino-forge/core/ForgeTableFiles.h and ui/ForgeTablePanel.h (lastFolder)
+- updated: pages/forge-oscillators.md (LOAD's dialog shares the root, so it also opened at home in the VST3)
+- updated: pages/build-and-test-forge.md (the plugin binary's path inside the bundle and its depth; Ableton Live 12 loads the build-tree VST3)
+- updated: pages/orphaned-build-processes.md (C1083/D8040 when two builds share one tree, here an agent's and the user's own; re-run once the other finishes)

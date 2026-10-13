@@ -38,19 +38,32 @@ struct TableEntry
 // The folder under the root that NEW and SAVE write into.
 inline constexpr const char* ownTableFolderName = "user";
 
-// The root. tables/ in the source tree in a development build, found upward
-// from the binary the way LOAD has always found it: the standalone and the
-// plugin both sit several directories under the source tree. A packaged build
-// has no such folder, and keeps its tables in Documents beside the LFO shapes.
-inline juce::File tableRoot()
+// A tables/ folder above a binary, or nothing. The plugin sits deepest: its
+// binary is inside the bundle (Rhino Forge.vst3/Contents/x86_64-win), and that
+// is under VST3, the configuration, the artefacts folder and build, so the
+// source tree is its eighth folder up where the standalone's is its fifth. A
+// walk of eight steps stopped one short of it, and the plugin listed nothing
+// but the built-in ten.
+inline juce::File tableRootAbove(const juce::File& binary)
 {
-    auto here = juce::File::getSpecialLocation(juce::File::currentExecutableFile);
-    for (int step = 0; step < 8 && here != juce::File {}; ++step)
+    auto here = binary;
+    for (int step = 0; step < 10 && here != juce::File {}; ++step)
     {
         const auto candidate = here.getChildFile("tables");
         if (candidate.isDirectory()) return candidate;
         here = here.getParentDirectory();
     }
+    return {};
+}
+
+// The root. tables/ in the source tree in a development build, found upward
+// from the binary, which in a plugin is the plugin's own file rather than the
+// host's. A packaged build has no such folder, and keeps its tables in
+// Documents beside the LFO shapes.
+inline juce::File tableRoot()
+{
+    const auto above = tableRootAbove(juce::File::getSpecialLocation(juce::File::currentExecutableFile));
+    if (above != juce::File {}) return above;
     return juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
         .getChildFile("Rhino Forge").getChildFile("Tables");
 }

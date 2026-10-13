@@ -36,7 +36,7 @@ Right-click a knob in the Device View (`DeviceEditorPanel::showParameterMenu`): 
 ## Limits and traps
 
 - **The mirror holds plugins alive.** `mirroredCurves` keeps a `te::Plugin::Ptr` per curve, so `restoreProject` and `newProject` clear it before the outgoing edit is destroyed. A plugin outliving its edit corrupted the heap (`0xc0000374`) the first time a document was reopened ([Hold ids, not pointers](ids-not-pointers.md)).
-- **A parameter is still named by its index** within the device (`parameter`), so a device's parameter order stays persistent ([Stored indices are append-only](append-only-stored-indices.md)).
+- **A parameter is still named by its index** within the device (`parameter`), so a device's parameter order stays persistent ([Stored indices are append-only](append-only-stored-indices.md)). For an external plugin that index is the knob's place in the rack's chosen list, so a knob joins only at the end, and taking one off moves the lanes above it down in the same undo step ([Mapped parameters](mapped-parameters.md)).
 - **The main row has no lanes yet.** `showTrackAutomation` refuses a main-track target because the pinned row has nowhere to stack one, although storage (on the edit's own state) and playback already treat it like any track.
 
 ## Related
@@ -48,3 +48,4 @@ Right-click a knob in the Device View (`DeviceEditorPanel::showParameterMenu`): 
 - [Session, the model](session-model.md)
 - [Hold ids, not pointers](ids-not-pointers.md)
 - [Transport, tempo and loop](transport.md)
+- [Mapped parameters, an external plugin's rack](mapped-parameters.md)

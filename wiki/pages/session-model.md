@@ -1,7 +1,7 @@
 ---
 title: Session, the model
 type: component
-summary: The message-thread facade over one Tracktion engine and edit, one class split across 29 files, where every rule and refusal lives.
+summary: The message-thread facade over one Tracktion engine and edit, one class split across 30 files, where every rule and refusal lives.
 tags: [rhino, model, tracktion, undo]
 sources: []
 updated: 2026-10-13
@@ -13,12 +13,12 @@ updated: 2026-10-13
 
 ## One class, many files
 
-`Session` is one class defined across 29 translation units, all in `native/src/model/` (the `src/model/Session*.cpp` lines under `# Session` in `native/CMakeLists.txt`, as of 2026-10-13; [The source tree mirrors the layers](source-tree-mirrors-the-layers.md)), split by caller as [Keeping files small](keeping-files-small.md) describes:
+`Session` is one class defined across 30 translation units, all in `native/src/model/` (the `src/model/Session*.cpp` lines under `# Session` in `native/CMakeLists.txt`, as of 2026-10-13; [The source tree mirrors the layers](source-tree-mirrors-the-layers.md)), split by caller as [Keeping files small](keeping-files-small.md) describes:
 
 - `Session.cpp`: construction, the starter edit, `restoreProject`, `projectSnapshot`, undo and redo.
 - Notes and patterns: `SessionNotes`, `SessionPatternPresets`, `SessionPatches`.
 - Tracks and mixing: `SessionTracks`, `SessionGroups`, `SessionMixer`, `SessionAutomation`, `SessionTransport`.
-- Devices: `SessionDevices`, `SessionDevicePresets`, `SessionDrums` (the [Drum Rack](drum-rack.md)'s kits, pads, banks, slices and drops), `SessionSidechain`, `SessionExternalPlugins`, `SessionDeviceMacros` (the rack's curated knobs, 4OSC only; `DeviceMacros.cpp` until 2026-10-13).
+- Devices: `SessionDevices`, `SessionDevicePresets`, `SessionDrums` (the [Drum Rack](drum-rack.md)'s kits, pads, banks, slices and drops), `SessionSidechain`, `SessionExternalPlugins`, `SessionDeviceMacros` (the rack's curated knobs, 4OSC only; `DeviceMacros.cpp` until 2026-10-13), `SessionMappedParameters` (an external plugin's chosen knobs and mapping more from its window; [Mapped parameters](mapped-parameters.md)).
 - Clips: `SessionClips`, `SessionRegion`, `SessionAudioClips`, `SessionWarp`, `SessionMerge`, `SessionSamples`, `SessionSlots`.
 - Input and audition: `SessionRecording`, `SessionMidiInput`, `SessionAudioInput`, `SessionPreview`.
 - The DJ booth: `SessionDj` (decks, transport, mixer, what the document saves) and `SessionDjSources` (file and audio-cell reads, MIDI cells made into notes, a deck bound to its track, Live, what an edit leaves a deck to do), sharing `SessionDjInternal.h` ([DJ view and the booth](dj-view.md)). The booth comes off the audio device in `releaseAudioDevice` and the destructor; the destructor and `djReset` unbind every deck from its track first, and `djReset` drains the worker. `ensureTrackMixers` (`SessionMixer`) gives every track the booth's two hidden ends beside its fader ([DJ decks play live through the track's chain](dj-decks-play-live-through-the-track.md)).

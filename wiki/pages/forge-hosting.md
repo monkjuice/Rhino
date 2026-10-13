@@ -27,9 +27,10 @@ A description qualifies if its name contains "Rhino Forge", or "Forge" with a ma
 
 ## What crosses the boundary
 
-- Rhino never names a Forge parameter. The rack's Edit button opens Forge's own editor; the rack itself shows Forge with the generic face, the first twelve parameters Tracktion exposes.
+- Rhino names nine Forge parameters, by their names: the rack shows Cutoff, Resonance, the three oscillator levels and Env 1's ADSR until something else is mapped onto it, and MAP in the face's name bar opens Forge's own window and puts every control touched there on the rack ([Mapped parameters](mapped-parameters.md), 2026-10-13; before it the generic face showed the first twelve parameters Tracktion listed). The rack's Edit button opens the same window.
 - Forge's host state is not versioned the way its presets are, so a `.rhinoedit` holding older Forge state is reconciled by `Processor::migrated` when it opens. That state includes any drawn wavetable or loaded spectral sample, so the project file carries them ([Forge presets and state](forge-presets-and-state.md)).
-- Rhino's own automation lanes address a parameter by slot and by position in that exposed list (`exposedParameterAt`), not by id, so reordering Forge's parameters would move such lanes onto other parameters.
+- Rhino's own automation lanes address a parameter by its place in the rack's list (`exposedParameterAt`), and that list holds Forge's own parameter ids, so Forge gaining or reordering parameters moves no lane. Renaming one of the nine default parameters loses it from a document that never mapped a knob, and changing a `paramID` string loses that knob from a document that did; `MappedParameters.inc` catches the first on any machine with a Forge build.
+- Forge's knobs send gestures (`SliderAttachment`); its choosers, matrix depth and a few other controls write `setValueNotifyingHost` with none, which is why mapping takes a lone value change as a touch as well as a gesture.
 - The [Computer MIDI keyboard](computer-keyboard.md) uses Forge's own key mapping and octave numbering, so a part lands in the same key in both.
 
 ## Pitfalls
@@ -47,4 +48,5 @@ A description qualifies if its name contains "Rhino Forge", or "Forge" with a ma
 - [Forge presets and state](forge-presets-and-state.md)
 - [LNK1104 means a running binary holds the file](locked-executable-lnk1104.md)
 - [Track automation](automation.md)
+- [Mapped parameters, an external plugin's rack](mapped-parameters.md)
 - [A plugin's static Direct2D images deadlock NVIDIA's driver at unload](plugin-static-images-deadlock-on-unload.md)

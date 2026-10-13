@@ -1,7 +1,7 @@
 ---
 title: Forge editor (panel)
 type: component
-summary: One Editor class across seventeen files builds the panel from declared modules and decides what is visible in one place.
+summary: One Editor class across eighteen files builds the panel from declared modules and decides what is visible in one place.
 tags: [forge, ui, layout]
 sources: []
 updated: 2026-10-13
@@ -9,7 +9,7 @@ updated: 2026-10-13
 
 # Forge editor (panel)
 
-The panel is one `Editor` (`src/ForgeEditor.h`) defined across seventeen `.cpp` files, `src/ForgeEditor.cpp` plus `ForgeEditor{Envelope,Filter,Fx,FxView,Input,Layout,Lfo,Modulation,Noise,NoteGuide,OscMode,Pages,Paint,Spectral,Tables,Warp}.cpp`, sharing the private `src/ForgeEditorInternal.h`. This is the split Rhino uses ([Keeping files small](keeping-files-small.md)); unlike the engine, the panel may span translation units freely ([Forge's engine splits into headers only](forge-engine-headers-only.md)).
+The panel is one `Editor` (`src/ForgeEditor.h`) defined across eighteen `.cpp` files, `src/ForgeEditor.cpp` plus `ForgeEditor{Envelope,Filter,Fx,FxView,Input,Layout,Lfo,MatrixView,Modulation,Noise,NoteGuide,OscMode,Pages,Paint,Spectral,Tables,Warp}.cpp`, sharing the private `src/ForgeEditorInternal.h`. This is the split Rhino uses ([Keeping files small](keeping-files-small.md)); unlike the engine, the panel may span translation units freely ([Forge's engine splits into headers only](forge-engine-headers-only.md)).
 
 ## Declared, not computed
 
@@ -17,11 +17,11 @@ The panel is one `Editor` (`src/ForgeEditor.h`) defined across seventeen `.cpp` 
 
 `Module` is an aggregate initialised positionally, so its optional trailing fields (`pages` through `group`) are reached by counting. Adding or removing one means revisiting every initialiser in `ui/ForgeModules.h` that reaches past it; when `plateName` went (commit `7be9a56`), the six arp panes were the ones easy to miss.
 
-**Adding a control** is its parameter in `src/ForgeParameters.cpp` plus a line in `ui/ForgeModules.h`. The layout test (`tests/ForgeTestsLayout.cpp`) fails if the two disagree in either direction, if a control or enable lacks a real tooltip in `ui/ForgeTooltips.h`, or if a module escapes or overlaps at any allowed size, swept in 20 px steps (about 800 sizes between 1180×820 and 2000×1180). A parameter set by dragging on a display rather than from a cell must be listed in `displayParameters` (`ui/ForgeModules.h`) for that test to find it. As of `bbc2b85` these are the spectral oscillator's four markers, Start, End, LoopStart and LoopEnd ([Forge spectral oscillator](forge-spectral.md)). A parameter whose control is painted on the chassis rather than declared in any module is listed in `chassisParameters()` beside it, and needs a tooltip like any other; since 2026-10-13 that is `arpSlot`, the ARP plate's buttons ([Forge ARP plate, slots and waterfall](forge-arp-plate.md)).
+**Adding a control** is its parameter in `src/ForgeParameters.cpp` plus a line in `ui/ForgeModules.h`. The layout test (`tests/ForgeTestsLayout.cpp`) fails if the two disagree in either direction, if a control or enable lacks a real tooltip in `ui/ForgeTooltips.h`, or if a module escapes or overlaps at any allowed size, swept in 20 px steps (about 800 sizes between 1180×820 and 2000×1180). A parameter set by dragging on a display rather than from a cell must be listed in `displayParameters` (`ui/ForgeModules.h`) for that test to find it. As of `bbc2b85` these are the spectral oscillator's four markers, Start, End, LoopStart and LoopEnd ([Forge spectral oscillator](forge-spectral.md)); since 2026-10-13 the LFO module's `lfo{n}Type` and `lfo{n}Direction`, chosen from dropdowns in its display's footer, are listed too ([Forge LFOs](forge-lfos.md)). A parameter whose control is painted on the chassis rather than declared in any module is listed in `chassisParameters()` beside it, and needs a tooltip like any other; since 2026-10-13 that is `arpSlot`, the ARP plate's buttons ([Forge ARP plate, slots and waterfall](forge-arp-plate.md)).
 
 ## Pages
 
-OSC, TABLE and MATRIX swap only the oscillator columns; MIX and FX take the whole signal row. The arp overlay is a sixth page, `Page::arp`, that is never a tab ([Forge arpeggiator](forge-arpeggiator.md)); it is opened from the ARP plate on the keyboard shelf, which is painted on the chassis rather than built of components and is hit-tested in `Editor::mouseDown` before anything a tab owns ([Forge ARP plate, slots and waterfall](forge-arp-plate.md)). Switching hides and shows components instead of rebuilding them, so a hidden knob stays attached, automated and modulated.
+OSC, TABLE and MATRIX swap only the oscillator columns; MIX and FX take the whole signal row. Two modules are windows over more rows than they show, the FX rack and, since 2026-10-13, the matrix: both lay their rows at a fixed height from an area translated by the rows scrolled past (`fxScrolledRackBounds`, `matrixScrolledBounds`), hide the rows outside the window in `applyEnableStates`, and draw a thumb with `drawScrollThumb` (`src/ForgeEditorInternal.h`); the matrix also hides the rows past the count the patch has earned ([Forge modulation](forge-modulation.md)). The arp overlay is a sixth page, `Page::arp`, that is never a tab ([Forge arpeggiator](forge-arpeggiator.md)); it is opened from the ARP plate on the keyboard shelf, which is painted on the chassis rather than built of components and is hit-tested in `Editor::mouseDown` before anything a tab owns ([Forge ARP plate, slots and waterfall](forge-arp-plate.md)). Switching hides and shows components instead of rebuilding them, so a hidden knob stays attached, automated and modulated.
 
 ## Note guide
 
@@ -31,7 +31,7 @@ The guide uses ASCII-only musical and directional spellings (`C#/Db`, `7#5`, `m7
 
 ## Rules that bite
 
-- **Visibility is decided only in `Editor::applyEnableStates`.** It runs every 24 Hz tick, so anything hidden or greyed elsewhere is put back next frame; the first FX rack failed exactly so.
+- **Visibility is decided only in `Editor::applyEnableStates`.** It runs every 24 Hz tick, so anything hidden or greyed elsewhere is put back next frame; the first FX rack failed exactly so. It is also where a layout that depends on a parameter is noticed: a PATH LFO hangs a "Y" drag card beside its bank card and shifts the bank cards (`src/ForgeEditorLayout.cpp`), and `applyEnableStates` compares the shown type with `lfoPathHandleShown` and calls `resized()` when they differ, so a preset or the host moves the header as a click would.
 - **A switched-off module greys everything and hides nothing.** `applyEnableStates` keeps two flags: `inCharge` (`disabledBy`/`enabledBy`, the LFO custom-table Shape rule, `fxKnobLive`) and `on = module.on() && inCharge`. Greying reads `on`; hiding a control in a shared cell (`ui::inSharedCell`) reads only `inCharge`, while `modeBy`/`modeIs` hides the other mode's set. When the hide used `on`, switching an oscillator off emptied the POSITION/SCAN, DETUNE/CUT and BLEND/MIX cells (commit `9b1790a`); the LFO's HZ/BPM rate pair had the same latent fault. `switchedOffControlsStaySuite` in `tests/ForgeTestsLayout.cpp` (CTest `forge_layout`) guards it. When a test counts visible labels, count ones unique to the module (POSITION, DETUNE, BLEND, UNISON, SCAN, CUT): PAN, LEVEL and MIX also label the sub, noise and filter modules on the OSC page.
 - **Read values through `Editor::value`**, which asks the parameter rather than the cached atomic beside it. The atomic is updated by another listener, and a panel attachment called first reads the old value: a mode field looked right only after an unrelated click.
 - **A picture of what sounds reads `Editor::modulatedValue`; a knob reads `value`.** The matrix never writes a parameter, so a display drawn from `value` stays on the knob while an LFO sweeps the sound. `modulatedValue(id)` (`src/ForgeEditorModulation.cpp`) adds `processor.modulationOffset` in the parameter's own `NormalisableRange`, clamped, exactly as `Core::applyModulation` does. With no note sounding the offset is zero and the picture sits on the knob. Since `2d14aba` (2026-10-13) the oscillator tube's POSITION and the warp depths in `warpStagesOf` read it; the warp mode still reads `value`. Knobs keep `value`, since their live arc already comes from `refreshModulationRings`.
@@ -47,6 +47,7 @@ Every frame repaints the whole panel and every ordinary knob shares one size: se
 
 - [Rhino Forge](forge.md)
 - [Forge modulation: matrix, envelopes, LFOs and macros](forge-modulation.md)
+- [Forge LFOs](forge-lfos.md)
 - [Forge ARP plate, slots and waterfall](forge-arp-plate.md)
 - [Seeing the UI without taking the screen](headless-ui-snapshots.md)
 - [Colours and typography](colours-and-typography.md)

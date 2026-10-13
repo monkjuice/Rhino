@@ -453,6 +453,9 @@ void layoutSuite()
             if (juce::String(modules[i].id) == "fx")
                 require(row.getHeight() == rhino::forge::ui::fxSlotHeight,
                         "every FX control row has the fixed rack height");
+            else if (rhino::forge::ui::isMatrixModule(modules[i]))
+                require(row.getHeight() == rhino::forge::ui::matrixRowHeight(area, modules[i]),
+                        "every matrix row has the table's fixed height");
             else if (modules[i].rows[static_cast<size_t>(r)].seat != rhino::forge::ui::Seat::body)
                 require(area.contains(row), "a seated row stays inside its module");
             else
@@ -764,7 +767,9 @@ void layoutSuite()
             {
                 const auto block = rhino::forge::ui::controlBlock(area, module, r, i, diameter);
                 require(!block.isEmpty(), "every control gets a non-empty rectangle");
-                if (juce::String(module.id) != "fx")
+                // The rack's rows and the matrix's run on past their windows
+                // and are checked as scrolled views further down.
+                if (juce::String(module.id) != "fx" && !rhino::forge::ui::isMatrixModule(module))
                     require(area.contains(block), "every control stays inside its module");
                 if (row.controls[static_cast<size_t>(i)].style != rhino::forge::ui::Style::knob)
                     continue;
@@ -878,9 +883,11 @@ void layoutSuite()
                 }
 
                 // And every ordinary control still lands inside the module
-                // that owns it. FX rows intentionally continue below their
-                // fixed-height viewport and are tested as a scrolled rack.
-                if (juce::String(modules[i].id) == "fx") continue;
+                // that owns it. FX rows and matrix rows intentionally continue
+                // below their fixed-height windows and are tested as scrolled
+                // views below.
+                if (juce::String(modules[i].id) == "fx" || rhino::forge::ui::isMatrixModule(modules[i]))
+                    continue;
                 for (int r = 0; r < static_cast<int>(modules[i].rows.size()); ++r)
                     for (int c = 0; c < static_cast<int>(modules[i].rows[static_cast<size_t>(r)].controls.size()); ++c)
                     {
@@ -978,6 +985,77 @@ void layoutSuite()
                             }
                         }
                     }
+
+    // The matrix is thirty rows under a window that shows some of them. The
+    // rule for how many rows the table shows is checked first, at its corners;
+    // then, at every size, the window holds the eight rows the table opens
+    // with, every row in it stays inside the window beside its number and
+    // clear of the rail, and the rows the window scrolls to are laid out
+    // exactly as the first ones are.
+    const rhino::forge::ui::Module* matrixModule = nullptr;
+    for (const auto& module : modules)
+        if (rhino::forge::ui::isMatrixModule(module)) matrixModule = &module;
+    require(matrixModule != nullptr, "the panel declares its matrix");
+    {
+        using namespace rhino::forge::ui;
+        require(matrixShownRowCount(-1) == matrixDefaultRows, "an empty matrix shows eight rows");
+        require(matrixShownRowCount(matrixDefaultRows - 2) == matrixDefaultRows,
+                "seven routings still show eight rows");
+        require(matrixShownRowCount(matrixDefaultRows - 1) == matrixDefaultRows + 1,
+                "an eighth routing appends a ninth row");
+        require(matrixShownRowCount(rhino::forge::modSlotCount - 2) == rhino::forge::modSlotCount,
+                "the twenty-ninth routing shows all thirty rows");
+        require(matrixShownRowCount(rhino::forge::modSlotCount - 1) == rhino::forge::modSlotCount,
+                "the thirtieth routing appends nothing");
+    }
+    if (matrixModule != nullptr)
+    {
+        require(static_cast<int>(matrixModule->rows.size()) == rhino::forge::modSlotCount,
+                "the matrix declares a row per slot");
+        for (int width = rhino::forge::ui::minPanelWidth; width <= rhino::forge::ui::maxPanelWidth; width += 40)
+            for (int height = rhino::forge::ui::minPanelHeight; height <= rhino::forge::ui::maxPanelHeight; height += 40)
+            {
+                using namespace rhino::forge::ui;
+                const auto panel = juce::Rectangle<int>(0, 0, width, height);
+                const auto area = moduleBounds(panel, *matrixModule);
+                const auto window = controlArea(area, *matrixModule);
+                const auto rowHeight = matrixRowHeight(area, *matrixModule);
+                const auto visible = matrixVisibleRowCount(area, *matrixModule);
+                const auto rail = matrixScrollBounds(area, *matrixModule);
+                const auto shared = uniformKnobDiameter(panel);
+                juce::String fault;
+                if (rowHeight < minMatrixRowHeight || rowHeight > maxMatrixRowHeight)
+                    fault = "a matrix row keeps a readable height";
+                else if (visible < matrixDefaultRows)
+                    fault = "the matrix window holds the eight rows the table opens with";
+                else if (!window.contains(rail))
+                    fault = "the matrix's scroll rail stays inside its window";
+                for (const auto first : {0, matrixMaxFirstRow(area, *matrixModule, rhino::forge::modSlotCount)})
+                {
+                    if (fault.isNotEmpty()) break;
+                    const auto scrolled = matrixScrolledBounds(area, *matrixModule, first);
+                    for (int row = first; row < first + visible && fault.isEmpty(); ++row)
+                    {
+                        const auto strip = rowBounds(scrolled, *matrixModule, row);
+                        const auto gutter = rowGutterBounds(scrolled, *matrixModule, row);
+                        if (strip.getHeight() != rowHeight || !window.contains(strip))
+                            fault = "every row in the matrix window stays inside it";
+                        else if (strip.intersects(rail) || gutter.intersects(strip) || !area.contains(gutter))
+                            fault = "a matrix row sits beside its number and clear of the rail";
+                        else if (row + 1 < first + visible
+                                 && strip.intersects(rowBounds(scrolled, *matrixModule, row + 1)))
+                            fault = "no two rows in the matrix window overlap";
+                        const auto& controls = matrixModule->rows[static_cast<size_t>(row)].controls;
+                        for (int c = 0; c < static_cast<int>(controls.size()) && fault.isEmpty(); ++c)
+                            if (!strip.contains(controlBlock(scrolled, *matrixModule, row, c, shared)))
+                                fault = "every field of a matrix row in the window stays inside its row";
+                    }
+                }
+                if (fault.isEmpty()) continue;
+                require(false, fault.toRawUTF8());
+                std::cerr << "       at " << width << "x" << height << '\n';
+            }
+    }
 
     // A macro is the one control laid out by geometry of its own rather than by
     // controlBlock: a knob, the plate beside it carrying the number you drag
@@ -1225,6 +1303,64 @@ void captionsKeepTheirSizeSuite()
         }
     }
 }
+
+// The matrix opens on eight blank rows and grows by one as they fill, so a
+// patch always has a row to start the next routing in; a full matrix shows as
+// many rows as its window holds and no more. Checked through the BI chips,
+// the one control on the table that carries its own caption: a chip on screen
+// is a row on screen. The editor's own layout pass is what reads the slots, so
+// resized() stands in for the tick a host's change would be noticed on.
+void matrixGrowsWithRoutingsSuite()
+{
+    using namespace rhino::forge;
+    Processor processor;
+    for (int slot = 1; slot <= modSlotCount; ++slot) setSlot(processor, slot, srcOff, destOff, 0.0f);
+    std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+    editor->setSize(ui::defaultPanelWidth, ui::defaultPanelHeight);
+    for (auto* child : editor->getChildren())
+        if (auto* tab = dynamic_cast<ui::PageTab*>(child))
+            if (tab->getButtonText() == "MATRIX" && tab->onClick) tab->onClick();
+
+    const auto rowsOnScreen = [&editor]
+    {
+        auto count = 0;
+        for (auto* child : editor->getChildren())
+            if (auto* chip = dynamic_cast<ui::ToggleChip*>(child))
+                if (chip->isVisible() && chip->getButtonText() == "BI") ++count;
+        return count;
+    };
+    const ui::Module* matrix = nullptr;
+    for (const auto& module : ui::modules())
+        if (ui::isMatrixModule(module)) matrix = &module;
+    require(matrix != nullptr, "the panel declares its matrix");
+    if (matrix == nullptr) return;
+    const auto window = ui::matrixVisibleRowCount(ui::moduleBounds(editor->getLocalBounds(), *matrix), *matrix);
+    require(window >= ui::matrixDefaultRows,
+            "the window the panel opens with holds the eight rows the table opens with");
+    require(rowsOnScreen() == ui::matrixDefaultRows, "the matrix opens on eight blank rows");
+
+    for (int slot = 1; slot <= ui::matrixDefaultRows; ++slot)
+        setSlot(processor, slot, srcEnv1, destCutoff, 0.5f);
+    editor->resized();
+    require(rowsOnScreen() == juce::jmin(window, ui::matrixDefaultRows + 1),
+            "filling the eight rows appends a ninth");
+
+    // A row with only one end set counts as taken, so the hand always has a
+    // blank row after the one it is on.
+    setValue(processor, "mod9Source", static_cast<float>(srcEnv1));
+    editor->resized();
+    require(rowsOnScreen() == juce::jmin(window, ui::matrixDefaultRows + 2),
+            "a row with only its source set still earns a blank row after it");
+
+    for (int slot = 1; slot <= modSlotCount; ++slot) setSlot(processor, slot, srcEnv1, destCutoff, 0.5f);
+    editor->resized();
+    require(rowsOnScreen() == window, "a full matrix shows exactly the rows its window holds");
+
+    for (int slot = 1; slot <= modSlotCount; ++slot) setSlot(processor, slot, srcOff, destOff, 0.0f);
+    editor->resized();
+    require(rowsOnScreen() == ui::matrixDefaultRows,
+            "clearing every routing takes the table back to its eight rows");
+}
 }
 
 void layoutTests()
@@ -1234,5 +1370,6 @@ void layoutTests()
     steppedFieldSuite();
     switchedOffControlsStaySuite();
     captionsKeepTheirSizeSuite();
+    matrixGrowsWithRoutingsSuite();
 }
 }

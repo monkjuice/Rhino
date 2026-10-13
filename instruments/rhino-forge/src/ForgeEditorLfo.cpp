@@ -28,12 +28,26 @@ float pointValue(juce::Rectangle<int> plot, int y, int rows, bool snap)
     return std::clamp(snap ? std::round(raw * rows / 2.0f) * 2.0f / rows : raw, -1.0f, 1.0f);
 }
 
+float pointAcross(juce::Rectangle<int> plot, int x, int columns, bool snap)
+{
+    const auto raw = std::clamp((x - plot.getX()) / static_cast<float>(plot.getWidth()), 0.0f, 1.0f);
+    return snap ? std::round(raw * columns) / columns : raw;
+}
+
 // One spelling of where a table coordinate lands in the well. The painter draws
 // from the same numbers, so what is grabbed is what is seen.
 juce::Point<float> plotPosition(juce::Rectangle<int> plot, LfoPoint point)
 {
-    return {plot.getX() + point.x * plot.getWidth(),
-            plot.getCentreY() - point.y * plot.getHeight() * 0.48f};
+    return ui::lfoPlotPosition(plot, point.x, point.y);
+}
+
+// Where a pointer lands on a path's pad, snapped to the grid when asked. The
+// grid is the LFO's table's, because the grid is a property of the well
+// rather than of the picture standing in it.
+LfoPathPoint padPoint(juce::Rectangle<int> plot, juce::Point<int> at, const LfoTable& grid, bool snap)
+{
+    return {pointAcross(plot, at.x, grid.columns, snap),
+            (pointValue(plot, at.y, grid.rows, snap) + 1.0f) * 0.5f};
 }
 }
 
@@ -51,6 +65,14 @@ LfoShape Editor::shownLfoShape() const
         juce::roundToInt(value(lfoParameterId(shownLfo(), "Shape")))));
 }
 
+LfoType Editor::typeOfLfo(int lfo) const
+{
+    return static_cast<LfoType>(juce::jlimit(0, lfoTypeCount - 1,
+        juce::roundToInt(value(lfoParameterId(lfo, "Type")))));
+}
+
+LfoType Editor::shownLfoType() const { return typeOfLfo(shownLfo()); }
+
 LfoTable Editor::editableLfoTable(int lfo) const
 {
     auto table = processor.lfoTable(lfo);
@@ -64,10 +86,18 @@ LfoTable Editor::editableLfoTable(int lfo) const
     table.points = starter.points;
     table.count = starter.count;
     table.custom = true;
-    if (shape == LfoShape::sampleHold)
-        table.points[0].y = table.points[1].y
-            = std::clamp(processor.lfoValue(lfo), -1.0f, 1.0f);
     return table;
+}
+
+// The same rule for a path: the default diamond's own points, picked up as
+// they stand, the first time anyone takes hold of one.
+LfoPath Editor::editableLfoPath(int lfo) const
+{
+    auto path = processor.lfoPath(lfo);
+    if (path.custom && path.valid()) return path;
+    path = lfoDefaultPathTable;
+    path.custom = true;
+    return path;
 }
 
 int Editor::lfoPointAt(juce::Point<int> at) const
@@ -75,6 +105,23 @@ int Editor::lfoPointAt(juce::Point<int> at) const
     const auto display = lfoDisplayBounds();
     const auto plot = ui::lfoPlotBounds(display);
     if (!plot.expanded(8).contains(at)) return -1;
+    const auto type = shownLfoType();
+    // A sample and hold's steps are not points: there is nothing to take hold of.
+    if (type == LfoType::sampleHold) return -1;
+    if (type == LfoType::path)
+    {
+        // The last match rather than the first, because two points laid on
+        // top of each other — a pause — are drawn in order and the later one
+        // is on top.
+        const auto path = editableLfoPath(shownLfo());
+        auto found = -1;
+        for (int i = 0; i < path.count; ++i)
+        {
+            const auto centre = ui::lfoPathPosition(plot, path.points[static_cast<size_t>(i)]);
+            if (std::hypot(at.x - centre.x, at.y - centre.y) <= 9.0f) found = i;
+        }
+        return found;
+    }
     const auto table = editableLfoTable(shownLfo());
     for (int i = 0; i < table.count; ++i)
     {
@@ -86,9 +133,11 @@ int Editor::lfoPointAt(juce::Point<int> at) const
 
 // The other kind of node: one per gap, carrying the bend of the segment it sits
 // on and nothing else. A position node under the same pointer wins, so a handle
-// dragged up against a point never takes a grab meant for the point.
+// dragged up against a point never takes a grab meant for the point. Only a
+// NORMAL shape has them: a path's segments are straight.
 int Editor::lfoCurveHandleAt(juce::Point<int> at) const
 {
+    if (shownLfoType() != LfoType::normal) return -1;
     const auto plot = ui::lfoPlotBounds(lfoDisplayBounds());
     if (!plot.expanded(8).contains(at)) return -1;
     if (lfoPointAt(at) >= 0) return -1;
@@ -115,8 +164,7 @@ void Editor::editLfoCurve(int lfo, int segment, juce::Point<int> at, bool snap)
     const auto right = table.points[static_cast<size_t>(segment + 1)];
     const auto width = right.x - left.x;
     if (width <= 0.0f) return;
-    const auto rawX = std::clamp((at.x - plot.getX()) / static_cast<float>(plot.getWidth()), 0.0f, 1.0f);
-    const auto x = snap ? std::round(rawX * table.columns) / table.columns : rawX;
+    const auto x = pointAcross(plot, at.x, table.columns, snap);
     const auto along = std::clamp((x - left.x) / width, minLfoCurveAt, maxLfoCurveAt);
     left.curve = LfoTable::curveThrough(left, right, along,
                                         pointValue(plot, at.y, table.rows, snap));
@@ -139,12 +187,12 @@ void Editor::resetLfoCurve(int lfo, int segment)
 
 void Editor::editLfoPoint(int lfo, int point, juce::Point<int> at, bool snap)
 {
+    if (typeOfLfo(lfo) == LfoType::path) { editLfoPathPoint(lfo, point, at, snap); return; }
     auto table = editableLfoTable(lfo);
     if (point < 0 || point >= table.count) return;
     const auto plot = ui::lfoPlotBounds(lfoDisplayBounds());
     if (plot.isEmpty()) return;
-    const auto rawX = std::clamp((at.x - plot.getX()) / static_cast<float>(plot.getWidth()), 0.0f, 1.0f);
-    auto x = snap ? std::round(rawX * table.columns) / table.columns : rawX;
+    auto x = pointAcross(plot, at.x, table.columns, snap);
     if (point == 0) x = 0.0f;
     else if (point == table.count - 1) x = 1.0f;
     else
@@ -166,12 +214,14 @@ void Editor::editLfoPoint(int lfo, int point, juce::Point<int> at, bool snap)
 
 void Editor::addLfoPoint(int lfo, juce::Point<int> at)
 {
+    const auto type = typeOfLfo(lfo);
+    if (type == LfoType::sampleHold) return;
+    if (type == LfoType::path) { addLfoPathPoint(lfo, at); return; }
     auto table = editableLfoTable(lfo);
     if (table.count >= maxLfoPoints) return;
     const auto plot = ui::lfoPlotBounds(lfoDisplayBounds());
     if (!plot.contains(at)) return;
-    const auto raw = std::clamp((at.x - plot.getX()) / static_cast<float>(plot.getWidth()), 0.0f, 1.0f);
-    const auto x = raw;
+    const auto x = pointAcross(plot, at.x, table.columns, false);
     int insert = 1;
     while (insert < table.count && table.points[static_cast<size_t>(insert)].x < x) ++insert;
     if (x <= table.points[static_cast<size_t>(insert - 1)].x + 0.001f
@@ -190,6 +240,7 @@ void Editor::addLfoPoint(int lfo, juce::Point<int> at)
 
 void Editor::removeLfoPoint(int lfo, int point)
 {
+    if (typeOfLfo(lfo) == LfoType::path) { removeLfoPathPoint(lfo, point); return; }
     auto table = editableLfoTable(lfo);
     if (point <= 0 || point >= table.count - 1) return;
     std::move(table.points.begin() + point + 1, table.points.begin() + table.count,
@@ -202,9 +253,88 @@ void Editor::removeLfoPoint(int lfo, int point)
     repaint(lfoDisplayBounds());
 }
 
+// A path's point goes wherever it is dropped: both axes are free, and its
+// neighbours put no limit on it, because the route is read in the order the
+// points are in rather than left to right.
+void Editor::editLfoPathPoint(int lfo, int point, juce::Point<int> at, bool snap)
+{
+    auto path = editableLfoPath(lfo);
+    if (point < 0 || point >= path.count) return;
+    const auto plot = ui::lfoPlotBounds(lfoDisplayBounds());
+    if (plot.isEmpty()) return;
+    path.points[static_cast<size_t>(point)] = padPoint(plot, at, processor.lfoTable(lfo), snap);
+    processor.setLfoPath(lfo, path);
+    repaint(lfoDisplayBounds());
+}
+
+// A new point joins the route at the segment it is nearest, so a point dropped
+// beside the line becomes part of the line there rather than being hung off
+// the end and dragging the route across the pad to reach it.
+void Editor::addLfoPathPoint(int lfo, juce::Point<int> at)
+{
+    auto path = editableLfoPath(lfo);
+    if (path.count >= maxLfoPoints) return;
+    const auto plot = ui::lfoPlotBounds(lfoDisplayBounds());
+    if (!plot.contains(at)) return;
+    const auto here = at.toFloat();
+    auto insert = path.count;
+    auto nearest = std::numeric_limits<float>::max();
+    for (int i = 0; i + 1 < path.count; ++i)
+    {
+        juce::Point<float> onLine;
+        const auto distance = juce::Line<float>(
+            ui::lfoPathPosition(plot, path.points[static_cast<size_t>(i)]),
+            ui::lfoPathPosition(plot, path.points[static_cast<size_t>(i + 1)])).getDistanceFromPoint(here, onLine);
+        if (distance < nearest)
+        {
+            nearest = distance;
+            insert = i + 1;
+        }
+    }
+    std::move_backward(path.points.begin() + insert, path.points.begin() + path.count,
+                       path.points.begin() + path.count + 1);
+    path.points[static_cast<size_t>(insert)] = padPoint(plot, at, processor.lfoTable(lfo), false);
+    ++path.count;
+    processor.setLfoPath(lfo, path);
+    repaint(lfoDisplayBounds());
+}
+
+// Any point may leave a path, its ends included, as long as a route is left:
+// two points is the shortest one there is.
+void Editor::removeLfoPathPoint(int lfo, int point)
+{
+    auto path = editableLfoPath(lfo);
+    if (point < 0 || point >= path.count || path.count <= 2) return;
+    std::move(path.points.begin() + point + 1, path.points.begin() + path.count,
+              path.points.begin() + point);
+    --path.count;
+    processor.setLfoPath(lfo, path);
+    repaint(lfoDisplayBounds());
+}
+
+void Editor::resetLfoPath(int lfo)
+{
+    if (lfo < 0 || lfo >= lfoCount) return;
+    processor.setLfoPath(lfo, LfoPath {});
+    repaint(lfoDisplayBounds());
+}
+
 void Editor::showLfoMenu()
 {
     const auto bank = shownLfo();
+    const auto safe = juce::Component::SafePointer<Editor>(this);
+    if (typeOfLfo(bank) == LfoType::path)
+    {
+        // A path has no library yet: the one thing to choose is to start again
+        // from the diamond.
+        juce::PopupMenu menu;
+        menu.addItem(1, "Default path", true, !processor.lfoPathIsCustom(bank));
+        menu.showMenuAsync(juce::PopupMenu::Options(), [safe, bank] (int choice)
+        {
+            if (safe != nullptr && choice == 1) safe->resetLfoPath(bank);
+        });
+        return;
+    }
     const auto custom = processor.lfoTableIsCustom(bank);
     const auto currentName = processor.lfoTableName(bank);
     juce::PopupMenu menu;
@@ -227,7 +357,6 @@ void Editor::showLfoMenu()
         }
         menu.addSubMenu("Saved shapes", library);
     }
-    const auto safe = juce::Component::SafePointer<Editor>(this);
     menu.showMenuAsync(juce::PopupMenu::Options(), [safe, bank, saved] (int choice)
     {
         if (safe == nullptr || choice == 0) return;
@@ -245,6 +374,52 @@ void Editor::showLfoMenu()
         safe->applyEnableStates();
         safe->repaint(safe->lfoDisplayBounds());
     });
+}
+
+// The three types, as the footer's first field offers them. The choice is a
+// parameter, so a preset or a host can make it too.
+void Editor::showLfoTypeMenu()
+{
+    const auto bank = shownLfo();
+    const auto current = static_cast<int>(typeOfLfo(bank));
+    juce::PopupMenu menu;
+    for (int i = 0; i < lfoTypeCount; ++i) menu.addItem(i + 1, lfoTypeName(i), true, i == current);
+    const auto safe = juce::Component::SafePointer<Editor>(this);
+    menu.showMenuAsync(juce::PopupMenu::Options(), [safe, bank] (int choice)
+    {
+        if (safe != nullptr && choice >= 1) safe->selectLfoChoice(bank, "Type", choice - 1);
+    });
+}
+
+void Editor::showLfoDirectionMenu()
+{
+    const auto bank = shownLfo();
+    const auto current = juce::jlimit(0, lfoDirectionCount - 1,
+                                      juce::roundToInt(value(lfoParameterId(bank, "Direction"))));
+    juce::PopupMenu menu;
+    for (int i = 0; i < lfoDirectionCount; ++i)
+        menu.addItem(i + 1, lfoDirectionName(i), true, i == current);
+    const auto safe = juce::Component::SafePointer<Editor>(this);
+    menu.showMenuAsync(juce::PopupMenu::Options(), [safe, bank] (int choice)
+    {
+        if (safe != nullptr && choice >= 1) safe->selectLfoChoice(bank, "Direction", choice - 1);
+    });
+}
+
+void Editor::selectLfoChoice(int lfo, const char* suffix, int choice)
+{
+    if (lfo < 0 || lfo >= lfoCount) return;
+    if (auto* parameter = processor.state.getParameter(lfoParameterId(lfo, suffix)))
+    {
+        parameter->beginChangeGesture();
+        parameter->setValueNotifyingHost(parameter->convertTo0to1(static_cast<float>(choice)));
+        parameter->endChangeGesture();
+    }
+    // What the footer offers and what the header hangs both follow the type,
+    // so the whole module is laid out again rather than only the well.
+    applyEnableStates();
+    resized();
+    repaint();
 }
 
 void Editor::selectLfoBasicShape(int lfo, int shape)
@@ -267,6 +442,7 @@ void Editor::selectLfoBasicShape(int lfo, int shape)
 void Editor::stepLfoShape(int direction)
 {
     const auto bank = shownLfo();
+    if (typeOfLfo(bank) != LfoType::normal) return;
     const auto saved = savedLfoShapes();
     auto current = juce::jlimit(0, lfoShapeCount - 1,
         juce::roundToInt(value(lfoParameterId(bank, "Shape"))));

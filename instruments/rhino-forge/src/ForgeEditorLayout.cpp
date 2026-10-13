@@ -32,9 +32,11 @@ juce::Rectangle<int> Editor::moduleAreaFor(const ui::Module& module) const
 void Editor::resized()
 {
     // A taller expanded rack may reveal every slot; a later compact resize can
-    // reduce the window again. Keep each rack's remembered top slot legal and
-    // refresh visibility before positioning the child controls.
+    // reduce the window again. Keep each rack's remembered top slot legal, and
+    // the matrix's, and refresh visibility before positioning the child
+    // controls.
     clampFxScroll();
+    clampMatrixScroll();
     applyEnableStates();
 
     savePreset.setBounds(ui::presetButtonBounds(getLocalBounds(), true));
@@ -99,6 +101,7 @@ void Editor::resized()
         const auto visible = moduleShown(descriptor);
         const auto area = moduleAreaFor(descriptor);
         const auto rackModule = isFxModule(descriptor);
+        const auto matrixRows = ui::isMatrixModule(descriptor);
 
         if (rackModule)
             fxControlViewport.setBounds(ui::fxSlotViewportBounds(area, fxListOpen));
@@ -121,9 +124,28 @@ void Editor::resized()
             // Flush with the module's top edge and the full height of the
             // header: the handle is a card hanging off that edge, not a button
             // floating inside it.
+            const auto left = area.getX() + (descriptor.enableId != nullptr ? ui::headerHeight + 8 : 10);
+            auto width = ui::handleWidth;
+            // A PATH LFO has two outputs, and its card splits in two for them,
+            // as Serum's tile does: the Y card takes the right-hand end of the
+            // name card's own room, so the bank cards and the header's rate
+            // beyond it never move. Every other type leaves the card off the
+            // panel and the name card whole.
+            if (descriptor.display == ui::Display::lfo)
+            {
+                const auto path = shownLfoType() == LfoType::path;
+                lfoPathHandleShown = path;
+                if (path) width -= ui::lfoYHandleWidth + 2;
+                for (int bank = 0; bank < lfoCount; ++bank)
+                    if (auto* y = handleFor(static_cast<int>(ModSource::lfo1Y) + bank))
+                    {
+                        y->setVisible(visible && path && bank == module.bank);
+                        y->setBounds(left + ui::handleWidth - ui::lfoYHandleWidth, area.getY(),
+                                     ui::lfoYHandleWidth, ui::headerHeight);
+                    }
+            }
             if (auto* handle = handleFor(showing))
-                handle->setBounds(area.getX() + (descriptor.enableId != nullptr ? ui::headerHeight + 8 : 10),
-                                  area.getY(), ui::handleWidth, ui::headerHeight);
+                handle->setBounds(left, area.getY(), width, ui::headerHeight);
         }
         for (int bank = 0; bank < static_cast<int>(module.bankButtons.size()); ++bank)
             module.bankButtons[static_cast<size_t>(bank)]
@@ -139,6 +161,11 @@ void Editor::resized()
                 if (fxControlAt(control.id, rack, slot))
                     controlsArea = fxRackAreaFor(area, rack, slot);
             }
+            // Every row of the matrix is placed, the ones past its window
+            // included: they land off the table and applyEnableStates keeps
+            // them hidden, so scrolling moves rows rather than making them.
+            if (matrixRows)
+                controlsArea = ui::matrixScrolledBounds(area, descriptor, matrixFirstRow);
             auto block = ui::controlBlock(controlsArea, descriptor, control.row, control.index, diameter);
             auto cell = ui::cellBounds(controlsArea, descriptor, control.row, control.index);
             if (rackModule)

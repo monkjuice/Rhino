@@ -630,7 +630,7 @@ public:
 
 // --- Tables -----------------------------------------------------------------
 //
-// The matrix is eight slots read as rows. What makes that a table rather than a
+// The matrix is thirty slots read as rows. What makes that a table rather than a
 // field of controls is the furniture around the controls: titles once at the
 // top, a number against every row, and a band under alternate rows so the eye
 // tracks across one slot without sliding into the next.

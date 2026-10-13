@@ -21,6 +21,10 @@ inline const auto panelRaised = juce::Colour(0xff191d2d);
 inline const auto line = juce::Colour(0xff34394e);
 
 inline constexpr int handleWidth = 70;
+// The second card a PATH LFO splits off the end of its first, Serum's X|Y
+// tile: its Y output, one letter wide, taken out of the name card's own width
+// so nothing beyond it in the header moves.
+inline constexpr int lfoYHandleWidth = 22;
 
 // The lit strip along a module's top edge. Named because the cards that hang
 // from that edge redraw it across themselves, and a card that continued a strip

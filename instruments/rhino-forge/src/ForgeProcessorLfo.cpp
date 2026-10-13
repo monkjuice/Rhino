@@ -50,6 +50,82 @@ bool readLfoNode(const juce::ValueTree& node, LfoTable& table)
     table = next;
     return true;
 }
+
+// A drawn path travels in the patch the same way a drawn table does: one node
+// per LFO that has one, holding its points in order.
+juce::ValueTree lfoPathNode(int index, const LfoPath& path)
+{
+    juce::ValueTree node("ForgeLfoPath");
+    node.setProperty("index", index, nullptr);
+    for (int i = 0; i < path.count; ++i)
+    {
+        juce::ValueTree point("Point");
+        point.setProperty("x", path.points[static_cast<size_t>(i)].x, nullptr);
+        point.setProperty("y", path.points[static_cast<size_t>(i)].y, nullptr);
+        node.addChild(point, -1, nullptr);
+    }
+    return node;
+}
+
+bool readLfoPathNode(const juce::ValueTree& node, LfoPath& path)
+{
+    if (!node.hasType("ForgeLfoPath") || node.getNumChildren() > maxLfoPoints) return false;
+    LfoPath next;
+    next.custom = true;
+    next.count = node.getNumChildren();
+    for (int i = 0; i < next.count; ++i)
+    {
+        const auto point = node.getChild(i);
+        if (!point.hasType("Point") || !point.hasProperty("x") || !point.hasProperty("y")) return false;
+        next.points[static_cast<size_t>(i)] = {static_cast<float>(point.getProperty("x")),
+                                               static_cast<float>(point.getProperty("y"))};
+    }
+    if (!next.valid()) return false;
+    path = next;
+    return true;
+}
+}
+
+LfoSteps Processor::lfoSteps(int lfo) const
+{
+    LfoSteps result {};
+    if (lfo < 0 || lfo >= lfoCount) return result;
+    const auto& published = meterLfoStep[static_cast<size_t>(lfo)];
+    for (size_t i = 0; i < result.size(); ++i) result[i] = published[i].load(std::memory_order_relaxed);
+    return result;
+}
+
+LfoPath Processor::lfoPath(int lfo) const
+{
+    LfoPath result;
+    if (lfo < 0 || lfo >= lfoCount) return result;
+    const auto index = static_cast<size_t>(lfo);
+    result.count = std::clamp(lfoPathCount[index].load(std::memory_order_relaxed), 0, maxLfoPoints);
+    for (int i = 0; i < result.count; ++i)
+        result.points[static_cast<size_t>(i)] = {
+            lfoPathX[index][static_cast<size_t>(i)].load(std::memory_order_relaxed),
+            lfoPathY[index][static_cast<size_t>(i)].load(std::memory_order_relaxed)};
+    result.custom = lfoPathCustom[index].load(std::memory_order_relaxed);
+    return result;
+}
+
+// The same hand-over the table uses: the points land first and the custom
+// flag last, so the audio thread reads the default path until the whole of
+// the drawn one is there.
+void Processor::setLfoPath(int lfo, const LfoPath& path)
+{
+    if (lfo < 0 || lfo >= lfoCount || (path.custom && !path.valid())) return;
+    const auto index = static_cast<size_t>(lfo);
+    lfoPathCustom[index].store(false, std::memory_order_relaxed);
+    for (int i = 0; i < path.count; ++i)
+    {
+        lfoPathX[index][static_cast<size_t>(i)].store(path.points[static_cast<size_t>(i)].x,
+                                                      std::memory_order_relaxed);
+        lfoPathY[index][static_cast<size_t>(i)].store(path.points[static_cast<size_t>(i)].y,
+                                                      std::memory_order_relaxed);
+    }
+    lfoPathCount[index].store(path.count, std::memory_order_relaxed);
+    lfoPathCustom[index].store(path.custom, std::memory_order_release);
 }
 
 LfoTable Processor::lfoTable(int lfo) const
@@ -114,6 +190,10 @@ void Processor::appendLfoTables(juce::ValueTree& tree) const
         const auto table = lfoTable(i);
         if ((table.custom && table.valid()) || table.columns != 8 || table.rows != 8)
             tree.addChild(lfoNode(i, table, lfoTableName(i)), -1, nullptr);
+        // The default path is the same in every copy of Forge, so only a
+        // drawn one is worth writing.
+        const auto path = lfoPath(i);
+        if (path.custom && path.valid()) tree.addChild(lfoPathNode(i, path), -1, nullptr);
     }
 }
 
@@ -122,11 +202,17 @@ void Processor::applyLfoTables(const juce::ValueTree& tree)
     for (int i = 0; i < lfoCount; ++i)
     {
         LfoTable table;
+        LfoPath path;
         juce::String name("Default");
         for (const auto child : tree)
-            if (child.hasType("ForgeLfoTable") && static_cast<int>(child.getProperty("index", -1)) == i)
+        {
+            const auto forThis = static_cast<int>(child.getProperty("index", -1)) == i;
+            if (child.hasType("ForgeLfoTable") && forThis)
                 if (readLfoNode(child, table)) name = child.getProperty("name", "Custom").toString();
+            if (child.hasType("ForgeLfoPath") && forThis) readLfoPathNode(child, path);
+        }
         setLfoTable(i, table, name);
+        setLfoPath(i, path);
     }
 }
 

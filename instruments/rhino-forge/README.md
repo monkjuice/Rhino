@@ -33,7 +33,7 @@ Spectral mode separates pitch from time: play a loaded sample chromatically whil
 
 ### Modulation that stays playable
 
-Four envelopes, six LFOs, eight macros, velocity, key tracking, aftertouch, and performance controls route through an eight-slot modulation matrix. Drag a source onto a control, set the depth, and keep working; visual feedback follows the same values the audio engine uses.
+Four envelopes, six LFOs, eight macros, velocity, key tracking, aftertouch, and performance controls route through an eight-slot modulation matrix. Each LFO is a drawn shape, a two-axis path with X and Y outputs, or a sample-and-hold with smoothing, read forward, in reverse, or ping-pong. Drag a source onto a control, set the depth, and keep working; visual feedback follows the same values the audio engine uses.
 
 ### A filter built for character
 

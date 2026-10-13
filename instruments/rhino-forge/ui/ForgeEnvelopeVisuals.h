@@ -418,13 +418,21 @@ inline const char* stageName(Stage stage)
 // An LFO's shape, drawn as exactly one cycle with an indicator riding it. One
 // cycle rather than several, and rather than a count that grows with the rate,
 // so the width of the display is the length of the cycle: the indicator then
-// sweeps the whole thing and its position is the phase, read directly. Drawing
-// two cycles left the indicator stuck in the left-hand half, because a phase
-// only ever covers one of them. The rate is written in the module header, so the
-// picture does not have to carry it too.
+// sweeps the whole thing and its position is where the shape is being read,
+// directly. Drawing two cycles left the indicator stuck in the left-hand half,
+// because a position only ever covers one of them. The rate is written in the
+// module header, so the picture does not have to carry it too.
 //
-// The indicator is the engine's own running phase, not an animation timed in the
-// editor, so it cannot drift away from what is being heard.
+// The indicator is the engine's own running position, not an animation timed
+// in the editor, so it cannot drift away from what is being heard — and it is
+// the position in the shape rather than the travel, so a reversed LFO is seen
+// running right to left and a ping-pong one turning round.
+//
+// What the display is a picture of depends on the LFO's type: a NORMAL one is
+// a curve over the grid, a PATH is a route across the pad, and a sample and
+// hold is its staircase for this cycle. The footer under all three is where
+// the type is chosen, at the left; what follows it is what that type has to
+// say — the shape and its chevrons, the direction — and the grid at the right.
 inline juce::Rectangle<int> lfoPlotBounds(juce::Rectangle<int> area)
 {
     return area.reduced(1, 8).withTrimmedBottom(19);
@@ -445,10 +453,46 @@ inline juce::Rectangle<int> lfoRowBounds(juce::Rectangle<int> area)
     return {area.getRight() - 64, area.getBottom() - 23, 56, 20};
 }
 
-inline juce::Rectangle<int> lfoNameBounds(juce::Rectangle<int> area)
+// The type, first thing on the left: what the picture above it is.
+inline juce::Rectangle<int> lfoTypeBounds(juce::Rectangle<int> area)
 {
-    return {area.getX() + 6, area.getBottom() - 23,
-            juce::jmax(55, juce::jmin(200, lfoColumnBounds(area).getX() - area.getX() - 68)), 20};
+    return {area.getX() + 6, area.getBottom() - 23, 66, 20};
+}
+
+// The direction, just before the grid fields: which way the picture is read.
+inline juce::Rectangle<int> lfoDirectionBounds(juce::Rectangle<int> area)
+{
+    return {lfoColumnBounds(area).getX() - 88, area.getBottom() - 23, 84, 20};
+}
+
+// Which of the footer's fields a type has a use for. A sample and hold has no
+// shape to name and no direction to read it in — its steps are random either
+// way round — and a path has a shape but nothing to step through with the
+// chevrons. The painter and the hit-tests both ask here, so they agree.
+inline bool lfoFooterShowsName(rhino::forge::LfoType type)
+{
+    return type != rhino::forge::LfoType::sampleHold;
+}
+
+inline bool lfoFooterShowsChevrons(rhino::forge::LfoType type)
+{
+    return type == rhino::forge::LfoType::normal;
+}
+
+inline bool lfoFooterShowsDirection(rhino::forge::LfoType type)
+{
+    return type != rhino::forge::LfoType::sampleHold;
+}
+
+// The name field takes whatever is left between the type and the direction,
+// less the chevrons when there are any, so the footer has no slack in it: the
+// name is the one field whose width can give.
+inline juce::Rectangle<int> lfoNameBounds(juce::Rectangle<int> area,
+                                          rhino::forge::LfoType type = rhino::forge::LfoType::normal)
+{
+    const auto left = lfoTypeBounds(area).getRight() + 4;
+    const auto right = lfoDirectionBounds(area).getX() - 4 - (lfoFooterShowsChevrons(type) ? 50 : 0);
+    return {left, area.getBottom() - 23, juce::jmax(40, right - left), 20};
 }
 
 inline juce::Rectangle<int> lfoPreviousBounds(juce::Rectangle<int> area)
@@ -467,17 +511,49 @@ inline juce::Rectangle<int> lfoGridStepBounds(juce::Rectangle<int> field, bool i
     return increase ? arrows.removeFromTop(arrows.getHeight() / 2) : arrows.withTrimmedTop(arrows.getHeight() / 2);
 }
 
-inline void drawLfo(juce::Graphics& g, juce::Rectangle<int> area, rhino::forge::LfoShape shape,
-                    const rhino::forge::LfoTable& table, const juce::String& name,
-                    float phase, float held, juce::Colour colour, float alpha)
+// Where a table coordinate lands in the well, and where a path's point does.
+// The editor grabs by the same numbers, so what is grabbed is what is seen: a
+// shape's y is already a swing of -1..1, a path's is a pad coordinate of 0..1
+// and is put on the same scale, so both kinds of point stand the same way off
+// the well's edges.
+inline juce::Point<float> lfoPlotPosition(juce::Rectangle<int> plot, float x, float swing)
 {
+    const auto box = plot.toFloat();
+    return {box.getX() + x * box.getWidth(), box.getCentreY() - swing * box.getHeight() * 0.48f};
+}
+
+inline juce::Point<float> lfoPathPosition(juce::Rectangle<int> plot, rhino::forge::LfoPathPoint point)
+{
+    return lfoPlotPosition(plot, point.x, point.y * 2.0f - 1.0f);
+}
+
+// Everything the LFO display is drawn from, read off the processor once per
+// paint: the setting the voice reads, the sample and hold's staircase, the
+// name of a drawn table, and where the engine has the shape right now.
+struct LfoPicture
+{
+    rhino::forge::LfoSetting setting;
+    rhino::forge::LfoSteps steps {};
+    juce::String name;
+    float phase = 0.0f;
+};
+
+inline void drawLfo(juce::Graphics& g, juce::Rectangle<int> area, const LfoPicture& picture,
+                    juce::Colour colour, float alpha)
+{
+    using rhino::forge::LfoType;
+    const auto& setting = picture.setting;
+    const auto type = rhino::forge::lfoTypeOf(setting);
+
     // Clipped to the well and drawn its full width, so one cycle spans edge to
     // edge and the curve meets both sides instead of floating inside a margin.
     juce::Graphics::ScopedSaveState clip(g);
     g.reduceClipRegion(displayClip(area));
 
-    const auto box = lfoPlotBounds(area).toFloat();
+    const auto plotArea = lfoPlotBounds(area);
+    const auto box = plotArea.toFloat();
     const auto plot = [&] (float at) { return box.getCentreY() - at * box.getHeight() * 0.48f; };
+    const auto& table = setting.table;
 
     g.setColour(colour.withAlpha(0.12f * alpha));
     for (int i = 1; i < table.columns; ++i)
@@ -487,73 +563,127 @@ inline void drawLfo(juce::Graphics& g, juce::Rectangle<int> area, rhino::forge::
         g.drawHorizontalLine(juce::roundToInt(box.getY() + box.getHeight() * i / table.rows),
                              box.getX(), box.getRight());
 
-    // A Default shape is a node set of its own, so one table answers for both:
-    // a drawn one, or the built-in the shape names. The curve, the dots, the
-    // rings and the indicator all read that one table, which is what makes the
-    // dots on a Default shape its real corners rather than a row of samples.
-    auto shown = table.custom ? table
-                              : rhino::forge::lfoShapeTables[static_cast<size_t>(shape)];
-    if (!table.custom && shape == rhino::forge::LfoShape::sampleHold)
+    // The curve, the dots and the indicator all read the very function the
+    // voice reads, so what is drawn is what is heard: a NORMAL shape or a
+    // staircase is lfoOutputAt across one cycle, and a path is its own route.
+    const auto at = juce::jlimit(0.0f, 1.0f, picture.phase);
+    const auto dot = [&] (juce::Point<float> centre, float size, float strength)
     {
-        // The step being held, flat across the whole display, because that is
-        // genuinely what this shape is putting out right now: one value, held.
-        // The jump is seen rather than drawn — the line lifts to a new height
-        // each time the cycle turns over, which is what sample and hold looks
-        // like when you watch it. Drawing a row of invented steps instead would
-        // put the indicator on a curve the voice is not reading.
-        shown.points[0].y = shown.points[1].y = juce::jlimit(-1.0f, 1.0f, held);
-    }
-
-    juce::Path path;
+        g.setColour(juce::Colours::white.withAlpha(strength * alpha));
+        g.fillEllipse(juce::Rectangle<float>(size, size).withCentre(centre));
+    };
+    const auto indicator = [&] (juce::Point<float> centre)
     {
-        constexpr int points = 240;
-        for (int i = 0; i <= points; ++i)
-        {
-            // The full closed interval, so a saw reaches the top of its ramp and
-            // a square its second half before the cycle ends.
-            const auto along = static_cast<float>(i) / static_cast<float>(points);
-            const auto x = box.getX() + along * box.getWidth();
-            const auto y = plot(shown.sample(along));
-            if (i == 0) path.startNewSubPath(x, y); else path.lineTo(x, y);
-        }
-    }
-    strokeGlow(g, path, colour, alpha);
-
-    // Two kinds of node, told apart by weight rather than by colour: a solid
-    // dot is a position, and the ring in each gap between two of them is that
-    // segment's bend. The ring rides the curve it describes, so a straight
-    // segment shows it sitting exactly on the line, and it is drawn first so a
-    // handle pushed up against a point reads as being behind it — which is also
-    // the order the pointer resolves them in.
-    for (int i = 0; i + 1 < shown.count; ++i)
-    {
-        const auto handle = shown.curveHandle(i);
-        const juce::Point<float> centre {box.getX() + handle.x * box.getWidth(), plot(handle.y)};
-        g.setColour(juce::Colour(0xff0a0d16).withAlpha(0.9f * alpha));
+        g.setColour(juce::Colours::white.withAlpha(0.9f * alpha));
         g.fillEllipse(juce::Rectangle<float>(7.0f, 7.0f).withCentre(centre));
-        g.setColour(juce::Colours::white.withAlpha(0.7f * alpha));
-        g.drawEllipse(juce::Rectangle<float>(6.0f, 6.0f).withCentre(centre), 1.4f);
-    }
+        g.setColour(colour);
+        g.fillEllipse(juce::Rectangle<float>(4.0f, 4.0f).withCentre(centre));
+    };
 
-    for (int i = 0; i < shown.count; ++i)
+    if (type == LfoType::path)
     {
-        const auto& point = shown.points[static_cast<size_t>(i)];
-        g.setColour(juce::Colours::white.withAlpha(0.8f * alpha));
-        g.fillEllipse(juce::Rectangle<float>(5.0f, 5.0f).withCentre(
-            {box.getX() + point.x * box.getWidth(), plot(point.y)}));
+        const auto& route = setting.path.custom ? setting.path : rhino::forge::lfoDefaultPathTable;
+        juce::Path path;
+        for (int i = 0; i < route.count; ++i)
+        {
+            const auto point = lfoPathPosition(plotArea, route.points[static_cast<size_t>(i)]);
+            if (i == 0) path.startNewSubPath(point); else path.lineTo(point);
+        }
+        strokeGlow(g, path, colour, alpha);
+        // The first point is ringed, because a route has a start and the dots
+        // alone do not say which end it is.
+        for (int i = 0; i < route.count; ++i)
+        {
+            const auto centre = lfoPathPosition(plotArea, route.points[static_cast<size_t>(i)]);
+            dot(centre, 5.0f, 0.8f);
+            if (i == 0)
+            {
+                g.setColour(juce::Colours::white.withAlpha(0.7f * alpha));
+                g.drawEllipse(juce::Rectangle<float>(10.0f, 10.0f).withCentre(centre), 1.2f);
+            }
+        }
+        // Where the travel has got to, with a line to each edge so both outputs
+        // can be read off the grid: how far across is X, how far up is Y.
+        const auto here = lfoPathPosition(plotArea, route.at(at));
+        g.setColour(colour.withAlpha(0.3f * alpha));
+        g.drawVerticalLine(juce::roundToInt(here.x), box.getY(), box.getBottom());
+        g.drawHorizontalLine(juce::roundToInt(here.y), box.getX(), box.getRight());
+        indicator(here);
     }
+    else
+    {
+        juce::Path path;
+        if (type == LfoType::sampleHold)
+        {
+            // Column by column, so each riser is drawn at the column's edge
+            // rather than slanted across the first sample of the next one.
+            const auto count = rhino::forge::lfoStepCount(setting);
+            constexpr int perColumn = 24;
+            for (int column = 0; column < count; ++column)
+                for (int i = 0; i <= perColumn; ++i)
+                {
+                    const auto along = (static_cast<float>(column) + static_cast<float>(i) / perColumn)
+                                     / static_cast<float>(count);
+                    const auto x = box.getX() + along * box.getWidth();
+                    const auto y = plot(rhino::forge::lfoOutputAt(setting, along, picture.steps).x);
+                    if (column == 0 && i == 0) path.startNewSubPath(x, y); else path.lineTo(x, y);
+                }
+        }
+        else
+        {
+            constexpr int points = 240;
+            for (int i = 0; i <= points; ++i)
+            {
+                // The full closed interval, so a saw reaches the top of its ramp
+                // and a square its second half before the cycle ends.
+                const auto along = static_cast<float>(i) / static_cast<float>(points);
+                const auto x = box.getX() + along * box.getWidth();
+                const auto y = plot(rhino::forge::lfoOutputAt(setting, along, picture.steps).x);
+                if (i == 0) path.startNewSubPath(x, y); else path.lineTo(x, y);
+            }
+        }
+        strokeGlow(g, path, colour, alpha);
 
-    // One cycle wide, so the phase is the position along it directly and the
-    // indicator always sits on the curve it is drawn over.
-    const auto at = juce::jlimit(0.0f, 1.0f, phase);
-    const auto x = box.getX() + at * box.getWidth();
-    const auto y = plot(shown.sample(phase));
-    g.setColour(colour.withAlpha(0.3f * alpha));
-    g.drawVerticalLine(juce::roundToInt(x), box.getY(), box.getBottom());
-    g.setColour(juce::Colours::white.withAlpha(0.9f * alpha));
-    g.fillEllipse(juce::Rectangle<float>(7.0f, 7.0f).withCentre({x, y}));
-    g.setColour(colour);
-    g.fillEllipse(juce::Rectangle<float>(4.0f, 4.0f).withCentre({x, y}));
+        if (type == LfoType::normal)
+        {
+            // A Default shape is a node set of its own, so one table answers
+            // for both: a drawn one, or the built-in the shape names. The dots
+            // and the rings read that one table, which is what makes the dots
+            // on a Default shape its real corners rather than a row of samples.
+            const auto& shown = table.custom
+                ? table
+                : rhino::forge::lfoShapeTables[static_cast<size_t>(rhino::forge::lfoShapeOf(setting))];
+            // Two kinds of node, told apart by weight rather than by colour: a
+            // solid dot is a position, and the ring in each gap between two of
+            // them is that segment's bend. The ring rides the curve it
+            // describes, so a straight segment shows it sitting exactly on the
+            // line, and it is drawn first so a handle pushed up against a point
+            // reads as being behind it — which is also the order the pointer
+            // resolves them in.
+            for (int i = 0; i + 1 < shown.count; ++i)
+            {
+                const auto handle = shown.curveHandle(i);
+                const auto centre = lfoPlotPosition(plotArea, handle.x, handle.y);
+                g.setColour(juce::Colour(0xff0a0d16).withAlpha(0.9f * alpha));
+                g.fillEllipse(juce::Rectangle<float>(7.0f, 7.0f).withCentre(centre));
+                g.setColour(juce::Colours::white.withAlpha(0.7f * alpha));
+                g.drawEllipse(juce::Rectangle<float>(6.0f, 6.0f).withCentre(centre), 1.4f);
+            }
+            for (int i = 0; i < shown.count; ++i)
+            {
+                const auto& point = shown.points[static_cast<size_t>(i)];
+                dot(lfoPlotPosition(plotArea, point.x, point.y), 5.0f, 0.8f);
+            }
+        }
+
+        // One cycle wide, so the position is where along it directly, and the
+        // indicator always sits on the curve it is drawn over.
+        const auto x = box.getX() + at * box.getWidth();
+        const auto y = plot(rhino::forge::lfoOutputAt(setting, at, picture.steps).x);
+        g.setColour(colour.withAlpha(0.3f * alpha));
+        g.drawVerticalLine(juce::roundToInt(x), box.getY(), box.getBottom());
+        indicator({x, y});
+    }
 
     const auto footer = lfoFooterBounds(area);
     g.setColour(juce::Colour(0xff0a0d16));
@@ -561,31 +691,55 @@ inline void drawLfo(juce::Graphics& g, juce::Rectangle<int> area, rhino::forge::
     g.setColour(colour.withAlpha(0.24f * alpha));
     g.drawHorizontalLine(footer.getY(), area.getX(), area.getRight());
 
-    const auto nameBox = lfoNameBounds(area);
-    g.setColour(juce::Colour(0xff151925));
-    g.fillRoundedRectangle(nameBox.toFloat(), 3.0f);
-    g.setColour(colour.withAlpha(0.28f * alpha));
-    g.drawRoundedRectangle(nameBox.toFloat().reduced(0.5f), 3.0f, 1.0f);
-    g.setColour(colour.withAlpha(alpha));
-    g.setFont(juce::FontOptions(12.0f));
-    const auto label = table.custom ? name : "Default / " + juce::String(rhino::forge::lfoFullShapeName(static_cast<int>(shape)));
-    g.drawText(label, nameBox.reduced(8, 0).withTrimmedRight(13), juce::Justification::centredLeft, true);
-    juce::Path down;
-    down.addTriangle(static_cast<float>(nameBox.getRight() - 14), static_cast<float>(nameBox.getCentreY() - 2),
-                     static_cast<float>(nameBox.getRight() - 6), static_cast<float>(nameBox.getCentreY() - 2),
-                     static_cast<float>(nameBox.getRight() - 10), static_cast<float>(nameBox.getCentreY() + 2));
-    g.fillPath(down);
-
-    const auto chevron = [&] (juce::Rectangle<int> button, bool right)
+    // A field that opens a menu: a word and the arrow that says so. The type,
+    // the name and the direction are all this.
+    const auto dropdown = [&] (juce::Rectangle<int> field, const juce::String& label, float size)
     {
-        const auto cx = static_cast<float>(button.getCentreX());
-        const auto cy = static_cast<float>(button.getCentreY());
-        const auto direction = right ? 1.0f : -1.0f;
-        g.drawLine(cx - direction * 2.0f, cy - 4.0f, cx + direction * 2.0f, cy, 1.5f);
-        g.drawLine(cx + direction * 2.0f, cy, cx - direction * 2.0f, cy + 4.0f, 1.5f);
+        g.setColour(juce::Colour(0xff151925));
+        g.fillRoundedRectangle(field.toFloat(), 3.0f);
+        g.setColour(colour.withAlpha(0.28f * alpha));
+        g.drawRoundedRectangle(field.toFloat().reduced(0.5f), 3.0f, 1.0f);
+        g.setColour(colour.withAlpha(alpha));
+        g.setFont(juce::FontOptions(size));
+        g.drawText(label, field.reduced(6, 0).withTrimmedRight(12), juce::Justification::centredLeft, true);
+        juce::Path down;
+        down.addTriangle(static_cast<float>(field.getRight() - 14), static_cast<float>(field.getCentreY() - 2),
+                         static_cast<float>(field.getRight() - 6), static_cast<float>(field.getCentreY() - 2),
+                         static_cast<float>(field.getRight() - 10), static_cast<float>(field.getCentreY() + 2));
+        g.fillPath(down);
     };
-    chevron(lfoPreviousBounds(area), false);
-    chevron(lfoNextBounds(area), true);
+
+    dropdown(lfoTypeBounds(area), rhino::forge::lfoTypeName(static_cast<int>(type)), 11.0f);
+
+    if (lfoFooterShowsName(type))
+    {
+        const auto label = type == LfoType::path
+            ? juce::String(setting.path.custom ? "Custom path" : "Default path")
+            : table.custom ? picture.name
+                           : juce::String(rhino::forge::lfoFullShapeName(
+                                 static_cast<int>(rhino::forge::lfoShapeOf(setting))));
+        dropdown(lfoNameBounds(area, type), label, 12.0f);
+    }
+
+    if (lfoFooterShowsChevrons(type))
+    {
+        g.setColour(colour.withAlpha(alpha));
+        const auto chevron = [&] (juce::Rectangle<int> button, bool right)
+        {
+            const auto cx = static_cast<float>(button.getCentreX());
+            const auto cy = static_cast<float>(button.getCentreY());
+            const auto direction = right ? 1.0f : -1.0f;
+            g.drawLine(cx - direction * 2.0f, cy - 4.0f, cx + direction * 2.0f, cy, 1.5f);
+            g.drawLine(cx + direction * 2.0f, cy, cx - direction * 2.0f, cy + 4.0f, 1.5f);
+        };
+        chevron(lfoPreviousBounds(area), false);
+        chevron(lfoNextBounds(area), true);
+    }
+
+    if (lfoFooterShowsDirection(type))
+        dropdown(lfoDirectionBounds(area),
+                 rhino::forge::lfoDirectionName(static_cast<int>(rhino::forge::lfoDirectionOf(setting))),
+                 11.0f);
 
     const auto gridField = [&] (juce::Rectangle<int> field, int count, bool columns)
     {
@@ -594,6 +748,7 @@ inline void drawLfo(juce::Graphics& g, juce::Rectangle<int> area, rhino::forge::
         g.setColour(colour.withAlpha(0.28f * alpha));
         g.drawRoundedRectangle(field.toFloat().reduced(0.5f), 3.0f, 1.0f);
         g.setColour(colour.withAlpha(alpha));
+        g.setFont(juce::FontOptions(12.0f));
         for (int i = 0; i < 3; ++i)
             if (columns) g.drawVerticalLine(field.getX() + 7 + i * 3, field.getY() + 5, field.getBottom() - 5);
             else g.drawHorizontalLine(field.getY() + 6 + i * 3, field.getX() + 5, field.getX() + 13);

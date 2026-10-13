@@ -302,10 +302,50 @@ struct Oscillator
 // another, and the panel shows one at a time rather than six at once.
 inline constexpr int lfoCount = 6;
 
-// The LFO shapes. An LFO is a modulation source, so every shape is bipolar and
-// runs the full -1..1: a slot's depth decides how much of that reaches anything.
-enum class LfoShape { sine, triangle, saw, square, sampleHold };
-inline constexpr int lfoShapeCount = 5;
+// What kind of thing an LFO is, Serum's TYPE. NORMAL is a shape read left to
+// right: one of the built-in four, or one drawn over the grid. PATH is a route
+// across the pad that the phase travels along, and it puts out two values at
+// once, how far across it is and how far up. S&H is a staircase of random
+// steps, one per grid column, a fresh flight taken at the top of every cycle;
+// it was a shape here until it had a type of its own.
+enum class LfoType { normal, path, sampleHold };
+inline constexpr int lfoTypeCount = 3;
+
+inline const char* lfoTypeName(int type)
+{
+    switch (type)
+    {
+        case 1: return "PATH";
+        case 2: return "S&H";
+        default: break;
+    }
+    return "NORMAL";
+}
+
+// Which way a NORMAL or a PATH LFO travels its shape, Serum's DIRECTION.
+// Forward reads it start to end; reverse reads it end to start; ping-pong
+// reads it out and back, so one trip takes two cycles and nothing jumps at
+// the turn. A sample and hold has no direction: its steps are random either
+// way round.
+enum class LfoDirection { forward, reverse, pingPong };
+inline constexpr int lfoDirectionCount = 3;
+
+inline const char* lfoDirectionName(int direction)
+{
+    switch (direction)
+    {
+        case 1: return "REVERSE";
+        case 2: return "PING-PONG";
+        default: break;
+    }
+    return "FORWARD";
+}
+
+// The LFO shapes a NORMAL LFO starts from. An LFO is a modulation source, so
+// every shape is bipolar and runs the full -1..1: a slot's depth decides how
+// much of that reaches anything.
+enum class LfoShape { sine, triangle, saw, square };
+inline constexpr int lfoShapeCount = 4;
 
 inline const char* lfoShapeName(int shape)
 {
@@ -314,7 +354,6 @@ inline const char* lfoShapeName(int shape)
         case 1: return "TRI";
         case 2: return "SAW";
         case 3: return "SQR";
-        case 4: return "S&H";
         default: break;
     }
     return "SINE";
@@ -327,7 +366,6 @@ inline const char* lfoFullShapeName(int shape)
         case 1: return "Triangle";
         case 2: return "Saw";
         case 3: return "Square";
-        case 4: return "Sample & Hold";
         default: break;
     }
     return "Sine";
@@ -374,13 +412,6 @@ constexpr LfoTable lfoShapeTable(LfoShape shape) noexcept
             table.points[2] = {0.5f, -1.0f};
             table.points[3] = {1.0f, -1.0f};
             break;
-        case LfoShape::sampleHold:
-            // A step drawn afresh each cycle is not a curve and has no corners
-            // to offer. Level, and the panel fills in the step being held.
-            table.count = 2;
-            table.points[0] = {0.0f, 0.0f};
-            table.points[1] = {1.0f, 0.0f};
-            break;
         case LfoShape::sine:
             table.count = 3;
             table.points[0] = {0.0f, 0.0f, 1.0f};
@@ -393,16 +424,13 @@ constexpr LfoTable lfoShapeTable(LfoShape shape) noexcept
 
 inline constexpr std::array<LfoTable, lfoShapeCount> lfoShapeTables {
     lfoShapeTable(LfoShape::sine), lfoShapeTable(LfoShape::triangle),
-    lfoShapeTable(LfoShape::saw), lfoShapeTable(LfoShape::square),
-    lfoShapeTable(LfoShape::sampleHold)};
+    lfoShapeTable(LfoShape::saw), lfoShapeTable(LfoShape::square)};
 
-// The shape at a point in its cycle. `held` is the sample-and-hold's current
-// step, the one shape that cannot be worked out from the phase alone. A free
-// function so the panel draws the very curve the voice is reading, the way the
-// oscillator display and the oscillator share morph().
-inline float lfoWave(LfoShape shape, float phase, float held)
+// The shape at a point in its cycle. A free function so the panel draws the
+// very curve the voice is reading, the way the oscillator display and the
+// oscillator share morph().
+inline float lfoWave(LfoShape shape, float phase)
 {
-    if (shape == LfoShape::sampleHold) return held;
     return lfoShapeTables[static_cast<size_t>(shape)].sample(phase);
 }
 
@@ -434,20 +462,61 @@ inline constexpr int lfoRateUnitCount = 2;
 
 // Everything one LFO owns. The rate is always in Hertz — a unit of beats is
 // resolved to one before the patch is built, so the Core never sees a tempo.
-// Held as floats because that is what a parameter read gives back.
+// Held as floats because that is what a parameter read gives back. SMOOTH is
+// the sample and hold's: how much of each step is a ramp to the next rather
+// than a hold, from none to the whole step.
 struct LfoSetting
 {
     float rate = 0.5f;
+    float type = 0.0f;
     float shape = 0.0f;
     float mode = 0.0f;
+    float direction = 0.0f;
+    float smooth = 0.0f;
     LfoTable table;
+    LfoPath path;
 };
 
-// The mode and the shape a setting names, clamped, so one reading serves the
-// voice, the panel and the tests.
+// The type, the mode, the direction and the shape a setting names, clamped,
+// so one reading serves the voice, the panel and the tests.
+inline LfoType lfoTypeOf(const LfoSetting& lfo)
+{
+    return static_cast<LfoType>(juce::jlimit(0, lfoTypeCount - 1, juce::roundToInt(lfo.type)));
+}
+
 inline LfoMode lfoModeOf(const LfoSetting& lfo)
 {
     return static_cast<LfoMode>(juce::jlimit(0, lfoModeCount - 1, juce::roundToInt(lfo.mode)));
+}
+
+inline LfoDirection lfoDirectionOf(const LfoSetting& lfo)
+{
+    if (lfoTypeOf(lfo) == LfoType::sampleHold) return LfoDirection::forward;
+    return static_cast<LfoDirection>(
+        juce::jlimit(0, lfoDirectionCount - 1, juce::roundToInt(lfo.direction)));
+}
+
+// How far the travel phase runs before the cycle starts again: one for a
+// shape read one way, two for ping-pong's trip out and back. The rate is the
+// speed of travel, so a ping-pong LFO at 1 Hz takes two seconds to come home.
+inline float lfoTravelSpan(const LfoSetting& lfo)
+{
+    return lfoDirectionOf(lfo) == LfoDirection::pingPong ? 2.0f : 1.0f;
+}
+
+// Where in its shape, 0..1, an LFO is reading at a point of its travel. This
+// is the position the panel's indicator shows, so a reversed LFO is seen
+// running right to left and a ping-pong one is seen turning round.
+inline float lfoPositionOf(const LfoSetting& lfo, float travel)
+{
+    switch (lfoDirectionOf(lfo))
+    {
+        case LfoDirection::reverse: return 1.0f - std::clamp(travel, 0.0f, 1.0f);
+        case LfoDirection::pingPong:
+            return travel <= 1.0f ? std::clamp(travel, 0.0f, 1.0f) : std::clamp(2.0f - travel, 0.0f, 1.0f);
+        case LfoDirection::forward: break;
+    }
+    return std::clamp(travel, 0.0f, 1.0f);
 }
 
 // A parameter id belonging to one LFO: lfoParameterId(0, "Shape") is
@@ -465,10 +534,57 @@ inline LfoShape lfoShapeOf(const LfoSetting& lfo)
     return static_cast<LfoShape>(juce::jlimit(0, lfoShapeCount - 1, juce::roundToInt(lfo.shape)));
 }
 
-inline float lfoValue(const LfoSetting& setting, float phase, float held)
+// How many steps a sample and hold takes in a cycle: as many as the grid has
+// columns, which is the one place that count is set.
+inline int lfoStepCount(const LfoSetting& setting)
 {
-    return setting.table.custom ? setting.table.sample(phase)
-                                : lfoWave(lfoShapeOf(setting), phase, held);
+    return std::clamp(setting.table.columns, 1, maxLfoSteps - 1);
+}
+
+// What one LFO puts out: where it is, and, for a PATH, where it is on the
+// other axis too. Every other type puts its one value on both, so a slot fed
+// from the Y output keeps moving when the type is switched away from PATH
+// rather than falling silent.
+struct LfoOutput
+{
+    float x = 0.0f;
+    float y = 0.0f;
+};
+
+// The value at a position in the shape. `steps` is the sample and hold's
+// staircase for this cycle, the one thing the position alone cannot say. A
+// free function so the panel draws the very curve the voice is reading.
+inline LfoOutput lfoOutputAt(const LfoSetting& setting, float position, const LfoSteps& steps)
+{
+    switch (lfoTypeOf(setting))
+    {
+        case LfoType::path:
+        {
+            const auto& path = setting.path.custom ? setting.path : lfoDefaultPathTable;
+            const auto point = path.at(position);
+            return {point.x * 2.0f - 1.0f, point.y * 2.0f - 1.0f};
+        }
+        case LfoType::sampleHold:
+        {
+            // Held for the whole column, then, with SMOOTH, a straight ramp to
+            // the next step over the last part of it: at full SMOOTH every
+            // column is a ramp and the staircase is a line through its steps.
+            const auto count = lfoStepCount(setting);
+            const auto along = std::clamp(position, 0.0f, 1.0f) * static_cast<float>(count);
+            const auto index = std::min(count - 1, static_cast<int>(along));
+            const auto held = steps[static_cast<size_t>(index)];
+            const auto smooth = std::clamp(setting.smooth, 0.0f, 1.0f);
+            const auto within = along - static_cast<float>(index);
+            if (smooth <= 0.0f || within <= 1.0f - smooth) return {held, held};
+            const auto next = steps[static_cast<size_t>(index + 1)];
+            const auto value = held + (next - held) * ((within - (1.0f - smooth)) / smooth);
+            return {value, value};
+        }
+        case LfoType::normal: break;
+    }
+    const auto value = setting.table.custom ? setting.table.sample(position)
+                                            : lfoWave(lfoShapeOf(setting), position);
+    return {value, value};
 }
 
 // Tempo-synced rates, as the length of one LFO cycle in beats. A beat is a

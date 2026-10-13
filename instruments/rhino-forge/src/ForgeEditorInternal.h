@@ -18,7 +18,22 @@ inline int destinationFor(const juce::String& parameterId)
 
 inline juce::String slotParameter(int slot, const char* suffix)
 {
-    return "mod" + juce::String(slot + 1) + suffix;
+    return modParameterId(slot, suffix);
+}
+
+// A thin rail and a thumb, for a view with more rows than it shows: the rack,
+// the list beside it, and the matrix. Nothing is drawn while everything fits.
+inline void drawScrollThumb(juce::Graphics& g, juce::Rectangle<int> rail,
+                            int first, int visible, int total)
+{
+    if (visible >= total || rail.isEmpty()) return;
+    const auto thumbHeight = juce::jmax(18, rail.getHeight() * visible / total);
+    const auto travel = rail.getHeight() - thumbHeight;
+    const auto top = rail.getY() + travel * first / (total - visible);
+    g.setColour(ui::line.withAlpha(0.55f));
+    g.fillRoundedRectangle(rail.toFloat(), 1.5f);
+    g.setColour(ui::signalViolet.withAlpha(0.8f));
+    g.fillRoundedRectangle(rail.withY(top).withHeight(thumbHeight).toFloat(), 1.5f);
 }
 
 // How many semitones of the piano the computer keys can reach at once. JUCE's

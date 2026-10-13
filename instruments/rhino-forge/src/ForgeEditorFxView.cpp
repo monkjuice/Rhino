@@ -111,21 +111,6 @@ void Editor::repaintFxDisplays()
             repaint(moduleAreaFor(module));
 }
 
-// A thin rail and a thumb, for whichever of the two views has more rows than
-// it shows.
-static void paintFxScrollThumb(juce::Graphics& g, juce::Rectangle<int> rail,
-                               int first, int visible, int total)
-{
-    if (visible >= total || rail.isEmpty()) return;
-    const auto thumbHeight = juce::jmax(18, rail.getHeight() * visible / total);
-    const auto travel = rail.getHeight() - thumbHeight;
-    const auto top = rail.getY() + travel * first / (total - visible);
-    g.setColour(ui::line.withAlpha(0.55f));
-    g.fillRoundedRectangle(rail.toFloat(), 1.5f);
-    g.setColour(ui::signalViolet.withAlpha(0.8f));
-    g.fillRoundedRectangle(rail.withY(top).withHeight(thumbHeight).toFloat(), 1.5f);
-}
-
 void Editor::paintFxShelves(juce::Graphics& g, juce::Rectangle<int> area, const ui::Module& module)
 {
     const auto rack = shownRack();
@@ -154,8 +139,8 @@ void Editor::paintFxShelves(juce::Graphics& g, juce::Rectangle<int> area, const 
             }
         }
     }
-    paintFxScrollThumb(g, ui::fxRackScrollBounds(area), fxFirstVisibleSlot(),
-                       ui::fxVisibleSlotCount(area), fxActiveSlotCount(rack));
+    drawScrollThumb(g, ui::fxRackScrollBounds(area), fxFirstVisibleSlot(),
+                    ui::fxVisibleSlotCount(area), fxActiveSlotCount(rack));
 }
 
 void Editor::paintFxList(juce::Graphics& g, juce::Rectangle<int> area, const ui::Module&)
@@ -195,8 +180,8 @@ void Editor::paintFxList(juce::Graphics& g, juce::Rectangle<int> area, const ui:
                                    static_cast<float>(list.getWidth() - 10), 2.0f, 1.0f);
         }
     }
-    paintFxScrollThumb(g, viewport.withLeft(list.getRight() - 4).reduced(0, 2), first,
-                       ui::fxListVisibleRowCount(area), active);
+    drawScrollThumb(g, viewport.withLeft(list.getRight() - 4).reduced(0, 2), first,
+                    ui::fxListVisibleRowCount(area), active);
 
     ui::drawFxListViewButton(g, ui::fxListButtonBounds(area), fxListOpen);
     ui::drawFxExpandButton(g, ui::fxExpandButtonBounds(area), fxExpanded);

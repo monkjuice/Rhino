@@ -634,3 +634,20 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/forge-modulation.md (On the panel: the tube follows the loudest voice and rests on the knob with no note)
 - updated: pages/displays-draw-from-the-dsp.md (oscillator display is drawn at the modulated values; modulatedTraceSuite and why it uses a macro and paints only the tube)
 - updated: pages/git-workflow.md (check the current branch before writing or committing; another agent switched it mid-task)
+
+## [2026-10-13] update | Forge's LFOs gain a TYPE (NORMAL, PATH, S&H), a DIRECTION and a Y output (uncommitted on main)
+- source: the main agent's brief, checked against instruments/rhino-forge/core/ForgeVoiceParts.h, core/ForgeLfoTable.h, core/ForgeMatrix.h, core/ForgeCore.h, src/ForgeProcessorLfo.cpp, src/ForgeProcessorState.cpp, src/ForgeEditorLayout.cpp, src/ForgeEditorPages.cpp, src/ForgeEditorLfo.cpp, src/ForgeEditorInput.cpp, ui/ForgeEnvelopeVisuals.h, ui/ForgeModules.h, tests/ForgeTestsLfo.cpp, tests/ForgeTestsDisplays.cpp
+- created: pages/forge-lfos.md (the three types, travel vs position, lfoOutputAt and the Y sources, the S&H flight and SMOOTH, the footer without slack, the Y card, path editing, the ForgeLfoPath node, the shape-4 migration, the Serum provenance)
+- updated: pages/forge-modulation.md (LFO 1-6 Y sources appended at 22-27; the modulators section defers to Forge LFOs)
+- updated: pages/displays-draw-from-the-dsp.md (the LFO graph samples lfoOutputAt; a path is drawn from its route)
+- updated: pages/append-only-stored-indices.md (the Y sources appended at the end; a new section on an entry leaving the end of a list, the S&H shape migrated to a type)
+- updated: pages/forge-engine.md (per-voice LFO state is a travel, a stopped flag and a step flight; meterLfoSource and Core::lfoSteps look the staircase up rather than copying it)
+- updated: pages/forge-editor.md (lfo{n}Type and lfo{n}Direction are display parameters; applyEnableStates relays out the header when the Y card comes or goes)
+- updated: pages/forge-presets-and-state.md (the ForgeLfoPath node; migrated repairs a shape of 4)
+- updated: index.md (Forge LFOs added under Components)
+
+## [2026-10-13] update | Forge's matrix grows to thirty slots, eight on the table until a patch needs more
+- source: the change itself, checked against instruments/rhino-forge/core/ForgeMatrix.h (modSlotCount, modParameterId, Modulation::settle), core/ForgeCore.h (the live-slot walks), src/ForgeProcessor.cpp (settle once a block), ui/ForgePlacement.h (the matrix section), ui/ForgeModules.h (completeMatrixRows), src/ForgeEditorMatrixView.cpp, src/ForgeEditorPages.cpp, src/ForgeEditorInput.cpp, tests/ForgeTestsLayout.cpp (the matrix sweep and matrixGrowsWithRoutingsSuite), tests/ForgeTestsModulation.cpp
+- updated: pages/forge-modulation.md (thirty slots, no format bump; the per-block live list; the table's growth rule, fixed row height, whole-row window, wheel and reveal; summary changed)
+- updated: pages/forge-editor.md (eighteen units with ForgeEditorMatrixView.cpp; the rack and the matrix as the two scrolled windows and what they share; summary changed)
+- updated: index.md (summaries of forge-modulation and forge-editor)

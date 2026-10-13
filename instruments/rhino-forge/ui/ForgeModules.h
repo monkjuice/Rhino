@@ -45,6 +45,32 @@ inline std::vector<Row> completeFxRows(std::vector<Row> rows)
     return rows;
 }
 
+// The matrix's rows past the eighth. The first eight are written out below so
+// the declaration still reads as the table it is; the rest repeat them exactly,
+// as the rack's later slots repeat its first four and for the same reason: a
+// row is four ids and nothing else, and twenty-two copies by hand would be
+// twenty-two places for one to drift. The deque owns the generated text
+// because Control stores light-weight string pointers.
+inline std::vector<Row> completeMatrixRows(std::vector<Row> rows)
+{
+    static std::deque<juce::String> ids;
+    const auto keep = [] (juce::String id)
+    {
+        ids.push_back(std::move(id));
+        return ids.back().toRawUTF8();
+    };
+
+    for (int slot = static_cast<int>(rows.size()); slot < modSlotCount; ++slot)
+    {
+        const auto id = [slot, &keep] (const char* suffix) { return keep(modParameterId(slot, suffix)); };
+        rows.push_back({1, {{id("Source"), "", Style::stepper, nullptr, 2},
+                            {id("Depth"), "", Style::bar, nullptr, 3},
+                            {id("Bipolar"), "BI", Style::chip},
+                            {id("Dest"), "", Style::stepper, nullptr, 2}}});
+    }
+    return rows;
+}
+
 inline constexpr float oscillatorColumnSpan = 16.0f / 3.0f;
 inline constexpr float mixerColumnSpan = static_cast<float>(gridColumns) / 9.0f;
 
@@ -181,6 +207,18 @@ inline std::vector<Row> oscillatorRows(const char* mode, const char* octave, con
 // appears somewhere on the panel has somewhere to find them.
 inline std::vector<juce::String> displayParameters(const Module& module)
 {
+    // An LFO's type and direction are chosen from the footer of its display:
+    // what the picture is, and which way it is read, beside the picture.
+    if (module.display == Display::lfo)
+    {
+        std::vector<juce::String> ids;
+        for (int lfo = 0; lfo < lfoCount; ++lfo)
+        {
+            ids.push_back(lfoParameterId(lfo, "Type"));
+            ids.push_back(lfoParameterId(lfo, "Direction"));
+        }
+        return ids;
+    }
     if (module.display != Display::oscillator) return {};
     const auto prefix = juce::String(module.id);
     return {prefix + "Start", prefix + "End", prefix + "LoopStart", prefix + "LoopEnd"};
@@ -244,10 +282,16 @@ inline const std::vector<Module>& modules()
         // screen whichever tab is open. It reads as a table: one row per slot,
         // numbered down the side, the amount between the source driving it and
         // the control it moves. Only the first slot names its columns, because
-        // those names are drawn once in the title strip rather than above all
-        // eight rows.
-        {"matrix", "MATRIX", "8 SLOTS", nullptr, true, Display::none, 0, 4, 16, false,
-         {{1, {{"mod1Source", "SOURCE", Style::stepper, nullptr, 2},
+        // those names are drawn once in the title strip rather than above every
+        // row.
+        //
+        // Thirty rows at one fixed height under a window that shows eight of
+        // them to begin with, and one more past the last slot in use; the rest
+        // scroll (ForgePlacement.h, the matrix). No detail is declared: the
+        // header counts the routings, and the editor supplies it.
+        {"matrix", "MATRIX", "", nullptr, true, Display::none, 0, 4, 16, false,
+         completeMatrixRows({
+          {1, {{"mod1Source", "SOURCE", Style::stepper, nullptr, 2},
                {"mod1Depth", "AMOUNT", Style::bar, nullptr, 3},
                {"mod1Bipolar", "BI", Style::chip},
                {"mod1Dest", "DESTINATION", Style::stepper, nullptr, 2}}},
@@ -278,7 +322,7 @@ inline const std::vector<Module>& modules()
           {1, {{"mod8Source", "", Style::stepper, nullptr, 2},
                {"mod8Depth", "", Style::bar, nullptr, 3},
                {"mod8Bipolar", "BI", Style::chip},
-               {"mod8Dest", "", Style::stepper, nullptr, 2}}}},
+               {"mod8Dest", "", Style::stepper, nullptr, 2}}}}),
          0, only(Page::matrix), 1, columnTitleHeight, rowNumberGutter},
 
         // The wavetable editor takes the same columns as the matrix does,
@@ -434,7 +478,10 @@ inline const std::vector<Module>& modules()
         // counts in. The two parameters behind it share a cell, so only the
         // reading in charge is on screen — Hertz free-running, or a division of
         // the host's beat. MODE is the other half of the same question, whether
-        // the shape answers the keyboard at all.
+        // the shape answers the keyboard at all. SMOOTH is the sample and
+        // hold's, and greys out under the other two types; the type itself and
+        // the direction are chosen in the display's footer, beside the picture
+        // they describe.
         //
         // Written out rather than generated: this file is read to find out what
         // the panel is, and a loop would mean reading the loop instead. The
@@ -445,36 +492,42 @@ inline const std::vector<Module>& modules()
                  {"lfo1RateUnit", "UNIT", Style::stepper},
                  {"lfo1Rate", "RATE", Style::knob, "lfo1RateUnit"},
                  {"lfo1Division", "RATE", Style::knob, nullptr, 1, "lfo1RateUnit", true},
+                 {"lfo1Smooth", "SMOOTH", Style::knob},
 
                  {"lfo2Shape", "SHAPE", Style::stepper},
                  {"lfo2Mode", "MODE", Style::stepper},
                  {"lfo2RateUnit", "UNIT", Style::stepper},
                  {"lfo2Rate", "RATE", Style::knob, "lfo2RateUnit"},
                  {"lfo2Division", "RATE", Style::knob, nullptr, 1, "lfo2RateUnit", true},
+                 {"lfo2Smooth", "SMOOTH", Style::knob},
 
                  {"lfo3Shape", "SHAPE", Style::stepper},
                  {"lfo3Mode", "MODE", Style::stepper},
                  {"lfo3RateUnit", "UNIT", Style::stepper},
                  {"lfo3Rate", "RATE", Style::knob, "lfo3RateUnit"},
                  {"lfo3Division", "RATE", Style::knob, nullptr, 1, "lfo3RateUnit", true},
+                 {"lfo3Smooth", "SMOOTH", Style::knob},
 
                  {"lfo4Shape", "SHAPE", Style::stepper},
                  {"lfo4Mode", "MODE", Style::stepper},
                  {"lfo4RateUnit", "UNIT", Style::stepper},
                  {"lfo4Rate", "RATE", Style::knob, "lfo4RateUnit"},
                  {"lfo4Division", "RATE", Style::knob, nullptr, 1, "lfo4RateUnit", true},
+                 {"lfo4Smooth", "SMOOTH", Style::knob},
 
                  {"lfo5Shape", "SHAPE", Style::stepper},
                  {"lfo5Mode", "MODE", Style::stepper},
                  {"lfo5RateUnit", "UNIT", Style::stepper},
                  {"lfo5Rate", "RATE", Style::knob, "lfo5RateUnit"},
                  {"lfo5Division", "RATE", Style::knob, nullptr, 1, "lfo5RateUnit", true},
+                 {"lfo5Smooth", "SMOOTH", Style::knob},
 
                  {"lfo6Shape", "SHAPE", Style::stepper},
                  {"lfo6Mode", "MODE", Style::stepper},
                  {"lfo6RateUnit", "UNIT", Style::stepper},
                  {"lfo6Rate", "RATE", Style::knob, "lfo6RateUnit"},
-                 {"lfo6Division", "RATE", Style::knob, nullptr, 1, "lfo6RateUnit", true}},
+                 {"lfo6Division", "RATE", Style::knob, nullptr, 1, "lfo6RateUnit", true},
+                 {"lfo6Smooth", "SMOOTH", Style::knob}},
            lfoCount}},
          static_cast<int>(ModSource::lfo1), everyPage, 1, 0, 0, 62},
 

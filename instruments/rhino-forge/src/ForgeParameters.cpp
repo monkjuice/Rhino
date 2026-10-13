@@ -420,10 +420,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout Processor::parameterLayout()
     // Six LFOs, declared identically. None is expressed in terms of another:
     // each owns its shape, its mode and its rate outright, exactly as the two
     // oscillators do, and the panel shows one at a time.
+    juce::StringArray lfoTypeNames;
+    for (int i = 0; i < lfoTypeCount; ++i) lfoTypeNames.add(lfoTypeName(i));
     juce::StringArray lfoShapeNames;
     for (int i = 0; i < lfoShapeCount; ++i) lfoShapeNames.add(lfoShapeName(i));
     juce::StringArray lfoModeNames;
     for (int i = 0; i < lfoModeCount; ++i) lfoModeNames.add(lfoModeName(i));
+    juce::StringArray lfoDirectionNames;
+    for (int i = 0; i < lfoDirectionCount; ++i) lfoDirectionNames.add(lfoDirectionName(i));
     juce::StringArray lfoRateUnitNames;
     for (int i = 0; i < lfoRateUnitCount; ++i) lfoRateUnitNames.add(lfoRateUnitName(i));
     juce::StringArray lfoDivisionNames;
@@ -436,12 +440,24 @@ juce::AudioProcessorValueTreeState::ParameterLayout Processor::parameterLayout()
         {
             return "LFO " + juce::String(lfo) + " " + suffix;
         };
+        // NORMAL by default: the shape in the stepper is what an LFO is expected
+        // to run until it is asked for a path or for steps. The type is chosen
+        // from the display's own footer rather than from a cell in the row.
+        result.push_back(std::make_unique<juce::AudioParameterChoice>(
+            juce::ParameterID {id("Type"), 1}, name("Type"), lfoTypeNames, 0));
         result.push_back(std::make_unique<juce::AudioParameterChoice>(
             juce::ParameterID {id("Shape"), 1}, name("Shape"), lfoShapeNames, 0));
         // TRIG by default: an LFO that answers the keyboard is what a player
         // expects of one, and it is the mode the other two are heard against.
         result.push_back(std::make_unique<juce::AudioParameterChoice>(
             juce::ParameterID {id("Mode"), 1}, name("Mode"), lfoModeNames, 0));
+        // Forward by default, and chosen from the footer beside the type: which
+        // way a shape is read is a property of the picture, not a knob.
+        result.push_back(std::make_unique<juce::AudioParameterChoice>(
+            juce::ParameterID {id("Direction"), 1}, name("Direction"), lfoDirectionNames, 0));
+        // The sample and hold's SMOOTH: none by default, so its steps are steps
+        // until someone asks for ramps between them.
+        result.push_back(parameter(id("Smooth"), name("Smooth"), {0.0f, 1.0f}, 0.0f, asPercent));
         // Each LFO starts at a rate of its own, so six of them pointed at six
         // destinations do not all move as one until they are set apart by hand.
         const auto defaultRate = 0.5f * static_cast<float>(lfo);
@@ -531,9 +547,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout Processor::parameterLayout()
         result.push_back(parameter("macro" + juce::String(macro), "Macro " + juce::String(macro),
                                    {0.0f, 1.0f}, 0.0f, asPercent));
 
-    // Eight modulation slots. Each is three parameters so a host can automate a
+    // Thirty modulation slots. Each is four parameters so a host can automate a
     // routing as readily as a knob, and so the whole matrix saves with a preset
-    // without a separate serialisation path.
+    // without a separate serialisation path. The panel shows eight rows until a
+    // patch needs more; the parameters are there either way.
     juce::StringArray sourceNames;
     for (int i = 0; i < modSourceCount; ++i) sourceNames.add(modSourceName(i));
     juce::StringArray destinationNames;

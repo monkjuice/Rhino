@@ -18,7 +18,7 @@
 //
 //   ForgeVoiceParts.h  the counts, and the settings one voice holds
 //   ForgeShapes.h      the ten waves, the six sub shapes, and their tables
-//   ForgeMatrix.h      what can modulate what, and the eight slots
+//   ForgeMatrix.h      what can modulate what, and the slots that join them
 //   ForgePatch.h       the whole patch, and the arithmetic that reads it
 //   ForgeArp.h         the arpeggiator, which is upstream of every voice
 //
@@ -89,10 +89,11 @@ public:
                 channel.reset();
         nextVoice = 0;
         freePhase = {};
-        freeHeld = {};
+        freeSteps = {};
         meterLfoPhase = {};
-        meterLfoHeld = {};
+        meterLfoSource.fill(freeLfoSource);
         meterLfoValue = {};
+        meterLfoValueY = {};
         noiseState = 0x9e3779b9u;
         noiseSeed = 0;
         heldCount = 0;
@@ -199,9 +200,11 @@ public:
             ? static_cast<int>(meterStage[static_cast<size_t>(env)]) : 0;
     }
 
-    // Where LFO 1 is in its cycle and what it last put out. The phase draws the
-    // running indicator; the value is published as well because a
-    // sample-and-hold's step cannot be worked back out of the phase.
+    // Where an LFO is in its shape and what it last put out. The position
+    // draws the running indicator — it is where the shape is being read, so a
+    // reversed LFO is seen running backwards; the value is published as well
+    // because a sample and hold's step cannot be worked back out of the
+    // position, and a path's Y output beside it.
     float lfoPosition(int lfo) const
     {
         return lfo >= 0 && lfo < lfoCount ? meterLfoPhase[static_cast<size_t>(lfo)] : 0.0f;
@@ -210,6 +213,23 @@ public:
     float lfoOutput(int lfo) const
     {
         return lfo >= 0 && lfo < lfoCount ? meterLfoValue[static_cast<size_t>(lfo)] : 0.0f;
+    }
+
+    float lfoOutputY(int lfo) const
+    {
+        return lfo >= 0 && lfo < lfoCount ? meterLfoValueY[static_cast<size_t>(lfo)] : 0.0f;
+    }
+
+    // The staircase the panel draws for a sample and hold: the one the voice
+    // it follows is stepping through, or the free-running one. Looked up
+    // rather than copied, because copying thirty-three steps per LFO per
+    // sample for the panel's sake would be the loop's biggest store.
+    const LfoSteps& lfoSteps(int lfo) const
+    {
+        if (lfo < 0 || lfo >= lfoCount) return freeSteps[0];
+        const auto source = meterLfoSource[static_cast<size_t>(lfo)];
+        if (source < 0 || source >= static_cast<int>(voices.size())) return freeSteps[static_cast<size_t>(lfo)];
+        return voices[static_cast<size_t>(source)].lfoSteps[static_cast<size_t>(lfo)];
     }
 
     // How far the matrix is moving each destination right now, in that
@@ -281,10 +301,9 @@ public:
         // wanted. The phases still move either way — an LFO nothing is pointed
         // at yet is still one the panel draws running.
         std::array<bool, lfoCount> used {};
-        for (const auto& slot : modulation.slots)
+        for (int i = 0; i < modulation.liveCount; ++i)
         {
-            if (slot.destination < 0.5f || slot.depth == 0.0f) continue;
-            const auto lfo = lfoIndexOf(juce::roundToInt(slot.source));
+            const auto lfo = lfoOfSource(juce::roundToInt(modulation.liveSlot(i).source));
             if (lfo >= 0) used[static_cast<size_t>(lfo)] = true;
         }
 
@@ -292,26 +311,37 @@ public:
         // whether or not a note is playing, which is the whole of what OFF
         // means. One cycle shared by every voice, so a rate set in beats stays
         // in step with the host across a phrase.
-        std::array<float, lfoCount> freeValue {};
+        std::array<LfoOutput, lfoCount> freeValue {};
         for (int i = 0; i < lfoCount; ++i)
         {
             const auto index = static_cast<size_t>(i);
             const auto& setting = patch.lfos[index];
             const auto free = lfoModeOf(setting) == LfoMode::free;
             if (free && used[index])
-                freeValue[index] = lfoValue(setting, freePhase[index], freeHeld[index]);
+                freeValue[index] = lfoOutputAt(setting, lfoPositionOf(setting, freePhase[index]),
+                                               freeSteps[index]);
 
             // What the panel is shown, before any voice has had its say: the
-            // free-running phase for an LFO in OFF, and the start of the shape
-            // for one that answers the keyboard — which is exactly where it is
-            // with nothing playing, and where the next key press will begin it.
-            meterLfoPhase[index] = free ? freePhase[index] : 0.0f;
-            meterLfoHeld[index] = free ? freeHeld[index] : 0.0f;
+            // free-running position for an LFO in OFF, and the start of the
+            // shape for one that answers the keyboard — which is exactly where
+            // it is with nothing playing, and where the next key press will
+            // begin it. The staircase shown at rest is the free-running
+            // flight whatever the mode: a note takes a flight of its own and
+            // the panel follows that the moment one sounds, but a flat line
+            // in the meantime said nothing about what the type is.
+            meterLfoPhase[index] = free ? lfoPositionOf(setting, freePhase[index])
+                                        : lfoPositionOf(setting, 0.0f);
+            meterLfoSource[index] = freeLfoSource;
 
+            const auto span = lfoTravelSpan(setting);
             const auto advanced = freePhase[index]
                 + juce::jlimit(0.01f, 40.0f, setting.rate) / static_cast<float>(sampleRate);
-            if (advanced >= 1.0f) freeHeld[index] = noise();
-            freePhase[index] = wrap(advanced);
+            if (advanced >= span)
+            {
+                freePhase[index] = advanced - span;
+                startLfoCycle(freeSteps[index], setting, false);
+            }
+            else freePhase[index] = advanced;
         }
 
         const auto modulated = modulation.anyActive();
@@ -321,9 +351,8 @@ public:
         // the loop to do that is only worth it when something actually is.
         auto fxModulated = false;
         if (modulated)
-            for (const auto& slot : modulation.slots)
-                if (slot.depth != 0.0f && slot.source >= 0.5f
-                    && isFxDestination(juce::roundToInt(slot.destination)))
+            for (int i = 0; i < modulation.liveCount; ++i)
+                if (isFxDestination(juce::roundToInt(modulation.liveSlot(i).destination)))
                     fxModulated = true;
         // Only the racks are ever taken from the loudest voice. Everything else
         // applied after the voices are summed (the busses, the output) is not a
@@ -401,7 +430,7 @@ public:
             // new note restarts its own shape and leaves the notes already
             // sounding where they were. An LFO in OFF is the one cycle
             // everything shares, and the voice simply reads it.
-            std::array<float, lfoCount> lfoValues {};
+            std::array<LfoOutput, lfoCount> lfoValues {};
             for (int i = 0; i < lfoCount; ++i)
             {
                 const auto index = static_cast<size_t>(i);
@@ -413,14 +442,15 @@ public:
                     continue;
                 }
                 if (used[index])
-                    lfoValues[index] = lfoValue(setting, voice.lfoPhase[index], voice.lfoHeld[index]);
+                    lfoValues[index] = lfoOutputAt(setting, lfoPositionOf(setting, voice.lfoPhase[index]),
+                                                   voice.lfoSteps[index]);
                 // The panel follows the loudest voice, exactly as ENV 1's
                 // display does and for the same reason: that is the note a
                 // player is listening to.
                 if (loudest)
                 {
-                    meterLfoPhase[index] = voice.lfoPhase[index];
-                    meterLfoHeld[index] = voice.lfoHeld[index];
+                    meterLfoPhase[index] = lfoPositionOf(setting, voice.lfoPhase[index]);
+                    meterLfoSource[index] = static_cast<int>(voiceIndex);
                 }
                 advanceVoiceLfo(voice, i, setting, mode);
             }
@@ -513,13 +543,17 @@ public:
         // audio routed to MAIN passes the modules, and then the master volume.
         racks[0].process((*fxRacks)[0], tempo, left, right);
 
-        // The values the panel draws, worked out once from the phases the loop
-        // settled on rather than per voice: a sample and hold's step cannot be
-        // read back out of its phase, so it has to be carried this far.
+        // The values the panel draws, worked out once from the positions the
+        // loop settled on rather than per voice: a sample and hold's step
+        // cannot be read back out of its position, so it has to be carried
+        // this far.
         for (int i = 0; i < lfoCount; ++i)
-            meterLfoValue[static_cast<size_t>(i)] =
-                lfoValue(patch.lfos[static_cast<size_t>(i)],
-                         meterLfoPhase[static_cast<size_t>(i)], meterLfoHeld[static_cast<size_t>(i)]);
+        {
+            const auto index = static_cast<size_t>(i);
+            const auto output = lfoOutputAt(patch.lfos[index], meterLfoPhase[index], lfoSteps(i));
+            meterLfoValue[index] = output.x;
+            meterLfoValueY[index] = output.y;
+        }
 
         const auto gain = juce::jlimit(0.0f, 1.25f, patch.output) * 0.28f;
         left = softClip(left * gain);
@@ -669,8 +703,10 @@ private:
         // voice, which is what makes TRIG and ENV mean anything: a new note
         // restarts its own shape and leaves the notes already sounding alone.
         // An LFO in OFF ignores these and reads the free-running phase instead.
+        // The phase is the travel, 0..1, or 0..2 for a ping-pong trip out and
+        // back; the steps are a sample and hold's staircase for this cycle.
         std::array<float, lfoCount> lfoPhase {};
-        std::array<float, lfoCount> lfoHeld {};
+        std::array<LfoSteps, lfoCount> lfoSteps {};
         std::array<bool, lfoCount> lfoStopped {};
     };
 
@@ -700,7 +736,7 @@ private:
     // over as the voice renders with them, so the ring on a knob and the sound
     // cannot come from two different readings.
     void applyModulation(Patch& target, const Modulation& modulation, const Voice& voice,
-                         const std::array<float, lfoCount>& lfos, bool publish = false)
+                         const std::array<LfoOutput, lfoCount>& lfos, bool publish = false)
     {
         // Offsets are accumulated per destination first and applied once.
         // Applying each slot in turn would round-trip through the destination's
@@ -710,12 +746,14 @@ private:
         std::array<float, destinationCount> offsets {};
         auto touched = false;
 
-        for (const auto& slot : modulation.slots)
+        // Only the slots settle() listed for the block: one with an end
+        // missing or no depth has nothing to add, and thirty of them walked
+        // per voice per sample would cost more than the routings in use do.
+        for (int i = 0; i < modulation.liveCount; ++i)
         {
+            const auto& slot = modulation.liveSlot(i);
             const auto source = juce::roundToInt(slot.source);
             const auto destination = juce::roundToInt(slot.destination);
-            if (source <= 0 || destination <= 0 || destination >= destinationCount || slot.depth == 0.0f)
-                continue;
 
             auto amount = 0.0f;
             switch (static_cast<ModSource>(source))
@@ -733,7 +771,12 @@ private:
                     }
                     if (const auto lfo = lfoIndexOf(source); lfo >= 0)
                     {
-                        amount = lfos[static_cast<size_t>(lfo)];
+                        amount = lfos[static_cast<size_t>(lfo)].x;
+                        break;
+                    }
+                    if (const auto lfo = lfoYIndexOf(source); lfo >= 0)
+                    {
+                        amount = lfos[static_cast<size_t>(lfo)].y;
                         break;
                     }
                     const auto macro = macroIndexOf(source);
@@ -778,14 +821,14 @@ private:
     }
 
     // Every field a live slot can have written, back to the patch's own value.
-    // A superset of what applyModulation touched, which is all it needs to be.
+    // The same list applyModulation walks, settled for the whole block, so
+    // nothing written goes unrestored and nothing unwritten is touched.
     void restoreModulatedFields(const Patch& patch, const Modulation& modulation)
     {
         auto& source = const_cast<Patch&>(patch);
-        for (const auto& slot : modulation.slots)
+        for (int i = 0; i < modulation.liveCount; ++i)
         {
-            const auto destination = juce::roundToInt(slot.destination);
-            if (destination <= 0 || destination >= destinationCount) continue;
+            const auto destination = juce::roundToInt(modulation.liveSlot(i).destination);
             if (auto* field = destinationField(scratch, destination))
                 *field = *destinationField(source, destination);
         }
@@ -850,15 +893,30 @@ private:
     {
         for (int i = 0; i < lfoCount; ++i)
         {
-            if (lfoModeOf(patch.lfos[static_cast<size_t>(i)]) == LfoMode::free) continue;
+            const auto& setting = patch.lfos[static_cast<size_t>(i)];
+            if (lfoModeOf(setting) == LfoMode::free) continue;
             voice.lfoPhase[static_cast<size_t>(i)] = 0.0f;
-            // A fresh step with it: phase zero is where sample and hold takes one.
-            voice.lfoHeld[static_cast<size_t>(i)] = noise();
+            // A fresh flight of steps with it: a note is a new cycle, and a
+            // sample and hold's cycle starts with its steps taken.
+            startLfoCycle(voice.lfoSteps[static_cast<size_t>(i)], setting, true);
             voice.lfoStopped[static_cast<size_t>(i)] = false;
         }
     }
 
-    // One LFO's cycle moved on by a sample, inside one voice.
+    // A sample and hold's steps for the cycle starting now, one per grid
+    // column and one more for the first step of the cycle after it, so the
+    // last step's ramp has somewhere to go. The cycle after inherits that
+    // step as its first, which is what keeps a smoothed staircase continuous
+    // across the join; a cycle a note starts afresh takes every step new.
+    void startLfoCycle(LfoSteps& steps, const LfoSetting& setting, bool fresh)
+    {
+        if (lfoTypeOf(setting) != LfoType::sampleHold) return;
+        const auto count = static_cast<size_t>(lfoStepCount(setting));
+        steps[0] = fresh ? noise() : steps[count];
+        for (size_t i = 1; i <= count; ++i) steps[i] = noise();
+    }
+
+    // One LFO's travel moved on by a sample, inside one voice.
     void advanceVoiceLfo(Voice& voice, int index, const LfoSetting& setting, LfoMode mode)
     {
         const auto i = static_cast<size_t>(index);
@@ -868,23 +926,30 @@ private:
         if (voice.lfoStopped[i] && mode != LfoMode::envelope) voice.lfoStopped[i] = false;
         if (voice.lfoStopped[i]) return;
 
+        const auto span = lfoTravelSpan(setting);
         const auto advanced = voice.lfoPhase[i]
             + juce::jlimit(0.01f, 40.0f, setting.rate) / static_cast<float>(sampleRate);
-        if (advanced >= 1.0f && mode == LfoMode::envelope)
+        if (advanced >= span && mode == LfoMode::envelope)
         {
-            // A one-shot stops on the last point of the shape and holds it,
-            // rather than wrapping round to the first. That hold is what makes
-            // it an envelope instead of a cycle that ran once: a saw finishes at
-            // the top, a triangle at the bottom, and whatever it is driving
-            // stays there until the next note.
-            voice.lfoPhase[i] = 1.0f;
+            // A one-shot stops at the end of its travel and holds it, rather
+            // than wrapping round to the start. That hold is what makes it an
+            // envelope instead of a cycle that ran once: a saw finishes at the
+            // top, a triangle at the bottom, a reversed shape on its first
+            // point, and whatever it is driving stays there until the next
+            // note.
+            voice.lfoPhase[i] = span;
             voice.lfoStopped[i] = true;
             return;
         }
-        // One new step per cycle, taken as the cycle turns over, so a
-        // sample-and-hold changes exactly where the other shapes restart.
-        if (advanced >= 1.0f) voice.lfoHeld[i] = noise();
-        voice.lfoPhase[i] = wrap(advanced);
+        if (advanced >= span)
+        {
+            // A new flight of steps as the cycle turns over, so a sample and
+            // hold changes exactly where the other shapes restart.
+            voice.lfoPhase[i] = advanced - span;
+            startLfoCycle(voice.lfoSteps[i], setting, false);
+            return;
+        }
+        voice.lfoPhase[i] = advanced;
     }
 
     // Taking a voice that is still sounding must not be audible as anything but
@@ -1383,13 +1448,16 @@ private:
     // is playing, which is the whole of what OFF means. The keyboard modes
     // ignore them and read the copy inside the voice instead.
     std::array<float, lfoCount> freePhase {};
-    std::array<float, lfoCount> freeHeld {};
-    // What the panel is shown for each LFO. The held step is carried as well as
-    // the phase because a sample and hold's step cannot be worked back out of
-    // its phase.
+    std::array<LfoSteps, lfoCount> freeSteps {};
+    // What the panel is shown for each LFO: the position in the shape, both
+    // outputs, and whose staircase it is — a voice's index, or the
+    // free-running one — because a sample and hold's steps cannot be worked
+    // back out of its position.
+    static constexpr int freeLfoSource = -1;
     std::array<float, lfoCount> meterLfoPhase {};
-    std::array<float, lfoCount> meterLfoHeld {};
+    std::array<int, lfoCount> meterLfoSource {};
     std::array<float, lfoCount> meterLfoValue {};
+    std::array<float, lfoCount> meterLfoValueY {};
     std::uint32_t noiseState = 0x9e3779b9u;
     // The noise module's poles and levels, worked out once in initialise(), and
     // the counter that gives every new voice a stream of its own.

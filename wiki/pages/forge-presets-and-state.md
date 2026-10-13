@@ -15,7 +15,7 @@ Persistence is `src/ForgeProcessorState.cpp`, with LFO tables in `src/ForgeProce
 
 - A `<PARAM id value>` per parameter, as plain values.
 - Properties: each oscillator's plate colour (`panelColour_<module>`) and the macro names (`macroName_<n>`), one property each so one changing shifts nothing else.
-- Child nodes, only when they differ from what every copy of Forge already has: `TABLE` (a drawn or loaded wavetable, deflated then base64), `SAMPLE` (a spectral sample as 16-bit FLAC then base64; the spectrogram is re-analysed on load) and `ForgeLfoTable` (a custom LFO shape or grid). A patch never points at a file on disk.
+- Child nodes, only when they differ from what every copy of Forge already has: `TABLE` (a drawn or loaded wavetable, deflated then base64), `SAMPLE` (a spectral sample as 16-bit FLAC then base64; the spectrogram is re-analysed on load), `ForgeLfoTable` (a custom LFO shape or grid) and, since 2026-10-13, `ForgeLfoPath` (a drawn PATH route as `Point x y` children, the default diamond never written; [Forge LFOs](forge-lfos.md)). A patch never points at a file on disk.
 - `ARPSLOT` nodes (since 2026-10-13), one per arp slot that has been left at least once: property `slot` (0-3) and one property per id in `arpSlotParameterIds()` holding the plain value ([Forge ARP plate, slots and waterfall](forge-arp-plate.md)). They are read from the parameter state itself, so they ride through `copyState` with no append or apply step, and `migrated` keeps them because they carry no `id`. **A slot's node is written only when the slot is left**, so the live slot's node is stale in a saved file whenever a knob moved since; harmless, because the only read is a switch *to* a slot, preceded by the write of the slot being left. A slot never visited has no node and opens on the defaults, as does a control a node predates. `liveArpSlot` is set from `arpSlot` after `setStateInformation` and `loadPreset`.
 
 Not in it: view settings (tab, the bank on show, envelope zoom, FX scroll) and MIDI bindings, which describe the desk rather than the sound ([Forge MIDI learn](forge-midi-learn.md)). The standalone keeps its patch as `filterState` in `%APPDATA%\Rhino Forge\Rhino Forge.settings`.
@@ -26,7 +26,7 @@ Not in it: view settings (tab, the bank on show, envelope zoom, FX scroll) and M
 
 ## Within a version, reconcile
 
-`Processor::migrated` drops parameters Forge no longer has and adds missing ones at their defaults; without that, a preset would leave newer controls holding the previous patch's values. It also repairs history: the LFO and ENV bank renames and source shifts, and the +3 dB on sub and noise levels saved before the mixer. Each repair keys off a mark that migrating clears (an old parameter name, a missing `subPan`), so a second run changes nothing.
+`Processor::migrated` drops parameters Forge no longer has and adds missing ones at their defaults; without that, a preset would leave newer controls holding the previous patch's values. It also repairs history: the LFO and ENV bank renames and source shifts, the +3 dB on sub and noise levels saved before the mixer, and a `lfo{n}Shape` of 4, sample and hold when it was a shape, which becomes Type = S&H and Shape = 0. Each repair keys off a mark that migrating clears (an old parameter name, a missing `subPan`, a shape past the list), so a second run changes nothing.
 
 ## Host state is never refused
 
@@ -40,6 +40,7 @@ Not in it: view settings (tab, the bank on show, envelope zoom, FX scroll) and M
 ## Related
 
 - [Forge modulation: matrix, envelopes, LFOs and macros](forge-modulation.md)
+- [Forge LFOs](forge-lfos.md)
 - [Forge ARP plate, slots and waterfall](forge-arp-plate.md)
 - [Forge oscillators and wavetables](forge-oscillators.md)
 - [Forge spectral oscillator](forge-spectral.md)

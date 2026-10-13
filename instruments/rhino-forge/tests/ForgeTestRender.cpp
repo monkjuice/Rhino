@@ -82,7 +82,7 @@ void everythingPatch(Processor& processor)
     set("lfo1Rate", 4.3f);
     set("lfo1Shape", 1.0f);
     set("lfo2Rate", 0.9f);
-    set("lfo2Shape", 4.0f);
+    set("lfo2Type", static_cast<float>(LfoType::sampleHold));
 
     const auto slot = [&set] (int index, float source, float destination, float depth)
     {

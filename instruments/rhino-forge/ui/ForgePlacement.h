@@ -553,6 +553,72 @@ inline juce::Rectangle<int> controlArea(juce::Rectangle<int> moduleArea, const M
     return body;
 }
 
+// --- The matrix ---------------------------------------------------------------
+//
+// Thirty slots, and a table that shows eight of them to begin with. A row is a
+// fixed height rather than a share of the module, as a rack strip is, so the
+// table scrolls past the window it has instead of squeezing thirty fields into
+// it. The height is what eight rows would get, so the table opens looking
+// exactly as the eight-row one did and gains a scroll rather than a squeeze
+// when a ninth routing arrives.
+inline constexpr int matrixDefaultRows = 8;
+inline constexpr int minMatrixRowHeight = 30;
+inline constexpr int maxMatrixRowHeight = 40;
+// The strip down the table's right edge its scroll thumb runs in, kept whether
+// or not there is anything to scroll so the fields do not move when a ninth
+// row arrives.
+inline constexpr int matrixScrollGutter = 8;
+
+inline bool isMatrixModule(const Module& module)
+{
+    return module.id != nullptr && juce::String(module.id) == "matrix";
+}
+
+inline int matrixRowHeight(juce::Rectangle<int> moduleArea, const Module& module)
+{
+    return juce::jlimit(minMatrixRowHeight, maxMatrixRowHeight,
+                        controlArea(moduleArea, module).getHeight() / matrixDefaultRows);
+}
+
+// How many whole rows the table's window holds. Whole rows only: a field cut
+// in half at the window's foot would read as a broken control, where a rack
+// strip cut in half reads as the next shelf.
+inline int matrixVisibleRowCount(juce::Rectangle<int> moduleArea, const Module& module)
+{
+    return juce::jlimit(1, modSlotCount,
+                        controlArea(moduleArea, module).getHeight() / matrixRowHeight(moduleArea, module));
+}
+
+// How many rows the table shows for a patch whose last slot with either end
+// set is `lastOccupiedSlot` (-1 for none): eight to begin with, and past that
+// one blank row after the last one in use, so there is always a row to set a
+// routing up in by hand until the thirty are spent.
+inline int matrixShownRowCount(int lastOccupiedSlot)
+{
+    return juce::jlimit(matrixDefaultRows, modSlotCount, lastOccupiedSlot + 2);
+}
+
+inline int matrixMaxFirstRow(juce::Rectangle<int> moduleArea, const Module& module, int shownRows)
+{
+    return juce::jmax(0, shownRows - matrixVisibleRowCount(moduleArea, module));
+}
+
+// The module's rectangle moved up by the rows scrolled past, so the row
+// geometry below lays the rows showing where the window is. Everything but
+// the rows -- the header, the column titles, the rail -- is laid out from the
+// unmoved area.
+inline juce::Rectangle<int> matrixScrolledBounds(juce::Rectangle<int> moduleArea, const Module& module,
+                                                 int firstRow)
+{
+    return moduleArea.translated(0, -firstRow * matrixRowHeight(moduleArea, module));
+}
+
+inline juce::Rectangle<int> matrixScrollBounds(juce::Rectangle<int> moduleArea, const Module& module)
+{
+    const auto area = controlArea(moduleArea, module);
+    return area.withLeft(area.getRight() - matrixScrollGutter).withWidth(3).reduced(0, 4);
+}
+
 inline juce::Rectangle<int> rowBounds(juce::Rectangle<int> moduleArea, const Module& module, int rowIndex)
 {
     // A seated row is laid out in the display rather than in the body, and is
@@ -565,6 +631,13 @@ inline juce::Rectangle<int> rowBounds(juce::Rectangle<int> moduleArea, const Mod
     const auto area = controlArea(moduleArea, module);
     if (juce::String(module.id) == "fx")
         return {area.getX(), area.getY() + rowIndex * fxSlotHeight, area.getWidth(), fxSlotHeight};
+    // The matrix's rows run on past the window at their fixed height, exactly
+    // as the rack's do, and leave the rail its strip.
+    if (isMatrixModule(module))
+    {
+        const auto height = matrixRowHeight(moduleArea, module);
+        return {area.getX(), area.getY() + rowIndex * height, area.getWidth() - matrixScrollGutter, height};
+    }
 
     auto total = 0;
     for (const auto& row : module.rows)

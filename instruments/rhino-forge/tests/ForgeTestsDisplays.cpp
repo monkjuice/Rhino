@@ -985,17 +985,77 @@ void lfoFooterSuite()
     {
         editor->setSize(width, ui::minPanelHeight);
         const auto display = displayAt();
+        const auto type = ui::lfoTypeBounds(display);
         const auto name = ui::lfoNameBounds(display);
         const auto previous = ui::lfoPreviousBounds(display);
         const auto next = ui::lfoNextBounds(display);
+        const auto direction = ui::lfoDirectionBounds(display);
         const auto columns = ui::lfoColumnBounds(display);
         const auto rows = ui::lfoRowBounds(display);
-        require(display.contains(name) && display.contains(previous) && display.contains(next)
+        require(display.contains(type) && display.contains(name) && display.contains(previous)
+                && display.contains(next) && display.contains(direction)
                 && display.contains(columns) && display.contains(rows),
                 "LFO footer controls remain inside the display at both widths");
-        require(!name.intersects(previous) && !previous.intersects(next)
-                && !next.intersects(columns) && !columns.intersects(rows),
+        require(!type.intersects(name) && !name.intersects(previous) && !previous.intersects(next)
+                && !next.intersects(direction) && !direction.intersects(columns)
+                && !columns.intersects(rows),
                 "LFO footer targets do not overlap");
+        // The type is the first field and the fields run on from it with no
+        // slack: the gap the footer used to leave between the chevrons and the
+        // grid is where the direction stands now.
+        require(type.getX() == display.getX() + 6, "the type field is the first thing in the footer");
+        require(name.getX() == type.getRight() + 4 && previous.getX() == name.getRight() + 4
+                && direction.getX() == next.getRight() + 4 && columns.getX() == direction.getRight() + 4,
+                "the LFO footer has no empty space between its fields");
+        require(name.getWidth() >= 40, "the shape field keeps a readable width at the narrowest window");
+        require(ui::lfoNameBounds(display, LfoType::path).getRight() + 4 == direction.getX(),
+                "a path, which has nothing to step through, gives its name the chevrons' room");
+    }
+
+    // A PATH LFO splits its Y card off the end of its name card, and nothing
+    // else in the header moves; every other type takes it down again.
+    const auto yHandle = [&] () -> ui::SourceHandle*
+    {
+        for (auto* child : editor->getChildren())
+            if (auto* handle = dynamic_cast<ui::SourceHandle*>(child))
+                if (handle->source == static_cast<int>(ModSource::lfo1Y)) return handle;
+        return nullptr;
+    };
+    require(yHandle() != nullptr, "LFO 1 has a Y card");
+    if (yHandle() != nullptr)
+    {
+        require(!yHandle()->isVisible(), "a NORMAL LFO hangs no Y card");
+        const auto cardsBefore = [&]
+        {
+            std::vector<juce::Rectangle<int>> bounds;
+            for (auto* child : editor->getChildren())
+                if (auto* card = dynamic_cast<ui::BankCard*>(child))
+                    if (card->isVisible()) bounds.push_back(card->getBounds());
+            return bounds;
+        }();
+        setValue(*processor, "lfo1Type", static_cast<float>(LfoType::path));
+        editor->resized();
+        require(yHandle()->isVisible(), "a PATH LFO hangs its Y card");
+        auto clear = true;
+        std::vector<juce::Rectangle<int>> cardsAfter;
+        for (auto* child : editor->getChildren())
+            if (auto* card = dynamic_cast<ui::BankCard*>(child))
+                if (card->isVisible())
+                {
+                    cardsAfter.push_back(card->getBounds());
+                    if (card->getBounds().intersects(yHandle()->getBounds())) clear = false;
+                }
+        require(clear, "the Y card stands clear of the bank cards");
+        require(cardsAfter == cardsBefore, "the bank cards stay where they were");
+        for (auto* child : editor->getChildren())
+            if (auto* handle = dynamic_cast<ui::SourceHandle*>(child))
+                if (handle->source == static_cast<int>(ModSource::lfo1))
+                    require(handle->isVisible() && handle->getRight() <= yHandle()->getX()
+                                && handle->getRight() > yHandle()->getX() - 4,
+                            "the Y card is split off the end of the name card");
+        setValue(*processor, "lfo1Type", static_cast<float>(LfoType::normal));
+        editor->resized();
+        require(!yHandle()->isVisible(), "switching the type back takes the Y card down");
     }
 
     const auto display = displayAt();

@@ -481,6 +481,27 @@ juce::ValueTree Processor::migrated(const juce::ValueTree& savedState) const
                               nullptr);
         }
 
+    // Sample and hold was the fifth shape until it became a type of its own.
+    // A state that still asks for it as a shape gets the type instead, and the
+    // first shape under it, which is what the stepper would have shown anyway.
+    // A state written since can never say it: the shape list stops at four.
+    for (int lfo = 0; lfo < lfoCount; ++lfo)
+    {
+        auto shape = parameterEntry(result, lfoParameterId(lfo, "Shape"));
+        if (!shape.isValid()
+            || juce::roundToInt(static_cast<float>(shape.getProperty("value"))) < lfoShapeCount)
+            continue;
+        shape.setProperty("value", 0.0f, nullptr);
+        auto type = parameterEntry(result, lfoParameterId(lfo, "Type"));
+        if (!type.isValid())
+        {
+            type = juce::ValueTree("PARAM");
+            type.setProperty("id", lfoParameterId(lfo, "Type"), nullptr);
+            result.addChild(type, -1, nullptr);
+        }
+        type.setProperty("value", static_cast<float>(LfoType::sampleHold), nullptr);
+    }
+
     for (int i = result.getNumChildren(); --i >= 0;)
     {
         // A table is data rather than a parameter and is applied separately, so
@@ -488,7 +509,7 @@ juce::ValueTree Processor::migrated(const juce::ValueTree& savedState) const
         // slot's node stays: it is read from the parameter state itself, and
         // carries no id for the check below to mistake for a parameter.
         if (result.getChild(i).hasType(tableNodeType) || result.getChild(i).hasType("ForgeLfoTable")
-            || result.getChild(i).hasType(sampleNodeType))
+            || result.getChild(i).hasType("ForgeLfoPath") || result.getChild(i).hasType(sampleNodeType))
         { result.removeChild(i, nullptr); continue; }
         const auto id = result.getChild(i).getProperty("id").toString();
         if (id.isNotEmpty() && state.getParameter(id) == nullptr)

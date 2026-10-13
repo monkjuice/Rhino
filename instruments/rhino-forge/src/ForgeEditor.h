@@ -204,6 +204,10 @@ private:
     int lfoGridStartCount = 8;
     int lfoGridStartY = 0;
     std::array<float, 2> lfoGridWheel {};
+    // Whether the LFO module is hanging its Y card: a PATH LFO's second
+    // output, beside the first. Kept so a type changed from anywhere moves
+    // the header exactly once.
+    bool lfoPathHandleShown = false;
 
     void buildModules();
     void buildTablePanel();
@@ -280,7 +284,12 @@ private:
     int shownLfo() const;
     juce::Rectangle<int> lfoDisplayBounds() const;
     LfoShape shownLfoShape() const;
+    // What kind of thing an LFO is — a shape, a path or a sample and hold —
+    // which decides what its display draws and what its footer offers.
+    LfoType typeOfLfo(int lfo) const;
+    LfoType shownLfoType() const;
     LfoTable editableLfoTable(int lfo) const;
+    LfoPath editableLfoPath(int lfo) const;
     int lfoPointAt(juce::Point<int> at) const;
     int lfoCurveHandleAt(juce::Point<int> at) const;
     void editLfoPoint(int lfo, int point, juce::Point<int> at, bool snap);
@@ -288,7 +297,17 @@ private:
     void resetLfoCurve(int lfo, int segment);
     void addLfoPoint(int lfo, juce::Point<int> at);
     void removeLfoPoint(int lfo, int point);
+    // A path's points move on both axes, join the route where they are
+    // dropped, and leave it from anywhere but its last two.
+    void editLfoPathPoint(int lfo, int point, juce::Point<int> at, bool snap);
+    void addLfoPathPoint(int lfo, juce::Point<int> at);
+    void removeLfoPathPoint(int lfo, int point);
+    void resetLfoPath(int lfo);
     void showLfoMenu();
+    void showLfoTypeMenu();
+    void showLfoDirectionMenu();
+    // One of an LFO's choice parameters — Type or Direction — set from a menu.
+    void selectLfoChoice(int lfo, const char* suffix, int choice);
     void selectLfoBasicShape(int lfo, int shape);
     void stepLfoShape(int direction);
     void setLfoGridCount(int lfo, bool columns, int count);
@@ -488,6 +507,25 @@ private:
     int fxDragSlot = -1;
     int fxDropSlot = -1;
     juce::Point<int> fxDragStart;
+
+    // The matrix's window onto its thirty rows: the row at its top, and the
+    // wheel travel not yet spent on a row. View state, like the rack's.
+    // ForgeEditorMatrixView.cpp.
+    int matrixFirstRow = 0;
+    float matrixWheel = 0.0f;
+    const ui::Module* matrixModule() const;
+    // How many rows the table shows: eight, or one past the last slot with
+    // either end set. Read off the parameters, so a routing arriving from a
+    // preset or a host grows the table on the next tick like one made here.
+    int matrixShownRowCount() const;
+    // What the matrix's header says: how many of the thirty are routed.
+    juce::String matrixHeaderDetail() const;
+    // Keeps the top row legal for the rows shown and the window's height, and
+    // says whether it had to move, since moving it means laying out again.
+    bool clampMatrixScroll();
+    void setMatrixFirstRow(int row);
+    // The least movement that puts a slot's row in the window.
+    void revealMatrixSlot(int slot);
 
     void buildBankButtons();
     void showBank(ModuleUi&, int bank);

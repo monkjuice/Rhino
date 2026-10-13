@@ -4,7 +4,7 @@ type: component
 summary: The header-only voice engine that allocates sixteen voices, modulates per voice per sample and scales the output by 0.28.
 tags: [forge, engine, voices, real-time]
 sources: []
-updated: 2026-10-05
+updated: 2026-10-13
 ---
 
 # Forge engine (Core)
@@ -32,11 +32,11 @@ updated: 2026-10-05
 - **Release (M9e):** when ENV 1 reaches zero, the voice fades out over 15 ms (`voiceTailSeconds`) instead of being cut, because the filter is still ringing. The stated reason for 15 ms is "half a cycle of the lowest cutoff", but with the CUTOFF floor at 30 Hz, half a cycle is 16.7 ms.
 - **All notes off (CC123)** lets every voice go into its release, as lifted keys do, through the same `releaseVoice`, and leaves the racks ringing. It used to reset the whole `Core`, zeroing about 20 MB of delay and reverb lines at 48 kHz inside one sample: a click, lost tails and a risk to a small buffer's deadline, on every stop and loop a host sends it (commit `2cc79de`).
 - **Mono legato** joins only notes that overlap. A voice already in its release has no key down, so the next note starts again; joined, it carried on the release and faded out under a held key (commit `32147e1`).
-- **Per-voice modulators:** all four envelopes, and every LFO in TRIG or ENV mode, run per voice. LFOs in OFF mode share one free-running cycle.
+- **Per-voice modulators:** all four envelopes, and every LFO in TRIG or ENV mode, run per voice. LFOs in OFF mode share one free-running cycle. Since 2026-10-13 a voice's `lfoPhase` is a travel of 0..1, or 0..2 for PING-PONG, that `lfoPositionOf` maps to the shape; `lfoStopped` parks a one-shot at the end of it; and each voice carries `lfoSteps`, an S&H flight of up to 33 random steps taken by `startLfoCycle` at every cycle turn and retrigger, with `freeSteps` for the free-running cycle. Every LFO reading goes through `lfoOutputAt`, which returns an X and a Y ([Forge LFOs](forge-lfos.md)).
 
 Modulation is applied per voice and per sample, in each destination's normalised 0..1 space. Offsets are summed per destination and then applied once, so two half-depth slots equal one full one ([Forge modulation: matrix, envelopes, LFOs and macros](forge-modulation.md)).
 
-The panel's readings come from the loudest voice by ENV 1: envelope stage, LFO phase, modulation offsets and spectral scan position. Core keeps them as plain members, and the Processor copies them into atomics once per block. Once per block is plenty for a panel that redraws at 24 Hz.
+The panel's readings come from the loudest voice by ENV 1: envelope stage, LFO phase, modulation offsets and spectral scan position. Core keeps them as plain members, and the Processor copies them into atomics once per block. Once per block is plenty for a panel that redraws at 24 Hz. The S&H staircase is the one reading not copied per sample: `meterLfoSource` records which voice (or `freeLfoSource`, -1, the free-running flight shown whenever no voice is sounding) the panel follows, and `Core::lfoSteps(lfo)` looks that voice's flight up when the block ends.
 
 ## The master stage: measure pieces alone
 
@@ -49,5 +49,6 @@ Tests build `Core` on the stack, so the test binary links an 8 MB stack ([A CTes
 - [Rhino Forge](forge.md)
 - [Forge's engine splits into headers only](forge-engine-headers-only.md)
 - [Forge oscillators and wavetables](forge-oscillators.md)
+- [Forge LFOs](forge-lfos.md)
 - [Forge mixer and effects racks](forge-mixer-and-fx.md)
 - [Real-time audio rules](real-time-audio-rules.md)

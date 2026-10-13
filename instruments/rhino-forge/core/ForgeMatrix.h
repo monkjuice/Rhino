@@ -2,10 +2,11 @@
 
 #include "ForgeShapes.h"
 #include "ForgeFxDsp.h"
+#include <cstdint>
 #include <vector>
 
 // What can modulate what: the list of sources, the list of destinations, and
-// the eight slots that join one to the other.
+// the slots that join one to the other.
 //
 // Both lists are ordered, and a slot stores an index into them. The order is a
 // schema: changing it bumps the preset format instead of leaving historical
@@ -20,10 +21,14 @@ enum class ModSource
     velocity = lfo1 + lfoCount,      // 11
     note,                            // 12
     macro1,                          // 13, and one per macro after it
-    modWheel = macro1 + macroCount
+    modWheel = macro1 + macroCount,  // 21
+    // A PATH LFO's second axis. Appended after everything, as the list is
+    // append-only, and one per LFO whatever its type, so a slot keeps its
+    // source when the type changes: outside PATH the Y output repeats the X.
+    lfo1Y                            // 22, and lfo2Y..lfo6Y up to 27
 };
 
-inline constexpr int modSourceCount = static_cast<int>(ModSource::modWheel) + 1;
+inline constexpr int modSourceCount = static_cast<int>(ModSource::lfo1Y) + lfoCount;
 
 inline int macroIndexOf(int source)
 {
@@ -31,11 +36,27 @@ inline int macroIndexOf(int source)
     return source >= first && source < first + macroCount ? source - first : -1;
 }
 
-// Which LFO a source names, or -1 for a source that is not one.
+// Which LFO a source names, or -1 for a source that is not one. This is the
+// main output, the X of a path.
 inline int lfoIndexOf(int source)
 {
     const auto first = static_cast<int>(ModSource::lfo1);
     return source >= first && source < first + lfoCount ? source - first : -1;
+}
+
+// Which LFO's Y output a source names, or -1 for a source that is not one.
+inline int lfoYIndexOf(int source)
+{
+    const auto first = static_cast<int>(ModSource::lfo1Y);
+    return source >= first && source < first + lfoCount ? source - first : -1;
+}
+
+// Which LFO a source reads from, either axis, or -1 for a source that is not
+// an LFO at all.
+inline int lfoOfSource(int source)
+{
+    const auto x = lfoIndexOf(source);
+    return x >= 0 ? x : lfoYIndexOf(source);
 }
 
 // Which envelope a source names, or -1 for a source that is not one.
@@ -52,7 +73,7 @@ inline int envIndexOf(int source)
 // This is what a slot's BI switch acts on. Centring a source that only rises
 // turns it into a swing; centring one that already swings would only double its
 // reach, which is the depth control's job, so BI leaves the LFOs alone.
-inline bool sourceIsBipolar(int source) { return lfoIndexOf(source) >= 0; }
+inline bool sourceIsBipolar(int source) { return lfoOfSource(source) >= 0; }
 
 inline const char* modSourceName(int source)
 {
@@ -64,6 +85,8 @@ inline const char* modSourceName(int source)
         "ENV 1", "ENV 2", "ENV 3", "ENV 4"};
     static const std::array<const char*, lfoCount> lfos {
         "LFO 1", "LFO 2", "LFO 3", "LFO 4", "LFO 5", "LFO 6"};
+    static const std::array<const char*, lfoCount> lfoYs {
+        "LFO 1 Y", "LFO 2 Y", "LFO 3 Y", "LFO 4 Y", "LFO 5 Y", "LFO 6 Y"};
     static const std::array<const char*, macroCount> macros {
         "MACRO 1", "MACRO 2", "MACRO 3", "MACRO 4",
         "MACRO 5", "MACRO 6", "MACRO 7", "MACRO 8"};
@@ -71,6 +94,8 @@ inline const char* modSourceName(int source)
     if (env >= 0) return envs[static_cast<size_t>(env)];
     const auto lfo = lfoIndexOf(source);
     if (lfo >= 0) return lfos[static_cast<size_t>(lfo)];
+    const auto lfoY = lfoYIndexOf(source);
+    if (lfoY >= 0) return lfoYs[static_cast<size_t>(lfoY)];
     const auto macro = macroIndexOf(source);
     return macro >= 0 ? macros[static_cast<size_t>(macro)] : "OFF";
 }
@@ -181,7 +206,21 @@ inline constexpr int filterDestination = warpDestinationBase + warpDestinationCo
 inline constexpr int noiseToneDestination = filterDestination + 1;
 inline constexpr int noiseStereoDestination = noiseToneDestination + 1;
 inline constexpr int destinationCount = noiseStereoDestination + 1;
-inline constexpr int modSlotCount = 8;
+
+// Thirty slots. The panel's table shows eight of them to begin with and adds a
+// row as those fill (ForgePlacement.h, the matrix); the parameters exist
+// whether or not their row is on screen, so a host automates the thirtieth
+// exactly as it automates the first, and a preset written with eight opens
+// with the rest at rest. Eight until 2026-10-13.
+inline constexpr int modSlotCount = 30;
+
+// A parameter id belonging to one slot: modParameterId(0, "Dest") is
+// "mod1Dest". One spelling of the pattern, for the same reason the rack slots
+// have one.
+inline juce::String modParameterId(int slot, const char* suffix)
+{
+    return "mod" + juce::String(slot + 1) + suffix;
+}
 
 // A parameter id belonging to one rack slot: fxParameterId(0, 1, "Mix") is
 // "fx1s2Mix". One spelling of the pattern, shared by the parameters, the panel,
@@ -268,13 +307,30 @@ struct Modulation
 {
     std::array<ModSlot, modSlotCount> slots {};
 
-    bool anyActive() const
+    // The slots worth visiting: both ends set, and a depth to apply. Settled
+    // once a block by whoever fills the slots (Processor::modulation), so the
+    // loops that run per voice per sample walk the handful of routings a patch
+    // has rather than every one of thirty rows. A Modulation built and never
+    // settled has nothing live, which is what an empty matrix is.
+    std::array<std::uint8_t, modSlotCount> live {};
+    int liveCount = 0;
+
+    void settle()
     {
-        for (const auto& slot : slots)
-            if (slot.source >= 0.5f && slot.destination >= 0.5f && slot.depth != 0.0f)
-                return true;
-        return false;
+        liveCount = 0;
+        for (int i = 0; i < modSlotCount; ++i)
+        {
+            const auto& slot = slots[static_cast<size_t>(i)];
+            const auto destination = juce::roundToInt(slot.destination);
+            if (slot.source >= 0.5f && destination > 0 && destination < destinationCount
+                && slot.depth != 0.0f)
+                live[static_cast<size_t>(liveCount++)] = static_cast<std::uint8_t>(i);
+        }
     }
+
+    bool anyActive() const { return liveCount > 0; }
+
+    const ModSlot& liveSlot(int i) const { return slots[live[static_cast<size_t>(i)]]; }
 };
 
 // One mixer channel's send amounts, one per bus. Every channel that can be

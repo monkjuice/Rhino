@@ -111,4 +111,70 @@ struct LfoTable
         return true;
     }
 };
+
+// How many steps a sample and hold holds: one per grid column, up to the most
+// columns the grid can be set to, and one more for the first step of the cycle
+// after this one, which is what the last step's ramp runs towards.
+inline constexpr int maxLfoSteps = 33;
+using LfoSteps = std::array<float, maxLfoSteps>;
+
+// A point on a path's pad, both axes 0..1: x runs left to right and y runs
+// bottom to top. Each becomes an output swinging -1..1, as every LFO's does.
+struct LfoPathPoint
+{
+    float x = 0.5f;
+    float y = 0.5f;
+};
+
+// A route across the pad that the phase travels along, Serum's Path type.
+// Equal time per segment rather than equal speed: a short segment takes as
+// long as a long one, so two points laid on top of each other are a pause,
+// which constant speed could not draw at all. Straight segments only, so far.
+struct LfoPath
+{
+    std::array<LfoPathPoint, maxLfoPoints> points {};
+    int count = 0;
+    bool custom = false;
+
+    LfoPathPoint at(float phase) const noexcept
+    {
+        if (count < 1) return {};
+        if (count < 2) return points[0];
+        const auto along = std::clamp(phase, 0.0f, 1.0f) * static_cast<float>(count - 1);
+        const auto segment = std::min(count - 2, static_cast<int>(along));
+        const auto mix = along - static_cast<float>(segment);
+        const auto& from = points[static_cast<size_t>(segment)];
+        const auto& to = points[static_cast<size_t>(segment + 1)];
+        return {from.x + (to.x - from.x) * mix, from.y + (to.y - from.y) * mix};
+    }
+
+    bool valid() const noexcept
+    {
+        if (count < 2 || count > maxLfoPoints) return false;
+        for (int i = 0; i < count; ++i)
+        {
+            const auto& point = points[static_cast<size_t>(i)];
+            if (!std::isfinite(point.x) || !std::isfinite(point.y)
+                || point.x < 0.0f || point.x > 1.0f || point.y < 0.0f || point.y > 1.0f)
+                return false;
+        }
+        return true;
+    }
+};
+
+// The path an LFO starts with: a diamond, so X and Y are two triangles a
+// quarter of a cycle apart and the pad is visibly two-dimensional at once.
+constexpr LfoPath lfoDefaultPath() noexcept
+{
+    LfoPath path;
+    path.count = 5;
+    path.points[0] = {0.5f, 1.0f};
+    path.points[1] = {1.0f, 0.5f};
+    path.points[2] = {0.5f, 0.0f};
+    path.points[3] = {0.0f, 0.5f};
+    path.points[4] = {0.5f, 1.0f};
+    return path;
+}
+
+inline constexpr LfoPath lfoDefaultPathTable = lfoDefaultPath();
 }

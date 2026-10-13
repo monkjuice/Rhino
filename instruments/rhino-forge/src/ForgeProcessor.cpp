@@ -325,8 +325,13 @@ void Processor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
         meterScan[static_cast<size_t>(osc)].store(core.scanPosition(osc), std::memory_order_relaxed);
     for (int lfo = 0; lfo < lfoCount; ++lfo)
     {
-        meterLfoPhase[static_cast<size_t>(lfo)].store(core.lfoPosition(lfo), std::memory_order_relaxed);
-        meterLfoValue[static_cast<size_t>(lfo)].store(core.lfoOutput(lfo), std::memory_order_relaxed);
+        const auto index = static_cast<size_t>(lfo);
+        meterLfoPhase[index].store(core.lfoPosition(lfo), std::memory_order_relaxed);
+        meterLfoValue[index].store(core.lfoOutput(lfo), std::memory_order_relaxed);
+        meterLfoValueY[index].store(core.lfoOutputY(lfo), std::memory_order_relaxed);
+        const auto& steps = core.lfoSteps(lfo);
+        for (size_t step = 0; step < steps.size(); ++step)
+            meterLfoStep[index][step].store(steps[step], std::memory_order_relaxed);
     }
     for (int destination = 1; destination < destinationCount; ++destination)
         meterOffsets[static_cast<size_t>(destination)]
@@ -652,8 +657,11 @@ void Processor::bindParameters()
     for (int lfo = 0; lfo < lfoCount; ++lfo)
     {
         auto& setting = result.lfos[static_cast<size_t>(lfo)];
+        bind(setting.type, lfoParameterId(lfo, "Type"));
         bind(setting.shape, lfoParameterId(lfo, "Shape"));
         bind(setting.mode, lfoParameterId(lfo, "Mode"));
+        bind(setting.direction, lfoParameterId(lfo, "Direction"));
+        bind(setting.smooth, lfoParameterId(lfo, "Smooth"));
         // The rate is worked out rather than read, so its three parameters
         // are held for lfoRateHz instead of being copied into a field.
         auto& rate = lfoRateParameters[static_cast<size_t>(lfo)];
@@ -716,6 +724,7 @@ const Patch& Processor::patch()
         auto& setting = blockPatch.lfos[static_cast<size_t>(lfo)];
         setting.rate = lfoRateHz(lfo);
         setting.table = lfoTable(lfo);
+        setting.path = lfoPath(lfo);
     }
     return blockPatch;
 }
@@ -723,6 +732,9 @@ const Patch& Processor::patch()
 const Modulation& Processor::modulation()
 {
     for (const auto& binding : modulationBindings) *binding.field = binding.value->load();
+    // Once per block, so the voices walk only the routings in use. See
+    // Modulation::settle.
+    blockModulation.settle();
     return blockModulation;
 }
 

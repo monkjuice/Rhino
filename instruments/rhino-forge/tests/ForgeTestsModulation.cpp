@@ -225,12 +225,31 @@ void modulationSuite()
     require(zeroCrossings(modulated, 0, settled) > atPitch,
             "an envelope pointed at pitch raises the note");
 
+    // Thirty slots, and the last is as real as the first: a routing set up in
+    // slot 30 renders exactly as the same routing in slot 1 does.
+    require(rhino::forge::modSlotCount == 30, "the matrix has thirty slots");
+    auto lastSlotOwner = std::make_unique<rhino::forge::Processor>();
+    auto& lastSlot = *lastSlotOwner;
+    closedFilterOnA(lastSlot);
+    setSlot(lastSlot, rhino::forge::modSlotCount, srcEnv1, destCutoff, 1.0f);
+    renderNote(lastSlot, modulated);
+    auto firstSlotOwner = std::make_unique<rhino::forge::Processor>();
+    auto& firstSlot = *firstSlotOwner;
+    closedFilterOnA(firstSlot);
+    setSlot(firstSlot, 1, srcEnv1, destCutoff, 1.0f);
+    renderNote(firstSlot, plain);
+    require(identical(plain, modulated), "the thirtieth slot renders exactly as the first does");
+    require(rms(modulated, 0, settled) > closed * 1.2f, "and it opens the filter it is pointed at");
+
     // Macros are sources like any other, and reach their target only through
     // the matrix.
     const auto firstMacro = static_cast<float>(rhino::forge::ModSource::macro1);
-    require(rhino::forge::modSourceCount == static_cast<int>(rhino::forge::ModSource::macro1)
-                + rhino::forge::macroCount + 1,
-            "every macro and the appended modulation wheel are offered as sources");
+    require(rhino::forge::modSourceCount == static_cast<int>(rhino::forge::ModSource::lfo1Y)
+                + rhino::forge::lfoCount,
+            "every macro, the appended modulation wheel and every LFO's Y are offered as sources");
+    require(static_cast<int>(rhino::forge::ModSource::lfo1Y)
+                == static_cast<int>(rhino::forge::ModSource::macro1) + rhino::forge::macroCount + 1,
+            "the Y outputs were appended after the modulation wheel, moving nothing");
 
     auto byMacroOwner = std::make_unique<rhino::forge::Processor>();
     auto& byMacro = *byMacroOwner;
@@ -304,9 +323,10 @@ void modulationSuite()
 
 // Matrix tests that compare two short renders prove the routing arithmetic,
 // but they do not keep rapidly changing coefficients alive long enough to
-// expose a poisoned DSP state. Exercise all eight slots at the live standalone
+// expose a poisoned DSP state. Exercise eight slots at the live standalone
 // cadence, with independent fast LFOs repeatedly driving the four filter
-// controls to both ends of their ranges.
+// controls to both ends of their ranges, and then every one of the thirty at
+// random.
 void modulationStabilitySuite()
 {
     constexpr double rate = 44100.0;
@@ -362,7 +382,7 @@ void modulationStabilitySuite()
 
         // Keep the first phase as the fixed regression cadence above. Then
         // use a small fixed-seed generator to vary real continuous controls
-        // and the eight matrix routes at 10 ms boundaries, as host automation
+        // and every matrix route at 10 ms boundaries, as host automation
         // does. This stays reproducible while exploring combinations that a
         // single hand-authored patch cannot cover.
         auto randomState = 0x6d2b79f5u ^ static_cast<std::uint32_t>(type);

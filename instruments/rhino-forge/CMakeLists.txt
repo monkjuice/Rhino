@@ -141,6 +141,7 @@ set(forge_sources
     src/ForgeEditorNoteGuide.cpp
     src/ForgeEditorLfo.cpp
     src/ForgeEditorModulation.cpp
+    src/ForgeEditorMatrixView.cpp
     src/ForgeEditorNoise.cpp
     src/ForgeEditorOscMode.cpp
     src/ForgeEditorPages.cpp

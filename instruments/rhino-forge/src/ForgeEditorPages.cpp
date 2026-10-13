@@ -205,14 +205,31 @@ juce::String Editor::envHeaderDetail() const
 
 void Editor::applyEnableStates()
 {
+    // The matrix shows a window of its rows, and only as many rows as the
+    // patch has earned. Both are read once here rather than per control.
+    const auto matrixShown = matrixShownRowCount();
     for (auto& module : moduleUis)
     {
         const auto onPage = moduleShown(*module.descriptor);
         if (module.enable != nullptr) module.enable->setVisible(onPage);
         for (auto& button : module.bankButtons) button->setVisible(onPage);
 
+        auto matrixWindowStart = 0;
+        auto matrixWindowEnd = std::numeric_limits<int>::max();
+        if (ui::isMatrixModule(*module.descriptor))
+        {
+            matrixWindowStart = matrixFirstRow;
+            matrixWindowEnd = juce::jmin(matrixShown,
+                                         matrixFirstRow + ui::matrixVisibleRowCount(
+                                             moduleAreaFor(*module.descriptor), *module.descriptor));
+        }
+
         for (auto& control : module.controls)
         {
+            // A matrix row outside the window, or past the rows the table
+            // shows, stays attached to its parameters and off the panel.
+            const auto inMatrixWindow = control->row >= matrixWindowStart
+                                     && control->row < matrixWindowEnd;
             auto inFxViewport = true;
             if (isFxModule(*module.descriptor))
             {
@@ -233,9 +250,16 @@ void Editor::applyEnableStates()
             const auto inCharge =
                 (control->disabledBy == nullptr || value(control->disabledBy) < 0.5f)
                 && (control->enabledBy == nullptr || value(control->enabledBy) >= 0.5f)
+                // An LFO's SHAPE is in charge only while there is a shape to
+                // choose: a NORMAL LFO on a built-in rather than a drawn
+                // table. Its SMOOTH is the sample and hold's alone.
                 && !(module.descriptor->display == ui::Display::lfo
                      && control->id.endsWith("Shape")
-                     && processor.lfoTableIsCustom(control->bank))
+                     && (processor.lfoTableIsCustom(control->bank)
+                         || typeOfLfo(control->bank) != LfoType::normal))
+                && !(module.descriptor->display == ui::Display::lfo
+                     && control->id.endsWith("Smooth")
+                     && typeOfLfo(control->bank) != LfoType::sampleHold)
                 // A rack knob its modes have made meaningless greys out, the
                 // same way polyphony does under mono. It is still here; it just
                 // has nothing to do until the mode beside it moves.
@@ -256,6 +280,7 @@ void Editor::applyEnableStates()
                 // Fixed-height rack rows outside the viewport remain attached
                 // to their parameters but are not painted on top of neighbours.
                 && inFxViewport
+                && inMatrixWindow
                 // A rack knob its slot's type does not have is not a control
                 // at all while that type is in there.
                 && fxControlUsed(*control)
@@ -317,6 +342,14 @@ void Editor::applyEnableStates()
             control->label.setColour(juce::Label::textColourId,
                                      ui::labelText.withAlpha(on ? 1.0f : 0.4f));
         }
+    }
+    // A PATH LFO hangs a second card in its header and the bank cards move
+    // along for it. Noticed here rather than only on a click, so a type
+    // changed by a preset or by the host moves the header the same way.
+    if (const auto pathShown = shownLfoType() == LfoType::path; pathShown != lfoPathHandleShown)
+    {
+        lfoPathHandleShown = pathShown;
+        resized();
     }
     applyTableFieldStates();
 }

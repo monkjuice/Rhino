@@ -367,6 +367,11 @@ void Editor::assignModulation(int source, int destination)
     // the ring it lands on is now the way to take it anywhere else.
     if (value(slotParameter(target, "Depth").toRawUTF8()) == 0.0f)
         setSlotDepth(target, 0.5f);
+    // The row it landed in comes onto the table and into the window now rather
+    // than on the next tick: a drop should be seen to land.
+    revealMatrixSlot(target);
+    applyEnableStates();
+    repaint();
 }
 
 // Written through the parameter rather than into the slot, so a depth dragged

@@ -547,7 +547,13 @@ inline juce::String tooltipFor(const juce::String& id)
     // suffix and the LFO's number is filled in, the same way the oscillators'
     // are keyed by their letter.
     static const std::map<juce::String, juce::String> perLfo {
-        {"Shape", "The curve LFO % runs: sine, triangle, saw, square or sample and hold"},
+        {"Type", "What LFO % is: NORMAL runs the shape, PATH travels a route across the pad and puts "
+                 "out where it is across and where it is up, S&H steps through random values, one per "
+                 "grid column"},
+        {"Shape", "The curve a NORMAL LFO % runs: sine, triangle, saw or square"},
+        {"Direction", "Which way LFO % reads its shape: forward, reverse, or ping-pong, out and back"},
+        {"Smooth", "How much of each of LFO %'s sample and hold steps is a ramp to the next rather "
+                   "than a hold"},
         {"Mode", "TRIG restarts LFO % on every new note and loops for as long as one is held; "
                  "ENV restarts it and stops at the end of the shape, as a one-shot envelope; "
                  "OFF free-runs across notes and never resets"},
@@ -586,7 +592,7 @@ inline juce::String tooltipFor(const juce::String& id)
         return "A performance macro. Drag the number on the plate beside it onto a knob, "
                "or right-click that knob and choose this macro as a source";
 
-    // Matrix slots: eight of each, all reading the same way.
+    // Matrix slots: thirty of each, all reading the same way.
     if (id.startsWith("mod"))
     {
         if (id.endsWith("Source")) return "What drives this slot";

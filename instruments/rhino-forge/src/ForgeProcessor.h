@@ -110,14 +110,27 @@ public:
             ? meterStage[static_cast<size_t>(env)].load(std::memory_order_relaxed) : 0;
     }
 
-    // Where an LFO is in its cycle, and what it last put out. The phase moves
-    // the indicator across its display; the value is published too because a
-    // sample-and-hold's step cannot be worked back out of the phase. An LFO
-    // that answers the keyboard reports the loudest voice's copy of itself,
-    // exactly as ENV 1's display follows that voice.
+    // Where an LFO is in its shape, and what it last put out. The position
+    // moves the indicator across its display; the value is published too
+    // because a sample and hold's step cannot be worked back out of the
+    // position, and a path's Y beside it, and the sample and hold's whole
+    // staircase so the display can draw the steps ahead. An LFO that answers
+    // the keyboard reports the loudest voice's copy of itself, exactly as
+    // ENV 1's display follows that voice.
     float lfoPhase(int lfo) const { return meter(meterLfoPhase, lfo); }
     float lfoValue(int lfo) const { return meter(meterLfoValue, lfo); }
+    float lfoValueY(int lfo) const { return meter(meterLfoValueY, lfo); }
+    LfoSteps lfoSteps(int lfo) const;
     LfoTable lfoTable(int lfo) const;
+    // The route a PATH LFO travels. Kept beside the table rather than in it,
+    // so switching the type away and back loses neither.
+    LfoPath lfoPath(int lfo) const;
+    bool lfoPathIsCustom(int lfo) const
+    {
+        return lfo >= 0 && lfo < lfoCount
+            && lfoPathCustom[static_cast<size_t>(lfo)].load(std::memory_order_relaxed);
+    }
+    void setLfoPath(int lfo, const LfoPath&);
     bool lfoTableIsCustom(int lfo) const
     {
         return lfo >= 0 && lfo < lfoCount
@@ -338,6 +351,12 @@ private:
     std::array<std::atomic<int>, envCount> meterStage {};
     std::array<std::atomic<float>, lfoCount> meterLfoPhase {};
     std::array<std::atomic<float>, lfoCount> meterLfoValue {};
+    std::array<std::atomic<float>, lfoCount> meterLfoValueY {};
+    std::array<std::array<std::atomic<float>, maxLfoSteps>, lfoCount> meterLfoStep {};
+    std::array<std::array<std::atomic<float>, maxLfoPoints>, lfoCount> lfoPathX {};
+    std::array<std::array<std::atomic<float>, maxLfoPoints>, lfoCount> lfoPathY {};
+    std::array<std::atomic<int>, lfoCount> lfoPathCount {};
+    std::array<std::atomic<bool>, lfoCount> lfoPathCustom {};
     std::array<std::array<std::atomic<float>, maxLfoPoints>, lfoCount> lfoPointX {};
     std::array<std::array<std::atomic<float>, maxLfoPoints>, lfoCount> lfoPointY {};
     // The bend of the segment leaving each point, and where its handle sits

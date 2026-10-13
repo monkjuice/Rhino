@@ -383,6 +383,39 @@ void legacyStateSuite()
         requireClose(value(loud, "subLevel"), 1.0f, 0.001f,
                      "a sub already at maximum stays at maximum rather than leaving its range");
     }
+
+    // Before sample and hold was a type. A state asking for it as the fifth
+    // shape reopens on the S&H type with the first shape under it, and one
+    // asking for any other shape is left on NORMAL.
+    {
+        rhino::forge::Processor processor;
+        juce::ValueTree saved(processor.state.state.getType());
+        const auto add = [&saved] (const char* id, float value)
+        {
+            juce::ValueTree entry("PARAM");
+            entry.setProperty("id", id, nullptr);
+            entry.setProperty("value", value, nullptr);
+            saved.addChild(entry, -1, nullptr);
+        };
+        add("lfo2Shape", 4.0f);
+        add("lfo3Shape", 2.0f);
+        reopened(processor, saved);
+
+        const auto read = [&] (const juce::String& id) { return value(processor, id); };
+        requireClose(read("lfo2Type"), static_cast<float>(rhino::forge::LfoType::sampleHold), 0.001f,
+                     "an LFO saved on the sample and hold shape reopens on the sample and hold type");
+        requireClose(read("lfo2Shape"), 0.0f, 0.001f, "with the first shape under it");
+        requireClose(read("lfo3Type"), static_cast<float>(rhino::forge::LfoType::normal), 0.001f,
+                     "an LFO saved on a saw reopens NORMAL");
+        requireClose(read("lfo3Shape"), 2.0f, 0.001f, "and keeps its saw");
+        requireClose(read("lfo1Direction"), 0.0f, 0.001f, "a direction the state predates opens forward");
+
+        juce::MemoryBlock again;
+        processor.getStateInformation(again);
+        processor.setStateInformation(again.getData(), static_cast<int>(again.getSize()));
+        requireClose(read("lfo2Type"), static_cast<float>(rhino::forge::LfoType::sampleHold), 0.001f,
+                     "saving and reopening keeps the type");
+    }
 }
 }
 

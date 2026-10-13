@@ -43,15 +43,18 @@ void Editor::mouseMove(const juce::MouseEvent& event)
         return;
     }
     const auto display = lfoDisplayBounds();
+    const auto type = shownLfoType();
     const auto column = ui::lfoColumnBounds(display);
     const auto row = ui::lfoRowBounds(display);
     const auto overGridStep = ui::lfoGridStepBounds(column, true).contains(at)
         || ui::lfoGridStepBounds(column, false).contains(at)
         || ui::lfoGridStepBounds(row, true).contains(at)
         || ui::lfoGridStepBounds(row, false).contains(at);
-    const auto overShapeControl = ui::lfoNameBounds(display).contains(at)
-        || ui::lfoPreviousBounds(display).contains(at)
-        || ui::lfoNextBounds(display).contains(at)
+    const auto overShapeControl = ui::lfoTypeBounds(display).contains(at)
+        || (ui::lfoFooterShowsName(type) && ui::lfoNameBounds(display, type).contains(at))
+        || (ui::lfoFooterShowsChevrons(type)
+            && (ui::lfoPreviousBounds(display).contains(at) || ui::lfoNextBounds(display).contains(at)))
+        || (ui::lfoFooterShowsDirection(type) && ui::lfoDirectionBounds(display).contains(at))
         || (ui::lfoPlotBounds(display).contains(at)
             && (lfoPointAt(at) >= 0 || lfoCurveHandleAt(at) >= 0));
     if (overGridStep || overShapeControl) setMouseCursor(juce::MouseCursor::PointingHandCursor);
@@ -98,12 +101,20 @@ void Editor::mouseDown(const juce::MouseEvent& event)
         const auto display = lfoDisplayBounds();
         if (display.contains(at))
         {
-            if (ui::lfoNameBounds(display).contains(at) && !event.mods.isPopupMenu())
+            // The footer's fields, only the ones the type has a use for —
+            // the same rule the painter draws them by.
+            const auto type = shownLfoType();
+            const auto plain = !event.mods.isPopupMenu();
+            if (ui::lfoTypeBounds(display).contains(at) && plain)
+            { showLfoTypeMenu(); return; }
+            if (ui::lfoFooterShowsName(type) && ui::lfoNameBounds(display, type).contains(at) && plain)
             { showLfoMenu(); return; }
-            if (ui::lfoPreviousBounds(display).contains(at) && !event.mods.isPopupMenu())
+            if (ui::lfoFooterShowsChevrons(type) && ui::lfoPreviousBounds(display).contains(at) && plain)
             { stepLfoShape(-1); return; }
-            if (ui::lfoNextBounds(display).contains(at) && !event.mods.isPopupMenu())
+            if (ui::lfoFooterShowsChevrons(type) && ui::lfoNextBounds(display).contains(at) && plain)
             { stepLfoShape(1); return; }
+            if (ui::lfoFooterShowsDirection(type) && ui::lfoDirectionBounds(display).contains(at) && plain)
+            { showLfoDirectionMenu(); return; }
             for (int axis = 0; axis < 2; ++axis)
             {
                 const auto field = axis == 0 ? ui::lfoColumnBounds(display) : ui::lfoRowBounds(display);
@@ -346,6 +357,23 @@ void Editor::mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWhee
         }
         return;
     }
+    // The matrix scrolls under the wheel wherever a field is not taking it. A
+    // field steps through its list on the wheel, and the editor hears about
+    // that because it listens to every slider, with the event naming the
+    // slider; the gutter, the rail, the titles, the BI chips and the gaps
+    // between fields hand the wheel up, and there the table itself moves.
+    if (page == ui::Page::matrix)
+        if (const auto* module = matrixModule())
+            if (ui::moduleInterior(moduleAreaFor(*module)).contains(at))
+            {
+                if (dynamic_cast<juce::Slider*>(event.eventComponent) != nullptr) return;
+                matrixWheel += wheel.isReversed ? -wheel.deltaY : wheel.deltaY;
+                const auto notches = static_cast<int>(matrixWheel / wheelPerZoomStep);
+                if (notches == 0) return;
+                matrixWheel -= static_cast<float>(notches) * wheelPerZoomStep;
+                setMatrixFirstRow(matrixFirstRow - notches);
+                return;
+            }
     // The list and the rack each scroll whichever one is under the pointer, and
     // only that one. Over the rack, a knob keeps the wheel for itself: this
     // hears about it because it listens to every knob, and the event then
@@ -622,7 +650,11 @@ void Editor::timerCallback()
                 repaint();
             }
 
-    applyEnableStates();
+    // A routing cleared from outside this editor can leave the matrix scrolled
+    // past its last row, and a layout pass is what brings the rows back up;
+    // resized runs the enable pass itself.
+    if (clampMatrixScroll()) resized();
+    else applyEnableStates();
 
     // A panel colour can move without this editor being touched: a preset
     // loaded, a project opened, a second editor on the same plugin. Noticed

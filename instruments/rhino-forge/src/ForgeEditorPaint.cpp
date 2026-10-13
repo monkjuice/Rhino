@@ -161,6 +161,7 @@ void Editor::paint(juce::Graphics& g)
                              descriptor.display == ui::Display::envelope ? envHeaderDetail()
                              : descriptor.display == ui::Display::lfo ? lfoHeaderDetail()
                              : rackModule ? fxHeaderDetail()
+                             : ui::isMatrixModule(descriptor) ? matrixHeaderDetail()
                              : tableModule && tablePanel != nullptr ? tablePanel->headerDetail()
                                  : juce::String(),
                              rackModule ? (ui::fxViewButtonSize * 2 + ui::fxViewButtonGap + 12) : 0);
@@ -292,12 +293,21 @@ void Editor::paint(juce::Graphics& g)
             }
             case ui::Display::lfo:
             {
+                // The setting the voice reads, assembled from the same
+                // parameters the block reads it from, so the picture is drawn
+                // by the function that makes the sound.
                 const auto lfo = shownLfo();
-                ui::drawLfo(g, display,
-                            static_cast<LfoShape>(juce::jlimit(0, lfoShapeCount - 1,
-                                                               juce::roundToInt(value(lfoParameterId(lfo, "Shape"))))),
-                            processor.lfoTable(lfo), processor.lfoTableName(lfo),
-                            processor.lfoPhase(lfo), processor.lfoValue(lfo), accent, alpha);
+                ui::LfoPicture picture;
+                picture.setting.type = value(lfoParameterId(lfo, "Type"));
+                picture.setting.shape = value(lfoParameterId(lfo, "Shape"));
+                picture.setting.direction = value(lfoParameterId(lfo, "Direction"));
+                picture.setting.smooth = value(lfoParameterId(lfo, "Smooth"));
+                picture.setting.table = processor.lfoTable(lfo);
+                picture.setting.path = processor.lfoPath(lfo);
+                picture.steps = processor.lfoSteps(lfo);
+                picture.name = processor.lfoTableName(lfo);
+                picture.phase = processor.lfoPhase(lfo);
+                ui::drawLfo(g, display, picture, accent, alpha);
                 break;
             }
             case ui::Display::filter:
@@ -330,30 +340,6 @@ void Editor::paint(juce::Graphics& g)
             g.drawRoundedRectangle(target->slider.getBounds().toFloat().reduced(2.0f), 4.0f, 1.6f);
         }
     }
-}
-
-// The furniture that makes eight rows of fields read as a table: the column
-// titles, once, above the rows; a rule under them; and every row numbered in
-// the gutter, against a band on alternate rows.
-void Editor::paintTable(juce::Graphics& g, juce::Rectangle<int> area, const ui::Module& descriptor)
-{
-    const auto accent = accentOf(descriptor);
-    const auto titles = ui::columnTitleBounds(area, descriptor);
-
-    ui::drawColumnTitle(g, titles.withWidth(descriptor.rowGutter), "#");
-    const auto& first = descriptor.rows.front().controls;
-    for (int i = 0; i < static_cast<int>(first.size()); ++i)
-    {
-        const auto cell = ui::cellBounds(area, descriptor, 0, i);
-        ui::drawColumnTitle(g, titles.withX(cell.getX()).withWidth(cell.getWidth()),
-                            first[static_cast<size_t>(i)].label);
-    }
-    ui::drawColumnTitleRule(g, titles);
-
-    for (int row = 0; row < static_cast<int>(descriptor.rows.size()); ++row)
-        ui::drawTableRow(g, ui::rowBounds(area, descriptor, row),
-                         ui::rowGutterBounds(area, descriptor, row),
-                         row + 1, slotIsLive(row), accent);
 }
 
 // A wash across the keys the letters can reach, with a brighter line under

@@ -1,5 +1,5 @@
-﻿// The six LFOs: their shapes, their three modes, and a rate set in beats
-// following the host rather than the knob.
+﻿// The six LFOs: their three types, their shapes, their three modes, their
+// direction, and a rate set in beats following the host rather than the knob.
 #include "ForgeTestSupport.h"
 
 namespace rhino::forge::tests
@@ -38,7 +38,7 @@ void lfoSuite()
         for (int i = 0; i <= 512; ++i)
         {
             const auto phase = static_cast<float>(i) / 512.0f;
-            const auto at = rhino::forge::lfoWave(which, phase, 1.0f);
+            const auto at = rhino::forge::lfoWave(which, phase);
             require(std::isfinite(at), "an LFO shape is finite everywhere");
             extreme = std::max(extreme, std::abs(at));
         }
@@ -50,26 +50,20 @@ void lfoSuite()
     // a full swing there instead, and that jump is the shape rather than a
     // fault — checked so neither can be quietly smoothed away.
     for (const auto continuous : {LfoShape::sine, LfoShape::triangle})
-        requireClose(rhino::forge::lfoWave(continuous, 0.0f, 0.0f),
-                     rhino::forge::lfoWave(continuous, 1.0f, 0.0f), 0.0001f,
+        requireClose(rhino::forge::lfoWave(continuous, 0.0f),
+                     rhino::forge::lfoWave(continuous, 1.0f), 0.0001f,
                      "a continuous LFO shape joins up across the cycle");
     for (const auto stepped : {LfoShape::saw, LfoShape::square})
-        require(std::abs(rhino::forge::lfoWave(stepped, 0.0f, 0.0f)
-                         - rhino::forge::lfoWave(stepped, 0.999f, 0.0f)) > 1.5f,
+        require(std::abs(rhino::forge::lfoWave(stepped, 0.0f)
+                         - rhino::forge::lfoWave(stepped, 0.999f)) > 1.5f,
                 "a saw and a square jump a full swing at the cycle boundary");
-
-    // Sample and hold is its held step and nothing else: it does not move
-    // within a cycle, which is what makes it a step rather than a ramp.
-    for (const auto phase : {0.0f, 0.2f, 0.75f, 0.99f})
-        requireClose(rhino::forge::lfoWave(LfoShape::sampleHold, phase, -0.4f), -0.4f, 0.0001f,
-                     "sample and hold holds its step for the whole cycle");
 
     // The default shapes are node sets, not formulas, and the same node set the
     // voice reads is the one the panel puts dots and rings on. Each is as small
     // as the shape allows: a triangle is its two corners and its ends, a saw is
     // its ends, and a sine is a triangle's three nodes with both segments bowed.
     {
-        constexpr int nodes[] = {3, 3, 2, 4, 2};
+        constexpr int nodes[] = {3, 3, 2, 4};
         for (int shape = 0; shape < rhino::forge::lfoShapeCount; ++shape)
         {
             const auto& built = rhino::forge::lfoShapeTables[static_cast<size_t>(shape)];
@@ -81,21 +75,21 @@ void lfoSuite()
         for (int i = 0; i <= 64; ++i)
         {
             const auto phase = static_cast<float>(i) / 64.0f;
-            requireClose(rhino::forge::lfoWave(LfoShape::triangle, phase, 0.0f),
+            requireClose(rhino::forge::lfoWave(LfoShape::triangle, phase),
                          1.0f - 4.0f * std::abs(phase - 0.5f), 0.0001f,
                          "three nodes carry a triangle exactly");
-            requireClose(rhino::forge::lfoWave(LfoShape::saw, phase, 0.0f), phase * 2.0f - 1.0f,
+            requireClose(rhino::forge::lfoWave(LfoShape::saw, phase), phase * 2.0f - 1.0f,
                          0.0001f, "two nodes carry a saw exactly");
         }
 
         // A square is the one shape with a step inside its cycle, and a table's
         // points have to keep going forwards in x. Its riser is a thousandth of
         // a cycle: level either side of it, and both levels exact.
-        requireClose(rhino::forge::lfoWave(LfoShape::square, 0.4f, 0.0f), 1.0f, 0.0001f,
+        requireClose(rhino::forge::lfoWave(LfoShape::square, 0.4f), 1.0f, 0.0001f,
                      "a square holds the top of its cycle");
-        requireClose(rhino::forge::lfoWave(LfoShape::square, 0.5f, 0.0f), -1.0f, 0.0001f,
+        requireClose(rhino::forge::lfoWave(LfoShape::square, 0.5f), -1.0f, 0.0001f,
                      "a square is all the way down by the half cycle");
-        require(rhino::forge::lfoWave(LfoShape::square, 0.5f - rhino::forge::lfoStepGap, 0.0f) > 0.99f,
+        require(rhino::forge::lfoWave(LfoShape::square, 0.5f - rhino::forge::lfoStepGap) > 0.99f,
                 "a square's riser is no wider than a thousandth of its cycle");
 
         // A sine is three nodes bowed to the limit. What is exact is what a
@@ -103,18 +97,18 @@ void lfoSuite()
         // slope through them, which is why the join is smooth rather than a
         // corner. The shape between them is a parabola and stands about 0.056
         // proud of a true sine, and that is the whole of the difference.
-        requireClose(rhino::forge::lfoWave(LfoShape::sine, 0.25f, 0.0f), 1.0f, 0.0001f,
+        requireClose(rhino::forge::lfoWave(LfoShape::sine, 0.25f), 1.0f, 0.0001f,
                      "a sine still peaks at exactly one, a quarter of the way through");
-        requireClose(rhino::forge::lfoWave(LfoShape::sine, 0.75f, 0.0f), -1.0f, 0.0001f,
+        requireClose(rhino::forge::lfoWave(LfoShape::sine, 0.75f), -1.0f, 0.0001f,
                      "a sine still troughs at exactly minus one");
         for (const auto crossing : {0.0f, 0.5f, 1.0f})
-            requireClose(rhino::forge::lfoWave(LfoShape::sine, crossing, 0.0f), 0.0f, 0.0001f,
+            requireClose(rhino::forge::lfoWave(LfoShape::sine, crossing), 0.0f, 0.0001f,
                          "a sine still crosses zero where it did");
         auto worst = 0.0f;
         for (int i = 0; i <= 2048; ++i)
         {
             const auto phase = static_cast<float>(i) / 2048.0f;
-            worst = std::max(worst, std::abs(rhino::forge::lfoWave(LfoShape::sine, phase, 0.0f)
+            worst = std::max(worst, std::abs(rhino::forge::lfoWave(LfoShape::sine, phase)
                                              - std::sin(phase * juce::MathConstants<float>::twoPi)));
         }
         require(worst < 0.06f, "a sine of three nodes stays within 0.06 of a true one");
@@ -124,10 +118,10 @@ void lfoSuite()
         constexpr auto step = 0.0005f;
         for (const auto join : {0.0f, 0.5f})
         {
-            const auto before = rhino::forge::lfoWave(LfoShape::sine, std::fmod(join + 1.0f - step, 1.0f), 0.0f)
-                              - rhino::forge::lfoWave(LfoShape::sine, std::fmod(join + 1.0f - 2.0f * step, 1.0f), 0.0f);
-            const auto after = rhino::forge::lfoWave(LfoShape::sine, join + 2.0f * step, 0.0f)
-                             - rhino::forge::lfoWave(LfoShape::sine, join + step, 0.0f);
+            const auto before = rhino::forge::lfoWave(LfoShape::sine, std::fmod(join + 1.0f - step, 1.0f))
+                              - rhino::forge::lfoWave(LfoShape::sine, std::fmod(join + 1.0f - 2.0f * step, 1.0f));
+            const auto after = rhino::forge::lfoWave(LfoShape::sine, join + 2.0f * step)
+                             - rhino::forge::lfoWave(LfoShape::sine, join + step);
             requireClose(after, before, 0.001f, "a sine's segments meet without a corner");
         }
     }
@@ -149,7 +143,7 @@ void lfoSuite()
         rhino::forge::LfoSetting setting;
         setting.shape = static_cast<float>(LfoShape::square);
         setting.table = drawn;
-        requireClose(rhino::forge::lfoValue(setting, 0.25f, 0.0f), 1.0f, 0.0001f,
+        requireClose(rhino::forge::lfoOutputAt(setting, 0.25f, rhino::forge::LfoSteps {}).x, 1.0f, 0.0001f,
                      "a custom table overrides the basic shape");
 
         auto source = std::make_unique<rhino::forge::Processor>();
@@ -281,12 +275,132 @@ void lfoSuite()
             for (int i = 0; i < 64; ++i)
             {
                 const auto phase = static_cast<float>(i) / 64.0f;
-                if (std::abs(rhino::forge::lfoWave(static_cast<LfoShape>(a), phase, 0.0f)
-                             - rhino::forge::lfoWave(static_cast<LfoShape>(b), phase, 0.0f)) > 0.01f)
+                if (std::abs(rhino::forge::lfoWave(static_cast<LfoShape>(a), phase)
+                             - rhino::forge::lfoWave(static_cast<LfoShape>(b), phase)) > 0.01f)
                     differs = true;
             }
             require(differs, "no two LFO shapes are the same curve");
         }
+
+    // --- The three types ------------------------------------------------------
+    //
+    // NORMAL is the shape above. PATH and S&H are read through the same
+    // function the voice and the panel both call, so what is checked here is
+    // what both of them get back from it.
+    {
+        using rhino::forge::LfoType;
+        using rhino::forge::LfoDirection;
+        using rhino::forge::lfoOutputAt;
+        rhino::forge::LfoSetting setting;
+        rhino::forge::LfoSteps steps {};
+
+        for (int a = 0; a < rhino::forge::lfoTypeCount; ++a)
+        {
+            require(juce::String(rhino::forge::lfoTypeName(a)).isNotEmpty(), "every LFO type is named");
+            for (int b = a + 1; b < rhino::forge::lfoTypeCount; ++b)
+                require(juce::String(rhino::forge::lfoTypeName(a)) != rhino::forge::lfoTypeName(b),
+                        "no two LFO types share a name");
+        }
+        for (int a = 0; a < rhino::forge::lfoDirectionCount; ++a)
+        {
+            require(juce::String(rhino::forge::lfoDirectionName(a)).isNotEmpty(), "every LFO direction is named");
+            for (int b = a + 1; b < rhino::forge::lfoDirectionCount; ++b)
+                require(juce::String(rhino::forge::lfoDirectionName(a)) != rhino::forge::lfoDirectionName(b),
+                        "no two LFO directions share a name");
+        }
+
+        // A NORMAL LFO puts its one value on both outputs, so a slot fed from Y
+        // keeps moving when the type is switched away from PATH.
+        setting.shape = static_cast<float>(LfoShape::saw);
+        const auto normal = lfoOutputAt(setting, 0.25f, steps);
+        requireClose(normal.x, -0.5f, 0.0001f, "a NORMAL LFO reads its shape");
+        requireClose(normal.y, normal.x, 0.0001f, "a NORMAL LFO's Y output repeats its X");
+
+        // Sample and hold: one step per grid column, held for the column.
+        setting.type = static_cast<float>(LfoType::sampleHold);
+        setting.table.columns = 4;
+        steps = {-1.0f, 0.5f, 0.0f, 1.0f, -0.5f};
+        requireClose(lfoOutputAt(setting, 0.1f, steps).x, -1.0f, 0.0001f,
+                     "a sample and hold reads the first step at the start");
+        requireClose(lfoOutputAt(setting, 0.24f, steps).x, -1.0f, 0.0001f,
+                     "and holds it for the whole column");
+        requireClose(lfoOutputAt(setting, 0.3f, steps).x, 0.5f, 0.0001f, "the second column is the second step");
+        requireClose(lfoOutputAt(setting, 0.99f, steps).x, 1.0f, 0.0001f, "the last column is the last step");
+        requireClose(lfoOutputAt(setting, 0.6f, steps).y, 0.0f, 0.0001f, "a sample and hold's Y repeats its X");
+        // SMOOTH turns the end of each step into a ramp to the next. At full,
+        // the whole column is the ramp and the staircase is a line through its
+        // steps, running at the very end into the step the next cycle starts on.
+        setting.smooth = 1.0f;
+        requireClose(lfoOutputAt(setting, 0.125f, steps).x, -0.25f, 0.001f,
+                     "at full SMOOTH the middle of a column is halfway to the next step");
+        requireClose(lfoOutputAt(setting, 1.0f, steps).x, -0.5f, 0.001f,
+                     "the last ramp runs to the step the next cycle starts on");
+        setting.smooth = 0.5f;
+        requireClose(lfoOutputAt(setting, 0.1f, steps).x, -1.0f, 0.001f,
+                     "at half SMOOTH the first half of a column is still a hold");
+        requireClose(lfoOutputAt(setting, 0.2f, steps).x, -1.0f + 1.5f * 0.6f, 0.001f,
+                     "and the second half ramps to the next step");
+        setting.smooth = 0.0f;
+
+        // A path: the phase travels its points with equal time per segment.
+        const auto& diamond = rhino::forge::lfoDefaultPathTable;
+        require(diamond.valid(), "the default path is a path a drawn one could be");
+        requireClose(diamond.at(0.0f).x, 0.5f, 0.0001f, "the default path starts at the top, across");
+        requireClose(diamond.at(0.0f).y, 1.0f, 0.0001f, "the default path starts at the top, up");
+        requireClose(diamond.at(0.25f).x, 1.0f, 0.0001f, "a quarter of the way it is at the right");
+        requireClose(diamond.at(0.5f).y, 0.0f, 0.0001f, "halfway it is at the bottom");
+        requireClose(diamond.at(0.125f).x, 0.75f, 0.0001f, "between two points it is on the line between them");
+        requireClose(diamond.at(0.125f).y, 0.75f, 0.0001f, "on both axes");
+        requireClose(diamond.at(1.0f).y, 1.0f, 0.0001f, "and at the end it is back at the top");
+        setting.type = static_cast<float>(LfoType::path);
+        const auto top = lfoOutputAt(setting, 0.0f, steps);
+        requireClose(top.x, 0.0f, 0.0001f, "a path's X is where it is across, as a swing");
+        requireClose(top.y, 1.0f, 0.0001f, "a path's Y is where it is up, as a swing");
+        const auto right = lfoOutputAt(setting, 0.25f, steps);
+        requireClose(right.x, 1.0f, 0.0001f, "at the right edge X is all the way up");
+        requireClose(right.y, 0.0f, 0.0001f, "and Y is in the middle");
+
+        // Two points in one place are a pause, which is what equal time per
+        // segment buys: a route may stop somewhere for a while.
+        rhino::forge::LfoPath paused;
+        paused.custom = true;
+        paused.count = 4;
+        paused.points[0] = {0.0f, 0.0f};
+        paused.points[1] = {1.0f, 1.0f};
+        paused.points[2] = {1.0f, 1.0f};
+        paused.points[3] = {0.0f, 0.0f};
+        require(paused.valid(), "a path with two points in one place is a valid path");
+        requireClose(paused.at(0.4f).x, 1.0f, 0.0001f, "a doubled point holds the route there");
+        requireClose(paused.at(0.6f).y, 1.0f, 0.0001f, "for the whole of its segment");
+        setting.path = paused;
+        requireClose(lfoOutputAt(setting, 0.5f, steps).x, 1.0f, 0.0001f, "a drawn path overrides the default");
+
+        rhino::forge::LfoPath lone;
+        lone.custom = true;
+        lone.count = 1;
+        require(!lone.valid(), "a path of one point is not a route");
+        rhino::forge::LfoPath astray = paused;
+        astray.points[1].x = 1.5f;
+        require(!astray.valid(), "a point off the pad is rejected");
+
+        // Direction: where in the shape a point of the travel is read.
+        setting = {};
+        setting.shape = static_cast<float>(LfoShape::saw);
+        setting.direction = static_cast<float>(LfoDirection::reverse);
+        requireClose(rhino::forge::lfoTravelSpan(setting), 1.0f, 0.0001f, "reverse is one cycle of travel");
+        requireClose(rhino::forge::lfoPositionOf(setting, 0.25f), 0.75f, 0.0001f,
+                     "reverse reads the shape from its end");
+        setting.direction = static_cast<float>(LfoDirection::pingPong);
+        requireClose(rhino::forge::lfoTravelSpan(setting), 2.0f, 0.0001f, "ping-pong is two cycles of travel");
+        requireClose(rhino::forge::lfoPositionOf(setting, 0.25f), 0.25f, 0.0001f, "ping-pong goes out forwards");
+        requireClose(rhino::forge::lfoPositionOf(setting, 1.25f), 0.75f, 0.0001f, "and comes back the other way");
+        requireClose(rhino::forge::lfoPositionOf(setting, 2.0f), 0.0f, 0.0001f, "and ends where it started");
+        setting.type = static_cast<float>(LfoType::sampleHold);
+        require(rhino::forge::lfoDirectionOf(setting) == LfoDirection::forward,
+                "a sample and hold has no direction");
+        requireClose(rhino::forge::lfoPositionOf(setting, 0.25f), 0.25f, 0.0001f,
+                     "so its steps are read forwards whatever the setting says");
+    }
 
     // --- The three modes ------------------------------------------------------
     //
@@ -414,6 +528,91 @@ void lfoSuite()
                      "a new note restarts a stopped ENV");
         runCore(core, patch, cycle / 4);
         require(core.lfoPosition(0) > 0.2f, "a restarted ENV runs again");
+    }
+
+    // --- Sample and hold inside a voice ---------------------------------------
+    //
+    // Eight columns, the grid's default, so a column is an eighth of a cycle.
+    // One voice, so a new note takes the same voice and restarts it.
+    {
+        rhino::forge::Core core;
+        core.initialise(48000.0);
+        auto patch = patchFor(rhino::forge::LfoMode::trigger);
+        patch.lfos.front().type = static_cast<float>(rhino::forge::LfoType::sampleHold);
+        core.noteOn(57, 1.0f, patch);
+        runCore(core, patch, cycle / 16);
+        const auto first = core.lfoOutput(0);
+        require(std::abs(first) <= 1.0f, "a sample and hold's step is inside plus or minus one");
+        runCore(core, patch, cycle / 32);
+        requireClose(core.lfoOutput(0), first, 0.0001f, "a step is held for its whole column");
+        runCore(core, patch, cycle / 8);
+        const auto second = core.lfoOutput(0);
+        require(std::abs(second - first) > 0.0001f, "the next column is a new step");
+        requireClose(core.lfoSteps(0)[1], second, 0.0001f,
+                     "the staircase the panel is shown holds the step being read");
+        core.noteOn(60, 1.0f, patch);
+        runCore(core, patch, cycle / 16);
+        require(std::abs(core.lfoOutput(0) - first) > 0.0001f, "a new note takes a fresh flight of steps");
+
+        // ENV stops on the last step and holds it.
+        auto oneShot = patch;
+        oneShot.lfos.front().mode = static_cast<float>(rhino::forge::LfoMode::envelope);
+        rhino::forge::Core held;
+        held.initialise(48000.0);
+        held.noteOn(57, 1.0f, oneShot);
+        runCore(held, oneShot, cycle + cycle / 4);
+        const auto last = held.lfoOutput(0);
+        runCore(held, oneShot, cycle);
+        requireClose(held.lfoOutput(0), last, 0.0001f, "a one-shot sample and hold holds its last step");
+        requireClose(held.lfoPosition(0), 1.0f, 0.0001f, "and is parked at the end of its cycle");
+    }
+
+    // --- Direction inside a voice ----------------------------------------------
+    {
+        // Reverse reads the saw from its end: a quarter of the way through the
+        // travel it is three quarters of the way through the shape.
+        rhino::forge::Core core;
+        core.initialise(48000.0);
+        auto reversed = patchFor(rhino::forge::LfoMode::trigger);
+        reversed.lfos.front().direction = static_cast<float>(rhino::forge::LfoDirection::reverse);
+        core.noteOn(57, 1.0f, reversed);
+        runCore(core, reversed, cycle / 4);
+        requireClose(core.lfoPosition(0), 0.75f, 0.01f, "a reversed LFO's position runs backwards through the shape");
+        requireClose(core.lfoOutput(0), 0.5f, 0.02f, "and its output is the shape read there");
+
+        // Ping-pong goes out over one cycle and back over the next.
+        rhino::forge::Core bouncing;
+        bouncing.initialise(48000.0);
+        auto pingPong = patchFor(rhino::forge::LfoMode::trigger);
+        pingPong.lfos.front().direction = static_cast<float>(rhino::forge::LfoDirection::pingPong);
+        bouncing.noteOn(57, 1.0f, pingPong);
+        runCore(bouncing, pingPong, cycle / 4);
+        requireClose(bouncing.lfoPosition(0), 0.25f, 0.01f, "a ping-pong LFO starts out forwards");
+        runCore(bouncing, pingPong, cycle);
+        requireClose(bouncing.lfoPosition(0), 0.75f, 0.01f, "and comes back the other way on the next cycle");
+        runCore(bouncing, pingPong, cycle);
+        requireClose(bouncing.lfoPosition(0), 0.25f, 0.01f, "then goes out again");
+
+        // A reversed one-shot ends on the shape's first point, and a ping-pong
+        // one back where it started, after both legs of its trip.
+        auto reversedShot = reversed;
+        reversedShot.lfos.front().mode = static_cast<float>(rhino::forge::LfoMode::envelope);
+        rhino::forge::Core backwards;
+        backwards.initialise(48000.0);
+        backwards.noteOn(57, 1.0f, reversedShot);
+        runCore(backwards, reversedShot, cycle + cycle / 4);
+        requireClose(backwards.lfoPosition(0), 0.0f, 0.0001f, "a reversed one-shot stops on the shape's first point");
+        requireClose(backwards.lfoOutput(0), -1.0f, 0.001f, "and holds what the shape starts on");
+        auto bouncedShot = pingPong;
+        bouncedShot.lfos.front().mode = static_cast<float>(rhino::forge::LfoMode::envelope);
+        rhino::forge::Core there;
+        there.initialise(48000.0);
+        there.noteOn(57, 1.0f, bouncedShot);
+        runCore(there, bouncedShot, cycle + cycle / 2);
+        require(there.lfoPosition(0) > 0.3f && there.lfoPosition(0) < 0.7f,
+                "a ping-pong one-shot is still on its way back after one cycle");
+        runCore(there, bouncedShot, cycle);
+        requireClose(there.lfoPosition(0), 0.0f, 0.0001f, "and stops back where it started after two");
     }
 
     // A legato note in mono did not lift a key, so it does not restart the
@@ -547,6 +746,66 @@ void lfoSuite()
         };
         require(level(1.0f) > level(0.0f) * 1.2f,
                 "every LFO reaches the matrix as a source of its own");
+    }
+
+    // A path's second axis is a source of its own. A route pinned to the left
+    // edge and the top puts out X at -1 and Y at +1, so the two outputs pull
+    // the sub's level opposite ways.
+    {
+        const auto level = [] (int source, float depth)
+        {
+            rhino::forge::Processor processor;
+            soloSineOnA(processor);
+            // The sub alone, so what the slot does to its level is the whole
+            // of what is measured.
+            setValue(processor, "oscALevel", 0.0f);
+            setValue(processor, "subEnable", 1.0f);
+            setValue(processor, "subLevel", 0.5f);
+            setValue(processor, "lfo1Type", static_cast<float>(rhino::forge::LfoType::path));
+            setValue(processor, "lfo1Mode", static_cast<float>(rhino::forge::LfoMode::free));
+            setValue(processor, "lfo1RateUnit", 0.0f);
+            setValue(processor, "lfo1Rate", 0.05f);
+            rhino::forge::LfoPath pinned;
+            pinned.custom = true;
+            pinned.count = 2;
+            pinned.points[0] = {0.0f, 1.0f};
+            pinned.points[1] = {0.0f, 1.0f};
+            processor.setLfoPath(0, pinned);
+            setSlot(processor, 1, static_cast<float>(source), destSub, depth);
+            juce::AudioBuffer<float> rendered(2, samples);
+            rendered.clear();
+            renderNote(processor, rendered);
+            return rms(rendered, 0, 1024);
+        };
+        const auto y = static_cast<int>(rhino::forge::ModSource::lfo1Y);
+        require(level(y, 0.0f) > 0.0f, "the sub is heard with nothing routed");
+        require(level(y, 1.0f) > level(y, 0.0f) * 1.2f,
+                "a path's Y output reaches the matrix, and pinned to the top it pushes the sub up");
+        require(level(srcLfo1, 1.0f) < level(srcLfo1, 0.0f) * 0.8f,
+                "its X output, pinned to the left, pulls the sub down");
+
+        // A drawn path belongs to one LFO and survives host state, and an LFO
+        // whose path was never drawn reopens on the default.
+        rhino::forge::Processor source;
+        rhino::forge::LfoPath drawn;
+        drawn.custom = true;
+        drawn.count = 3;
+        drawn.points[0] = {0.1f, 0.2f};
+        drawn.points[1] = {0.9f, 0.4f};
+        drawn.points[2] = {0.5f, 0.8f};
+        source.setLfoPath(2, drawn);
+        require(!source.lfoPath(0).custom, "drawing LFO 3's path leaves LFO 1 on the default");
+        juce::MemoryBlock state;
+        source.getStateInformation(state);
+        rhino::forge::Processor restored;
+        restored.setStateInformation(state.getData(), static_cast<int>(state.getSize()));
+        const auto back = restored.lfoPath(2);
+        require(back.custom && back.count == 3, "host state restores a drawn path");
+        requireClose(back.points[1].x, 0.9f, 0.0001f, "with its points where they were put");
+        requireClose(back.points[2].y, 0.8f, 0.0001f, "on both axes");
+        require(!restored.lfoPath(0).custom, "an LFO whose path was never drawn reopens on the default");
+        require(!restored.lfoPath(2).custom || restored.lfoTable(2).columns == 8,
+                "a path leaves the grid where it was");
     }
 
     // Every mode has a name of its own, or the stepper would show two the same.

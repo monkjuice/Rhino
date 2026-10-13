@@ -704,6 +704,10 @@ void Editor::buildHandles()
             ui::electricBlue, true);
     for (int lfo = 0; lfo < lfoCount; ++lfo)
         add(static_cast<int>(ModSource::lfo1) + lfo, "LFO " + juce::String(lfo + 1), ui::signalViolet, true);
+    // And one more per LFO for a path's second axis, a card one letter wide
+    // that only a PATH LFO hangs beside its first.
+    for (int lfo = 0; lfo < lfoCount; ++lfo)
+        add(static_cast<int>(ModSource::lfo1Y) + lfo, "Y", ui::signalViolet, true);
     // A macro carries a plate instead of a tag: the number on top is the grip,
     // and under it is how many slots this macro is driving. It is still a
     // SourceHandle, because the drag that starts on it is the same drag, and

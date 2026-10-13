@@ -26,7 +26,8 @@ The user edits Forge in the same working tree while an agent works elsewhere, co
 
 - stage named paths (`git add native/ AGENTS.md`), never `git add -A` or `git add .`;
 - treat changes outside your own area in `git status` as somebody else's;
-- run `git log` again before assuming the branch is where you left it, because the user pushes mid-session too.
+- run `git log` again before assuming the branch is where you left it, because the user pushes mid-session too;
+- check `git branch --show-current` before writing and before committing: another agent sharing the tree has checked out a different branch and back mid-task (2026-10-13, `main` to `feat/forge-lfo-types`), so a survey of the files belongs to the commit it was made on.
 
 ## Committing through the HARBIZ `git_commit` tool
 

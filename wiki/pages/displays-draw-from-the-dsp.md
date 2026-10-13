@@ -20,7 +20,7 @@ A display is drawn from the arithmetic the engine actually runs, never from a pi
 - **[Drum Rack](drum-rack.md).** A synth pad's picture is a strike rendered by the engine's own voice (`DrumRackEngine::renderStrike`), held sample-identical to live playback by a test, and Slice draws the cuts `DrumSlicer` returns. The sample editor's envelope line is the exception: `shapeAt` in `DeviceEditorPanelDrumSample.cpp` restates the voice's fades, Decay and envelope as a closed form in the UI, and no test holds the two together (2026-10-07; [Drum Rack sample editor](drum-rack-sample-editor.md)).
 - **Forge FX slots** (`ui/ForgeFxDisplay.h`). A distortion's curve is `fxShape` per pixel, an equaliser's response is the magnitude of the very biquads `setBand` builds, and a delay's repeats are placed by `fxDelaySeconds`.
 - **Forge LFO graph.** It draws `lfoShapeTables` or the custom `LfoTable`, the tables the voice reads through `lfoValue`.
-- **Forge oscillator display.** It draws the frames in `WavetableStore` as authored, warped as the voice warps them.
+- **Forge oscillator display.** It draws the frames in `WavetableStore` as authored, warped as the voice warps them, at the POSITION and warp depths the loudest voice is modulated to (`Editor::modulatedValue`, since `2d14aba`).
 - **Forge modulation rings.** `modulationOffset` is the reading the loudest voice renders with, the same voice ENV 1's display follows.
 
 ## Honest exceptions
@@ -29,7 +29,7 @@ Where no true picture exists, draw the truest thing that can be said instead of 
 
 ## How the rule is held
 
-Tests compare picture and sound by different routes. `native/src/tests/EqTest.cpp` sweeps sines through `EqEngine`, measures what comes out, and requires it within 0.35 dB of `responseDbAt`. `ForgeTestsDisplays.cpp` checks each slot curve against the function the engine calls. `ForgeTestsEnvelope.cpp` requires the offset drawn on a knob to equal ENV 2's own display reading.
+Tests compare picture and sound by different routes. `native/src/tests/EqTest.cpp` sweeps sines through `EqEngine`, measures what comes out, and requires it within 0.35 dB of `responseDbAt`. `ForgeTestsDisplays.cpp` checks each slot curve against the function the engine calls. `ForgeTestsEnvelope.cpp` requires the offset drawn on a knob to equal ENV 2's own display reading. `modulatedTraceSuite` (`ForgeTestsDisplays.cpp`, `forge_displays`) routes MACRO 1 to POSITION and to a BEND + warp depth, holds a note, and requires the tube to match pixel for pixel a tube whose knob is set by hand to the modulated value. A macro holds still where an LFO would not; depth 0.5 and macro 1.0 are exact as floats; and it paints only `editor->paint` clipped to `ui::wavetableTubeBounds`, so the knob rings, which change while a note sounds, stay out of the picture. With `modulatedValue` forced back to `value` both checks fail.
 
 ## How to apply
 

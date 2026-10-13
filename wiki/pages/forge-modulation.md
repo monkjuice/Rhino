@@ -4,7 +4,7 @@ type: component
 summary: Eight matrix slots route envelopes, LFOs, macros and performance sources to any continuous control, per voice, in the knob's own range.
 tags: [forge, modulation, lfo, envelopes]
 sources: []
-updated: 2026-10-05
+updated: 2026-10-13
 ---
 
 # Forge modulation: matrix, envelopes, LFOs and macros
@@ -27,6 +27,8 @@ The list (`core/ForgeMatrix.h`) runs: the named controls, then every rack slot's
 ## On the panel
 
 Drag a source's handle onto a knob, stepper or bar. The handle is never the control itself, so dragging a knob still turns it. A new routing lands at half depth so the drop visibly does something. A modulated knob shows a faint reach ring plus a bright arc for where the loudest voice has it now, published once per block; the pointer stays at the parameter's value. The ring is draggable only while exactly one slot points there, since a sum of two has no single meaning.
+
+Pictures follow the same loudest voice. Since `2d14aba` (2026-10-13) the oscillator tube draws a modulated POSITION and modulated warp depths through `Editor::modulatedValue`; before, an LFO on POSITION swept the sound while the tube stayed on the knob. With no note sounding the published offset is zero, so the tube, like the rings and ENV 1's display, rests on the knob ([Forge editor (panel)](forge-editor.md)).
 
 ## The modulators
 

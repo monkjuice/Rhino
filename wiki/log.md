@@ -627,3 +627,10 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/forge-editor.md (seventeen units with ForgeEditorTables.cpp; a control-less row carving a display; the table fields as the exception to FxSelector's copy rule, and when the disk is rescanned; summary changed)
 - updated: pages/forge.md (tables/ row names the git-ignored user/ folder)
 - updated: index.md (summaries of forge-oscillators and forge-editor)
+
+## [2026-10-13] update | Forge's oscillator tube draws a modulated POSITION and warp depth (commit 2d14aba on main)
+- source: the main agent's brief, checked against instruments/rhino-forge/src/ForgeEditor.h, src/ForgeEditorModulation.cpp, src/ForgeEditorPaint.cpp, src/ForgeEditorWarp.cpp, tests/ForgeTestsDisplays.cpp
+- updated: pages/forge-editor.md (new rule: pictures of what sounds read Editor::modulatedValue, knobs read value)
+- updated: pages/forge-modulation.md (On the panel: the tube follows the loudest voice and rests on the knob with no note)
+- updated: pages/displays-draw-from-the-dsp.md (oscillator display is drawn at the modulated values; modulatedTraceSuite and why it uses a macro and paints only the tube)
+- updated: pages/git-workflow.md (check the current branch before writing or committing; another agent switched it mid-task)

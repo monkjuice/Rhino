@@ -128,11 +128,6 @@ juce::AudioProcessorValueTreeState::ParameterLayout Processor::parameterLayout()
 {
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> result;
 
-    // The warp modes, in the order ForgeWarp.h declares them, so a host's
-    // automation lane names the very mode the engine will run.
-    juce::StringArray warpModeNames;
-    for (int i = 0; i < warpModeCount; ++i) warpModeNames.add(warpModeName(i));
-
     // Every mode Serum names, built or not: a choice parameter's list is part
     // of the plugin's published interface, so adding to the middle of it later
     // would renumber what a host has already automated.
@@ -142,7 +137,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout Processor::parameterLayout()
     // The three oscillators are declared identically. None is expressed in
     // terms of another, so each owns its tuning, its stack, its pan and its
     // level outright.
-    const auto oscillator = [this, &result, &warpModeNames, &oscModeNames] (int which, const char* prefix,
+    const auto oscillator = [this, &result, &oscModeNames] (int which, const char* prefix,
                                                              const char* label, bool enabled,
                                                              float position, float semitone, float level)
     {
@@ -223,6 +218,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout Processor::parameterLayout()
         // Both open at nothing: a fresh patch has no warp on it, exactly as the
         // manual says Serum's does, so every preset written before warp existed
         // still sounds as it did.
+        //
+        // The names are this oscillator's own, in the order ForgeWarp.h
+        // declares the modes, so a host's automation lane names the very mode
+        // the engine will run and the oscillator an OSC mode reads: PD OSC B
+        // here on A is PD OSC C on B.
+        juce::StringArray warpModeNames;
+        for (int mode = 0; mode < warpModeCount; ++mode) warpModeNames.add(warpModeName(mode, which));
         for (int slot = 1; slot <= warpSlots; ++slot)
         {
             const auto suffix = "Warp" + juce::String(slot);

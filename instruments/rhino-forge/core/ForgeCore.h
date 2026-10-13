@@ -1194,9 +1194,9 @@ private:
             const auto& settings = patch.oscillators[index];
             oscillatorHz[index] = hz * tuningRatio(settings);
             // A disabled carrier cannot be heard or ask a source for
-            // modulation. Leave its resolved stages empty; if it is used as a
-            // modulator by the previous carrier, only its table and pitch are
-            // needed, and oscillatorHz above already supplies that.
+            // modulation. Leave its resolved stages empty; if another carrier
+            // reads it as a modulator, only its table and pitch are needed,
+            // and oscillatorHz above already supplies that.
             if (!on(settings.enable)) continue;
             for (int stage = 0; stage < warpSlots; ++stage)
             {
@@ -1249,14 +1249,23 @@ private:
         // here rather than letting the modulator come out at zero matters,
         // because a live stage also asks the table for bandwidth it is not
         // going to use, and the carrier would quietly go dull for nothing.
-        const auto pointAt = [&] (std::array<WarpStage, warpSlots>& warp, float other, bool otherOn)
+        //
+        // An OSC stage reads whichever neighbour its mode names: the next one
+        // round the ring A-B-C or the one before, so each carrier can reach
+        // both of the others. See warpSourceOscillator.
+        const auto pointAt = [&] (std::array<WarpStage, warpSlots>& warp, int carrier)
         {
             for (auto& stage : warp)
                 switch (warpSourceOf(stage.mode))
                 {
-                    case WarpSource::otherOscillator:
-                        if (otherOn) stage.modulator = other; else stage = {};
+                    case WarpSource::nextOscillator:
+                    case WarpSource::previousOscillator:
+                    {
+                        const auto other = static_cast<size_t>(warpSourceOscillator(stage.mode, carrier));
+                        if (on(patch.oscillators[other].enable)) stage.modulator = centreSamples[other];
+                        else stage = {};
                         break;
+                    }
                     case WarpSource::sub:
                         if (on(patch.subEnable)) stage.modulator = fromSub; else stage = {};
                         break;
@@ -1267,16 +1276,8 @@ private:
                     case WarpSource::none:  break;
                 }
         };
-        // OSC is the next oscillator in a ring: A reads B, B reads C, C reads
-        // A. The rule is identical at every index and scales without another
-        // branch if the oscillator bank changes again.
         for (int oscillator = 0; oscillator < oscillatorCount; ++oscillator)
-        {
-            const auto index = static_cast<size_t>(oscillator);
-            const auto other = static_cast<size_t>((oscillator + 1) % oscillatorCount);
-            pointAt(oscillatorWarp[index], centreSamples[other],
-                    on(patch.oscillators[other].enable));
-        }
+            pointAt(oscillatorWarp[static_cast<size_t>(oscillator)], oscillator);
 
         for (int oscillator = 0; oscillator < oscillatorCount; ++oscillator)
         {

@@ -286,9 +286,13 @@ void Editor::buildModules()
                     if (isWarpControl(declared.id))
                     {
                         control->selector->accent = accent;
+                        // The field lists this oscillator's modes in its own
+                        // order, so the arrows hand back a position that has to
+                        // be turned back into a mode. See refreshWarpFields.
                         control->selector->onChoose = [this, held] (int choice)
                         {
-                            setWarpMode(held->id, choice);
+                            setWarpMode(held->id, warpModeAt(choice,
+                                                             juce::jmax(0, oscillatorIndexFromId(held->id))));
                         };
                         control->selector->onOpenList = [this, held] { showWarpMenu(*held); };
                     }

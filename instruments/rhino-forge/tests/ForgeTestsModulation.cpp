@@ -321,6 +321,64 @@ void modulationSuite()
             "host pitch bend lowers the rendered note");
 }
 
+// The envelopes' knobs and the oscillators' OCT and FINE were appended to the
+// destination list, so every index a saved slot already holds still names what
+// it did, and each new index names the parameter and the field it says it does.
+void appendedDestinationsSuite()
+{
+    Patch patch;
+    const auto& list = destinations();
+    require(static_cast<int>(list.size()) == destinationCount,
+            "the destination list is as long as it says it is");
+    requireText(list[static_cast<size_t>(envDestinationBase - 1)].id, "noiseStereo",
+                "the envelopes were appended after the last destination, moving nothing");
+
+    const std::array<const char*, envDestinationsPerEnvelope> suffixes {
+        "Attack", "Decay", "Sustain", "Release"};
+    for (int env = 0; env < envCount; ++env)
+    {
+        auto& shape = patch.envs[static_cast<size_t>(env)];
+        const std::array<float*, envDestinationsPerEnvelope> fields {
+            &shape.attack, &shape.decay, &shape.sustain, &shape.release};
+        for (int control = 0; control < envDestinationsPerEnvelope; ++control)
+        {
+            const auto destination = envDestinationBase + env * envDestinationsPerEnvelope + control;
+            require(isEnvelopeDestination(destination), "the envelope bank is one run");
+            requireText(list[static_cast<size_t>(destination)].id,
+                        envParameterId(env, suffixes[static_cast<size_t>(control)]),
+                        "each envelope destination names its knob's parameter");
+            require(destinationField(patch, destination) == fields[static_cast<size_t>(control)],
+                    "and moves that knob's field");
+        }
+    }
+    require(!isEnvelopeDestination(envDestinationBase - 1)
+                && !isEnvelopeDestination(tuningDestinationBase),
+            "the envelope bank is a range, not a lower bound");
+
+    for (int oscillator = 0; oscillator < oscillatorCount; ++oscillator)
+    {
+        const auto prefix = juce::String(oscillatorPrefix(oscillator));
+        const auto octave = tuningDestinationBase + oscillator * tuningDestinationsPerOscillator;
+        auto& settings = patch.oscillators[static_cast<size_t>(oscillator)];
+        requireText(list[static_cast<size_t>(octave)].id, prefix + "Octave",
+                    "each oscillator's OCT is a destination");
+        requireText(list[static_cast<size_t>(octave + 1)].id, prefix + "Fine",
+                    "and its FINE beside it");
+        require(destinationField(patch, octave) == &settings.octave
+                    && destinationField(patch, octave + 1) == &settings.fine,
+                "OCT and FINE move their own oscillator's fields");
+    }
+    require(destinationField(patch, destinationCount) == nullptr,
+            "an index past the end of the list points at nothing");
+
+    // Each one names a real parameter, which is what hands the engine its
+    // range: a destination without one would be modulated across 0..1.
+    auto processor = std::make_unique<Processor>();
+    for (int destination = 1; destination < destinationCount; ++destination)
+        require(processor->state.getParameter(list[static_cast<size_t>(destination)].id) != nullptr,
+                "every destination names a real parameter");
+}
+
 // Matrix tests that compare two short renders prove the routing arithmetic,
 // but they do not keep rapidly changing coefficients alive long enough to
 // expose a poisoned DSP state. Exercise eight slots at the live standalone
@@ -417,6 +475,10 @@ void modulationStabilitySuite()
             noiseStereoDestination,
             warpDestinationBase,
             fxDestinationOf(0, 0, 0),
+            envDestinationBase,
+            envDestinationBase + 2,
+            tuningDestinationBase,
+            tuningDestinationBase + 1,
         };
 
         auto finite = true;
@@ -484,6 +546,7 @@ void modulationStabilitySuite()
 void modulationTests()
 {
     modulationSuite();
+    appendedDestinationsSuite();
     modulationStabilitySuite();
 }
 }

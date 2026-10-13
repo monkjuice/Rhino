@@ -126,9 +126,9 @@ void layoutSuite()
     // switch and a mode field draw none of it, which is why the drop is offered
     // to the first two and the rest are still reached from the matrix table.
     //
-    // The two tuning fields are the reason this is not just a rule about knobs:
-    // they are the only destinations the panel draws as fields, so they are the
-    // ones a narrowing of it would silently take the drop away from again.
+    // The tuning fields are the reason this is not just a rule about knobs: OCT,
+    // SEMI and FINE are the only destinations the panel draws as fields, so they
+    // are the ones a narrowing of it would silently take the drop away from.
     const auto destinationOf = [] (const char* id)
     {
         for (int i = 1; i < rhino::forge::destinationCount; ++i)
@@ -136,7 +136,9 @@ void layoutSuite()
                 return i;
         return 0;
     };
-    for (const auto* id : {"oscASemitone", "oscBSemitone", "oscCSemitone"})
+    for (const auto* id : {"oscAOctave", "oscASemitone", "oscAFine",
+                           "oscBOctave", "oscBSemitone", "oscBFine",
+                           "oscCOctave", "oscCSemitone", "oscCFine"})
     {
         require(destinationOf(id) != 0, "an oscillator's tuning field is a destination");
         auto declared = 0;

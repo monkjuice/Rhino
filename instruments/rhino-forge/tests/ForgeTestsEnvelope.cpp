@@ -222,11 +222,141 @@ void auxEnvelopeSuite()
     require(watched.modulationOffset(destCutoff) == watched.envelopeLevel(1),
             "the offset drawn on a knob is the same reading ENV 2's own display draws");
 }
+
+// Plays a prepared processor on in blocks of 64, as a host would, so an
+// envelope can be read part of the way through. The first block carries the
+// events.
+void play(rhino::forge::Processor& processor, int blocks, juce::MidiBuffer midi = {})
+{
+    juce::AudioBuffer<float> buffer(2, 64);
+    for (int i = 0; i < blocks; ++i)
+    {
+        processor.processBlock(buffer, midi);
+        midi.clear();
+    }
+}
+
+// Every envelope's four knobs are matrix destinations, and the voice runs its
+// envelopes from the settings the matrix has moved. MACRO 1 stands in wherever
+// a value has to be pinned, because a macro holds still; an LFO, which is what
+// the knobs were opened up for, is checked moving a sustain.
+void modulatedEnvelopeSuite()
+{
+    constexpr double rate = 48000.0;
+    constexpr int block = 64;
+    enum Stage { idle, attack, decay, sustain, release };
+    enum Knob { attackKnob, decayKnob, sustainKnob, releaseKnob };
+    const auto knob = [] (int env, Knob control)
+    {
+        return rhino::forge::envDestinationBase
+             + env * rhino::forge::envDestinationsPerEnvelope + static_cast<int>(control);
+    };
+    const auto macro1 = static_cast<float>(rhino::forge::ModSource::macro1);
+    const auto blocksIn = [rate, block] (double seconds)
+    {
+        return static_cast<int>(std::ceil(rate * seconds / block));
+    };
+
+    juce::MidiBuffer noteOn, noteOff;
+    noteOn.addEvent(juce::MidiMessage::noteOn(1, 57, 1.0f), 0);
+    noteOff.addEvent(juce::MidiMessage::noteOff(1, 57), 0);
+
+    // SUSTAIN is a straight line from nothing to full, so half its travel taken
+    // off a sustain of 0.75 is a voice holding 0.25, in every one of the four.
+    for (int env = 0; env < rhino::forge::envCount; ++env)
+    {
+        auto owner = std::make_unique<rhino::forge::Processor>();
+        auto& processor = *owner;
+        soloSineOnA(processor);
+        setValue(processor, rhino::forge::envParameterId(env, "Attack").toRawUTF8(), 0.001f);
+        setValue(processor, rhino::forge::envParameterId(env, "Decay").toRawUTF8(), 0.01f);
+        setValue(processor, rhino::forge::envParameterId(env, "Sustain").toRawUTF8(), 0.75f);
+        setValue(processor, "macro1", 1.0f);
+        setSlot(processor, 1, macro1, static_cast<float>(knob(env, sustainKnob)), -0.5f);
+        processor.prepareToPlay(rate, block);
+        play(processor, blocksIn(0.1), noteOn);
+
+        require(processor.envelopeStage(env) == sustain, "a moved envelope still settles into sustain");
+        requireClose(processor.envelopeLevel(env), 0.25f, 0.001f,
+                     "a slot on SUSTAIN moves the level the voice holds");
+        requireClose(processor.modulationOffset(knob(env, sustainKnob)), -0.5f, 0.001f,
+                     "and the SUSTAIN knob's ring is published like any other knob's");
+    }
+
+    // ATTACK moves in the knob's own skewed travel, and the voice climbs at the
+    // rate of the attack it has been moved to rather than the one on the knob.
+    {
+        auto owner = std::make_unique<rhino::forge::Processor>();
+        auto& processor = *owner;
+        soloSineOnA(processor);
+        setValue(processor, "env1Attack", 0.1f);
+        setValue(processor, "macro1", 1.0f);
+        setSlot(processor, 1, macro1, static_cast<float>(knob(0, attackKnob)), 0.2f);
+        processor.prepareToPlay(rate, block);
+        constexpr int blocks = 8;
+        play(processor, blocks, noteOn);
+
+        const auto range = processor.state.getParameter("env1Attack")->getNormalisableRange();
+        const auto lengthened = range.convertFrom0to1(
+            range.convertTo0to1(value(processor, "env1Attack")) + 0.2f);
+        require(lengthened > 0.3f, "a fifth of ATTACK's travel is several times a 100 ms attack");
+        require(processor.envelopeStage() == attack, "a lengthened attack is still climbing");
+        requireClose(processor.envelopeLevel(),
+                     static_cast<float>(blocks * block / rate) / lengthened, 0.001f,
+                     "an attack the matrix lengthens climbs at the lengthened rate");
+    }
+
+    // An LFO on SUSTAIN is a tremolo on the held note, which a sustain left
+    // alone is not.
+    {
+        const auto swing = [] (bool routed)
+        {
+            auto owner = std::make_unique<rhino::forge::Processor>();
+            auto& processor = *owner;
+            soloSineOnA(processor);
+            setValue(processor, "env1Decay", 0.01f);
+            setValue(processor, "env1Sustain", 0.5f);
+            setValue(processor, "lfo1RateUnit", 0.0f);
+            setValue(processor, "lfo1Rate", 8.0f);
+            if (routed) setSlot(processor, 1, static_cast<float>(srcLfo1),
+                                static_cast<float>(rhino::forge::envDestinationBase + sustainKnob), 0.25f);
+            juce::AudioBuffer<float> buffer(2, 48000);
+            renderNote(processor, buffer);
+            // Three cycles of the note to a window, so a steady sine measures
+            // steady.
+            return envelopeDepthDb(buffer, 0, 4800, 655);
+        };
+        const auto still = swing(false);
+        const auto moved = swing(true);
+        require(still < 1.0f, "a held note on an unmodulated sustain holds its level");
+        require(moved > still + 6.0f, "an LFO on SUSTAIN swings the held note's level");
+    }
+
+    // An envelope pointed at its own knobs reads the value it had a sample ago,
+    // so the loop is well defined: pointed at its own attack it still reaches
+    // the top, and pointed at its own release the note still ends.
+    {
+        auto owner = std::make_unique<rhino::forge::Processor>();
+        auto& processor = *owner;
+        soloSineOnA(processor);
+        setValue(processor, "env1Release", 0.05f);
+        setSlot(processor, 1, static_cast<float>(srcEnv1), static_cast<float>(knob(0, attackKnob)), 1.0f);
+        setSlot(processor, 2, static_cast<float>(srcEnv1), static_cast<float>(knob(0, releaseKnob)), 0.5f);
+        processor.prepareToPlay(rate, block);
+        play(processor, blocksIn(2.0), noteOn);
+        require(processor.envelopeStage() == sustain,
+                "an envelope slowing its own attack still reaches the top and settles");
+        play(processor, blocksIn(3.0), noteOff);
+        require(processor.envelopeStage() == idle,
+                "an envelope lengthening its own release still lets the note end");
+    }
+}
 }
 
 void envelopeTests()
 {
     envelopeSuite();
     auxEnvelopeSuite();
+    modulatedEnvelopeSuite();
 }
 }

@@ -350,10 +350,16 @@ public:
         // to a single voice's value — and carrying a copy of every rack out of
         // the loop to do that is only worth it when something actually is.
         auto fxModulated = false;
+        // And whether anything is pointed at an envelope's knobs, which a voice
+        // has to apply before it runs its envelopes rather than with the rest.
+        auto envModulated = false;
         if (modulated)
             for (int i = 0; i < modulation.liveCount; ++i)
-                if (isFxDestination(juce::roundToInt(modulation.liveSlot(i).destination)))
-                    fxModulated = true;
+            {
+                const auto destination = juce::roundToInt(modulation.liveSlot(i).destination);
+                if (isFxDestination(destination)) fxModulated = true;
+                if (isEnvelopeDestination(destination)) envModulated = true;
+            }
         // Only the racks are ever taken from the loudest voice. Everything else
         // applied after the voices are summed (the busses, the output) is not a
         // destination, so it is read from the patch as it stands.
@@ -375,6 +381,35 @@ public:
         {
             auto& voice = voices[voiceIndex];
             if (!voice.active) continue;
+
+            // What every LFO reads in this voice, this sample. Read before the
+            // envelopes run, because a slot can point an LFO at an envelope's
+            // knobs; reading moves nothing, and each LFO is moved on further
+            // down, once the voice is known to be still sounding.
+            std::array<LfoOutput, lfoCount> lfoValues {};
+            for (int i = 0; i < lfoCount; ++i)
+            {
+                const auto index = static_cast<size_t>(i);
+                const auto& setting = patch.lfos[index];
+                if (lfoModeOf(setting) == LfoMode::free)
+                    lfoValues[index] = freeValue[index];
+                else if (used[index])
+                    lfoValues[index] = lfoOutputAt(setting, lfoPositionOf(setting, voice.lfoPhase[index]),
+                                                   voice.lfoSteps[index]);
+            }
+
+            // The envelopes' own knobs, moved by whatever slots point at them.
+            // The sources are read as they stand before this sample's envelopes
+            // run, so an envelope pointed at its own knobs reads the value it
+            // had a sample ago rather than one that depends on itself.
+            const auto* shapes = &patch.envs;
+            if (envModulated)
+            {
+                envScratch = patch.envs;
+                modulateEnvelopes(envScratch, modulation, voice, lfoValues, patch);
+                shapes = &envScratch;
+            }
+
             // All four, whether or not anything reads them. An envelope's value
             // is its state rather than something worked out from a phase, so
             // one skipped while nothing points at it would come back wrong the
@@ -382,7 +417,7 @@ public:
             for (int env = 0; env < envCount; ++env)
             {
                 const auto i = static_cast<size_t>(env);
-                const auto& shape = patch.envs[i];
+                const auto& shape = (*shapes)[i];
                 updateEnvelope(voice.envelope[i], voice.envStage[i], voice.envReleaseStart[i],
                                shape.attack, shape.decay, shape.sustain, shape.release);
             }
@@ -429,21 +464,13 @@ public:
             // Every LFO that answers the keyboard runs inside the voice, so a
             // new note restarts its own shape and leaves the notes already
             // sounding where they were. An LFO in OFF is the one cycle
-            // everything shares, and the voice simply reads it.
-            std::array<LfoOutput, lfoCount> lfoValues {};
+            // everything shares, and the voice only read it, above.
             for (int i = 0; i < lfoCount; ++i)
             {
                 const auto index = static_cast<size_t>(i);
                 const auto& setting = patch.lfos[index];
                 const auto mode = lfoModeOf(setting);
-                if (mode == LfoMode::free)
-                {
-                    lfoValues[index] = freeValue[index];
-                    continue;
-                }
-                if (used[index])
-                    lfoValues[index] = lfoOutputAt(setting, lfoPositionOf(setting, voice.lfoPhase[index]),
-                                                   voice.lfoSteps[index]);
+                if (mode == LfoMode::free) continue;
                 // The panel follows the loudest voice, exactly as ENV 1's
                 // display does and for the same reason: that is the note a
                 // player is listening to.
@@ -752,58 +779,9 @@ private:
         for (int i = 0; i < modulation.liveCount; ++i)
         {
             const auto& slot = modulation.liveSlot(i);
-            const auto source = juce::roundToInt(slot.source);
-            const auto destination = juce::roundToInt(slot.destination);
-
             auto amount = 0.0f;
-            switch (static_cast<ModSource>(source))
-            {
-                case ModSource::velocity: amount = voice.velocity; break;
-                case ModSource::note:     amount = static_cast<float>(voice.note) / 127.0f; break;
-                case ModSource::modWheel: amount = modWheel; break;
-                case ModSource::off:      continue;
-                default:
-                {
-                    if (const auto env = envIndexOf(source); env >= 0)
-                    {
-                        amount = voice.envelope[static_cast<size_t>(env)];
-                        break;
-                    }
-                    if (const auto lfo = lfoIndexOf(source); lfo >= 0)
-                    {
-                        amount = lfos[static_cast<size_t>(lfo)].x;
-                        break;
-                    }
-                    if (const auto lfo = lfoYIndexOf(source); lfo >= 0)
-                    {
-                        amount = lfos[static_cast<size_t>(lfo)].y;
-                        break;
-                    }
-                    const auto macro = macroIndexOf(source);
-                    if (macro < 0) continue;
-                    amount = target.macros[static_cast<size_t>(macro)];
-                    break;
-                }
-            }
-
-            // BI centres the source, so the destination's own setting becomes
-            // the middle of what the slot can reach rather than one end of it:
-            // a macro at rest pulls it as far negative as the depth goes, a
-            // macro at half leaves it alone, and a macro at the top pushes it
-            // as far positive. Serum calls this POL, and it is the difference
-            // between a source at zero meaning "no modulation" and meaning "as
-            // far negative as this reaches" — a whole octave on a pitch
-            // destination at full depth, and easy to mistake for the oscillator
-            // being mistuned.
-            //
-            // Half, not double: this recentres the reach without resizing it,
-            // so one depth still spans the destination exactly once and the top
-            // of the control is still the top of the control. Scaling to plus
-            // and minus the depth instead would put everything past halfway
-            // into the clamp, where turning the knob further did nothing.
-            if (slot.bipolar >= 0.5f && !sourceIsBipolar(source)) amount -= 0.5f;
-
-            offsets[static_cast<size_t>(destination)] += slot.depth * amount;
+            if (!slotAmount(slot, voice, lfos, target, amount)) continue;
+            offsets[static_cast<size_t>(juce::roundToInt(slot.destination))] += slot.depth * amount;
             touched = true;
         }
         if (publish) meterOffsets = offsets;
@@ -813,9 +791,101 @@ private:
         {
             const auto offset = offsets[static_cast<size_t>(destination)];
             if (offset == 0.0f) continue;
+            // Moved already, by modulateEnvelopes, before the voice ran its
+            // envelopes. They are summed above only so their knobs' rings are
+            // published with everything else.
+            if (isEnvelopeDestination(destination)) continue;
             auto* field = destinationField(target, destination);
             if (field == nullptr) continue;
             const auto& range = destinationRanges[static_cast<size_t>(destination)];
+            *field = range.convertFrom0to1(juce::jlimit(0.0f, 1.0f, range.convertTo0to1(*field) + offset));
+        }
+    }
+
+    // What one slot's source reads in this voice right now, centred when the
+    // slot is BI. False for a source that names nothing, which is skipped rather
+    // than read as zero: BI would turn that zero into half a depth.
+    bool slotAmount(const ModSlot& slot, const Voice& voice,
+                    const std::array<LfoOutput, lfoCount>& lfos, const Patch& patch,
+                    float& amount) const
+    {
+        const auto source = juce::roundToInt(slot.source);
+        switch (static_cast<ModSource>(source))
+        {
+            case ModSource::velocity: amount = voice.velocity; break;
+            case ModSource::note:     amount = static_cast<float>(voice.note) / 127.0f; break;
+            case ModSource::modWheel: amount = modWheel; break;
+            case ModSource::off:      return false;
+            default:
+            {
+                if (const auto env = envIndexOf(source); env >= 0)
+                {
+                    amount = voice.envelope[static_cast<size_t>(env)];
+                    break;
+                }
+                if (const auto lfo = lfoIndexOf(source); lfo >= 0)
+                {
+                    amount = lfos[static_cast<size_t>(lfo)].x;
+                    break;
+                }
+                if (const auto lfo = lfoYIndexOf(source); lfo >= 0)
+                {
+                    amount = lfos[static_cast<size_t>(lfo)].y;
+                    break;
+                }
+                const auto macro = macroIndexOf(source);
+                if (macro < 0) return false;
+                amount = patch.macros[static_cast<size_t>(macro)];
+                break;
+            }
+        }
+
+        // BI centres the source, so the destination's own setting becomes the
+        // middle of what the slot can reach rather than one end of it: a macro
+        // at rest pulls it as far negative as the depth goes, a macro at half
+        // leaves it alone, and a macro at the top pushes it as far positive.
+        // Serum calls this POL, and it is the difference between a source at
+        // zero meaning "no modulation" and meaning "as far negative as this
+        // reaches" — a whole octave on a pitch destination at full depth, and
+        // easy to mistake for the oscillator being mistuned.
+        //
+        // Half, not double: this recentres the reach without resizing it, so
+        // one depth still spans the destination exactly once and the top of the
+        // control is still the top of the control. Scaling to plus and minus
+        // the depth instead would put everything past halfway into the clamp,
+        // where turning the knob further did nothing.
+        if (slot.bipolar >= 0.5f && !sourceIsBipolar(source)) amount -= 0.5f;
+        return true;
+    }
+
+    // The matrix's envelope bank, applied on its own. A voice runs its
+    // envelopes before anything else and the rest of the matrix after them,
+    // because an envelope is a source as well as something a slot can move.
+    // The arithmetic is applyModulation's — offsets summed per knob, then
+    // applied once in the knob's normalised space — on the four envelopes'
+    // settings alone rather than on a copy of the whole patch.
+    void modulateEnvelopes(std::array<EnvSetting, envCount>& shapes, const Modulation& modulation,
+                           const Voice& voice, const std::array<LfoOutput, lfoCount>& lfos,
+                           const Patch& patch) const
+    {
+        std::array<float, envDestinationCount> offsets {};
+        for (int i = 0; i < modulation.liveCount; ++i)
+        {
+            const auto& slot = modulation.liveSlot(i);
+            const auto destination = juce::roundToInt(slot.destination);
+            auto amount = 0.0f;
+            if (!isEnvelopeDestination(destination) || !slotAmount(slot, voice, lfos, patch, amount))
+                continue;
+            offsets[static_cast<size_t>(destination - envDestinationBase)] += slot.depth * amount;
+        }
+
+        for (int i = 0; i < envDestinationCount; ++i)
+        {
+            const auto offset = offsets[static_cast<size_t>(i)];
+            if (offset == 0.0f) continue;
+            auto* field = envelopeField(shapes[static_cast<size_t>(i / envDestinationsPerEnvelope)],
+                                        i % envDestinationsPerEnvelope);
+            const auto& range = destinationRanges[static_cast<size_t>(envDestinationBase + i)];
             *field = range.convertFrom0to1(juce::jlimit(0.0f, 1.0f, range.convertTo0to1(*field) + offset));
         }
     }
@@ -1470,6 +1540,9 @@ private:
     // The patch scratch was last copied whole from, by beginBlock. Only that
     // patch, unchanged since, may have just the matrix's fields put back.
     const Patch* scratchFor = nullptr;
+    // One voice's envelope settings as the matrix has moved them, reused like
+    // scratch and only touched while a slot points at an envelope's knobs.
+    std::array<EnvSetting, envCount> envScratch {};
     // The three racks, rendered. They hold delay lines and filter state, so
     // they belong to the Core rather than to the patch that describes them.
     std::array<FxRack, rackCount> racks;

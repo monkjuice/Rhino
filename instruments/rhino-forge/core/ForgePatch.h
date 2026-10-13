@@ -116,6 +116,21 @@ inline bool on(float enable) { return enable >= 0.5f; }
 inline constexpr float voiceTailSeconds = 0.015f;
 
 
+// One of an envelope's four knobs, in the order its destinations run: ATTACK,
+// DECAY, SUSTAIN, RELEASE. Shared by destinationField and by the voice, which
+// moves the envelopes on their own before the rest of the patch.
+inline float* envelopeField(EnvSetting& shape, int control)
+{
+    switch (control)
+    {
+        case 0: return &shape.attack;
+        case 1: return &shape.decay;
+        case 2: return &shape.sustain;
+        case 3: return &shape.release;
+        default: return nullptr;
+    }
+}
+
 // The field a destination index names, inside a patch that is about to be
 // modulated. Null for "nothing", which is also what an out-of-range index gets.
 inline float* destinationField(Patch& patch, int destination)
@@ -158,6 +173,17 @@ inline float* destinationField(Patch& patch, int destination)
     if (warp >= 0 && warp < warpDestinationCount)
         return &patch.oscillators[static_cast<size_t>(warp / warpSlots)]
                     .warpAmount[static_cast<size_t>(warp % warpSlots)];
+    const auto env = destination - envDestinationBase;
+    if (env >= 0 && env < envDestinationCount)
+        return envelopeField(patch.envs[static_cast<size_t>(env / envDestinationsPerEnvelope)],
+                             env % envDestinationsPerEnvelope);
+    // OCT then FINE, oscillator by oscillator.
+    const auto tuning = destination - tuningDestinationBase;
+    if (tuning >= 0 && tuning < tuningDestinationCount)
+    {
+        auto& oscillator = patch.oscillators[static_cast<size_t>(tuning / tuningDestinationsPerOscillator)];
+        return tuning % tuningDestinationsPerOscillator == 0 ? &oscillator.octave : &oscillator.fine;
+    }
 
     const auto fx = destination - fxDestinationBase;
     if (fx < 0 || fx >= fxDestinationCount) return nullptr;
@@ -257,8 +283,16 @@ inline float channelPanRight(float pan)
 }
 
 // Octave, semitone and fine are one frequency multiplier. Fine is in cents.
+//
+// The octave is a whole number of octaves however it got there. The knob only
+// stops on whole numbers, but the matrix moves it through its range smoothly,
+// and an LFO on OCT is wanted for the jumps: the Serum manual's own example is
+// an LFO on the octave "without having to count in 12 semitones" (p. 29), and
+// Serum keeps smooth sweeps for its CRS. SEMI is Forge's smooth one, so OCT is
+// rounded here and nowhere else, and a patch whose octave nothing modulates
+// plays exactly what it did.
 inline float tuningRatio(const Oscillator& osc)
 {
-    return std::pow(2.0f, osc.octave + osc.semitone / 12.0f + osc.fine / 1200.0f);
+    return std::pow(2.0f, std::round(osc.octave) + osc.semitone / 12.0f + osc.fine / 1200.0f);
 }
 }

@@ -112,7 +112,8 @@ struct DestinationInfo
 
 // A compact schema: the continuously modulatable controls of every oscillator
 // are contiguous, followed by the shared voice controls, rack controls, warp
-// depths and the remaining source shapers.
+// depths and the remaining source shapers. The envelopes' knobs and the
+// oscillators' OCT and FINE came later and are appended after all of it.
 inline const std::vector<DestinationInfo>& destinations();
 
 inline constexpr int oscillatorDestinationBase = 1;
@@ -205,7 +206,38 @@ inline constexpr int filterDestination = warpDestinationBase + warpDestinationCo
 // modulation; the two continuous controls beside it are the ones worth playing.
 inline constexpr int noiseToneDestination = filterDestination + 1;
 inline constexpr int noiseStereoDestination = noiseToneDestination + 1;
-inline constexpr int destinationCount = noiseStereoDestination + 1;
+
+// Every envelope's four knobs, ENV 1 to ENV 4 in turn, each ATTACK, DECAY,
+// SUSTAIN and RELEASE. The voice reads an envelope's settings before it reads
+// anything else, so this bank is applied on its own and ahead of the rest; see
+// Core::modulateEnvelopes.
+inline constexpr int envDestinationBase = noiseStereoDestination + 1;
+inline constexpr int envDestinationsPerEnvelope = 4;
+inline constexpr int envDestinationCount = envCount * envDestinationsPerEnvelope;
+
+inline constexpr bool isEnvelopeDestination(int destination)
+{
+    return destination >= envDestinationBase
+        && destination < envDestinationBase + envDestinationCount;
+}
+
+// OCT and FINE, oscillator by oscillator. SEMI has been a destination from the
+// start, as A PITCH and its neighbours, which is why it is not here. A modulated
+// OCT still moves in whole octaves; see tuningRatio.
+inline constexpr int tuningDestinationBase = envDestinationBase + envDestinationCount;
+inline constexpr int tuningDestinationsPerOscillator = 2;
+inline constexpr int tuningDestinationCount = oscillatorCount * tuningDestinationsPerOscillator;
+inline constexpr int destinationCount = tuningDestinationBase + tuningDestinationCount;
+
+inline const std::array<DestinationInfo, tuningDestinationCount>& tuningDestinations()
+{
+    static const std::array<DestinationInfo, tuningDestinationCount> table {{
+        {"oscAOctave", "A OCT"}, {"oscAFine", "A FINE"},
+        {"oscBOctave", "B OCT"}, {"oscBFine", "B FINE"},
+        {"oscCOctave", "C OCT"}, {"oscCFine", "C FINE"},
+    }};
+    return table;
+}
 
 // Thirty slots. The panel's table shows eight of them to begin with and adds a
 // row as those fill (ForgePlacement.h, the matrix); the parameters exist
@@ -246,8 +278,9 @@ inline int fxDestinationOf(int rack, int slot, int control)
 }
 
 // The whole destination list: the named controls, then every rack slot's six
-// knobs and its mix. Built once, and held by value because the generated half
-// owns the strings it names — a `const char*` here would point at a temporary.
+// knobs and its mix, then whatever was appended since. Built once, and held by
+// value because the generated half owns the strings it names — a `const char*`
+// here would point at a temporary.
 inline const std::vector<DestinationInfo>& destinations()
 {
     static const std::vector<DestinationInfo> table = []
@@ -255,7 +288,7 @@ inline const std::vector<DestinationInfo>& destinations()
         // The ids and labels the generated half needs, kept alive for as long
         // as the table points into them.
         static std::vector<juce::String> pool;
-        pool.reserve(static_cast<size_t>(fxDestinationCount) * 2);
+        pool.reserve(static_cast<size_t>(fxDestinationCount + envDestinationCount) * 2);
 
         std::vector<DestinationInfo> built;
         built.reserve(static_cast<size_t>(destinationCount));
@@ -286,6 +319,23 @@ inline const std::vector<DestinationInfo>& destinations()
         built.push_back({"filterFreq", "FLT FREQ"});
         built.push_back({"noiseTone", "NOISE TONE"});
         built.push_back({"noiseStereo", "NOISE WIDTH"});
+
+        // Spelt through envParameterId, so the bank names the parameters the
+        // envelope module declares rather than a second copy of their ids.
+        static constexpr std::array<const char*, envDestinationsPerEnvelope> envSuffixes {
+            "Attack", "Decay", "Sustain", "Release"};
+        static constexpr std::array<const char*, envDestinationsPerEnvelope> envLabels {
+            "ATK", "DEC", "SUS", "REL"};
+        for (int env = 0; env < envCount; ++env)
+            for (int control = 0; control < envDestinationsPerEnvelope; ++control)
+            {
+                const auto index = static_cast<size_t>(control);
+                pool.push_back(envParameterId(env, envSuffixes[index]));
+                pool.push_back("ENV " + juce::String(env + 1) + " " + envLabels[index]);
+                built.push_back({pool[pool.size() - 2].toRawUTF8(), pool.back().toRawUTF8()});
+            }
+
+        for (const auto& named : tuningDestinations()) built.push_back(named);
         return built;
     }();
     return table;

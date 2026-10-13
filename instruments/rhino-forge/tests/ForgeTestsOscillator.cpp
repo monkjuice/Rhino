@@ -404,6 +404,53 @@ void tuningSuite()
         }
 }
 
+// OCT and FINE under the matrix. SEMI has always been a destination, and is
+// continuous so a source can sweep pitch through it; OCT and FINE joined it
+// later. A modulated OCT still moves in whole octaves, as Serum's does, and
+// FINE is as continuous as SEMI.
+//
+// MACRO 1 stands in for the LFO because it holds still, so a modulated render
+// can be compared sample for sample with one whose field is simply set where
+// the modulation takes it.
+void modulatedTuningSuite()
+{
+    const auto render = [] (const char* field, float placed, int destination, float macro, float depth)
+    {
+        auto owner = std::make_unique<rhino::forge::Processor>();
+        auto& processor = *owner;
+        soloSineOnA(processor);
+        if (field != nullptr) setValue(processor, field, placed);
+        if (destination > 0)
+        {
+            setValue(processor, "macro1", macro);
+            setSlot(processor, 1, static_cast<float>(rhino::forge::ModSource::macro1),
+                    static_cast<float>(destination), depth);
+        }
+        juce::AudioBuffer<float> buffer(2, 8192);
+        renderNote(processor, buffer);
+        return buffer;
+    };
+    const auto octaveA = rhino::forge::tuningDestinationBase;
+    const auto fineA = octaveA + 1;
+    const auto plain = render(nullptr, 0.0f, 0, 0.0f, 0.0f);
+
+    // OCT spans eight octaves, so an eighth of the depth is one of them.
+    require(identical(render(nullptr, 0.0f, octaveA, 0.75f, 0.125f), render("oscAOctave", 1.0f, 0, 0.0f, 0.0f)),
+            "three quarters of an octave from the matrix plays the whole octave above");
+    require(identical(render(nullptr, 0.0f, octaveA, 0.25f, 0.125f), plain),
+            "a quarter of an octave from the matrix leaves OCT where it was");
+    require(identical(render(nullptr, 0.0f, octaveA, 1.0f, -0.125f), render("oscAOctave", -1.0f, 0, 0.0f, 0.0f)),
+            "a negative depth takes OCT down a whole octave");
+
+    // FINE spans two hundred cents, so a quarter of the depth is fifty.
+    require(identical(render(nullptr, 0.0f, fineA, 1.0f, 0.25f), render("oscAFine", 50.0f, 0, 0.0f, 0.0f)),
+            "a quarter of FINE's travel from the matrix is fifty cents");
+    const auto between = render(nullptr, 0.0f, fineA, 0.51f, 0.25f);
+    require(!identical(between, render("oscAFine", 25.0f, 0, 0.0f, 0.0f))
+                && !identical(between, render("oscAFine", 26.0f, 0, 0.0f, 0.0f)),
+            "FINE is not stepped: 25.5 cents from the matrix is neither 25 nor 26");
+}
+
 // --- The sub oscillator -------------------------------------------------------
 //
 // The sub has a shape and a pitch of its own, and both claims are settled the
@@ -542,6 +589,7 @@ void oscillatorTests()
     waveTableSuite();
     bandLimitSuite();
     tuningSuite();
+    modulatedTuningSuite();
     subSuite();
 }
 }

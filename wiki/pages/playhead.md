@@ -4,12 +4,12 @@ type: component
 summary: Draws both playheads every display refresh from the audio graph's own position, repainting two narrow strips whose painters skip everything else, with a Direct2D fix.
 tags: [rhino, ui, rendering, windows]
 sources: []
-updated: 2026-10-05
+updated: 2026-10-13
 ---
 
 # Playhead rendering
 
-`native/src/Playhead.*` serves both playheads, the arrangement's and the note editor's. Each panel moves its line from a `juce::VBlankAttachment`, so it follows the display's refresh rather than a timer, and nothing about it schedules audio.
+`native/src/ui/shared/Playhead.*` serves both playheads, the arrangement's and the note editor's. Each panel moves its line from a `juce::VBlankAttachment`, so it follows the display's refresh rather than a timer, and nothing about it schedules audio.
 
 ## Where the position comes from
 

@@ -4,7 +4,7 @@ type: convention
 summary: A curve on screen is computed by the same functions the audio runs, never from a second set of formulas, and tests hold the two together.
 tags: [both, ui, dsp, testing]
 sources: []
-updated: 2026-10-07
+updated: 2026-10-13
 ---
 
 # Displays draw from the DSP
@@ -15,7 +15,7 @@ A display is drawn from the arithmetic the engine actually runs, never from a pi
 
 ## Where it is applied
 
-- **[Rhino EQ](rhino-eq.md).** `core/EqFilter.h` is a pure header that the curve and the audio share. The panel draws `EqEngine::responseDbAt` from the scaled bands (`EqEngine::scaledBand`); drawn from the stored bands, display and audio would part once Scale leaves 100%.
+- **[Rhino EQ](rhino-eq.md).** `core/dsp/EqFilter.h` is a pure header that the curve and the audio share. The panel draws `EqEngine::responseDbAt` from the scaled bands (`EqEngine::scaledBand`); drawn from the stored bands, display and audio would part once Scale leaves 100%.
 - **[Forge filter](forge-filter.md).** `core/ForgeFilter.h` holds `filterSample`, the audio, and `filterMagnitude`, the picture, written from the same coefficients a few lines apart.
 - **[Drum Rack](drum-rack.md).** A synth pad's picture is a strike rendered by the engine's own voice (`DrumRackEngine::renderStrike`), held sample-identical to live playback by a test, and Slice draws the cuts `DrumSlicer` returns. The sample editor's envelope line is the exception: `shapeAt` in `DeviceEditorPanelDrumSample.cpp` restates the voice's fades, Decay and envelope as a closed form in the UI, and no test holds the two together (2026-10-07; [Drum Rack sample editor](drum-rack-sample-editor.md)).
 - **Forge FX slots** (`ui/ForgeFxDisplay.h`). A distortion's curve is `fxShape` per pixel, an equaliser's response is the magnitude of the very biquads `setBand` builds, and a delay's repeats are placed by `fxDelaySeconds`.

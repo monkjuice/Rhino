@@ -1,24 +1,24 @@
 ---
 title: Session, the model
 type: component
-summary: The message-thread facade over one Tracktion engine and edit, one class split across 28 files, where every rule and refusal lives.
+summary: The message-thread facade over one Tracktion engine and edit, one class split across 29 files, where every rule and refusal lives.
 tags: [rhino, model, tracktion, undo]
 sources: []
-updated: 2026-10-12
+updated: 2026-10-13
 ---
 
 # Session, the model
 
-`rhino::Session` (`native/src/Session.h`) is the whole document model: a `juce::ChangeBroadcaster` that owns one `te::Engine` and the open `te::Edit`, and offers every command the UI may issue. It runs on the message thread only; the engine owns scheduling, streaming and playback. The UI depends on `Session`, never the reverse ([Dependency direction](dependency-direction.md)).
+`rhino::Session` (`native/src/model/Session.h`) is the whole document model: a `juce::ChangeBroadcaster` that owns one `te::Engine` and the open `te::Edit`, and offers every command the UI may issue. It runs on the message thread only; the engine owns scheduling, streaming and playback. The UI depends on `Session`, never the reverse ([Dependency direction](dependency-direction.md)).
 
 ## One class, many files
 
-`Session` is one class defined across 28 translation units (the `src/Session*.cpp` lines under `# Session` in `native/CMakeLists.txt`, as of 2026-10-11), split by caller as [Keeping files small](keeping-files-small.md) describes:
+`Session` is one class defined across 29 translation units, all in `native/src/model/` (the `src/model/Session*.cpp` lines under `# Session` in `native/CMakeLists.txt`, as of 2026-10-13; [The source tree mirrors the layers](source-tree-mirrors-the-layers.md)), split by caller as [Keeping files small](keeping-files-small.md) describes:
 
 - `Session.cpp`: construction, the starter edit, `restoreProject`, `projectSnapshot`, undo and redo.
-- Notes and patterns: `SessionNotes`, `SessionPresets`, `SessionPatches`.
+- Notes and patterns: `SessionNotes`, `SessionPatternPresets`, `SessionPatches`.
 - Tracks and mixing: `SessionTracks`, `SessionGroups`, `SessionMixer`, `SessionAutomation`, `SessionTransport`.
-- Devices: `SessionDevices`, `SessionDevicePresets`, `SessionDrums` (the [Drum Rack](drum-rack.md)'s kits, pads, banks, slices and drops), `SessionSidechain`, `SessionExternalPlugins`.
+- Devices: `SessionDevices`, `SessionDevicePresets`, `SessionDrums` (the [Drum Rack](drum-rack.md)'s kits, pads, banks, slices and drops), `SessionSidechain`, `SessionExternalPlugins`, `SessionDeviceMacros` (the rack's curated knobs, 4OSC only; `DeviceMacros.cpp` until 2026-10-13).
 - Clips: `SessionClips`, `SessionRegion`, `SessionAudioClips`, `SessionWarp`, `SessionMerge`, `SessionSamples`, `SessionSlots`.
 - Input and audition: `SessionRecording`, `SessionMidiInput`, `SessionAudioInput`, `SessionPreview`.
 - The DJ booth: `SessionDj` (decks, transport, mixer, what the document saves) and `SessionDjSources` (file and audio-cell reads, MIDI cells made into notes, a deck bound to its track, Live, what an edit leaves a deck to do), sharing `SessionDjInternal.h` ([DJ view and the booth](dj-view.md)). The booth comes off the audio device in `releaseAudioDevice` and the destructor; the destructor and `djReset` unbind every deck from its track first, and `djReset` drains the worker. `ensureTrackMixers` (`SessionMixer`) gives every track the booth's two hidden ends beside its fader ([DJ decks play live through the track's chain](dj-decks-play-live-through-the-track.md)).
@@ -45,9 +45,10 @@ Replacing the document (`newProject`, `restoreProject`) is bracketed by `Listene
 - Hold clip ids, not `te::Clip*` ([Hold ids, not pointers](ids-not-pointers.md)).
 - A device's parameter list can be long: a Drum Rack has 768 controls. On a path that runs per frame or per change, read a range (`deviceParameters(track, slot, first, count)`), one control (`deviceParameter`) or the count (`deviceParameterCount`), not the whole list ([What a change costs the interface](ui-cost-of-a-change.md)).
 - View state a command writes without undo may still announce, so other views follow: `showDrumBank` does, for the note editor's drum rows.
-- `SessionPresets.cpp` is the [pattern presets](pattern-presets.md); [device presets](device-presets.md) are
-  `SessionDevicePresets.cpp`. On 2026-10-05 a file write meant to create the new one overwrote the old one, restored
-  from git at once. Check a name is free before writing a new file here.
+- `SessionPatternPresets.cpp` is the [pattern presets](pattern-presets.md); [device presets](device-presets.md) are
+  `SessionDevicePresets.cpp`. On 2026-10-05, when it was still `SessionPresets.cpp`, a file write meant to create the
+  new one overwrote the old one, restored from git at once; the rename of 2026-10-13 is for exactly that confusion.
+  Check a name is free before writing a new file here.
 
 ## Related
 

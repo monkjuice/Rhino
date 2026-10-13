@@ -4,12 +4,12 @@ type: component
 summary: A .rhinoedit is the Tracktion edit's XML plus Rhino's own properties, saved from a snapshot on a worker and opened off-thread.
 tags: [rhino, persistence, files, debugging]
 sources: []
-updated: 2026-10-11
+updated: 2026-10-13
 ---
 
 # Project files (.rhinoedit)
 
-A `.rhinoedit` is the Tracktion edit's `ValueTree` written as XML. Rhino's own state rides on the same tree as `rhino*` properties and children of the edit, its tracks and its clips (track kind, arming, inputs, groups, automation, clip colour, warp, count-in), so none of it has a save path of its own. `native/src/ProjectFiles.cpp` does the file work; `Session::projectSnapshot`, `restoreProject` and `projectSaved` in `Session.cpp` are the model side.
+A `.rhinoedit` is the Tracktion edit's `ValueTree` written as XML. Rhino's own state rides on the same tree as `rhino*` properties and children of the edit, its tracks and its clips (track kind, arming, inputs, groups, automation, clip colour, warp, count-in), so none of it has a save path of its own. `native/src/app/ProjectFiles.cpp` does the file work; `Session::projectSnapshot`, `restoreProject` and `projectSaved` in `Session.cpp` are the model side.
 
 ## Saving
 

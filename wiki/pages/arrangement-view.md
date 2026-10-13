@@ -4,12 +4,12 @@ type: component
 summary: The timeline UI, one class across eleven files, that previews every drag locally and leaves panel decisions to the shell.
 tags: [rhino, ui, arrangement]
 sources: []
-updated: 2026-10-10
+updated: 2026-10-13
 ---
 
 # Arrangement view
 
-`Arrangement` is the timeline: track cards on the left, clip lanes on the right, the pinned [main track](main-track.md) row and the time ruler at the foot. It is one class defined across eleven translation units (as of 2026-10-03): `Arrangement.cpp` (keys, zoom, split, playhead), `ArrangementGeometry.cpp` (lanes, time to x, snapping, hit zones), `ArrangementPainter.cpp`, `ArrangementSync.cpp` (rebuilding views and card controls from the edit), `ArrangementGestures.cpp` (pointer, card drags, menus, autoscroll, middle-drag pan), `ArrangementSelection.cpp` (region and clipboard), `ArrangementAutomation.cpp` and `ArrangementAutomationPaint.cpp`, `ArrangementGroups.cpp`, `ArrangementRename.cpp` and `ArrangementDrops.cpp`. Shared helpers are in `ArrangementInternal.h`; the clip-edit arithmetic is the pure header `ClipGeometry.h`, unit-tested without a `Session`.
+`Arrangement` is the timeline: track cards on the left, clip lanes on the right, the pinned [main track](main-track.md) row and the time ruler at the foot. It is one class defined across eleven translation units (as of 2026-10-03), all in `native/src/ui/arrangement/` since 2026-10-13 with `ArrangementGrid.h` and `MonitorSelector.*` beside them ([The source tree mirrors the layers](source-tree-mirrors-the-layers.md)): `Arrangement.cpp` (keys, zoom, split, playhead), `ArrangementGeometry.cpp` (lanes, time to x, snapping, hit zones), `ArrangementPainter.cpp`, `ArrangementSync.cpp` (rebuilding views and card controls from the edit), `ArrangementGestures.cpp` (pointer, card drags, menus, autoscroll, middle-drag pan), `ArrangementSelection.cpp` (region and clipboard), `ArrangementAutomation.cpp` and `ArrangementAutomationPaint.cpp`, `ArrangementGroups.cpp`, `ArrangementRename.cpp` and `ArrangementDrops.cpp`. Shared helpers are in `ArrangementInternal.h`; the clip-edit arithmetic is the pure header `model/ClipGeometry.h`, unit-tested without a `Session`.
 
 ## How it stays responsive and correct
 

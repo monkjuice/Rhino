@@ -4,12 +4,12 @@ type: component
 summary: How Rhino finds, loads and talks to the Forge VST3, and what does and does not cross the plugin boundary.
 tags: [both, vst3, devices, hosting]
 sources: []
-updated: 2026-10-12
+updated: 2026-10-13
 ---
 
 # Hosting Forge in Rhino
 
-Rhino plays [Rhino Forge](forge.md) as an ordinary VST3 through Tracktion's external-plugin wrapper; the reasons are in [Forge is an independent VST3](forge-is-an-independent-vst3.md). Rhino's side is `native/src/SessionExternalPlugins.cpp` and one catalog entry.
+Rhino plays [Rhino Forge](forge.md) as an ordinary VST3 through Tracktion's external-plugin wrapper; the reasons are in [Forge is an independent VST3](forge-is-an-independent-vst3.md). Rhino's side is `native/src/model/SessionExternalPlugins.cpp` and one catalog entry.
 
 ## Discovery
 

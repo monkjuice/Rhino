@@ -4,18 +4,18 @@ type: component
 summary: Up to six CDJ-style decks either side of a DJM-style mixer, run by Rhino's own engine as a second audio callback, playing files or a track's own cells heard live through the track's chain.
 tags: [rhino, dj, decks, mixer, ui, dsp]
 sources: []
-updated: 2026-10-12
+updated: 2026-10-13
 ---
 
 # DJ view and the booth
 
-The DJ view is the second view of the shell, opened by the Arrange/DJ switch in the control bar or by Tab (`setDjViewOpen` in `native/src/Main.cpp`). It took the place of the session view, a clip launcher that was paused and then removed on 2026-10-11 ([Clip slots, the DJ consoles' cells](clip-slots.md)). The user asked for it on 2026-10-09 as an experimental feature "oriented to DJs", with a CDJ-3000 and a DJM-V10 as the references.
+The DJ view is the second view of the shell, opened by the Arrange/DJ switch in the control bar or by Tab (`MainComponent::setDjViewOpen`, `native/src/app/MainComponentPanes.cpp`). It took the place of the session view, a clip launcher that was paused and then removed on 2026-10-11 ([Clip slots, the DJ consoles' cells](clip-slots.md)). The user asked for it on 2026-10-09 as an experimental feature "oriented to DJs", with a CDJ-3000 and a DJM-V10 as the references.
 
 | Layer | Files |
 | --- | --- |
-| DSP (`RhinoCore`, JUCE core only) | `core/DjEngine.*`, `DjEngineClock.cpp`, `DjEngineMix.cpp` (the booth: decks into a mixer, the command queue, quantised starts, sync, the sequencer), `core/DjDeck.*`, `DjDeckTransport.cpp`, `DjDeckLoops.cpp`, `DjDeckRender.cpp` (one player), `core/DjTrackPort.*` (the rings a deck crosses into a track by, and the block delay), `core/DjReleaseQueue.*` and `DjLinearRamp.h` (the hand-over back, the fades) - see [DJ deck engine](dj-deck-engine.md); `core/DjMixer.*` (channel strips, isolator, colour filter, crossfader, master, beat effect), `core/DjAnalysis.*` (waveform columns, tempo and grid, bars and drops, key), `core/DjTrack.h` (a deck's material: audio, or a MIDI cell's notes) |
+| DSP (`RhinoCore`, JUCE core only; all under `core/dj/` since 2026-10-13, included as `"dj/DjEngine.h"`) | `core/dj/DjEngine.*`, `DjEngineClock.cpp`, `DjEngineMix.cpp` (the booth: decks into a mixer, the command queue, quantised starts, sync, the sequencer), `core/dj/DjDeck.*`, `DjDeckTransport.cpp`, `DjDeckLoops.cpp`, `DjDeckRender.cpp` (one player), `core/dj/DjTrackPort.*` (the rings a deck crosses into a track by, and the block delay), `core/dj/DjReleaseQueue.*` and `DjLinearRamp.h` (the hand-over back, the fades) - see [DJ deck engine](dj-deck-engine.md); `core/dj/DjMixer.*` (channel strips, isolator, colour filter, crossfader, master, beat effect), `core/dj/DjAnalysis.*` (waveform columns, tempo and grid, bars and drops, key), `core/dj/DjTrack.h` (a deck's material: audio, or a MIDI cell's notes) |
 | Devices (`RhinoDevices`) | `devices/infra/DjTrackPortDevices.*`: the hidden DJ Input and DJ Output every track carries |
-| Model | `SessionDj.cpp` (decks, transport, mixer, what the document saves), `SessionDjSources.cpp` (files and audio cells read on a worker, MIDI cells made into notes, a deck bound to its track, Live, what an edit leaves a deck to do), `SessionDjInternal.h` (the booth, its audio callback, the reads in flight) |
+| Model (`model/`) | `SessionDj.cpp` (decks, transport, mixer, what the document saves), `SessionDjSources.cpp` (files and audio cells read on a worker, MIDI cells made into notes, a deck bound to its track, Live, what an edit leaves a deck to do), `SessionDjInternal.h` (the booth, its audio callback, the reads in flight) |
 | UI | `DjView.*` (the view), `DjDeckPanel.*` (a deck's console), `DjDeckDisplay.*` (its screen), `DjClipGrid.*` (its clips grid), `DjMixerPanel.*` (the mixer), `DjControls.h` (pads, faders, meters), `ClipDrag.h` (the drag descriptions a clip crosses the views by, shared with the arrangement) |
 | Tests | `tests/DjTest.cpp` (`--self-test`, `checkTrackPort` among its checks), `tests/Arrangement/scenarios/DjBooth.inc`, `ClipCells.inc` (the cells in a document of their own), `DjLiveChain.inc` (a track's deck heard through its chain), `DjBoothEdges.inc` (the beat effect on a deck taken off, a tempo held past the fader's range, a load arriving at a full queue) |
 

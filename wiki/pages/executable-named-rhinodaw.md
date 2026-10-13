@@ -4,12 +4,12 @@ type: decision
 summary: The binary is RhinoDAW.exe because NVIDIA's driver profile for Rhinoceros 3D, keyed on Rhino.exe, corrupted the app's Direct2D repaints.
 tags: [rhino, windows, rendering, debugging]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-13
 ---
 
 # The executable is RhinoDAW, not Rhino
 
-`PRODUCT_NAME "RhinoDAW"` in `native/CMakeLists.txt` decides the file on disk: `native/build/RhinoNative_artefacts/Release/RhinoDAW.exe`. The name a person sees is still Rhino, because it comes from `Application::getApplicationName()` in `native/src/Main.cpp`. Commit `9bedbdb` (2026-09-18) made the change. The long form is `AGENTS.md`, *When the same source renders differently on two machines*.
+`PRODUCT_NAME "RhinoDAW"` in `native/CMakeLists.txt` decides the file on disk: `native/build/RhinoNative_artefacts/Release/RhinoDAW.exe`. The name a person sees is still Rhino, because it comes from `Application::getApplicationName()` in `native/src/app/Main.cpp`. Commit `9bedbdb` (2026-09-18) made the change. The long form is `AGENTS.md`, *When the same source renders differently on two machines*.
 
 ## Context
 

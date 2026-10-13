@@ -4,18 +4,18 @@ type: component
 summary: A channel vocoder whose carrier arrives as a sidechain from another track, and how Rhino routes a sidechain at all.
 tags: [rhino, devices, dsp, sidechain]
 sources: []
-updated: 2026-10-12
+updated: 2026-10-13
 ---
 
 # Rhino Vocoder and sidechains
 
-A channel vocoder in the one mode Live calls External: the voice is the track's own audio, the carrier another track's output. `native/src/core/VocoderEngine.*` is the bank and followers, `native/src/devices/audio/VocoderDevice.*` (`rhino.vocoder.v1`) hands it parameters, and the face is `native/src/DeviceEditorPanelVocoder.cpp`.
+A channel vocoder in the one mode Live calls External: the voice is the track's own audio, the carrier another track's output. `native/src/core/dsp/VocoderEngine.*` is the bank and followers, `native/src/devices/audio/VocoderDevice.*` (`rhino.vocoder.v1`) hands it parameters, and the face is `native/src/ui/rack/DeviceEditorPanelVocoder.cpp`.
 
 ## The sidechain
 
 **Declaring four input channels is the whole mechanism.** `VocoderDevice::getChannelNames` reports Left, Right, Carrier L and Carrier R in and two channels out, and `canSidechain` answers true. When the plugin names a source track, Tracktion's graph builder puts a send on that track and a return in front of the plugin: channels 0-1 are the voice, 2-3 the carrier.
 
-`native/src/SessionSidechain.cpp` is Rhino's whole part. It writes the source track's id onto the plugin, re-guesses the wires and restarts playback at once: the id alone would take effect only at the next transport start, and the point is to sing into an armed track with the transport stopped. A track cannot be its own carrier, and removing a track clears its id from every plugin naming it. Nothing here is vocoder-specific, so a compressor ducking to a kick would need no new model code.
+`native/src/model/SessionSidechain.cpp` is Rhino's whole part. It writes the source track's id onto the plugin, re-guesses the wires and restarts playback at once: the id alone would take effect only at the next transport start, and the point is to sing into an armed track with the transport stopped. A track cannot be its own carrier, and removing a track clears its id from every plugin naming it. Nothing here is vocoder-specific, so a compressor ducking to a kick would need no new model code.
 
 **The send sits before the source track's mute.** That is the engine's doing, and it is why muting the synth, so you do not hear it twice, leaves the carrier running.
 

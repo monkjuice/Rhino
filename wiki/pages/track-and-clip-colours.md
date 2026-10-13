@@ -4,14 +4,14 @@ type: concept
 summary: Every new track is born with a palette colour; a clip wears its track's colour until C gives it its own rhinoClipColour.
 tags: [rhino, colours, tracks, clips]
 sources: []
-updated: 2026-10-11
+updated: 2026-10-13
 ---
 
 # Track and clip colours
 
 ## Tracks are born coloured
 
-Every path that makes a track calls `Session::pickTrackColour` (`native/src/SessionTracks.cpp`): `appendTrack`, and through it `addTrack`, a clip dragged below the last lane and a paste that runs off the bottom, plus the starter stack in `buildStarterEdit`. A stack is therefore legible the moment it exists rather than after someone has coloured it by hand. The pick is random among the `trackColourPalette` entries no track is already wearing, starting over from the whole palette once all are on screen (43 entries as of 2026-10-03). Under the command-line test modes it takes the first unused entry instead, because scenarios that compare pixels cannot agree with a dice roll; tracks still come out distinct, in the same order every run.
+Every path that makes a track calls `Session::pickTrackColour` (`native/src/model/SessionTracks.cpp`): `appendTrack`, and through it `addTrack`, a clip dragged below the last lane and a paste that runs off the bottom, plus the starter stack in `buildStarterEdit`. A stack is therefore legible the moment it exists rather than after someone has coloured it by hand. The pick is random among the `trackColourPalette` entries no track is already wearing, starting over from the whole palette once all are on screen (43 entries as of 2026-10-03). Under the command-line test modes it takes the first unused entry instead, because scenarios that compare pixels cannot agree with a dice roll; tracks still come out distinct, in the same order every run.
 
 A group bus is the exception: `groupTracks` makes it without a pick, and until someone colours it the arrangement draws it in neutral greys (its card from `palette::control`, its group band from `defaultGroupColour` in `ArrangementGroups.cpp`). The main row takes no colour at all.
 

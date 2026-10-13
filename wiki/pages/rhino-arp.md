@@ -13,7 +13,7 @@ Rhino Arp is a standalone built-in `te::Plugin` in `RhinoDevices`, registered un
 
 Its 15 automatable controls cover style (Up, Down, UpDown, DownUp, Chord), rate mode and value, gate/overlap, Hold, pattern Offset, groove (Straight, Swing 8, Swing 16), retrigger (Off, Note, Beat plus interval), finite/infinite repeats, and scale-aware Distance/Steps plus Root. Factory defaults are Up, beat mode at 1/16, 84% gate, Steps 0, Distance +7 scale degrees, Straight, Hold off, Retrigger off, infinite repeats, and C Chromatic; free rate stores 125 ms and retrigger interval stores 1/2 note. Explicit saved settings retain their values. For a plain uninterrupted chord in an older instance, set Steps to 0 and Retrigger to Off.
 
-The scale choices reuse `MusicalScale` names and masks from `native/src/core/ScaleQuantizer.h`: Chromatic, Major, Minor, Harm Minor, Dorian, Phrygian, Lydian, Mixolydian, Locrian, Major Pent, Minor Pent, Blues, and Whole Tone. Preserve the original persisted indices (Chromatic 0, Major 1, Minor 2); additions follow them.
+The scale choices reuse `MusicalScale` names and masks from `native/src/core/dsp/ScaleQuantizer.h`: Chromatic, Major, Minor, Harm Minor, Dorian, Phrygian, Lydian, Mixolydian, Locrian, Major Pent, Minor Pent, Blues, and Whole Tone. Preserve the original persisted indices (Chromatic 0, Major 1, Minor 2); additions follow them.
 
 ## Timing contract
 

@@ -4,12 +4,12 @@ type: component
 summary: Ctrl+G gathers tracks under a bus track that their audio feeds; the structure is positional and repaired after every reorder.
 tags: [rhino, groups, mixer, arrangement]
 sources: []
-updated: 2026-10-12
+updated: 2026-10-13
 ---
 
 # Track groups (bus tracks)
 
-A group is a bus: a track of its own, with fader, pan, mute, solo and an audio-effect chain, that every member's output feeds. The model is `native/src/SessionGroups.cpp`; the fold arrow, indented member cards and multi-card selection are `native/src/ArrangementGroups.cpp`. Why the bus is an ordinary track is [A group is an ordinary bus track](group-is-a-bus-track.md).
+A group is a bus: a track of its own, with fader, pan, mute, solo and an audio-effect chain, that every member's output feeds. The model is `native/src/model/SessionGroups.cpp`; the fold arrow, indented member cards and multi-card selection are `native/src/ui/arrangement/ArrangementGroups.cpp`. Why the bus is an ordinary track is [A group is an ordinary bus track](group-is-a-bus-track.md).
 
 ## How it works
 

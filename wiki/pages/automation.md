@@ -4,12 +4,12 @@ type: component
 summary: Per-track lanes stored as Rhino's own ValueTree children, naming their device by key rather than slot, and played by the engine from parameter curves the session mirrors after every change.
 tags: [rhino, automation, arrangement, devices]
 sources: []
-updated: 2026-10-11
+updated: 2026-10-13
 ---
 
 # Track automation
 
-Automation belongs to a track and spans the whole timeline; it moved off clips in September 2026. The model is `native/src/SessionAutomation.cpp`; the arrangement's lane rows, hit testing and gestures are `ArrangementAutomation.cpp`, the drawing `ArrangementAutomationPaint.cpp`.
+Automation belongs to a track and spans the whole timeline; it moved off clips in September 2026. The model is `native/src/model/SessionAutomation.cpp`; the arrangement's lane rows, hit testing and gestures are `ArrangementAutomation.cpp`, the drawing `ArrangementAutomationPaint.cpp`.
 
 ## Storage
 

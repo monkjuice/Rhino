@@ -4,12 +4,12 @@ type: component
 summary: Arms tracks, not inputs, lets each take win the ground it lands on, and counts in with Rhino's own click while the playhead stands still.
 tags: [rhino, recording, audio-io]
 sources: []
-updated: 2026-10-12
+updated: 2026-10-13
 ---
 
 # Recording and the count-in
 
-The model is `native/src/SessionRecording.cpp`, the count-in click `native/src/CountInClick.*`, the record button `Main.cpp` and the record dot on each card `ArrangementSync.cpp`.
+The model is `native/src/model/SessionRecording.cpp`, the count-in click `native/src/model/CountInClick.*`, the record button `RecordButton` in `app/ControlBarButtons.h` (toggled from `app/MainComponentControlBar.cpp`) and the record dot on each card `ArrangementSync.cpp`.
 
 ## A track is armed, not an input
 

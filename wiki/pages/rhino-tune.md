@@ -4,12 +4,12 @@ type: component
 summary: Vocal pitch correction with YIN tracking and PSOLA shifting, real reported latency, and correction smoothed on the offset.
 tags: [rhino, devices, dsp, pitch]
 sources: []
-updated: 2026-10-05
+updated: 2026-10-13
 ---
 
 # Rhino Tune
 
-Vocal pitch correction modelled on Live's Auto Shift. The device, `native/src/devices/audio/AutoTuneDevice.*` (`rhino.autotune.v1`), only hands parameters to `AutoTuneEngine`; tracking, correction and shifting are plain C++ in `native/src/core/`, which `--self-test` drives with a synthesised vowel.
+Vocal pitch correction modelled on Live's Auto Shift. The device, `native/src/devices/audio/AutoTuneDevice.*` (`rhino.autotune.v1`), only hands parameters to `AutoTuneEngine`; tracking, correction and shifting are plain C++ in `native/src/core/dsp/`, which `--self-test` drives with a synthesised vowel.
 
 ## The DSP
 
@@ -30,7 +30,7 @@ Pitfalls (commit `0f50919` unless noted):
 
 ## Parameters and face
 
-Thirteen automatable parameters cover correction, transposition, formants, vibrato and mix; root, scale, note mask, range and the two switches are properties. The face, `native/src/DeviceEditorPanelAutoTune.cpp`, draws and hit-tests its meter, keyboard, choosers and range lamps by rectangle, and writes every property through `Session::editDeviceSettings`, so each is an undo step of its own (commit `63bb3b2`; [Device rack and device editors](device-rack.md)). After a vocoder it tunes the result; before one it feeds it a tuned voice ([Device chain order](device-chain-order.md)).
+Thirteen automatable parameters cover correction, transposition, formants, vibrato and mix; root, scale, note mask, range and the two switches are properties. The face, `native/src/ui/rack/DeviceEditorPanelAutoTune.cpp`, draws and hit-tests its meter, keyboard, choosers and range lamps by rectangle, and writes every property through `Session::editDeviceSettings`, so each is an undo step of its own (commit `63bb3b2`; [Device rack and device editors](device-rack.md)). After a vocoder it tunes the result; before one it feeds it a tuned voice ([Device chain order](device-chain-order.md)).
 
 ## Tests
 

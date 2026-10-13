@@ -4,7 +4,7 @@ type: concept
 summary: The clip that just arrived wins the ground it lands on, and one function, Session::makeRoomForClip, enforces it for every path.
 tags: [rhino, clips, arrangement, editing]
 sources: []
-updated: 2026-10-05
+updated: 2026-10-13
 ---
 
 # Clips never overlap
@@ -13,7 +13,7 @@ Two clips may never overlap on one track, and the clip that just arrived wins: L
 
 ## One place
 
-`Session::makeRoomForClip` (`native/src/SessionRegion.cpp`) is the only implementation. It runs `clearClipRegionInEdit` over the newcomer's span on its own track: split every clip crossing either edge, then delete whatever lies wholly inside. Splitting first is what makes "trim", "cut a hole" and "replace" one case. Touching an edge is not overlapping (a 1e-7 s tolerance).
+`Session::makeRoomForClip` (`native/src/model/SessionRegion.cpp`) is the only implementation. It runs `clearClipRegionInEdit` over the newcomer's span on its own track: split every clip crossing either edge, then delete whatever lies wholly inside. Splitting first is what makes "trim", "cut a hole" and "replace" one case. Touching an edge is not overlapping (a 1e-7 s tolerance).
 
 Every path that places or grows a clip ends there: `editClip` and `moveClips` (drags, trims, nudges), `importAudioAt` and `importAudioFilesAt`, `insertPatternPreset`, `copySlotClipToArrangement`, `mergeClips`, a note paste that lengthens the open clip, every warp change that lengthens one (`SessionWarp.cpp`), and recording through `tidyRecordedClips`. The engine drops a finished take on top of whatever was there, so `tidyRecordedClips` diffs the track's clip ids against those held before the take, by id because making room for one new clip can delete another. `pasteClipRegion` gets the same effect by clearing its whole rectangle first ([Region editing](region-editing.md)).
 

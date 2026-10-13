@@ -4,7 +4,7 @@ type: component
 summary: A device's settings saved as a .rnd file by parameter id, filed under the device in the browser, dragged to add the device already set, and loaded or saved from its name bar.
 tags: [rhino, devices, presets, library, browser]
 sources: []
-updated: 2026-10-06
+updated: 2026-10-13
 ---
 
 # Device presets (.rnd)
@@ -13,7 +13,7 @@ A `.rnd` file is a preset of one device: Rhino Arp's `Super Creative Arpeggiatio
 
 ## The file
 
-`native/src/core/DevicePreset.*`, in `RhinoCore`, so it is tested without a `Session`:
+`native/src/core/content/DevicePreset.*`, in `RhinoCore`, so it is tested without a `Session`:
 
 ```xml
 <RHINO_PRESET format="1" device="RhinoArp">
@@ -23,7 +23,7 @@ A `.rnd` file is a preset of one device: Rhino Arp's `Super Creative Arpeggiatio
 
 - **`device` is the catalog id.** Each value is stored under its control's engine parameter id, in the control's own units. The ids are what documents store and are never renamed, so every built-in device has presets, whether or not it is written on the SDK; the Arp is not.
 - **The name is the file name**, so renaming the file renames the preset.
-- **Values round-trip exactly.** They are written with `std::to_chars` and read with `std::from_chars` (`core/ExactFloatText.h`, shared with the Drum Rack's files); JUCE's decimal formatting does not promise that.
+- **Values round-trip exactly.** They are written with `std::to_chars` and read with `std::from_chars` (`core/content/ExactFloatText.h`, shared with the Drum Rack's files); JUCE's decimal formatting does not promise that.
 - **Format 1 is all that is read.** Anything else is refused with a message, because no compatibility is owed before a production release. The version is written so that it can be owed then.
 
 ## Where presets live
@@ -37,7 +37,7 @@ They are generated so that each lists every control, and the scratch script that
 
 ## Applying one
 
-`SessionDevicePresets.cpp`, not `SessionPresets.cpp`, which holds the pattern presets:
+`SessionDevicePresets.cpp`, not `SessionPatternPresets.cpp` (named `SessionPresets.cpp` until 2026-10-13), which holds the pattern presets:
 - **`saveDevicePreset(track, slot, file)`** stores every active control's base value: what was set, not where a lane has moved it.
 - **`loadDevicePreset(track, slot, file)`** is one undo step. It refuses a preset for another device, naming the device it is for.
 - **`addDeviceFromPreset(file, track)`** is `addDevice(id, track, &preset)`. The values are set inside the add's own transaction, so a single undo removes the device and its settings together. An instrument the track already runs takes the preset instead, as a second copy would replace it.

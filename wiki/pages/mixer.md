@@ -4,12 +4,12 @@ type: component
 summary: One mixer, drawn in the arrangement's track cards, with a VolumeAndPanPlugin in each track's channel strip, mute and solo that silence only a track's output, and the master volume for Main; a DJ deck takes its track ahead of the channel strip.
 tags: [rhino, mixer, tracks]
 sources: []
-updated: 2026-10-12
+updated: 2026-10-13
 ---
 
 # Mixer
 
-Rhino has one mixer. `native/src/SessionMixer.cpp` reads and writes it, and the arrangement draws it as a horizontal strip in each track card (`ArrangementSync.cpp`) through the same `Session` methods, so it cannot show a stale level. A DJ deck playing a track takes the chain's output from the hidden DJ Output, which stands where the track's own devices end and its channel strip begins, so the track's trim, fader, pan and mute are the song's alone and the booth's channel strip is the deck's mixer ([DJ view and the booth](dj-view.md)). Until 2026-10-12 a deck played a bounce of the track, which passed through the fader.
+Rhino has one mixer. `native/src/model/SessionMixer.cpp` reads and writes it, and the arrangement draws it as a horizontal strip in each track card (`ArrangementSync.cpp`) through the same `Session` methods, so it cannot show a stale level. A DJ deck playing a track takes the chain's output from the hidden DJ Output, which stands where the track's own devices end and its channel strip begins, so the track's trim, fader, pan and mute are the song's alone and the booth's channel strip is the deck's mixer ([DJ view and the booth](dj-view.md)). Until 2026-10-12 a deck played a bounce of the track, which passed through the fader.
 
 ## Where each value lives
 

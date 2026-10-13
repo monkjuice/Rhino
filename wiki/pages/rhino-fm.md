@@ -4,14 +4,14 @@ type: component
 summary: A four-operator FM synth in eight routings, written on the device SDK, whose modulation index is checked against Bessel functions and whose face shows its operators as tabs, its carriers in a routing diagram, and the waveform it makes.
 tags: [rhino, devices, instruments, dsp, fm]
 sources: []
-updated: 2026-10-05
+updated: 2026-10-13
 ---
 
 # Rhino FM
 
 Rhino's built-in synth since 2026-10-05, replacing Rhino Wave ([Built-in devices](built-in-devices.md)). It was chosen as FM because it complements the other two: 4OSC is subtractive and Forge is the deep wavetable synth. It is for bells, electric pianos and hard basses. It is the first instrument written on the device SDK, and nothing in `Session` or the UI names it ([The native device standard](native-device-standard.md)).
 
-The DSP is `native/src/core/FmEngine.*`, standard library only, so a test can play it without an engine. The device, `native/src/devices/instruments/RhinoFmDevice.*`, turns its controls into `FmEngine::Settings` and its MIDI into calls, and describes its face's display. It is about 160 lines.
+The DSP is `native/src/core/dsp/FmEngine.*`, standard library only, so a test can play it without an engine. The device, `native/src/devices/instruments/RhinoFmDevice.*`, turns its controls into `FmEngine::Settings` and its MIDI into calls, and describes its face's display. It is about 160 lines.
 
 ## Sound
 

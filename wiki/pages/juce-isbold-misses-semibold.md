@@ -4,7 +4,7 @@ type: gotcha
 summary: juce::Font::isBold() matches only the whole word Bold, so a LookAndFeel keyed on it serves the Regular cut for SemiBold text.
 tags: [rhino, juce, typography]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-13
 ---
 
 # JUCE's isBold() is false for SemiBold
@@ -15,7 +15,7 @@ Nothing looks broken. Every label meant to be SemiBold is drawn in the Regular c
 
 ## Cause
 
-`juce::Font::isBold()` checks the style name with `containsWholeWordIgnoreCase("Bold")`. "SemiBold" is a single word, so the answer is false. The same is true for "Medium", "Black" and "ExtraBold". Rhino asks for its heavier cut with `FontOptions().withStyle("SemiBold")` (`uiFontBold` in `native/src/Theme.h`). `Theme::getTypefaceForFont` used to branch on `isBold()`, so it served the Regular face for every one of those fonts. This was fixed in commit `0a6282d` (2026-09-30).
+`juce::Font::isBold()` checks the style name with `containsWholeWordIgnoreCase("Bold")`. "SemiBold" is a single word, so the answer is false. The same is true for "Medium", "Black" and "ExtraBold". Rhino asks for its heavier cut with `FontOptions().withStyle("SemiBold")` (`uiFontBold` in `native/src/ui/shared/Theme.h`). `Theme::getTypefaceForFont` used to branch on `isBold()`, so it served the Regular face for every one of those fonts. This was fixed in commit `0a6282d` (2026-09-30).
 
 ## What to do
 

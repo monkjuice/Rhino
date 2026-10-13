@@ -4,12 +4,12 @@ type: component
 summary: Edits one audio clip's own gain, pan, pitch, fades, mute and reverse as clip properties, with one undo step per knob drag.
 tags: [rhino, ui, audio-clips]
 sources: []
-updated: 2026-10-05
+updated: 2026-10-13
 ---
 
 # Audio clip editor
 
-The editor for one audio clip: `native/src/AudioClipPanel.*` in the UI (its warp half is a second translation unit, `AudioClipWarp.cpp`, see [Time warp](time-warp.md)) and `native/src/SessionAudioClips.cpp` in the model, which is the whole of that API.
+The editor for one audio clip: `native/src/ui/audioclip/AudioClipPanel.*` in the UI (its warp half is a second translation unit, `AudioClipWarp.cpp`, see [Time warp](time-warp.md)) and `native/src/model/SessionAudioClips.cpp` in the model, which is the whole of that API.
 
 ## The clip's own mix
 

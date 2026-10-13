@@ -4,14 +4,14 @@ type: convention
 summary: Rhino names chrome colours in Theme.h's palette and draws text in embedded Inter; Forge has its own metal look, accent colours and four faces.
 tags: [both, ui, theme, fonts]
 sources: []
-updated: 2026-10-10
+updated: 2026-10-13
 ---
 
 # Colours and typography
 
 ## Rhino: colours are named, never spelt
 
-`palette` in `native/src/Theme.h` is where a chrome colour gets its name, and code uses the token rather than a hex literal (`AGENTS.md`). The tokens, as of 2026-10-05:
+`palette` in `native/src/ui/shared/Theme.h` (included as `"ui/shared/Theme.h"`) is where a chrome colour gets its name, and code uses the token rather than a hex literal (`AGENTS.md`). The tokens, as of 2026-10-05:
 
 - **Surfaces and text:** `appBackground`, `globalBar`, `sideSurface`, `trackCard`, `control`, `hover`, `border`, `text`, `textDim`, `disabled`, `activeNeutral`, `displayInset`, `recordAccent`.
 - **The timeline:** `arrangement`, `automationLane`, `minorGrid`, `beatGrid`, `barGrid`. The lanes are light and ruled dark, which keeps the grid's contrast under room light.

@@ -4,7 +4,7 @@ type: convention
 summary: Knowledge flows one way in both products, UI to model to devices to core, and every rule lives in the model so each UI path inherits it.
 tags: [both, architecture, includes]
 sources: []
-updated: 2026-10-11
+updated: 2026-10-13
 ---
 
 # Dependency direction
@@ -15,25 +15,27 @@ In Rhino, knowledge flows downward only: UI, then model, then devices, then core
 
 | Layer | May depend on | Must not know |
 | --- | --- | --- |
-| UI (`Arrangement*`, `StepGrid*`, `DeviceRack`, `Main.cpp`) | `Session` | audio scheduling |
-| Model (`Session.h`, `Session*.cpp`) | Tracktion, `DeviceCatalog.h` | any UI header |
+| UI (`native/src/ui/<view>/`, `native/src/ui/shared/`) and the shell (`native/src/app/`) | `Session` | audio scheduling |
+| Model (`native/src/model/`: `Session.h`, `Session*.cpp`) | Tracktion, `DeviceCatalog.h` | any UI header |
 | Devices (`native/src/devices/`) | Tracktion, `RhinoCore` | `Session.h`, any UI header |
 | `RhinoCore` (`native/src/core/`) | JUCE only | Tracktion, `Session`, UI |
 
 `Session.h` reaches the device library through `DeviceCatalog.h` alone. The private `SessionInternal.h` includes the two device headers the implementation genuinely manipulates (Utility and Drums).
+
+Since 2026-10-13 the folders are the layers and an include is spelled from its target's root, so the direction of a dependency reads in the path: `#include "model/Session.h"` in a `ui/` file is right, and `#include "ui/..."` in a `model/` file is wrong at a glance. A device cannot spell either, because only `src/core` and `src/devices` are on its include path ([The source tree mirrors the layers](source-tree-mirrors-the-layers.md)).
 
 ## Why
 
 - **Rebuild cost.** `Session.h` used to include all six device headers, so editing any device rebuilt nearly every translation unit. Now a device edit rebuilds only the device library.
 - **One answer per rule.** A rule written in the model is inherited by every UI path, so refusals live there: a mismatched drop on a track ([Track kinds: audio and MIDI](track-kinds.md)), `chainRank` refusing a move that would break MIDI FX, then instrument, then audio FX ([Device chain order](device-chain-order.md)), and `makeRoomForClip` ([Clips never overlap](clip-placement.md)). A UI that checked for itself would be a second answer, free to disagree.
 - **Two views, one project.** The arrangement and the DJ view read the same `Session` and never cache a copy of tracks, devices or mixer state. Selection, focus, scroll and zoom are the only per-view state.
-- **Reporting, not deciding.** `Arrangement` reports `clipSelected`, `clipOpened`, `trackSelected` and `trackFocused`; the shell in `Main.cpp` decides which panel a click opens.
+- **Reporting, not deciding.** `Arrangement` reports `clipSelected`, `clipOpened`, `trackSelected` and `trackFocused`; the shell's `MainComponent` (`app/MainComponentPanes.cpp`) decides which panel a click opens.
 
 ## Forge
 
 - Forge includes no Tracktion or Rhino header. Rhino finds Forge by name (`SessionExternalPlugins.cpp`) and never names one of its parameters, so Forge's parameters can change without breaking the hosting ([Forge is an independent VST3](forge-is-an-independent-vst3.md)).
 - `Core` (`core/ForgeCore.h`) owns no `AudioProcessor`, UI, state tree or filesystem. It never calls the arpeggiator: the `Processor` owns the `Arp` and hands `Core` the notes it produces (`ForgeCore.h` includes `ForgeArp.h` only as the umbrella header). Its panel readings are plain members, which the `Processor` publishes through atomics.
-- Pure DSP headers depend on nothing else in their product, so the display and the audio can read one file: `core/ForgeFilter.h`, `core/ForgeNoise.h` and `core/ForgeMidiMap.h` in Forge, `core/EqFilter.h` and `core/ScaleQuantizer.h` in Rhino ([Displays draw from the DSP](displays-draw-from-the-dsp.md)).
+- Pure DSP headers depend on nothing else in their product, so the display and the audio can read one file: `core/ForgeFilter.h`, `core/ForgeNoise.h` and `core/ForgeMidiMap.h` in Forge, `core/dsp/EqFilter.h` and `core/dsp/ScaleQuantizer.h` in Rhino ([Displays draw from the DSP](displays-draw-from-the-dsp.md)).
 
 ## How to apply
 
@@ -42,6 +44,7 @@ Before adding an include, ask which layer the file belongs to. If a device wants
 ## Related
 
 - [Rhino's build targets](rhino-build-targets.md)
+- [The source tree mirrors the layers](source-tree-mirrors-the-layers.md)
 - [Session, the model](session-model.md)
 - [Forge engine (Core)](forge-engine.md)
 - [Hosting Forge in Rhino](forge-hosting.md)

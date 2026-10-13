@@ -79,10 +79,18 @@ Paths resolve against the working directory. `ARP` presses the name column of th
 eight-note chord through the voices, runs the due timers by hand with `juce::Timer::callPendingTimersSynchronously()`
 (nothing runs a message loop, and the editor's timer is what carries a note from the Processor to the plate) and waits
 450 ms, so the PNG shows notes falling through the plate's well ([Forge ARP plate, slots and waterfall](forge-arp-plate.md)).
-`ARPHELD` (2026-10-13, uncommitted when written) releases four of the chord's notes, waits `sparkFallMs` + `sparkChargeMs`
+`ARPHELD` (commit `f95557b`, 2026-10-13) releases four of the chord's notes, waits `sparkFallMs` + `sparkChargeMs`
 so the other four hang in ultra, then plays two short notes that fall the ordinary way. The `MidiBuffer` handed to
 `processBlock` keeps the events `keyboardState` injected into it, so clear it before every later block or the chord
-replays. The preset
+replays.
+
+**Pump the timers through a wait, do not call them once.** `callPendingTimersSynchronously()` runs only a timer the
+timer thread has already counted down. One call after an 80 ms sleep caught the first editor tick and missed the next,
+so `ARPHELD`'s four releases were not seen until the 3.3 s wait ended and the lights showed mid-fall; matching the
+lights' x positions to the notes is what exposed it. `runSnapshot` (`tests/ForgeTestTools.cpp`) now loops sleep 15 ms,
+call, until the wait ends, as a message loop would. Any snapshot that needs more than one editor tick must pump this way.
+
+The preset
 is loaded before the editor is built, which is the only way to review what the panel draws from the patch, such as
 modulation rings. A hand-written one needs only `<RhinoForgePreset formatVersion="3" name="x">` around a
 `<RhinoForgeState>` holding the `<PARAM id="..." value="..."/>` entries you care about; `Processor::migrated` defaults

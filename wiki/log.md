@@ -674,3 +674,8 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/headless-ui-snapshots.md (the ARPHELD page, and the MidiBuffer that replays keyboardState's events unless cleared)
 - updated: pages/real-time-audio-rules.md (held notes cross as an atomic set because a lost note-off would hang a light)
 - updated: index.md (summary of forge-arp-plate)
+
+## [2026-10-13] update | Arp waterfall held notes committed as f95557b, after visual review
+- source: the follow-up brief, checked against instruments/rhino-forge/ui/ForgeArpPlate.h and tests/ForgeTestTools.cpp
+- updated: pages/forge-arp-plate.md (commit f95557b, tuning caveat dropped; ~2 px slices capped at 64; colour capped at 0.85 of white and the column half way, two halos instead of one large one, and why)
+- updated: pages/headless-ui-snapshots.md (commit f95557b; pump callPendingTimersSynchronously through a wait, since one call misses later ticks)

@@ -22,8 +22,8 @@ add_library(RhinoDevices STATIC
     audio/AutoTuneDevice.cpp
     audio/VocoderDevice.cpp
     midi/RhinoArpDevice.cpp
+    midi/RhinoArpDeviceProcessing.cpp
     infra/DjTrackPortDevices.cpp)
-    midi/RhinoArpDeviceProcessing.cpp)
 # Only the devices/ root is public, so an include names the kind it wants:
 # #include "instruments/DrumRackDevice.h".
 target_include_directories(RhinoDevices PUBLIC .)

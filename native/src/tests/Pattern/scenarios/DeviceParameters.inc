@@ -47,19 +47,20 @@
             auto arpParameters = parameterSession.deviceParameters(2, arpSlot);
             require(arpParameters.size() == RhinoArpDevice::parameterCount
                     && arpParameters[RhinoArpDevice::styleParameter].name == "Style"
-                    && arpParameters[RhinoArpDevice::styleParameter].valueText == "UpDown"
+                    && arpParameters[RhinoArpDevice::styleParameter].valueText == "Up"
                     && arpParameters[RhinoArpDevice::rateParameter].valueText == "1/16"
-                    && arpParameters[RhinoArpDevice::distanceParameter].valueText == "-7 sd"
-                    && arpParameters[RhinoArpDevice::stepsParameter].valueText == "2"
-                    && arpParameters[RhinoArpDevice::grooveParameter].valueText == "Swing 16"
+                    && arpParameters[RhinoArpDevice::gateParameter].valueText == "84%"
+                    && arpParameters[RhinoArpDevice::distanceParameter].valueText == "7 st"
+                    && arpParameters[RhinoArpDevice::stepsParameter].valueText == "0"
+                    && arpParameters[RhinoArpDevice::grooveParameter].valueText == "Straight"
                     && arpParameters[RhinoArpDevice::holdParameter].valueText == "Off"
-                    && arpParameters[RhinoArpDevice::retriggerParameter].valueText == "Beat"
-                    && arpParameters[RhinoArpDevice::rootParameter].valueText == "G#"
-                    && arpParameters[RhinoArpDevice::scaleParameter].valueText == "Minor"
+                    && arpParameters[RhinoArpDevice::retriggerParameter].valueText == "Off"
+                    && arpParameters[RhinoArpDevice::rootParameter].valueText == "C"
+                    && arpParameters[RhinoArpDevice::scaleParameter].valueText == "Chromatic"
                     && arpParameters[RhinoArpDevice::scaleParameter].maximum == 12.0f
                     && arpParameters[RhinoArpDevice::rateModeParameter].valueText == "Beats"
                     && arpParameters[RhinoArpDevice::freeRateParameter].valueText == "125 ms",
-                    "Rhino Arp opens with the Bouncy Chords controls and defaults");
+                    "Rhino Arp opens with a straight ascending pattern and no pitch changes or retriggers");
             const auto developmentForge = juce::File(juce::String(RHINO_SOURCE_DIR))
                 .getChildFile("../instruments/rhino-forge/build/RhinoForge_artefacts/Release/VST3/Rhino Forge.vst3");
             if (developmentForge.exists())

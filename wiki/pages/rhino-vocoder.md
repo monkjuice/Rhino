@@ -4,7 +4,7 @@ type: component
 summary: A channel vocoder whose carrier arrives as a sidechain from another track, and how Rhino routes a sidechain at all.
 tags: [rhino, devices, dsp, sidechain]
 sources: []
-updated: 2026-10-05
+updated: 2026-10-12
 ---
 
 # Rhino Vocoder and sidechains
@@ -18,6 +18,8 @@ A channel vocoder in the one mode Live calls External: the voice is the track's 
 `native/src/SessionSidechain.cpp` is Rhino's whole part. It writes the source track's id onto the plugin, re-guesses the wires and restarts playback at once: the id alone would take effect only at the next transport start, and the point is to sing into an armed track with the transport stopped. A track cannot be its own carrier, and removing a track clears its id from every plugin naming it. Nothing here is vocoder-specific, so a compressor ducking to a kick would need no new model code.
 
 **The send sits before the source track's mute.** That is the engine's doing, and it is why muting the synth, so you do not hear it twice, leaves the carrier running.
+
+**A track a DJ deck holds is no carrier while the song is stopped** (since 2026-10-12). The hidden DJ Output at the end of its devices hands the chain's output to the deck and clears the block, which is before the engine's send, so the vocoder hears silence; once the song's transport rolls the track is the song's again ([DJ view and the booth](dj-view.md)).
 
 ## DSP choices
 

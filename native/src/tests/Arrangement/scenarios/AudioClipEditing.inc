@@ -116,9 +116,10 @@
             view.mouseDrag(event(down, to, true));
             view.mouseUp(event(down, to, true));
         };
-        const auto automationParameters = session.deviceParameters(0, 0);
+        // Slot 1: the DJ booth's hidden input stands at slot 0 of every chain, so a track's first device is at slot 1.
+        const auto automationParameters = session.deviceParameters(0, 1);
         require(!automationParameters.empty(), "Starter device exposes an automatable parameter");
-        require(session.setTrackAutomationPoints({0, 0, 0}, {{0.0, automationParameters.front().minimum},
+        require(session.setTrackAutomationPoints({0, 1, 0}, {{0.0, automationParameters.front().minimum},
                                                              {0.75, automationParameters.front().maximum}}).wasOk(),
                 "Can add automation before exercising clip gestures");
         view.sync();

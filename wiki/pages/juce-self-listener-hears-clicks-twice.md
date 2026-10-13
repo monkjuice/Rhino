@@ -4,7 +4,7 @@ type: gotcha
 summary: A component registered as its own mouse listener gets every event on itself twice, so every toggle on Rhino's device faces flipped on and straight back off; hear the children through a separate listener, and test clicks through real dispatch.
 tags: [rhino, juce, ui, input, testing]
 sources: []
-updated: 2026-10-07
+updated: 2026-10-09
 ---
 
 # A JUCE component listening to itself hears its own clicks twice
@@ -25,6 +25,8 @@ Commit `a033e1a`: the deep listener is a separate member, `ChildMouse` (`DeviceE
 
 To hear a component's children, hand `addMouseListener` another object that drops the component's own events, never the component itself. On 2026-10-07 `DeviceEditorPanel` was Rhino's only caller. Forge's editor registers itself on child controls with `false`, which is safe: the editor is not the component it listens to.
 
+A second caller arrived on 2026-10-09: `DjDeckPanel` ([DJ view and the booth](dj-view.md)) calls `addMouseListener(this, true)` so that a press anywhere on the console selects its deck, and its `mouseDown` drops the second hearing by comparing `event.eventTime` with the last press it acted on (`lastSelectTime`). That works because selecting a deck twice is harmless; it would not save a toggle, and a press on two components in the same millisecond would lose one. A new listener should still be a separate object.
+
 ## Why no test caught it
 
 Every face test called `panel->mouseDown` and its siblings directly, around JUCE's dispatch, so the listener never ran. `runDrumRackFaceTest` now also puts the `DeviceRack` on the desktop at (-10000, -10000), off the screen, and sends a press and, 400 ms later, a release through `ComponentPeer::handleMouseEvent` to Loop and to a pad's M, requiring each to toggle exactly once. It failed before the fix (Loop stayed off) and passed after. It needs a desktop peer, so it runs only when `RHINO_NATIVE_INPUT_TEST=1` is set ([Writing Rhino tests](writing-rhino-tests.md)).
@@ -37,3 +39,5 @@ Every face test called `panel->mouseDown` and its siblings directly, around JUCE
 - [Drum Rack sample editor](drum-rack-sample-editor.md)
 - [Rhino Tune](rhino-tune.md)
 - [Rhino EQ](rhino-eq.md)
+- [DJ view and the booth](dj-view.md)
+- [A juce::Button fires its click on a right-click too](juce-button-fires-on-right-click.md)

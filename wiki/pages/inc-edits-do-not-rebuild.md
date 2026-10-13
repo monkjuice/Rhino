@@ -4,7 +4,7 @@ type: gotcha
 summary: An edit to a workflow scenario alone has left the old test binary in place, so CTest passed a scenario that was never compiled.
 tags: [rhino, forge, testing, build]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-10
 ---
 
 # Editing only a scenario .inc does not rebuild the tests
@@ -12,6 +12,8 @@ updated: 2026-10-03
 ## Symptom
 
 You change a workflow scenario, build, run `ctest`, and the case reports **Passed**. But the binary that ran does not contain your change. On 2026-09-28 a scenario passed that had never been compiled.
+
+The mirror image is as misleading. On 2026-10-10 a new check in `DjBooth.inc` and the code it tests were written together and `ctest` was run against the binary built before either; it reported the check failing, and a rebuild was the whole fix. A failure in a check you have just written is first a question of whether the binary is newer than the edit.
 
 ## Cause
 

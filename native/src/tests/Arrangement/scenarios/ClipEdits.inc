@@ -131,11 +131,11 @@
             require(stack.ensurePatternLengthSteps(Session::defaultSteps * 3), "The clip grows to take more steps");
             require(!overlapping(0), "and no clip on its lane overlaps another");
 
-            // A session slot is no way round a track's kind.
-            require(stack.insertDeviceClipInSlot("FourOsc", 1, 0).failed(),
-                    "A slot on an audio lane refuses an instrument clip");
+            // A cell is no way round a track's kind.
+            require(stack.createSlotClip(1, 0).failed(),
+                    "An audio lane's cell makes no MIDI clip");
             require(stack.insertAudioFileInSlot(source.getFile(), 0, 0).failed(),
-                    "A slot on a MIDI lane refuses audio");
+                    "A MIDI lane's cell refuses audio");
 
             // A built-in sample whose file was cut short is written again
             // whole, not appended after the stub that was left behind.

@@ -4,7 +4,7 @@ type: concept
 summary: Every new track is born with a palette colour; a clip wears its track's colour until C gives it its own rhinoClipColour.
 tags: [rhino, colours, tracks, clips]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-11
 ---
 
 # Track and clip colours
@@ -27,9 +27,7 @@ The property is Rhino's own because the engine cannot say "no colour": `te::Clip
 
 `ArrangementPainter.cpp` fills a clip with its own colour, or else its track's colour darkened (`darker(0.5f)`), as a translucent band behind light text. A card is a solid block behind dark text; one value cannot serve both.
 
-## Leftover
-
-Slot clips in the paused session view are still given an engine colour on creation (`presetColour`, `instrumentColour`), and the view draws `getColour()` rather than `Session::clipColour` ([Session view (paused)](session-view.md)).
+A DJ console's cells follow the same rule since 2026-10-11: `Session::SlotClip::colour` is `clipColour`, and the grid paints a cell with none in its track's colour, darkened the same way. The `presetColour` and `instrumentColour` stamps that the session view's slot clips were given went with that view ([Clip slots, the DJ consoles' cells](clip-slots.md)).
 
 ## Related
 

@@ -4,7 +4,7 @@ type: component
 summary: One Editor class across fifteen files builds the panel from declared modules and decides what is visible in one place.
 tags: [forge, ui, layout]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-12
 ---
 
 # Forge editor (panel)
@@ -35,6 +35,7 @@ The guide uses ASCII-only musical and directional spellings (`C#/Db`, `7#5`, `m7
 - **A switched-off module greys everything and hides nothing.** `applyEnableStates` keeps two flags: `inCharge` (`disabledBy`/`enabledBy`, the LFO custom-table Shape rule, `fxKnobLive`) and `on = module.on() && inCharge`. Greying reads `on`; hiding a control in a shared cell (`ui::inSharedCell`) reads only `inCharge`, while `modeBy`/`modeIs` hides the other mode's set. When the hide used `on`, switching an oscillator off emptied the POSITION/SCAN, DETUNE/CUT and BLEND/MIX cells (commit `9b1790a`); the LFO's HZ/BPM rate pair had the same latent fault. `switchedOffControlsStaySuite` in `tests/ForgeTestsLayout.cpp` (CTest `forge_layout`) guards it. When a test counts visible labels, count ones unique to the module (POSITION, DETUNE, BLEND, UNISON, SCAN, CUT): PAN, LEVEL and MIX also label the sub, noise and filter modules on the OSC page.
 - **Read values through `Editor::value`**, which asks the parameter rather than the cached atomic beside it. The atomic is updated by another listener, and a panel attachment called first reads the old value: a mode field looked right only after an unrelated click.
 - **Copy, do not point.** `FxSelector` copies a type's choices, because the slot's type can change before the next repaint.
+- **No image outlives the editor.** A `juce::Image` with static storage is a Direct2D bitmap. It is released at DLL unload under the loader lock, and NVIDIA's driver deadlocks there. As of 2026-10-12 four statics still do this: in `ui/ForgeChrome.h` (`brushedGrain`, `fastenerImage`) and in `ui/ForgePerformanceWheel.h` ([A plugin's static Direct2D images deadlock NVIDIA's driver at unload](plugin-static-images-deadlock-on-unload.md)).
 - **No knob prints its value.** A bubble beside the knob being turned does, so readouts cost no row height.
 - **A caption that does not fit its box changes font.** A `juce::Label` narrower than its text first squashes the glyphs (default minimum horizontal scale 0.7), then drops the font size, so the word reads as another face; POSITION did in a box its knob's width. So `ui::knobLabelBounds(block, cell)` (`ui/ForgeControlBlock.h`) spans the wider of the knob, fader or rocker block and its cell, and `dressControlLabel` (`src/ForgeEditor.cpp`) sets a `{1, 0, 1, 0}` border with no side padding, without which WARP 1/WARP 2 still overflowed their weight-2 cells at the minimum window. `captionsKeepTheirSizeSuite` (`forge_layout`) checks every caption-size label's string width against its box on OSC, MATRIX, MIX and FX at the minimum and default sizes. It walks visibility flags, because `isShowing()` is always false in a headless editor with no peer.
 - **Plates carry no legend.** A plate's foot is only `plateFootMargin` (6 px, `ui/ForgeModule.h`), kept clear of the housing's rail and rivet. The 20 px stamped legend strip (OSCILLATOR A … A-03) was removed in `7be9a56` because it repeated the header, and its height went to the knobs, displays, lower row and mixer strips. Part numbers (B-01…, A-06) stay in the header via `plateCode`; a group such as SUB / NOISE is keyed only by its `group` string, and `drawGroupPlate` draws just the housing.
@@ -47,3 +48,4 @@ Every frame repaints the whole panel and every ordinary knob shares one size: se
 - [Forge modulation: matrix, envelopes, LFOs and macros](forge-modulation.md)
 - [Seeing the UI without taking the screen](headless-ui-snapshots.md)
 - [Colours and typography](colours-and-typography.md)
+- [A plugin's static Direct2D images deadlock NVIDIA's driver at unload](plugin-static-images-deadlock-on-unload.md)

@@ -4,7 +4,7 @@ type: component
 summary: A six-section library rail, Drums first, whose rows leave only by drag, with samples and drum presets auditioned through a second audio callback.
 tags: [rhino, ui, browser, library]
 sources: []
-updated: 2026-10-06
+updated: 2026-10-11
 ---
 
 # Browser and library preview
@@ -25,7 +25,7 @@ A device's row holds its presets, read from disk by `ContentLibrary::presets()` 
 
 ## Rows leave only by drag
 
-There is no click-to-add and no double-click action, so browsing and auditioning can never land a device on whatever track happens to be selected. A row's drag description is `rhino-browser:<kind>:<id>` (kinds `preset`, `instrument`, `midi-effect`, `effect`, `device-preset`, `file`, `sample`, `drumkit`, `drum-preset`), parsed by `BrowserIds.h` for every drop target: the [arrangement](arrangement-view.md), the [device rack](device-rack.md) and the paused session view. It exists because the arrangement and rack kept their own id tables, which drifted until the rack silently ignored a Rhino Wave drop the arrangement accepted. The id is read from the front, because a `file` payload is a Windows path with its own colon. `drumkit` carries the `.rdk` file's path (until 2026-10-06, a kit enum's id) and `drum-preset` the `.rdp` file's, read by `browserDropKitFile` and `browserDropDrumPresetFile`.
+There is no click-to-add and no double-click action, so browsing and auditioning can never land a device on whatever track happens to be selected. A row's drag description is `rhino-browser:<kind>:<id>` (kinds `preset`, `instrument`, `midi-effect`, `effect`, `device-preset`, `file`, `sample`, `drumkit`, `drum-preset`), parsed by `BrowserIds.h` for every drop target: the [arrangement](arrangement-view.md), the [device rack](device-rack.md) and a DJ console's clips grid ([DJ view and the booth](dj-view.md)). It exists because the arrangement and rack kept their own id tables, which drifted until the rack silently ignored a Rhino Wave drop the arrangement accepted. The id is read from the front, because a `file` payload is a Windows path with its own colon. `drumkit` carries the `.rdk` file's path (until 2026-10-06, a kit enum's id) and `drum-preset` the `.rdp` file's, read by `browserDropKitFile` and `browserDropDrumPresetFile`.
 
 A drop below the last lane makes a lane of the kind the item needs, since a track cannot change kind later ([Track kinds: audio and MIDI](track-kinds.md)).
 

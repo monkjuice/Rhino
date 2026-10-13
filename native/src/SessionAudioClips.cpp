@@ -50,7 +50,7 @@ void Session::endAudioClipGesture()
     if (--audioClipGestureDepth > 0)
         return;
     edit->getUndoManager().beginNewTransaction();
-    markModified();
+    // Every edit inside the drag marked its own clip's track as it went.
     sendSynchronousChangeMessage();
 }
 
@@ -60,14 +60,17 @@ juce::Result Session::applyAudioClipEdit(te::EditItemID id, const juce::String& 
     auto* clip = findAudioClip(id);
     if (clip == nullptr)
         return juce::Result::fail("Select an audio clip first.");
+    const auto track = clipTrackIndex(*edit, *clip);
     const auto insideGesture = audioClipGestureDepth > 0;
     if (!insideGesture)
         edit->getUndoManager().beginNewTransaction(actionName);
     apply(*clip);
+    // Marked at every step, so a drag names the track its clip is on; only
+    // the announcement waits for the drag's end.
+    markModified(track, ModelChange::audioClips);
     if (insideGesture)
         return juce::Result::ok();
     edit->getUndoManager().beginNewTransaction();
-    markModified();
     sendSynchronousChangeMessage();
     return juce::Result::ok();
 }

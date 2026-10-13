@@ -4,7 +4,7 @@ type: component
 summary: Each track names its own MIDI or audio input and its own Off, Auto or In monitoring, all resolved to engine devices by applyRecordArming.
 tags: [rhino, recording, midi, audio-io]
 sources: []
-updated: 2026-10-05
+updated: 2026-10-12
 ---
 
 # Track inputs and monitoring
@@ -29,6 +29,12 @@ Which input a track takes, and whether you hear it, are properties of the **trac
 
 The engine keeps the mode on the *device*, so two tracks sharing one input get the strongest mode either asked for (On beats Auto beats Off), which never silences a track that asked to hear itself. Different inputs give each track exactly what its card says. A mode change reapplies routing, except during a take or count-in: `setMonitorMode` restarts the transports and would cut the recording in half. The change is kept (`armingDeferred`) and applied when the take finishes ([Recording and the count-in](recording.md)).
 
+## A DJ deck's Live
+
+A DJ deck's Live key (`Session::setDjDeckLive`) is this setting: it switches the deck's track to On, remembers the mode it had, and puts it back when Live goes off. It wants a MIDI track running an instrument. A document saves the remembered mode as the deck's `liveRestore`, so Live switched off after a reopen puts it back; until 2026-10-12 it left the track monitoring On.
+
+While a deck holds a track and the song is stopped, the hidden DJ Input adds the deck's audio and notes to whatever the track already carries, so a monitored input still plays, and the hidden DJ Output hands everything the chain makes to the deck's channel strip and clears it from the song's output. A held track's monitored input, MIDI or audio, is therefore heard through the booth's mixer, not the song's (since 2026-10-12; [DJ view and the booth](dj-view.md)).
+
 ## Related
 
 - [Recording and the count-in](recording.md)
@@ -36,3 +42,4 @@ The engine keeps the mode on the *device*, so two tracks sharing one input get t
 - [Track kinds: audio and MIDI](track-kinds.md)
 - [Reading MIDI hardware on Windows](reading-midi-hardware-on-windows.md)
 - [Arrangement view](arrangement-view.md)
+- [DJ view and the booth](dj-view.md)

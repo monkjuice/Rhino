@@ -18,6 +18,8 @@ struct DevicePreset;
 // count-in click is an audio callback of Rhino's own, and only
 // SessionRecording.cpp needs to see how it works.
 class CountInClick;
+// A deck's material (core/DjTrack.h), handed out by pointer for the displays.
+struct DjTrack;
 
 // Message-thread facade. The engine owns scheduling, streaming and playback.
 // Member order keeps the engine alive until its edit and devices are released.
@@ -166,14 +168,58 @@ public:
     Session();
     ~Session();
     static void setCommandLineTestMode(bool enabled);
-    juce::ValueTree projectSnapshot();
+    // The document's state, to be written to `destination`. The open edit
+    // names each clip's audio file as it was stored against the file the edit
+    // was opened from; for any other destination the copy names each one again
+    // for that file - relative to it where the engine would store it so,
+    // absolute otherwise - and the live clips keep their names. With no
+    // destination, the names are the edit's own.
+    juce::ValueTree projectSnapshot(const juce::File& destination = {});
     // Discards the open document for an untitled starter one. Callers ask about
     // unsaved changes first; this does not.
     void newProject();
     juce::Result restoreProject(const juce::ValueTree&, const juce::File&);
     void projectSaved(const juce::ValueTree&, const juce::File&);
     bool hasUnsavedChanges() const { return changeRevision != savedRevision; }
-    void markModified();
+    // Fails, naming the clip and its file, when a clip on the timeline plays an
+    // audio file that is not there. A render waits for every such file to open,
+    // so the WAV export asks this before it starts.
+    juce::Result checkTimelineFiles();
+    // The song as Export WAV writes it: the timeline of `edit` from the top for
+    // `seconds`, through the main chain, at unity, as a 24-bit dithered WAV at
+    // the rate and block size given. On whichever thread calls it; the caller
+    // takes the edit off the device first. A render waits for every clip's
+    // file to open, and one that is there but cannot be read would hold it for
+    // good, so a render that has not moved for `stallSeconds` is given up and
+    // what it wrote deleted.
+    static juce::Result renderTimelineWav(te::Edit&, const juce::File& destination, double seconds, double sampleRate,
+                                          int blockSize, double stallSeconds = 60.0);
+    // What an edit changed, so that what is derived from the document - the
+    // engine's automation curves, a DJ deck's clip - can tell whether it is
+    // behind. Kinds combine with |. A change nobody has classified is
+    // `unknown`, every kind at once, which is always safe: it costs a deck its
+    // clip made again, never a wrong sound.
+    enum class ModelChange : unsigned
+    {
+        none = 0,              // nothing anything renders: a name, a colour, a view setting
+        parameters = 1u << 0,  // a device parameter's value, the track's fader and pan among them
+        curves = 1u << 1,      // an automation lane
+        notes = 1u << 2,       // what a MIDI track plays: its notes and the clips that hold them
+        audioClips = 1u << 3,  // what an audio track plays: its clips and how each one plays
+        devices = 1u << 4,     // a chain's devices, or a device's own settings
+        tempo = 1u << 5,       // the tempo or the time signature
+        unknown = (1u << 6) - 1
+    };
+    friend constexpr ModelChange operator|(ModelChange a, ModelChange b) noexcept
+    {
+        return static_cast<ModelChange>(static_cast<unsigned>(a) | static_cast<unsigned>(b));
+    }
+    // Every edit ends here, naming the track it changed when it knows it and
+    // what it changed. `none` marks the document and nothing else; anything
+    // else leaves the lanes to be mirrored again, and a change to what a clip
+    // plays leaves the DJ decks playing that track's clips - every deck, for
+    // -1 - to make their clip again.
+    void markModified(int changedTrack = -1, ModelChange changes = ModelChange::unknown);
     juce::File projectFile;
     juce::ListenerList<Listener> listeners;
     juce::Result importAudio(const juce::File&);
@@ -638,6 +684,7 @@ public:
     // dragged on the ruler. refreshLoop is what puts it on the transport.
     tracktion::core::TimeRange loopRange() const;
     void refreshLoop();
+    // A clip by id: on a track's timeline, or in one of its clip slots.
     te::Clip* findClip(te::EditItemID) const;
     te::WaveAudioClip* findAudioClip(te::EditItemID) const;
     bool shouldShowClipInArrangement(te::Clip&) const;
@@ -907,8 +954,9 @@ public:
     void endAudioClipGesture();
     void toggleTrackMute(int track);
     void toggleTrackSolo(int track);
-    // The mixer. Session view and the arrangement are two presentations of
-    // these same per-track values, so both read and write them through here.
+    // The mixer. The arrangement's track headers read and write these
+    // per-track values through here, and a deck's bounce of a track passes
+    // through the same fader.
     struct TrackMixer
     {
         float volumeDb = 0.0f;
@@ -939,47 +987,294 @@ public:
     void setMasterPan(float pan);
     void beginMasterPanGesture();
     void endMasterPanGesture();
-    // Session view: scenes are rows of clip slots across every track. The engine
-    // owns launch timing; these calls only queue state changes from the message
-    // thread and report back what the launch handles currently hold.
+    // A track's clip slots (SessionSlots.cpp): one per scene on every track,
+    // each holding at most one clip. They are the cells of a DJ console's
+    // clips grid, the DJ view's own clips, apart from the arrangement's: a
+    // deck plays one cell's clip through the track's live chain
+    // (loadDjDeckSlot).
     static constexpr int defaultScenes = 8;
     struct SlotClip
     {
         bool hasClip = false;
-        bool playing = false;
-        bool playQueued = false;
-        bool stopQueued = false;
         bool isMidi = false;
         juce::String name;
+        // The clip's own colour, transparent until someone gives it one:
+        // until then it wears its track's, as a timeline clip does.
         juce::Colour colour;
         te::EditItemID clipID;
     };
     int sceneCount() const;
-    juce::String sceneName(int scene) const;
     SlotClip slotClip(int track, int scene) const;
-    bool trackHasActiveSlot(int track) const;
-    juce::Result launchSlot(int track, int scene);
-    juce::Result launchScene(int scene);
-    void stopTrackSlots(int track);
-    void stopAllSlots();
-    juce::Result addScene();
-    juce::Result deleteScene(int scene);
+    // Every path that puts a clip in a cell makes the scene it lands in when
+    // that is past the last, inside the same undo step, so a drop on a
+    // console's + row grows the grid only when something actually lands.
     juce::Result insertPatternPresetInSlot(PatternPreset, int track, int scene);
-    juce::Result insertDeviceClipInSlot(const juce::String& deviceId, int track, int scene);
-    juce::Result insertInstrumentClipInSlot(Instrument, int track, int scene);
     juce::Result insertAudioFileInSlot(const juce::File&, int track, int scene);
     juce::Result insertBuiltInSampleInSlot(BuiltInSample, int track, int scene);
     juce::Result deleteSlotClip(int track, int scene);
-    // Session clips and arrangement clips are separate, as they are in Live.
-    // These are the two ways across: -1 for scene picks the first free slot.
-    juce::Result copySlotClipToArrangement(int track, int scene, double startSeconds);
+    // An empty one-bar MIDI clip in a slot, as a double-click on an empty
+    // cell makes; an audio track's cell takes a file instead.
+    juce::Result createSlotClip(int track, int scene);
+    // A cell's clip and a timeline clip are separate objects. These are the
+    // ways across, and each copies: -1 for scene picks the first free slot,
+    // -1 for targetTrack the clip's own track. A clip copied into another
+    // track's slot is held to that track's kind.
+    juce::Result copySlotClipToArrangement(int track, int scene, double startSeconds, int targetTrack = -1);
     juce::Result copyClipToSlot(te::EditItemID, int scene = -1);
+    juce::Result copyClipToTrackSlot(te::EditItemID, int track, int scene);
     int firstFreeSlot(int track) const;
-    bool anyTrackPlayingSlots() const;
-    void returnToArrangement();
-    te::LaunchQType launchQuantisation() const;
-    void setLaunchQuantisation(te::LaunchQType);
-    te::SceneWatcher* sceneWatcher() const;
+    // ---- The DJ booth (SessionDj.cpp, SessionDjSources.cpp) ----
+    // Up to six decks into a mixer with a beat effect, rendered by Rhino's own
+    // engine (core/DjEngine.h) as a second callback on the audio device,
+    // beside the edit's, the way the library preview is. So every deck has a
+    // transport of its own and none of them is the song's. A deck plays a
+    // file, or one of a track's own clips - its clip slots, the console's
+    // cells, never the arrangement's clips - heard live through the track's
+    // chain: the clip's notes play the track's instrument and its sound goes
+    // through the track's effects as the deck passes them, so every knob,
+    // and an external instrument's own window, is heard as it turns. Nothing
+    // is rendered on the way.
+    static constexpr int maximumDjDecks = 6;
+    // The booth's private state, defined in SessionDjInternal.h and held
+    // below; declared here so the session's own units can name it.
+    struct DjBooth;
+    enum class DjSourceKind { none, file, track };
+    // When a start or a hot cue lands: at once, or on the master deck's next
+    // beat, bar or four bars - the mechanism Live launches clips with.
+    enum class DjQuantise { off, beat, bar, fourBars };
+    static juce::String djQuantiseName(DjQuantise);
+    struct DjDeckInfo
+    {
+        DjSourceKind kind = DjSourceKind::none;
+        juce::String name;        // what the deck shows
+        juce::File file;          // the file a file deck reads
+        te::EditItemID trackId;   // a track deck's track
+        int slot = -1;            // the cell a track deck plays; -1 while it plays none yet
+        int track = -1;           // where that track is now; -1 once it is gone
+        bool loaded = false;      // material is on the deck
+        bool loading = false;     // a read is in flight
+        bool live = false;        // the track's input is heard too, so its instrument plays from the keys
+        juce::String error;       // why the last load failed
+        int generation = 0;       // bumped with every load, so a display can tell new material from old
+    };
+    struct DjLoop
+    {
+        double startSeconds = -1.0, endSeconds = -1.0;
+        bool active = false;
+        bool valid() const { return startSeconds >= 0.0 && endSeconds > startSeconds; }
+    };
+    struct DjDeckState
+    {
+        enum class Transport { empty, stopped, playing, waiting, cueing };
+        Transport transport = Transport::empty;
+        bool pendingJump = false;
+        double positionSeconds = 0.0, lengthSeconds = 0.0;
+        double bpm = 0.0, effectiveBpm = 0.0;   // the track's own, and at the rate it plays
+        double firstBeatSeconds = 0.0;
+        int beatsPerBar = 4;
+        double beat = 0.0;                      // fractional beats from the first downbeat
+        float tempoPercent = 0.0f;
+        int tempoRange = 6;
+        bool synced = false, master = false, reversed = false;
+        float brakeSeconds = 0.0f;              // how long a stop winds down and a start spins up
+        bool quantiseSnap = true;               // cue and loop points snap to the grid
+        bool scratching = false;                // a hand is on the platter
+        double cueSeconds = 0.0;
+        std::array<double, 8> hotCueSeconds {}; // negative when unset
+        DjLoop loop;
+        float peak = 0.0f;
+        int keyIndex = -1;
+        juce::uint32 jumps = 0;
+        bool isPlaying() const { return transport == Transport::playing || transport == Transport::cueing; }
+    };
+    // A channel of the mixer, as the DJM-V10 lays one out: trim, a
+    // compressor, four EQ bands, the colour filter, a send, the fader with
+    // its curve, cue, the effect assign and the crossfader side.
+    static constexpr int djChannelBandCount = 4;   // low, low-mid, high-mid, high
+    struct DjChannelState
+    {
+        float trimDb = 0.0f, comp = 0.0f;
+        std::array<float, djChannelBandCount> eqDb {};
+        float filter = 0.0f, resonance = 0.2f, fader = 1.0f, send = 0.0f;
+        int faderCurve = 1;                     // 0 gentle, 1 normal, 2 steep
+        bool cue = false, fx = false;
+        int crossfaderSide = 1;                 // 0 A, 1 through, 2 B
+        float meter = 0.0f;
+    };
+    struct DjMasterState
+    {
+        float crossfader = 0.0f, crossfaderCurve = 0.0f;
+        float levelDb = 0.0f, lowDb = 0.0f, midDb = 0.0f, highDb = 0.0f;
+        // The headphones: the cue against the master, their level, and
+        // mono split (cue left, master right).
+        float cueMix = 0.0f, cueLevelDb = 0.0f;
+        bool monoSplit = false;
+        float meterLeft = 0.0f, meterRight = 0.0f;
+        double bpm = 0.0;                       // the master deck's, 0 for none
+        double tapBpm = 128.0;                  // tapped in; times the effect when no deck plays
+        int masterDeck = -1;
+    };
+    // The mic: the audio device's first input, with a two-band EQ, off, on
+    // or on with talkover, which ducks the master while it is spoken into.
+    struct DjMicState
+    {
+        float levelDb = 0.0f, lowDb = 0.0f, highDb = 0.0f;
+        int mode = 0;                           // 0 off, 1 on, 2 talkover
+        float meter = 0.0f;
+    };
+    // The send/return unit the channels' sends feed.
+    struct DjSendFxState
+    {
+        int type = 2;                           // djSendFxTypeName
+        float size = 0.5f, time = 0.5f, tone = 0.5f, mix = 0.5f;
+    };
+    struct DjFxState
+    {
+        int type = 1;
+        float beats = 0.5f, depth = 0.5f;
+        bool on = false;
+        // -1 the master, else a channel. One past the console's decks is
+        // where a deck taken off with the effect on it went, and the effect
+        // is on nothing until a deck takes that channel and lights its key.
+        int target = -1;
+        std::array<bool, 3> bands {true, true, true};   // the bands the effect is on: low, mid, high
+        bool autoTime = true;                   // from the beats, else from manualSeconds
+        float manualSeconds = 0.25f;
+    };
+    static constexpr float djKillDb = -90.0f;  // an EQ band at or below this is off
+    static juce::String djFxTypeName(int type);
+    static int djFxTypeCount();
+    static juce::String djSendFxTypeName(int type);
+    static int djSendFxTypeCount();
+
+    // Decks are named by their place on the console, and a mixer channel by
+    // the same place. Removing a deck closes the console's gap; the decks
+    // after it play on untouched, since each plays in an engine slot of its
+    // own (SessionDjInternal.h).
+    int djDeckCount() const;
+    juce::Result addDjDeck();
+    juce::Result removeDjDeck(int deck);
+    // What a deck plays. A file is read and analysed on a worker thread and
+    // djPoll installs it. A track makes the deck that track's: the deck is
+    // heard through the track's chain from then on, and plays nothing until
+    // one of the track's cells is chosen - the arrangement's clips are never
+    // a deck's. A track another deck plays is refused, since one chain plays
+    // one deck.
+    juce::Result loadDjDeckFile(int deck, const juce::File&);
+    juce::Result loadDjDeckTrack(int deck, int track);
+    // One of the track's cells on the deck, heard through the track's chain:
+    // a MIDI clip's notes at once, an audio clip's sound once the worker has
+    // read it. A deck already playing that track keeps its beat.
+    juce::Result loadDjDeckSlot(int deck, int track, int scene);
+    void ejectDjDeck(int deck);
+    DjDeckInfo djDeckInfo(int deck) const;
+    DjDeckState djDeckState(int deck) const;
+    // The material itself, for the displays. Valid until the next change
+    // announcement; a display keys what it keeps on DjDeckInfo::generation.
+    const DjTrack* djDeckTrack(int deck) const;
+    // The deck's transport. Each is a command queued for the audio thread,
+    // which is where every position is changed; the state reads it back.
+    void djPlay(int deck);
+    void djPause(int deck);
+    void djTogglePlay(int deck);
+    void djCueDown(int deck);
+    void djCueUp(int deck);
+    void djHotCue(int deck, int index);
+    void djClearHotCue(int deck, int index);
+    void djLoopIn(int deck);
+    void djLoopOut(int deck);
+    void djBeatLoop(int deck, double beats);
+    void djReloopExit(int deck);
+    void djLoopHalve(int deck);
+    void djLoopDouble(int deck);
+    void djClearLoop(int deck);
+    void djBeatJump(int deck, int beats);
+    void djSeek(int deck, double seconds);
+    void djSetSynced(int deck, bool);
+    void djSetMaster(int deck);
+    void djSetReversed(int deck, bool);
+    void djSetTempoPercent(int deck, float percent);
+    void djSetTempoRange(int deck, int range);     // 6, 10, 16 or 100
+    void djNudge(int deck, float percent);          // held: 0 lets go
+    // The hand on the platter: the deck plays at this rate, backwards for a
+    // negative one, until the hand lets go.
+    void djScratch(int deck, double rate, bool active);
+    void djSetBrake(int deck, float seconds);
+    void djSetQuantiseSnap(int deck, bool);
+    // The previous or next cue point from where the deck stands, hot cues
+    // and the cue point alike; back past the first is the top of the track.
+    void djJumpToCue(int deck, bool forward);
+    void djStopAll();
+    DjQuantise djQuantise() const;
+    void setDjQuantise(DjQuantise);
+    bool djPhaseLock() const;
+    void setDjPhaseLock(bool);
+    // The mixer. Knob moves are performance, not edits: no undo step, and
+    // the document is not marked modified by them.
+    DjChannelState djChannel(int channel) const;
+    void setDjChannelTrim(int channel, float decibels);
+    void setDjChannelComp(int channel, float amount);
+    void setDjChannelEq(int channel, int band, float decibels);   // 0 low, 1 low-mid, 2 high-mid, 3 high
+    void setDjChannelFilter(int channel, float amount);
+    void setDjChannelResonance(int channel, float amount);
+    void setDjChannelFader(int channel, float position);
+    void setDjChannelFaderCurve(int channel, int curve);
+    void setDjChannelSend(int channel, float level);
+    void setDjChannelCue(int channel, bool);
+    void setDjChannelFx(int channel, bool);
+    void setDjChannelCrossfaderSide(int channel, int side);
+    DjMasterState djMaster() const;
+    void setDjCrossfader(float position);
+    void setDjCrossfaderCurve(float curve);
+    void setDjMasterLevel(float decibels);
+    void setDjMasterEq(int band, float decibels);                 // 0 low, 1 mid, 2 high
+    void setDjCueMix(float mix);
+    void setDjCueLevel(float decibels);
+    void setDjMonoSplit(bool);
+    DjMicState djMic() const;
+    void setDjMicLevel(float decibels);
+    void setDjMicEq(int band, float decibels);                    // 0 low, 1 high
+    void setDjMicMode(int mode);
+    DjSendFxState djSendFx() const;
+    void setDjSendFxType(int type);
+    void setDjSendFxSize(float);
+    void setDjSendFxTime(float);
+    void setDjSendFxTone(float);
+    void setDjSendFxMix(float);
+    DjFxState djFx() const;
+    void setDjFxType(int type);
+    void setDjFxBeats(float beats);
+    void setDjFxDepth(float depth);
+    void setDjFxOn(bool);
+    void setDjFxTarget(int target);
+    void setDjFxBand(int band, bool on);                          // 0 low, 1 mid, 2 high
+    void setDjFxAutoTime(bool);
+    void setDjFxTime(float seconds);
+    // A tap on the effect's TAP key: two or more within two seconds set
+    // the tempo the effect runs at when no deck plays.
+    void djTapTempo();
+    // Playing over a deck. A track deck's track can take its input too: it
+    // is monitored, so a Drum Rack on it plays from the keys through the
+    // deck's channel. A file has no instrument to play.
+    juce::Result setDjDeckLive(int deck, bool live);
+    bool djDeckHasDrumRack(int deck) const;
+    // The clip the lower pane opens for a track deck: the cell it plays, or
+    // an invalid id while it plays none.
+    te::EditItemID djDeckEditClip(int deck) const;
+    // Polled by the shell at 30 Hz: installs what a worker has read, hands
+    // over what waited for room, and makes a deck's clip again once it has
+    // changed and nothing is held.
+    void djPoll();
+    bool djBusy() const;
+    // Drives the booth without an audio device, for the tests, through the
+    // booth's own callback: what a device would hand it is what the test
+    // hands it, the inputs (the first is the mic) included, and the last form
+    // hands back what the device would play.
+    void djProcessOffline(int frames);
+    void djProcessOffline(const float* const* inputs, int inputChannels, int frames);
+    void djProcessOffline(const float* const* inputs, int inputChannels, float* const* outputs, int outputChannels, int frames);
+    bool djEngineAttached() const;
+
     te::Engine engine;
     std::unique_ptr<te::Edit> edit;
     // A track has one instrument, so there is nothing stable to cache: switching
@@ -1042,11 +1337,13 @@ private:
                                     const std::function<void(te::WaveAudioClip&)>&);
     // SessionClips.cpp - one clip's move or trim without a transaction, a
     // notification or a playback restart, so moveClips can carry several
-    // inside one undo step. trackChanged says whether it changed lanes, and
-    // changed whether it moved at all.
+    // inside one undo step. trackChanged says whether it changed lanes,
+    // changed whether it moved at all, and devicesChanged whether the lane it
+    // reached changed devices for it: a MIDI clip's instrument brought there
+    // or switched back on, or a blank Drum Rack given the clip's kit.
     juce::Result editClipInEdit(te::EditItemID, ClipGeometry, ClipGesture, int targetTrack,
                                 const std::vector<te::EditItemID>& movingWith, bool& trackChanged,
-                                bool& changed);
+                                bool& changed, bool& devicesChanged);
     // SessionTransport.cpp - an import without a transaction, so importAudio
     // can add the lane it lands on in the same undo step.
     juce::Result importAudioInEdit(const juce::File&, int track, double startSeconds, double* endSeconds = nullptr);
@@ -1054,6 +1351,11 @@ private:
     // notification, so paste can clear and insert inside one undo step.
     bool clearClipRegionInEdit(double startSeconds, double endSeconds, int firstTrack, int lastTrack,
                                const std::vector<te::EditItemID>& keep = {});
+    // A clip edit marks each track it reached with what that track plays -
+    // notes on a MIDI track, audio clips on an audio track - and with `also`,
+    // whatever else it changed there. With no track known, every track is
+    // marked. Session.cpp.
+    void markClipsModified(std::vector<int> tracks, ModelChange also = ModelChange::none);
     // Two clips may never overlap on one track. A clip that has just been
     // dropped, dragged or trimmed is the one that wins the span it now covers:
     // the clips already there are split at its edges and the part underneath
@@ -1120,8 +1422,9 @@ private:
     void finishRecording();
     // makeRoomForClip over whatever the recording just added. The engine
     // inserts a recorded clip on top of what is already on the track; Rhino's
-    // rule is that the newcomer wins the ground it landed on.
-    bool tidyRecordedClips();
+    // rule is that the newcomer wins the ground it landed on. Returns the
+    // tracks a take landed on, empty when nothing was recorded.
+    std::vector<int> tidyRecordedClips();
     CountInClick& countInClick();
     // Attaching is separate from building, so a count is configured while
     // nothing is registered on the device and no block can be in flight
@@ -1149,7 +1452,7 @@ private:
     te::VolumeAndPanPlugin* trackVolumePlugin(int track) const;
     // SessionMixer.cpp - a fader or pan change is announced at once outside a
     // drag and once at the drag's end inside one.
-    void announceMixerChange();
+    void announceMixerChange(int track, ModelChange);
     void endMixerGesture();
     void ensureTrackMixers();
     // The reorder itself, without a transaction or a notification, so the group
@@ -1166,9 +1469,11 @@ private:
     void reconcileTrackGroups();
     void migrateLegacyTrackGroups();
     void ensureSceneSlots(int minimumScenes = defaultScenes);
-    std::optional<te::MonotonicBeat> nextLaunchBeat() const;
-    void startTransportForLaunch();
-    juce::Result preparePresetTrack(int trackIndex, const PresetPattern&);
+    // SessionPresets.cpp - the instrument and sound a pattern preset plays its
+    // notes with, put on the track. devicesChanged says whether that changed
+    // the track's chain: an instrument switched, the synth's patch set, or a
+    // blank rack given the default kit. A track already set up changes none.
+    juce::Result preparePresetTrack(int trackIndex, const PresetPattern&, bool& devicesChanged);
     // Every path that makes a track goes through here, so no track can exist
     // without having said what it is for. It appends the row, names it,
     // colours it, writes its type and gives it its utility device; the caller
@@ -1241,6 +1546,49 @@ private:
     // the transport still reports that it is not recording. Without this the
     // poll would read that window as a recording that had already finished.
     bool recordingStarted = false;
+    // The DJ booth: the engine, its decks' sources and the loads in flight.
+    // Built the first time a deck is added, so a session that never opens
+    // the DJ view registers no callback. SessionDjInternal.h.
+    std::unique_ptr<DjBooth> dj;
+    DjBooth& booth();
+    void ensureDjAttached();
+    void releaseDj();
+    // A deck's info found by the engine slot it plays in, which stays its own
+    // however the console moves around it (DjBooth::slotOfDeck).
+    DjDeckInfo djSlotInfo(int slot) const;
+    // SessionDjSources.cpp. These take a deck's engine slot, which a load in
+    // flight keeps: a deck taken off the console moves no other deck's slot.
+    // The deck's cell made into material: a MIDI clip's notes at once, an
+    // audio clip's sound on the worker.
+    juce::Result loadDjClip(int slot, bool keepBeat);
+    // The deck in `slot` heard through the track at `track`, or through none
+    // for -1: the track's hidden ends point at the slot's port. Idempotent,
+    // so the poll asserts it again for a track whose devices were made anew.
+    void bindDjTrack(int slot, int track);
+    // Every deck let go of its track, before the booth or the document goes.
+    void djUnbindAll();
+    juce::Result startDjFileRead(int slot);
+    void finishDjLoad(int slot, int generation, std::unique_ptr<DjTrack>, const juce::String& error, bool keepBeat);
+    // Hands the deck the source its last load or eject left waiting, when
+    // the booth's queue has room: false while it waits on.
+    bool handOverDjSource(int slot);
+    void applyDjDeckSettings(int slot);
+    // A change to the document, or to one track of it (-1 is every track):
+    // the decks playing a clip of it make their clip again when what a clip
+    // plays changed. A device, a knob or a curve is heard live and asks for
+    // nothing.
+    void djDocumentChanged(int track, ModelChange);
+    // True while a knob, fader, tempo or clip drag is held, or any mouse
+    // button is down: the person is in the middle of something. A deck's clip
+    // is not made again then, so a note being dragged is not cut on every
+    // step of the drag.
+    bool gestureHeld() const;
+    // SessionNotes.cpp: the track the note editor's clip sits on, or -1.
+    int patternTrackIndex() const;
+    void djReset();
+    void writeDjState();
+    void readDjState();
+    void markDjModified();
 };
 int runSelfTest();
 int runPatternTest();
@@ -1266,4 +1614,8 @@ void checkDrumRack(Session&);
 // Device presets: the .rnd format, every factory preset against its device,
 // and saving, loading and adding through the session. Run by --device-test.
 void checkDevicePresets(Session&);
+// The DJ booth's engine, measured offline: decks, loops, cues, quantised
+// starts and sync, the mixer's bands and faders, the beat effect, and the
+// analysis of a synthesised beat. See tests/DjTest.cpp.
+void checkDjCore(Session&);
 }

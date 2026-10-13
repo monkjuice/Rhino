@@ -13,7 +13,7 @@ void Session::clearPattern()
     edit->getUndoManager().beginNewTransaction("Clear pattern");
     pattern().getSequence().removeAllNotes(&edit->getUndoManager());
     pattern().state.setProperty(starterPlaceholderID, true, &edit->getUndoManager());
-    markModified();
+    markModified(patternTrackIndex(), ModelChange::notes);
     edit->getUndoManager().beginNewTransaction();
     sendSynchronousChangeMessage();
 }
@@ -23,17 +23,20 @@ void Session::clearPattern()
 void Session::applyPatternPreset(PatternPreset preset)
 {
     if (patternClip == nullptr) return;
-    const auto trackIndex = te::getAudioTracks(*edit).indexOf(dynamic_cast<te::AudioTrack*>(patternClip->getClipTrack()));
+    const auto trackIndex = te::getAudioTracks(*edit).indexOf(trackHoldingClip(*edit, *patternClip));
     if (trackIndex < 0) return;
     const auto data = presetPattern(preset);
     edit->getUndoManager().beginNewTransaction("Load " + data.name);
-    if (preparePresetTrack(trackIndex, data).failed())
+    auto devicesChanged = false;
+    if (preparePresetTrack(trackIndex, data, devicesChanged).failed())
     {
         edit->getUndoManager().beginNewTransaction();
         return;
     }
     fillMidiClip(pattern(), data, edit->getUndoManager());
-    markModified();
+    // The preset's notes, and the instrument and patch it plays them with
+    // when the track was not running them already.
+    markModified(trackIndex, devicesChanged ? ModelChange::notes | ModelChange::devices : ModelChange::notes);
     edit->getUndoManager().beginNewTransaction();
     if (edit->getTransport().isPlaying())
         edit->restartPlayback();
@@ -53,7 +56,8 @@ juce::Result Session::insertPatternPreset(PatternPreset preset, int trackIndex, 
     const auto end = edit->tempoSequence.toTime(tracktion::core::BeatPosition::fromBeats(startBeat + beatsPerBar()));
     edit->getUndoManager().beginNewTransaction("Add " + data.name);
     auto* track = tracks[trackIndex];
-    if (const auto prepared = preparePresetTrack(trackIndex, data); prepared.failed())
+    auto devicesChanged = false;
+    if (const auto prepared = preparePresetTrack(trackIndex, data, devicesChanged); prepared.failed())
         return prepared;
     auto clip = track->insertMIDIClip(data.name, {start, end}, nullptr);
     if (clip == nullptr)
@@ -61,7 +65,7 @@ juce::Result Session::insertPatternPreset(PatternPreset preset, int trackIndex, 
     fillMidiClip(*clip, data, edit->getUndoManager());
     makeRoomForClip(*clip);
     refreshLoop();
-    markModified();
+    markModified(trackIndex, devicesChanged ? ModelChange::notes | ModelChange::devices : ModelChange::notes);
     edit->getUndoManager().beginNewTransaction();
     if (edit->getTransport().isPlaying())
         edit->restartPlayback();
@@ -130,7 +134,7 @@ juce::Result Session::createClip(int trackIndex, double startSeconds, te::EditIt
     if (created != nullptr) *created = patternClipID;
     refreshLoop();
     edit->getUndoManager().beginNewTransaction();
-    markModified();
+    markModified(trackIndex, ModelChange::notes);
     if (edit->getTransport().isPlaying())
         edit->restartPlayback();
     sendSynchronousChangeMessage();
@@ -141,7 +145,7 @@ juce::Result Session::createClip(int trackIndex, double startSeconds, te::EditIt
 // lookup rather than a cached flag.
 te::Plugin* Session::patternInstrument() const
 {
-    auto* track = patternClip != nullptr ? patternClip->getClipTrack() : nullptr;
+    auto* track = patternClip != nullptr ? trackHoldingClip(*edit, *patternClip) : nullptr;
     auto* audioTrack = dynamic_cast<te::AudioTrack*>(track);
     if (audioTrack == nullptr) return nullptr;
     return trackInstrument(*audioTrack);
@@ -189,8 +193,9 @@ std::optional<juce::String> Session::patternNoteName(int pitch) const
 // Puts a track into the state a preset expects: the right instrument and its
 // patch. Shared by the timeline and clip-slot insertion paths so the two cannot
 // drift apart, and the same for every track: none is special for being first.
-juce::Result Session::preparePresetTrack(int trackIndex, const PresetPattern& data)
+juce::Result Session::preparePresetTrack(int trackIndex, const PresetPattern& data, bool& devicesChanged)
 {
+    devicesChanged = false;
     const auto tracks = te::getAudioTracks(*edit);
     if (!juce::isPositiveAndBelow(trackIndex, tracks.size()))
         return juce::Result::fail("Drop clips on a track lane.");
@@ -199,20 +204,30 @@ juce::Result Session::preparePresetTrack(int trackIndex, const PresetPattern& da
     if (trackType(trackIndex) != TrackType::midi)
         return juce::Result::fail("That is an audio track. Drop patterns on a MIDI track instead.");
     auto* track = tracks[trackIndex];
-    bool instrumentChanged = false;
+    InstrumentSwitch switched;
     const auto result = switchTrackInstrument(*edit, *track,
                                               data.useDrums ? Instrument::Drums : Instrument::FourOsc,
-                                              instrumentChanged);
+                                              switched);
     if (result.failed())
         return result;
+    devicesChanged = switched.devices;
+    // A patch sets the synth's voice mode, filter type and effect switches,
+    // which are state rather than parameters, so it counts as the device
+    // changing.
     if (data.synthPatch != SynthPatch::Default)
         if (auto* fourOsc = findFourOsc(*track))
+        {
             applySynthPatch(data.synthPatch, *fourOsc, edit->getUndoManager());
+            devicesChanged = true;
+        }
     // A rack that already holds sounds keeps them: the pattern plays whatever
     // kit the person has built.
     if (data.useDrums)
         if (auto* drums = findDrumRack(*track); drums != nullptr && drums->isBlank())
+        {
             loadDefaultDrumKit(*drums);
+            devicesChanged = true;
+        }
     return juce::Result::ok();
 }
 

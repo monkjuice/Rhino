@@ -4,7 +4,7 @@ type: guide
 summary: Render the real project in a test at the audio device's block size, not the offline default, to catch bugs that live on block boundaries.
 tags: [rhino, debugging, audio, testing]
 sources: []
-updated: 2026-10-06
+updated: 2026-10-12
 ---
 
 # Reproducing a live timing bug offline
@@ -42,6 +42,10 @@ only the export had written, so live and rendered sweeps moved at different rate
 4. Touch the runner before building ([Editing only a scenario .inc does not rebuild the tests](inc-edits-do-not-rebuild.md)),
    and delete the scenario and its `#include` afterwards. Write throwaway C++ with an editor or the Write tool, not a
    shell heredoc, which eats backslashes ([Development environment and reference material](development-environment.md)).
+
+## Running the live graph instead of a render
+
+A render is not the live graph. To run the graph itself at a block size of your choosing, as the device would, switch a document's engine to Tracktion's hosted audio device and call its `processBlock` a block at a time, as `DjLiveChain.inc` does since 2026-10-12. It needs the engine's posted device preparation dispatched by hand, or it plays silence and the transport never moves ([Tracktion's hosted device is silent until its start is dispatched](hosted-device-silent-until-dispatched.md)).
 
 ## The case that taught it
 

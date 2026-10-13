@@ -51,6 +51,18 @@ juce::PropertiesFile::Options rhinoSettingsOptions()
     return options;
 }
 
+std::unique_ptr<te::Edit> loadDocumentEdit(te::Engine& engine, const juce::ValueTree& state, const juce::File& document,
+                                           te::Edit::EditRole role)
+{
+    auto id = te::ProjectItemID::fromProperty(state, te::IDs::projectID);
+    if (!id.isValid())
+        id = te::ProjectItemID::createNewID(te::ProjectID{});
+    te::Edit::Options options {engine, state, id};
+    options.role = role;
+    options.editFileRetriever = [document] { return document; };
+    return te::Edit::createEdit(std::move(options));
+}
+
 void panicMidiOnTrack(te::ClipTrack* clipTrack)
 {
     auto* track = dynamic_cast<te::AudioTrack*>(clipTrack);
@@ -61,35 +73,22 @@ void panicMidiOnTrack(te::ClipTrack* clipTrack)
             plugin->midiPanic();
 }
 
-juce::Colour presetColour(Session::PatternPreset preset)
+// The audio track holding a clip: its timeline track, or the track whose
+// clip slot it sits in, which the clip's own lookup may not answer for.
+te::AudioTrack* trackHoldingClip(te::Edit& edit, const te::Clip& clip)
 {
-    switch (preset)
-    {
-        case Session::PatternPreset::WarmPulse:  return juce::Colour(0xff4f7d8f);
-        case Session::PatternPreset::AcidSteps:  return juce::Colour(0xff2f6e78);
-        case Session::PatternPreset::ArpRun:     return juce::Colour(0xff77659a);
-        case Session::PatternPreset::ChordPad:   return juce::Colour(0xff5f718f);
-        case Session::PatternPreset::SubBass:    return juce::Colour(0xff34535f);
-        case Session::PatternPreset::ReeseBass:  return juce::Colour(0xff4a5f38);
-        case Session::PatternPreset::SirenLead:  return juce::Colour(0xff8f4f67);
-        case Session::PatternPreset::HouseKit:   return juce::Colour(0xff657844);
-        case Session::PatternPreset::BreakKit:   return juce::Colour(0xff6f7f43);
-        case Session::PatternPreset::MinimalKit: return juce::Colour(0xff506d45);
-        case Session::PatternPreset::ClapKit:    return juce::Colour(0xff8a7a42);
-    }
-    return juce::Colour(0xff4b6671);
+    if (auto* track = dynamic_cast<te::AudioTrack*>(clip.getClipTrack()))
+        return track;
+    for (auto* track : te::getAudioTracks(edit))
+        for (auto* slot : track->getClipSlotList().getClipSlots())
+            if (slot->getClip() == &clip)
+                return track;
+    return nullptr;
 }
 
-juce::Colour instrumentColour(const DeviceDescriptor& device)
+int clipTrackIndex(te::Edit& edit, const te::Clip& clip)
 {
-    return device.colour != 0 ? juce::Colour(device.colour) : juce::Colour(0xff4b6671);
-}
-
-juce::Colour instrumentColour(Session::Instrument instrument)
-{
-    if (const auto* device = descriptorFor(instrument))
-        return instrumentColour(*device);
-    return juce::Colour(0xff4b6671);
+    return te::getAudioTracks(edit).indexOf(trackHoldingClip(edit, clip));
 }
 
 juce::Colour nextClipColour(juce::Colour current)
@@ -278,6 +277,45 @@ te::Plugin* trackInstrument(te::AudioTrack& track)
     return nullptr;
 }
 
+int djInputEnd(const te::AudioTrack& track)
+{
+    const auto& list = track.pluginList;
+    return list.size() > 0 && list[0] != nullptr && list[0]->getPluginType() == DjTrackInjectorDevice::xmlTypeName ? 1 : 0;
+}
+
+void ensureDjPortDevices(te::Edit& edit, te::AudioTrack& track)
+{
+    auto& list = track.pluginList;
+    if (djInputEnd(track) == 0)
+        if (auto input = edit.getPluginCache().createNewPlugin(DjTrackInjectorDevice::xmlTypeName, {}))
+            list.insertPlugin(input, 0, nullptr);
+    for (auto* plugin : list)
+        if (plugin != nullptr && plugin->getPluginType() == DjTrackTapDevice::xmlTypeName)
+            return;
+    auto output = edit.getPluginCache().createNewPlugin(DjTrackTapDevice::xmlTypeName, {});
+    if (output == nullptr)
+        return;
+    // Where the track's own devices end and its channel strip begins - the
+    // first of the Utility, the Volume & Pan and the meter, in whatever order
+    // the track was made with them - so a deck takes the track as its own
+    // devices leave it, and the song's trim, fader, pan and mute stay the
+    // song's. Every device added later lands ahead of it, as every add path
+    // puts a device ahead of the channel strip.
+    auto at = list.size();
+    for (int i = djInputEnd(track); i < list.size(); ++i)
+        if (auto* plugin = list[i]; plugin != nullptr)
+        {
+            const auto type = plugin->getPluginType();
+            const auto* entry = DeviceCatalog::byTypeName(type);
+            if (entry != nullptr ? entry->infrastructure : (type == "volume" || type == "level"))
+            {
+                at = i;
+                break;
+            }
+        }
+    list.insertPlugin(output, at, nullptr);
+}
+
 juce::Result ensurePlugin(te::Edit& edit, te::AudioTrack& track, const juce::String& type,
                           int insertIndex, te::Plugin*& plugin, bool& changed)
 {
@@ -336,10 +374,10 @@ void collapseStackedInstruments(te::Edit& edit)
 }
 
 juce::Result switchTrackInstrument(te::Edit& edit, te::AudioTrack& track, const DeviceDescriptor& device,
-                                   bool& changed, const juce::PluginDescription* forgeDescription)
+                                   InstrumentSwitch& switched, const juce::PluginDescription* forgeDescription)
 {
     // MIDI effects run ahead of the instrument, so a new one goes in after them.
-    int instrumentInsertIndex = 0;
+    int instrumentInsertIndex = djInputEnd(track);
     while (instrumentInsertIndex < track.pluginList.size())
     {
         auto* plugin = track.pluginList[instrumentInsertIndex];
@@ -386,7 +424,7 @@ juce::Result switchTrackInstrument(te::Edit& edit, te::AudioTrack& track, const 
                 return juce::Result::fail("Rhino Forge.vst3 could not be loaded.");
             selected = created.get();
             track.pluginList.insertPlugin(created, juce::jlimit(0, track.pluginList.size(), instrumentInsertIndex), nullptr);
-            changed = true;
+            switched.devices = true;
         }
         else
         {
@@ -395,7 +433,7 @@ juce::Result switchTrackInstrument(te::Edit& edit, te::AudioTrack& track, const 
                 return juce::Result::fail("The target track device could not be created.");
             selected = created.get();
             track.pluginList.insertPlugin(created, juce::jlimit(0, track.pluginList.size(), instrumentInsertIndex), nullptr);
-            changed = true;
+            switched.devices = true;
         }
     }
 
@@ -407,13 +445,13 @@ juce::Result switchTrackInstrument(te::Edit& edit, te::AudioTrack& track, const 
         {
             removeDeviceLanes(track.state, *plugin, &edit.getUndoManager());
             plugin->removeFromParent();
-            changed = true;
+            switched.devices = true;
         }
 
     if (!selected->isEnabled())
     {
         selected->setEnabled(true);
-        changed = true;
+        switched.devices = true;
     }
 
     // A track is named after the instrument it runs, so the arrangement header
@@ -421,7 +459,7 @@ juce::Result switchTrackInstrument(te::Edit& edit, te::AudioTrack& track, const 
     if (const auto name = selected->getName(); name.isNotEmpty() && track.getName() != name)
     {
         track.setName(name);
-        changed = true;
+        switched.renamed = true;
     }
 
     // What the track is was settled when it was created, so nothing is written
@@ -429,13 +467,26 @@ juce::Result switchTrackInstrument(te::Edit& edit, te::AudioTrack& track, const 
     return juce::Result::ok();
 }
 
-juce::Result switchTrackInstrument(te::Edit& edit, te::AudioTrack& track, Session::Instrument instrument, bool& changed,
-                                   const juce::PluginDescription* forgeDescription)
+juce::Result switchTrackInstrument(te::Edit& edit, te::AudioTrack& track, Session::Instrument instrument,
+                                   InstrumentSwitch& switched, const juce::PluginDescription* forgeDescription)
 {
     const auto* device = descriptorFor(instrument);
     if (device == nullptr)
         return juce::Result::fail("That instrument is not in this build.");
-    return switchTrackInstrument(edit, track, *device, changed, forgeDescription);
+    return switchTrackInstrument(edit, track, *device, switched, forgeDescription);
+}
+
+juce::Result checkClipFile(te::Clip& clip)
+{
+    if (dynamic_cast<te::WaveAudioClip*>(&clip) == nullptr)
+        return juce::Result::ok();
+    // An empty file is a clip that never named one: a render makes no node
+    // for it, so it holds nothing up.
+    const auto file = clip.getSourceFileReference().getFile();
+    if (file == juce::File() || file.existsAsFile())
+        return juce::Result::ok();
+    return juce::Result::fail("The clip " + clip.getName().quoted() + " plays " + file.getFullPathName()
+                              + ", which is missing.");
 }
 
 }

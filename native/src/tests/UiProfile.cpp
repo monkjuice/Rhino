@@ -1,11 +1,12 @@
 #include "../Arrangement.h"
 #include "../StepGrid.h"
 #include "../DeviceRack.h"
-#include "../SessionView.h"
+#include "../DjView.h"
 #include "../AudioClipPanel.h"
 #include "../Playhead.h"
 #include "../Theme.h"
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <functional>
 #include <memory>
@@ -20,8 +21,8 @@
 //
 // The document is deliberately large - sixteen MIDI tracks, each with twenty
 // clips of sixty-four notes - and every panel the shell keeps listening is
-// built and sized, the hidden session view among them, so a model change pays
-// for exactly the listeners it pays for in the app.
+// built and sized, the hidden DJ view among them, so a model change pays for
+// exactly the listeners it pays for in the app.
 namespace rhino
 {
 namespace
@@ -30,18 +31,26 @@ constexpr int profileTracks = 16;
 constexpr int clipsPerTrack = 20;
 constexpr int notesPerClip = 64;
 
-double medianMicroseconds(int repetitions, const std::function<void(int)>& body)
+// With untimed work before each run: the booth processed so the decks move, or
+// the damage the run before left cleared.
+double medianMicroseconds(int repetitions, const std::function<void(int)>& setup, const std::function<void(int)>& body)
 {
     std::vector<double> times;
     times.reserve(static_cast<size_t>(repetitions));
     for (int i = 0; i < repetitions; ++i)
     {
+        if (setup) setup(i);
         const auto start = juce::Time::getHighResolutionTicks();
         body(i);
         times.push_back(juce::Time::highResolutionTicksToSeconds(juce::Time::getHighResolutionTicks() - start) * 1.0e6);
     }
     std::sort(times.begin(), times.end());
     return times[times.size() / 2];
+}
+
+double medianMicroseconds(int repetitions, const std::function<void(int)>& body)
+{
+    return medianMicroseconds(repetitions, nullptr, body);
 }
 
 void report(const char* name, double microseconds)
@@ -66,6 +75,81 @@ void paintArea(juce::Component& component, juce::Image& canvas, juce::Rectangle<
 juce::Image canvasFor(const juce::Component& component)
 {
     return {juce::Image::ARGB, component.getWidth(), component.getHeight(), true, juce::SoftwareImageType()};
+}
+
+// What a component and everything inside it invalidated, collected as its
+// peer would collect it, so a line can paint exactly that. A component with a
+// cached image is told of every repaint inside it before its parent is; this
+// one only remembers them, and the component owns it.
+struct DamageRecorder final : juce::CachedComponentImage
+{
+    explicit DamageRecorder(juce::Component& owner) : component(owner) {}
+    void paint(juce::Graphics&) override {}
+    bool invalidateAll() override
+    {
+        damage.add(component.getLocalBounds());
+        return false;
+    }
+    bool invalidate(const juce::Rectangle<int>& area) override
+    {
+        damage.add(area);
+        return false;
+    }
+    void releaseResources() override {}
+    juce::Component& component;
+    juce::RectangleList<int> damage;
+};
+
+DamageRecorder& recordDamage(juce::Component& component)
+{
+    auto* recorder = new DamageRecorder(component);
+    component.setCachedComponentImage(recorder);
+    return *recorder;
+}
+
+// Paints what was invalidated, as one region, the way the peer paints it.
+void paintDamage(juce::Component& component, juce::Image& canvas, DamageRecorder& recorder)
+{
+    if (!recorder.damage.isEmpty())
+    {
+        juce::Graphics g(canvas);
+        g.reduceClipRegion(recorder.damage);
+        component.paintEntireComponent(g, false);
+    }
+    recorder.damage.clear();
+}
+
+// A minute of a beat for the file decks at 120 BPM: a kick on the beat, a hat
+// between and a tone under both, so the screen's three bands each have
+// something to draw.
+void writeBeat(const juce::File& file)
+{
+    constexpr double rate = 48000.0;
+    constexpr int seconds = 60;
+    juce::WavAudioFormat wav;
+    std::unique_ptr<juce::OutputStream> stream = file.createOutputStream();
+    if (stream == nullptr)
+        throw std::runtime_error("Could not write the profile's beat");
+    auto writer = wav.createWriterFor(stream, juce::AudioFormatWriterOptions()
+        .withSampleRate(rate).withNumChannels(2).withBitsPerSample(16));
+    if (writer == nullptr)
+        throw std::runtime_error("Could not write the profile's beat");
+    juce::AudioBuffer<float> audio(2, static_cast<int>(rate) * seconds);
+    juce::Random noise(1);
+    for (int i = 0; i < audio.getNumSamples(); ++i)
+    {
+        const auto t = i / rate;
+        const auto inBeat = std::fmod(t, 0.5);
+        const auto offBeat = std::fmod(t + 0.25, 0.5);
+        const auto kick = std::sin(juce::MathConstants<double>::twoPi * 55.0 * inBeat) * std::exp(-inBeat * 18.0);
+        const auto hat = (noise.nextFloat() * 2.0f - 1.0f) * std::exp(-offBeat * 60.0);
+        const auto tone = 0.1 * std::sin(juce::MathConstants<double>::twoPi * 440.0 * t);
+        const auto sample = static_cast<float>(0.6 * kick + 0.25 * hat + tone);
+        audio.setSample(0, i, sample);
+        audio.setSample(1, i, sample);
+    }
+    if (!writer->writeFromAudioSampleBuffer(audio, 0, audio.getNumSamples()))
+        throw std::runtime_error("Could not write the profile's beat");
 }
 
 void fillDocument(Session& session)
@@ -127,24 +211,24 @@ int runUiProfile()
         juce::LookAndFeel::setDefaultLookAndFeel(&theme);
         // Laid out as the shell lays them out while a device is being edited:
         // the arrangement and the rack showing, the note editor and the clip
-        // panel - the lower pane's other two faces - and the paused session
-        // view present but switched off.
+        // panel - the lower pane's other two faces - and the DJ view present
+        // but switched off.
         juce::Component shell;
         shell.setBounds(0, 0, 1400, 1000);
         auto arrangement = std::make_unique<Arrangement>(session);
         auto grid = std::make_unique<StepGrid>(session);
         auto rack = std::make_unique<DeviceRack>(session);
-        auto sessionView = std::make_unique<SessionView>(session);
+        auto djView = std::make_unique<DjView>(session);
         auto clipPanel = std::make_unique<AudioClipPanel>(session);
         shell.addAndMakeVisible(*arrangement);
         shell.addAndMakeVisible(*rack);
         shell.addChildComponent(*grid);
-        shell.addChildComponent(*sessionView);
+        shell.addChildComponent(*djView);
         shell.addChildComponent(*clipPanel);
         arrangement->setBounds(0, 0, 1400, 620);
         grid->setBounds(0, 620, 1400, 300);
         rack->setBounds(0, 620, 1400, 260);
-        sessionView->setBounds(0, 0, 1400, 620);
+        djView->setBounds(0, 0, 1400, 620);
         clipPanel->setBounds(0, 620, 1400, 260);
         rack->selectTrack(0);
         session.sendSynchronousChangeMessage();
@@ -245,8 +329,159 @@ int runUiProfile()
             paintArea(*rack, rackCanvas, rack->getLocalBounds());
         }));
 
+        // The DJ view, showing as the shell shows it in the arrangement's
+        // place, with six decks playing: three on a file and three on a cell
+        // of a track of the song, the track's first clip copied into it. The
+        // cells' screens draw notes, the files' screens waveforms. Every line
+        // paints what its work invalidated, collected as the peer would
+        // collect it.
+        juce::TemporaryFile beat(".wav");
+        writeBeat(beat.getFile());
+        session.setDjQuantise(Session::DjQuantise::off);
+        // The pressed console's track carries two effects, so the Device View
+        // has faces to read when a press follows the deck.
+        constexpr int pressedTrack = 5;
+        if (session.addDevice("Equaliser", pressedTrack).failed() || session.addDevice("Reverb", pressedTrack).failed())
+            throw std::runtime_error("Could not add the pressed deck's effects");
+        for (int deck = 0; deck < Session::maximumDjDecks; ++deck)
+        {
+            if (session.addDjDeck().failed())
+                throw std::runtime_error("Could not add a profile deck");
+            const auto playCell = [&session](int onDeck, int lane)
+            {
+                const auto clips = te::getAudioTracks(*session.edit)[lane]->getClips();
+                if (clips.isEmpty()) return juce::Result::fail("The profile track has no clip");
+                if (!session.slotClip(lane, 0).hasClip)
+                    if (const auto copied = session.copyClipToTrackSlot(clips.getFirst()->itemID, lane, 0); copied.failed())
+                        return copied;
+                return session.loadDjDeckSlot(onDeck, lane, 0);
+            };
+            const auto loaded = deck % 2 == 0 ? session.loadDjDeckFile(deck, beat.getFile())
+                                              : playCell(deck, pressedTrack + (deck / 2) * 2);
+            if (loaded.failed())
+                throw std::runtime_error(("Could not load a profile deck: " + loaded.getErrorMessage()).toStdString());
+        }
+        for (int waited = 0; waited < 800 && session.djBusy(); ++waited)
+        {
+            juce::Thread::sleep(25);
+            session.djPoll();
+        }
+        for (int deck = 0; deck < Session::maximumDjDecks; ++deck)
+            if (!session.djDeckInfo(deck).loaded)
+                throw std::runtime_error(("A profile deck did not load: " + session.djDeckInfo(deck).error).toStdString());
+        arrangement->setVisible(false);
+        djView->setVisible(true);
+        djView->setBounds(0, 0, 1400, 900);
+        session.sendSynchronousChangeMessage();
+        for (int deck = 0; deck < Session::maximumDjDecks; ++deck)
+            session.djPlay(deck);
+        session.djProcessOffline(4800);
+        auto& djDamage = recordDamage(*djView);
+        auto& rackDamage = recordDamage(*rack);
+        auto djCanvas = canvasFor(*djView);
+        // The screens paint their pictures a couple a frame: a few frames
+        // first, so every line below finds them painted, as a set would.
+        for (int frame = 0; frame < 30; ++frame)
+        {
+            session.djProcessOffline(800);
+            djView->frame();
+            paintDamage(*djView, djCanvas, djDamage);
+        }
+        paintArea(*djView, djCanvas, djView->getLocalBounds());
+        djDamage.damage.clear();
+        std::printf("DJ view: %d decks playing, %d x %d\n", session.djDeckCount(), djView->getWidth(), djView->getHeight());
+
+        // What every announcement costs the view, and painting what it asked for.
+        report("dj view sync", medianMicroseconds(30, [&] (int)
+        {
+            djView->sync();
+        }));
+        report("dj view sync paint", medianMicroseconds(30, [&] (int)
+        {
+            djDamage.damage.clear();
+            djView->sync();
+        }, [&] (int)
+        {
+            paintDamage(*djView, djCanvas, djDamage);
+        }));
+        // A display refresh: every console's screen and platter, with the
+        // booth moved on a 60 Hz frame's worth between them.
+        std::vector<double> frameTimes;
+        report("dj frame", medianMicroseconds(120, [&] (int)
+        {
+            session.djProcessOffline(800);
+        }, [&] (int)
+        {
+            const auto start = juce::Time::getHighResolutionTicks();
+            djView->frame();
+            paintDamage(*djView, djCanvas, djDamage);
+            frameTimes.push_back(juce::Time::highResolutionTicksToSeconds(juce::Time::getHighResolutionTicks() - start) * 1.0e6);
+        }));
+        {
+            double sum = 0.0;
+            for (const auto time : frameTimes) sum += time;
+            report("dj frame (mean)", sum / static_cast<double>(std::max<size_t>(1, frameTimes.size())));
+        }
+        // The keys and the meters at the view's 30 Hz, the booth moved on a
+        // tick's worth between them so the meters move.
+        report("dj tick", medianMicroseconds(60, [&] (int)
+        {
+            session.djProcessOffline(1600);
+        }, [&] (int)
+        {
+            djView->timerCallback();
+            paintDamage(*djView, djCanvas, djDamage);
+        }));
+        // A key pressed on the focused console: the press focuses its deck and
+        // the shell follows it, which a test reaches as far as the
+        // arrangement's selection and the rack; the shell's own pane layout is
+        // in Main.cpp, out of reach.
+        djView->deckSelected = [&] (int deck)
+        {
+            const auto info = session.djDeckInfo(deck);
+            if (info.kind != Session::DjSourceKind::track || info.track < 0) return;
+            arrangement->selectTrack(info.track);
+            rack->selectTrack(info.track);
+        };
+        djView->decks[1]->selected();
+        paintDamage(*djView, djCanvas, djDamage);
+        paintDamage(*rack, rackCanvas, rackDamage);
+        report("dj console press", medianMicroseconds(30, [&] (int)
+        {
+            djView->decks[1]->selected();
+            paintDamage(*djView, djCanvas, djDamage);
+            paintDamage(*rack, rackCanvas, rackDamage);
+        }));
+        // The name bar of the focused console, which asks the shell to follow
+        // the deck again.
+        report("dj name bar press", medianMicroseconds(30, [&] (int)
+        {
+            djView->decks[1]->nameBarPressed();
+            paintDamage(*djView, djCanvas, djDamage);
+            paintDamage(*rack, rackCanvas, rackDamage);
+        }));
+        // One tile of each picture the screens scroll, handed to the
+        // platform's own image type, since that is what the screen pays. An
+        // image of that type is held throughout, as the window holds its
+        // Direct2D resources: with none alive, every hand-over built them
+        // afresh, about 115 ms, which no screen pays.
+        const juce::Image holdsTheScreensResources(juce::Image::ARGB, 1, 1, true);
+        auto& fileScreen = djView->decks[0]->display;
+        auto& trackScreen = djView->decks[1]->display;
+        report("dj tile build (waveform)", medianMicroseconds(20, [&] (int)
+        {
+            juce::NativeImageType().convert(fileScreen.paintTile(fileScreen.tileKey(), 2));
+        }));
+        report("dj tile build (notes)", medianMicroseconds(20, [&] (int)
+        {
+            juce::NativeImageType().convert(trackScreen.paintTile(trackScreen.tileKey(), 2));
+        }));
+        djView->setCachedComponentImage(nullptr);
+        rack->setCachedComponentImage(nullptr);
+        session.djStopAll();
+
         clipPanel.reset();
-        sessionView.reset();
+        djView.reset();
         rack.reset();
         grid.reset();
         arrangement.reset();

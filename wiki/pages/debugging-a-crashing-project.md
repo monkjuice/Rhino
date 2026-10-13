@@ -4,7 +4,7 @@ type: guide
 summary: Turn a project file that crashes Rhino into a ten-second repro, name the faulting module, and bisect the XML against a control.
 tags: [rhino, debugging, project-files, windows]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-12
 ---
 
 # Debugging a crash only one project triggers
@@ -25,7 +25,8 @@ This is the method of the *Debugging a crash that only one project file triggers
    ```
    A project that loads a VST invites blaming the VST; `RhinoDAW.exe` faulting in `RhinoDAW.exe` rules that out in one
    step. The entry also gives a fault offset: the same offset on every attempt means a deterministic crash worth
-   bisecting, not a race.
+   bisecting, not a race. A freeze is not a crash. It leaves no `Application Error` event and no dump, only an
+   `AppHangB1`; read the live process instead ([Reading a hung RhinoDAW's stacks without a debugger](reading-a-hung-process.md)).
 3. **Bracket it with `%APPDATA%\Rhino\rhino.log`.** `ProjectFiles::load` logs `Rhino: Opening <name>...` before the
    load and `Rhino: Opened <name>` after it, so the first without the second puts the fault inside
    `Session::restoreProject`. Another project opening fine in the same session says the data, not the build, is the
@@ -62,3 +63,4 @@ writes, or what the load re-derives that the document already records, rather th
 - [Build and test Rhino](build-and-test-rhino.md)
 - [Reproducing a live timing bug offline](reproducing-live-timing-offline.md)
 - [The executable is RhinoDAW, not Rhino](executable-named-rhinodaw.md)
+- [Reading a hung RhinoDAW's stacks without a debugger](reading-a-hung-process.md)

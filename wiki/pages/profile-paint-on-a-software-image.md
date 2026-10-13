@@ -4,7 +4,7 @@ type: gotcha
 summary: On Windows a plain juce::Image is a Direct2D bitmap whose context costs about 3 ms a paint whatever is drawn, so time painters on juce::SoftwareImageType() and repaint what the app really invalidates.
 tags: [both, juce, ui, performance, windows]
 sources: []
-updated: 2026-10-05
+updated: 2026-10-12
 ---
 
 # Profile paint on a software image
@@ -15,7 +15,7 @@ A paint profile says a small repaint is expensive, and an optimisation barely mo
 
 ## Cause
 
-`juce::Image(juce::Image::ARGB, w, h, true)` takes the platform's native image type, which on Windows is a Direct2D bitmap. Opening a `juce::Graphics` on one cost about 3 ms at the arrangement's size (1400 × 620), whatever was drawn. No on-screen repaint pays that cost, and it buried the painters' own cost, which was the thing being compared.
+`juce::Image(juce::Image::ARGB, w, h, true)` takes the platform's native image type, which on Windows is a Direct2D bitmap. Opening a `juce::Graphics` on one cost about 3 ms at the arrangement's size (1400 × 620), whatever was drawn. No on-screen repaint pays that cost, and it buried the painters' own cost, which was the thing being compared. The same backing has a worse consequence in a plugin. A static image is released when the plugin's DLL unloads, and that deadlocks NVIDIA's driver ([A plugin's static Direct2D images deadlock NVIDIA's driver at unload](plugin-static-images-deadlock-on-unload.md)).
 
 ## What to do
 
@@ -34,3 +34,4 @@ A paint profile says a small repaint is expensive, and an optimisation barely mo
 - [JUCE's rasteriser is not clip-invariant](juce-rasteriser-not-clip-invariant.md)
 - [Proving a Forge change changed nothing](proving-a-forge-change-changed-nothing.md)
 - [Playhead rendering](playhead.md)
+- [A plugin's static Direct2D images deadlock NVIDIA's driver at unload](plugin-static-images-deadlock-on-unload.md)

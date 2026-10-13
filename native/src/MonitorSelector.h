@@ -19,9 +19,9 @@ namespace rhino
 // what a track that has never been asked resolves to.
 //
 // It is a type of its own rather than a detail of the arrangement because a
-// card is not the only place the three settings belong: the mixer strip and
-// the session view's track head both want the same control, and because a
-// named type is one the workflow test can take the measure of.
+// card is not the only place the three settings belong - a mixer strip would
+// want the same control - and because a named type is one the workflow test
+// can take the measure of.
 class MonitorSelector final : public juce::Component,
                               public juce::SettableTooltipClient
 {

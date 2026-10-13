@@ -3,10 +3,11 @@
 
 // The mixer: per-track volume, pan, mute and solo, plus the master level.
 //
-// There is one mixer, not one per view. The session view draws it as a
-// vertical strip under each track column and the arrangement draws it as a
-// horizontal strip in each track header, but both read and write the same
-// VolumeAndPanPlugin, so neither view can hold a stale copy of a level.
+// There is one mixer: each track's own VolumeAndPanPlugin. The arrangement
+// draws it in each track header and reads and writes that plugin, so it cannot
+// hold a stale copy of a level. A DJ deck takes its track from where the
+// track's own devices end, ahead of the channel strip, so the song's trim,
+// fader and pan are the song's and the deck's are the booth's.
 //
 // Rhino's UtilityDevice is a device in a chain, like Live's Utility. It is not
 // the track fader, and the two are deliberately separate.
@@ -27,6 +28,9 @@ void Session::ensureTrackMixers()
 {
     for (auto* track : te::getAudioTracks(*edit))
     {
+        // Every track carries the DJ booth's two hidden ends from the start,
+        // made with it here as the mixer is.
+        ensureDjPortDevices(*edit, *track);
         if (track->getVolumePlugin() != nullptr)
             continue;
         auto plugin = edit->getPluginCache().createNewPlugin(te::VolumeAndPanPlugin::xmlTypeName, {});
@@ -55,9 +59,9 @@ Session::TrackMixer Session::trackMixer(int track) const
 // Inside a fader or pan drag the views are not told of every pixel: the control
 // being dragged draws its own value, and rebuilding every panel per pixel is
 // what made a drag stutter. The gesture's end tells them once.
-void Session::announceMixerChange()
+void Session::announceMixerChange(int track, ModelChange changes)
 {
-    markModified();
+    markModified(track, changes);
     if (mixerGestureDepth == 0)
         sendSynchronousChangeMessage();
 }
@@ -76,7 +80,8 @@ juce::Result Session::setTrackVolumeDb(int track, float decibels)
     if (volume == nullptr)
         return juce::Result::fail("That track has no fader.");
     volume->setVolumeDb(juce::jlimit(minimumVolumeDb, maximumVolumeDb, decibels));
-    announceMixerChange();
+    // The fader is a parameter of the track's own chain.
+    announceMixerChange(track, ModelChange::parameters);
     return juce::Result::ok();
 }
 
@@ -86,7 +91,7 @@ juce::Result Session::setTrackPan(int track, float pan)
     if (volume == nullptr)
         return juce::Result::fail("That track has no fader.");
     volume->setPan(juce::jlimit(-1.0f, 1.0f, pan));
-    announceMixerChange();
+    announceMixerChange(track, ModelChange::parameters);
     return juce::Result::ok();
 }
 
@@ -158,7 +163,8 @@ void Session::setMasterVolumeDb(float decibels)
     if (auto master = edit->getMasterVolumePlugin())
     {
         master->setVolumeDb(juce::jlimit(minimumVolumeDb, maximumVolumeDb, decibels));
-        announceMixerChange();
+        // The main output is the song's, which no deck plays through.
+        announceMixerChange(masterTrackIndex(), ModelChange::none);
     }
 }
 
@@ -174,7 +180,7 @@ void Session::setMasterPan(float pan)
     if (auto master = edit->getMasterVolumePlugin())
     {
         master->setPan(juce::jlimit(-1.0f, 1.0f, pan));
-        announceMixerChange();
+        announceMixerChange(masterTrackIndex(), ModelChange::none);
     }
 }
 

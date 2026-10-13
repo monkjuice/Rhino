@@ -4,7 +4,7 @@ type: overview
 summary: "Rhino and Rhino Forge at a glance: what they are, how they are built and where to start reading."
 tags: [overview, rhino, forge]
 sources: []
-updated: 2026-10-07
+updated: 2026-10-12
 ---
 
 # Rhino and Rhino Forge
@@ -12,7 +12,7 @@ updated: 2026-10-07
 This repository holds two products.
 
 - **Rhino** is a native desktop DAW for electronic music: an arrangement view with a note editor, audio and MIDI
-  recording, time warp, track groups, a device chain per track, and a clip launcher that is built but switched off.
+  recording, time warp, track groups, a device chain per track, and an experimental DJ view of decks and a mixer.
   It is C++20 on Tracktion Engine and JUCE, under `native/`. Windows is the development platform; macOS is kept
   portable in the architecture but has not yet been validated.
 - **Rhino Forge** is an independent wavetable and spectral synthesiser: one JUCE `AudioProcessor` built as a VST3 and
@@ -89,3 +89,5 @@ The full catalog is [index.md](index.md).
 | 2026-10-05 | The engine plays automation; the pattern-track bookkeeping retired; the seeding's Rhino hazards closed; drags and playhead repaints made cheap |
 | 2026-10-06 | The [Drum Rack](pages/drum-rack.md) replaces Rhino Drums: sixteen sample-or-synth pads, with kits and drum presets as files |
 | 2026-10-07 | The Drum Rack takes a pad on every note, a map of all 128, and a [sample editor](pages/drum-rack-sample-editor.md) with one-shot, classic and slice |
+| 2026-10-11 | The session view, unreachable since the [DJ view](pages/dj-view.md) took the view switch on 2026-10-09, removed; its [clip slots](pages/clip-slots.md) stay as the DJ consoles' cells |
+| 2026-10-12 | [DJ decks play live through their track's chain](pages/dj-decks-play-live-through-the-track.md), by two hidden devices on every track; the bounces, group decks and the knob-held preview removed |

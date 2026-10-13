@@ -90,13 +90,34 @@ void Arrangement::filesDropped(const juce::StringArray& files, int x, int y)
 
 bool Arrangement::isInterestedInDragSource(const juce::DragAndDropTarget::SourceDetails& details)
 {
-    return details.description.toString().startsWith("rhino-browser:");
+    const auto description = details.description.toString();
+    return description.startsWith("rhino-browser:") || description.startsWith("rhino-slot:");
 }
 
 void Arrangement::itemDropped(const juce::DragAndDropTarget::SourceDetails& details)
 {
     auto targetTrack = trackAt(static_cast<float>(details.localPosition.y));
     const auto description = details.description.toString();
+    // A console's cell lands as a copy on the lane under the pointer, from
+    // the point it was dropped at, held to the lane's kind by the model.
+    if (int slotTrack = -1, slotScene = -1; draggedSlot(description, slotTrack, slotScene))
+    {
+        if (targetTrack < 0)
+        {
+            if (status) status("Drop the clip on a lane.");
+            return;
+        }
+        const auto start = snapped(std::max(0.0, timeAt(static_cast<float>(details.localPosition.x))), false);
+        const auto result = session.copySlotClipToArrangement(slotTrack, slotScene, start, targetTrack);
+        if (result.failed())
+        {
+            if (status) status(result.getErrorMessage());
+            return;
+        }
+        selectTrack(targetTrack);
+        if (status) status("Copied " + session.slotClip(slotTrack, slotScene).name.quoted() + " to " + session.trackName(targetTrack));
+        return;
+    }
     const auto kind = browserDropKind(description);
     if (kind == "effect")
         if (const auto clipIndex = hit(details.localPosition.toFloat()); clipIndex >= 0)

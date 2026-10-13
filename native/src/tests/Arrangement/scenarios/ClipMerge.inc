@@ -152,3 +152,8 @@
         // The clips reading those files are gone with their sessions by now,
         // so nothing is holding them open.
         mergeScratch.deleteRecursively();
+
+        // A merge refuses a clip whose file is gone; so does the WAV export,
+        // and a saved document has to find its files wherever it is saved.
+        scenario("project files: where a saved document finds its audio, and the export's refusals");
+       #include "ProjectFileMedia.inc"

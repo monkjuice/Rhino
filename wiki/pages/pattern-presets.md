@@ -4,7 +4,7 @@ type: component
 summary: The eleven built-in one-bar patterns, each a set of notes plus the instrument and patch that play them, and what dropping one does to a track.
 tags: [rhino, presets, browser]
 sources: []
-updated: 2026-10-06
+updated: 2026-10-11
 ---
 
 # Pattern presets
@@ -23,13 +23,15 @@ Drum Rack (`useDrums`), or 4OSC with one of its patches. So dropping a pattern o
 
 1. `preparePresetTrack` readies the track. It refuses an audio track ("Drop patterns on a MIDI track instead"), then
    switches the track's instrument through `switchTrackInstrument` — replacing whatever was there, since a track has
-   [one instrument](one-instrument-per-track.md) — and applies the pattern's patch to it.
+   [one instrument](one-instrument-per-track.md) — and applies the pattern's patch to it. It reports whether any of
+   that changed the track's chain, so a pattern dropped where its synth already plays marks the track's `notes` alone
+   rather than its `devices` too ([DJ view and the booth](dj-view.md)).
 2. `insertPatternPreset` inserts a one-bar MIDI clip at the drop position, fills it with the notes, and runs
    `makeRoomForClip`, so the new clip wins the ground it lands on ([Clips never overlap](clip-placement.md)).
 
-The clip-slot path in the session view (`insertPatternPresetInSlot`) calls the same `preparePresetTrack`, so the two
-cannot drift apart. The cost is that dropping a pattern into one slot changes the instrument for every clip on that
-track.
+The clip-slot path, a pattern dropped on a cell of a DJ console's clips grid (`insertPatternPresetInSlot`), calls the
+same `preparePresetTrack`, so the two cannot drift apart. The cost is that dropping a pattern into one cell changes the
+instrument for every clip on that track ([Clip slots, the DJ consoles' cells](clip-slots.md)).
 
 A drum pattern switches the track to the [Drum Rack](drum-rack.md). A rack is blank when made, and a blank rack would
 play nothing, so `preparePresetTrack` loads `Drums/Kits/808 Kit.rdk` into it (`loadDefaultDrumKit`, in

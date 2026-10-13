@@ -1,7 +1,8 @@
 #include "SessionInternal.h"
-// The count-in is held by unique_ptr, so the destructor here needs its
-// definition even though nothing in this file drives it.
+// The count-in and the DJ booth are held by unique_ptr, so the destructor
+// here needs their definitions even though nothing in this file drives them.
 #include "CountInClick.h"
+#include "SessionDjInternal.h"
 #include <algorithm>
 #include <set>
 
@@ -10,6 +11,81 @@ namespace rhino
 namespace
 {
 bool commandLineTestMode = false;
+
+// How many folders deep a path is: a drive's root is 0, C:\Users 1.
+int folderDepth(const juce::File& file)
+{
+    int depth = 0;
+    if (file != juce::File())
+        for (auto folder = file; folder != folder.getParentDirectory(); folder = folder.getParentDirectory())
+            ++depth;
+    return depth;
+}
+
+// The system's own folders and the temp folder. A file in one is named
+// absolute from a document outside one, and the other way round.
+bool inSystemOrTempFolder(const juce::File& file)
+{
+    const auto path = file.getFullPathName();
+   #if JUCE_MAC
+    for (const auto* folder : {"/System", "/Library", "/usr", "/var", "/private/var"})
+        if (path.startsWith(folder)) return true;
+   #elif JUCE_WINDOWS
+    for (const auto& folder : {juce::File::getSpecialLocation(juce::File::windowsSystemDirectory).getParentDirectory(),
+                               juce::File::getSpecialLocation(juce::File::globalApplicationsDirectory)})
+        if (path.startsWithIgnoreCase(folder.getFullPathName())) return true;
+   #elif JUCE_LINUX
+    for (const auto* folder : {"/usr", "/var", "/etc", "/sys", "/proc"})
+        if (path.startsWith(folder)) return true;
+   #endif
+    return file.isAChildOf(juce::File::getSpecialLocation(juce::File::tempDirectory));
+}
+
+// How a document at `document` names `file`: relative to the document's
+// folder where the engine would store it so - the two share a folder deep
+// enough to be one workspace, or a shallow one both sit close to - and
+// absolute otherwise. The rule is the engine's (shouldUseRelativePath,
+// tracktion_SourceFileReference.cpp at 4536d8a, less the project folder Rhino
+// never has), restated because it is private to that file. The engine also
+// measures from the document itself, with getRelativePathFrom, which takes a
+// document that is not on disk yet - a Save As to a new name - for a folder
+// and climbs one level too many; this measures from the document's folder.
+juce::String sourceNameFor(const juce::File& file, const juce::File& document, bool alwaysRelative)
+{
+    const auto relative = [&]
+    {
+        if (document == juce::File())
+            return false;
+       #if JUCE_WINDOWS
+        if (document.getFullPathName()[0] != file.getFullPathName()[0])
+            return false;
+       #endif
+        if (alwaysRelative)
+            return true;
+        if (inSystemOrTempFolder(file) != inSystemOrTempFolder(document))
+            return false;
+        const auto folder = document.getParentDirectory();
+        auto shared = folder;
+        while (shared != shared.getParentDirectory() && !file.isAChildOf(shared))
+            shared = shared.getParentDirectory();
+        const auto depth = folderDepth(shared);
+        return depth > 2 || (depth > 0 && folderDepth(file) - depth <= 3 && folderDepth(folder) - depth <= 3);
+    }();
+    return relative ? file.getRelativePathFrom(document.getParentDirectory()) : file.getFullPathName();
+}
+
+// Every audio file a document's state names - each audio clip's, on the
+// timeline or in a cell, and each of its takes' - resolved as the live edit
+// resolves it and named again for `document`.
+void nameSourcesFor(juce::ValueTree node, te::Edit& live, const juce::File& document)
+{
+    if (node.hasType(te::IDs::AUDIOCLIP) || node.hasType(te::IDs::TAKE))
+        if (const auto named = node[te::IDs::source].toString(); named.isNotEmpty())
+            if (const auto file = te::SourceFileReference::findFileFromString(live, named); file != juce::File())
+                node.setProperty(te::IDs::source, sourceNameFor(file, document, live.alwaysUseRelativePaths.get()), nullptr);
+    for (auto child : node)
+        nameSourcesFor(child, live, document);
+}
 }
 
 void Session::setCommandLineTestMode(bool enabled)
@@ -49,6 +125,10 @@ Session::~Session()
     if (midiDeviceWatcher != nullptr)
         engine.getDeviceManager().removeChangeListener(midiDeviceWatcher.get());
     cancelCountIn();
+    // The tracks' hidden DJ ends point into the booth, which goes before the
+    // document does: they let go of it first.
+    djUnbindAll();
+    releaseDj();
     releasePreview();
 }
 
@@ -121,6 +201,8 @@ void Session::newProject()
     automationMirrorStale = true;
     manualLoop = false;
     buildStarterEdit();
+    // The booth belongs to the document, so a new one starts with no decks.
+    djReset();
     projectFile = juce::File{};
     // A save still running against the old document must not report this one
     // as saved, so the revision moves on rather than resetting to zero.
@@ -170,7 +252,8 @@ void Session::redo()
 
 void Session::refreshAfterUndoRedo(bool changed)
 {
-    if (changed) markModified();
+    // An undo can take back any edit at all, so it cannot say what it changed.
+    if (changed) markModified(-1, ModelChange::unknown);
     repairPatternClip();
     edit->tempoSequence.updateTempoData();
     refreshLoop();
@@ -179,30 +262,66 @@ void Session::refreshAfterUndoRedo(bool changed)
     sendSynchronousChangeMessage();
 }
 
-juce::ValueTree Session::projectSnapshot()
+juce::ValueTree Session::projectSnapshot(const juce::File& destination)
 {
     edit->flushState();
+    // The booth is written into the state only when a snapshot is taken.
+    writeDjState();
     auto snapshot = edit->state.createCopy();
     snapshot.setProperty("rhinoSnapshotRevision", changeRevision, nullptr);
+    // A file beside the document is stored relative to it, so a project
+    // folder can move whole; written to another file as the edit names it,
+    // every such name pointed into a folder beside that file that was never
+    // there, and the reopened clips played nothing. Only the copy is named
+    // again: a new name on a live clip restarts its playback, and the clips
+    // the undo history can bring back are named as the edit names them.
+    const auto opened = edit->editFileRetriever ? edit->editFileRetriever() : juce::File();
+    if (destination != juce::File() && destination != opened)
+        nameSourcesFor(snapshot, *edit, destination);
     return snapshot;
 }
 
-void Session::markModified()
+void Session::markModified(int changedTrack, ModelChange changes)
 {
     ++changeRevision;
-    // Anything that changes the document may have moved a lane, the device a
-    // lane drives, or the track it sits on.
-    automationMirrorStale = true;
     edit->markAsChanged();
+    // A name, a colour or a view setting moves no lane and changes nothing a
+    // deck plays.
+    if (changes == ModelChange::none)
+        return;
+    // Anything else may have moved a lane, the device a lane drives, or the
+    // track it sits on.
+    automationMirrorStale = true;
+    // A deck playing a clip of the track makes it again when what the clip
+    // plays changed; a change known to be one track's leaves the others alone.
+    djDocumentChanged(changedTrack, changes);
+}
+
+void Session::markClipsModified(std::vector<int> tracks, ModelChange also)
+{
+    const auto count = trackCount();
+    std::erase_if(tracks, [count](int track) { return !juce::isPositiveAndBelow(track, count); });
+    std::sort(tracks.begin(), tracks.end());
+    tracks.erase(std::unique(tracks.begin(), tracks.end()), tracks.end());
+    if (tracks.empty())
+    {
+        markModified(-1, ModelChange::notes | ModelChange::audioClips | also);
+        return;
+    }
+    for (const auto track : tracks)
+        markModified(track, (trackType(track) == TrackType::midi ? ModelChange::notes : ModelChange::audioClips) | also);
 }
 
 juce::Result Session::restoreProject(const juce::ValueTree& state, const juce::File& file)
 {
     if (!state.hasType(te::IDs::EDIT) || static_cast<int>(state.getProperty("rhinoFormatVersion")) != 1)
         return juce::Result::fail("This is not a supported Rhino native project.");
-    auto candidate = te::loadEditFromState(engine, state.createCopy());
+    // The document's file goes in with its state rather than after it: a
+    // clip resolves its source file while the edit is being built, so every
+    // clip stored relative to the document - anything imported after it was
+    // first opened - came back silent when the edit was told afterwards.
+    auto candidate = loadDocumentEdit(engine, state.createCopy(), file, te::Edit::forEditing);
     if (!candidate) return juce::Result::fail("The project could not be loaded.");
-    candidate->editFileRetriever = [file] { return file; };
     if (te::getAudioTracks(*candidate).isEmpty())
         return juce::Result::fail("This project has no tracks.");
     // Documents written when a track could stack instruments collapse here.
@@ -240,6 +359,9 @@ juce::Result Session::restoreProject(const juce::ValueTree& state, const juce::F
     // which is also what puts every member output back onto its bus.
     migrateLegacyTrackGroups();
     reconcileTrackGroups();
+    // The decks the document saved come back empty and stale; the poll
+    // loads them again.
+    readDjState();
     projectFile = file;
     savedRevision = ++changeRevision;
     edit->getUndoManager().clearUndoHistory();
@@ -252,6 +374,12 @@ juce::Result Session::restoreProject(const juce::ValueTree& state, const juce::F
 
 void Session::projectSaved(const juce::ValueTree& snapshot, const juce::File& file)
 {
+    // Takes and merged audio go beside the file the document was saved as
+    // (recordingDirectory, mergedAudioDirectory). The edit itself goes on
+    // resolving its clips' files against the file it was opened from: every
+    // name the live clips and the undo history hold was made against that
+    // file, and pointed at this one the edit would look for each of them in
+    // the wrong folder. Each snapshot names them for its own file instead.
     projectFile = file;
     // Edits made while the worker wrote the snapshot must remain unsaved.
     if (static_cast<juce::int64>(snapshot.getProperty("rhinoSnapshotRevision")) == changeRevision)
@@ -260,6 +388,66 @@ void Session::projectSaved(const juce::ValueTree& snapshot, const juce::File& fi
         edit->resetChangedStatus();
     }
     sendSynchronousChangeMessage();
+}
+
+// Only the timeline: a render plays the clips in the cells through the
+// switching node's own launchers, which it never waits for.
+juce::Result Session::checkTimelineFiles()
+{
+    for (auto* track : te::getAudioTracks(*edit))
+        for (auto* clip : track->getClips())
+            if (const auto readable = checkClipFile(*clip); readable.failed())
+                return readable;
+    return juce::Result::ok();
+}
+
+juce::Result Session::renderTimelineWav(te::Edit& song, const juce::File& destination, double seconds, double sampleRate,
+                                        int blockSize, double stallSeconds)
+{
+    // Where the render has got to, as a fraction of the song, and when that
+    // last moved. Declared before the task, which polls them until it goes.
+    std::atomic<float> progress {0.0f};
+    auto lastProgress = -1.0f;
+    auto movedAt = 0.0;
+    auto stalled = false;
+    juce::WavAudioFormat wav;
+    te::Renderer::Parameters parameters(song);
+    parameters.destFile = destination;
+    parameters.audioFormat = &wav;
+    parameters.sampleRateForAudio = sampleRate;
+    parameters.bitDepth = 24;
+    parameters.blockSizeForAudio = blockSize;
+    // The main track is the edit's master chain, so its devices and its
+    // fader only reach the file when master plugins are rendered. Export
+    // at unity otherwise: normalising would re-level the mix against what
+    // the main meter showed.
+    parameters.useMasterPlugins = true;
+    parameters.ditheringEnabled = true;
+    parameters.time = {{}, tracktion::core::TimePosition::fromSeconds(seconds)};
+    te::Renderer::RenderTask task("Export WAV", parameters, &progress, nullptr);
+    // A render that keeps coming back without moving is waiting on something
+    // that will not come: a clip's file that is there but cannot be read
+    // (WaveNode::isReadyToProcess at 4536d8a). Given up through the engine's
+    // own cancellation, which closes the file and deletes it. Measured from
+    // the last move rather than from the start, so a long song is never cut
+    // short; the render's half second of run-in counts as a stall, so a
+    // budget is never set that short.
+    task.setCancellationCheck([&progress, &lastProgress, &movedAt, &stalled, stallSeconds]
+    {
+        const auto now = juce::Time::getMillisecondCounterHiRes();
+        if (const auto reached = progress.load(); reached != lastProgress)
+        {
+            lastProgress = reached;
+            movedAt = now;
+        }
+        stalled = now - movedAt > stallSeconds * 1000.0;
+        return stalled;
+    });
+    while (task.runJob() != juce::ThreadPoolJob::jobHasFinished) {}
+    if (stalled)
+        return juce::Result::fail("The render made no progress for " + juce::String(stallSeconds, 0)
+                                  + " seconds and was stopped: a clip's audio file may not be readable.");
+    return task.errorMessage.isEmpty() ? juce::Result::ok() : juce::Result::fail(task.errorMessage);
 }
 
 }

@@ -4,13 +4,19 @@
 // rather than their catalog entries.
 #include "instruments/DrumRackDevice.h"
 #include "audio/VocoderDevice.h"
+#include "audio/UtilityDevice.h"
+#include "infra/DjTrackPortDevices.h"
 #include "../../Theme.h"
 #include "../../TransportDisplay.h"
 #include "../../ControlBarFields.h"
 #include "../../StepGrid.h"
 #include "../../AudioClipPanel.h"
-#include "../../SessionView.h"
+#include "../../DjView.h"
 #include "../../Playhead.h"
+// The DJ booth scenario reads a deck's material, and the booth's edges fill
+// its engine's command queue.
+#include "DjTrack.h"
+#include "DjEngine.h"
 #include <algorithm>
 #include <functional>
 #include <stdexcept>
@@ -106,6 +112,20 @@ int runArrangementTest()
         // persistence", which closes the audio device this has to render with.
         scenario("group bus reload");
        #include "scenarios/GroupBusReload.inc"
+        // The booth through the session, before the recording scenarios and
+        // the audio device closing, as every scenario that drives it is.
+        scenario("dj booth");
+       #include "scenarios/DjBooth.inc"
+        // A document of its own whose decks play its cells.
+        scenario("clip cells");
+       #include "scenarios/ClipCells.inc"
+        // A track's deck heard through the track's own chain, live, in
+        // documents of their own.
+        scenario("dj live chain");
+       #include "scenarios/DjLiveChain.inc"
+        // The booth at its edges, in documents of their own.
+        scenario("dj booth edges");
+       #include "scenarios/DjBoothEdges.inc"
         // After everything that renders and before the audio device closes:
         // arming allocates a playback context to hang its input destinations
         // off, and the offline renders above run a RenderTask directly against
@@ -116,12 +136,12 @@ int runArrangementTest()
        #include "scenarios/VocoderCarrier.inc"
         scenario("gestures and persistence");
        #include "scenarios/GesturesAndPersistence.inc"
-        scenario("session view");
-       #include "scenarios/SessionView.inc"
-        scenario("shared mixer");
+        scenario("arrangement mixer");
        #include "scenarios/SharedMixer.inc"
         scenario("clip round trip");
        #include "scenarios/ClipRoundTrip.inc"
+        scenario("drum kits: whole Drum Racks dropped from the browser");
+       #include "scenarios/DrumKitDrops.inc"
         scenario("automation lanes");
        #include "scenarios/AutomationLanes.inc"
         scenario("tempo change");

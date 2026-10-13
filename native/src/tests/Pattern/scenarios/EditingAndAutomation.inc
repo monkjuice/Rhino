@@ -117,49 +117,50 @@
         require(patternSynth()->ampRelease->getCurrentValue() < 0.4f && patternSynth()->chorusMix->getCurrentValue() == 0.0f
                 && static_cast<int>(patternSynth()->state.getProperty("voices")) == 1,
                 "Sub bass preset shapes the 4OSC patch for clean mono low end");
-        auto synthMacros = session.deviceParameters(0, 0);
+        // The 4OSC is at slot 1: the DJ booth's hidden input stands at slot 0 of every chain, so a track's first device is at slot 1.
+        auto synthMacros = session.deviceParameters(0, 1);
         require(synthMacros.size() == 6 && synthMacros[0].name == "Attack" && synthMacros[1].name == "Decay"
                 && synthMacros[2].name == "Sustain" && synthMacros[3].name == "Release",
                 "4OSC rack exposes musical envelope macros first");
         require(synthMacros[0].minimum == 0.001f && synthMacros[0].maximum == 6.0f,
                 "4OSC Attack rack range is 1 to 6000 ms");
-        require(session.setDeviceParameter(0, 0, 0, 60.0f).wasOk()
+        require(session.setDeviceParameter(0, 1, 0, 60.0f).wasOk()
                     && patternSynth()->ampAttack->getCurrentValue() == 6.0f,
                 "4OSC Attack rack edits are capped at 6000 ms");
-        require(session.setDeviceParameter(0, 0, 0, 1.0f).wasOk()
+        require(session.setDeviceParameter(0, 1, 0, 1.0f).wasOk()
                     && patternSynth()->ampAttack->getCurrentValue() == 1.0f,
                 "4OSC Attack leaves the cap when set lower");
         const auto previousAttack = patternSynth()->ampAttack->getCurrentValue();
-        require(session.setDeviceParameter(0, 0, 0, previousAttack + 0.05f).wasOk(), "4OSC Attack macro can be edited from the rack");
+        require(session.setDeviceParameter(0, 1, 0, previousAttack + 0.05f).wasOk(), "4OSC Attack macro can be edited from the rack");
         require(patternSynth()->ampAttack->getCurrentValue() > previousAttack, "4OSC Attack macro writes to the synth envelope");
         const auto manualAttack = patternSynth()->ampAttack->getCurrentValue();
         const auto attackMinimum = synthMacros[0].minimum;
         const auto attackMaximum = std::min(synthMacros[0].maximum, attackMinimum + 1.0f);
         require(session.trackAutomations(0).empty(), "A track starts with no automation lanes");
-        require(session.showTrackAutomation({0, 0, 0}, false).wasOk(),
+        require(session.showTrackAutomation({0, 1, 0}, false).wasOk(),
                 "Right-clicking a knob can reveal an automation lane");
         require(session.trackAutomations(0).size() == 1 && !session.trackAutomations(0).front().active(),
                 "A revealed lane exists but drives nothing until it is drawn");
-        require(session.trackAutomationState({0, 0, 0}).visible && !session.trackAutomationState({0, 0, 0}).ownLane
-                && !session.trackAutomationState({0, 0, 0}).active,
+        require(session.trackAutomationState({0, 1, 0}).visible && !session.trackAutomationState({0, 1, 0}).ownLane
+                && !session.trackAutomationState({0, 1, 0}).active,
                 "A revealed lane reports itself as shown on the track and inactive");
         require(std::abs(session.trackAutomations(0).front().restingValue - manualAttack) < 0.02f,
                 "An undrawn lane rests at the knob's current value");
-        require(!session.deviceParameters(0, 0)[0].automated,
+        require(!session.deviceParameters(0, 1)[0].automated,
                 "Revealing a lane does not make the parameter automated");
-        require(session.setTrackAutomationPoints({0, 0, 0}, {{0.0, attackMinimum}, {1.0, attackMaximum}}).wasOk(),
+        require(session.setTrackAutomationPoints({0, 1, 0}, {{0.0, attackMinimum}, {1.0, attackMaximum}}).wasOk(),
                 "An automation lane stores a curve spanning the timeline");
         require(session.trackAutomations(0).front().active() && session.trackAutomations(0).front().points.size() == 2,
                 "A drawn lane becomes active");
         const auto decayMinimum = synthMacros[1].minimum;
         const auto decayMaximum = std::min(synthMacros[1].maximum, decayMinimum + 1.0f);
         const auto restingDecay = patternSynth()->ampDecay->getCurrentValue();
-        require(session.showTrackAutomation({0, 0, 1}, true).wasOk()
-                && session.setTrackAutomationPoints({0, 0, 1}, {{0.0, decayMinimum}, {4.0, decayMaximum}}).wasOk(),
+        require(session.showTrackAutomation({0, 1, 1}, true).wasOk()
+                && session.setTrackAutomationPoints({0, 1, 1}, {{0.0, decayMinimum}, {4.0, decayMaximum}}).wasOk(),
                 "A track can automate a second parameter on its own lane");
-        require(session.trackAutomationState({0, 0, 1}).ownLane,
+        require(session.trackAutomationState({0, 1, 1}).ownLane,
                 "\"Show automation on new lane\" is remembered per lane");
-        require(session.setTrackAutomationPoints({0, 0, 2}, {{0.0, synthMacros[2].minimum},
+        require(session.setTrackAutomationPoints({0, 1, 2}, {{0.0, synthMacros[2].minimum},
                                                              {2.0, synthMacros[2].maximum}}).wasOk(),
                 "Drawing a curve reveals a lane that was never shown");
         require(session.trackAutomations(0).size() == 3, "A track holds several automation lanes at once");
@@ -170,7 +171,7 @@
         session.undo();
         require(!session.hasNote(15, 80) && session.trackAutomations(0).size() == 3,
                 "Undo after automation removes the new note without deleting automation");
-        synthMacros = session.deviceParameters(0, 0);
+        synthMacros = session.deviceParameters(0, 1);
         require(synthMacros[0].automated && synthMacros[1].automated && synthMacros[2].automated
                 && !synthMacros[0].automationOverridden && !synthMacros[1].automationOverridden && !synthMacros[2].automationOverridden,
                 "Automated parameters report following state to device panels");
@@ -203,7 +204,7 @@
                 "Automation holds its last value past the end of its curve");
         follow(0.5);
         const auto overrideAttack = juce::jlimit(attackMinimum, attackMaximum, attackMinimum + 0.2f);
-        require(session.setDeviceParameter(0, 0, 0, overrideAttack).wasOk(),
+        require(session.setDeviceParameter(0, 1, 0, overrideAttack).wasOk(),
                 "Manual parameter edits can override active automation");
         require(patternSynth()->ampAttack->getCurve().getNumPoints() == 0
                     && patternSynth()->ampDecay->getCurve().getNumPoints() == 2,
@@ -211,26 +212,26 @@
         follow(0.75);
         require(std::abs(patternSynth()->ampAttack->getCurrentValue() - overrideAttack) < 0.02f,
                 "Manual override wins over automation until automation is re-enabled");
-        synthMacros = session.deviceParameters(0, 0);
+        synthMacros = session.deviceParameters(0, 1);
         require(synthMacros[0].automated && synthMacros[0].automationOverridden,
                 "Device panels can show manual automation override state");
-        require(session.toggleParameterAutomationOverride(0, 0, 0).wasOk()
+        require(session.toggleParameterAutomationOverride(0, 1, 0).wasOk()
                     && patternSynth()->ampAttack->getCurve().getNumPoints() == 2,
                 "Automation indicators can return a parameter to automation, curve and all");
         follow(0.75);
         require(std::abs(patternSynth()->ampAttack->getCurrentValue()
                          - (attackMinimum + (attackMaximum - attackMinimum) * 0.75f)) < 0.02f,
                 "Re-enabled automation drives the parameter again");
-        require(session.clearTrackAutomationPoints({0, 0, 1}).wasOk(),
+        require(session.clearTrackAutomationPoints({0, 1, 1}).wasOk(),
                 "A curve can be deleted without losing its lane");
         require(patternSynth()->ampDecay->getCurve().getNumPoints() == 0
                     && std::abs(patternSynth()->ampDecay->getCurrentValue() - restingDecay) < 0.0001f,
                 "A deleted curve leaves the engine and hands its knob back to where it was left by hand");
         require(session.trackAutomations(0).size() == 3 && !session.trackAutomations(0)[1].active()
-                && session.deviceParameters(0, 0)[0].automated && !session.deviceParameters(0, 0)[1].automated
-                && session.deviceParameters(0, 0)[2].automated,
+                && session.deviceParameters(0, 1)[0].automated && !session.deviceParameters(0, 1)[1].automated
+                && session.deviceParameters(0, 1)[2].automated,
                 "Deleting one curve leaves its lane shown and the other lanes driving");
-        require(session.hideTrackAutomation({0, 0, 1}).wasOk() && session.trackAutomations(0).size() == 2,
+        require(session.hideTrackAutomation({0, 1, 1}).wasOk() && session.trackAutomations(0).size() == 2,
                 "A lane can be hidden again from the knob menu");
         session.applyPatternPreset(Session::PatternPreset::ReeseBass);
         require(!session.isPatternDrums() && session.hasNote(0, 36) && session.hasNote(8, 39) && session.hasNote(12, 41),

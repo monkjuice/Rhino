@@ -22,4 +22,14 @@ inline juce::Rectangle<int> playheadDamage(float previous, float next, juce::Rec
 }
 
 void movePlayhead(juce::Component& owner, float& current, float next, juce::Rectangle<int> area);
+
+// Hands what a vblank callback repainted to the window before the window
+// paints this frame. In the pinned JUCE (37c894f) the Windows Direct2D peer
+// runs vblank listeners before it paints the damage it has collected, and
+// repaint() only invalidates, so damage asked for from a vblank listener was
+// painted a frame late: a narrow repaint - a playhead's strip, a jog wheel's
+// marker - erased the old picture and clipped out the new one. Called once at
+// the end of such a callback, after every repaint it makes. Does nothing on
+// other platforms and renderers. Recheck it whenever JUCE is upgraded.
+void deliverVBlankDamage(juce::Component& owner);
 }

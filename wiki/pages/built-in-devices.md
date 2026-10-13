@@ -4,12 +4,12 @@ type: component
 summary: Every device Rhino ships, what each one is and where its source lives, with Utility's details and the pitfalls the devices share.
 tags: [rhino, devices, dsp]
 sources: []
-updated: 2026-10-06
+updated: 2026-10-12
 ---
 
 # Built-in devices
 
-Every device in the [Device catalog](device-catalog.md) on 2026-10-06. Rhino's own live under `native/src/devices/`; four come from Tracktion.
+Every device in the [Device catalog](device-catalog.md) on 2026-10-12. Rhino's own live under `native/src/devices/`; four come from Tracktion.
 
 | Device | Kind | Source | What it is |
 | --- | --- | --- | --- |
@@ -25,6 +25,9 @@ Every device in the [Device catalog](device-catalog.md) on 2026-10-06. Rhino's o
 | Rhino Tune | audio FX | `audio/AutoTuneDevice.*` | [Rhino Tune](rhino-tune.md) |
 | Rhino Vocoder | audio FX | `audio/VocoderDevice.*` | [Rhino Vocoder and sidechains](rhino-vocoder.md) |
 | Rhino Arp | MIDI FX | `midi/RhinoArpDevice.*` | [Rhino Arp](rhino-arp.md) |
+| DJ Input, DJ Output | hidden | `infra/DjTrackPortDevices.*` | The DJ booth's two ends of every track, since 2026-10-12: [DJ decks play live through the track's chain](dj-decks-play-live-through-the-track.md) |
+
+The two DJ ends are hand-written on `te::Plugin`, flagged `infrastructure` like Utility and never browsable; they pass the block through until a deck binds them, and `--device-test` holds both to the standard as pass-through effects. Like Utility, the DJ Input answers `getNumOutputChannelsGivenInputs` with its input count, and two only at a chain's head with none, so a mono chain stays mono; its first version answered at least two, the trap that once made a mono take play from the left speaker only, until the review of 2026-10-12 (`AudioChannels.inc`).
 
 Rhino Wave, the first built-in synth (a morphing wavetable instrument), was removed on 2026-10-05. Rhino FM replaced it the same day, as a catalog entry with no special case in `Session`.
 

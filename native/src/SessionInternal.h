@@ -8,6 +8,7 @@
 // Nothing outside Session's own .cpp files sees this.
 #include "audio/UtilityDevice.h"
 #include "instruments/DrumRackDevice.h"
+#include "infra/DjTrackPortDevices.h"
 #include "sdk/NativeDevice.h"
 
 // Shared internals of the Session implementation.
@@ -20,6 +21,11 @@
 
 namespace rhino
 {
+
+// Rebuilds a clip inside a new owner - a slot or a track, in this document or
+// in a copy of it. SessionSlots.cpp.
+te::Clip* copyClipInto(te::ClipOwner& destination, te::Clip& source, tracktion::core::TimeRange range,
+                       const juce::String& name);
 
 // ValueTree property identifiers owned by the session document.
 extern const juce::Identifier starterPlaceholderID;
@@ -86,6 +92,13 @@ struct RhinoEngineBehaviour final : te::EngineBehaviour
     // A recording covers what is under it - the same rule every other clip
     // here follows - so the material it replaces is silent while it is made.
     bool muteTrackContentsWhilstRecording() override { return true; }
+    // A muted track - or one left out by another's solo - still runs its
+    // devices, and only its output to the song is silenced, by the muting
+    // node after them. A DJ deck takes its track's sound from inside the
+    // chain, so the song's mute and solo leave the deck its track; without
+    // this the engine skipped the whole chain of a muted track. The price is
+    // the CPU a muted track's devices take.
+    bool shouldProcessMutedTracks() override { return true; }
     std::function<juce::File()> recordingDirectory;
 };
 
@@ -119,15 +132,26 @@ te::AutomatableParameter* exposedParameterAt(te::Plugin& plugin, int index);
 float exposedParameterMaximum(te::Plugin& plugin, int index, float maximum);
 
 // Engine and model helpers (SessionInternal.cpp)
+// An edit made from a document's state, given the document's file and its
+// role before it is built. A clip resolves its source file while the edit is
+// built and keeps what it found, so a source stored relative to the document
+// is found only by an edit that knows the file from the start: told
+// afterwards, as both the reopened document and a deck's copy once were, the
+// clip kept an empty file and played nothing. A state with no project id is
+// given a new one, as te::loadEditFromState gives it.
+std::unique_ptr<te::Edit> loadDocumentEdit(te::Engine&, const juce::ValueTree& state, const juce::File& document,
+                                           te::Edit::EditRole);
 // Where the note editor goes when the clip it had is gone: the first MIDI
 // track, or null when there is none. Never a group bus, which holds no clips,
 // and never an audio track, which may not hold a MIDI clip at all. Nothing
 // else about a document singles out a track by position.
 te::AudioTrack* firstMidiTrackOf(te::Edit& edit);
 void panicMidiOnTrack(te::ClipTrack* clipTrack);
-juce::Colour presetColour(Session::PatternPreset preset);
-juce::Colour instrumentColour(const DeviceDescriptor& device);
-juce::Colour instrumentColour(Session::Instrument instrument);
+// The audio track holding a clip, on its timeline or in one of its slots.
+te::AudioTrack* trackHoldingClip(te::Edit& edit, const te::Clip& clip);
+// Its index among the audio tracks, or -1: what an edit of the clip names
+// when it marks the document modified.
+int clipTrackIndex(te::Edit& edit, const te::Clip& clip);
 juce::Colour nextClipColour(juce::Colour current);
 void setClipColour(te::Clip& clip, juce::Colour colour, juce::UndoManager* undoManager);
 const DeviceDescriptor* audioEffectDescriptor(Session::AudioEffect effect);
@@ -148,6 +172,19 @@ int slotOfDevice(const te::PluginList&, const juce::String& key);
 void removeDeviceLanes(juce::ValueTree owner, const te::Plugin&, juce::UndoManager*);
 bool hasActiveTrackAutomation(te::Edit& edit, Session::DeviceTarget target);
 te::Plugin* findPlugin(te::AudioTrack& track, const juce::String& type);
+// The DJ booth's hidden input sits at the very head of a track's chain while a
+// deck plays the track (devices/infra/DjTrackPortDevices.h): 1 when it is
+// there, else 0. Every path that puts a device at the front of a chain starts
+// after it, so a MIDI effect or an instrument never lands ahead of the notes
+// it is meant to play.
+int djInputEnd(const te::AudioTrack&);
+// Gives a track the booth's hidden input at the head of its chain and its
+// hidden output where its own devices end and its channel strip begins, when
+// it lacks either.
+// Outside the undo history, as the channel strip and the mixer are: it runs
+// as a track is made, inside the step that makes it, and as a document opens,
+// before its history begins, so it never moves a place an undo recorded.
+void ensureDjPortDevices(te::Edit&, te::AudioTrack&);
 te::FourOscPlugin* findFourOsc(te::AudioTrack& track);
 DrumRackDevice* findDrumRack(te::AudioTrack& track);
 // A drum pattern on a blank rack would play nothing, so the rack takes the
@@ -155,9 +192,10 @@ DrumRackDevice* findDrumRack(te::AudioTrack& track);
 void loadDefaultDrumKit(DrumRackDevice&);
 // A drum clip moved or pasted onto another track brings its sounds: the kit of
 // the Drum Rack it came from, which a rack that arrives blank takes. A rack
-// already holding sounds keeps them. In SessionDrums.cpp.
+// already holding sounds keeps them. Returns whether the rack took the kit.
+// In SessionDrums.cpp.
 std::optional<DrumKit> drumKitOf(te::AudioTrack&);
-void fillBlankDrumRack(te::AudioTrack&, const DrumKit&);
+bool fillBlankDrumRack(te::AudioTrack&, const DrumKit&);
 // The instrument a MIDI clip carries when it is moved or pasted onto another
 // track: whatever its own track plays, bypassed or not, by catalog entry so a
 // device with no Session::Instrument value is carried too. Null for a track
@@ -170,12 +208,30 @@ te::Plugin* trackInstrument(te::AudioTrack& track);
 void collapseStackedInstruments(te::Edit& edit);
 juce::Result ensurePlugin(te::Edit& edit, te::AudioTrack& track, const juce::String& type,
                           int insertIndex, te::Plugin*& plugin, bool& changed);
+// What switching a track's instrument did: `devices` when its chain changed -
+// the instrument made, any other removed, the one kept switched back on - and
+// `renamed` when the track took the instrument's name, which on its own
+// changes nothing the track plays. A clip carried onto a track already
+// running its instrument, as a clip duplicated on its own track always is,
+// changes no device there.
+struct InstrumentSwitch
+{
+    bool devices = false;
+    bool renamed = false;
+};
 // Takes a catalog entry, so an instrument that has no Session::Instrument
 // value can still be switched to. The enum overload is shorthand for it.
 juce::Result switchTrackInstrument(te::Edit& edit, te::AudioTrack& track, const DeviceDescriptor& device,
-                                   bool& changed, const juce::PluginDescription* forgeDescription = nullptr);
-juce::Result switchTrackInstrument(te::Edit& edit, te::AudioTrack& track, Session::Instrument instrument, bool& changed,
-                                   const juce::PluginDescription* forgeDescription = nullptr);
+                                   InstrumentSwitch& switched, const juce::PluginDescription* forgeDescription = nullptr);
+juce::Result switchTrackInstrument(te::Edit& edit, te::AudioTrack& track, Session::Instrument instrument,
+                                   InstrumentSwitch& switched, const juce::PluginDescription* forgeDescription = nullptr);
+// Fails, naming the clip and its file, when the clip plays an audio file that
+// is not there: moved or deleted, or stored beside a document that has since
+// been moved away from it. An offline render waits until every clip's file
+// opens, muted clip or not (WaveNode::isReadyToProcess at 4536d8a), so a
+// render holding such a clip never finishes; the bounce and the merge ask
+// this of every clip they render before they build the render.
+juce::Result checkClipFile(te::Clip&);
 
 // Sets every control a preset names and every other to its default, clamped
 // and snapped to each control's range, inside whatever undo transaction is

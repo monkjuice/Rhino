@@ -4,7 +4,7 @@ type: component
 summary: Arms tracks, not inputs, lets each take win the ground it lands on, and counts in with Rhino's own click while the playhead stands still.
 tags: [rhino, recording, audio-io]
 sources: []
-updated: 2026-10-05
+updated: 2026-10-12
 ---
 
 # Recording and the count-in
@@ -29,13 +29,13 @@ Recording lifts the loop, since a wrapped take would land on the one just played
 
 The engine broadcasts neither start nor end, so the shell polls `Session::recordingStopped` on its 30 Hz timer; `recordingStarted` covers the gap before the audio thread begins. A MIDI take is drawn while played, from the engine's per-track note fifo (`pollRecordingNotes`).
 
-`RhinoEngineBehaviour` (`SessionInternal.h`) names take files `<track> Take <n>.wav`, in a `<project> Recordings` folder beside a saved project or `%APPDATA%\Rhino\Recordings` while untitled (the engine's default dropped untitled takes in the working directory), and mutes what a recording covers. A mono take plays from both speakers only because `UtilityDevice` answers `getNumOutputChannelsGivenInputs` with its input count.
+`RhinoEngineBehaviour` (`SessionInternal.h`) names take files `<track> Take <n>.wav`, in a `<project> Recordings` folder beside a saved project or `%APPDATA%\Rhino\Recordings` while untitled (the engine's default dropped untitled takes in the working directory), and mutes what a recording covers. A mono take plays from both speakers only because every plugin ahead of Volume & Pan answers `getNumOutputChannelsGivenInputs` with its input count: `UtilityDevice`, and since 2026-10-12 the DJ booth's hidden input at the head of every chain, whose first version answered at least two, the regression `AudioChannels.inc` guards against, until the review of 2026-10-12 ([Built-in devices](built-in-devices.md)).
 
 ## The count-in
 
 Tracktion counts in by rolling the playhead backwards, which caps it at two bars and fails at bar one. `CountInClick` instead plays a decaying sine per beat through a second `AudioIODeviceCallback`, attached only while counting, for 1-4 bars (`rhinoCountInBars`), from a standstill only. When it ends the transport starts from the message thread, so the downbeat follows within about a block.
 
-**Pitfalls:** JUCE hands a second callback a scratch buffer still holding its previous block, so the click clears it before mixing; otherwise it summed into a growing tone (commit `775b112`). And `Session::clickTrackGain` converts decibels to the engine's linear gain (clamped to 0.2-1.0); written raw, all three menu levels sounded alike.
+**Pitfalls:** JUCE hands a second callback a scratch buffer still holding its previous block, so the click clears it before mixing; otherwise it summed into a growing tone (commit `775b112`). The DJ booth's engine, the third such callback, clears for the same reason ([DJ view and the booth](dj-view.md)). And `Session::clickTrackGain` converts decibels to the engine's linear gain (clamped to 0.2-1.0); written raw, all three menu levels sounded alike.
 
 Not supported: punch ranges, loop takes, comping.
 

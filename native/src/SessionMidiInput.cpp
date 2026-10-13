@@ -200,7 +200,7 @@ juce::Result Session::setTrackMidiInput(int track, const juce::String& token)
     else
         tracks[track]->state.setProperty(trackMidiInputID, token, nullptr);
     const auto applied = applyRecordArming();
-    markModified();
+    markModified(track, ModelChange::none);
     sendSynchronousChangeMessage();
     return applied;
 }

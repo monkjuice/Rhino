@@ -4,7 +4,7 @@ type: gotcha
 summary: Both projects suppress CMake regeneration, so a file or a flag added to a CMakeLists is silently left out until you configure again.
 tags: [both, build, cmake]
 sources: []
-updated: 2026-10-05
+updated: 2026-10-10
 ---
 
 # A new source file needs an explicit CMake configure
@@ -26,6 +26,7 @@ Any edit to any CMakeLists in either project:
 - **Rhino:** the application list in `native/CMakeLists.txt`, `RhinoCore` in `native/src/core/CMakeLists.txt`, and `RhinoDevices` in `native/src/devices/CMakeLists.txt`. Adding a device's source is one of [the three edits for a device](adding-a-device.md), so it needs a configure too.
 - **Forge:** `forge_sources`, the test sources and `forge_test_areas`. A new test area also gets no CTest case until a configure, because CMake generates the case list at configure time.
 - **Renames and deletions** fail the other way. The stale project still names the old file, and the compiler cannot open it.
+- **A new asset in `juce_add_binary_data`** fails earlier and differently: the generated `BinaryData` header lacks the new symbol, so the compile stops on `BinaryData::dj_view_svg` and nothing reaches the link (the view switch's SVGs, 2026-10-10).
 - **Compile and link options** fail silently. Commit `3f6bb4e` added `/STACK:8388608` to `native/CMakeLists.txt`, and a plain build kept linking the old 1 MB stack reserve until the configure ran. `dumpbin /headers RhinoDAW.exe` shows which one the binary got.
 
 ## What to do

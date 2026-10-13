@@ -8,10 +8,11 @@
 
         // Automation lanes live on the track's own state, so they ride the
         // project snapshot rather than needing a save path of their own.
-        const auto persistedParameters = session.deviceParameters(0, 0);
+        // Slot 1: the DJ booth's hidden input stands at slot 0 of every chain, so a track's first device is at slot 1.
+        const auto persistedParameters = session.deviceParameters(0, 1);
         require(!persistedParameters.empty(), "Pattern device exposes a parameter before saving");
-        require(session.showTrackAutomation({0, 0, 0}, true).wasOk(), "Show an automation lane before saving");
-        require(session.setTrackAutomationPoints({0, 0, 0}, {{0.0, persistedParameters.front().minimum},
+        require(session.showTrackAutomation({0, 1, 0}, true).wasOk(), "Show an automation lane before saving");
+        require(session.setTrackAutomationPoints({0, 1, 0}, {{0.0, persistedParameters.front().minimum},
                                                              {2.0, persistedParameters.front().maximum}}).wasOk(),
                 "Draw an automation curve before saving");
         // An engine curve with no lane to own it, as a document can carry one:
@@ -54,14 +55,14 @@
         require(session.pattern().getSequence().getNumNotes() == 10, "Notes survive project reopen");
         require(std::abs(session.tempo() - 90.0) < 0.001, "Tempo survives project reopen");
         {
-            const auto restoredLane = session.trackAutomationState({0, 0, 0});
+            const auto restoredLane = session.trackAutomationState({0, 1, 0});
             require(restoredLane.visible && restoredLane.ownLane && restoredLane.active,
                     "Automation lanes and their own-lane placement survive project reopen");
             const auto restored = session.trackAutomations(0);
             require(restored.size() == 1 && restored.front().points.size() == 2,
                     "A restored automation curve keeps its points");
             auto laneCurveBack = false;
-            for (auto* parameter : te::getAudioTracks(*session.edit)[0]->pluginList[0]->getAutomatableParameters())
+            for (auto* parameter : te::getAudioTracks(*session.edit)[0]->pluginList[1]->getAutomatableParameters())
                 laneCurveBack = laneCurveBack || parameter->getCurve().getNumPoints() == 2;
             require(laneCurveBack, "A restored lane is played by the engine again");
             require(utilityGainOf(1) != nullptr && utilityGainOf(1)->getCurve().getNumPoints() == 0,

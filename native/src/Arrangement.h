@@ -160,6 +160,11 @@ private:
         bool valid() const { return row >= 0; }
     };
     void sync();
+    // Brings a timeline the shell has hidden up to date before a command reads
+    // its list of the clips. Hidden, the timeline lets the list go stale rather
+    // than rebuilding it for every change, and the shell still sends it Ctrl+E
+    // and Ctrl+J from the DJ view.
+    void syncIfStale();
     void syncTrackControls();
     void configureMasterControls();
     void updateScroll();
@@ -382,6 +387,7 @@ private:
     juce::Rectangle<float> bounds(const ClipView&) const;
     int hit(juce::Point<float>) const;
     void changeListenerCallback(juce::ChangeBroadcaster*) override;
+    void visibilityChanged() override;
     void scrollBarMoved(juce::ScrollBar*, double) override;
     void editWillChange() override;
     void editDidChange() override;
@@ -443,7 +449,7 @@ private:
     // that takes an input has one; a group bus and the main row take none, so
     // they are given no control rather than one that refuses.
     std::vector<std::unique_ptr<MonitorSelector>> monitor;
-    // The same mixer values the session view shows, laid out horizontally.
+    // The track's fader and pan, the session's own mixer values.
     std::vector<std::unique_ptr<juce::Slider>> volume, pan;
     juce::Slider masterVolume, masterPan;
     juce::ScrollBar scroll {false}, trackScrollBar {true};
@@ -552,6 +558,10 @@ private:
                            maximumMasterLaneHeight = 120.0f;
     float masterLaneHeight = defaultMasterLaneHeight;
     float bottomInset = 0.0f;
+    // A change arrived while the shell had the timeline switched off - the
+    // DJ view shows in its place - caught up when it is shown. See
+    // UiVisibility.h.
+    bool staleWhileHidden = false;
     static constexpr float automationRowHeight = 44.0f;
     // What rules one track off from the next, header and lane alike, and the
     // line the main row is closed off with.

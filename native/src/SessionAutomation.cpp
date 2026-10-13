@@ -226,7 +226,7 @@ juce::Result Session::showTrackAutomation(DeviceTarget target, bool ownLane)
     edit->getUndoManager().beginNewTransaction("Show automation");
     if (!ensureTrackAutomationState(target, ownLane, false).isValid())
         return juce::Result::fail("That track is no longer available.");
-    markModified();
+    markModified(target.track, ModelChange::curves);
     edit->getUndoManager().beginNewTransaction();
     sendSynchronousChangeMessage();
     return juce::Result::ok();
@@ -246,7 +246,7 @@ juce::Result Session::hideTrackAutomation(DeviceTarget target)
         runtime->active = false;
         runtime->overridden = false;
     }
-    markModified();
+    markModified(target.track, ModelChange::curves);
     edit->getUndoManager().beginNewTransaction();
     sendSynchronousChangeMessage();
     return juce::Result::ok();
@@ -289,7 +289,7 @@ juce::Result Session::setTrackAutomationPoints(DeviceTarget target, std::vector<
     }
     if (auto* runtime = findAutomationRuntime(target))
         runtime->overridden = false;
-    markModified();
+    markModified(target.track, ModelChange::curves);
     edit->getUndoManager().beginNewTransaction();
     sendSynchronousChangeMessage();
     return juce::Result::ok();
@@ -312,7 +312,7 @@ juce::Result Session::clearTrackAutomationPoints(DeviceTarget target)
         runtime->active = false;
         runtime->overridden = false;
     }
-    markModified();
+    markModified(target.track, ModelChange::curves);
     edit->getUndoManager().beginNewTransaction();
     sendSynchronousChangeMessage();
     return juce::Result::ok();

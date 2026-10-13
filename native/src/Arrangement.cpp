@@ -1,5 +1,6 @@
 #include "ArrangementInternal.h"
 #include "Playhead.h"
+#include "UiVisibility.h"
 #include <optional>
 #include <set>
 
@@ -444,6 +445,7 @@ void Arrangement::focusTrack()
 void Arrangement::splitAtInsertPoint()
 {
     cancelDrag();
+    syncIfStale();
     const auto seconds = insertPointTime();
     splitClipsAt(clipsUnderLine(seconds), seconds);
 }
@@ -529,6 +531,9 @@ void Arrangement::mergeSelected()
         return;
     }
     const auto made = static_cast<int>(result.clips.size());
+    // The selection's region is read off the list, which the merge's own
+    // announcement left stale if the timeline is hidden.
+    syncIfStale();
     setSelection(result.clips);
     if (status)
     {
@@ -573,6 +578,15 @@ void Arrangement::nudgeSelected(int direction, bool byBar)
 
 void Arrangement::changeListenerCallback(juce::ChangeBroadcaster*)
 {
+    // Switched off while the DJ view shows in its place, the timeline waits
+    // and catches up when it is shown, as every panel the shell hides does:
+    // otherwise a booth key, a bounce landing or an edit in the lower pane
+    // cost a whole rebuild of a timeline nobody could see.
+    if (isHiddenInShell(*this))
+    {
+        staleWhileHidden = true;
+        return;
+    }
     // A change can be announced in the middle of a drag. Keep the gesture
     // snapshot stable until the pointer is released.
     if (dragging || automationGesture != AutomationGesture::none)
@@ -580,6 +594,25 @@ void Arrangement::changeListenerCallback(juce::ChangeBroadcaster*)
         repaint();
         return;
     }
+    sync();
+}
+
+void Arrangement::visibilityChanged()
+{
+    if (staleWhileHidden && !isHiddenInShell(*this))
+    {
+        staleWhileHidden = false;
+        sync();
+    }
+}
+
+// Once per command rather than once per change, so the timeline still waits
+// while hidden. An undo made in the DJ view left the split it took back on
+// the list, and Ctrl+E found no clip under a line drawn through a whole one.
+void Arrangement::syncIfStale()
+{
+    if (!staleWhileHidden) return;
+    staleWhileHidden = false;
     sync();
 }
 // The row stack indexes tracks that are about to be replaced, so it goes with
@@ -725,12 +758,13 @@ double Arrangement::resolvedGridBeats() const
 }
 
 // The arrangement's half of the route between the two views. The clip stays
-// here; a copy of it lands in a session slot on the same track.
+// here; a copy of it lands in the first free cell of the same track's clips,
+// which a DJ console playing the track shows.
 void Arrangement::showClipMenu(te::EditItemID id)
 {
     juce::PopupMenu menu;
     menu.addSectionHeader("CLIP");
-    menu.addItem(1, "Copy to session slot");
+    menu.addItem(1, "Copy to the track's DJ clips");
     menu.addSeparator();
     menu.addItem(4, "Cut       Ctrl+X");
     menu.addItem(5, "Copy       Ctrl+C");
@@ -777,7 +811,7 @@ void Arrangement::showClipMenu(te::EditItemID id)
                 const auto outcome = safe->session.copyClipToSlot(id);
                 if (safe->status)
                     safe->status(outcome.failed() ? outcome.getErrorMessage()
-                                                  : "Copied the clip into a session slot");
+                                                  : "Copied into the track's first free cell in the DJ view");
                 return;
             }
             // Split is the one command here that is not about the selection,

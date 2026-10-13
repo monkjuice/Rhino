@@ -4,7 +4,7 @@ type: component
 summary: Per-track lanes stored as Rhino's own ValueTree children, naming their device by key rather than slot, and played by the engine from parameter curves the session mirrors after every change.
 tags: [rhino, automation, arrangement, devices]
 sources: []
-updated: 2026-10-05
+updated: 2026-10-11
 ---
 
 # Track automation
@@ -27,7 +27,7 @@ Right-click a knob in the Device View (`DeviceEditorPanel::showParameterMenu`): 
 
 **The engine plays the lanes** (commit `fe163c8`). `Session::mirrorAutomationToEngine` writes every drawn lane that nobody has taken over by hand onto its parameter's own `te::AutomatableParameter` curve, which the audio graph reads every block, live and in a render alike. The shell's 30 Hz timer used to set each parameter from the message thread instead: values moved in frame-sized steps and stalled whenever that thread was busy, every step rebuilt the interface, and a plain render heard no lanes.
 
-- **When it runs.** `markModified` marks the lanes stale, and `AutomationMirror`, a listener on the session's own announcement, mirrors them after any document change, leaving unchanged curves alone. It also runs at once when a knob touch takes a parameter from its lane (inside a drag nothing is announced until release) and when an override is toggled. The WAV export calls it before rendering.
+- **When it runs.** `markModified` marks the lanes stale for every change but `ModelChange::none` (a name, a colour, a view setting, which can move no lane; [Session, the model](session-model.md)), and `AutomationMirror`, a listener on the session's own announcement, mirrors them after any such change, leaving unchanged curves alone. It also runs at once when a knob touch takes a parameter from its lane (inside a drag nothing is announced until release) and when an override is toggled. The WAV export calls it before rendering.
 - **It owns every curve in the edit.** A curve no lane drives is cleared rather than played unseen, whether it came from a document saved with its curves, a device restored by undo or one moved to another track. The edit is searched for strays only when its set of plugins changes, compared by `EditItemID`. Curves are never written through the undo manager.
 - **Touching an automated knob overrides it**, as in Live: the knob's **A** button turns amber and the lane stops driving until it is clicked. The override is kept by device key, so it survives a reorder. A lane that stops driving hands its parameter back to the value last set by hand rather than freezing on its final point, unless the user has taken that knob over.
 - **The rack follows.** The engine tells nobody when it moves a knob, so the Device View reads moving knobs back on its own 30 Hz timer, only while the transport rolls, only for faces with a knob on a lane, and not while hidden ([Device rack and device editors](device-rack.md)).

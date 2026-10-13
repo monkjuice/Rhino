@@ -68,7 +68,7 @@ juce::Result Session::importAudio(const juce::File& file)
         return imported;
     }
     undoManager.beginNewTransaction();
-    markModified();
+    markClipsModified({trackCount() - 1});
     sendSynchronousChangeMessage();
     return juce::Result::ok();
 }
@@ -82,7 +82,7 @@ juce::Result Session::importAudioAt(const juce::File& file, int trackIndex, doub
     undoManager.beginNewTransaction();
     if (imported.failed())
         return imported;
-    markModified();
+    markClipsModified({trackIndex});
     sendSynchronousChangeMessage();
     return juce::Result::ok();
 }
@@ -105,7 +105,7 @@ juce::Result Session::importAudioFilesAt(const std::vector<juce::File>& files, i
                                     : imported;
         }
     undoManager.beginNewTransaction();
-    markModified();
+    markClipsModified({trackIndex});
     sendSynchronousChangeMessage();
     return juce::Result::ok();
 }
@@ -212,6 +212,7 @@ void Session::releaseAudioDevice()
     // to close, so they come off first rather than being left pointing at a
     // shut device.
     cancelCountIn();
+    releaseDj();
     releasePreview();
     te::TransportControl::stopAllTransports(engine, false, true);
     if (edit != nullptr)
@@ -255,7 +256,7 @@ juce::Result Session::setTimeSignature(int numerator, int denominator)
     signature->setStringTimeSig(juce::String(numerator) + "/" + juce::String(denominator));
     edit->tempoSequence.updateTempoData();
     refreshLoop();
-    markModified();
+    markModified(-1, ModelChange::tempo);
     if (edit->getTransport().isPlaying()) edit->restartPlayback();
     if (!insideGesture)
         edit->getUndoManager().beginNewTransaction();
@@ -276,11 +277,12 @@ float Session::clickTrackGain() const
     return juce::Decibels::gainToDecibels(juce::jlimit(0.0001f, 4.0f, edit->clickTrackGain.get()), -60.0f);
 }
 
+// The click is the song's own, which no deck's bounce plays.
 void Session::setClickTrackEnabled(bool enabled)
 {
     if (clickTrackEnabled() == enabled) return;
     edit->clickTrackEnabled = enabled;
-    markModified();
+    markModified(-1, ModelChange::none);
     sendSynchronousChangeMessage();
 }
 
@@ -288,7 +290,7 @@ void Session::setClickTrackEmphasiseBars(bool enabled)
 {
     if (clickTrackEmphasiseBars() == enabled) return;
     edit->clickTrackEmphasiseBars = enabled;
-    markModified();
+    markModified(-1, ModelChange::none);
     sendSynchronousChangeMessage();
 }
 
@@ -297,7 +299,7 @@ void Session::setClickTrackGain(float gainDb)
     gainDb = juce::jlimit(-60.0f, 6.0f, gainDb);
     if (std::abs(clickTrackGain() - gainDb) < 0.001f) return;
     edit->clickTrackGain = juce::Decibels::decibelsToGain(gainDb, -60.0f);
-    markModified();
+    markModified(-1, ModelChange::none);
     sendSynchronousChangeMessage();
 }
 
@@ -327,7 +329,9 @@ void Session::setTempo(double bpm)
     if (!insideGesture)
         edit->getUndoManager().beginNewTransaction("Change tempo");
     edit->tempoSequence.getTempo(0)->setBpm(bpm);
-    markModified();
+    // The lanes and the repitched clips below follow the tempo; the kind
+    // covers them, as every bounce is on the new grid.
+    markModified(-1, ModelChange::tempo);
     edit->tempoSequence.updateTempoData();
 
     // Clips are the engine's to move: it anchors them to beats and rewrites
@@ -390,7 +394,8 @@ juce::Result Session::setLoopRange(double startSeconds, double endSeconds)
                        tracktion::core::TimePosition::fromSeconds(endSeconds)};
     edit->getTransport().setLoopRange(manualLoopRange);
     edit->getTransport().looping = true;
-    markModified();
+    // The song's transport loop; a deck's bounce spans its own clips.
+    markModified(-1, ModelChange::none);
     sendSynchronousChangeMessage();
     return juce::Result::ok();
 }
@@ -401,7 +406,7 @@ void Session::clearManualLoopRange()
         return;
     manualLoop = false;
     refreshLoop();
-    markModified();
+    markModified(-1, ModelChange::none);
     sendSynchronousChangeMessage();
 }
 }

@@ -4,7 +4,7 @@ type: guide
 summary: The three edits that add a device, the SDK base a new one is written on, the shape the older devices follow, and the enum-era code a new instrument still meets.
 tags: [rhino, devices, cmake, testing]
 sources: []
-updated: 2026-10-06
+updated: 2026-10-11
 ---
 
 # Adding a device to Rhino
@@ -50,7 +50,6 @@ Two declarations go further without a hand-built face:
 
 Effects need nothing more; a new instrument also meets code written for the instruments that predate the catalog:
 
-- The paused session view's slot menu lists instruments by hand.
 - `native/src/DeviceMacros.cpp` curates rack knobs only for 4OSC; any other device shows its active parameters in order.
 
 Two older traps are gone as of 2026-10-05: a moved or pasted MIDI clip carries its instrument by catalog entry ([One instrument per track](one-instrument-per-track.md)), and reopening a project no longer re-applies an instrument to the first track (commit `a04b407`).

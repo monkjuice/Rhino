@@ -203,7 +203,10 @@ juce::Result Session::clearClipRegion(double startSeconds, double endSeconds, in
     repairPatternClip();
     refreshLoop();
     edit->getUndoManager().beginNewTransaction();
-    markModified();
+    std::vector<int> cleared;
+    for (int track = std::max(0, firstTrack); track <= lastTrack; ++track)
+        cleared.push_back(track);
+    markClipsModified(cleared);
     if (edit->getTransport().isPlaying())
         edit->restartPlayback();
     sendSynchronousChangeMessage();
@@ -285,6 +288,11 @@ juce::Result Session::pasteClipRegion(const ClipRegion& region, double destinati
                           destinationTrack, destinationTrack + region.trackSpan);
 
     const auto tracks = te::getAudioTracks(*edit);
+    // Every row the paste cleared or filled, and the rows whose devices a MIDI
+    // clip changed by bringing its instrument or its kit.
+    std::vector<int> rows, gainedDevices;
+    for (int row = 0; row <= region.trackSpan; ++row)
+        rows.push_back(destinationTrack + row);
     for (const auto& snapshot : region.clips)
     {
         const auto targetIndex = destinationTrack + snapshot.track;
@@ -303,14 +311,20 @@ juce::Result Session::pasteClipRegion(const ClipRegion& region, double destinati
             if (const auto* instrument = snapshot.instrumentId.isEmpty() ? nullptr
                                                                           : DeviceCatalog::byId(snapshot.instrumentId))
             {
-                bool instrumentChanged = false;
-                const auto instrumentResult = switchTrackInstrument(*edit, *target, *instrument, instrumentChanged,
+                InstrumentSwitch switched;
+                const auto instrumentResult = switchTrackInstrument(*edit, *target, *instrument, switched,
                                                                     forgeDescription ? &*forgeDescription : nullptr);
                 if (instrumentResult.failed())
                     return rollBack(instrumentResult);
+                auto kitTaken = false;
                 DrumKit kit;
                 if (const auto xml = juce::parseXML(snapshot.drumKit); xml != nullptr && DrumFiles::fromXml(*xml, kit).wasOk())
-                    fillBlankDrumRack(*target, kit);
+                    kitTaken = fillBlankDrumRack(*target, kit);
+                // Only what the clip changed counts: a row already running its
+                // instrument - its own row, for a duplicate - has new notes
+                // and the same devices.
+                if (switched.devices || kitTaken)
+                    gainedDevices.push_back(targetIndex);
             }
             if (auto midiCopy = target->insertMIDIClip(snapshot.name, range, nullptr))
             {
@@ -380,7 +394,9 @@ juce::Result Session::pasteClipRegion(const ClipRegion& region, double destinati
     repairPatternClip();
     refreshLoop();
     edit->getUndoManager().beginNewTransaction();
-    markModified();
+    markClipsModified(rows);
+    if (!gainedDevices.empty())
+        markClipsModified(gainedDevices, ModelChange::devices);
     if (edit->getTransport().isPlaying())
         edit->restartPlayback();
     sendSynchronousChangeMessage();

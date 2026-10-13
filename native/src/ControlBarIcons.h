@@ -77,6 +77,9 @@ public:
     // neutral active grey, which is what every control in the bar but record
     // and the browser toggle wants.
     void setActiveColour(juce::Colour c) { active = c; repaint(); }
+    // The colour when the button is off. Left unset, the bar's dim grey; the
+    // view switch asks for a lighter one.
+    void setIdleColour(juce::Colour c) { idle = c; repaint(); }
     // Whether the hit area washes under the pointer. Off for the undo pair,
     // which the specification asks to carry no surface of any kind.
     void setWashesOnHover(bool shouldWash) { washes = shouldWash; }
@@ -87,6 +90,7 @@ private:
     Painter painter;
     float inset = 0.28f;
     juce::Colour active {palette::activeNeutral};
+    juce::Colour idle {palette::textDim};
     bool washes = true;
 };
 }

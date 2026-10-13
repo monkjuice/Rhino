@@ -171,7 +171,8 @@ juce::Result Session::setTrackArmed(int trackIndex, bool armed)
         applied = applyRecordArming();
     else
         armingDeferred = true;
-    markModified();
+    // What the track takes in, not what any deck's bounce of it plays.
+    markModified(trackIndex, ModelChange::none);
     sendSynchronousChangeMessage();
     return applied;
 }
@@ -441,7 +442,9 @@ juce::Result Session::setTrackMonitoring(int trackIndex, InputMonitoring mode)
         applied = applyRecordArming();
     else
         armingDeferred = true;
-    markModified();
+    // Whether the input is heard, which no bounce renders. It used to leave
+    // every deck behind, and Live switches it on every time.
+    markModified(trackIndex, ModelChange::none);
     sendSynchronousChangeMessage();
     return applied;
 }
@@ -457,7 +460,7 @@ void Session::setCountInBars(int bars)
     if (countInBars() == bars)
         return;
     edit->state.setProperty(countInBarsID, bars, nullptr);
-    markModified();
+    markModified(-1, ModelChange::none);
     sendSynchronousChangeMessage();
 }
 
@@ -680,7 +683,7 @@ void Session::finishRecording()
 {
     if (recordingStart < 0.0)
         return;
-    const auto changed = tidyRecordedClips();
+    const auto recorded = tidyRecordedClips();
     clipsBeforeRecording.clear();
     // The clips the engine just wrote say the same thing these did, and better.
     liveNotes.clear();
@@ -696,24 +699,31 @@ void Session::finishRecording()
     }
     refreshLoop();
     edit->getUndoManager().beginNewTransaction();
-    if (changed)
-        markModified();
+    // A MIDI take is notes on its track, an audio take an audio clip on its.
+    if (!recorded.empty())
+        markClipsModified(recorded);
     sendSynchronousChangeMessage();
 }
 
 // The engine drops a recorded clip on top of whatever was already on the track.
 // Rhino's rule is that the clip which just arrived wins the ground it landed on,
 // so the same call every drag, trim and drop ends in is applied to it here.
-bool Session::tidyRecordedClips()
+std::vector<int> Session::tidyRecordedClips()
 {
     const std::set<te::EditItemID> before(clipsBeforeRecording.begin(), clipsBeforeRecording.end());
     std::vector<te::EditItemID> added;
-    for (auto* track : te::getAudioTracks(*edit))
-        for (auto* clip : track->getClips())
+    std::vector<int> recorded;
+    const auto tracks = te::getAudioTracks(*edit);
+    for (int track = 0; track < tracks.size(); ++track)
+        for (auto* clip : tracks[track]->getClips())
             if (!before.contains(clip->itemID))
+            {
                 added.push_back(clip->itemID);
+                if (recorded.empty() || recorded.back() != track)
+                    recorded.push_back(track);
+            }
     if (added.empty())
-        return false;
+        return recorded;
     // Looked up by id rather than held as pointers: making room for one clip
     // can delete another, and a recording into two tracks adds two at once.
     for (const auto id : added)
@@ -727,7 +737,7 @@ bool Session::tidyRecordedClips()
         makeRoomForClip(*clip, added);
     }
     repairPatternClip();
-    return true;
+    return recorded;
 }
 
 }

@@ -112,7 +112,7 @@ juce::Result Session::setTrackAudioInput(int track, const juce::String& token)
     else
         tracks[track]->state.setProperty(trackAudioInputID, token, nullptr);
     const auto applied = applyRecordArming();
-    markModified();
+    markModified(track, ModelChange::none);
     sendSynchronousChangeMessage();
     return applied;
 }

@@ -795,52 +795,51 @@ void sparkSuite()
     spark.across = 0.5f;
     spark.seed = 12345u;
     spark.bornMs = 1000.0;
-    const auto restAt = spark.bornMs + sparkRestAgeMs(spark);
+    const auto chargeAt = spark.bornMs + sparkChargeStartMs(spark);
 
     // Let go early, a note falls exactly as every spark always has.
     auto quick = spark;
     quick.releasedMs = spark.bornMs + 100.0;
     requireClose(sparkProgress(quick, spark.bornMs + sparkFallMs * 0.5), 0.5f, 0.0001f,
                  "a note let go early falls at the standard pace");
-    require(sparkProgress(quick, spark.bornMs + sparkFallMs) >= 1.0f, "and is spent at the floor");
-    const auto early = sparkHold(quick, restAt);
-    require(early.column == 0.0f && early.charge == 0.0f && early.ultra == 0.0f,
-            "and nothing about holding shows on it");
+    require(!sparkSpent(quick, spark.bornMs + sparkFallMs - 1.0), "and is not spent before the floor");
+    require(sparkSpent(quick, quick.releasedMs + sparkFallMs + 1.0), "but is once it and its trace are through it");
+    require(sparkTrace(quick, chargeAt + 1000.0).charge == 0.0f, "and its trace never brightens");
 
-    // Held, it stops at its rest and stays there for as long as the key is down.
-    requireClose(sparkProgress(spark, restAt + 10000.0), sparkRestProgress, 0.0001f,
-                 "a held note stops at its rest");
-    require(sparkProgress(spark, restAt + 600000.0) < 1.0f, "and is never spent while the key is down");
+    // Held, its light still falls through the floor; what stays is its trace.
+    require(sparkProgress(spark, spark.bornMs + sparkFallMs) >= 1.0f,
+            "a held note's light still goes through the floor");
+    require(sparkTrace(spark, spark.bornMs + 60000.0).tail == 0.0f, "while its trace hangs from the top of the well");
+    require(!sparkSpent(spark, spark.bornMs + 600000.0), "for as long as the key is down");
 
-    // It brightens as it hangs there, and reaches ultra only once it is fully bright.
+    // The trace brightens the longer the note is held, and reaches ultra only
+    // once it is fully bright.
     auto previous = -1.0f;
     for (auto after = 0.0; after <= sparkChargeMs; after += 100.0)
     {
-        const auto charge = sparkHold(spark, restAt + after).charge;
-        require(charge >= previous, "a held note only ever brightens");
+        const auto charge = sparkTrace(spark, chargeAt + after).charge;
+        require(charge >= previous, "a held note's trace only ever brightens");
         previous = charge;
     }
-    requireClose(sparkHold(spark, restAt).charge, 0.0f, 0.0001f, "from no brighter than any other spark");
-    requireClose(sparkHold(spark, restAt + sparkChargeMs).charge, 1.0f, 0.0001f, "to full by the end of its charge");
-    require(sparkHold(spark, restAt + sparkChargeMs * 0.95).ultra == 0.0f, "ultra waits for the charge");
-    const auto ultra = sparkHold(spark, restAt + sparkChargeMs + sparkUltraEaseMs + 1.0);
-    requireClose(ultra.ultra, 1.0f, 0.0001f, "and is all the way in once it has eased in");
-    requireClose(ultra.column, 1.0f, 0.0001f, "with the trail stretched up to the top of the well");
+    requireClose(sparkTrace(spark, chargeAt).charge, 0.0f, 0.0001f, "from nothing as its light starts to go out");
+    requireClose(sparkTrace(spark, chargeAt + sparkChargeMs).charge, 1.0f, 0.0001f, "to full by the end of its charge");
+    require(sparkTrace(spark, chargeAt + sparkChargeMs * 0.95).ultra == 0.0f, "ultra waits for the charge");
+    requireClose(sparkTrace(spark, chargeAt + sparkChargeMs + sparkUltraEaseMs + 1.0).ultra, 1.0f, 0.0001f,
+                 "and is all the way in once it has eased in");
 
-    // Let go after a long hold, it falls the rest of the way from its rest at
-    // the standard pace, and its hold dims away rather than vanishing.
+    // Let go after a long hold, the top of its trace falls at the standard
+    // pace and the trace pours out through the floor as bright as it was,
+    // going out over the last third of the fall.
     auto longHeld = spark;
-    longHeld.releasedMs = restAt + 5000.0;
-    const auto remaining = (1.0 - static_cast<double>(sparkRestProgress)) * sparkFallMs;
-    requireClose(sparkProgress(longHeld, longHeld.releasedMs), sparkRestProgress, 0.0001f,
-                 "let go, it starts from its rest");
-    requireClose(sparkProgress(longHeld, longHeld.releasedMs + remaining * 0.5),
-                 (1.0f + sparkRestProgress) * 0.5f, 0.0001f, "and falls the rest of the way at the standard pace");
-    require(sparkProgress(longHeld, longHeld.releasedMs + remaining + 1.0) >= 1.0f, "to be spent at the floor");
-    require(sparkHold(longHeld, longHeld.releasedMs + sparkLetGoMs * 0.5).charge > 0.0f,
-            "its brightness lets go gradually");
-    const auto gone = sparkHold(longHeld, longHeld.releasedMs + sparkLetGoMs);
-    require(gone.column == 0.0f && gone.charge == 0.0f && gone.ultra == 0.0f, "and is gone once it has");
+    longHeld.releasedMs = chargeAt + 5000.0;
+    const auto leaving = sparkTrace(longHeld, longHeld.releasedMs + sparkFallMs * 0.5);
+    requireClose(leaving.tail, 0.5f, 0.0001f, "let go, the top of its trace falls at the standard pace");
+    require(leaving.charge == 1.0f && leaving.ultra == 1.0f && leaving.light == 1.0f,
+            "and the trace leaves as bright as it was");
+    requireClose(sparkTrace(longHeld, longHeld.releasedMs + sparkFallMs * 0.85).light, 0.5f, 0.001f,
+                 "going out as its top nears the floor");
+    require(!sparkSpent(longHeld, longHeld.releasedMs + sparkFallMs - 1.0), "and lasts until the top is through it");
+    require(sparkSpent(longHeld, longHeld.releasedMs + sparkFallMs + 1.0), "and no longer");
 
     // The same note struck again restarts its voice, so only its newest strike
     // can still be held; and the voices say which notes have stopped.
@@ -859,7 +858,7 @@ void sparkSuite()
     require(!sparks[1].held() && sparks[1].releasedMs == 2500.0 && sparks[2].held(),
             "a note the voices have stopped is let go, and one still down is not");
 
-    // At the cap, the light dropped is the oldest already let go, never a held one.
+    // At the cap, the spark dropped is the oldest already let go, never a held one.
     std::vector<NoteSpark> crowded;
     auto heldLight = spark;
     heldLight.note = 30;
@@ -875,10 +874,10 @@ void sparkSuite()
     require(static_cast<int>(crowded.size()) == maxSparks, "the well never keeps more than its cap");
     require(crowded.front().note == 30 && crowded.front().held(), "and a held note survives it");
     requireClose(static_cast<float>(crowded[1].bornMs - spark.bornMs), 2.0f, 0.001f,
-                 "while the oldest light already let go is the one dropped");
+                 "while the oldest spark already let go is the one dropped");
 
-    // Painted. A well of the shape the plate has, one light in the middle of
-    // it, and the top rows of the well well clear of the light's own halo.
+    // Painted. A well of the shape the plate has, one spark in the middle of
+    // it: x is 4 + 0.5 * (120 - 8).
     const auto paint = [] (const NoteSpark& light, double nowMs)
     {
         juce::Image image(juce::Image::ARGB, 120, 60, true, juce::SoftwareImageType());
@@ -894,28 +893,55 @@ void sparkSuite()
                 total += image.getPixelAt(x, y).getFloatAlpha();
         return total;
     };
+    const auto brightest = [] (const juce::Image& image)
+    {
+        auto most = 0.0f;
+        for (auto y = 0; y < image.getHeight(); ++y)
+            for (auto x = 0; x < image.getWidth(); ++x)
+                most = juce::jmax(most, image.getPixelAt(x, y).getFloatAlpha());
+        return most;
+    };
     const juce::Rectangle<int> whole(0, 0, 120, 60);
     const juce::Rectangle<int> top(0, 0, 120, 3);
-    // x is 4 + 0.5 * (120 - 8): the middle of the well.
-    const juce::Rectangle<int> besideColumn(0, 0, 55, 16);
+    const juce::Rectangle<int> nearFloor(0, 56, 120, 4);
+    const juce::Rectangle<int> besideTrace(0, 0, 55, 16);
 
-    require(light(paint(quick, spark.bornMs + sparkRestAgeMs(spark)), top) == 0.0f,
+    // Until its trace outgrows an ordinary trail, a held note is painted
+    // exactly like one let go.
+    {
+        const auto heldEarly = paint(spark, spark.bornMs + 600.0);
+        const auto quickEarly = paint(quick, spark.bornMs + 600.0);
+        auto same = true;
+        for (auto y = 0; y < 60 && same; ++y)
+            for (auto x = 0; x < 120 && same; ++x)
+                same = heldEarly.getPixelAt(x, y) == quickEarly.getPixelAt(x, y);
+        require(same, "a note held briefly is painted exactly like one let go");
+    }
+    require(light(paint(quick, spark.bornMs + 900.0), top) == 0.0f,
             "a note let go early leaves no trace at the top of the well");
-    require(light(paint(spark, restAt + sparkColumnMs), top) > 0.5f,
-            "a held one hangs from the top of the well by its trail");
-    require(light(paint(spark, restAt + sparkChargeMs), whole) > light(paint(spark, restAt), whole) * 1.5f,
-            "and is far brighter once it has charged than when it stopped");
 
-    // Taken after the flash that marks ultra's arrival, which spreads far
-    // enough to light this corner by itself.
+    const auto lightGone = paint(spark, spark.bornMs + sparkFallMs + 200.0);
+    require(light(lightGone, top) > 0.5f && light(lightGone, nearFloor) > 0.5f,
+            "a held note's trace runs from the top of the well to the floor");
+    require(brightest(lightGone) < 0.7f, "once its light has gone through the floor");
+    require(light(paint(spark, chargeAt + sparkChargeMs * 0.97), whole)
+                > light(paint(spark, spark.bornMs + 1600.0), whole) * 1.3f,
+            "and the trace grows brighter the longer the note is held");
+
+    const auto pouring = paint(longHeld, longHeld.releasedMs + sparkFallMs * 0.5);
+    require(light(pouring, top) == 0.0f && light(pouring, nearFloor) > 0.5f,
+            "let go, the trace's top falls away and it pours out through the floor");
+
+    // Taken after the flash that marks ultra's arrival, which widens the
+    // trace by itself.
     auto dustBefore = 0.0f, dustDuring = 0.0f;
     for (int frame = 0; frame < 8; ++frame)
     {
-        dustBefore += light(paint(spark, restAt + sparkChargeMs * 0.95 - frame * 6.0), besideColumn);
-        dustDuring += light(paint(spark, restAt + sparkChargeMs + sparkUltraFlashMs + 1.0 + frame * 120.0),
-                            besideColumn);
+        dustBefore += light(paint(spark, chargeAt + sparkChargeMs * 0.95 - frame * 6.0), besideTrace);
+        dustDuring += light(paint(spark, chargeAt + sparkChargeMs + sparkUltraFlashMs + 1.0 + frame * 120.0),
+                            besideTrace);
     }
-    require(dustBefore == 0.0f, "before ultra nothing lights the well beside the column");
+    require(dustBefore == 0.0f, "before ultra nothing lights the well beside the trace");
     require(dustDuring > 0.0f, "in ultra, stardust sprinkles round it");
 
     // The noise the stardust is placed by is the same every time it is asked

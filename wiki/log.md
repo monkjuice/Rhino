@@ -679,3 +679,10 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - source: the follow-up brief, checked against instruments/rhino-forge/ui/ForgeArpPlate.h and tests/ForgeTestTools.cpp
 - updated: pages/forge-arp-plate.md (commit f95557b, tuning caveat dropped; ~2 px slices capped at 64; colour capped at 0.85 of white and the column half way, two halos instead of one large one, and why)
 - updated: pages/headless-ui-snapshots.md (commit f95557b; pump callPendingTimersSynchronously through a wait, since one call misses later ticks)
+
+## [2026-10-13] update | Forge arp waterfall: a held note's light leaves, its trace carries the hold
+- source: the change's brief (uncommitted on main, not yet built or tested), checked against instruments/rhino-forge/ui/ForgeArpPlate.h and tests/ForgeTestsArp.cpp
+- updated: pages/forge-arp-plate.md (section rewritten as "A held note's trace hangs and charges": the user's feedback, no parking, charge from sparkChargeStart, the trace pours out after release, sparkSpent drops sparks, short holds identical to a let-go note, ultra on the trace, f95557b's halos gone; sparkSuite rewritten and the nearFloor/C4459 note; summary changed)
+- updated: pages/headless-ui-snapshots.md (ARPHELD now shows traces in ultra, the lights gone)
+- updated: pages/real-time-audio-rules.md (a lost note-off would leave a trace hanging, not a light)
+- updated: index.md (summary of forge-arp-plate)

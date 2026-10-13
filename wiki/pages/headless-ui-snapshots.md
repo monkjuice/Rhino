@@ -80,7 +80,7 @@ eight-note chord through the voices, runs the due timers by hand with `juce::Tim
 (nothing runs a message loop, and the editor's timer is what carries a note from the Processor to the plate) and waits
 450 ms, so the PNG shows notes falling through the plate's well ([Forge ARP plate, slots and waterfall](forge-arp-plate.md)).
 `ARPHELD` (commit `f95557b`, 2026-10-13) releases four of the chord's notes, waits `sparkFallMs` + `sparkChargeMs`
-so the other four hang in ultra, then plays two short notes that fall the ordinary way. The `MidiBuffer` handed to
+so the other four's traces are in ultra (since the uncommitted 2026-10-13 redesign their lights have left through the floor), then plays two short notes that fall the ordinary way. The `MidiBuffer` handed to
 `processBlock` keeps the events `keyboardState` injected into it, so clear it before every later block or the chord
 replays.
 

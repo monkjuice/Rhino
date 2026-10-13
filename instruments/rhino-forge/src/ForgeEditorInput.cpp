@@ -597,16 +597,16 @@ void Editor::fadeValueBubble()
 
 // The notes the voices were told to play since the last tick become sparks in
 // the plate's well, the ones whose notes have stopped are let go, and the
-// sparks that have reached the floor are dropped. Where a spark falls is the
-// note's place on the keyboard, so a rising arpeggio drifts across the well
-// the way it walks along the keys; how big it is, is the velocity; the rest is
-// a roll of the dice, so a chord falls as several lights rather than one.
+// sparks that have gone through the floor, trace and all, are dropped. Where a
+// spark falls is the note's place on the keyboard, so a rising arpeggio drifts
+// across the well the way it walks along the keys; how big it is, is the
+// velocity; the rest is a roll of the dice, so a chord falls as several lights
+// rather than one.
 void Editor::gatherNoteSparks()
 {
     const auto now = juce::Time::getMillisecondCounterHiRes();
     sparks.erase(std::remove_if(sparks.begin(), sparks.end(),
-                                [now] (const ui::NoteSpark& spark)
-                                { return ui::sparkProgress(spark, now) >= 1.0f; }),
+                                [now] (const ui::NoteSpark& spark) { return ui::sparkSpent(spark, now); }),
                  sparks.end());
 
     auto& random = juce::Random::getSystemRandom();

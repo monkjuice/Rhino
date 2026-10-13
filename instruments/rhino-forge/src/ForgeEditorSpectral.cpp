@@ -495,6 +495,19 @@ void Editor::paintSpectralMarkers(juce::Graphics& g, int oscillator, juce::Recta
 juce::String Editor::getTooltip()
 {
     const auto at = getMouseXYRelative();
+    // The ARP plate is painted rather than built of components, so what each
+    // part of it does is answered here, by the same geometry that takes the
+    // press.
+    if (ui::arpPlateBounds(getLocalBounds()).contains(at))
+    {
+        if (ui::arpPlateLedBounds(getLocalBounds()).contains(at)) return ui::tooltipFor("arpEnable");
+        if (const auto slot = ui::arpSlotAt(getLocalBounds(), at); slot >= 0)
+            return "Arp slot " + juce::String(slot + 1) + ". " + ui::tooltipFor("arpSlot");
+        if (ui::arpWaterfallBounds(getLocalBounds()).contains(at))
+            return "The notes Forge is playing, falling as they sound";
+        return arpOpen ? "Put the arpeggiator's settings away"
+                       : "Open the arpeggiator's settings over the envelopes and LFOs";
+    }
     const auto oscillator = spectralDisplayAt(at);
     if (oscillator < 0) return {};
     const auto prefix = juce::String(oscillatorPrefix(oscillator));

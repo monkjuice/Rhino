@@ -576,9 +576,17 @@ juce::AudioProcessorValueTreeState::ParameterLayout Processor::parameterLayout()
     for (const auto& division : arpDivisions()) arpQuantNames.add(division.label);
 
     result.push_back(toggle("arpEnable", "Arp Enable", false));
-    // GLOBAL. The bank field and EDIT ALL belong to the twelve launchable slots
-    // and arrive with them; what is real without slots is the interval the arp
-    // waits for before it starts, which is what LAUNCH QUANT means.
+    // GLOBAL: the lamp above, the slot and the interval the arp waits for
+    // before it starts. The slot is which of four configurations is live —
+    // every parameter in the five panes after this one belongs to it, see
+    // arpSlotParameterIds, and choosing another slot moves all of them at
+    // once on the Processor's timer. A parameter rather than a view setting so
+    // a host lane or a pad on a controller can switch patterns while playing.
+    // EDIT ALL, which the manual puts beside it, has not arrived.
+    juce::StringArray arpSlotNames;
+    for (int slot = 0; slot < arpSlotCount; ++slot) arpSlotNames.add(juce::String(slot + 1));
+    result.push_back(std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID {"arpSlot", 1}, "Arp Slot", arpSlotNames, 0));
     result.push_back(std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID {"arpLaunchQuant", 1}, "Arp Launch Quant", arpQuantNames, 0));
 

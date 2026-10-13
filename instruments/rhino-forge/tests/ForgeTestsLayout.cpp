@@ -6,6 +6,8 @@
 #include "../ui/ForgeVisuals.h"
 #include "../ui/ForgeNoteGuide.h"
 
+#include <algorithm>
+
 namespace rhino::forge::tests
 {
 namespace
@@ -273,6 +275,8 @@ void layoutSuite()
                 require(tip.length() > 8, "a tooltip says something");
             }
     }
+    for (const auto& id : rhino::forge::ui::chassisParameters())
+        require(rhino::forge::ui::tooltipFor(id).length() > 8, "a control on the chassis has a tooltip");
 
     // Polyphony means nothing in mono, and the panel has to say so.
     auto polyIsGated = false;
@@ -283,6 +287,43 @@ void layoutSuite()
                     polyIsGated = control.disabledBy != nullptr
                         && juce::String(control.disabledBy) == "mono";
     require(polyIsGated, "the polyphony knob greys out while mono is on");
+
+    // The arp's slots hold every control of the five pattern panes and nothing
+    // else. The list a preset stores (arpSlotParameterIds) and the panes the
+    // panel declares are held to each other here, so a control added to a
+    // pane cannot be left out of the slots by accident, and a slot cannot
+    // quietly carry a setting the panes share.
+    {
+        std::vector<juce::String> inPanes;
+        for (const auto& module : modules)
+        {
+            if (!rhino::forge::ui::onPage(module, rhino::forge::ui::Page::arp)) continue;
+            if (juce::String(module.id) == "arpGlobal") continue;
+            for (const auto& row : module.rows)
+                for (const auto& control : row.controls) inPanes.push_back(control.id);
+        }
+        const auto& inSlot = rhino::forge::arpSlotParameterIds();
+        const auto slotHolds = [&inSlot] (const juce::String& id)
+        {
+            return std::any_of(inSlot.begin(), inSlot.end(),
+                               [&id] (const char* held) { return id == held; });
+        };
+        require(inPanes.size() == inSlot.size(), "a slot holds exactly the controls of the pattern panes");
+        for (const auto& id : inPanes)
+        {
+            require(slotHolds(id), "every control on a pattern pane belongs to the slot");
+            if (!slotHolds(id)) std::cerr << "       not in a slot: " << id << '\n';
+        }
+        for (const auto* id : inSlot)
+            require(std::find(inPanes.begin(), inPanes.end(), juce::String(id)) != inPanes.end(),
+                    "everything a slot holds is a control on a pattern pane");
+        for (const auto& module : modules)
+            if (juce::String(module.id) == "arpGlobal")
+                for (const auto& row : module.rows)
+                    for (const auto& control : row.controls)
+                        require(!slotHolds(control.id),
+                                "the ARP pane's controls are shared across the slots");
+    }
 
     // Conversely, every parameter should be reachable from the panel. A
     // parameter nothing displays is either a bug or dead weight.
@@ -301,6 +342,9 @@ void layoutSuite()
             for (const auto& id : rhino::forge::ui::displayParameters(module))
                 if (withId->paramID == id) found = true;
         }
+        // A button on the chassis is that parameter's control.
+        for (const auto& id : rhino::forge::ui::chassisParameters())
+            if (withId->paramID == id) found = true;
         require(found, "every parameter appears somewhere on the panel");
         if (!found) std::cerr << "       orphan parameter: " << withId->paramID << '\n';
     }
@@ -761,6 +805,32 @@ void layoutSuite()
             {
                 require(false, "knobs stay usable at every allowed size");
                 std::cerr << "       at " << width << "x" << height << '\n';
+            }
+
+            // The keyboard shelf, left to right: the keys, the ARP plate and
+            // the note guide, each clear of the next. And on the plate, the
+            // lamp, the name, the slot buttons and the well all inside its
+            // face and clear of each other, with the well still wide enough
+            // for a note to be seen falling.
+            {
+                const auto keys = rhino::forge::ui::keyboardBounds(resized);
+                const auto plate = rhino::forge::ui::arpPlateBounds(resized);
+                const auto guide = rhino::forge::ui::noteGuidePlateBounds(resized);
+                const auto face = rhino::forge::ui::arpPlateFace(resized);
+                const auto name = rhino::forge::ui::arpPlateNameBounds(resized);
+                const auto grid = rhino::forge::ui::arpSlotGridBounds(resized);
+                const auto well = rhino::forge::ui::arpWaterfallBounds(resized);
+                const auto ordered = keys.getRight() < plate.getX() && plate.getRight() < guide.getX()
+                    && !keys.intersects(plate) && !plate.intersects(guide);
+                const auto housed = face.contains(rhino::forge::ui::arpPlateLedBounds(resized))
+                    && face.contains(name) && face.contains(grid) && face.contains(well)
+                    && !name.intersects(grid) && !grid.intersects(well);
+                if (!ordered || !housed || well.getWidth() < 60)
+                {
+                    require(false, "the keys, the ARP plate and the note guide keep their order, "
+                                   "and the plate holds its parts, at every allowed size");
+                    std::cerr << "       at " << width << "x" << height << '\n';
+                }
             }
 
             for (size_t i = 0; i < modules.size(); ++i)

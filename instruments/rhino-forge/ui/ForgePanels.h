@@ -192,23 +192,50 @@ inline void drawNoteGuideHousing(juce::Graphics& g, juce::Rectangle<int> compone
     drawWell(g, plate.reduced(6.0f), juce::Colour(0xff05070c), 1.0f, 5);
 }
 
-// The ARP switch on the shelf beside the keys, standing in the octave the
-// keyboard gave up for it.
+// The sky behind the notes falling through the ARP plate's well: a faint
+// violet haze and a scatter of stars, the far side of the picture the sparks
+// fall in front of. Static, so it lives in the cached chassis with the metal;
+// the seed is fixed so the same stars are there every time the layer is
+// rebuilt rather than a new sky at every resize.
+inline void drawArpSky(juce::Graphics& g, juce::Rectangle<int> wellBounds)
+{
+    if (wellBounds.getWidth() < 8 || wellBounds.getHeight() < 8) return;
+    const auto well = wellBounds.toFloat();
+    juce::Graphics::ScopedSaveState state(g);
+    g.reduceClipRegion(wellBounds);
+    juce::ColourGradient haze(signalViolet.withAlpha(0.0f), well.getCentreX(), well.getY(),
+                              signalViolet.withAlpha(0.07f), well.getCentreX(), well.getBottom(), false);
+    g.setGradientFill(haze);
+    g.fillRect(well);
+    juce::Random random(0x4a7f);
+    const auto count = juce::jmax(6, juce::roundToInt(well.getWidth() * well.getHeight() / 260.0f));
+    for (int i = 0; i < count; ++i)
+    {
+        const auto x = well.getX() + random.nextFloat() * well.getWidth();
+        const auto y = well.getY() + random.nextFloat() * well.getHeight();
+        const auto size = 0.6f + random.nextFloat() * 1.1f;
+        g.setColour(juce::Colours::white.withAlpha(0.05f + random.nextFloat() * 0.16f));
+        g.fillEllipse(x, y, size, size);
+    }
+}
+
+// The ARP plate on the shelf between the keys and the note guide, the width of
+// the octave the keyboard gave up for it.
 //
-// One plate doing two jobs, exactly as Serum's is: the circle switches the
-// arpeggiator on, and the rest of it opens the six panes over the modulators.
-// The two are drawn as different things — a lit lamp against a raised face —
-// because an arp running with its settings put away and an arp on screen that
-// is switched off are both ordinary states, and a single highlight covering
-// both would leave you unable to tell which you were in.
+// One plate doing three jobs: the lamp switches the arpeggiator on, the four
+// buttons choose which of its slots is playing, and the name — or any of the
+// plate those do not cover — opens the six panes over the modulators. The well
+// at its right-hand end is where the notes the voices play fall.
 //
 // It is drawn in two halves, for the same reason the chassis and the module
-// plates are two layers. The metal never changes and goes into the cached
-// chassis with the rest of the furniture; only the lamp, the lit face and the
-// word under the name follow the arp's state, and only those are on the frame
-// path. Drawn whole in the live pass it cost about three milliseconds a frame
-// — `drawMetalPiece` and `drawEdgeWear` are the expensive primitives here, and
-// they are exactly what the cached layer exists to pay for once.
+// plates are two layers. The metal, the well, the rule between the door and
+// the buttons and the sky in the well never change and go into the cached
+// chassis with the rest of the furniture; the lamp, the lit face, the word
+// under the name, the buttons and the falling notes follow the arp's state,
+// and only those are on the frame path (ui/ForgeArpPlate.h). Drawn whole in
+// the live pass it cost about three milliseconds a frame — `drawMetalPiece`
+// and `drawEdgeWear` are the expensive primitives here, and they are exactly
+// what the cached layer exists to pay for once.
 inline void drawArpPlateHousing(juce::Graphics& g, juce::Rectangle<int> componentBounds)
 {
     const auto plate = arpPlateBounds(componentBounds).toFloat();
@@ -216,44 +243,15 @@ inline void drawArpPlateHousing(juce::Graphics& g, juce::Rectangle<int> componen
     drawEdgeWear(g, plate, 137);
     drawRivet(g, {plate.getRight() - 9, plate.getY() + 9}, 3.2f, 0.9f);
     drawRivet(g, {plate.getX() + 8, plate.getBottom() - 9}, 2.4f, 0.8f);
-    drawWell(g, plate.reduced(7.0f, 9.0f), juce::Colour(0xff05070c), 1.0f, 5);
-}
-
-inline void drawArpPlateState(juce::Graphics& g, juce::Rectangle<int> componentBounds,
-                              bool on, bool open)
-{
-    const auto face = arpPlateBounds(componentBounds).toFloat().reduced(7.0f, 9.0f);
-    // Lit while the panes are showing, which is what makes the plate read as
-    // the door it is rather than as a second power switch.
-    if (open)
-    {
-        g.setColour(signalViolet.withAlpha(0.16f));
-        g.fillRoundedRectangle(face, 5.0f);
-        g.setColour(signalViolet.withAlpha(0.75f));
-        g.drawRoundedRectangle(face.reduced(0.5f), 5.0f, 1.0f);
-    }
-
-    // The same lamp the module headers wear, drawn here rather than borrowed,
-    // because this one is on the chassis instead of on a module and has no
-    // component of its own to carry it.
-    const auto led = arpPlateLedBounds(componentBounds).toFloat().reduced(5.0f);
-    if (on)
-    {
-        g.setColour(signalViolet.withAlpha(0.22f));
-        g.fillEllipse(led.expanded(3.5f));
-    }
-    g.setColour(on ? signalViolet : juce::Colour(0xff232838));
-    g.fillEllipse(led);
-    g.setColour(on ? juce::Colours::white.withAlpha(0.5f) : mutedText.withAlpha(0.45f));
-    g.drawEllipse(led, 1.0f);
-
-    auto name = face.withTrimmedLeft(arpPlateLedBounds(componentBounds).toFloat().getRight()
-                                     - face.getX() + 6.0f);
-    g.setFont(panelFont(Face::header, 14.0f));
-    g.setColour(on ? text : mutedText);
-    drawTrackedText(g, "ARP", name.removeFromTop(name.getHeight() * 0.62f), 1.8f,
-                    juce::Justification::centredLeft);
-    stamp(g, open ? "CLOSE" : "SETTINGS", name, 8.0f, 0.7f);
+    drawWell(g, arpPlateFace(componentBounds).toFloat(), juce::Colour(0xff05070c), 1.0f,
+             arpPlateFaceCut);
+    // The rule between the door and the slot buttons, the same engraved line
+    // GLOBAL carries under its knobs.
+    const auto name = arpPlateNameBounds(componentBounds).toFloat();
+    g.setColour(plateEdgeLit.withAlpha(0.16f));
+    g.drawLine(name.getRight() + 5.0f, name.getY() + 6.0f, name.getRight() + 5.0f,
+               name.getBottom() - 6.0f, 0.8f);
+    drawArpSky(g, arpWaterfallBounds(componentBounds));
 }
 
 inline void drawBackdrop(juce::Graphics& g, juce::Rectangle<int> componentBounds)

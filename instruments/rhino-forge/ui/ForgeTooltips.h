@@ -468,6 +468,9 @@ inline juce::String tooltipFor(const juce::String& id)
         // The arpeggiator. Every one of these says what it does to the notes
         // being held, because that is the only thing the arp acts on.
         {"arpEnable", "Play the keys being held as a sequence rather than as a chord"},
+        {"arpSlot", "Which of the four arp slots is playing. Each slot keeps its own pattern, "
+                    "transpose, playback, retrigger and velocity settings; the lamp and "
+                    "LAUNCH QUANT are shared"},
         {"arpLaunchQuant", "Wait for the next division of the host's bar before starting, "
                            "so an arp switched on mid-phrase still lands on the grid"},
         {"arpShape", "The order the held notes are played in: up, down, and the "

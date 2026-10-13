@@ -85,6 +85,7 @@ set(forge_sources
     core/ForgeVoiceParts.h
     core/ForgeLfoTable.h
     core/ForgeArp.h
+    core/ForgeNoteFlash.h
     core/ForgeShapes.h
     core/ForgeFilter.h
     core/ForgeMatrix.h
@@ -105,6 +106,7 @@ set(forge_sources
     ui/ForgeControlBlock.h
     ui/ForgeLayout.h
     ui/ForgePanels.h
+    ui/ForgeArpPlate.h
     ui/ForgePerformanceWheel.h
     ui/ForgeNoteGuide.h
     ui/ForgeTablePanel.h

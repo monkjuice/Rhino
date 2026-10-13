@@ -134,9 +134,14 @@ void Editor::paint(juce::Graphics& g)
     g.drawImageTransformed(chrome, juce::AffineTransform::scale(1.0f / scale));
 
     // Only the plate's state, over the cached chassis that already carries its
-    // metal: the lamp follows arpEnable and the face follows whether the panes
-    // are showing, and neither of those is something the metal knows about.
-    ui::drawArpPlateState(g, getLocalBounds(), value("arpEnable") >= 0.5f, arpOpen);
+    // metal: the lamp follows arpEnable, the face follows whether the panes
+    // are showing, the buttons follow the slot and the well follows the notes,
+    // and none of those is something the metal knows about. The slot lit is
+    // the one chosen rather than the one the Processor has moved to, so a
+    // press lights its button on this very frame.
+    ui::drawArpPlateState(g, getLocalBounds(), value("arpEnable") >= 0.5f, arpOpen,
+                          juce::jlimit(0, arpSlotCount - 1, juce::roundToInt(value("arpSlot"))),
+                          sparks, juce::Time::getMillisecondCounterHiRes());
 
     for (const auto& module : moduleUis)
     {

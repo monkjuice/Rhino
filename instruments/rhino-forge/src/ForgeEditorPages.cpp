@@ -66,6 +66,23 @@ void Editor::toggleArpEnabled()
     repaint();
 }
 
+// One of the four slot buttons on the plate. The slot is a parameter, so it
+// goes through the host the way the lamp does; the Processor then moves the
+// pattern's parameters to match, and is asked to do so now rather than on its
+// next tick so the knobs follow the press.
+void Editor::chooseArpSlot(int slot)
+{
+    auto* parameter = processor.state.getParameter("arpSlot");
+    if (parameter == nullptr) return;
+    parameter->beginChangeGesture();
+    parameter->setValueNotifyingHost(parameter->convertTo0to1(
+        static_cast<float>(juce::jlimit(0, arpSlotCount - 1, slot))));
+    parameter->endChangeGesture();
+    processor.applyArpSlot();
+    applyEnableStates();
+    repaint();
+}
+
 juce::Colour Editor::accentOf(const ui::Module& module) const
 {
     if (module.display == ui::Display::oscillator)

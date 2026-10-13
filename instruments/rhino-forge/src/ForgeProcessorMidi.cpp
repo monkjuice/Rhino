@@ -130,7 +130,14 @@ void Processor::applyDefaultMidiMap()
     }
 }
 
-void Processor::timerCallback() { drainMidiControl(); }
+// The arp's slot rides on the same tick as the learned controls, and for the
+// same reason: a slot chosen by a host lane or a pad arrives on the audio
+// thread, and the parameters it moves may only be written here.
+void Processor::timerCallback()
+{
+    drainMidiControl();
+    applyArpSlot();
+}
 
 void Processor::drainMidiControl()
 {

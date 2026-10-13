@@ -32,16 +32,31 @@ int runSnapshot(int argc, char** argv)
     if (argc > 4) editor->setSize(juce::String(argv[3]).getIntValue(), juce::String(argv[4]).getIntValue());
     // ARP is not one of the tabs — it is the plate beside the keyboard, and it
     // opens over whichever tab is showing. There is no button to reach for, so
-    // the review takes the same route a hand does and presses the plate.
+    // the review takes the same route a hand does and presses the plate's
+    // name: the lamp and the slot buttons beside it do other things.
     if (argc > 5 && juce::String(argv[5]).equalsIgnoreCase("ARP"))
     {
-        const auto at = rhino::forge::ui::arpPlateBounds(editor->getLocalBounds())
+        const auto at = rhino::forge::ui::arpPlateNameBounds(editor->getLocalBounds())
                             .getCentre().toFloat();
         const juce::MouseEvent click(juce::Desktop::getInstance().getMainMouseSource(), at,
                                      juce::ModifierKeys(), 1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
                                      editor.get(), editor.get(), juce::Time::getCurrentTime(),
                                      at, juce::Time::getCurrentTime(), 1, false);
         editor->mouseDown(click);
+        // And a chord through the voices, so the review shows the plate's
+        // well with notes falling. Nothing here runs a message loop, so the
+        // editor's timer — which is what carries a note from the Processor
+        // to the plate — is run by hand once it is due, and the sparks are
+        // then given a moment to fall before the picture is taken.
+        processor->prepareToPlay(48000.0, 512);
+        juce::AudioBuffer<float> audio(2, 512);
+        juce::MidiBuffer midi;
+        for (const auto note : {48, 52, 55, 60, 64, 67, 72, 76})
+            processor->keyboardState.noteOn(1, note, 0.35f + 0.08f * static_cast<float>(note % 7));
+        processor->processBlock(audio, midi);
+        juce::Thread::sleep(80);
+        juce::Timer::callPendingTimersSynchronously();
+        juce::Thread::sleep(450);
     }
     else if (argc > 5)
         for (auto* child : editor->getChildren())

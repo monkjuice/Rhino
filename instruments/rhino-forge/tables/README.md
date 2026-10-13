@@ -12,9 +12,9 @@ folders go, so `Basic/basic-shapes.wav` is reached through **Basic**.
 
 **NEW** on the `TABLE` tab asks for a name, writes a blank one-frame table to
 `user/`, and loads it to draw on. **SAVE** writes the table back to its file in
-`user/`. A table that has no file there yet, such as a factory table, the
-built-in ten or one drawn over, is saved as a new file instead, so the tables
-here are never written over. `user/` is ignored by git, so what you make there
+`user/`, drawn over or not. A table that has no file there yet, such as a
+factory table or the built-in ten, is saved as a new file instead, so the
+tables here are never written over. `user/` is ignored by git, so what you make there
 stays on your machine. A packaged build with no source tree keeps the same tree
 in `Documents/Rhino Forge/Tables`.
 

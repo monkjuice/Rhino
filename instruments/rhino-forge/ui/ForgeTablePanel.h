@@ -421,8 +421,8 @@ public:
         // Writing a file changes nothing that undo could take back, so SAVE
         // takes no step.
         saveButton.accent = electricBlue;
-        saveButton.setTooltip("Write this table to its file. One that is not yours yet -- a factory "
-                              "table, the built-in ten, one drawn over -- is saved as a new file");
+        saveButton.setTooltip("Write this table back to its file in your tables. One that has no file "
+                              "there yet -- a factory table, the built-in ten -- is saved as a new file");
         saveButton.onClick = [this] { if (onSaveTable != nullptr) onSaveTable(oscillator); };
         addAndMakeVisible(saveButton);
 

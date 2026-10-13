@@ -125,12 +125,62 @@ void warpSuite()
     // --- The list itself ------------------------------------------------------
     require(static_cast<int>(rhino::forge::warpModes().size()) == modeCount,
             "the warp table holds exactly as many modes as it says it does");
-    for (int mode = 0; mode < modeCount; ++mode)
+    // Names are per oscillator, because an OSC mode names the oscillator it
+    // reads, so uniqueness is asked of each oscillator's own list.
+    for (int carrier = 0; carrier < rhino::forge::oscillatorCount; ++carrier)
+        for (int mode = 0; mode < modeCount; ++mode)
+        {
+            const auto name = juce::String(rhino::forge::warpModeName(mode, carrier));
+            require(name.isNotEmpty(), "every warp mode has a name");
+            for (int other = mode + 1; other < modeCount; ++other)
+                require(name != rhino::forge::warpModeName(other, carrier),
+                        "no two warp modes share a name on one oscillator");
+        }
+
+    // --- Which oscillator an OSC mode reads ------------------------------------
+    //
+    // Each carrier reaches both of the others, never itself, and its list names
+    // them by letter in letter order: the PD family reads PD OSC B, PD OSC C on
+    // A, PD OSC A, PD OSC C on B, and PD OSC A, PD OSC B on C. Written out as
+    // the names a person reads rather than derived from the ring, so this is a
+    // second opinion and not a tautology.
     {
-        const auto name = juce::String(rhino::forge::warpModeName(mode));
-        require(name.isNotEmpty(), "every warp mode has a name");
-        for (int other = mode + 1; other < modeCount; ++other)
-            require(name != rhino::forge::warpModeName(other), "no two warp modes share a name");
+        const char* const expected[rhino::forge::oscillatorCount][5] = {
+            {"PD OSC B", "PD OSC C", "PD SUB", "PD NOISE", "PD SELF"},
+            {"PD OSC A", "PD OSC C", "PD SUB", "PD NOISE", "PD SELF"},
+            {"PD OSC A", "PD OSC B", "PD SUB", "PD NOISE", "PD SELF"},
+        };
+        for (int carrier = 0; carrier < rhino::forge::oscillatorCount; ++carrier)
+        {
+            const auto order = rhino::forge::warpModeOrder(carrier);
+            // Every mode listed exactly once, and each position turns back into
+            // the mode it lists.
+            for (int mode = 0; mode < modeCount; ++mode)
+            {
+                auto seen = 0;
+                for (const auto listed : order) if (listed == mode) ++seen;
+                require(seen == 1, "a carrier's warp list holds every mode exactly once");
+                require(rhino::forge::warpModeAt(rhino::forge::warpModePosition(mode, carrier), carrier)
+                            == mode,
+                        "a warp field's position turns back into the mode it shows");
+            }
+            juce::StringArray pd;
+            for (const auto mode : order)
+                if (rhino::forge::warpCategoryOf(static_cast<WarpMode>(mode))
+                    == rhino::forge::WarpCategory::pd)
+                    pd.add(rhino::forge::warpModeName(mode, carrier));
+            juce::StringArray wanted;
+            for (const auto* name : expected[carrier]) wanted.add(name);
+            if (pd != wanted)
+            {
+                require(false, "a carrier's PD family lists both other oscillators by letter, then SUB");
+                std::cerr << "       oscillator " << carrier << " lists "
+                          << pd.joinIntoString(", ") << '\n';
+            }
+            for (int mode = 0; mode < modeCount; ++mode)
+                require(rhino::forge::warpSourceOscillator(static_cast<WarpMode>(mode), carrier) != carrier,
+                        "no warp mode points an oscillator at itself");
+        }
     }
     // Every category the menu offers has something in it, or the menu draws an
     // empty submenu.
@@ -173,7 +223,7 @@ void warpSuite()
         if (worst > (stepped ? 0.01f : 1.0e-5f))
         {
             require(false, "a warp mode leaves the wave as it was at the depth it calls neutral");
-            std::cerr << "       " << rhino::forge::warpModeName(mode) << " moved it by " << worst << '\n';
+            std::cerr << "       " << rhino::forge::warpModeName(mode, 0) << " moved it by " << worst << '\n';
         }
     }
 
@@ -236,7 +286,7 @@ void warpSuite()
             if (!finite || warpPeak(rendered) <= 0.0f || warpPeak(rendered) > 1.0f)
             {
                 require(false, "every warp mode renders finite, audible signal inside full scale");
-                std::cerr << "       " << rhino::forge::warpModeName(mode) << " at note " << note
+                std::cerr << "       " << rhino::forge::warpModeName(mode, 0) << " at note " << note
                           << " peaked at " << warpPeak(rendered) << '\n';
             }
         }
@@ -296,7 +346,7 @@ void warpSuite()
             if (atNote < 0.95)
             {
                 require(false, "a warped oscillator still repeats at the note's own period");
-                std::cerr << "       " << rhino::forge::warpModeName(static_cast<int>(checked.mode))
+                std::cerr << "       " << rhino::forge::warpModeName(static_cast<int>(checked.mode), 0)
                           << " repeated at only " << atNote << '\n';
             }
             // And nothing shorter repeats, or the warp has put the note up
@@ -310,7 +360,7 @@ void warpSuite()
             if (worst > 0.95)
             {
                 require(false, "nothing shorter than the note's period repeats in a warped oscillator");
-                std::cerr << "       " << rhino::forge::warpModeName(static_cast<int>(checked.mode))
+                std::cerr << "       " << rhino::forge::warpModeName(static_cast<int>(checked.mode), 0)
                           << " repeated at " << shortest << " samples, " << worst << '\n';
             }
         }
@@ -379,60 +429,92 @@ void warpSuite()
     // modulate with and the stage takes itself out rather than going quietly
     // wrong; with it on, its own level makes no difference to the modulation.
     for (const auto mode : {WarpMode::pdOsc, WarpMode::fmOsc, WarpMode::fmExpOsc,
-                            WarpMode::amOsc, WarpMode::rmOsc})
+                            WarpMode::amOsc, WarpMode::rmOsc,
+                            WarpMode::pdOscPrevious, WarpMode::fmOscPrevious,
+                            WarpMode::fmExpOscPrevious, WarpMode::amOscPrevious,
+                            WarpMode::rmOscPrevious})
     {
+        const auto read = static_cast<size_t>(rhino::forge::warpSourceOscillator(mode, 0));
         auto alone = warpTestPatch();
         alone.oscillators[0].warpMode[0] = static_cast<float>(mode);
         alone.oscillators[0].warpAmount[0] = 1.0f;
-        const auto withoutB = warpRender(alone, 2048);
+        const auto withoutSource = warpRender(alone, 2048);
         auto difference = 0.0f;
-        for (size_t i = 0; i < withoutB.size(); ++i)
-            difference = juce::jmax(difference, std::abs(withoutB[i] - plainRender[i]));
+        for (size_t i = 0; i < withoutSource.size(); ++i)
+            difference = juce::jmax(difference, std::abs(withoutSource[i] - plainRender[i]));
         if (difference > 1.0e-5f)
         {
             require(false, "a stage driven by the other oscillator does nothing while it is off");
-            std::cerr << "       " << rhino::forge::warpModeName(static_cast<int>(mode)) << '\n';
+            std::cerr << "       " << rhino::forge::warpModeName(static_cast<int>(mode), 0) << '\n';
         }
 
-        alone.oscillators[1].enable = 1.0f;
-        alone.oscillators[1].level = 0.0f;   // heard only as a modulator, as the manual suggests
-        const auto withB = warpRender(alone, 2048);
+        alone.oscillators[read].enable = 1.0f;
+        alone.oscillators[read].level = 0.0f;   // heard only as a modulator, as the manual suggests
+        const auto withSource = warpRender(alone, 2048);
         difference = 0.0f;
-        for (size_t i = 0; i < withB.size(); ++i)
-            difference = juce::jmax(difference, std::abs(withB[i] - plainRender[i]));
+        for (size_t i = 0; i < withSource.size(); ++i)
+            difference = juce::jmax(difference, std::abs(withSource[i] - plainRender[i]));
         if (difference < 0.01f)
         {
             require(false, "a stage driven by the other oscillator works with its level down");
-            std::cerr << "       " << rhino::forge::warpModeName(static_cast<int>(mode)) << '\n';
+            std::cerr << "       " << rhino::forge::warpModeName(static_cast<int>(mode), 0) << '\n';
         }
     }
 
-    // With three oscillators, OSC modulation follows one explicit ring. Hold
-    // that contract for every carrier: A reads B, B reads C and C reads A.
-    for (int carrier = 0; carrier < rhino::forge::oscillatorCount; ++carrier)
+    // Every carrier reaches both of the others, and each OSC mode reads the one
+    // its name says and not the other: AM OSC on A is B and AM OSC's partner is
+    // C; on B they are C and A; on C, A and B. The sources are written out
+    // rather than taken from warpSourceOscillator, so the check cannot agree
+    // with the engine by construction.
     {
-        auto ringPlain = warpTestPatch();
-        const auto carrierSettings = ringPlain.oscillators[0];
-        for (auto& oscillator : ringPlain.oscillators) oscillator.enable = 0.0f;
-        ringPlain.oscillators[static_cast<size_t>(carrier)] = carrierSettings;
-        const auto unmodulated = warpRender(ringPlain, 2048);
+        struct Read { WarpMode mode; int source[rhino::forge::oscillatorCount]; };
+        const Read reads[] = {{WarpMode::amOsc, {1, 2, 0}}, {WarpMode::amOscPrevious, {2, 0, 1}}};
+        for (const auto& checked : reads)
+            for (int carrier = 0; carrier < rhino::forge::oscillatorCount; ++carrier)
+            {
+                auto ringPlain = warpTestPatch();
+                const auto carrierSettings = ringPlain.oscillators[0];
+                for (auto& oscillator : ringPlain.oscillators) oscillator.enable = 0.0f;
+                ringPlain.oscillators[static_cast<size_t>(carrier)] = carrierSettings;
+                const auto unmodulated = warpRender(ringPlain, 2048);
 
-        auto ringModulated = ringPlain;
-        auto& target = ringModulated.oscillators[static_cast<size_t>(carrier)];
-        target.warpMode[0] = static_cast<float>(WarpMode::amOsc);
-        target.warpAmount[0] = 1.0f;
-        auto& source = ringModulated.oscillators[static_cast<size_t>(
-            (carrier + 1) % rhino::forge::oscillatorCount)];
-        source.enable = 1.0f;
-        source.level = 0.0f;
+                // The render with only `on` of the other two enabled, heard
+                // only as a modulator.
+                const auto renderWith = [&] (int on)
+                {
+                    auto patch = ringPlain;
+                    auto& target = patch.oscillators[static_cast<size_t>(carrier)];
+                    target.warpMode[0] = static_cast<float>(checked.mode);
+                    target.warpAmount[0] = 1.0f;
+                    auto& source = patch.oscillators[static_cast<size_t>(on)];
+                    source.enable = 1.0f;
+                    source.level = 0.0f;
+                    return warpRender(patch, 2048);
+                };
+                const auto movedBy = [&unmodulated] (const std::vector<float>& rendered)
+                {
+                    auto difference = 0.0f;
+                    for (size_t sample = 0; sample < unmodulated.size(); ++sample)
+                        difference = juce::jmax(difference,
+                                                std::abs(unmodulated[sample] - rendered[sample]));
+                    return difference;
+                };
 
-        const auto modulated = warpRender(ringModulated, 2048);
-        auto difference = 0.0f;
-        for (size_t sample = 0; sample < unmodulated.size(); ++sample)
-            difference = juce::jmax(difference,
-                std::abs(unmodulated[sample] - modulated[sample]));
-        require(difference > 0.01f,
-                "every oscillator reads the next member of the cross-modulation ring");
+                const auto named = checked.source[carrier];
+                const auto neither = 3 - carrier - named;   // the third of A, B and C
+                if (movedBy(renderWith(named)) <= 0.01f)
+                {
+                    require(false, "an OSC warp mode reads the oscillator its name says");
+                    std::cerr << "       " << rhino::forge::warpModeName(static_cast<int>(checked.mode), carrier)
+                              << " on oscillator " << carrier << '\n';
+                }
+                if (movedBy(renderWith(neither)) > 1.0e-5f)
+                {
+                    require(false, "an OSC warp mode ignores the oscillator its name does not say");
+                    std::cerr << "       " << rhino::forge::warpModeName(static_cast<int>(checked.mode), carrier)
+                              << " on oscillator " << carrier << '\n';
+                }
+            }
     }
 
     // --- FM against PD --------------------------------------------------------
@@ -477,6 +559,13 @@ void warpSuite()
         requireClose(factor(WarpMode::fmExpOsc, 1.0f, -1.0f),
                      1.0f / std::pow(2.0f, rhino::forge::warpFmOctaves), 0.001f,
                      "exponential FM sweeps the same distance downwards");
+        // The pair reading the oscillator on the other side are the same two
+        // curves, not linear twice.
+        requireClose(factor(WarpMode::fmOscPrevious, 1.0f, 1.0f), 1.0f + rhino::forge::warpFmDepth, 0.0001f,
+                     "linear FM from the previous oscillator is linear");
+        requireClose(factor(WarpMode::fmExpOscPrevious, 1.0f, 1.0f),
+                     std::pow(2.0f, rhino::forge::warpFmOctaves), 0.01f,
+                     "exponential FM from the previous oscillator is exponential");
 
         // And the two are audibly different things from the same source at the
         // same depth, which is the claim the separation is worth making for.
@@ -568,10 +657,11 @@ void warpSuite()
                          "a warp stage opens on OFF");
             requireClose(value(processor, id.toRawUTF8()), 0.0f, 0.0001f,
                          "a warp depth opens at nothing");
-            // A host's automation lane names the very mode the engine will run.
+            // A host's automation lane names the very mode the engine will run,
+            // and the oscillator an OSC mode on this one reads.
             for (int mode = 0; mode < modeCount; ++mode)
                 requireText(textFor(processor, (id + "Mode").toRawUTF8(), static_cast<float>(mode)),
-                            rhino::forge::warpModeName(mode),
+                            rhino::forge::warpModeName(mode, oscillator),
                             "a warp mode reads out as the mode the engine runs");
         }
     }
@@ -592,9 +682,22 @@ void warpSuite()
 
     // Every mode has something to say for itself, which is what the field's
     // tooltip shows once a mode is chosen.
-    for (int mode = 0; mode < modeCount; ++mode)
-        require(rhino::forge::ui::warpTooltipFor(mode).isNotEmpty(),
-                "every warp mode explains itself");
+    for (int carrier = 0; carrier < rhino::forge::oscillatorCount; ++carrier)
+        for (int mode = 0; mode < modeCount; ++mode)
+        {
+            const auto tip = rhino::forge::ui::warpTooltipFor(mode, carrier);
+            require(tip.isNotEmpty(), "every warp mode explains itself");
+            // And an OSC mode says which oscillator it reads, the one its
+            // name does.
+            const auto source = rhino::forge::warpSourceOscillator(static_cast<WarpMode>(mode), carrier);
+            if (source >= 0)
+                require(tip.contains("oscillator " + rhino::forge::oscillatorLetter(source)),
+                        "an OSC warp mode's tooltip names the oscillator it reads");
+        }
+    // The host-facing name is spelled out once, so a change to how it is built
+    // shows here rather than only in a lane nobody looked at.
+    requireText(textFor(processor, "oscBWarp1Mode", static_cast<float>(WarpMode::pdOscPrevious)),
+                "PD OSC A", "PD from the oscillator before B reads PD OSC A");
 
     // The depth knob greys out under OFF and comes back under anything else.
     // Declared as the panel's own rule rather than checked through the editor,

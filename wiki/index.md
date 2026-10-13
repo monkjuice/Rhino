@@ -36,7 +36,7 @@ The catalog of this wiki: every page, grouped by type, one line each (`- [Title]
 - [Forge oscillators and wavetables](pages/forge-oscillators.md) — Three identical oscillators, each reading its own band-limited wavetable, plus the table editor, file import and audio-thread hand-off.
 - [Forge presets and state](pages/forge-presets-and-state.md) — Presets and host state carry one tree; a preset of another format version is refused, and within a version everything is reconciled.
 - [Forge spectral oscillator](pages/forge-spectral.md) — An oscillator mode that resynthesises a loaded sample with a phase vocoder, so pitch and scan position move independently (M16).
-- [Forge warp](pages/forge-warp.md) — Two warp stages per oscillator, 38 modes in nine families, chained through one read function and anti-aliased by duller tables.
+- [Forge warp](pages/forge-warp.md) — Two warp stages per oscillator, 43 modes in nine families, OSC modes able to read either other oscillator, chained through one read function and anti-aliased by duller tables.
 - [Hosting Forge in Rhino](pages/forge-hosting.md) — How Rhino finds, loads and talks to the Forge VST3, and what does and does not cross the plugin boundary.
 - [Mixer](pages/mixer.md) — One mixer, drawn in the arrangement's track cards, with a VolumeAndPanPlugin in each track's channel strip, mute and solo that silence only a track's output, and the master volume for Main; a DJ deck takes its track ahead of the channel strip.
 - [Note editor (StepGrid)](pages/note-editor.md) — Edits the notes of the open MIDI clip in steps, with a draw mode, a step region and caches that tie it closely to Session.

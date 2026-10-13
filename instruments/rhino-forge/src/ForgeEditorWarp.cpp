@@ -9,10 +9,11 @@ namespace rhino::forge
 //
 // An oscillator's two warp fields wear the same component a rack slot's modes
 // do and behave differently behind it. A rack mode is a plain 0..1 because what
-// it steps through depends on what is in the slot; a warp mode is a fixed list
-// of twenty-six, so it is a real choice parameter and the value *is* the index.
-// That is the whole of the difference, and it is why these methods sit beside
-// the rack's rather than inside them.
+// it steps through depends on what is in the slot; a warp mode is a fixed list,
+// so it is a real choice parameter and the value *is* the index. The field shows
+// that list in its own order, as the noise module's SOURCE does -- see
+// warpModeOrder -- and that is why these methods sit beside the rack's rather
+// than inside them.
 bool Editor::isWarpControl(const juce::String& id)
 {
     return id.startsWith("osc") && id.contains("Warp");
@@ -53,19 +54,25 @@ void Editor::refreshWarpFields()
                 continue;
             }
 
+            // The list is this oscillator's: its OSC modes name the oscillator
+            // they read, and they sit beside each other rather than where they
+            // are stored, so what the field holds is a position in
+            // warpModeOrder and not the mode itself.
+            const auto oscillator = juce::jmax(0, oscillatorIndexFromId(control.id));
             const auto chosen = juce::jlimit(0, warpModeCount - 1, juce::roundToInt(value(control.id)));
+            const auto position = warpModePosition(chosen, oscillator);
             const auto listed = control.selector->count() == warpModeCount;
-            if (listed && control.selector->chosen == chosen) continue;
+            if (listed && control.selector->chosen == position) continue;
             if (!listed)
             {
                 control.selector->choices.clear();
-                for (int mode = 0; mode < warpModeCount; ++mode)
-                    control.selector->choices.push_back(warpModeName(mode));
+                for (const auto mode : warpModeOrder(oscillator))
+                    control.selector->choices.push_back(warpModeName(mode, oscillator));
             }
-            control.selector->chosen = chosen;
+            control.selector->chosen = position;
             // The field says what it is set to; the tooltip says what that
             // setting does, read out of the same table the engine renders from.
-            control.selector->setTooltip(ui::warpTooltipFor(chosen));
+            control.selector->setTooltip(ui::warpTooltipFor(chosen, oscillator));
             control.selector->repaint();
         }
 }
@@ -78,6 +85,8 @@ void Editor::showWarpMenu(Control& control)
 {
     if (control.selector == nullptr) return;
     const auto current = juce::jlimit(0, warpModeCount - 1, juce::roundToInt(value(control.id)));
+    const auto oscillator = juce::jmax(0, oscillatorIndexFromId(control.id));
+    const auto order = warpModeOrder(oscillator);
 
     juce::PopupMenu menu;
     for (int category = 0; category < warpCategoryCount; ++category)
@@ -86,12 +95,15 @@ void Editor::showWarpMenu(Control& control)
         juce::PopupMenu submenu;
         auto held = 0;
         auto only = 0;
-        for (int mode = 0; mode < warpModeCount; ++mode)
+        // Walked in the field's order rather than by value, so a family reads
+        // the way the arrows step through it: PD OSC B and PD OSC C together
+        // on A, PD OSC A and PD OSC C on B.
+        for (const auto mode : order)
         {
             if (warpCategoryOf(static_cast<WarpMode>(mode)) != group) continue;
             ++held;
             only = mode;
-            juce::PopupMenu::Item item(warpModeName(mode));
+            juce::PopupMenu::Item item(warpModeName(mode, oscillator));
             item.itemID = mode + 1;
             item.isTicked = mode == current;
             submenu.addItem(item);
@@ -99,7 +111,7 @@ void Editor::showWarpMenu(Control& control)
         if (held == 0) continue;
         if (held == 1)
         {
-            juce::PopupMenu::Item item(warpModeName(only));
+            juce::PopupMenu::Item item(warpModeName(only, oscillator));
             item.itemID = only + 1;
             item.isTicked = only == current;
             menu.addItem(item);

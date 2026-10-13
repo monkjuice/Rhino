@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../core/ForgeWarp.h"
+#include "../core/ForgeVoiceParts.h"
 #include "../core/ForgeFilter.h"
 #include "../core/ForgeNoise.h"
 
@@ -19,11 +19,15 @@ namespace rhino::forge::ui
 {
 // What one warp mode does, in the words the manual uses for it. Keyed by the
 // mode rather than by the parameter, because the field it is shown on is
-// twenty-six things depending on where it is set -- so the explanation follows
-// the setting, the way a rack slot's does.
-inline juce::String warpTooltipFor(int mode)
+// forty-three things depending on where it is set -- so the explanation follows
+// the setting, the way a rack slot's does. The carrier is asked for because an
+// OSC mode names the oscillator it reads, and that depends on whose field it is.
+inline juce::String warpTooltipFor(int mode, int carrier)
 {
-    switch (warpModeOf(static_cast<float>(mode)))
+    const auto which = warpModeOf(static_cast<float>(mode));
+    const auto source = warpSourceOscillator(which, carrier);
+    const auto other = source < 0 ? juce::String() : "oscillator " + oscillatorLetter(source);
+    switch (which)
     {
         case WarpMode::sync:
             return "Restart a second read of the table inside every cycle of the note. "
@@ -82,8 +86,8 @@ inline juce::String warpTooltipFor(int mode)
         // PD moves where in the cycle the table is read. The note does not
         // move with it, which is the whole difference from FM below.
         case WarpMode::pdOsc:
-            return "Push the read along the cycle with the next oscillator (A reads B, B reads C, "
-                   "C reads A). It has to be on, "
+        case WarpMode::pdOscPrevious:
+            return "Push the read along the cycle with " + other + ". It has to be on, "
                    "though its level can be down if it is only wanted as a modulator. "
                    "Unlike FM, this leaves the note exactly where it was";
         case WarpMode::pdSub:
@@ -99,8 +103,8 @@ inline juce::String warpTooltipFor(int mode)
         // FM moves the rate the cycle runs at, which is why it can bend the
         // note where PD cannot.
         case WarpMode::fmOsc:
-            return "Modulate this oscillator's frequency with the next one (A reads B, B reads C, "
-                   "C reads A), in proportion. "
+        case WarpMode::fmOscPrevious:
+            return "Modulate this oscillator's frequency with " + other + ", in proportion. "
                    "It has to be on, though its level can be down. Clamped at zero rather than "
                    "running backwards, which is the traditional FM sound";
         case WarpMode::fmSub:
@@ -110,17 +114,19 @@ inline juce::String warpTooltipFor(int mode)
             return "Modulate this oscillator's frequency with noise: grain and grit rather "
                    "than a second pitch";
         case WarpMode::fmExpOsc:
-            return "The same, on an exponential curve: a small move in the next oscillator "
+        case WarpMode::fmExpOscPrevious:
+            return "Exponential frequency modulation from " + other + ": a small move in it "
                    "sweeps the frequency a long way. Brighter and harsher than linear FM, "
                    "and it does not hold the note where linear does";
         case WarpMode::fmExpSub:
             return "Exponential frequency modulation from the sub. Sweeps further for the "
                    "same depth than linear does, and takes the pitch with it";
         case WarpMode::fmExpNoise:
-            return "Exponential frequency modulation from noise. The most violent of the six";
+            return "Exponential frequency modulation from noise. The most violent of the FM modes";
 
         case WarpMode::amOsc:
-            return "Ride this oscillator's level with the next one in the A-B-C ring. The carrier is still in "
+        case WarpMode::amOscPrevious:
+            return "Ride this oscillator's level with " + other + ". The carrier is still in "
                    "there, so this is a tremolo taken up to audio rate";
         case WarpMode::amSub:
             return "Ride this oscillator's level with the sub, an octave below the note";
@@ -128,7 +134,8 @@ inline juce::String warpTooltipFor(int mode)
             return "Ride this oscillator's level with noise, which reads as grit on the sound";
 
         case WarpMode::rmOsc:
-            return "Multiply this oscillator by the next one in the A-B-C ring outright. The carrier's own "
+        case WarpMode::rmOscPrevious:
+            return "Multiply this oscillator by " + other + " outright. The carrier's own "
                    "pitch leaves the sound and what is left is the two sidebands: the "
                    "clangorous, bell-like one";
         case WarpMode::rmSub:

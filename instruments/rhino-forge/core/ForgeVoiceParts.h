@@ -45,6 +45,89 @@ inline int oscillatorIndexFromId(const juce::String& id)
     return -1;
 }
 
+// Which oscillator a warp stage on `carrier` reads, or -1 for a mode that reads
+// none. The ring is the bank's own order, so the rule is the same at every
+// index: the next one round from C is A, and the one before A is C.
+inline int warpSourceOscillator(WarpMode mode, int carrier)
+{
+    const auto at = juce::jlimit(0, oscillatorCount - 1, carrier);
+    switch (warpSourceOf(mode))
+    {
+        case WarpSource::nextOscillator:     return (at + 1) % oscillatorCount;
+        case WarpSource::previousOscillator: return (at + oscillatorCount - 1) % oscillatorCount;
+        default: break;
+    }
+    return -1;
+}
+
+// What a mode is called on one oscillator. An OSC mode names the oscillator it
+// reads -- PD OSC B on A, PD OSC A on B -- so nobody has to work out which way
+// round the ring runs from a menu.
+//
+// Built once and handed out as a pointer, as the plain table's names are,
+// because a warp field holds its choices by pointer.
+inline const char* warpModeName(int mode, int carrier)
+{
+    using Names = std::array<std::array<juce::String, warpModeCount>, oscillatorCount>;
+    static const Names names = []
+    {
+        Names built;
+        for (int oscillator = 0; oscillator < oscillatorCount; ++oscillator)
+            for (int index = 0; index < warpModeCount; ++index)
+            {
+                const auto which = static_cast<WarpMode>(index);
+                const auto source = warpSourceOscillator(which, oscillator);
+                const juce::String name(warpInfo(which).name);
+                built[static_cast<size_t>(oscillator)][static_cast<size_t>(index)] =
+                    source < 0 ? name : name + " " + oscillatorLetter(source);
+            }
+        return built;
+    }();
+    return names[static_cast<size_t>(juce::jlimit(0, oscillatorCount - 1, carrier))]
+                [static_cast<size_t>(juce::jlimit(0, warpModeCount - 1, mode))].toRawUTF8();
+}
+
+// The order a carrier's warp field lists its modes in, which is the menu's:
+// family by family in the order the categories are declared, and inside a
+// family each OSC mode beside its partner from the other side of the ring, the
+// two in letter order. Stored order is arrival order, which would put PD OSC C
+// after RM NOISE, so stepping the field's arrows walks this instead and the two
+// orders meet only at warpModeAt and warpModePosition.
+inline std::array<int, warpModeCount> warpModeOrder(int carrier)
+{
+    std::array<int, warpModeCount> order {};
+    size_t filled = 0;
+    for (int category = 0; category < warpCategoryCount; ++category)
+        for (int index = 0; index < warpModeCount; ++index)
+        {
+            const auto mode = static_cast<WarpMode>(index);
+            if (warpCategoryOf(mode) != static_cast<WarpCategory>(category)) continue;
+            // Seated beside its partner, which comes first in stored order.
+            if (warpSourceOf(mode) == WarpSource::previousOscillator) continue;
+            order[filled++] = index;
+            if (warpSourceOf(mode) != WarpSource::nextOscillator) continue;
+            const auto partner = warpOtherSide(mode);
+            order[filled++] = static_cast<int>(partner);
+            if (warpSourceOscillator(partner, carrier) < warpSourceOscillator(mode, carrier))
+                std::swap(order[filled - 2], order[filled - 1]);
+        }
+    jassert(filled == order.size());
+    return order;
+}
+
+inline int warpModePosition(int mode, int carrier)
+{
+    const auto order = warpModeOrder(carrier);
+    for (size_t i = 0; i < order.size(); ++i)
+        if (order[i] == mode) return static_cast<int>(i);
+    return 0;
+}
+
+inline int warpModeAt(int position, int carrier)
+{
+    return warpModeOrder(carrier)[static_cast<size_t>(juce::jlimit(0, warpModeCount - 1, position))];
+}
+
 // How many detuned copies one oscillator's unison stack may hold. The per-voice
 // phase arrays are this long, and the Unison parameter's range stops here, so
 // the two cannot drift apart.

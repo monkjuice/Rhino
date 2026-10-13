@@ -64,12 +64,17 @@ inline const char* warpCategoryName(WarpCategory category)
     return "OFF";
 }
 
-// Where a mode gets the signal it modulates with. Forge has three: the other
-// oscillator, the sub, and the noise -- plus a stage's own output, which only
-// PD offers, exactly as the manual's list does. Serum names its two filters as
-// sources as well; Forge has one filter and it sits downstream of both
-// oscillators, so pointing an oscillator at it would be a loop.
-enum class WarpSource { none, otherOscillator, sub, noise, self };
+// Where a mode gets the signal it modulates with. Forge has four: either of the
+// other two oscillators, the sub, and the noise -- plus a stage's own output,
+// which only PD offers, exactly as the manual's list does. Serum names its two
+// filters as sources as well; Forge has one filter and it sits downstream of
+// every oscillator, so pointing an oscillator at it would be a loop.
+//
+// The two oscillators are named relative to the carrier rather than by letter,
+// so every mode is valid on every oscillator and none can point a stage at
+// itself: the next one round the ring A-B-C, or the one before it.
+// warpSourceOscillator in ForgeVoiceParts.h turns either into a letter.
+enum class WarpSource { none, nextOscillator, previousOscillator, sub, noise, self };
 
 // Appended to, never inserted into: a warp mode is stored as an index into this
 // list, so every index already written into a preset has to keep meaning what
@@ -102,9 +107,15 @@ enum class WarpMode
     // it outright, which is what puts the carrier's own pitch out of the sound.
     amOsc, amSub, amNoise,
     rmOsc, rmSub, rmNoise,
+    // The same five read from the oscillator before the carrier rather than
+    // the one after it: A reads C, B reads A, C reads B. The OSC modes above
+    // all read the next one, which left each carrier one of its two neighbours
+    // it could not reach. Appended rather than placed beside their partners,
+    // and the panel lists them there instead -- see warpModeOrder.
+    pdOscPrevious, fmOscPrevious, fmExpOscPrevious, amOscPrevious, rmOscPrevious,
 };
 
-inline constexpr int warpModeCount = 38;
+inline constexpr int warpModeCount = 43;
 
 struct WarpInfo
 {
@@ -145,6 +156,13 @@ inline const std::array<WarpInfo, warpModeCount>& warpModes()
 
         {"RM OSC", WarpCategory::rm},   {"RM SUB", WarpCategory::rm},
         {"RM NOISE", WarpCategory::rm},
+
+        // Named as the five above are. Which oscillator either pair reads
+        // depends on the carrier, so the letter is added where the carrier is
+        // known -- see warpModeName in ForgeVoiceParts.h.
+        {"PD OSC", WarpCategory::pd},     {"FM OSC", WarpCategory::fm},
+        {"FM EXP OSC", WarpCategory::fm}, {"AM OSC", WarpCategory::am},
+        {"RM OSC", WarpCategory::rm},
     }};
     return table;
 }
@@ -160,7 +178,12 @@ inline WarpSource warpSourceOf(WarpMode mode)
         case WarpMode::fmOsc:
         case WarpMode::fmExpOsc:
         case WarpMode::amOsc:
-        case WarpMode::rmOsc:      return WarpSource::otherOscillator;
+        case WarpMode::rmOsc:      return WarpSource::nextOscillator;
+        case WarpMode::pdOscPrevious:
+        case WarpMode::fmOscPrevious:
+        case WarpMode::fmExpOscPrevious:
+        case WarpMode::amOscPrevious:
+        case WarpMode::rmOscPrevious: return WarpSource::previousOscillator;
         case WarpMode::pdSub:
         case WarpMode::fmSub:
         case WarpMode::fmExpSub:
@@ -187,12 +210,29 @@ inline const WarpInfo& warpInfo(WarpMode mode)
     return warpModes()[static_cast<size_t>(juce::jlimit(0, warpModeCount - 1, static_cast<int>(mode)))];
 }
 
-inline const char* warpModeName(int mode)
-{
-    return warpModes()[static_cast<size_t>(juce::jlimit(0, warpModeCount - 1, mode))].name;
-}
-
 inline WarpCategory warpCategoryOf(WarpMode mode) { return warpInfo(mode).category; }
+
+// The mode that does what this one does from the oscillator on the other side
+// of the carrier, so a menu can seat the pair together. A mode that reads no
+// oscillator is its own partner.
+inline WarpMode warpOtherSide(WarpMode mode)
+{
+    switch (mode)
+    {
+        case WarpMode::pdOsc:            return WarpMode::pdOscPrevious;
+        case WarpMode::fmOsc:            return WarpMode::fmOscPrevious;
+        case WarpMode::fmExpOsc:         return WarpMode::fmExpOscPrevious;
+        case WarpMode::amOsc:            return WarpMode::amOscPrevious;
+        case WarpMode::rmOsc:            return WarpMode::rmOscPrevious;
+        case WarpMode::pdOscPrevious:    return WarpMode::pdOsc;
+        case WarpMode::fmOscPrevious:    return WarpMode::fmOsc;
+        case WarpMode::fmExpOscPrevious: return WarpMode::fmExpOsc;
+        case WarpMode::amOscPrevious:    return WarpMode::amOsc;
+        case WarpMode::rmOscPrevious:    return WarpMode::rmOsc;
+        default: break;
+    }
+    return mode;
+}
 
 // Whether a mode moves the carrier's frequency rather than reading its table
 // somewhere else. These are the only modes that reach the phase increment, and
@@ -201,7 +241,8 @@ inline bool warpBendsPitch(WarpMode mode) { return warpCategoryOf(mode) == WarpC
 
 inline bool warpIsExponential(WarpMode mode)
 {
-    return mode == WarpMode::fmExpOsc || mode == WarpMode::fmExpSub || mode == WarpMode::fmExpNoise;
+    return mode == WarpMode::fmExpOsc || mode == WarpMode::fmExpSub || mode == WarpMode::fmExpNoise
+        || mode == WarpMode::fmExpOscPrevious;
 }
 
 // Whether the depth knob beside a mode does anything. Only OFF leaves it with
@@ -250,7 +291,8 @@ inline bool warpShapesWaveform(WarpMode mode)
 // sources the patch actually asks for.
 inline bool warpReadsOtherOscillator(WarpMode mode)
 {
-    return warpSourceOf(mode) == WarpSource::otherOscillator;
+    const auto source = warpSourceOf(mode);
+    return source == WarpSource::nextOscillator || source == WarpSource::previousOscillator;
 }
 inline bool warpReadsSub(WarpMode mode) { return warpSourceOf(mode) == WarpSource::sub; }
 inline bool warpReadsNoise(WarpMode mode) { return warpSourceOf(mode) == WarpSource::noise; }
@@ -562,22 +604,27 @@ inline float warpHeadroom(const WarpStage& stage)
         case WarpMode::highPass:
         case WarpMode::bandPass:   return 1.0f;
         case WarpMode::pdOsc:
+        case WarpMode::pdOscPrevious:
         case WarpMode::pdSub:
         case WarpMode::pdNoise:
         case WarpMode::pdSelf:     return 1.0f + warpFmIndex(stage.mode, a) * 2.0f;
         // FM asks for the highest frequency it will reach, because that is
         // literally the rate the table is about to be read at.
         case WarpMode::fmOsc:
+        case WarpMode::fmOscPrevious:
         case WarpMode::fmSub:
         case WarpMode::fmNoise:    return 1.0f + a * warpFmDepth;
         case WarpMode::fmExpOsc:
+        case WarpMode::fmExpOscPrevious:
         case WarpMode::fmExpSub:
         case WarpMode::fmExpNoise: return std::exp2(a * warpFmOctaves);
         // A product of two signals is as wide as the two of them together.
         case WarpMode::amOsc:
+        case WarpMode::amOscPrevious:
         case WarpMode::amSub:
         case WarpMode::amNoise:
         case WarpMode::rmOsc:
+        case WarpMode::rmOscPrevious:
         case WarpMode::rmSub:
         case WarpMode::rmNoise:    return 1.0f + a;
         default: break;
@@ -750,6 +797,7 @@ float warpRead(const WarpStage& stage, float phase, WarpState& state, Read&& rea
         // for the oscillator to stop or reflect at, which is the whole problem
         // thru-zero exists to solve.
         case WarpMode::pdOsc:
+        case WarpMode::pdOscPrevious:
         case WarpMode::pdSub:
         case WarpMode::pdNoise:
             return read(warpFrac(phase + warpFmIndex(stage.mode, a) * stage.modulator));
@@ -758,9 +806,11 @@ float warpRead(const WarpStage& stage, float phase, WarpState& state, Read&& rea
         // nothing to do here -- see warpPitchFactor, which the oscillator
         // applies to the rate the cycle runs at.
         case WarpMode::fmOsc:
+        case WarpMode::fmOscPrevious:
         case WarpMode::fmSub:
         case WarpMode::fmNoise:
         case WarpMode::fmExpOsc:
+        case WarpMode::fmExpOscPrevious:
         case WarpMode::fmExpSub:
         case WarpMode::fmExpNoise:
             break;
@@ -770,6 +820,7 @@ float warpRead(const WarpStage& stage, float phase, WarpState& state, Read&& rea
         // carrier itself is still in there, which is what makes AM a tremolo
         // taken up to audio rate rather than a new sound.
         case WarpMode::amOsc:
+        case WarpMode::amOscPrevious:
         case WarpMode::amSub:
         case WarpMode::amNoise:
             return read(phase) * (1.0f - a + a * (1.0f + stage.modulator));
@@ -778,6 +829,7 @@ float warpRead(const WarpStage& stage, float phase, WarpState& state, Read&& rea
         // the sound entirely and what is left is the two sidebands, which is
         // why RM is the clangorous one and AM is not.
         case WarpMode::rmOsc:
+        case WarpMode::rmOscPrevious:
         case WarpMode::rmSub:
         case WarpMode::rmNoise:
         {

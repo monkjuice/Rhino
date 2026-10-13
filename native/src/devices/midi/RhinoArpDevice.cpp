@@ -58,22 +58,21 @@ juce::String RhinoArpDevice::parameterChoiceName(int parameterIndex, int choice)
 
 RhinoArpDevice::RhinoArpDevice(te::PluginCreationInfo info) : Plugin(info)
 {
-    // These defaults are the device's identity: a held chord bounces up and
-    // down, then walks down two octaves in scale degrees before starting over.
-    // Latching is opt-in; an ordinary new arp stops when its input notes end.
-    style.referTo(state, "style", getUndoManager(), 2.0f);
+    // A new device plays a straight ascending chord. Pitch correction,
+    // expansion, groove and retriggering are deliberate choices.
+    style.referTo(state, "style", getUndoManager(), 0.0f);
     rateIndex.referTo(state, "rate", getUndoManager(), 1.0f);
     gatePercent.referTo(state, "gate", getUndoManager(), 84.0f);
-    distance.referTo(state, "distance", getUndoManager(), -7.0f);
-    steps.referTo(state, "steps", getUndoManager(), 2.0f);
+    distance.referTo(state, "distance", getUndoManager(), 7.0f);
+    steps.referTo(state, "steps", getUndoManager(), 0.0f);
     offset.referTo(state, "offset", getUndoManager(), 0.0f);
-    groove.referTo(state, "groove", getUndoManager(), 2.0f);
+    groove.referTo(state, "groove", getUndoManager(), 0.0f);
     hold.referTo(state, "hold", getUndoManager(), 0.0f);
-    retrigger.referTo(state, "retrigger", getUndoManager(), 2.0f);
+    retrigger.referTo(state, "retrigger", getUndoManager(), 0.0f);
     interval.referTo(state, "interval", getUndoManager(), 1.0f);
     repeats.referTo(state, "repeats", getUndoManager(), 0.0f);
-    root.referTo(state, "root", getUndoManager(), 8.0f);
-    scale.referTo(state, "scale", getUndoManager(), 2.0f);
+    root.referTo(state, "root", getUndoManager(), 0.0f);
+    scale.referTo(state, "scale", getUndoManager(), 0.0f);
     rateMode.referTo(state, "rateMode", getUndoManager(), 0.0f);
     freeRateMilliseconds.referTo(state, "freeRate", getUndoManager(), 125.0f);
 

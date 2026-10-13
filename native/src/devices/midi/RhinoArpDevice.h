@@ -2,6 +2,7 @@
 #include <tracktion_engine/tracktion_engine.h>
 #include <array>
 #include <atomic>
+#include <bitset>
 #include <cstdint>
 
 namespace rhino
@@ -83,7 +84,7 @@ private:
         bool active = false;
         double beat = 0.0;
         double startedBeat = 0.0;
-        int inputKey = 0;
+        std::bitset<128> inputPitches;
         te::MPESourceID source = {};
     };
 
@@ -136,6 +137,7 @@ private:
     std::atomic<bool> resetPending {false};
     bool wasPlaying = false;
     bool clockValid = false;
+    bool timelineValid = false;
     double nextTickBeat = 0.0;
     double lastBlockEndBeat = 0.0;
     // The stopped-transport clock: this block's start in edit seconds, the
@@ -145,6 +147,7 @@ private:
     double freeAnchorBeat = 0.0;
     double freeSecondsPerBeat = 0.5;
     std::int64_t sequenceStep = 0;
+    std::int64_t grooveStep = 0;
     double nextRetriggerBeat = 0.0;
     double lastRetriggerInterval = 0.0;
     double sampleRate = 48000.0;

@@ -1,185 +1,13 @@
-#include "midi/RhinoArpDevice.h"
-#include <algorithm>
-#include <array>
-#include <cmath>
+#include "ArpTestHarness.h"
 #include <cstdio>
 #include <functional>
-#include <stdexcept>
-#include <vector>
 
 namespace rhino
 {
-namespace
-{
-constexpr double sampleRate = 48000.0;
-
-void require(bool valid, const juce::String& message)
-{
-    if (!valid)
-        throw std::runtime_error(message.toStdString());
-}
-
-int frames(double seconds) { return juce::roundToInt(seconds * sampleRate); }
-
-struct Input
-{
-    int frame;
-    juce::MidiMessage message;
-};
-
-Input on(double seconds, int pitch = 60, int channel = 1)
-{
-    return { frames(seconds), juce::MidiMessage::noteOn(channel, pitch, 0.8f) };
-}
-
-Input off(double seconds, int pitch = 60, int channel = 1)
-{
-    return { frames(seconds), juce::MidiMessage::noteOff(channel, pitch) };
-}
-
-struct Output
-{
-    double seconds;
-    juce::MidiMessage message;
-    bool allNotesOff = false;
-};
-
-// Drive the actual plugin with a moving edit clock, or a frozen playhead and
-// advancing audio blocks. Output times always use elapsed audio time so the
-// same assertions cover live playing while the transport is stopped.
-struct Harness
-{
-    explicit Harness(te::Edit& edit)
-        : plugin(edit.getPluginCache().createNewPlugin(RhinoArpDevice::xmlTypeName, {})),
-          arp(dynamic_cast<RhinoArpDevice*>(plugin.get()))
-    {
-        require(arp != nullptr, "could not construct Rhino Arp");
-        arp->initialise({{}, sampleRate, 24000});
-    }
-
-    ~Harness() { arp->deinitialise(); }
-
-    void set(const char* id, float value)
-    {
-        auto parameter = arp->getAutomatableParameterByID(id);
-        require(parameter != nullptr, "missing parameter " + juce::String(id));
-        parameter->setParameter(value, juce::dontSendNotification);
-    }
-
-    void plain()
-    {
-        set("style", 0.0f);
-        set("rate", 1.0f);
-        set("gate", 200.0f);
-        set("distance", 0.0f);
-        set("steps", 0.0f);
-        set("groove", 0.0f);
-        set("hold", 0.0f);
-        set("retrigger", 0.0f);
-        set("repeats", 0.0f);
-        set("root", 0.0f);
-        set("scale", 0.0f);
-    }
-
-    void render(double seconds, std::vector<Input> input = {}, bool playing = true, int blockSize = 256)
-    {
-        std::stable_sort(input.begin(), input.end(), [] (const Input& a, const Input& b)
-        { return a.frame < b.frame; });
-        const auto total = frames(seconds);
-        size_t next = 0;
-        te::MidiMessageArray midi;
-        for (int done = 0; done < total;)
-        {
-            const auto count = std::min(blockSize, total - done);
-            midi.clear();
-            midi.isAllNotesOff = allNotesOffNextBlock;
-            allNotesOffNextBlock = false;
-            while (next < input.size() && input[next].frame < done + count)
-            {
-                midi.addMidiMessage(input[next].message, (input[next].frame - done) / sampleRate, {});
-                ++next;
-            }
-            const auto start = playing ? elapsed / sampleRate + editOffset : 2.0;
-            const auto end = playing ? start + count / sampleRate : start;
-            const tracktion::core::TimeRange time {
-                tracktion::core::TimePosition::fromSeconds(start),
-                tracktion::core::TimePosition::fromSeconds(end) };
-            te::PluginRenderContext context(nullptr, 0, count, &midi, 0.0, time,
-                                             playing, false, playing, false);
-            arp->applyToBuffer(context);
-            if (midi.isAllNotesOff)
-                output.push_back({ elapsed / sampleRate, {}, true });
-            for (const auto& message : midi)
-            {
-                require(message.getTimeStamp() >= -1.0e-8
-                            && message.getTimeStamp() <= count / sampleRate + 1.0e-8,
-                        "output timestamp is outside its audio block");
-                output.push_back({ elapsed / sampleRate + message.getTimeStamp(), message, false });
-            }
-            elapsed += count;
-            done += count;
-        }
-    }
-
-    std::vector<Output> onsets(double from = 0.0, int channel = 0) const
-    {
-        std::vector<Output> result;
-        for (const auto& event : output)
-            if (!event.allNotesOff && event.message.isNoteOn() && event.seconds >= from - 1.0e-8
-                && (channel == 0 || event.message.getChannel() == channel))
-                result.push_back(event);
-        return result;
-    }
-
-    void requireBalanced() const
-    {
-        std::array<int, 16 * 128> sounding {};
-        for (const auto& event : output)
-        {
-            if (event.allNotesOff)
-            {
-                sounding.fill(0);
-                continue;
-            }
-            const auto& message = event.message;
-            const auto channel = message.getChannel();
-            if (message.isAllNotesOff() || message.isAllSoundOff())
-            {
-                for (int pitch = 0; pitch < 128; ++pitch)
-                    sounding[static_cast<size_t>((channel - 1) * 128 + pitch)] = 0;
-                continue;
-            }
-            if (!message.isNoteOnOrOff())
-                continue;
-            auto& count = sounding[static_cast<size_t>((channel - 1) * 128 + message.getNoteNumber())];
-            const auto where = " at " + juce::String(event.seconds, 6) + " s, channel "
-                + juce::String(channel) + ", pitch " + juce::String(message.getNoteNumber());
-            if (message.isNoteOn())
-            {
-                require(count == 0, "same pitch retriggered before its previous note-off" + where);
-                ++count;
-            }
-            else
-            {
-                require(count == 1, "note-off has no sounding note" + where);
-                --count;
-            }
-        }
-        require(std::all_of(sounding.begin(), sounding.end(), [] (int count) { return count == 0; }),
-                "generated notes remain sounding after input release");
-    }
-
-    te::Plugin::Ptr plugin;
-    RhinoArpDevice* arp;
-    std::vector<Output> output;
-    std::int64_t elapsed = 0;
-    bool allNotesOffNextBlock = false;
-    double editOffset = 0.0;
-};
-}
 
 void runArpMechanicsTests(te::Edit& edit)
 {
+    using namespace arp_test;
     juce::StringArray failures;
     const auto check = [&] (const juce::String& name, const std::function<void()>& test)
     {
@@ -196,6 +24,70 @@ void runArpMechanicsTests(te::Edit& edit)
     });
 
     for (const auto playing : {true, false})
+        check(playing ? "factory C major chord" : "factory C major chord, stopped", [&]
+        {
+            Harness test(edit);
+            // Exercise the actual factory sound; plain() used to hide the
+            // octave expansion and periodic retrigger enabled by default.
+            test.set("scale", 1.0f);
+            test.render(1.6, {on(0.03, 60), on(0.04, 64), on(0.05, 67),
+                              off(1.44, 60), off(1.44, 64), off(1.44, 67)}, playing, 127);
+            const auto notes = test.onsets();
+            requirePitches(notes, {60, 64, 67, 60, 64, 67, 60, 64, 67, 60, 64, 67});
+            for (size_t i = 0; i < notes.size(); ++i)
+                require(std::abs(notes[i].seconds - (0.03 + i * 0.125)) < 1.0e-6,
+                        "factory arpeggiation must keep its 1/16 cadence through repeated cycles");
+            test.requireBalanced();
+        });
+
+    for (const auto playing : {true, false})
+        for (const auto block : {64, 127, 480, 512, 24000})
+            for (const auto start : {0.03, 0.99})
+                check(juce::String(playing ? "playing" : "stopped") + " off-grid Beat retrigger / "
+                      + juce::String(block) + " / " + juce::String(start), [&]
+                {
+                    Harness test(edit);
+                    test.plain();
+                    test.set("scale", 1.0f);
+                    test.set("retrigger", 2.0f);
+                    test.set("interval", 1.0f);
+                    test.render(start + 1.4, {on(start, 60), on(start + 0.01, 64), on(start + 0.02, 67),
+                                              off(start + 1.3, 60), off(start + 1.3, 64), off(start + 1.3, 67)},
+                                playing, block);
+                    const auto notes = test.onsets();
+                    requirePitches(notes, start < 0.5
+                        ? std::vector<int>{60, 64, 67, 60, 64, 67, 60, 64, 60, 64, 67}
+                        : std::vector<int>{60, 60, 64, 67, 60, 64, 67, 60, 64, 60, 64});
+                    for (size_t i = 0; i < notes.size(); ++i)
+                        require(std::abs(notes[i].seconds - (start + i * 0.125)) < 1.0e-6,
+                                "Beat retrigger must reset the pattern on the existing rate clock");
+                    test.requireBalanced();
+                });
+
+    for (const auto playing : {true, false})
+        for (const auto block : {64, 127, 480, 512, 24000})
+            check(juce::String(playing ? "playing" : "stopped") + " second chord after silence / "
+                  + juce::String(block), [&]
+            {
+                Harness test(edit);
+                test.plain();
+                test.set("retrigger", 2.0f);
+                test.set("interval", 1.0f);
+                test.render(1.6, {on(0.0, 60), on(0.0, 64), on(0.0, 67),
+                                  off(0.2, 60), off(0.2, 64), off(0.2, 67),
+                                  on(0.3, 60), on(0.3, 64), on(0.3, 67),
+                                  off(1.5, 60), off(1.5, 64), off(1.5, 67)}, playing, block);
+                const auto notes = test.onsets(0.3);
+                requirePitches(notes, {60, 64, 67, 60, 64, 67, 60, 64, 67, 60});
+                // The 1.0 s beat boundary resets the pattern at 1.05 s.
+                // Silence must not move that boundary to 1.3 s in small blocks.
+                for (size_t i = 0; i < notes.size(); ++i)
+                    require(std::abs(notes[i].seconds - (0.3 + i * 0.125)) < 1.0e-6,
+                            "a second chord must preserve cadence independently of callback boundaries");
+                test.requireBalanced();
+            });
+
+    for (const auto playing : {true, false})
         check(playing ? "single note, eight repeats" : "single note, eight repeats, stopped transport", [&]
         {
             Harness test(edit);
@@ -210,6 +102,7 @@ void runArpMechanicsTests(te::Edit& edit)
             Harness tap(edit);
             tap.set("hold", 0.0f);
             tap.set("repeats", 8.0f);
+            tap.set("retrigger", 2.0f);
             tap.render(2.0, { on(0.0), off(0.05) }, playing, 480);
             require(tap.onsets(0.05).empty(), "releasing a single note must stop even with Beat retrigger enabled");
             tap.requireBalanced();
@@ -349,13 +242,18 @@ void runArpMechanicsTests(te::Edit& edit)
         test.requireBalanced();
     });
 
-    check("saved Hold and scale choices survive reload", [&]
+    check("saved choices survive changes to factory defaults", [&]
     {
         for (const auto scale : {2, 12})
         {
             Harness test(edit);
             test.set("hold", 1.0f);
             test.set("scale", static_cast<float>(scale));
+            const std::array<std::pair<const char*, float>, 6> saved {{
+                {"style", 2.0f}, {"distance", -7.0f}, {"steps", 2.0f},
+                {"groove", 2.0f}, {"retrigger", 2.0f}, {"root", 8.0f}
+            }};
+            for (const auto& [id, value] : saved) test.set(id, value);
             auto xml = test.arp->state.createXml();
             auto state = juce::ValueTree::fromXml(*xml);
             state.removeProperty(te::IDs::id, nullptr);
@@ -365,6 +263,9 @@ void runArpMechanicsTests(te::Edit& edit)
                     "changing the default must preserve explicitly saved Hold On");
             require(reloaded->getAutomatableParameterByID("scale")->getCurrentValue() == static_cast<float>(scale),
                     "saved scale index changed during reload");
+            for (const auto& [id, value] : saved)
+                require(reloaded->getAutomatableParameterByID(id)->getCurrentValue() == value,
+                        "new defaults must preserve saved " + juce::String(id));
         }
     });
 
@@ -418,7 +319,7 @@ void runArpMechanicsTests(te::Edit& edit)
         test.requireBalanced();
     });
 
-    check("Beat retrigger falls between free-rate steps", [&]
+    check("Beat retrigger preserves free-rate steps", [&]
     {
         Harness test(edit);
         test.plain();
@@ -429,16 +330,61 @@ void runArpMechanicsTests(te::Edit& edit)
         test.set("retrigger", 2.0f);
         test.set("interval", 0.0f);
         test.render(1.2, { on(0.0, 60), on(0.0, 64), on(0.0, 67),
-                           off(1.01, 60), off(1.01, 64), off(1.01, 67) }, true, 127);
+                           off(1.05, 60), off(1.05, 64), off(1.05, 67) }, true, 127);
         const auto notes = test.onsets();
-        const std::array<double, 7> expected {0.0, 0.08, 0.16, 0.5, 0.58, 0.66, 1.0};
-        require(notes.size() == expected.size(), "free-rate finite patterns must restart on each Beat interval");
+        // A 500 ms Beat boundary resets the pattern on the next existing
+        // 80 ms tick, at 560 ms; it must never shorten a rate interval.
+        const std::array<double, 7> expected {0.0, 0.08, 0.16, 0.56, 0.64, 0.72, 1.04};
+        require(notes.size() == expected.size(), "Beat retrigger must preserve the free-rate clock");
         for (size_t i = 0; i < expected.size(); ++i)
             require(std::abs(notes[i].seconds - expected[i]) < 1.0e-6,
                     "onset " + juce::String(static_cast<int>(i)) + " was " + juce::String(notes[i].seconds, 6)
                     + " s; expected " + juce::String(expected[i], 6) + " s");
         test.requireBalanced();
     });
+
+    check("Beat retrigger preserves swing phase", [&]
+    {
+        Harness test(edit);
+        test.plain();
+        test.set("rateMode", 1.0f);
+        test.set("freeRate", 80.0f);
+        test.set("groove", 2.0f);
+        test.set("retrigger", 2.0f);
+        test.set("interval", 0.0f);
+        test.render(1.2, {on(0.0, 60), on(0.0, 64), on(0.0, 67),
+                          off(1.1, 60), off(1.1, 64), off(1.1, 67)}, true, 127);
+        const auto notes = test.onsets();
+        requirePitches(notes, {60, 64, 67, 60, 64, 67, 60, 60, 64, 67, 60, 64, 67, 60});
+        for (size_t i = 0; i < notes.size(); ++i)
+        {
+            // Each pair is 160 ms: 92.8 ms then 67.2 ms. A pattern reset
+            // at an odd tick must not introduce two long swing gaps.
+            const auto expected = (i / 2) * 0.16 + (i % 2 == 0 ? 0.0 : 0.0928);
+            require(std::abs(notes[i].seconds - expected) < 1.0e-6,
+                    "pattern retrigger must preserve the independent swing phase");
+        }
+        test.requireBalanced();
+    });
+
+    for (const auto releasedFirst : {60, 61})
+        check("quantized chord retains shared output / " + juce::String(releasedFirst), [&]
+        {
+            Harness test(edit);
+            test.plain();
+            test.set("style", 4.0f);
+            test.set("scale", 1.0f);
+            test.render(0.1, {on(0.0, 60), on(0.0, 61), off(0.02, releasedFirst),
+                              off(0.05, releasedFirst == 60 ? 61 : 60)}, true, 127);
+            requirePitches(test.onsets(), {60});
+            const auto releases = std::count_if(test.output.begin(), test.output.end(), [] (const Output& event)
+            {
+                return event.message.isNoteOff() && event.message.getNoteNumber() == 60
+                    && std::abs(event.seconds - 0.05) < 1.0e-6;
+            });
+            require(releases == 1, "a shared quantized note must release only after both input keys end");
+            test.requireBalanced();
+        });
 
     check("style directions and bounce endpoints", [&]
     {
@@ -523,7 +469,72 @@ void runArpMechanicsTests(te::Edit& edit)
             }
         });
 
-    check("root offsets and chromatic passing notes", [&]
+    check("live scale and root changes correct an untransposed chord", [&]
+    {
+        Harness test(edit);
+        test.plain();
+        test.set("scale", 1.0f);
+        test.render(0.375, {on(0.0, 60), on(0.0, 64), on(0.0, 67)});
+        requirePitches(test.onsets(), {60, 64, 67});
+        test.set("scale", 2.0f);
+        test.render(0.375);
+        requirePitches(test.onsets(0.375), {60, 63, 67});
+        test.set("scale", 1.0f);
+        test.set("root", 4.0f);
+        test.render(0.375);
+        requirePitches(test.onsets(0.75), {59, 64, 66});
+        test.set("scale", 0.0f);
+        test.set("root", 11.0f);
+        test.render(0.375);
+        requirePitches(test.onsets(1.125), {60, 64, 67});
+        test.render(0.2, {off(0.0, 60), off(0.0, 64), off(0.0, 67)});
+        const auto notes = test.onsets();
+        for (size_t i = 0; i < notes.size(); ++i)
+            require(std::abs(notes[i].seconds - i * 0.125) < 1.0e-6,
+                    "changing harmony must leave the rate clock running");
+        test.requireBalanced();
+    });
+
+    for (const auto direction : {-1, 1})
+        check("minor chord, seven-degree octave / " + juce::String(direction), [&]
+        {
+            Harness test(edit);
+            test.plain();
+            test.set("scale", 2.0f);
+            test.set("steps", 1.0f);
+            test.set("distance", 7.0f * direction);
+            test.render(0.9, {on(0.0, 60), on(0.0, 64), on(0.0, 67),
+                              off(0.7, 60), off(0.7, 64), off(0.7, 67)});
+            requirePitches(test.onsets(), {60, 63, 67, 60 + direction * 12, 63 + direction * 12, 67 + direction * 12});
+            test.requireBalanced();
+        });
+
+    check("minor pentatonic chooses the nearest scale tone", [&]
+    {
+        Harness test(edit);
+        test.plain();
+        test.set("scale", 10.0f);
+        test.render(0.1, {on(0.0, 62), off(0.05, 62)});
+        requirePitches(test.onsets(), {63});
+        test.requireBalanced();
+    });
+
+    for (const auto high : {false, true})
+        check(high ? "scale transposition at MIDI 127" : "scale transposition at MIDI zero", [&]
+        {
+            Harness test(edit);
+            test.plain();
+            test.set("scale", 1.0f);
+            test.set("root", 11.0f);
+            test.set("steps", 1.0f);
+            test.set("distance", high ? 12.0f : -12.0f);
+            const auto pitch = high ? 127 : 0;
+            test.render(0.3, {on(0.0, pitch), off(0.2, pitch)});
+            requirePitches(test.onsets(), high ? std::vector<int>{126, 126} : std::vector<int>{1, 1});
+            test.requireBalanced();
+        });
+
+    check("root offsets and nearest-note ties below the root", [&]
     {
         Harness test(edit);
         test.plain();
@@ -534,11 +545,11 @@ void runArpMechanicsTests(te::Edit& edit)
         test.set("distance", 1.0f);
         test.render(0.6, { on(0.0, 5), off(0.45, 5) });
         const auto notes = test.onsets();
-        const std::array<int, 4> expected {5, 7, 9, 11};
+        const std::array<int, 4> expected {4, 6, 8, 10};
         require(notes.size() == expected.size(), "expected four transpositions from low F in B major");
         for (size_t i = 0; i < expected.size(); ++i)
             require(notes[i].message.getNoteNumber() == expected[i],
-                    "transposition must retain the passing note's offset, including pitches below the root");
+                    "an out-of-scale F must choose E on a tie, then transpose in B major");
         test.requireBalanced();
     });
 

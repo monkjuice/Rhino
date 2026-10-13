@@ -13,12 +13,6 @@ int positiveModulo(std::int64_t value, int divisor)
     return remainder < 0 ? remainder + divisor : remainder;
 }
 
-int floorDivide(int value, int divisor)
-{
-    const auto quotient = value / divisor;
-    return value < 0 && value % divisor != 0 ? quotient - 1 : quotient;
-}
-
 // Pitch first keeps the pattern in pitch order even across MIDI channels.
 int noteKey(int pitch, int channel) { return pitch * 16 + channel - 1; }
 }
@@ -30,6 +24,8 @@ void RhinoArpDevice::initialise(const te::PluginInitialisationInfo& info)
     steadyOutput.reserve(8192);
     firstRender = true;
     wasPlaying = false;
+    timelineValid = false;
+    lastBlockEndBeat = 0.0;
     resetPending.store(false);
     clearState();
 }
@@ -42,8 +38,8 @@ void RhinoArpDevice::clearState()
         pending.active = false;
     clockValid = false;
     nextTickBeat = 0.0;
-    lastBlockEndBeat = 0.0;
     sequenceStep = 0;
+    grooveStep = 0;
     nextRetriggerBeat = 0.0;
     lastRetriggerInterval = 0.0;
 }
@@ -174,28 +170,20 @@ int RhinoArpDevice::ordinalForStep(std::int64_t step, int noteCount) const
 int RhinoArpDevice::transposedPitch(int pitch, int transposition) const
 {
     const auto selectedScale = static_cast<MusicalScale>(juce::roundToInt(scaleParam->getCurrentValue()));
-    if (selectedScale == MusicalScale::Chromatic) return pitch + transposition;
+    if (selectedScale == MusicalScale::Chromatic) return juce::jlimit(0, 127, pitch + transposition);
 
-    // Share Rhino Tune's scale definitions, including scales with five or six
-    // degrees. The existing Chromatic/Major/Minor saved indices stay intact.
-    std::array<int, 12> notes {};
-    int size = 0;
-    const auto bits = musicalScaleBits(selectedScale);
-    for (int pitchClass = 0; pitchClass < 12; ++pitchClass)
-        if ((bits >> pitchClass) & 1u)
-            notes[static_cast<size_t>(size++)] = pitchClass;
+    // Correct even the untransposed cycle. Keeping an accidental's offset
+    // made Major and Minor sound identical for an ordinary held chord.
     const auto scaleRoot = juce::jlimit(0, 11, juce::roundToInt(rootParam->getCurrentValue()));
-    const auto relative = pitch - scaleRoot;
-    const auto octave = floorDivide(relative, 12);
-    const auto pitchClass = positiveModulo(relative, 12);
-    auto degree = 0;
-    for (int i = 1; i < size; ++i)
-        if (notes[static_cast<size_t>(i)] <= pitchClass) degree = i;
-    // Keep a passing note's displacement rather than quantising the input.
-    const auto remainder = pitchClass - notes[static_cast<size_t>(degree)];
-    const auto target = octave * size + degree + transposition;
-    return scaleRoot + floorDivide(target, size) * 12
-        + notes[static_cast<size_t>(positiveModulo(target, size))] + remainder;
+    const auto mask = maskForScale(selectedScale, scaleRoot);
+    const auto corrected = nearestAllowedNote(static_cast<float>(pitch), mask);
+    const auto shifted = juce::roundToInt(shiftByScaleDegrees(corrected, mask, transposition));
+    // Clamping to raw MIDI endpoints can introduce an out-of-scale note.
+    auto lowest = 0;
+    auto highest = 127;
+    while (!mask[static_cast<size_t>(lowest % 12)]) ++lowest;
+    while (!mask[static_cast<size_t>(highest % 12)]) --highest;
+    return juce::jlimit(lowest, highest, shifted);
 }
 
 void RhinoArpDevice::clearActiveNotes()
@@ -213,6 +201,7 @@ void RhinoArpDevice::resetSequence(double beat)
 {
     nextTickBeat = beat;
     sequenceStep = 0;
+    grooveStep = 0;
     clockValid = true;
     nextRetriggerBeat = (std::floor((beat + 1.0e-9) / intervalBeats()) + 1.0) * intervalBeats();
 }
@@ -228,11 +217,16 @@ void RhinoArpDevice::endOutputNote(int key, double timestamp, te::MidiMessageArr
 
 void RhinoArpDevice::releaseInactiveNotes(double timestamp, te::MidiMessageArray& output)
 {
+    std::array<std::bitset<128>, 16> activeInputs;
+    for (int key = 0; key < static_cast<int>(heldNotes.size()); ++key)
+        if (heldNotes[static_cast<size_t>(key)].active)
+            activeInputs[static_cast<size_t>(key % 16)].set(static_cast<size_t>(key / 16));
     for (int key = 0; key < static_cast<int>(pendingOffs.size()); ++key)
     {
-        const auto& pending = pendingOffs[static_cast<size_t>(key)];
-        if (pending.active && !heldNotes[static_cast<size_t>(pending.inputKey)].active)
-            endOutputNote(key, timestamp, output);
+        auto& pending = pendingOffs[static_cast<size_t>(key)];
+        if (!pending.active) continue;
+        pending.inputPitches &= activeInputs[static_cast<size_t>(key % 16)];
+        if (pending.inputPitches.none()) endOutputNote(key, timestamp, output);
     }
     if (activeNoteCount() == 0) clockValid = false;
 }
@@ -256,21 +250,26 @@ void RhinoArpDevice::emitNote(double tickBeat, double offBeat, int inputKey,
     const auto transposeCount = juce::jlimit(0, 8, juce::roundToInt(stepsParam->getCurrentValue()));
     const auto transposeIndex = static_cast<int>((sequenceStep / patternLength) % (transposeCount + 1));
     const auto movement = juce::roundToInt(distanceParam->getCurrentValue()) * transposeIndex;
-    const auto pitch = juce::jlimit(0, 127, transposedPitch(inputKey / 16, movement));
+    const auto pitch = transposedPitch(inputKey / 16, movement);
     const auto channel = inputKey % 16 + 1;
     const auto key = noteKey(pitch, channel);
     const auto& source = heldNotes[static_cast<size_t>(inputKey)];
     auto& pending = pendingOffs[static_cast<size_t>(key)];
-    // Clamping at a MIDI range boundary can collapse several chord tones to
-    // the same output. Sound that pitch once at this tick.
-    if (pending.active && std::abs(pending.startedBeat - tickBeat) < 1.0e-9) return;
+    // Scale correction and range clamping can merge chord tones. Keep every
+    // contributor so lifting just one key cannot cut the shared output.
+    if (pending.active && std::abs(pending.startedBeat - tickBeat) < 1.0e-9)
+    {
+        pending.inputPitches.set(static_cast<size_t>(inputKey / 16));
+        return;
+    }
     const auto timestamp = std::max(0.0, toSeconds(tickBeat) - blockStartSeconds);
     // MIDI 1 has no identity for overlapping instances of a channel/pitch.
     // End the previous instance before starting another, so an old gate can
     // never cut a new note and no retrigger can exhaust release storage.
     endOutputNote(key, timestamp, output);
     output.addMidiMessage(juce::MidiMessage::noteOn(channel, pitch, source.velocity), timestamp, source.source);
-    pending = {true, offBeat, tickBeat, inputKey, source.source};
+    pending = {true, offBeat, tickBeat, {}, source.source};
+    pending.inputPitches.set(static_cast<size_t>(inputKey / 16));
 }
 
 void RhinoArpDevice::generateUntil(double endBeat, double blockStartSeconds, te::MidiMessageArray& output)
@@ -280,25 +279,25 @@ void RhinoArpDevice::generateUntil(double endBeat, double blockStartSeconds, te:
     {
         const auto beatRetrigger = static_cast<Retrigger>(juce::roundToInt(retriggerParam->getCurrentValue()))
             == Retrigger::Beat;
-        // A beat boundary is an event in its own right. Waiting for the next
-        // regular tick drifts with swing or a free rate such as 80 ms.
-        const auto retriggerNow = beatRetrigger && nextRetriggerBeat <= nextTickBeat + epsilon;
-        const auto tickBeat = retriggerNow ? nextRetriggerBeat : nextTickBeat;
+        const auto tickBeat = nextTickBeat;
         if (tickBeat >= endBeat - epsilon) break;
-        if (retriggerNow)
+        // Beat retrigger resets the pattern on the existing clock. Inserting
+        // a tick at the boundary doubles the first note of a late chord and
+        // shortens its interval; resetting swing phase also moves the rhythm.
+        if (beatRetrigger && nextRetriggerBeat <= tickBeat + epsilon)
         {
             sequenceStep = 0;
-            nextRetriggerBeat += intervalBeats();
+            nextRetriggerBeat = (std::floor((tickBeat + epsilon) / intervalBeats()) + 1.0) * intervalBeats();
         }
         flushPendingOffs(tickBeat, blockStartSeconds, true, output);
         const auto noteCount = activeNoteCount();
         const auto transposeCount = juce::jlimit(0, 8, juce::roundToInt(stepsParam->getCurrentValue()));
         const auto fullPatternLength = styleLength(noteCount) * (transposeCount + 1);
         const auto repeatLimit = juce::jlimit(0, 8, juce::roundToInt(repeatsParam->getCurrentValue()));
-        const auto followingTick = nextStepBeat(tickBeat, sequenceStep);
+        const auto followingTick = nextStepBeat(tickBeat, grooveStep);
         if (repeatLimit == 0 || sequenceStep < fullPatternLength * repeatLimit)
         {
-            const auto offBeat = noteOffBeat(tickBeat, followingTick, sequenceStep);
+            const auto offBeat = noteOffBeat(tickBeat, followingTick, grooveStep);
             if (static_cast<Style>(juce::roundToInt(styleParam->getCurrentValue())) == Style::Chord)
             {
                 for (int key = 0; key < static_cast<int>(heldNotes.size()); ++key)
@@ -311,6 +310,7 @@ void RhinoArpDevice::generateUntil(double endBeat, double blockStartSeconds, te:
         }
         nextTickBeat = followingTick;
         ++sequenceStep;
+        ++grooveStep;
     }
     // Keep releases pending until the scheduler actually reaches them. Writing
     // future offs at note-on time prevents a later input release from cancelling
@@ -328,8 +328,10 @@ void RhinoArpDevice::applyToBuffer(const te::PluginRenderContext& context)
     firstRender = false;
     output.clear();
     const auto resetRequested = resetPending.exchange(false);
-    output.isAllNotesOff = midi->isAllNotesOff || resetRequested || (wasPlaying && !context.isPlaying);
+    const auto transportStopped = wasPlaying && !context.isPlaying;
+    output.isAllNotesOff = midi->isAllNotesOff || resetRequested || transportStopped;
     if (output.isAllNotesOff) clearState();
+    if (transportStopped) timelineValid = false;
     wasPlaying = context.isPlaying;
 
     const auto blockStartSeconds = context.editTime.getStart().inSeconds();
@@ -347,7 +349,9 @@ void RhinoArpDevice::applyToBuffer(const te::PluginRenderContext& context)
             tracktion::core::BeatPosition::fromBeats(here + 1.0)).inSeconds();
         freeSecondsPerBeat = std::max(1.0e-3, beatLater - blockStartSeconds);
         freeAnchorSeconds = blockStartSeconds;
-        freeAnchorBeat = clockValid ? lastBlockEndBeat : here;
+        // Silence ends a pattern, not elapsed time. Resetting this anchor on
+        // release makes the next phrase's Beat retriggers buffer-dependent.
+        freeAnchorBeat = timelineValid ? lastBlockEndBeat : here;
     }
     const auto blockStartBeat = toBeat(blockStartSeconds);
     const auto blockEndBeat = toBeat(blockEndSeconds);
@@ -423,6 +427,7 @@ void RhinoArpDevice::applyToBuffer(const te::PluginRenderContext& context)
 
     generateUntil(blockEndBeat, blockStartSeconds, output);
     lastBlockEndBeat = blockEndBeat;
+    timelineValid = true;
     midi->swapWith(output);
     midi->sortByTimestamp();
 }

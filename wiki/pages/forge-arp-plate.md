@@ -1,8 +1,8 @@
 ---
 title: Forge ARP plate, slots and waterfall
 type: component
-summary: The painted plate between Forge's keys and note guide - a lamp, four slot buttons that swap the five pattern panes' 25 parameters through ARPSLOT nodes on the state tree, a door to the overlay, and a well where every note the voices play falls.
-tags: [forge, arpeggiator, ui, state]
+summary: The painted plate between Forge's keys and note guide - a lamp, four slot buttons that swap the five pattern panes' 25 parameters through ARPSLOT nodes on the state tree, a door to the overlay, and a well where every note the voices play falls, and a held one hangs and brightens.
+tags: [forge, arpeggiator, ui, state, real-time]
 sources: []
 updated: 2026-10-13
 ---
@@ -31,13 +31,25 @@ Four configurations, `arpSlotCount` in `core/ForgeArp.h`, one of them the live p
 
 ## The waterfall
 
-Every note handed to `Core::noteOn`, from a key or from the arp, is also pushed into `NoteFlashQueue` (`core/ForgeNoteFlash.h`): `NoteFlash {note, velocity}` through a 64-deep single-producer, single-consumer ring like `MidiControlQueue`, dropping when full and never blocking ([Real-time audio rules](real-time-audio-rules.md)). `Editor::gatherNoteSparks` (`src/ForgeEditorInput.cpp`, every 24 Hz tick) pops them through `Processor::popNoteFlash` into `NoteSpark`s: position across the well from the note's place in the keyboard's range (33..96), size from velocity, a random pace of 0.85-1.15 and warmth, born now. Sparks past the floor are dropped and the list is capped at `maxSparks` = 48. A spark is drawn from its age alone (`sparkProgress`: a `sparkFallMs` = 1500 ms fall with a mild ease, lit over the first tenth, put out over the last third), never stepped per frame. The editor drains the queue in its constructor, since it holds the last sixty-odd notes of a session with no editor open.
+Every note handed to `Core::noteOn`, from a key or from the arp, is also pushed into `NoteFlashQueue` (`core/ForgeNoteFlash.h`): `NoteFlash {note, velocity}` through a 64-deep single-producer, single-consumer ring like `MidiControlQueue`, dropping when full and never blocking ([Real-time audio rules](real-time-audio-rules.md)). `Editor::gatherNoteSparks` (`src/ForgeEditorInput.cpp`, every 24 Hz tick) pops them through `Processor::popNoteFlash` into `NoteSpark`s: position across the well from the note's place in the keyboard's range (33..96), size from velocity, a random pace of 0.85-1.15 and warmth, a random `seed`, born now. Sparks past the floor are dropped and the list is capped at `maxSparks` = 48; at the cap `addNoteSpark` drops the oldest *released* spark, never a held one. A spark is drawn from its age alone (`sparkProgress`: a `sparkFallMs` = 1500 ms fall with a mild ease, lit over the first tenth, put out over the last third), never stepped per frame. The editor drains the queue in its constructor, since it holds the last sixty-odd notes of a session with no editor open.
+
+### A held note hangs and charges
+
+Added 2026-10-13, uncommitted on `main` when written; the constants in `ui/ForgeArpPlate.h` may still be tuned after visual review. A note still held does not fall away: it parks at `sparkRestProgress` = 0.6 (before the fade at 0.7), its trail stretches to the top of the well as a column, and over `sparkChargeMs` = 1800 ms parked it turns whiter, its halo and column brighter, until "ultra": a white burst (`sparkUltraFlashMs`), then column and body swell up to `sparkUltraSwellPx` = 3 in a ripple running down into the light, and `sparkUltraMotes` = 10 stardust motes twinkle and drift around it. Released, the hold dims over `sparkLetGoMs` = 320 and the spark falls the remaining 0.4 at the standard pace, because the fall clock stops while parked (`sparkParkedMs`, subtracted in `sparkProgress`). `sparkHold` returns the whole state from the spark and the clock.
+
+- **Held state crosses as a set, not as note-offs.** `HeldNotes` (`core/ForgeNoteFlash.h`) is 128 bits in two lock-free `std::atomic<std::uint64_t>`, read through `Processor::noteHeld`. Note-offs in `NoteFlashQueue` were rejected: it drops when full, and a dropped release would leave a light in ultra forever. A set cannot fall behind.
+- **Ordering:** the audio thread sets a note's bit before pushing its flash, and `gatherNoteSparks` pops the queue first and calls `releaseNoteSparks` with `noteHeld` after, so a spark just popped is never seen as already released.
+- **"Held" means held by a voice.** Every `Core` note-on and note-off - keys, the arp's steps, `arp.flush` when the arp is switched off - goes through `Processor::playNote`/`stopNote`, which keep the set; all-notes-off (CC 123) and `prepareToPlay` clear it. With the arp on, a note is held for its gate, not for as long as the key is down.
+- Every spark is born held (`releasedMs` < 0). Striking a note again releases its older held spark: only the newest strike of a note can hang.
+- **A note released before it reaches rest (about 0.9 s) draws pixel for pixel as before**, because every hold effect is driven by parked time, which is zero for it. A first draft attached the column from the press, changed every short note's trail, and was reworked for that reason.
+- Still cheap on the frame path: fills of small shapes, no strokes. Motes are placed by `sparkNoise(seed, a, b)`, an integer hash of the spark's seed and the clock, so nothing is stored or stepped per frame. The column is cut into ~3 px whole-pixel slices; slices overlapping by half a pixel band into visible lines.
 
 ## Tests
 
 - `forge_layout` (`tests/ForgeTestsLayout.cpp`) sweeps every allowed size in 20 px steps and requires keys, plate and guide in that order without overlap; lamp, name, grid and well inside the face and clear of each other; and the well at least 60 px wide (76 at the minimum window, about 134 at 1440 wide, about 284 at 2000). It also holds `arpSlotParameterIds()` to the panes both ways and keeps the ARP pane's controls out of it.
-- `slotSuite` and `flashSuite` in `tests/ForgeTestsArp.cpp`: switching, returning, defaults for an unvisited slot, the shared lamp and LAUNCH QUANT, round trips through a `.forgepreset` and through `getStateInformation`; both routes into the flash queue.
-- `--snapshot ... ARP` shows the plate open with notes falling ([Seeing the UI without taking the screen](headless-ui-snapshots.md)).
+- `slotSuite` and `flashSuite` in `tests/ForgeTestsArp.cpp`: switching, returning, defaults for an unvisited slot, the shared lamp and LAUNCH QUANT, round trips through a `.forgepreset` and through `getStateInformation`; both routes into the flash queue, and `noteHeld` for keys (across blocks, note-off, all-notes-off, re-prepare) and for the arp (held for its gate only).
+- `sparkSuite` (area `arp`, same file): the hold's timing (an early release unchanged, parking, monotonic charge, ultra only after it, the resumed fall and let-go), the retrigger and cap rules, `sparkNoise`, and painted checks on a 120x60 software image. The stardust check samples after the ultra flash, because the flash alone lights that corner.
+- `--snapshot ... ARP` shows the plate open with notes falling; `ARPHELD` adds four notes held into ultra beside two short ones falling ([Seeing the UI without taking the screen](headless-ui-snapshots.md)).
 
 ## Related
 

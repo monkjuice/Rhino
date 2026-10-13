@@ -32,6 +32,7 @@ void Processor::prepareToPlay(double sampleRate, int)
     core.initialise(sampleRate);
     arp.reset();
     directNotes.reset();
+    heldNotes.clear();
     preparedSampleRate = juce::jmax(1.0, sampleRate);
     // Room for a few hundred events, which is far more than one block carries;
     // a block that somehow brings more grows it once and keeps the room.
@@ -154,6 +155,21 @@ void Processor::quantiseArpStart(int sampleIndex, const ArpSettings& settings)
     arp.delayFirstStep((next - ppq) / juce::jmax(1.0e-9, beatsPerSample));
 }
 
+// The held bit before the flash, so a panel that pops the flash and then asks
+// whether the note is held sees it held rather than already let go.
+void Processor::playNote(int note, float velocity, const Patch& values)
+{
+    core.noteOn(note, velocity, values);
+    heldNotes.set(note, true);
+    noteFlashes.push({note, velocity});
+}
+
+void Processor::stopNote(int note)
+{
+    core.noteOff(note);
+    heldNotes.set(note, false);
+}
+
 void Processor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
     juce::ScopedNoDenormals noDenormals;
@@ -204,7 +220,7 @@ void Processor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
     // holding has to go when no finger is on it.
     if (arpWasEnabled && !arpValues.enabled)
     {
-        arp.flush([this] (int note) { core.noteOff(note); });
+        arp.flush([this] (int note) { stopNote(note); });
         arp.allNotesOff();
     }
     if (arpWasLatched && !arpValues.latch) arp.releaseLatch();
@@ -278,22 +294,22 @@ void Processor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
             {
                 if (direct)
                 {
-                    core.noteOn(note, message.getFloatVelocity(), values);
+                    playNote(note, message.getFloatVelocity(), values);
                     directNotes.set(static_cast<size_t>(note));
-                    noteFlashes.push({note, message.getFloatVelocity()});
                 }
             }
             else if (message.isNoteOff())
             {
                 if (directNotes[static_cast<size_t>(note)])
                 {
-                    core.noteOff(note);
+                    stopNote(note);
                     directNotes.reset(static_cast<size_t>(note));
                 }
             }
             else if (message.isAllNotesOff() && (direct || directNotes.any()))
             {
                 core.allNotesOff();
+                heldNotes.clear();
                 directNotes.reset();
             }
             ++event;
@@ -301,12 +317,8 @@ void Processor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
         // Between the events and the render, so a note the arp starts on this
         // sample is sounding in this sample rather than the next one.
         arp.advance(arpValues, preparedSampleRate,
-                    [this, &values] (int note, float velocity)
-                    {
-                        core.noteOn(note, velocity, values);
-                        noteFlashes.push({note, velocity});
-                    },
-                    [this] (int note) { core.noteOff(note); });
+                    [this, &values] (int note, float velocity) { playNote(note, velocity, values); },
+                    [this] (int note) { stopNote(note); });
 
         float left, right; core.renderSample(values, mods, left, right);
         buffer.addSample(0, i, left);

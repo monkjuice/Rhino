@@ -596,11 +596,11 @@ void Editor::fadeValueBubble()
 }
 
 // The notes the voices were told to play since the last tick become sparks in
-// the plate's well, and the sparks that have reached the floor are let go.
-// Where a spark falls is the note's place on the keyboard, so a rising
-// arpeggio drifts across the well the way it walks along the keys; how big it
-// is, is the velocity; the rest is a roll of the dice, so a chord falls as
-// several lights rather than one.
+// the plate's well, the ones whose notes have stopped are let go, and the
+// sparks that have reached the floor are dropped. Where a spark falls is the
+// note's place on the keyboard, so a rising arpeggio drifts across the well
+// the way it walks along the keys; how big it is, is the velocity; the rest is
+// a roll of the dice, so a chord falls as several lights rather than one.
 void Editor::gatherNoteSparks()
 {
     const auto now = juce::Time::getMillisecondCounterHiRes();
@@ -614,17 +614,21 @@ void Editor::gatherNoteSparks()
     NoteFlash flash;
     while (processor.popNoteFlash(flash))
     {
-        if (static_cast<int>(sparks.size()) >= ui::maxSparks) sparks.erase(sparks.begin());
         ui::NoteSpark spark;
+        spark.note = flash.note;
         spark.across = juce::jlimit(0.0f, 1.0f,
                                     static_cast<float>(flash.note - ui::keyboardLowestNote) / span
                                         + (random.nextFloat() - 0.5f) * 0.02f);
         spark.weight = juce::jlimit(0.0f, 1.0f, flash.velocity);
         spark.pace = 0.85f + random.nextFloat() * 0.3f;
         spark.warmth = random.nextFloat();
+        spark.seed = static_cast<std::uint32_t>(random.nextInt());
         spark.bornMs = now;
-        sparks.push_back(spark);
+        ui::addNoteSpark(sparks, spark);
     }
+    // After the queue, never before it: a note is marked held before its flash
+    // is queued, so asking now cannot find one just popped already let go.
+    ui::releaseNoteSparks(sparks, now, [this] (int note) { return processor.noteHeld(note); });
 }
 
 void Editor::timerCallback()

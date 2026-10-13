@@ -71,14 +71,18 @@ binary before blaming the change; that is how the source move of 2026-10-13 was 
 The Forge test binary renders the real editor, controls and cached layers included, in about a second:
 
 ```
-RhinoForgeTests --snapshot out.png [width height [OSC|TABLE|MATRIX|MIX|FX|ARP [scale [preset.forgepreset]]]]
+RhinoForgeTests --snapshot out.png [width height [OSC|TABLE|MATRIX|MIX|FX|ARP|ARPHELD [scale [preset.forgepreset]]]]
 ```
 
 Paths resolve against the working directory. `ARP` presses the name column of the ARP plate on the keyboard shelf
 (`arpPlateNameBounds`; the lamp and the slot buttons beside it do other things), the only way in, then plays an
 eight-note chord through the voices, runs the due timers by hand with `juce::Timer::callPendingTimersSynchronously()`
 (nothing runs a message loop, and the editor's timer is what carries a note from the Processor to the plate) and waits
-450 ms, so the PNG shows notes falling through the plate's well ([Forge ARP plate, slots and waterfall](forge-arp-plate.md)). The preset
+450 ms, so the PNG shows notes falling through the plate's well ([Forge ARP plate, slots and waterfall](forge-arp-plate.md)).
+`ARPHELD` (2026-10-13, uncommitted when written) releases four of the chord's notes, waits `sparkFallMs` + `sparkChargeMs`
+so the other four hang in ultra, then plays two short notes that fall the ordinary way. The `MidiBuffer` handed to
+`processBlock` keeps the events `keyboardState` injected into it, so clear it before every later block or the chord
+replays. The preset
 is loaded before the editor is built, which is the only way to review what the panel draws from the patch, such as
 modulation rings. A hand-written one needs only `<RhinoForgePreset formatVersion="3" name="x">` around a
 `<RhinoForgeState>` holding the `<PARAM id="..." value="..."/>` entries you care about; `Processor::migrated` defaults

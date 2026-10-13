@@ -169,6 +169,10 @@ public:
     // asked, in order, for the panel to draw falling. Message thread; the
     // audio thread fills it from inside processBlock.
     bool popNoteFlash(NoteFlash& flash) noexcept { return noteFlashes.pop(flash); }
+    // Whether the voices are still holding a note: started and not yet
+    // stopped. Ask after popping, never before: a note is marked held before
+    // its flash is queued, so one popped here is never found already let go.
+    bool noteHeld(int note) const noexcept { return heldNotes.isHeld(note); }
 
     // The tempo as of the last block. A synced delay draws its repeats where
     // they will actually land, which needs the same tempo the engine divides.
@@ -312,6 +316,14 @@ private:
     ArpSettings arpSettings() const;
     // Every note handed to Core is handed here too, for the panel.
     NoteFlashQueue noteFlashes;
+    // And whether Core is still holding it, for the same panel, which keeps a
+    // held note lit for as long as it is down.
+    HeldNotes heldNotes;
+    // Every start and stop the voices are given, from the keys and from the
+    // arp alike, goes through these two, so what the panel is told is exactly
+    // what Core is told.
+    void playNote(int note, float velocity, const Patch& values);
+    void stopNote(int note);
     // Which slot the live arp parameters are. Set from `arpSlot` whenever a
     // state is loaded and moved by applyArpSlot; see ForgeProcessorState.cpp.
     int liveArpSlot = 0;

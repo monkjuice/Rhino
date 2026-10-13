@@ -33,8 +33,11 @@ int runSnapshot(int argc, char** argv)
     // ARP is not one of the tabs — it is the plate beside the keyboard, and it
     // opens over whichever tab is showing. There is no button to reach for, so
     // the review takes the same route a hand does and presses the plate's
-    // name: the lamp and the slot buttons beside it do other things.
-    if (argc > 5 && juce::String(argv[5]).equalsIgnoreCase("ARP"))
+    // name: the lamp and the slot buttons beside it do other things. ARPHELD
+    // is the same plate with four of the chord's notes held down long enough
+    // to go ultra, beside two short notes that fall the ordinary way.
+    const auto held = argc > 5 && juce::String(argv[5]).equalsIgnoreCase("ARPHELD");
+    if (argc > 5 && (juce::String(argv[5]).equalsIgnoreCase("ARP") || held))
     {
         const auto at = rhino::forge::ui::arpPlateNameBounds(editor->getLocalBounds())
                             .getCentre().toFloat();
@@ -56,6 +59,37 @@ int runSnapshot(int argc, char** argv)
         processor->processBlock(audio, midi);
         juce::Thread::sleep(80);
         juce::Timer::callPendingTimersSynchronously();
+        if (held)
+        {
+            // The buffer still carries the chord the keyboard put into it, so
+            // it is emptied before each block rather than played again.
+            const auto play = [&processor, &audio, &midi]
+            {
+                midi.clear();
+                processor->processBlock(audio, midi);
+            };
+            // The timers are run all through a wait, as a message loop would
+            // run them. Run once at the end of a sleep, a timer is only called
+            // if the timer thread has already counted it down, and a release
+            // missed that way is seen seconds late, mid-charge.
+            const auto wait = [] (double ms)
+            {
+                const auto until = juce::Time::getMillisecondCounterHiRes() + ms;
+                while (juce::Time::getMillisecondCounterHiRes() < until)
+                {
+                    juce::Thread::sleep(15);
+                    juce::Timer::callPendingTimersSynchronously();
+                }
+            };
+            for (const auto note : {48, 55, 64, 76}) processor->keyboardState.noteOff(1, note, 0.0f);
+            play();
+            wait(rhino::forge::ui::sparkFallMs + rhino::forge::ui::sparkChargeMs);
+            for (const auto note : {57, 69}) processor->keyboardState.noteOn(1, note, 0.6f);
+            play();
+            for (const auto note : {57, 69}) processor->keyboardState.noteOff(1, note, 0.0f);
+            play();
+            wait(120.0);
+        }
         juce::Thread::sleep(450);
     }
     else if (argc > 5)

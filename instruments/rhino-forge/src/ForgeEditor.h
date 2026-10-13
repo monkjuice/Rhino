@@ -489,8 +489,9 @@ private:
     // and the Processor moves the pattern's parameters to match.
     void chooseArpSlot(int slot);
     // The notes falling through the plate's well: one spark per note the
-    // voices were told to play, gathered from the Processor on every tick and
-    // let go once it has reached the floor. View state, like the bubble.
+    // voices were told to play, gathered from the Processor on every tick,
+    // kept lit while its note is down and dropped once it has reached the
+    // floor. View state, like the bubble.
     std::vector<ui::NoteSpark> sparks;
     void gatherNoteSparks();
 

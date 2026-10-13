@@ -8,6 +8,7 @@
 // suite at the end goes through the Processor instead, because the one thing
 // lambdas cannot check is that the notes reach the voices.
 #include "ForgeTestSupport.h"
+#include "../ui/ForgeVisuals.h"
 
 #include <algorithm>
 #include <cmath>
@@ -718,6 +719,53 @@ void flashSuite()
     require(processor.popNoteFlash(flash) && flash.note == 67, "in the order it was played");
     require(!processor.popNoteFlash(flash), "and nothing else");
 
+    // And whether each note is still down, which is what keeps a held note lit
+    // on the plate: from the press to the release, not to the end of the
+    // block that carried the press.
+    {
+        rhino::forge::Processor keys;
+        keys.prepareToPlay(48000.0, 512);
+        const auto play = [&keys, &buffer] (std::initializer_list<juce::MidiMessage> messages)
+        {
+            juce::MidiBuffer events;
+            for (const auto& message : messages) events.addEvent(message, 0);
+            keys.processBlock(buffer, events);
+        };
+        play({juce::MidiMessage::noteOn(1, 60, 0.8f), juce::MidiMessage::noteOn(1, 64, 0.8f)});
+        require(keys.noteHeld(60) && keys.noteHeld(64), "a key down is held");
+        require(!keys.noteHeld(62), "and a key never pressed is not");
+        play({});
+        require(keys.noteHeld(60), "for as long as it stays down");
+        play({juce::MidiMessage::noteOff(1, 60)});
+        require(!keys.noteHeld(60) && keys.noteHeld(64), "a key let go is not held, and its neighbour still is");
+        play({juce::MidiMessage::allNotesOff(1)});
+        require(!keys.noteHeld(64), "all notes off lets go of every note");
+        play({juce::MidiMessage::noteOn(1, 60, 0.8f)});
+        keys.prepareToPlay(48000.0, 512);
+        require(!keys.noteHeld(60), "and so does preparing to play again, which silences the voices");
+    }
+
+    // With the arp on, a note is held for its gate, not for as long as the
+    // key: the keys are consumed, and what sounds is the arp's notes. At 20 Hz
+    // a step is 2400 samples and a gate of half is 1200 of them.
+    {
+        rhino::forge::Processor arpeggiated;
+        setValue(arpeggiated, "arpEnable", 1.0f);
+        setValue(arpeggiated, "arpRateUnit", 0.0f);
+        setValue(arpeggiated, "arpRate", 20.0f);
+        setValue(arpeggiated, "arpGate", 0.5f);
+        arpeggiated.prepareToPlay(48000.0, 1200);
+        juce::AudioBuffer<float> first(2, 600), rest(2, 1200);
+        juce::MidiBuffer chord, nothing;
+        for (const auto note : {60, 64, 67}) chord.addEvent(juce::MidiMessage::noteOn(1, note, 1.0f), 0);
+        arpeggiated.processBlock(first, chord);
+        require(arpeggiated.noteHeld(60), "the note the arp is playing is held while its gate is open");
+        require(!arpeggiated.noteHeld(64) && !arpeggiated.noteHeld(67),
+                "and the keys the arp has not reached are not, though they are down");
+        arpeggiated.processBlock(rest, nothing);
+        require(!arpeggiated.noteHeld(60), "the arp's note is let go when its gate closes");
+    }
+
     // With the arp on, the keys are consumed and the notes it starts are what
     // the panel is told about. At 20 Hz a step is 2400 samples, and a block of
     // 4800 fires one at its start and one at each boundary inside it: three.
@@ -734,6 +782,154 @@ void flashSuite()
     require(reported == std::vector<int> {60, 64, 67},
             "with the arp on, the panel is told the notes the arp plays");
 }
+
+// --- The lights in the plate's well ---------------------------------------------
+//
+// A spark is drawn from two clocks, its age and how long its note has been
+// held, so how a held note behaves can be checked from the functions the
+// painter reads, and how it looks from one painted well, without an editor.
+void sparkSuite()
+{
+    using namespace rhino::forge::ui;
+    NoteSpark spark;
+    spark.across = 0.5f;
+    spark.seed = 12345u;
+    spark.bornMs = 1000.0;
+    const auto restAt = spark.bornMs + sparkRestAgeMs(spark);
+
+    // Let go early, a note falls exactly as every spark always has.
+    auto quick = spark;
+    quick.releasedMs = spark.bornMs + 100.0;
+    requireClose(sparkProgress(quick, spark.bornMs + sparkFallMs * 0.5), 0.5f, 0.0001f,
+                 "a note let go early falls at the standard pace");
+    require(sparkProgress(quick, spark.bornMs + sparkFallMs) >= 1.0f, "and is spent at the floor");
+    const auto early = sparkHold(quick, restAt);
+    require(early.column == 0.0f && early.charge == 0.0f && early.ultra == 0.0f,
+            "and nothing about holding shows on it");
+
+    // Held, it stops at its rest and stays there for as long as the key is down.
+    requireClose(sparkProgress(spark, restAt + 10000.0), sparkRestProgress, 0.0001f,
+                 "a held note stops at its rest");
+    require(sparkProgress(spark, restAt + 600000.0) < 1.0f, "and is never spent while the key is down");
+
+    // It brightens as it hangs there, and reaches ultra only once it is fully bright.
+    auto previous = -1.0f;
+    for (auto after = 0.0; after <= sparkChargeMs; after += 100.0)
+    {
+        const auto charge = sparkHold(spark, restAt + after).charge;
+        require(charge >= previous, "a held note only ever brightens");
+        previous = charge;
+    }
+    requireClose(sparkHold(spark, restAt).charge, 0.0f, 0.0001f, "from no brighter than any other spark");
+    requireClose(sparkHold(spark, restAt + sparkChargeMs).charge, 1.0f, 0.0001f, "to full by the end of its charge");
+    require(sparkHold(spark, restAt + sparkChargeMs * 0.95).ultra == 0.0f, "ultra waits for the charge");
+    const auto ultra = sparkHold(spark, restAt + sparkChargeMs + sparkUltraEaseMs + 1.0);
+    requireClose(ultra.ultra, 1.0f, 0.0001f, "and is all the way in once it has eased in");
+    requireClose(ultra.column, 1.0f, 0.0001f, "with the trail stretched up to the top of the well");
+
+    // Let go after a long hold, it falls the rest of the way from its rest at
+    // the standard pace, and its hold dims away rather than vanishing.
+    auto longHeld = spark;
+    longHeld.releasedMs = restAt + 5000.0;
+    const auto remaining = (1.0 - static_cast<double>(sparkRestProgress)) * sparkFallMs;
+    requireClose(sparkProgress(longHeld, longHeld.releasedMs), sparkRestProgress, 0.0001f,
+                 "let go, it starts from its rest");
+    requireClose(sparkProgress(longHeld, longHeld.releasedMs + remaining * 0.5),
+                 (1.0f + sparkRestProgress) * 0.5f, 0.0001f, "and falls the rest of the way at the standard pace");
+    require(sparkProgress(longHeld, longHeld.releasedMs + remaining + 1.0) >= 1.0f, "to be spent at the floor");
+    require(sparkHold(longHeld, longHeld.releasedMs + sparkLetGoMs * 0.5).charge > 0.0f,
+            "its brightness lets go gradually");
+    const auto gone = sparkHold(longHeld, longHeld.releasedMs + sparkLetGoMs);
+    require(gone.column == 0.0f && gone.charge == 0.0f && gone.ultra == 0.0f, "and is gone once it has");
+
+    // The same note struck again restarts its voice, so only its newest strike
+    // can still be held; and the voices say which notes have stopped.
+    std::vector<NoteSpark> sparks;
+    addNoteSpark(sparks, spark);
+    auto again = spark;
+    again.bornMs = 2000.0;
+    addNoteSpark(sparks, again);
+    auto other = spark;
+    other.note = 64;
+    other.bornMs = 2000.0;
+    addNoteSpark(sparks, other);
+    require(!sparks[0].held() && sparks[0].releasedMs == 2000.0, "a note struck again lets go of its earlier light");
+    require(sparks[1].held() && sparks[2].held(), "and leaves the newest strike, and other notes, held");
+    releaseNoteSparks(sparks, 2500.0, [] (int note) { return note == 64; });
+    require(!sparks[1].held() && sparks[1].releasedMs == 2500.0 && sparks[2].held(),
+            "a note the voices have stopped is let go, and one still down is not");
+
+    // At the cap, the light dropped is the oldest already let go, never a held one.
+    std::vector<NoteSpark> crowded;
+    auto heldLight = spark;
+    heldLight.note = 30;
+    addNoteSpark(crowded, heldLight);
+    for (int i = 1; i <= maxSparks; ++i)
+    {
+        auto passing = spark;
+        passing.note = 31 + i % 90;
+        passing.bornMs = spark.bornMs + i;
+        passing.releasedMs = passing.bornMs;
+        addNoteSpark(crowded, passing);
+    }
+    require(static_cast<int>(crowded.size()) == maxSparks, "the well never keeps more than its cap");
+    require(crowded.front().note == 30 && crowded.front().held(), "and a held note survives it");
+    requireClose(static_cast<float>(crowded[1].bornMs - spark.bornMs), 2.0f, 0.001f,
+                 "while the oldest light already let go is the one dropped");
+
+    // Painted. A well of the shape the plate has, one light in the middle of
+    // it, and the top rows of the well well clear of the light's own halo.
+    const auto paint = [] (const NoteSpark& light, double nowMs)
+    {
+        juce::Image image(juce::Image::ARGB, 120, 60, true, juce::SoftwareImageType());
+        juce::Graphics g(image);
+        drawArpWaterfall(g, image.getBounds(), {light}, nowMs);
+        return image;
+    };
+    const auto light = [] (const juce::Image& image, juce::Rectangle<int> area)
+    {
+        auto total = 0.0f;
+        for (auto y = area.getY(); y < area.getBottom(); ++y)
+            for (auto x = area.getX(); x < area.getRight(); ++x)
+                total += image.getPixelAt(x, y).getFloatAlpha();
+        return total;
+    };
+    const juce::Rectangle<int> whole(0, 0, 120, 60);
+    const juce::Rectangle<int> top(0, 0, 120, 3);
+    // x is 4 + 0.5 * (120 - 8): the middle of the well.
+    const juce::Rectangle<int> besideColumn(0, 0, 55, 16);
+
+    require(light(paint(quick, spark.bornMs + sparkRestAgeMs(spark)), top) == 0.0f,
+            "a note let go early leaves no trace at the top of the well");
+    require(light(paint(spark, restAt + sparkColumnMs), top) > 0.5f,
+            "a held one hangs from the top of the well by its trail");
+    require(light(paint(spark, restAt + sparkChargeMs), whole) > light(paint(spark, restAt), whole) * 1.5f,
+            "and is far brighter once it has charged than when it stopped");
+
+    // Taken after the flash that marks ultra's arrival, which spreads far
+    // enough to light this corner by itself.
+    auto dustBefore = 0.0f, dustDuring = 0.0f;
+    for (int frame = 0; frame < 8; ++frame)
+    {
+        dustBefore += light(paint(spark, restAt + sparkChargeMs * 0.95 - frame * 6.0), besideColumn);
+        dustDuring += light(paint(spark, restAt + sparkChargeMs + sparkUltraFlashMs + 1.0 + frame * 120.0),
+                            besideColumn);
+    }
+    require(dustBefore == 0.0f, "before ultra nothing lights the well beside the column");
+    require(dustDuring > 0.0f, "in ultra, stardust sprinkles round it");
+
+    // The noise the stardust is placed by is the same every time it is asked
+    // and spread across its range, or the motes would sit still or bunch up.
+    require(sparkNoise(7u, 3u, 5u) == sparkNoise(7u, 3u, 5u), "the same mote lands in the same place");
+    auto sum = 0.0f;
+    for (std::uint32_t k = 0; k < 1000; ++k)
+    {
+        const auto n = sparkNoise(7u, k, k * 3u);
+        require(n >= 0.0f && n < 1.0f, "stardust noise stays between 0 and 1");
+        sum += n;
+    }
+    requireClose(sum / 1000.0f, 0.5f, 0.05f, "and spreads evenly across it");
+}
 }
 
 void arpTests()
@@ -744,5 +940,6 @@ void arpTests()
     processorSuite();
     slotSuite();
     flashSuite();
+    sparkSuite();
 }
 }

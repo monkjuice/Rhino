@@ -667,3 +667,10 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/build-and-test-forge.md (new Warnings section: fix at the site, why headers multiply the count, listing them from a worktree build, the C4459/C4458/C4244/C4996 causes and the writer API's stream leak; summary changed)
 - updated: pages/colours-and-typography.md (never name a Forge UI local text, panel or line)
 - updated: index.md (summary of build-and-test-forge)
+
+## [2026-10-13] update | A held note hangs in Forge's arp waterfall and charges to ultra
+- source: the change's brief (uncommitted on main, constants still open to tuning), checked against instruments/rhino-forge/ui/ForgeArpPlate.h, core/ForgeNoteFlash.h (HeldNotes) and tests/ForgeTestsArp.cpp
+- updated: pages/forge-arp-plate.md (new "A held note hangs and charges" section: parking, charge, ultra, let-go; HeldNotes as a set rather than note-offs and why; the push/pop ordering; held means held by a voice; early releases unchanged; cap evicts released sparks only; sparkSuite, ARPHELD; summary changed)
+- updated: pages/headless-ui-snapshots.md (the ARPHELD page, and the MidiBuffer that replays keyboardState's events unless cleared)
+- updated: pages/real-time-audio-rules.md (held notes cross as an atomic set because a lost note-off would hang a light)
+- updated: index.md (summary of forge-arp-plate)

@@ -100,6 +100,20 @@ void Editor::refreshModulationRings()
         }
 }
 
+// The offset is published in the destination's normalised space and applied
+// through the same range the Processor handed Core, so the tube and the voice
+// cannot disagree about where a modulated POSITION or warp depth has got to.
+// Zero with nothing sounding, which leaves the picture on the knob's value.
+float Editor::modulatedValue(const juce::String& id) const
+{
+    const auto destination = destinationFor(id);
+    const auto offset = destination == 0 ? 0.0f : processor.modulationOffset(destination);
+    const auto* parameter = processor.state.getParameter(id);
+    if (offset == 0.0f || parameter == nullptr) return value(id);
+    const auto& range = parameter->getNormalisableRange();
+    return range.convertFrom0to1(juce::jlimit(0.0f, 1.0f, range.convertTo0to1(value(id)) + offset));
+}
+
 // --- A macro, from its own end ------------------------------------------------
 //
 // Everything below answers the question a knob's own ring cannot. Not "what is

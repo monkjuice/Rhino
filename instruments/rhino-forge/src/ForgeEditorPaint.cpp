@@ -265,12 +265,13 @@ void Editor::paint(juce::Graphics& g)
                     // Warped as the voice warps it, which is what the manual
                     // means when it says the 2D view shows what the mode is
                     // doing. The modes it cannot honestly draw take themselves
-                    // off the picture -- see drawWaveform.
+                    // off the picture -- see drawWaveform. POSITION is read
+                    // where the voice has it, so an LFO on it moves the frame.
                     const auto oscillator = juce::jmax(
                         0, oscillatorIndexFromId(juce::String(descriptor.id)));
                     ui::drawWaveform(g, ui::wavetableTubeBounds(area, descriptor),
                                      processor.tableStore().edit(oscillator),
-                                     value(source), warpStagesOf(oscillatorPrefix(oscillator)),
+                                     modulatedValue(source), warpStagesOf(oscillatorPrefix(oscillator)),
                                      accent, alpha);
                 }
                 break;

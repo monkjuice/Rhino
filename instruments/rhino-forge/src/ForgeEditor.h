@@ -505,6 +505,10 @@ private:
     // changed from outside this editor is noticed on the next tick.
     juce::String panelColoursShown;
     float value(const juce::String& id) const;
+    // A parameter as the voice the displays follow is rendering it: its value
+    // moved by whatever the matrix is adding, the way Core adds it. The knob
+    // stays at value(); a picture of what is sounding draws this.
+    float modulatedValue(const juce::String& id) const;
     void mouseMove(const juce::MouseEvent&) override;
     void mouseDown(const juce::MouseEvent&) override;
     void mouseDrag(const juce::MouseEvent&) override;

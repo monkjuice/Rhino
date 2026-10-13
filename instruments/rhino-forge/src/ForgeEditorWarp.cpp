@@ -159,16 +159,17 @@ void Editor::swapWarpModes(const juce::String& id)
 }
 
 // One oscillator's two stages, resolved the way the engine resolves them, so
-// the tube draws the very warp the voice is rendering. The note and the rate
-// are the filter modes' business and the display draws none of those, so what
-// is handed in for them does not matter.
+// the tube draws the very warp the voice is rendering - depths and all, so a
+// depth the matrix is sweeping sweeps the trace. The note and the rate are the
+// filter modes' business and the display draws none of those, so what is
+// handed in for them does not matter.
 std::array<WarpStage, warpSlots> Editor::warpStagesOf(const char* prefix) const
 {
     std::array<WarpStage, warpSlots> stages {};
     for (int slot = 0; slot < warpSlots; ++slot)
     {
         const auto id = juce::String(prefix) + "Warp" + juce::String(slot + 1);
-        stages[static_cast<size_t>(slot)] = warpStageFor(value(id + "Mode"), value(id), 0.0f, 48000.0);
+        stages[static_cast<size_t>(slot)] = warpStageFor(value(id + "Mode"), modulatedValue(id), 0.0f, 48000.0);
     }
     return stages;
 }

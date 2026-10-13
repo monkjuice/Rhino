@@ -136,6 +136,94 @@ void chromeCacheSuite()
     }
 }
 
+// An oscillator's tube draws what the voice is reading, so POSITION or a warp
+// depth that the matrix is moving has to move the trace. Both used to be drawn
+// from the parameter alone: an LFO on POSITION swept the sound and left the
+// picture sitting on the knob.
+//
+// MACRO 1 stands in for the LFO because a macro holds still. The offset it
+// publishes is the same on every block, so a modulated tube can be compared
+// pixel for pixel with one whose knob is simply set where the modulation
+// takes it.
+void modulatedTraceSuite()
+{
+    const auto destinationOf = [] (const char* id)
+    {
+        for (int i = 1; i < destinationCount; ++i)
+            if (juce::String(destinations()[static_cast<size_t>(i)].id) == id) return i;
+        require(false, id);
+        return 0;
+    };
+    const ui::Module* oscA = nullptr;
+    for (const auto& module : ui::modules())
+        if (juce::String(module.id) == "oscA") oscA = &module;
+    require(oscA != nullptr, "oscillator A has a display");
+    if (oscA == nullptr) return;
+
+    // Only the panel's own paint, so the knobs - whose rings do differ between
+    // a sounding patch and a silent one - are not in the picture.
+    const auto tube = [oscA] (Processor& processor)
+    {
+        std::unique_ptr<juce::AudioProcessorEditor> editor(processor.createEditor());
+        for (auto* child : editor->getChildren())
+            if (auto* tab = dynamic_cast<ui::PageTab*>(child))
+                if (tab->getButtonText() == "OSC" && tab->onClick) tab->onClick();
+        juce::Image canvas(juce::Image::ARGB, editor->getWidth(), editor->getHeight(), true);
+        {
+            juce::Graphics g(canvas);
+            editor->paint(g);
+        }
+        return canvas.getClippedImage(
+            ui::wavetableTubeBounds(ui::moduleBounds(editor->getLocalBounds(), *oscA), *oscA));
+    };
+    const auto same = [] (const juce::Image& a, const juce::Image& b)
+    {
+        if (a.getBounds() != b.getBounds()) return false;
+        for (int y = 0; y < a.getHeight(); ++y)
+            for (int x = 0; x < a.getWidth(); ++x)
+                if (a.getPixelAt(x, y) != b.getPixelAt(x, y)) return false;
+        return true;
+    };
+
+    // Values a float carries exactly through the depth's -1..1 range, so the
+    // modulated reading and the knob set by hand are the same number.
+    constexpr auto depth = 0.5f;
+    const auto bendUp = static_cast<float>(WarpMode::bendUp);
+    const auto macro1 = static_cast<float>(ModSource::macro1);
+
+    for (const auto* id : {"oscAPosition", "oscAWarp1"})
+    {
+        const auto patch = [bendUp] (Processor& processor)
+        {
+            setValue(processor, "oscAPosition", 0.0f);
+            setValue(processor, "oscAWarp1Mode", bendUp);
+            setValue(processor, "oscAWarp1", 0.0f);
+        };
+
+        auto still = std::make_unique<Processor>();
+        patch(*still);
+        const auto atRest = tube(*still);
+
+        auto placed = std::make_unique<Processor>();
+        patch(*placed);
+        setValue(*placed, id, depth);
+        const auto byHand = tube(*placed);
+        require(!same(atRest, byHand), "the trace changes when the knob does");
+
+        // Held: a source reaches a destination only through a sounding voice.
+        auto moved = std::make_unique<Processor>();
+        patch(*moved);
+        setValue(*moved, "macro1", 1.0f);
+        setSlot(*moved, 1, macro1, static_cast<float>(destinationOf(id)), depth);
+        juce::AudioBuffer<float> buffer(2, 512);
+        renderNote(*moved, buffer);
+        require(same(tube(*moved), byHand),
+                juce::String(id) == "oscAPosition"
+                    ? "a modulated POSITION draws the frame the voice is reading"
+                    : "a modulated warp depth draws the warp the voice is applying");
+    }
+}
+
 // Compare consecutive resize frames with opening the editor at each size.
 // The parent's cached headings and chassis must retain their resolution even
 // when changes arrive faster than the old resize-quality timeout.
@@ -958,6 +1046,7 @@ void lfoFooterSuite()
 void displayTests()
 {
     chromeCacheSuite();
+    modulatedTraceSuite();
     resizeSharpnessSuite();
     filterDisplaySuite();
     envelopeDisplaySuite();

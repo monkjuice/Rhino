@@ -686,3 +686,6 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/headless-ui-snapshots.md (ARPHELD now shows traces in ultra, the lights gone)
 - updated: pages/real-time-audio-rules.md (a lost note-off would leave a trace hanging, not a light)
 - updated: index.md (summary of forge-arp-plate)
+
+## [2026-10-13] update | Arp waterfall trace redesign committed as 90246e1 and verified
+- updated: pages/forge-arp-plate.md, pages/headless-ui-snapshots.md (uncommitted/untested caveats replaced with commit 90246e1; 18 Forge CTest areas pass incl. sparkSuite, no-warning builds, ARPHELD reviewed by eye)

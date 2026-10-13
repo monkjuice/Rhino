@@ -1,10 +1,10 @@
-#include "../Arrangement.h"
-#include "../StepGrid.h"
-#include "../DeviceRack.h"
-#include "../DjView.h"
-#include "../AudioClipPanel.h"
-#include "../Playhead.h"
-#include "../Theme.h"
+#include "ui/arrangement/Arrangement.h"
+#include "ui/notes/StepGrid.h"
+#include "ui/rack/DeviceRack.h"
+#include "ui/dj/DjView.h"
+#include "ui/audioclip/AudioClipPanel.h"
+#include "ui/shared/Playhead.h"
+#include "ui/shared/Theme.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>

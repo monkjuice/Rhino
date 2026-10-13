@@ -1,5 +1,5 @@
 #include "RhinoArpDevice.h"
-#include "ScaleQuantizer.h"
+#include "dsp/ScaleQuantizer.h"
 #include <algorithm>
 
 namespace rhino

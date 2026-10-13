@@ -1,6 +1,6 @@
-#include "../Session.h"
-#include "ContentLibrary.h"
-#include "DevicePreset.h"
+#include "model/Session.h"
+#include "content/ContentLibrary.h"
+#include "content/DevicePreset.h"
 #include <cmath>
 #include <set>
 #include <stdexcept>

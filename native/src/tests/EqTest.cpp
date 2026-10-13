@@ -1,7 +1,7 @@
-#include "../Session.h"
-#include "../DeviceEditorPanel.h"
-#include "EqEngine.h"
-#include "SpectrumAnalyser.h"
+#include "model/Session.h"
+#include "ui/rack/DeviceEditorPanel.h"
+#include "dsp/EqEngine.h"
+#include "dsp/SpectrumAnalyser.h"
 #include "audio/RhinoEqDevice.h"
 #include <algorithm>
 #include <cmath>

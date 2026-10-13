@@ -1,0 +1,609 @@
+#pragma once
+#include "model/Session.h"
+#include "ArrangementGrid.h"
+#include "MonitorSelector.h"
+#include <map>
+#include <memory>
+
+namespace rhino
+{
+class Arrangement final : public juce::Component,
+                          public juce::FileDragAndDropTarget,
+                          public juce::DragAndDropTarget,
+                          private juce::ChangeListener,
+                          private juce::ScrollBar::Listener,
+                          private Session::Listener
+{
+public:
+    explicit Arrangement(Session&);
+    ~Arrangement() override;
+    void paint(juce::Graphics&) override;
+    void resized() override;
+    void mouseDown(const juce::MouseEvent&) override;
+    void mouseDrag(const juce::MouseEvent&) override;
+    void mouseUp(const juce::MouseEvent&) override;
+    void mouseMove(const juce::MouseEvent&) override;
+    void mouseExit(const juce::MouseEvent&) override;
+    void mouseWheelMove(const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
+    bool keyPressed(const juce::KeyPress&) override;
+    bool isInterestedInFileDrag(const juce::StringArray&) override;
+    void filesDropped(const juce::StringArray&, int x, int y) override;
+    bool isInterestedInDragSource(const juce::DragAndDropTarget::SourceDetails&) override;
+    void itemDropped(const juce::DragAndDropTarget::SourceDetails&) override;
+    void fit();
+    void selectTrack(int track);
+    int selectedTrackIndex() const { return selectedTrack; }
+    // The clip a command would act on, or an invalid id when the selection is
+    // a track, a region or nothing. The shell reads it to decide which editor
+    // the lower pane should be showing.
+    te::EditItemID selectedClipID() const { return selected; }
+    // Cuts clips in two at the line. Public because Ctrl+E is a shell shortcut
+    // rather than an arrangement one: the timeline rarely has the keyboard when
+    // a clip editor is open, and the command still means the same thing.
+    void splitAtInsertPoint();
+    // Where the line is, in seconds. The audio editor's own Split button reads
+    // it so that the button and the shortcut it advertises cut in the same
+    // place even while the transport is rolling away from it.
+    double insertPointTime() const;
+    // Turns the selected audio clips round. Public for the same reason as the
+    // split above: R is a shell shortcut, because the clip you want to hear
+    // backwards is usually the one open in the audio editor.
+    void reverseSelected();
+    // Renders the selected audio clips down to one clip per track. Public for
+    // the same reason again: Ctrl+J is a shell shortcut, and the selection it
+    // acts on is usually the one the audio editor is looking at.
+    void mergeSelected();
+    // How much of the foot of the panel the clip and device panes cover. They
+    // float over the arrangement rather than pushing it up, so the panel keeps
+    // the full height of the window and the lanes keep the size they had; only
+    // the pinned main row and the scrollbars move, up to sit above the pane.
+    void setBottomInset(float);
+    std::function<void(juce::String)> status;
+    // The typing keyboard belongs to the shell, not to the arrangement, but the
+    // card is where a MIDI track is armed and where its input is chosen - and
+    // on a machine with no keyboard plugged in, those are exactly the two
+    // moments when whether the typing keyboard is on decides whether anything
+    // happens at all. Asking the shell is cheaper than moving it down here.
+    std::function<bool()> typingKeyboardEnabled;
+    std::function<void()> enableTypingKeyboard;
+    std::function<void(int)> trackSelected;
+    // Clicking a card is what asks for that track's devices, and it is reported
+    // separately from trackSelected because it fires even when the working
+    // track did not move: clicking the card already selected is how the Device
+    // View is asked for again once it has been closed.
+    std::function<void(int)> trackFocused;
+    // Selecting a clip says what is being worked on; double-clicking one says
+    // to open it. The arrangement reports both and decides neither: which
+    // editor a clip belongs in is the shell's business, not the timeline's.
+    std::function<void(te::EditItemID)> clipSelected;
+    std::function<void(te::EditItemID)> clipOpened;
+private:
+    friend int runArrangementTest();
+    friend int runUiProfile();
+    struct Waveform;
+    struct MidiNoteView
+    {
+        double start = 0.0, end = 0.0;
+        int pitch = 0;
+    };
+    struct ClipView
+    {
+        te::EditItemID id;
+        juce::String name;
+        ClipGeometry position;
+        Waveform* waveform = nullptr;
+        std::vector<MidiNoteView> midiNotes;
+        double speed = 1.0;
+        double sourceDuration = 0.0;
+        int track = 0;
+        juce::Colour colour;
+        int clipPlugins = 0;
+    };
+    enum class LoopGesture { none, create, move, trimStart, trimEnd };
+    // A clip is two rows. The strip along its top is the clip itself: clicking
+    // it selects, dragging it carries. Everything below belongs to the
+    // timeline, so a press there puts the selection line down and a drag
+    // sweeps out a region, exactly as over an empty lane. The left and right
+    // edges trim at any height, because a trim is about the clip's own bounds
+    // rather than about which of its two rows the pointer is in.
+    enum class ClipZone { trimStart, trimEnd, header, body };
+    // What the last click selected, and therefore what Delete acts on. A track
+    // is always highlighted as the working row, so "a track is selected" cannot
+    // be inferred from selectedTrack - it has to be recorded.
+    enum class Focus { none, clip, track, automation, region };
+    // A rectangle of the timeline: a span of time across a run of tracks. It is
+    // what copy, cut, paste, duplicate and delete all act on, so the same rule
+    // covers a dragged-out region and a clicked clip - selecting a clip sets
+    // the region to that clip's span, which is what makes Ctrl+D put the copy
+    // flush against its end. A click that never drags leaves a zero-length
+    // region: an insert point, and nothing else, which is where a paste lands.
+    struct TimeSelection
+    {
+        double start = 0.0, end = 0.0;
+        int firstTrack = 0, lastTrack = 0;
+        bool active = false;
+        double length() const { return std::max(0.0, end - start); }
+        bool isRange() const { return end > start + 1.0e-7; }
+        bool covers(int track) const { return active && track >= firstTrack && track <= lastTrack; }
+    };
+    // Automation is edited by dragging a point, or by lifting a lane that has
+    // never been drawn off its resting line, which is what makes it active.
+    enum class AutomationGesture { none, movePoint, moveLine };
+    // Lanes stack: every track owns one row, plus one row for each automation
+    // the user has sent to its own lane. Ghost rows repeat the track's clips
+    // dimmed, so an automation stays visually anchored to what it drives. A
+    // collapsed group gives its members zero height rather than dropping their
+    // rows, so every track still has a row to be addressed and drawn through.
+    struct LaneRow
+    {
+        int track = 0;
+        int automation = -1; // -1 is the track's own row
+        float top = 0.0f;
+        float height = 0.0f;
+    };
+    // What the pointer is over inside an automation lane, worked out once per
+    // move and read by everything that reacts to it: the curve lightens, the
+    // node under the pointer is marked, a ghost shows where a click would drop
+    // a new one, and the reading says what level that would be. It also stands
+    // in for the pointer during a drag, so the same readout follows a node
+    // being moved without a second code path.
+    struct AutomationHover
+    {
+        int row = -1;
+        int automation = -1;
+        int point = -1;       // the node under the pointer, -1 when between them
+        bool onCurve = false; // near enough that the value was pulled onto the line
+        bool dragging = false;
+        double timeSeconds = 0.0;
+        float value = 0.0f;
+        juce::Point<float> pointer;
+        bool valid() const { return row >= 0; }
+    };
+    void sync();
+    // Brings a timeline the shell has hidden up to date before a command reads
+    // its list of the clips. Hidden, the timeline lets the list go stale rather
+    // than rebuilding it for every change, and the shell still sends it Ctrl+E
+    // and Ctrl+J from the DJ view.
+    void syncIfStale();
+    void syncTrackControls();
+    void configureMasterControls();
+    void updateScroll();
+    void zoom(double factor, double anchor);
+    void cancelDrag();
+    bool isSelected(te::EditItemID) const;
+    void setSelection(std::vector<te::EditItemID>, te::EditItemID primary = {});
+    void openCreatedClip(te::EditItemID created);
+    // Records that the last click landed on a track card, and reports it.
+    void focusTrack();
+    // ArrangementSelection.cpp
+    void setTimeSelection(double start, double end, int firstTrack, int lastTrack);
+    void setInsertPoint(double seconds, int track);
+    void clearTimeSelection();
+    // The line the region starts at is where playback begins, so putting it
+    // down moves the transport onto it and tells the session where Stop should
+    // return to.
+    void moveTransportToSelectionStart();
+    // The region a command acts on: the dragged-out one when there is one,
+    // otherwise the span of the selected clips, so both read the same way.
+    TimeSelection effectiveRegion() const;
+    // Where the region is drawn. While a clip drag previews, the engine has
+    // not moved anything yet, so the region follows the previewed geometry the
+    // clips are being drawn at. Display only: the commands read the region the
+    // edit is actually in.
+    TimeSelection displayedTimeSelection() const;
+    // The bounding rectangle of the selected clips, taken either from the edit
+    // or from what is currently being previewed.
+    TimeSelection regionOfSelectedClips(bool previewed) const;
+    void selectRegionContents();
+    void setRegionFromSelectedClips();
+    bool beginRegionGesture(const juce::MouseEvent&);
+    void dragRegionGesture(const juce::MouseEvent&);
+    void endRegionGesture();
+    void paintTimeSelection(juce::Graphics&);
+    // The clips a split would cut. A selection wins wherever the line actually
+    // crosses it; with nothing selected under the line the line cuts whatever
+    // it is drawn through, on the tracks the region covers.
+    std::vector<te::EditItemID> clipsUnderLine(double seconds) const;
+    // The one place a split is carried out and reported, so the shortcut, the
+    // clip menu and the audio editor all say the same thing about it.
+    void splitClipsAt(const std::vector<te::EditItemID>&, double seconds);
+    // The ruler reads in bars whatever the snap grid is set to, so its
+    // numbering is stepped by what stays legible at this zoom rather than
+    // by the grid division. Changing the grid must not renumber the bars.
+    // Zoomed in far enough, it labels the counts inside a bar as well (1.2,
+    // 1.3) and marks the divisions between labels, by the same rule.
+    void paintBarNumbers(juce::Graphics&, double firstBeat, double lastBeat);
+    // The same bars read as wall-clock times, in the strip above the horizontal
+    // scrollbar. That strip is the main row's own lane: the row takes no clips,
+    // so it is the one piece of the panel that is empty at every zoom and every
+    // window size, and it already starts where the track cards end.
+    void paintTimeRuler(juce::Graphics&, double firstBeat, double lastBeat);
+    // Every other bar group washed a shade lighter, so the beats read as bars
+    // without counting grid lines. Painted under the clips: a clip is drawn
+    // translucent, so the band shows through it the way Live's does.
+    // Returns how many bars one band covers, so the grid lines drawn over the
+    // bands can tell which of them they land in.
+    int paintBarBands(juce::Graphics&, double firstBeat, double lastBeat);
+    juce::String barPositionText(double seconds) const;
+    void copySelection();
+    void cutSelection();
+    void pasteSelection();
+    void deleteSelection();
+    void duplicateSelected();
+    void nudgeSelected(int direction, bool byBar);
+    juce::Result applyBrowserDrop(const juce::String& description, int track, double startSeconds = 0.0, bool insertPreset = false);
+    void updatePlayhead();
+    // A take is drawn as it is played, so the band has to be repainted as it
+    // grows. The playhead's own damage is two narrow strips at its old and new
+    // positions and not the span between them, so it cannot be relied on to
+    // fill the band in.
+    void repaintRecordingBand();
+    // Opened from either readout, or from a right-click on empty lane space -
+    // Live's own way in. A null target leaves the menu at the pointer.
+    void showGridMenu(juce::Component* target = nullptr);
+    void setGridEnabled(bool);
+    void showAddTrackMenu();
+    void addTrackOfType(Session::TrackType);
+    void showClipMenu(te::EditItemID);
+    void updateGridControl();
+    GridDivision resolvedGridDivision() const;
+    double resolvedGridBeats() const;
+    int trackAt(float y) const;
+    double snapUnitSeconds() const;
+    float xFor(double seconds) const;
+    double timeAt(float x) const;
+    double snapped(double seconds, bool bypass) const;
+    // A pointer position lands inside a grid cell, and which edge of that cell
+    // it takes depends on what it is for. The selection line takes the cell it
+    // is inside, so clicking anywhere in a bar puts the line on the bar; a
+    // region's edges grow outwards from the anchor, so a drag covers whole
+    // cells rather than stopping halfway through the one it ended in.
+    double snappedDown(double seconds, bool bypass) const;
+    double snappedUp(double seconds, bool bypass) const;
+    static float clipHeaderHeight(float boxHeight);
+    juce::Rectangle<float> clipHeaderBounds(const ClipView&) const;
+    ClipZone clipZoneAt(juce::Point<float>, const ClipView&) const;
+    double snappedClipMoveStart(double desiredStart, double length, int targetTrack, bool bypass) const;
+    LoopGesture loopGestureAt(juce::Point<float>) const;
+    // ArrangementAutomation.cpp
+    void buildRows();
+    void layoutRows();
+    juce::Rectangle<float> rowBounds(int row) const;
+    int rowAt(float y) const;
+    const Session::TrackAutomation* automationFor(const LaneRow&) const;
+    juce::Rectangle<float> automationArea(int row) const;
+    bool isFocusedAutomation(Session::DeviceTarget) const;
+    float automationYFor(int row, const Session::TrackAutomation&, float value) const;
+    float automationValueForY(int row, const Session::TrackAutomation&, float y) const;
+    std::vector<Session::AutomationPoint> defaultAutomationPoints(const Session::TrackAutomation&) const;
+    // The one automation hit test. Everything else - the cursor, the gesture,
+    // the drawing - reads its answer rather than measuring again, so what
+    // lights up under the pointer is by construction what a click acts on.
+    AutomationHover automationHoverAt(juce::Point<float>, bool bypassSnap) const;
+    void updateAutomationHover(juce::Point<float>, bool bypassSnap);
+    void clearAutomationHover();
+    // Where the curve would run at this time if the node at `index` were not
+    // there: what the subtle snap pulls a node onto, so dropping one on a ramp
+    // does not dent it.
+    float automationNeighbourValue(const std::vector<Session::AutomationPoint>&, int index, double seconds) const;
+    // Puts a node into the gesture's working copy and answers where it landed.
+    // A node dropped on one already there moves that one instead of stacking a
+    // second on top of it.
+    int insertAutomationPoint(double seconds, float value);
+    bool beginAutomationGesture(const juce::MouseEvent&);
+    void dragAutomationGesture(const juce::MouseEvent&);
+    void endAutomationGesture(const juce::MouseEvent&);
+    // ArrangementAutomationPaint.cpp
+    void paintAutomationRow(juce::Graphics&, int row);
+    // Where a click would drop a node, drawn on the curve it would join.
+    void paintAutomationGhost(juce::Graphics&, int row, const Session::TrackAutomation&) const;
+    // The level under the pointer, floated over the lanes. Painted last rather
+    // than with its row: it sits above the pointer and would otherwise be
+    // covered by whatever row is drawn next.
+    void paintAutomationReadout(juce::Graphics&);
+    void paintGhostRow(juce::Graphics&, int row);
+    // Every row's band and its card, clipped to the lanes: a row that straddles
+    // the bottom edge has to stop at it rather than paint the height it was
+    // given, which is what used to run a track's colour through the main row.
+    void paintTrackCards(juce::Graphics&);
+    // What a paint has to cover. The painters skip what lies outside it; with
+    // cullRepaints off they draw everything and leave the clip to discard it,
+    // which is what a test compares a culled repaint against. JUCE's
+    // rasteriser is not exactly clip-invariant, so a strip cannot simply be
+    // compared with the whole paint.
+    juce::Rectangle<float> repaintArea(const juce::Graphics&) const;
+    bool cullRepaints = true;
+    void showAutomationMenu(Session::DeviceTarget);
+    // ArrangementGestures.cpp
+    // Middle-button pan: carries both the timeline and the row stack so that
+    // whatever was under the pointer when the button went down stays there.
+    void panView(juce::Point<float> pointer);
+    int cardResizeEdgeAt(juce::Point<float>) const;
+    int cardAt(juce::Point<float>) const;
+    bool beginCardGesture(const juce::MouseEvent&);
+    void dragCardGesture(const juce::MouseEvent&);
+    void endCardGesture();
+    void showTrackMenu(int track);
+    // The input chooser for one card, and for the same card in the track menu.
+    // Which of the two a track gets follows from what the track is, so the
+    // card's button calls the first and never has to know.
+    void showTrackInputMenu(int track);
+    void showMidiInputMenu(int track);
+    void showAudioInputMenu(int track);
+    // One place that applies a monitor choice and says what it means, because
+    // the card and the track menu both make it.
+    void applyMonitorChoice(int track, Session::InputMonitoring);
+    // A drag that reaches the edge of the lanes pulls the view after it, so a
+    // selection or a clip can be dragged somewhere that is not on screen yet.
+    // Driven by the frame clock rather than by pointer movement: a pointer
+    // held still outside the panel sends no more drags.
+    void autoScrollDrag();
+    // The live drag, re-posed against the view it is now looking at. Building
+    // one is what lets the scroll re-run the gesture without every handler
+    // having to be rewritten to take a position instead of an event.
+    juce::MouseEvent resumedDrag() const;
+    // ArrangementRename.cpp
+    void configureNameEditor();
+    juce::Rectangle<int> trackNameBounds(int track) const;
+    bool isRenaming() const;
+    void layoutNameEditor();
+    void startRename(int track, const juce::String& current);
+    void endRename(bool keep);
+    void renameTrack(int track);
+    // ArrangementGroups.cpp
+    const Session::TrackGroup* groupById(int groupId) const;
+    const Session::TrackGroup* groupForBus(int track) const;
+    const Session::TrackGroup* groupContaining(int track) const;
+    bool isTrackHidden(int track) const;
+    float trackIndent(int track) const;
+    bool isTrackSelected(int track) const;
+    // The cached arm flag, so the painter never has to ask the session.
+    bool isTrackArmed(int track) const;
+    void selectTrackRange(int from, int to);
+    void toggleTrackSelection(int track);
+    juce::Rectangle<float> busDisclosureBounds(juce::Rectangle<float> row) const;
+    bool beginGroupGesture(const juce::MouseEvent&);
+    void paintGroupGutter(juce::Graphics&, int track, juce::Rectangle<float> row);
+    void toggleGroupCollapsed(int groupId);
+    void groupSelectedTracks();
+    void ungroupSelection();
+    juce::Rectangle<float> lane(int track) const;
+    // The master row is pinned under the scrolling lanes and never scrolls.
+    juce::Rectangle<float> masterLane() const;
+    bool isMasterSelected() const;
+    float laneHeight() const;
+    // A track keeps its own row height once its card has been dragged; until
+    // then it follows the fitted height, and a resize in progress previews
+    // ahead of the session so the drag does not rewrite the edit per pixel.
+    float laneHeightFor(int track) const;
+    float laneContentHeight() const;
+    // What the lanes would have if nothing covered the foot of the panel. The
+    // fitted lane height follows this rather than the visible height, so a
+    // clip keeps its size while the pane over it is dragged.
+    float fullLaneContentHeight() const;
+    bool masterResizeEdgeAt(juce::Point<float>) const;
+    ClipGeometry displayedPosition(const ClipView&) const;
+    int displayedTrack(const ClipView&) const;
+    juce::Rectangle<float> bounds(const ClipView&) const;
+    int hit(juce::Point<float>) const;
+    void changeListenerCallback(juce::ChangeBroadcaster*) override;
+    void visibilityChanged() override;
+    void scrollBarMoved(juce::ScrollBar*, double) override;
+    void editWillChange() override;
+    void editDidChange() override;
+    Session& session;
+    juce::AudioFormatManager formats;
+    juce::AudioThumbnailCache thumbnailCache {32};
+    std::map<juce::String, std::unique_ptr<Waveform>> waveforms;
+    std::vector<ClipView> clips;
+    std::vector<std::vector<Session::TrackAutomation>> trackLanes;
+    std::vector<LaneRow> rows;
+    std::vector<Session::TrackGroup> groups;
+    // Read once per sync rather than per repaint: answering it costs the
+    // engine's track list, and the painter asks for every visible row.
+    std::vector<bool> armedTracks;
+    // The rest of what the painter asks about every track, read once per sync
+    // for the same reason: each question walks the engine's track list, so
+    // asking it per row per frame grew with the square of the track count.
+    struct TrackFacts
+    {
+        juce::String name;
+        juce::Colour colour;
+        bool midi = false, holdsInstrument = false, bus = false;
+    };
+    std::vector<TrackFacts> trackFacts;
+    const TrackFacts& factsFor(int track) const;
+    // How wide each clip name is set, measured the first time a repaint
+    // reaches it and forgotten at every sync, so a renamed clip is measured
+    // again and the table holds only names the arrangement still shows.
+    std::map<juce::String, float> clipNameWidths;
+    std::vector<int> trackRowIndex;
+    float rowsHeight = 0.0f;
+    // Two faces of one setting, never two settings: gridControl is Live's
+    // readout in the corner of the view, toolbarGrid is the same value and the
+    // same menu up beside the snap toggle. updateGridControl writes both.
+    juce::TextButton duplicateButton, addTrack, snap, automationButton, gridControl, toolbarGrid;
+    // The header controls live in a container spanning the scrolling lane
+    // viewport, so JUCE clips them at its edges: a row dragged past the bottom
+    // slides under the pinned main row instead of being drawn over it, and one
+    // scrolled off the top disappears under the ruler. The container itself is
+    // transparent to the mouse, so a click on empty header space still reaches
+    // the arrangement and selects the track.
+    juce::Component laneHeaders;
+    // Renaming happens in place, on the line the name is painted on. The editor
+    // is a child of laneHeaders so a row scrolled half out of view crops it.
+    juce::TextEditor nameEditor;
+    int renamingTrack = -1;
+    // Mute, solo and the record dot share the card's button line. Arming is
+    // last, as it is in Live's track header, so the two that shape playback
+    // stay together on the left.
+    std::vector<std::unique_ptr<juce::TextButton>> mute, solo, arm;
+    // What the track takes in, on the line under the faders: Live's MIDI From
+    // on a MIDI track and the audio input on an audio track, in the same place
+    // because they are the same question. It is a button that opens a menu
+    // rather than a ComboBox because the list is rebuilt from the machine's
+    // devices every time it is opened - an interface plugged in while Rhino
+    // was running should be in it, and one unplugged should not.
+    std::vector<std::unique_ptr<juce::TextButton>> trackInput;
+    // And whether you hear it, on the line under that. Every kind of track
+    // that takes an input has one; a group bus and the main row take none, so
+    // they are given no control rather than one that refuses.
+    std::vector<std::unique_ptr<MonitorSelector>> monitor;
+    // The track's fader and pan, the session's own mixer values.
+    std::vector<std::unique_ptr<juce::Slider>> volume, pan;
+    juce::Slider masterVolume, masterPan;
+    juce::ScrollBar scroll {false}, trackScrollBar {true};
+    juce::VBlankAttachment vblank;
+    double viewStart = 0.0, viewSpan = 8.0, songEnd = 2.0, trackScroll = 0.0;
+    GridSettings gridSettings;
+    // What the snap toggle turns back on. Without it, switching snapping off
+    // and on again silently moved an adaptive grid to fixed - the two controls
+    // now show the same value, so that quietly rewrote what the person read.
+    GridMode gridModeWhenSnapping = GridMode::adaptive;
+    te::EditItemID selected;
+    std::vector<te::EditItemID> selectedClips;
+    // A copied rectangle rather than clip ids: a cut deletes its sources, and
+    // so does an undo made between the copy and the paste.
+    Session::ClipRegion clipboard;
+    int selectedTrack = 0;
+    // Grouping acts on several cards at once, so the working track is joined by
+    // the set a shift-click has gathered. It always holds selectedTrack.
+    std::vector<int> selectedTracks {0};
+    int trackSelectionAnchor = 0;
+    bool dragging = false;
+    // A plain press inside a group of selected clips keeps the group, so the
+    // drag carries all of it. If the press turns out never to have been a
+    // drag, it was a click, and a click takes the one clip under it - which is
+    // what every list in the OS does, and can only be decided on release.
+    bool collapseSelectionOnRelease = false;
+    te::EditItemID collapseSelectionTo;
+    // Where the live drag is, so the frame clock can carry it on while the
+    // pointer sits still past the edge of the panel. Only a drag that has
+    // actually travelled is recorded: a press near the edge is a click, not a
+    // request to scroll to the end of the song.
+    bool dragTravelled = false;
+    juce::Point<float> dragPointer, dragOrigin;
+    juce::ModifierKeys dragModifiers;
+    TimeSelection timeSelection;
+    bool regionSelecting = false;
+    // The clip selection and the region are two views of one thing and each
+    // keeps the other in step; this stops the two updates chasing each other.
+    bool syncingSelection = false;
+    // A region read off the selected clips belongs to those clips, so it has to
+    // travel with them when they are moved, trimmed or nudged. One dragged out
+    // over the lanes belongs to the timeline and stays where it was put.
+    bool regionFollowsClips = false;
+    // Unsnapped: which cell each edge of a dragged region takes depends on
+    // which side of the anchor the pointer ended up, so the anchor has to be
+    // re-snapped on every move rather than fixed when the press landed.
+    double regionAnchorTime = 0.0;
+    int regionAnchorTrack = 0;
+    ClipGesture gesture = ClipGesture::move;
+    ClipGeometry original, preview;
+    int originalTrack = 0, previewTrack = 0;
+    double dragTime = 0.0, sourceDuration = 0.0;
+    LoopGesture loopGesture = LoopGesture::none;
+    double loopAnchor = 0.0, loopOriginalStart = 0.0, loopOriginalEnd = 0.0, loopPreviewStart = 0.0, loopPreviewEnd = 0.0;
+    AutomationGesture automationGesture = AutomationGesture::none;
+    Session::DeviceTarget automationTarget;
+    Session::DeviceTarget focusedAutomation;
+    Focus focus = Focus::none;
+    int automationRow = -1, automationPoint = -1;
+    std::vector<Session::AutomationPoint> automationPoints;
+    // A click that put a new node down has changed the curve before the
+    // pointer has moved at all, so it has to be written on release even though
+    // the gesture never travelled.
+    bool automationInserted = false;
+    AutomationHover automationHover;
+    float playhead = -1.0f;
+    // A parked playhead is a marker, not a sweep: it stays in the ruler so the
+    // lanes are not cut in two by a line that is not going anywhere. Held here
+    // as well as read from the transport, because the line changes length
+    // without necessarily moving and the strip it used to fill still has to be
+    // repainted.
+    bool playheadSweepsLanes = false;
+    // How far the recording band has been painted, and the note revision it
+    // was painted at, so an ordinary frame repaints only the sliver the band
+    // has grown by. Negative means nothing is being recorded.
+    float recordingPaintedTo = -1.0f;
+    juce::int64 paintedNoteRevision = -1;
+    // Card gestures. The bottom edge resizes the row it belongs to; the body
+    // of the card carries the track to a new place in the stack. Only one of
+    // them can be running, and both preview before they touch the session.
+    int resizingTrack = -1, movingTrack = -1, moveDestination = -1;
+    float resizePreview = 0.0f, resizeAnchor = 0.0f, resizeStartHeight = 0.0f, moveAnchor = 0.0f;
+    bool moveStarted = false;
+    // The main row's own resize, which is the same gesture read from the other
+    // side: the row is pinned at the bottom, so its top edge is its handle and
+    // dragging up makes it taller.
+    bool resizingMaster = false;
+    float masterResizeAnchor = 0.0f, masterResizeStart = 0.0f;
+    // Holding the middle button and moving the mouse carries the view under
+    // the pointer, in both axes at once. It is offered before every other
+    // gesture and takes the whole panel, headers included: a pan is about the
+    // view rather than about whatever happens to be under the pointer, and
+    // having it stop working over a card or the ruler would be the surprise.
+    // The anchors are absolute, so a pan that runs to the end of the song and
+    // back returns to exactly where it started.
+    bool panning = false;
+    juce::Point<float> panAnchor;
+    double panStartView = 0.0, panStartTrackScroll = 0.0;
+    static constexpr float headerWidth = 228.0f, rulerTop = 36.0f, lanesTop = 60.0f;
+    // The main row is dragged from its top edge like any other, so its height
+    // is a value rather than a constant. It is a view setting and lives here
+    // beside the zoom: the fitted lane height is measured against the default
+    // instead, so dragging the main row taller never resizes the lanes above
+    // it. minimum is one control line plus the margin it sits on.
+    static constexpr float defaultMasterLaneHeight = 28.0f, minimumMasterLaneHeight = 26.0f,
+                           maximumMasterLaneHeight = 120.0f;
+    float masterLaneHeight = defaultMasterLaneHeight;
+    float bottomInset = 0.0f;
+    // A change arrived while the shell had the timeline switched off - the
+    // DJ view shows in its place - caught up when it is shown. See
+    // UiVisibility.h.
+    bool staleWhileHidden = false;
+    static constexpr float automationRowHeight = 44.0f;
+    // What rules one track off from the next, header and lane alike, and the
+    // line the main row is closed off with.
+    static constexpr float trackDividerThickness = 2.0f;
+    // The panel's foot, top downwards: the rule that closes the main row off,
+    // the row of times, the horizontal scrollbar, and the rule the panel ends
+    // on. It is a band of its own rather than the bottom of the main row - a
+    // ruler is not a lane, and the main row may not run down beside one or
+    // light a column through it when it is selected.
+    static constexpr float scrollBarHeight = 14.0f, timeRulerHeight = 18.0f;
+    static constexpr float footHeight = timeRulerHeight + scrollBarHeight + trackDividerThickness * 2.0f;
+    // The marks on that row, kept short: they are a reading aid under the
+    // times, not a continuation of the grid above them.
+    static constexpr float timeMajorTick = 5.0f, timeMinorTick = 3.0f;
+    // The bar ruler's marks below a bar line, which runs the ruler's full
+    // height: a labelled count rises half of it, an unlabelled mark a few
+    // pixels, both standing on the lanes.
+    static constexpr float countTick = 12.0f, rulerMinorTick = 4.0f;
+    // A group's members are pushed right by groupIndent, and the gap that opens
+    // up is filled with the bus's colour; the bus itself keeps that column for
+    // its disclosure arrow. The step in the left edge is what tells a card
+    // inside a group from one below it at a glance.
+    static constexpr float groupIndent = 13.0f, groupSpineLeft = 3.0f;
+    // A card is name plus one control line at its shortest; the mixer line is
+    // the next thing that fits, and past that a row only gets roomier.
+    static constexpr float minimumLaneHeight = 32.0f, mixerLaneHeight = 54.0f, maximumLaneHeight = 260.0f;
+    // The third control line - the input chooser - needs a taller row again,
+    // and the fourth - the monitor control - taller again than that. A default
+    // row is between 62 and 96 and is 96 in any window worth working in, so
+    // both are there unless the window is very short or the row has been
+    // dragged down by hand. The track menu carries the same two settings for
+    // the rows that are not.
+    static constexpr float inputLaneHeight = 72.0f, monitorLaneHeight = 90.0f;
+    // A card is two columns: the controls, then the name on its colour. The
+    // divider between them is the same grey the row separators use. Both lines
+    // of controls share one left edge and one width, so the buttons sit
+    // squarely over the faders.
+    static constexpr float cardControlsWidth = 124.0f, cardDividerWidth = 4.0f;
+    // The buttons are narrower than the faders under them: three of them share
+    // the line the two faders split, and a single letter needs far less room
+    // than a level bar does.
+    static constexpr int cardControlsTop = 7, cardControlLeft = 10, cardControlWidth = 52,
+                         cardControlGap = 4, cardButtonWidth = 34;
+};
+}

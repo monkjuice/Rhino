@@ -1,5 +1,5 @@
 #pragma once
-#include "DjTrackPort.h"
+#include "dj/DjTrackPort.h"
 #include <tracktion_engine/tracktion_engine.h>
 #include <array>
 #include <atomic>

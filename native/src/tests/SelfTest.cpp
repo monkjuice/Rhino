@@ -1,9 +1,9 @@
-#include "../Session.h"
-#include "../BrowserPanel.h"
-#include "../BrowserIds.h"
-#include "../CountInClick.h"
-#include "../ComputerKeyboard.h"
-#include "ContentLibrary.h"
+#include "model/Session.h"
+#include "ui/browser/BrowserPanel.h"
+#include "ui/browser/BrowserIds.h"
+#include "model/CountInClick.h"
+#include "app/ComputerKeyboard.h"
+#include "content/ContentLibrary.h"
 // A test drives the DSP directly, so unlike the rest of the app it needs the
 // device definitions rather than their catalog entries.
 #include "audio/UtilityDevice.h"
@@ -11,7 +11,7 @@
 #include "audio/RhinoSpaceDevice.h"
 #include "instruments/DrumRackDevice.h"
 #include "midi/RhinoArpDevice.h"
-#include "DrumKitFile.h"
+#include "content/DrumKitFile.h"
 #include <algorithm>
 #include <cmath>
 #include <source_location>

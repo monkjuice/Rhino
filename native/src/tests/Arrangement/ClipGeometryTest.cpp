@@ -1,8 +1,8 @@
 #include "ClipGeometryTest.h"
-#include "../../ClipGeometry.h"
-#include "../../ArrangementGrid.h"
-#include "../../InfoHints.h"
-#include "../../Playhead.h"
+#include "model/ClipGeometry.h"
+#include "ui/arrangement/ArrangementGrid.h"
+#include "app/InfoHints.h"
+#include "ui/shared/Playhead.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>

@@ -1,6 +1,6 @@
-#include "../Session.h"
-#include "DjEngine.h"
-#include "DjTrack.h"
+#include "model/Session.h"
+#include "dj/DjEngine.h"
+#include "dj/DjTrack.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdint>

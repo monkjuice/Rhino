@@ -1,5 +1,5 @@
-#include "../Session.h"
-#include "FmEngine.h"
+#include "model/Session.h"
+#include "dsp/FmEngine.h"
 #include "instruments/RhinoFmDevice.h"
 #include <algorithm>
 #include <array>

@@ -1,5 +1,5 @@
-#include "../Session.h"
-#include "ContentLibrary.h"
+#include "model/Session.h"
+#include "content/ContentLibrary.h"
 #include "instruments/DrumRackDevice.h"
 #include "sdk/NativeDevice.h"
 #include <algorithm>

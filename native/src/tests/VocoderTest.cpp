@@ -1,6 +1,6 @@
-#include "../Session.h"
-#include "../DeviceEditorPanel.h"
-#include "VocoderEngine.h"
+#include "model/Session.h"
+#include "ui/rack/DeviceEditorPanel.h"
+#include "dsp/VocoderEngine.h"
 #include "audio/VocoderDevice.h"
 #include <algorithm>
 #include <cmath>

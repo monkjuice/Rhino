@@ -1,5 +1,5 @@
 #pragma once
-#include "EqEngine.h"
+#include "dsp/EqEngine.h"
 #include <tracktion_engine/tracktion_engine.h>
 
 namespace rhino

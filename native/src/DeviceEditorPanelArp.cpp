@@ -160,7 +160,16 @@ void DeviceEditorPanel::styleArpControls()
             continue;
         const auto& value = parameters[static_cast<size_t>(parameter)];
         choice->setSelectedId(juce::roundToInt(value.value) + 1, juce::dontSendNotification);
-        choice->setTooltip(value.name + ": " + value.valueText + ". Right-click for automation.");
+        const auto explanation = parameter == RhinoArpDevice::retriggerParameter
+            ? ". Beat restarts the pattern and finite Repeats on the next rate tick after each Interval, preserving the rhythm."
+            : parameter == RhinoArpDevice::rootParameter
+                ? ". Sets the root of the allowed scale notes. Has no effect in Chromatic."
+                : parameter == RhinoArpDevice::scaleParameter
+                    ? (juce::roundToInt(value.value) == 0
+                        ? ". Passes input pitches unchanged. Distance uses semitones."
+                        : ". Snaps input to the nearest scale note, with ties going lower, even when Steps is 0. Distance uses scale degrees.")
+                    : ".";
+        choice->setTooltip(value.name + ": " + value.valueText + explanation + " Right-click for automation.");
         choice->setColour(juce::ComboBox::backgroundColourId, palette::control);
         choice->setColour(juce::ComboBox::outlineColourId, palette::border);
         choice->setColour(juce::ComboBox::textColourId, palette::text);
@@ -172,11 +181,21 @@ void DeviceEditorPanel::styleArpControls()
         && parameters[RhinoArpDevice::holdParameter].value >= 0.5f;
     arpHold.setVisible(true);
     arpHold.setToggleState(holdOn, juce::dontSendNotification);
-    arpHold.setTooltip("Hold: " + juce::String(holdOn ? "On" : "Off") + ". Right-click for automation.");
+    arpHold.setTooltip("Hold: " + juce::String(holdOn ? "On" : "Off")
+        + ". Keeps the pattern playing after keys are released. Turn Hold off or stop playback to clear latched notes."
+          " Right-click for automation.");
     arpHold.setColour(juce::TextButton::buttonColourId, palette::control);
     arpHold.setColour(juce::TextButton::buttonOnColourId, palette::midiEffect.darker(0.62f));
     arpHold.setColour(juce::TextButton::textColourOffId, palette::textDim);
     arpHold.setColour(juce::TextButton::textColourOnId, palette::text);
+
+    if (juce::isPositiveAndBelow(RhinoArpDevice::repeatsParameter, parameterSliders.size()))
+    {
+        const auto& value = parameters[RhinoArpDevice::repeatsParameter];
+        parameterSliders[RhinoArpDevice::repeatsParameter]->setTooltip(value.name + ": " + value.valueText
+            + ". Complete patterns per retrigger. All continues while notes are held or latched."
+              " Right-click for automation.");
+    }
 
     const auto beatMode = !juce::isPositiveAndBelow(RhinoArpDevice::rateModeParameter,
                                                      static_cast<int>(parameters.size()))
@@ -317,11 +336,11 @@ void DeviceEditorPanel::paintArp(juce::Graphics& g)
 
     auto graph = visualArea.reduced(13, 8).withTrimmedTop(18).withTrimmedBottom(18).toFloat();
     const auto style = juce::jlimit(0, 4, juce::roundToInt(parameterValue(
-        parameters, RhinoArpDevice::styleParameter, 2.0f)));
+        parameters, RhinoArpDevice::styleParameter, 0.0f)));
     const auto distance = juce::roundToInt(parameterValue(
-        parameters, RhinoArpDevice::distanceParameter, -7.0f));
+        parameters, RhinoArpDevice::distanceParameter, 7.0f));
     const auto steps = juce::jlimit(0, 8, juce::roundToInt(parameterValue(
-        parameters, RhinoArpDevice::stepsParameter, 2.0f)));
+        parameters, RhinoArpDevice::stepsParameter, 0.0f)));
     const auto patternLength = displayPatternLength(style);
 
     constexpr int points = 12;

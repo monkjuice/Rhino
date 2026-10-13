@@ -4,12 +4,12 @@ type: component
 summary: Play and stop, the loop that is always on, the single tempo and the time signature, and what Rhino rescales by hand when the tempo moves.
 tags: [rhino, transport, tempo]
 sources: []
-updated: 2026-10-05
+updated: 2026-10-13
 ---
 
 # Transport, tempo and loop
 
-`native/src/SessionTransport.cpp` holds the transport commands, the tempo, the time signature, the metronome settings
+`native/src/model/SessionTransport.cpp` holds the transport commands, the tempo, the time signature, the metronome settings
 and the loop. Tracktion's `TransportControl` does the playing; the control bar's drag fields are `ControlBarFields.*`
 and its readout is `TransportDisplay.*` ([App shell and control bar](app-shell.md)).
 

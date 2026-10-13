@@ -4,7 +4,7 @@ type: gotcha
 summary: A link that fails with LNK1104 after every file compiled means a running RhinoDAW, DAW or Forge standalone holds the output.
 tags: [both, build, windows]
 sources: []
-updated: 2026-10-12
+updated: 2026-10-13
 ---
 
 # LNK1104 means a running binary holds the file
@@ -21,7 +21,7 @@ A full Forge build fails the same way on `Rhino Forge.vst3`, or on the standalon
 
 ## Cause
 
-Windows will not let the linker overwrite an image that a running process has loaded. An open RhinoDAW holds `RhinoDAW.exe`. Any host that has loaded Forge holds its `.vst3` for as long as the host runs, and a standalone left open after driving the panel holds its own exe. For Forge this is the normal state of a working session. Rhino's discovery in `native/src/SessionExternalPlugins.cpp` checks the known-plugin list first and then Forge's own build tree (`instruments/rhino-forge/build/RhinoForge_artefacts/<config>/VST3/`), before the system VST3 folders. So the file the linker is trying to write is often the one RhinoDAW has loaded.
+Windows will not let the linker overwrite an image that a running process has loaded. An open RhinoDAW holds `RhinoDAW.exe`. Any host that has loaded Forge holds its `.vst3` for as long as the host runs, and a standalone left open after driving the panel holds its own exe. For Forge this is the normal state of a working session. Rhino's discovery in `native/src/model/SessionExternalPlugins.cpp` checks the known-plugin list first and then Forge's own build tree (`instruments/rhino-forge/build/RhinoForge_artefacts/<config>/VST3/`), before the system VST3 folders. So the file the linker is trying to write is often the one RhinoDAW has loaded.
 
 ## Confirm
 

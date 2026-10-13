@@ -4,7 +4,7 @@ type: guide
 summary: Fetch the pinned engine, build with Visual Studio 2022, and run the six CTest cases without being fooled by a stale or locked build.
 tags: [rhino, build, testing, windows]
 sources: []
-updated: 2026-10-10
+updated: 2026-10-13
 ---
 
 # Build and test Rhino
@@ -33,7 +33,12 @@ cmake --build native/build --config Release --parallel 2
    stops with an error until it has run.
 2. Re-run the configure line after any `CMakeLists.txt` edit. `CMAKE_SUPPRESS_REGENERATION ON` means the build never
    reconfigures itself, so a new `.cpp` is silently skipped and the link fails with `LNK2019`
-   ([A new source file needs an explicit CMake configure](cmake-does-not-reconfigure.md)).
+   ([A new source file needs an explicit CMake configure](cmake-does-not-reconfigure.md)). Configure after a merge
+   too, before believing the result builds: two branches that each append to the same explicit source list can merge
+   without a conflict and still leave the list unparseable. Merging `main` into `feat/dj-view` left
+   `native/src/devices/CMakeLists.txt` with `midi/RhinoArpDeviceProcessing.cpp)` *after* the closing parenthesis of
+   `add_library(RhinoDevices ...)`, and `main` would not configure at all ("Parse error. Expected a command name")
+   until `0bff66b` (2026-10-13).
 3. `MSBUILDDISABLENODEREUSE=1` keeps idle MSBuild nodes from holding `.obj` files between builds
    ([Build locks from MSBuild nodes and orphaned compilers](orphaned-build-processes.md)).
 4. Judge the build by its exit code (`$LASTEXITCODE`), not by grepping piped output, which hides a failed link. On a

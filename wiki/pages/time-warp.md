@@ -4,12 +4,12 @@ type: component
 summary: Makes an audio clip follow the song's tempo, with five warp modes over two stretchers, a clip tempo and warp markers.
 tags: [rhino, audio-clips, tempo]
 sources: []
-updated: 2026-10-05
+updated: 2026-10-13
 ---
 
 # Time warp
 
-An audio clip that follows the song's tempo instead of its recorded speed. Model `native/src/SessionWarp.cpp`, UI `AudioClipWarp.cpp` (strip and markers in the [audio clip editor](audio-clip-editor.md)), tests `ClipWarp.inc`. The engine had the parts (`setAutoTempo`, `setTimeStretchMode`, `WarpTimeManager`); Rhino adds Live's vocabulary, a clip tempo that rescales the clip, and single-step undo for marker edits.
+An audio clip that follows the song's tempo instead of its recorded speed. Model `native/src/model/SessionWarp.cpp`, UI `ui/audioclip/AudioClipWarp.cpp` (strip and markers in the [audio clip editor](audio-clip-editor.md)), tests `ClipWarp.inc`. The engine had the parts (`setAutoTempo`, `setTimeStretchMode`, `WarpTimeManager`); Rhino adds Live's vocabulary, a clip tempo that rescales the clip, and single-step undo for marker edits.
 
 ## Rhino's properties, the engine's state derived
 

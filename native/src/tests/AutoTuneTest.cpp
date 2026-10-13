@@ -1,6 +1,6 @@
-#include "../Session.h"
-#include "../DeviceEditorPanel.h"
-#include "AutoTuneEngine.h"
+#include "model/Session.h"
+#include "ui/rack/DeviceEditorPanel.h"
+#include "dsp/AutoTuneEngine.h"
 #include "audio/AutoTuneDevice.h"
 #include <algorithm>
 #include <cmath>

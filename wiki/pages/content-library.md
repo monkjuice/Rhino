@@ -4,12 +4,12 @@ type: component
 summary: Samples, device presets, drum kits and drum presets live as files under library/, found at runtime by ContentLibrary, audio stored with Git LFS, nothing compiled in.
 tags: [rhino, library, content]
 sources: []
-updated: 2026-10-07
+updated: 2026-10-13
 ---
 
 # Content library
 
-Rhino's content is files under `library/` at the repository root, located at runtime by `native/src/core/ContentLibrary.*`. Nothing there is compiled; why is the decision [Content is files, never compiled in](content-is-files.md). `ContentLibrary` sits in `RhinoCore` and knows nothing of `Session`, the UI or the engine, so the app (the browser) and the device library (the Drum Rack) can both use it without depending on each other ([Rhino's build targets](rhino-build-targets.md)).
+Rhino's content is files under `library/` at the repository root, located at runtime by `native/src/core/content/ContentLibrary.*` (included as `"content/ContentLibrary.h"`). Nothing there is compiled; why is the decision [Content is files, never compiled in](content-is-files.md). `ContentLibrary` sits in `RhinoCore` and knows nothing of `Session`, the UI or the engine, so the app (the browser) and the device library (the Drum Rack) can both use it without depending on each other ([Rhino's build targets](rhino-build-targets.md)).
 
 ## Finding the root
 

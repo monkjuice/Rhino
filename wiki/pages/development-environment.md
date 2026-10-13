@@ -4,7 +4,7 @@ type: guide
 summary: What the Windows development machine offers (shells, CMake, Python, ffmpeg, PDF tools, the reference manuals) and the habits it demands.
 tags: [both, environment, windows, tooling]
 sources: []
-updated: 2026-10-12
+updated: 2026-10-13
 ---
 
 # Development environment and reference material
@@ -46,6 +46,9 @@ Read the figures too: the screenshots carry layout the prose never states, such 
 - **Bash-tool heredocs collapse backslashes**, even with a quoted delimiter, and truncate long payloads. A patch script
   matching `"\n"` in C++ then fails silently or writes a broken literal (`error C2001`). Write anything longer than a
   few lines, or holding a backslash, to a file with the Write tool and run it by path.
+- **The Bash command hook refuses a heredoc that names a drive-letter path.** It reads `C:` followed by a backslash
+  as an alternate data stream and blocks the command before it runs (2026-10-13). Same remedy: write the script with
+  the Write tool and run it by path.
 - **Git Bash rewrites a Windows tool's slash options as paths.** dumpbin's `/nologo` arrived as a path on 2026-10-12.
   Set `MSYS_NO_PATHCONV=1`, or run the tool from PowerShell.
 - **Commit messages go through a file in PowerShell 5.1.** A `git commit -m @'...'@` message that contains double

@@ -1,5 +1,5 @@
 #pragma once
-#include "VocoderEngine.h"
+#include "dsp/VocoderEngine.h"
 #include <tracktion_engine/tracktion_engine.h>
 
 namespace rhino

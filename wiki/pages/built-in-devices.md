@@ -4,12 +4,12 @@ type: component
 summary: Every device Rhino ships, what each one is and where its source lives, with Utility's details and the pitfalls the devices share.
 tags: [rhino, devices, dsp]
 sources: []
-updated: 2026-10-12
+updated: 2026-10-13
 ---
 
 # Built-in devices
 
-Every device in the [Device catalog](device-catalog.md) on 2026-10-12. Rhino's own live under `native/src/devices/`; four come from Tracktion.
+Every device in the [Device catalog](device-catalog.md) on 2026-10-12. Rhino's own live under `native/src/devices/`, with their DSP under `native/src/core/dsp/`; four come from Tracktion.
 
 | Device | Kind | Source | What it is |
 | --- | --- | --- | --- |

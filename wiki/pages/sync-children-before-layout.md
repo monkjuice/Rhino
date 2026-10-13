@@ -4,7 +4,7 @@ type: gotcha
 summary: DjView laid itself out before syncing its mixer, so the layout read the mixer's width from the old strip count and a new deck's strip sat under the master section until the next resize; sync the children a layout measures first, and re-lay out when the measured size changes.
 tags: [rhino, ui, layout]
 sources: []
-updated: 2026-10-09
+updated: 2026-10-13
 ---
 
 # A layout that reads a child's preferred size must sync the child first
@@ -13,7 +13,7 @@ A composite view that syncs from the model and lays its children out by their pr
 
 ## What it broke
 
-`DjView::sync` (`native/src/DjView.cpp`) rebuilt its deck panels, called `resized()`, and only then called `mixer.sync()`. `DjView::resized` sizes the mixer by `mixer.preferredWidth()`, which follows the number of channel strips, and the strips are made in `mixer.sync()`. So after a fourth deck was added the layout gave the mixer the width of three strips, the mixer then grew a fourth strip into that width, and it was drawn under the master section until the window was next resized and the layout ran again on the right count (reported by the user on 2026-10-09).
+`DjView::sync` (`native/src/ui/dj/DjView.cpp`) rebuilt its deck panels, called `resized()`, and only then called `mixer.sync()`. `DjView::resized` sizes the mixer by `mixer.preferredWidth()`, which follows the number of channel strips, and the strips are made in `mixer.sync()`. So after a fourth deck was added the layout gave the mixer the width of three strips, the mixer then grew a fourth strip into that width, and it was drawn under the master section until the window was next resized and the layout ran again on the right count (reported by the user on 2026-10-09).
 
 ## The fix
 

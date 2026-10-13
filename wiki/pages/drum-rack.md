@@ -4,7 +4,7 @@ type: component
 summary: A pad on every MIDI note, addressed by note, each a sample or one of eight synthesised drums with six automatable controls; the face shows a bank of sixteen beside a map of all 128 and opens maximised in a window of its own, and kits (.rdk), drum presets (.rdp) or dropped samples fill it.
 tags: [rhino, devices, drums, dsp, library]
 sources: []
-updated: 2026-10-07
+updated: 2026-10-13
 ---
 
 # Drum Rack
@@ -13,14 +13,14 @@ Rhino's drum instrument since 2026-10-06 (branch `feat/drum-rack`). It replaced 
 
 | Layer | Files |
 | --- | --- |
-| DSP and files (`RhinoCore`) | `core/DrumRackEngine.*` (pads, 32 voices, playback), `core/DrumSynth.*` (the synth models), `core/DrumSlicer.*` (where Slice cuts), `core/DrumKitFile.*` (`DrumSound`, `DrumKit`, both file formats, `padNoteName`) |
+| DSP and files (`RhinoCore`) | `core/dsp/DrumRackEngine.*` (pads, 32 voices, playback), `core/dsp/DrumSynth.*` (the synth models), `core/dsp/DrumSlicer.*` (where Slice cuts), `core/content/DrumKitFile.*` (`DrumSound`, `DrumKit`, both file formats, `padNoteName`) |
 | Device | `devices/instruments/DrumRackDevice.cpp` (pads, their state, playing them) and `DrumRackDeviceEditing.cpp` (what the face asks for: view state, previews, counts, pictures, slices), sharing `DrumRackDeviceInternal.h` |
-| Model | `SessionDrums.cpp`; `findDrumRack`, `loadDefaultDrumKit`, `drumKitOf` and `fillBlankDrumRack` in `SessionInternal.h`; `patternDrumLowestNote` in `SessionPresets.cpp` |
+| Model (`model/`) | `SessionDrums.cpp`; `findDrumRack`, `loadDefaultDrumKit`, `drumKitOf` and `fillBlankDrumRack` in `SessionInternal.h`; `patternDrumLowestNote` in `SessionPatternPresets.cpp` |
 | UI | the face, six `DeviceEditorPanelDrum*.cpp` units ([Device rack and device editors](device-rack.md)); the face in a window of its own, `DrumRackWindow.*` (below); pad drops in `DeviceRack.cpp` and `DeviceEditorPanel::dropDrumSounds`, the Drums section in `BrowserPanel.cpp`, lane drops in `ArrangementDrops.cpp` |
 
 ## A pad on every note
 
-- **128 pads** (`DrumRackEngine::padCount`), one per MIDI note, as in Live. A pad is addressed by its note everywhere: engine, device, kit files and every `Session` call that takes a pad. Messages name it with `padNoteName` (`core/DrumKitFile.h`), where middle C is C3, so 48 is C2.
+- **128 pads** (`DrumRackEngine::padCount`), one per MIDI note, as in Live. A pad is addressed by its note everywhere: engine, device, kit files and every `Session` call that takes a pad. Messages name it with `padNoteName` (`core/content/DrumKitFile.h`), where middle C is C3, so 48 is C2.
 - **A bank of sixteen on the face**: four rows of four, lowest note bottom left, from `firstShownNote()`, a multiple of 4, default 48. It and the selected pad are view state on the device (`firstNote`, `selPad`, both default 48), written without undo. The note editor's sixteen drum rows follow the bank ([Note editor (StepGrid)](note-editor.md)).
 - **Kits still sit on C2 up**, where the drum patterns are written, not at Live's C1. A controller sending notes 36-51 therefore plays below the default bank, and the map shows the keys arriving there.
 - **A sample or a synth.** The synths (`DrumModel`) are small 808-style models: Kick, Snare, Tom, ClosedHat, OpenHat, Clap, Rim and Cowbell. `DrumModelInfo` gives each a file `id` (never renamed), a name, the browser drum kind it files under, and its starting Decay and Tone.
@@ -50,7 +50,7 @@ What a pad holds (`sample` or `synth`, `name`, `choke`, `mute`, `solo`, and a sa
 
 ## Kits and drum presets
 
-`core/DrumKitFile.*` defines two XML files, numbers written through `core/ExactFloatText.h` (shared with `.rnd`) so they read back exactly.
+`core/content/DrumKitFile.*` defines two XML files, numbers written through `core/content/ExactFloatText.h` (shared with `.rnd`) so they read back exactly.
 
 - A **kit** (`.rdk`, `RHINO_DRUM_KIT`) is format 2 (`DrumFiles::kitFormat`): a `PAD note="n"` (0-127) per pad that holds a sound. Format 1, sixteen pads indexed from C2, is refused; the eight factory kits were converted with note = 48 + old index. A pad on no valid note, or a note filled twice, is refused.
 - A **drum preset** (`.rdp`, `RHINO_DRUM_SOUND`) is one pad's sound, still format 1 (`soundFormat`), now with optional playback attributes ([Drum Rack sample editor](drum-rack-sample-editor.md)). Kit pads carry the same attributes.

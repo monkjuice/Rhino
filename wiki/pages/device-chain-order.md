@@ -4,7 +4,7 @@ type: concept
 summary: A track's plugin list is its signal chain - the hidden DJ input, MIDI FX, instrument, audio FX, the hidden DJ output, then a channel strip whose order differs between starter and added tracks - so the first visible device is plugin 1; how every add and every drag keeps that order.
 tags: [rhino, devices, signal-chain, dj, gotcha]
 sources: []
-updated: 2026-10-12
+updated: 2026-10-13
 ---
 
 # Device chain order
@@ -13,7 +13,7 @@ A track's plugin list *is* its signal chain: each device reads what the one in f
 
 ## The order
 
-At plugin index 0 the DJ booth's hidden input (`DjTrackInjectorDevice`, "DJ Input"); then MIDI effects, the instrument and audio effects; then the booth's hidden output (`DjTrackTapDevice`, "DJ Output"); then, hidden from the Device View like the two DJ ends, the channel strip: Rhino's Utility, the engine's Volume & Pan and, on a starter track, its level meter, in an order that depends on how the track was made (below). `isTrackInfrastructure` in `native/src/SessionDevices.cpp` reads the catalog's `infrastructure` flag and also counts the engine's `volume` and `level` types. The two DJ ends are made with every track by `ensureDjPortDevices` and pass audio through until a deck binds them ([DJ decks play live through the track's chain](dj-decks-play-live-through-the-track.md)); neither can be moved (`canBeMoved`) or deleted. Each add path builds the order:
+At plugin index 0 the DJ booth's hidden input (`DjTrackInjectorDevice`, "DJ Input"); then MIDI effects, the instrument and audio effects; then the booth's hidden output (`DjTrackTapDevice`, "DJ Output"); then, hidden from the Device View like the two DJ ends, the channel strip: Rhino's Utility, the engine's Volume & Pan and, on a starter track, its level meter, in an order that depends on how the track was made (below). `isTrackInfrastructure` in `native/src/model/SessionDevices.cpp` reads the catalog's `infrastructure` flag and also counts the engine's `volume` and `level` types. The two DJ ends are made with every track by `ensureDjPortDevices` and pass audio through until a deck binds them ([DJ decks play live through the track's chain](dj-decks-play-live-through-the-track.md)); neither can be moved (`canBeMoved`) or deleted. Each add path builds the order:
 
 - `switchTrackInstrument` puts an instrument after the DJ input and any leading MIDI effects, at the old instrument's index ([One instrument per track](one-instrument-per-track.md)).
 - `addMidiEffectDevice` puts a MIDI effect immediately in front of the instrument, or, on a track with no instrument yet, after the DJ input and the MIDI effects already at the front, which is where `switchTrackInstrument` will put one.

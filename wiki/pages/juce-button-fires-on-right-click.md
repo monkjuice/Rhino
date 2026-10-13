@@ -4,7 +4,7 @@ type: gotcha
 summary: juce::Button presses and clicks for any mouse button, so a key that carries a right-click menu also runs its left-click action unless mouseDown and mouseUp swallow the popup-menu press first, as the DJ console's DjPad does.
 tags: [rhino, juce, ui, input]
 sources: []
-updated: 2026-10-12
+updated: 2026-10-13
 ---
 
 # A juce::Button fires its click on a right-click too
@@ -17,7 +17,7 @@ The DJ console ([DJ view and the booth](dj-view.md)) gives several keys a second
 
 ## The fix
 
-Every key with a second action is a `DjPad` (`native/src/DjControls.h`), which overrides `mouseDown` and `mouseUp`: a press with `isPopupMenu()` calls `onRightClick` and returns before `juce::Button::mouseDown` sees it, and the matching release is dropped the same way, so the button neither presses nor clicks. The menus that used to hang on `TextButton`s moved to `DjPad`s for this.
+Every key with a second action is a `DjPad` (`native/src/ui/dj/DjControls.h`), which overrides `mouseDown` and `mouseUp`: a press with `isPopupMenu()` calls `onRightClick` and returns before `juce::Button::mouseDown` sees it, and the matching release is dropped the same way, so the button neither presses nor clicks. The menus that used to hang on `TextButton`s moved to `DjPad`s for this.
 
 A new control that needs a right-click goes on `DjPad` or on a `Button` subclass with the same two overrides, never on a stock button with a listener bolted on: the listener hears the right-click, but so does the button.
 

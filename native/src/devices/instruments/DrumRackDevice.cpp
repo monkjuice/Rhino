@@ -1,6 +1,6 @@
 #include "DrumRackDevice.h"
 #include "DrumRackDeviceInternal.h"
-#include "ContentLibrary.h"
+#include "content/ContentLibrary.h"
 #include <algorithm>
 #include <cmath>
 

@@ -4,7 +4,7 @@ type: guide
 summary: The three edits that add a device, the SDK base a new one is written on, the shape the older devices follow, and the enum-era code a new instrument still meets.
 tags: [rhino, devices, cmake, testing]
 sources: []
-updated: 2026-10-11
+updated: 2026-10-13
 ---
 
 # Adding a device to Rhino
@@ -36,7 +36,7 @@ The other devices are still hand-written on `te::Plugin`, and this is what chang
 
 ## DSP and its test
 
-Put DSP worth testing in `native/src/core/` as plain C++, with the device a thin shell, as Rhino Tune, Rhino EQ and Rhino Vocoder do. Measure rendered output in a new `native/src/tests/*Test.cpp` called from `runSelfTest`, which needs its own line in `native/CMakeLists.txt` ([Measure sound, don't read the DSP](measure-sound-dont-read-dsp.md)).
+Put DSP worth testing in `native/src/core/dsp/` as plain C++, which the device includes as `"dsp/<Engine>.h"`, with the device a thin shell, as Rhino Tune, Rhino EQ and Rhino Vocoder do. Measure rendered output in a new `native/src/tests/*Test.cpp` called from `runSelfTest`, which needs its own line in `native/CMakeLists.txt` ([Measure sound, don't read the DSP](measure-sound-dont-read-dsp.md)).
 
 ## A face
 
@@ -44,13 +44,13 @@ Optional. A device on the SDK without one gets a face generated from its declara
 
 Two declarations go further without a hand-built face:
 - Sections that repeat, such as Rhino FM's four operators, can share a tab group, `.section("Op 1", "Operators")`, and show one at a time.
-- A device can override `describe(DeviceDisplay&)` to put a display after the face's first group: traces of what it plays, and a diagram of blocks and links. Draw a trace with an engine of the device's own, since `describe` runs on the message thread while the audio thread plays. Keep its last answer while the controls are unchanged, because a dragged knob asks every frame. Anything not on the SDK gets twelve generic knobs. A hand-built face is a new translation unit of `DeviceEditorPanel` (a line in `native/CMakeLists.txt`) and a `Face` value chosen by catalog id in `setTarget`. Draw and hit-test rectangles, keep view state on the device, and reach it through `Session::devicePlugin`. Write the device's own settings through `Session::editDeviceSettings`, so each is an undo step of its own and the session hears of it ([Device rack and device editors](device-rack.md)).
+- A device can override `describe(DeviceDisplay&)` to put a display after the face's first group: traces of what it plays, and a diagram of blocks and links. Draw a trace with an engine of the device's own, since `describe` runs on the message thread while the audio thread plays. Keep its last answer while the controls are unchanged, because a dragged knob asks every frame. Anything not on the SDK gets twelve generic knobs. A hand-built face is a new translation unit of `DeviceEditorPanel` in `native/src/ui/rack/` (a line in `native/CMakeLists.txt`) and a `Face` value chosen by catalog id in `setTarget`. Draw and hit-test rectangles, keep view state on the device, and reach it through `Session::devicePlugin`. Write the device's own settings through `Session::editDeviceSettings`, so each is an undo step of its own and the session hears of it ([Device rack and device editors](device-rack.md)).
 
 ## Instruments still meet older code
 
 Effects need nothing more; a new instrument also meets code written for the instruments that predate the catalog:
 
-- `native/src/DeviceMacros.cpp` curates rack knobs only for 4OSC; any other device shows its active parameters in order.
+- `native/src/model/SessionDeviceMacros.cpp` (`DeviceMacros.cpp` until 2026-10-13) curates rack knobs only for 4OSC; any other device shows its active parameters in order.
 
 Two older traps are gone as of 2026-10-05: a moved or pasted MIDI clip carries its instrument by catalog entry ([One instrument per track](one-instrument-per-track.md)), and reopening a project no longer re-applies an instrument to the first track (commit `a04b407`).
 

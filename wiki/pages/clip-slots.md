@@ -4,12 +4,12 @@ type: component
 summary: Each track's clip slots, one per scene, are the cells a DJ console's clips grid shows; what the model guarantees about them, and the clip launcher that first showed them, removed on 2026-10-11.
 tags: [rhino, clips, dj, slots]
 sources: []
-updated: 2026-10-12
+updated: 2026-10-13
 ---
 
 # Clip slots, the DJ consoles' cells
 
-Every track carries a clip slot per scene, and a slot holds at most one clip. Nothing launches them: they are the cells of a DJ console's clips grid (`DjClipGrid`), where a deck plays one cell's clip through the track's live chain ([DJ view and the booth](dj-view.md), the clips grid section). They are the only clips a deck plays: the arrangement's never reach one, since 2026-10-12, when the SONG cell went with the bounce ([DJ decks play live through the track's chain](dj-decks-play-live-through-the-track.md)). Model: `native/src/SessionSlots.cpp`, declared in `Session.h` with `SlotClip`. Tests: `tests/Arrangement/scenarios/ClipCells.inc` (a document of its own), `ClipRoundTrip.inc`, and the clips part of `DjBooth.inc`.
+Every track carries a clip slot per scene, and a slot holds at most one clip. Nothing launches them: they are the cells of a DJ console's clips grid (`DjClipGrid`), where a deck plays one cell's clip through the track's live chain ([DJ view and the booth](dj-view.md), the clips grid section). They are the only clips a deck plays: the arrangement's never reach one, since 2026-10-12, when the SONG cell went with the bounce ([DJ decks play live through the track's chain](dj-decks-play-live-through-the-track.md)). Model: `native/src/model/SessionSlots.cpp`, declared in `Session.h` with `SlotClip`. Tests: `tests/Arrangement/scenarios/ClipCells.inc` (a document of its own), `ClipRoundTrip.inc`, and the clips part of `DjBooth.inc`.
 
 ## What the model guarantees
 

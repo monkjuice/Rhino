@@ -1,6 +1,6 @@
 #pragma once
-#include "DrumKitFile.h"
-#include "DrumRackEngine.h"
+#include "content/DrumKitFile.h"
+#include "dsp/DrumRackEngine.h"
 #include "sdk/NativeDevice.h"
 #include <array>
 #include <optional>

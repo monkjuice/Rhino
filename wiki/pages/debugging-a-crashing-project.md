@@ -4,12 +4,12 @@ type: guide
 summary: Turn a project file that crashes Rhino into a ten-second repro, name the faulting module, and bisect the XML against a control.
 tags: [rhino, debugging, project-files, windows]
 sources: []
-updated: 2026-10-12
+updated: 2026-10-13
 ---
 
 # Debugging a crash only one project triggers
 
-`RhinoDAW.exe` opens a `.rhinoedit` passed as its only argument (`Application::initialise` in `native/src/Main.cpp`),
+`RhinoDAW.exe` opens a `.rhinoedit` passed as its only argument (`Application::initialise` in `native/src/app/Main.cpp`),
 which turns "it crashes when I open my project" into a repro that needs no clicking and runs in about ten seconds.
 This is the method of the *Debugging a crash that only one project file triggers* section of `AGENTS.md`.
 

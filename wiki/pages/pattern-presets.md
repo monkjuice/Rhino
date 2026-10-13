@@ -4,15 +4,15 @@ type: component
 summary: The eleven built-in one-bar patterns, each a set of notes plus the instrument and patch that play them, and what dropping one does to a track.
 tags: [rhino, presets, browser]
 sources: []
-updated: 2026-10-11
+updated: 2026-10-13
 ---
 
 # Pattern presets
 
 The browser's **Patterns** section offers eleven one-bar patterns, grouped Synth, Bass, Lead and Drums
-(`native/src/BrowserPanel.cpp`). Each is a `Session::PatternPreset`. The model side is two files:
-`native/src/SessionPatches.cpp` holds the note tables (`presetPattern`) and the 4OSC patches (`applySynthPatch`);
-`native/src/SessionPresets.cpp` puts them on a track. The three Wave presets (pad, bass, pluck) left with Rhino Wave
+(`native/src/ui/browser/BrowserPanel.cpp`). Each is a `Session::PatternPreset`. The model side is two files:
+`native/src/model/SessionPatches.cpp` holds the note tables (`presetPattern`) and the 4OSC patches (`applySynthPatch`);
+`native/src/model/SessionPatternPresets.cpp` (named `SessionPresets.cpp` until 2026-10-13) puts them on a track. The three Wave presets (pad, bass, pluck) left with Rhino Wave
 on 2026-10-05 ([Built-in devices](built-in-devices.md)). A device's `.rnd` presets are a different thing, in
 `SessionDevicePresets.cpp` ([Device presets (.rnd)](device-presets.md)).
 

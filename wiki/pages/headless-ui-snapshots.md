@@ -4,7 +4,7 @@ type: guide
 summary: Render a Rhino panel, the whole Rhino shell or Forge's editor to a PNG without a window, then measure it instead of eyeballing it.
 tags: [both, ui, testing, snapshots]
 sources: []
-updated: 2026-10-09
+updated: 2026-10-13
 ---
 
 # Seeing the UI without taking the screen
@@ -44,8 +44,10 @@ the playhead's Direct2D handoff ([Writing Rhino tests](writing-rhino-tests.md)).
 
 ## The whole Rhino shell
 
-`ControlWindow` is defined inside `native/src/Main.cpp`, so no test can reach it. Instead, the startup test builds the
-window hidden, writes its content to a PNG and quits:
+No runner builds the shell's `MainComponent` (`native/src/app/MainComponent.h`; until commit `db88b5c` on 2026-10-13
+it was `ControlWindow`, defined inline in `Main.cpp`, so no test *could* build it - now none does yet). So the way to see
+it is the startup test, which builds the window hidden, writes its content to a PNG through `writeSnapshot`
+(`ui/shared/ComponentSnapshot.h`) and quits:
 
 ```powershell
 $env:RHINO_SHELL_SNAPSHOT = "<scratch>\shell.png"; $env:RHINO_SHELL_SNAPSHOT_SIZE = "960x680"
@@ -54,8 +56,15 @@ $env:RHINO_SHELL_SNAPSHOT = "<scratch>\shell.png"; $env:RHINO_SHELL_SNAPSHOT_SIZ
 
 Give an absolute path. The size variable is optional; 960x680 is the smallest window the shell allows.
 `RHINO_STARTUP_SNAPSHOT` does the same for the loading screen. No variable sets the shell's state, so to see it with the
-browser closed, flip the `browserOpen` default in `ControlWindow`, build, snapshot and flip it back. That is how the
+browser closed, flip the `browserOpen` default in `MainComponent`, build, snapshot and flip it back. That is how the
 Info View heading was caught painting into the control bar.
+
+A hash of the shell PNG is not a "nothing changed" check. `--startup-test` is not command-line test mode, so the four
+starter tracks take random colours, and two runs of one binary differ in four 98 x 94 blocks at columns 375-472. The
+DJ snapshot carries live readouts as well (three small bands near rows 41-62 and 475-484). The Drum Rack face snapshot
+is byte-identical run to run. So compare per pixel, and check each differing region against a rerun of the *same*
+binary before blaming the change; that is how the source move of 2026-10-13 was shown to change nothing
+([The source tree mirrors the layers](source-tree-mirrors-the-layers.md)).
 
 ## Forge's editor
 

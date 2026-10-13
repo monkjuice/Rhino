@@ -1,4 +1,4 @@
-#include "../../Session.h"
+#include "model/Session.h"
 // The scenarios drive devices directly, so this runner needs the definitions
 // rather than their catalog entries.
 #include "audio/UtilityDevice.h"
@@ -7,7 +7,7 @@
 #include "instruments/DrumRackDevice.h"
 #include "midi/RhinoArpDevice.h"
 #include "DeviceRackTest.h"
-#include "../../StepGrid.h"
+#include "ui/notes/StepGrid.h"
 #include <stdexcept>
 
 namespace rhino

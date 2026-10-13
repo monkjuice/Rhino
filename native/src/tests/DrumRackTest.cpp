@@ -1,8 +1,8 @@
-#include "../Session.h"
-#include "ContentLibrary.h"
-#include "DrumKitFile.h"
-#include "DrumRackEngine.h"
-#include "DrumSlicer.h"
+#include "model/Session.h"
+#include "content/ContentLibrary.h"
+#include "content/DrumKitFile.h"
+#include "dsp/DrumRackEngine.h"
+#include "dsp/DrumSlicer.h"
 #include "instruments/DrumRackDevice.h"
 #include <algorithm>
 #include <cmath>

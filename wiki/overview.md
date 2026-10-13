@@ -4,7 +4,7 @@ type: overview
 summary: "Rhino and Rhino Forge at a glance: what they are, how they are built and where to start reading."
 tags: [overview, rhino, forge]
 sources: []
-updated: 2026-10-12
+updated: 2026-10-13
 ---
 
 # Rhino and Rhino Forge
@@ -27,8 +27,8 @@ is for Forge's.
 
 | Path | What it holds |
 | --- | --- |
-| `native/src/` | Rhino's model (`Session*.cpp`), UI, app shell (`Main.cpp`) and test runners |
-| `native/src/core/`, `native/src/devices/` | The `RhinoCore` (JUCE-only DSP, content library) and `RhinoDevices` (built-in plugins, device catalog) targets |
+| `native/src/app/`, `native/src/model/`, `native/src/ui/` | Rhino's shell (`Application` in `Main.cpp`, `MainWindow`, `MainComponent` and its units, the control bar, project files), its model (`Session.h`, `Session*.cpp`) and its UI, one folder per view under `ui/` plus `ui/shared/`; laid out by layer since 2026-10-13 ([The source tree mirrors the layers](pages/source-tree-mirrors-the-layers.md)) |
+| `native/src/core/`, `native/src/devices/`, `native/src/tests/` | The `RhinoCore` target (`dsp/`, `dj/`, `content/`: JUCE-only DSP, the DJ booth's engine, the content library), the `RhinoDevices` target (built-in plugins, device catalog), and the test runners |
 | `native/assets/` | Fonts and app icons, the only assets compiled in |
 | `instruments/rhino-forge/` | Forge: `core/` engine (headers only), `ui/`, `src/`, `tests/`, `tables/` |
 | `library/` | Rhino's content: samples (stored with Git LFS), device presets, drum kits and drum presets |
@@ -91,3 +91,4 @@ The full catalog is [index.md](index.md).
 | 2026-10-07 | The Drum Rack takes a pad on every note, a map of all 128, and a [sample editor](pages/drum-rack-sample-editor.md) with one-shot, classic and slice |
 | 2026-10-11 | The session view, unreachable since the [DJ view](pages/dj-view.md) took the view switch on 2026-10-09, removed; its [clip slots](pages/clip-slots.md) stay as the DJ consoles' cells |
 | 2026-10-12 | [DJ decks play live through their track's chain](pages/dj-decks-play-live-through-the-track.md), by two hidden devices on every track; the bounces, group decks and the knob-held preview removed |
+| 2026-10-13 | `native/src` laid out by layer, `app/`, `model/`, `ui/<view>/`, `core/{dsp,dj,content}/`, with includes spelled from each target's root ([The source tree mirrors the layers](pages/source-tree-mirrors-the-layers.md)); `Main.cpp` split into `MainWindow`, `MainComponent` and its six units ([App shell](pages/app-shell.md)) |

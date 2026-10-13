@@ -4,7 +4,7 @@ type: component
 summary: The one table of Rhino's devices that the browser, drop targets, rack menu, engine registration and instrument rules all read.
 tags: [rhino, devices, catalog]
 sources: []
-updated: 2026-10-12
+updated: 2026-10-13
 ---
 
 # Device catalog
@@ -19,12 +19,12 @@ As of 2026-10-06 it lists 4OSC, Rhino FM, Rhino Forge (external), Drum Rack, Rhi
 
 ## Readers
 
-The browser's device rows; the drop targets (`deviceFromId` in `native/src/BrowserIds.h`, `deviceFromBrowserDrop` in `native/src/DeviceRack.cpp`); the rack's `+` menu, which leaves out infrastructure and greys an external device until it is found; `Session::addDevice`, which dispatches on `kind`; the instrument rules (`isInstrumentPlugin`, the MIDI-effect skip in `switchTrackInstrument`); and `registerBuiltInTypes`, called once per engine from `Session`'s constructor, which registers every entry that carries a factory, nine on 2026-10-06 and eleven on 2026-10-12. It used to hold a `createBuiltInType<T>()` line per device, a second list to keep in step with the entries (until commit `71842c2`). Tracktion's built-ins need no registration and Forge arrives as a VST3 ([Hosting Forge in Rhino](forge-hosting.md)).
+The browser's device rows; the drop targets (`deviceFromId` in `native/src/ui/browser/BrowserIds.h`, `deviceFromBrowserDrop` in `native/src/ui/rack/DeviceRack.cpp`); the rack's `+` menu, which leaves out infrastructure and greys an external device until it is found; `Session::addDevice`, which dispatches on `kind`; the instrument rules (`isInstrumentPlugin`, the MIDI-effect skip in `switchTrackInstrument`); and `registerBuiltInTypes`, called once per engine from `Session`'s constructor, which registers every entry that carries a factory, nine on 2026-10-06 and eleven on 2026-10-12. It used to hold a `createBuiltInType<T>()` line per device, a second list to keep in step with the entries (until commit `71842c2`). Tracktion's built-ins need no registration and Forge arrives as a VST3 ([Hosting Forge in Rhino](forge-hosting.md)).
 
 ## Rules
 
 - **Ids and type names never change.** Browser drags carry the id (`rhino-browser:<kind>:<id>`), and presets and `Session::AudioEffect` name devices by it, which is why Rhino EQ kept `Equaliser`, the id of the Tracktion EQ it replaced. The Drum Rack likewise kept `Drums`, so `Session::Instrument::Drums` and the drum patterns still name it. Saved documents store the `typeName` (`rhino.<name>.v1`). A replacement with a different state gets a new one: the Drum Rack is `rhino.drumrack.v1`, and nothing reads `rhino.drums.v1` ([Drum Rack](drum-rack.md)).
-- The `Instrument`, `AudioEffect` and `MidiEffect` enums survive as shorthand because presets and about a hundred call sites name devices with them; `native/src/DeviceIds.h` is the only place they become ids. New devices get no enum.
+- The `Instrument`, `AudioEffect` and `MidiEffect` enums survive as shorthand because presets and about a hundred call sites name devices with them; `native/src/model/DeviceIds.h` is the only place they become ids. New devices get no enum.
 - `byTypeName("")` answers null on purpose, so nothing can match Forge by accident.
 - Never register a device from a static initialiser: the linker drops unreferenced objects of a static library and the registration vanishes without an error.
 - `--self-test` asserts that every browsable entry has a browser row, every device row names a real entry, every non-external entry can be added, and an unknown id is refused.
@@ -32,7 +32,7 @@ The browser's device rows; the drop targets (`deviceFromId` in `native/src/Brows
 
 ## Not yet the only list
 
-Effects are fully catalog-driven; instruments nearly so. `native/src/DeviceMacros.cpp` curates rack knobs for 4OSC only ([Adding a device to Rhino](adding-a-device.md)); the session view's slot menu, which listed three instruments by hand, went with that view on 2026-10-11. A MIDI clip moved or pasted to another track carries its instrument by catalog entry (`carriedInstrument`), so that path already knows every instrument.
+Effects are fully catalog-driven; instruments nearly so. `native/src/model/SessionDeviceMacros.cpp` (`DeviceMacros.cpp` until 2026-10-13) curates rack knobs for 4OSC only ([Adding a device to Rhino](adding-a-device.md)); the session view's slot menu, which listed three instruments by hand, went with that view on 2026-10-11. A MIDI clip moved or pasted to another track carries its instrument by catalog entry (`carriedInstrument`), so that path already knows every instrument.
 
 ## Related
 

@@ -1,0 +1,1075 @@
+#include "ArrangementInternal.h"
+#include "ui/shared/Playhead.h"
+#include <optional>
+#include <set>
+#include <utility>
+
+// Pointer gestures: loop range and clip move/trim. Automation gestures live in
+// ArrangementAutomation.cpp and are offered the pointer first.
+//
+// The pointer obeys the rule in SelectionInput.h, which the note editor reads
+// too: a plain press on a clip takes that clip and drops the rest, a press on
+// empty lane sweeps out a region, Ctrl and Shift gather, and a clip is put
+// down by double-clicking a lane.
+
+namespace rhino
+{
+
+void Arrangement::mouseDown(const juce::MouseEvent& event)
+{
+    grabKeyboardFocus();
+    // A press starts a fresh gesture. One that never saw its release must not
+    // go on reading this drag as a card being resized or carried.
+    resizingTrack = -1;
+    movingTrack = -1;
+    moveDestination = -1;
+    moveStarted = false;
+    resizingMaster = false;
+    collapseSelectionOnRelease = false;
+    collapseSelectionTo = {};
+    dragTravelled = false;
+    dragOrigin = event.position;
+    dragPointer = event.position;
+    dragModifiers = event.mods;
+    // The middle button pans, and answers first: it is a view gesture, so
+    // nothing under the pointer gets a say in whether it starts.
+    if (event.mods.isMiddleButtonDown())
+    {
+        clearAutomationHover();
+        panning = true;
+        panAnchor = event.position;
+        panStartView = viewStart;
+        panStartTrackScroll = trackScroll;
+        cancelDrag();
+        setMouseCursor(juce::MouseCursor::DraggingHandCursor);
+        return;
+    }
+    if (event.mods.isRightButtonDown() && loopGestureAt(event.position) != LoopGesture::none)
+    {
+        session.clearManualLoopRange();
+        if (status) status("Loop range cleared");
+        repaint();
+        return;
+    }
+    // The disclosure on a group's card answers before anything else on it: it
+    // is the one part of that card that is about the group rather than the bus.
+    if (beginGroupGesture(event))
+        return;
+    // An automation row answers for its own lane wherever it is clicked,
+    // header included, because its header is the lane's only label.
+    if (event.mods.isRightButtonDown() && event.position.y >= lanesTop)
+        if (const auto row = rowAt(event.position.y); row >= 0 && rows[static_cast<size_t>(row)].automation >= 0)
+            if (const auto* automation = automationFor(rows[static_cast<size_t>(row)]))
+            {
+                setSelection({});
+                focusedAutomation = automation->target;
+                focus = Focus::automation;
+                showAutomationMenu(automation->target);
+                repaint();
+                return;
+            }
+    if (event.mods.isRightButtonDown() && event.position.x >= headerWidth && event.position.y >= rulerTop)
+    {
+        // A right-click on a clip acts on that clip; empty lane space still
+        // opens the grid menu.
+        if (const auto index = hit(event.position); index >= 0)
+        {
+            showClipMenu(clips[static_cast<size_t>(index)].id);
+            return;
+        }
+        showGridMenu();
+        return;
+    }
+    // A right-click on a card offers what belongs to the track itself, so it is
+    // answered before the grid menu that empty space opens.
+    if (event.mods.isRightButtonDown())
+        if (const auto track = cardAt(event.position); track >= 0)
+        {
+            // The menu acts on the whole selection, so a right-click inside one
+            // keeps it rather than collapsing it the way a plain click does.
+            if (!isTrackSelected(track))
+                selectTrack(track);
+            setSelection({});
+            focusTrack();
+            repaint();
+            showTrackMenu(track);
+            return;
+        }
+    if (!event.mods.isLeftButtonDown()) return;
+    // The main row is pinned at the bottom, so its top edge is the handle its
+    // height is dragged from. It is answered before the row itself, or a grab
+    // on the edge would simply select the main output.
+    if (masterResizeEdgeAt(event.position))
+    {
+        resizingMaster = true;
+        masterResizeStart = masterLaneHeight;
+        masterResizeAnchor = event.position.y;
+        return;
+    }
+    // The master row selects but takes no clips, so it is handled before the
+    // lane hit tests rather than inside them.
+    if (masterLane().contains(event.position))
+    {
+        selectTrack(session.masterTrackIndex());
+        setSelection({});
+        focusTrack();
+        repaint();
+        return;
+    }
+    // Shift and Ctrl on a card gather cards instead of carrying one: that is the
+    // selection Ctrl+G groups, and the one a group command reaches. A card is
+    // the one place the two modifiers differ, because cards are a list and a
+    // list has a range between two of them.
+    if (event.position.x < headerWidth && isMultiSelectModifier(event.mods))
+        if (const auto track = cardAt(event.position); track >= 0)
+        {
+            if (isExtendSelectionModifier(event.mods)) selectTrackRange(trackSelectionAnchor, track);
+            else toggleTrackSelection(track);
+            setSelection({});
+            focusTrack();
+            repaint();
+            return;
+        }
+    for (int track = 0; track < session.trackCount(); ++track)
+        if (lane(track).withX(0.0f).contains(event.position))
+        {
+            selectTrack(track);
+            break;
+        }
+    // A card is the only place a track can be resized or carried from, and it
+    // has already taken the selection a plain click on it would have made.
+    // Grabbing its bottom edge is a resize and nothing else: it takes the focus
+    // so Delete still means the track, but it is not a request to see that
+    // track's devices, and it is the one card gesture that can be told from a
+    // plain click before the pointer has moved.
+    const auto resizingEdge = cardResizeEdgeAt(event.position) >= 0;
+    if (beginCardGesture(event))
+    {
+        setSelection({});
+        if (resizingEdge) focus = Focus::track;
+        else focusTrack();
+        repaint();
+        return;
+    }
+    if (event.y >= rulerTop && event.y < lanesTop && event.x >= headerWidth)
+    {
+        const auto loopRange = session.edit->getTransport().getLoopRange();
+        loopOriginalStart = loopRange.getStart().inSeconds();
+        loopOriginalEnd = loopRange.getEnd().inSeconds();
+        loopPreviewStart = loopOriginalStart;
+        loopPreviewEnd = loopOriginalEnd;
+        loopAnchor = timeAt(event.position.x);
+        loopGesture = loopGestureAt(event.position);
+        if (loopGesture == LoopGesture::none)
+        {
+            loopGesture = LoopGesture::create;
+            loopAnchor = snapped(std::max(0.0, loopAnchor), event.mods.isAltDown());
+            loopPreviewStart = loopPreviewEnd = loopAnchor;
+        }
+        repaint();
+        return;
+    }
+    // Automation takes the pointer before the clips do: its points are small
+    // targets, and a lane row carries no clips of its own to compete with.
+    const auto pointerRow = rowAt(event.position.y);
+    if (beginAutomationGesture(event))
+    {
+        repaint();
+        return;
+    }
+    if (pointerRow >= 0 && rows[static_cast<size_t>(pointerRow)].automation >= 0)
+    {
+        selectTrack(rows[static_cast<size_t>(pointerRow)].track);
+        setSelection({});
+        if (const auto* automation = automationFor(rows[static_cast<size_t>(pointerRow)]))
+        {
+            focusedAutomation = automation->target;
+            focus = Focus::automation;
+        }
+        repaint();
+        return;
+    }
+    // Double-clicking empty lane space creates a clip that starts where the
+    // pointer is, which is the only way to add one now that instrument drops
+    // change the track instead.
+    if (event.getNumberOfClicks() == 2 && event.position.x >= headerWidth && event.position.y >= lanesTop
+        && hit(event.position) < 0)
+    {
+        const auto track = trackAt(event.position.y);
+        if (track >= 0)
+        {
+            selectTrack(track);
+            const auto start = snapped(std::max(0.0, timeAt(event.position.x)), event.mods.isAltDown());
+            te::EditItemID created;
+            const auto result = session.createClip(track, start, &created);
+            if (status) status(result.failed() ? result.getErrorMessage() : "Added a clip to " + session.trackName(track));
+            if (result.wasOk()) openCreatedClip(created);
+        }
+        return;
+    }
+    const auto index = hit(event.position);
+    // A clip is two rows, and only the upper one is the clip. The lower row is
+    // timeline like any empty lane: a press there puts the selection line down
+    // and a drag sweeps out a region across whatever it covers, clips
+    // included. A double-click still reaches the clip from either row, because
+    // opening one is worth more than a second way of placing the line.
+    const auto zone = index < 0 ? ClipZone::body : clipZoneAt(event.position, clips[static_cast<size_t>(index)]);
+    if (index < 0 || (zone == ClipZone::body && event.getNumberOfClicks() < 2))
+    {
+        // Empty lane space is where a region is dragged out, and a press that
+        // never moves leaves the insert point there. The header still selects
+        // the track itself.
+        if (beginRegionGesture(event))
+        {
+            repaint();
+            return;
+        }
+        setSelection({});
+        clearTimeSelection();
+        // Header space with no card under it still focuses the track, so Delete
+        // keeps meaning the track, but it asks for no devices: nothing was
+        // clicked.
+        focus = event.position.x < headerWidth ? Focus::track : Focus::none;
+        repaint();
+        return;
+    }
+    // A copy, not a reference: selecting the clip opens it in the note editor,
+    // the session announces that, and the clip list is rebuilt under it.
+    const auto clip = clips[static_cast<size_t>(index)];
+    // Ctrl or Shift gathers: the clip joins the selection or leaves it, the
+    // rest is untouched, and the press is over. It must not also start
+    // carrying, or every attempt to add one clip to a group would nudge the
+    // whole group.
+    if (isMultiSelectModifier(event.mods))
+    {
+        auto next = selectedClips;
+        if (isSelected(clip.id))
+        {
+            // Shift extends, so it never takes anything back out; Ctrl is the
+            // one that toggles.
+            if (isExtendSelectionModifier(event.mods))
+                return;
+            next.erase(std::remove(next.begin(), next.end(), clip.id), next.end());
+        }
+        else
+            next.push_back(clip.id);
+        // setSelection derives the region from what is now selected, so the
+        // gathered set is what a clipboard command will act on.
+        setSelection(std::move(next), clip.id);
+        // The working row follows the pointer even while a group is being
+        // gathered, so the card highlight cannot lag behind the clips.
+        selectTrack(clip.track);
+        repaint();
+        return;
+    }
+    // A plain press takes the clip and drops everything else - unless the clip
+    // is already part of a group, in which case the group is kept so the drag
+    // can carry all of it. A press on a group that never travels was a click
+    // after all, and collapses onto this clip on release.
+    if (!isSelected(clip.id))
+        setSelection({clip.id}, clip.id);
+    else
+    {
+        if (selectedClips.size() > 1)
+        {
+            collapseSelectionOnRelease = true;
+            collapseSelectionTo = clip.id;
+        }
+        if (selected != clip.id)
+        {
+            selected = clip.id;
+            if (clipSelected) clipSelected(selected);
+        }
+        focus = Focus::clip;
+    }
+    // Whatever the region was before - a span dragged out, or the rectangle a
+    // paste left behind - the gesture starting here is about these clips, so
+    // the region becomes theirs and travels with them.
+    setRegionFromSelectedClips();
+    // Selecting a clip puts the line on its start, and the transport follows
+    // the line, so hitting play after picking a clip starts at that clip.
+    moveTransportToSelectionStart();
+    selectTrack(clip.track);
+    if (clip.waveform == nullptr)
+    {
+        const auto result = session.selectPatternClip(selected);
+        if (result.failed() && status) status(result.getErrorMessage());
+    }
+    // Double-clicking a clip opens it. A drag can still start from the same
+    // press, so this reports and returns nothing: the gesture below is set up
+    // either way, and a double-click that never moves simply never drags.
+    if (event.getNumberOfClicks() == 2 && clipOpened)
+        clipOpened(clip.id);
+    repaint();
+    original = preview = clip.position;
+    originalTrack = previewTrack = clip.track;
+    sourceDuration = clip.sourceDuration;
+    gesture = zone == ClipZone::trimStart ? ClipGesture::trimLeft
+        : zone == ClipZone::trimEnd ? ClipGesture::trimRight : ClipGesture::move;
+    dragTime = timeAt(event.position.x);
+    dragging = true;
+}
+
+void Arrangement::mouseDrag(const juce::MouseEvent& event)
+{
+    // Recorded before anything acts on it, so the frame clock can carry the
+    // gesture on while the pointer sits still past the edge of the panel.
+    dragPointer = event.position;
+    dragModifiers = event.mods;
+    dragTravelled = dragTravelled || event.getDistanceFromDragStart() >= 3;
+    if (panning)
+    {
+        panView(event.position);
+        return;
+    }
+    if (resizingMaster)
+    {
+        // Pulling the edge up makes the row taller, which is the same sense a
+        // card's bottom edge has read from the other side.
+        masterLaneHeight = juce::jlimit(minimumMasterLaneHeight, maximumMasterLaneHeight,
+                                        masterResizeStart - (event.position.y - masterResizeAnchor));
+        resized();
+        repaint();
+        return;
+    }
+    if (resizingTrack >= 0 || movingTrack >= 0)
+    {
+        dragCardGesture(event);
+        return;
+    }
+    if (regionSelecting)
+    {
+        dragRegionGesture(event);
+        return;
+    }
+    if (automationGesture != AutomationGesture::none)
+    {
+        dragAutomationGesture(event);
+        return;
+    }
+    if (loopGesture != LoopGesture::none)
+    {
+        constexpr auto minimumLoopSeconds = 0.02;
+        const auto t = std::max(0.0, timeAt(event.position.x));
+        if (loopGesture == LoopGesture::create)
+        {
+            const auto edge = snapped(t, event.mods.isAltDown());
+            loopPreviewStart = std::min(loopAnchor, edge);
+            loopPreviewEnd = std::max(loopAnchor, edge);
+        }
+        else if (loopGesture == LoopGesture::move)
+        {
+            const auto length = loopOriginalEnd - loopOriginalStart;
+            auto start = snapped(loopOriginalStart + t - loopAnchor, event.mods.isAltDown());
+            start = std::max(0.0, start);
+            loopPreviewStart = start;
+            loopPreviewEnd = start + length;
+        }
+        else if (loopGesture == LoopGesture::trimStart)
+        {
+            loopPreviewStart = std::min(snapped(t, event.mods.isAltDown()), loopOriginalEnd - minimumLoopSeconds);
+            loopPreviewStart = std::max(0.0, loopPreviewStart);
+            loopPreviewEnd = loopOriginalEnd;
+        }
+        else if (loopGesture == LoopGesture::trimEnd)
+        {
+            loopPreviewStart = loopOriginalStart;
+            loopPreviewEnd = std::max(snapped(t, event.mods.isAltDown()), loopOriginalStart + minimumLoopSeconds);
+        }
+        repaint();
+        return;
+    }
+    if (!dragging) return;
+    // A clip carried up out of the panel, past the band where the lanes
+    // scroll, leaves as a drag the rest of the window can take: the DJ
+    // switch shows the consoles and a console's grid takes a copy. The
+    // timeline's own move is cancelled first, so the clip stays put.
+    if (gesture == ClipGesture::move && event.position.y < -24.0f && selected != te::EditItemID())
+        if (auto* container = juce::DragAndDropContainer::findParentDragContainerFor(this))
+        {
+            const auto id = selected;
+            juce::String name;
+            auto colour = palette::selection;
+            for (const auto& clip : clips)
+                if (clip.id == id)
+                {
+                    name = clip.name;
+                    colour = clip.colour;
+                }
+            cancelDrag();
+            repaint();
+            container->startDragging(arrangementClipDragDescription(id), this, clipDragImage(name, colour), true);
+            return;
+        }
+    const auto anchor = gesture == ClipGesture::trimRight ? original.end : original.start;
+    auto targetTrack = previewTrack;
+    if (gesture == ClipGesture::move)
+    {
+        if (const auto target = trackAt(event.position.y); target >= 0)
+            targetTrack = target;
+        else if (session.trackCount() > 0 && event.position.y > lane(session.trackCount() - 1).getBottom())
+            targetTrack = session.trackCount();
+        else
+            targetTrack = originalTrack;
+        auto lowestSelectedTrack = originalTrack;
+        for (const auto& selectedClip : clips)
+            if (isSelected(selectedClip.id)) lowestSelectedTrack = std::min(lowestSelectedTrack, selectedClip.track);
+        targetTrack = std::max(targetTrack, originalTrack - lowestSelectedTrack);
+    }
+    const auto rawStart = anchor + timeAt(event.position.x) - dragTime;
+    const auto editTime = gesture == ClipGesture::move
+        ? snappedClipMoveStart(rawStart, original.end - original.start, targetTrack, event.mods.isAltDown())
+        : snapped(rawStart, event.mods.isAltDown());
+    preview = previewClipEdit(original, gesture, editTime, sourceDuration);
+    previewTrack = targetTrack;
+    repaint();
+}
+
+// The view follows the pointer rather than the pointer scrolling the view: the
+// timeline moves the same number of pixels the mouse did, so whatever was under
+// the cursor when the button went down stays under it. Both axes at once, which
+// is what makes one gesture replace two scrollbars.
+void Arrangement::panView(juce::Point<float> pointer)
+{
+    const auto laneWidth = lane(0).getWidth();
+    if (laneWidth > 1.0f)
+        viewStart = panStartView - (pointer.x - panAnchor.x) / laneWidth * viewSpan;
+    trackScroll = panStartTrackScroll - (pointer.y - panAnchor.y);
+    // Clamped in one place: updateScroll holds both axes inside the song and
+    // the row stack, so a pan that runs off either end simply stops there.
+    updateScroll();
+    updatePlayhead();
+    resized();
+    repaint();
+}
+
+void Arrangement::mouseUp(const juce::MouseEvent& event)
+{
+    if (panning)
+    {
+        panView(event.position);
+        panning = false;
+        setMouseCursor(juce::MouseCursor::NormalCursor);
+        return;
+    }
+    if (resizingMaster)
+    {
+        resizingMaster = false;
+        return;
+    }
+    if (resizingTrack >= 0 || movingTrack >= 0)
+    {
+        endCardGesture();
+        return;
+    }
+    if (regionSelecting)
+    {
+        dragRegionGesture(event);
+        endRegionGesture();
+        return;
+    }
+    if (automationGesture != AutomationGesture::none)
+    {
+        dragAutomationGesture(event);
+        endAutomationGesture(event);
+        return;
+    }
+    if (loopGesture != LoopGesture::none)
+    {
+        mouseDrag(event);
+        const auto completedGesture = loopGesture;
+        loopGesture = LoopGesture::none;
+        if (event.getDistanceFromDragStart() >= 3)
+        {
+            const auto result = session.setLoopRange(loopPreviewStart, loopPreviewEnd);
+            if (result.failed() && status) status(result.getErrorMessage());
+            else if (status) status(completedGesture == LoopGesture::create ? "Loop range selected" : "Loop range updated");
+        }
+        else
+        {
+            // The ruler puts down the same line the lanes do, so it snaps the
+            // same way and the transport follows it rather than the raw
+            // pointer: the playhead and the line the paste lands on cannot
+            // disagree about where the click was.
+            const auto seconds = snappedDown(std::max(0.0, timeAt(event.position.x)), event.mods.isAltDown());
+            setInsertPoint(seconds, timeSelection.active ? timeSelection.firstTrack : selectedTrack);
+            session.setPlaybackStart(seconds);
+            session.edit->getTransport().setPosition(tracktion::core::TimePosition::fromSeconds(seconds));
+            updatePlayhead();
+        }
+        repaint();
+        return;
+    }
+    if (!dragging) return;
+    if (event.getDistanceFromDragStart() >= 3)
+    {
+        mouseDrag(event);
+        dragging = false;
+        if (gesture == ClipGesture::move && selectedClips.size() > 1)
+        {
+            struct Move { te::EditItemID id; ClipGeometry position; int track; };
+            std::vector<Move> moves;
+            for (const auto& clip : clips)
+                if (isSelected(clip.id)) moves.push_back({clip.id, clip.position, clip.track});
+            std::sort(moves.begin(), moves.end(), [this] (const auto& a, const auto& b)
+            {
+                return a.track + previewTrack - originalTrack < b.track + previewTrack - originalTrack;
+            });
+            const auto timeDelta = preview.start - original.start;
+            const auto trackDelta = previewTrack - originalTrack;
+            // One move for the whole gesture: one undo step, one restart of
+            // playback, and refused whole if any clip may not land.
+            std::vector<Session::ClipMove> carried;
+            for (const auto& move : moves)
+            {
+                const auto length = move.position.end - move.position.start;
+                const auto start = std::max(0.0, move.position.start + timeDelta);
+                carried.push_back({move.id, {start, start + length, move.position.offset}, move.track + trackDelta});
+            }
+            const auto result = session.moveClips(carried);
+            if (result.failed() && status) status(result.getErrorMessage());
+            else selectTrack(juce::jlimit(0, std::max(0, session.trackCount() - 1), previewTrack));
+        }
+        else
+        {
+            const auto result = session.editClip(selected, preview, gesture, gesture == ClipGesture::move ? previewTrack : -1);
+            if (result.failed() && status) status(result.getErrorMessage());
+            else if (gesture == ClipGesture::move)
+                selectTrack(juce::jlimit(0, std::max(0, session.trackCount() - 1), previewTrack));
+        }
+    }
+    // A press inside a group that never travelled was a click, and a click
+    // takes the one thing under it. Deciding it here rather than on the press
+    // is what lets the same press also carry the whole group.
+    else if (collapseSelectionOnRelease && collapseSelectionTo != te::EditItemID())
+        setSelection({collapseSelectionTo}, collapseSelectionTo);
+    cancelDrag();
+    repaint();
+}
+
+// The live drag, re-posed against the view it is now looking at. The pointer
+// has not moved, so the position and the modifiers are the ones last seen; the
+// press position is carried so the handlers that ask how far the drag has come
+// still get a true answer.
+juce::MouseEvent Arrangement::resumedDrag() const
+{
+    auto* self = const_cast<Arrangement*>(this);
+    return {juce::Desktop::getInstance().getMainMouseSource(), dragPointer, dragModifiers,
+            1.0f, 0.0f, 0.0f, 0.0f, 0.0f, self, self,
+            juce::Time::getCurrentTime(), dragOrigin, juce::Time::getCurrentTime(), 1, true};
+}
+
+// Called once a frame. A drag that has reached the edge of the lanes pulls the
+// view after it and then re-runs itself, so a region can be swept across more
+// of the song than fits on screen and a clip can be carried to a track that is
+// not shown yet.
+void Arrangement::autoScrollDrag()
+{
+    if (!dragTravelled)
+        return;
+    const auto live = dragging || regionSelecting || loopGesture != LoopGesture::none
+                   || automationGesture != AutomationGesture::none || movingTrack >= 0;
+    if (!live)
+        return;
+
+    auto scrolled = false;
+    if (const auto push = autoScrollPush(dragPointer.x, headerWidth, static_cast<float>(getWidth()) - 14.0f);
+        push != 0.0f)
+    {
+        const auto before = viewStart;
+        // A share of what is on screen rather than a fixed number of seconds,
+        // so the view travels at the same apparent speed at every zoom.
+        viewStart = std::max(0.0, viewStart + push * viewSpan * 0.012);
+        updateScroll();
+        scrolled = viewStart != before;
+    }
+    // The loop gesture and an automation drag live on rows that do not scroll
+    // under them, so only the gestures that span tracks travel vertically.
+    if (dragging || regionSelecting || movingTrack >= 0)
+        if (const auto push = autoScrollPush(dragPointer.y, lanesTop, masterLane().getY()); push != 0.0f)
+        {
+            const auto before = trackScroll;
+            trackScroll += push * laneHeight() * 0.1;
+            updateScroll();
+            if (trackScroll != before)
+            {
+                resized();
+                scrolled = true;
+            }
+        }
+    if (!scrolled)
+        return;
+    mouseDrag(resumedDrag());
+    updatePlayhead();
+    repaint();
+}
+
+void Arrangement::mouseMove(const juce::MouseEvent& event)
+{
+    // A pan owns the cursor until the button comes up. JUCE still sends moves
+    // to a component that is not the drag source, and letting one through here
+    // would flicker the hand back to an arrow mid-gesture.
+    if (panning) return;
+    // Before the cursor is picked, because the cursor is one of the things it
+    // decides: the hover is the single answer about what the pointer is on.
+    updateAutomationHover(event.position, event.mods.isAltDown());
+    if (masterResizeEdgeAt(event.position))
+    {
+        setMouseCursor(juce::MouseCursor::UpDownResizeCursor);
+        return;
+    }
+    if (cardResizeEdgeAt(event.position) >= 0)
+    {
+        setMouseCursor(juce::MouseCursor::UpDownResizeCursor);
+        return;
+    }
+    if (cardAt(event.position) >= 0)
+    {
+        setMouseCursor(juce::MouseCursor::DraggingHandCursor);
+        return;
+    }
+    const auto index = hit(event.position);
+    auto pointerStyle = juce::MouseCursor::NormalCursor;
+    const auto loopHit = loopGestureAt(event.position);
+    if (loopHit == LoopGesture::trimStart || loopHit == LoopGesture::trimEnd)
+        pointerStyle = juce::MouseCursor::LeftRightResizeCursor;
+    else if (loopHit == LoopGesture::move)
+        pointerStyle = juce::MouseCursor::DraggingHandCursor;
+    else if (event.y >= rulerTop && event.y < lanesTop && event.x >= headerWidth)
+        pointerStyle = juce::MouseCursor::CrosshairCursor;
+    // A node is carried and the lane between nodes is clicked on, so the two
+    // say different things: the arrows mean a level is about to be dragged,
+    // the crosshair that a node is about to be placed.
+    else if (automationHover.valid())
+        pointerStyle = automationHover.point >= 0 ? juce::MouseCursor::UpDownResizeCursor
+                                                  : juce::MouseCursor::CrosshairCursor;
+    else if (index >= 0)
+    {
+        // The pointer says which of a clip's rows it is over: a hand on the
+        // strip that carries the clip, and the ruler's crosshair on the row
+        // that places the line, because that is the same gesture.
+        switch (clipZoneAt(event.position, clips[static_cast<size_t>(index)]))
+        {
+            case ClipZone::trimStart:
+            case ClipZone::trimEnd: pointerStyle = juce::MouseCursor::LeftRightResizeCursor; break;
+            case ClipZone::header: pointerStyle = juce::MouseCursor::DraggingHandCursor; break;
+            case ClipZone::body: pointerStyle = juce::MouseCursor::CrosshairCursor; break;
+        }
+    }
+    setMouseCursor(pointerStyle);
+}
+
+// A pointer that has left the panel is over nothing, so the lit curve, the
+// ghost and the reading all have to go with it.
+void Arrangement::mouseExit(const juce::MouseEvent&)
+{
+    clearAutomationHover();
+}
+
+// The main row's top edge, across the whole width of the panel: the row spans
+// it and there is nothing above the edge but the last lane, whose own bottom
+// edge lies below the main row whenever the stack is tall enough to scroll.
+bool Arrangement::masterResizeEdgeAt(juce::Point<float> point) const
+{
+    constexpr auto grab = 4.0f;
+    const auto master = masterLane();
+    return point.y >= master.getY() - grab && point.y <= master.getY() + grab
+        && point.x >= 0.0f && point.x < master.getRight();
+}
+
+// A card bottom edge is a resize handle; the rest of the card carries the
+// track. Only a track's own row answers, because an automation lane is sized
+// by what it draws rather than by the user.
+int Arrangement::cardResizeEdgeAt(juce::Point<float> point) const
+{
+    if (point.x >= headerWidth || point.y < lanesTop || point.y >= masterLane().getY())
+        return -1;
+    constexpr auto grab = 4.0f;
+    for (int index = 0; index < static_cast<int>(rows.size()); ++index)
+    {
+        const auto& entry = rows[static_cast<size_t>(index)];
+        if (entry.automation >= 0 || entry.height <= 0.0f) continue;
+        const auto row = rowBounds(index);
+        if (std::abs(point.y - row.getBottom()) <= grab)
+            return rows[static_cast<size_t>(index)].track;
+    }
+    return -1;
+}
+
+int Arrangement::cardAt(juce::Point<float> point) const
+{
+    if (point.x >= headerWidth || point.y < lanesTop || point.y >= masterLane().getY())
+        return -1;
+    const auto row = rowAt(point.y);
+    if (row < 0 || rows[static_cast<size_t>(row)].automation >= 0)
+        return -1;
+    return rows[static_cast<size_t>(row)].track;
+}
+
+bool Arrangement::beginCardGesture(const juce::MouseEvent& event)
+{
+    if (const auto track = cardResizeEdgeAt(event.position); track >= 0)
+    {
+        // Read the height before the track is marked as resizing, because from
+        // that moment laneHeightFor answers with the preview instead.
+        resizeStartHeight = laneHeightFor(track);
+        resizePreview = resizeStartHeight;
+        resizeAnchor = event.position.y;
+        resizingTrack = track;
+        return true;
+    }
+    if (const auto track = cardAt(event.position); track >= 0)
+    {
+        movingTrack = track;
+        moveDestination = track;
+        moveAnchor = event.position.y;
+        moveStarted = false;
+        return true;
+    }
+    return false;
+}
+
+void Arrangement::dragCardGesture(const juce::MouseEvent& event)
+{
+    if (resizingTrack >= 0)
+    {
+        // Dragging down grows the row and pushes the stack below it along;
+        // dragging up gives height back until the card is down to its name and
+        // its two buttons, which is as small as a track goes.
+        resizePreview = juce::jlimit(minimumLaneHeight, maximumLaneHeight,
+                                     resizeStartHeight + event.position.y - resizeAnchor);
+        layoutRows();
+        resized();
+        repaint();
+        return;
+    }
+    if (movingTrack < 0) return;
+    if (!moveStarted && std::abs(event.position.y - moveAnchor) < 5.0f) return;
+    moveStarted = true;
+    // The pointer picks the destination, not the dragged card: the card would
+    // answer differently depending on where along it the drag started, while
+    // the row under the pointer is what the drop indicator is drawn on.
+    auto destination = session.trackCount() - 1;
+    for (int track = 0; track < session.trackCount(); ++track)
+        if (event.position.y < lane(track).getBottom())
+        {
+            destination = track;
+            break;
+        }
+    if (destination != moveDestination)
+    {
+        moveDestination = destination;
+        repaint();
+    }
+}
+
+void Arrangement::endCardGesture()
+{
+    if (resizingTrack >= 0)
+    {
+        const auto track = std::exchange(resizingTrack, -1);
+        if (const auto done = session.setTrackLaneHeight(track, resizePreview); done.failed() && status)
+            status(done.getErrorMessage());
+    }
+    else if (movingTrack >= 0 && moveStarted && moveDestination != movingTrack)
+    {
+        const auto from = std::exchange(movingTrack, -1);
+        const auto to = moveDestination;
+        if (const auto done = session.moveTrack(from, to); done.failed())
+        {
+            if (status) status(done.getErrorMessage());
+        }
+        else
+        {
+            selectTrack(to);
+            if (status) status("Moved " + session.trackName(to) + " to position " + juce::String(to + 1));
+        }
+    }
+    movingTrack = -1;
+    moveDestination = -1;
+    moveStarted = false;
+    buildRows();
+    resized();
+    repaint();
+}
+
+// Everything here acts on the cards that are selected rather than only on the
+// one under the pointer, which is what makes a gathered selection worth having.
+void Arrangement::showTrackMenu(int track)
+{
+    // Captured now: the callback outlives the click that opened the menu.
+    std::vector<int> targets;
+    for (const auto gathered : selectedTracks)
+        if (juce::isPositiveAndBelow(gathered, session.trackCount()))
+            targets.push_back(gathered);
+    if (targets.empty())
+        targets.push_back(track);
+    const auto several = targets.size() > 1;
+    const auto subject = several ? juce::String(targets.size()) + " tracks" : session.trackName(track);
+
+    juce::PopupMenu menu;
+    menu.addSectionHeader(subject);
+    menu.addCustomItem(1, std::make_unique<TrackSwatches>(session.trackColour(track),
+        [safe = juce::Component::SafePointer<Arrangement>(this), targets](juce::Colour chosen)
+        {
+            if (safe == nullptr) return;
+            for (const auto target : targets)
+                safe->session.setTrackColour(target, chosen);
+        }), nullptr);
+    menu.addItem(2, "No colour", !session.trackColour(track).isTransparent());
+    menu.addSeparator();
+    menu.addItem(3, "Rename " + session.trackName(track) + "...       F2");
+    menu.addSeparator();
+    // What the track takes in and whether you hear it. The card carries both,
+    // but only on a row tall enough for the third and fourth control lines -
+    // so the menu is where a short row reaches them. A group bus takes neither,
+    // because it carries its members' audio and has no input of its own.
+    if (const auto takes = session.trackRecordInput(track); takes != Session::RecordInput::none)
+    {
+        menu.addItem(211, (takes == Session::RecordInput::midi
+                               ? "MIDI From: " + session.trackMidiInputName(track)
+                               : "Audio From: " + session.trackAudioInputName(track)) + "...");
+        juce::PopupMenu monitoring;
+        for (const auto mode : {Session::InputMonitoring::off, Session::InputMonitoring::automatic,
+                                Session::InputMonitoring::on})
+            monitoring.addItem(200 + static_cast<int>(mode),
+                               Session::inputMonitoringName(mode)
+                                   + (mode == Session::InputMonitoring::automatic ? "   (while armed)"
+                                    : mode == Session::InputMonitoring::on        ? "   (always)"
+                                                                                  : "   (never)"),
+                               true, session.trackMonitoring(track) == mode);
+        menu.addSubMenu("Monitor: " + Session::inputMonitoringName(session.trackMonitoring(track)), monitoring);
+    }
+    menu.addSeparator();
+    // A bus is the group, so what it offers is what happens to the group. The
+    // cards under it offer what happens to their membership.
+    if (const auto busOf = session.trackGroupBusId(track); busOf > 0)
+    {
+        menu.addItem(6, groupById(busOf) != nullptr && groupById(busOf)->collapsed ? "Expand" : "Collapse");
+        menu.addItem(7, "Ungroup       Ctrl+Shift+G");
+    }
+    else if (session.trackGroupId(track) > 0)
+        menu.addItem(4, "Remove " + subject + " from group");
+    else
+    {
+        menu.addItem(5, "Group " + subject + "       Ctrl+G");
+        juce::PopupMenu existing;
+        for (int i = 0; i < static_cast<int>(groups.size()); ++i)
+            existing.addItem(100 + i, groups[static_cast<size_t>(i)].name);
+        if (!groups.empty())
+            menu.addSubMenu("Add " + subject + " to group", existing);
+    }
+    const auto anchor = localPointToGlobal(lane(track).getTopLeft().toInt());
+    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this)
+                           .withTargetScreenArea({anchor.x, anchor.y, 1, 1}),
+        [safe = juce::Component::SafePointer<Arrangement>(this), track, targets, subject](int choice)
+        {
+            if (safe == nullptr || choice == 0) return;
+            if (choice == 2)
+            {
+                for (const auto target : targets)
+                    safe->session.setTrackColour(target, {});
+            }
+            else if (choice == 3) safe->renameTrack(track);
+            else if (choice == 4)
+            {
+                const auto done = safe->session.removeTracksFromGroup(targets);
+                if (safe->status)
+                    safe->status(done.failed() ? done.getErrorMessage() : subject + " left the group");
+            }
+            else if (choice == 211) safe->showTrackInputMenu(track);
+            else if (choice == 5) safe->groupSelectedTracks();
+            else if (choice == 6) safe->toggleGroupCollapsed(safe->session.trackGroupBusId(track));
+            else if (choice == 7)
+            {
+                safe->selectTrack(track);
+                safe->ungroupSelection();
+            }
+            else if (choice >= 200 && choice <= 202)
+                safe->applyMonitorChoice(track, static_cast<Session::InputMonitoring>(choice - 200));
+            else if (choice >= 100 && choice - 100 < static_cast<int>(safe->groups.size()))
+            {
+                const auto group = safe->groups[static_cast<size_t>(choice - 100)];
+                const auto done = safe->session.addTracksToGroup(targets, group.id);
+                if (safe->status)
+                    safe->status(done.failed() ? done.getErrorMessage() : subject + " joined " + group.name);
+            }
+        });
+}
+
+// Which of the two choosers a card's input button opens. The track says which,
+// and the track's kind is fixed when it is made, so the button never has to
+// decide anything the model has not already settled.
+void Arrangement::showTrackInputMenu(int track)
+{
+    switch (session.trackRecordInput(track))
+    {
+        case Session::RecordInput::midi:  showMidiInputMenu(track); break;
+        case Session::RecordInput::audio: showAudioInputMenu(track); break;
+        case Session::RecordInput::none:
+            if (status)
+                status(session.trackName(track) + " carries its members' audio, so it takes no input of its own.");
+            break;
+    }
+}
+
+// Applying a monitor choice, from the card's segmented control and from the
+// same choice in the track menu. One place, because both have to say the same
+// thing afterwards - and because hearing a live microphone through the
+// machine's own speakers is worth warning about every time it is asked for.
+void Arrangement::applyMonitorChoice(int track, Session::InputMonitoring mode)
+{
+    const auto done = session.setTrackMonitoring(track, mode);
+    if (status == nullptr)
+        return;
+    if (done.failed())
+    {
+        status(done.getErrorMessage());
+        return;
+    }
+    const auto name = session.trackName(track);
+    // Only an audio input can feed back. A MIDI input cannot, so the warning
+    // would be noise on an instrument track - where Auto is also the default.
+    const auto feedback = session.trackRecordInput(track) == Session::RecordInput::audio
+                              ? " Use headphones: a built-in microphone and speakers will feed back." : "";
+    status(mode == Session::InputMonitoring::off
+               ? name + " does not play its input back"
+           : mode == Session::InputMonitoring::automatic
+               ? name + " plays its input back while it is armed." + feedback
+               : name + " plays its input back at all times, armed or not." + feedback);
+}
+
+// The audio input chooser, opened from the card and from the track menu. Built
+// when the menu opens for the same reason the MIDI one is: it describes the
+// machine, and an interface plugged in while Rhino was running should be in it.
+void Arrangement::showAudioInputMenu(int track)
+{
+    if (session.trackRecordInput(track) != Session::RecordInput::audio)
+    {
+        if (status)
+            status(session.trackName(track) + " is a MIDI track. What plays it is chosen with MIDI From.");
+        return;
+    }
+    const auto choices = session.audioInputChoices();
+    const auto current = session.trackAudioInput(track);
+
+    juce::PopupMenu menu;
+    menu.addSectionHeader("AUDIO FROM");
+    for (size_t i = 0; i < choices.size(); ++i)
+    {
+        // A separator before the hardware and another before None, so the
+        // three kinds of answer read apart rather than as one long list.
+        if (choices[i].token.startsWith("device:") && (i == 0 || !choices[i - 1].token.startsWith("device:")))
+            menu.addSeparator();
+        if (choices[i].token == Session::audioInputNoneToken())
+            menu.addSeparator();
+        menu.addItem(static_cast<int>(i) + 1, choices[i].name, choices[i].available,
+                     choices[i].token == current);
+    }
+    juce::Component* anchor = this;
+    if (juce::isPositiveAndBelow(track, static_cast<int>(trackInput.size())))
+        anchor = trackInput[static_cast<size_t>(track)].get();
+    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(anchor),
+        [safe = juce::Component::SafePointer<Arrangement>(this), track, choices] (int result)
+        {
+            if (safe == nullptr || result == 0) return;
+            const auto& chosen = choices[static_cast<size_t>(result - 1)];
+            const auto done = safe->session.setTrackAudioInput(track, chosen.token);
+            if (safe->status == nullptr) return;
+            // The call reports two things at once, as arming does: whether the
+            // track took the choice, and whether the input behind it is there.
+            safe->status(done.failed() ? done.getErrorMessage()
+                                       : safe->session.trackName(track) + " records from " + chosen.name);
+        });
+}
+
+// Live's MIDI From chooser, opened from the card and from the track menu.
+//
+// The list is built when the menu opens rather than held anywhere, because it
+// describes the machine: a keyboard plugged in while Rhino was running should
+// be in it, and one unplugged should not.
+void Arrangement::showMidiInputMenu(int track)
+{
+    if (session.trackRecordInput(track) != Session::RecordInput::midi)
+    {
+        if (status)
+            status(session.trackName(track) + " is an audio track. Drop an instrument on it to play it from MIDI.");
+        return;
+    }
+    const auto choices = session.midiInputChoices();
+    const auto current = session.trackMidiInput(track);
+
+    juce::PopupMenu menu;
+    menu.addSectionHeader("MIDI FROM");
+    for (size_t i = 0; i < choices.size(); ++i)
+    {
+        // A separator before the hardware and another before None, so the three
+        // kinds of answer read apart rather than as one long list.
+        if (choices[i].token.startsWith("device:") && (i == 0 || !choices[i - 1].token.startsWith("device:")))
+            menu.addSeparator();
+        if (choices[i].token == Session::midiInputNoneToken())
+            menu.addSeparator();
+        menu.addItem(static_cast<int>(i) + 1, choices[i].name, choices[i].available,
+                     choices[i].token == current);
+    }
+    juce::Component* anchor = this;
+    if (juce::isPositiveAndBelow(track, static_cast<int>(trackInput.size())))
+        anchor = trackInput[static_cast<size_t>(track)].get();
+    menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(anchor),
+        [safe = juce::Component::SafePointer<Arrangement>(this), track, choices] (int result)
+        {
+            if (safe == nullptr || result == 0) return;
+            const auto& chosen = choices[static_cast<size_t>(result - 1)];
+            const auto done = safe->session.setTrackMidiInput(track, chosen.token);
+            if (safe->status == nullptr) return;
+            if (done.failed())
+            {
+                safe->status(done.getErrorMessage());
+                return;
+            }
+            // Asking for the typing keyboard is asking for the typing keyboard,
+            // so it is switched on rather than explained. It takes the letter
+            // keys while it is on, which is why it has a toggle at all - and
+            // the same toggle switches it back off.
+            auto note = juce::String();
+            if (chosen.token == Session::midiInputKeyboardToken()
+                && safe->enableTypingKeyboard
+                && (!safe->typingKeyboardEnabled || !safe->typingKeyboardEnabled()))
+            {
+                safe->enableTypingKeyboard();
+                note = ". The typing keyboard is now on: A-; play, Z/X change octave, M turns it off";
+            }
+            safe->status(safe->session.trackName(track) + " plays from " + chosen.name + note);
+        });
+}
+
+void Arrangement::mouseWheelMove(const juce::MouseEvent& event, const juce::MouseWheelDetails& wheel)
+{
+    if (dragging) return;
+    // A wheel sends no move, so whatever was under the pointer before the view
+    // slid is not under it afterwards. Cleared rather than recomputed: the new
+    // scroll is not applied yet, and the next move answers properly.
+    clearAutomationHover();
+    if (event.mods.isShiftDown())
+    {
+        const auto wheelDelta = std::abs(wheel.deltaY) >= std::abs(wheel.deltaX) ? wheel.deltaY : -wheel.deltaX;
+        zoom(std::exp(-wheelDelta * 2.0f), timeAt(event.position.x));
+    }
+    else if (std::abs(wheel.deltaY) > std::abs(wheel.deltaX)
+             && rowsHeight > laneContentHeight() + 1.0f)
+    {
+        trackScroll += -wheel.deltaY * laneHeight() * 1.5;
+        updateScroll();
+        resized();
+        repaint();
+    }
+    else
+    {
+        viewStart -= (std::abs(wheel.deltaX) > std::abs(wheel.deltaY) ? wheel.deltaX : wheel.deltaY) * viewSpan * 0.3;
+        updateScroll();
+        updatePlayhead();
+        repaint();
+    }
+}
+
+}

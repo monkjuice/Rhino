@@ -4,12 +4,12 @@ type: concept
 summary: Copy, cut, paste, duplicate and delete all act on a region, a span of time across a run of tracks, never on a set of clips.
 tags: [rhino, arrangement, editing, clipboard]
 sources: []
-updated: 2026-10-05
+updated: 2026-10-13
 ---
 
 # Region editing
 
-In the arrangement the clipboard commands act on a **region**: a span of time across a run of tracks, not a set of clips, as in Live. The UI half is `native/src/ArrangementSelection.cpp`; the edit half is `Session::copyClipRegion`, `clearClipRegion` and `pasteClipRegion` in `native/src/SessionRegion.cpp`.
+In the arrangement the clipboard commands act on a **region**: a span of time across a run of tracks, not a set of clips, as in Live. The UI half is `native/src/ui/arrangement/ArrangementSelection.cpp`; the edit half is `Session::copyClipRegion`, `clearClipRegion` and `pasteClipRegion` in `native/src/model/SessionRegion.cpp`.
 
 ## Where the region comes from
 

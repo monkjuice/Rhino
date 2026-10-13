@@ -1,9 +1,9 @@
 #include "DeviceRackTest.h"
-#include "../../DeviceRack.h"
-#include "../../DrumRackWindow.h"
-#include "../../Session.h"
-#include "../../Theme.h"
-#include "ContentLibrary.h"
+#include "ui/rack/DeviceRack.h"
+#include "ui/rack/DrumRackWindow.h"
+#include "model/Session.h"
+#include "ui/shared/Theme.h"
+#include "content/ContentLibrary.h"
 #include "instruments/DrumRackDevice.h"
 #include <array>
 #include <cmath>

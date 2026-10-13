@@ -1,22 +1,22 @@
-#include "../../Arrangement.h"
-#include "ContentLibrary.h"
+#include "ui/arrangement/Arrangement.h"
+#include "content/ContentLibrary.h"
 // The scenarios drive devices directly, so this runner needs the definitions
 // rather than their catalog entries.
 #include "instruments/DrumRackDevice.h"
 #include "audio/VocoderDevice.h"
 #include "audio/UtilityDevice.h"
 #include "infra/DjTrackPortDevices.h"
-#include "../../Theme.h"
-#include "../../TransportDisplay.h"
-#include "../../ControlBarFields.h"
-#include "../../StepGrid.h"
-#include "../../AudioClipPanel.h"
-#include "../../DjView.h"
-#include "../../Playhead.h"
+#include "ui/shared/Theme.h"
+#include "app/TransportDisplay.h"
+#include "app/ControlBarFields.h"
+#include "ui/notes/StepGrid.h"
+#include "ui/audioclip/AudioClipPanel.h"
+#include "ui/dj/DjView.h"
+#include "ui/shared/Playhead.h"
 // The DJ booth scenario reads a deck's material, and the booth's edges fill
 // its engine's command queue.
-#include "DjTrack.h"
-#include "DjEngine.h"
+#include "dj/DjTrack.h"
+#include "dj/DjEngine.h"
 #include <algorithm>
 #include <functional>
 #include <stdexcept>

@@ -4,12 +4,12 @@ type: component
 summary: Edits the notes of the open MIDI clip in steps, with a draw mode, a step region and caches that tie it closely to Session.
 tags: [rhino, ui, notes]
 sources: []
-updated: 2026-10-07
+updated: 2026-10-13
 ---
 
 # Note editor (StepGrid)
 
-`StepGrid` edits the notes of the MIDI clip the editor is pointed at, `Session::pattern()`. A document with no MIDI track has no such clip: `Session::hasPatternClip()` says so, every note edit refuses with a message, and the grid draws an empty editor. It is one class across `StepGrid.cpp`, `StepGridPainter.cpp`, `StepGridGestures.cpp` (pointer) and `StepGridEditing.cpp` (selection, region, clipboard, modal tools), with private helpers in `StepGridInternal.h`. It opens in the shell's lower pane when a MIDI clip is double-clicked ([App shell and control bar](app-shell.md)).
+`StepGrid` edits the notes of the MIDI clip the editor is pointed at, `Session::pattern()`. A document with no MIDI track has no such clip: `Session::hasPatternClip()` says so, every note edit refuses with a message, and the grid draws an empty editor. It is one class across `StepGrid.cpp`, `StepGridPainter.cpp`, `StepGridGestures.cpp` (pointer) and `StepGridEditing.cpp` (selection, region, clipboard, modal tools), with private helpers in `StepGridInternal.h`, all in `native/src/ui/notes/` since 2026-10-13. It opens in the shell's lower pane when a MIDI clip is double-clicked ([App shell and control bar](app-shell.md)).
 
 ## Gestures
 
@@ -37,7 +37,7 @@ When the open clip's track plays drums (`Session::isPatternDrums`), the grid sho
 - **It is welded to `Session`.** The four files reach into `Session` 101 times (counted 2026-10-03), and `Session.h` pulls in Tracktion. That is why Forge's planned arp pattern editor cannot simply reuse it: first extract a Session-free note-grid header, as `ClipGeometry.h` was.
 - **The clip can vanish under it.** `Session::repairPatternClip` is the single place that re-points the editor when its clip goes: by id first, else to the first MIDI clip on the first MIDI track, else to a hidden starter clip it makes there, never onto an audio track ([No track is special for being first](pattern-track.md), [Hold ids, not pointers](ids-not-pointers.md)).
 - **Hidden, it waits.** While another face holds the lower pane the grid marks itself stale instead of rebuilding on every change, and skips its playhead every display refresh ([What a change costs the interface](ui-cost-of-a-change.md)).
-- **Octave names.** Middle C reads C3, matching Live, Forge and the Drum Rack's pads (`padNoteName` in `core/DrumKitFile.h`, which `DrumRackDevice::noteName` calls). Both of the painter's keyboards name rows through `pitchName` in `StepGridInternal.h` (until 2026-10-06, `drumLaneName`). Change `pitchName` and `padNoteName` together or the rows and the pads disagree.
+- **Octave names.** Middle C reads C3, matching Live, Forge and the Drum Rack's pads (`padNoteName` in `core/content/DrumKitFile.h`, which `DrumRackDevice::noteName` calls). Both of the painter's keyboards name rows through `pitchName` in `StepGridInternal.h` (until 2026-10-06, `drumLaneName`). Change `pitchName` and `padNoteName` together or the rows and the pads disagree.
 
 ## Related
 

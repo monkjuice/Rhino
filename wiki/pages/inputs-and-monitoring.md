@@ -4,12 +4,12 @@ type: component
 summary: Each track names its own MIDI or audio input and its own Off, Auto or In monitoring, all resolved to engine devices by applyRecordArming.
 tags: [rhino, recording, midi, audio-io]
 sources: []
-updated: 2026-10-12
+updated: 2026-10-13
 ---
 
 # Track inputs and monitoring
 
-Which input a track takes, and whether you hear it, are properties of the **track**, as in Live. The model is `native/src/SessionMidiInput.cpp`, `SessionAudioInput.cpp` and the monitoring half of `SessionRecording.cpp`; the card's chooser and On/Auto/Off control (`MonitorSelector.*`) are wired in `ArrangementSync.cpp` and `ArrangementGestures.cpp`. Every choice is saved on the track, follows it when reordered, and opens no undo transaction. `Session::applyRecordArming` turns it all into engine routing ([Recording and the count-in](recording.md)).
+Which input a track takes, and whether you hear it, are properties of the **track**, as in Live. The model is `native/src/model/SessionMidiInput.cpp`, `SessionAudioInput.cpp` and the monitoring half of `SessionRecording.cpp`; the card's chooser and On/Auto/Off control (`MonitorSelector.*`) are wired in `ArrangementSync.cpp` and `ArrangementGestures.cpp`. Every choice is saved on the track, follows it when reordered, and opens no undo transaction. `Session::applyRecordArming` turns it all into engine routing ([Recording and the count-in](recording.md)).
 
 ## MIDI From
 

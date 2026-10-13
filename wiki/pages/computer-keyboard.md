@@ -4,12 +4,12 @@ type: component
 summary: Plays notes from the typing keyboard into the MIDI input with Forge's exact key mapping, so arming and recording need no special case.
 tags: [rhino, midi, keyboard]
 sources: []
-updated: 2026-10-12
+updated: 2026-10-13
 ---
 
 # Computer MIDI keyboard
 
-`native/src/ComputerKeyboard.*`, owned and wired by `ControlWindow` in `Main.cpp`. **M** switches it on and off; while on, **A** to **;** play seventeen semitones (home row white keys, the row above black), **Z**/**X** move the octave (3 to 7, default 5) and **C**/**V** the velocity (steps of 10, 1-127, default 100).
+`native/src/app/ComputerKeyboard.*`, owned and wired by `MainComponent` (`app/MainComponent.cpp`). **M** switches it on and off; while on, **A** to **;** play seventeen semitones (home row white keys, the row above black), **Z**/**X** move the octave (3 to 7, default 5) and **C**/**V** the velocity (steps of 10, 1-127, default 100).
 
 ## It plays the input, not a track
 
@@ -28,7 +28,7 @@ The keys are `juce::MidiKeyboardComponent`'s default, `"awsedftgyhujkolp;"`, wit
 
 ## Focus from the first frame
 
-A window with nothing focused keeps its keys for itself, above the content, and nothing here took focus on its own, so Space, F9 and the keyboard did nothing until the first click. `ControlWindow` now wants focus and is given it at startup (commit `a1d4ef0`).
+A window with nothing focused keeps its keys for itself, above the content, and nothing here took focus on its own, so Space, F9 and the keyboard did nothing until the first click. `MainComponent` (then `ControlWindow`) now wants focus and is given it at startup (commit `a1d4ef0`).
 
 ## Related
 

@@ -4,12 +4,12 @@ type: concept
 summary: One pointer vocabulary for the arrangement and the note editor, written once as shared predicates in SelectionInput.h.
 tags: [rhino, ui, interaction, selection]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-13
 ---
 
 # Pointer and selection rules
 
-The arrangement and the note editor answer the pointer the same way, because a clip and a note are the same kind of thing to select. `native/src/SelectionInput.h` writes the rule down as shared predicates rather than a shared gesture; each panel still decides what its marquee catches.
+The arrangement and the note editor answer the pointer the same way, because a clip and a note are the same kind of thing to select. `native/src/ui/shared/SelectionInput.h` writes the rule down as shared predicates rather than a shared gesture; each panel still decides what its marquee catches.
 
 ## The rules
 

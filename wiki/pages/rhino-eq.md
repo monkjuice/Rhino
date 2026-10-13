@@ -4,12 +4,12 @@ type: component
 summary: Eight-band EQ whose drawn curve comes from the same coefficients as the audio, over a spectrum computed off the audio thread.
 tags: [rhino, devices, dsp, eq]
 sources: []
-updated: 2026-10-05
+updated: 2026-10-13
 ---
 
 # Rhino EQ
 
-Eight bands, the eight filter types of Live's EQ Eight, and a live spectrum behind the curve. The device, `native/src/devices/audio/RhinoEqDevice.*` (catalog id `Equaliser`, type `rhino.eq.v1`), is a thin shell; nearly everything else is in `native/src/core/`, where `--self-test` measures it without an edit.
+Eight bands, the eight filter types of Live's EQ Eight, and a live spectrum behind the curve. The device, `native/src/devices/audio/RhinoEqDevice.*` (catalog id `Equaliser`, type `rhino.eq.v1`), is a thin shell; nearly everything else is in `native/src/core/dsp/`, where `--self-test` measures it without an edit.
 
 ## The DSP
 
@@ -24,7 +24,7 @@ The 24 per-band numbers plus output and Scale are automatable. Scale rides every
 
 ## The face
 
-`native/src/DeviceEditorPanelEq.cpp`: the display is the control. Drag a band, wheel to widen it, double-click to switch it off, right-click for its type; three knobs follow the band in hand and two are global. The response is a cached `juce::Path`, rebuilt only when a parameter moves.
+`native/src/ui/rack/DeviceEditorPanelEq.cpp`: the display is the control. Drag a band, wheel to widen it, double-click to switch it off, right-click for its type; three knobs follow the band in hand and two are global. The response is a cached `juce::Path`, rebuilt only when a parameter moves.
 
 ## Tests
 

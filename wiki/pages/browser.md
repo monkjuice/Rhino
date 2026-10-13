@@ -4,12 +4,12 @@ type: component
 summary: A six-section library rail, Drums first, whose rows leave only by drag, with samples and drum presets auditioned through a second audio callback.
 tags: [rhino, ui, browser, library]
 sources: []
-updated: 2026-10-11
+updated: 2026-10-13
 ---
 
 # Browser and library preview
 
-`native/src/BrowserPanel.*` is a rail of six sections (Drums, Instruments, Patterns, Samples, Audio FX, MIDI FX) over a folder tree, the shape Live uses. Its rows come from four places:
+`native/src/ui/browser/BrowserPanel.*` is a rail of six sections (Drums, Instruments, Patterns, Samples, Audio FX, MIDI FX) over a folder tree, the shape Live uses. Its rows come from four places:
 - pattern presets and the two generated samples (Whistle, Siren), listed in `BrowserPanel.cpp`;
 - every file `ContentLibrary::samples()` finds under `library/` ([Content library](content-library.md));
 - the kits and drum presets on disk;

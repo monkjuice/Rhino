@@ -1,6 +1,6 @@
 #include "DrumRackDevice.h"
 #include "DrumRackDeviceInternal.h"
-#include "DrumSlicer.h"
+#include "dsp/DrumSlicer.h"
 #include <algorithm>
 #include <cmath>
 #include <functional>

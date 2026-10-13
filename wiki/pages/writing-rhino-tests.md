@@ -4,7 +4,7 @@ type: guide
 summary: Choose between a unit check and a workflow scenario, follow the rules that keep scenarios sharing one Session honest, and time the interface with --profile-ui.
 tags: [rhino, testing, conventions]
 sources: []
-updated: 2026-10-12
+updated: 2026-10-13
 ---
 
 # Writing Rhino tests
@@ -13,8 +13,8 @@ Rhino's tests are compiled into the app and selected by flag ([Build and test Rh
 `native/src/tests/README.md` describes two layers; prefer the first wherever it reaches the behaviour.
 
 - **Unit-style checks**, for whatever needs no `Session`, render, desktop peer or pointer sequence. Geometry over pure
-  headers such as `ClipGeometry.h` goes in `tests/Arrangement/ClipGeometryTest.cpp` (`--arrangement-geometry-test`, no
-  audio device). DSP lives in `src/core` as a plain class driven from `--self-test` (`SelfTest.cpp`, `AutoTuneTest.cpp`,
+  headers such as `model/ClipGeometry.h` goes in `tests/Arrangement/ClipGeometryTest.cpp` (`--arrangement-geometry-test`, no
+  audio device). DSP lives in `src/core/dsp` as a plain class driven from `--self-test` (`SelfTest.cpp`, `AutoTuneTest.cpp`,
   `EqTest.cpp`, `VocoderTest.cpp`, `FmTest.cpp`, `DrumRackTest.cpp`). Every device Rhino makes is also rendered by
   `--device-test` (`DeviceConformance.cpp`) against [the native device standard](native-device-standard.md); a new
   device gets those checks without writing any. A device that is silent at its defaults, as a blank
@@ -140,7 +140,8 @@ profile drive it alone through `djProcessOffline`; its five-argument form hands 
 booth's worker, so a scenario polls `djPoll` until `djBusy` is false. What only a test reads stays private behind the
 friendship.
 
-Nothing in `Main.cpp` is reachable by a test ([App shell and control bar](app-shell.md)), so a shell behaviour is
+No runner builds the shell's `MainComponent` (its units are ordinary translation units under `app/` since `db88b5c`, but
+nothing in `tests/` constructs one yet; [App shell and control bar](app-shell.md)), so a shell behaviour is
 checked at the boundary the shell wires, and whatever it needs is put in the view or the model: `DjBooth.inc` replaces
 `DjView::deckSelected` with a lambda to see which deck the shell would be told of, presses a console through its
 `selected` callback and calls `togglePlayFocused` as Space would; what the shell then does with that deck

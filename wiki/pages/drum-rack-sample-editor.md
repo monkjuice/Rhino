@@ -4,7 +4,7 @@ type: component
 summary: How a Drum Rack sample pad plays its file (one-shot, classic or slice), kept as undoable pad content rather than automatable controls, cut at transients or into equal parts, and spread onto pads of their own.
 tags: [rhino, devices, drums, dsp, ui]
 sources: []
-updated: 2026-10-07
+updated: 2026-10-13
 ---
 
 # Drum Rack sample editor
@@ -33,7 +33,7 @@ It is stored as `PAD` properties (`mode`, `start`, `end`, `fadeIn`, `fadeOut`, `
 
 ## Slicing
 
-`core/DrumSlicer.*` returns the starts of a part's slices as fractions of the file, the part's start always first, at most 64. It reads the whole part, so it runs on the message thread; the device keeps the last answer per note, sound and playback (`padSlices`).
+`core/dsp/DrumSlicer.*` returns the starts of a part's slices as fractions of the file, the part's start always first, at most 64. It reads the whole part, so it runs on the message thread; the device keeps the last answer per note, sound and playback (`padSlices`).
 
 - **Transients.** Energy of 10 ms windows 5 ms apart, in dB. A hit is a window this many dB louder than the one two before it, a local maximum of that rise, at least 60 ms after the last hit, and above a floor under the loudest window. Sensitivity moves the threshold from 16 to 4 dB and the floor from 30 to 60 dB down. A cut goes 2 ms before the hit's first sample to reach a third of its peak, so a slice keeps its attack.
 - **Divisions** cut equal parts.

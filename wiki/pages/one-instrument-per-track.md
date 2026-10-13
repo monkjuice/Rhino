@@ -4,7 +4,7 @@ type: decision
 summary: A track runs exactly one instrument; a new one replaces the old in place, and nothing may cache an instrument pointer.
 tags: [rhino, devices, instruments]
 sources: []
-updated: 2026-10-11
+updated: 2026-10-13
 ---
 
 # One instrument per track
@@ -15,7 +15,7 @@ Until commit `16ef43a` (2026-09-14) a track kept every instrument dropped on it 
 
 ## Decision
 
-`switchTrackInstrument` (`native/src/SessionInternal.cpp`) is the only thing that changes a track's instrument. The replacement goes in at the old instrument's index, after any MIDI effects, so the chain keeps its order ([Device chain order](device-chain-order.md)). The old instrument is removed with its patch and its automation lanes, in the same undo step (commit `cf85e3f`), and the track is renamed after the new one. Clips are untouched, so a pattern survives the swap. It writes nothing about the track's kind, because only a MIDI track is offered an instrument at all ([A track's kind is fixed when it is made](track-kind-fixed-at-creation.md)).
+`switchTrackInstrument` (`native/src/model/SessionInternal.cpp`) is the only thing that changes a track's instrument. The replacement goes in at the old instrument's index, after any MIDI effects, so the chain keeps its order ([Device chain order](device-chain-order.md)). The old instrument is removed with its patch and its automation lanes, in the same undo step (commit `cf85e3f`), and the track is renamed after the new one. Clips are untouched, so a pattern survives the swap. It writes nothing about the track's kind, because only a MIDI track is offered an instrument at all ([A track's kind is fixed when it is made](track-kind-fixed-at-creation.md)).
 
 Rejected: keeping the stack and switching with enable flags.
 
@@ -28,7 +28,7 @@ Rejected: keeping the stack and switching with enable flags.
 
 ## Pitfall: clips carry instruments the other way
 
-A swap leaves clips alone, but the converse does not hold. Moving a MIDI clip to another track (`Session::editClip`) and pasting one (`pasteClipRegion`, which duplicating also uses) switch the destination to the instrument of the track the clip came from, replacing the destination's instrument and patch in the same undo step. The source is read by `carriedInstrument` (`native/src/SessionInternal.cpp`), which names the source track's instrument by catalog entry, bypassed or not, so every instrument travels. A clip from a track that plays nothing leaves the destination's instrument alone. Until commit `b5d17e0` (2026-10-05) the reader knew only a few instruments and answered 4OSC for the rest, so duplicating a clip on an empty MIDI track installed a 4OSC; `native/src/tests/Arrangement/scenarios/ClipEdits.inc` now covers a bypassed instrument and a lane that plays nothing.
+A swap leaves clips alone, but the converse does not hold. Moving a MIDI clip to another track (`Session::editClip`) and pasting one (`pasteClipRegion`, which duplicating also uses) switch the destination to the instrument of the track the clip came from, replacing the destination's instrument and patch in the same undo step. The source is read by `carriedInstrument` (`native/src/model/SessionInternal.cpp`), which names the source track's instrument by catalog entry, bypassed or not, so every instrument travels. A clip from a track that plays nothing leaves the destination's instrument alone. Until commit `b5d17e0` (2026-10-05) the reader knew only a few instruments and answered 4OSC for the rest, so duplicating a clip on an empty MIDI track installed a 4OSC; `native/src/tests/Arrangement/scenarios/ClipEdits.inc` now covers a bypassed instrument and a lane that plays nothing.
 
 A drum clip carries its sounds as well. A Drum Rack that arrives through the switch is blank, so it takes the source rack's kit (`drumKitOf` and `fillBlankDrumRack` in `SessionInternal.h`). A paste carries the kit as XML in `ClipSnapshot::drumKit`, taken at copy time like the rest of the clipboard snapshot. A destination rack that already holds sounds keeps them ([Drum Rack](drum-rack.md)).
 

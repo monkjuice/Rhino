@@ -327,7 +327,7 @@ public:
     {
         const auto lit = dragging || isMouseOver();
         const auto fill = lit ? accent.withAlpha(0.3f) : juce::Colour(0xff0d1120);
-        auto text = getLocalBounds().toFloat();
+        auto textArea = getLocalBounds().toFloat();
 
         if (card)
         {
@@ -339,7 +339,7 @@ public:
             g.strokePath(outline, juce::PathStrokeType(1.0f));
             g.setColour(accent.withAlpha(lit ? 1.0f : 0.85f));
             g.fillRect(area.withHeight(moduleEdgeHeight));
-            text = area.withTrimmedTop(moduleEdgeHeight);
+            textArea = area.withTrimmedTop(moduleEdgeHeight);
         }
         else
         {
@@ -348,12 +348,12 @@ public:
             g.fillRoundedRectangle(area, 3.0f);
             g.setColour(accent.withAlpha(lit ? 1.0f : 0.65f));
             g.drawRoundedRectangle(area, 3.0f, 1.0f);
-            text = area;
+            textArea = area;
         }
 
         g.setColour(lit ? juce::Colours::white : accent);
-        g.setFont(panelFont(Face::emphasis, juce::jmin(13.0f, text.getHeight() * 0.72f)));
-        g.drawText(caption, text, juce::Justification::centred);
+        g.setFont(panelFont(Face::emphasis, juce::jmin(13.0f, textArea.getHeight() * 0.72f)));
+        g.drawText(caption, textArea, juce::Justification::centred);
     }
 };
 

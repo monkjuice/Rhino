@@ -89,10 +89,10 @@ public:
             {
                 const auto at = juce::jlimit(0.0, 1.0, (slider.getValue() - range.getStart())
                                                            / range.getLength());
-                const auto x = area.getX() + 3.0f
-                               + static_cast<float>(at) * (area.getWidth() - 6.0f);
+                const auto tickX = area.getX() + 3.0f
+                                   + static_cast<float>(at) * (area.getWidth() - 6.0f);
                 g.setColour(accent.withAlpha(enabled ? 0.9f : 0.25f));
-                g.fillEllipse(juce::Rectangle<float>(3.6f, 3.6f).withCentre({x, area.getY()}));
+                g.fillEllipse(juce::Rectangle<float>(3.6f, 3.6f).withCentre({tickX, area.getY()}));
             }
         }
 

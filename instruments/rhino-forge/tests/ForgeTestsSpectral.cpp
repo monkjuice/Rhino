@@ -334,11 +334,11 @@ void loaderSuite()
                 0.5 * std::sin(2.0 * juce::MathConstants<double>::pi * 440.0
                                * static_cast<double>(i) / testRate)));
         juce::WavAudioFormat wav;
-        std::unique_ptr<juce::FileOutputStream> stream(file.createOutputStream());
+        std::unique_ptr<juce::OutputStream> stream(file.createOutputStream());
         require(stream != nullptr, "the test can write a sample to the temp directory");
         if (stream == nullptr) return;
-        const std::unique_ptr<juce::AudioFormatWriter> writer(
-            wav.createWriterFor(stream.release(), testRate, 1, 16, {}, 0));
+        const auto writer = wav.createWriterFor(stream, juce::AudioFormatWriterOptions()
+            .withSampleRate(testRate).withNumChannels(1).withBitsPerSample(16));
         require(writer != nullptr, "the test can encode a wav");
         if (writer != nullptr) writer->writeFromAudioSampleBuffer(buffer, 0, buffer.getNumSamples());
     }
@@ -389,10 +389,10 @@ void persistenceSuite()
                 0.5 * std::sin(2.0 * juce::MathConstants<double>::pi * 440.0
                                * static_cast<double>(i) / testRate)));
         juce::WavAudioFormat wav;
-        std::unique_ptr<juce::FileOutputStream> stream(file.createOutputStream());
+        std::unique_ptr<juce::OutputStream> stream(file.createOutputStream());
         if (stream == nullptr) { require(false, "the test can write a sample"); return; }
-        const std::unique_ptr<juce::AudioFormatWriter> writer(
-            wav.createWriterFor(stream.release(), testRate, 1, 16, {}, 0));
+        const auto writer = wav.createWriterFor(stream, juce::AudioFormatWriterOptions()
+            .withSampleRate(testRate).withNumChannels(1).withBitsPerSample(16));
         if (writer != nullptr) writer->writeFromAudioSampleBuffer(buffer, 0, buffer.getNumSamples());
     }
 
@@ -462,10 +462,10 @@ void playheadSuite()
                 0.5 * std::sin(2.0 * juce::MathConstants<double>::pi * 440.0
                                * static_cast<double>(i) / testRate)));
         juce::WavAudioFormat wav;
-        std::unique_ptr<juce::FileOutputStream> stream(file.createOutputStream());
+        std::unique_ptr<juce::OutputStream> stream(file.createOutputStream());
         if (stream == nullptr) { require(false, "the test can write a sample"); return; }
-        const std::unique_ptr<juce::AudioFormatWriter> writer(
-            wav.createWriterFor(stream.release(), testRate, 1, 16, {}, 0));
+        const auto writer = wav.createWriterFor(stream, juce::AudioFormatWriterOptions()
+            .withSampleRate(testRate).withNumChannels(1).withBitsPerSample(16));
         if (writer != nullptr) writer->writeFromAudioSampleBuffer(buffer, 0, buffer.getNumSamples());
     }
 
@@ -895,10 +895,10 @@ void loopParametersSuite()
                 0.5 * std::sin(2.0 * juce::MathConstants<double>::pi * 440.0
                                * static_cast<double>(i) / testRate)));
         juce::WavAudioFormat wav;
-        std::unique_ptr<juce::FileOutputStream> stream(file.createOutputStream());
+        std::unique_ptr<juce::OutputStream> stream(file.createOutputStream());
         if (stream == nullptr) { require(false, "the test can write a sample"); return; }
-        const std::unique_ptr<juce::AudioFormatWriter> writer(
-            wav.createWriterFor(stream.release(), testRate, 1, 16, {}, 0));
+        const auto writer = wav.createWriterFor(stream, juce::AudioFormatWriterOptions()
+            .withSampleRate(testRate).withNumChannels(1).withBitsPerSample(16));
         if (writer != nullptr) writer->writeFromAudioSampleBuffer(buffer, 0, buffer.getNumSamples());
     }
 
@@ -942,10 +942,10 @@ void loopMarkersSuite()
                 0.5 * std::sin(2.0 * juce::MathConstants<double>::pi * 440.0
                                * static_cast<double>(i) / testRate)));
         juce::WavAudioFormat wav;
-        std::unique_ptr<juce::FileOutputStream> stream(file.createOutputStream());
+        std::unique_ptr<juce::OutputStream> stream(file.createOutputStream());
         if (stream == nullptr) { require(false, "the test can write a sample"); return; }
-        const std::unique_ptr<juce::AudioFormatWriter> writer(
-            wav.createWriterFor(stream.release(), testRate, 1, 16, {}, 0));
+        const auto writer = wav.createWriterFor(stream, juce::AudioFormatWriterOptions()
+            .withSampleRate(testRate).withNumChannels(1).withBitsPerSample(16));
         if (writer != nullptr) writer->writeFromAudioSampleBuffer(buffer, 0, buffer.getNumSamples());
     }
 

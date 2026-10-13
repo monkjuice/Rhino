@@ -661,3 +661,9 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/forge-oscillators.md (LOAD's dialog shares the root, so it also opened at home in the VST3)
 - updated: pages/build-and-test-forge.md (the plugin binary's path inside the bundle and its depth; Ableton Live 12 loads the build-tree VST3)
 - updated: pages/orphaned-build-processes.md (C1083/D8040 when two builds share one tree, here an agent's and the user's own; re-run once the other finishes)
+
+## [2026-10-13] update | Forge's /W4 build warnings fixed at their sites
+- source: the change's brief, checked against instruments/rhino-forge/CMakeLists.txt (juce_recommended_warning_flags on both targets), ui/ForgeChrome.h and ui/ForgeStyle.h (the text, panel and line colours)
+- updated: pages/build-and-test-forge.md (new Warnings section: fix at the site, why headers multiply the count, listing them from a worktree build, the C4459/C4458/C4244/C4996 causes and the writer API's stream leak; summary changed)
+- updated: pages/colours-and-typography.md (never name a Forge UI local text, panel or line)
+- updated: index.md (summary of build-and-test-forge)

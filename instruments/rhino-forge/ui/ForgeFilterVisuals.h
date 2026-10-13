@@ -188,13 +188,13 @@ inline void drawFilterScale(juce::Graphics& g, juce::Rectangle<int> plot, float 
     g.setFont(font);
 
     const auto& marks = filterScaleMarks();
-    const auto widthOf = [&font] (const juce::String& text)
+    const auto widthOf = [&font] (const juce::String& label)
     {
-        return juce::GlyphArrangement::getStringWidth(font, text);
+        return juce::GlyphArrangement::getStringWidth(font, label);
     };
-    const auto put = [&g, strip] (const juce::String& text, float at, float width)
+    const auto put = [&g, strip] (const juce::String& label, float at, float width)
     {
-        g.drawText(text, juce::Rectangle<float>(at, strip.getY(), width, strip.getHeight()).toNearestInt(),
+        g.drawText(label, juce::Rectangle<float>(at, strip.getY(), width, strip.getHeight()).toNearestInt(),
                    juce::Justification::centred);
     };
 
@@ -212,11 +212,11 @@ inline void drawFilterScale(juce::Graphics& g, juce::Rectangle<int> plot, float 
     const auto ceiling = box.getRight() - highWidth;
     for (size_t i = 1; i + 1 < marks.size(); ++i)
     {
-        const auto text = filterDecadeText(marks[i]);
-        const auto width = widthOf(text);
+        const auto label = filterDecadeText(marks[i]);
+        const auto width = widthOf(label);
         const auto at = filterHzToX(box, marks[i]) - width * 0.5f;
         if (at < taken + clearance || at + width > ceiling - clearance) continue;
-        put(text, at, width);
+        put(label, at, width);
         taken = at + width;
     }
 }

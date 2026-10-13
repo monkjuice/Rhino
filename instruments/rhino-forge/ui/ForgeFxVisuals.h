@@ -351,14 +351,14 @@ public:
         // than that plate is wide.
         const auto name = caption.isNotEmpty()
             ? caption : juce::String(choices[static_cast<size_t>(juce::jlimit(0, count() - 1, chosen))]);
-        const auto text = area.reduced(static_cast<float>(arrowSpan()), 0.0f);
+        const auto textArea = area.reduced(static_cast<float>(arrowSpan()), 0.0f);
         auto font = panelFont(Face::emphasis, listTextHeight);
         const auto needed = juce::GlyphArrangement::getStringWidth(font, name);
-        if (needed > text.getWidth() && needed > 0.0f)
+        if (needed > textArea.getWidth() && needed > 0.0f)
             font = font.withHeight(juce::jmax(minimumListTextHeight,
-                                              listTextHeight * text.getWidth() / needed));
+                                              listTextHeight * textArea.getWidth() / needed));
         g.setFont(font);
-        g.drawText(name, text, juce::Justification::centred);
+        g.drawText(name, textArea, juce::Justification::centred);
 
         // The two arrows, greyed at the end they cannot go past — a list that
         // does not wrap should say so before it is clicked.

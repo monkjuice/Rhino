@@ -60,9 +60,9 @@ juce::ValueTree sampleNode(const Sample& sample, const juce::String& name, int o
         // The writer takes the stream only if it is created, and deletes it
         // when it goes out of scope here — which is also what flushes the last
         // FLAC frame, so the block is not complete until this scope closes.
-        const std::unique_ptr<juce::AudioFormatWriter> writer(
-            flac.createWriterFor(new juce::MemoryOutputStream(encoded, false),
-                                 sample.rate(), 1, 16, {}, 0));
+        std::unique_ptr<juce::OutputStream> stream = std::make_unique<juce::MemoryOutputStream>(encoded, false);
+        const auto writer = flac.createWriterFor(stream, juce::AudioFormatWriterOptions()
+            .withSampleRate(sample.rate()).withNumChannels(1).withBitsPerSample(16));
         if (writer == nullptr) return {};
         writer->writeFromAudioSampleBuffer(buffer, 0, buffer.getNumSamples());
     }
@@ -613,7 +613,7 @@ juce::Result Processor::importTable(int oscillator, const juce::File& file)
     // A table larger than the ceiling is thinned evenly rather than cut short,
     // so a 256-frame table still sweeps from its first shape to its last.
     const auto frames = juce::jmin(sourceFrames, maxEditableFrames);
-    std::vector<float> samples(static_cast<size_t>(frames) * wavetableFrameSize);
+    std::vector<float> points(static_cast<size_t>(frames) * wavetableFrameSize);
     const auto* read = source.getReadPointer(0);
     for (int frame = 0; frame < frames; ++frame)
     {
@@ -622,7 +622,7 @@ juce::Result Processor::importTable(int oscillator, const juce::File& file)
                            juce::roundToInt(static_cast<double>(frame) * (sourceFrames - 1)
                                             / static_cast<double>(frames - 1)));
         const auto* from = read + static_cast<size_t>(pick) * sourceFrameSize;
-        auto* into = samples.data() + static_cast<size_t>(frame) * wavetableFrameSize;
+        auto* into = points.data() + static_cast<size_t>(frame) * wavetableFrameSize;
         if (sourceFrameSize == wavetableFrameSize)
         {
             std::copy_n(from, wavetableFrameSize, into);
@@ -636,7 +636,7 @@ juce::Result Processor::importTable(int oscillator, const juce::File& file)
                                            static_cast<float>(i) / static_cast<float>(wavetableFrameSize));
     }
 
-    if (!tables.edit(oscillator).setFrames(samples.data(), frames, tableNameOf(file)))
+    if (!tables.edit(oscillator).setFrames(points.data(), frames, tableNameOf(file)))
         return juce::Result::fail("Forge could not build a table from that file.");
     tables.publish(oscillator);
     return juce::Result::ok();

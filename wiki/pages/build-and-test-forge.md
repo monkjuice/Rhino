@@ -1,8 +1,8 @@
 ---
 title: Build and test Forge
 type: guide
-summary: Configure Forge against Rhino's JUCE checkout, build around the toolchain's traps, and run one test area at a time.
-tags: [forge, build, testing, windows]
+summary: Configure Forge against Rhino's JUCE checkout, build around the toolchain's traps, fix /W4 warnings at their source, and run one test area at a time.
+tags: [forge, build, testing, windows, warnings]
 sources: []
 updated: 2026-10-13
 ---
@@ -45,6 +45,31 @@ The VST3 cannot relink while RhinoDAW or a DAW has it loaded, which is the norma
 mid-session; build `--target RhinoForgeTests RhinoForge_Standalone` instead and report the VST3 as stale
 ([LNK1104 means a running binary holds the file](locked-executable-lnk1104.md)). Never commit a bundle, and install one
 only after validating it in a host.
+
+## Warnings
+
+`RhinoForge` and `RhinoForgeTests` both link `juce::juce_recommended_warning_flags` (MSVC `/W4`). Fix a warning at its
+site rather than suppressing it or lowering the level (decided 2026-10-13, when a full build's 890 warning lines came
+from 24 sites, all in Forge's own code and none in JUCE).
+
+- Headers inflate the count. The editor, processor and most test translation units of both targets include `ui/*.h`,
+  so one warning in a ui header prints about 40 times.
+- An up-to-date build prints nothing, and MSBuild leaves no per-project log here. To list every warning without
+  touching the working tree or a running `Rhino Forge.exe`, run a full build of `HEAD` in a scratch worktree, as
+  [Proving a Forge change changed nothing](proving-a-forge-change-changed-nothing.md) describes. It takes a few minutes,
+  and the MSB8029 it reports only means the tree is under `Temp`.
+- The causes found so far:
+  - C4459: `rhino::forge::ui` declares colours named `text` (`ui/ForgeChrome.h`), `panel` and `line`
+    (`ui/ForgeStyle.h`), so a local or parameter with one of those names hides it. Name them `textArea`, `label`,
+    `lineTool` and the like ([Colours and typography](colours-and-typography.md)).
+  - C4458: a local named after a member of its class, JUCE bases included: `properties` (`juce::Component`), `playHead`
+    (`juce::AudioProcessor`), `samples` (`Processor`'s `SampleStore`). C4456 and C4457 catch a local that hides an
+    outer local or a parameter.
+  - C4244: `Graphics::drawHorizontalLine` and `drawVerticalLine` take `(int, float, float)`, so cast `Rectangle<int>`
+    coordinates to `float`.
+  - C4996: the raw-pointer `AudioFormat::createWriterFor(OutputStream*, ...)` is deprecated in the pinned JUCE. Use
+    the `std::unique_ptr<OutputStream>&` overload with `AudioFormatWriterOptions`, as `native/src/model/SessionSamples.cpp`
+    does. The writer takes the stream only on success, so the old calls leaked the stream whenever no writer was made.
 
 ## Test
 

@@ -559,11 +559,11 @@ private:
         if (onTableChanged != nullptr) onTableChanged();
     }
 
-    void chooseTool(bool line)
+    void chooseTool(bool lineTool)
     {
-        canvas.lineTool = line;
-        toolChips[0]->setToggleState(!line, juce::dontSendNotification);
-        toolChips[1]->setToggleState(line, juce::dontSendNotification);
+        canvas.lineTool = lineTool;
+        toolChips[0]->setToggleState(!lineTool, juce::dontSendNotification);
+        toolChips[1]->setToggleState(lineTool, juce::dontSendNotification);
     }
 
     void cycleGrid()

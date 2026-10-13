@@ -34,6 +34,8 @@ The chrome is neutral on purpose. Only what carries meaning is saturated: a trac
 
 Forge shares none of this. Its panel is a dark metal chassis (`ui/ForgePanels.h`), with colours named in `ui/ForgeStyle.h` and `ui/ForgeChrome.h`. The signal path is electric blue and the modulators are violet. Each oscillator wears a plate colour picked from its LED (red, orange, green by default, or blue), and each FX type has its own colour (`fxTypeColour`). Text uses four subset OFL faces, one per job: Chakra Petch SemiBold for headers and tabs, Rajdhani Medium for labels, Rajdhani SemiBold for buttons and IBM Plex Mono Medium for readouts. Subsetting cut them from 988 KB to 79 KB of embedded data (`ui/assets/fonts/README.md`).
 
+Some of those colour names are short words at namespace scope in `rhino::forge::ui`: `text`, `panel` and `line`. Never name a local or parameter `text`, `panel` or `line` in Forge UI code: under `/W4` it raises C4459, once per translation unit that includes the header ([Build and test Forge](build-and-test-forge.md#warnings)).
+
 ## Related
 
 - [App shell and control bar](app-shell.md)

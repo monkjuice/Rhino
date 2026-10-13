@@ -735,10 +735,10 @@ void filterCombTuningSuite()
     // delay line would have quietly detuned: the line is sized from the same
     // floor the cutoff is clamped to, so there is no tuning the knob can ask
     // for that it has no room for.
-    for (const auto rate : {44100.0, 48000.0, 96000.0})
+    for (const auto sampleRate : {44100.0, 48000.0, 96000.0})
     {
         const rhino::forge::FilterShape low {rhino::forge::FilterType::comb, 30.0f, 0.9f,
-                                             1.0f, rate};
+                                             1.0f, sampleRate};
         requireClose(rhino::forge::filterCombHz(low), 30.0f, 0.01f,
                      "a comb is tuned to the cutoff at the bottom of the knob, at any rate");
     }

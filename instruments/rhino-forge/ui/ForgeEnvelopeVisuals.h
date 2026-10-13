@@ -689,7 +689,7 @@ inline void drawLfo(juce::Graphics& g, juce::Rectangle<int> area, const LfoPictu
     g.setColour(juce::Colour(0xff0a0d16));
     g.fillRect(footer);
     g.setColour(colour.withAlpha(0.24f * alpha));
-    g.drawHorizontalLine(footer.getY(), area.getX(), area.getRight());
+    g.drawHorizontalLine(footer.getY(), static_cast<float>(area.getX()), static_cast<float>(area.getRight()));
 
     // A field that opens a menu: a word and the arrow that says so. The type,
     // the name and the direction are all this.
@@ -750,8 +750,10 @@ inline void drawLfo(juce::Graphics& g, juce::Rectangle<int> area, const LfoPictu
         g.setColour(colour.withAlpha(alpha));
         g.setFont(juce::FontOptions(12.0f));
         for (int i = 0; i < 3; ++i)
-            if (columns) g.drawVerticalLine(field.getX() + 7 + i * 3, field.getY() + 5, field.getBottom() - 5);
-            else g.drawHorizontalLine(field.getY() + 6 + i * 3, field.getX() + 5, field.getX() + 13);
+            if (columns) g.drawVerticalLine(field.getX() + 7 + i * 3, static_cast<float>(field.getY() + 5),
+                                            static_cast<float>(field.getBottom() - 5));
+            else g.drawHorizontalLine(field.getY() + 6 + i * 3, static_cast<float>(field.getX() + 5),
+                                      static_cast<float>(field.getX() + 13));
         g.drawText(juce::String(count), field.withTrimmedLeft(17).withTrimmedRight(13),
                    juce::Justification::centred, true);
         for (const auto increase : {true, false})

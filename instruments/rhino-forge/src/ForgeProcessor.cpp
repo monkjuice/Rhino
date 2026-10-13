@@ -165,8 +165,8 @@ void Processor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&
     buffer.clear();
     // Read before the patch is built, because the patch resolves a synced LFO
     // against it.
-    if (auto* playHead = getPlayHead())
-        if (const auto position = playHead->getPosition())
+    if (auto* hostPlayHead = getPlayHead())
+        if (const auto position = hostPlayHead->getPosition())
         {
             if (const auto bpm = position->getBpm())
                 hostBpm.store(*bpm, std::memory_order_relaxed);

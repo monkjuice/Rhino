@@ -88,14 +88,14 @@ void Editor::refreshModulationRings()
                 ? only[static_cast<size_t>(destination)] : -1;
             control->slider.ringDraggable = control->ringSlot >= 0;
             control->slider.ringDepth = depth;
-            auto& properties = control->slider.getProperties();
-            if (static_cast<float>(properties.getWithDefault("modDepth", 0.0)) == depth
-                && static_cast<float>(properties.getWithDefault("modOffset", 0.0)) == offset
-                && static_cast<bool>(properties.getWithDefault("modLive", false)) == live)
+            auto& sliderProperties = control->slider.getProperties();
+            if (static_cast<float>(sliderProperties.getWithDefault("modDepth", 0.0)) == depth
+                && static_cast<float>(sliderProperties.getWithDefault("modOffset", 0.0)) == offset
+                && static_cast<bool>(sliderProperties.getWithDefault("modLive", false)) == live)
                 continue;
-            properties.set("modDepth", depth);
-            properties.set("modOffset", offset);
-            properties.set("modLive", live);
+            sliderProperties.set("modDepth", depth);
+            sliderProperties.set("modOffset", offset);
+            sliderProperties.set("modLive", live);
             control->slider.repaint();
         }
 }

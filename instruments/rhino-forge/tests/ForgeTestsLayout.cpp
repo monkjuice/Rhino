@@ -372,8 +372,8 @@ void layoutSuite()
             require(rhino::forge::ui::rowBounds(area, modules[i], r).contains(strip),
                     "a row's display strip stays inside that row");
             const auto shared = rhino::forge::ui::uniformKnobDiameter(bounds);
-            const auto& controls = modules[i].rows[static_cast<size_t>(r)].controls;
-            for (int c = 0; c < static_cast<int>(controls.size()); ++c)
+            const auto& rowControls = modules[i].rows[static_cast<size_t>(r)].controls;
+            for (int c = 0; c < static_cast<int>(rowControls.size()); ++c)
                 require(!strip.intersects(
                             rhino::forge::ui::controlBlock(area, modules[i], r, c, shared)),
                         "no control sits on top of its row's display strip");
@@ -805,8 +805,8 @@ void layoutSuite()
         {
             const auto resized = juce::Rectangle<int>(0, 0, width, height);
             const auto area = rhino::forge::ui::contentBounds(resized);
-            const auto diameter = rhino::forge::ui::uniformKnobDiameter(resized);
-            if (diameter < 40)
+            const auto resizedDiameter = rhino::forge::ui::uniformKnobDiameter(resized);
+            if (resizedDiameter < 40)
             {
                 require(false, "knobs stay usable at every allowed size");
                 std::cerr << "       at " << width << "x" << height << '\n';
@@ -891,7 +891,7 @@ void layoutSuite()
                 for (int r = 0; r < static_cast<int>(modules[i].rows.size()); ++r)
                     for (int c = 0; c < static_cast<int>(modules[i].rows[static_cast<size_t>(r)].controls.size()); ++c)
                     {
-                        const auto block = rhino::forge::ui::controlBlock(box, modules[i], r, c, diameter);
+                        const auto block = rhino::forge::ui::controlBlock(box, modules[i], r, c, resizedDiameter);
                         if (block.isEmpty() || !box.contains(block))
                         {
                             require(false, "every control stays inside its module at any allowed size");
@@ -1016,13 +1016,13 @@ void layoutSuite()
             for (int height = rhino::forge::ui::minPanelHeight; height <= rhino::forge::ui::maxPanelHeight; height += 40)
             {
                 using namespace rhino::forge::ui;
-                const auto panel = juce::Rectangle<int>(0, 0, width, height);
-                const auto area = moduleBounds(panel, *matrixModule);
+                const auto resized = juce::Rectangle<int>(0, 0, width, height);
+                const auto area = moduleBounds(resized, *matrixModule);
                 const auto window = controlArea(area, *matrixModule);
                 const auto rowHeight = matrixRowHeight(area, *matrixModule);
                 const auto visible = matrixVisibleRowCount(area, *matrixModule);
                 const auto rail = matrixScrollBounds(area, *matrixModule);
-                const auto shared = uniformKnobDiameter(panel);
+                const auto shared = uniformKnobDiameter(resized);
                 juce::String fault;
                 if (rowHeight < minMatrixRowHeight || rowHeight > maxMatrixRowHeight)
                     fault = "a matrix row keeps a readable height";
@@ -1073,9 +1073,9 @@ void layoutSuite()
             for (int height = rhino::forge::ui::minPanelHeight; height <= rhino::forge::ui::maxPanelHeight; height += 20)
             {
                 using namespace rhino::forge::ui;
-                const auto panel = juce::Rectangle<int>(0, 0, width, height);
-                const auto area = moduleBounds(panel, *macroModule);
-                const auto shared = uniformKnobDiameter(panel);
+                const auto resized = juce::Rectangle<int>(0, 0, width, height);
+                const auto area = moduleBounds(resized, *macroModule);
+                const auto shared = uniformKnobDiameter(resized);
                 for (int r = 0; r < static_cast<int>(macroModule->rows.size()); ++r)
                 {
                     const auto& row = macroModule->rows[static_cast<size_t>(r)];

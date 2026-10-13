@@ -4,7 +4,7 @@ type: convention
 summary: Saved choice lists and parameter arrays are append-only, because inserting an entry silently changes what an old index means.
 tags: [forge, rhino, presets, parameters, compatibility]
 sources: []
-updated: 2026-10-04
+updated: 2026-10-13
 ---
 
 # Stored indices are append-only
@@ -13,7 +13,7 @@ Forge saves a choice as its index into a list: a filter type, a warp mode, a noi
 
 ## How the rule shows up
 
-- **Stored order and shown order differ.** Noise sources are stored in arrival order (GEIGER is 3, among the colours) and shown by family; the two meet only at `noiseSourceAt` and `noiseSourcePosition` (`core/ForgeNoise.h`).
+- **Stored order and shown order differ.** Noise sources are stored in arrival order (GEIGER is 3, among the colours) and shown by family; the two meet only at `noiseSourceAt` and `noiseSourcePosition` (`core/ForgeNoise.h`). Warp modes work the same way. The five previous-oscillator OSC modes were appended at 38-42, and `warpModeOrder(carrier)` shows each one beside its partner. The field holds a position, which `warpModeAt` and `warpModePosition` convert (`core/ForgeVoiceParts.h`; [Forge warp](forge-warp.md)).
 - **A wrong name keeps its place.** Four warp modes first shipped as "FM" were really phase distortion; they were renamed PD and kept their indices.
 - **Normalised fields keep their landing points.** An FX slot's mode fields are 0..1 floats read as `round(value × (count − 1))`. When the distortion's filter field grew from three choices to five, PRE LP and POST LP went to 2 and 4 so old values of 0.5 and 1 still land on a low pass (`core/ForgeFx.h`).
 - **Modes are not modulation destinations**: sweeping unrelated choices is a stutter, so only continuous controls get a destination index.

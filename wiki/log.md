@@ -614,3 +614,9 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/forge.md (the keyboard's range and the plate's position; M13b partly done)
 - updated: overview.md (the 2026-10-13 history row)
 - updated: index.md (the new page; forge-arpeggiator's summary)
+
+## [2026-10-13] update | Forge's OSC warp modes read either other oscillator (commit d0a7e0f on feat/forge-warp-pick-source-oscillator)
+- source: the main agent's brief, checked against instruments/rhino-forge/core/ForgeWarp.h (WarpSource, the five appended modes, warpModeCount 43, WarpCategory order, warpOtherSide), core/ForgeVoiceParts.h (warpSourceOscillator, warpModeName, warpModeOrder/Position/At), core/ForgeCore.h (renderOscillators' pointAt) and the callers in src/ForgeParameters.cpp, src/ForgeEditorWarp.cpp, src/ForgeEditor.cpp
+- updated: pages/forge-warp.md (43 modes and the per-family counts; the appended previous-oscillator modes; new "Names and shown order" section; the Sources ring now goes both ways; the behavioural direction test; summary changed)
+- updated: pages/append-only-stored-indices.md (warp modes as the second case where stored and shown order differ)
+- updated: index.md (forge-warp's summary)

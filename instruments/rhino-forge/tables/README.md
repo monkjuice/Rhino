@@ -1,7 +1,22 @@
 # Forge's factory wavetables
 
-Ten tables, sixteen frames each. Load one with **LOAD** on the `TABLE` tab, or
-drop the file on the editor.
+Ten tables, sixteen frames each. Pick one from the table field along the top of
+an oscillator's display or on the `TABLE` tab: its arrows step through every
+table here and a click opens them as a menu. Or load any file with **LOAD**, or
+drop one on the editor.
+
+The menu is this folder's tree. A subfolder becomes a submenu, as deep as the
+folders go, so `Basic/basic-shapes.wav` is reached through **Basic**.
+
+## Your own tables
+
+**NEW** on the `TABLE` tab asks for a name, writes a blank one-frame table to
+`user/`, and loads it to draw on. **SAVE** writes the table back to its file in
+`user/`. A table that has no file there yet, such as a factory table, the
+built-in ten or one drawn over, is saved as a new file instead, so the tables
+here are never written over. `user/` is ignored by git, so what you make there
+stays on your machine. A packaged build with no source tree keeps the same tree
+in `Documents/Rhino Forge/Tables`.
 
 They are ordinary `.wav` files: single-cycle frames of 2048 samples laid end to
 end, 32-bit float, mono, each frame bipolar and scaled so its peak reaches full

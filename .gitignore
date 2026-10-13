@@ -19,5 +19,8 @@ __pycache__/
 Thumbs.db
 
 instruments/rhino-forge/build/
+# The wavetables a developer makes with Forge's NEW and SAVE. They sit beside
+# the factory tables so the table menu lists them, and never reach a commit.
+instruments/rhino-forge/tables/user/
 temp/
 .obsidian

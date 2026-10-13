@@ -615,9 +615,33 @@ juce::Result Processor::importTable(int oscillator, const juce::File& file)
                                            static_cast<float>(i) / static_cast<float>(wavetableFrameSize));
     }
 
-    if (!tables.edit(oscillator).setFrames(samples.data(), frames,
-                                           file.getFileNameWithoutExtension().toUpperCase()))
+    if (!tables.edit(oscillator).setFrames(samples.data(), frames, tableNameOf(file)))
         return juce::Result::fail("Forge could not build a table from that file.");
+    tables.publish(oscillator);
+    return juce::Result::ok();
+}
+
+// Blank means flat: one frame of silence, which is the canvas a person asked for
+// when they asked for a new table. It plays nothing until it is drawn on, and
+// ADD puts sines after it rather than more silence -- see initFrame.
+juce::Result Processor::newTable(int oscillator, const juce::File& file)
+{
+    const std::vector<float> blank(static_cast<size_t>(wavetableFrameSize), 0.0f);
+    if (const auto written = writeTableFile(file, blank.data(), 1); written.failed()) return written;
+    return importTable(oscillator, file);
+}
+
+juce::Result Processor::saveTable(int oscillator, const juce::File& file)
+{
+    auto& edit = tables.edit(oscillator);
+    if (const auto written = writeTableFile(file, edit.samples().data(), edit.frameCount()); written.failed())
+        return written;
+    // Renamed after the file it now lives in. A copy of the frames, because
+    // setFrames cannot be handed its own storage; and published, because a
+    // built-in table saved to a file is no longer the built-in one and POSITION
+    // has to stop naming its frames as if it were.
+    const auto frames = edit.samples();
+    edit.setFrames(frames.data(), static_cast<int>(frames.size()) / wavetableFrameSize, tableNameOf(file));
     tables.publish(oscillator);
     return juce::Result::ok();
 }

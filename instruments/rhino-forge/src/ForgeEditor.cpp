@@ -57,6 +57,7 @@ Editor::Editor(Processor& p)
     buildHandles();
     buildTabs();
     buildTablePanel();
+    buildTableFields();
 
     keyboard.setAvailableRange(ui::keyboardLowestNote, ui::keyboardHighestNote);
     keyboard.setLowestVisibleKey(ui::keyboardLowestNote);
@@ -160,8 +161,10 @@ void Editor::buildTablePanel()
     tablePanel->onTableChanged = [this]
     {
         // A table with a different number of frames changes what POSITION steps
-        // through and what its readout says, on both tabs.
+        // through and what its readout says, on both tabs. The fields name the
+        // table, and the panel's names whichever oscillator it is now editing.
         applyTableCounts();
+        refreshTableFields();
         if (tablePanel->status.isNotEmpty())
         {
             presetName.setText(tablePanel->status, juce::dontSendNotification);

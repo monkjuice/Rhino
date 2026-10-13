@@ -1,5 +1,8 @@
 ﻿// The wavetable editor and the .wav files it loads.
 #include "ForgeTestSupport.h"
+#include "../ui/ForgeLayout.h"
+#include "../ui/ForgeTablePanel.h"
+#include <cstring>
 
 namespace rhino::forge::tests
 {
@@ -225,11 +228,233 @@ void tableFileSuite()
     voice.tableStore().publishFrame(0, 0);
     require(peakForNote(voice) < 0.001f, "flattening the frame POSITION is on silences the oscillator");
 }
+
+// A menu as lines of text, a submenu's items indented under it, so a whole
+// nesting can be compared in one check. Every item is also held to the entry its
+// id names, which is how a choice is turned back into a table.
+juce::StringArray describeMenu(const juce::PopupMenu& menu, const std::vector<rhino::forge::TableEntry>& entries,
+                               const juce::String& indent = {})
+{
+    juce::StringArray lines;
+    juce::PopupMenu::MenuItemIterator items(menu);
+    while (items.next())
+    {
+        const auto& item = items.getItem();
+        if (item.isSeparator) { lines.add(indent + "---"); continue; }
+        lines.add(indent + item.text + (item.subMenu != nullptr ? "/" : "") + (item.isTicked ? " *" : ""));
+        if (item.subMenu != nullptr)
+        {
+            lines.addArray(describeMenu(*item.subMenu, entries, indent + "  "));
+            continue;
+        }
+        const auto entry = item.itemID - 1;
+        require(entry >= 0 && entry < static_cast<int>(entries.size())
+                    && entries[static_cast<size_t>(entry)].name == item.text,
+                "a table menu item's id names the entry it shows");
+    }
+    return lines;
+}
+
+// The tables on disk: the files NEW and SAVE write, the folder tree the table
+// field lists, the menu that tree becomes, and the strip the field is seated in.
+void tableLibrarySuite()
+{
+    using rhino::forge::wavetableFrameSize;
+    const auto root = juce::File::getSpecialLocation(juce::File::tempDirectory)
+        .getNonexistentChildFile("rhino-forge-table-library", {}, true);
+    require(root.createDirectory(), "a temporary table root can be created");
+    const auto own = rhino::forge::ownTableFolder(root);
+
+    // --- Writing a table -------------------------------------------------------
+    //
+    // Three frames, each a sine at its own level, so a round trip is checked
+    // frame by frame and a frame landing in the wrong place shows.
+    const auto frameCount = 3;
+    std::vector<float> frames(static_cast<size_t>(frameCount * wavetableFrameSize));
+    for (int frame = 0; frame < frameCount; ++frame)
+        for (int i = 0; i < wavetableFrameSize; ++i)
+            frames[static_cast<size_t>(frame * wavetableFrameSize + i)] =
+                0.25f * static_cast<float>(frame + 1)
+                * std::sin(juce::MathConstants<float>::twoPi * static_cast<float>(i) / wavetableFrameSize);
+    const auto written = root.getChildFile("written.wav");
+    require(rhino::forge::writeTableFile(written, frames.data(), frameCount).wasOk(),
+            "a table can be written to a file");
+    // Written twice, because a second write over a file that is already there
+    // is the case createOutputStream gets wrong by appending.
+    require(rhino::forge::writeTableFile(written, frames.data(), frameCount).wasOk(),
+            "a table can be written over its own file");
+
+    // The frame size is named the way Serum names its own, so the file opens
+    // there as well as here, and the audio is exactly the frames.
+    juce::MemoryBlock bytes;
+    require(written.loadFileAsData(bytes), "a written table can be read back as bytes");
+    const auto* data = static_cast<const char*>(bytes.getData());
+    const auto holds = [data, &bytes] (const char* text)
+    {
+        const auto length = std::strlen(text);
+        return std::search(data, data + bytes.getSize(), text, text + length) != data + bytes.getSize();
+    };
+    require(holds("clm ") && holds("<!>2048"), "a written table names its frame size in a clm chunk");
+    require(bytes.getSize() > static_cast<size_t>(frameCount * wavetableFrameSize) * sizeof(float)
+                && bytes.getSize() < static_cast<size_t>(frameCount * wavetableFrameSize) * sizeof(float) + 200,
+            "a written table holds its frames and a header, written once");
+
+    rhino::forge::Processor processor;
+    require(processor.importTable(0, written).wasOk(), "a written table loads");
+    {
+        const auto& loaded = processor.tableStore().edit(0);
+        require(loaded.frameCount() == frameCount, "a written table loads with every frame");
+        requireText(loaded.title(), "WRITTEN", "a written table is named after its file");
+        auto worst = 0.0f;
+        for (size_t i = 0; i < frames.size(); ++i)
+            worst = juce::jmax(worst, std::abs(loaded.samples()[i] - frames[i]));
+        requireClose(worst, 0.0f, 0.0f, "a written table loads back sample for sample");
+    }
+
+    // --- NEW -----------------------------------------------------------------
+    const auto fresh = own.getChildFile("from-scratch.wav");
+    require(processor.newTable(1, fresh).wasOk(), "NEW writes a table and loads it");
+    require(fresh.existsAsFile(), "NEW leaves the file on disk, making the folder it goes in");
+    {
+        const auto& blank = processor.tableStore().edit(1);
+        require(blank.frameCount() == 1, "a new table is one frame");
+        requireText(blank.title(), "FROM-SCRATCH", "a new table is named after its file");
+        auto loudest = 0.0f;
+        for (const auto sample : blank.samples()) loudest = juce::jmax(loudest, std::abs(sample));
+        requireClose(loudest, 0.0f, 0.0f, "a new table is blank");
+    }
+
+    // --- SAVE ----------------------------------------------------------------
+    //
+    // What is drawn is what is written, and loading the file back into another
+    // oscillator gives the same frame.
+    processor.tableStore().edit(1).draw(0, 0.0f, -0.5f, 1.0f, 0.5f);
+    processor.tableStore().publish(1);
+    require(processor.saveTable(1, fresh).wasOk(), "SAVE writes a table over its own file");
+    require(processor.importTable(2, fresh).wasOk(), "a saved table loads");
+    {
+        auto worst = 0.0f;
+        for (int i = 0; i < wavetableFrameSize; ++i)
+            worst = juce::jmax(worst, std::abs(processor.tableStore().edit(2).frame(0)[i]
+                                               - processor.tableStore().edit(1).frame(0)[i]));
+        requireClose(worst, 0.0f, 0.0f, "a saved table is what was drawn");
+    }
+    // Saved somewhere new, the table takes that file's name, so the field reads
+    // the file it is now in.
+    require(processor.saveTable(0, own.getChildFile("renamed.wav")).wasOk(), "SAVE writes a table to a new file");
+    requireText(processor.tableStore().edit(0).title(), "RENAMED", "a table saved as a new file takes its name");
+    require(processor.tableStore().edit(0).frameCount() == frameCount, "and keeps every frame");
+    // The built-in ten saved to a file are no longer the built-in ten, so
+    // POSITION stops naming their frames as if they were.
+    processor.tableStore().resetToBuiltIn(2);
+    require(processor.saveTable(2, own.getChildFile("basic-copy.wav")).wasOk(), "the built-in table can be saved");
+    require(!processor.tableStore().edit(2).isUntouched() && !processor.tableStore().isBuiltIn(2),
+            "a saved built-in table is no longer the built-in one");
+
+    // --- The list ------------------------------------------------------------
+    //
+    // A tree with a folder two deep, a file beside the folders, and something
+    // that is not a table. Each folder's subfolders come before its files, and
+    // both in natural order.
+    require(root.getChildFile("Basic").getChildFile("Deep").createDirectory(), "folders can be made");
+    require(written.copyFileTo(root.getChildFile("zeta.wav"))
+                && written.copyFileTo(root.getChildFile("Basic").getChildFile("alpha.wav"))
+                && written.copyFileTo(root.getChildFile("Basic").getChildFile("Deep").getChildFile("inner.wav")),
+            "tables can be copied into the tree");
+    root.getChildFile("notes.txt").replaceWithText("not a table");
+
+    const auto entries = rhino::forge::listTables(root);
+    juce::StringArray listed;
+    for (const auto& entry : entries)
+        listed.add(entry.folders.joinIntoString("/") + (entry.folders.isEmpty() ? "" : "/") + entry.name);
+    const juce::StringArray expected {"BASIC SHAPES", "Basic/Deep/INNER", "Basic/ALPHA",
+                                      "user/BASIC-COPY", "user/FROM-SCRATCH", "user/RENAMED",
+                                      "WRITTEN", "ZETA"};
+    if (listed != expected)
+    {
+        require(false, "the tables are listed depth first, folders before files");
+        std::cerr << "       listed " << listed.joinIntoString(", ") << '\n';
+    }
+    require(entries.front().file == juce::File {}, "the built-in ten come first, and are not a file");
+
+    // Which entry a table is.
+    const auto indexOf = [&entries] (const juce::String& name)
+    {
+        for (size_t i = 0; i < entries.size(); ++i)
+            if (entries[i].name == name) return static_cast<int>(i);
+        return -1;
+    };
+    require(rhino::forge::tableEntryIndex(entries, "BASIC SHAPES", true) == 0,
+            "an untouched table is the built-in entry");
+    require(rhino::forge::tableEntryIndex(entries, "ALPHA", false) == indexOf("ALPHA"),
+            "a loaded table is the entry its file is");
+    require(rhino::forge::tableEntryIndex(entries, "CUSTOM", false) == -1,
+            "a table drawn over is none of the entries");
+
+    // Where SAVE may write without asking: one of yours, and only one.
+    require(rhino::forge::tableSaveTarget(entries, "FROM-SCRATCH", false, own) == fresh,
+            "SAVE writes straight to a table of yours");
+    require(rhino::forge::tableSaveTarget(entries, "ZETA", false, own) == juce::File {},
+            "SAVE never writes over a table that is not yours");
+    require(rhino::forge::tableSaveTarget(entries, "BASIC SHAPES", true, own) == juce::File {},
+            "SAVE asks where to put the built-in ten");
+    require(own.getChildFile("More").createDirectory()
+                && fresh.copyFileTo(own.getChildFile("More").getChildFile("from-scratch.wav")),
+            "a second table of the same name can be made");
+    require(rhino::forge::tableSaveTarget(rhino::forge::listTables(root), "FROM-SCRATCH", false, own)
+                == juce::File {},
+            "SAVE asks rather than guess between two tables of one name");
+
+    // --- The menu ------------------------------------------------------------
+    //
+    // The built-in ten on their own, then the tree with each folder a submenu,
+    // and the way to the table playing ticked all the way down.
+    const auto lines = describeMenu(rhino::forge::ui::tableMenu(entries, indexOf("INNER")), entries);
+    const juce::StringArray menuExpected {"BASIC SHAPES", "---", "Basic/ *", "  Deep/ *", "    INNER *",
+                                          "  ALPHA", "user/", "  BASIC-COPY", "  FROM-SCRATCH",
+                                          "  RENAMED", "WRITTEN", "ZETA"};
+    if (lines != menuExpected)
+    {
+        require(false, "the table menu nests each folder as a submenu");
+        std::cerr << "       menu " << lines.joinIntoString(" | ") << '\n';
+    }
+
+    root.deleteRecursively();
+
+    // --- The strip -----------------------------------------------------------
+    //
+    // Every oscillator seats the field along the top of its display, and the
+    // tube a wavetable oscillator draws on starts below it and ends where the
+    // display does.
+    const juce::Rectangle<int> panel(0, 0, rhino::forge::ui::defaultPanelWidth,
+                                     rhino::forge::ui::defaultPanelHeight);
+    auto oscillators = 0;
+    for (const auto& module : rhino::forge::ui::modules())
+    {
+        if (module.display != rhino::forge::ui::Display::oscillator) continue;
+        ++oscillators;
+        const auto row = rhino::forge::ui::tableStripRow(module);
+        require(row >= 0, "every oscillator has a strip for its table field");
+        if (row < 0) continue;
+        const auto area = rhino::forge::ui::moduleBounds(panel, module);
+        const auto strip = rhino::forge::ui::rowBounds(area, module, row);
+        const auto display = rhino::forge::ui::displayBounds(area, module);
+        const auto tube = rhino::forge::ui::wavetableTubeBounds(area, module);
+        require(display.contains(strip) && strip.getY() <= display.getY() + 2,
+                "the table field sits along the top of the display");
+        require(!tube.intersects(strip) && tube.getBottom() == display.getBottom()
+                    && tube.getX() == display.getX() && tube.getWidth() == display.getWidth(),
+                "the tube starts below the field and keeps the display's sides and foot");
+        require(strip.getWidth() > 100 && strip.getHeight() >= 20, "the table field has room for a name");
+    }
+    require(oscillators == rhino::forge::oscillatorCount, "every oscillator is laid out");
+}
 }
 
 void tableTests()
 {
     tableEditSuite();
     tableFileSuite();
+    tableLibrarySuite();
 }
 }

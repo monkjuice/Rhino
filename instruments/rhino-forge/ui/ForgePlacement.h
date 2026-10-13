@@ -579,6 +579,35 @@ inline juce::Rectangle<int> rowBounds(juce::Rectangle<int> moduleArea, const Mod
     return {area.getX(), y, area.getWidth(), height};
 }
 
+// Which of an oscillator's rows the table field is seated in, or -1 for a
+// module without one: the wavetable mode's strip along the top of the display,
+// declared with no controls because the editor seats its own field there.
+inline int tableStripRow(const Module& module)
+{
+    if (module.display != Display::oscillator) return -1;
+    for (int i = 0; i < static_cast<int>(module.rows.size()); ++i)
+    {
+        const auto& row = module.rows[static_cast<size_t>(i)];
+        if (row.seat == Seat::displayTop && row.modeBy != nullptr && row.controls.empty()
+            && row.modeIs == static_cast<int>(OscMode::wavetable))
+            return i;
+    }
+    return -1;
+}
+
+// The picture tube a wavetable oscillator draws on: the display less the table
+// strip along its top. Only the top moves. The tube keeps the display's sides
+// and foot, so the glass sits where it always has and the field reads as a lid
+// on it rather than the picture shrinking all round.
+inline juce::Rectangle<int> wavetableTubeBounds(juce::Rectangle<int> moduleArea, const Module& module)
+{
+    const auto display = displayBounds(moduleArea, module);
+    const auto row = tableStripRow(module);
+    if (row < 0 || display.isEmpty()) return display;
+    const auto strip = rowBounds(moduleArea, module, row);
+    return display.withTop(juce::jmin(display.getBottom(), strip.getBottom() + displaySeatGap));
+}
+
 // The strip to the left of a table row, where its number is drawn.
 inline juce::Rectangle<int> rowGutterBounds(juce::Rectangle<int> moduleArea, const Module& module,
                                             int rowIndex)

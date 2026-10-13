@@ -227,6 +227,12 @@ public:
     // field cannot be told it has more choices than it was given.
     std::vector<const char*> choices;
     int chosen = 0;
+    // What to show in place of the chosen name. The table field needs it: the
+    // table an oscillator plays need not be any of the files it lists -- a
+    // preset's own, one drawn over -- and the field still has to say what is
+    // playing. It sets `chosen` to -1 then, which greys the left arrow and
+    // lets the right one step onto the first choice.
+    juce::String caption;
     juce::Colour accent = electricBlue;
     std::function<void(int)> onChoose;
     // Opens the list, for a field with too many choices to show at once.
@@ -343,7 +349,8 @@ public:
         // narrow one. The noise module's is narrow because its plate is two
         // columns of twenty-four, and two of its four sources are longer words
         // than that plate is wide.
-        const auto& name = choices[static_cast<size_t>(juce::jlimit(0, count() - 1, chosen))];
+        const auto name = caption.isNotEmpty()
+            ? caption : juce::String(choices[static_cast<size_t>(juce::jlimit(0, count() - 1, chosen))]);
         const auto text = area.reduced(static_cast<float>(arrowSpan()), 0.0f);
         auto font = panelFont(Face::emphasis, listTextHeight);
         const auto needed = juce::GlyphArrangement::getStringWidth(font, name);

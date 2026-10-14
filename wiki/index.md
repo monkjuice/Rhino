@@ -9,7 +9,8 @@ The catalog of this wiki: every page, grouped by type, one line each (`- [Title]
 
 ## Components
 
-- [App shell and control bar](pages/app-shell.md) — The shell under app/ - Application in a 204-line Main.cpp, MainWindow, and MainComponent across six units holding the control bar, the docked browser, the single lower pane and the 30 Hz timer that polls what the engine never broadcasts.
+- [Ableton Push 1](pages/ableton-push.md) — Rhino drives the original Push itself on its User port and keeps all four of its ports from the engine; the pads are translated into a scale or a Drum Rack's bank on the MIDI thread and play like any keyboard, and the buttons and encoders become Rhino's commands, never a track's MIDI.
+- [App shell and control bar](pages/app-shell.md) — The shell under app/ - Application in a Main.cpp of about 200 lines, MainWindow, and MainComponent across six units holding the control bar, the docked browser, the single lower pane and the 30 Hz timer that polls what the engine never broadcasts.
 - [Arrangement view](pages/arrangement-view.md) — The timeline UI, one class across eleven files, that previews every drag locally and leaves panel decisions to the shell.
 - [Audio clip editor](pages/audio-clip-editor.md) — Edits one audio clip's own gain, pan, pitch, fades, mute and reverse as clip properties, with one undo step per knob drag.
 - [Browser and library preview](pages/browser.md) — A six-section library rail, Drums first, whose rows leave only by drag, with samples and drum presets auditioned through a second audio callback.
@@ -53,7 +54,7 @@ The catalog of this wiki: every page, grouped by type, one line each (`- [Title]
 - [Rhino Tune](pages/rhino-tune.md) — Vocal pitch correction with YIN tracking and PSOLA shifting, real reported latency, and correction smoothed on the offset.
 - [Rhino Vocoder and sidechains](pages/rhino-vocoder.md) — A channel vocoder whose carrier arrives as a sidechain from another track, and how Rhino routes a sidechain at all.
 - [Rhino's build targets](pages/rhino-build-targets.md) — Rhino builds as three targets (RhinoCore, RhinoDevices, the app) so that editing a device does not rebuild the app.
-- [Session, the model](pages/session-model.md) — The message-thread facade over one Tracktion engine and edit, one class split across 30 files, where every rule and refusal lives.
+- [Session, the model](pages/session-model.md) — The message-thread facade over one Tracktion engine and edit, one class split across 31 files, where every rule and refusal lives.
 - [Time warp](pages/time-warp.md) — Makes an audio clip follow the song's tempo, with five warp modes over two stretchers, a clip tempo and warp markers.
 - [Track automation](pages/automation.md) — Per-track lanes stored as Rhino's own ValueTree children, naming their device by key rather than slot, and played by the engine from parameter curves the session mirrors after every change.
 - [Track groups (bus tracks)](pages/track-groups.md) — Ctrl+G gathers tracks under a bus track that their audio feeds; the structure is positional and repaired after every reorder.

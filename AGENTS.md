@@ -26,7 +26,7 @@ Application code, `native/src`, is laid out by layer, and the layers may only lo
 
 ```
 native/src/
-  app/          the shell: Main.cpp (the application object), MainWindow, MainComponent and its units, the control bar, the readout, project files, the typing keyboard
+  app/          the shell: Main.cpp (the application object), MainWindow, MainComponent and its units, the control bar, the readout, project files, the typing keyboard, the Ableton Push
   model/        Session.h and the Session*.cpp units, the count-in click
   ui/shared/    Theme.h and the helpers every view draws with (Playhead, ShapedText, ClipDrag, ...)
   ui/arrangement/  ui/notes/  ui/dj/  ui/rack/  ui/browser/  ui/audioclip/   one folder per view
@@ -43,6 +43,7 @@ Each target has one include root, and an include is spelled from the root of the
 | Note grid UI | `ui/notes/StepGrid.*` — the 16-step pattern editor |
 | Arrangement UI | `ui/arrangement/Arrangement.*`, `ArrangementGeometry.cpp`; the clip-edit arithmetic is `model/ClipGeometry.h`, a pure header `Session.h` includes |
 | Playing MIDI from the typing keyboard | `app/ComputerKeyboard.*`, wired in `app/MainComponent.cpp`; the notes go in through `Session::sendMidiInputNote` |
+| Playing and controlling Rhino from an Ableton Push 1: its pads in key or on a Drum Rack's bank, its display, lights, buttons and encoders. See [Ableton Push 1](wiki/pages/ableton-push.md) | The protocol is `app/PushProtocol.h`, a pure header; the controller is `app/PushController.*` with `PushControllerControls.cpp` (buttons and encoders) and `PushControllerSurface.cpp` (what it shows), owned and wired by `MainComponent`. The model side is `SessionControllers.cpp`: the Push's ports reserved from the engine, its `Push` input, and `sendControllerMidi`, the one `Session` call safe from any thread |
 | Recording: arming a track, the count-in, and the clip a take becomes | `SessionRecording.cpp` in the model, `model/CountInClick.*` for the count-in click, the record button in `app/ControlBarButtons.h` and the record dot in `ArrangementSync.cpp` |
 | Audio clip editor: one clip's own gain, pan, pitch, fades, mute and reverse | `ui/audioclip/AudioClipPanel.*` in the UI, `SessionAudioClips.cpp` in the model |
 | Time warp: making an audio clip follow the song's tempo, its warp mode, its own tempo and its warp markers | `SessionWarp.cpp` in the model, `AudioClipWarp.cpp` in the UI. See [Time warp](wiki/pages/time-warp.md) |

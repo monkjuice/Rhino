@@ -1,7 +1,7 @@
 ---
 title: App shell and control bar
 type: component
-summary: The shell under app/ - Application in a 204-line Main.cpp, MainWindow, and MainComponent across six units holding the control bar, the docked browser, the single lower pane and the 30 Hz timer that polls what the engine never broadcasts.
+summary: The shell under app/ - Application in a Main.cpp of about 200 lines, MainWindow, and MainComponent across six units holding the control bar, the docked browser, the single lower pane and the 30 Hz timer that polls what the engine never broadcasts.
 tags: [rhino, ui, shell]
 sources: []
 updated: 2026-10-13
@@ -9,7 +9,7 @@ updated: 2026-10-13
 
 # App shell and control bar
 
-The shell is `native/src/app/` ([The source tree mirrors the layers](source-tree-mirrors-the-layers.md)). Since commit `db88b5c` (2026-10-13) `Main.cpp` is 204 lines and holds only `Application` (the log, the staged start-up, a `.rhinoedit` given as first argument, the `RHINO_RENDERER` choice, the `RHINO_STARTUP_SNAPSHOT` and `RHINO_SHELL_SNAPSHOT` writes) plus `START_JUCE_APPLICATION`; until then it was about 2,200 lines with the window and its content defined inline. The content is `MainComponent`, JUCE's own name for a window's content (it was `ControlWindow`, which was not a window and collided with the nested `Window`), declared in `MainComponent.h` and defined across six units by responsibility:
+The shell is `native/src/app/` ([The source tree mirrors the layers](source-tree-mirrors-the-layers.md)). Since commit `db88b5c` (2026-10-13) `Main.cpp` is about 200 lines (204 at that commit) and holds only `Application` (the log, the staged start-up, a `.rhinoedit` given as first argument, the `RHINO_RENDERER` choice, the `RHINO_STARTUP_SNAPSHOT` and `RHINO_SHELL_SNAPSHOT` writes) plus `START_JUCE_APPLICATION`; until then it was about 2,200 lines with the window and its content defined inline. The content is `MainComponent`, JUCE's own name for a window's content (it was `ControlWindow`, which was not a window and collided with the nested `Window`), declared in `MainComponent.h` and defined across six units by responsibility:
 
 - `MainComponent.cpp`: the constructor and all the panel wiring, the destructor, `editWillChange`/`editDidChange`, `changeListenerCallback`, `logStatus`.
 - `MainComponentLayout.cpp`: `paint`, `resized`, the browser-divider mouse handlers, `toggleBrowser`, `toggleInfoView`, `applyPaneLayout`, `paintedLayout`, `infoViewArea`, `browserColumnBottom`, `isOverSplitter`.
@@ -18,7 +18,7 @@ The shell is `native/src/app/` ([The source tree mirrors the layers](source-tree
 - `MainComponentCommands.cpp`: `keyPressed`, the File, Edit, View and Help menus, `sendClipboardShortcut`, `showAudioSettings`.
 - `MainComponentTimer.cpp`: the 30 Hz `timerCallback`, `updateReadings`, `loopText`, `placeText`, `audioDeviceText`, `updateHint`, and `formatMemory` as a file-static.
 
-The header (about 260 lines) keeps the members in their original order, because the constructor's initialiser list and the `addAndMakeVisible` z-order depend on it, and holds the layout constants, `enum class LowerPane` and the inline one-liners. Around it: `MainWindow.h/.cpp` is the window (`TitleMenuButton` stays nested in its header); `ControlBarButtons.h` holds `StopButton`, `RecordButton`, `ViewToggle` and `SplitterBar`, header-only as before; `AppPlatform.h/.cpp` holds `rhinoLogFile`, `avoidLegacyDirectSound` and `registerRhinoProjectFileAssociation`, the one unit that includes `windows.h` and `shlobj.h`; `writeSnapshot` is an inline function in `ui/shared/ComponentSnapshot.h`, so tests can share it later (they still carry their own copies). The test-flag dispatch is `std::optional<int> runTestFlag(const juce::String&)` in `tests/TestRunners.h/.cpp`, with `prepareCommandLineAudio` as its file-static, so `Main.cpp` no longer includes `tests/Pattern/DeviceRackTest.h`; the runner declarations stay in `model/Session.h`. Every body moved verbatim, every unit is under 400 lines ([Keeping files small](keeping-files-small.md)), and all six CTest cases and the snapshots matched before and after. No runner builds a `MainComponent` yet, which is why `RHINO_SHELL_SNAPSHOT=<png>` under `--startup-test` is the way to see it ([Seeing the UI without taking the screen](headless-ui-snapshots.md)).
+The header (about 260 lines) keeps the members in their original order, because the constructor's initialiser list and the `addAndMakeVisible` z-order depend on it, and holds the layout constants, `enum class LowerPane` and the inline one-liners. `PushController push` is deliberately the last member, so it is destroyed first, while the panels it talks to are still there. `Application` calls `startHardwareControllers()` at start-up stage 2, never under `--startup-test` ([Ableton Push 1](ableton-push.md), 2026-10-13). Around it: `MainWindow.h/.cpp` is the window (`TitleMenuButton` stays nested in its header); `ControlBarButtons.h` holds `StopButton`, `RecordButton`, `ViewToggle` and `SplitterBar`, header-only as before; `AppPlatform.h/.cpp` holds `rhinoLogFile`, `avoidLegacyDirectSound` and `registerRhinoProjectFileAssociation`, the one unit that includes `windows.h` and `shlobj.h`; `writeSnapshot` is an inline function in `ui/shared/ComponentSnapshot.h`, so tests can share it later (they still carry their own copies). The test-flag dispatch is `std::optional<int> runTestFlag(const juce::String&)` in `tests/TestRunners.h/.cpp`, with `prepareCommandLineAudio` as its file-static, so `Main.cpp` no longer includes `tests/Pattern/DeviceRackTest.h`; the runner declarations stay in `model/Session.h`. Every body moved verbatim, every unit is under 400 lines ([Keeping files small](keeping-files-small.md)), and all six CTest cases and the snapshots matched before and after. No runner builds a `MainComponent` yet, which is why `RHINO_SHELL_SNAPSHOT=<png>` under `--startup-test` is the way to see it ([Seeing the UI without taking the screen](headless-ui-snapshots.md)).
 
 The dead code went the same day (chore, *remove the shell's dead code*): a hint `juce::Label` that was never shown, and the four `TextButton`s `fileMenu`, `editMenu`, `viewMenu` and `helpMenu` kept only as fallback menu targets, never added to the view (the title bar's own buttons in `MainWindow` are the real ones). `showFileMenu`, `showEditMenu`, `showViewMenu` and `showHelpMenu` take a `juce::Component&` target now, not a nullable pointer.
 
@@ -53,6 +53,7 @@ Note editor, audio clip editor and Device View are three faces of one pane (`Low
 - [Arrangement view](arrangement-view.md)
 - [Colours and typography](colours-and-typography.md)
 - [Computer MIDI keyboard](computer-keyboard.md)
+- [Ableton Push 1](ableton-push.md)
 - [Playhead rendering](playhead.md)
 - [juce::File::createOutputStream appends](juce-output-stream-appends.md)
 - [Transport, tempo and loop](transport.md)

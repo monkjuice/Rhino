@@ -4,7 +4,7 @@ type: guide
 summary: Enumerate and monitor a MIDI controller from PowerShell through winmm, and why a port that will not open usually means something else.
 tags: [both, midi, windows, debugging]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-13
 ---
 
 # Reading MIDI hardware on Windows
@@ -18,7 +18,9 @@ write the script in the scratchpad or a user-level skill, never in the repo
 
 From PowerShell, `Add-Type` a small C# class that P/Invokes `winmm.dll`: `midiInGetNumDevs` for the count and
 `midiInGetDevCapsW` for each input's name. A controller can expose more than one input. The developer's Launchkey Mini
-shows two, `Launchkey Mini` (the keys) and `MIDIIN2 (Launchkey Mini)` (its InControl/DAW port).
+shows two, `Launchkey Mini` (the keys) and `MIDIIN2 (Launchkey Mini)` (its InControl/DAW port). An original Ableton
+Push shows `Ableton Push` (its Live port) and `MIDIIN2 (Ableton Push)` / `MIDIOUT2 (Ableton Push)` (its User port).
+A second identical device gets a `2- ` prefix, inside the parentheses too ([Ableton Push 1](ableton-push.md)).
 
 ## Monitor
 
@@ -42,6 +44,11 @@ being unplugged returned `7` (`MMSYSERR_NOMEM`) and later `2` (`MMSYSERR_BADDEVI
 when the keyboard had simply been unplugged. Re-enumerate before concluding anything: `midiInGetNumDevs` returning 0
 and no such device in `Get-PnpDevice -PresentOnly` is what unplugged looks like.
 
+**A running RhinoDAW holds a Push's User port** (since 2026-10-13), so close Rhino before capturing a Push. Rhino also
+switches the Push into User mode, which routes the pads, buttons and encoders to the User port, so while Rhino runs,
+the Live port can be opened but carries nothing. Rhino keeps its engine off all four Push ports, and Tracktion remembers
+them as disabled ([Ableton Push 1](ableton-push.md)).
+
 ## Open question
 
 Forge's MIDI learn ships CC 21-28 to the eight macros as its default map, written only when no bindings file exists
@@ -53,6 +60,7 @@ standalone remember that a MIDI input must be ticked once in Options → Audio/M
 ## Related
 
 - [Forge MIDI learn](forge-midi-learn.md)
+- [Ableton Push 1](ableton-push.md)
 - [Track inputs and monitoring](inputs-and-monitoring.md)
 - [Computer MIDI keyboard](computer-keyboard.md)
 - [Driving Forge's standalone on Windows](driving-the-forge-standalone.md)

@@ -35,7 +35,7 @@ The Device View is `DeviceRack` (`native/src/ui/rack/DeviceRack.*`, beside every
 
 Two exceptions keep a drag cheap (commit `e7c9554`; [What a change costs the interface](ui-cost-of-a-change.md)). During a knob drag the session announces only on `deviceParameterValues`, and the rack refreshes just the dragged device's panel (`refreshTouchedDevice`). While the shell hides the rack, a change only marks it stale, and it syncs when shown.
 
-A sync that changes no slot still lays the chain out again when a face's preferred width has changed: a knob mapped onto an external plugin's face widens it ([Mapped parameters](mapped-parameters.md)). The same sync shows what the last control touched in a plugin's window did, from `Session::parameterMappingReport`, once per report.
+A sync that changes no slot still lays the chain out again when a face's preferred width has changed: a knob mapped onto an external plugin's face widens it ([Mapped parameters](mapped-parameters.md)). The same sync shows what the last control touched in a plugin's window did, from `Session::parameterMappingReport`, once per report. Its end fires `deviceSelected(track, pluginIndex)` when the selected device's track and plugin pair changes (-1 for an empty chain); the [Ableton Push](ableton-push.md) follows the rack through it. `selectPluginIndex` is the way back: the Push's upper row selects a device on the shown track by plugin index (2026-10-13).
 
 Faces that move on their own (Tune's meter, the vocoder bank, the EQ spectrum, the Drum Rack's pad and key flashes and playhead) run a 24 Hz timer that does nothing while the rack is hidden; the rest ask for no frames.
 
@@ -68,3 +68,4 @@ Tests: `native/src/tests/Pattern/DeviceRackTest.cpp`, where `runDrumRackFaceTest
 - [Track automation](automation.md)
 - [Hold ids, not pointers](ids-not-pointers.md)
 - [Mapped parameters, an external plugin's rack](mapped-parameters.md)
+- [Ableton Push 1](ableton-push.md)

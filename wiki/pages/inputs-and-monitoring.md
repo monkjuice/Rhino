@@ -13,11 +13,13 @@ Which input a track takes, and whether you hear it, are properties of the **trac
 
 ## MIDI From
 
-`rhinoMidiInput` holds a token: absent means **All Ins** (so no older document needed migrating), `keyboard` the typing keyboard, `none` nothing, `device:<name>` one port. All Ins resolves to the engine's "All MIDI Ins" virtual device, which merges only the physical inputs that are *open*, so choosing it enables them all. The typing keyboard gets a second virtual device, created the first time a track asks for it ([Computer MIDI keyboard](computer-keyboard.md)).
+`rhinoMidiInput` holds a token: absent means **All Ins** (so no older document needed migrating), `keyboard` the typing keyboard, `none` nothing, `device:<name>` one port (`device:Push` is the Push's own virtual input, below). All Ins resolves to the engine's "All MIDI Ins" virtual device, which merges only the physical inputs that are *open*, so choosing it enables them all. The typing keyboard gets a second virtual device, created the first time a track asks for it ([Computer MIDI keyboard](computer-keyboard.md)).
 
 **The rescan trap.** Creating that device rescans the MIDI device list asynchronously: it does not exist when `createVirtualMidiDevice` returns. Choosing Computer Keyboard used to fail once with "no MIDI input" and work the second time. `awaitingMidiDeviceScan` now suppresses the complaint, and `MidiDeviceWatcher` re-arms when the rebuilt list lands, which is also why a keyboard plugged in mid-session starts playing without a relaunch. The rescan (`midiDevicesChanged`) re-arms whenever a MIDI track wants input by the same rule arming uses, `trackWantsInput`: armed, or monitoring On. Until commit `23de20c` it asked only for an armed track, so an unarmed track monitoring the typing keyboard stayed silent. That fix has no automated test, because the engine rebuilds its device list on a timer.
 
-**Armed is not playable.** With no hardware keyboard and the typing keyboard off, an armed MIDI track is correct and silent. `Session::hasHardwareMidiInput` lets the arm message say so.
+**Armed is not playable.** With no hardware keyboard and the typing keyboard off, an armed MIDI track is correct and silent. `Session::hasHardwareMidiInput` lets the arm message say so. It answers true while a Push is connected, and it ignores reserved ports.
+
+**Reserved ports and the Push** (2026-10-13). A controller Rhino drives itself owns its ports, because a Windows MIDI port has one owner ([Ableton Push 1](ableton-push.md)). `Session::reserveMidiPorts` disables those ports in the engine and in JUCE's device manager. From then on every path skips a reserved name: `enablePhysicalMidiInputs`, `midiInputChoices`, `hasHardwareMidiInput`, `midiInputDevice()` and the `device:<name>` resolution in `midiInputDeviceForTrack`. As a result, All Ins never merges a reserved port and no card offers one. The Push's pads arrive already translated, through `Session::sendControllerMidi`, on All Ins and on a virtual device of their own. Its token is `device:Push` (`midiInputPushToken`), and the device is made on first use, with the same rescan handling as the typing keyboard's. A card lists "Push" while a Push is connected or while a track names it. Nothing is armed for it.
 
 ## Audio From
 
@@ -39,6 +41,7 @@ While a deck holds a track and the song is stopped, the hidden DJ Input adds the
 
 - [Recording and the count-in](recording.md)
 - [Computer MIDI keyboard](computer-keyboard.md)
+- [Ableton Push 1](ableton-push.md)
 - [Track kinds: audio and MIDI](track-kinds.md)
 - [Reading MIDI hardware on Windows](reading-midi-hardware-on-windows.md)
 - [Arrangement view](arrangement-view.md)

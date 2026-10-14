@@ -713,3 +713,18 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 ## [2026-10-13] update | DeviceParameters.inc's restated Forge check, verified against the file
 - source: native/src/tests/Pattern/scenarios/DeviceParameters.inc (`forgeProcessor->getParameters().size() >= 35` keeps the original message, then `forgeParameters.size() == 9` with a comment pointing at MappedParameters.inc; the whole block is still inside `if (parameterSession.isForgeAvailable())`), checked against the two previous entries, pages/mapped-parameters.md, pages/forge-hosting.md (its Pitfalls bullet still holds, no change) and pages/inc-edits-do-not-rebuild.md (already says to touch the runner, no change)
 - updated: pages/mapped-parameters.md (the Tests section now says the second check holds the rack to exactly nine, so the default list's length is pinned in DeviceParameters.inc as well as MappedParameters.inc)
+
+## [2026-10-13] update | Native Ableton Push 1 support (uncommitted on main; not yet run on the hardware)
+- source: the change's brief (the build and ctest were still running), checked against native/src/app/PushProtocol.h, PushController.h/.cpp, PushControllerControls.cpp, PushControllerSurface.cpp, native/src/model/SessionControllers.cpp, Session.h, SessionMidiInput.cpp, SessionRecording.cpp, SessionDevices.cpp (endDeviceParameterGesture), SessionMixer.cpp, ui/rack/DeviceRack.h/.cpp, app/MainComponent.h/.cpp, app/Main.cpp, native/CMakeLists.txt (31 Session*.cpp lines), tests/PushProtocolTest.cpp and tests/Arrangement/scenarios/PushController.inc
+- created: pages/ableton-push.md (why Rhino drives it rather than Tracktion, the ports and their reservation, threads, the pads as a keyboard, controls, gestures from the first turn, the surface, selection, lifecycle, tests; the unverified hardware points; an unplug mid-turn leaving a gesture open, read from the code)
+- updated: pages/inputs-and-monitoring.md (reserved ports skipped by every input path, the `device:Push` input, hasHardwareMidiInput true while a Push is connected)
+- updated: pages/reading-midi-hardware-on-windows.md (the Push's port names; a running RhinoDAW holds its User port, so close Rhino before a capture)
+- updated: pages/app-shell.md (PushController as MainComponent's last member, startHardwareControllers not under --startup-test; Main.cpp's line count loosened, summary changed)
+- updated: pages/session-model.md (SessionControllers, 31 units, sendControllerMidi the one call safe off the message thread, the Push's settings under test mode; summary changed)
+- updated: pages/ui-cost-of-a-change.md (an end*Gesture always closes its gesture now; the stuck-depth bug the Push made reachable)
+- updated: pages/device-rack.md (deviceSelected and selectPluginIndex), pages/computer-keyboard.md (sendControllerMidi as the sibling entry)
+- updated: index.md (new page; app-shell and session-model summaries)
+
+## [2026-10-13] update | A Push unplugged mid-turn no longer leaves a gesture open (uncommitted on main; not yet run on the hardware)
+- source: the change's brief, checked against native/src/app/PushController.cpp (`closePorts` clears `touched`, `shift`, `muteHeld` and `soloHeld` and calls `endGestures` before releasing held notes; reached from `stop` and from `lookForPush` on unplug)
+- updated: pages/ableton-push.md (the Gestures section and the removed open item written by the main agent and verified; the last section's heading now reads "Unverified", since nothing open remains)

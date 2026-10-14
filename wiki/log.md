@@ -764,3 +764,14 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/track-kinds.md (`appendTrack`'s `after` and `addTrack`'s `below`/`added`; `+` and Ctrl+T go through `insertTrack` under `selectedTrack`, main row means the foot; the `markModified` rule; drop and paste lanes and `addAudioTrack` still append)
 - updated: pages/track-groups.md (new bullet: under an open group joins by an explicit `trackGroupMemberID`, under a collapsed one lands after the whole group)
 - updated: pages/arrangement-view.md (Cards: a new track lands under the selected card)
+
+## [2026-10-14] update | Bounce to New Track (Ctrl+B) and clip mute (uncommitted on main, parent 81b1344)
+- source: the change's brief, checked against native/src/model/SessionBounce.cpp, Session.h (`BounceResult`, the two bounce calls, `setClipsMuted`), SessionClips.cpp, SessionInternal.h/.cpp (`runRenderTask`, `nextRenderFile`), Session.cpp (`renderTimelineWav`), ui/arrangement/ArrangementBounce.cpp, Arrangement.cpp, ArrangementGestures.cpp, ArrangementPainter.cpp, app/MainComponentCommands.cpp, tests/Arrangement/scenarios/ClipBounce.inc and native/CMakeLists.txt
+- created: pages/bounce-to-new-track.md (Live's rules for a track, a group and the main row; one render per track windowed into one clip per selected clip; the source muted in the same undo step; refusals; the message-thread render, 32-bit float, 15 s stall; Ctrl+B instead of Ctrl+T; open items)
+- created: pages/bus-member-renders-nothing-alone.md (createNodeForEdit at 4536d8a skips a track routed to another track; the ScopedProperty workaround on the output name and the fader's `enabled`, and why it works and is safe)
+- updated: pages/arrangement-view.md (twelve units with ArrangementBounce.cpp; Ctrl+B dispatches on Focus; muted clips drawn grey and the clip menu's Mute)
+- updated: pages/session-model.md (32 units with SessionBounce; `runRenderTask` and `nextRenderFile` in SessionInternal)
+- updated: pages/renders-that-never-return.md (the bounce's 15 s stall and `checkClipFile`; `runRenderTask` shared with the WAV export; ClipBounce.inc before GesturesAndPersistence.inc)
+- updated: pages/track-groups.md (bouncing a group and a member; a member renders only as part of its bus)
+- updated: pages/audio-clip-editor.md (bounce as merge's counterpart; mute is the property `setClipsMuted` sets, MIDI clips included)
+- updated: index.md (two new pages; Arrangement view and Session summaries)

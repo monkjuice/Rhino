@@ -4,7 +4,7 @@ type: component
 summary: Edits one audio clip's own gain, pan, pitch, fades, mute and reverse as clip properties, with one undo step per knob drag.
 tags: [rhino, ui, audio-clips]
 sources: []
-updated: 2026-10-13
+updated: 2026-10-14
 ---
 
 # Audio clip editor
@@ -25,7 +25,8 @@ Double-clicking an audio clip opens it in the shell's lower pane, which shows on
 
 - **Split** cuts at the timeline's insert line (`splitPosition` asks `Arrangement::insertPointTime`), so the button and Ctrl+E cut in the same place even while the transport moves.
 - **R** (reverse) and **Ctrl+J** (merge) are shell shortcuts, because the keyboard is usually on one of this panel's knobs.
-- **Merge** (`SessionMerge.cpp`) is the one clip command that writes a file: it renders the selected clips per track with the track's plugins off, so each clip's own mix lands in the file but clip-local effects are dropped (and reported). The file outlives an undo.
+- **Merge** (`SessionMerge.cpp`) writes a file, as only the bounce also does: it renders the selected clips per track with the track's plugins off, so each clip's own mix lands in the file but clip-local effects are dropped (and reported). The file outlives an undo. Ctrl+B [Bounce to New Track](bounce-to-new-track.md) is its counterpart through the track's devices, onto a new track.
+- **Mute** is the same clip property the arrangement's clip menu sets through `Session::setClipsMuted`, which takes MIDI clips too; a muted clip is drawn grey on the timeline ([Arrangement view](arrangement-view.md)).
 
 ## Drawing and testing
 

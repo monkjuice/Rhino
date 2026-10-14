@@ -376,6 +376,8 @@ DeviceRack::DeviceRack(Session& s) : session(s)
 
 DeviceRack::~DeviceRack()
 {
+    if (watchedWindow != nullptr)
+        watchedWindow->removeComponentListener(this);
     stopTimer();
     session.listeners.remove(this);
     session.deviceParameterValues.removeChangeListener(this);
@@ -836,6 +838,46 @@ void DeviceRack::selectDevice(int device)
 {
     selectedDevice = juce::jlimit(0, std::max(0, static_cast<int>(slots.size()) - 1), device);
     sync();
+}
+
+void DeviceRack::parentHierarchyChanged()
+{
+    auto* window = getTopLevelComponent();
+    if (window == this)
+        window = nullptr;
+    if (window == watchedWindow.getComponent())
+        return;
+    if (watchedWindow != nullptr)
+        watchedWindow->removeComponentListener(this);
+    watchedWindow = window;
+    if (watchedWindow != nullptr)
+        watchedWindow->addComponentListener(this);
+}
+
+void DeviceRack::componentBroughtToFront(juce::Component& component)
+{
+    if (&component == watchedWindow.getComponent())
+        raiseFloatingWindows();
+}
+
+// A window that floats above the main window is above it on the screen, but
+// JUCE keeps an order of its own, and a drag from the browser looks for its
+// target in that order: once the main window had been clicked, JUCE took it to
+// be on top, and a sound dropped on the Drum Rack's window went to whatever
+// lay under the window instead. Bringing the floating windows forward again,
+// without activating them, puts JUCE's order back where the screen's is.
+void DeviceRack::raiseFloatingWindows()
+{
+    if (!keepAboveShell)
+        return;
+    const auto raise = [](juce::DocumentWindow* window, bool floating)
+    {
+        // A minimised window would be restored by being brought forward.
+        if (window != nullptr && floating && window->isVisible() && !window->isMinimised())
+            window->toFront(false);
+    };
+    raise(floatingWindow.get(), true);
+    raise(drumWindow.get(), drumWindow != nullptr && !drumWindow->isFullScreen());
 }
 
 void DeviceRack::selectPluginIndex(int pluginIndex)

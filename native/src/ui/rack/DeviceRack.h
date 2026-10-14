@@ -12,6 +12,7 @@ class DeviceRack final : public juce::Component,
                          public juce::DragAndDropTarget,
                          public juce::FileDragAndDropTarget,
                          private juce::ChangeListener,
+                         private juce::ComponentListener,
                          private juce::Timer,
                          private Session::Listener
 {
@@ -71,6 +72,12 @@ private:
     void editWillChange() override;
     void editDidChange() override;
     void timerCallback() override;
+    // The main window coming to the front, which JUCE then takes to be the
+    // window on top - see raiseFloatingWindows.
+    void parentHierarchyChanged() override;
+    void componentBroughtToFront(juce::Component&) override;
+    void raiseFloatingWindows();
+    juce::Component::SafePointer<juce::Component> watchedWindow;
     // The engine plays the lanes and tells nobody, so a knob a lane is moving
     // is read back here instead: only the faces with such a knob are
     // refreshed.

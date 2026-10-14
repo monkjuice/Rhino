@@ -87,6 +87,15 @@ void runDrumRackWindowTest()
     require(rack.drumWindow->keyPressed(juce::KeyPress(juce::KeyPress::spaceKey)) && forwarded.getKeyCode() == juce::KeyPress::spaceKey,
             "and the shell's shortcuts answer there");
     require(rack.drumWindow->getName().contains(session.trackName(0)), "the window is named for the rack and its track");
+    // It opens beside the main window rather than over it: 1024 by 720,
+    // centred, and never past a small display's edges or under its minimum.
+    require(DrumRackWindow::openingBounds({0, 0, 1920, 1040}) == juce::Rectangle<int>(448, 160, 1024, 720),
+            "the window opens at 1024 by 720, centred on the display");
+    require(DrumRackWindow::openingBounds({0, 0, 800, 600}) == juce::Rectangle<int>(0, 0, 800, 600),
+            "on a display smaller than that it fills the display");
+    require(DrumRackWindow::openingBounds({0, 0, 640, 400}).getWidth() == DrumRackWindow::minimumWidth
+                && DrumRackWindow::openingBounds({0, 0, 640, 400}).getHeight() == DrumRackWindow::minimumHeight,
+            "and never opens below its minimum size");
     // Restored beside the main window, it floats above it, so a sound dragged
     // from the browser there lands on it instead of burying it.
     rack.drumWindow->setSize(DrumRackWindow::minimumWidth + 40, DrumRackWindow::minimumHeight + 40);

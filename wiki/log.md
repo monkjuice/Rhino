@@ -752,3 +752,9 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 ## [2026-10-13] update | Rhino sends Live's pad sensitivity to the Push on connect (built and tested; not yet tried by the user)
 - source: the change's brief, checked against native/src/app/PushProtocol.h (`padSensitivitySysex`), app/PushController.cpp (`greet`), tests/PushProtocolTest.cpp and tests/Arrangement/scenarios/PushController.inc
 - updated: pages/ableton-push.md (Ports: the greeting's order now includes the pad sensitivity; new Pad sensitivity section: the sysex layout, Live's default as sent, the rejected sensitivity page and why, Live's six curves and the threshold formula for later, velocity also depending on the instrument and Accent; Tests: the scenario checks the greeting; On the hardware: the feel under Rhino still unconfirmed)
+
+## [2026-10-14] update | The Drum Rack window opens 1024 x 720 instead of maximised (built and under test; not yet tried by the user)
+- source: the change's brief, checked against native/src/ui/rack/DrumRackWindow.h/.cpp (`openingWidth`, `openingHeight`, `openingBounds`, `show`)
+- updated: pages/drum-rack.md (summary; Its own window: the opening size, `openingBounds`, why maximised hid the main window, `raiseFloatingWindows` left alone; floats from the moment it opens; the window test's `openingBounds` check)
+- updated: pages/device-rack.md (the name-bar button and the Drum Rack window bullet no longer say maximised)
+- updated: index.md (Drum Rack summary)

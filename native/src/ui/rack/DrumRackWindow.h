@@ -71,11 +71,17 @@ public:
     // Small enough to sit beside the main window, and still tall enough that
     // the face stands stacked.
     static constexpr int minimumWidth = 720, minimumHeight = DeviceEditorPanel::drumStackedHeight + 20;
+    // The size it opens at: room for the pads and the sample editor, and
+    // small enough to sit beside the main window, whose browser a sound is
+    // dragged onto it from.
+    static constexpr int openingWidth = 1024, openingHeight = 720;
+    // That size, centred on a display's free area, and no bigger than it.
+    static juce::Rectangle<int> openingBounds(juce::Rectangle<int> displayArea);
 
     DrumRackWindow(Session&, te::EditItemID rack);
     DrumRackView& view();
-    // Maximised on the display a component is on. Restored, it is most of
-    // that display, centred.
+    // At its opening size on the display a component is on. The title bar's
+    // maximise button fills the display.
     void show(juce::Component& over);
     // Closing hides it and asks the owner to destroy it.
     void closeButtonPressed() override;

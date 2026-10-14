@@ -192,14 +192,21 @@ DrumRackView& DrumRackWindow::view()
     return *static_cast<DrumRackView*>(getContentComponent());
 }
 
+juce::Rectangle<int> DrumRackWindow::openingBounds(juce::Rectangle<int> displayArea)
+{
+    return displayArea.withSizeKeepingCentre(std::max(minimumWidth, std::min(openingWidth, displayArea.getWidth())),
+                                             std::max(minimumHeight, std::min(openingHeight, displayArea.getHeight())));
+}
+
+// It used to open maximised, which covered the main window - and with it the
+// browser, and a main window smaller than the rack's could not be found
+// behind it.
 void DrumRackWindow::show(juce::Component& over)
 {
     const auto* display = juce::Desktop::getInstance().getDisplays().getDisplayForRect(over.getScreenBounds());
     const auto area = display != nullptr ? display->userBounds.toNearestInt() : juce::Rectangle<int>(0, 0, 1280, 800);
-    setBounds(area.withSizeKeepingCentre(std::max(minimumWidth, area.getWidth() * 85 / 100),
-                                         std::max(minimumHeight, area.getHeight() * 85 / 100)));
+    setBounds(openingBounds(area));
     setVisible(true);
-    setFullScreen(true);
     toFront(true);
     updateFloating();
 }

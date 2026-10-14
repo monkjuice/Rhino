@@ -187,6 +187,9 @@ void MainComponent::resized()
     browserToggle.toFront(false);
     editorToggle.toFront(false);
     rackToggle.toFront(false);
+    // Over all of it, those raised just now included.
+    loadingScreen.setBounds(getLocalBounds());
+    loadingScreen.toFront(false);
 }
 
 void MainComponent::mouseMove(const juce::MouseEvent& event)

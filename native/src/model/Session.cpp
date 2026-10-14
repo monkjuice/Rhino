@@ -121,6 +121,9 @@ Session::Session() : engine(commandLineTestMode ? "Rhino Native Tests" : "Theda 
 // device manager, so both have to come off before either of them goes.
 Session::~Session()
 {
+    // While the edit is whole: the bounce puts back what it changed for its
+    // render and hands the edit back to the device.
+    cancelBounce();
     removeChangeListener(&automationMirror);
     if (midiDeviceWatcher != nullptr)
         engine.getDeviceManager().removeChangeListener(midiDeviceWatcher.get());
@@ -195,6 +198,8 @@ void Session::buildStarterEdit()
 
 void Session::newProject()
 {
+    // A bounce holds the outgoing edit's tracks and clips.
+    cancelBounce();
     listeners.call(&Listener::editWillChange);
     cancelCountIn();
     stop();
@@ -251,14 +256,19 @@ void Session::panicReset(bool restartAudioDevice)
     sendSynchronousChangeMessage();
 }
 
+// A bounce in flight holds the tracks and clips it renders, which an undo
+// could take away under it; the shell blocks input meanwhile, and this holds
+// the line for anything that reaches here anyway.
 void Session::undo()
 {
-    refreshAfterUndoRedo(edit->getUndoManager().undo());
+    if (!isBouncing())
+        refreshAfterUndoRedo(edit->getUndoManager().undo());
 }
 
 void Session::redo()
 {
-    refreshAfterUndoRedo(edit->getUndoManager().redo());
+    if (!isBouncing())
+        refreshAfterUndoRedo(edit->getUndoManager().redo());
 }
 
 void Session::refreshAfterUndoRedo(bool changed)
@@ -343,6 +353,8 @@ juce::Result Session::restoreProject(const juce::ValueTree& state, const juce::F
     // records, track by track, and never decides what a track ought to run or
     // which of them is first.
     collapseStackedInstruments(*candidate);
+    // A bounce holds the outgoing edit's tracks and clips.
+    cancelBounce();
     listeners.call(&Listener::editWillChange);
     cancelCountIn();
     stop();

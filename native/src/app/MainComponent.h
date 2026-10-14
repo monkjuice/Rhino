@@ -14,6 +14,7 @@
 #include "ControlBarFields.h"
 #include "ControlBarIcons.h"
 #include "ControlBarButtons.h"
+#include "LoadingScreen.h"
 #include <functional>
 #include <tuple>
 #include <vector>
@@ -68,7 +69,13 @@ public:
     void toggleInfoView();
     void toggleRecording();
 
-    void requestClose() { files.confirmUnsaved([] { juce::JUCEApplication::getInstance()->quit(); }); }
+    // Closing the window stops a bounce rather than waiting it out; the
+    // loading screen sees it has gone and reports it cancelled.
+    void requestClose()
+    {
+        session.cancelBounce();
+        files.confirmUnsaved([] { juce::JUCEApplication::getInstance()->quit(); });
+    }
     void openProjectFile(const juce::File& file) { files.openFile(file); }
     void showFileMenuFrom(juce::Component& target) { showFileMenu(target); }
     void showEditMenuFrom(juce::Component& target) { showEditMenu(target); }
@@ -149,6 +156,9 @@ private:
     ComputerKeyboard computerKeyboard;
     juce::Component::SafePointer<juce::DialogWindow> audioSettings;
     ProjectFiles files;
+    // Over the whole window while a bounce renders, so the window draws and
+    // nothing can be edited under the render.
+    LoadingScreen loadingScreen;
     SplitterBar lowerSplitter;
     // Zero until the pane is opened for the first time, which is what asks for
     // a fifth of the window rather than a number chosen here: the right height

@@ -249,6 +249,12 @@ juce::Result checkClipFile(te::Clip&);
 // made with `progress` as the fraction it updates. A render that has not
 // moved for `stallSeconds` is given up and what it wrote deleted.
 juce::Result runRenderTask(te::Renderer::RenderTask&, const std::atomic<float>& progress, double stallSeconds);
+// The two halves of that, for a render run a few blocks at a time: the first
+// arms the stall check and returns the flag it raises, the second reads how
+// a finished task went. `progress` must outlive the task.
+std::shared_ptr<bool> stopRenderWhenStalled(te::Renderer::RenderTask&, const std::atomic<float>& progress,
+                                            double stallSeconds);
+juce::Result renderTaskOutcome(const te::Renderer::RenderTask&, bool stalled, double stallSeconds);
 // A file in `folder` for a render of a track - "Bass Merge 3.wav" - numbered
 // rather than overwritten, so making one, undoing it and making another never
 // hands the new clip a file the old one may still be reading. An empty file

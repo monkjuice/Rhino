@@ -9,6 +9,7 @@
 #include "ui/shared/Theme.h"
 #include "app/TransportDisplay.h"
 #include "app/ControlBarFields.h"
+#include "app/LoadingScreen.h"
 #include "ui/notes/StepGrid.h"
 #include "ui/audioclip/AudioClipPanel.h"
 #include "ui/dj/DjView.h"

@@ -863,12 +863,37 @@ public:
     // selected clip over the same span. The track is rendered once across
     // them, so a tail that rings into the next clip is in the bounce as it is
     // in the song. The source clips are muted.
+    //
+    // These two run the whole bounce before they return, for a caller with
+    // nothing to draw meanwhile; the steps below are the same bounce a few
+    // blocks at a time.
     juce::Result bounceClipsToNewTracks(const std::vector<te::EditItemID>&, BounceResult* = nullptr);
     // Tracks and groups: everything on the timeline from the first clip's
     // start to the last one's end becomes one clip, and the track, or the
     // group's bus, is muted. A group's bus bounces the group; a member listed
     // with its own bus is bounced as part of it rather than twice.
     juce::Result bounceTracksToNewTracks(const std::vector<int>& tracks, BounceResult* = nullptr);
+    // The bounce in steps, so the window can draw while it renders - the
+    // shell's loading screen drives it. A start makes every refusal at once
+    // and takes the edit off the device; continueBounce renders for about
+    // `milliseconds` and returns true while there is more to do, laying what
+    // was made on new tracks as it ends; cancelBounce stops it with nothing
+    // changed. Once it is over, bounceOutcome says how it went. Nothing else
+    // may edit the document while one runs: the shell blocks input, undo and
+    // redo wait, and opening or starting a document cancels it.
+    juce::Result startBounceClips(const std::vector<te::EditItemID>&);
+    juce::Result startBounceTracks(const std::vector<int>& tracks);
+    bool continueBounce(double milliseconds);
+    void cancelBounce();
+    bool isBouncing() const { return bounceRun != nullptr; }
+    struct BounceProgress
+    {
+        float fraction = 0.0f;  // of the whole bounce, by length rendered
+        juce::String source;    // the track or group being rendered now
+        int step = 0, steps = 0;
+    };
+    BounceProgress bounceProgress() const;
+    juce::Result bounceOutcome(BounceResult* = nullptr) const;
     // Mutes or unmutes clips of either kind, as one undo step. A muted clip
     // stays on its lane, drawn grey, and plays nothing.
     juce::Result setClipsMuted(const std::vector<te::EditItemID>&, bool muted);
@@ -1460,10 +1485,13 @@ private:
     // notification, so paste can clear and insert inside one undo step.
     bool clearClipRegionInEdit(double startSeconds, double endSeconds, int firstTrack, int lastTrack,
                                const std::vector<te::EditItemID>& keep = {});
-    // SessionBounce.cpp - one render each, defined there, and the step that
-    // renders them all and lays what they made on new tracks.
+    // SessionBounce.cpp - one render each, defined there; the start every
+    // kind of bounce shares; the edit made once the last has rendered; and
+    // the way out that leaves the document as it was.
     struct BounceJob;
-    juce::Result bounceToNewTracks(std::vector<BounceJob>&, BounceResult*);
+    juce::Result startBounce(std::vector<BounceJob>&);
+    void finishBounce();
+    void abandonBounce(const juce::String& why);
     // A clip edit marks each track it reached with what that track plays -
     // notes on a MIDI track, audio clips on an audio track - and with `also`,
     // whatever else it changed there. With no track known, every track is
@@ -1756,6 +1784,17 @@ private:
     void writeDjState();
     void readDjState();
     void markDjModified();
+    // The bounce in flight (SessionBounce.cpp), defined there with its
+    // deleter so that nothing else need see it. After the edit, so it would
+    // go first; the destructor cancels it before then anyway.
+    struct BounceRun;
+    struct BounceRunDeleter
+    {
+        void operator()(BounceRun*) const;
+    };
+    std::unique_ptr<BounceRun, BounceRunDeleter> bounceRun;
+    juce::Result lastBounce = juce::Result::ok();
+    BounceResult lastBounceResult;
 };
 int runSelfTest();
 int runPatternTest();

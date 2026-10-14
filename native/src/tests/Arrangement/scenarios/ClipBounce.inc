@@ -196,4 +196,71 @@
             require(keyed.trackCount() == 6 && keyed.trackMixer(2).muted && keyedView.selectedTrack == 3,
                     "With a card selected it bounces the track, and the new card is selected");
         }
+        // In steps, as the shell's loading screen runs it: a slice renders and
+        // hands the thread back, nothing undoes under it, and cancelling
+        // leaves the document and the disk as they were.
+        {
+            Session stepped;
+            stepped.projectFile = bounceScratch.getChildFile("stepped.rhinoedit");
+            require(stepped.importAudio(source.getFile()).wasOk(), "A file imports for the stepped fixture");
+            const auto lane = 1;
+            const auto bounces = [&stepped]
+            {
+                return stepped.mergedAudioDirectory().findChildFiles(juce::File::findFiles, false, "*Bounce*.wav").size();
+            };
+            const auto before = bounces();
+            require(stepped.startBounceTracks({lane}).wasOk() && stepped.isBouncing(),
+                    "A bounce can be started and left running");
+            require(stepped.startBounceTracks({lane}).failed(), "and a second waits for it");
+            require(stepped.continueBounce(0.0), "A slice renders and hands the thread back with work left");
+            const auto midway = stepped.bounceProgress();
+            require(midway.steps == 1 && midway.source == stepped.trackName(lane)
+                        && midway.fraction >= 0.0f && midway.fraction <= 1.0f,
+                    "and says what it is on and how far it has got");
+            stepped.undo();
+            require(stepped.isBouncing() && stepped.trackCount() == 4, "Undo waits rather than pulling the track away");
+            stepped.cancelBounce();
+            require(!stepped.isBouncing() && stepped.bounceOutcome().getErrorMessage().contains("cancelled"),
+                    "Cancelling stops it");
+            require(stepped.trackCount() == 4 && !stepped.trackMixer(lane).muted && bounces() == before,
+                    "with nothing changed and nothing left on disk");
+            require(te::getAudioTracks(*stepped.edit)[lane]->getVolumePlugin()->isEnabled(),
+                    "and the fader it switched off for the render back on");
+
+            // The screen the shell shows, driving the real thing.
+            LoadingScreen screen;
+            screen.setSize(900, 600);
+            auto finished = 0;
+            const auto task = [&stepped, &finished]
+            {
+                return LoadingScreen::Task {"Bouncing to new track",
+                    [&stepped](double milliseconds) { return stepped.continueBounce(milliseconds); },
+                    [&stepped]
+                    {
+                        const auto progress = stepped.bounceProgress();
+                        return std::make_pair(progress.fraction, progress.source);
+                    },
+                    [&stepped] { stepped.cancelBounce(); },
+                    [&finished] { ++finished; }};
+            };
+            require(stepped.startBounceTracks({lane}).wasOk(), "It starts again");
+            screen.run(task());
+            require(screen.isRunning() && screen.isVisible(), "The loading screen shows while it runs");
+            const auto drawn = screen.createComponentSnapshot(screen.getLocalBounds());
+            require(drawn.isValid(), "and draws");
+            for (auto frames = 0; screen.isRunning(); ++frames)
+            {
+                require(frames < 10000, "The loading screen finishes the bounce");
+                screen.timerCallback();
+            }
+            require(finished == 1 && !screen.isVisible(), "and goes once it is done, handing it back once");
+            require(stepped.bounceOutcome().wasOk() && stepped.trackCount() == 5 && stepped.trackMixer(lane).muted,
+                    "What the screen drove lands like any bounce");
+
+            require(stepped.startBounceTracks({lane + 1}).wasOk(), "The bounce can itself be bounced");
+            screen.run(task());
+            screen.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey));
+            require(!screen.isRunning() && finished == 2 && !stepped.isBouncing() && stepped.trackCount() == 5,
+                    "Esc on the screen cancels the bounce, and the screen still hands it back");
+        }
         bounceScratch.deleteRecursively();

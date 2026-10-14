@@ -64,6 +64,12 @@ public:
     // selected cards, a group's bus card bouncing the group. Public for the
     // same reason as the merge: Ctrl+B is also a shell shortcut.
     void bounceSelected();
+    // A bounce renders over many frames. The arrangement starts it and says
+    // so here; the shell renders it behind its loading screen and calls
+    // bounceFinished once it is over, which selects what was made and says
+    // how it went. Left unset - a test - the bounce runs to its end at once.
+    std::function<void()> bounceStarted;
+    void bounceFinished();
     // How much of the foot of the panel the clip and device panes cover. They
     // float over the arrangement rather than pushing it up, so the panel keeps
     // the full height of the window and the lanes keep the size they had; only
@@ -247,6 +253,10 @@ private:
     // shortcut passes the selection.
     void bounceClips(std::vector<te::EditItemID>);
     void bounceTracks(std::vector<int>);
+    void runBounce();
+    // What the bounce in flight was asked for, which decides what is selected
+    // once it is done: the new cards, or the new clips.
+    bool bouncingTracks = false;
     // Mutes the selected clips, or unmutes them when every one already is:
     // the way back for a clip a bounce muted.
     void muteSelected();

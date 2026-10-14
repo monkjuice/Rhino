@@ -150,6 +150,7 @@ target_sources(RhinoNative PRIVATE
     src/app/ControlBarFields.cpp
     src/app/ControlBarIcons.cpp
     src/app/ProjectFiles.cpp
+    src/app/LoadingScreen.cpp
     src/app/PushController.cpp
     src/app/PushControllerControls.cpp
     src/app/PushControllerSurface.cpp

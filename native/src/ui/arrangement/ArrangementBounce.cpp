@@ -30,58 +30,83 @@ void Arrangement::bounceSelected()
     bounceClips(std::move(chosen));
 }
 
-// The selection moves onto what the bounce made, as a merge's does: the clips
-// it was pointing at are muted now, and bouncing them again would be refused.
 void Arrangement::bounceClips(std::vector<te::EditItemID> ids)
 {
     cancelDrag();
-    Session::BounceResult result;
-    const auto outcome = session.bounceClipsToNewTracks(ids, &result);
-    if (outcome.failed())
+    if (const auto started = session.startBounceClips(ids); started.failed())
     {
-        if (status) status(outcome.getErrorMessage());
+        if (status) status(started.getErrorMessage());
         return;
     }
-    // The selection's region is read off the list, which the bounce's own
-    // announcement left stale if the timeline is hidden.
-    syncIfStale();
-    setSelection(result.clips);
-    if (status)
-    {
-        const auto one = result.sourceCount == 1;
-        status("Bounced " + (one ? juce::String("1 clip") : juce::String(result.sourceCount) + " clips") + " to "
-               + (result.tracks.size() == 1 ? session.trackName(result.tracks.front())
-                                            : juce::String(static_cast<int>(result.tracks.size())) + " new tracks")
-               + (one ? ". The original is muted." : ". The originals are muted."));
-    }
-    repaint();
+    bouncingTracks = false;
+    runBounce();
 }
 
-// The new cards become the selection, so whatever is done next - a rename, a
-// device - is done to the audio rather than to what it was made from.
 void Arrangement::bounceTracks(std::vector<int> tracks)
 {
     cancelDrag();
+    if (const auto started = session.startBounceTracks(tracks); started.failed())
+    {
+        if (status) status(started.getErrorMessage());
+        return;
+    }
+    bouncingTracks = true;
+    runBounce();
+}
+
+void Arrangement::runBounce()
+{
+    if (bounceStarted)
+    {
+        bounceStarted();
+        return;
+    }
+    while (session.continueBounce(1000.0)) {}
+    bounceFinished();
+}
+
+// The selection moves onto what the bounce made: the new cards, which are the
+// audio now, or the new clips, as a merge's does - the clips it was pointing
+// at are muted, and bouncing them again would be refused.
+void Arrangement::bounceFinished()
+{
     Session::BounceResult result;
-    const auto outcome = session.bounceTracksToNewTracks(tracks, &result);
+    const auto outcome = session.bounceOutcome(&result);
     if (outcome.failed())
     {
         if (status) status(outcome.getErrorMessage());
         return;
     }
+    // The selection is read off the list, which the bounce's own
+    // announcement left stale if the timeline is hidden.
     syncIfStale();
-    selectTrack(result.tracks.front());
-    for (size_t i = 1; i < result.tracks.size(); ++i)
-        toggleTrackSelection(result.tracks[i]);
-    setSelection({});
-    focus = Focus::track;
-    if (status)
+    if (bouncingTracks)
     {
-        if (result.sourceCount == 1)
-            status("Bounced to " + session.trackName(result.tracks.front())
-                   + (result.group ? ". The group's bus is muted." : ". The original track is muted."));
-        else
-            status("Bounced " + juce::String(result.sourceCount) + " tracks to new tracks. The originals are muted.");
+        selectTrack(result.tracks.front());
+        for (size_t i = 1; i < result.tracks.size(); ++i)
+            toggleTrackSelection(result.tracks[i]);
+        setSelection({});
+        focus = Focus::track;
+        if (status)
+        {
+            if (result.sourceCount == 1)
+                status("Bounced to " + session.trackName(result.tracks.front())
+                       + (result.group ? ". The group's bus is muted." : ". The original track is muted."));
+            else
+                status("Bounced " + juce::String(result.sourceCount) + " tracks to new tracks. The originals are muted.");
+        }
+    }
+    else
+    {
+        setSelection(result.clips);
+        if (status)
+        {
+            const auto one = result.sourceCount == 1;
+            status("Bounced " + (one ? juce::String("1 clip") : juce::String(result.sourceCount) + " clips") + " to "
+                   + (result.tracks.size() == 1 ? session.trackName(result.tracks.front())
+                                                : juce::String(static_cast<int>(result.tracks.size())) + " new tracks")
+                   + (one ? ". The original is muted." : ". The originals are muted."));
+        }
     }
     repaint();
 }

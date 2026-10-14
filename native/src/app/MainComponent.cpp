@@ -54,7 +54,24 @@ MainComponent::MainComponent(Session& s)
         else toggleRecording();
     };
     push.status = [this](const juce::String& message) { logStatus(message); };
-    push.commandsAllowed = [this] { return isEnabled(); };
+    push.commandsAllowed = [this] { return isEnabled() && !loadingScreen.isRunning(); };
+    // The arrangement starts a bounce and the shell renders it, a slice per
+    // frame behind the loading screen, then hands it back to the arrangement.
+    arrangement.bounceStarted = [this]
+    {
+        loadingScreen.run({"Bouncing to new track",
+                           [this](double milliseconds) { return session.continueBounce(milliseconds); },
+                           [this]
+                           {
+                               const auto progress = session.bounceProgress();
+                               auto detail = "Rendering " + progress.source;
+                               if (progress.steps > 1)
+                                   detail << "  (" << progress.step << " of " << progress.steps << ")";
+                               return std::make_pair(progress.fraction, detail);
+                           },
+                           [this] { session.cancelBounce(); },
+                           [this] { arrangement.bounceFinished(); }});
+    };
     // The two lower panes answer to two different things, and to nothing
     // else: the clip editors to the selected clip, the Device View to a
     // clicked track card. Clicking a clip moves the working track too, so
@@ -320,6 +337,8 @@ MainComponent::MainComponent(Session& s)
              &patternLabel, &editorResolution, &editorZoomOut, &editorZoomIn, &scaleHighlight,
              &lowerSplitter})
         addAndMakeVisible(component);
+    // Last, so it is above everything it covers.
+    addChildComponent(loadingScreen);
     lowerSplitter.dragStarted = [this] (int screenY)
     {
         resizeStartY = screenY;

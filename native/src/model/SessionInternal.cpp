@@ -489,11 +489,10 @@ juce::Result checkClipFile(te::Clip& clip)
                               + ", which is missing.");
 }
 
-juce::Result runRenderTask(te::Renderer::RenderTask& task, const std::atomic<float>& progress, double stallSeconds)
+std::shared_ptr<bool> stopRenderWhenStalled(te::Renderer::RenderTask& task, const std::atomic<float>& progress,
+                                            double stallSeconds)
 {
-    auto lastProgress = -1.0f;
-    auto movedAt = 0.0;
-    auto stalled = false;
+    auto stalled = std::make_shared<bool>(false);
     // A render that keeps coming back without moving is waiting on something
     // that will not come: a clip's file that is there but cannot be read
     // (WaveNode::isReadyToProcess at 4536d8a). Given up through the engine's
@@ -501,7 +500,7 @@ juce::Result runRenderTask(te::Renderer::RenderTask& task, const std::atomic<flo
     // the last move rather than from the start, so a long song is never cut
     // short; the render's half second of run-in counts as a stall, so a
     // budget is never set that short.
-    task.setCancellationCheck([&progress, &lastProgress, &movedAt, &stalled, stallSeconds]
+    task.setCancellationCheck([&progress, stallSeconds, stalled, lastProgress = -1.0f, movedAt = 0.0]() mutable
     {
         const auto now = juce::Time::getMillisecondCounterHiRes();
         if (const auto reached = progress.load(); reached != lastProgress)
@@ -509,14 +508,25 @@ juce::Result runRenderTask(te::Renderer::RenderTask& task, const std::atomic<flo
             lastProgress = reached;
             movedAt = now;
         }
-        stalled = now - movedAt > stallSeconds * 1000.0;
-        return stalled;
+        *stalled = now - movedAt > stallSeconds * 1000.0;
+        return *stalled;
     });
-    while (task.runJob() != juce::ThreadPoolJob::jobHasFinished) {}
+    return stalled;
+}
+
+juce::Result renderTaskOutcome(const te::Renderer::RenderTask& task, bool stalled, double stallSeconds)
+{
     if (stalled)
         return juce::Result::fail("The render made no progress for " + juce::String(stallSeconds, 0)
                                   + " seconds and was stopped: a clip's audio file may not be readable.");
     return task.errorMessage.isEmpty() ? juce::Result::ok() : juce::Result::fail(task.errorMessage);
+}
+
+juce::Result runRenderTask(te::Renderer::RenderTask& task, const std::atomic<float>& progress, double stallSeconds)
+{
+    const auto stalled = stopRenderWhenStalled(task, progress, stallSeconds);
+    while (task.runJob() != juce::ThreadPoolJob::jobHasFinished) {}
+    return renderTaskOutcome(task, *stalled, stallSeconds);
 }
 
 juce::File nextRenderFile(const juce::File& folder, const juce::String& trackName, const juce::String& kind)

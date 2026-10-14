@@ -201,6 +201,22 @@ void DrumRackWindow::show(juce::Component& over)
     setVisible(true);
     setFullScreen(true);
     toFront(true);
+    updateFloating();
+}
+
+// A restored window is the one beside the main window, where a sound dragged
+// from the browser in the main window has to land on it - so it floats; a
+// maximised one does not. Maximising and restoring both resize it.
+void DrumRackWindow::resized()
+{
+    DocumentWindow::resized();
+    updateFloating();
+}
+
+void DrumRackWindow::updateFloating()
+{
+    if (floatAboveShell)
+        floatAboveShell(*this, !isFullScreen());
 }
 
 void DrumRackWindow::closeButtonPressed()

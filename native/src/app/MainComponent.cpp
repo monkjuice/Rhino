@@ -1,4 +1,5 @@
 #include "MainComponent.h"
+#include "AppPlatform.h"
 
 namespace rhino
 {
@@ -115,6 +116,10 @@ MainComponent::MainComponent(Session& s)
     // undo and the rest answer there, and the typing keyboard plays its pads.
     rack.shortcut = [this](const juce::KeyPress& key) { return keyPressed(key); };
     rack.listenForKeys = [this](juce::Component& window) { computerKeyboard.listenTo(window); };
+    rack.keepAboveShell = [this](juce::Component& window, bool floating)
+    {
+        keepWindowAbove(window, floating ? this : nullptr);
+    };
     editorToggle.onClick = [this] { toggleClipEditor(); };
     rackToggle.onClick = [this] { toggleDeviceView(); };
     editorToggle.setButtonText("Clip");

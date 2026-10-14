@@ -48,6 +48,11 @@ public:
     // handed. The shell wires both.
     std::function<bool(const juce::KeyPress&)> shortcut;
     std::function<void(juce::Component&)> listenForKeys;
+    // The windows the rack opens - a plugin's, the Drum Rack's - float above
+    // the main window, as Live's plugin windows do, so a drag from the browser
+    // does not bury them. Floating is the platform's business, so the shell
+    // does it; false lets a window sink again.
+    std::function<void(juce::Component& window, bool floating)> keepAboveShell;
     // The device a controller picked, by plugin index on the shown track.
     void selectPluginIndex(int pluginIndex);
     // Told whenever the device shown as selected changes, as the track and

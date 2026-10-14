@@ -473,6 +473,7 @@ void DeviceRack::openDevice(int pluginIndex)
     // processor and createEditorIfNeeded may otherwise return the old pointer.
     floatingWindow.reset();
     floatingWindow = std::make_unique<FloatingDeviceWindow>(session, selectedTrack, pluginIndex);
+    if (keepAboveShell) keepAboveShell(*floatingWindow, true);
     // Destroyed after the click that closed it has finished with it, and only
     // if it is still the window open by then. A mapping from it ends with it:
     // there is nothing left to touch.
@@ -501,6 +502,10 @@ void DeviceRack::openDrumWindow(int pluginIndex)
         view.status = [this] (const juce::String& message) { if (status) status(message); };
         view.presetsChanged = [this] { if (presetsChanged) presetsChanged(); };
         drumWindow->shortcut = [this] (const juce::KeyPress& key) { return shortcut != nullptr && shortcut(key); };
+        drumWindow->floatAboveShell = [this] (juce::Component& window, bool floating)
+        {
+            if (keepAboveShell) keepAboveShell(window, floating);
+        };
         // Destroyed after the click that closed it has finished with it, and
         // only if it is still the window open by then.
         drumWindow->onClose = [this, window = drumWindow.get()]

@@ -17,6 +17,28 @@ namespace te = tracktion::engine;
 namespace rhino
 {
 
+void keepWindowAbove(juce::Component& window, juce::Component* owner)
+{
+   #if JUCE_WINDOWS
+    // JUCE has no owned window, and always-on-top cannot stand in for one: it
+    // floats above every app, and switching it off puts the window above
+    // whatever app is in front. Setting the owner of a top-level window is
+    // what GWLP_HWNDPARENT does for one that is not a child.
+    auto* handle = static_cast<HWND>(window.getWindowHandle());
+    if (handle == nullptr)
+        return;
+    auto* ownerHandle = owner != nullptr && owner->getTopLevelComponent() != nullptr
+                          ? static_cast<HWND>(owner->getTopLevelComponent()->getWindowHandle())
+                          : nullptr;
+    if (ownerHandle == handle)
+        return;
+    if (reinterpret_cast<HWND>(GetWindowLongPtrW(handle, GWLP_HWNDPARENT)) != ownerHandle)
+        SetWindowLongPtrW(handle, GWLP_HWNDPARENT, reinterpret_cast<LONG_PTR>(ownerHandle));
+   #else
+    juce::ignoreUnused(window, owner);
+   #endif
+}
+
 juce::File rhinoLogFile()
 {
     return juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)

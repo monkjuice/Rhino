@@ -82,7 +82,15 @@ public:
     // The shell's shortcuts answer here as they do in the main window: Space
     // plays, Ctrl+Z undoes, Ctrl+S saves.
     bool keyPressed(const juce::KeyPress&) override;
+    void resized() override;
     std::function<void()> onClose;
     std::function<bool(const juce::KeyPress&)> shortcut;
+    // Told when the window is shown or changes size whether it should float
+    // above the main window: always, unless it is maximised, where floating
+    // would cover the main window with no way back to it but closing this.
+    std::function<void(juce::Component& window, bool floating)> floatAboveShell;
+
+private:
+    void updateFloating();
 };
 }

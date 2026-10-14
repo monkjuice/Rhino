@@ -26,6 +26,13 @@ void runDrumRackWindowTest()
     juce::KeyPress forwarded;
     rack.listenForKeys = [&heard] (juce::Component& window) { heard = &window; };
     rack.shortcut = [&forwarded] (const juce::KeyPress& key) { forwarded = key; return true; };
+    juce::Component* floated = nullptr;
+    auto floating = false;
+    rack.keepAboveShell = [&floated, &floating] (juce::Component& window, bool shouldFloat)
+    {
+        floated = &window;
+        floating = shouldFloat;
+    };
     rack.selectTrack(0);
     rack.setSize(1400, 280);
     DeviceEditorPanel* inRack = nullptr;
@@ -80,6 +87,10 @@ void runDrumRackWindowTest()
     require(rack.drumWindow->keyPressed(juce::KeyPress(juce::KeyPress::spaceKey)) && forwarded.getKeyCode() == juce::KeyPress::spaceKey,
             "and the shell's shortcuts answer there");
     require(rack.drumWindow->getName().contains(session.trackName(0)), "the window is named for the rack and its track");
+    // Restored beside the main window, it floats above it, so a sound dragged
+    // from the browser there lands on it instead of burying it.
+    rack.drumWindow->setSize(DrumRackWindow::minimumWidth + 40, DrumRackWindow::minimumHeight + 40);
+    require(floated == rack.drumWindow.get() && floating, "a restored window asks to float above the main window");
     auto* window = rack.drumWindow.get();
     rack.selectDevice(drumsAt);
     rack.openSelectedDevice();

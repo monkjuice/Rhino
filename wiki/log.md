@@ -709,3 +709,7 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 ## [2026-10-13] update | Mapped parameters verified: all six CTest cases pass
 - source: the rebuild after the running RhinoDAW was closed, then `ctest --test-dir native/build -C Release` (6/6 passed; native_pattern_workflow 44.6 s with the mapped parameters scenario in its output, native_arrangement_workflow 103.4 s). DeviceParameters.inc's old check that the rack lists at least 35 Forge parameters was restated: Tracktion still exposes them all through the wrapped processor, and the rack shows nine.
 - updated: pages/mapped-parameters.md (the tests-pending sentence replaced with the result)
+
+## [2026-10-13] update | DeviceParameters.inc's restated Forge check, verified against the file
+- source: native/src/tests/Pattern/scenarios/DeviceParameters.inc (`forgeProcessor->getParameters().size() >= 35` keeps the original message, then `forgeParameters.size() == 9` with a comment pointing at MappedParameters.inc; the whole block is still inside `if (parameterSession.isForgeAvailable())`), checked against the two previous entries, pages/mapped-parameters.md, pages/forge-hosting.md (its Pitfalls bullet still holds, no change) and pages/inc-edits-do-not-rebuild.md (already says to touch the runner, no change)
+- updated: pages/mapped-parameters.md (the Tests section now says the second check holds the rack to exactly nine, so the default list's length is pinned in DeviceParameters.inc as well as MappedParameters.inc)

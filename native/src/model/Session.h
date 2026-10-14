@@ -1477,6 +1477,8 @@ private:
     // Points sendControllerMidi at the devices the list holds now. Message
     // thread only; run whenever the engine has rebuilt the list.
     void refreshControllerTargets();
+    // Switches off whatever reserved port the engine has switched on.
+    void disableReservedMidiPorts();
     juce::StringArray reservedMidiPorts;
     bool controllerConnected = false;
     // What sendControllerMidi delivers to, from whatever thread calls it. The

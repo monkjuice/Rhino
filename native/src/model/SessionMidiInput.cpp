@@ -113,8 +113,10 @@ void Session::MidiDeviceWatcher::changeListenerCallback(juce::ChangeBroadcaster*
 // mid-session starts playing without a relaunch.
 void Session::midiDevicesChanged()
 {
-    // First, whatever else this decides: the controller's notes are delivered
+    // First, whatever else this decides: a controller's ports the rebuild has
+    // switched back on go off again, and the controller's notes are delivered
     // from another thread to devices the rebuilt list may have replaced.
+    disableReservedMidiPorts();
     refreshControllerTargets();
     if (reapplyingArming)
         return;

@@ -30,15 +30,25 @@ bool Session::isReservedMidiPort(const juce::String& portName) const
     return reservedMidiPorts.contains(portName);
 }
 
-// Idempotent, because disabling a device rescans the list and the controller
-// reserves again whenever the list changes: only a device still switched on is
-// touched, so the two cannot chase each other.
 void Session::reserveMidiPorts(const juce::StringArray& portNames)
 {
     jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
     for (const auto& name : portNames)
         reservedMidiPorts.addIfNotAlreadyThere(name);
+    disableReservedMidiPorts();
+}
 
+// Run on every rebuild of the engine's device list as well as on reserving,
+// because the engine builds its MIDI list on a timer and keeps each device's
+// enabled flag from the last run: a Push taken before the first scan landed
+// was found switched on by it and opened under the controller, and its raw
+// pads reached All Ins. Idempotent, because disabling a device rescans the
+// list: only a device still switched on is touched, so the two cannot chase
+// each other.
+void Session::disableReservedMidiPorts()
+{
+    if (reservedMidiPorts.isEmpty())
+        return;
     auto& deviceManager = engine.getDeviceManager();
     for (const auto& candidate : deviceManager.getMidiInDevices())
         if (candidate != nullptr && dynamic_cast<te::VirtualMidiInputDevice*>(candidate.get()) == nullptr

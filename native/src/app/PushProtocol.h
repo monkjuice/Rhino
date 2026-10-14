@@ -116,6 +116,31 @@ inline Bytes polyAftertouchSysex() { return sysex({0x5C, 0x00, 0x01, 0x00}); }
 // The strip as a pitch bend that springs back, Live's own default.
 inline Bytes touchStripPitchBendSysex() { return sysex({0x63, 0x00, 0x01, 0x05}); }
 
+// How hard a pad has to be hit. The Push turns pressure into velocity
+// itself, through a threshold and a curve held in its firmware, and powers up
+// with neither of Live's: Live sends its own each time it starts, and pads no
+// host has set need hitting harder for the same velocity. This is what Live
+// sends by default - threshold 0, the curve it calls Log 1 - for every pad at
+// once: the off threshold (190) and on threshold (210), then the curve's gain
+// (85000) and two shape terms (120000, 60000), each a nibble at a time, most
+// significant first.
+inline Bytes padSensitivitySysex()
+{
+    Bytes bytes {0xF0, 0x47, 0x7F, 0x15, 0x5D, 0x00, 0x20};
+    const auto nibbles = [&bytes](std::uint32_t value, int count)
+    {
+        for (int nibble = count - 1; nibble >= 0; --nibble)
+            bytes.push_back(static_cast<std::uint8_t>((value >> (4 * nibble)) & 0xFu));
+    };
+    nibbles(190, 4);
+    nibbles(210, 4);
+    nibbles(85000, 8);
+    nibbles(120000, 8);
+    nibbles(60000, 8);
+    bytes.push_back(0xF7);
+    return bytes;
+}
+
 // The display is four lines of 68 characters, in four blocks of 17 that
 // each hold two cells of eight with a space between - so a cell begins at
 // one of these.

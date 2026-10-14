@@ -21,7 +21,7 @@ At the pinned commit `4536d8a`, Tracktion has no Push driver and cannot remap no
 - **The engine is kept off all four ports, on every rescan.** `Session::reserveMidiPorts` records the names and calls `disableReservedMidiPorts`, which disables the engine's devices for them. `midiDevicesChanged` calls it again first, before its early return, on every rebuild of the engine's device list. Only a reserved device still enabled is touched, so the rescan that disabling itself causes finds nothing to do. Reserving also unticks them in JUCE's `AudioDeviceManager`, because Audio settings opens ticked inputs behind the engine's back. Every input path skips a reserved name ([Track inputs and monitoring](inputs-and-monitoring.md)). The outputs are reserved too, because the engine sends all-notes-off to every enabled output at each stop, which would blank the pads.
 - **Why on every rescan.** Tracktion builds its MIDI device list on a timer after start-up, and keeps each device's enabled flag in its `Settings.xml` (`%APPDATA%\Theda Native`). On the first hardware run `rhino.log` showed "Push connected" before "MIDI Input devices scanned in", so reserving met an empty list and disabled nothing. The scan then found all four Push ports enabled, as All Ins had left them in earlier runs, and opened them. **Nothing failed: a Windows MIDI port has one owner between processes, not within one.** JUCE's Win32 backend shares one OS handle per device inside a process, so the engine and the controller's own `juce::MidiInput` both opened the User port. The raw pad notes and button and encoder CCs reached All Ins beside the translated ones, and an armed track would have heard every pad twice.
 - **Retries.** The engine closes a disabled port asynchronously. `lookForPush` runs once a second on the controller's own 30 Hz timer, so it retries the open. After three failures it reports once that another program, such as Ableton Live, holds the Push. Plugging in or unplugging is noticed within a second.
-- **No handshake.** Writing to the display clears "Please start Live to play". `greet` first sends User mode (`F0 47 7F 15 62 00 01 01 F7`), because a Push that Live crashed out of stays in Live mode. It then sends poly aftertouch (`5C 00 01 00`) and the touch strip as a pitch bend that springs back (`63 00 01 05`), and redraws everything.
+- **No handshake.** Writing to the display clears "Please start Live to play". `greet` first sends User mode (`F0 47 7F 15 62 00 01 01 F7`), because a Push that Live crashed out of stays in Live mode. It then sends Live's pad sensitivity (`push::padSensitivitySysex`, see [Pad sensitivity](#pad-sensitivity)), poly aftertouch (`5C 00 01 00`) and the touch strip as a pitch bend that springs back (`63 00 01 05`), and redraws everything. All of it is resent on every connect.
 - **On `stop`** the controller ends its gestures, releases held notes, darkens the pads and lit buttons, and writes "Rhino has closed" on line 2.
 
 ## Threads
@@ -36,6 +36,14 @@ At the pinned commit `4536d8a`, Tracktion has no Push driver and cannot remap no
 By the user's decision, the pads feed All Ins and an input choice called "Push" (token `device:Push`, `Session::midiInputPushToken`). The Push input is a virtual device made on first use, like the Computer Keyboard's, and is subject to the same asynchronous rescan. Cards list it while a Push is connected or while a track names it. **Nothing is armed implicitly**: to play from the pads, arm a MIDI track or set its monitoring to In.
 
 In key, the bottom-left pad plays the root at octave 3 (MIDI 48 for C). Each row starts a fourth above the one below: in key, that is the fewest scale steps that reach five semitones (three in a major scale); chromatic, it is five semitones. On a track with a [Drum Rack](drum-rack.md), the bottom-left four by four plays the bank the rack shows, lowest note at the bottom left, and the other pads play nothing.
+
+## Pad sensitivity
+
+The Push 1 turns pad pressure into velocity itself, through a threshold and a curve in its firmware: `F0 47 7F 15 5D 00 20`, then 32 nibbles (off threshold and on threshold, 4 each; gain and two curve terms, 8 each; most significant nibble first), then `F7`. Live sends its own every time it starts; Rhino sent nothing until 2026-10-13, so the Push stayed on its power-on default and the user had to hit pads too hard for full velocity. `greet` now sends Live's default: threshold 0 and the curve Live calls Log 1 (off 190, on 210, gain 85000, curves 120000 and 60000). `PushProtocolTest.cpp` checks the bytes against Live 9.1.2's captured start-up payload.
+
+- **No sensitivity page, by decision.** Live has one on Push 1's User button (threshold -20..+20, six curves). It was rejected because it would only ever reach the Push; a per-input software velocity curve in Rhino would serve every controller's pads, and is not built.
+- **If a page is ever wanted:** gain/curve1/curve2 are Linear 100000/45000/0, Log 1 85000/120000/60000, Log 2 85000/120000/50000, Log 3 100000/120000/50000, Log 4 130000/120000/50000, Log 5 140000/120000/0. Threshold step `t` gives on = 10 + 10(t+20), off = 10 + 9(t+20).
+- **Loudness is not only the Push.** The instrument's own velocity response matters too (the Drum Rack's per-pad Velocity control), and Accent plays every pad at 127.
 
 ## Controls
 
@@ -76,14 +84,14 @@ The Push follows the arrangement's selected track; it ignores the main row. It a
 ## Tests
 
 - `tests/PushProtocolTest.cpp` (`checkPushProtocol`, run by `--arrangement-geometry-test`) checks the header.
-- `tests/Arrangement/scenarios/PushController.inc` drives a controller that is never started, through its `sendToPush` and `playNote` sinks plus `receive()` and `flush()`. It covers reserved ports, the Push input choice, the gesture-depth fix, the display, a turn as one undo step, buttons, mixer mode, pad translation and release, and the Drum Rack bank.
+- `tests/Arrangement/scenarios/PushController.inc` drives a controller that is never started, through its `sendToPush` and `playNote` sinks plus `receive()` and `flush()`. It covers reserved ports, the Push input choice, the greeting sending the pad sensitivity, the gesture-depth fix, the display, a turn as one undo step, buttons, mixer mode, pad translation and release, and the Drum Rack bank.
 - Reserving a real port name in a test would disable that port in the test engine's device list, so the scenario uses a made-up name.
 
 ## On the hardware (2026-10-13)
 
 - **First run.** The Push lit up and Rhino took over its display. The run exposed the double delivery described under Ports; the fix (reservations re-applied on every rescan) is built but not yet re-checked on the hardware.
 - **A buzz in the speakers is electrical, not Rhino.** Once Rhino lit the Push, a constant buzz came through the speakers, with the Push on its own power adapter. Moving it to another USB port stopped it. That is USB ground or power noise in the audio path, plausibly worse now that the LEDs draw current. Rhino played nothing: the engine had opened the same MIDI outputs (GS Wavetable Synth and both Push outs, all `sendMidiClock="0"`) in runs before Push support existed. Try another USB port before suspecting the code.
-- **Not yet confirmed on the hardware:** the In/Out CCs, the button light values, the display's bar glyphs (3, 5, 6), and that the User port carries everything once the Push is in User mode.
+- **Not yet confirmed on the hardware:** the In/Out CCs, the button light values, the display's bar glyphs (3, 5, 6), that the User port carries everything once the Push is in User mode, and that the pad sensitivity sysex makes the pads feel as they do under Live (built and tested on 2026-10-13, not yet tried).
 
 ## Related
 

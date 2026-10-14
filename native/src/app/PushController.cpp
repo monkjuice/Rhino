@@ -202,11 +202,13 @@ void PushController::closePorts(bool sayGoodbye)
 }
 
 // The Push starts in User mode, but one Live crashed out of is left in Live
-// mode, which routes everything to the other port. Then pressure per pad and
-// the strip as a pitch bend, and a full picture.
+// mode, which routes everything to the other port. Then Live's pad
+// sensitivity, without which the pads need hitting harder for full velocity,
+// pressure per pad, the strip as a pitch bend, and a full picture.
 void PushController::greet()
 {
     sendBytes(push::userModeSysex());
+    sendBytes(push::padSensitivitySysex());
     sendBytes(push::polyAftertouchSysex());
     sendBytes(push::touchStripPitchBendSysex());
     invalidateSurface();

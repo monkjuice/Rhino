@@ -748,3 +748,7 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/device-rack.md (the rack listens to its top-level window and re-raises the floating windows)
 - updated: pages/drum-rack.md (floating bullet: the failed drop and the fix; the Unverified bullet now states TreeView's drag does leave its window)
 - updated: index.md (new gotcha)
+
+## [2026-10-13] update | Rhino sends Live's pad sensitivity to the Push on connect (built and tested; not yet tried by the user)
+- source: the change's brief, checked against native/src/app/PushProtocol.h (`padSensitivitySysex`), app/PushController.cpp (`greet`), tests/PushProtocolTest.cpp and tests/Arrangement/scenarios/PushController.inc
+- updated: pages/ableton-push.md (Ports: the greeting's order now includes the pad sensitivity; new Pad sensitivity section: the sysex layout, Live's default as sent, the rejected sensitivity page and why, Live's six curves and the threshold formula for later, velocity also depending on the instrument and Accent; Tests: the scenario checks the greeting; On the hardware: the feel under Rhino still unconfirmed)

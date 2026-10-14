@@ -116,6 +116,15 @@
             require(std::any_of(sent.begin(), sent.end(), [](const auto& message)
                                 { return message.isNoteOn() && message.getNoteNumber() == push::padNoteFirst; }),
                     "The pads are lit");
+            sent.clear();
+            controller->greet();
+            require(std::any_of(sent.begin(), sent.end(), [](const auto& message)
+                                {
+                                    const auto expected = push::padSensitivitySysex();
+                                    return message.isSysEx() && message.getRawDataSize() == static_cast<int>(expected.size())
+                                        && std::equal(expected.begin(), expected.end(), message.getRawData());
+                                }),
+                    "Connecting sets Live's pad sensitivity, so the pads reach full velocity as they do in Live");
 
             scenario("push: an encoder turn is one undo step");
             {

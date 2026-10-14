@@ -4,7 +4,7 @@ type: convention
 summary: Anything kept beyond one call holds an id or a copy, never a raw engine pointer, because undo, moves, reloads and publishes free the object.
 tags: [both, lifetime, undo]
 sources: []
-updated: 2026-10-12
+updated: 2026-10-14
 ---
 
 # Hold ids, not pointers
@@ -24,6 +24,7 @@ Tracktion rebuilds its objects from the edit's `ValueTree`, so a raw `te::Clip*`
 - A stored automation lane keeps no copy of its track index, since deleting a track renumbers every track below it, and no copy of its device's slot, since a reorder moves devices. A lane is identified by the track state that holds it plus `{device key, parameter}`; the key is a UUID Rhino writes onto the plugin's state (`rhinoDeviceKey`, commit `cf85e3f`; [Track automation](automation.md)).
 - The Drum Rack's own window keeps its rack's `itemID` and finds it again on every change (`DrumRackView::follow`), so a device added in front of it or a track moved leaves it on the same rack, and it closes once the id is gone ([Drum Rack](drum-rack.md)).
 - A DJ deck keeps its track's `EditItemID`, and `Session::djDeckInfo` resolves the row on every call (`track`, -1 once it is gone), so a deck follows its track through reorders. It keeps no pointer to the track's hidden DJ devices, which hold a raw pointer to the deck's port: `djPoll` finds them again by the track's id every poll and points them at the port again, because an undo that brings a track back makes its devices anew. The reverse holds too: `bindDjTrack` looks for stale readers by the port, not by the track the deck remembers, pointing away every hidden end on any track that names the slot's port, so a track brought back by an undo with the devices it had never leaves a second reader on a port; `djUnbindAll` (`~Session`, `djReset`) clears every hidden end of every track. Material reaches the engine by pointer and is replaced whole, so a display keys what it keeps on `DjDeckInfo::generation`, not on the pointer ([DJ view and the booth](dj-view.md)).
+- The stepped bounce is a deliberate exception: its run keeps `te::Clip*` and track indices from one frame to the next, which is safe only because nothing can edit while it runs ([A long command runs in slices behind a modal screen](long-commands-run-in-slices.md)).
 - `tidyRecordedClips` compares a track's clips with the *ids* held before recording started, because making room for one new clip can delete another.
 - The clipboard goes further and holds `ClipSnapshot` values, not ids: the source of a cut is gone before the paste, and an undo can remove it too ([Region editing](region-editing.md)).
 - A view's own cache is no safer than the engine's objects. Any `Session` command announces synchronously and the arrangement rebuilds its clip list in that call, so a gesture that reads a clip after calling `Session` takes a copy of it first. Two that held a reference read freed or wrong entries until commit `2df76f8`.

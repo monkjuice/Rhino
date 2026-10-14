@@ -10,10 +10,10 @@ The catalog of this wiki: every page, grouped by type, one line each (`- [Title]
 ## Components
 
 - [Ableton Push 1](pages/ableton-push.md) — Rhino drives the original Push itself on its User port and keeps all four of its ports from the engine; the pads are translated into a scale or a Drum Rack's bank on the MIDI thread and play like any keyboard, and the buttons and encoders become Rhino's commands, never a track's MIDI.
-- [App shell and control bar](pages/app-shell.md) — The shell under app/ - Application in a Main.cpp of about 200 lines, MainWindow, and MainComponent across six units holding the control bar, the docked browser, the single lower pane and the 30 Hz timer that polls what the engine never broadcasts.
+- [App shell and control bar](pages/app-shell.md) — The shell under app/ - Application in a Main.cpp of about 200 lines, MainWindow, and MainComponent across six units holding the control bar, the docked browser, the single lower pane, the 30 Hz timer that polls what the engine never broadcasts, and the modal loading screen a long command runs behind.
 - [Arrangement view](pages/arrangement-view.md) — The timeline UI, one class across twelve files, that previews every drag locally and leaves panel decisions to the shell.
 - [Audio clip editor](pages/audio-clip-editor.md) — Edits one audio clip's own gain, pan, pitch, fades, mute and reverse as clip properties, with one undo step per knob drag.
-- [Bounce to New Track](pages/bounce-to-new-track.md) — Ctrl+B renders the selected clips, a track or a group to an audio file on a new track directly under its source and mutes the source in the same undo step, by Live 12's rules - a track before its fader, a group after its bus.
+- [Bounce to New Track](pages/bounce-to-new-track.md) — Ctrl+B renders the selected clips, a track or a group to an audio file on a new track directly under its source and mutes the source in the same undo step, by Live 12's rules - a track before its fader, a group after its bus - a slice per frame behind a cancellable loading screen.
 - [Browser and library preview](pages/browser.md) — A six-section library rail, Drums first, whose rows leave only by drag, with samples and drum presets auditioned through a second audio callback.
 - [Built-in devices](pages/built-in-devices.md) — Every device Rhino ships, what each one is and where its source lives, with Utility's details and the pitfalls the devices share.
 - [Clip slots, the DJ consoles' cells](pages/clip-slots.md) — Each track's clip slots, one per scene, are the cells a DJ console's clips grid shows; what the model guarantees about them, and the clip launcher that first showed them, removed on 2026-10-11.
@@ -75,6 +75,7 @@ The catalog of this wiki: every page, grouped by type, one line each (`- [Title]
 ## Decisions
 
 - [A deck's bounce renders on a worker against a copy of the document](pages/dj-bounce-on-a-copy.md) — Superseded on 2026-10-12, when decks stopped bouncing - how a track or group bounced to a DJ deck rendered on the booth's worker from a snapshot copy of the edit, kept for what it found about copies of a document, relative sources and the renderer.
+- [A long command runs in slices behind a modal screen](pages/long-commands-run-in-slices.md) — A command that must render the live document (Bounce to New Track, so far) stays on the message thread but works a slice per frame behind the shell's modal LoadingScreen, so the window draws and can cancel while nothing can edit the document under it.
 - [A group is an ordinary bus track](pages/group-is-a-bus-track.md) — A group's bus is a plain te::AudioTrack kept in getAudioTracks(), so every track-indexed path reaches it with no second code path.
 - [A track's kind is fixed when it is made](pages/track-kind-fixed-at-creation.md) — A track declares audio or MIDI at creation, nothing dropped on it changes that, and every mismatched drop is refused in the model.
 - [Content is files, never compiled in](pages/content-is-files.md) — Samples and other content live as files under library/ and are found at runtime; only fonts, app icons and two tiny SVG glyphs are embedded.

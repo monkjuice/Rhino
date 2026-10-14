@@ -19,14 +19,14 @@ An offline render whose `tracksToDo` names a [group](track-groups.md) member but
 
 ## Workaround
 
-`renderBounce` in `native/src/model/SessionBounce.cpp`, for a track rendered before its mixer ([Bounce to New Track](bounce-to-new-track.md)), sets two properties for the length of the render with a null undo manager, through `ScopedProperty`, which puts the old value back (or removes a property that was absent) when it goes:
+`RenderInFlight` in `native/src/model/SessionBounce.cpp` (one job's render; `renderBounce` until the bounce was stepped on 2026-10-14), for a track rendered before its mixer ([Bounce to New Track](bounce-to-new-track.md)), sets two properties for the length of the render with a null undo manager, through `ScopedProperty`, which puts the old value back (or removes a property that was absent) when it goes:
 
 - the track's `OUTPUTDEVICES/DEVICE` `name`, set to the default audio output's name, so the track is built as a top-level track;
 - its `VolumeAndPanPlugin`'s `enabled`, set false, so the fader and pan stay out of the file.
 
 It works because `TrackOutput` recomputes its destination synchronously when that property changes (no `AsyncUpdater`), and the graph builder passes a disabled plugin through (`createNodeForPlugin`, unless `includeBypassedPlugins`); both read at `4536d8a`. The scopes are declared before the `RenderTask`, so they are restored only after the task has gone.
 
-The writes skip the undo history because a render is not an edit, and they are safe only because the render runs on the message thread, so nothing else edits the document meanwhile. `ClipBounce.inc` checks that a member feeds its bus again after its render, and that a bounced track's fader is switched back on. The DJ bounce did the same on a copy of the document with `setOutputToDefaultDevice`.
+The writes skip the undo history because a render is not an edit. They stay in place across the bounce's slices, so they are safe only because nothing can edit the document meanwhile: the render runs on the message thread behind a modal loading screen, and undo and redo do nothing while it runs ([A long command runs in slices behind a modal screen](long-commands-run-in-slices.md)). `ClipBounce.inc` checks that a member feeds its bus again after its render, and that a bounced track's fader is switched back on. The DJ bounce did the same on a copy of the document with `setOutputToDefaultDevice`.
 
 ## Related
 

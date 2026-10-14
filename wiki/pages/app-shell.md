@@ -1,10 +1,10 @@
 ---
 title: App shell and control bar
 type: component
-summary: The shell under app/ - Application in a Main.cpp of about 200 lines, MainWindow, and MainComponent across six units holding the control bar, the docked browser, the single lower pane and the 30 Hz timer that polls what the engine never broadcasts.
+summary: The shell under app/ - Application in a Main.cpp of about 200 lines, MainWindow, and MainComponent across six units holding the control bar, the docked browser, the single lower pane, the 30 Hz timer that polls what the engine never broadcasts, and the modal loading screen a long command runs behind.
 tags: [rhino, ui, shell]
 sources: []
-updated: 2026-10-13
+updated: 2026-10-14
 ---
 
 # App shell and control bar
@@ -59,9 +59,21 @@ Note editor, audio clip editor and Device View are three faces of one pane (`Low
 
 `MainComponent`'s timer (`MainComponentTimer.cpp`) polls what the engine does not broadcast (`Session::recordingStopped`, for the clips a recording wrote, and `Session::djPoll`, for the DJ booth's finished reads, its decks' bindings and the cells to make again), applies pending pane layout, updates the Info View hint (`InfoHints.h`), and rewrites the readout. It no longer plays track automation: since commit `fe163c8` the engine does ([Track automation](automation.md)).
 
+## The loading screen
+
+`app/LoadingScreen.h/.cpp` (2026-10-14; not `StartupScreen.h`, which marks start-up stages) is a generic veil for a long command that works on the message thread a slice at a time ([A long command runs in slices behind a modal screen](long-commands-run-in-slices.md)). `run(Task)` takes a title, `step(ms)` (does about that much work, returns whether any is left), `progress()` (fraction and a detail line), `cancel` and `finished` (called once the screen has gone, finished or cancelled).
+
+- **Modal.** `run` enters modal state, so no other component, the custom title bar's menus and other windows included, takes input; `inputAttemptWhenModal` is overridden to stay silent rather than beep and raise. Esc and the Cancel button cancel; every other key is swallowed, since a shortcut is an edit.
+- **Frame budget.** A 33 ms timer gives the work 24 ms per frame; the first slice waits one frame so the screen is painted before work holds the thread. It draws the window dimmed, with a card: title, detail, percentage and a bar in `palette::deviceAccent`.
+- **Owned by `MainComponent`**, added last and raised again at the end of `resized()` (`MainComponentLayout.cpp`), because `resized` raises the lower panes and toggles above everything else.
+- **Used by the bounce only:** `MainComponent.cpp` wires `Arrangement::bounceStarted` to `run` with `Session::continueBounce` as the step, "Rendering <track>" plus "(n of m)" as the detail, and `Arrangement::bounceFinished` as `finished` ([Bounce to New Track](bounce-to-new-track.md)). The Push's `commandsAllowed` is false while it runs, and `requestClose` cancels the bounce before asking about unsaved changes; the screen then finds no work left and reports the cancel.
+- **Open (2026-10-14):** opening a project and the WAV export still only disable `MainComponent` (`ProjectFiles::loadingChanged` → `setEnabled`), and Ctrl+J merge still renders in one blocking loop; any of them could run behind this screen.
+
 ## Related
 
 - [Arrangement view](arrangement-view.md)
+- [Bounce to New Track](bounce-to-new-track.md)
+- [A long command runs in slices behind a modal screen](long-commands-run-in-slices.md)
 - [Colours and typography](colours-and-typography.md)
 - [Computer MIDI keyboard](computer-keyboard.md)
 - [Ableton Push 1](ableton-push.md)

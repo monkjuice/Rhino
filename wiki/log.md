@@ -775,3 +775,15 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/track-groups.md (bouncing a group and a member; a member renders only as part of its bus)
 - updated: pages/audio-clip-editor.md (bounce as merge's counterpart; mute is the property `setClipsMuted` sets, MIDI clips included)
 - updated: index.md (two new pages; Arrangement view and Session summaries)
+
+## [2026-10-14] update | Bounce to New Track renders in slices behind a modal loading screen
+- source: the change's brief, checked against native/src/model/SessionBounce.cpp, Session.h, Session.cpp (`undo`, `redo`, `cancelBounce` callers), SessionInternal.cpp (`stopRenderWhenStalled`, `renderTaskOutcome`, `runRenderTask`), app/LoadingScreen.h/.cpp, app/MainComponent.cpp/.h, app/MainComponentLayout.cpp, app/ProjectFiles.cpp, ui/arrangement/ArrangementBounce.cpp and tests/Arrangement/scenarios/ClipBounce.inc
+- created: pages/long-commands-run-in-slices.md (decision: stay on the message thread, slice per frame behind a modal screen rather than render the live edit from a worker; the edit guards; pointers held across slices; merge, open and export not yet behind it)
+- updated: pages/bounce-to-new-track.md (summary; the stepped API, `BounceRun`/`RenderInFlight`, the wrappers; `runBounce`/`bounceFinished`; the edit guards; files named per job; the stepped and LoadingScreen tests)
+- updated: pages/app-shell.md (summary; new section The loading screen: Task, modal, Esc, 24 of 33 ms, first slice waits a frame, raised last in `resized`, the bounce wiring, `requestClose`; open item for open, export and merge)
+- updated: pages/renders-that-never-return.md (a stalled bounce holds the loading screen; the guard split into `stopRenderWhenStalled` and `renderTaskOutcome`, `runRenderTask` the two around a loop)
+- updated: pages/session-model.md (SessionInternal render helpers; pitfall: the model guards only undo, redo and replacing the document while bouncing)
+- updated: pages/ids-not-pointers.md (the bounce's pointers across slices as a deliberate exception)
+- updated: pages/bus-member-renders-nothing-alone.md (`RenderInFlight` replaces `renderBounce`; why the overrides are safe across slices)
+- updated: pages/ableton-push.md (`commandsAllowed` false while the loading screen runs)
+- updated: index.md (new decision; App shell and Bounce summaries)

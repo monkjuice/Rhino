@@ -4,7 +4,7 @@ type: component
 summary: Rhino drives the original Push itself on its User port and keeps all four of its ports from the engine; the pads are translated into a scale or a Drum Rack's bank on the MIDI thread and play like any keyboard, and the buttons and encoders become Rhino's commands, never a track's MIDI.
 tags: [rhino, midi, controller, hardware]
 sources: []
-updated: 2026-10-13
+updated: 2026-10-14
 ---
 
 # Ableton Push 1
@@ -56,7 +56,7 @@ The Push 1 turns pad pressure into velocity itself, through a threshold and a cu
   - In Device mode, the upper row picks a device in the chain, and In/Out (CC 62/63, unverified) page through its parameters eight at a time. A continuous control moves through a `NormalisableRange` with the parameter's skew, about 140 steps across its whole travel, ten times finer with Shift. A discrete control, a choice or a toggle moves one step every 6 detents.
   - In Volume and Pan mode, the encoders drive the bank's eight tracks: 0.5 dB a step for volume (Shift 0.1) and 0.01 for pan (Shift 0.002).
   - The master encoder sets the main volume and the tempo encoder moves 1 BPM a step (Shift 0.1).
-- **While the shell is disabled** (opening a project, exporting), presses are dropped but releases are not (`commandsAllowed`).
+- **While the shell is disabled** (opening a project, exporting) **or the loading screen runs** (a bounce, since 2026-10-14), presses are dropped but releases are not (`commandsAllowed`).
 
 ## Gestures
 

@@ -740,3 +740,11 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/app-shell.md (new section: owned windows via `GWLP_HWNDPARENT`, always-on-top toggling rejected and why, the gotcha that the main window's native window must never be recreated while one is open, what checks it; AppPlatform lists `keepWindowAbove`)
 - updated: pages/device-rack.md (`openDevice` floats the plugin window; `keepAboveShell` as the UI's one way to ask, and the drum window's `floatAboveShell`)
 - updated: pages/drum-rack.md (floats while restored, not while maximised, and why; the cross-window drag still untested; the window test's new check)
+
+## [2026-10-13] update | Browser drops reach the floating Drum Rack window again (built; not yet tried by the user)
+- source: the change's brief (cause read from JUCE at 37c894f), checked against native/src/ui/rack/DeviceRack.h/.cpp (`parentHierarchyChanged`, `componentBroughtToFront`, `raiseFloatingWindows`, `watchedWindow`)
+- created: pages/juce-drop-target-follows-its-own-window-order.md (a desktop drag resolves its target by juce::Desktop's own window list, not the OS z-order; how an owned window lost browser drops; the re-raise fix; applies to any window kept above by platform means; no automated test, since it needs real windows)
+- updated: pages/app-shell.md (floating windows: the drag-order gotcha and its fix, linked)
+- updated: pages/device-rack.md (the rack listens to its top-level window and re-raises the floating windows)
+- updated: pages/drum-rack.md (floating bullet: the failed drop and the fix; the Unverified bullet now states TreeView's drag does leave its window)
+- updated: index.md (new gotcha)

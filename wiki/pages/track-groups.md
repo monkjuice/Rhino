@@ -4,7 +4,7 @@ type: component
 summary: Ctrl+G gathers tracks under a bus track that their audio feeds; the structure is positional and repaired after every reorder.
 tags: [rhino, groups, mixer, arrangement]
 sources: []
-updated: 2026-10-13
+updated: 2026-10-14
 ---
 
 # Track groups (bus tracks)
@@ -15,6 +15,7 @@ A group is a bus: a track of its own, with fader, pan, mute, solo and an audio-e
 
 - **Grouping.** Ctrl+G (`Session::groupTracks`) appends a bus named `Group N`, gives it a `rhinoGroupBus` id one past the highest the document has used (so an id freed by an undo is never reissued), and gathers the members under it. Ctrl+Shift+G (`ungroupTracks`) deletes the bus and hands the members back to the main output; the tracks survive.
 - **Positional structure.** A group is its bus followed by the run of tracks whose `rhinoGroup` equals the bus's id; no member list is stored. `reconcileTrackGroups` runs after `addTrack`, `moveTrack`, `removeAudioTrack`, every group command, every lane a drag or paste makes, and every reopen: a plain track carried between two members, or directly under the bus, joins; anything cut off from its bus leaves; then routing is rewritten to match (`TrackOutput::setOutputToTrack` for members, the default device for the rest).
+- **A track added under a group** (`addTrack` with `below`, from the `+` menu or Ctrl+T under the selected card, 2026-10-14). Under an open group's bus or any of its members it joins that group, and the join is written explicitly (`trackGroupMemberID`) before reconciling: under the *last* member is not between two members, so reconciling alone would leave it outside. Under any part of a collapsed group (the bus, or a hidden member still selected) it lands after the whole group, outside it, since inside a folded group it would be made at zero height and never seen. `TrackManagement.inc` covers both.
 - **Undo restores the group whole** (commit `8dd3627`). Membership is written through the undo manager, and every caller reconciles inside the transaction of the move, group or delete that decided it, so one Ctrl+Z puts back position, membership and routing together. Ungrouping and deleting a bus let the members go and route them to the main output while the bus still exists (`dissolveGroupInEdit`). Undo replays a transaction backwards, so it brings the bus back before routing anything into it; routed after the deletion, the members lost their routing for good. `Arrangement/scenarios/GroupUndo.inc` covers each case.
 - **Collapse** is a view setting on the bus (`rhinoGroupCollapsed`, no undo). Members are laid out at zero height rather than removed, so geometry code needs no special case.
 - **No nesting.** Grouping refuses a selection that contains a bus, and a bus is never made a member.

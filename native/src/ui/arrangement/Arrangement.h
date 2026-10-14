@@ -33,6 +33,12 @@ public:
     void fit();
     void selectTrack(int track);
     int selectedTrackIndex() const { return selectedTrack; }
+    // Adds a track of this kind directly under the selected card - at the
+    // foot of the stack while the main row is selected - and selects it, so
+    // adding several in a row stacks them in the order they were made.
+    // Public because Ctrl+T is a shell shortcut that answers wherever the
+    // focus is.
+    void insertTrack(Session::TrackType);
     // The clip a command would act on, or an invalid id when the selection is
     // a track, a region or nothing. The shell reads it to decide which editor
     // the lower pane should be showing.

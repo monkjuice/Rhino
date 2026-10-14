@@ -4,7 +4,7 @@ type: component
 summary: The timeline UI, one class across eleven files, that previews every drag locally and leaves panel decisions to the shell.
 tags: [rhino, ui, arrangement]
 sources: []
-updated: 2026-10-13
+updated: 2026-10-14
 ---
 
 # Arrangement view
@@ -27,7 +27,7 @@ updated: 2026-10-13
 - **`Focus`** records what the last click selected (clip, track, automation lane, region or nothing), and Delete dispatches on it.
 - **Autoscroll runs on the frame clock** (`VBlankAttachment`), because a pointer held still past the edge sends no drag events.
 - **It reports, the shell decides.** `clipSelected`, `clipOpened`, `trackSelected` and `trackFocused` are callbacks; which panel opens is the [app shell](app-shell.md)'s call.
-- **Cards.** A card's bottom edge resizes its row and its body carries the track through the stack (`Session::moveTrack`), both previewed until release. Row height (`rhinoLaneHeight`, 0 means fit the panel) is a view setting written without undo; colour and name are undoable. Renaming puts one `TextEditor` over the painted name.
+- **Cards.** A card's bottom edge resizes its row and its body carries the track through the stack (`Session::moveTrack`), both previewed until release. Row height (`rhinoLaneHeight`, 0 means fit the panel) is a view setting written without undo; colour and name are undoable. Renaming puts one `TextEditor` over the painted name. A track from the `+` menu or Ctrl+T lands under the selected card and becomes the selection (`insertTrack`, see [Track kinds: audio and MIDI](track-kinds.md)).
 
 ## Clips that leave the panel
 

@@ -34,12 +34,11 @@ bool MainComponent::keyPressed(const juce::KeyPress& key)
     // Adding a track is a document command rather than an arrangement one,
     // so it answers wherever the focus is, the way New and Open do. The
     // arrangement's + button is where the kind is chosen; the shortcut
-    // repeats that choice instead of asking again, and starts on MIDI.
+    // repeats that choice instead of asking again, and starts on MIDI. The
+    // track lands under the arrangement's selected card either way.
     if (key.getModifiers().isCommandDown() && key.getKeyCode() == 'T')
     {
-        const auto result = session.addTrack(Session::lastAddedTrackType());
-        logStatus(result.failed() ? result.getErrorMessage()
-                                  : "Added " + session.trackName(session.trackCount() - 1));
+        arrangement.insertTrack(Session::lastAddedTrackType());
         return true;
     }
     if (key.getModifiers().isCommandDown() && key.getModifiers().isShiftDown() && key.getKeyCode() == 'E')

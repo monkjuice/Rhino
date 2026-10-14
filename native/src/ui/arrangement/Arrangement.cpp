@@ -888,10 +888,17 @@ void Arrangement::showAddTrackMenu()
 void Arrangement::addTrackOfType(Session::TrackType type)
 {
     Session::setLastAddedTrackType(type);
-    const auto result = session.addTrack(type);
+    insertTrack(type);
+}
+
+void Arrangement::insertTrack(Session::TrackType type)
+{
+    auto added = -1;
+    const auto result = session.addTrack(type, selectedTrack, &added);
+    if (result.wasOk())
+        selectTrack(added);
     if (status)
-        status(result.failed() ? result.getErrorMessage()
-                               : "Added " + session.trackName(session.trackCount() - 1));
+        status(result.failed() ? result.getErrorMessage() : "Added " + session.trackName(added));
 }
 
 void Arrangement::showGridMenu(juce::Component* target)

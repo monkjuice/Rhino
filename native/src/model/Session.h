@@ -390,7 +390,13 @@ public:
     // track" a question only the chain could answer.
     enum class TrackType { audio, midi };
     TrackType trackType(int track) const;
-    juce::Result addTrack(TrackType);
+    // Lands directly under `below`, in its group when it is in one, so a new
+    // track arrives where the person is working; with no track named - the
+    // main row, or -1 - it goes at the foot of the stack. A group folded away
+    // shows as one row, so a track added under any part of it lands under
+    // the whole group rather than out of sight inside it. `added`, when
+    // given, receives the new track's index.
+    juce::Result addTrack(TrackType, int below = -1, int* added = nullptr);
     // Shorthand for addTrack(TrackType::audio), kept because most callers - an
     // import, a drop below the last lane - want a track for audio and say so.
     juce::Result addAudioTrack() { return addTrack(TrackType::audio); }
@@ -1554,10 +1560,12 @@ private:
     // blank rack given the default kit. A track already set up changes none.
     juce::Result preparePresetTrack(int trackIndex, const PresetPattern&, bool& devicesChanged);
     // Every path that makes a track goes through here, so no track can exist
-    // without having said what it is for. It appends the row, names it,
-    // colours it, writes its type and gives it its utility device; the caller
-    // owns the undo transaction and whatever reconciling the new row needs.
-    te::AudioTrack* appendTrack(TrackType);
+    // without having said what it is for. It adds the row - directly under
+    // `after` when that names a track, at the foot of the stack otherwise -
+    // names it, colours it, writes its type and gives it its utility device;
+    // the caller owns the undo transaction and whatever reconciling the new
+    // row needs.
+    te::AudioTrack* appendTrack(TrackType, int after = -1);
     void initialiseExternalPlugins(bool retry = false);
     juce::ValueTree automationOwnerState(int track) const;
     juce::ValueTree findTrackAutomationState(DeviceTarget) const;

@@ -758,3 +758,9 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/drum-rack.md (summary; Its own window: the opening size, `openingBounds`, why maximised hid the main window, `raiseFloatingWindows` left alone; floats from the moment it opens; the window test's `openingBounds` check)
 - updated: pages/device-rack.md (the name-bar button and the Drum Rack window bullet no longer say maximised)
 - updated: index.md (Drum Rack summary)
+
+## [2026-10-14] update | A new track lands under the selected card
+- source: the change's brief, checked against native/src/model/SessionTracks.cpp (`appendTrack`, `addTrack`) and ui/arrangement/Arrangement.cpp (`insertTrack`, `addTrackOfType`)
+- updated: pages/track-kinds.md (`appendTrack`'s `after` and `addTrack`'s `below`/`added`; `+` and Ctrl+T go through `insertTrack` under `selectedTrack`, main row means the foot; the `markModified` rule; drop and paste lanes and `addAudioTrack` still append)
+- updated: pages/track-groups.md (new bullet: under an open group joins by an explicit `trackGroupMemberID`, under a collapsed one lands after the whole group)
+- updated: pages/arrangement-view.md (Cards: a new track lands under the selected card)

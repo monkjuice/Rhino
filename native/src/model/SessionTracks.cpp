@@ -59,9 +59,12 @@ void Session::setLastAddedTrackType(TrackType type)
     properties.saveIfNeeded();
 }
 
-te::AudioTrack* Session::appendTrack(TrackType type)
+te::AudioTrack* Session::appendTrack(TrackType type, int after)
 {
-    auto newTrack = edit->insertNewAudioTrack(te::TrackInsertPoint::getEndOfTracks(*edit), nullptr, false);
+    const auto tracks = te::getAudioTracks(*edit);
+    const auto at = juce::isPositiveAndBelow(after, tracks.size()) ? te::TrackInsertPoint(nullptr, tracks[after])
+                                                                  : te::TrackInsertPoint::getEndOfTracks(*edit);
+    auto newTrack = edit->insertNewAudioTrack(at, nullptr, false);
     if (newTrack == nullptr)
         return nullptr;
     newTrack->setName(trackTypeName(type));
@@ -75,22 +78,44 @@ te::AudioTrack* Session::appendTrack(TrackType type)
     return newTrack.get();
 }
 
-juce::Result Session::addTrack(TrackType type)
+juce::Result Session::addTrack(TrackType type, int below, int* added)
 {
     const auto kind = trackTypeName(type);
+    auto after = juce::isPositiveAndBelow(below, trackCount()) ? below : -1;
+    auto joining = 0;
+    const auto groupId = trackGroupBusId(after) != 0 ? trackGroupBusId(after) : trackGroupId(after);
+    if (const auto group = trackGroup(groupId))
+    {
+        // Under a folded group means under all of it: inside, the track would
+        // be made and never seen. Under an open one it joins, explicitly,
+        // because under the last member is not between two of them and
+        // reconciling alone would leave it outside.
+        if (group->collapsed)
+            after = std::max(group->busTrack, group->lastTrack());
+        else
+            joining = group->id;
+    }
     edit->getUndoManager().beginNewTransaction("Add " + kind.toLowerCase() + " track");
-    if (appendTrack(type) == nullptr)
+    auto* track = appendTrack(type, after);
+    if (track == nullptr)
         return juce::Result::fail("Could not create " + kind.toLowerCase() + " track.");
-    // The new track lands after the last one, below every group, so it joins
-    // none of them; reconciling routes it to the main output with the rest.
+    if (joining != 0)
+        track->state.setProperty(trackGroupMemberID, joining, &edit->getUndoManager());
+    // Reconciling routes the new track into the bus it joined, or to the main
+    // output with the rest.
     reconcileTrackGroups();
     ensureSceneSlots();
     ensureTrackMixers();
     edit->getUndoManager().beginNewTransaction();
+    const auto index = after < 0 ? trackCount() - 1 : after + 1;
+    if (added != nullptr)
+        *added = index;
     // An empty track below every other changes nothing any deck plays, and
     // moves no lane: the main row's index moves on one, but the mirror finds
-    // a lane's curve by its device and parameter, not by the index.
-    markModified(-1, ModelChange::none);
+    // a lane's curve by its device and parameter, not by the index. One
+    // landing higher up moves every lane under it and may have joined a
+    // group, which is what moving a track counts as.
+    markModified(-1, index == trackCount() - 1 && joining == 0 ? ModelChange::none : ModelChange::unknown);
     sendSynchronousChangeMessage();
     return juce::Result::ok();
 }

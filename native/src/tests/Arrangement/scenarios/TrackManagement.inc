@@ -536,3 +536,65 @@
                     "and the note editor back on the clip it was editing");
             view.sync();
         }
+
+        // A new track arrives where the person is working: directly under the
+        // selected card, in its group when it is in one, and at the foot of
+        // the stack only while the main row is selected. Every track made
+        // here is removed again, so the stack is left as it was found.
+        scenario("track management: a new track lands under the selected card");
+        {
+            const auto before = session.trackCount();
+            const auto idOf = [&session](int track) { return te::getAudioTracks(*session.edit)[track]->itemID; };
+            const auto first = idOf(0), second = idOf(1);
+            view.sync();
+            view.selectTrack(0);
+            view.insertTrack(Session::TrackType::audio);
+            require(session.trackCount() == before + 1 && idOf(0) == first && idOf(2) == second,
+                    "A track added with the first card selected lands directly under it");
+            require(session.trackType(1) == Session::TrackType::audio && session.trackName(1) == "Audio",
+                    "as the kind that was asked for");
+            require(view.selectedTrackIndex() == 1, "and becomes the selected card");
+            const auto firstAdded = idOf(1);
+            view.insertTrack(Session::TrackType::midi);
+            require(idOf(1) == firstAdded && session.trackType(2) == Session::TrackType::midi && idOf(3) == second,
+                    "so a second one lands under the first, in the order they were made");
+            session.undo();
+            require(session.trackCount() == before + 1 && idOf(2) == second,
+                    "Undo takes a track added mid-stack away in one step");
+            require(session.removeAudioTrack(1).wasOk() && session.trackCount() == before && idOf(1) == second,
+                    "and the other can be removed again");
+
+            view.sync();
+            view.selectTrack(session.masterTrackIndex());
+            view.insertTrack(Session::TrackType::midi);
+            require(session.trackCount() == before + 1 && session.trackType(before) == Session::TrackType::midi
+                        && idOf(0) == first && idOf(1) == second,
+                    "With the main row selected a track goes at the foot of the stack");
+            require(view.selectedTrackIndex() == before, "and is selected there");
+            require(session.removeAudioTrack(before).wasOk(), "and can be removed again");
+
+            // Under a group's last member is not between two members, so the
+            // join is the model's to make rather than reconciling's.
+            require(session.groupTracks({0, 1}, "Under").wasOk(), "Two cards can be grouped");
+            auto band = session.trackGroup(session.trackGroupBusId(0));
+            require(band.has_value() && band->busTrack == 0 && band->trackCount == 2, "under a bus at the top");
+            int added = -1;
+            require(session.addTrack(Session::TrackType::midi, band->lastTrack(), &added).wasOk()
+                        && added == band->lastTrack() + 1,
+                    "A track added under a group's last member lands under it");
+            require(session.trackGroupId(added) == band->id
+                        && te::getAudioTracks(*session.edit)[added]->getOutput().getDestinationTrack()
+                               == te::getAudioTracks(*session.edit)[band->busTrack],
+                    "inside the group, feeding its bus");
+            require(session.removeAudioTrack(added).wasOk(), "and can be removed again");
+
+            require(session.setTrackGroupCollapsed(band->id, true).wasOk(), "The group folds away");
+            require(session.addTrack(Session::TrackType::audio, band->busTrack, &added).wasOk()
+                        && added == band->lastTrack() + 1 && session.trackGroupId(added) == 0,
+                    "and a track added under its bus lands under the whole group, outside it, where it can be seen");
+            require(session.removeAudioTrack(added).wasOk(), "and can be removed again");
+            require(session.ungroupTracks(band->id).wasOk() && session.trackGroups().empty()
+                        && session.trackCount() == before && idOf(0) == first && idOf(1) == second,
+                    "Ungrouping leaves the stack as it was found");
+            view.sync();
+        }

@@ -37,7 +37,8 @@ A second identical device gets a `2- ` prefix, inside the parentheses too ([Able
 
 ## When a port will not open
 
-A MIDI input is exclusive. A running Forge standalone, RhinoDAW or another DAW holding the device makes `midiInOpen`
+A MIDI input is exclusive between processes; within one process JUCE shares the handle, so a second open there
+succeeds ([Ableton Push 1](ableton-push.md)). A running Forge standalone, RhinoDAW or another DAW holding the device makes `midiInOpen`
 fail, so check `Get-Process` before theorising. Do not trust the error code to say why, though. A port whose device was
 being unplugged returned `7` (`MMSYSERR_NOMEM`) and later `2` (`MMSYSERR_BADDEVICEID`), not the `4`
 (`MMSYSERR_ALLOCATED`) that "someone else has it" should produce, and a `7` was once misread as Forge holding the port

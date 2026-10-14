@@ -728,3 +728,15 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 ## [2026-10-13] update | A Push unplugged mid-turn no longer leaves a gesture open (uncommitted on main; not yet run on the hardware)
 - source: the change's brief, checked against native/src/app/PushController.cpp (`closePorts` clears `touched`, `shift`, `muteHeld` and `soloHeld` and calls `endGestures` before releasing held notes; reached from `stop` and from `lookForPush` on unplug)
 - updated: pages/ableton-push.md (the Gestures section and the removed open item written by the main agent and verified; the last section's heading now reads "Unverified", since nothing open remains)
+
+## [2026-10-13] update | Push ports re-reserved on every engine rescan, after the first hardware run
+- source: the change's brief (rhino.log from the first hardware run; fix built, not yet re-checked on the Push), checked against native/src/model/SessionControllers.cpp (`reserveMidiPorts`, `disableReservedMidiPorts`), Session.h and SessionMidiInput.cpp (`midiDevicesChanged`)
+- updated: pages/ableton-push.md (intro no longer says it never ran; Ports: reservation re-applied on every rescan, and why: the first scan came after the Push connected and opened ports All Ins had left enabled, and JUCE shares a port's handle within a process, so the raw pads reached All Ins too; "Unverified" became "On the hardware": the first run, the fix awaiting a re-check, and the USB buzz that a different port cured)
+- updated: pages/inputs-and-monitoring.md (the reservation's reason corrected from "one owner" to the in-process double delivery; re-applied by `midiDevicesChanged`)
+- updated: pages/reading-midi-hardware-on-windows.md (a MIDI input is exclusive between processes, not within one)
+
+## [2026-10-13] update | Rhino's plugin and Drum Rack windows float above the main window (built and tested; not yet tried by the user)
+- source: the change's brief, checked against native/src/app/AppPlatform.h/.cpp (`keepWindowAbove`), app/MainComponent.cpp, ui/rack/DeviceRack.h/.cpp (`keepAboveShell`, `openDevice`, `openDrumWindow`), ui/rack/DrumRackWindow.h/.cpp (`floatAboveShell`, `resized`, `updateFloating`) and tests/Pattern/DrumRackWindowTest.cpp
+- updated: pages/app-shell.md (new section: owned windows via `GWLP_HWNDPARENT`, always-on-top toggling rejected and why, the gotcha that the main window's native window must never be recreated while one is open, what checks it; AppPlatform lists `keepWindowAbove`)
+- updated: pages/device-rack.md (`openDevice` floats the plugin window; `keepAboveShell` as the UI's one way to ask, and the drum window's `floatAboveShell`)
+- updated: pages/drum-rack.md (floats while restored, not while maximised, and why; the cross-window drag still untested; the window test's new check)

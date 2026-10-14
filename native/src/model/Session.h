@@ -741,8 +741,8 @@ public:
     // Recorded audio is written here: beside the project once it has been
     // saved, and in the application's own folder until then.
     juce::File recordingDirectory() const;
-    // Merged audio follows the same rule, in a folder of its own: a take and a
-    // flattened clip are different things to go looking for.
+    // Merged and bounced audio follow the same rule, in a folder of their own:
+    // a take and a flattened clip are different things to go looking for.
     juce::File mergedAudioDirectory() const;
     void undo();
     void redo();
@@ -832,6 +832,46 @@ public:
     // properties of the clip, while the track's devices and its fader are not,
     // because the merged clip still plays through them.
     juce::Result mergeClips(const std::vector<te::EditItemID>&, MergeResult* = nullptr);
+    // What a bounce made, so the gesture that asked for it can select it and
+    // say what happened.
+    struct BounceResult
+    {
+        // The new tracks, top to bottom, as they stand once all are in place.
+        std::vector<int> tracks;
+        // The clips on them, top to bottom and in time order on each.
+        std::vector<te::EditItemID> clips;
+        // The clips, or the tracks and groups, that went in.
+        int sourceCount = 0;
+        // True when a source was a group, whose bus is what was muted.
+        bool group = false;
+    };
+    // Bounce to New Track, as Live has it (SessionBounce.cpp). What a source
+    // plays is rendered to an audio file and laid on a new audio track
+    // directly under it, named for it with " (Bounce)" and wearing its
+    // colour, and the source is muted so the song sounds as it did - all one
+    // undo step. The render runs on this thread, as a merge's does.
+    //
+    // A track is rendered through its devices and clip effects and before its
+    // fader and pan, which the new track takes over, so the mix can still be
+    // moved; a track in a group is rendered alone, and its new track joins the
+    // group. A group is rendered after its bus, fader included, and its new
+    // track sits under the whole group at unity. Neither carries the main
+    // row's devices. A muted track, or a MIDI track with no instrument, is
+    // refused: either would bounce to silence.
+    //
+    // Clips: one new track per source track, holding one clip for each
+    // selected clip over the same span. The track is rendered once across
+    // them, so a tail that rings into the next clip is in the bounce as it is
+    // in the song. The source clips are muted.
+    juce::Result bounceClipsToNewTracks(const std::vector<te::EditItemID>&, BounceResult* = nullptr);
+    // Tracks and groups: everything on the timeline from the first clip's
+    // start to the last one's end becomes one clip, and the track, or the
+    // group's bus, is muted. A group's bus bounces the group; a member listed
+    // with its own bus is bounced as part of it rather than twice.
+    juce::Result bounceTracksToNewTracks(const std::vector<int>& tracks, BounceResult* = nullptr);
+    // Mutes or unmutes clips of either kind, as one undo step. A muted clip
+    // stays on its lane, drawn grey, and plays nothing.
+    juce::Result setClipsMuted(const std::vector<te::EditItemID>&, bool muted);
     void deleteClip(te::EditItemID);
     // A region is a span of time across a run of tracks - the rectangle the
     // arrangement highlights - and it is what copy, cut, paste, duplicate and
@@ -1420,6 +1460,10 @@ private:
     // notification, so paste can clear and insert inside one undo step.
     bool clearClipRegionInEdit(double startSeconds, double endSeconds, int firstTrack, int lastTrack,
                                const std::vector<te::EditItemID>& keep = {});
+    // SessionBounce.cpp - one render each, defined there, and the step that
+    // renders them all and lays what they made on new tracks.
+    struct BounceJob;
+    juce::Result bounceToNewTracks(std::vector<BounceJob>&, BounceResult*);
     // A clip edit marks each track it reached with what that track plays -
     // notes on a MIDI track, audio clips on an audio track - and with `also`,
     // whatever else it changed there. With no track known, every track is

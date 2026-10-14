@@ -120,6 +120,7 @@ void Arrangement::sync()
             ClipView view {clip->itemID, clip->getName(), {p.time.getStart().inSeconds(), p.time.getEnd().inSeconds(), p.offset.inSeconds()}, nullptr, {}, clip->getSpeedRatio(),
                            p.offset.inSeconds() + p.time.getLength().inSeconds(), track, Session::clipColour(*clip),
                            Session::clipPluginCount(*clip)};
+            view.muted = clip->isMuted();
             if (auto* audio = dynamic_cast<te::WaveAudioClip*>(clip))
             {
                 const auto file = clip->getSourceFileReference().getFile();

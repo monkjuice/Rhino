@@ -98,6 +98,8 @@ int runArrangementTest()
        #include "scenarios/ClipWarp.inc"
         scenario("clip merge");
        #include "scenarios/ClipMerge.inc"
+        scenario("bounce to new track");
+       #include "scenarios/ClipBounce.inc"
         scenario("region clipboard");
        #include "scenarios/RegionClipboard.inc"
         scenario("arrangement pan");

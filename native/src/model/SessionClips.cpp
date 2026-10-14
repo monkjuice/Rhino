@@ -400,6 +400,36 @@ juce::Result Session::cycleClipColour(te::EditItemID id)
     return juce::Result::ok();
 }
 
+// Either kind of clip: the audio editor's mute is the same property, and a
+// bounce mutes MIDI clips as readily as audio ones.
+juce::Result Session::setClipsMuted(const std::vector<te::EditItemID>& ids, bool muted)
+{
+    std::vector<te::Clip*> changing;
+    auto found = false;
+    for (const auto id : ids)
+        if (auto* clip = findClip(id))
+        {
+            found = true;
+            if (clip->isMuted() != muted && std::find(changing.begin(), changing.end(), clip) == changing.end())
+                changing.push_back(clip);
+        }
+    if (!found)
+        return juce::Result::fail("Select a clip first.");
+    if (changing.empty())
+        return juce::Result::ok();
+    edit->getUndoManager().beginNewTransaction(muted ? "Mute clips" : "Unmute clips");
+    std::vector<int> tracks;
+    for (auto* clip : changing)
+    {
+        tracks.push_back(clipTrackIndex(*edit, *clip));
+        clip->setMuted(muted);
+    }
+    edit->getUndoManager().beginNewTransaction();
+    markClipsModified(tracks);
+    sendSynchronousChangeMessage();
+    return juce::Result::ok();
+}
+
 int Session::clipPluginCount(te::EditItemID id) const
 {
     auto* clip = findClip(id);

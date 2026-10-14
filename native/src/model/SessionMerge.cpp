@@ -41,22 +41,6 @@ bool overlapsSpan(tracktion::core::TimeRange clip, tracktion::core::TimePosition
     return clip.getStart().inSeconds() < end.inSeconds() - mergeTolerance
         && clip.getEnd().inSeconds() > start.inSeconds() + mergeTolerance;
 }
-
-// Numbered rather than overwritten: merging, undoing and merging again must
-// not hand the second clip a file the first one is still reading.
-juce::File nextMergeFile(const juce::File& folder, const juce::String& trackName)
-{
-    auto name = juce::File::createLegalFileName(trackName.trim());
-    if (name.isEmpty())
-        name = "Track";
-    for (int take = 1; take < 10000; ++take)
-    {
-        const auto file = folder.getChildFile(name + " Merge " + juce::String(take) + ".wav");
-        if (!file.exists())
-            return file;
-    }
-    return {};
-}
 }
 
 // Beside the project once it has been saved, so a project folder carries the
@@ -221,7 +205,7 @@ juce::Result Session::mergeClips(const std::vector<te::EditItemID>& ids, MergeRe
             // claim about what is in the file.
             rendered.name = trackName(group.track);
             rendered.colour = clipColour(*group.clips.front());
-            rendered.file = nextMergeFile(folder, rendered.name);
+            rendered.file = nextRenderFile(folder, rendered.name, "Merge");
             if (rendered.file == juce::File{})
             {
                 failure = "Rhino could not name a file for the merged audio.";

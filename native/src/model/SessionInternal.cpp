@@ -489,4 +489,48 @@ juce::Result checkClipFile(te::Clip& clip)
                               + ", which is missing.");
 }
 
+juce::Result runRenderTask(te::Renderer::RenderTask& task, const std::atomic<float>& progress, double stallSeconds)
+{
+    auto lastProgress = -1.0f;
+    auto movedAt = 0.0;
+    auto stalled = false;
+    // A render that keeps coming back without moving is waiting on something
+    // that will not come: a clip's file that is there but cannot be read
+    // (WaveNode::isReadyToProcess at 4536d8a). Given up through the engine's
+    // own cancellation, which closes the file and deletes it. Measured from
+    // the last move rather than from the start, so a long song is never cut
+    // short; the render's half second of run-in counts as a stall, so a
+    // budget is never set that short.
+    task.setCancellationCheck([&progress, &lastProgress, &movedAt, &stalled, stallSeconds]
+    {
+        const auto now = juce::Time::getMillisecondCounterHiRes();
+        if (const auto reached = progress.load(); reached != lastProgress)
+        {
+            lastProgress = reached;
+            movedAt = now;
+        }
+        stalled = now - movedAt > stallSeconds * 1000.0;
+        return stalled;
+    });
+    while (task.runJob() != juce::ThreadPoolJob::jobHasFinished) {}
+    if (stalled)
+        return juce::Result::fail("The render made no progress for " + juce::String(stallSeconds, 0)
+                                  + " seconds and was stopped: a clip's audio file may not be readable.");
+    return task.errorMessage.isEmpty() ? juce::Result::ok() : juce::Result::fail(task.errorMessage);
+}
+
+juce::File nextRenderFile(const juce::File& folder, const juce::String& trackName, const juce::String& kind)
+{
+    auto name = juce::File::createLegalFileName(trackName.trim());
+    if (name.isEmpty())
+        name = "Track";
+    for (int take = 1; take < 10000; ++take)
+    {
+        const auto file = folder.getChildFile(name + " " + kind + " " + juce::String(take) + ".wav");
+        if (!file.exists())
+            return file;
+    }
+    return {};
+}
+
 }

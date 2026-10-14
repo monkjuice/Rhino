@@ -59,6 +59,11 @@ public:
     // the same reason again: Ctrl+J is a shell shortcut, and the selection it
     // acts on is usually the one the audio editor is looking at.
     void mergeSelected();
+    // Bounces what is selected to new audio tracks (ArrangementBounce.cpp):
+    // the selected clips, or the clips a dragged region holds, or the
+    // selected cards, a group's bus card bouncing the group. Public for the
+    // same reason as the merge: Ctrl+B is also a shell shortcut.
+    void bounceSelected();
     // How much of the foot of the panel the clip and device panes cover. They
     // float over the arrangement rather than pushing it up, so the panel keeps
     // the full height of the window and the lanes keep the size they had; only
@@ -104,6 +109,7 @@ private:
         int track = 0;
         juce::Colour colour;
         int clipPlugins = 0;
+        bool muted = false;
     };
     enum class LoopGesture { none, create, move, trimStart, trimEnd };
     // A clip is two rows. The strip along its top is the clip itself: clicking
@@ -237,6 +243,13 @@ private:
     void deleteSelection();
     void duplicateSelected();
     void nudgeSelected(int direction, bool byBar);
+    // ArrangementBounce.cpp. The menus pass what they were opened on; the
+    // shortcut passes the selection.
+    void bounceClips(std::vector<te::EditItemID>);
+    void bounceTracks(std::vector<int>);
+    // Mutes the selected clips, or unmutes them when every one already is:
+    // the way back for a clip a bounce muted.
+    void muteSelected();
     juce::Result applyBrowserDrop(const juce::String& description, int track, double startSeconds = 0.0, bool insertPreset = false);
     void updatePlayhead();
     // A take is drawn as it is played, so the band has to be repainted as it

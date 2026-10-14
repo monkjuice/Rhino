@@ -514,7 +514,10 @@ void Arrangement::paint(juce::Graphics& g)
         juce::Graphics::ScopedSaveState scope(g);
         g.reduceClipRegion(juce::Rectangle<int>(0, static_cast<int>(lanesTop), getWidth() - 14,
                                                 std::max(1, static_cast<int>(laneContentHeight()))));
-        const auto label = clip.colour.isTransparent() ? laneTint(paintTrack) : clip.colour;
+        // A muted clip keeps its place and plays nothing, so it is drawn grey,
+        // as Live draws a clip it has switched off.
+        const auto own = clip.colour.isTransparent() ? laneTint(paintTrack) : clip.colour;
+        const auto label = clip.muted ? own.withSaturation(0.0f) : own;
         g.setColour(label.withAlpha(isSelected(clip.id) ? 0.82f : 0.68f));
         g.fillRect(box);
         g.setColour(label.brighter(0.55f));
@@ -565,8 +568,9 @@ void Arrangement::paint(juce::Graphics& g)
                 const auto end = start + visible.getWidth() / lane(0).getWidth() * viewSpan * clip.speed;
                 // A modest display-only lift keeps low-amplitude and steady tones legible
                 // at arrangement zoom without changing the source audio or clip gain.
+                const auto wave = juce::Colour(0xff8cc5d2);
                 paintWaveformLanes(g, clip.waveform->thumbnail, waveArea, start, end, 1.45f,
-                                   juce::Colour(0xff8cc5d2));
+                                   clip.muted ? wave.withSaturation(0.0f).withMultipliedAlpha(0.5f) : wave);
             }
             else
             {
@@ -617,9 +621,10 @@ void Arrangement::paint(juce::Graphics& g)
                 // Against the repaint too: a playhead strip crosses a clip on
                 // every lane, and each would otherwise issue all its notes.
                 if (!noteBox.intersects(visible) || !noteBox.intersects(dirty)) continue;
-                g.setColour(palette::selection);
+                const auto ink = clip.muted ? palette::textDim : palette::selection;
+                g.setColour(ink);
                 g.fillRect(noteBox);
-                g.setColour(palette::selection.brighter(0.3f));
+                g.setColour(ink.brighter(0.3f));
                 g.drawRect(noteBox.reduced(0.5f), 1.0f);
             }
             if (clip.midiNotes.empty())

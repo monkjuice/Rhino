@@ -64,6 +64,14 @@ bool MainComponent::keyPressed(const juce::KeyPress& key)
         arrangement.mergeSelected();
         return true;
     }
+    // Bounce reaches the shell for the same reason. The DJ view hides the
+    // selection it would act on, so there it says so instead.
+    if (key.getModifiers().isCommandDown() && key.getKeyCode() == 'B')
+    {
+        if (djViewOpen) logStatus("Bouncing is the arrangement's: press Tab to return to it");
+        else arrangement.bounceSelected();
+        return true;
+    }
     // Reverse reaches the shell for the same reason, and more often: the
     // clip you want to hear backwards is usually the one already open in
     // the audio editor, with the keyboard on one of its knobs. A plain
@@ -261,6 +269,7 @@ void MainComponent::showHelpMenu(juce::Component& target)
                     "Ctrl+X / Ctrl+C / Ctrl+V  Cut, copy and paste the selection\n"
                     "Ctrl+D  Duplicate it directly after itself\nCtrl+E  Split the selected clip at the playhead\n"
                     "Ctrl+J  Merge the selected audio clips into one audio file\n"
+                    "Ctrl+B  Bounce the selected clips, tracks or group to new audio tracks\n"
                     "R  Play the selected audio clips backwards\nDelete  Empty the selection\n"
                     "?  Show/hide Info View\nF12  Full screen");
             else if (result == 2)

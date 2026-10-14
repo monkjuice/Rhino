@@ -841,6 +841,12 @@ void Arrangement::showTrackMenu(int track)
         menu.addSubMenu("Monitor: " + Session::inputMonitoringName(session.trackMonitoring(track)), monitoring);
     }
     menu.addSeparator();
+    // A bus card is the group, so it bounces the group: after its bus rather
+    // than before its fader, which is a different thing to ask for.
+    menu.addItem(8, juce::String(!several && session.trackGroupBusId(track) > 0 ? "Bounce Group to New Track"
+                                                                               : "Bounce to New Track")
+                        + "       Ctrl+B");
+    menu.addSeparator();
     // A bus is the group, so what it offers is what happens to the group. The
     // cards under it offer what happens to their membership.
     if (const auto busOf = session.trackGroupBusId(track); busOf > 0)
@@ -878,6 +884,7 @@ void Arrangement::showTrackMenu(int track)
                     safe->status(done.failed() ? done.getErrorMessage() : subject + " left the group");
             }
             else if (choice == 211) safe->showTrackInputMenu(track);
+            else if (choice == 8) safe->bounceTracks(targets);
             else if (choice == 5) safe->groupSelectedTracks();
             else if (choice == 6) safe->toggleGroupCollapsed(safe->session.trackGroupBusId(track));
             else if (choice == 7)

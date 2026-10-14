@@ -245,6 +245,15 @@ juce::Result switchTrackInstrument(te::Edit& edit, te::AudioTrack& track, Sessio
 // render holding such a clip never finishes; the bounce and the merge ask
 // this of every clip they render before they build the render.
 juce::Result checkClipFile(te::Clip&);
+// Runs a render to its end on the calling thread. The task must have been
+// made with `progress` as the fraction it updates. A render that has not
+// moved for `stallSeconds` is given up and what it wrote deleted.
+juce::Result runRenderTask(te::Renderer::RenderTask&, const std::atomic<float>& progress, double stallSeconds);
+// A file in `folder` for a render of a track - "Bass Merge 3.wav" - numbered
+// rather than overwritten, so making one, undoing it and making another never
+// hands the new clip a file the old one may still be reading. An empty file
+// when ten thousand are taken.
+juce::File nextRenderFile(const juce::File& folder, const juce::String& trackName, const juce::String& kind);
 
 // Sets every control a preset names and every other to its default, clamped
 // and snapped to each control's range, inside whatever undo transaction is

@@ -64,6 +64,7 @@ target_sources(RhinoNative PRIVATE
     src/model/SessionWarp.cpp
     src/model/SessionRegion.cpp
     src/model/SessionMerge.cpp
+    src/model/SessionBounce.cpp
     src/model/SessionSamples.cpp
     src/model/SessionPreview.cpp
     src/model/SessionRecording.cpp
@@ -89,6 +90,7 @@ target_sources(RhinoNative PRIVATE
     src/ui/arrangement/ArrangementSync.cpp
     src/ui/arrangement/ArrangementGestures.cpp
     src/ui/arrangement/ArrangementSelection.cpp
+    src/ui/arrangement/ArrangementBounce.cpp
     src/ui/arrangement/ArrangementGroups.cpp
     src/ui/arrangement/ArrangementRename.cpp
     src/ui/arrangement/ArrangementAutomation.cpp

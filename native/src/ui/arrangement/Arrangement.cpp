@@ -293,6 +293,11 @@ bool Arrangement::keyPressed(const juce::KeyPress& key)
         mergeSelected();
         return true;
     }
+    if (key.getModifiers().isCommandDown() && key.getKeyCode() == 'B')
+    {
+        bounceSelected();
+        return true;
+    }
     if (key.getModifiers().isCommandDown() && key.getKeyCode() == 'D')
     {
         duplicateSelected();
@@ -512,6 +517,30 @@ void Arrangement::reverseSelected()
         : juce::String(static_cast<int>(audio.size())) + " clips";
     if (status) status(allReversed ? subject + ": playing forwards again" : "Reversed " + subject);
     repaint();
+}
+
+// Settled the way reverse is: one clip still playing mutes the selection, and
+// only a selection that is all muted comes back on.
+void Arrangement::muteSelected()
+{
+    cancelDrag();
+    auto chosen = selectedClips;
+    if (chosen.empty() && selected != te::EditItemID()) chosen = {selected};
+    if (chosen.empty())
+    {
+        if (status) status("Select a clip to mute");
+        return;
+    }
+    auto allMuted = true;
+    for (const auto id : chosen)
+        if (auto* clip = session.findClip(id))
+            allMuted = allMuted && clip->isMuted();
+    const auto outcome = session.setClipsMuted(chosen, !allMuted);
+    if (!status) return;
+    const auto subject = chosen.size() == 1 ? juce::String("the clip")
+                                            : juce::String(static_cast<int>(chosen.size())) + " clips";
+    status(outcome.failed() ? outcome.getErrorMessage()
+                            : allMuted ? "Unmuted " + subject : "Muted " + subject);
 }
 
 // Merging is a command about a run of clips rather than about one, so it acts
@@ -774,9 +803,12 @@ void Arrangement::showClipMenu(te::EditItemID id)
     // Enabled from the selection rather than from the clip the menu was opened
     // on: merging needs two, and one clip can never be merged with itself.
     menu.addItem(9, "Merge       Ctrl+J", selectedClips.size() > 1);
+    menu.addItem(13, "Bounce to New Track       Ctrl+B");
     // Ticked from the clip the menu was opened on, which is the one under the
     // pointer whether or not the rest of the selection agrees with it.
     menu.addItem(8, "Reverse       R", session.audioClipMix(id).valid, session.audioClipMix(id).reversed);
+    if (auto* clip = session.findClip(id))
+        menu.addItem(14, "Mute", true, clip->isMuted());
     // Warping is where a person looks for it in Live: on the clip, not only in
     // the editor below. The mode is here too, because choosing one is the next
     // thing anyone does after switching warping on.
@@ -861,6 +893,8 @@ void Arrangement::showClipMenu(te::EditItemID id)
             else if (result == 6) safe->pasteSelection();
             else if (result == 8) safe->reverseSelected();
             else if (result == 9) safe->mergeSelected();
+            else if (result == 13) safe->bounceClips(safe->selectedClips);
+            else if (result == 14) safe->muteSelected();
         });
 }
 

@@ -77,6 +77,7 @@ target_sources(RhinoNative PRIVATE
     src/model/SessionDjSources.cpp
     src/model/SessionDeviceMacros.cpp
     src/model/SessionMappedParameters.cpp
+    src/model/SessionControllers.cpp
     # UI
     src/ui/notes/StepGrid.cpp
     src/ui/notes/StepGridPainter.cpp
@@ -147,6 +148,9 @@ target_sources(RhinoNative PRIVATE
     src/app/ControlBarFields.cpp
     src/app/ControlBarIcons.cpp
     src/app/ProjectFiles.cpp
+    src/app/PushController.cpp
+    src/app/PushControllerControls.cpp
+    src/app/PushControllerSurface.cpp
     # Tests
     src/tests/SelfTest.cpp
     src/tests/ArpTest.cpp
@@ -164,6 +168,7 @@ target_sources(RhinoNative PRIVATE
     src/tests/Pattern/DrumRackWindowTest.cpp
     src/tests/Pattern/WorkflowTest.cpp
     src/tests/Arrangement/ClipGeometryTest.cpp
+    src/tests/PushProtocolTest.cpp
     src/tests/Arrangement/WorkflowTest.cpp)
 target_include_directories(RhinoNative PRIVATE src)
 target_compile_definitions(RhinoNative PRIVATE

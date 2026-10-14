@@ -12,7 +12,8 @@ static void paintSidebarIcon(juce::Graphics& g, juce::Rectangle<float> area, juc
     icons::drawSidebar(g, area);
 }
 
-MainComponent::MainComponent(Session& s) : session(s), browser(s), grid(s), arrangement(s), djView(s), rack(s), audioClip(s), files(s)
+MainComponent::MainComponent(Session& s)
+    : session(s), browser(s), grid(s), arrangement(s), djView(s), rack(s), audioClip(s), files(s), push(s)
 {
     setOpaque(true);
     files.status = [this](const juce::String& message) { logStatus(message); };
@@ -27,7 +28,32 @@ MainComponent::MainComponent(Session& s) : session(s), browser(s), grid(s), arra
     {
         if (!djViewOpen) rack.selectTrack(track);
         refreshEditorPanes();
+        push.setSelectedTrack(track);
     };
+    // The Push works on the arrangement's selected track and the device the
+    // rack shows on it, and moves both. Its Play and Record mean what Space
+    // and F9 mean in the view that is showing.
+    rack.deviceSelected = [this](int track, int pluginIndex) { push.setSelectedDevice(track, pluginIndex); };
+    push.selectTrack = [this](int track) { arrangement.selectTrack(track); };
+    push.selectDevice = [this](int track, int pluginIndex)
+    {
+        if (djViewOpen) return;
+        rack.selectTrack(track);
+        rack.selectPluginIndex(pluginIndex);
+    };
+    push.play = [this]
+    {
+        if (djViewOpen) djView.togglePlayFocused();
+        else session.togglePlayback();
+    };
+    push.returnToStart = [this] { if (!djViewOpen) session.returnToStart(); };
+    push.record = [this]
+    {
+        if (djViewOpen) logStatus("Recording is the arrangement's: press Tab to return to it");
+        else toggleRecording();
+    };
+    push.status = [this](const juce::String& message) { logStatus(message); };
+    push.commandsAllowed = [this] { return isEnabled(); };
     // The two lower panes answer to two different things, and to nothing
     // else: the clip editors to the selected clip, the Device View to a
     // clicked track card. Clicking a clip moves the working track too, so

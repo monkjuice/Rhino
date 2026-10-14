@@ -48,6 +48,12 @@ public:
     // handed. The shell wires both.
     std::function<bool(const juce::KeyPress&)> shortcut;
     std::function<void(juce::Component&)> listenForKeys;
+    // The device a controller picked, by plugin index on the shown track.
+    void selectPluginIndex(int pluginIndex);
+    // Told whenever the device shown as selected changes, as the track and
+    // the plugin index, -1 for a chain with nothing on it; the Push follows
+    // the rack through it.
+    std::function<void(int track, int pluginIndex)> deviceSelected;
 
 private:
     friend void runPatternDeviceRackTest();
@@ -112,5 +118,7 @@ private:
     // The last report of a control touched in a plugin's window that the
     // status line has shown (Session::parameterMappingReport).
     int mappingReportShown = 0;
+    // What deviceSelected was last told.
+    int reportedTrack = -1, reportedPlugin = -1;
 };
 }

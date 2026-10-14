@@ -98,15 +98,16 @@ juce::File Session::recordingDirectory() const
 te::MidiInputDevice* Session::midiInputDevice() const
 {
     auto& deviceManager = engine.getDeviceManager();
-    if (auto* chosen = deviceManager.getDefaultMidiInDevice())
+    // A controller's ports are never the answer: the engine does not hold them.
+    if (auto* chosen = deviceManager.getDefaultMidiInDevice(); chosen != nullptr && !isReservedMidiPort(chosen->getName()))
         return chosen;
     // Nothing chosen: the first that is switched on, and failing that the
     // first there is. On a machine with one keyboard those are the same thing.
     for (const auto& candidate : deviceManager.getMidiInDevices())
-        if (candidate != nullptr && candidate->isEnabled())
+        if (candidate != nullptr && candidate->isEnabled() && !isReservedMidiPort(candidate->getName()))
             return candidate.get();
     for (const auto& candidate : deviceManager.getMidiInDevices())
-        if (candidate != nullptr)
+        if (candidate != nullptr && !isReservedMidiPort(candidate->getName()))
             return candidate.get();
     return nullptr;
 }
@@ -224,16 +225,23 @@ juce::Result Session::applyRecordArming()
     }
 
     auto& deviceManager = engine.getDeviceManager();
-    // Creating the typing keyboard's device rescans the MIDI device list and
-    // rebuilds every device object with it, so it happens before anything here
-    // has resolved a device to a pointer.
+    // Creating the typing keyboard's device, or the Push's, rescans the MIDI
+    // device list and rebuilds every device object with it, so it happens
+    // before anything here has resolved a device to a pointer.
     if (wantsMidi)
+    {
+        auto wantsKeyboard = false, wantsPush = false;
         for (int track = 0; track < tracks.size(); ++track)
-            if (wantsInput(track) && trackMidiInput(track) == midiInputKeyboardToken())
+            if (wantsInput(track))
             {
-                ensureComputerKeyboardDevice();
-                break;
+                wantsKeyboard = wantsKeyboard || trackMidiInput(track) == midiInputKeyboardToken();
+                wantsPush = wantsPush || trackMidiInput(track) == midiInputPushToken();
             }
+        if (wantsKeyboard)
+            ensureComputerKeyboardDevice();
+        if (wantsPush)
+            ensurePushInputDevice();
+    }
     // Every track names its own input, audio as well as MIDI, so this is a
     // device per track rather than one for the document. All Ins resolves to
     // the engine's merge of the physical inputs, and a physical input only

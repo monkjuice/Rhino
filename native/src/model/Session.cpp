@@ -124,6 +124,13 @@ Session::~Session()
     removeChangeListener(&automationMirror);
     if (midiDeviceWatcher != nullptr)
         engine.getDeviceManager().removeChangeListener(midiDeviceWatcher.get());
+    // The controller has closed its port by now (the window goes first), so
+    // nothing is delivering through these.
+    {
+        const juce::SpinLock::ScopedLockType lock(controllerTargetLock);
+        controllerAllIns.reset();
+        controllerPush.reset();
+    }
     // Off the plugin's processor while the edit still holds it: the mapper is
     // destroyed before the edit is, and the audio thread may still be running.
     detachParameterMapping();

@@ -3,6 +3,7 @@
 #include "ui/arrangement/ArrangementGrid.h"
 #include "app/InfoHints.h"
 #include "ui/shared/Playhead.h"
+#include "tests/PushProtocolTest.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -205,6 +206,7 @@ int runArrangementGeometryTest()
             if (infoHintReplaces(nullptr, mute, &other, {}))
                 throw std::runtime_error("A control that says nothing leaves the panel alone");
         }
+        checkPushProtocol();
         return 0;
     }
     catch (const std::exception& error)

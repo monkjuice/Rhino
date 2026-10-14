@@ -633,6 +633,30 @@ public:
     // means the typing keyboard is the only way to play a MIDI track, which is
     // worth saying out loud at the moment a track is armed.
     bool hasHardwareMidiInput() const;
+    // A hardware controller Rhino drives itself, the Ableton Push
+    // (app/PushController). Its ports are reserved: the engine never opens
+    // them, All Ins never merges them and no card offers them, because the
+    // controller's own MIDI input holds them and a Windows MIDI port has one
+    // owner. What it plays comes back in through sendControllerMidi, already
+    // translated, as the typing keyboard's notes come in through
+    // sendMidiInputNote. SessionControllers.cpp.
+    void reserveMidiPorts(const juce::StringArray& portNames);
+    bool isReservedMidiPort(const juce::String& portName) const;
+    // While one is connected its input is offered on the cards as "Push",
+    // and the machine counts as having a keyboard.
+    void setControllerConnected(bool connected);
+    bool isControllerConnected() const { return controllerConnected; }
+    static juce::String midiInputPushToken();
+    // The one Session call that is safe from any thread: the controller's
+    // MIDI callback plays its pads through it, with no hop to the message
+    // thread to add jitter. It reaches All Ins and the Push input, exactly as
+    // a physical keyboard's notes reach All Ins and the keyboard's own entry.
+    void sendControllerMidi(const juce::MidiMessage&);
+    // The controller's own preferences - its scale, its octave - kept per
+    // machine in the settings file beside the browser preview's, and never
+    // read or written under the test runners.
+    static juce::String controllerSetting(const juce::String& key, const juce::String& fallback);
+    static void setControllerSetting(const juce::String& key, const juce::String& value);
     // Hearing yourself. These are Live's three Monitor settings under another
     // spelling, and the engine happens to carry exactly the same three.
     //
@@ -1446,6 +1470,20 @@ private:
     };
     void midiDevicesChanged();
     std::unique_ptr<MidiDeviceWatcher> midiDeviceWatcher;
+    // SessionControllers.cpp - the Push's own virtual input, made the first
+    // time a track asks for it, as the typing keyboard's is.
+    te::MidiInputDevice* pushInputDevice() const;
+    te::MidiInputDevice* ensurePushInputDevice();
+    // Points sendControllerMidi at the devices the list holds now. Message
+    // thread only; run whenever the engine has rebuilt the list.
+    void refreshControllerTargets();
+    juce::StringArray reservedMidiPorts;
+    bool controllerConnected = false;
+    // What sendControllerMidi delivers to, from whatever thread calls it. The
+    // lock is held across the delivery, so the last reference to a device the
+    // engine has dropped is always let go here, on the message thread.
+    juce::SpinLock controllerTargetLock;
+    std::shared_ptr<te::MidiInputDevice> controllerAllIns, controllerPush;
     // Set while a virtual device has been asked for and the rebuild that will
     // produce it has not landed. Arming does not complain about a missing
     // device in that window: it is on its way.

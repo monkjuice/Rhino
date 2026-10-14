@@ -833,6 +833,17 @@ void DeviceRack::selectDevice(int device)
     sync();
 }
 
+void DeviceRack::selectPluginIndex(int pluginIndex)
+{
+    for (int i = 0; i < static_cast<int>(slots.size()); ++i)
+        if (slots[static_cast<size_t>(i)].pluginIndex == pluginIndex)
+        {
+            if (i != selectedDevice)
+                selectDevice(i);
+            return;
+        }
+}
+
 void DeviceRack::rebuildDevicePanels()
 {
     devicePanels.clear(true);
@@ -959,5 +970,13 @@ void DeviceRack::sync()
     }
     open.setEnabled(!slots.empty());
     remove.setEnabled(!slots.empty() && slots[static_cast<size_t>(selectedDevice)].removable);
+    // Last, and only on a change: whoever listens may act on the model, and
+    // the next sync that brings it back here finds nothing new to say.
+    if (const auto plugin = selectedPluginIndex(); selectedTrack != reportedTrack || plugin != reportedPlugin)
+    {
+        reportedTrack = selectedTrack;
+        reportedPlugin = plugin;
+        if (deviceSelected) deviceSelected(selectedTrack, plugin);
+    }
 }
 }

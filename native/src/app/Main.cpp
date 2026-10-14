@@ -154,6 +154,10 @@ private:
                     // Give the content the focus it never takes for itself, so
                     // the shortcuts answer from the first frame.
                     controls->grabKeyboardFocus();
+                    // Not under the startup test, which is CTest's: a test
+                    // run must not take the Push from whoever is playing it.
+                    if (!startupTest)
+                        controls->startHardwareControllers();
                 }
                 if (projectToOpen != juce::File{})
                     if (auto* controls = dynamic_cast<MainComponent*>(window->getContentComponent()))

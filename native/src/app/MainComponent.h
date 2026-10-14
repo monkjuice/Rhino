@@ -9,6 +9,7 @@
 #include "ui/rack/DeviceRack.h"
 #include "ui/audioclip/AudioClipPanel.h"
 #include "ComputerKeyboard.h"
+#include "PushController.h"
 #include "TransportDisplay.h"
 #include "ControlBarFields.h"
 #include "ControlBarIcons.h"
@@ -77,6 +78,10 @@ public:
     // it is nowhere: keys then go to the window, which is above this component
     // and so is never reached by walking up from here.
     void listenForKeysOn(juce::Component& component) { computerKeyboard.listenTo(component); }
+    // Takes a connected Ableton Push, and any plugged in later. The shell
+    // calls it once it is up; the test runners never do, so a test run never
+    // takes the Push from whoever is playing it.
+    void startHardwareControllers() { push.start(); }
     std::function<void(const juce::String&)> projectTitleChanged;
     // Full screen is the window's business, not its content's: the shell wires
     // these to the document window that owns this component.
@@ -250,6 +255,9 @@ private:
     juce::String audioDescription;
     int readingSample = 15;
     RecordButton::State recordState = RecordButton::State::idle;
+    // Last, so it goes first: it closes its port and ends what its encoders
+    // hold while every panel it talks to is still here.
+    PushController push;
 };
 
 }

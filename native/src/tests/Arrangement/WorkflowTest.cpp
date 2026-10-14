@@ -13,6 +13,7 @@
 #include "ui/audioclip/AudioClipPanel.h"
 #include "ui/dj/DjView.h"
 #include "ui/shared/Playhead.h"
+#include "app/PushController.h"
 // The DJ booth scenario reads a deck's material, and the booth's edges fill
 // its engine's command queue.
 #include "dj/DjTrack.h"
@@ -134,6 +135,8 @@ int runArrangementTest()
        #include "scenarios/Recording.inc"
         scenario("vocoder carrier and midi input");
        #include "scenarios/VocoderCarrier.inc"
+        scenario("ableton push");
+       #include "scenarios/PushController.inc"
         scenario("gestures and persistence");
        #include "scenarios/GesturesAndPersistence.inc"
         scenario("arrangement mixer");

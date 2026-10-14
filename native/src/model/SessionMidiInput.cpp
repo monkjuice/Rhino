@@ -91,8 +91,13 @@ te::MidiInputDevice* Session::ensureComputerKeyboardDevice()
 // played from the typing keyboard, and nothing else would say so.
 bool Session::hasHardwareMidiInput() const
 {
+    // A connected Push is a keyboard, even though its ports are its own and
+    // what it plays arrives on a virtual device.
+    if (controllerConnected)
+        return true;
     for (const auto& candidate : engine.getDeviceManager().getMidiInDevices())
-        if (candidate != nullptr && dynamic_cast<te::VirtualMidiInputDevice*>(candidate.get()) == nullptr)
+        if (candidate != nullptr && dynamic_cast<te::VirtualMidiInputDevice*>(candidate.get()) == nullptr
+            && !isReservedMidiPort(candidate->getName()))
             return true;
     return false;
 }
@@ -108,6 +113,9 @@ void Session::MidiDeviceWatcher::changeListenerCallback(juce::ChangeBroadcaster*
 // mid-session starts playing without a relaunch.
 void Session::midiDevicesChanged()
 {
+    // First, whatever else this decides: the controller's notes are delivered
+    // from another thread to devices the rebuilt list may have replaced.
+    refreshControllerTargets();
     if (reapplyingArming)
         return;
     // Listening is armed or monitoring On - the same rule arming applies - so
@@ -141,13 +149,24 @@ std::vector<Session::InputChoice> Session::midiInputChoices() const
     std::vector<InputChoice> choices;
     choices.push_back({midiInputAllInsToken(), "All Ins", true});
     choices.push_back({midiInputKeyboardToken(), computerKeyboardDeviceName, true});
+    // The Push's input while one is connected - and while a track still names
+    // it, so a card whose controller is unplugged still shows what it is set to.
+    auto namesPush = controllerConnected;
+    const auto tracks = te::getAudioTracks(*edit);
+    for (int track = 0; track < tracks.size() && !namesPush; ++track)
+        namesPush = trackMidiInput(track) == midiInputPushToken();
+    if (namesPush)
+        choices.push_back({midiInputPushToken(), "Push", true});
     for (const auto& candidate : engine.getDeviceManager().getMidiInDevices())
     {
         if (candidate == nullptr)
             continue;
-        // The two virtual devices are already offered above, under names that
+        // The virtual devices are already offered above, under names that
         // say what they are rather than what the engine calls them.
         if (dynamic_cast<te::VirtualMidiInputDevice*>(candidate.get()) != nullptr)
+            continue;
+        // A controller's own ports belong to the controller.
+        if (isReservedMidiPort(candidate->getName()))
             continue;
         choices.push_back({midiInputDeviceToken(candidate->getName()), candidate->getName(), true});
     }
@@ -191,6 +210,8 @@ juce::Result Session::setTrackMidiInput(int track, const juce::String& token)
     // against the answer.
     if (token == midiInputKeyboardToken())
         ensureComputerKeyboardDevice();
+    else if (token == midiInputPushToken())
+        ensurePushInputDevice();
 
     // Not an edit of the music, so it opens no undo transaction - the same
     // treatment arming and row height get. It is still written to the track,
@@ -219,7 +240,7 @@ te::MidiInputDevice* Session::midiInputDeviceForTrack(int track) const
     {
         const auto wanted = token.substring(static_cast<int>(std::string_view(devicePrefix).size()));
         for (const auto& candidate : engine.getDeviceManager().getMidiInDevices())
-            if (candidate != nullptr && candidate->getName() == wanted)
+            if (candidate != nullptr && candidate->getName() == wanted && !isReservedMidiPort(wanted))
                 return candidate.get();
         return nullptr;
     }
@@ -233,7 +254,7 @@ void Session::enablePhysicalMidiInputs()
 {
     for (const auto& candidate : engine.getDeviceManager().getMidiInDevices())
         if (candidate != nullptr && dynamic_cast<te::VirtualMidiInputDevice*>(candidate.get()) == nullptr
-            && !candidate->isEnabled())
+            && !candidate->isEnabled() && !isReservedMidiPort(candidate->getName()))
             candidate->setEnabled(true);
 }
 

@@ -549,26 +549,29 @@ juce::Result Session::setDeviceParameter(int track, int slot, int parameterIndex
     return juce::Result::ok();
 }
 
+// The gesture is closed whether or not its device is still there. A device
+// removed, or a document replaced, under a held knob - which a controller's
+// encoder can hold for as long as a finger rests on it - used to leave the
+// depth counted forever, and every later change was told to the rack alone.
 juce::Result Session::endDeviceParameterGesture(int track, int slot, int parameterIndex)
 {
-    auto* list = pluginListForTrack(track);
-    if (list == nullptr || !juce::isPositiveAndBelow(slot, list->size()))
-        return juce::Result::fail("Select a device first.");
-    auto* plugin = (*list)[slot];
-    if (plugin == nullptr) return juce::Result::fail("Select a device first.");
-    auto* parameter = exposedParameterAt(*plugin, parameterIndex);
-    if (parameter == nullptr) return juce::Result::fail("Select a parameter first.");
-    parameter->parameterChangeGestureEnd();
     parameterGestureDepth = std::max(0, parameterGestureDepth - 1);
     edit->getUndoManager().beginNewTransaction();
+    auto* list = pluginListForTrack(track);
+    auto* plugin = list != nullptr && juce::isPositiveAndBelow(slot, list->size()) ? (*list)[slot] : nullptr;
+    auto* parameter = plugin != nullptr ? exposedParameterAt(*plugin, parameterIndex) : nullptr;
+    if (parameter != nullptr)
+        parameter->parameterChangeGestureEnd();
     // A parameter reaches the plugin as it moves, so the graph is rebuilt only
     // when what moved was the device's latency - Rhino Tune's range does that -
     // which the delay compensation has to hear about. Rebuilding on every knob
     // release was an audible gap each time one was let go during playback.
-    if (parameterGestureDepth == 0 && edit->getTransport().isPlaying()
+    if (plugin != nullptr && parameterGestureDepth == 0 && edit->getTransport().isPlaying()
         && std::abs(plugin->getLatencySeconds() - latencyAtGestureStart) > 1.0e-9)
         edit->restartPlayback();
     sendSynchronousChangeMessage();
+    if (plugin == nullptr) return juce::Result::fail("Select a device first.");
+    if (parameter == nullptr) return juce::Result::fail("Select a parameter first.");
     return juce::Result::ok();
 }
 

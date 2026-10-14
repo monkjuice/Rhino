@@ -110,10 +110,10 @@ void Session::beginTrackVolumeGesture(int track)
 void Session::endTrackVolumeGesture(int track)
 {
     if (auto* volume = trackVolumePlugin(track))
-    {
         volume->volParam->parameterChangeGestureEnd();
-        endMixerGesture();
-    }
+    // Closed even when the track went under a held fader, as a device
+    // parameter's gesture is: a depth left counted silences every later move.
+    endMixerGesture();
 }
 
 void Session::beginTrackPanGesture(int track)
@@ -129,10 +129,10 @@ void Session::beginTrackPanGesture(int track)
 void Session::endTrackPanGesture(int track)
 {
     if (auto* volume = trackVolumePlugin(track))
-    {
         volume->panParam->parameterChangeGestureEnd();
-        endMixerGesture();
-    }
+    // Closed even when the track went under a held fader, as a device
+    // parameter's gesture is: a depth left counted silences every later move.
+    endMixerGesture();
 }
 
 void Session::setTrackMuted(int track, bool muted)

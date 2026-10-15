@@ -4,7 +4,7 @@ type: gotcha
 summary: JUCE opens an existing file for output at its end, so rewriting a PNG or a render in place leaves the old content in front.
 tags: [both, juce, testing]
 sources: []
-updated: 2026-10-13
+updated: 2026-10-15
 ---
 
 # juce::File::createOutputStream appends
@@ -21,7 +21,7 @@ You write a snapshot PNG to the same path as last time, and every viewer, PIL in
 
 Use one of the three patterns the code already uses:
 
-- **Delete first.** `writeSnapshot`, inline in `native/src/ui/shared/ComponentSnapshot.h` (in `Main.cpp` until `db88b5c`), calls `deleteFile()` before opening the stream, and its comment explains why. It writes the `RHINO_SHELL_SNAPSHOT` and `RHINO_STARTUP_SNAPSHOT` images. The env-gated PNGs in `AutomationLanes.inc` (`RHINO_AUTOMATION_SNAPSHOT`) and `ClipWarp.inc` (`RHINO_CLIP_PANEL_SNAPSHOT`) also delete first, and so does Forge's `--render` (`tests/ForgeTestRender.cpp`).
+- **Delete first.** `writeSnapshot`, inline in `native/src/ui/shared/ComponentSnapshot.h` (in `Main.cpp` until `db88b5c`), calls `deleteFile()` before opening the stream, and its comment explains why. It writes the `RHINO_SHELL_SNAPSHOT` and `RHINO_STARTUP_SNAPSHOT` images. The env-gated PNGs in `AutomationLanes.inc` (`RHINO_AUTOMATION_SNAPSHOT`), `ClipWarp.inc` (`RHINO_CLIP_PANEL_SNAPSHOT`) and `TrackMeters.inc` (`RHINO_TRACK_METERS_SNAPSHOT`) also delete first, and so does Forge's `--render` (`tests/ForgeTestRender.cpp`).
 - **Rewind and truncate.** Forge's `--snapshot` (`tests/ForgeTestTools.cpp`) calls `setPosition(0)` and then `truncate()` on the stream.
 - **Write to a new file.** Test fixtures write to a fresh `juce::TemporaryFile`. A project save writes to a `TemporaryFile` and then replaces the project with it through `overwriteTargetFileWithTemporary()` (`native/src/app/ProjectFiles.cpp`).
 

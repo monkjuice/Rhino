@@ -4,7 +4,7 @@ type: component
 summary: The timeline UI, one class across twelve files, that previews every drag locally and leaves panel decisions to the shell.
 tags: [rhino, ui, arrangement]
 sources: []
-updated: 2026-10-14
+updated: 2026-10-15
 ---
 
 # Arrangement view
@@ -26,7 +26,9 @@ updated: 2026-10-14
 - **The bar ruler labels counts too.** Bar numbers step by powers of two bars, 44 px apart (`barLabelStep`, `barNumberMinimumPixels`). Once they are one bar apart, `paintBarNumbers` also labels counts as `bar.count` with short marks between, like Live. A count is the signature's denominator note (`timeSignature().numerator` per bar, so 6/8 reads 1.2 to 1.6 in eighths), not the engine's quarter-note beat (`beatsPerBar()`). Every span comes from one chain in `ArrangementGrid.h`, `finerRulerSpan`, where each span divides the previous: 4/4 runs 4, 2, 1, 1/2, 1/4; 6/8 runs 6, 3, 1; 7/8 runs 7, 1. That chain is what makes every mark land on a division of the labels either side. `rulerLabelSpan` keeps labels 44 px apart and never goes finer than a count. `rulerTickSpan` keeps marks 10 px apart and stops at a quarter count. The ruler ignores the snap grid, and the time ruler's rule (every labelled time sits on a numbered bar) is unchanged. Unit-tested in `tests/Arrangement/ClipGeometryTest.cpp`.
 - **`Focus`** records what the last click selected (clip, track, automation lane, region or nothing), and Delete and Ctrl+B dispatch on it.
 - **A muted clip is drawn grey** (since 2026-10-14): `ClipView::muted`, a desaturated body, grey waveform and dim notes in `ArrangementPainter.cpp`. The clip menu's ticked *Mute* (`muteSelected`, `Session::setClipsMuted`) mutes either kind of clip as one undo step; before, a muted audio clip looked like any other and a MIDI clip could not be muted at all.
-- **Autoscroll runs on the frame clock** (`VBlankAttachment`), because a pointer held still past the edge sends no drag events.
+- **Autoscroll runs on the frame clock** (`VBlankAttachment`), because a pointer held still past the edge sends no drag events. So do the level meters: each frame runs `autoScrollDrag`, `updateMeters` and `updatePlayhead`, in that order, so the playhead's immediate `UpdateWindow` handoff also collects the meters' damage ([Playhead rendering](playhead.md)).
+- **A meter column at the header's right edge** (since 2026-10-15). Every card and the main row carry a `LevelMeter` at `cardMeterLeft`, one column not indented by a group, and the track name and its rename editor stop short of it (`trackNameBounds`). `updateMeters` is the single reader of `Session::takeOutputLevels`, skips while the arrangement is hidden, and drops the bars to empty on its return ([Track level meters](level-meters.md)).
+- **Waveforms already fill their height.** `paintWaveformLanes` draws JUCE's `AudioThumbnail` (peaks stored as int8 × 127, drawn at zoom × height / 256) at zoom 1.45 (`ArrangementPainter.cpp`), so a peak of about -3.2 dBFS reaches the lane edge and anything louder is clipped at it. In a default 96 px row the clip box is 86 px, its name strip and padding take 36, and the 50 px left split into two channel lanes of about 25 and 23 px. A waveform that looks small is quiet material: a recording reported as loud (2026-10-15) peaked at -4.4 dBFS but 90% of its pixel columns sat below -12.6 dBFS. Measure the file before changing the drawing ([Measure sound, don't read the DSP](measure-sound-dont-read-dsp.md)).
 - **It reports, the shell decides.** `clipSelected`, `clipOpened`, `trackSelected` and `trackFocused` are callbacks; which panel opens is the [app shell](app-shell.md)'s call.
 - **Cards.** A card's bottom edge resizes its row and its body carries the track through the stack (`Session::moveTrack`), both previewed until release. Row height (`rhinoLaneHeight`, 0 means fit the panel) is a view setting written without undo; colour and name are undoable. Renaming puts one `TextEditor` over the painted name. A track from the `+` menu or Ctrl+T lands under the selected card and becomes the selection (`insertTrack`, see [Track kinds: audio and MIDI](track-kinds.md)).
 
@@ -43,3 +45,4 @@ A clip dragged up out of the panel by more than the band where the lanes scroll 
 - [Playhead rendering](playhead.md)
 - [Track and clip colours](track-and-clip-colours.md)
 - [Bounce to New Track](bounce-to-new-track.md)
+- [Track level meters](level-meters.md)

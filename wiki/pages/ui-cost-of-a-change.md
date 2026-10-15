@@ -4,7 +4,7 @@ type: convention
 summary: Session announces every change synchronously to every listening panel, so a drag announces once, a hidden panel goes stale, a frame reads only the controls it shows, painters skip what a repaint does not reach, and --profile-ui measures it.
 tags: [rhino, ui, performance]
 sources: []
-updated: 2026-10-13
+updated: 2026-10-15
 ---
 
 # What a change costs the interface
@@ -26,7 +26,7 @@ updated: 2026-10-13
   - Its 24 Hz tick repaints only the pads, map cells, key name and playhead strip that moved.
   - `drawLine` keeps each shaped line as a `juce::GlyphArrangement`, keyed by text, box, justification and font and cleared past 2,048 entries, because shaping text was most of the paint.
   - `padPicture` renders a synth's strike at 16 kHz instead of the device's rate; it and `samplePicture` keep the selected pad's picture while sound, settings and width are unchanged, at two widths, because the rack's face and the Drum Rack window draw one pad at different widths and evicted each other every frame.
-  - A readout of text compares before it repaints. `DjMixerPanel`'s tempo readout formats its text on the 30 Hz tick and repaints its rectangle only when that differs from `drawnBpm`, the text the last paint drew, which replaced `DjView`'s blind repaint of the mixer's corner every tick ([DJ view and the booth](dj-view.md)); the deck display's readouts do the same.
+  - A readout of text compares before it repaints. `DjMixerPanel`'s tempo readout formats its text on the 30 Hz tick and repaints its rectangle only when that differs from `drawnBpm`, the text the last paint drew, which replaced `DjView`'s blind repaint of the mixer's corner every tick ([DJ view and the booth](dj-view.md)); the deck display's readouts do the same. The [track level meters](level-meters.md) compare bar and hold heights in whole pixels, so a silent song repaints nothing on its frame clock.
 
 ## Measuring
 

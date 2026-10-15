@@ -1,10 +1,10 @@
 ---
 title: Mixer
 type: component
-summary: One mixer, drawn in the arrangement's track cards, with a VolumeAndPanPlugin in each track's channel strip, mute and solo that silence only a track's output, and the master volume for Main; a DJ deck takes its track ahead of the channel strip.
+summary: One mixer, drawn in the arrangement's track cards, with a VolumeAndPanPlugin and a level meter behind it in each track's channel strip, mute and solo that silence only a track's output, and the master volume for Main; a DJ deck takes its track ahead of the channel strip.
 tags: [rhino, mixer, tracks]
 sources: []
-updated: 2026-10-13
+updated: 2026-10-15
 ---
 
 # Mixer
@@ -15,19 +15,20 @@ Rhino has one mixer. `native/src/model/SessionMixer.cpp` reads and writes it, an
 
 | Control | Stored as |
 | --- | --- |
-| Track volume (-60 to +6 dB) and pan | the track's `te::VolumeAndPanPlugin`, in the channel strip after its devices: last on a track added later, ahead of the meter and the Utility on a starter track ([Device chain order](device-chain-order.md)) |
+| Track volume (-60 to +6 dB) and pan | the track's `te::VolumeAndPanPlugin`, in the channel strip after its devices: after the Utility on a track added later, ahead of it on a starter track ([Device chain order](device-chain-order.md)) |
+| Track meter | an engine `te::LevelMeterPlugin` straight behind the fader on every track, read by `Session::takeOutputLevels` ([Track level meters](level-meters.md)) |
 | Mute and solo | the track's own `mute` / `solo` properties, each toggle one undo step |
-| Main level and pan | the edit's master volume plugin |
+| Main level and pan | the edit's master volume plugin; its meter reads the playback context's `masterLevels` |
 
-`ensureTrackMixers` adds the fader to any track that lacks one, at the end of the chain so it sits after the devices. It runs from `addTrack`, the starter stack, `groupTracks`, an import that adds a lane, a lane made by dragging a clip below the last lane or by a paste running off the bottom (since commit `8dd3627`; until then such a lane answered "That track has no fader."), and every reopen, which is how tracks from documents older than the mixer got one. A group bus is a track, so it gets the same strip. The same pass gives every track the DJ booth's two hidden ends (`ensureDjPortDevices`): made inside the step that makes the track, or as a document opens before its history begins, they never shift an index an undo recorded ([DJ decks play live through the track's chain](dj-decks-play-live-through-the-track.md)).
+`ensureTrackMixers` adds the fader to any track that lacks one, at the end of the chain so it sits after the devices, and since 2026-10-15 a level meter straight behind the fader to any track that lacks one. It runs from `addTrack`, the starter stack, `groupTracks`, an import that adds a lane, a lane made by dragging a clip below the last lane or by a paste running off the bottom (since commit `8dd3627`; until then such a lane answered "That track has no fader."), and every reopen, which is how tracks from documents older than the mixer got one. A group bus is a track, so it gets the same strip. The same pass gives every track the DJ booth's two hidden ends (`ensureDjPortDevices`): made inside the step that makes the track, or as a document opens before its history begins, they never shift an index an undo recorded ([DJ decks play live through the track's chain](dj-decks-play-live-through-the-track.md)).
 
 ## Rules
 
 - **`UtilityDevice` is not the fader.** It is a device in the chain, like Live's Utility. Two bottom-bar gain sliders once drove Utility devices; they read as a second, contradictory mixer and were replaced by the main output level.
 - **A fader drag is one undo step and one announcement.** `beginTrackVolumeGesture`/`endTrackVolumeGesture`, and the pan and main equivalents, open a named transaction and bracket the parameter's change gesture, so the engine records one move and undo one entry. Inside the gesture `setTrackVolumeDb` and its siblings announce nothing, the dragged control drawing its own value, and the gesture's end announces once (commit `e7c9554`; [What a change costs the interface](ui-cost-of-a-change.md)).
-- **Mute and solo silence only what reaches the song** (since 2026-10-12). `RhinoEngineBehaviour::shouldProcessMutedTracks()` returns true (`SessionInternal.h`), so a muted or solo-excluded track still runs its devices and the engine's muting node after them clears its output; the engine used to skip the whole chain. A DJ deck takes its track from inside the chain, so the song's mute and solo leave the deck playing, which `DjLiveChain.inc` hears through Tracktion's real graph ([Tracktion's hosted device is silent until its start is dispatched](hosted-device-silent-until-dispatched.md)). The price is the CPU a muted track's devices take.
+- **Mute and solo silence only what reaches the song** (since 2026-10-12). `RhinoEngineBehaviour::shouldProcessMutedTracks()` returns true (`SessionInternal.h`), so a muted or solo-excluded track still runs its devices and the engine's muting node after them clears its output; the engine used to skip the whole chain. A DJ deck takes its track from inside the chain, so the song's mute and solo leave the deck playing, which `DjLiveChain.inc` hears through Tracktion's real graph ([Tracktion's hosted device is silent until its start is dispatched](hosted-device-silent-until-dispatched.md)). The price is the CPU a muted track's devices take, and a meter in the chain that goes on measuring, so the card meters gate on the engine's `shouldBePlayed()` ([Track level meters](level-meters.md)).
 - **Colour carries meaning.** Volume bars are cyan and pan bars red on every card and on the main row; mute darkens its key and solo brightens it, so the two differ by value rather than hue.
-- **The main row** has level and pan only, no mute or solo. Its devices and fader reach an exported WAV because the export renders master plugins ([The main track](main-track.md)).
+- **The main row** has level, pan and a meter, no mute or solo. Its devices and fader reach an exported WAV because the export renders master plugins ([The main track](main-track.md)).
 
 ## Pitfall
 
@@ -35,10 +36,11 @@ Rhino has one mixer. `native/src/model/SessionMixer.cpp` reads and writes it, an
 
 ## Not built
 
-No level meters, sends or return tracks (nothing in `native/src` creates a level-measuring plugin or an aux send, checked 2026-10-03; the starter tracks carry the engine's default level meter, which nothing in Rhino reads, checked 2026-10-12). Meters need a per-track measuring plugin read at a bounded rate, never polled from `paint`.
+No sends or return tracks (nothing in `native/src` creates an aux send, checked 2026-10-03). Level meters arrived on 2026-10-15 ([Track level meters](level-meters.md)).
 
 ## Related
 
+- [Track level meters](level-meters.md)
 - [The main track](main-track.md)
 - [DJ view and the booth](dj-view.md)
 - [DJ decks play live through the track's chain](dj-decks-play-live-through-the-track.md)

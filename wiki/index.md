@@ -42,7 +42,7 @@ The catalog of this wiki: every page, grouped by type, one line each (`- [Title]
 - [Forge warp](pages/forge-warp.md) — Two warp stages per oscillator, 43 modes in nine families, OSC modes able to read either other oscillator, chained through one read function and anti-aliased by duller tables.
 - [Hosting Forge in Rhino](pages/forge-hosting.md) — How Rhino finds, loads and talks to the Forge VST3, and what does and does not cross the plugin boundary.
 - [Mapped parameters, an external plugin's rack](pages/mapped-parameters.md) — An external plugin's rack is a chosen list of its parameters, kept on the device by the plugin's own parameter ids, Forge's nine most-played controls at first, and grown by MAP, which opens the plugin's window and puts every control touched there on the rack to automate.
-- [Mixer](pages/mixer.md) — One mixer, drawn in the arrangement's track cards, with a VolumeAndPanPlugin in each track's channel strip, mute and solo that silence only a track's output, and the master volume for Main; a DJ deck takes its track ahead of the channel strip.
+- [Mixer](pages/mixer.md) — One mixer, drawn in the arrangement's track cards, with a VolumeAndPanPlugin and a level meter behind it in each track's channel strip, mute and solo that silence only a track's output, and the master volume for Main; a DJ deck takes its track ahead of the channel strip.
 - [Note editor (StepGrid)](pages/note-editor.md) — Edits the notes of the open MIDI clip in steps, with a draw mode, a step region and caches that tie it closely to Session.
 - [Pattern presets](pages/pattern-presets.md) — The eleven built-in one-bar patterns, each a set of notes plus the instrument and patch that play them, and what dropping one does to a track.
 - [Playhead rendering](pages/playhead.md) — Draws both playheads every display refresh from the audio graph's own position, repainting two narrow strips whose painters skip everything else, with a Direct2D fix.
@@ -55,17 +55,18 @@ The catalog of this wiki: every page, grouped by type, one line each (`- [Title]
 - [Rhino Tune](pages/rhino-tune.md) — Vocal pitch correction with YIN tracking and PSOLA shifting, real reported latency, and correction smoothed on the offset.
 - [Rhino Vocoder and sidechains](pages/rhino-vocoder.md) — A channel vocoder whose carrier arrives as a sidechain from another track, and how Rhino routes a sidechain at all.
 - [Rhino's build targets](pages/rhino-build-targets.md) — Rhino builds as three targets (RhinoCore, RhinoDevices, the app) so that editing a device does not rebuild the app.
-- [Session, the model](pages/session-model.md) — The message-thread facade over one Tracktion engine and edit, one class split across 33 files, where every rule and refusal lives.
+- [Session, the model](pages/session-model.md) — The message-thread facade over one Tracktion engine and edit, one class split across 34 files, where every rule and refusal lives.
 - [Time warp](pages/time-warp.md) — Makes an audio clip follow the song's tempo, with five warp modes over two stretchers, a clip tempo and warp markers.
 - [Track automation](pages/automation.md) — Per-track lanes stored as Rhino's own ValueTree children, naming their device by key rather than slot, and played by the engine from parameter curves the session mirrors after every change.
 - [Track groups (bus tracks)](pages/track-groups.md) — Ctrl+G gathers tracks under a bus track that their audio feeds; the structure is positional and repaired after every reorder.
 - [Track inputs and monitoring](pages/inputs-and-monitoring.md) — Each track names its own MIDI or audio input and its own Off, Auto or In monitoring, all resolved to engine devices by applyRecordArming.
+- [Track level meters](pages/level-meters.md) — A stereo peak meter on every track card and on the main row, fed once a frame by Session::takeOutputLevels from one engine level meter behind each track's fader and the main output's own measurer, drawn on Ardour's IEC 60268-18 scale and gated on the engine's mute and solo.
 - [Transport, tempo and loop](pages/transport.md) — Play and stop, the loop that is always on, the single tempo and the time signature, and what Rhino rescales by hand when the tempo moves.
 
 ## Concepts
 
 - [Clips never overlap](pages/clip-placement.md) — The clip that just arrived wins the ground it lands on, and one function, Session::makeRoomForClip, enforces it for every path.
-- [Device chain order](pages/device-chain-order.md) — A track's plugin list is its signal chain - the hidden DJ input, MIDI FX, instrument, audio FX, the hidden DJ output, then a channel strip whose order differs between starter and added tracks - so the first visible device is plugin 1; how every add and every drag keeps that order.
+- [Device chain order](pages/device-chain-order.md) — A track's plugin list is its signal chain - the hidden DJ input, MIDI FX, instrument, audio FX, the hidden DJ output, then a channel strip of Utility, fader and meter whose Utility sits on a different side of the fader on starter and added tracks - so the first visible device is plugin 1; how every add and every drag keeps that order.
 - [Pointer and selection rules](pages/pointer-and-selection.md) — One pointer vocabulary for the arrangement and the note editor, written once as shared predicates in SelectionInput.h.
 - [Region editing](pages/region-editing.md) — Copy, cut, paste, duplicate and delete all act on a region, a span of time across a run of tracks, never on a set of clips.
 - [The main track](pages/main-track.md) — The main output row is the edit's master plugin list, addressed as track index trackCount() so track-indexed calls need no sentinel.

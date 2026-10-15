@@ -4,7 +4,7 @@ type: component
 summary: Draws both playheads every display refresh from the audio graph's own position, repainting two narrow strips whose painters skip everything else, with a Direct2D fix.
 tags: [rhino, ui, rendering, windows]
 sources: []
-updated: 2026-10-13
+updated: 2026-10-15
 ---
 
 # Playhead rendering
@@ -28,7 +28,7 @@ Two cases the strips cannot cover are handled by their callers:
 
 ## The Direct2D handoff
 
-In the pinned JUCE (`37c894f`, `native/scripts/fetch-dependencies.py`), the Windows Direct2D peer runs vblank listeners *before* it paints the damage collected earlier, and `repaint()` only invalidates; `WM_PAINT` would collect that damage later. Left alone, the frame erased the old line but clipped out the new one. After repainting, `movePlayhead` calls `UpdateWindow`, which delivers `WM_PAINT` at once; for this backend that only collects damage, and drawing still happens at vblank. It applies only on Windows with Direct2D; macOS and the software renderer use plain invalidation. **Recheck it whenever JUCE is upgraded.**
+In the pinned JUCE (`37c894f`, `native/scripts/fetch-dependencies.py`), the Windows Direct2D peer runs vblank listeners *before* it paints the damage collected earlier, and `repaint()` only invalidates; `WM_PAINT` would collect that damage later. Left alone, the frame erased the old line but clipped out the new one. After repainting, `movePlayhead` calls `UpdateWindow`, which delivers `WM_PAINT` at once; for this backend that only collects damage, and drawing still happens at vblank. It applies only on Windows with Direct2D; macOS and the software renderer use plain invalidation. **Recheck it whenever JUCE is upgraded.** Anything else the arrangement moves on the same tick repaints before `updatePlayhead`, so this handoff collects its damage too: the [track level meters](level-meters.md) (`updateMeters`, since 2026-10-15).
 
 Damage has to be exact on Direct2D: it presents from rotating buffers, so a region nobody repainted shows an *older* frame. The software renderer (`RHINO_RENDERER=software`) keeps one surface where such a region still holds the last correct frame, which makes it a useful control when a repaint artefact appears.
 

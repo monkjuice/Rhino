@@ -1,7 +1,7 @@
 ---
 title: Session, the model
 type: component
-summary: The message-thread facade over one Tracktion engine and edit, one class split across 33 files, where every rule and refusal lives.
+summary: The message-thread facade over one Tracktion engine and edit, one class split across 34 files, where every rule and refusal lives.
 tags: [rhino, model, tracktion, undo]
 sources: []
 updated: 2026-10-15
@@ -13,11 +13,11 @@ updated: 2026-10-15
 
 ## One class, many files
 
-`Session` is one class defined across 33 translation units, all in `native/src/model/` (the `src/model/Session*.cpp` lines under `# Session` in `native/CMakeLists.txt`, as of 2026-10-15; [The source tree mirrors the layers](source-tree-mirrors-the-layers.md)), split by caller as [Keeping files small](keeping-files-small.md) describes:
+`Session` is one class defined across 34 translation units, all in `native/src/model/` (the `src/model/Session*.cpp` lines under `# Session` in `native/CMakeLists.txt`, as of 2026-10-15; [The source tree mirrors the layers](source-tree-mirrors-the-layers.md)), split by caller as [Keeping files small](keeping-files-small.md) describes:
 
 - `Session.cpp`: construction, the starter edit, `restoreProject`, `projectSnapshot`, undo and redo.
 - Notes and patterns: `SessionNotes`, `SessionPatternPresets`, `SessionPatches`.
-- Tracks and mixing: `SessionTracks`, `SessionGroups`, `SessionMixer`, `SessionAutomation`, `SessionTransport`.
+- Tracks and mixing: `SessionTracks`, `SessionGroups`, `SessionMixer`, `SessionMeters` (`takeOutputLevels`, what the card meters read; [Track level meters](level-meters.md)), `SessionAutomation`, `SessionTransport`.
 - Devices: `SessionDevices`, `SessionDevicePresets`, `SessionDrums` (the [Drum Rack](drum-rack.md)'s kits, pads, banks, slices and drops), `SessionSidechain`, `SessionExternalPlugins`, `SessionDeviceMacros` (the rack's curated knobs, 4OSC only; `DeviceMacros.cpp` until 2026-10-13), `SessionMappedParameters` (an external plugin's chosen knobs and mapping more from its window; [Mapped parameters](mapped-parameters.md)).
 - Clips: `SessionClips`, `SessionRegion`, `SessionAudioClips`, `SessionWarp`, `SessionMerge`, `SessionBounce` ([Bounce to New Track](bounce-to-new-track.md)), `SessionExport` (Export WAV, stepped like the bounce; [Project files](project-files.md#wav-export)), `SessionSamples`, `SessionSlots`.
 - Input and audition: `SessionRecording`, `SessionMidiInput`, `SessionAudioInput`, `SessionPreview`, `SessionControllers` (the ports a controller Rhino drives itself reserves, the Push's own input, `sendControllerMidi` and the controller's per-machine settings; [Ableton Push 1](ableton-push.md)).
@@ -35,7 +35,7 @@ The September 2026 split established the responsibility-based `Session*.cpp` lay
 - **Says what it changed.** Every command ends in `markModified(track, ModelChange)`: the track it changed, or -1, and what it changed, a combinable `Session::ModelChange` of `parameters`, `curves`, `notes`, `audioClips`, `devices` and `tempo`, or `none`, with `unknown` (every kind) the default and what undo, redo and the commands that reshape the stack (moving or removing a track, grouping) pass. `none` - names, colours, lane heights, arming, monitoring, inputs, the click, the count-in, the loop range, a group's collapse, mute and solo, the main fader - bumps the revision and the edit's changed flag and nothing else. Anything else marks the lanes stale, so a listener on the session's own announcement writes them onto the engine's curves ([Track automation](automation.md)); and `notes`, `audioClips` or `tempo` leave the DJ decks playing a cell of that track, or every such deck for -1 or a tempo, to make their cell again (`djDocumentChanged`). A device, a parameter or a curve asks nothing of a deck, which hears its track's chain live ([DJ view and the booth](dj-view.md)). A clip edit goes through `markClipsModified`, which marks each track it reached with `notes` or `audioClips` by the track's kind, and with `devices` too where a MIDI clip changed them by bringing its instrument or its kit ([One instrument per track](one-instrument-per-track.md)); a DJ change the document saves goes through `markDjModified`, which is `none`. Adding a track is `none` too: it moves the main row's index, but the mirror finds a curve by its device and parameter, and no deck plays the new track.
 - **Counts its own dirt.** `changeRevision`/`savedRevision` track user commands, because engine initialisation flips the edit's changed flag asynchronously.
 
-Replacing the document (`newProject`, `restoreProject`) is bracketed by `Listener::editWillChange`/`editDidChange`, so views drop cached rows, clips and pointers before the old edit is freed. Anything holding a `te::Plugin::Ptr` must let go before then: the automation mirror's curves and the rack's floating device window both did not, and a plugin outliving its edit corrupted the heap ([Hold ids, not pointers](ids-not-pointers.md)). Declaration order destroys the preview and the edit before the engine.
+Replacing the document (`newProject`, `restoreProject`) is bracketed by `Listener::editWillChange`/`editDidChange`, so views drop cached rows, clips and pointers before the old edit is freed. Anything holding a `te::Plugin::Ptr` must let go before then: the automation mirror's curves and the rack's floating device window both did not, and a plugin outliving its edit corrupted the heap ([Hold ids, not pointers](ids-not-pointers.md)). The meter taps hold one per track, and `releaseMeterTaps` drops them in `newProject`, `restoreProject` and `~Session`. Declaration order destroys the preview and the edit before the engine.
 
 ## Pitfalls
 

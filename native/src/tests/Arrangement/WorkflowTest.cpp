@@ -104,6 +104,8 @@ int runArrangementTest()
        #include "scenarios/ClipBounce.inc"
         scenario("region clipboard");
        #include "scenarios/RegionClipboard.inc"
+        scenario("no clip is left too short to hear");
+       #include "scenarios/ClipSlivers.inc"
         scenario("arrangement pan");
        #include "scenarios/ArrangementPan.inc"
         scenario("track management");

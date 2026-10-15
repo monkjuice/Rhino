@@ -59,8 +59,16 @@ Session::ClipRegion Session::copyClipRegion(double startSeconds, double endSecon
             if (!overlapsRegion(position.time, startSeconds, endSeconds))
                 continue;
             const auto clipStart = position.time.getStart().inSeconds();
+            const auto clipEnd = position.time.getEnd().inSeconds();
             const auto visibleStart = std::max(clipStart, startSeconds);
-            const auto visibleEnd = std::min(position.time.getEnd().inSeconds(), endSeconds);
+            const auto visibleEnd = std::min(clipEnd, endSeconds);
+            // A clip that only grazes the region - a sample one sample longer
+            // than a beat reaches across the next grid line - would paste as a
+            // clip nobody could hear or grab. One wholly inside is copied
+            // however short it is.
+            const auto cropped = clipStart < startSeconds - regionTolerance || clipEnd > endSeconds + regionTolerance;
+            if (cropped && visibleEnd - visibleStart < minimumSplitSeconds)
+                continue;
             ClipSnapshot snapshot;
             snapshot.name = clip->getName();
             snapshot.colour = clipColour(*clip);
@@ -146,14 +154,28 @@ bool Session::clearClipRegionInEdit(double startSeconds, double endSeconds, int 
             clip->removeFromParent();
             changed = true;
         }
-        for (const auto edge : {startSeconds, endSeconds})
+        // A clip is cut at an edge only when the part left outside is long
+        // enough to be a clip: the same 10 ms a split by hand has to leave. The
+        // engine refuses a cut within a millisecond of an edge on its own, but
+        // a clip crossing by a few milliseconds was cut, and the stub drew as a
+        // sliver nobody could grab. A clip that crosses by less is left whole,
+        // and as it still overlaps the region the pass below deletes it,
+        // losing less than anyone could hear.
+        for (const auto atStart : {true, false})
         {
+            const auto edge = atStart ? startSeconds : endSeconds;
             // Collected before anything is split: splitting inserts into the
             // array being walked.
             std::vector<te::Clip*> crossing;
             for (auto* clip : clipTrack->getClips())
-                if (clip != nullptr && !kept(*clip) && crossesEdge(clip->getPosition().time, edge))
+            {
+                if (clip == nullptr || kept(*clip) || !crossesEdge(clip->getPosition().time, edge))
+                    continue;
+                const auto time = clip->getPosition().time;
+                const auto outside = atStart ? edge - time.getStart().inSeconds() : time.getEnd().inSeconds() - edge;
+                if (outside >= minimumSplitSeconds)
                     crossing.push_back(clip);
+            }
             for (auto* clip : crossing)
                 if (clipTrack->splitClip(*clip, tracktion::core::TimePosition::fromSeconds(edge)) != nullptr)
                     changed = true;

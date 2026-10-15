@@ -14,7 +14,8 @@ enum class ClipGesture { move, trimLeft, trimRight };
 // clip's edge - or within a hair of it - is not a split at all. Both the
 // timeline, deciding which clips a line is drawn through, and the model, doing
 // the cutting, ask this, which is what stops them disagreeing about whether a
-// clip is splittable.
+// clip is splittable. Making room for a clip and copying a region keep to the
+// same floor (SessionRegion.cpp): neither leaves a piece shorter than this.
 inline constexpr double minimumSplitSeconds = 0.01;
 inline bool canSplitClipAt(ClipGeometry clip, double seconds)
 {

@@ -787,3 +787,15 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/bus-member-renders-nothing-alone.md (`RenderInFlight` replaces `renderBounce`; why the overrides are safe across slices)
 - updated: pages/ableton-push.md (`commandsAllowed` false while the loading screen runs)
 - updated: index.md (new decision; App shell and Bounce summaries)
+
+## [2026-10-15] update | Export WAV renders in slices behind the loading screen (b6758b4)
+- source: the change's brief, checked against native/src/model/SessionExport.cpp, Session.h (`startExport` and its siblings, `ExportRun`), Session.cpp (undo, redo, the `cancelExport` callers), SessionBounce.cpp, SessionInternal.h (`runRenderTask`), app/ProjectFiles.h/.cpp, app/MainComponent.cpp/.h, native/CMakeLists.txt and tests/Arrangement/scenarios/ProjectFileMedia.inc
+- updated: pages/long-commands-run-in-slices.md (summary; the export follows the bounce; guards cover both renders; temp-file swap; why 15 s rather than the worker's 60 s; only open and merge left)
+- updated: pages/project-files.md (WAV export: `SessionExport.cpp`, the app-side hand-off, refusals, temp file, `renderTimelineWav` for tests only, `exportParameters`)
+- updated: pages/app-shell.md (loading screen used by the export too; open item down to open and merge)
+- updated: pages/renders-that-never-return.md (export's 15 s budget, `runRenderTask` left to `renderTimelineWav`, `checkTimelineFiles` settled)
+- updated: pages/session-model.md (summary: 33 files; `SessionExport`; render helpers; the in-flight pitfall covers `isExporting()`)
+- updated: pages/ableton-push.md (an export now runs behind the loading screen, not a disabled shell)
+- updated: pages/bounce-to-new-track.md (a bounce start is refused while exporting)
+- updated: pages/dj-bounce-on-a-copy.md (the export no longer renders on a worker)
+- updated: index.md (Long commands and Session summaries)

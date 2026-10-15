@@ -4,7 +4,7 @@ type: component
 summary: The shell under app/ - Application in a Main.cpp of about 200 lines, MainWindow, and MainComponent across six units holding the control bar, the docked browser, the single lower pane, the 30 Hz timer that polls what the engine never broadcasts, and the modal loading screen a long command runs behind.
 tags: [rhino, ui, shell]
 sources: []
-updated: 2026-10-14
+updated: 2026-10-15
 ---
 
 # App shell and control bar
@@ -66,8 +66,8 @@ Note editor, audio clip editor and Device View are three faces of one pane (`Low
 - **Modal.** `run` enters modal state, so no other component, the custom title bar's menus and other windows included, takes input; `inputAttemptWhenModal` is overridden to stay silent rather than beep and raise. Esc and the Cancel button cancel; every other key is swallowed, since a shortcut is an edit.
 - **Frame budget.** A 33 ms timer gives the work 24 ms per frame; the first slice waits one frame so the screen is painted before work holds the thread. It draws the window dimmed, with a card: title, detail, percentage and a bar in `palette::deviceAccent`.
 - **Owned by `MainComponent`**, added last and raised again at the end of `resized()` (`MainComponentLayout.cpp`), because `resized` raises the lower panes and toggles above everything else.
-- **Used by the bounce only:** `MainComponent.cpp` wires `Arrangement::bounceStarted` to `run` with `Session::continueBounce` as the step, "Rendering <track>" plus "(n of m)" as the detail, and `Arrangement::bounceFinished` as `finished` ([Bounce to New Track](bounce-to-new-track.md)). The Push's `commandsAllowed` is false while it runs, and `requestClose` cancels the bounce before asking about unsaved changes; the screen then finds no work left and reports the cancel.
-- **Open (2026-10-14):** opening a project and the WAV export still only disable `MainComponent` (`ProjectFiles::loadingChanged` → `setEnabled`), and Ctrl+J merge still renders in one blocking loop; any of them could run behind this screen.
+- **Used by the bounce and the WAV export:** `MainComponent.cpp` wires `Arrangement::bounceStarted` to `run` with `Session::continueBounce` as the step, "Rendering <track>" plus "(n of m)" as the detail, and `Arrangement::bounceFinished` as `finished` ([Bounce to New Track](bounce-to-new-track.md)); and, since commit `b6758b4` (2026-10-15), `ProjectFiles::exportStarted` to `run` with `Session::continueExport`, `exportProgress()` and "Rendering <file>", `cancelExport`, and `ProjectFiles::exportFinished` as `finished` ([Project files (.rhinoedit)](project-files.md#wav-export)). The Push's `commandsAllowed` is false while it runs, and `requestClose` cancels a bounce or an export before asking about unsaved changes; the screen then finds no work left and reports the cancel.
+- **Open (2026-10-15):** opening a project still only disables `MainComponent` (`ProjectFiles::loadingChanged` → `setEnabled`), and Ctrl+J merge still renders in one blocking loop; either could run behind this screen.
 
 ## Related
 

@@ -55,7 +55,7 @@ The catalog of this wiki: every page, grouped by type, one line each (`- [Title]
 - [Rhino Tune](pages/rhino-tune.md) — Vocal pitch correction with YIN tracking and PSOLA shifting, real reported latency, and correction smoothed on the offset.
 - [Rhino Vocoder and sidechains](pages/rhino-vocoder.md) — A channel vocoder whose carrier arrives as a sidechain from another track, and how Rhino routes a sidechain at all.
 - [Rhino's build targets](pages/rhino-build-targets.md) — Rhino builds as three targets (RhinoCore, RhinoDevices, the app) so that editing a device does not rebuild the app.
-- [Session, the model](pages/session-model.md) — The message-thread facade over one Tracktion engine and edit, one class split across 32 files, where every rule and refusal lives.
+- [Session, the model](pages/session-model.md) — The message-thread facade over one Tracktion engine and edit, one class split across 33 files, where every rule and refusal lives.
 - [Time warp](pages/time-warp.md) — Makes an audio clip follow the song's tempo, with five warp modes over two stretchers, a clip tempo and warp markers.
 - [Track automation](pages/automation.md) — Per-track lanes stored as Rhino's own ValueTree children, naming their device by key rather than slot, and played by the engine from parameter curves the session mirrors after every change.
 - [Track groups (bus tracks)](pages/track-groups.md) — Ctrl+G gathers tracks under a bus track that their audio feeds; the structure is positional and repaired after every reorder.
@@ -75,7 +75,7 @@ The catalog of this wiki: every page, grouped by type, one line each (`- [Title]
 ## Decisions
 
 - [A deck's bounce renders on a worker against a copy of the document](pages/dj-bounce-on-a-copy.md) — Superseded on 2026-10-12, when decks stopped bouncing - how a track or group bounced to a DJ deck rendered on the booth's worker from a snapshot copy of the edit, kept for what it found about copies of a document, relative sources and the renderer.
-- [A long command runs in slices behind a modal screen](pages/long-commands-run-in-slices.md) — A command that must render the live document (Bounce to New Track, so far) stays on the message thread but works a slice per frame behind the shell's modal LoadingScreen, so the window draws and can cancel while nothing can edit the document under it.
+- [A long command runs in slices behind a modal screen](pages/long-commands-run-in-slices.md) — A command that must render the live document (Bounce to New Track and Export WAV, so far) stays on the message thread but works a slice per frame behind the shell's modal LoadingScreen, so the window draws and can cancel while nothing can edit the document under it.
 - [A group is an ordinary bus track](pages/group-is-a-bus-track.md) — A group's bus is a plain te::AudioTrack kept in getAudioTracks(), so every track-indexed path reaches it with no second code path.
 - [A track's kind is fixed when it is made](pages/track-kind-fixed-at-creation.md) — A track declares audio or MIDI at creation, nothing dropped on it changes that, and every mismatched drop is refused in the model.
 - [Content is files, never compiled in](pages/content-is-files.md) — Samples and other content live as files under library/ and are found at runtime; only fonts, app icons and two tiny SVG glyphs are embedded.

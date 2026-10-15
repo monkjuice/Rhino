@@ -4,7 +4,7 @@ type: component
 summary: Ctrl+B renders the selected clips, a track or a group to an audio file on a new track directly under its source and mutes the source in the same undo step, by Live 12's rules - a track before its fader, a group after its bus - a slice per frame behind a cancellable loading screen.
 tags: [rhino, arrangement, rendering, groups, undo, threads]
 sources: []
-updated: 2026-10-14
+updated: 2026-10-15
 ---
 
 # Bounce to New Track
@@ -14,7 +14,7 @@ Live 12's command (Live 12 manual, chapter 20, pp. 418-421; where the manual is:
 ## Where it lives
 
 - **Model**, `native/src/model/SessionBounce.cpp`, stepped since commit `d6f53ba` (2026-10-14):
-  - `startBounceClips(ids)` / `startBounceTracks(tracks)` build one `BounceJob` per source, make every refusal at once, take the edit off the device (`te::Edit::ScopedRenderStatus`, held for the whole run), stop transports and mirror automation. A second start while `isBouncing()` is refused.
+  - `startBounceClips(ids)` / `startBounceTracks(tracks)` build one `BounceJob` per source, make every refusal at once, take the edit off the device (`te::Edit::ScopedRenderStatus`, held for the whole run), stop transports and mirror automation. A start while `isBouncing()` or `isExporting()` is refused (the WAV export runs the same way; [Project files](project-files.md#wav-export)).
   - `continueBounce(ms)` renders for about that long and returns true while work remains; one `RenderTask::runJob` call is one block (Tracktion at `4536d8a`). After the last job it calls the private `finishBounce`, which makes the whole edit (tracks, clips, muting) as one undo step.
   - `cancelBounce()` (and the private `abandonBounce(why)` on a failure) destroys the render in flight, deletes every file written and leaves the document untouched.
   - `bounceOutcome(BounceResult*)` says how it ended (`BounceResult` gives the new tracks and clips to select); `bounceProgress()` gives the fraction by length rendered across jobs, the source's name and step/steps.

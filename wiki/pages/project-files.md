@@ -4,7 +4,7 @@ type: component
 summary: A .rhinoedit is the Tracktion edit's XML plus Rhino's own properties, saved from a snapshot on a worker and opened off-thread.
 tags: [rhino, persistence, files, debugging]
 sources: []
-updated: 2026-10-13
+updated: 2026-10-15
 ---
 
 # Project files (.rhinoedit)
@@ -30,7 +30,14 @@ Imported audio is referenced at its original path and never collected. Takes are
 
 ## WAV export
 
-*Export WAV* renders the whole edit on a worker at the audio device's own rate and block size (falling back to 48 kHz and 512), 24-bit, dithered, through the master plugins and with no normalising, so the file matches what the main fader set. `te::Edit::ScopedRenderStatus` detaches the edit from the device meanwhile. The render reads automation from the parameters' engine curves, exactly as playback does, so the export only calls `Session::mirrorAutomationToEngine` first to make them current ([Track automation](automation.md)). Commit `d3ead2a` (2026-09-15) changed export from fixed 48 kHz and peak normalisation to this behaviour.
+*Export WAV* (File menu, Ctrl+Shift+E) renders the song from the top to the end of its last clip at the audio device's own rate and block size (falling back to 48 kHz and 512), 24-bit, dithered, through the master plugins and with no normalising, so the file matches what the main fader set. `te::Edit::ScopedRenderStatus` detaches the edit from the device meanwhile. The render reads automation from the parameters' engine curves, exactly as playback does, so the export only calls `Session::mirrorAutomationToEngine` first to make them current ([Track automation](automation.md)). Commit `d3ead2a` (2026-09-15) changed export from fixed 48 kHz and peak normalisation to this behaviour.
+
+Since commit `b6758b4` (2026-10-15) the export lives in `model/SessionExport.cpp` and renders the live edit on the message thread, a few blocks per frame behind the shell's modal loading screen, as [Bounce to New Track](bounce-to-new-track.md) does ([A long command runs in slices behind a modal screen](long-commands-run-in-slices.md)). Before, it rendered on a `ProjectFiles` worker while the message thread kept reading the same edit, with the window merely disabled.
+
+- **App side.** `ProjectFiles::exportWav` asks for the file; `renderWav` calls `Session::startExport`, reports "Exporting <name>...", then hands the run to the `exportStarted` callback, which `MainComponent` wires to the loading screen; with none set it loops `continueExport` itself. `exportFinished` reports "Exported <name>" or `exportOutcome()`'s sentence. `ProjectFiles` no longer touches the live edit: its workers see only snapshots and the parsed XML of an open.
+- **Refusals**, at `startExport`, before anything is touched: another bounce or export running, an empty song ("There is no arrangement to export."), a timeline clip whose file is missing (`checkTimelineFiles`; [Offline renders that never return](renders-that-never-return.md)).
+- **The file.** The render writes a `juce::TemporaryFile` beside the destination and swaps it in only once it has finished, so a cancel ("The export was cancelled."), a failure or a stall (15 s without progress) leaves the file that was there.
+- `Session::renderTimelineWav`, the same render in one blocking call (60 s stall default), is now used only by tests; both build their `te::Renderer::Parameters` from one file-local helper, `exportParameters`, so they cannot drift. `Arrangement/scenarios/ProjectFileMedia.inc` drives the stepped export, its refusals, a cancel and the real `LoadingScreen`.
 
 ## Related
 

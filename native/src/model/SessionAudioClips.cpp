@@ -135,7 +135,13 @@ juce::Result Session::setAudioClipMuted(te::EditItemID id, bool muted)
 juce::Result Session::setAudioClipReversed(te::EditItemID id, bool reversed)
 {
     return applyAudioClipEdit(id, reversed ? "Reverse clip" : "Play clip forwards",
-                              [reversed](te::WaveAudioClip& clip) { clip.setIsReversed(reversed); });
+                              [reversed](te::WaveAudioClip& clip)
+    {
+        // Only a real change: the engine mirrors the clip's window into its
+        // file whenever the property is written, even from absent to off.
+        if (clip.getIsReversed() != reversed)
+            clip.setIsReversed(reversed);
+    });
 }
 
 }

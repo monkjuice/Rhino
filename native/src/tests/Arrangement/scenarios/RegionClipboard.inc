@@ -478,3 +478,39 @@
                     "The region scenario leaves the arrangement as it found it");
             require(session.trackCount() == 4, "The region scenario creates no tracks");
         }
+
+        // A copy plays the same stretch of its file as the clip it came from.
+        // The engine mirrors a clip's window into its file whenever the reverse
+        // switch is written, even from nothing to off, so a paste that wrote
+        // "forwards" onto its new clip moved a trimmed copy to the far end of
+        // the file: for a drum, past the attack, and so quieter. A clip that is
+        // the whole file is its own mirror, which is why only a trimmed one
+        // ever showed it. A document of its own.
+        {
+            Session mirrored;
+            require(mirrored.importAudioAt(source.getFile(), 1, 0.0).wasOk(), "A one-second clip to copy part of");
+            const auto offsetOf = [&mirrored](te::EditItemID id)
+            {
+                auto* clip = mirrored.findClip(id);
+                return clip != nullptr ? clip->getPosition().offset.inSeconds() : -1.0;
+            };
+            const auto copyAndPaste = [&](double from, double to)
+            {
+                std::vector<te::EditItemID> pasted;
+                require(mirrored.pasteClipRegion(mirrored.copyClipRegion(from, from + 0.3, 1, 1), to, 1, pasted).wasOk()
+                            && pasted.size() == 1,
+                        "A trimmed clip copies and pastes");
+                return pasted.front();
+            };
+            // The first 0.3 s, a window that is not its own mirror.
+            const auto opening = copyAndPaste(0.0, 2.0);
+            require(close(offsetOf(opening), 0.0), "A copy of a clip's opening plays its opening");
+            const auto again = copyAndPaste(2.0, 3.0);
+            require(close(offsetOf(again), 0.0), "and so does a copy of that copy");
+            require(mirrored.setAudioClipReversed(again, false).wasOk() && close(offsetOf(again), 0.0),
+                    "Asking a clip that was never reversed to play forwards leaves its window alone");
+            require(mirrored.setAudioClipReversed(opening, true).wasOk(), "A trimmed clip reverses");
+            const auto backwards = copyAndPaste(2.0, 4.0);
+            require(mirrored.audioClipMix(backwards).reversed && close(offsetOf(backwards), offsetOf(opening)),
+                    "A copy of a reversed clip plays the same window backwards");
+        }

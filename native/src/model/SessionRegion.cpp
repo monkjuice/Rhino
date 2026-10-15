@@ -342,6 +342,15 @@ juce::Result Session::pasteClipRegion(const ClipRegion& region, double destinati
             copy = target->insertWaveClip(snapshot.name, snapshot.sourceFile, {range, offset}, false).get();
             if (auto* audio = dynamic_cast<te::WaveAudioClip*>(copy))
             {
+                // Reversed before anything else, and only a clip that was. The
+                // engine mirrors a clip's window into its file whenever the
+                // reverse property is written - from absent to off included, as
+                // it never asks whether the value changed - so writing "forwards"
+                // onto a new clip moved a trimmed copy to the far end of its
+                // file, past a drum's attack. The position re-asserted below
+                // puts a reversed copy's window back where the original had it.
+                if (snapshot.reversed)
+                    audio->setIsReversed(true);
                 // Warp or speed first, then the position re-asserted, because
                 // both rescale what the clip covers; the fades last, because
                 // they are limited by the length the clip ends up with.
@@ -376,7 +385,6 @@ juce::Result Session::pasteClipRegion(const ClipRegion& region, double destinati
                 audio->setPan(snapshot.pan);
                 audio->setPitchChange(snapshot.pitchSemitones);
                 audio->setMuted(snapshot.muted);
-                audio->setIsReversed(snapshot.reversed);
                 audio->setFadeIn(tracktion::core::TimeDuration::fromSeconds(snapshot.fadeInSeconds));
                 audio->setFadeOut(tracktion::core::TimeDuration::fromSeconds(snapshot.fadeOutSeconds));
             }

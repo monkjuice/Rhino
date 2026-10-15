@@ -855,3 +855,8 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/region-editing.md (the paste writes reverse only for a reversed clip, first)
 - updated: pages/audio-clip-editor.md (`setAudioClipReversed` writes only a real change)
 - updated: index.md (new page)
+
+## [2026-10-15] update | No clip shorter than a split may leave: making room and copying keep the 10 ms floor (commit 972cc0e)
+- source: native/src/model/SessionRegion.cpp (`clearClipRegionInEdit`, `copyClipRegion`) and Tracktion's `split` in tracktion_ClipOwner.cpp at `4536d8a` (refuses a cut within 1 ms of an edge)
+- updated: pages/clip-placement.md (a crossing clip is cut only when 10 ms stays outside, otherwise deleted whole; the engine's own 1 ms refusal)
+- updated: pages/region-editing.md (a clip grazing the region by less than 10 ms is not copied; the one-sample-past-the-beat drum sample)

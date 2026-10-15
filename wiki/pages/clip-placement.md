@@ -4,7 +4,7 @@ type: concept
 summary: The clip that just arrived wins the ground it lands on, and one function, Session::makeRoomForClip, enforces it for every path.
 tags: [rhino, clips, arrangement, editing]
 sources: []
-updated: 2026-10-13
+updated: 2026-10-15
 ---
 
 # Clips never overlap
@@ -14,6 +14,8 @@ Two clips may never overlap on one track, and the clip that just arrived wins: L
 ## One place
 
 `Session::makeRoomForClip` (`native/src/model/SessionRegion.cpp`) is the only implementation. It runs `clearClipRegionInEdit` over the newcomer's span on its own track: split every clip crossing either edge, then delete whatever lies wholly inside. Splitting first is what makes "trim", "cut a hole" and "replace" one case. Touching an edge is not overlapping (a 1e-7 s tolerance).
+
+**No piece shorter than 10 ms is left.** A clip is cut at an edge only when the part left outside is at least `minimumSplitSeconds` (10 ms, `native/src/model/ClipGeometry.h`, the floor a split by hand already keeps). One that crosses by less is left whole, still overlaps, and goes with everything else inside. Tracktion refuses a split within 1 ms of a clip's edge on its own, but cut anything wider, so a clip overlapping its neighbour by a few milliseconds used to leave a stub drawn as a sliver nobody could grab (commit `972cc0e`). The same floor keeps a copy from taking a sliver ([Region editing](region-editing.md)).
 
 Every path that places or grows a clip ends there: `editClip` and `moveClips` (drags, trims, nudges), `importAudioAt` and `importAudioFilesAt`, `insertPatternPreset`, `copySlotClipToArrangement`, `mergeClips`, a note paste that lengthens the open clip, every warp change that lengthens one (`SessionWarp.cpp`), and recording through `tidyRecordedClips`. The engine drops a finished take on top of whatever was there, so `tidyRecordedClips` diffs the track's clip ids against those held before the take, by id because making room for one new clip can delete another. `pasteClipRegion` gets the same effect by clearing its whole rectangle first ([Region editing](region-editing.md)).
 

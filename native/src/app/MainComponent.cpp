@@ -388,7 +388,7 @@ MainComponent::MainComponent(Session& s)
 MainComponent::~MainComponent()
 {
     stopTimer();
-    delete audioSettings.getComponent();
+    delete preferences.getComponent();
     session.edit->getTransport().removeChangeListener(this);
     session.removeChangeListener(this);
     session.listeners.remove(this);

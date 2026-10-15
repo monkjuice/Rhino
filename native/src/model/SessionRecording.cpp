@@ -698,6 +698,10 @@ void Session::finishRecording()
     ++liveNoteRevision;
     recordingStart = -1.0;
     recordingStarted = false;
+    // A keyboard whose curve was switched on or off during the take changes
+    // hands now, and the tracks that play from it are armed again below.
+    if (syncKeyboardPorts())
+        armingDeferred = true;
     // Arming, monitoring or a device that changed while the take ran was kept
     // off the inputs so as not to cut it; now is when it takes effect.
     if (armingDeferred)

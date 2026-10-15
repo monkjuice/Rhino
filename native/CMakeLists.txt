@@ -81,6 +81,7 @@ target_sources(RhinoNative PRIVATE
     src/model/SessionDeviceMacros.cpp
     src/model/SessionMappedParameters.cpp
     src/model/SessionControllers.cpp
+    src/model/SessionKeyboards.cpp
     # UI
     src/ui/notes/StepGrid.cpp
     src/ui/notes/StepGridPainter.cpp
@@ -136,6 +137,8 @@ target_sources(RhinoNative PRIVATE
     src/ui/rack/DeviceEditorPanelDrumSampleControls.cpp
     src/ui/rack/DeviceRack.cpp
     src/ui/rack/DrumRackWindow.cpp
+    src/ui/preferences/PreferencesPanel.cpp
+    src/ui/preferences/MidiPreferencesPanel.cpp
     src/ui/shared/Playhead.cpp
     src/model/CountInClick.cpp
     src/app/ComputerKeyboard.cpp
@@ -175,6 +178,7 @@ target_sources(RhinoNative PRIVATE
     src/tests/Pattern/WorkflowTest.cpp
     src/tests/Arrangement/ClipGeometryTest.cpp
     src/tests/PushProtocolTest.cpp
+    src/tests/VelocityCurveTest.cpp
     src/tests/Arrangement/WorkflowTest.cpp)
 target_include_directories(RhinoNative PRIVATE src)
 target_compile_definitions(RhinoNative PRIVATE

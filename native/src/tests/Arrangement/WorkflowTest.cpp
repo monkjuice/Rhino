@@ -15,6 +15,7 @@
 #include "ui/dj/DjView.h"
 #include "ui/shared/Playhead.h"
 #include "app/PushController.h"
+#include "ui/preferences/PreferencesPanel.h"
 // The DJ booth scenario reads a deck's material, and the booth's edges fill
 // its engine's command queue.
 #include "dj/DjTrack.h"
@@ -140,6 +141,10 @@ int runArrangementTest()
        #include "scenarios/VocoderCarrier.inc"
         scenario("ableton push");
        #include "scenarios/PushController.inc"
+        // After the Push, whose reserved port it checks is refused a curve, and
+        // before the audio device closes, because it arms a track.
+        scenario("keyboard velocity curves");
+       #include "scenarios/KeyboardCurves.inc"
         scenario("gestures and persistence");
        #include "scenarios/GesturesAndPersistence.inc"
         scenario("arrangement mixer");

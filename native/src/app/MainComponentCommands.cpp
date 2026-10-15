@@ -41,6 +41,11 @@ bool MainComponent::keyPressed(const juce::KeyPress& key)
         arrangement.insertTrack(Session::lastAddedTrackType());
         return true;
     }
+    if (key.getModifiers().isCommandDown() && key.getKeyCode() == ',')
+    {
+        showPreferences(lastPreferencesTab);
+        return true;
+    }
     if (key.getModifiers().isCommandDown() && key.getModifiers().isShiftDown() && key.getKeyCode() == 'E')
     {
         files.exportWav();
@@ -179,6 +184,11 @@ void MainComponent::showEditMenu(juce::Component& target)
     // so it lives where that input is chosen: the card, and the track menu
     // for a row too short to carry the control.
     menu.addSeparator();
+    juce::PopupMenu::Item preferencesItem {"Preferences..."};
+    preferencesItem.itemID = 13;
+    preferencesItem.shortcutKeyDescription = "Ctrl+,";
+    menu.addItem(std::move(preferencesItem));
+    // The way to the Audio tab it always was, kept where people look for it.
     menu.addItem(4, "Audio settings...");
     // Panic was an exclamation mark on the control bar, which told nobody
     // what it did. It is named here instead, beside the audio settings it
@@ -198,7 +208,8 @@ void MainComponent::showEditMenu(juce::Component& target)
             if (result == 1) safe->session.undo();
             else if (result == 2) safe->session.redo();
             else if (result == 3) safe->session.clearPattern();
-            else if (result == 4) safe->showAudioSettings();
+            else if (result == 4) safe->showPreferences(PreferencesPanel::Tab::audio);
+            else if (result == 13) safe->showPreferences(safe->lastPreferencesTab);
             else if (result == 5)
             {
                 const auto on = !safe->session.previewEnabled();
@@ -271,29 +282,36 @@ void MainComponent::showHelpMenu(juce::Component& target)
                     "Ctrl+J  Merge the selected audio clips into one audio file\n"
                     "Ctrl+B  Bounce the selected clips, tracks or group to new audio tracks\n"
                     "R  Play the selected audio clips backwards\nDelete  Empty the selection\n"
-                    "?  Show/hide Info View\nF12  Full screen");
+                    "?  Show/hide Info View\nF12  Full screen\nCtrl+,  Preferences: audio device, MIDI keyboards");
             else if (result == 2)
                 juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon, "About Rhino",
                     "Rhino\nA native desktop DAW for patterns, arrangement, and offline WAV export.");
         });
 }
 
-void MainComponent::showAudioSettings()
+void MainComponent::showPreferences(PreferencesPanel::Tab tab)
 {
-    if (audioSettings != nullptr)
+    lastPreferencesTab = tab;
+    if (preferences != nullptr)
     {
-        audioSettings->toFront(true);
+        if (auto* panel = dynamic_cast<PreferencesPanel*>(preferences->getContentComponent()))
+            panel->showTab(tab);
+        preferences->toFront(true);
         return;
     }
-    auto selector = std::make_unique<juce::AudioDeviceSelectorComponent>(
-        session.engine.getDeviceManager().deviceManager, 0, 2, 0, 2, true, false, true, false);
-    selector->setSize(520, 420);
+    auto panel = std::make_unique<PreferencesPanel>(session, tab);
+    panel->onTabShown = [safe = juce::Component::SafePointer<MainComponent>(this)](PreferencesPanel::Tab shown)
+    {
+        if (safe != nullptr)
+            safe->lastPreferencesTab = shown;
+    };
+    panel->setSize(PreferencesPanel::defaultWidth, PreferencesPanel::defaultHeight);
     juce::DialogWindow::LaunchOptions options;
-    options.content.setOwned(selector.release());
-    options.dialogTitle = "Audio settings";
+    options.content.setOwned(panel.release());
+    options.dialogTitle = "Preferences";
     options.dialogBackgroundColour = palette::sideSurface;
     options.useNativeTitleBar = true;
-    audioSettings = options.launchAsync();
+    preferences = options.launchAsync();
 }
 
 }

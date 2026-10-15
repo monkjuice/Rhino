@@ -15,6 +15,7 @@
 #include "ControlBarIcons.h"
 #include "ControlBarButtons.h"
 #include "LoadingScreen.h"
+#include "ui/preferences/PreferencesPanel.h"
 #include <functional>
 #include <tuple>
 #include <vector>
@@ -86,10 +87,15 @@ public:
     // it is nowhere: keys then go to the window, which is above this component
     // and so is never reached by walking up from here.
     void listenForKeysOn(juce::Component& component) { computerKeyboard.listenTo(component); }
-    // Takes a connected Ableton Push, and any plugged in later. The shell
-    // calls it once it is up; the test runners never do, so a test run never
-    // takes the Push from whoever is playing it.
-    void startHardwareControllers() { push.start(); }
+    // Takes a connected Ableton Push, and any plugged in later, and opens the
+    // keyboards that have a velocity curve. The shell calls it once it is up;
+    // the test runners never do, so a test run never takes a controller or a
+    // keyboard from whoever is playing it.
+    void startHardwareControllers()
+    {
+        push.start();
+        session.startKeyboardPorts();
+    }
     std::function<void(const juce::String&)> projectTitleChanged;
     // Full screen is the window's business, not its content's: the shell wires
     // these to the document window that owns this component.
@@ -106,7 +112,10 @@ private:
     void showDisplayMenu();
     void editWillChange() override;
     void editDidChange() override;
-    void showAudioSettings();
+    // One window for what belongs to the machine, opened on the tab asked for.
+    // Audio settings in the Edit menu is the Audio tab; Ctrl+, opens the tab
+    // last looked at.
+    void showPreferences(PreferencesPanel::Tab tab);
     void logStatus(const juce::String& message);
     void updateHint();
     void changeListenerCallback(juce::ChangeBroadcaster*) override;
@@ -155,7 +164,8 @@ private:
     juce::TextButton editorZoomOut, editorZoomIn;
     juce::ComboBox scaleHighlight;
     ComputerKeyboard computerKeyboard;
-    juce::Component::SafePointer<juce::DialogWindow> audioSettings;
+    juce::Component::SafePointer<juce::DialogWindow> preferences;
+    PreferencesPanel::Tab lastPreferencesTab = PreferencesPanel::Tab::audio;
     ProjectFiles files;
     // Over the whole window while a bounce or an export renders, so the window
     // draws and nothing can be edited under the render.

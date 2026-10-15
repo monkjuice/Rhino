@@ -44,28 +44,29 @@ void Session::reserveMidiPorts(const juce::StringArray& portNames)
 // was found switched on by it and opened under the controller, and its raw
 // pads reached All Ins. Idempotent, because disabling a device rescans the
 // list: only a device still switched on is touched, so the two cannot chase
-// each other.
+// each other. A keyboard Rhino reads for its velocity curve (SessionKeyboards.cpp)
+// is kept from the engine the same way; only its output is left alone.
 void Session::disableReservedMidiPorts()
 {
-    if (reservedMidiPorts.isEmpty())
-        return;
+    const auto heldByRhino = [this](const juce::String& name)
+    { return isReservedMidiPort(name) || isCurvedMidiPort(name); };
     auto& deviceManager = engine.getDeviceManager();
     for (const auto& candidate : deviceManager.getMidiInDevices())
         if (candidate != nullptr && dynamic_cast<te::VirtualMidiInputDevice*>(candidate.get()) == nullptr
-            && candidate->isEnabled() && isReservedMidiPort(candidate->getName()))
+            && candidate->isEnabled() && heldByRhino(candidate->getName()))
             candidate->setEnabled(false);
+    // Audio settings lists MIDI inputs through JUCE's own device manager, which
+    // opens what is ticked there behind the engine's back.
+    auto& juceDevices = deviceManager.deviceManager;
+    for (const auto& input : juce::MidiInput::getAvailableDevices())
+        if (heldByRhino(input.name) && juceDevices.isMidiInputDeviceEnabled(input.identifier))
+            juceDevices.setMidiInputDeviceEnabled(input.identifier, false);
     // The engine gives every enabled output an all-notes-off at each stop,
     // which on a Push would blank the pads every time the song stopped.
     for (int index = 0; index < deviceManager.getNumMidiOutDevices(); ++index)
         if (auto* output = deviceManager.getMidiOutDevice(index);
             output != nullptr && output->isEnabled() && isReservedMidiPort(output->getName()))
             output->setEnabled(false);
-    // Audio settings lists MIDI inputs through JUCE's own device manager, which
-    // opens what is ticked there behind the engine's back.
-    auto& juceDevices = deviceManager.deviceManager;
-    for (const auto& input : juce::MidiInput::getAvailableDevices())
-        if (isReservedMidiPort(input.name) && juceDevices.isMidiInputDeviceEnabled(input.identifier))
-            juceDevices.setMidiInputDeviceEnabled(input.identifier, false);
 }
 
 void Session::setControllerConnected(bool connected)

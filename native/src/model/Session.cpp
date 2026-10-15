@@ -112,6 +112,7 @@ Session::Session() : engine(commandLineTestMode ? "Rhino Native Tests" : "Theda 
     // to be re-resolved when it changes rather than once at arming time.
     midiDeviceWatcher = std::make_unique<MidiDeviceWatcher>(*this);
     engine.getDeviceManager().addChangeListener(midiDeviceWatcher.get());
+    initialiseKeyboards();
     initialiseExternalPlugins();
     buildStarterEdit();
     addChangeListener(&automationMirror);
@@ -129,6 +130,10 @@ Session::~Session()
     removeChangeListener(&automationMirror);
     if (midiDeviceWatcher != nullptr)
         engine.getDeviceManager().removeChangeListener(midiDeviceWatcher.get());
+    // A keyboard's port and its listeners on the engine's devices deliver from
+    // the MIDI thread into devices the engine is about to take down.
+    closeKeyboardPorts();
+    keyboards.reset();
     // The controller has closed its port by now (the window goes first), so
     // nothing is delivering through these.
     {

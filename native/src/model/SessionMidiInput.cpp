@@ -118,6 +118,17 @@ void Session::midiDevicesChanged()
     // from another thread to devices the rebuilt list may have replaced.
     disableReservedMidiPorts();
     refreshControllerTargets();
+    if (!reapplyingArming)
+        awaitingMidiDeviceScan = false;
+    // A keyboard with a curve that has just been plugged in is opened, one
+    // unplugged is let go of, and every one is pointed at the rebuilt list.
+    // Asking for a device of its own sets awaitingMidiDeviceScan again.
+    juce::ignoreUnused(syncKeyboardPorts());
+    rearmListeningMidiTracks();
+}
+
+void Session::rearmListeningMidiTracks()
+{
     if (reapplyingArming)
         return;
     // Listening is armed or monitoring On - the same rule arming applies - so
@@ -131,7 +142,6 @@ void Session::midiDevicesChanged()
             listening = true;
             break;
         }
-    awaitingMidiDeviceScan = false;
     // Never under a running take: rebuilding the destinations can cut the
     // tracks that are capturing. The next take is armed against the new list.
     if (!listening)
@@ -241,6 +251,10 @@ te::MidiInputDevice* Session::midiInputDeviceForTrack(int track) const
     if (token.startsWith(devicePrefix))
     {
         const auto wanted = token.substring(static_cast<int>(std::string_view(devicePrefix).size()));
+        // A keyboard Rhino reads for its curve plays into a device of its own.
+        // Null while the rescan that makes it is on its way.
+        if (isCurvedMidiPort(wanted))
+            return curvedInputDevice(wanted);
         for (const auto& candidate : engine.getDeviceManager().getMidiInDevices())
             if (candidate != nullptr && candidate->getName() == wanted && !isReservedMidiPort(wanted))
                 return candidate.get();
@@ -251,12 +265,14 @@ te::MidiInputDevice* Session::midiInputDeviceForTrack(int track) const
 
 // All Ins is a merge of the physical inputs, and a physical input only feeds it
 // while it is open. Enabling every one of them is therefore part of what All
-// Ins *means*, rather than a side effect of it.
+// Ins *means*, rather than a side effect of it. A keyboard Rhino reads for its
+// curve is left shut: Rhino delivers its notes to All Ins itself.
 void Session::enablePhysicalMidiInputs()
 {
     for (const auto& candidate : engine.getDeviceManager().getMidiInDevices())
         if (candidate != nullptr && dynamic_cast<te::VirtualMidiInputDevice*>(candidate.get()) == nullptr
-            && !candidate->isEnabled() && !isReservedMidiPort(candidate->getName()))
+            && !candidate->isEnabled() && !isReservedMidiPort(candidate->getName())
+            && !isCurvedMidiPort(candidate->getName()))
             candidate->setEnabled(true);
 }
 

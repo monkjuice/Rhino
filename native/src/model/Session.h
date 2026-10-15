@@ -4,6 +4,7 @@
 #include "DeviceCatalog.h"
 #include "DeviceDisplay.h"
 #include "ClipGeometry.h"
+#include "VelocityCurve.h"
 #include <array>
 #include <functional>
 #include <map>
@@ -688,6 +689,36 @@ public:
     // read or written under the test runners.
     static juce::String controllerSetting(const juce::String& key, const juce::String& fallback);
     static void setControllerSetting(const juce::String& key, const juce::String& value);
+    // A keyboard's velocity curve: how hard its keys have to be struck to play
+    // loud, chosen per MIDI port in the preferences' MIDI tab and kept per
+    // machine. A port with any curve but Linear is read by Rhino itself, which
+    // bends each note-on before any track hears or records it, and is kept
+    // from the engine as a controller's ports are - but it is still offered on
+    // the cards, under its own name. Linear leaves the port to the engine.
+    // SessionKeyboards.cpp.
+    juce::StringArray keyboardPortNames() const;
+    VelocityCurve velocityCurve(const juce::String& portName) const;
+    void setVelocityCurve(const juce::String& portName, VelocityCurve curve);
+    // The last note a port played: how hard it was struck and what its curve
+    // made of that. `notes` counts them, so a panel can tell a new note from
+    // the same one read twice; zero means none yet. A Linear port is read too,
+    // through the engine, while the engine has it open.
+    struct KeyboardNote
+    {
+        int struck = 0, played = 0;
+        juce::uint32 notes = 0;
+    };
+    KeyboardNote lastKeyboardNote(const juce::String& portName) const;
+    // engine: Linear, so the engine reads it. open: Rhino reads it. busy:
+    // Rhino could not open it, which on Windows means another program has it.
+    // absent: it has a curve and is not plugged in, or Rhino has not started
+    // reading keyboards yet.
+    enum class KeyboardPortState { engine, open, busy, absent };
+    KeyboardPortState keyboardPortState(const juce::String& portName) const;
+    // Opens the ports a curve is saved for, and any given one later. The shell
+    // calls it once it is up; the test runners never do, so a test run never
+    // takes a keyboard from whoever is playing it.
+    void startKeyboardPorts();
     // Hearing yourself. These are Live's three Monitor settings under another
     // spelling, and the engine happens to carry exactly the same three.
     //
@@ -1586,7 +1617,36 @@ private:
         Session& session;
     };
     void midiDevicesChanged();
+    // Arms again, against the device list as it is now, when any MIDI track is
+    // listening, and announces it. Never under a take, which keeps it for
+    // finishRecording.
+    void rearmListeningMidiTracks();
     std::unique_ptr<MidiDeviceWatcher> midiDeviceWatcher;
+    // SessionKeyboards.cpp - the velocity curves, and the ports Rhino reads
+    // for them, defined there with its deleter so that nothing else need see
+    // it. Made by the constructor, gone before the engine is.
+    struct Keyboards;
+    struct KeyboardsDeleter
+    {
+        void operator()(Keyboards*) const;
+    };
+    std::unique_ptr<Keyboards, KeyboardsDeleter> keyboards;
+    void initialiseKeyboards();
+    // Takes the ports with a curve from the engine and opens them, hands back
+    // the ones set to Linear, and points each at the devices the list holds
+    // now. Message thread; run on every rebuild of the device list too. True
+    // when a port changed hands, which moves the tracks that play from it onto
+    // another device, so the caller arms again. Under a take nothing changes
+    // hands until finishRecording runs this once more.
+    bool syncKeyboardPorts();
+    void closeKeyboardPorts();
+    // A port Rhino reads for its curve, and the virtual device its notes are
+    // delivered to, which a track that names the port listens to instead.
+    bool isCurvedMidiPort(const juce::String& portName) const;
+    te::MidiInputDevice* curvedInputDevice(const juce::String& portName) const;
+    // What a curved port's MIDI callback does with a message, for a test that
+    // has no keyboard to play.
+    void receiveKeyboardMidi(const juce::String& portName, const juce::MidiMessage&);
     // SessionControllers.cpp - the Push's own virtual input, made the first
     // time a track asks for it, as the typing keyboard's is.
     te::MidiInputDevice* pushInputDevice() const;

@@ -5,6 +5,7 @@
 #include "ui/shared/Playhead.h"
 #include "ui/shared/LevelMeter.h"
 #include "tests/PushProtocolTest.h"
+#include "tests/VelocityCurveTest.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -239,6 +240,7 @@ int runArrangementGeometryTest()
                 throw std::runtime_error("A long silence, or a reading that is not a number, empties the meter");
         }
         checkPushProtocol();
+        checkVelocityCurves();
         return 0;
     }
     catch (const std::exception& error)

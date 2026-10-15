@@ -125,6 +125,7 @@ Session::~Session()
     // render, and either render hands the edit back to the device.
     cancelBounce();
     cancelExport();
+    releaseMeterTaps();
     removeChangeListener(&automationMirror);
     if (midiDeviceWatcher != nullptr)
         engine.getDeviceManager().removeChangeListener(midiDeviceWatcher.get());
@@ -217,6 +218,7 @@ void Session::newProject()
     mirroredPlugins.clear();
     automationMirrorStale = true;
     detachParameterMapping();
+    releaseMeterTaps();
     manualLoop = false;
     buildStarterEdit();
     // The booth belongs to the document, so a new one starts with no decks.
@@ -370,6 +372,7 @@ juce::Result Session::restoreProject(const juce::ValueTree& state, const juce::F
     // plugin must not outlive the edit it belongs to.
     mirroredCurves.clear();
     detachParameterMapping();
+    releaseMeterTaps();
     edit = std::move(candidate);
     // The automation that was being played by hand belonged to the outgoing
     // document's tracks, and is keyed by their indices.

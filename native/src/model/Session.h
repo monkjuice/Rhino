@@ -6,6 +6,7 @@
 #include "ClipGeometry.h"
 #include <array>
 #include <functional>
+#include <map>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -1138,6 +1139,20 @@ public:
     void setMasterPan(float pan);
     void beginMasterPanGesture();
     void endMasterPanGesture();
+    // What each track sends to the mix, for the meters on the cards: the
+    // loudest sample on each side since the last call, in decibels, after the
+    // track's fader and pan. It is read from the level meter every track
+    // carries just behind its fader (ensureTrackMixers); index trackCount() is
+    // the main output, after its own fader. A track the song cannot hear -
+    // muted, or silenced by a solo elsewhere - reads as silence, because the
+    // engine mutes a track after its whole chain, meter included; so does
+    // everything while a bounce or an export renders. A read clears the
+    // peaks, so there is one reader: the arrangement's frame clock.
+    struct OutputLevel
+    {
+        float leftDb = -100.0f, rightDb = -100.0f;
+    };
+    std::vector<OutputLevel> takeOutputLevels();
     // A track's clip slots (SessionSlots.cpp): one per scene on every track,
     // each holding at most one clip. They are the cells of a DJ console's
     // clips grid, the DJ view's own clips, apart from the arrangement's: a
@@ -1822,6 +1837,19 @@ private:
     void endExport(const juce::Result&);
     std::unique_ptr<ExportRun, ExportRunDeleter> exportRun;
     juce::Result lastExport = juce::Result::ok();
+    // Where takeOutputLevels reads (SessionMeters.cpp): a place on each
+    // track's meter, by the meter's id, and one on the main output's. Each
+    // holds the meter it is on, which belongs to the edit, so all of them go
+    // before the edit does (releaseMeterTaps).
+    struct MeterTap;
+    struct MeterTapDeleter
+    {
+        void operator()(MeterTap*) const;
+    };
+    std::map<te::EditItemID, std::unique_ptr<MeterTap, MeterTapDeleter>> meterTaps;
+    std::unique_ptr<MeterTap, MeterTapDeleter> mainMeterTap;
+    juce::uint32 meterPass = 0;
+    void releaseMeterTaps();
 };
 int runSelfTest();
 int runPatternTest();

@@ -7,10 +7,12 @@
 namespace rhino
 {
 
-// One frame clock for both: a drag that has reached the edge pulls the view
-// after it on the same tick the playhead is advanced on.
+// One frame clock for all three: a drag that has reached the edge pulls the
+// view after it on the same tick the meters and the playhead move on. The
+// meters go first, so the damage the playhead hands over at once
+// (movePlayhead) carries theirs with it.
 Arrangement::Arrangement(Session& s)
-    : session(s), vblank(this, [this] { autoScrollDrag(); updatePlayhead(); })
+    : session(s), vblank(this, [this] { autoScrollDrag(); updateMeters(); updatePlayhead(); })
 {
     configureMasterControls();
     setOpaque(true);
@@ -96,6 +98,7 @@ void Arrangement::configureMasterControls()
     masterPan.setColour(juce::Slider::textBoxOutlineColourId, juce::Colour(0x33000000));
     addAndMakeVisible(masterVolume);
     addAndMakeVisible(masterPan);
+    addAndMakeVisible(masterMeter);
 }
 
 void Arrangement::resized()
@@ -165,13 +168,22 @@ void Arrangement::resized()
         const auto inputWidth = cardControlWidth * 2 + cardControlGap;
         trackInput[index]->setBounds(left, top + 42, inputWidth, 16);
         monitor[index]->setBounds(left, top + 61, inputWidth, 15);
+        // Not pushed in with a group's indent: every meter stands in one column.
+        meters[index]->setVisible(visible);
+        meters[index]->setBounds(static_cast<int>(cardMeterLeft), top, LevelMeter::width,
+                                 std::max(0, static_cast<int>(row.getHeight() - trackDividerThickness)
+                                                 - 2 * cardControlsTop));
     }
     {
         // Everything the main row carries sits on its single line, and its two
-        // faders are the same pair of widths the cards use.
-        const auto controlsY = static_cast<int>(masterLane().getY()) + 5;
+        // faders are the same pair of widths the cards use. Its meter is in
+        // the cards' column and fills the row but for the same margin.
+        const auto master = masterLane();
+        const auto controlsY = static_cast<int>(master.getY()) + 5;
         masterVolume.setBounds(56, controlsY, 62, 16);
         masterPan.setBounds(122, controlsY, 62, 16);
+        masterMeter.setBounds(static_cast<int>(cardMeterLeft), controlsY, LevelMeter::width,
+                              std::max(0, static_cast<int>(master.getBottom()) - 5 - controlsY));
     }
     layoutNameEditor();
     // Both scrollbars stop at the top of whatever covers the foot of the panel,
@@ -665,6 +677,34 @@ void Arrangement::editWillChange()
     focus = Focus::none;
 }
 void Arrangement::editDidChange() { sync(); fit(); }
+
+// Each meter repaints only itself, and only when a bar or a held peak has
+// moved by a pixel, so a frame of a silent song reads the session and paints
+// nothing.
+void Arrangement::updateMeters()
+{
+    if (!isShowing())
+    {
+        metersFedAt = 0.0;
+        return;
+    }
+    auto levels = session.takeOutputLevels();
+    const auto now = juce::Time::getMillisecondCounterHiRes();
+    auto seconds = (now - metersFedAt) / 1000.0;
+    // Back from behind the DJ view: the peaks read now piled up all the while
+    // it showed, and the bars still hold what they held when it opened. Both
+    // are thrown away and the bars dropped to nothing.
+    if (metersFedAt <= 0.0)
+    {
+        std::fill(levels.begin(), levels.end(), Session::OutputLevel {});
+        seconds = 3600.0;
+    }
+    metersFedAt = now;
+    const auto count = std::min(meters.size(), levels.size() - 1);
+    for (size_t track = 0; track < count; ++track)
+        meters[track]->feed(levels[track].leftDb, levels[track].rightDb, seconds);
+    masterMeter.feed(levels.back().leftDb, levels.back().rightDb, seconds);
+}
 
 void Arrangement::updatePlayhead()
 {

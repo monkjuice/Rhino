@@ -2,6 +2,7 @@
 #include "model/Session.h"
 #include "ArrangementGrid.h"
 #include "MonitorSelector.h"
+#include "ui/shared/LevelMeter.h"
 #include <map>
 #include <memory>
 
@@ -262,6 +263,9 @@ private:
     void muteSelected();
     juce::Result applyBrowserDrop(const juce::String& description, int track, double startSeconds = 0.0, bool insertPreset = false);
     void updatePlayhead();
+    // Feeds every card's meter and the main row's what the session measured
+    // since the last frame. On the frame clock, as the playhead is.
+    void updateMeters();
     // A take is drawn as it is played, so the band has to be repainted as it
     // grows. The playhead's own damage is two narrow strips at its old and new
     // positions and not the span between them, so it cannot be relied on to
@@ -481,6 +485,13 @@ private:
     // The track's fader and pan, the session's own mixer values.
     std::vector<std::unique_ptr<juce::Slider>> volume, pan;
     juce::Slider masterVolume, masterPan;
+    // What each track sends to the mix, and on the main row what leaves the
+    // song, each at the right edge of its header in one column.
+    std::vector<std::unique_ptr<LevelMeter>> meters;
+    LevelMeter masterMeter;
+    // When the meters were last fed, or zero when they have not been since
+    // the arrangement was last showing: what a meter holds by then is old.
+    double metersFedAt = 0.0;
     juce::ScrollBar scroll {false}, trackScrollBar {true};
     juce::VBlankAttachment vblank;
     double viewStart = 0.0, viewSpan = 8.0, songEnd = 2.0, trackScroll = 0.0;
@@ -634,5 +645,11 @@ private:
     // than a level bar does.
     static constexpr int cardControlsTop = 7, cardControlLeft = 10, cardControlWidth = 52,
                          cardControlGap = 4, cardButtonWidth = 34;
+    // The meter stands at the right edge of the header, where Live keeps its
+    // own, clear of the armed strip and the rule beside the lanes. It runs from
+    // the button line to as far above the rule under the row, and the name
+    // stops short of it.
+    static constexpr int cardMeterInset = 6;
+    static constexpr float cardMeterLeft = headerWidth - static_cast<float>(cardMeterInset + LevelMeter::width);
 };
 }

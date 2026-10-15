@@ -59,6 +59,7 @@ target_sources(RhinoNative PRIVATE
     src/model/SessionGroups.cpp
     src/model/SessionSlots.cpp
     src/model/SessionMixer.cpp
+    src/model/SessionMeters.cpp
     src/model/SessionClips.cpp
     src/model/SessionAudioClips.cpp
     src/model/SessionWarp.cpp
@@ -114,6 +115,7 @@ target_sources(RhinoNative PRIVATE
     src/ui/dj/DjMeter.cpp
     src/ui/dj/DjJogWheel.cpp
     src/ui/shared/ShapedText.cpp
+    src/ui/shared/LevelMeter.cpp
     src/ui/browser/BrowserDrops.cpp
     src/ui/browser/BrowserPanel.cpp
     src/ui/audioclip/AudioClipPanel.cpp

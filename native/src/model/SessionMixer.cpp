@@ -24,6 +24,9 @@ te::VolumeAndPanPlugin* Session::trackVolumePlugin(int track) const
 
 // Every track needs a fader, including tracks in documents written before the
 // mixer existed. The fader goes last so it sits after the track's devices.
+// The meter goes straight behind the fader, so the card shows what the track
+// sends to the mix, its level and pan included (takeOutputLevels). A starter
+// track already has the engine's own meter there.
 void Session::ensureTrackMixers()
 {
     for (auto* track : te::getAudioTracks(*edit))
@@ -31,12 +34,20 @@ void Session::ensureTrackMixers()
         // Every track carries the DJ booth's two hidden ends from the start,
         // made with it here as the mixer is.
         ensureDjPortDevices(*edit, *track);
-        if (track->getVolumePlugin() != nullptr)
+        if (track->getVolumePlugin() == nullptr)
+            if (auto plugin = edit->getPluginCache().createNewPlugin(te::VolumeAndPanPlugin::xmlTypeName, {}))
+                track->pluginList.insertPlugin(plugin, track->pluginList.size(), nullptr);
+        if (track->getLevelMeterPlugin() != nullptr)
             continue;
-        auto plugin = edit->getPluginCache().createNewPlugin(te::VolumeAndPanPlugin::xmlTypeName, {});
-        if (plugin == nullptr)
+        auto meter = edit->getPluginCache().createNewPlugin(te::LevelMeterPlugin::xmlTypeName, {});
+        if (meter == nullptr)
             continue;
-        track->pluginList.insertPlugin(plugin, track->pluginList.size(), nullptr);
+        auto* fader = track->getVolumePlugin();
+        auto behindFader = track->pluginList.size();
+        for (int i = 0; i < track->pluginList.size(); ++i)
+            if (track->pluginList[i] == fader)
+                behindFader = i + 1;
+        track->pluginList.insertPlugin(meter, behindFader, nullptr);
     }
 }
 

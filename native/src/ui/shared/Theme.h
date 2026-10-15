@@ -60,6 +60,11 @@ inline const juce::Colour displayTextFaint {0xff76856f};
 // on the main row alike.
 inline const juce::Colour volume           {0xff45d0d4};
 inline const juce::Colour pan              {0xffd4564e};
+// A track meter runs green while a signal has headroom, turns yellow as it
+// nears full scale and red at it, the way every mixer's does. See LevelMeter.h.
+inline const juce::Colour meterSafe        {0xff3ddc84};
+inline const juce::Colour meterHot         {0xffe8c547};
+inline const juce::Colour meterClip        {0xffed3935};
 
 // MIDI processors use cyan because they transform events rather than audio.
 inline const juce::Colour midiEffect       {0xff55c7d5};

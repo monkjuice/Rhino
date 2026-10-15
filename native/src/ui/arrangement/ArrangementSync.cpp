@@ -306,6 +306,10 @@ void Arrangement::syncTrackControls()
         laneHeaders.addAndMakeVisible(*monitorControl);
         laneHeaders.addAndMakeVisible(*volumeSlider);
         laneHeaders.addAndMakeVisible(*panSlider);
+        // What the track sends to the mix; see LevelMeter.h.
+        auto meter = std::make_unique<LevelMeter>();
+        laneHeaders.addAndMakeVisible(*meter);
+        meters.push_back(std::move(meter));
         mute.push_back(std::move(muteButton));
         solo.push_back(std::move(soloButton));
         arm.push_back(std::move(armButton));
@@ -323,6 +327,7 @@ void Arrangement::syncTrackControls()
         monitor.pop_back();
         volume.pop_back();
         pan.pop_back();
+        meters.pop_back();
     }
 }
 

@@ -37,8 +37,8 @@ void Arrangement::configureNameEditor()
     laneHeaders.addChildComponent(nameEditor);
 }
 
-// The name's line on a card. The painter draws into this too, so the editor
-// lands exactly where the text it replaces was.
+// The name's line on a card, which stops at the meter. The painter draws into
+// this too, so the editor lands exactly where the text it replaces was.
 juce::Rectangle<int> Arrangement::trackNameBounds(int track) const
 {
     if (!juce::isPositiveAndBelow(track, session.trackCount()))
@@ -47,7 +47,7 @@ juce::Rectangle<int> Arrangement::trackNameBounds(int track) const
     const auto indent = trackIndent(track);
     return juce::Rectangle<float>(indent + cardControlsWidth + cardDividerWidth,
                                   row.getY() + static_cast<float>(cardControlsTop),
-                                  headerWidth - indent - cardControlsWidth - cardDividerWidth, 18.0f)
+                                  cardMeterLeft - indent - cardControlsWidth - cardDividerWidth, 18.0f)
         .toNearestInt().reduced(6, 0);
 }
 

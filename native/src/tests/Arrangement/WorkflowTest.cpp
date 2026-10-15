@@ -144,6 +144,10 @@ int runArrangementTest()
        #include "scenarios/GesturesAndPersistence.inc"
         scenario("arrangement mixer");
        #include "scenarios/SharedMixer.inc"
+        // In a document of its own, which plays its chains by hand and renders
+        // nothing, so it may follow the device closing.
+        scenario("track meters");
+       #include "scenarios/TrackMeters.inc"
         scenario("clip round trip");
        #include "scenarios/ClipRoundTrip.inc"
         scenario("drum kits: whole Drum Racks dropped from the browser");

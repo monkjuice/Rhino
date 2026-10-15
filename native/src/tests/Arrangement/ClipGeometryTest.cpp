@@ -3,6 +3,7 @@
 #include "ui/arrangement/ArrangementGrid.h"
 #include "app/InfoHints.h"
 #include "ui/shared/Playhead.h"
+#include "ui/shared/LevelMeter.h"
 #include "tests/PushProtocolTest.h"
 #include <algorithm>
 #include <cmath>
@@ -205,6 +206,37 @@ int runArrangementGeometryTest()
                 throw std::runtime_error("Nothing under the pointer leaves the panel alone");
             if (infoHintReplaces(nullptr, mute, &other, {}))
                 throw std::runtime_error("A control that says nothing leaves the panel alone");
+        }
+        // The track meters' scale, against the points of Ardour's log_meter,
+        // and what a bar does between two peaks.
+        {
+            if (meterFraction(-100.0f) != 0.0f || meterFraction(-70.0f) != 0.0f || meterFraction(std::nanf("")) != 0.0f)
+                throw std::runtime_error("Silence, the floor and a level that is not a number all read as an empty meter");
+            if (meterFraction(6.0f) != 1.0f || meterFraction(20.0f) != 1.0f)
+                throw std::runtime_error("+6 dB fills the meter and nothing goes past the top");
+            if (!close(meterFraction(0.0f), 100.0 / 115.0) || !close(meterFraction(-20.0f), 50.0 / 115.0)
+                || !close(meterFraction(-45.0f), 11.25 / 115.0))
+                throw std::runtime_error("Full scale, -20 dB and a level between two points land where log_meter puts them");
+            for (auto decibels = -80.0f; decibels < 10.0f; decibels += 0.25f)
+                if (meterFraction(decibels + 0.25f) < meterFraction(decibels))
+                    throw std::runtime_error("A louder level never reads lower on the meter");
+
+            MeterBallistics channel;
+            channel.advance(-6.0f, 0.02);
+            if (channel.levelDb != -6.0f || channel.heldDb != -6.0f)
+                throw std::runtime_error("A peak shows at once and is held");
+            channel.advance(-100.0f, 0.5);
+            if (!close(channel.levelDb, -6.0 - MeterBallistics::fallDbPerSecond * 0.5) || channel.heldDb != -6.0f)
+                throw std::runtime_error("The bar falls at its rate while the held peak stays");
+            channel.advance(-100.0f, 1.1);
+            if (!(channel.heldDb < -6.0f) || channel.heldDb < channel.levelDb)
+                throw std::runtime_error("Past its hold the peak falls too, never below the bar");
+            channel.advance(-3.0f, 0.02);
+            if (channel.levelDb != -3.0f || channel.heldDb != -3.0f)
+                throw std::runtime_error("A louder peak takes the bar and the hold straight up");
+            channel.advance(std::nanf(""), 3600.0);
+            if (channel.levelDb != MeterBallistics::floorDb || channel.heldDb != MeterBallistics::floorDb)
+                throw std::runtime_error("A long silence, or a reading that is not a number, empties the meter");
         }
         checkPushProtocol();
         return 0;

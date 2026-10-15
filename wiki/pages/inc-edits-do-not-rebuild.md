@@ -4,7 +4,7 @@ type: gotcha
 summary: An edit to a workflow scenario alone has left the old test binary in place, so CTest passed a scenario that was never compiled.
 tags: [rhino, forge, testing, build]
 sources: []
-updated: 2026-10-10
+updated: 2026-10-15
 ---
 
 # Editing only a scenario .inc does not rebuild the tests
@@ -21,7 +21,7 @@ Scenarios are bare statement blocks in `native/src/tests/Pattern/scenarios/*.inc
 
 A second route produces the same green line. If you pipe the build through a filter (`cmake --build ... | grep error`), the shell reports the filter's exit status, not the build's. A failed link, for example [LNK1104](locked-executable-lnk1104.md), then looks clean and the old executable runs. This hit Forge on 2026-10-03: `cmake --build ... | Select-String` followed by `ctest` in the same PowerShell command ran the previous binary after a failed compile and reported 100% passed.
 
-A third route caught a Forge check on 2026-10-03. To prove a test could fail, a source file was edited temporarily and then restored with `Copy-Item` from a backup. `Copy-Item` keeps the backup's older `LastWriteTime`, so the restored file looked older than the object compiled from the temporary edit. MSBuild skipped it, and the binary kept the temporary behaviour, so a snapshot showed the bug "still there".
+A third route caught a Forge check on 2026-10-03. To prove a test could fail, a source file was edited temporarily and then restored with `Copy-Item` from a backup. `Copy-Item` keeps the backup's older `LastWriteTime`, so the restored file looked older than the object compiled from the temporary edit. MSBuild skipped it, and the binary kept the temporary behaviour, so a snapshot showed the bug "still there". It hit Rhino the same way on 2026-10-15: `SessionRegion.cpp` copied back after proving the `ClipSlivers.inc` checks could fail left the old code in the binary, and the checks failed with the fix in place.
 
 ## What to do
 

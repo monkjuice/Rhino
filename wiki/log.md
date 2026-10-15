@@ -860,3 +860,10 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - source: native/src/model/SessionRegion.cpp (`clearClipRegionInEdit`, `copyClipRegion`) and Tracktion's `split` in tracktion_ClipOwner.cpp at `4536d8a` (refuses a cut within 1 ms of an edge)
 - updated: pages/clip-placement.md (a crossing clip is cut only when 10 ms stays outside, otherwise deleted whole; the engine's own 1 ms refusal)
 - updated: pages/region-editing.md (a clip grazing the region by less than 10 ms is not copied; the one-sample-past-the-beat drum sample)
+
+## [2026-10-15] update | Gaps after the 10 ms floor (commit 972cc0e): delete, the test, and a stale build from Copy-Item
+- source: the change's brief, checked against native/src/model/SessionRegion.cpp (`copyClipRegion`, `clearClipRegionInEdit`), ClipGeometry.h and tests/Arrangement/scenarios/ClipSlivers.inc
+- updated: pages/region-editing.md (delete and paste's clear take a clip reaching under 10 ms past an edge whole)
+- updated: pages/clip-placement.md (only the copy path made one-sample slivers; `ClipSlivers.inc` pins both)
+- updated: pages/inc-edits-do-not-rebuild.md (the `Copy-Item` restore trap recurred in Rhino on `SessionRegion.cpp`)
+- updated: pages/build-and-test-rhino.md (a bullet on the `Copy-Item` timestamp trap, linking the gotcha)

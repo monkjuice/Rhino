@@ -836,3 +836,15 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/colours-and-typography.md (`selectedRowWash`, a 7% white wash)
 - updated: pages/level-meters.md (`cardMeterInset` 9, 8 px before the controls, the main row's meter at x 9)
 - updated: pages/writing-rhino-tests.md (rule 13: compare a picture with itself under one changed state, from the selected-row check that misread a mark in another row)
+
+## [2026-10-15] update | Per-keyboard velocity curves and a Preferences window (uncommitted)
+- source: the change's brief, checked against native/src/model/VelocityCurve.h, SessionKeyboards.cpp, SessionControllers.cpp (`disableReservedMidiPorts`), SessionMidiInput.cpp, SessionRecording.cpp (`finishRecording`), app/MainComponent.h and MainComponentCommands.cpp, ui/preferences/*, ui/shared/Theme.h, native/CMakeLists.txt and tests/Arrangement/scenarios/KeyboardCurves.inc
+- created: pages/keyboard-velocity-curves.md (the curves; why Rhino reads a curved port; All Ins plus the `(curved)` stand-in; Linear untouched; the port held while a curve is set; settings and start-up; `syncKeyboardPorts`; the Tracktion facts at `4536d8a`; states; tests)
+- updated: pages/inputs-and-monitoring.md (a curved port's token resolves to its stand-in; curved keyboards beside reserved ports; `rearmListeningMidiTracks`)
+- updated: pages/app-shell.md (Preferences replaces the Audio settings dialog, Ctrl+, and the tab rule; `startHardwareControllers` opens curved keyboards)
+- updated: pages/ableton-push.md (the software curve now exists but refuses the Push's reserved ports)
+- updated: pages/reading-midi-hardware-on-windows.md (the Launchkey's USB ids; the code 43 hub failure; Live holding the ports, error 7, Live's Log.txt, the missing rhino.log line)
+- updated: pages/session-model.md (35 units, `SessionKeyboards`, curves suppressed under test; summary changed)
+- updated: pages/colours-and-typography.md (`drawSnappedText` and why the Preferences tabs are buttons)
+- updated: pages/headless-ui-snapshots.md (`RHINO_PREFERENCES_SNAPSHOT`)
+- updated: index.md (new page; Session summary)

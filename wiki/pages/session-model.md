@@ -1,7 +1,7 @@
 ---
 title: Session, the model
 type: component
-summary: The message-thread facade over one Tracktion engine and edit, one class split across 34 files, where every rule and refusal lives.
+summary: The message-thread facade over one Tracktion engine and edit, one class split across 35 files, where every rule and refusal lives.
 tags: [rhino, model, tracktion, undo]
 sources: []
 updated: 2026-10-15
@@ -9,18 +9,18 @@ updated: 2026-10-15
 
 # Session, the model
 
-`rhino::Session` (`native/src/model/Session.h`) is the whole document model: a `juce::ChangeBroadcaster` that owns one `te::Engine` and the open `te::Edit`, and offers every command the UI may issue. It runs on the message thread only; the engine owns scheduling, streaming and playback. The one exception is `sendControllerMidi`, which a controller's MIDI thread calls ([Ableton Push 1](ableton-push.md)). The UI depends on `Session`, never the reverse ([Dependency direction](dependency-direction.md)).
+`rhino::Session` (`native/src/model/Session.h`) is the whole document model: a `juce::ChangeBroadcaster` that owns one `te::Engine` and the open `te::Edit`, and offers every command the UI may issue. It runs on the message thread only; the engine owns scheduling, streaming and playback. The one exception is `sendControllerMidi`, which a controller's MIDI thread calls ([Ableton Push 1](ableton-push.md)); a curved keyboard's notes also cross on the MIDI thread, but inside `SessionKeyboards.cpp`'s own port objects, not through a `Session` call. The UI depends on `Session`, never the reverse ([Dependency direction](dependency-direction.md)).
 
 ## One class, many files
 
-`Session` is one class defined across 34 translation units, all in `native/src/model/` (the `src/model/Session*.cpp` lines under `# Session` in `native/CMakeLists.txt`, as of 2026-10-15; [The source tree mirrors the layers](source-tree-mirrors-the-layers.md)), split by caller as [Keeping files small](keeping-files-small.md) describes:
+`Session` is one class defined across 35 translation units, all in `native/src/model/` (the `src/model/Session*.cpp` lines under `# Session` in `native/CMakeLists.txt`, as of 2026-10-15; [The source tree mirrors the layers](source-tree-mirrors-the-layers.md)), split by caller as [Keeping files small](keeping-files-small.md) describes:
 
 - `Session.cpp`: construction, the starter edit, `restoreProject`, `projectSnapshot`, undo and redo.
 - Notes and patterns: `SessionNotes`, `SessionPatternPresets`, `SessionPatches`.
 - Tracks and mixing: `SessionTracks`, `SessionGroups`, `SessionMixer`, `SessionMeters` (`takeOutputLevels`, what the card meters read; [Track level meters](level-meters.md)), `SessionAutomation`, `SessionTransport`.
 - Devices: `SessionDevices`, `SessionDevicePresets`, `SessionDrums` (the [Drum Rack](drum-rack.md)'s kits, pads, banks, slices and drops), `SessionSidechain`, `SessionExternalPlugins`, `SessionDeviceMacros` (the rack's curated knobs, 4OSC only; `DeviceMacros.cpp` until 2026-10-13), `SessionMappedParameters` (an external plugin's chosen knobs and mapping more from its window; [Mapped parameters](mapped-parameters.md)).
 - Clips: `SessionClips`, `SessionRegion`, `SessionAudioClips`, `SessionWarp`, `SessionMerge`, `SessionBounce` ([Bounce to New Track](bounce-to-new-track.md)), `SessionExport` (Export WAV, stepped like the bounce; [Project files](project-files.md#wav-export)), `SessionSamples`, `SessionSlots`.
-- Input and audition: `SessionRecording`, `SessionMidiInput`, `SessionAudioInput`, `SessionPreview`, `SessionControllers` (the ports a controller Rhino drives itself reserves, the Push's own input, `sendControllerMidi` and the controller's per-machine settings; [Ableton Push 1](ableton-push.md)).
+- Input and audition: `SessionRecording`, `SessionMidiInput`, `SessionAudioInput`, `SessionPreview`, `SessionControllers` (the ports a controller Rhino drives itself reserves, the Push's own input, `sendControllerMidi` and the controller's per-machine settings; [Ableton Push 1](ableton-push.md)), `SessionKeyboards` (a keyboard port's velocity curve, the port Rhino reads to apply it and its stand-in device; [Keyboard velocity curves](keyboard-velocity-curves.md)).
 - The DJ booth: `SessionDj` (decks, transport, mixer, what the document saves) and `SessionDjSources` (file and audio-cell reads, MIDI cells made into notes, a deck bound to its track, Live, what an edit leaves a deck to do), sharing `SessionDjInternal.h` ([DJ view and the booth](dj-view.md)). The booth comes off the audio device in `releaseAudioDevice` and the destructor; the destructor and `djReset` unbind every deck from its track first, and `djReset` drains the worker. `ensureTrackMixers` (`SessionMixer`) gives every track the booth's two hidden ends beside its fader ([DJ decks play live through the track's chain](dj-decks-play-live-through-the-track.md)).
 - `SessionInternal.h/.cpp`: property identifiers and helpers private to these files, among them the render helpers `stopRenderWhenStalled` and `renderTaskOutcome` (the guard that gives up a render with no progress for a given time; the stepped bounce and export call them around their slices), `runRenderTask` (those two around one blocking loop; only `renderTimelineWav`, which only tests call) and `nextRenderFile` (`<track> <kind> N.wav`; the merge and the bounce).
 
@@ -39,7 +39,7 @@ Replacing the document (`newProject`, `restoreProject`) is bracketed by `Listene
 
 ## Pitfalls
 
-- `isCommandLineTestMode()` suppresses machine preferences (browser preview, last track kind, the Push's scale and octave) and makes `pickTrackColour` deterministic, so a developer's settings cannot change what the suite sees.
+- `isCommandLineTestMode()` suppresses machine preferences (browser preview, last track kind, the Push's scale and octave, keyboard velocity curves) and makes `pickTrackColour` deterministic, so a developer's settings cannot change what the suite sees.
 - `RhinoEngineBehaviour` is the only thing Rhino tells the engine: where a recording goes, that recording mutes what it covers, and, since 2026-10-12, that a muted track still runs its devices (`shouldProcessMutedTracks`), so the song's mute and solo leave a DJ deck its track ([Mixer](mixer.md)).
 - The note editor's clip, `patternClip` kept beside `patternClipID`, is the one long-lived pointer. `repairPatternClip` re-finds it after anything that can take it, and a document with no MIDI track has none, so ask `hasPatternClip()` before `pattern()`. The rest of the positional state from the original pattern-track layout was retired in commit `a04b407` ([No track is special for being first](pattern-track.md)).
 - Hold clip ids, not `te::Clip*` ([Hold ids, not pointers](ids-not-pointers.md)).

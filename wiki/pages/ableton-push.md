@@ -41,7 +41,7 @@ In key, the bottom-left pad plays the root at octave 3 (MIDI 48 for C). Each row
 
 The Push 1 turns pad pressure into velocity itself, through a threshold and a curve in its firmware: `F0 47 7F 15 5D 00 20`, then 32 nibbles (off threshold and on threshold, 4 each; gain and two curve terms, 8 each; most significant nibble first), then `F7`. Live sends its own every time it starts; Rhino sent nothing until 2026-10-13, so the Push stayed on its power-on default and the user had to hit pads too hard for full velocity. `greet` now sends Live's default: threshold 0 and the curve Live calls Log 1 (off 190, on 210, gain 85000, curves 120000 and 60000). `PushProtocolTest.cpp` checks the bytes against Live 9.1.2's captured start-up payload.
 
-- **No sensitivity page, by decision.** Live has one on Push 1's User button (threshold -20..+20, six curves). It was rejected because it would only ever reach the Push; a per-input software velocity curve in Rhino would serve every controller's pads, and is not built.
+- **No sensitivity page, by decision.** Live has one on Push 1's User button (threshold -20..+20, six curves). It was rejected because it would only ever reach the Push. A per-port software curve now exists for keyboards ([Keyboard velocity curves](keyboard-velocity-curves.md), 2026-10-15), but it refuses a reserved port, so it does not reach the Push's pads.
 - **If a page is ever wanted:** gain/curve1/curve2 are Linear 100000/45000/0, Log 1 85000/120000/60000, Log 2 85000/120000/50000, Log 3 100000/120000/50000, Log 4 130000/120000/50000, Log 5 140000/120000/0. Threshold step `t` gives on = 10 + 10(t+20), off = 10 + 9(t+20).
 - **Loudness is not only the Push.** The instrument's own velocity response matters too (the Drum Rack's per-pad Velocity control), and Accent plays every pad at 127.
 
@@ -97,6 +97,7 @@ The Push follows the arrangement's selected track; it ignores the main row. It a
 
 - [Track inputs and monitoring](inputs-and-monitoring.md)
 - [Computer MIDI keyboard](computer-keyboard.md)
+- [Keyboard velocity curves](keyboard-velocity-curves.md)
 - [Reading MIDI hardware on Windows](reading-midi-hardware-on-windows.md)
 - [Device rack and device editors](device-rack.md)
 - [Drum Rack](drum-rack.md)

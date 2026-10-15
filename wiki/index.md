@@ -41,6 +41,7 @@ The catalog of this wiki: every page, grouped by type, one line each (`- [Title]
 - [Forge spectral oscillator](pages/forge-spectral.md) — An oscillator mode that resynthesises a loaded sample with a phase vocoder, so pitch and scan position move independently (M16).
 - [Forge warp](pages/forge-warp.md) — Two warp stages per oscillator, 43 modes in nine families, OSC modes able to read either other oscillator, chained through one read function and anti-aliased by duller tables.
 - [Hosting Forge in Rhino](pages/forge-hosting.md) — How Rhino finds, loads and talks to the Forge VST3, and what does and does not cross the plugin boundary.
+- [Keyboard velocity curves](pages/keyboard-velocity-curves.md) — A velocity curve per MIDI keyboard port, kept per machine; a port set to anything but Linear is read by Rhino itself, bent on the MIDI thread and delivered to All Ins and a "<port> (curved)" stand-in, because Tracktion cannot rewrite a note on its way in.
 - [Mapped parameters, an external plugin's rack](pages/mapped-parameters.md) — An external plugin's rack is a chosen list of its parameters, kept on the device by the plugin's own parameter ids, Forge's nine most-played controls at first, and grown by MAP, which opens the plugin's window and puts every control touched there on the rack to automate.
 - [Mixer](pages/mixer.md) — One mixer, drawn in the arrangement's track cards, with a VolumeAndPanPlugin and a level meter behind it in each track's channel strip, mute and solo that silence only a track's output, and the master volume for Main; a DJ deck takes its track ahead of the channel strip.
 - [Note editor (StepGrid)](pages/note-editor.md) — Edits the notes of the open MIDI clip in steps, with a draw mode, a step region and caches that tie it closely to Session.
@@ -55,7 +56,7 @@ The catalog of this wiki: every page, grouped by type, one line each (`- [Title]
 - [Rhino Tune](pages/rhino-tune.md) — Vocal pitch correction with YIN tracking and PSOLA shifting, real reported latency, and correction smoothed on the offset.
 - [Rhino Vocoder and sidechains](pages/rhino-vocoder.md) — A channel vocoder whose carrier arrives as a sidechain from another track, and how Rhino routes a sidechain at all.
 - [Rhino's build targets](pages/rhino-build-targets.md) — Rhino builds as three targets (RhinoCore, RhinoDevices, the app) so that editing a device does not rebuild the app.
-- [Session, the model](pages/session-model.md) — The message-thread facade over one Tracktion engine and edit, one class split across 34 files, where every rule and refusal lives.
+- [Session, the model](pages/session-model.md) — The message-thread facade over one Tracktion engine and edit, one class split across 35 files, where every rule and refusal lives.
 - [Time warp](pages/time-warp.md) — Makes an audio clip follow the song's tempo, with five warp modes over two stretchers, a clip tempo and warp markers.
 - [Track automation](pages/automation.md) — Per-track lanes stored as Rhino's own ValueTree children, naming their device by key rather than slot, and played by the engine from parameter curves the session mirrors after every change.
 - [Track groups (bus tracks)](pages/track-groups.md) — Ctrl+G gathers tracks under a bus track that their audio feeds; the structure is positional and repaired after every reorder.

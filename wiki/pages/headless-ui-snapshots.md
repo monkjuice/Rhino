@@ -33,6 +33,8 @@ mixer, from `DjBooth.inc` in `native_arrangement_workflow` ([DJ view and the boo
 case, every card's meter and the main row's fed a different level (a held peak above a falling bar) and one row folded,
 deleting any old
 file first; it is the way to see the meters without opening the app ([Track level meters](level-meters.md)).
+`RHINO_PREFERENCES_SNAPSHOT` writes the Preferences panel on its MIDI tab at 560 x 480, with a `Theme`, from
+`KeyboardCurves.inc` in the same case, deleting any old file first ([Keyboard velocity curves](keyboard-velocity-curves.md)).
 It writes the face at 852 px (`DeviceEditorPanel::drumFaceWidth`) by `standardHeight`, painted with a `Theme`, as the
 test leaves it at its end, showing a sliced roll, and deletes any old file first. A snapshot is what caught the sample
 editor's envelope line drawing nothing ([A juce::Path holding only a start point is empty](juce-path-isempty-ignores-a-lone-point.md)).

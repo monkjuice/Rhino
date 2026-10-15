@@ -4,7 +4,7 @@ type: component
 summary: Each track names its own MIDI or audio input and its own Off, Auto or In monitoring, all resolved to engine devices by applyRecordArming.
 tags: [rhino, recording, midi, audio-io]
 sources: []
-updated: 2026-10-13
+updated: 2026-10-15
 ---
 
 # Track inputs and monitoring
@@ -13,13 +13,15 @@ Which input a track takes, and whether you hear it, are properties of the **trac
 
 ## MIDI From
 
-`rhinoMidiInput` holds a token: absent means **All Ins** (so no older document needed migrating), `keyboard` the typing keyboard, `none` nothing, `device:<name>` one port (`device:Push` is the Push's own virtual input, below). All Ins resolves to the engine's "All MIDI Ins" virtual device, which merges only the physical inputs that are *open*, so choosing it enables them all. The typing keyboard gets a second virtual device, created the first time a track asks for it ([Computer MIDI keyboard](computer-keyboard.md)).
+`rhinoMidiInput` holds a token: absent means **All Ins** (so no older document needed migrating), `keyboard` the typing keyboard, `none` nothing, `device:<name>` one port (`device:Push` is the Push's own virtual input, below; a port with a velocity curve resolves to its `<name> (curved)` stand-in, below). All Ins resolves to the engine's "All MIDI Ins" virtual device, which merges only the physical inputs that are *open*, so choosing it enables them all. The typing keyboard gets a second virtual device, created the first time a track asks for it ([Computer MIDI keyboard](computer-keyboard.md)).
 
-**The rescan trap.** Creating that device rescans the MIDI device list asynchronously: it does not exist when `createVirtualMidiDevice` returns. Choosing Computer Keyboard used to fail once with "no MIDI input" and work the second time. `awaitingMidiDeviceScan` now suppresses the complaint, and `MidiDeviceWatcher` re-arms when the rebuilt list lands, which is also why a keyboard plugged in mid-session starts playing without a relaunch. The rescan (`midiDevicesChanged`) re-arms whenever a MIDI track wants input by the same rule arming uses, `trackWantsInput`: armed, or monitoring On. Until commit `23de20c` it asked only for an armed track, so an unarmed track monitoring the typing keyboard stayed silent. That fix has no automated test, because the engine rebuilds its device list on a timer.
+**The rescan trap.** Creating that device rescans the MIDI device list asynchronously: it does not exist when `createVirtualMidiDevice` returns. Choosing Computer Keyboard used to fail once with "no MIDI input" and work the second time. `awaitingMidiDeviceScan` now suppresses the complaint, and `MidiDeviceWatcher` re-arms when the rebuilt list lands, which is also why a keyboard plugged in mid-session starts playing without a relaunch. The rescan (`midiDevicesChanged`) re-arms whenever a MIDI track wants input by the same rule arming uses, `trackWantsInput`: armed, or monitoring On (`rearmListeningMidiTracks`, its own function since 2026-10-15 so the keyboard-curve sync can call it too). Until commit `23de20c` it asked only for an armed track, so an unarmed track monitoring the typing keyboard stayed silent. That fix has no automated test, because the engine rebuilds its device list on a timer.
 
 **Armed is not playable.** With no hardware keyboard and the typing keyboard off, an armed MIDI track is correct and silent. `Session::hasHardwareMidiInput` lets the arm message say so. It answers true while a Push is connected, and it ignores reserved ports.
 
 **Reserved ports and the Push** (2026-10-13). A controller Rhino drives itself owns its ports: within one process JUCE shares a Windows port's handle, so an engine that opened them too would hand their raw messages to All Ins ([Ableton Push 1](ableton-push.md)). `Session::reserveMidiPorts` disables those ports in the engine, again on every rebuild of its device list (`disableReservedMidiPorts`, first thing in `midiDevicesChanged`), and in JUCE's device manager. From then on every path skips a reserved name: `enablePhysicalMidiInputs`, `midiInputChoices`, `hasHardwareMidiInput`, `midiInputDevice()` and the `device:<name>` resolution in `midiInputDeviceForTrack`. As a result, All Ins never merges a reserved port and no card offers one. The Push's pads arrive already translated, through `Session::sendControllerMidi`, on All Ins and on a virtual device of their own. Its token is `device:Push` (`midiInputPushToken`), and the device is made on first use, with the same rescan handling as the typing keyboard's. A card lists "Push" while a Push is connected or while a track names it. Nothing is armed for it.
+
+**Curved keyboards** (2026-10-15), the sibling case. A keyboard port given a velocity curve other than Linear is read by Rhino itself and kept from the engine the same way: `disableReservedMidiPorts` disables its input (not its output) and `enablePhysicalMidiInputs` skips it. Its bent notes reach All Ins and a virtual stand-in, `<port> (curved)`; a track naming `device:<port>` resolves to the stand-in in `midiInputDeviceForTrack` (null while the rescan that makes it is pending) while its card still shows the port's own name, so no document changes when a curve is set ([Keyboard velocity curves](keyboard-velocity-curves.md)). Unlike a reserved port, a curved one is still offered on the cards.
 
 ## Audio From
 
@@ -42,6 +44,7 @@ While a deck holds a track and the song is stopped, the hidden DJ Input adds the
 - [Recording and the count-in](recording.md)
 - [Computer MIDI keyboard](computer-keyboard.md)
 - [Ableton Push 1](ableton-push.md)
+- [Keyboard velocity curves](keyboard-velocity-curves.md)
 - [Track kinds: audio and MIDI](track-kinds.md)
 - [Reading MIDI hardware on Windows](reading-midi-hardware-on-windows.md)
 - [Arrangement view](arrangement-view.md)

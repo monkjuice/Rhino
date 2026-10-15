@@ -4,7 +4,7 @@ type: concept
 summary: Copy, cut, paste, duplicate and delete all act on a region, a span of time across a run of tracks, never on a set of clips.
 tags: [rhino, arrangement, editing, clipboard]
 sources: []
-updated: 2026-10-13
+updated: 2026-10-15
 ---
 
 # Region editing
@@ -25,7 +25,7 @@ In the arrangement the clipboard commands act on a **region**: a span of time ac
 
 ## Why snapshots, not ids
 
-The clipboard holds values (`Session::ClipSnapshot`): position, offset and `rhinoClipColour`, plus, for a MIDI clip, the whole note list and its track's instrument as a catalog id. For an audio clip it holds the source file and speed, and since commit `b5d17e0` also the clip's gain, pan, pitch, fades, mute, reverse and warp (mode, clip tempo in beats, markers). Before that a copy played the raw file at speed one instead of what the original played. A cut deletes its sources, and an undo between copy and paste can too, so a clipboard of ids would paste nothing ([Hold ids, not pointers](ids-not-pointers.md)).
+The clipboard holds values (`Session::ClipSnapshot`): position, offset and `rhinoClipColour`, plus, for a MIDI clip, the whole note list and its track's instrument as a catalog id. For an audio clip it holds the source file and speed, and since commit `b5d17e0` also the clip's gain, pan, pitch, fades, mute, reverse and warp (mode, clip tempo in beats, markers). Before that a copy played the raw file at speed one instead of what the original played. The paste writes reverse only for a clip that was reversed, and before anything else: writing it at all mirrors the new clip's window into its file, which made trimmed copies quieter until commit `50d87d5` ([Writing a clip's reverse switch moves its window](writing-reverse-moves-a-clips-window.md)). A cut deletes its sources, and an undo between copy and paste can too, so a clipboard of ids would paste nothing ([Hold ids, not pointers](ids-not-pointers.md)).
 
 ## In the note editor
 

@@ -848,3 +848,10 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/colours-and-typography.md (`drawSnappedText` and why the Preferences tabs are buttons)
 - updated: pages/headless-ui-snapshots.md (`RHINO_PREFERENCES_SNAPSHOT`)
 - updated: index.md (new page; Session summary)
+
+## [2026-10-15] update | A pasted audio clip keeps its stretch of the file: reverse written only when it differs (commit 50d87d5)
+- source: the change's brief, checked against native/src/model/SessionRegion.cpp (`pasteClipRegion`) and SessionAudioClips.cpp (`setAudioClipReversed`)
+- created: pages/writing-reverse-moves-a-clips-window.md (Tracktion's `reverseLoopPoints` on any `isReversed` write, absent to off included, at `4536d8a`; the quieter trimmed copies; why symmetric test windows missed it; the rule)
+- updated: pages/region-editing.md (the paste writes reverse only for a reversed clip, first)
+- updated: pages/audio-clip-editor.md (`setAudioClipReversed` writes only a real change)
+- updated: index.md (new page)

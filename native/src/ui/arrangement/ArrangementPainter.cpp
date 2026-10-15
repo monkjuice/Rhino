@@ -265,9 +265,19 @@ void Arrangement::paintTrackCards(juce::Graphics& g)
         // lane is the light surface the grid is ruled into. They were a single
         // fill while they were a single colour, and a card lit to the lane's
         // new shade would have been the brightest block in the window.
+        // A selected track is lit along its whole row, its lane under the bar
+        // bands, the grid and the clips, which are drawn over it, and its card
+        // below. Every track in the selection is, whatever the last click was.
+        const auto selected = isTrackSelected(track);
+        const auto laneGround = row.withX(headerWidth)
+                                   .withWidth(std::max(0.0f, static_cast<float>(getWidth()) - 14.0f - headerWidth));
         g.setColour(palette::arrangement);
-        g.fillRect(row.withX(headerWidth)
-                      .withWidth(std::max(0.0f, static_cast<float>(getWidth()) - 14.0f - headerWidth)));
+        g.fillRect(laneGround);
+        if (selected)
+        {
+            g.setColour(palette::selectedRowWash);
+            g.fillRect(laneGround);
+        }
         if (!reachesCards)
             continue;
         g.setColour(palette::trackCard);
@@ -294,18 +304,10 @@ void Arrangement::paintTrackCards(juce::Graphics& g)
             g.setColour(palette::recordAccent.darker(0.2f));
             g.fillRect(row.withX(headerWidth - 3.0f).withWidth(3.0f));
         }
-        if (isTrackSelected(track))
+        if (selected)
         {
-            // Highlighted and selected are the same state: every card in the
-            // selection is washed whatever the last click was, and the strip
-            // only says which of them the rest of the app is working on.
-            g.setColour(juce::Colour(0x12ffffff));
+            g.setColour(palette::selectedRowWash);
             g.fillRect(row.withX(0.0f).withWidth(headerWidth));
-            if (track == selectedTrack)
-            {
-                g.setColour(palette::selection);
-                g.fillRect(row.withX(0.0f).withWidth(3.0f));
-            }
         }
         // The name holds the top line of the card whatever height the row is
         // dragged to, level with the two buttons beside it. Dark text on a
@@ -403,15 +405,19 @@ void Arrangement::paint(juce::Graphics& g)
         // it on purpose, and a dark line needs the lane's ground under it to
         // be seen at all. It ends where the lanes above it end, short of the
         // scrollbar strip.
+        const juce::Rectangle<float> mainLane {headerWidth, band.getY(),
+                                               std::max(0.0f, static_cast<float>(getWidth()) - 14.0f - headerWidth),
+                                               band.getHeight()};
         g.setColour(palette::arrangement);
-        g.fillRect(headerWidth, band.getY(), std::max(0.0f, static_cast<float>(getWidth()) - 14.0f - headerWidth),
-                   band.getHeight());
-        g.setColour(isMasterSelected() ? palette::hover : palette::sideSurface);
+        g.fillRect(mainLane);
+        g.setColour(palette::sideSurface);
         g.fillRect(band.withWidth(headerWidth));
+        // Selected, it is lit along its row as a track is.
         if (isMasterSelected())
         {
-            g.setColour(palette::selection);
-            g.fillRect(band.withWidth(3.0f));
+            g.setColour(palette::selectedRowWash);
+            g.fillRect(band.withWidth(headerWidth));
+            g.fillRect(mainLane);
         }
         // Last, so it rules the whole width: drawn before the header column it
         // stopped at the cards and the main row read as closed off over the

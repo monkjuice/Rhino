@@ -591,7 +591,7 @@ private:
     bool panning = false;
     juce::Point<float> panAnchor;
     double panStartView = 0.0, panStartTrackScroll = 0.0;
-    static constexpr float headerWidth = 264.0f, rulerTop = 36.0f, lanesTop = 60.0f;
+    static constexpr float headerWidth = 272.0f, rulerTop = 36.0f, lanesTop = 60.0f;
     // The main row is dragged from its top edge like any other, so its height
     // is a value rather than a constant. It is a view setting and lives here
     // beside the zoom: the fitted lane height is measured against the default
@@ -644,15 +644,17 @@ private:
     // colour. The divider between them is the same grey the row separators use.
     // Both lines of controls share one left edge and one width, so the buttons
     // sit squarely over the faders.
-    static constexpr float cardControlsWidth = 140.0f, cardDividerWidth = 4.0f;
+    static constexpr float cardControlsWidth = 148.0f, cardDividerWidth = 4.0f;
     // The buttons are narrower than the faders under them: three of them share
     // the line the two faders split, and a single letter needs far less room
     // than a level bar does.
-    static constexpr int cardControlsTop = 7, cardControlLeft = 17, cardControlWidth = 56,
+    static constexpr int cardControlsTop = 7, cardControlLeft = 24, cardControlWidth = 56,
                          cardControlGap = 4, cardButtonWidth = 36;
     // The meter opens the card, ahead of the controls and pushed in with them
     // by a group's indent, and on the main row too. It runs from the button
-    // line to as far above the rule under the row.
-    static constexpr int cardMeterInset = 5;
+    // line to as far above the rule under the row, with room either side of
+    // it: cardMeterInset from the card's edge, and what is left before
+    // cardControlLeft between it and the controls.
+    static constexpr int cardMeterInset = 9;
 };
 }

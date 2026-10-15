@@ -79,6 +79,9 @@ inline const juce::Colour arpSequence      {0xffff7f27};
 // What the chrome uses to mark a selection or a focused row, kept grey so it
 // never competes with a track colour sitting next to it.
 inline const juce::Colour selection        {0xffdcdcdc};
+// A selected track's row, card and lane alike, lit a little. A wash rather than
+// a colour, so it lifts whatever ground it lies on by the same step.
+inline const juce::Colour selectedRowWash  {0x12ffffff};
 
 // The DJ booth's meaning colours. A deck's play and cue keys light as a
 // CDJ's do, green and orange, and a start held for the beat blinks amber;

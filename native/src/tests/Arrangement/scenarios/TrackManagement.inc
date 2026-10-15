@@ -314,6 +314,70 @@
             view.sync();
         }
 
+        // The same picture taken with one row selected and then another, so
+        // whatever a row holds - clips, curves, the grid - is the same in both
+        // and only the selection differs. A clip's translucent fill lets the
+        // lit ground through too; its opaque marks stay the same.
+        scenario("track cards: a selected track is lit along its whole row, with no strip down its edge");
+        {
+            view.clearTimeSelection();
+            // The first rows on screen, whatever scrolled them away before.
+            view.trackScroll = 0.0;
+            view.sync();
+            const auto picture = [&view](int selected)
+            {
+                view.selectTrack(selected);
+                return view.createComponentSnapshot(view.getLocalBounds());
+            };
+            // How much of an area is lighter in one picture than the other.
+            const auto lighterShare = [](const juce::Image& lit, const juce::Image& unlit, juce::Rectangle<int> area)
+            {
+                int lighter = 0, total = 0;
+                for (int y = area.getY(); y < area.getBottom(); y += 2)
+                    for (int x = area.getX(); x < area.getRight(); x += 3)
+                    {
+                        ++total;
+                        if (lit.getPixelAt(x, y).getBrightness() > unlit.getPixelAt(x, y).getBrightness())
+                            ++lighter;
+                    }
+                return total > 0 ? static_cast<double>(lighter) / total : 0.0;
+            };
+            const auto laneOf = [&view](juce::Rectangle<float> row)
+            {
+                return row.withTrimmedBottom(view.trackDividerThickness).toNearestInt()
+                          .withLeft(static_cast<int>(view.headerWidth)).withRight(view.getWidth() - 14);
+            };
+            // Between the controls and the divider, where the card is bare.
+            const auto cardOf = [&view](juce::Rectangle<float> row)
+            {
+                return row.withTrimmedBottom(view.trackDividerThickness).toNearestInt()
+                          .withLeft(static_cast<int>(view.cardControlsWidth) - 6)
+                          .withRight(static_cast<int>(view.cardControlsWidth));
+            };
+            require(view.lane(1).getBottom() <= view.lanesTop + view.laneContentHeight(), "Both rows are on screen");
+            const auto firstSelected = picture(0);
+            const auto secondSelected = picture(1);
+            const auto mainSelected = picture(session.masterTrackIndex());
+            view.selectTrack(0);
+            const auto laneShare = lighterShare(firstSelected, secondSelected, laneOf(view.lane(0)));
+            require(laneShare > 0.5, ("The selected track's lane is lit across the arrangement: "
+                                      + juce::String(laneShare * 100.0, 1) + "% of it lighter").toRawUTF8());
+            require(lighterShare(firstSelected, secondSelected, cardOf(view.lane(0))) > 0.9, "and so is its card");
+            require(lighterShare(secondSelected, firstSelected, laneOf(view.lane(1))) > 0.5,
+                    "Selecting another track lights that one's row instead");
+            const auto edge = firstSelected.getPixelAt(1, static_cast<int>(view.lane(0).getCentreY()));
+            require(edge != palette::selection && edge.getBrightness() < 0.3f, "with no light strip down the card's edge");
+
+            const auto master = view.masterLane().withTrimmedTop(view.trackDividerThickness).toNearestInt();
+            require(lighterShare(mainSelected, firstSelected,
+                                 master.withLeft(static_cast<int>(view.headerWidth)).withRight(view.getWidth() - 14)) > 0.5
+                        && lighterShare(mainSelected, firstSelected,
+                                        master.withLeft(static_cast<int>(view.headerWidth) - 30)
+                                              .withRight(static_cast<int>(view.headerWidth) - 4)) > 0.9,
+                    "The main row, selected, is lit along its row as a track is");
+            require(mainSelected.getPixelAt(1, master.getCentreY()) != palette::selection, "and has no strip either");
+        }
+
         scenario("track management: duplicate move");
         view.setSelection({id}, id);
         view.duplicateSelected();

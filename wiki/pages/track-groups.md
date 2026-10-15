@@ -4,7 +4,7 @@ type: component
 summary: Ctrl+G gathers tracks under a bus track that their audio feeds; the structure is positional and repaired after every reorder.
 tags: [rhino, groups, mixer, arrangement]
 sources: []
-updated: 2026-10-14
+updated: 2026-10-15
 ---
 
 # Track groups (bus tracks)
@@ -18,7 +18,7 @@ A group is a bus: a track of its own, with fader, pan, mute, solo and an audio-e
 - **A track added under a group** (`addTrack` with `below`, from the `+` menu or Ctrl+T under the selected card, 2026-10-14). Under an open group's bus or any of its members it joins that group, and the join is written explicitly (`trackGroupMemberID`) before reconciling: under the *last* member is not between two members, so reconciling alone would leave it outside. Under any part of a collapsed group (the bus, or a hidden member still selected) it lands after the whole group, outside it, since inside a folded group it would be made at zero height and never seen. `TrackManagement.inc` covers both.
 - **Bouncing** ([Bounce to New Track](bounce-to-new-track.md), Ctrl+B, 2026-10-14). A bus card bounces the group after its bus, fader included; the new track lands under the whole group, outside it, at unity, and the bus is muted. A member bounced alone is rendered before its own fader and without the bus ([A track that feeds a bus renders nothing on its own](bus-member-renders-nothing-alone.md)); its new track joins the group by an explicit `trackGroupMemberID`, as a track added under the last member does, so it plays into the bus as its source did.
 - **Undo restores the group whole** (commit `8dd3627`). Membership is written through the undo manager, and every caller reconciles inside the transaction of the move, group or delete that decided it, so one Ctrl+Z puts back position, membership and routing together. Ungrouping and deleting a bus let the members go and route them to the main output while the bus still exists (`dissolveGroupInEdit`). Undo replays a transaction backwards, so it brings the bus back before routing anything into it; routed after the deletion, the members lost their routing for good. `Arrangement/scenarios/GroupUndo.inc` covers each case.
-- **Collapse** is a view setting on the bus (`rhinoGroupCollapsed`, no undo). Members are laid out at zero height rather than removed, so geometry code needs no special case.
+- **Collapse** is a view setting on the bus (`rhinoGroupCollapsed`, no undo). Members are laid out at zero height rather than removed, so geometry code needs no special case. The bus's fold arrow stands before its name, the arrow every card now carries (commit `14c9c77`, 2026-10-15); it used to sit in the left gutter of the bus card alone, and `paintGroupGutter` now paints only the members' bus-colour band. On a bus the arrow folds the members and never the bus's own row; on a member it folds that row alone ([Arrangement view](arrangement-view.md)).
 - **No nesting.** Grouping refuses a selection that contains a bus, and a bus is never made a member.
 - **A bus refuses** instruments and MIDI effects (`addDevice`), clips (`createClip`, `importAudioAt`, and since `b5d17e0` moved and pasted ones), clip slots (`clipSlotAt`, `clipLaneRefusal`), arming (`trackRecordInput` answers none) and, since group decks went on 2026-10-12, a DJ deck (`loadDjDeckTrack`).
 

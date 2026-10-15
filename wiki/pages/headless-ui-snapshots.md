@@ -30,7 +30,8 @@ The Drum Rack face does the same in `runDrumRackFaceTest` (`tests/Pattern/Device
 the same run. `RHINO_DJ_SNAPSHOT` writes the DJ view at 1240 x 720, a track deck and a file deck either side of the
 mixer, from `DjBooth.inc` in `native_arrangement_workflow` ([DJ view and the booth](dj-view.md)).
 `RHINO_TRACK_METERS_SNAPSHOT` writes the left 420 px of the arrangement at 2x scale from `TrackMeters.inc` in the same
-case, every card's meter and the main row's fed a different level (a held peak above a falling bar), deleting any old
+case, every card's meter and the main row's fed a different level (a held peak above a falling bar) and one row folded,
+deleting any old
 file first; it is the way to see the meters without opening the app ([Track level meters](level-meters.md)).
 It writes the face at 852 px (`DeviceEditorPanel::drumFaceWidth`) by `standardHeight`, painted with a `Theme`, as the
 test leaves it at its end, showing a sliced roll, and deletes any old file first. A snapshot is what caught the sample

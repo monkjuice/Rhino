@@ -4,7 +4,7 @@ type: guide
 summary: Choose between a unit check and a workflow scenario, follow the rules that keep scenarios sharing one Session honest, and time the interface with --profile-ui.
 tags: [rhino, testing, conventions]
 sources: []
-updated: 2026-10-13
+updated: 2026-10-15
 ---
 
 # Writing Rhino tests
@@ -71,7 +71,10 @@ every scenario of `DjLiveChain.inc`).
    "persistence: trimmed render" on every run, with the product never at fault (commit `89dfd1c`).
 8. **Ask a face where its parts are.** `runDrumRackFaceTest` finds pads, map cells, markers and knobs through the
    panel's own `drumPadAt` and `drumTooltip` rather than repeating its layout arithmetic, so a layout change cannot
-   leave the test clicking stale coordinates. Live MIDI cannot reach a device in the Pattern runner, so the key-flash
+   leave the test clicking stale coordinates. The arrangement is the same: never spell a lane's x in pixels, ask
+   `xFor`. `GesturesAndPersistence.inc` pressed and dragged a clip at fixed x positions (240 to 346.5, 360 to 500)
+   that assumed a 228 px header and its pixels per second, and widening the header to 264 (commit `14c9c77`) broke
+   "Pointer drag moves audio" until it read them off `view.xFor`. Live MIDI cannot reach a device in the Pattern runner, so the key-flash
    and Auto Select checks nudge the panel's own counter (`drumNotesSeen`) instead of sending a note.
 9. **A direct handler call skips JUCE's dispatch.** The face tests call `panel->mouseDown` and `mouseWheelMove`
    themselves, so they cannot see a bug in how an event reaches the handler: every face heard each of its own clicks

@@ -815,3 +815,12 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/headless-ui-snapshots.md (`RHINO_TRACK_METERS_SNAPSHOT`: the left 420 px of the arrangement at 2x, every meter fed a different level)
 - updated: pages/juce-output-stream-appends.md (`TrackMeters.inc`'s snapshot deletes first too)
 - updated: index.md (new page; Mixer, Device chain order and Session summaries)
+
+## [2026-10-15] update | Meter at the start of the card, a wider card, and a fold arrow before every name (commit 14c9c77; all six CTest cases pass, snapshot checked)
+- source: the change's brief, checked against native/src/ui/arrangement/Arrangement.h (the card constants), ArrangementGroups.cpp (`disclosureBounds`, `beginDisclosureGesture`, `paintDisclosure`), ArrangementGeometry.cpp (`laneHeightFor`), ArrangementRename.cpp (`trackNameBounds`), native/src/model/SessionTracks.cpp (`setTrackFolded`, `setTrackLaneHeight`) and tests/Arrangement/scenarios/GesturesAndPersistence.inc
+- updated: pages/arrangement-view.md (the card's meter, controls and name columns at 264 px; buttons over faders; the fold arrow on every card, what it does on a bus and elsewhere, `rhinoTrackFolded`, a chosen height unfolding; replaces the right-edge meter column)
+- updated: pages/level-meters.md (the meter opens each card at `cardMeterInset` plus the indent; the right-edge column of `7a92d14` and why it moved; the test and snapshot now cover the place and a folded row)
+- updated: pages/track-groups.md (the bus's arrow moved from the left gutter to before its name; `paintGroupGutter` paints only the band; a member's arrow folds its own row)
+- updated: pages/writing-rhino-tests.md (rule 8: never spell a lane's x in pixels; the hard-coded drag that the wider header broke)
+- updated: pages/session-model.md (a row's fold is a view setting with no undo and `ModelChange::none`)
+- updated: pages/headless-ui-snapshots.md (the meters snapshot folds one row)

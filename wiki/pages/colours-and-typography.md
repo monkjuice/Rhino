@@ -15,7 +15,7 @@ updated: 2026-10-15
 
 - **Surfaces and text:** `appBackground`, `globalBar`, `sideSurface`, `trackCard`, `control`, `hover`, `border`, `text`, `textDim`, `disabled`, `activeNeutral`, `displayInset`, `recordAccent`.
 - **The timeline:** `arrangement`, `automationLane`, `minorGrid`, `beatGrid`, `barGrid`. The lanes are light and ruled dark, which keeps the grid's contrast under room light.
-- **Meaning:** `displayText`, `displayTextDim` and `displayTextFaint` for the readout, plus `volume`, `pan` and `selection`; `meterSafe`, `meterHot` and `meterClip`, the green, yellow and red of the [track level meters](level-meters.md) (2026-10-15). `midiEffect` (cyan) marks MIDI-effect controls; `arpSequence` (orange) is only for [Rhino Arp](rhino-arp.md)'s sequence display, a colour no control wears so the output stands apart from the controls.
+- **Meaning:** `displayText`, `displayTextDim` and `displayTextFaint` for the readout, plus `volume`, `pan` and `selection`; `meterSafe`, `meterHot` and `meterClip`, the green, yellow and red of the [track level meters](level-meters.md) (2026-10-15). `selectedRowWash` (`0x12ffffff`, about 7% white) lights a selected track's card and lane: a wash rather than a colour, so it lifts whatever ground it lies on by the same step (commit `83135f7`, 2026-10-15; [Arrangement view](arrangement-view.md)). `midiEffect` (cyan) marks MIDI-effect controls; `arpSequence` (orange) is only for [Rhino Arp](rhino-arp.md)'s sequence display, a colour no control wears so the output stands apart from the controls.
 
 `Theme` feeds the tokens to JUCE's stock colour ids, so menus, dialogs and scrollbars match the panels unaided.
 

@@ -110,6 +110,13 @@ every scenario of `DjLiveChain.inc`).
     device up by kind and takes its `pluginIndex`, and a hidden plugin is found by its type, as `AutomationLanes.inc`
     finds a fresh track's Utility: a channel strip's order differs between starter and added tracks
     ([Device chain order](device-chain-order.md)).
+13. **Compare a picture with itself under one changed state**, not one row's pixel with another row's. The
+    selected-row check in `TrackManagement.inc` first read one pixel low in rows 0 and 1, assuming nothing was drawn
+    there: row 0 read the lane plus the wash as intended, but row 1 carried a mark of its own, so the check failed on
+    a correct paint. It now paints twice, row 0 selected and then row 1, and requires that over half of the selected
+    row's lane pixels, and over 90% of a bare strip of its card, are lighter than in the other picture: translucent
+    clip fills let the lit ground through, and opaque marks are equal in both (commit `83135f7`). The same idea as
+    comparing a culled repaint under the same clip ([JUCE's rasteriser is not clip-invariant](juce-rasteriser-not-clip-invariant.md)).
 
 ## Timing, not checking
 

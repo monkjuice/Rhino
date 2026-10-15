@@ -39,7 +39,7 @@ Since 2026-10-15 (commit `7a92d14`) every track card and the main row carry a le
 
 ## In the arrangement
 
-- One meter per card, a child of `laneHeaders` made and dropped with the card's controls in `syncTrackControls`, plus `masterMeter`. Since commit `14c9c77` the meter opens the card, at `cardMeterInset` (5) plus the group indent, ahead of the buttons and faders, so a member's meter moves in with its card; the main row's stands at x 5, ahead of MAIN and its faders ([Arrangement view](arrangement-view.md)). In `7a92d14` the meters stood in one column at the header's right edge (`cardMeterLeft`, gone) and the name stopped short of them; the user asked for them at the start of the card.
+- One meter per card, a child of `laneHeaders` made and dropped with the card's controls in `syncTrackControls`, plus `masterMeter`. Since commit `14c9c77` the meter opens the card, at `cardMeterInset` (9 since `83135f7`) plus the group indent, 8 px ahead of the buttons and faders, so a member's meter moves in with its card; the main row's stands at x 9, ahead of MAIN and its faders ([Arrangement view](arrangement-view.md)). In `7a92d14` the meters stood in one column at the header's right edge (`cardMeterLeft`, gone) and the name stopped short of them; the user asked for them at the start of the card.
 - `Arrangement::updateMeters()` runs on the existing `VBlankAttachment` after autoscroll and before the playhead, so the playhead's `UpdateWindow` handoff also collects the meters' damage ([Playhead rendering](playhead.md)). It skips while not showing, and back from the DJ view it throws its first read away, peaks that piled up while hidden, and drops the bars to empty.
 
 ## Tests (passing on 2026-10-15)

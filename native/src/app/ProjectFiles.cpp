@@ -146,71 +146,32 @@ void ProjectFiles::exportWav()
         });
 }
 
+// An export renders the live edit, so it runs on the message thread rather
+// than on a worker: in steps behind the shell's loading screen, which keeps
+// every edit out until it is over (Session::startExport).
 void ProjectFiles::renderWav(const juce::File& file)
 {
     if (busy) return;
-    const auto length = session.edit->getLength();
-    if (length.inSeconds() <= 0.0)
+    if (const auto started = session.startExport(file); started.failed())
     {
-        report("There is no arrangement to export.");
+        report(started.getErrorMessage());
         return;
     }
-    // A render waits for every clip's file to open, so one whose file is gone
-    // held the export, and with it every file command and the window's close
-    // button, for good. Said, naming the file, before anything starts.
-    if (const auto readable = session.checkTimelineFiles(); readable.failed())
-    {
-        report("Could not export WAV: " + readable.getErrorMessage());
-        return;
-    }
-
-    // Rendering has its own offline playback context. Freeze edit commands
-    // until it completes so that the output is one coherent arrangement.
-    busy = true;
-    if (loadingChanged) loadingChanged(true);
-    session.stop();
-    auto* edit = session.edit.get();
-
-    // The render drives the very plugin instances the device callback is still
-    // holding. Detaching the edit from the device first is what keeps the export
-    // off the speakers, and stops the live graph from re-entering plugins that
-    // the render has just re-prepared. Released on the message thread below,
-    // which reattaches the device.
-    renderStatus = std::make_unique<te::Edit::ScopedRenderStatus>(*edit, true);
-    // The render reads the lanes from the engine's curves, as playback does, so
-    // they have to be current before it starts rather than at the next change.
-    session.mirrorAutomationToEngine();
-    te::Renderer::turnOffAllPlugins(*edit);
-
-    // Render at the device's own rate and block size. Anything else asks every
-    // plugin to run at settings it was never auditioned at, and the file stops
-    // being the thing that was heard.
-    auto& devices = session.engine.getDeviceManager();
-    const double sampleRate = devices.getSampleRate() > 7000.0 ? devices.getSampleRate() : 48000.0;
-    const int blockSize = devices.getBlockSize() > 0 ? devices.getBlockSize() : 512;
-
+    exporting = file;
     report("Exporting " + file.getFileName() + "...");
-    workers.addJob([weak = juce::WeakReference<ProjectFiles>(this), edit, file, seconds = length.inSeconds(), sampleRate,
-                    blockSize]
+    if (exportStarted)
     {
-        juce::TemporaryFile temporary(file);
-        // Gives up on a render that stops moving, so `busy` is always let go.
-        const auto rendered = Session::renderTimelineWav(*edit, temporary.getFile(), seconds, sampleRate, blockSize);
-        const auto error = rendered.getErrorMessage();
-        const auto success = rendered.wasOk() && temporary.overwriteTargetFileWithTemporary();
-        juce::MessageManager::callAsync([weak, file, success, error]
-        {
-            if (!weak) return;
-            weak->busy = false;
-            // Leave no plugin prepared for the render's settings before the
-            // device comes back; releasing the status reallocates the context.
-            te::Renderer::turnOffAllPlugins(*weak->session.edit);
-            weak->renderStatus.reset();
-            if (weak->loadingChanged) weak->loadingChanged(false);
-            weak->report(success ? "Exported " + file.getFileName()
-                                 : "Could not export WAV" + (error.isEmpty() ? juce::String{} : ": " + error));
-        });
-    });
+        exportStarted(file);
+        return;
+    }
+    while (session.continueExport(1000.0)) {}
+    exportFinished();
+}
+
+void ProjectFiles::exportFinished()
+{
+    const auto outcome = session.exportOutcome();
+    report(outcome.wasOk() ? "Exported " + exporting.getFileName() : outcome.getErrorMessage());
 }
 
 void ProjectFiles::load(const juce::File& file)

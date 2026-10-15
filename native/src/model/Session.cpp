@@ -122,8 +122,9 @@ Session::Session() : engine(commandLineTestMode ? "Rhino Native Tests" : "Theda 
 Session::~Session()
 {
     // While the edit is whole: the bounce puts back what it changed for its
-    // render and hands the edit back to the device.
+    // render, and either render hands the edit back to the device.
     cancelBounce();
+    cancelExport();
     removeChangeListener(&automationMirror);
     if (midiDeviceWatcher != nullptr)
         engine.getDeviceManager().removeChangeListener(midiDeviceWatcher.get());
@@ -198,8 +199,9 @@ void Session::buildStarterEdit()
 
 void Session::newProject()
 {
-    // A bounce holds the outgoing edit's tracks and clips.
+    // A bounce or an export renders the outgoing edit.
     cancelBounce();
+    cancelExport();
     listeners.call(&Listener::editWillChange);
     cancelCountIn();
     stop();
@@ -256,18 +258,18 @@ void Session::panicReset(bool restartAudioDevice)
     sendSynchronousChangeMessage();
 }
 
-// A bounce in flight holds the tracks and clips it renders, which an undo
-// could take away under it; the shell blocks input meanwhile, and this holds
-// the line for anything that reaches here anyway.
+// A bounce or an export in flight renders tracks and clips that an undo could
+// take away under it; the shell blocks input meanwhile, and this holds the
+// line for anything that reaches here anyway.
 void Session::undo()
 {
-    if (!isBouncing())
+    if (!isBouncing() && !isExporting())
         refreshAfterUndoRedo(edit->getUndoManager().undo());
 }
 
 void Session::redo()
 {
-    if (!isBouncing())
+    if (!isBouncing() && !isExporting())
         refreshAfterUndoRedo(edit->getUndoManager().redo());
 }
 
@@ -353,8 +355,9 @@ juce::Result Session::restoreProject(const juce::ValueTree& state, const juce::F
     // records, track by track, and never decides what a track ought to run or
     // which of them is first.
     collapseStackedInstruments(*candidate);
-    // A bounce holds the outgoing edit's tracks and clips.
+    // A bounce or an export renders the outgoing edit.
     cancelBounce();
+    cancelExport();
     listeners.call(&Listener::editWillChange);
     cancelCountIn();
     stop();
@@ -415,41 +418,6 @@ void Session::projectSaved(const juce::ValueTree& snapshot, const juce::File& fi
         edit->resetChangedStatus();
     }
     sendSynchronousChangeMessage();
-}
-
-// Only the timeline: a render plays the clips in the cells through the
-// switching node's own launchers, which it never waits for.
-juce::Result Session::checkTimelineFiles()
-{
-    for (auto* track : te::getAudioTracks(*edit))
-        for (auto* clip : track->getClips())
-            if (const auto readable = checkClipFile(*clip); readable.failed())
-                return readable;
-    return juce::Result::ok();
-}
-
-juce::Result Session::renderTimelineWav(te::Edit& song, const juce::File& destination, double seconds, double sampleRate,
-                                        int blockSize, double stallSeconds)
-{
-    // Where the render has got to, as a fraction of the song. Declared before
-    // the task, which updates it until it goes.
-    std::atomic<float> progress {0.0f};
-    juce::WavAudioFormat wav;
-    te::Renderer::Parameters parameters(song);
-    parameters.destFile = destination;
-    parameters.audioFormat = &wav;
-    parameters.sampleRateForAudio = sampleRate;
-    parameters.bitDepth = 24;
-    parameters.blockSizeForAudio = blockSize;
-    // The main track is the edit's master chain, so its devices and its
-    // fader only reach the file when master plugins are rendered. Export
-    // at unity otherwise: normalising would re-level the mix against what
-    // the main meter showed.
-    parameters.useMasterPlugins = true;
-    parameters.ditheringEnabled = true;
-    parameters.time = {{}, tracktion::core::TimePosition::fromSeconds(seconds)};
-    te::Renderer::RenderTask task("Export WAV", parameters, &progress, nullptr);
-    return runRenderTask(task, progress, stallSeconds);
 }
 
 }

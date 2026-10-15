@@ -16,6 +16,11 @@ public:
     void confirmUnsaved(std::function<void()>);
     std::function<void(juce::String)> status;
     std::function<void(bool)> loadingChanged;
+    // The shell renders a started export a slice per frame behind its loading
+    // screen, then hands it back to exportFinished. Unset, the export renders
+    // before exportWav's chooser returns.
+    std::function<void(const juce::File&)> exportStarted;
+    void exportFinished();
 private:
     void write(const juce::File&, std::function<void(bool)>);
     void renderWav(const juce::File&);
@@ -24,9 +29,7 @@ private:
     void report(const juce::String& text) { if (status) status(text); }
     Session& session;
     bool busy = false;
-    // Held for the whole of an export: the edit stays detached from the audio
-    // device until this is released back on the message thread.
-    std::unique_ptr<te::Edit::ScopedRenderStatus> renderStatus;
+    juce::File exporting;
     std::unique_ptr<juce::FileChooser> chooser;
     juce::ThreadPool workers {1};
     JUCE_DECLARE_WEAK_REFERENCEABLE(ProjectFiles)

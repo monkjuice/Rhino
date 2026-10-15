@@ -188,13 +188,30 @@ public:
     juce::Result checkTimelineFiles();
     // The song as Export WAV writes it: the timeline of `edit` from the top for
     // `seconds`, through the main chain, at unity, as a 24-bit dithered WAV at
-    // the rate and block size given. On whichever thread calls it; the caller
-    // takes the edit off the device first. A render waits for every clip's
-    // file to open, and one that is there but cannot be read would hold it for
-    // good, so a render that has not moved for `stallSeconds` is given up and
-    // what it wrote deleted.
+    // the rate and block size given, all before it returns. On whichever
+    // thread calls it; the caller takes the edit off the device first. A
+    // render waits for every clip's file to open, and one that is there but
+    // cannot be read would hold it for good, so a render that has not moved
+    // for `stallSeconds` is given up and what it wrote deleted.
     static juce::Result renderTimelineWav(te::Edit&, const juce::File& destination, double seconds, double sampleRate,
                                           int blockSize, double stallSeconds = 60.0);
+    // Export WAV itself: that render of this document, at the audio device's
+    // rate and block size, in steps, as the bounce runs, so the shell's
+    // loading screen can draw and cancel while it renders. A start refuses an
+    // empty song or a missing file, stops the transport and takes the edit off
+    // the device; continueExport renders for about `milliseconds` and returns
+    // true while there is more to do, replacing `destination` only once all of
+    // it has rendered; cancelExport stops it with the file that was there left
+    // alone. Once it is over, exportOutcome says how it went, failures as a
+    // sentence to show. Nothing may edit the document while one runs: the
+    // shell blocks input, undo and redo wait, and replacing the document
+    // cancels it.
+    juce::Result startExport(const juce::File& destination);
+    bool continueExport(double milliseconds);
+    void cancelExport();
+    bool isExporting() const { return exportRun != nullptr; }
+    float exportProgress() const;
+    juce::Result exportOutcome() const;
     // What an edit changed, so that what is derived from the document - the
     // engine's automation curves, a DJ deck's clip - can tell whether it is
     // behind. Kinds combine with |. A change nobody has classified is
@@ -1795,6 +1812,16 @@ private:
     std::unique_ptr<BounceRun, BounceRunDeleter> bounceRun;
     juce::Result lastBounce = juce::Result::ok();
     BounceResult lastBounceResult;
+    // The WAV export in flight (SessionExport.cpp), kept the same way.
+    struct ExportRun;
+    struct ExportRunDeleter
+    {
+        void operator()(ExportRun*) const;
+    };
+    void finishExport();
+    void endExport(const juce::Result&);
+    std::unique_ptr<ExportRun, ExportRunDeleter> exportRun;
+    juce::Result lastExport = juce::Result::ok();
 };
 int runSelfTest();
 int runPatternTest();

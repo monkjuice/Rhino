@@ -72,6 +72,18 @@ MainComponent::MainComponent(Session& s)
                            [this] { session.cancelBounce(); },
                            [this] { arrangement.bounceFinished(); }});
     };
+    // Export WAV the same way, handed back to the file commands to report.
+    files.exportStarted = [this](const juce::File& file)
+    {
+        loadingScreen.run({"Exporting WAV",
+                           [this](double milliseconds) { return session.continueExport(milliseconds); },
+                           [this, detail = "Rendering " + file.getFileName()]
+                           {
+                               return std::make_pair(session.exportProgress(), detail);
+                           },
+                           [this] { session.cancelExport(); },
+                           [this] { files.exportFinished(); }});
+    };
     // The two lower panes answer to two different things, and to nothing
     // else: the clip editors to the selected clip, the Device View to a
     // clicked track card. Clicking a clip moves the working track too, so

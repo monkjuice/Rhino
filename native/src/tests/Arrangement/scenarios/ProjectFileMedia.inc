@@ -36,13 +36,10 @@
                 auto* audio = document.findAudioClip(clip);
                 return audio != nullptr ? audio->getSourceFileReference().getFile() : juce::File();
             };
-            // The song rendered as Export WAV renders it, and the level of the
-            // loud half of the fixture's first second in what it wrote.
-            const auto exportedLevel = [&require](Session& document, const juce::File& file)
+            // The level of the loud half of the fixture's first second in a
+            // WAV the export wrote.
+            const auto writtenLevel = [&require](const juce::File& file)
             {
-                const auto rendered = Session::renderTimelineWav(*document.edit, file, document.edit->getLength().inSeconds(),
-                                                                 48000.0, 512);
-                require(rendered.wasOk(), ("The song renders as Export WAV renders it: " + rendered.getErrorMessage()).toRawUTF8());
                 juce::AudioFormatManager formats;
                 formats.registerBasicFormats();
                 std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(file));
@@ -52,6 +49,14 @@
                 require(reader->read(&audio, 0, audio.getNumSamples(), 0, true, true), "every sample of it");
                 const auto from = static_cast<int>(0.6 * reader->sampleRate), until = static_cast<int>(0.95 * reader->sampleRate);
                 return audio.getRMSLevel(0, from, until - from);
+            };
+            // The song rendered as Export WAV renders it, and that level.
+            const auto exportedLevel = [&require, &writtenLevel](Session& document, const juce::File& file)
+            {
+                const auto rendered = Session::renderTimelineWav(*document.edit, file, document.edit->getLength().inSeconds(),
+                                                                 48000.0, 512);
+                require(rendered.wasOk(), ("The song renders as Export WAV renders it: " + rendered.getErrorMessage()).toRawUTF8());
+                return writtenLevel(file);
             };
             const auto lane = 1;
             const auto original = songs.getChildFile("Set.rhinoedit");
@@ -172,6 +177,55 @@
                     require(fileOf(*reopened, first) == loop, "with the first sample still found");
                 }
             }
+
+            // Export WAV itself renders in steps, as the shell's loading screen
+            // runs it: a slice hands the thread back, nothing undoes under it,
+            // a cancel leaves the file that was there, and what the screen
+            // drives to its end is the song.
+            scenario("project files: the export renders in steps behind the loading screen");
+            {
+                auto song = std::make_unique<Session>();
+                require(song->importAudioAt(loop, lane, 0.0).wasOk(), "A song with a sample on it");
+                const auto target = media.getChildFile("Stepped export.wav");
+                require(target.replaceWithText("An earlier export"), "and a file where its export will go");
+                const auto beside = [&media] { return media.findChildFiles(juce::File::findFiles, false, "Stepped export*").size(); };
+                require(song->startExport(target).wasOk() && song->isExporting(), "An export can be started and left running");
+                require(song->startExport(target).failed() && song->startBounceTracks({lane}).failed(),
+                        "and nothing else renders until it is over");
+                require(song->continueExport(0.0), "A slice renders and hands the thread back with work left");
+                require(song->exportProgress() >= 0.0f && song->exportProgress() < 1.0f, "and says how far it has got");
+                song->undo();
+                require(song->isExporting() && te::getAudioTracks(*song->edit)[lane]->getClips().size() == 1,
+                        "Undo waits rather than pulling the sample away");
+                song->cancelExport();
+                require(!song->isExporting() && song->exportOutcome().getErrorMessage().contains("cancelled"),
+                        "Cancelling stops it");
+                require(target.loadFileAsString() == "An earlier export" && beside() == 1,
+                        "leaving the file that was there and nothing beside it");
+
+                // The screen the shell shows, driving the real thing.
+                LoadingScreen screen;
+                screen.setSize(900, 600);
+                auto finished = 0;
+                require(song->startExport(target).wasOk(), "It starts again");
+                screen.run({"Exporting WAV",
+                            [&song](double milliseconds) { return song->continueExport(milliseconds); },
+                            [&song] { return std::make_pair(song->exportProgress(), juce::String("Rendering")); },
+                            [&song] { song->cancelExport(); },
+                            [&finished] { ++finished; }});
+                require(screen.isRunning() && screen.isVisible(), "The loading screen shows while it runs");
+                for (auto frames = 0; screen.isRunning(); ++frames)
+                {
+                    require(frames < 10000, "The loading screen finishes the export");
+                    screen.timerCallback();
+                }
+                require(finished == 1 && !screen.isVisible() && song->exportOutcome().wasOk(),
+                        ("and goes once it is done: " + song->exportOutcome().getErrorMessage()).toRawUTF8());
+                const auto level = writtenLevel(target);
+                require(level > 0.1f && beside() == 1,
+                        ("The export replaced the file with the song: " + juce::String(level, 3)).toRawUTF8());
+            }
+
             // Every session reading these files is gone by now.
             media.deleteRecursively();
         }

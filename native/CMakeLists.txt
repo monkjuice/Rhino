@@ -65,6 +65,7 @@ target_sources(RhinoNative PRIVATE
     src/model/SessionRegion.cpp
     src/model/SessionMerge.cpp
     src/model/SessionBounce.cpp
+    src/model/SessionExport.cpp
     src/model/SessionSamples.cpp
     src/model/SessionPreview.cpp
     src/model/SessionRecording.cpp

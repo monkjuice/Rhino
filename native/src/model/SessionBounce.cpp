@@ -304,6 +304,8 @@ juce::Result Session::startBounce(std::vector<BounceJob>& jobs)
 {
     if (isBouncing())
         return juce::Result::fail("A bounce is already running.");
+    if (isExporting())
+        return juce::Result::fail("Wait for the WAV export to finish.");
     const auto tracks = te::getAudioTracks(*edit);
     // Every refusal before anything is written.
     for (const auto& job : jobs)

@@ -69,11 +69,12 @@ public:
     void toggleInfoView();
     void toggleRecording();
 
-    // Closing the window stops a bounce rather than waiting it out; the
-    // loading screen sees it has gone and reports it cancelled.
+    // Closing the window stops a bounce or an export rather than waiting it
+    // out; the loading screen sees it has gone and reports it cancelled.
     void requestClose()
     {
         session.cancelBounce();
+        session.cancelExport();
         files.confirmUnsaved([] { juce::JUCEApplication::getInstance()->quit(); });
     }
     void openProjectFile(const juce::File& file) { files.openFile(file); }
@@ -156,8 +157,8 @@ private:
     ComputerKeyboard computerKeyboard;
     juce::Component::SafePointer<juce::DialogWindow> audioSettings;
     ProjectFiles files;
-    // Over the whole window while a bounce renders, so the window draws and
-    // nothing can be edited under the render.
+    // Over the whole window while a bounce or an export renders, so the window
+    // draws and nothing can be edited under the render.
     LoadingScreen loadingScreen;
     SplitterBar lowerSplitter;
     // Zero until the pane is opened for the first time, which is what asks for

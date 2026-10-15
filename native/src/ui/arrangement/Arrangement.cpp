@@ -168,21 +168,21 @@ void Arrangement::resized()
         const auto inputWidth = cardControlWidth * 2 + cardControlGap;
         trackInput[index]->setBounds(left, top + 42, inputWidth, 16);
         monitor[index]->setBounds(left, top + 61, inputWidth, 15);
-        // Not pushed in with a group's indent: every meter stands in one column.
+        // The meter opens the card, pushed in with the controls by a group.
         meters[index]->setVisible(visible);
-        meters[index]->setBounds(static_cast<int>(cardMeterLeft), top, LevelMeter::width,
+        meters[index]->setBounds(cardMeterInset + static_cast<int>(trackIndent(i)), top, LevelMeter::width,
                                  std::max(0, static_cast<int>(row.getHeight() - trackDividerThickness)
                                                  - 2 * cardControlsTop));
     }
     {
-        // Everything the main row carries sits on its single line, and its two
-        // faders are the same pair of widths the cards use. Its meter is in
-        // the cards' column and fills the row but for the same margin.
+        // Everything the main row carries sits on its single line: the meter
+        // where every card's starts, the MAIN label where their controls do,
+        // and its two faders after it.
         const auto master = masterLane();
         const auto controlsY = static_cast<int>(master.getY()) + 5;
-        masterVolume.setBounds(56, controlsY, 62, 16);
-        masterPan.setBounds(122, controlsY, 62, 16);
-        masterMeter.setBounds(static_cast<int>(cardMeterLeft), controlsY, LevelMeter::width,
+        masterVolume.setBounds(cardControlLeft + 46, controlsY, 62, 16);
+        masterPan.setBounds(cardControlLeft + 112, controlsY, 62, 16);
+        masterMeter.setBounds(cardMeterInset, controlsY, LevelMeter::width,
                               std::max(0, static_cast<int>(master.getBottom()) - 5 - controlsY));
     }
     layoutNameEditor();

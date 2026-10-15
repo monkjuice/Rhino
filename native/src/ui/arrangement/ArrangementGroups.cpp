@@ -10,6 +10,8 @@
 // card. What this file adds is only what makes the grouping legible - the
 // disclosure that folds the members away, the step in the left edge that says
 // which cards are inside, and the multi-card selection that grouping acts on.
+// The disclosure is the same arrow every card carries before its name, which on
+// any other card folds the row itself down to its one line.
 //
 // Collapsing lays the members out at zero height rather than dropping their
 // rows, so lane, bounds, cardAt and the header controls all answer with an
@@ -114,52 +116,51 @@ void Arrangement::toggleTrackSelection(int track)
     }
 }
 
-// The arrow lives in the gutter a member's indent opens, so the disclosure and
-// the step it controls are the same column.
-juce::Rectangle<float> Arrangement::busDisclosureBounds(juce::Rectangle<float> row) const
+// The arrow opens the name, on the name's own line: the controls column is
+// busy enough, and Live keeps its fold button beside the name too.
+juce::Rectangle<float> Arrangement::disclosureBounds(int track) const
 {
-    return {groupSpineLeft - 1.0f, row.getY() + cardControlsTop + 2.0f, groupIndent, 13.0f};
+    const auto row = lane(track);
+    return {trackIndent(track) + cardControlsWidth + cardDividerWidth + disclosureLeft,
+            row.getY() + cardControlsTop + 2.0f, disclosureSize, disclosureSize};
 }
 
-bool Arrangement::beginGroupGesture(const juce::MouseEvent& event)
+bool Arrangement::beginDisclosureGesture(const juce::MouseEvent& event)
 {
     if (!event.mods.isLeftButtonDown() || event.position.x >= headerWidth)
         return false;
     const auto track = cardAt(event.position);
-    if (track < 0)
+    if (track < 0 || !disclosureBounds(track).contains(event.position))
         return false;
-    const auto* group = groupForBus(track);
-    if (group == nullptr || !busDisclosureBounds(lane(track)).contains(event.position))
-        return false;
-    // Read before touching the session: a change message rebuilds the row stack
-    // and with it the group this points at.
-    const auto groupId = group->id;
-    const auto name = group->name;
-    const auto collapsed = group->collapsed;
-    const auto done = session.setTrackGroupCollapsed(groupId, !collapsed);
+    if (const auto* group = groupForBus(track))
+    {
+        // Read before touching the session: a change message rebuilds the row
+        // stack and with it the group this points at.
+        const auto groupId = group->id;
+        const auto name = group->name;
+        const auto collapsed = group->collapsed;
+        const auto done = session.setTrackGroupCollapsed(groupId, !collapsed);
+        if (status)
+            status(done.failed() ? done.getErrorMessage() : (collapsed ? "Expanded " : "Collapsed ") + name);
+        return true;
+    }
+    const auto folded = session.isTrackFolded(track);
+    const auto name = session.trackName(track);
+    const auto done = session.setTrackFolded(track, !folded);
     if (status)
-        status(done.failed() ? done.getErrorMessage() : (collapsed ? "Expanded " : "Collapsed ") + name);
+        status(done.failed() ? done.getErrorMessage() : (folded ? "Expanded " : "Collapsed ") + name);
     return true;
 }
 
-// What tells a group apart on the cards: an arrow on the bus, and the colour of
-// that bus filling the step every member is pushed right by.
-void Arrangement::paintGroupGutter(juce::Graphics& g, int track, juce::Rectangle<float> row)
+// Right for a folded group or row, down for an open one: the arrow points at
+// what clicking it reveals. Drawn in the name's own colour.
+void Arrangement::paintDisclosure(juce::Graphics& g, int track, juce::Colour colour)
 {
-    if (const auto* member = groupContaining(track))
-    {
-        g.setColour(bandColour(*member).withAlpha(0.9f));
-        g.fillRect(groupSpineLeft, row.getY(), groupIndent - groupSpineLeft, row.getHeight());
-        return;
-    }
     const auto* bus = groupForBus(track);
-    if (bus == nullptr)
-        return;
-    // Right for a folded group, down for an open one: the arrow points at what
-    // clicking it reveals.
-    const auto area = busDisclosureBounds(row);
+    const auto closed = bus != nullptr ? bus->collapsed : factsFor(track).folded;
+    const auto area = disclosureBounds(track);
     juce::Path arrow;
-    if (bus->collapsed)
+    if (closed)
         arrow.addTriangle(area.getX() + 4.0f, area.getY() + 1.0f,
                           area.getX() + 4.0f, area.getBottom() - 1.0f,
                           area.getRight() - 4.0f, area.getCentreY());
@@ -167,8 +168,19 @@ void Arrangement::paintGroupGutter(juce::Graphics& g, int track, juce::Rectangle
         arrow.addTriangle(area.getX() + 2.0f, area.getY() + 3.0f,
                           area.getRight() - 2.0f, area.getY() + 3.0f,
                           area.getCentreX(), area.getBottom() - 2.0f);
-    g.setColour(bandColour(*bus).contrasting(0.7f));
+    g.setColour(colour);
     g.fillPath(arrow);
+}
+
+// What tells a group's members apart on the cards: the colour of their bus
+// filling the step every member is pushed right by.
+void Arrangement::paintGroupGutter(juce::Graphics& g, int track, juce::Rectangle<float> row)
+{
+    if (const auto* member = groupContaining(track))
+    {
+        g.setColour(bandColour(*member).withAlpha(0.9f));
+        g.fillRect(groupSpineLeft, row.getY(), groupIndent - groupSpineLeft, row.getHeight());
+    }
 }
 
 void Arrangement::toggleGroupCollapsed(int groupId)

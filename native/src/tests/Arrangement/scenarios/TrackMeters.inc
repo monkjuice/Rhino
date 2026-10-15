@@ -119,31 +119,34 @@
                     plugin->baseClassDeinitialise();
             }
 
-            scenario("track meters: every card and the main row show a meter in one column, clear of the name");
+            scenario("track meters: every card and the main row open with a meter, ahead of their controls");
             {
                 auto panel = std::make_unique<Arrangement>(song);
                 panel->setSize(1200, 760);
                 require(static_cast<int>(panel->meters.size()) == song.trackCount(), "One meter per card");
                 for (int track = 0; track < song.trackCount(); ++track)
                 {
-                    const auto& meter = *panel->meters[static_cast<size_t>(track)];
+                    const auto index = static_cast<size_t>(track);
+                    const auto& meter = *panel->meters[index];
                     const auto row = panel->lane(track);
+                    const auto indent = static_cast<int>(panel->trackIndent(track));
                     require(meter.isVisible() && meter.isOpaque() && meter.getHeight() > 0,
                             "Each card's meter shows, and paints all of itself so a frame repaints nothing behind it");
-                    require(meter.getX() == static_cast<int>(Arrangement::cardMeterLeft) && meter.getWidth() == LevelMeter::width
-                                && meter.getRight() <= static_cast<int>(Arrangement::headerWidth) - 3,
-                            "at the right edge of the header, clear of the armed strip, in the same column whatever the indent");
+                    require(meter.getX() == Arrangement::cardMeterInset + indent && meter.getWidth() == LevelMeter::width,
+                            "at the start of the card, pushed in with the rest of it by a group");
+                    require(meter.getRight() < panel->mute[index]->getX() && meter.getRight() < panel->volume[index]->getX(),
+                            "and ahead of the buttons and the faders");
                     const auto top = static_cast<float>(meter.getY()) + Arrangement::lanesTop;
                     require(top >= row.getY() && top + static_cast<float>(meter.getHeight()) <= row.getBottom() - Arrangement::trackDividerThickness,
                             "and inside its row, above the rule under it");
-                    require(panel->trackNameBounds(track).getRight() <= meter.getX(), "The name stops short of the meter");
                 }
                 const auto& main = panel->masterMeter;
                 const auto master = panel->masterLane();
-                require(main.isVisible() && main.getX() == static_cast<int>(Arrangement::cardMeterLeft)
+                require(main.isVisible() && main.getX() == Arrangement::cardMeterInset
+                            && main.getRight() < panel->masterVolume.getX()
                             && static_cast<float>(main.getY()) >= master.getY()
                             && static_cast<float>(main.getBottom()) <= master.getBottom() && main.getHeight() > 0,
-                        "The main row's meter stands in the cards' column, inside the row");
+                        "The main row opens with its meter too, ahead of its faders and inside the row");
 
                 // What a fed meter draws: the left side lit green from the
                 // bottom, the right side dark, and red at the top past 0 dB.
@@ -171,6 +174,8 @@
                 if (const auto path = juce::SystemStats::getEnvironmentVariable("RHINO_TRACK_METERS_SNAPSHOT", {});
                     path.isNotEmpty())
                 {
+                    // One row folded, so both ways the arrow points are in it.
+                    require(song.setTrackFolded(song.trackCount() - 2, true).wasOk(), "A row folds for the picture");
                     const float levels[] {-30.0f, -9.0f, -2.0f, 2.0f, -48.0f, -14.0f};
                     for (size_t track = 0; track < panel->meters.size(); ++track)
                     {

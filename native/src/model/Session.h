@@ -429,7 +429,14 @@ public:
     // choosing, so a project that has never been resized keeps following the
     // panel height; dragging a card's edge pins a height that outlives reopen.
     float trackLaneHeight(int track) const;
+    // Choosing a height unfolds a folded row.
     juce::Result setTrackLaneHeight(int track, float height);
+    // A row folded down to its one line by the arrow beside the card's name,
+    // as Live's fold button does, keeping the height it unfolds back to. A
+    // view setting, like the height. A group's bus folds its members instead
+    // (setTrackGroupCollapsed).
+    bool isTrackFolded(int track) const;
+    juce::Result setTrackFolded(int track, bool folded);
     juce::Result setTrackName(int track, const juce::String& name);
     // The card's own colour, and the colour its clips take unless one of them
     // has been given a colour of its own.

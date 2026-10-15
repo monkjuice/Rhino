@@ -99,14 +99,47 @@
                 "Folding is a view setting: the audio still goes where it did");
 
         scenario("track groups: the disclosure folds and unfolds");
-        clickAt(view.busDisclosureBounds(view.lane(bus)).getCentre());
+        require(view.disclosureBounds(bus).getX() >= view.cardControlsWidth + view.cardDividerWidth
+                    && view.disclosureBounds(bus).getRight() <= static_cast<float>(view.trackNameBounds(bus).getX()),
+                "The bus's arrow sits on the name side of its card, ahead of the name");
+        clickAt(view.disclosureBounds(bus).getCentre());
         require(!session.trackGroups().front().collapsed, "Clicking the arrow on the bus expands a folded group");
         view.sync();
         view.resized();
         require(view.lane(2).getHeight() > 0.0f && view.mute[2]->isVisible(),
                 "Expanding brings the members back with their controls");
-        clickAt(view.busDisclosureBounds(view.lane(bus)).getCentre());
+        clickAt(view.disclosureBounds(bus).getCentre());
         require(session.trackGroups().front().collapsed, "and clicking it again folds the group back up");
+        require(!session.isTrackFolded(bus) && view.lane(bus).getHeight() > view.minimumLaneHeight,
+                "On a bus the arrow folds the members, never the bus's own row");
+
+        scenario("track cards: the arrow folds any other card down to its one line and back");
+        {
+            // Track 0 is outside the group.
+            view.sync();
+            view.resized();
+            const auto openHeight = view.lane(0).getHeight();
+            require(openHeight > view.minimumLaneHeight && !session.isTrackFolded(0), "A loose card starts open");
+            require(view.disclosureBounds(0).getRight() <= static_cast<float>(view.trackNameBounds(0).getX()),
+                    "Its arrow sits ahead of its name, as the bus's does");
+            clickAt(view.disclosureBounds(0).getCentre());
+            view.sync();
+            view.resized();
+            require(session.isTrackFolded(0) && view.lane(0).getHeight() == view.minimumLaneHeight,
+                    "Clicking the arrow folds the row down to its one line");
+            require(view.mute[0]->isVisible() && !view.volume[0]->isVisible(), "keeping its name and its buttons");
+            clickAt(view.disclosureBounds(0).getCentre());
+            view.sync();
+            view.resized();
+            require(!session.isTrackFolded(0) && std::abs(view.lane(0).getHeight() - openHeight) < 0.001f,
+                    "and clicking it again unfolds the row to the height it had");
+            require(session.setTrackFolded(0, true).wasOk() && session.setTrackLaneHeight(0, 150.0f).wasOk()
+                        && !session.isTrackFolded(0),
+                    "Choosing a height for a folded row unfolds it");
+            require(session.setTrackLaneHeight(0, 0.0f).wasOk(), "The row goes back to the fitted height");
+            view.sync();
+            view.resized();
+        }
         require(session.setTrackGroupCollapsed(bandId, false).wasOk(), "A group can be expanded again");
         view.sync();
         view.resized();

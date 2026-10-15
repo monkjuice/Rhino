@@ -394,8 +394,11 @@ private:
     bool isTrackArmed(int track) const;
     void selectTrackRange(int from, int to);
     void toggleTrackSelection(int track);
-    juce::Rectangle<float> busDisclosureBounds(juce::Rectangle<float> row) const;
-    bool beginGroupGesture(const juce::MouseEvent&);
+    // The arrow at the start of a card's name: on a group's bus it folds the
+    // members away, on any other card it folds the row down to its one line.
+    juce::Rectangle<float> disclosureBounds(int track) const;
+    bool beginDisclosureGesture(const juce::MouseEvent&);
+    void paintDisclosure(juce::Graphics&, int track, juce::Colour);
     void paintGroupGutter(juce::Graphics&, int track, juce::Rectangle<float> row);
     void toggleGroupCollapsed(int groupId);
     void groupSelectedTracks();
@@ -442,7 +445,7 @@ private:
     {
         juce::String name;
         juce::Colour colour;
-        bool midi = false, holdsInstrument = false, bus = false;
+        bool midi = false, holdsInstrument = false, bus = false, folded = false;
     };
     std::vector<TrackFacts> trackFacts;
     const TrackFacts& factsFor(int track) const;
@@ -486,7 +489,7 @@ private:
     std::vector<std::unique_ptr<juce::Slider>> volume, pan;
     juce::Slider masterVolume, masterPan;
     // What each track sends to the mix, and on the main row what leaves the
-    // song, each at the right edge of its header in one column.
+    // song, each at the start of its header.
     std::vector<std::unique_ptr<LevelMeter>> meters;
     LevelMeter masterMeter;
     // When the meters were last fed, or zero when they have not been since
@@ -588,7 +591,7 @@ private:
     bool panning = false;
     juce::Point<float> panAnchor;
     double panStartView = 0.0, panStartTrackScroll = 0.0;
-    static constexpr float headerWidth = 228.0f, rulerTop = 36.0f, lanesTop = 60.0f;
+    static constexpr float headerWidth = 264.0f, rulerTop = 36.0f, lanesTop = 60.0f;
     // The main row is dragged from its top edge like any other, so its height
     // is a value rather than a constant. It is a view setting and lives here
     // beside the zoom: the fitted lane height is measured against the default
@@ -621,10 +624,12 @@ private:
     // pixels, both standing on the lanes.
     static constexpr float countTick = 12.0f, rulerMinorTick = 4.0f;
     // A group's members are pushed right by groupIndent, and the gap that opens
-    // up is filled with the bus's colour; the bus itself keeps that column for
-    // its disclosure arrow. The step in the left edge is what tells a card
-    // inside a group from one below it at a glance.
+    // up is filled with the bus's colour. The step in the left edge is what
+    // tells a card inside a group from one below it at a glance.
     static constexpr float groupIndent = 13.0f, groupSpineLeft = 3.0f;
+    // The fold arrow every card carries before its name, and the room the name
+    // gives up to it.
+    static constexpr float disclosureSize = 13.0f, disclosureLeft = 2.0f, disclosureGap = 4.0f;
     // A card is name plus one control line at its shortest; the mixer line is
     // the next thing that fits, and past that a row only gets roomier.
     static constexpr float minimumLaneHeight = 32.0f, mixerLaneHeight = 54.0f, maximumLaneHeight = 260.0f;
@@ -635,21 +640,19 @@ private:
     // dragged down by hand. The track menu carries the same two settings for
     // the rows that are not.
     static constexpr float inputLaneHeight = 72.0f, monitorLaneHeight = 90.0f;
-    // A card is two columns: the controls, then the name on its colour. The
-    // divider between them is the same grey the row separators use. Both lines
-    // of controls share one left edge and one width, so the buttons sit
-    // squarely over the faders.
-    static constexpr float cardControlsWidth = 124.0f, cardDividerWidth = 4.0f;
+    // A card is two columns: the meter and the controls, then the name on its
+    // colour. The divider between them is the same grey the row separators use.
+    // Both lines of controls share one left edge and one width, so the buttons
+    // sit squarely over the faders.
+    static constexpr float cardControlsWidth = 140.0f, cardDividerWidth = 4.0f;
     // The buttons are narrower than the faders under them: three of them share
     // the line the two faders split, and a single letter needs far less room
     // than a level bar does.
-    static constexpr int cardControlsTop = 7, cardControlLeft = 10, cardControlWidth = 52,
-                         cardControlGap = 4, cardButtonWidth = 34;
-    // The meter stands at the right edge of the header, where Live keeps its
-    // own, clear of the armed strip and the rule beside the lanes. It runs from
-    // the button line to as far above the rule under the row, and the name
-    // stops short of it.
-    static constexpr int cardMeterInset = 6;
-    static constexpr float cardMeterLeft = headerWidth - static_cast<float>(cardMeterInset + LevelMeter::width);
+    static constexpr int cardControlsTop = 7, cardControlLeft = 17, cardControlWidth = 56,
+                         cardControlGap = 4, cardButtonWidth = 36;
+    // The meter opens the card, ahead of the controls and pushed in with them
+    // by a group's indent, and on the main row too. It runs from the button
+    // line to as far above the rule under the row.
+    static constexpr int cardMeterInset = 5;
 };
 }

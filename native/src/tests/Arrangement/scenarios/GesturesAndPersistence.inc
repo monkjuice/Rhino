@@ -5,10 +5,16 @@
         // scenarios held no longer addresses this clip. Look it up by id again.
         clip = session.findAudioClip(id);
         require(clip != nullptr, "The imported audio clip survives the track-management scenarios");
-        view.mouseDown(event({240, clipRowY(1)}, {240, clipRowY(1)}, false));
-        view.mouseDrag(event({240, clipRowY(1)}, {346.5f, clipRowY(1)}, true));
-        require(close(clip->getPosition().time.getStart().inSeconds(), 0.0), "Drag must not rebuild live clip before release");
-        view.mouseUp(event({240, clipRowY(1)}, {346.5f, clipRowY(1)}, true));
+        {
+            // Read off the timeline rather than spelt in pixels, so the header
+            // can change width without moving where these land.
+            const auto grab = juce::Point<float>(view.xFor(0.0) + 12.0f, clipRowY(1));
+            const auto halfSecondOn = grab.translated(view.xFor(0.5) - view.xFor(0.0), 0.0f);
+            view.mouseDown(event(grab, grab, false));
+            view.mouseDrag(event(grab, halfSecondOn, true));
+            require(close(clip->getPosition().time.getStart().inSeconds(), 0.0), "Drag must not rebuild live clip before release");
+            view.mouseUp(event(grab, halfSecondOn, true));
+        }
         require(close(clip->getPosition().time.getStart().inSeconds(), 0.5), "Pointer drag moves audio");
         require(close(clip->getPosition().offset.inSeconds(), 0.0), "Move preserves source offset");
         session.undo();
@@ -31,10 +37,14 @@
         require(close(clip->getPosition().time.getStart().inSeconds(), 0.75), "Undo restores left expansion");
         require(close(clip->getPosition().time.getEnd().inSeconds(), 1.25), "Undo restores right expansion");
         const auto originalPosition = clip->getPosition();
-        view.mouseDown(event({360, clipRowY(1)}, {360, clipRowY(1)}, false));
-        view.mouseDrag(event({360, clipRowY(1)}, {500, clipRowY(1)}, true));
-        view.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey));
-        view.mouseUp(event({360, clipRowY(1)}, {500, clipRowY(1)}, true));
+        {
+            const auto onClip = juce::Point<float>(view.xFor(1.0), clipRowY(1));
+            const auto later = juce::Point<float>(view.xFor(1.75), clipRowY(1));
+            view.mouseDown(event(onClip, onClip, false));
+            view.mouseDrag(event(onClip, later, true));
+            view.keyPressed(juce::KeyPress(juce::KeyPress::escapeKey));
+            view.mouseUp(event(onClip, later, true));
+        }
         require(close(clip->getPosition().time.getStart().inSeconds(), originalPosition.time.getStart().inSeconds()), "Escape cancels preview");
 
         // AudioThumbnail scans asynchronously. Its cache is intentionally

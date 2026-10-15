@@ -45,6 +45,9 @@ float Arrangement::laneHeightFor(int track) const
 {
     if (track == resizingTrack)
         return resizePreview;
+    // Folded, a row is down to its one line, and keeps the height it unfolds to.
+    if (session.isTrackFolded(track))
+        return minimumLaneHeight;
     const auto chosen = session.trackLaneHeight(track);
     return chosen > 0.0f ? juce::jlimit(minimumLaneHeight, maximumLaneHeight, chosen) : laneHeight();
 }

@@ -311,6 +311,7 @@ void Arrangement::paintTrackCards(juce::Graphics& g)
         // dragged to, level with the two buttons beside it. Dark text on a
         // light card, light on a dark one, so every colour stays readable. A
         // card being renamed gives that line to the editor instead.
+        paintDisclosure(g, track, cardColour.contrasting(0.8f));
         g.setColour(cardColour.contrasting(0.8f));
         g.setFont(uiFontBold(11.0f));
         if (renamingTrack != track)
@@ -420,7 +421,7 @@ void Arrangement::paint(juce::Graphics& g)
         g.fillRect(band.withHeight(trackDividerThickness));
         g.setColour(palette::text);
         g.setFont(uiFontBold(9.0f));
-        drawSnappedText(g, "MAIN", {10, static_cast<int>(master.getY()) + 5, 44, 16});
+        drawSnappedText(g, "MAIN", {cardControlLeft, static_cast<int>(master.getY()) + 5, 44, 16});
     }
 
     const auto firstBeat = session.edit->tempoSequence.toBeats(tracktion::core::TimePosition::fromSeconds(viewStart)).inBeats();

@@ -155,6 +155,7 @@ juce::Result Session::removeAudioTrack(int track)
 namespace
 {
 const juce::Identifier laneHeightID {"rhinoLaneHeight"};
+const juce::Identifier trackFoldedID {"rhinoTrackFolded"};
 }
 
 // Zero is "not chosen yet" rather than a height of nothing, which is what lets
@@ -175,6 +176,29 @@ juce::Result Session::setTrackLaneHeight(int track, float height)
     // Row heights are a view setting, so they are written straight to the track
     // state without an undo transaction: undo belongs to what the track plays.
     tracks[track]->state.setProperty(laneHeightID, static_cast<double>(std::max(0.0f, height)), nullptr);
+    // A height chosen for a folded row is a height to see it at.
+    tracks[track]->state.removeProperty(trackFoldedID, nullptr);
+    markModified(track, ModelChange::none);
+    sendSynchronousChangeMessage();
+    return juce::Result::ok();
+}
+
+bool Session::isTrackFolded(int track) const
+{
+    const auto tracks = te::getAudioTracks(*edit);
+    return juce::isPositiveAndBelow(track, tracks.size()) && static_cast<bool>(tracks[track]->state.getProperty(trackFoldedID, false));
+}
+
+juce::Result Session::setTrackFolded(int track, bool folded)
+{
+    const auto tracks = te::getAudioTracks(*edit);
+    if (!juce::isPositiveAndBelow(track, tracks.size()))
+        return juce::Result::fail("Select a track to fold.");
+    // Written without undo, as the height is; an open row carries nothing.
+    if (folded)
+        tracks[track]->state.setProperty(trackFoldedID, true, nullptr);
+    else
+        tracks[track]->state.removeProperty(trackFoldedID, nullptr);
     markModified(track, ModelChange::none);
     sendSynchronousChangeMessage();
     return juce::Result::ok();

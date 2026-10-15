@@ -51,9 +51,9 @@ void Arrangement::mouseDown(const juce::MouseEvent& event)
         repaint();
         return;
     }
-    // The disclosure on a group's card answers before anything else on it: it
-    // is the one part of that card that is about the group rather than the bus.
-    if (beginGroupGesture(event))
+    // The fold arrow answers before anything else on a card: a click on it is
+    // about what the row shows, not a request to select or carry the track.
+    if (beginDisclosureGesture(event))
         return;
     // An automation row answers for its own lane wherever it is clicked,
     // header included, because its header is the lane's only label.

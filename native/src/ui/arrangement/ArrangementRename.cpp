@@ -37,18 +37,17 @@ void Arrangement::configureNameEditor()
     laneHeaders.addChildComponent(nameEditor);
 }
 
-// The name's line on a card, which stops at the meter. The painter draws into
-// this too, so the editor lands exactly where the text it replaces was.
+// The name's line on a card, after the fold arrow. The painter draws into this
+// too, so the editor lands exactly where the text it replaces was.
 juce::Rectangle<int> Arrangement::trackNameBounds(int track) const
 {
     if (!juce::isPositiveAndBelow(track, session.trackCount()))
         return {};
     const auto row = lane(track);
-    const auto indent = trackIndent(track);
-    return juce::Rectangle<float>(indent + cardControlsWidth + cardDividerWidth,
-                                  row.getY() + static_cast<float>(cardControlsTop),
-                                  cardMeterLeft - indent - cardControlsWidth - cardDividerWidth, 18.0f)
-        .toNearestInt().reduced(6, 0);
+    const auto left = disclosureBounds(track).getRight() + disclosureGap;
+    return juce::Rectangle<float>(left, row.getY() + static_cast<float>(cardControlsTop),
+                                  headerWidth - 6.0f - left, 18.0f)
+        .toNearestInt();
 }
 
 bool Arrangement::isRenaming() const

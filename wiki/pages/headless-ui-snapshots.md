@@ -59,7 +59,9 @@ $env:RHINO_SHELL_SNAPSHOT = "<scratch>\shell.png"; $env:RHINO_SHELL_SNAPSHOT_SIZ
 ```
 
 Give an absolute path. The size variable is optional; 960x680 is the smallest window the shell allows.
-`RHINO_STARTUP_SNAPSHOT` does the same for the loading screen. No variable sets the shell's state, so to see it with the
+`RHINO_STARTUP_SNAPSHOT` writes the start-up splash (`StartupScreen`, not the `LoadingScreen` of long commands): since
+2026-10-15 the whole window, title bar or none, rather than the splash component alone, so the PNG is what the user
+sees at start-up ([App shell and control bar](app-shell.md#the-window)). No variable sets the shell's state, so to see it with the
 browser closed, flip the `browserOpen` default in `MainComponent`, build, snapshot and flip it back. That is how the
 Info View heading was caught painting into the control bar.
 

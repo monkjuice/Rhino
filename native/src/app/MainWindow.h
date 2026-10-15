@@ -46,12 +46,18 @@ public:
     bool keyPressed(const juce::KeyPress& key) override;
     void setAppFullScreen(bool shouldBeFullScreen);
 
+    // The start-up screen is a splash rather than a document: while it shows,
+    // the window has no title bar, menus or caption buttons and cannot be
+    // resized.
+    void setTitleBarShown(bool shouldShow);
+
     void setProjectTitle(const juce::String& text) { projectTitle.setText(text, juce::dontSendNotification); }
     void closeButtonPressed() override { juce::JUCEApplication::getInstance()->systemRequestedQuit(); }
 
     std::function<void(juce::Component&)> fileRequested, editRequested, viewRequested, helpRequested;
 
 private:
+    static constexpr int captionHeight = 28;
     TitleMenuButton fileMenu {"File"}, editMenu {"Edit"}, viewMenu {"View"}, helpMenu {"Help"};
     juce::Label projectTitle;
     bool maximisedBeforeFullScreen = false;

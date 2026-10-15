@@ -13,7 +13,7 @@ MainWindow::MainWindow() : DocumentWindow({}, palette::globalBar, allButtons)
     // Native Windows non-client bounds can put the title bar above the
     // display work area when a constrained window is resized/snapped.
     setUsingNativeTitleBar(false);
-    setTitleBarHeight(28);
+    setTitleBarHeight(captionHeight);
     setOpaque(true);
     // On Windows this flag is what decides whether a borderless window
     // gets the native frame styles. Without it JUCE creates a bare
@@ -36,6 +36,17 @@ MainWindow::MainWindow() : DocumentWindow({}, palette::globalBar, allButtons)
     editMenu.onClick = [this] { if (editRequested) editRequested(editMenu); };
     viewMenu.onClick = [this] { if (viewRequested) viewRequested(viewMenu); };
     helpMenu.onClick = [this] { if (helpRequested) helpRequested(helpMenu); };
+}
+
+// None of this recreates the native window: the title bar is Rhino's own, so
+// its height, buttons and resizability are only layout.
+void MainWindow::setTitleBarShown(bool shouldShow)
+{
+    setTitleBarHeight(shouldShow ? captionHeight : 0);
+    setTitleBarButtonsRequired(shouldShow ? allButtons : 0, false);
+    setResizable(shouldShow, false);
+    for (auto* component : std::initializer_list<juce::Component*>{&fileMenu, &editMenu, &viewMenu, &helpMenu, &projectTitle})
+        component->setVisible(shouldShow);
 }
 
 // Rhino keeps its title bar in full screen, where JUCE's kiosk mode

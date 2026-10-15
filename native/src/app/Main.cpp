@@ -40,10 +40,13 @@ public:
             projectToOpen = requestedProject;
         juce::LookAndFeel::setDefaultLookAndFeel(&theme);
         window = std::make_unique<MainWindow>();
+        // The splash keeps the size it had under the title bar, 320 less the
+        // bar's 28, so its layout is unchanged.
+        window->setTitleBarShown(false);
         loading = new StartupScreen();
-        loading->setSize(560, 320);
+        loading->setSize(560, 292);
         window->setContentOwned(loading.getComponent(), true);
-        window->centreWithSize(560, 320);
+        window->centreWithSize(560, 292);
         window->setVisible(!startupTest);
 
         // RHINO_RENDERER=software selects JUCE's rasteriser. It keeps one
@@ -65,7 +68,7 @@ public:
         }
         const auto screenshot = juce::SystemStats::getEnvironmentVariable("RHINO_STARTUP_SNAPSHOT", {});
         if (startupTest && screenshot.isNotEmpty())
-            writeSnapshot(*loading, juce::File(screenshot));
+            writeSnapshot(*window, juce::File(screenshot));
         // Let the window become visible before constructing the engine. Engine
         // initialization requires the message thread; yield between its phases.
         startTimer(40);
@@ -115,6 +118,7 @@ private:
             else
             {
                 window->setContentOwned(new MainComponent(*session), true);
+                window->setTitleBarShown(true);
                 window->setResizeLimits(960, 680, 2400, 1600);
                 window->centreWithSize(1120, 760);
                 if (auto* controls = dynamic_cast<MainComponent*>(window->getContentComponent()))
@@ -188,7 +192,14 @@ private:
         catch (const std::exception& error)
         {
             setApplicationReturnValue(1);
-            if (loading) loading->showError(error.what());
+            if (loading)
+            {
+                loading->showError(error.what());
+                // The error stays up until it is closed, so the close button
+                // comes back, and the screen grows by the bar it gains.
+                window->setTitleBarShown(true);
+                window->centreWithSize(560, 320);
+            }
             std::fprintf(stderr, "Rhino startup failed: %s\n", error.what());
             if (startupTest) quit();
         }

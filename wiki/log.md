@@ -824,3 +824,8 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/writing-rhino-tests.md (rule 8: never spell a lane's x in pixels; the hard-coded drag that the wider header broke)
 - updated: pages/session-model.md (a row's fold is a view setting with no undo and `ModelChange::none`)
 - updated: pages/headless-ui-snapshots.md (the meters snapshot folds one row)
+
+## [2026-10-15] update | The start-up splash shows no title bar
+- source: the change's brief, checked against native/src/app/Main.cpp and MainWindow.h/.cpp (`setTitleBarShown`, `captionHeight`)
+- updated: pages/app-shell.md (The window: `setTitleBarShown`, the 560 x 292 splash and why, the bar back at stage 2 and on a failed start; the owned-window gotcha now names `setTitleBarShown` as layout only)
+- updated: pages/headless-ui-snapshots.md (`RHINO_STARTUP_SNAPSHOT` writes the whole window, and names the splash rather than "the loading screen")

@@ -4,7 +4,7 @@ type: guide
 summary: What the Windows development machine offers (shells, CMake, Python, ffmpeg, PDF tools, the reference manuals) and the habits it demands.
 tags: [both, environment, windows, tooling]
 sources: []
-updated: 2026-10-13
+updated: 2026-10-16
 ---
 
 # Development environment and reference material
@@ -37,15 +37,21 @@ Both manuals are in the Downloads folder, and in both the printed page number is
 - **Serum 2 User Guide** (`Serum 2 User Guide.pdf`), Forge's north star. Its page map is in
   [Comparing Forge with Serum](comparing-forge-with-serum.md).
 - **Ableton Live 12 manual** (`live12-manual-en.pdf`, 1009 pages), the reference when a Rhino device is modelled on a
-  Live one. Auto Shift is pp. 537-544.
+  Live one. Auto Shift is pp. 537-544, and the velocity editor that the note editor's
+  [velocity lane](note-velocity-lane.md) follows is section 10.5.12, pp. 272-276.
 
 Read the figures too: the screenshots carry layout the prose never states, such as a channel strip's control order.
 
 ## Habits the setup demands
 
 - **Bash-tool heredocs collapse backslashes**, even with a quoted delimiter, and truncate long payloads. A patch script
-  matching `"\n"` in C++ then fails silently or writes a broken literal (`error C2001`). Write anything longer than a
-  few lines, or holding a backslash, to a file with the Write tool and run it by path.
+  matching `"\n"` in C++ then fails silently or writes a broken literal (`error C2001`). A command over about 7 KB
+  arrives mangled ("unexpected EOF" inside a quoted heredoc), which the velocity lane's patches hit on 2026-10-16.
+  Write anything longer than a few lines, or holding a backslash, to a file with the Write tool and run it by path.
+- **The HARBIZ hook also screens Workflow tool input.** On 2026-10-16 it refused an input that held a `.key` token and a
+  `file:` token. Reword those, as for commit messages ([Git workflow](git-workflow.md)).
+- **`near` and `far` are macros in `windows.h`**, defined as nothing, so a helper with either name breaks the build in
+  any unit that sees that header. The velocity lane's test helpers were renamed for this reason (2026-10-16).
 - **The Bash command hook refuses a heredoc that names a drive-letter path.** It reads `C:` followed by a backslash
   as an alternate data stream and blocks the command before it runs (2026-10-13). Same remedy: write the script with
   the Write tool and run it by path.

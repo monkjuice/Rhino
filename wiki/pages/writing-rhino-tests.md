@@ -4,7 +4,7 @@ type: guide
 summary: Choose between a unit check and a workflow scenario, follow the rules that keep scenarios sharing one Session honest, and time the interface with --profile-ui.
 tags: [rhino, testing, conventions]
 sources: []
-updated: 2026-10-15
+updated: 2026-10-16
 ---
 
 # Writing Rhino tests
@@ -14,7 +14,8 @@ Rhino's tests are compiled into the app and selected by flag ([Build and test Rh
 
 - **Unit-style checks**, for whatever needs no `Session`, render, desktop peer or pointer sequence. Geometry over pure
   headers such as `model/ClipGeometry.h` goes in `tests/Arrangement/ClipGeometryTest.cpp` (`--arrangement-geometry-test`, no
-  audio device). DSP lives in `src/core/dsp` as a plain class driven from `--self-test` (`SelfTest.cpp`, `AutoTuneTest.cpp`,
+  audio device). That runner also calls the checks other headers keep in files of their own, such as
+  `tests/VelocityLaneTest.*` for `ui/notes/VelocityLaneGeometry.h` (2026-10-16; [Note editor velocity lane](note-velocity-lane.md)). DSP lives in `src/core/dsp` as a plain class driven from `--self-test` (`SelfTest.cpp`, `AutoTuneTest.cpp`,
   `EqTest.cpp`, `VocoderTest.cpp`, `FmTest.cpp`, `DrumRackTest.cpp`). Every device Rhino makes is also rendered by
   `--device-test` (`DeviceConformance.cpp`) against [the native device standard](native-device-standard.md); a new
   device gets those checks without writing any. A device that is silent at its defaults, as a blank
@@ -51,6 +52,10 @@ every scenario of `DjLiveChain.inc`).
    the week of 2026-10-05 a scenario that added two panels did the same. `RhinoDAW.exe` now reserves 8 MB on Windows
    (commit `3f6bb4e`), but declare a `StepGrid`, an `Arrangement`, a `Session` or anything that size with
    `std::make_unique` all the same ([A CTest SegFault may be a stack overflow](stack-overflow-reports-as-segfault.md)).
+   Declare a listener that a panel's teardown can reach, such as a change counter on the session, before the panel.
+   Locals are destroyed in reverse order, and when a `require` fails mid-drag, the `StepGrid` destructor ends the
+   drag's gesture, which announces the change. A counter declared after the grid is already gone by then. The
+   velocity-lane scenarios were fixed for this on 2026-10-16.
 3. **Re-fetch clips by id.** A raw `te::Clip*` does not survive an undo, a cross-track move or a project restore; one
    cached across scenarios was the "intermittent" arrangement segfault. Use `session.findClip` or `findAudioClip`
    ([Hold ids, not pointers](ids-not-pointers.md)).

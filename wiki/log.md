@@ -876,3 +876,28 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/track-groups.md (the bus stands for its group on the clipboard; Delete on a bus card deletes the group, Ungroup alone drops the bus; reconcile after track paste and delete)
 - updated: pages/session-model.md (summary and body: 36 units with `SessionTrackClipboard`)
 - updated: index.md (new page; summaries of region-editing, arrangement-view and session-model)
+
+## [2026-10-16] update | A velocity lane in the note editor, after Live 12's velocity editor (uncommitted; suite still running)
+- source: the change's brief, checked against native/src/ui/notes/VelocityLaneGeometry.h, StepGrid.h, StepGridVelocity.cpp, StepGridEditing.cpp, model/Session.h, SessionNotes.cpp, SessionDjSources.cpp (`gestureHeld`) and app/MainComponentLayout.cpp
+- created: pages/note-velocity-lane.md (files and the pure header; layout above the scrollbar, the 8 px row floor, folding under 32 px, the divider; MIDI 1-127 instead of percent; absolute `setNoteVelocities` and group drags from the press values; the gesture bracket; no `restartPlayback`; marker gestures, draw-mode strokes held to the visible steps; dimmed out-of-window markers, whole-pixel drawing; what is not done yet)
+- updated: pages/note-editor.md (summary; seven units; hold V in MIDI steps, Ctrl+Up/Down; a note dragged below the rows; a Velocity lane section; the shared gesture timer and the `setSelectedStates` repaint as pitfalls)
+- updated: pages/pointer-and-selection.md (the lane's markers follow the shared rules; 3 px arming; right button and double-click inert; time-only autoscroll)
+- updated: pages/ui-cost-of-a-change.md (the note-velocity gesture bracket; `gestureHeld` counts it; the two new `--profile-ui` timings)
+- updated: pages/dj-view.md (`gestureHeld` list includes the note-velocity gesture)
+- updated: pages/app-shell.md (the pane first opens at a fifth of the window, and the note editor's first appearance raises it to `StepGrid::openingHeight`, 261 px)
+- updated: pages/colours-and-typography.md (the note editor's and the lane's palette tokens)
+- updated: pages/writing-rhino-tests.md (the geometry runner calls `tests/VelocityLaneTest.*`)
+- updated: pages/keeping-files-small.md (`VelocityLaneGeometry.h` as a pure header; `StepGrid.cpp` 679 and `StepGridGestures.cpp` 727 lines, past the line)
+- updated: pages/development-environment.md (the Live manual's velocity editor pages; Bash commands mangled past about 7 KB; the HARBIZ hook refusing `.key` and `file:` in Workflow input; `near` and `far` macros from `windows.h`)
+- updated: index.md (new page; note-editor summary)
+
+## [2026-10-16] update | Velocity lane follow-up: suite passing, the review's fixes, and a JUCE key-code gotcha
+- source: the coordinator's follow-up brief, checked against native/src/ui/notes/StepGrid.cpp (`keyPressed`), StepGridVelocityGestures.cpp, StepGridVelocity.cpp, StepGridEditing.cpp (`laneNoteFor` callers), app/MainComponent.cpp and MainComponentLayout.cpp (`paneHeightDragged`)
+- updated: pages/note-velocity-lane.md (status: all six CTest cases pass twice, the user has not tried it; the three units split from 807 lines and the scenario names; `zoomAt` and `rebuildVisibleNotes` against the scrollbar folding the lane; the raise skips a dragged pane; a click is a press that never armed; a new section on holding the bracket safely: a second press ends the held gesture, keys consumed while it is held, stroke alignment and its O(N²) tick, hover after markers move)
+- created: pages/juce-keypress-codes-not-constexpr.md (named `juce::KeyPress` codes are `static const int` defined in a .cpp, so no `static constexpr` array; a local `const int` array instead)
+- updated: pages/note-editor.md (copy, cut and `effectiveStepRegion` read every selected note through `laneNoteFor`, after cut lost an out-of-window note from the clipboard; `mouseUp` keeps the timer for hold-V and subdivision; `setSelectedStates` repaints the insert line's column)
+- updated: pages/app-shell.md (the opening raise applies only while `paneHeightDragged` is false)
+- updated: pages/ui-cost-of-a-change.md (a second press could strand the velocity bracket; `StepGrid::mouseDown` ends a held gesture first)
+- updated: pages/pointer-and-selection.md (a lane click is a press that never armed; a second press ends the held lane gesture)
+- updated: pages/writing-rhino-tests.md (declare a listener a panel's teardown reaches before the panel)
+- updated: index.md (new gotcha page)

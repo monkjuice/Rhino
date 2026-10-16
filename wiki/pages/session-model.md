@@ -1,10 +1,10 @@
 ---
 title: Session, the model
 type: component
-summary: The message-thread facade over one Tracktion engine and edit, one class split across 35 files, where every rule and refusal lives.
+summary: The message-thread facade over one Tracktion engine and edit, one class split across 36 files, where every rule and refusal lives.
 tags: [rhino, model, tracktion, undo]
 sources: []
-updated: 2026-10-15
+updated: 2026-10-16
 ---
 
 # Session, the model
@@ -13,11 +13,11 @@ updated: 2026-10-15
 
 ## One class, many files
 
-`Session` is one class defined across 35 translation units, all in `native/src/model/` (the `src/model/Session*.cpp` lines under `# Session` in `native/CMakeLists.txt`, as of 2026-10-15; [The source tree mirrors the layers](source-tree-mirrors-the-layers.md)), split by caller as [Keeping files small](keeping-files-small.md) describes:
+`Session` is one class defined across 36 translation units, all in `native/src/model/` (the `src/model/Session*.cpp` lines under `# Session` in `native/CMakeLists.txt`, as of 2026-10-16; [The source tree mirrors the layers](source-tree-mirrors-the-layers.md)), split by caller as [Keeping files small](keeping-files-small.md) describes:
 
 - `Session.cpp`: construction, the starter edit, `restoreProject`, `projectSnapshot`, undo and redo.
 - Notes and patterns: `SessionNotes`, `SessionPatternPresets`, `SessionPatches`.
-- Tracks and mixing: `SessionTracks`, `SessionGroups`, `SessionMixer`, `SessionMeters` (`takeOutputLevels`, what the card meters read; [Track level meters](level-meters.md)), `SessionAutomation`, `SessionTransport`.
+- Tracks and mixing: `SessionTracks`, `SessionTrackClipboard` (copying, pasting, duplicating and removing whole tracks; [Track clipboard](track-clipboard.md)), `SessionGroups`, `SessionMixer`, `SessionMeters` (`takeOutputLevels`, what the card meters read; [Track level meters](level-meters.md)), `SessionAutomation`, `SessionTransport`.
 - Devices: `SessionDevices`, `SessionDevicePresets`, `SessionDrums` (the [Drum Rack](drum-rack.md)'s kits, pads, banks, slices and drops), `SessionSidechain`, `SessionExternalPlugins`, `SessionDeviceMacros` (the rack's curated knobs, 4OSC only; `DeviceMacros.cpp` until 2026-10-13), `SessionMappedParameters` (an external plugin's chosen knobs and mapping more from its window; [Mapped parameters](mapped-parameters.md)).
 - Clips: `SessionClips`, `SessionRegion`, `SessionAudioClips`, `SessionWarp`, `SessionMerge`, `SessionBounce` ([Bounce to New Track](bounce-to-new-track.md)), `SessionExport` (Export WAV, stepped like the bounce; [Project files](project-files.md#wav-export)), `SessionSamples`, `SessionSlots`.
 - Input and audition: `SessionRecording`, `SessionMidiInput`, `SessionAudioInput`, `SessionPreview`, `SessionControllers` (the ports a controller Rhino drives itself reserves, the Push's own input, `sendControllerMidi` and the controller's per-machine settings; [Ableton Push 1](ableton-push.md)), `SessionKeyboards` (a keyboard port's velocity curve, the port Rhino reads to apply it and its stand-in device; [Keyboard velocity curves](keyboard-velocity-curves.md)).

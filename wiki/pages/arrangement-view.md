@@ -1,15 +1,15 @@
 ---
 title: Arrangement view
 type: component
-summary: The timeline UI, one class across twelve files, that previews every drag locally and leaves panel decisions to the shell.
+summary: The timeline UI, one class across thirteen files, that previews every drag locally and leaves panel decisions to the shell.
 tags: [rhino, ui, arrangement]
 sources: []
-updated: 2026-10-15
+updated: 2026-10-16
 ---
 
 # Arrangement view
 
-`Arrangement` is the timeline: track cards on the left, clip lanes on the right, the pinned [main track](main-track.md) row and the time ruler at the foot. It is one class defined across twelve translation units (as of 2026-10-14), all in `native/src/ui/arrangement/` since 2026-10-13 with `ArrangementGrid.h` and `MonitorSelector.*` beside them ([The source tree mirrors the layers](source-tree-mirrors-the-layers.md)): `Arrangement.cpp` (keys, zoom, split, playhead), `ArrangementGeometry.cpp` (lanes, time to x, snapping, hit zones), `ArrangementPainter.cpp`, `ArrangementSync.cpp` (rebuilding views and card controls from the edit), `ArrangementGestures.cpp` (pointer, card drags, menus, autoscroll, middle-drag pan), `ArrangementSelection.cpp` (region and clipboard), `ArrangementAutomation.cpp` and `ArrangementAutomationPaint.cpp`, `ArrangementGroups.cpp`, `ArrangementRename.cpp`, `ArrangementDrops.cpp` and `ArrangementBounce.cpp` (Ctrl+B, [Bounce to New Track](bounce-to-new-track.md)). Shared helpers are in `ArrangementInternal.h`; the clip-edit arithmetic is the pure header `model/ClipGeometry.h`, unit-tested without a `Session`.
+`Arrangement` is the timeline: track cards on the left, clip lanes on the right, the pinned [main track](main-track.md) row and the time ruler at the foot. It is one class defined across thirteen translation units (as of 2026-10-16), all in `native/src/ui/arrangement/` since 2026-10-13 with `ArrangementGrid.h` and `MonitorSelector.*` beside them ([The source tree mirrors the layers](source-tree-mirrors-the-layers.md)): `Arrangement.cpp` (keys, zoom, split, playhead), `ArrangementGeometry.cpp` (lanes, time to x, snapping, hit zones), `ArrangementPainter.cpp`, `ArrangementSync.cpp` (rebuilding views and card controls from the edit), `ArrangementGestures.cpp` (pointer, card drags, menus, autoscroll, middle-drag pan), `ArrangementSelection.cpp` (region and clipboard), `ArrangementTrackClipboard.cpp` (the clipboard commands on whole cards, [Track clipboard](track-clipboard.md)), `ArrangementAutomation.cpp` and `ArrangementAutomationPaint.cpp`, `ArrangementGroups.cpp`, `ArrangementRename.cpp`, `ArrangementDrops.cpp` and `ArrangementBounce.cpp` (Ctrl+B, [Bounce to New Track](bounce-to-new-track.md)). Shared helpers are in `ArrangementInternal.h`; the clip-edit arithmetic is the pure header `model/ClipGeometry.h`, unit-tested without a `Session`.
 
 ## How it stays responsive and correct
 
@@ -24,7 +24,7 @@ updated: 2026-10-15
 - **The selection line is where playback starts.** `moveTransportToSelectionStart` always calls `Session::setPlaybackStart`, but moves the transport only while stopped and not counting in.
 - **Two snapping rules.** Clip edges round to the nearest line (`snapped`); a pointer position takes the cell it is inside (`snappedDown`/`snappedUp`). The grid is adaptive by default (`ArrangementGrid.h`).
 - **The bar ruler labels counts too.** Bar numbers step by powers of two bars, 44 px apart (`barLabelStep`, `barNumberMinimumPixels`). Once they are one bar apart, `paintBarNumbers` also labels counts as `bar.count` with short marks between, like Live. A count is the signature's denominator note (`timeSignature().numerator` per bar, so 6/8 reads 1.2 to 1.6 in eighths), not the engine's quarter-note beat (`beatsPerBar()`). Every span comes from one chain in `ArrangementGrid.h`, `finerRulerSpan`, where each span divides the previous: 4/4 runs 4, 2, 1, 1/2, 1/4; 6/8 runs 6, 3, 1; 7/8 runs 7, 1. That chain is what makes every mark land on a division of the labels either side. `rulerLabelSpan` keeps labels 44 px apart and never goes finer than a count. `rulerTickSpan` keeps marks 10 px apart and stops at a quarter count. The ruler ignores the snap grid, and the time ruler's rule (every labelled time sits on a numbered bar) is unchanged. Unit-tested in `tests/Arrangement/ClipGeometryTest.cpp`.
-- **`Focus`** records what the last click selected (clip, track, automation lane, region or nothing), and Delete and Ctrl+B dispatch on it.
+- **`Focus`** records what the last click selected (clip, track, automation lane, region or nothing), and Delete, Ctrl+B, Ctrl+C, Ctrl+X and Ctrl+D dispatch on it: on `Focus::track` they act on every selected card ([Track clipboard](track-clipboard.md)), otherwise on the region. Ctrl+V follows whichever clipboard was filled last.
 - **A muted clip is drawn grey** (since 2026-10-14): `ClipView::muted`, a desaturated body, grey waveform and dim notes in `ArrangementPainter.cpp`. The clip menu's ticked *Mute* (`muteSelected`, `Session::setClipsMuted`) mutes either kind of clip as one undo step; before, a muted audio clip looked like any other and a MIDI clip could not be muted at all.
 - **Autoscroll runs on the frame clock** (`VBlankAttachment`), because a pointer held still past the edge sends no drag events. So do the level meters: each frame runs `autoScrollDrag`, `updateMeters` and `updatePlayhead`, in that order, so the playhead's immediate `UpdateWindow` handoff also collects the meters' damage ([Playhead rendering](playhead.md)).
 - **A card reads meter, controls, name** (commits `14c9c77` and `83135f7`, 2026-10-15). The header is `headerWidth` 272 px: a `LevelMeter` at `cardMeterInset` (9) plus the group indent, 8 px of room, the controls column (`cardControlsWidth` 148, its controls from `cardControlLeft` 24 and 116 px wide), a 4 px divider, and the name column, 120 px on the track's colour. Three buttons and their gaps (3 × 36 + 2 × 4) span exactly the two faders and theirs (2 × 56 + 4), so the buttons sit squarely over the faders. The main row reads meter at x 9, MAIN at 24, volume at 70, pan at 136. `updateMeters` is the single reader of `Session::takeOutputLevels`, skips while the arrangement is hidden, and drops the bars to empty on its return ([Track level meters](level-meters.md)).
@@ -42,6 +42,7 @@ A clip dragged up out of the panel by more than the band where the lanes scroll 
 
 - [Pointer and selection rules](pointer-and-selection.md)
 - [Region editing](region-editing.md)
+- [Track clipboard (cards)](track-clipboard.md)
 - [Clips never overlap](clip-placement.md)
 - [Track automation](automation.md)
 - [Playhead rendering](playhead.md)

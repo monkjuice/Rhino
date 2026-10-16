@@ -867,3 +867,12 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/clip-placement.md (only the copy path made one-sample slivers; `ClipSlivers.inc` pins both)
 - updated: pages/inc-edits-do-not-rebuild.md (the `Copy-Item` restore trap recurred in Rhino on `SessionRegion.cpp`)
 - updated: pages/build-and-test-rhino.md (a bullet on the `Copy-Item` timestamp trap, linking the gotcha)
+
+## [2026-10-16] update | Cut, copy, paste, duplicate and delete on whole track cards (commit 7f546da)
+- source: the change's brief, checked against native/src/model/SessionTrackClipboard.cpp, ui/arrangement/ArrangementTrackClipboard.cpp, Arrangement.h, ArrangementSelection.cpp, ArrangementGestures.cpp (`showTrackMenu`) and native/CMakeLists.txt
+- created: pages/track-clipboard.md (`TrackClipboard` as values after `flushStateToValueTree`; `insertTrackCopies` as `Edit::copyTrack` does, `remapIDs` leaving outside references alone at `4536d8a`; new device keys and lanes, `rhinoArmed` stripped; a bus for its group, new group ids, placement; `removeTracks` and the Delete-on-a-bus change; one clipboard at a time; by-value card lists; selection after paste and delete; what the test leaves out)
+- updated: pages/region-editing.md (summary; the region is the lanes' rule, cards move whole tracks; one clipboard of each, copying empties the other)
+- updated: pages/arrangement-view.md (summary and body: thirteen units with `ArrangementTrackClipboard.cpp`; `Focus` now routes Ctrl+C, X and D too)
+- updated: pages/track-groups.md (the bus stands for its group on the clipboard; Delete on a bus card deletes the group, Ungroup alone drops the bus; reconcile after track paste and delete)
+- updated: pages/session-model.md (summary and body: 36 units with `SessionTrackClipboard`)
+- updated: index.md (new page; summaries of region-editing, arrangement-view and session-model)

@@ -1,15 +1,15 @@
 ---
 title: Region editing
 type: concept
-summary: Copy, cut, paste, duplicate and delete all act on a region, a span of time across a run of tracks, never on a set of clips.
+summary: In the lanes, copy, cut, paste, duplicate and delete act on a region, a span of time across a run of tracks, never on a set of clips; on a focused card they move whole tracks.
 tags: [rhino, arrangement, editing, clipboard]
 sources: []
-updated: 2026-10-15
+updated: 2026-10-16
 ---
 
 # Region editing
 
-In the arrangement the clipboard commands act on a **region**: a span of time across a run of tracks, not a set of clips, as in Live. The UI half is `native/src/ui/arrangement/ArrangementSelection.cpp`; the edit half is `Session::copyClipRegion`, `clearClipRegion` and `pasteClipRegion` in `native/src/model/SessionRegion.cpp`.
+In the arrangement's lanes the clipboard commands act on a **region**: a span of time across a run of tracks, not a set of clips, as in Live. The UI half is `native/src/ui/arrangement/ArrangementSelection.cpp`; the edit half is `Session::copyClipRegion`, `clearClipRegion` and `pasteClipRegion` in `native/src/model/SessionRegion.cpp`. With a card focused, or from the card menu, the same keys copy, paste and delete whole tracks instead ([Track clipboard](track-clipboard.md)). The arrangement holds one clipboard of each kind and copying into either empties the other, so Ctrl+V always puts down what was copied last.
 
 ## Where the region comes from
 
@@ -34,6 +34,7 @@ The clipboard holds values (`Session::ClipSnapshot`): position, offset and `rhin
 ## Related
 
 - [Clips never overlap](clip-placement.md)
+- [Track clipboard (cards)](track-clipboard.md)
 - [Pointer and selection rules](pointer-and-selection.md)
 - [Note editor (StepGrid)](note-editor.md)
 - [Arrangement view](arrangement-view.md)

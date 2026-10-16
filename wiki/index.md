@@ -11,7 +11,7 @@ The catalog of this wiki: every page, grouped by type, one line each (`- [Title]
 
 - [Ableton Push 1](pages/ableton-push.md) — Rhino drives the original Push itself on its User port and keeps all four of its ports from the engine; the pads are translated into a scale or a Drum Rack's bank on the MIDI thread and play like any keyboard, and the buttons and encoders become Rhino's commands, never a track's MIDI.
 - [App shell and control bar](pages/app-shell.md) — The shell under app/ - Application in a Main.cpp of about 200 lines, MainWindow, and MainComponent across six units holding the control bar, the docked browser, the single lower pane, the 30 Hz timer that polls what the engine never broadcasts, and the modal loading screen a long command runs behind.
-- [Arrangement view](pages/arrangement-view.md) — The timeline UI, one class across twelve files, that previews every drag locally and leaves panel decisions to the shell.
+- [Arrangement view](pages/arrangement-view.md) — The timeline UI, one class across thirteen files, that previews every drag locally and leaves panel decisions to the shell.
 - [Audio clip editor](pages/audio-clip-editor.md) — Edits one audio clip's own gain, pan, pitch, fades, mute and reverse as clip properties, with one undo step per knob drag.
 - [Bounce to New Track](pages/bounce-to-new-track.md) — Ctrl+B renders the selected clips, a track or a group to an audio file on a new track directly under its source and mutes the source in the same undo step, by Live 12's rules - a track before its fader, a group after its bus - a slice per frame behind a cancellable loading screen.
 - [Browser and library preview](pages/browser.md) — A six-section library rail, Drums first, whose rows leave only by drag, with samples and drum presets auditioned through a second audio callback.
@@ -56,9 +56,10 @@ The catalog of this wiki: every page, grouped by type, one line each (`- [Title]
 - [Rhino Tune](pages/rhino-tune.md) — Vocal pitch correction with YIN tracking and PSOLA shifting, real reported latency, and correction smoothed on the offset.
 - [Rhino Vocoder and sidechains](pages/rhino-vocoder.md) — A channel vocoder whose carrier arrives as a sidechain from another track, and how Rhino routes a sidechain at all.
 - [Rhino's build targets](pages/rhino-build-targets.md) — Rhino builds as three targets (RhinoCore, RhinoDevices, the app) so that editing a device does not rebuild the app.
-- [Session, the model](pages/session-model.md) — The message-thread facade over one Tracktion engine and edit, one class split across 35 files, where every rule and refusal lives.
+- [Session, the model](pages/session-model.md) — The message-thread facade over one Tracktion engine and edit, one class split across 36 files, where every rule and refusal lives.
 - [Time warp](pages/time-warp.md) — Makes an audio clip follow the song's tempo, with five warp modes over two stretchers, a clip tempo and warp markers.
 - [Track automation](pages/automation.md) — Per-track lanes stored as Rhino's own ValueTree children, naming their device by key rather than slot, and played by the engine from parameter curves the session mirrors after every change.
+- [Track clipboard (cards)](pages/track-clipboard.md) — Cut, copy, paste, duplicate and delete on whole track cards; a copy is the track's own state, pasted with new engine ids and new device keys, a bus standing for its whole group.
 - [Track groups (bus tracks)](pages/track-groups.md) — Ctrl+G gathers tracks under a bus track that their audio feeds; the structure is positional and repaired after every reorder.
 - [Track inputs and monitoring](pages/inputs-and-monitoring.md) — Each track names its own MIDI or audio input and its own Off, Auto or In monitoring, all resolved to engine devices by applyRecordArming.
 - [Track level meters](pages/level-meters.md) — A stereo peak meter on every track card and on the main row, fed once a frame by Session::takeOutputLevels from one engine level meter behind each track's fader and the main output's own measurer, drawn on Ardour's IEC 60268-18 scale and gated on the engine's mute and solo.
@@ -69,7 +70,7 @@ The catalog of this wiki: every page, grouped by type, one line each (`- [Title]
 - [Clips never overlap](pages/clip-placement.md) — The clip that just arrived wins the ground it lands on, and one function, Session::makeRoomForClip, enforces it for every path.
 - [Device chain order](pages/device-chain-order.md) — A track's plugin list is its signal chain - the hidden DJ input, MIDI FX, instrument, audio FX, the hidden DJ output, then a channel strip of Utility, fader and meter whose Utility sits on a different side of the fader on starter and added tracks - so the first visible device is plugin 1; how every add and every drag keeps that order.
 - [Pointer and selection rules](pages/pointer-and-selection.md) — One pointer vocabulary for the arrangement and the note editor, written once as shared predicates in SelectionInput.h.
-- [Region editing](pages/region-editing.md) — Copy, cut, paste, duplicate and delete all act on a region, a span of time across a run of tracks, never on a set of clips.
+- [Region editing](pages/region-editing.md) — In the lanes, copy, cut, paste, duplicate and delete act on a region, a span of time across a run of tracks, never on a set of clips; on a focused card they move whole tracks.
 - [The main track](pages/main-track.md) — The main output row is the edit's master plugin list, addressed as track index trackCount() so track-indexed calls need no sentinel.
 - [Track and clip colours](pages/track-and-clip-colours.md) — Every new track is born with a palette colour; a clip wears its track's colour until C gives it its own rhinoClipColour.
 - [Track kinds: audio and MIDI](pages/track-kinds.md) — Every track is audio or MIDI from creation; one property records it, one call reads it, and the model refuses mismatched content.

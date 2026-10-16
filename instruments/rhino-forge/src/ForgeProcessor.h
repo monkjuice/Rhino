@@ -6,6 +6,7 @@
 #include "../core/ForgeTableStore.h"
 #include "../core/ForgeTableFiles.h"
 #include "../core/ForgeSampleStore.h"
+#include "../ui/ForgeTheme.h"
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <bitset>
 #include <map>
@@ -271,6 +272,20 @@ public:
     // so a test that bound anything would write over the bindings belonging to
     // whoever ran it — which is what this exists to prevent.
     static void setMidiMapFile(const juce::File&);
+    // The machine's own settings — the theme, today — kept beside the MIDI map
+    // and for the same reason: they describe the machine, not the sound, so
+    // neither a preset nor a project carries them. The override exists for the
+    // tests, as the MIDI map's does. See ForgeProcessorSettings.cpp.
+    static void setSettingsFile(const juce::File&);
+    static juce::File settingsFile();
+    static ui::ThemeId readThemeChoice();
+    static void saveThemeChoice(ui::ThemeId);
+    // Reads the chosen theme the first time it is called in the process and
+    // applies it; every later call answers what is applied. createEditor calls
+    // it before the Editor exists, which is the one moment that works: the
+    // Editor's members copy the colour tokens as they are constructed.
+    static ui::ThemeId loadThemeOnce();
+    static void forgetLoadedThemeForTests();
 
 private:
     // Audio thread, inside processBlock. Takes the bound messages out of the

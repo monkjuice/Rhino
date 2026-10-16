@@ -42,7 +42,7 @@ public:
         const auto active = slider.getValue() != slider.getDoubleClickReturnValue();
         const auto horizontal = style == juce::Slider::LinearBar;
 
-        g.setColour(juce::Colour(0xff0b0e18).withAlpha(enabled ? 1.0f : 0.5f));
+        g.setColour(fieldFloor.withAlpha(enabled ? 1.0f : 0.5f));
         g.fillRoundedRectangle(area, 3.0f);
 
         if (horizontal)
@@ -198,7 +198,7 @@ public:
         const auto slot = juce::Rectangle<float>(slotWidth, area.getHeight())
                               .withCentre(area.getCentre());
 
-        g.setColour(juce::Colour(0xff0b0e18).withAlpha(enabled ? 1.0f : 0.5f));
+        g.setColour(fieldFloor.withAlpha(enabled ? 1.0f : 0.5f));
         g.fillRoundedRectangle(slot, 3.0f);
         if (thumbY < slot.getBottom() - 1.0f)
         {
@@ -218,9 +218,9 @@ public:
 
         const auto thumb = juce::Rectangle<float>(area.getWidth(), faderThumbHeight)
                                .withCentre({area.getCentreX(), thumbY});
-        g.setColour(juce::Colour(0xff0b0e18).withAlpha(alpha));
+        g.setColour(fieldFloor.withAlpha(alpha));
         g.fillRoundedRectangle(thumb, 2.0f);
-        g.setColour(juce::Colour(0xff39405c).withAlpha(alpha));
+        g.setColour(faderThumbRim.withAlpha(alpha));
         g.drawRoundedRectangle(thumb.reduced(0.5f), 2.0f, 1.0f);
         g.setColour(accent.withAlpha(alpha));
         g.fillRoundedRectangle(thumb.reduced(2.5f, 2.5f), 1.0f);
@@ -258,7 +258,7 @@ public:
         g.fillEllipse(body.translated(0.0f, 2.0f).expanded(1.6f));
 
         // The collar.
-        g.setColour(juce::Colour(0xff090b11).withAlpha(enabled ? 1.0f : 0.55f));
+        g.setColour(knobCollar.withAlpha(enabled ? 1.0f : 0.55f));
         g.fillEllipse(body.expanded(1.0f));
         juce::ColourGradient collar(plateEdgeLit.withAlpha(enabled ? 0.5f : 0.18f),
                                     body.getCentreX(), body.getY(),
@@ -284,17 +284,17 @@ public:
         // foot — the same bevel a plate has, bent into a circle — with an
         // anodised dome inside it.
         const auto cap = body.reduced(body.getWidth() * 0.5f - radius * 0.52f);
-        juce::ColourGradient rim(juce::Colour(0xff858da1).withAlpha(enabled ? 1.0f : 0.4f),
+        juce::ColourGradient rim(knobRimLit.withAlpha(enabled ? 1.0f : 0.4f),
                                  cap.getCentreX(), cap.getY(),
-                                 juce::Colour(0xff04060c).withAlpha(enabled ? 1.0f : 0.4f),
+                                 knobRimDark.withAlpha(enabled ? 1.0f : 0.4f),
                                  cap.getCentreX(), cap.getBottom(), false);
         g.setGradientFill(rim);
         g.fillEllipse(cap.expanded(juce::jmax(2.2f, radius * 0.1f)));
 
-        juce::ColourGradient dome(juce::Colour(0xff32363f), cap.getX() + cap.getWidth() * 0.28f,
+        juce::ColourGradient dome(knobDomeLit, cap.getX() + cap.getWidth() * 0.28f,
                                   cap.getY() + cap.getHeight() * 0.18f,
-                                  juce::Colour(0xff0a0c10), cap.getRight(), cap.getBottom(), true);
-        dome.addColour(0.55, juce::Colour(0xff171a21));
+                                  knobDomeDark, cap.getRight(), cap.getBottom(), true);
+        dome.addColour(0.55, knobDomeMid);
         g.setGradientFill(dome);
         g.fillEllipse(cap);
 

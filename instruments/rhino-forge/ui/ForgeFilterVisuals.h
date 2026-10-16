@@ -239,7 +239,7 @@ inline void drawFilterResponse(juce::Graphics& g, juce::Rectangle<int> area,
     // it: the well now holds the selector and the routing strip as well, and
     // without a frame the response reads as floating between them rather than
     // as the thing they are attached to.
-    g.setColour(juce::Colour(0xff070a12).withAlpha(0.55f * alpha));
+    g.setColour(shadeFloor.withAlpha(0.55f * alpha));
     g.fillRect(plot);
     g.setColour(line.withAlpha(0.45f * alpha));
     g.drawRect(plot, 1);

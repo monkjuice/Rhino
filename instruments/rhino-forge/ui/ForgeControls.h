@@ -282,7 +282,7 @@ public:
             g.setColour(accent.withAlpha(0.22f));
             g.fillEllipse(area.expanded(3.5f));
         }
-        g.setColour(on ? accent : juce::Colour(0xff232838));
+        g.setColour(on ? accent : lampOff);
         g.fillEllipse(area);
         g.setColour(on ? juce::Colours::white.withAlpha(0.5f)
                        : mutedText.withAlpha(highlighted ? 0.85f : 0.45f));
@@ -326,7 +326,7 @@ public:
     void paint(juce::Graphics& g) override
     {
         const auto lit = dragging || isMouseOver();
-        const auto fill = lit ? accent.withAlpha(0.3f) : juce::Colour(0xff0d1120);
+        const auto fill = lit ? accent.withAlpha(0.3f) : chipFloor;
         auto textArea = getLocalBounds().toFloat();
 
         if (card)
@@ -380,7 +380,7 @@ public:
         // A dark bezel with a thin rim that picks up both accents, the way the
         // panel's own frame does. The rim is a stroke, not a fill: filled, it
         // reads as a pale outline rather than an edge catching the light.
-        g.setColour(juce::Colour(0xff0a0c14));
+        g.setColour(switchBezel);
         g.fillRoundedRectangle(bezel, radius);
         juce::ColourGradient rim(signalViolet.withAlpha(alpha * (highlighted ? 1.0f : 0.8f)),
                                  bezel.getX(), bezel.getY(),
@@ -390,7 +390,7 @@ public:
         g.drawRoundedRectangle(bezel.reduced(0.7f), radius, 1.4f);
 
         const auto well = bezel.reduced(bezel.getWidth() * 0.13f);
-        g.setColour(juce::Colour(0xff05070e));
+        g.setColour(wellFloor);
         g.fillRoundedRectangle(well, radius * 0.7f);
 
         const auto body = well.reduced(well.getWidth() * 0.08f);
@@ -408,17 +408,17 @@ public:
         // narrower than the face pointing at you.
         const auto sunken = (on ? top : bottom).reduced(body.getWidth() * 0.07f, 0.0f);
 
-        juce::ColourGradient shade(juce::Colour(0xff161a26), sunken.getX(), sunken.getY(),
-                                   juce::Colour(0xff070a12), sunken.getX(), sunken.getBottom(), false);
+        juce::ColourGradient shade(switchShadeTop, sunken.getX(), sunken.getY(),
+                                   shadeFloor, sunken.getX(), sunken.getBottom(), false);
         g.setGradientFill(shade);
         g.fillRoundedRectangle(sunken, radius * 0.4f);
 
         // Light falls from above, so the raised face is brightest at whichever
         // edge is tipped towards it.
-        juce::ColourGradient metal(juce::Colour(0xffb4bccf).withAlpha(alpha), raised.getX(), raised.getY(),
-                                   juce::Colour(0xff4e5568).withAlpha(alpha), raised.getX(), raised.getBottom(), false);
-        if (!on) metal = juce::ColourGradient(juce::Colour(0xff98a0b4).withAlpha(alpha), raised.getX(), raised.getY(),
-                                              juce::Colour(0xff6a7186).withAlpha(alpha), raised.getX(), raised.getBottom(), false);
+        juce::ColourGradient metal(switchMetalLit.withAlpha(alpha), raised.getX(), raised.getY(),
+                                   switchMetalDark.withAlpha(alpha), raised.getX(), raised.getBottom(), false);
+        if (!on) metal = juce::ColourGradient(switchOffLit.withAlpha(alpha), raised.getX(), raised.getY(),
+                                              switchOffDark.withAlpha(alpha), raised.getX(), raised.getBottom(), false);
         g.setGradientFill(metal);
         g.fillRoundedRectangle(raised, radius * 0.5f);
 
@@ -442,7 +442,7 @@ public:
         }
         else
         {
-            g.setColour(juce::Colour(0xff2b3044).withAlpha(alpha));
+            g.setColour(switchSlot.withAlpha(alpha));
         }
         g.fillRoundedRectangle(bar, barWidth * 0.5f);
     }
@@ -463,7 +463,7 @@ public:
         const auto area = getLocalBounds().toFloat().reduced(1.0f);
         const auto on = getToggleState();
         const auto enabled = isEnabled();
-        const auto fill = on ? accent.withAlpha(enabled ? 0.24f : 0.08f) : juce::Colour(0xff0b0e18);
+        const auto fill = on ? accent.withAlpha(enabled ? 0.24f : 0.08f) : fieldFloor;
         g.setColour(fill);
         g.fillRoundedRectangle(area, 3.0f);
         g.setColour((on ? accent : line).withAlpha(enabled ? (highlighted ? 1.0f : 0.85f) : 0.3f));
@@ -502,7 +502,7 @@ public:
         const auto area = getLocalBounds().toFloat().reduced(0.6f, 0.0f);
         const auto on = getToggleState();
         const auto outline = cardOutline(area);
-        g.setColour(on ? accent.withAlpha(0.26f) : juce::Colour(0xff0b0e18));
+        g.setColour(on ? accent.withAlpha(0.26f) : fieldFloor);
         g.fillPath(outline);
         g.setColour((on ? accent : line).withAlpha(highlighted ? 1.0f : 0.8f));
         g.strokePath(outline, juce::PathStrokeType(1.0f));
@@ -557,7 +557,7 @@ public:
     void paint(juce::Graphics& g) override
     {
         const auto area = getLocalBounds().toFloat().reduced(1.0f);
-        g.setColour(juce::Colour(0xf205070e));
+        g.setColour(wellFloor.withAlpha((juce::uint8) 0xf2));
         g.fillRoundedRectangle(area, 5.0f);
         g.setColour(accent.withAlpha(0.85f));
         g.drawRoundedRectangle(area, 5.0f, 1.0f);
@@ -583,8 +583,8 @@ public:
     void paintButton(juce::Graphics& g, bool highlighted, bool down) override
     {
         const auto box = getLocalBounds().toFloat().reduced(0.7f);
-        drawWell(g, box, juce::Colour(down ? 0xff151c26 : 0xff070b10), 1.0f, 2);
-        g.setColour((highlighted ? electricBlue : juce::Colour(0xff657389)).withAlpha(0.85f));
+        drawWell(g, box, (down ? buttonWellDown : buttonWellFloor), 1.0f, 2);
+        g.setColour((highlighted ? electricBlue : presetOutline).withAlpha(0.85f));
         g.strokePath(chamferedPath(box, 2), juce::PathStrokeType(0.8f));
         g.setColour(rhino::forge::ui::text.withAlpha(0.85f));
         g.setFont(panelFont(Face::emphasis, 14));
@@ -605,8 +605,8 @@ public:
         const auto area = getLocalBounds().toFloat().reduced(0.5f);
         const auto on = getToggleState();
 
-        g.setGradientFill(juce::ColourGradient(on ? juce::Colour(0xff163554) : juce::Colour(0xff0c131b),
-                                               area.getX(), area.getY(), juce::Colour(0xff04080d),
+        g.setGradientFill(juce::ColourGradient(on ? tabOnTop : tabOffTop,
+                                               area.getX(), area.getY(), tabFoot,
                                                area.getX(), area.getBottom(), false));
         g.fillRoundedRectangle(area, 2.0f);
         g.setColour((on ? accent : line).withAlpha(on ? 1.0f : (highlighted ? 0.9f : 0.6f)));
@@ -657,7 +657,7 @@ inline void drawTableRow(juce::Graphics& g, juce::Rectangle<int> row, juce::Rect
 {
     if (number % 2 == 0)
     {
-        g.setColour(juce::Colour(0xff0d1120).withAlpha(0.55f));
+        g.setColour(chipFloor.withAlpha(0.55f));
         g.fillRoundedRectangle(row.toFloat()
                                    .withLeft(static_cast<float>(gutter.getX()))
                                    .reduced(0.0f, 2.0f), 3.0f);
@@ -719,7 +719,7 @@ public:
             const auto live = i == chosen;
             const auto lit = enabled && i == hovered;
             g.setColour(live ? accent.withAlpha(alpha * 0.20f)
-                             : juce::Colour(0xff0b0e18).withAlpha(alpha));
+                             : fieldFloor.withAlpha(alpha));
             g.fillRoundedRectangle(cell, 3.0f);
             g.setColour((live ? accent : line).withAlpha(alpha * (live ? 1.0f : lit ? 0.9f : 0.6f)));
             g.drawRoundedRectangle(cell, 3.0f, 1.0f);

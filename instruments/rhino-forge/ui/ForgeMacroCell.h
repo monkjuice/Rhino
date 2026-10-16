@@ -69,7 +69,7 @@ public:
         // stand in one narrow column beside the knobs they belong to, and at
         // the tag's own weight the column read as eight blue boxes with knobs
         // between them rather than as eight macros.
-        g.setColour(lit ? accent.withAlpha(0.3f) : juce::Colour(0xff0a0d18));
+        g.setColour(lit ? accent.withAlpha(0.3f) : macroCellFloor);
         g.fillRoundedRectangle(area, 3.0f);
         g.setColour(lit ? accent : line.withAlpha(0.9f));
         g.drawRoundedRectangle(area, 3.0f, 1.0f);
@@ -119,7 +119,7 @@ public:
         setColour(juce::Label::textColourId, mutedText);
         setColour(juce::Label::backgroundColourId, juce::Colours::transparentBlack);
         setColour(juce::Label::outlineWhenEditingColourId, electricBlue);
-        setColour(juce::Label::backgroundWhenEditingColourId, juce::Colour(0xff05070e));
+        setColour(juce::Label::backgroundWhenEditingColourId, wellFloor);
         setColour(juce::Label::textWhenEditingColourId, text);
         setFont(panelFont(Face::label, nameSize));
         setRepaintsOnMouseActivity(true);

@@ -615,5 +615,9 @@ private:
     void choosePresetToLoad();
     void choosePresetToSave();
     void showPresetResult(const juce::Result&, const juce::File&);
+    // The theme menu, and the stretch of the title plate that opens it. The
+    // choice is saved for the next start, not applied; see ForgeEditorTheme.cpp.
+    void showThemeMenu();
+    bool onThemePlate(juce::Point<int>) const;
 };
 }

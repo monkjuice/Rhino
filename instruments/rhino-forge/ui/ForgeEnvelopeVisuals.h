@@ -254,7 +254,7 @@ inline juce::Rectangle<int> envelopeZoomOut(juce::Rectangle<int> display)
 inline void drawEnvelopeZoom(juce::Graphics& g, juce::Rectangle<int> display, int zoom, float alpha)
 {
     const auto strip = envelopeZoomStrip(display);
-    g.setColour(juce::Colour(0xff0b0e18));
+    g.setColour(fieldFloor);
     g.fillRoundedRectangle(strip.toFloat(), displayCorner);
     g.setColour(line.withAlpha(0.6f));
     g.drawRoundedRectangle(strip.toFloat(), displayCorner, 1.0f);
@@ -664,7 +664,7 @@ inline void drawLfo(juce::Graphics& g, juce::Rectangle<int> area, const LfoPictu
             {
                 const auto handle = shown.curveHandle(i);
                 const auto centre = lfoPlotPosition(plotArea, handle.x, handle.y);
-                g.setColour(juce::Colour(0xff0a0d16).withAlpha(0.9f * alpha));
+                g.setColour(displayFloor.withAlpha(0.9f * alpha));
                 g.fillEllipse(juce::Rectangle<float>(7.0f, 7.0f).withCentre(centre));
                 g.setColour(juce::Colours::white.withAlpha(0.7f * alpha));
                 g.drawEllipse(juce::Rectangle<float>(6.0f, 6.0f).withCentre(centre), 1.4f);
@@ -686,7 +686,7 @@ inline void drawLfo(juce::Graphics& g, juce::Rectangle<int> area, const LfoPictu
     }
 
     const auto footer = lfoFooterBounds(area);
-    g.setColour(juce::Colour(0xff0a0d16));
+    g.setColour(displayFloor);
     g.fillRect(footer);
     g.setColour(colour.withAlpha(0.24f * alpha));
     g.drawHorizontalLine(footer.getY(), static_cast<float>(area.getX()), static_cast<float>(area.getRight()));
@@ -695,7 +695,7 @@ inline void drawLfo(juce::Graphics& g, juce::Rectangle<int> area, const LfoPictu
     // the name and the direction are all this.
     const auto dropdown = [&] (juce::Rectangle<int> field, const juce::String& label, float size)
     {
-        g.setColour(juce::Colour(0xff151925));
+        g.setColour(footerField);
         g.fillRoundedRectangle(field.toFloat(), 3.0f);
         g.setColour(colour.withAlpha(0.28f * alpha));
         g.drawRoundedRectangle(field.toFloat().reduced(0.5f), 3.0f, 1.0f);
@@ -743,7 +743,7 @@ inline void drawLfo(juce::Graphics& g, juce::Rectangle<int> area, const LfoPictu
 
     const auto gridField = [&] (juce::Rectangle<int> field, int count, bool columns)
     {
-        g.setColour(juce::Colour(0xff151925));
+        g.setColour(footerField);
         g.fillRoundedRectangle(field.toFloat(), 3.0f);
         g.setColour(colour.withAlpha(0.28f * alpha));
         g.drawRoundedRectangle(field.toFloat().reduced(0.5f), 3.0f, 1.0f);

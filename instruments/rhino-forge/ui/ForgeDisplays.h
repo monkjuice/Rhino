@@ -136,7 +136,7 @@ inline void drawCrtScreen(juce::Graphics& g, juce::Rectangle<int> well,
         juce::Graphics::ScopedSaveState clip(g);
         g.reduceClipRegion(tube);
 
-        g.setColour(juce::Colour(0xff01030c));
+        g.setColour(tubeFloor);
         g.fillPath(tube);
 
         // The tube's own light, brightest at the middle of the face and falling
@@ -150,7 +150,7 @@ inline void drawCrtScreen(juce::Graphics& g, juce::Rectangle<int> well,
 
         // The face is much wider than it is tall, so the bloom alone leaves the
         // top and bottom lit. Darken them back down for a vignette on all sides.
-        const auto shade = juce::Colour(0xdd000208);
+        const auto shade = tubeVignette.withAlpha((juce::uint8) 0xdd);
         juce::ColourGradient top(shade, cx, face.getY(), juce::Colours::transparentBlack, cx, cy, false);
         g.setGradientFill(top);
         g.fillPath(tube);
@@ -224,7 +224,7 @@ inline juce::Path displayClip(juce::Rectangle<int> area)
 inline void drawDisplayWell(juce::Graphics& g, juce::Rectangle<int> area, bool baseline = true)
 {
     const auto box = area.toFloat();
-    drawWell(g, box, juce::Colour(0xff0a0d16), 1.0f, displayCorner);
+    drawWell(g, box, displayFloor, 1.0f, displayCorner);
     if (!baseline) return;
     g.setColour(line.withAlpha(0.45f));
     g.drawHorizontalLine(area.getCentreY(), box.getX(), box.getRight());
@@ -238,7 +238,7 @@ inline constexpr int spectralWellWall = 1;
 
 inline void drawSpectralWell(juce::Graphics& g, juce::Rectangle<int> well, float alpha)
 {
-    drawWell(g, well.toFloat(), juce::Colour(0xff01030c), alpha, 0.0f, 0);
+    drawWell(g, well.toFloat(), tubeFloor, alpha, 0.0f, 0);
 }
 
 // The oscillator's own table on its tube. The table is handed in rather than

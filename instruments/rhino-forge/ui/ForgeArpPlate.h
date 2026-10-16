@@ -334,7 +334,7 @@ inline void drawArpSlots(juce::Graphics& g, juce::Rectangle<int> componentBounds
     {
         const auto box = arpSlotButtonBounds(componentBounds, slot).toFloat().reduced(0.5f);
         const auto on = slot == chosen;
-        g.setColour(on ? signalViolet.withAlpha(0.14f) : juce::Colour(0xff0b0e18));
+        g.setColour(on ? signalViolet.withAlpha(0.14f) : fieldFloor);
         g.fillRoundedRectangle(box, 3.5f);
         g.setColour(on ? signalViolet.withAlpha(0.6f) : line.withAlpha(0.8f));
         g.drawRoundedRectangle(box, 3.5f, 1.0f);
@@ -378,7 +378,7 @@ inline void drawArpPlateState(juce::Graphics& g, juce::Rectangle<int> componentB
         g.setColour(signalViolet.withAlpha(0.16f));
         g.fillEllipse(led.expanded(3.5f));
     }
-    g.setColour(on ? signalViolet : juce::Colour(0xff232838));
+    g.setColour(on ? signalViolet : lampOff);
     g.fillEllipse(led);
     g.setColour(on ? juce::Colours::white.withAlpha(0.5f) : mutedText.withAlpha(0.45f));
     g.drawEllipse(led, 1.0f);

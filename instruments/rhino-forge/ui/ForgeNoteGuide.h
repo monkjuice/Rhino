@@ -151,7 +151,7 @@ private:
         auto label = area.reduced(1.0f);
         label = black ? label.withTop(label.getBottom() - label.getHeight() * 0.38f)
                       : label.withTop(label.getBottom() - 13.0f);
-        g.setColour((tone == GuideTone::normal ? (black ? juce::Colour(0xff8c92a0) : juce::Colour(0xff555c69))
+        g.setColour((tone == GuideTone::normal ? (black ? keyLabelOnBlack : keyLabelOnWhite)
                                                     : colour).withAlpha(down ? 0.95f : tone == GuideTone::normal ? 0.72f : 0.95f));
         g.setFont(panelFont(Face::label, black ? 8.0f : 9.0f));
         g.drawText(guideSharpNames[static_cast<size_t>(note % 12)], label, juce::Justification::centred);
@@ -166,7 +166,7 @@ public:
     {
         const auto box = getLocalBounds().toFloat().reduced(0.5f);
         const auto alpha = isEnabled() ? 1.0f : 0.35f;
-        g.setColour(juce::Colour(down ? 0xff151c26 : 0xff090d14).withAlpha(alpha));
+        g.setColour((down ? buttonWellDown : guideFieldFloor).withAlpha(alpha));
         g.fillRoundedRectangle(box, 3.0f);
         g.setColour((over ? electricBlue : line).withAlpha(alpha));
         g.drawRoundedRectangle(box, 3.0f, 1.0f);
@@ -188,7 +188,7 @@ public:
     {
         const auto box = getLocalBounds().toFloat().reduced(0.5f);
         const auto enabled = isEnabled(); const auto alpha = enabled ? 1.0f : 0.35f;
-        g.setColour(juce::Colour(0xff090d14).withAlpha(alpha)); g.fillRoundedRectangle(box, 3.0f);
+        g.setColour(guideFieldFloor.withAlpha(alpha)); g.fillRoundedRectangle(box, 3.0f);
         const auto half = box.withWidth(box.getWidth() * 0.5f);
         g.setColour(electricBlue.withAlpha(getToggleState() ? 0.08f : 0.22f));
         g.fillRoundedRectangle(getToggleState() ? box.withX(half.getRight()).withWidth(half.getWidth()) : half, 2.5f);

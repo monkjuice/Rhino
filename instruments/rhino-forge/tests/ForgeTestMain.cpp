@@ -40,6 +40,7 @@ constexpr Area areas[] {
     {"voicing", voicingTests},
     {"arp", arpTests},
     {"midi", midiTests},
+    {"theme", themeTests},
 };
 
 void listAreas(std::ostream& out)
@@ -56,10 +57,18 @@ int main(int argc, char** argv)
     using namespace rhino::forge::tests;
 
     juce::ScopedJuceInitialiser_GUI initialiseJuce;
+    // The suite must render the Forge baseline on a machine whose user picked
+    // Merli, so the settings are read from a scratch file instead of the real
+    // one, and that file is deleted first so nothing an earlier run wrote is
+    // read either. The snapshot tool's own theme argument overrides this.
+    rhino::forge::Processor::setSettingsFile(
+        juce::File::getSpecialLocation(juce::File::tempDirectory)
+            .getChildFile("RhinoForgeTests").getChildFile("Settings.xml"));
+    rhino::forge::Processor::settingsFile().deleteFile();
     const juce::String first = argc > 1 ? argv[1] : "";
 
     // The development tools, which render something rather than check anything.
-    // None is a CTest case; all are documented in README.md.
+    // None is a CTest case; all are documented in wiki/pages/headless-ui-snapshots.md.
     if (first == "--snapshot" && argc > 2) return runSnapshot(argc, argv);
     if (first == "--profile") return runProfile(argc, argv);
     if (first == "--profile-audio") return runProfileAudio(argc, argv);

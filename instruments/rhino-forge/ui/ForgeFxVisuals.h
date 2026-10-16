@@ -310,7 +310,7 @@ public:
         const auto alpha = enabled ? 1.0f : 0.35f;
         if (count() <= 0)
         {
-            g.setColour(juce::Colour(0xff0b0e18).withAlpha(alpha * 0.6f));
+            g.setColour(fieldFloor.withAlpha(alpha * 0.6f));
             g.fillRoundedRectangle(getLocalBounds().toFloat().reduced(1.0f), 3.0f);
             return;
         }
@@ -321,7 +321,7 @@ public:
             {
                 const auto box = segmentBounds(i).toFloat().reduced(1.0f);
                 const auto live = i == chosen;
-                g.setColour((live ? accent.withAlpha(alpha * 0.22f) : juce::Colour(0xff0b0e18))
+                g.setColour((live ? accent.withAlpha(alpha * 0.22f) : fieldFloor)
                                 .withAlpha(live ? alpha * 0.22f : alpha));
                 g.fillRoundedRectangle(box, 3.0f);
                 g.setColour((live ? accent : line).withAlpha(alpha * (live ? 1.0f : 0.7f)));
@@ -334,7 +334,7 @@ public:
         }
 
         const auto area = listBounds().toFloat().reduced(1.0f);
-        g.setColour(juce::Colour(0xff0b0e18).withAlpha(alpha));
+        g.setColour(fieldFloor.withAlpha(alpha));
         g.fillRoundedRectangle(area, 3.0f);
         g.setColour(accent.withAlpha(alpha));
         g.drawRoundedRectangle(area, 3.0f, 1.0f);
@@ -459,7 +459,7 @@ public:
         const auto enabled = isEnabled();
         const auto alpha = enabled ? 1.0f : 0.4f;
 
-        g.setColour(juce::Colour(0xff0b0e18).withAlpha(enabled ? 1.0f : 0.5f));
+        g.setColour(fieldFloor.withAlpha(enabled ? 1.0f : 0.5f));
         g.fillRoundedRectangle(area, 4.0f);
         if (filled)
         {
@@ -498,7 +498,7 @@ inline void drawFxShelf(juce::Graphics& g, juce::Rectangle<int> area, int type, 
     const auto filled = type != 0;
     const auto alpha = on ? 1.0f : 0.4f;
 
-    g.setColour(juce::Colour(0xff0e1220).withAlpha(on ? 1.0f : 0.6f));
+    g.setColour(shelfFloor.withAlpha(on ? 1.0f : 0.6f));
     g.fillRoundedRectangle(box, 4.0f);
     g.setColour(line.withAlpha(alpha * 0.55f));
     g.drawRoundedRectangle(box, 4.0f, 1.0f);
@@ -574,7 +574,7 @@ inline void drawFxAddButton(juce::Graphics& g, juce::Rectangle<int> area, bool o
 {
     const auto box = area.toFloat().reduced(0.5f);
     const auto accent = signalViolet.withAlpha(enabled ? 0.9f : 0.3f);
-    g.setColour(juce::Colour(0xff0d1120));
+    g.setColour(chipFloor);
     g.fillRoundedRectangle(box, 3.0f);
     g.setColour(accent);
     g.drawRoundedRectangle(box, 3.0f, 1.0f);
@@ -595,7 +595,7 @@ inline void drawFxAddButton(juce::Graphics& g, juce::Rectangle<int> area, bool o
 inline void drawFxListViewButton(juce::Graphics& g, juce::Rectangle<int> area, bool open)
 {
     const auto box = area.toFloat().reduced(0.5f);
-    g.setColour(juce::Colour(0xff090c15));
+    g.setColour(rackFloor);
     g.fillRoundedRectangle(box, 3.0f);
     g.setColour(signalViolet.withAlpha(0.75f));
     g.drawRoundedRectangle(box, 3.0f, 1.0f);
@@ -616,7 +616,7 @@ inline void drawFxListViewButton(juce::Graphics& g, juce::Rectangle<int> area, b
 inline void drawFxExpandButton(juce::Graphics& g, juce::Rectangle<int> area, bool expanded)
 {
     const auto box = area.toFloat().reduced(0.5f);
-    g.setColour(expanded ? signalViolet.withAlpha(0.2f) : juce::Colour(0xff090c15));
+    g.setColour(expanded ? signalViolet.withAlpha(0.2f) : rackFloor);
     g.fillRoundedRectangle(box, 3.0f);
     g.setColour(signalViolet.withAlpha(expanded ? 1.0f : 0.75f));
     g.drawRoundedRectangle(box, 3.0f, 1.0f);

@@ -186,6 +186,15 @@ void Editor::mouseDown(const juce::MouseEvent& event)
     if (event.eventComponent == this && !event.mods.isPopupMenu())
     {
         const auto at = event.getEventRelativeTo(this).getPosition();
+        // The title plate is the first of the theme menu's two doors, in either
+        // theme: the one stretch of header that nothing else claims, so a
+        // click there can mean only one thing. (The second door is a
+        // right-click on the bare panel, at the foot of this function.)
+        if (onThemePlate(at))
+        {
+            showThemeMenu();
+            return;
+        }
         // The plate beside the keys, before anything a tab owns: it is on the
         // chassis rather than on a page, and it is reachable from every one of
         // them.
@@ -267,6 +276,11 @@ void Editor::mouseDown(const juce::MouseEvent& event)
                 showControlMenu(control->id);
                 return;
             }
+    // A right-click that reached the panel itself and found nothing with a menu
+    // of its own — the bare chassis, an empty stretch of plate. The theme is
+    // the one setting that belongs to the panel rather than to a control, so
+    // this is where it is offered; the title plate above is the other way in.
+    if (event.eventComponent == this) showThemeMenu();
 }
 
 // The computer keys play Forge wherever the focus happens to be. A key event is

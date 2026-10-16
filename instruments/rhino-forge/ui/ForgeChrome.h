@@ -1,5 +1,10 @@
 #pragma once
 
+// The colours first: every token the material below is drawn with lives in
+// ForgeTheme.h, and Merli's own primitives follow it so a Forge primitive can
+// hand off to its counterpart in one line.
+#include "ForgeTheme.h"
+#include "ForgeMerliMaterial.h"
 #include <algorithm>
 #include <array>
 #include <vector>
@@ -12,41 +17,6 @@
 // paths so their cuts stay sharp when resized; the fasteners use small assets.
 namespace rhino::forge::ui
 {
-inline const auto electricBlue = juce::Colour(0xff45a8ff);
-inline const auto signalViolet = juce::Colour(0xff9a6cff);
-inline const auto text = juce::Colour(0xffe8eaff);
-inline const auto mutedText = juce::Colour(0xff8f95ad);
-// The name of a control: POSITION, CUTOFF, RATE. Its own colour rather than
-// mutedText, which every dimmed or secondary piece of lettering shares — the
-// label on the knob under your hand is primary text, and sampling the reference
-// puts it at RGB (192,213,235), well clear of the legends stamped beside it.
-inline const auto labelText = juce::Colour(0xffc0d5eb);
-
-// --- The material's palette -------------------------------------------------
-//
-// A plate is gunmetal lit from above: the top of its face catches the light,
-// the foot of it falls away. The two edge colours are what turns that face into
-// something raised rather than a rectangle of paint — a lit rim along the top
-// and a black one along the bottom is the whole of the trick.
-//
-// The numbers are measured off the reference rather than chosen, by sampling a
-// column straight down through a plate in both and comparing: its chassis sits
-// at about RGB 3, its face at (17,19,23), and the lit band along its top edge
-// peaks near 100. Two passes were needed. The first had the chassis as light as
-// the plates and every plate disappeared into it, which no amount of bevel
-// could rescue; the second left the face at (26,30,38) — half a stop light and
-// noticeably bluer than the reference's neutral gunmetal — with a rim
-// overshooting at 117.
-inline const auto chassis        = juce::Colour(0xff020304);
-inline const auto chassisLit     = juce::Colour(0xff05060a);
-inline const auto plateFaceTop   = juce::Colour(0xff191b1e);
-inline const auto plateFaceFoot  = juce::Colour(0xff0b0d10);
-inline const auto plateEdgeLit   = juce::Colour(0xff868d9c);
-inline const auto plateEdgeDark  = juce::Colour(0xff020407);
-// Stamped legends: a part number, the markings on a decal.
-// Dimmer than mutedText, because a legend is read once and then ignored.
-inline const auto legendText     = juce::Colour(0xff6c7386);
-
 // The corner cut every plate shares. Machined, not rounded: the panel reads as
 // something assembled out of parts, and a 45 degree corner is what says so.
 inline constexpr float plateCut = 11.0f;
@@ -419,7 +389,7 @@ inline void drawMetalPiece(juce::Graphics& g, const juce::Path& shape, float alp
     g.strokePath(shape, juce::PathStrokeType(5.0f));
     juce::ColourGradient face(plateFaceTop.withAlpha(alpha), box.getX(), box.getY(),
                               plateFaceFoot.withAlpha(alpha), box.getRight(), box.getBottom(), false);
-    face.addColour(0.25, juce::Colour(0xff121518).withAlpha(alpha));
+    face.addColour(0.25, plateFaceMid.withAlpha(alpha));
     g.setGradientFill(face);
     g.fillPath(shape);
     fillGrain(g, shape, grain * alpha);
@@ -443,10 +413,10 @@ inline void drawMetalRail(juce::Graphics& g, juce::Rectangle<float> box, bool re
     const auto x = box.getX(), y = box.getY(), r = box.getRight(), b = box.getBottom();
     auto shape = metalPolygon({{x + 5, y}, {r, y}, {r - 5, b}, {x, b}});
     if (reverse) shape.applyTransform(juce::AffineTransform::verticalFlip(y + b));
-    g.setGradientFill(juce::ColourGradient(juce::Colour(0xff51575f), x, y,
-                                          juce::Colour(0xff16191c), x, b, false));
+    g.setGradientFill(juce::ColourGradient(railLit, x, y,
+                                          railDark, x, b, false));
     g.fillPath(shape);
-    g.setColour(juce::Colour(0xff080a0c));
+    g.setColour(railLine);
     g.strokePath(shape, juce::PathStrokeType(0.8f));
     g.setColour(plateEdgeLit.withAlpha(0.7f));
     g.drawLine(x + 6, y + 0.7f, r - 2, y + 0.7f, 0.7f);

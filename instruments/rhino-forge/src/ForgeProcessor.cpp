@@ -750,7 +750,14 @@ const Modulation& Processor::modulation()
     return blockModulation;
 }
 
-juce::AudioProcessorEditor* Processor::createEditor() { return new Editor(*this); }
+juce::AudioProcessorEditor* Processor::createEditor()
+{
+    // Before the Editor exists, not inside it: its members copy the colour
+    // tokens as they are constructed, so a theme applied any later would reach
+    // the chrome and miss the controls. See ForgeProcessorSettings.cpp.
+    loadThemeOnce();
+    return new Editor(*this);
+}
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()

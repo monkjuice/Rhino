@@ -9,7 +9,6 @@
 namespace rhino::forge::ui
 {
 inline const juce::String unitMark = juce::String::fromUTF8("\xe5\x88\x9d\xe5\x8f\xb7\xe6\xa9\x9f");
-inline const auto markRed = juce::Colour(0xffdf503b);
 
 inline void stamp(juce::Graphics& g, const juce::String& label, juce::Rectangle<float> box,
                   float size = 10.0f, float tracking = 0.8f,
@@ -80,8 +79,8 @@ inline void drawModuleShell(juce::Graphics& g, juce::Rectangle<int> area, const 
         const auto x = box.getX() + 6, y = box.getY() + 7;
         const auto badge = metalPolygon({{x + 3, y}, {x + badgeWidth, y},
                                          {x + badgeWidth - 13, y + 23}, {x, y + 23}, {x, y + 3}});
-        g.setGradientFill(juce::ColourGradient(juce::Colour(0xff22262c), x, y,
-                                              juce::Colour(0xff111417), x, y + 23, false));
+        g.setGradientFill(juce::ColourGradient(badgeTop, x, y,
+                                              badgeFoot, x, y + 23, false));
         g.fillPath(badge);
         g.setColour(plateEdgeLit.withAlpha(0.18f));
         g.drawLine(x + 2, y + 23, x + badgeWidth - 13, y + 23, 0.65f);
@@ -144,22 +143,22 @@ inline void drawIdentityPlate(juce::Graphics& g, juce::Rectangle<int> area)
     drawRivet(g, {r - 7, y + 28}, 2.7f, 0.9f);
 
     // The vertical serial marker is aligned with the three lines of lettering.
-    g.setColour(juce::Colour(0xff444b5a));
+    g.setColour(identityBar);
     g.fillRect(x + 9, y + 14, 7.0f, 45.0f);
-    g.setColour(juce::Colour(0xff717784));
+    g.setColour(identityBarLit);
     g.fillRect(x + 9, y + 14, 1.0f, 45.0f);
     const auto face = juce::Rectangle<float>(x + 29, y + 12, 169, 19);
     g.setFont(panelFont(Face::reading, 15.0f));
-    g.setColour(juce::Colour(0xff9ba5bc));
+    g.setColour(identityTitle);
     drawTrackedText(g, "RHINO FORGE", face, 2.2f, juce::Justification::centredLeft);
-    g.setColour(juce::Colour(0xff68758a));
+    g.setColour(identityRule);
     g.drawLine(face.getX(), face.getBottom() + 1, face.getX() + 130, face.getBottom() + 1, 0.7f);
     stamp(g, "SYNTHESIZER UNIT 01", face.translated(0, 21).withHeight(13), 11, 0.75f);
     stamp(g, "TOKYO-3 AUDIO RESEARCH", face.translated(0, 34).withHeight(13), 10.5f, 0.65f);
     const auto hatchX = x + 185;
     const auto hatchRight = knee + 7;
     if (hatchRight - hatchX > 20)
-        drawHatch(g, {hatchX, y + 40, hatchRight - hatchX, 23}, juce::Colour(0xff545d70), 6.0f, 13.0f);
+        drawHatch(g, {hatchX, y + 40, hatchRight - hatchX, 23}, identityHatch, 6.0f, 13.0f);
 }
 
 inline void drawUnitMark(juce::Graphics& g, juce::Rectangle<int> area)
@@ -189,7 +188,7 @@ inline void drawNoteGuideHousing(juce::Graphics& g, juce::Rectangle<int> compone
     drawEdgeWear(g, plate, 63);
     drawRivet(g, {plate.getRight() - 12, plate.getY() + 7}, 3.4f, 0.9f);
     drawRivet(g, {plate.getX() + 9, plate.getBottom() - 9}, 2.6f, 0.8f);
-    drawWell(g, plate.reduced(6.0f), juce::Colour(0xff05070c), 1.0f, 5);
+    drawWell(g, plate.reduced(6.0f), plateWellFloor, 1.0f, 5);
 }
 
 // The sky behind the notes falling through the ARP plate's well: a faint
@@ -243,7 +242,7 @@ inline void drawArpPlateHousing(juce::Graphics& g, juce::Rectangle<int> componen
     drawEdgeWear(g, plate, 137);
     drawRivet(g, {plate.getRight() - 9, plate.getY() + 9}, 3.2f, 0.9f);
     drawRivet(g, {plate.getX() + 8, plate.getBottom() - 9}, 2.4f, 0.8f);
-    drawWell(g, arpPlateFace(componentBounds).toFloat(), juce::Colour(0xff05070c), 1.0f,
+    drawWell(g, arpPlateFace(componentBounds).toFloat(), plateWellFloor, 1.0f,
              arpPlateFaceCut);
     // The rule between the door and the slot buttons, the same engraved line
     // GLOBAL carries under its knobs.
@@ -268,7 +267,7 @@ inline void drawBackdrop(juce::Graphics& g, juce::Rectangle<int> componentBounds
         g.excludeClipRegion(componentBounds.reduced(24));
         drawMetalPiece(g, frame, 1.0f, 0.018f);
     }
-    drawWell(g, bounds.reduced(9), juce::Colour(0xff050709), 1.0f, 13);
+    drawWell(g, bounds.reduced(9), chassisWellFloor, 1.0f, 13);
     drawMetalRail(g, {22, 3, w * 0.23f, 5});
     drawMetalRail(g, {w * 0.25f, 3, w * 0.49f, 4});
     drawMetalRail(g, {w * 0.78f, 3, w * 0.20f - 15, 5});
@@ -286,7 +285,7 @@ inline void drawBackdrop(juce::Graphics& g, juce::Rectangle<int> componentBounds
 
     const auto tabs = tabBounds(0, componentBounds.getWidth()).getUnion(
         tabBounds(tabCount - 1, componentBounds.getWidth())).toFloat();
-    drawWell(g, tabs.expanded(6, 5), juce::Colour(0xff030609), 1.0f, 6);
+    drawWell(g, tabs.expanded(6, 5), tabWellFloor, 1.0f, 6);
     const auto wordmarkWidth = tabs.getX() - 68;
     // The wordmark is the only thing on this plate now that the tagline under
     // it is gone, so it sits on the plate's own centre line rather than in the
@@ -304,13 +303,13 @@ inline void drawBackdrop(juce::Graphics& g, juce::Rectangle<int> componentBounds
                                     {w * 0.40f, 104}, {w * 0.395f, 100}, {25, 100}}));
     for (const auto side : {7.0f, w - 7.0f})
     {
-        g.setColour(juce::Colour(0xff394047));
+        g.setColour(sideRailLit);
         g.drawLine(side, 109, side, h - 120, 1.0f);
-        g.setColour(juce::Colour(0xff13171d));
+        g.setColour(sideRailDark);
         g.drawLine(side + 2, 114, side + 2, h - 124, 1.0f);
         drawRivet(g, {side, 97}, 2.2f, 1.0f);
     }
-    drawWell(g, keyboardBounds(componentBounds).toFloat().expanded(4, 3), juce::Colour(0xff010203), 1, 4);
+    drawWell(g, keyboardBounds(componentBounds).toFloat().expanded(4, 3), keyboardWellFloor, 1, 4);
     drawDeckPlates(g, componentBounds);
     drawArpPlateHousing(g, componentBounds);
     drawNoteGuideHousing(g, componentBounds);

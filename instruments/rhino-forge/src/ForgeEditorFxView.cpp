@@ -149,7 +149,7 @@ void Editor::paintFxList(juce::Graphics& g, juce::Rectangle<int> area, const ui:
     const auto list = ui::fxListBounds(area, fxListOpen);
     const auto viewport = ui::fxListViewportBounds(area, fxListOpen);
     const auto first = fxListFirstRow();
-    g.setColour(juce::Colour(0xff070a12));
+    g.setColour(ui::shadeFloor);
     g.fillRoundedRectangle(list.toFloat(), 4.0f);
     g.setColour(ui::line.withAlpha(0.7f));
     g.drawRoundedRectangle(list.toFloat(), 4.0f, 1.0f);

@@ -68,11 +68,28 @@ juce_add_plugin(RhinoForge
 # on a scaled display. The typefaces are subsets — see ui/assets/fonts/README.md
 # for what was cut and how to re-cut them; unsubsetted they are 988 KB, and
 # juce_add_binary_data expands an asset to roughly three bytes of C++ per byte.
+#
+# The Merli theme's eleven textures under ui/assets/themes/merli/ are about
+# 565 KB together — the fur tile alone is 241 KB — and so become roughly
+# 1.7 MB of generated C++, rebuilt on every clean build. They are tiles the
+# panel repeats, never whole screens, which is what keeps a second look at the
+# size of one typeface; a twelfth asset should earn its place the same way.
 juce_add_binary_data(RhinoForgeAssets SOURCES
     ui/assets/forge_logo.png
     ui/assets/screw_cross.png
     ui/assets/screw_dome.png
     ui/assets/performance_wheel.png
+    ui/assets/themes/merli/merli_ear_left.png
+    ui/assets/themes/merli/merli_ear_right.png
+    ui/assets/themes/merli/merli_fur.png
+    ui/assets/themes/merli/merli_matte.png
+    ui/assets/themes/merli/merli_panel.png
+    ui/assets/themes/merli/merli_paw.png
+    ui/assets/themes/merli/merli_plate.png
+    ui/assets/themes/merli/merli_screw_large.png
+    ui/assets/themes/merli/merli_screw_small.png
+    ui/assets/themes/merli/merli_title_plate.png
+    ui/assets/themes/merli/merli_whiskers.png
     ui/assets/fonts/ChakraPetchSemiBold.ttf
     ui/assets/fonts/RajdhaniMedium.ttf
     ui/assets/fonts/RajdhaniSemiBold.ttf
@@ -99,6 +116,8 @@ set(forge_sources
     core/ForgeWarp.h
     core/ForgeWavetable.h
     core/ForgeTableFiles.h
+    ui/ForgeTheme.h
+    ui/ForgeMerliMaterial.h
     ui/ForgeChrome.h
     ui/ForgeFxDisplay.h
     ui/ForgeModule.h
@@ -129,6 +148,7 @@ set(forge_sources
     src/ForgeProcessorState.cpp
     src/ForgeProcessorLfo.cpp
     src/ForgeProcessorMidi.cpp
+    src/ForgeProcessorSettings.cpp
     src/ForgeEditor.cpp
     src/ForgeEditor.h
     src/ForgeEditorInternal.h
@@ -148,6 +168,7 @@ set(forge_sources
     src/ForgeEditorSpectral.cpp
     src/ForgeEditorPaint.cpp
     src/ForgeEditorTables.cpp
+    src/ForgeEditorTheme.cpp
     src/ForgeEditorWarp.cpp)
 
 target_sources(RhinoForge PRIVATE ${forge_sources})
@@ -217,7 +238,8 @@ if (BUILD_TESTING)
         table
         voicing
         arp
-        midi)
+        midi
+        theme)
 
     target_sources(RhinoForgeTests PRIVATE
         tests/ForgeTestMain.cpp
@@ -247,6 +269,7 @@ if (BUILD_TESTING)
         tests/ForgeTestsVoicing.cpp
         tests/ForgeTestsArp.cpp
         tests/ForgeTestsMidi.cpp
+        tests/ForgeTestsTheme.cpp
         ${forge_sources})
     forge_use_precompiled_header(RhinoForgeTests)
     target_link_libraries(RhinoForgeTests PRIVATE

@@ -74,9 +74,9 @@ Editor::Editor(Processor& p)
     keyboard.setOctaveForMiddleC(3);
     keyboard.setScrollButtonsVisible(false);
     keyboard.setKeyPressBaseOctave(computerKeyOctave);
-    keyboard.setColour(juce::MidiKeyboardComponent::whiteNoteColourId, juce::Colour(0xffd8dcea));
-    keyboard.setColour(juce::MidiKeyboardComponent::blackNoteColourId, juce::Colour(0xff10131f));
-    keyboard.setColour(juce::MidiKeyboardComponent::keySeparatorLineColourId, juce::Colour(0xff05070e));
+    keyboard.setColour(juce::MidiKeyboardComponent::whiteNoteColourId, ui::keyWhite);
+    keyboard.setColour(juce::MidiKeyboardComponent::blackNoteColourId, ui::keyBlack);
+    keyboard.setColour(juce::MidiKeyboardComponent::keySeparatorLineColourId, ui::wellFloor);
     keyboard.setColour(juce::MidiKeyboardComponent::keyDownOverlayColourId, ui::electricBlue.withAlpha(0.75f));
     keyboard.setColour(juce::MidiKeyboardComponent::mouseOverKeyOverlayColourId, ui::electricBlue.withAlpha(0.3f));
     keyboard.setColour(juce::MidiKeyboardComponent::shadowColourId, juce::Colours::black.withAlpha(0.4f));
@@ -115,7 +115,7 @@ Editor::Editor(Processor& p)
     // The default tooltip is dark text furniture on a dark panel, which leaves
     // the words floating with no edge to read them against. Given the same
     // well-and-hairline treatment the rest of the panel uses.
-    tooltips.setColour(juce::TooltipWindow::backgroundColourId, juce::Colour(0xff05070e));
+    tooltips.setColour(juce::TooltipWindow::backgroundColourId, ui::wellFloor);
     tooltips.setColour(juce::TooltipWindow::textColourId, ui::text);
     tooltips.setColour(juce::TooltipWindow::outlineColourId, ui::electricBlue.withAlpha(0.6f));
 

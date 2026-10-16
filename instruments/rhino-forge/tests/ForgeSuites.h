@@ -70,4 +70,8 @@ void engineTests();
 // at, that SCAN moves the playhead without moving the pitch, and the
 // spectral filter.
 void spectralTests();
+
+// ForgeTestsTheme.cpp — the theme's names, palettes, settings file and menu,
+// and the panel drawn in Merli.
+void themeTests();
 }

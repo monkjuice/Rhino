@@ -18,7 +18,8 @@ int runSnapshot(int argc, char** argv)
     // under it — cannot be reviewed on an empty one, and the editor reads that
     // state as it is constructed. Nothing here runs a message loop, so anything
     // arriving after construction would never be noticed.
-    if (argc > 7)
+    // A `-` here is no preset, so the theme behind it can be named alone.
+    if (argc > 7 && juce::String(argv[7]) != "-")
     {
         const auto file = juce::File::getCurrentWorkingDirectory().getChildFile(argv[7]);
         const auto opened = processor->loadPreset(file);
@@ -27,6 +28,19 @@ int runSnapshot(int argc, char** argv)
             std::cerr << "snapshot: " << opened.getErrorMessage() << '\n';
             return 1;
         }
+    }
+    // Argument 8 names the theme, chosen before the editor is built because
+    // the editor copies the colours as it is constructed. A name Forge does
+    // not know is refused rather than defaulted: a typo that quietly rendered
+    // Forge would be hashed against the wrong baseline.
+    if (argc > 8)
+    {
+        if (!rhino::forge::ui::knownThemeName(argv[8]))
+        {
+            std::cerr << "snapshot: unknown theme\n";
+            return 2;
+        }
+        rhino::forge::ui::selectTheme(rhino::forge::ui::themeFromName(argv[8]));
     }
     std::unique_ptr<juce::AudioProcessorEditor> editor(processor->createEditor());
     if (argc > 4) editor->setSize(juce::String(argv[3]).getIntValue(), juce::String(argv[4]).getIntValue());
@@ -118,6 +132,17 @@ int runSnapshot(int argc, char** argv)
 int runProfile(int argc, char** argv)
 {
     auto processor = std::make_unique<rhino::forge::Processor>();
+    // Argument 4 names the theme, as --snapshot's argument 8 does, so the two
+    // looks can be timed against each other from one binary.
+    if (argc > 4)
+    {
+        if (!rhino::forge::ui::knownThemeName(argv[4]))
+        {
+            std::cerr << "profile: unknown theme\n";
+            return 2;
+        }
+        rhino::forge::ui::selectTheme(rhino::forge::ui::themeFromName(argv[4]));
+    }
     std::unique_ptr<juce::AudioProcessorEditor> editor(processor->createEditor());
     const auto width = argc > 2 ? juce::String(argv[2]).getIntValue() : editor->getWidth();
     const auto height = argc > 3 ? juce::String(argv[3]).getIntValue() : editor->getHeight();

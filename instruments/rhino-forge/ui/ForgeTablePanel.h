@@ -33,7 +33,7 @@ public:
     {
         const auto area = getLocalBounds().toFloat().reduced(1.0f);
         const auto enabled = isEnabled();
-        g.setColour(down ? accent.withAlpha(0.28f) : juce::Colour(0xff0b0e18));
+        g.setColour(down ? accent.withAlpha(0.28f) : fieldFloor);
         g.fillRoundedRectangle(area, 3.0f);
         g.setColour((highlighted || down ? accent : line).withAlpha(enabled ? 0.9f : 0.3f));
         g.drawRoundedRectangle(area, 3.0f, 1.0f);
@@ -74,7 +74,7 @@ public:
     void paint(juce::Graphics& g) override
     {
         const auto box = plotArea();
-        g.setColour(juce::Colour(0xff080b14));
+        g.setColour(canvasFloor);
         g.fillRoundedRectangle(getLocalBounds().toFloat(), displayCorner);
 
         paintGrid(g, box);
@@ -217,7 +217,7 @@ public:
 
     void paint(juce::Graphics& g) override
     {
-        g.setColour(juce::Colour(0xff080b14));
+        g.setColour(canvasFloor);
         g.fillRoundedRectangle(getLocalBounds().toFloat(), displayCorner);
         if (table == nullptr) return;
 
@@ -226,7 +226,7 @@ public:
             auto cell = cellFor(i);
             if (cell.getWidth() < 3) continue;
             const auto on = i == selected;
-            g.setColour(on ? accent.withAlpha(0.14f) : juce::Colour(0xff0d1120));
+            g.setColour(on ? accent.withAlpha(0.14f) : chipFloor);
             g.fillRoundedRectangle(cell.toFloat().reduced(1.0f), 2.0f);
 
             const auto* samples = table->frame(i);

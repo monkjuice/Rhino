@@ -16,10 +16,6 @@
 // nothing decides where one goes.
 namespace rhino::forge::ui
 {
-inline const auto panel = juce::Colour(0xff111522);
-inline const auto panelRaised = juce::Colour(0xff191d2d);
-inline const auto line = juce::Colour(0xff34394e);
-
 inline constexpr int handleWidth = 70;
 // The second card a PATH LFO splits off the end of its first, Serum's X|Y
 // tile: its Y output, one letter wide, taken out of the name card's own width
@@ -203,9 +199,9 @@ inline juce::Colour panelColourOf(PanelColour choice)
 {
     switch (choice)
     {
-        case PanelColour::red:    return juce::Colour(0xffff5c52);
-        case PanelColour::orange: return juce::Colour(0xffffa235);
-        case PanelColour::green:  return juce::Colour(0xff3ddc84);
+        case PanelColour::red:    return oscRed;
+        case PanelColour::orange: return oscOrange;
+        case PanelColour::green:  return oscGreen;
         // The blue the rest of the panel is drawn in, so an oscillator set to
         // it is the panel's own colour rather than a fifth one close to it.
         case PanelColour::blue:   return electricBlue;

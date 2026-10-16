@@ -56,6 +56,7 @@ target_sources(RhinoNative PRIVATE
     src/model/SessionDevicePresets.cpp
     src/model/SessionDrums.cpp
     src/model/SessionTracks.cpp
+    src/model/SessionTrackClipboard.cpp
     src/model/SessionGroups.cpp
     src/model/SessionSlots.cpp
     src/model/SessionMixer.cpp
@@ -93,6 +94,7 @@ target_sources(RhinoNative PRIVATE
     src/ui/arrangement/ArrangementSync.cpp
     src/ui/arrangement/ArrangementGestures.cpp
     src/ui/arrangement/ArrangementSelection.cpp
+    src/ui/arrangement/ArrangementTrackClipboard.cpp
     src/ui/arrangement/ArrangementBounce.cpp
     src/ui/arrangement/ArrangementGroups.cpp
     src/ui/arrangement/ArrangementRename.cpp

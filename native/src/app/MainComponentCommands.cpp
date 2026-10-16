@@ -277,11 +277,11 @@ void MainComponent::showHelpMenu(juce::Component& target)
                     "Ctrl+click  Add one or take it back out / Shift+click  Add one\n"
                     "Double-click a cell  Add a note there\nB  Draw mode in the MIDI editor: drag paints notes\n"
                     "Right-drag in the MIDI editor  Erase notes\n"
-                    "Ctrl+X / Ctrl+C / Ctrl+V  Cut, copy and paste the selection\n"
+                    "Ctrl+X / Ctrl+C / Ctrl+V  Cut, copy and paste the selection, or whole tracks from their cards\n"
                     "Ctrl+D  Duplicate it directly after itself\nCtrl+E  Split the selected clip at the playhead\n"
                     "Ctrl+J  Merge the selected audio clips into one audio file\n"
                     "Ctrl+B  Bounce the selected clips, tracks or group to new audio tracks\n"
-                    "R  Play the selected audio clips backwards\nDelete  Empty the selection\n"
+                    "R  Play the selected audio clips backwards\nDelete  Empty the selection, or delete the selected tracks\n"
                     "?  Show/hide Info View\nF12  Full screen\nCtrl+,  Preferences: audio device, MIDI keyboards");
             else if (result == 2)
                 juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon, "About Rhino",

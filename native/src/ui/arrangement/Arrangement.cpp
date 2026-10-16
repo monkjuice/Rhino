@@ -368,9 +368,7 @@ bool Arrangement::keyPressed(const juce::KeyPress& key)
         }
         if (focus == Focus::track)
         {
-            const auto name = session.trackName(selectedTrack);
-            const auto result = session.removeAudioTrack(selectedTrack);
-            if (status) status(result.wasOk() ? "Deleted " + name : result.getErrorMessage());
+            deleteCards(selectedTracks);
             return true;
         }
         if (focus == Focus::clip || focus == Focus::region)

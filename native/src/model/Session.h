@@ -420,6 +420,34 @@ public:
     // import, a drop below the last lane - want a track for audio and say so.
     juce::Result addAudioTrack() { return addTrack(TrackType::audio); }
     juce::Result removeAudioTrack(int track);
+    // Whole tracks, as a track card's cut, copy, paste, duplicate and delete
+    // move them (SessionTrackClipboard.cpp). A copy is everything the track
+    // is - its kind, name, colour, devices, clips, cells and automation - held
+    // as a value, so a cut, or an undo between the copy and the paste, cannot
+    // take it away. A bus stands for its group in all of them, as it does for
+    // a bounce: copying one copies its members, and deleting one deletes them
+    // too, as Live does. Ungroup is the way to drop the bus alone, and
+    // removeAudioTrack still does that for a bus it is handed.
+    struct TrackClipboard
+    {
+        // In stack order, each group's bus directly before its members.
+        std::vector<juce::ValueTree> tracks;
+        bool isEmpty() const { return tracks.empty(); }
+    };
+    TrackClipboard copyTracks(const std::vector<int>& tracks) const;
+    // Lands the copies directly under `below`, by addTrack's rule: under an
+    // open group's bus or one of its members the copies join that group,
+    // under a folded one they go below all of it, and a copied group, which
+    // cannot go inside another, always goes below the whole group. Nothing
+    // named lands them at the foot of the stack. One undo step; `pasted`
+    // receives the new tracks' indices, top to bottom.
+    juce::Result pasteTracks(const TrackClipboard&, int below, std::vector<int>* pasted = nullptr);
+    // A copy of the tracks lands directly under the last of them, as one
+    // block, by the same rule.
+    juce::Result duplicateTracks(const std::vector<int>& tracks, std::vector<int>* duplicated = nullptr);
+    // Deletes the tracks, and the members of any bus among them, in one undo
+    // step. Refused when it would leave the document no track at all.
+    juce::Result removeTracks(const std::vector<int>& tracks);
     // What Ctrl+T adds: the kind last chosen from the add-track menu, MIDI
     // until one has been. It describes how the person works rather than the
     // song, so it is a preference of this machine and not part of a document.
@@ -1737,6 +1765,10 @@ private:
     // the caller owns the undo transaction and whatever reconciling the new
     // row needs.
     te::AudioTrack* appendTrack(TrackType, int after = -1);
+    // SessionTrackClipboard.cpp - the half of a paste and a duplicate that
+    // differs only in what the undo step is called.
+    juce::Result insertTrackCopies(const TrackClipboard&, int below, std::vector<int>* inserted,
+                                   const juce::String& action);
     void initialiseExternalPlugins(bool retry = false);
     juce::ValueTree automationOwnerState(int track) const;
     juce::ValueTree findTrackAutomationState(DeviceTarget) const;

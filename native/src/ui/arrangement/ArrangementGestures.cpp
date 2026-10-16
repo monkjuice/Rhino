@@ -820,6 +820,13 @@ void Arrangement::showTrackMenu(int track)
     menu.addSeparator();
     menu.addItem(3, "Rename " + session.trackName(track) + "...       F2");
     menu.addSeparator();
+    // Whole tracks, a bus with its group. Paste lands under this card.
+    menu.addItem(20, "Cut       Ctrl+X");
+    menu.addItem(21, "Copy       Ctrl+C");
+    menu.addItem(22, "Paste       Ctrl+V", !trackClipboard.isEmpty());
+    menu.addItem(23, "Duplicate       Ctrl+D");
+    menu.addItem(24, "Delete");
+    menu.addSeparator();
     // What the track takes in and whether you hear it. The card carries both,
     // but only on a row tall enough for the third and fourth control lines -
     // so the menu is where a short row reaches them. A group bus takes neither,
@@ -877,6 +884,11 @@ void Arrangement::showTrackMenu(int track)
                     safe->session.setTrackColour(target, {});
             }
             else if (choice == 3) safe->renameTrack(track);
+            else if (choice == 20) safe->cutCards(targets);
+            else if (choice == 21) safe->copyCards(targets);
+            else if (choice == 22) safe->pasteCards(track);
+            else if (choice == 23) safe->duplicateCards(targets);
+            else if (choice == 24) safe->deleteCards(targets);
             else if (choice == 4)
             {
                 const auto done = safe->session.removeTracksFromGroup(targets);

@@ -304,8 +304,15 @@ juce::String Arrangement::barPositionText(double seconds) const
     return juce::String(place.bar) + "." + juce::String(place.count);
 }
 
+// A card that has the focus is what the clipboard commands act on, whole
+// (ArrangementTrackClipboard.cpp); otherwise they act on the region.
 void Arrangement::copySelection()
 {
+    if (focus == Focus::track)
+    {
+        copyCards(selectedTracks);
+        return;
+    }
     const auto region = effectiveRegion();
     if (!region.isRange())
     {
@@ -313,6 +320,7 @@ void Arrangement::copySelection()
         return;
     }
     clipboard = session.copyClipRegion(region.start, region.end, region.firstTrack, region.lastTrack);
+    trackClipboard = {};
     if (status)
         status(clipboard.clips.empty() ? "There is nothing inside the selection to copy"
                                        : "Copied " + juce::String(clipboard.clips.size())
@@ -321,6 +329,11 @@ void Arrangement::copySelection()
 
 void Arrangement::cutSelection()
 {
+    if (focus == Focus::track)
+    {
+        cutCards(selectedTracks);
+        return;
+    }
     const auto region = effectiveRegion();
     copySelection();
     if (clipboard.clips.empty())
@@ -341,6 +354,13 @@ void Arrangement::cutSelection()
 void Arrangement::pasteSelection()
 {
     cancelDrag();
+    // Tracks on the clipboard land under the working card, wherever the last
+    // click was, because what was copied decides what a paste is.
+    if (!trackClipboard.isEmpty())
+    {
+        pasteCards(selectedTrack);
+        return;
+    }
     if (clipboard.isEmpty())
     {
         if (status) status("Copy one or more clips first");
@@ -378,6 +398,11 @@ void Arrangement::pasteSelection()
 void Arrangement::duplicateSelected()
 {
     cancelDrag();
+    if (focus == Focus::track)
+    {
+        duplicateCards(selectedTracks);
+        return;
+    }
     const auto region = effectiveRegion();
     if (!region.isRange())
     {

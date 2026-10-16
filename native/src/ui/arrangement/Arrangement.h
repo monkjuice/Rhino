@@ -249,6 +249,17 @@ private:
     void pasteSelection();
     void deleteSelection();
     void duplicateSelected();
+    // ArrangementTrackClipboard.cpp: the same five commands on whole cards,
+    // reached from the card menu and from the shortcuts while a card has the
+    // focus. Paste lands the copies under the card it is given. By value: the
+    // shortcuts pass selectedTracks, which the session's announcement rebuilds.
+    void copyCards(std::vector<int>);
+    void cutCards(std::vector<int>);
+    void pasteCards(int below);
+    void duplicateCards(std::vector<int>);
+    void deleteCards(std::vector<int>);
+    // The cards a command made become the selection, a card focus.
+    void selectCards(const std::vector<int>&);
     void nudgeSelected(int direction, bool byBar);
     // ArrangementBounce.cpp. The menus pass what they were opened on; the
     // shortcut passes the selection.
@@ -508,6 +519,10 @@ private:
     // A copied rectangle rather than clip ids: a cut deletes its sources, and
     // so does an undo made between the copy and the paste.
     Session::ClipRegion clipboard;
+    // Whole tracks, copied from the cards. One clipboard in effect: copying
+    // either empties the other, so a paste always puts down what was copied
+    // last.
+    Session::TrackClipboard trackClipboard;
     int selectedTrack = 0;
     // Grouping acts on several cards at once, so the working track is joined by
     // the set a shift-click has gathered. It always holds selectedTrack.

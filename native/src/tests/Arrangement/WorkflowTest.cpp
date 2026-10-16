@@ -169,6 +169,8 @@ int runArrangementTest()
        #include "scenarios/TrackGroups.inc"
         scenario("group undo and new lanes");
        #include "scenarios/GroupUndo.inc"
+        scenario("track clipboard: whole tracks cut, copied, pasted, duplicated and deleted");
+       #include "scenarios/TrackClipboard.inc"
         scenario("clip edits are whole");
        #include "scenarios/ClipEdits.inc"
         scenario("what a drag costs the rest of the interface");

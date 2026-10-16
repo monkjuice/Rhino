@@ -14,14 +14,15 @@ StepGrid::StepGrid(Session& s) : session(s), vblank(this, [this] { updatePlayhea
     setWantsKeyboardFocus(true);
     setTitle("Pattern notes");
     setDescription("Step editor. Drag to select, double-click a cell for a note, B for draw mode. "
-                   "Drag the piano keys sideways to resize the lanes, up and down to scroll them.");
+                   "Drag the piano keys sideways to resize the lanes, up and down to scroll them. "
+                   "The velocity lane under the notes: drag a marker to change its note's velocity.");
     drawButton.setButtonText("Draw");
     drawButton.setTooltip("Draw mode (B). Drag to paint notes; with it off, drag selects and "
                           "double-clicking a cell adds one note. The right button always erases.");
     drawButton.setClickingTogglesState(true);
     drawButton.setWantsKeyboardFocus(false);
-    drawButton.setColour(juce::TextButton::buttonColourId, juce::Colour(0xff30373e));
-    drawButton.setColour(juce::TextButton::buttonOnColourId, juce::Colour(0xff397f94));
+    drawButton.setColour(juce::TextButton::buttonColourId, palette::noteEditorButton);
+    drawButton.setColour(juce::TextButton::buttonOnColourId, palette::noteEditorButtonOn);
     drawButton.onClick = [this]
     {
         setDrawMode(drawButton.getToggleState());
@@ -37,6 +38,7 @@ StepGrid::StepGrid(Session& s) : session(s), vblank(this, [this] { updatePlayhea
         grabKeyboardFocus();
     };
     addAndMakeVisible(loopButton);
+    setUpVelocityLane();
     horizontalScroll.addListener(this);
     addAndMakeVisible(horizontalScroll);
     session.addChangeListener(this);
@@ -47,7 +49,9 @@ StepGrid::~StepGrid()
 {
     finishSubdivision();
     finishVelocityAdjustment();
-    if (gesture != Gesture::none && gesture != Gesture::keyboard) session.endNoteGesture();
+    if (holdsVelocityGesture(gesture)) session.endNoteVelocityGesture();
+    else if (gesture != Gesture::none && gesture != Gesture::keyboard && !isVelocityLaneGesture(gesture))
+        session.endNoteGesture();
     horizontalScroll.removeListener(this);
     session.removeChangeListener(this);
 }
@@ -120,6 +124,26 @@ std::vector<juce::ValueTree> StepGrid::selectedStates() const
 
 void StepGrid::setSelectedStates(std::vector<juce::ValueTree> states)
 {
+    // What changed colour has to be repainted here: a click on a note in a
+    // grid that already has the focus repaints nothing else, and the lane
+    // shows the selection too. Past a few hundred notes the diff costs more
+    // than painting the panel.
+    const auto changed = states != selectedNoteStates;
+    const auto few = states.size() + selectedNoteStates.size() <= 128;
+    std::vector<juce::ValueTree> toggled;
+    if (changed && few)
+    {
+        for (const auto& state : states)
+            if (std::find(selectedNoteStates.begin(), selectedNoteStates.end(), state) == selectedNoteStates.end())
+                toggled.push_back(state);
+        for (const auto& state : selectedNoteStates)
+            if (std::find(states.begin(), states.end(), state) == states.end())
+                toggled.push_back(state);
+    }
+    // The insert line shows only for a region asked for by itself, and the
+    // selection decides whether that is still so.
+    const auto insertLineStep = [this] { return stepSelection.active && !regionFromNotes ? stepSelection.start : -1.0; };
+    const auto lineBefore = insertLineStep();
     selectedNoteStates = std::move(states);
     selectedNotes.reset();
     for (const auto& state : selectedNoteStates)
@@ -131,8 +155,25 @@ void StepGrid::setSelectedStates(std::vector<juce::ValueTree> states)
     // The region the clipboard commands act on follows the selection, so this
     // is the one place it has to be kept in step.
     setStepRegionFromSelection();
-    if (getHeight() > 0)
-        repaint(footerBounds().getSmallestIntegerContainer());
+    if (getHeight() <= 0)
+        return;
+    repaint(footerBounds().getSmallestIntegerContainer());
+    if (const auto lineAfter = insertLineStep(); lineAfter != lineBefore)
+        for (const auto step : {lineBefore, lineAfter})
+            if (step >= 0.0)
+                repaint(juce::Rectangle<float>(xForStep(step) - 2.0f, headerHeight, 6.0f, timeAreaBottom() - headerHeight)
+                            .getSmallestIntegerContainer());
+    if (changed && !few)
+    {
+        repaint();
+        return;
+    }
+    if (!changed)
+        return;
+    repaintVelocityLane();
+    for (const auto& state : toggled)
+        if (const auto* note = noteForState(state))
+            repaint(boundsFor(*note).getSmallestIntegerContainer().expanded(3));
 }
 
 void StepGrid::zoomIn()
@@ -152,6 +193,10 @@ void StepGrid::zoomAt(double factor, float pointerX)
     stepZoom = std::clamp(stepZoom * factor, 1.0, 8.0);
     stepScroll = anchorStep - static_cast<double>(anchor) * visibleStepSpan();
     syncHorizontalScroll();
+    // The scrollbar coming or going can fold the velocity lane or bring it
+    // back, which moves the rows by more than the scrollbar's own height.
+    if (computePitchRowCount() != pitchRowCount)
+        changeListenerCallback(nullptr);
     updatePlayhead();
     repaint();
 }
@@ -197,9 +242,11 @@ void StepGrid::setDrawMode(bool shouldDraw)
     drawMode = shouldDraw;
     drawButton.setToggleState(drawMode, juce::dontSendNotification);
     setDescription(drawMode
-        ? "Step editor, draw mode. Drag to paint notes, right-drag to erase, B to go back to selecting."
+        ? "Step editor, draw mode. Drag to paint notes, or velocities in the velocity lane, "
+          "right-drag to erase, B to go back to selecting."
         : "Step editor. Drag to select, double-click a cell for a note, B for draw mode. "
-          "Drag the piano keys sideways to resize the lanes, up and down to scroll them.");
+          "Drag the piano keys sideways to resize the lanes, up and down to scroll them. "
+          "The velocity lane under the notes: drag a marker to change its note's velocity.");
     repaint(footerBounds().getSmallestIntegerContainer());
 }
 
@@ -217,10 +264,22 @@ void StepGrid::setScaleHighlight(int selection)
     }
 }
 
-float StepGrid::rowAreaHeight() const
+float StepGrid::timeAreaHeight() const
 {
     return std::max(1.0f, getHeight() - headerHeight - footerHeight
                               - (horizontalScroll.isVisible() ? scrollHeight : 0.0f));
+}
+
+float StepGrid::timeAreaBottom() const
+{
+    return headerHeight + timeAreaHeight();
+}
+
+// What the velocity lane leaves of the time area. Every hit test and every
+// row is bounded by this, so none of them can reach into the lane.
+float StepGrid::rowAreaHeight() const
+{
+    return std::max(1.0f, timeAreaHeight() - velocityLaneBlockHeight());
 }
 
 float StepGrid::rowHeight() const
@@ -287,6 +346,12 @@ void StepGrid::timerCallback()
         case Gesture::select: updateMarqueeSelection(); repaint(); break;
         case Gesture::resize: resizeCurrentNoteTo(dragPosition, false); break;
         case Gesture::draw:   apply(cellHit(dragPosition)); break;
+        // A stroke held still at the edge paints the columns that scroll in
+        // under it, as a stroke of notes does.
+        case Gesture::velocityDraw:
+            paintVelocityStrokeTo(dragPosition, juce::ModifierKeys::getCurrentModifiersRealtime().isAltDown());
+            break;
+        case Gesture::velocitySelect: updateVelocityMarquee(); repaint(); break;
         default: break;
     }
 }
@@ -294,6 +359,21 @@ void StepGrid::timerCallback()
 bool StepGrid::keyPressed(const juce::KeyPress& key)
 {
     const auto command = isShortcutDown(key.getModifiers());
+    // Inside a marker drag or a stroke the open undo transaction is the
+    // gesture's own. Any edit from the keyboard would split it, or take a note
+    // out from under it, so the editor's own keys wait for the release; keys
+    // it does not handle, the transport's among them, still pass.
+    if (holdsVelocityGesture(gesture))
+    {
+        const auto code = key.getKeyCode();
+        const int plainKeys[] {juce::KeyPress::upKey, juce::KeyPress::downKey, juce::KeyPress::leftKey,
+                               juce::KeyPress::rightKey, juce::KeyPress::deleteKey,
+                               juce::KeyPress::backspaceKey, juce::KeyPress::escapeKey, 'V', 'B', 'F'};
+        const int commandKeys[] {'Z', 'Y', 'L', 'A', 'C', 'X', 'E', 'V', 'D'};
+        const auto among = [code](const auto& keys) { return std::find(std::begin(keys), std::end(keys), code) != std::end(keys); };
+        if (among(plainKeys) || (command && among(commandKeys)))
+            return true;
+    }
     if (velocityAdjustActive
         && (key.getKeyCode() == juce::KeyPress::upKey || key.getKeyCode() == juce::KeyPress::downKey))
         return adjustVelocity(key.getKeyCode() == juce::KeyPress::upKey ? 1 : -1);
@@ -308,6 +388,11 @@ bool StepGrid::keyPressed(const juce::KeyPress& key)
                               || key.getKeyCode() == juce::KeyPress::rightKey ? 1 : -1);
     if (subdivisionActive && !(command && key.getKeyCode() == 'E'))
         finishSubdivision();
+    const auto up = key.getKeyCode() == juce::KeyPress::upKey;
+    const auto down = key.getKeyCode() == juce::KeyPress::downKey;
+    // Live's keys: the selection's velocity by 10, or by 1 with Shift.
+    if (command && (up || down))
+        return nudgeSelectedVelocities((up ? 1 : -1) * (key.getModifiers().isShiftDown() ? 1 : 10));
     if (command && key.getKeyCode() == 'Z')
     {
         if (key.getModifiers().isShiftDown()) session.redo();
@@ -451,7 +536,7 @@ void StepGrid::changeListenerCallback(juce::ChangeBroadcaster*)
         && std::abs(loopRange.getStart().inSeconds() - clipRange.getStart().inSeconds()) < 0.0001
         && std::abs(loopRange.getEnd().inSeconds() - clipRange.getEnd().inSeconds()) < 0.0001;
     loopButton.setColour(juce::TextButton::buttonColourId,
-                         loopsEditedClip ? juce::Colour(0xff397f94) : juce::Colour(0xff30373e));
+                         loopsEditedClip ? palette::noteEditorButtonOn : palette::noteEditorButton);
     if (previousLowestPitch != lowestVisiblePitch)
         repaint();
 }
@@ -459,7 +544,14 @@ void StepGrid::changeListenerCallback(juce::ChangeBroadcaster*)
 void StepGrid::rebuildVisibleNotes()
 {
     // The scrollbar decides how tall the row area is, and the row area decides
-    // how many rows fit, so both settle before any note is placed on one.
+    // how many rows fit, so both settle before any note is placed on one -
+    // the clip's length first, because it decides the zoom and so the
+    // scrollbar, and the scrollbar can fold the velocity lane.
+    const auto steps = session.editorStepCount();
+    const auto stepCountChanged = steps != visibleStepCount;
+    if (stepCountChanged)
+        stepZoom = std::max(1.0, static_cast<double>(steps) / static_cast<double>(Session::defaultSteps));
+    visibleStepCount = steps;
     syncHorizontalScroll();
     const auto previousRows = pitchRowCount;
     pitchRowCount = computePitchRowCount();
@@ -468,7 +560,6 @@ void StepGrid::rebuildVisibleNotes()
     std::bitset<Session::steps * maxPitchRows> next;
     std::array<float, Session::steps * maxPitchRows> nextLengths {}, nextStartOffsets {};
     const auto nextDrumLabels = session.isPatternDrums();
-    const auto steps = session.editorStepCount();
     std::vector<VisibleNote> nextVisible;
     const auto allNotes = session.editorNotes();
     for (const auto& note : allNotes)
@@ -488,15 +579,12 @@ void StepGrid::rebuildVisibleNotes()
     const auto changed = next ^ notes;
     const auto lengthsChanged = nextLengths != noteLengths;
     const auto offsetsChanged = nextStartOffsets != noteStartOffsets;
-    const auto stepCountChanged = steps != visibleStepCount;
-    if (stepCountChanged)
-        stepZoom = std::max(1.0, static_cast<double>(steps) / static_cast<double>(Session::defaultSteps));
-    visibleStepCount = steps;
-    syncHorizontalScroll();
     notes = next;
     noteLengths = nextLengths;
     noteStartOffsets = nextStartOffsets;
     visibleNotes = std::move(nextVisible);
+    // Before the selection is reconciled below, which repaints the lane.
+    rebuildLaneNotes(allNotes, rows);
     // Drop notes that have left the clip, never notes that have merely left the
     // pitch window. Selection outlives scrolling, so a pattern taller than the
     // window can still be selected and transposed whole.
@@ -578,6 +666,8 @@ void StepGrid::syncHorizontalScroll()
     horizontalScroll.setVisible(maximumStart > 0.001);
     horizontalScroll.setRangeLimits(0.0, static_cast<double>(steps), juce::dontSendNotification);
     horizontalScroll.setCurrentRange(stepScroll, visible, juce::dontSendNotification);
+    // A scrollbar that comes or goes can fold the lane or bring it back.
+    updateVelocityButton();
 }
 
 void StepGrid::scrollBarMoved(juce::ScrollBar* bar, double start)
@@ -598,6 +688,8 @@ void StepGrid::resized()
     // in the shell's toolbar above it.
     drawButton.setBounds(6, getHeight() - static_cast<int>(footerHeight) + 3,
                          56, static_cast<int>(footerHeight) - 6);
+    velocityButton.setBounds(66, getHeight() - static_cast<int>(footerHeight) + 3,
+                             60, static_cast<int>(footerHeight) - 6);
     syncHorizontalScroll();
     horizontalScroll.setBounds(static_cast<int>(labelWidth),
                                getHeight() - static_cast<int>(footerHeight + scrollHeight),

@@ -62,6 +62,7 @@
             require(midiClipsOnAudioTracks() == 0, "and no MIDI clip was made on an audio track for it");
             require(stack.addNote(0.0, Session::lowestNote, 1.0).failed() && stack.editorNotes().empty(),
                     "Note edits refuse rather than reaching for a clip that is not there");
+            require(!stack.setNoteVelocities({{juce::ValueTree("NOTE"), 64}}), "and so does a velocity edit");
             {
                 auto editor = std::make_unique<StepGrid>(stack);
                 editor->setSize(800, 300);

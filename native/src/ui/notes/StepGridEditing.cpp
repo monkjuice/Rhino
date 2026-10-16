@@ -22,15 +22,20 @@ void StepGrid::toggleSelection(int index)
         repaint();
         return;
     }
-    const auto& note = visibleNotes[static_cast<size_t>(index)];
+    toggleSelectionOf(visibleNotes[static_cast<size_t>(index)].state);
+}
+
+// By state rather than by row, because a marker in the velocity lane can
+// stand for a note the pitch window has scrolled past. setSelectedStates
+// repaints what changed colour.
+void StepGrid::toggleSelectionOf(const juce::ValueTree& state)
+{
     auto current = selectedStates();
-    if (std::find(current.begin(), current.end(), note.state) != current.end())
-        std::erase(current, note.state);
+    if (std::find(current.begin(), current.end(), state) != current.end())
+        std::erase(current, state);
     else
-        current.push_back(note.state);
+        current.push_back(state);
     setSelectedStates(std::move(current));
-    const auto bounds = boundsFor(note);
-    repaint(bounds.getSmallestIntegerContainer().expanded(3));
 }
 
 // Every note in the clip, not every note on screen. The pitch window shows
@@ -102,9 +107,11 @@ StepGrid::StepSelection StepGrid::effectiveStepRegion() const
     StepSelection fromNotes;
     // selectedStates rather than the raw list: a selected cell can stand for
     // every retrigger inside it, and the region has to cover what copy would
-    // actually take.
+    // actually take. Read off the lane's notes, which are every note in the
+    // clip, because a note the velocity lane selected may be scrolled out of
+    // the pitch window.
     for (const auto& state : selectedStates())
-        if (const auto* note = noteForState(state))
+        if (const auto* note = laneNoteFor(state))
         {
             const auto start = std::floor(note->start);
             const auto end = std::ceil(note->start + note->length);
@@ -155,7 +162,8 @@ void StepGrid::paintStepSelection(juce::Graphics& g)
         return;
     const auto left = labelWidth + static_cast<float>(stepSelection.start - stepScroll) * cellWidth();
     const auto top = headerHeight;
-    const auto bottom = headerHeight + rowAreaHeight();
+    // Through the velocity lane too: a paste lands on every note's marker.
+    const auto bottom = timeAreaBottom();
     juce::Graphics::ScopedSaveState scope(g);
     g.reduceClipRegion(juce::Rectangle<float>(labelWidth, 0.0f, gridWidth(), bottom).getSmallestIntegerContainer());
     g.setColour(juce::Colour(0xffc6d58c));
@@ -174,9 +182,11 @@ bool StepGrid::copySelection()
     if (states.empty() || !region.isRange())
         return false;
 
+    // Every selected note, scrolled into the pitch window or not; delete takes
+    // them all, so a cut that copied only the visible ones would lose the rest.
     auto minPitch = 128;
     for (const auto& state : states)
-        if (const auto* note = noteForState(state))
+        if (const auto* note = laneNoteFor(state))
             minPitch = std::min(minPitch, note->pitch);
     if (minPitch > 127)
         return false;
@@ -185,7 +195,7 @@ bool StepGrid::copySelection()
     clipboardBasePitch = minPitch;
     clipboardSpanSteps = region.length();
     for (const auto& state : states)
-        if (const auto* note = noteForState(state))
+        if (const auto* note = laneNoteFor(state))
             noteClipboard.push_back({note->start - region.start, note->pitch - minPitch,
                                      std::max(0.001, note->length), note->velocity});
     return !noteClipboard.empty();
@@ -350,30 +360,36 @@ void StepGrid::finishSubdivision()
     if (!subdivisionActive) return;
     subdivisionActive = false;
     session.endNoteGesture();
-    if (gesture != Gesture::move && !velocityAdjustActive) stopTimer();
+    // Only with nothing else on the clock: a stroke or a marquee carries on
+    // autoscrolling after a modal tool ends.
+    if (gesture == Gesture::none && !velocityAdjustActive) stopTimer();
     repaint();
 }
 
-int StepGrid::selectedVelocityPercent() const
+// Read off the lane's notes rather than the visible ones, so a selected note
+// the pitch window has scrolled past still counts.
+int StepGrid::selectedVelocity() const
 {
     const auto states = selectedStates();
     if (states.empty()) return -2;
-    auto midiVelocity = -1;
+    auto velocity = -1;
     for (const auto& state : states)
-        if (const auto* note = noteForState(state))
+        if (const auto* note = laneNoteFor(state))
         {
-            if (midiVelocity < 0) midiVelocity = note->velocity;
-            else if (midiVelocity != note->velocity) return -1;
+            if (velocity < 0) velocity = note->velocity;
+            else if (velocity != note->velocity) return -1;
         }
-    return midiVelocity < 0 ? -2 : juce::roundToInt(midiVelocity * 100.0 / 127.0);
+    return velocity < 0 ? -2 : velocity;
 }
 
+// Refused while the pointer holds a gesture, so two tools never share one
+// undo transaction.
 bool StepGrid::beginVelocityAdjustment()
 {
-    if (selectedStates().empty()) return false;
+    if (gesture != Gesture::none || selectedStates().empty()) return false;
     if (!velocityAdjustActive)
     {
-        session.beginNoteGesture("Adjust note velocity");
+        session.beginNoteVelocityGesture("Adjust note velocity");
         velocityAdjustActive = true;
         startTimerHz(30);
         repaint(footerBounds().getSmallestIntegerContainer());
@@ -381,11 +397,15 @@ bool StepGrid::beginVelocityAdjustment()
     return true;
 }
 
+// One MIDI step per key press or wheel notch, so every value is reachable.
 bool StepGrid::adjustVelocity(int delta)
 {
     if (delta == 0 || (!velocityAdjustActive && !beginVelocityAdjustment())) return false;
-    const auto changed = session.adjustNoteVelocities(selectedStates(), delta);
-    repaint(footerBounds().getSmallestIntegerContainer());
+    std::vector<Session::NoteVelocity> targets;
+    for (const auto& state : selectedStates())
+        if (const auto* note = laneNoteFor(state))
+            targets.push_back({state, velocitylane::clampVelocity(note->velocity + delta)});
+    const auto changed = applyNoteVelocities(targets);
     return changed || velocityAdjustActive;
 }
 
@@ -393,8 +413,8 @@ void StepGrid::finishVelocityAdjustment()
 {
     if (!velocityAdjustActive) return;
     velocityAdjustActive = false;
-    session.endNoteGesture();
-    if (gesture != Gesture::move && !subdivisionActive) stopTimer();
+    session.endNoteVelocityGesture();
+    if (gesture == Gesture::none && !subdivisionActive) stopTimer();
     repaint(footerBounds().getSmallestIntegerContainer());
 }
 

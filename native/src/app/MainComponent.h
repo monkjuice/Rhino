@@ -175,6 +175,9 @@ private:
     // a fifth of the window rather than a number chosen here: the right height
     // depends on the display and cannot be known at construction.
     int browserWidth = 244, lowerPaneHeight = 0;
+    // Whether the note editor has been shown yet this run, and whether the
+    // pane has been dragged to a height of someone's choosing; see resized.
+    bool noteEditorHasOpened = false, paneHeightDragged = false;
     int resizeStartX = 0, resizeStartY = 0, resizeStartBrowserWidth = 244;
     // Three results of the layout, written by resized() and read by paint and
     // by the hit tests so that the panels, the ground under them and the

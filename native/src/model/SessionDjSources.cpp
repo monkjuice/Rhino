@@ -735,13 +735,14 @@ void Session::djDocumentChanged(int track, ModelChange changes)
     }
 }
 
-// A knob, a fader, the tempo field and an audio clip's sliders say when they
-// are held; a jog wheel, a note drag or the booth's own faders do not, but
-// each holds a mouse button down.
+// A knob, a fader, the tempo field, an audio clip's sliders and a note's
+// velocity say when they are held - V held down presses no mouse button; a
+// jog wheel, a note drag or the booth's own faders do not, but each holds a
+// mouse button down.
 bool Session::gestureHeld() const
 {
     return parameterGestureDepth > 0 || mixerGestureDepth > 0 || tempoGestureDepth > 0 || audioClipGestureDepth > 0
-        || juce::Component::isMouseButtonDownAnywhere();
+        || noteVelocityGestureDepth > 0 || juce::Component::isMouseButtonDownAnywhere();
 }
 
 void Session::djPoll()

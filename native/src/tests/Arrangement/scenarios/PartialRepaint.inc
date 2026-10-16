@@ -112,6 +112,8 @@
                 {cards + 1, 0, 2, 60},
             });
 
+            // Below the pitch window, so the velocity lane has a dimmed marker.
+            require(stack.addNote(9.0, 30, 1.0).wasOk(), "A note below the pitch window");
             auto gridPanel = std::make_unique<StepGrid>(stack);
             auto& paintedGrid = *gridPanel;
             paintedGrid.setSize(900, 320);
@@ -119,10 +121,22 @@
             paintedGrid.setSelectedStates({held});
             paintedGrid.scaleHighlight = 2;
             paintedGrid.playhead = 300.0f;
+            // The first note's marker starts on the gutter's edge, so its ring
+            // is cut by the lane's clip.
+            paintedGrid.hoveredNoteState = paintedGrid.laneNotes.front().state;
+            const auto divider = paintedGrid.laneDividerBounds().toNearestInt();
+            const auto lane = paintedGrid.velocityLaneBounds().toNearestInt();
+            const auto labels = static_cast<int>(paintedGrid.labelWidth);
+            require(!lane.isEmpty(), "The note editor shows its velocity lane");
             checkAreas(paintedGrid, "The note editor", {
-                {0, 30, static_cast<int>(paintedGrid.labelWidth), 80},
-                {static_cast<int>(paintedGrid.labelWidth) - 2, 0, 4, paintedGrid.getHeight()},
+                {0, 30, labels, 80},
+                {labels - 2, 0, 4, paintedGrid.getHeight()},
                 {0, 0, paintedGrid.getWidth(), static_cast<int>(paintedGrid.headerHeight) + 2},
+                {0, divider.getY() - 2, paintedGrid.getWidth(), divider.getHeight() + 4},
+                {0, lane.getY(), labels + 4, lane.getHeight()},
+                paintedGrid.markerBounds(*paintedGrid.laneNoteFor(held)).expanded(2)
+                    .getIntersection(paintedGrid.getLocalBounds()),
+                {0, static_cast<int>(paintedGrid.yForVelocity(64.0f)) - 2, paintedGrid.getWidth(), 5},
             });
             // Zoomed in and scrolled part of a step along, so cells straddle
             // the keys and the repainted columns cut through them.
@@ -130,6 +144,11 @@
             paintedGrid.stepScroll = 5.5;
             checkAreas(paintedGrid, "The zoomed note editor", {
                 {static_cast<int>(paintedGrid.labelWidth) - 8, 0, 10, paintedGrid.getHeight()},
+                {static_cast<int>(paintedGrid.labelWidth) - 8, lane.getY(), 16, lane.getHeight()},
+            });
+            paintedGrid.setVelocityLaneShown(false);
+            checkAreas(paintedGrid, "The note editor without its lane", {
+                {0, 30, static_cast<int>(paintedGrid.labelWidth), 80},
             });
             gridPanel.reset();
             arrangementPanel.reset();

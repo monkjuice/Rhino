@@ -86,6 +86,17 @@ void MainComponent::resized()
         // doing on every machine with a tall display.
         if (lowerPaneHeight <= 0)
             lowerPaneHeight = getHeight() / 5;
+        // The note editor's first appearance in a run makes room for sixteen
+        // named rows and its velocity lane, whichever face opened the pane
+        // first; a fifth of a 1080p window folds the lane away. Only the
+        // shell's own default is raised: a height the pane was dragged to,
+        // before or after, is kept.
+        if (lowerPane == LowerPane::notes && !noteEditorHasOpened)
+        {
+            noteEditorHasOpened = true;
+            if (!paneHeightDragged)
+                lowerPaneHeight = std::max(lowerPaneHeight, StepGrid::openingHeight);
+        }
         // A device face has a fixed height, and a Device View shorter than
         // one cuts every device off at its knobs, so that face of the pane
         // has a taller floor than the clip editors.

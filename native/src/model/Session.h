@@ -151,6 +151,13 @@ public:
         int velocity = 100;
         int colour = 0;
     };
+    // A note's velocity as MIDI has it, 1-127. A note-on of 0 is a note-off,
+    // so nothing that takes one of these writes 0.
+    struct NoteVelocity
+    {
+        juce::ValueTree state;
+        int velocity = 100;
+    };
     struct TimeSignature
     {
         int numerator = 4;
@@ -300,7 +307,14 @@ public:
     juce::Result addNote(double startSteps, int pitch, double lengthSteps,
                          juce::ValueTree* addedState = nullptr, int velocity = 100);
     bool removeNotes(const std::vector<juce::ValueTree>&);
-    bool adjustNoteVelocities(const std::vector<juce::ValueTree>&, int percentageDelta);
+    // Sets each listed note of the open clip to the velocity beside it, held to
+    // 1-127. A state the clip does not hold is skipped, and so is a note already
+    // at its value. False with no open clip, or when nothing changed. Opens no
+    // undo transaction of its own: the caller brackets it, as addNote's callers
+    // do. Outside a note-velocity gesture it announces the change; inside one
+    // the gesture's end does, once. Playback needs no help: the engine rebuilds
+    // after any note property changes.
+    bool setNoteVelocities(const std::vector<NoteVelocity>&);
     void setNote(int step, int pitch, bool enabled);
     int noteLengthSteps(int step, int pitch) const;
     juce::Result resizeNote(int step, int pitch, int lengthSteps);
@@ -313,6 +327,13 @@ public:
     juce::Result fillNoteToClipEnd(const juce::ValueTree&);
     void beginNoteGesture(juce::String actionName = "Draw notes");
     void endNoteGesture();
+    // A velocity drag, a stroke painted in the velocity lane, or V held: every
+    // step reaches the notes at once, the whole gesture is one undo step, and
+    // it is announced once, at its end, and only if it changed something - an
+    // announcement per pixel rebuilds the arrangement every time. Counted, so a
+    // caller cannot end another's, as beginAudioClipGesture is.
+    void beginNoteVelocityGesture(const juce::String& actionName = "Change velocity");
+    void endNoteVelocityGesture();
     void clearPattern();
     void applyPatternPreset(PatternPreset);
     juce::Result insertPatternPreset(PatternPreset, int track, double startSeconds);
@@ -1789,6 +1810,9 @@ private:
     // user commands separately so startup cannot dirty an untouched document.
     juce::int64 changeRevision = 0, savedRevision = 0;
     int audioClipGestureDepth = 0, tempoGestureDepth = 0;
+    // An open note-velocity gesture, and whether anything inside it changed.
+    int noteVelocityGestureDepth = 0;
+    bool noteVelocitiesChangedInGesture = false;
     // Open knob and fader drags. Inside one, a value change is not announced
     // to the whole session; the gesture's end announces it once.
     int parameterGestureDepth = 0, mixerGestureDepth = 0;

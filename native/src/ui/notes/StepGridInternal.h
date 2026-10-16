@@ -4,8 +4,9 @@
 #include "ui/shared/Theme.h"
 
 // Shared internals of the StepGrid implementation, which is defined across
-// StepGrid.cpp, StepGridPainter.cpp, StepGridGestures.cpp and
-// StepGridEditing.cpp. Internal: nothing outside those files should include it.
+// StepGrid.cpp, StepGridPainter.cpp, StepGridGestures.cpp, StepGridEditing.cpp
+// and the velocity lane's StepGridVelocity*.cpp. Internal: nothing outside
+// those files should include it.
 //
 // The pointer rules come from SelectionInput.h, which the arrangement reads
 // too. Only what is peculiar to a grid of notes lives here.

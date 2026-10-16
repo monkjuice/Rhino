@@ -88,6 +88,9 @@ target_sources(RhinoNative PRIVATE
     src/ui/notes/StepGridPainter.cpp
     src/ui/notes/StepGridGestures.cpp
     src/ui/notes/StepGridEditing.cpp
+    src/ui/notes/StepGridVelocity.cpp
+    src/ui/notes/StepGridVelocityGestures.cpp
+    src/ui/notes/StepGridVelocityPainter.cpp
     src/ui/arrangement/Arrangement.cpp
     src/ui/arrangement/ArrangementGeometry.cpp
     src/ui/arrangement/ArrangementPainter.cpp
@@ -181,6 +184,7 @@ target_sources(RhinoNative PRIVATE
     src/tests/Arrangement/ClipGeometryTest.cpp
     src/tests/PushProtocolTest.cpp
     src/tests/VelocityCurveTest.cpp
+    src/tests/VelocityLaneTest.cpp
     src/tests/Arrangement/WorkflowTest.cpp)
 target_include_directories(RhinoNative PRIVATE src)
 target_compile_definitions(RhinoNative PRIVATE

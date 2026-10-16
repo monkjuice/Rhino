@@ -355,6 +355,9 @@ MainComponent::MainComponent(Session& s)
     {
         resizeStartY = screenY;
         resizeStartLowerPaneHeight = lowerPaneHeight;
+        // A height someone chose is theirs: the note editor's opening raise
+        // only ever replaces the shell's own default.
+        paneHeightDragged = true;
     };
     lowerSplitter.dragged = [this] (int screenY)
     {

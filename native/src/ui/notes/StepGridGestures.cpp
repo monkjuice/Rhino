@@ -139,6 +139,8 @@ void StepGrid::updatePointer(juce::Point<float> position, const juce::ModifierKe
         setMouseCursor(juce::MouseCursor::CrosshairCursor);
         return;
     }
+    if (updateLanePointer(position, modifiers))
+        return;
     if (isOverKeyboard(position))
     {
         setMouseCursor(juce::MouseCursor::UpDownLeftRightResizeCursor);
@@ -162,10 +164,16 @@ void StepGrid::updatePointer(juce::Point<float> position, const juce::ModifierKe
 void StepGrid::mouseMove(const juce::MouseEvent& event)
 {
     updatePointer(event.position, event.mods);
+    updateHover(event.position);
 }
 
 void StepGrid::mouseDown(const juce::MouseEvent& event)
 {
+    // A press while another is still held - a second finger, or a pen beside
+    // the mouse - ends the first gesture rather than overwriting it, so an
+    // undo bracket it opened cannot be left open.
+    if (gesture != Gesture::none)
+        mouseUp(event);
     finishSubdivision();
     finishVelocityAdjustment();
     collapseSelectionOnRelease = false;
@@ -210,6 +218,8 @@ void StepGrid::mouseDown(const juce::MouseEvent& event)
         loopPreviewStartStep = loopPreviewEndStep = loopAnchorStep;
         return;
     }
+    if (velocityLaneMouseDown(event))
+        return;
     // A resize handle is the one part of a note that is not the note: it is
     // offered first, and only to the plain pointer. A pencil has no handles,
     // and a gathering press is about the selection rather than the shape.
@@ -405,7 +415,11 @@ juce::Result StepGrid::moveCurrentNotesBy(double stepDelta, int pitchDelta)
 
 void StepGrid::moveDraggedNotesAt(juce::Point<float> position)
 {
-    const auto index = cellHit(position);
+    // A note carried below the rows - into the velocity lane, or past it - sits
+    // on the lowest row while the view scrolls pitch down after it, rather
+    // than freezing where the pointer left the rows.
+    const auto rowsBottom = headerHeight + rowAreaHeight();
+    const auto index = cellHit(position.y >= rowsBottom ? juce::Point<float>(position.x, rowsBottom - 0.5f) : position);
     if (index < 0 || dragStartStep < 0.0 || moveGrabPitch < 0 || movingNotes.empty())
         return;
     const auto& anchor = movingNotes.front();
@@ -429,7 +443,8 @@ void StepGrid::moveDraggedNotesAt(juce::Point<float> position)
 // the panel, which is the whole point of dragging past the edge.
 void StepGrid::autoScrollDrag()
 {
-    if (gesture == Gesture::none || gesture == Gesture::keyboard || dragPosition.x < 0.0f)
+    if (gesture == Gesture::none || gesture == Gesture::keyboard || gesture == Gesture::velocityDrag
+        || gesture == Gesture::laneResize || dragPosition.x < 0.0f)
         return;
 
     const auto maximumStart = std::max(0.0, static_cast<double>(session.editorStepCount()) - visibleStepSpan());
@@ -437,7 +452,9 @@ void StepGrid::autoScrollDrag()
     const auto nextStepScroll = std::clamp(stepScroll + horizontal * 0.3, 0.0, maximumStart);
     auto changed = nextStepScroll != stepScroll;
     stepScroll = nextStepScroll;
-    if (!session.isPatternDrums())
+    // A stroke or a marquee in the velocity lane is below the rows the whole
+    // time, and would otherwise scroll pitch at the gesture clock's rate.
+    if (!session.isPatternDrums() && !isVelocityLaneGesture(gesture))
     {
         // Upwards on screen is a higher pitch, so the sign flips here: the
         // lanes move the opposite way to the view along the timeline.
@@ -537,6 +554,11 @@ void StepGrid::mouseDrag(const juce::MouseEvent& event)
     if (gesture == Gesture::none) return;
     dragPosition = event.position;
     dragTravelled = dragTravelled || event.getDistanceFromDragStart() >= 3;
+    if (isVelocityLaneGesture(gesture))
+    {
+        velocityLaneMouseDrag(event);
+        return;
+    }
     if (gesture == Gesture::keyboard)
     {
         // Ableton's piano strip: sideways resizes the lanes, up and down drags
@@ -612,7 +634,11 @@ void StepGrid::mouseUp(const juce::MouseEvent& event)
     // is what lets the same press also carry the whole group.
     if (gesture == Gesture::move && collapseSelectionOnRelease && !noteMoved && clickedNoteState.isValid())
         setSelectedStates({clickedNoteState});
-    if (gesture != Gesture::none && gesture != Gesture::keyboard) session.endNoteGesture();
+    const auto laneGesture = isVelocityLaneGesture(gesture);
+    if (laneGesture)
+        finishVelocityLaneGesture();
+    else if (gesture != Gesture::none && gesture != Gesture::keyboard)
+        session.endNoteGesture();
     gesture = Gesture::none;
     collapseSelectionOnRelease = false;
     clickedNoteState = {};
@@ -628,11 +654,18 @@ void StepGrid::mouseUp(const juce::MouseEvent& event)
     keyboardScrollRemainder = 0.0;
     dragStartStep = -1.0;
     dragPosition = {-1.0f, -1.0f};
-    stopTimer();
+    // V held, or a subdivision, outlives a press made during it, and the
+    // clock is what notices V being let go.
+    if (!velocityAdjustActive && !subdivisionActive)
+        stopTimer();
     resizingNoteState = {};
     resizingFromLeft = false;
     hasResizeTarget = false;
     noteMoved = false;
+    // A marker may have been left away from the pointer, so the one that
+    // lights is the one a press would now take.
+    if (isMouseOver(true))
+        updateHover(event.position);
 }
 
 void StepGrid::updateMarqueeSelection()

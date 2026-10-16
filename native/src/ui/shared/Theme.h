@@ -48,6 +48,19 @@ inline const juce::Colour minorGrid        {0xff303030};  // subdivisions
 inline const juce::Colour beatGrid         {0xff232323};  // beats
 inline const juce::Colour barGrid          {0xff121212};  // bars, and the rules between rows
 
+// The note editor. A note and its marker in the velocity lane wear the same
+// two colours, so the eye goes straight from one to the other, and the lane
+// is a darker ground than the cells so it never reads as one more pitch row.
+inline const juce::Colour noteBody             {0xffc6d58c};  // a note, and its velocity marker
+inline const juce::Colour noteSelected         {0xffe9a84a};  // a selected note, and its marker
+inline const juce::Colour noteEditorButton     {0xff30373e};  // the editor's own toggles, off
+inline const juce::Colour noteEditorButtonOn   {0xff397f94};  // and on
+inline const juce::Colour velocityLane         {0xff2d353c};  // the lane, on the bars the cells shade lighter
+inline const juce::Colour velocityLaneAlternate{0xff283037};  // and on the bars between them
+inline const juce::Colour velocityLaneStepRule {0xff22292f};  // a step's line through the lane
+inline const juce::Colour velocityLaneBarRule  {0xff181d22};  // a bar's
+inline const juce::Colour velocityGuide        {0xff3c464f};  // the line at 64
+
 // The readout keeps the tint it has always had. It is the one lit surface in
 // the interface and the only place the eye is meant to be drawn to, so it is
 // a display token rather than a chrome one: nothing else may use it.

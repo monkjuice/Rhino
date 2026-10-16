@@ -322,6 +322,33 @@ int runUiProfile()
             grid->playhead = x + 3.0f;
             paintArea(*grid, gridCanvas, playheadDamage(x, x + 3.0f, gridSweep));
         }));
+        // One step of a velocity drag on sixteen notes: the model written, the
+        // grid's caches read back, the lane and the footer invalidated, and
+        // nobody else told. Shown, because a hidden grid skips its rebuilds.
+        grid->setVisible(true);
+        grid->playhead = -1.0f;
+        if (session.hasPatternClip())
+        {
+            std::vector<juce::ValueTree> dragged;
+            for (const auto& note : session.editorNotes())
+                if (dragged.size() < 16) dragged.push_back(note.state);
+            grid->setSelectedStates(dragged);
+            session.beginNoteVelocityGesture("Profile");
+            report("note editor velocity drag step", medianMicroseconds(60, [&] (int i)
+            {
+                std::vector<Session::NoteVelocity> values;
+                for (const auto& state : dragged) values.push_back({state, i % 2 == 0 ? 90 : 100});
+                grid->applyNoteVelocities(values);
+            }));
+            session.endNoteVelocityGesture();
+            session.undo();
+            grid->clearSelection();
+        }
+        report("note editor velocity lane repaint", medianMicroseconds(60, [&] (int)
+        {
+            paintArea(*grid, gridCanvas, grid->velocityLaneBounds().toNearestInt());
+        }));
+        grid->setVisible(false);
 
         auto rackCanvas = canvasFor(*rack);
         report("device rack full paint", medianMicroseconds(20, [&] (int)

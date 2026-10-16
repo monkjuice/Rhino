@@ -228,8 +228,8 @@
         selectionGrid.mouseDown(gridEvent(selectionGrid.cell(8, rowForPitch(60)).getCentre(),
                                           selectionGrid.cell(8, rowForPitch(60)).getCentre(), false, commandLeft));
         require(selectionGrid.selectedNotes.count() == 2, "Command-click selects multiple note cells");
-        require(selectionGrid.selectedVelocityPercent() == 79,
-                "The velocity footer reports a shared selected-note percentage");
+        require(selectionGrid.selectedVelocity() == 100,
+                "The velocity footer reports the selected notes' shared velocity, in MIDI's 1-127");
         require(selectionGrid.keyPressed(juce::KeyPress('V', juce::ModifierKeys(), 'v')),
                 "V starts selected-note velocity adjustment");
         juce::MouseWheelDetails velocityWheel;
@@ -237,24 +237,24 @@
         selectionGrid.mouseWheelMove(gridEvent(selectionGrid.cell(4, rowForPitch(55)).getCentre(),
                                                selectionGrid.cell(4, rowForPitch(55)).getCentre(), false),
                                      velocityWheel);
-        require(selectionGrid.selectedVelocityPercent() == 80,
-                "The wheel adjusts every selected note while V is held");
+        require(selectionGrid.selectedVelocity() == 101,
+                "The wheel adjusts every selected note while V is held, one MIDI step a notch");
         require(selectionGrid.keyPressed(juce::KeyPress(juce::KeyPress::upKey)),
                 "Up adjusts every selected note while V is held");
-        require(selectionGrid.selectedVelocityPercent() == 81,
+        require(selectionGrid.selectedVelocity() == 102,
                 "A selected group retains a visible shared velocity after adjustment");
         selectionGrid.finishVelocityAdjustment();
         session.undo();
         selectionGrid.changeListenerCallback(nullptr);
-        require(selectionGrid.selectedVelocityPercent() == 79,
+        require(selectionGrid.selectedVelocity() == 100,
                 "One undo restores the complete velocity gesture");
         const auto velocityStates = selectionGrid.selectedStates();
         session.beginNoteGesture("Test mixed velocities");
-        require(session.adjustNoteVelocities({velocityStates.front()}, -1),
+        require(session.setNoteVelocities({{velocityStates.front(), 99}}),
                 "A note in the selected group can receive a distinct velocity");
         session.endNoteGesture();
         selectionGrid.changeListenerCallback(nullptr);
-        require(selectionGrid.selectedVelocityPercent() == -1,
+        require(selectionGrid.selectedVelocity() == -1,
                 "The velocity footer reports a mixed selection");
         session.undo();
         selectionGrid.changeListenerCallback(nullptr);
@@ -284,11 +284,11 @@
         selectionGrid.setSelectedStates({noteState(4, 55), noteState(8, 60)});
         const auto copiedStates = selectionGrid.selectedStates();
         session.beginNoteGesture("Set copied note velocity");
-        require(session.adjustNoteVelocities({copiedStates.front()}, -10),
+        require(session.setNoteVelocities({{copiedStates.front(), 90}}),
                 "A source note can have a distinct velocity before copying");
         session.endNoteGesture();
         selectionGrid.changeListenerCallback(nullptr);
-        require(selectionGrid.selectedVelocityPercent() == -1,
+        require(selectionGrid.selectedVelocity() == -1,
                 "The copied selection contains distinct velocities");
         require(selectionGrid.keyPressed(juce::KeyPress('C', juce::ModifierKeys::commandModifier, 'c')),
                 "Command-C copies selected notes");
@@ -300,7 +300,7 @@
                 "Command-V pastes selected notes");
         require(session.hasNote(0, 55) && session.hasNote(4, 60),
                 "Paste places the copied shape at the insert point");
-        require(selectionGrid.selectedVelocityPercent() == -1,
+        require(selectionGrid.selectedVelocity() == -1,
                 "Paste preserves each copied note's velocity");
         require(selectionGrid.keyPressed(juce::KeyPress('Z', juce::ModifierKeys::commandModifier, 'z')),
                 "Command-Z undoes a note-editor edit while the grid is focused");

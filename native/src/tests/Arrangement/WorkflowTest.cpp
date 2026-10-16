@@ -187,6 +187,14 @@ int runArrangementTest()
         // fixture of its own and leaves the clip longer than it found it.
         scenario("note gestures");
        #include "scenarios/NoteGestures.inc"
+        // Each builds a document of its own, so none leans on or disturbs the
+        // shared clip.
+        scenario("velocity lane: markers, drags and keys");
+       #include "scenarios/VelocityLane.inc"
+        scenario("velocity lane: drawing, the marquee and the pointer");
+       #include "scenarios/VelocityLaneDraw.inc"
+        scenario("velocity lane: the gesture, the divider and short panes");
+       #include "scenarios/VelocityLaneLayout.inc"
         // Last, because it points the note editor at a clip of its own and
         // nothing after it would expect that.
         scenario("clip window");

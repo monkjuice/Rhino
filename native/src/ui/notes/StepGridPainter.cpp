@@ -26,7 +26,7 @@ void StepGrid::paintKeyboard(juce::Graphics& g)
     const auto blackKeyWidth = std::floor(width * 0.6f);
     // A name needs a row tall enough to hold it. Once the lanes are squeezed
     // past that only the octaves stay named, and past that nothing does.
-    const auto labelEvery = height >= 15.0f ? 1 : height >= 8.0f ? 12 : 0;
+    const auto labelEvery = height >= 15.0f ? 1 : height >= octaveLabelRowHeight ? 12 : 0;
     // Rounded to a whole pixel per em rather than following the row height
     // continuously: a lane height dragged between two integers would otherwise
     // rasterise every key name at a fractional em, which is the one thing
@@ -167,7 +167,7 @@ void StepGrid::paint(juce::Graphics& g)
                 continue;
 
             const auto selected = isSelected(note.state);
-            g.setColour(selected ? juce::Colour(0xffe9a84a) : juce::Colour(0xffc6d58c));
+            g.setColour(selected ? palette::noteSelected : palette::noteBody);
             g.fillRect(bounds);
             g.setColour(selected ? juce::Colour(0x77482d15) : juce::Colour(0x55363f46));
             g.fillRect(bounds.withWidth(1.0f));
@@ -227,6 +227,9 @@ void StepGrid::paint(juce::Graphics& g)
             }
         }
     }
+    // Under everything that crosses the whole time area: the loop band, the
+    // playhead, the insert line and the marquee all run through the lane.
+    paintVelocityLane(g, dirty, stepWidth, dirtyFirstStep, dirtyLastStep);
     {
         auto loopStartX = -1.0f;
         auto loopEndX = -1.0f;
@@ -245,7 +248,7 @@ void StepGrid::paint(juce::Graphics& g)
         const auto right = std::min(gridRight(), std::max(loopStartX, loopEndX));
         if (right > left)
         {
-            const juce::Rectangle<float> loopBounds {left, 0.0f, right - left, headerHeight + rowAreaHeight()};
+            const juce::Rectangle<float> loopBounds {left, 0.0f, right - left, timeAreaBottom()};
             g.setColour(juce::Colour(0x245ab9d6));
             g.fillRect(loopBounds);
             g.setColour(juce::Colour(0xff5ab9d6));
@@ -270,7 +273,7 @@ void StepGrid::paint(juce::Graphics& g)
     if (playhead >= 0)
     {
         g.setColour(playheadColour);
-        g.fillRect(playhead, headerHeight, 2.0f, rowAreaHeight());
+        g.fillRect(playhead, headerHeight, 2.0f, timeAreaBottom() - headerHeight);
     }
     if (hasKeyboardFocus(true))
     {
@@ -280,7 +283,7 @@ void StepGrid::paint(juce::Graphics& g)
     // Over the notes and under the marquee: the region is what the clipboard
     // commands act on, so it has to read as covering what it contains.
     paintStepSelection(g);
-    if (gesture == Gesture::select && !selectionBox.isEmpty())
+    if ((gesture == Gesture::select || gesture == Gesture::velocitySelect) && !selectionBox.isEmpty())
     {
         g.setColour(juce::Colour(0x3355c7eb));
         g.fillRect(selectionBox);
@@ -309,24 +312,28 @@ void StepGrid::paint(juce::Graphics& g)
         g.fillRect(footer);
         g.setColour(juce::Colour(0xff3b4650));
         g.fillRect(footer.withHeight(1.0f));
-        const auto velocity = selectedVelocityPercent();
-        const auto value = velocity >= 0 ? juce::String(velocity) + "%"
+        const auto velocity = selectedVelocity();
+        const auto value = velocity >= 0 ? juce::String(velocity)
                                          : velocity == -1 ? juce::String("MIXED") : juce::String("-");
         g.setFont(uiFontBold(9.5f));
         g.setColour(velocityAdjustActive ? juce::Colour(0xffe9a84a) : juce::Colour(0xffb8c4aa));
         drawSnappedText(g, "VELOCITY  " + value, footer.reduced(9.0f, 2.0f).toNearestInt(),
                         juce::Justification::centredRight);
-        // The draw toggle sits at the left of the footer, so the hint starts
-        // past it rather than underneath it.
-        const auto hint = footer.withTrimmedLeft(68.0f).reduced(9.0f, 2.0f);
+        // The draw and velocity toggles sit at the left of the footer, so the
+        // hint starts past them rather than underneath them.
+        const auto hint = footer.withTrimmedLeft(132.0f).reduced(9.0f, 2.0f);
         g.setFont(uiFont(8.5f));
         g.setColour(juce::Colour(0xff78818a));
+        // The lane is named only while it is on screen.
+        const auto laneShowing = velocityLaneHeight() > 0.0f;
         if (drawMode)
-            drawSnappedText(g, "Drag paints notes  -  B to select", hint.toNearestInt(),
-                            juce::Justification::centredLeft, true);
+            drawSnappedText(g, laneShowing ? "Drag paints notes, or velocities in the lane  -  B to select"
+                                           : "Drag paints notes  -  B to select",
+                            hint.toNearestInt(), juce::Justification::centredLeft, true);
         else if (velocity >= -1)
-            drawSnappedText(g, "Hold V + Up/Down or wheel", hint.toNearestInt(),
-                            juce::Justification::centredLeft, true);
+            drawSnappedText(g, laneShowing ? "Drag a marker, Ctrl+Up/Down, or hold V + wheel"
+                                           : "Ctrl+Up/Down, or hold V + Up/Down or wheel",
+                            hint.toNearestInt(), juce::Justification::centredLeft, true);
         else
             drawSnappedText(g, "Drag to select  -  double-click a cell for a note", hint.toNearestInt(),
                             juce::Justification::centredLeft, true);

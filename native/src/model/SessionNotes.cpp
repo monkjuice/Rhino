@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <limits>
 #include <set>
+#include <utility>
 
 // Note editing and pattern geometry. Serves StepGrid.
 //
@@ -126,36 +127,65 @@ bool Session::removeNotes(const std::vector<juce::ValueTree>& states)
     return changed;
 }
 
-bool Session::adjustNoteVelocities(const std::vector<juce::ValueTree>& states, int percentageDelta)
+// Absolute values rather than a step up or down: a group dragged into a rail
+// has to come back to its own spacing, which only the values it started from
+// can give, and a stroke in the lane sets each note to something different.
+//
+// No restartPlayback here, unlike removeNotes: the engine's Edit::TreeWatcher
+// already restarts playback, deferred and coalesced, when any NOTE property
+// other than its colour changes, and a velocity moves no note in time, so
+// nothing sounding needs cutting off.
+bool Session::setNoteVelocities(const std::vector<NoteVelocity>& values)
 {
     jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
-    if (states.empty() || percentageDelta == 0 || patternClip == nullptr)
+    if (patternClip == nullptr || values.empty())
         return false;
     auto& sequence = pattern().getSequence();
     auto* undoManager = &edit->getUndoManager();
     auto changed = false;
-    for (const auto& state : states)
-        if (auto* note = sequence.getNoteFor(state))
-        {
-            const auto oldPercent = juce::roundToInt(note->getVelocity() * 100.0 / 127.0);
-            const auto newPercent = juce::jlimit(1, 100, oldPercent + percentageDelta);
-            const auto newVelocity = juce::jlimit(1, 127, juce::roundToInt(newPercent * 127.0 / 100.0));
-            if (newVelocity != note->getVelocity())
+    for (const auto& value : values)
+        if (auto* note = sequence.getNoteFor(value.state))
+            if (const auto clamped = juce::jlimit(1, 127, value.velocity); clamped != note->getVelocity())
             {
-                note->setVelocity(newVelocity, undoManager);
+                note->setVelocity(clamped, undoManager);
                 changed = true;
             }
-        }
-    if (changed)
+    if (!changed)
+        return false;
+    // Marked at every step, so a deck playing the track knows its cell changed;
+    // only the announcement waits for a gesture's end.
+    markModified(patternTrackIndex(), ModelChange::notes);
+    if (noteVelocityGestureDepth > 0)
     {
-        markModified(patternTrackIndex(), ModelChange::notes);
-        sendSynchronousChangeMessage();
+        noteVelocitiesChangedInGesture = true;
+        return true;
     }
-    return changed;
+    sendSynchronousChangeMessage();
+    return true;
 }
 
 void Session::beginNoteGesture(juce::String actionName) { edit->getUndoManager().beginNewTransaction(actionName); }
 void Session::endNoteGesture() { edit->getUndoManager().beginNewTransaction(); }
+
+void Session::beginNoteVelocityGesture(const juce::String& actionName)
+{
+    if (noteVelocityGestureDepth++ == 0)
+    {
+        noteVelocitiesChangedInGesture = false;
+        edit->getUndoManager().beginNewTransaction(actionName);
+    }
+}
+
+void Session::endNoteVelocityGesture()
+{
+    if (noteVelocityGestureDepth <= 0)
+        return;
+    if (--noteVelocityGestureDepth > 0)
+        return;
+    edit->getUndoManager().beginNewTransaction();
+    if (std::exchange(noteVelocitiesChangedInGesture, false))
+        sendSynchronousChangeMessage();
+}
 
 int Session::editorStepCount() const
 {

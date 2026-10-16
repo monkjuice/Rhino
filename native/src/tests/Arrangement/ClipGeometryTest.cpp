@@ -6,6 +6,7 @@
 #include "ui/shared/LevelMeter.h"
 #include "tests/PushProtocolTest.h"
 #include "tests/VelocityCurveTest.h"
+#include "tests/VelocityLaneTest.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -241,6 +242,7 @@ int runArrangementGeometryTest()
         }
         checkPushProtocol();
         checkVelocityCurves();
+        checkVelocityLane();
         return 0;
     }
     catch (const std::exception& error)

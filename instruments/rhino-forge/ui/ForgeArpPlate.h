@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ForgeStyle.h"
+#include "ForgeMerliControls.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -360,7 +361,21 @@ inline void drawArpPlateState(juce::Graphics& g, juce::Rectangle<int> componentB
     // rather than a rounded box laid over it: the light is the well's, so it
     // follows the well's corners. And faint — the lamp says whether the arp is
     // running, and this only has to say the door is open.
-    if (open)
+    if (open && isMerli())
+    {
+        // Merli's well is let in with rounded corners, so the light follows a
+        // rounded outline of the same radius: the one shape the housing in
+        // ForgePanels.h and this state agree on.
+        juce::Path litFace;
+        litFace.addRoundedRectangle(face, arpPlateFaceCut);
+        g.setColour(signalViolet.withAlpha(0.05f));
+        g.fillPath(litFace);
+        juce::Path litRim;
+        litRim.addRoundedRectangle(face.reduced(0.5f), arpPlateFaceCut - 0.5f);
+        g.setColour(signalViolet.withAlpha(0.32f));
+        g.strokePath(litRim, juce::PathStrokeType(1.0f));
+    }
+    else if (open)
     {
         g.setColour(signalViolet.withAlpha(0.05f));
         g.fillPath(chamferedPath(face, arpPlateFaceCut));
@@ -372,16 +387,28 @@ inline void drawArpPlateState(juce::Graphics& g, juce::Rectangle<int> componentB
     // because this one is on the chassis instead of on a module and has no
     // component of its own to carry it.
     const auto ledBounds = arpPlateLedBounds(componentBounds).toFloat();
-    const auto led = ledBounds.reduced(5.0f);
-    if (on)
+    if (isMerli())
     {
-        g.setColour(signalViolet.withAlpha(0.16f));
-        g.fillEllipse(led.expanded(3.5f));
+        // The paw again, in the lamp's square and two rows shorter than it is
+        // wide, as a paw is. Lit in the modulators' violet rather than the
+        // paw's own tan, because violet is the colour everything else on this
+        // plate lights up in — the face, the slot, the falling notes — and the
+        // lamp has to be read as the same light.
+        merli::drawPawLamp(g, ledBounds.reduced(0.0f, 1.0f), signalViolet, on, 0.4f);
     }
-    g.setColour(on ? signalViolet : lampOff);
-    g.fillEllipse(led);
-    g.setColour(on ? juce::Colours::white.withAlpha(0.5f) : mutedText.withAlpha(0.45f));
-    g.drawEllipse(led, 1.0f);
+    else
+    {
+        const auto led = ledBounds.reduced(5.0f);
+        if (on)
+        {
+            g.setColour(signalViolet.withAlpha(0.16f));
+            g.fillEllipse(led.expanded(3.5f));
+        }
+        g.setColour(on ? signalViolet : lampOff);
+        g.fillEllipse(led);
+        g.setColour(on ? juce::Colours::white.withAlpha(0.5f) : mutedText.withAlpha(0.45f));
+        g.drawEllipse(led, 1.0f);
+    }
 
     auto name = arpPlateNameBounds(componentBounds).toFloat();
     name = name.withTrimmedLeft(ledBounds.getRight() - name.getX() + 6.0f);

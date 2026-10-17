@@ -118,6 +118,30 @@ public:
     void drawBlackNote(int note, juce::Graphics& g, juce::Rectangle<float> area, bool down, bool over,
                        juce::Colour fill) override
     {
+        // JUCE paints a black key's face in a brighter() copy of its colour,
+        // which from any colour at all comes out a mid grey; Merli's keys are
+        // near-black, as the mockup draws them. Same construction otherwise:
+        // a darker rim, a face inset on the sides and short of the foot, and a
+        // lit row along its top.
+        if (isMerli())
+        {
+            auto key = fill;
+            if (down) key = key.overlaidWith(findColour(keyDownOverlayColourId));
+            if (over) key = key.overlaidWith(findColour(mouseOverKeyOverlayColourId));
+            g.setColour(key.darker(0.6f));
+            g.fillRect(area);
+            if (!down)
+            {
+                const auto face = area.reduced(area.getWidth() / 8.0f, 0.0f)
+                                      .removeFromTop(area.getHeight() * 7.0f / 8.0f);
+                g.setColour(key);
+                g.fillRect(face);
+                g.setColour(key.brighter(0.5f));
+                g.fillRect(face.withHeight(1.0f));
+            }
+            drawGuide(note, g, area, down, true);
+            return;
+        }
         juce::MidiKeyboardComponent::drawBlackNote(note, g, area, down, over, fill);
         drawGuide(note, g, area, down, true);
     }

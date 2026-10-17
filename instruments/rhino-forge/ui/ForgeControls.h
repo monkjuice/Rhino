@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ForgeDisplays.h"
+#include "ForgeMerliControls.h"
 
 // The components a module is built out of: the knob and its modulation ring,
 // the enable LED, the drag handle, the rocker, the chip, the cards in a
@@ -277,6 +278,17 @@ public:
     {
         const auto area = getLocalBounds().toFloat().reduced(getWidth() * 0.3f);
         const auto on = getToggleState();
+        if (isMerli())
+        {
+            // The paw in the lamp's place, twenty by eighteen in the header's
+            // square as the mockup has it: the module's tint when the module is
+            // on, and the tint faint when it is off — lifted a little under the
+            // pointer, as the lamp's rim is, so a dark paw still answers the
+            // hand.
+            const auto pawBox = getLocalBounds().toFloat().reduced(getWidth() * 0.2f, getHeight() * 0.235f);
+            merli::drawPawLamp(g, pawBox, pawTint, on, highlighted ? 0.5f : 0.35f);
+            return;
+        }
         if (on)
         {
             g.setColour(accent.withAlpha(0.22f));
@@ -583,6 +595,20 @@ public:
     void paintButton(juce::Graphics& g, bool highlighted, bool down) override
     {
         const auto box = getLocalBounds().toFloat().reduced(0.7f);
+        if (isMerli())
+        {
+            // A rounded chip rather than a chamfered well: Merli's housing has
+            // no machined corners for a button to echo. The outline is the one
+            // thing that moves — grey at rest, the accent under the pointer.
+            g.setColour(down ? buttonWellDown : buttonWellFloor);
+            g.fillRoundedRectangle(box, 4.0f);
+            g.setColour(highlighted ? electricBlue : presetOutline);
+            g.drawRoundedRectangle(box, 4.0f, 1.0f);
+            g.setColour(valueText);
+            g.setFont(panelFont(Face::emphasis, 14));
+            g.drawText(getButtonText(), box, juce::Justification::centred);
+            return;
+        }
         drawWell(g, box, (down ? buttonWellDown : buttonWellFloor), 1.0f, 2);
         g.setColour((highlighted ? electricBlue : presetOutline).withAlpha(0.85f));
         g.strokePath(chamferedPath(box, 2), juce::PathStrokeType(0.8f));
@@ -604,6 +630,33 @@ public:
     {
         const auto area = getLocalBounds().toFloat().reduced(0.5f);
         const auto on = getToggleState();
+        if (isMerli())
+        {
+            // Merli's tab says which page is showing with its whole outline,
+            // two pixels of the accent all the way round, and no bar along the
+            // foot: the mockup's tabs are rounded chips in a well, and a lit
+            // bar under one would be a Forge edge on a Merli chip. The ring is
+            // drawn inside the area so none of it is lost to the component's
+            // own edge.
+            g.setGradientFill(juce::ColourGradient(on ? tabOnTop : tabOffTop,
+                                                   area.getX(), area.getY(), tabFoot,
+                                                   area.getX(), area.getBottom(), false));
+            g.fillRoundedRectangle(area, 4.0f);
+            if (on)
+            {
+                g.setColour(accent);
+                g.drawRoundedRectangle(area.reduced(0.5f), 3.5f, 2.0f);
+            }
+            else
+            {
+                g.setColour(line.withAlpha(highlighted ? 0.9f : 0.6f));
+                g.drawRoundedRectangle(area, 4.0f, 1.0f);
+            }
+            g.setColour(on ? valueText : mutedText.withAlpha(highlighted ? 1.0f : 0.8f));
+            g.setFont(panelFont(Face::header, 13.0f));
+            g.drawText(getName(), getLocalBounds(), juce::Justification::centred);
+            return;
+        }
 
         g.setGradientFill(juce::ColourGradient(on ? tabOnTop : tabOffTop,
                                                area.getX(), area.getY(), tabFoot,

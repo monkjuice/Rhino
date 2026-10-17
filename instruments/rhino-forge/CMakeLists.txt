@@ -69,11 +69,12 @@ juce_add_plugin(RhinoForge
 # for what was cut and how to re-cut them; unsubsetted they are 988 KB, and
 # juce_add_binary_data expands an asset to roughly three bytes of C++ per byte.
 #
-# The Merli theme's eleven textures under ui/assets/themes/merli/ are about
-# 565 KB together — the fur tile alone is 241 KB — and so become roughly
-# 1.7 MB of generated C++, rebuilt on every clean build. They are tiles the
-# panel repeats, never whole screens, which is what keeps a second look at the
-# size of one typeface; a twelfth asset should earn its place the same way.
+# The Merli theme's eight images under ui/assets/themes/merli/ are about
+# 0.87 MB together and so become roughly 2.6 MB of generated C++, rebuilt on
+# every clean build. The fur tile is most of it (0.59 MB): it is the theme's
+# whole look, rebuilt from the designer's 2 MB swatch as a seamless tile at the
+# size it is drawn. Everything else is a tile the panel repeats or a small
+# part, never a whole screen; a ninth image should earn its place the same way.
 juce_add_binary_data(RhinoForgeAssets SOURCES
     ui/assets/forge_logo.png
     ui/assets/screw_cross.png
@@ -82,14 +83,11 @@ juce_add_binary_data(RhinoForgeAssets SOURCES
     ui/assets/themes/merli/merli_ear_left.png
     ui/assets/themes/merli/merli_ear_right.png
     ui/assets/themes/merli/merli_fur.png
-    ui/assets/themes/merli/merli_matte.png
     ui/assets/themes/merli/merli_panel.png
-    ui/assets/themes/merli/merli_paw.png
     ui/assets/themes/merli/merli_plate.png
     ui/assets/themes/merli/merli_screw_large.png
     ui/assets/themes/merli/merli_screw_small.png
     ui/assets/themes/merli/merli_title_plate.png
-    ui/assets/themes/merli/merli_whiskers.png
     ui/assets/fonts/ChakraPetchSemiBold.ttf
     ui/assets/fonts/RajdhaniMedium.ttf
     ui/assets/fonts/RajdhaniSemiBold.ttf
@@ -118,6 +116,8 @@ set(forge_sources
     core/ForgeTableFiles.h
     ui/ForgeTheme.h
     ui/ForgeMerliMaterial.h
+    ui/ForgeMerliChassis.h
+    ui/ForgeMerliControls.h
     ui/ForgeChrome.h
     ui/ForgeFxDisplay.h
     ui/ForgeModule.h

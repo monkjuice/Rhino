@@ -44,7 +44,7 @@ struct Theme
     juce::Colour oscRed, oscOrange, oscGreen;
 
     juce::Colour valueText, knobPointer, knobArcDot, pawTint, pawHighlight;
-    juce::Colour earPink, furRimLit, furLip, backdrop;
+    juce::Colour furRimLit, furLip, backdrop;
 };
 
 // Forge: gunmetal lit from above. Every value here is the literal the panel
@@ -139,7 +139,6 @@ inline const Theme& forgeTheme()
         .knobArcDot   = juce::Colour(0xff45a8ff),
         .pawTint      = juce::Colour(0xff8f95ad),
         .pawHighlight = juce::Colour(0xffe8eaff),
-        .earPink      = juce::Colour(0xff804E47),
         .furRimLit    = juce::Colour(0xffD4A173),
         .furLip       = juce::Colour(0xff794628),
         .backdrop     = juce::Colour(0xff020304),
@@ -160,7 +159,7 @@ inline const Theme& merliTheme()
         .text          = juce::Colour(0xffEBE2DA),
         .mutedText     = juce::Colour(0xff9FA19A),
         .labelText     = juce::Colour(0xffDCD5CC),
-        .legendText    = juce::Colour(0xff74767A),
+        .legendText    = juce::Colour(0xff8A8C8F),
         .chassis       = juce::Colour(0xff120F0C),
         .chassisLit    = juce::Colour(0xff1A1713),
         .plateFaceTop  = juce::Colour(0xff141616),
@@ -236,7 +235,6 @@ inline const Theme& merliTheme()
         .knobArcDot   = juce::Colour(0xffAD7542),
         .pawTint      = juce::Colour(0xffCEB88A),
         .pawHighlight = juce::Colour(0xffFBF2CB),
-        .earPink      = juce::Colour(0xff804E47),
         .furRimLit    = juce::Colour(0xffD4A173),
         .furLip       = juce::Colour(0xff794628),
         .backdrop     = juce::Colour(0xff0A0B0C),
@@ -445,9 +443,7 @@ inline juce::Colour knobArcDot = forgeTheme().knobArcDot;
 inline juce::Colour pawTint = forgeTheme().pawTint;
 // The paw's highlight.
 inline juce::Colour pawHighlight = forgeTheme().pawHighlight;
-// The ears' feathered interior.
-inline juce::Colour earPink = forgeTheme().earPink;
-// The one-pixel lit rim along the fur band's top edge and the ears' outer edges.
+// The one-pixel lit rim along the fur band's top edge.
 inline juce::Colour furRimLit = forgeTheme().furRimLit;
 // The two-pixel lip where the fur meets the window's bottom edge.
 inline juce::Colour furLip = forgeTheme().furLip;
@@ -499,8 +495,8 @@ inline const std::vector<TokenBinding>& tokenBindings()
         RHINO_FORGE_TOKEN(oscGreen),
 
         RHINO_FORGE_TOKEN(valueText), RHINO_FORGE_TOKEN(knobPointer), RHINO_FORGE_TOKEN(knobArcDot),
-        RHINO_FORGE_TOKEN(pawTint), RHINO_FORGE_TOKEN(pawHighlight), RHINO_FORGE_TOKEN(earPink),
-        RHINO_FORGE_TOKEN(furRimLit), RHINO_FORGE_TOKEN(furLip), RHINO_FORGE_TOKEN(backdrop),
+        RHINO_FORGE_TOKEN(pawTint), RHINO_FORGE_TOKEN(pawHighlight), RHINO_FORGE_TOKEN(furRimLit),
+        RHINO_FORGE_TOKEN(furLip), RHINO_FORGE_TOKEN(backdrop),
     };
 #undef RHINO_FORGE_TOKEN
     return bindings;

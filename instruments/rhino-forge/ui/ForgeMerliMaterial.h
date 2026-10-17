@@ -4,7 +4,7 @@
 #include <BinaryData.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
-// Merli's material: the fur and matte textures, the rounded plate, the paw and
+// Merli's material: the fur and panel textures, the rounded plate, the paw and
 // the screws. Each primitive takes the geometry its Forge counterpart takes,
 // so the dispatch at the top of a Forge primitive is one line.
 //
@@ -14,7 +14,9 @@
 // the cache keeps the decoded pixels between calls and pins nothing at exit.
 namespace rhino::forge::ui::merli
 {
-enum class Asset { fur, panel, matte, plate, earLeft, earRight, paw, whiskers, screwSmall, screwLarge, titlePlate };
+// The ears are the cat's own: earRight is the ear on the viewer's left, as it
+// is on a cat facing you.
+enum class Asset { fur, panel, plate, earLeft, earRight, screwSmall, screwLarge, titlePlate };
 
 // The decoded PNG. The two screws are trimmed to their opaque pixels, so a
 // radius handed to drawScrew describes the hardware and not the gutter the
@@ -26,12 +28,9 @@ inline juce::Image image(Asset asset)
     {
         case Asset::fur:        return from(BinaryData::merli_fur_png, BinaryData::merli_fur_pngSize);
         case Asset::panel:      return from(BinaryData::merli_panel_png, BinaryData::merli_panel_pngSize);
-        case Asset::matte:      return from(BinaryData::merli_matte_png, BinaryData::merli_matte_pngSize);
         case Asset::plate:      return from(BinaryData::merli_plate_png, BinaryData::merli_plate_pngSize);
         case Asset::earLeft:    return from(BinaryData::merli_ear_left_png, BinaryData::merli_ear_left_pngSize);
         case Asset::earRight:   return from(BinaryData::merli_ear_right_png, BinaryData::merli_ear_right_pngSize);
-        case Asset::paw:        return from(BinaryData::merli_paw_png, BinaryData::merli_paw_pngSize);
-        case Asset::whiskers:   return from(BinaryData::merli_whiskers_png, BinaryData::merli_whiskers_pngSize);
         case Asset::screwSmall: return from(BinaryData::merli_screw_small_png, BinaryData::merli_screw_small_pngSize)
                                     .getClippedImage({5, 5, 55, 55});
         case Asset::screwLarge: return from(BinaryData::merli_screw_large_png, BinaryData::merli_screw_large_pngSize)
@@ -41,8 +40,8 @@ inline juce::Image image(Asset asset)
     return {};
 }
 
-// Tiles a texture over a shape. The origin shifts where the tile's seams fall,
-// which is how the fur's mirror lines are tucked under the header plates.
+// Tiles a texture over a shape, from the origin given. The fill is bounded by
+// the path, so no clip is pushed; the saved state only restores the brush.
 inline void fillTexture(juce::Graphics& g, const juce::Path& shape, Asset asset, float scale, float opacity,
                         juce::Point<float> origin = {})
 {
@@ -50,7 +49,6 @@ inline void fillTexture(juce::Graphics& g, const juce::Path& shape, Asset asset,
     const auto tile = image(asset);
     if (tile.isNull()) return;
     juce::Graphics::ScopedSaveState state(g);
-    g.reduceClipRegion(shape);
     juce::FillType fill(tile, juce::AffineTransform::scale(scale).translated(origin));
     fill.setOpacity(opacity);
     g.setFillType(fill);
@@ -59,8 +57,9 @@ inline void fillTexture(juce::Graphics& g, const juce::Path& shape, Asset asset,
 
 // The paw: a pad and four toes, as ellipses. Drawn rather than blitted because
 // it is on the frame path — the EnableLed wears one — and because it has to
-// tint by state, which a PNG cannot. The proportions are read off
-// merli_paw.png: the pad is wider than tall and takes the lower half, the
+// tint by state, which a PNG cannot. The proportions are read off the
+// designer's paw icon (not shipped; see ui/assets/README.md): the pad is wider
+// than tall and takes the lower half, the
 // middle toes stand tallest, and the outer pair sit lower, smaller, and lean
 // outward, which is what makes it a paw rather than a bunch of grapes.
 inline void drawPaw(juce::Graphics& g, juce::Rectangle<float> box, juce::Colour colour, float alpha)
@@ -99,11 +98,52 @@ inline void drawScrew(juce::Graphics& g, juce::Point<float> centre, float radius
                 juce::RectanglePlacement::centred);
 }
 
+// A Merli well: a rounded floor with a hairline wall. Forge's well is sunk,
+// its wall shaded at the top and lit at the foot; a matte panel throws no
+// light for a wall to catch, so one row of `line` is all that separates the
+// well from the plate it is let into.
+inline void drawRoundedWell(juce::Graphics& g, juce::Rectangle<float> box, juce::Colour floorColour,
+                            float alpha, float radius)
+{
+    if (box.getWidth() < 2.0f || box.getHeight() < 2.0f || alpha <= 0.0f) return;
+    const auto corner = juce::jmax(0.0f, juce::jmin(radius, box.getWidth() * 0.5f, box.getHeight() * 0.5f));
+
+    g.setColour(floorColour.withAlpha(alpha));
+    g.fillRoundedRectangle(box, corner);
+
+    // The wall is the well's outermost row, so the stroke runs half a pixel
+    // in. Centred on the edge itself it would straddle two rows at half
+    // strength each and read as a blur rather than a wall.
+    juce::Path wall;
+    wall.addRoundedRectangle(box.reduced(0.5f), juce::jmax(0.0f, corner - 0.5f));
+    g.setColour(line.withAlpha(alpha));
+    g.strokePath(wall, juce::PathStrokeType(1.0f));
+}
+
+// The face of a shaped part in Merli: the plate gradient and a hairline, and
+// nothing else. drawMetalPiece stands Forge's parts off the chassis with lips
+// and grain; a matte panel has no relief to show, so the outline alone says
+// where the part ends.
+inline void drawMatteFill(juce::Graphics& g, const juce::Path& shape, float alpha)
+{
+    const auto box = shape.getBounds();
+    if (box.getWidth() < 2.0f || box.getHeight() < 2.0f || alpha <= 0.0f) return;
+    juce::ColourGradient face(plateFaceTop.withAlpha(alpha), box.getCentreX(), box.getY(),
+                              plateFaceFoot.withAlpha(alpha), box.getCentreX(), box.getBottom(), false);
+    g.setGradientFill(face);
+    g.fillPath(shape);
+    g.setColour(line.withAlpha(alpha));
+    g.strokePath(shape, juce::PathStrokeType(1.0f));
+}
+
 // The Merli plate: a rounded matte panel standing a little off the chassis.
 // Shadow, face, hairline and a lit lip along the top, with small screws at
 // the corners when asked. No grain, no rails, no wear — the warmth is in the
 // colours, and the fur around it is texture enough.
-inline void drawRoundedPlate(juce::Graphics& g, juce::Rectangle<float> box, float radius, float alpha, bool screws)
+// Screws at the four corners when asked, or only the two at the foot: a plate
+// whose header carries a paw at its top-left corner has no room for one there.
+inline void drawRoundedPlate(juce::Graphics& g, juce::Rectangle<float> box, float radius, float alpha, bool screws,
+                             bool topScrews = true)
 {
     if (box.getWidth() < 2.0f || box.getHeight() < 2.0f || alpha <= 0.0f) return;
     const auto corner = juce::jmax(0.0f, juce::jmin(radius, box.getWidth() * 0.5f, box.getHeight() * 0.5f));
@@ -127,19 +167,27 @@ inline void drawRoundedPlate(juce::Graphics& g, juce::Rectangle<float> box, floa
     g.setGradientFill(fill);
     g.fillPath(face);
 
-    // The lip is two rows, full strength then half: that falloff is what
-    // reads as light on an edge rather than as a stripe painted along it.
+    // The hairline first and the lip over its top run: the mockup's plate goes
+    // from the dark gap straight to the lit row, with the grey edge only down
+    // the sides and along the foot. The lip is two rows, full strength then
+    // half — that falloff is what reads as light on an edge rather than as a
+    // stripe painted along it.
+    // Stroked half a pixel inside the edge, so the hairline lies on the face
+    // rather than straddling it: straddling, its outer half stood above the
+    // lip as a grey row on a scaled display.
+    juce::Path edge;
+    edge.addRoundedRectangle(box.reduced(0.5f), juce::jmax(0.0f, corner - 0.5f));
+    g.setColour(line.withAlpha(alpha));
+    g.strokePath(edge, juce::PathStrokeType(1.0f));
     {
         juce::Graphics::ScopedSaveState state(g);
         g.reduceClipRegion(face);
         const auto inset = corner * 0.7f;
         g.setColour(plateEdgeLit.withAlpha(alpha));
-        g.fillRect(box.getX() + inset, box.getY() + 1.0f, box.getWidth() - inset * 2.0f, 1.0f);
+        g.fillRect(box.getX() + inset, box.getY(), box.getWidth() - inset * 2.0f, 1.0f);
         g.setColour(plateEdgeLit.withAlpha(0.5f * alpha));
-        g.fillRect(box.getX() + inset, box.getY() + 2.0f, box.getWidth() - inset * 2.0f, 1.0f);
+        g.fillRect(box.getX() + inset, box.getY() + 1.0f, box.getWidth() - inset * 2.0f, 1.0f);
     }
-    g.setColour(line.withAlpha(alpha));
-    g.strokePath(face, juce::PathStrokeType(1.0f));
 
     if (!screws) return;
     const auto in = corner + 2.0f;
@@ -148,6 +196,7 @@ inline void drawRoundedPlate(juce::Graphics& g, juce::Rectangle<float> box, floa
                               {box.getX() + in, box.getBottom() - in},
                               {box.getRight() - in, box.getBottom() - in}})
     {
+        if (!topScrews && centre.y < box.getCentreY()) continue;
         drawScrew(g, centre, 3.0f, false, alpha);
         // A hair of light over the screw's upper-left shoulder, so it sits in
         // the plate's light the way the lip does rather than floating on it.

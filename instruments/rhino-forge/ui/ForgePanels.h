@@ -3,6 +3,7 @@
 #include "ForgeChrome.h"
 #include "ForgePlacement.h"
 #include "ForgeType.h"
+#include "ForgeMerliChassis.h"
 
 // Static chassis furniture. Editor caches this layer at the display's pixel
 // scale; the irregular plates, engraving and wear are never rebuilt per frame.
@@ -57,6 +58,7 @@ inline void drawModuleDetail(juce::Graphics& g, juce::Rectangle<int> area, const
 inline void drawModuleShell(juce::Graphics& g, juce::Rectangle<int> area, const Module& module, bool on,
                             juce::Colour /*accent*/, const juce::String& code = {})
 {
+    if (isMerli()) { merli::drawModuleShell(g, area, module, on, code); return; }
     const auto box = area.toFloat();
     const auto id = juce::String(module.id);
     const auto grouped = module.group != nullptr;
@@ -112,6 +114,7 @@ inline void drawModuleShell(juce::Graphics& g, juce::Rectangle<int> area, const 
 
 inline void drawGroupPlate(juce::Graphics& g, juce::Rectangle<int> area)
 {
+    if (isMerli()) { merli::drawGroupPlate(g, area); return; }
     drawHousing(g, area.toFloat());
 }
 
@@ -173,6 +176,7 @@ inline void drawUnitMark(juce::Graphics& g, juce::Rectangle<int> area)
 
 inline void drawDeckPlates(juce::Graphics& g, juce::Rectangle<int> bounds)
 {
+    if (isMerli()) { merli::drawDeckPlates(g, bounds); return; }
     const auto left = deckLeftBounds(bounds).toFloat();
     const auto x = left.getX(), y = left.getY(), r = left.getRight(), b = left.getBottom();
     drawMetalPiece(g, metalPolygon({{x + 5, y - 5}, {r - 16, y - 5}, {r, y + 11},
@@ -183,6 +187,7 @@ inline void drawDeckPlates(juce::Graphics& g, juce::Rectangle<int> bounds)
 
 inline void drawNoteGuideHousing(juce::Graphics& g, juce::Rectangle<int> componentBounds)
 {
+    if (isMerli()) { merli::drawNoteGuideHousing(g, componentBounds); return; }
     const auto plate = noteGuidePlateBounds(componentBounds).toFloat();
     drawMetalPiece(g, housingOutline(plate.withTrimmedTop(-5).withTrimmedBottom(-8), 16));
     drawEdgeWear(g, plate, 63);
@@ -237,6 +242,7 @@ inline void drawArpSky(juce::Graphics& g, juce::Rectangle<int> wellBounds)
 // what the cached layer exists to pay for once.
 inline void drawArpPlateHousing(juce::Graphics& g, juce::Rectangle<int> componentBounds)
 {
+    if (isMerli()) { merli::drawArpPlateHousing(g, componentBounds); return; }
     const auto plate = arpPlateBounds(componentBounds).toFloat();
     drawMetalPiece(g, housingOutline(plate, 12.0f));
     drawEdgeWear(g, plate, 137);
@@ -255,6 +261,7 @@ inline void drawArpPlateHousing(juce::Graphics& g, juce::Rectangle<int> componen
 
 inline void drawBackdrop(juce::Graphics& g, juce::Rectangle<int> componentBounds)
 {
+    if (isMerli()) { merli::drawBackdrop(g, componentBounds); return; }
     const auto bounds = componentBounds.toFloat();
     const auto w = bounds.getWidth(), h = bounds.getHeight();
     g.fillAll(chassis);

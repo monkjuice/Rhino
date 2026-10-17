@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ForgeStyle.h"
+#include "ForgeMerliControls.h"
 
 // The knob, the slider and the menu, as JUCE asks for them. One place, so a
 // control that is drawn by JUCE and one that draws itself still look like
@@ -257,88 +258,100 @@ public:
         g.setColour(juce::Colours::black.withAlpha(enabled ? 0.45f : 0.16f));
         g.fillEllipse(body.translated(0.0f, 2.0f).expanded(1.6f));
 
-        // The collar.
-        g.setColour(knobCollar.withAlpha(enabled ? 1.0f : 0.55f));
-        g.fillEllipse(body.expanded(1.0f));
-        juce::ColourGradient collar(plateEdgeLit.withAlpha(enabled ? 0.5f : 0.18f),
-                                    body.getCentreX(), body.getY(),
-                                    juce::Colours::black.withAlpha(0.0f),
-                                    body.getCentreX(), body.getCentreY(), false);
-        g.setGradientFill(collar);
-        g.drawEllipse(body.reduced(0.4f), 1.2f);
-
-        // The scale, engraved into the collar rather than printed on the plate
-        // around it. Every third mark is longer, so the travel can be read in
-        // thirds without counting.
-        juce::Path ticks;
-        for (int i = 0; i <= 18; ++i)
+        if (isMerli())
         {
-            const auto tickAngle = juce::jmap(static_cast<float>(i) / 18.0f, startAngle, endAngle);
-            const auto inner = polar(radius * (i % 3 == 0 ? 0.64f : 0.68f), tickAngle);
-            ticks.startNewSubPath(inner); ticks.lineTo(polar(radius * 0.76f, tickAngle));
+            // Merli's knob is a bronze ring round one dark cap, the ring
+            // doubling as the value track, drawn whole by the Merli controls
+            // on the same circle. Its pointer is the tick on that cap, so the
+            // indicator at the end of this function is Forge's alone; the
+            // modulation ring between is shared.
+            merli::drawKnobFace(g, knob, angle, startAngle, endAngle, accent, enabled);
         }
-        g.setColour(plateEdgeLit.withAlpha(enabled ? 0.55f : 0.18f));
-        g.strokePath(ticks, juce::PathStrokeType(1.0f));
-
-        // The cap. A machined rim lit along its top edge and black along its
-        // foot — the same bevel a plate has, bent into a circle — with an
-        // anodised dome inside it.
-        const auto cap = body.reduced(body.getWidth() * 0.5f - radius * 0.52f);
-        juce::ColourGradient rim(knobRimLit.withAlpha(enabled ? 1.0f : 0.4f),
-                                 cap.getCentreX(), cap.getY(),
-                                 knobRimDark.withAlpha(enabled ? 1.0f : 0.4f),
-                                 cap.getCentreX(), cap.getBottom(), false);
-        g.setGradientFill(rim);
-        g.fillEllipse(cap.expanded(juce::jmax(2.2f, radius * 0.1f)));
-
-        juce::ColourGradient dome(knobDomeLit, cap.getX() + cap.getWidth() * 0.28f,
-                                  cap.getY() + cap.getHeight() * 0.18f,
-                                  knobDomeDark, cap.getRight(), cap.getBottom(), true);
-        dome.addColour(0.55, knobDomeMid);
-        g.setGradientFill(dome);
-        g.fillEllipse(cap);
-
-        // The specular: a sliver of the lamp above the desk, across the top of
-        // the dome. Sized to sit inside the cap rather than clipped to it — a
-        // clip push per knob per frame measured at seven points of one core on
-        // its own, and an ellipse that already fits needs no clip.
+        else
         {
-            const auto gloss = cap.reduced(cap.getWidth() * 0.16f, cap.getHeight() * 0.3f)
-                                  .translated(0.0f, -cap.getHeight() * 0.16f);
-            juce::ColourGradient sheen(juce::Colours::white.withAlpha(enabled ? 0.14f : 0.04f),
-                                       gloss.getCentreX(), gloss.getY(),
-                                       juce::Colours::white.withAlpha(0.0f),
-                                       gloss.getCentreX(), gloss.getBottom(), false);
-            g.setGradientFill(sheen);
-            g.fillEllipse(gloss);
-        }
+            // The collar.
+            g.setColour(knobCollar.withAlpha(enabled ? 1.0f : 0.55f));
+            g.fillEllipse(body.expanded(1.0f));
+            juce::ColourGradient collar(plateEdgeLit.withAlpha(enabled ? 0.5f : 0.18f),
+                                        body.getCentreX(), body.getY(),
+                                        juce::Colours::black.withAlpha(0.0f),
+                                        body.getCentreX(), body.getCentreY(), false);
+            g.setGradientFill(collar);
+            g.drawEllipse(body.reduced(0.4f), 1.2f);
 
-        // The one hard highlight on the knob: a crisp line along the cap's top
-        // edge. Stroked with a gradient rather than a flat colour so it is
-        // brightest at twelve o'clock and gone by the sides, which is where the
-        // light on this panel comes from.
-        {
-            juce::Path crown;
-            crown.addCentredArc(centre.x, centre.y, cap.getWidth() * 0.5f, cap.getHeight() * 0.5f,
-                                0.0f, -juce::MathConstants<float>::halfPi,
-                                juce::MathConstants<float>::halfPi, true);
-            juce::ColourGradient light(juce::Colours::white.withAlpha(enabled ? 0.45f : 0.12f),
-                                       cap.getCentreX(), cap.getY(),
-                                       juce::Colours::white.withAlpha(0.0f),
-                                       cap.getCentreX(), cap.getCentreY(), false);
-            g.setGradientFill(light);
-            g.strokePath(crown, juce::PathStrokeType(1.3f));
-        }
+            // The scale, engraved into the collar rather than printed on the plate
+            // around it. Every third mark is longer, so the travel can be read in
+            // thirds without counting.
+            juce::Path ticks;
+            for (int i = 0; i <= 18; ++i)
+            {
+                const auto tickAngle = juce::jmap(static_cast<float>(i) / 18.0f, startAngle, endAngle);
+                const auto inner = polar(radius * (i % 3 == 0 ? 0.64f : 0.68f), tickAngle);
+                ticks.startNewSubPath(inner); ticks.lineTo(polar(radius * 0.76f, tickAngle));
+            }
+            g.setColour(plateEdgeLit.withAlpha(enabled ? 0.55f : 0.18f));
+            g.strokePath(ticks, juce::PathStrokeType(1.0f));
 
-        // One lit LED where the pointer aims, rather than a strip filled from the
-        // start of the travel. The eye then reads the position itself, which is
-        // what the value is, and a centred parameter like PAN no longer looks
-        // like it is holding a large amount of something.
-        const auto led = polar(radius * 0.71f, angle);
-        g.setColour(accent.withAlpha(enabled ? 0.22f : 0.06f));
-        g.fillEllipse(juce::Rectangle<float>(9.0f, 9.0f).withCentre(led));
-        g.setColour(accent.withAlpha(enabled ? 1.0f : 0.3f));
-        g.fillEllipse(juce::Rectangle<float>(4.0f, 4.0f).withCentre(led));
+            // The cap. A machined rim lit along its top edge and black along its
+            // foot — the same bevel a plate has, bent into a circle — with an
+            // anodised dome inside it.
+            const auto cap = body.reduced(body.getWidth() * 0.5f - radius * 0.52f);
+            juce::ColourGradient rim(knobRimLit.withAlpha(enabled ? 1.0f : 0.4f),
+                                     cap.getCentreX(), cap.getY(),
+                                     knobRimDark.withAlpha(enabled ? 1.0f : 0.4f),
+                                     cap.getCentreX(), cap.getBottom(), false);
+            g.setGradientFill(rim);
+            g.fillEllipse(cap.expanded(juce::jmax(2.2f, radius * 0.1f)));
+
+            juce::ColourGradient dome(knobDomeLit, cap.getX() + cap.getWidth() * 0.28f,
+                                      cap.getY() + cap.getHeight() * 0.18f,
+                                      knobDomeDark, cap.getRight(), cap.getBottom(), true);
+            dome.addColour(0.55, knobDomeMid);
+            g.setGradientFill(dome);
+            g.fillEllipse(cap);
+
+            // The specular: a sliver of the lamp above the desk, across the top of
+            // the dome. Sized to sit inside the cap rather than clipped to it — a
+            // clip push per knob per frame measured at seven points of one core on
+            // its own, and an ellipse that already fits needs no clip.
+            {
+                const auto gloss = cap.reduced(cap.getWidth() * 0.16f, cap.getHeight() * 0.3f)
+                                      .translated(0.0f, -cap.getHeight() * 0.16f);
+                juce::ColourGradient sheen(juce::Colours::white.withAlpha(enabled ? 0.14f : 0.04f),
+                                           gloss.getCentreX(), gloss.getY(),
+                                           juce::Colours::white.withAlpha(0.0f),
+                                           gloss.getCentreX(), gloss.getBottom(), false);
+                g.setGradientFill(sheen);
+                g.fillEllipse(gloss);
+            }
+
+            // The one hard highlight on the knob: a crisp line along the cap's top
+            // edge. Stroked with a gradient rather than a flat colour so it is
+            // brightest at twelve o'clock and gone by the sides, which is where the
+            // light on this panel comes from.
+            {
+                juce::Path crown;
+                crown.addCentredArc(centre.x, centre.y, cap.getWidth() * 0.5f, cap.getHeight() * 0.5f,
+                                    0.0f, -juce::MathConstants<float>::halfPi,
+                                    juce::MathConstants<float>::halfPi, true);
+                juce::ColourGradient light(juce::Colours::white.withAlpha(enabled ? 0.45f : 0.12f),
+                                           cap.getCentreX(), cap.getY(),
+                                           juce::Colours::white.withAlpha(0.0f),
+                                           cap.getCentreX(), cap.getCentreY(), false);
+                g.setGradientFill(light);
+                g.strokePath(crown, juce::PathStrokeType(1.3f));
+            }
+
+            // One lit LED where the pointer aims, rather than a strip filled from the
+            // start of the travel. The eye then reads the position itself, which is
+            // what the value is, and a centred parameter like PAN no longer looks
+            // like it is holding a large amount of something.
+            const auto led = polar(radius * 0.71f, angle);
+            g.setColour(accent.withAlpha(enabled ? 0.22f : 0.06f));
+            g.fillEllipse(juce::Rectangle<float>(9.0f, 9.0f).withCentre(led));
+            g.setColour(accent.withAlpha(enabled ? 1.0f : 0.3f));
+            g.fillEllipse(juce::Rectangle<float>(4.0f, 4.0f).withCentre(led));
+        }
 
         // A modulated knob carries a ring outside the LED, so the two never read
         // as one. Two things are drawn on it: how far this knob's slots could
@@ -389,6 +402,9 @@ public:
                 g.fillEllipse(juce::Rectangle<float>(4.5f, 4.5f).withCentre(marker));
             }
         }
+
+        // Merli's pointer is the tick on its cap, drawn with the face above.
+        if (isMerli()) return;
 
         // The indicator, run out to just short of the lit rim so the line and
         // the LED read as one reading rather than two marks at odd radii. It is

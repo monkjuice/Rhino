@@ -40,6 +40,18 @@ public:
         g.setFont(panelFont(Face::label, 8.0f));
         g.drawText(spring ? "PITCH" : "MOD", 0, 0, width, 10, juce::Justification::centred);
         g.drawImage(wheel, art.toFloat(), juce::RectanglePlacement::stretchToFit);
+        // The wheel art is brushed steel, the one cold metal on Merli's warm
+        // panel. A wash of the knobs' bronze over the art's own pixels brings
+        // it into the set: drawn through the image's alpha, so the plate
+        // around the wheel is untouched, and in a saved state, because an
+        // image takes the current colour's alpha and the tyre drawn next must
+        // not inherit the wash's.
+        if (isMerli())
+        {
+            juce::Graphics::ScopedSaveState wash(g);
+            g.setColour(knobRimLit.withAlpha(0.24f));
+            g.drawImage(wheel, art.toFloat(), juce::RectanglePlacement::stretchToFit, true);
+        }
 
         // Slide only the tyre's ribbed middle over the stationary metal. The
         // narrow clip avoids moving the housing or its four screw heads.
@@ -52,6 +64,14 @@ public:
         g.reduceClipRegion(tyre.getSmallestIntegerContainer());
         g.drawImage(wheel, art.toFloat().translated(0.0f, shift),
                     juce::RectanglePlacement::stretchToFit);
+        // The tyre is rubber, near-black in the mockup between bronze rims,
+        // so it is taken down toward the knobs' dark bronze rather than lit.
+        if (isMerli())
+        {
+            juce::Graphics::ScopedSaveState rubber(g);
+            g.setColour(knobRimDark.withAlpha(0.45f));
+            g.drawImage(wheel, art.toFloat().translated(0.0f, shift), juce::RectanglePlacement::stretchToFit, true);
+        }
 
         // The small luminous notch makes the current position legible at the
         // panel's minimum size, even where the tyre texture is only a few px.

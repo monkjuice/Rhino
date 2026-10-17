@@ -149,6 +149,9 @@ inline const juce::Image& brushedGrain()
 // it is the second one that stops a large plate looking like an even wash.
 inline void fillGrain(juce::Graphics& g, const juce::Path& shape, float opacity, float scale = 1.0f)
 {
+    // The grain is the metal. Merli's plates are matte, and the fur around
+    // them is texture enough.
+    if (isMerli()) return;
     if (opacity <= 0.0f) return;
     juce::Graphics::ScopedSaveState state(g);
     g.reduceClipRegion(shape);
@@ -193,6 +196,9 @@ inline const juce::Image& fastenerImage(Fastener kind)
 inline void drawFastener(juce::Graphics& g, juce::Point<float> centre, float radius,
                          Fastener kind, float alpha)
 {
+    // Merli's hardware: its large screw where the cross-head holds Forge's
+    // chassis together, its small one where the dome stud holds a plate on.
+    if (isMerli()) { merli::drawScrew(g, centre, radius, kind == Fastener::cross, alpha); return; }
     if (radius < 1.0f || alpha <= 0.0f) return;
     const auto& art = fastenerImage(kind);
     if (art.isNull()) return;
@@ -223,6 +229,9 @@ inline void drawRivet(juce::Graphics& g, juce::Point<float> centre, float radius
 inline void drawHatch(juce::Graphics& g, juce::Rectangle<float> area, juce::Colour colour,
                       float thickness = 3.0f, float pitch = 9.0f)
 {
+    // Merli's plates carry no decal: the one stretch Forge hatches is the
+    // identity plate, and Merli's header has a cat where that was.
+    if (isMerli()) return;
     if (area.isEmpty() || pitch <= 0.0f) return;
     juce::Graphics::ScopedSaveState state(g);
     g.reduceClipRegion(area.toNearestInt());
@@ -298,6 +307,10 @@ inline void drawPlateShadow(juce::Graphics& g, juce::Rectangle<float> box, float
 inline void drawPlate(juce::Graphics& g, juce::Rectangle<float> box, float alpha = 1.0f,
                       float cut = plateCut, int corners = everyCorner, float grain = 0.035f)
 {
+    // Rounded to the module plates' radius at most: a chamfer is a larger cut
+    // than the rounding that stands in for it, so a caller's cut can only
+    // tighten the corner, never widen it past what the rest of Merli draws.
+    if (isMerli()) { merli::drawRoundedPlate(g, box, juce::jmin(cut, 7.0f), alpha, false); return; }
     if (box.getWidth() < 2.0f || box.getHeight() < 2.0f) return;
     const auto outline = chamferedPath(box, cut, corners);
 
@@ -334,6 +347,7 @@ inline void drawPlate(juce::Graphics& g, juce::Rectangle<float> box, float alpha
 inline void drawInnerPanel(juce::Graphics& g, juce::Rectangle<float> box, float alpha = 1.0f,
                            float cut = 6.0f)
 {
+    if (isMerli()) { merli::drawRoundedPlate(g, box, juce::jmin(cut, 7.0f), alpha, false); return; }
     if (box.getWidth() < 2.0f || box.getHeight() < 2.0f) return;
     const auto outline = chamferedPath(box, cut);
 
@@ -353,6 +367,16 @@ inline void drawInnerPanel(juce::Graphics& g, juce::Rectangle<float> box, float 
 inline void drawWell(juce::Graphics& g, juce::Rectangle<float> box, juce::Colour floorColour,
                      float alpha = 1.0f, float cut = 4.0f, int corners = everyCorner)
 {
+    // Every Merli well is rounded, whichever corners the caller would have
+    // cut: the mask was only ever about chamfers. A small cut rounds to 4 so
+    // it still reads as a corner, but no cut stays square — the spectral well
+    // asks for none because its picture fills it to the wall, and a rounded
+    // floor would leave the picture's corners hanging over the plate.
+    if (isMerli())
+    {
+        merli::drawRoundedWell(g, box, floorColour, alpha, cut <= 0.0f ? 0.0f : juce::jmax(4.0f, cut));
+        return;
+    }
     if (box.getWidth() < 2.0f || box.getHeight() < 2.0f) return;
     const auto outline = chamferedPath(box, cut, corners);
 
@@ -383,6 +407,7 @@ inline juce::Path metalPolygon(std::initializer_list<juce::Point<float>> points)
 inline void drawMetalPiece(juce::Graphics& g, const juce::Path& shape, float alpha = 1.0f,
                            float grain = 0.035f)
 {
+    if (isMerli()) { merli::drawMatteFill(g, shape, alpha); return; }
     const auto box = shape.getBounds();
     if (box.getWidth() < 2.0f || box.getHeight() < 2.0f) return;
     g.setColour(juce::Colours::black.withAlpha(0.95f * alpha));
@@ -410,6 +435,9 @@ inline void drawMetalPiece(juce::Graphics& g, const juce::Path& shape, float alp
 // long chassis rails. These are separate pieces, not an unbroken bright border.
 inline void drawMetalRail(juce::Graphics& g, juce::Rectangle<float> box, bool reverse = false)
 {
+    // A rail is a folded strip of the metal Merli has none of; its plates
+    // end at their hairline.
+    if (isMerli()) return;
     const auto x = box.getX(), y = box.getY(), r = box.getRight(), b = box.getBottom();
     auto shape = metalPolygon({{x + 5, y}, {r, y}, {r - 5, b}, {x, b}});
     if (reverse) shape.applyTransform(juce::AffineTransform::verticalFlip(y + b));
@@ -424,6 +452,9 @@ inline void drawMetalRail(juce::Graphics& g, juce::Rectangle<float> box, bool re
 
 inline void drawEdgeWear(juce::Graphics& g, juce::Rectangle<float> box, int seed)
 {
+    // Wear is scratched into a lit edge, and a matte plate has no lit edge
+    // to scratch.
+    if (isMerli()) return;
     juce::Random random(seed);
     const auto count = juce::jmax(3, static_cast<int>(box.getWidth() / 30.0f));
     for (int i = 0; i < count; ++i)

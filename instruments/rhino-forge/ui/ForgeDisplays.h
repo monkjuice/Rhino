@@ -120,9 +120,47 @@ inline juce::Path crtPath(juce::Rectangle<float> face)
     return tube;
 }
 
+// Merli's display is a flat panel, not a tube: the floor, a hairline in the
+// trace's colour and the graticule, with no glass to bloom, vignette or scan.
+// It keeps the tube's silhouette all the same, because drawWaveform clips the
+// trace to crtPath, and a floor of any other shape would either leave the
+// trace's halo on the plate or leave a margin of floor the trace never reaches.
+namespace merli
+{
+inline void drawFlatDisplay(juce::Graphics& g, juce::Rectangle<int> well, juce::Colour phosphor, float alpha)
+{
+    const auto face = crtFace(well);
+    if (face.getWidth() <= 1.0f || face.getHeight() <= 1.0f) return;
+    const auto tube = crtPath(face);
+
+    g.setColour(tubeFloor);
+    g.fillPath(tube);
+
+    {
+        juce::Graphics::ScopedSaveState clip(g);
+        g.reduceClipRegion(tube);
+        // Six divisions across and quarters down, as the tube's, with the
+        // middle row standing in for its zero axis at the same strength: on a
+        // flat panel every rule is printed and none of them is lit.
+        g.setColour(phosphor.withAlpha(0.12f * alpha));
+        for (int division = 1; division < 6; ++division)
+            g.fillRect(face.getX() + face.getWidth() * (float) division / 6.0f, face.getY(),
+                       1.0f, face.getHeight());
+        for (const auto share : {0.25f, 0.5f, 0.75f})
+            g.fillRect(face.getX(), face.getY() + face.getHeight() * share, face.getWidth(), 1.0f);
+    }
+
+    // The outline runs along the floor's own edge rather than astride it, so
+    // it reads as the panel's rim and not as a glow cast onto the plate.
+    g.setColour(phosphor.withAlpha(0.5f * alpha));
+    g.strokePath(crtPath(face.reduced(0.5f)), juce::PathStrokeType(1.0f));
+}
+}
+
 inline void drawCrtScreen(juce::Graphics& g, juce::Rectangle<int> well,
                           juce::Colour phosphor, float alpha)
 {
+    if (isMerli()) { merli::drawFlatDisplay(g, well, phosphor, alpha); return; }
     const auto face = crtFace(well);
     if (face.getWidth() <= 1.0f || face.getHeight() <= 1.0f) return;
     const auto tube = crtPath(face);

@@ -1,15 +1,15 @@
 ---
 title: Forge editor (panel)
 type: component
-summary: One Editor class across eighteen files builds the panel from declared modules and decides what is visible in one place.
+summary: One Editor class across nineteen files builds the panel from declared modules and decides what is visible in one place.
 tags: [forge, ui, layout]
 sources: []
-updated: 2026-10-13
+updated: 2026-10-17
 ---
 
 # Forge editor (panel)
 
-The panel is one `Editor` (`src/ForgeEditor.h`) defined across eighteen `.cpp` files, `src/ForgeEditor.cpp` plus `ForgeEditor{Envelope,Filter,Fx,FxView,Input,Layout,Lfo,MatrixView,Modulation,Noise,NoteGuide,OscMode,Pages,Paint,Spectral,Tables,Warp}.cpp`, sharing the private `src/ForgeEditorInternal.h`. This is the split Rhino uses ([Keeping files small](keeping-files-small.md)); unlike the engine, the panel may span translation units freely ([Forge's engine splits into headers only](forge-engine-headers-only.md)).
+The panel is one `Editor` (`src/ForgeEditor.h`) defined across nineteen `.cpp` files, `src/ForgeEditor.cpp` plus `ForgeEditor{Envelope,Filter,Fx,FxView,Input,Layout,Lfo,MatrixView,Modulation,Noise,NoteGuide,OscMode,Pages,Paint,Spectral,Tables,Theme,Warp}.cpp`, sharing the private `src/ForgeEditorInternal.h`. This is the split Rhino uses ([Keeping files small](keeping-files-small.md)); unlike the engine, the panel may span translation units freely ([Forge's engine splits into headers only](forge-engine-headers-only.md)).
 
 ## Declared, not computed
 
@@ -36,7 +36,8 @@ The guide uses ASCII-only musical and directional spellings (`C#/Db`, `7#5`, `m7
 - **Read values through `Editor::value`**, which asks the parameter rather than the cached atomic beside it. The atomic is updated by another listener, and a panel attachment called first reads the old value: a mode field looked right only after an unrelated click.
 - **A picture of what sounds reads `Editor::modulatedValue`; a knob reads `value`.** The matrix never writes a parameter, so a display drawn from `value` stays on the knob while an LFO sweeps the sound. `modulatedValue(id)` (`src/ForgeEditorModulation.cpp`) adds `processor.modulationOffset` in the parameter's own `NormalisableRange`, clamped, exactly as `Core::applyModulation` does. With no note sounding the offset is zero and the picture sits on the knob. Since `2d14aba` (2026-10-13) the oscillator tube's POSITION and the warp depths in `warpStagesOf` read it; the warp mode still reads `value`. Knobs keep `value`, since their live arc already comes from `refreshModulationRings`.
 - **Copy, do not point.** `FxSelector` copies a type's choices, because the slot's type can change before the next repaint. The table fields are the exception: their `choices` point into the editor's one `tableEntries` list, so only `rescanTables()` may replace that list, and it repoints all four fields when it does. It runs when the editor opens, when a table menu opens and after NEW or SAVE, never on the 24 Hz tick, where `refreshTableFields` only compares titles (`src/ForgeEditorTables.cpp`).
-- **No image outlives the editor.** A `juce::Image` with static storage is a Direct2D bitmap. It is released at DLL unload under the loader lock, and NVIDIA's driver deadlocks there. As of 2026-10-12 four statics still do this: in `ui/ForgeChrome.h` (`brushedGrain`, `fastenerImage`) and in `ui/ForgePerformanceWheel.h` ([A plugin's static Direct2D images deadlock NVIDIA's driver at unload](plugin-static-images-deadlock-on-unload.md)).
+- **No image outlives the editor.** A `juce::Image` with static storage is a Direct2D bitmap. It is released at DLL unload under the loader lock, and NVIDIA's driver deadlocks there. As of 2026-10-17 the same four statics as on 2026-10-12 still do this: in `ui/ForgeChrome.h` (`brushedGrain`, `fastenerImage`) and in `ui/ForgePerformanceWheel.h` ([A plugin's static Direct2D images deadlock NVIDIA's driver at unload](plugin-static-images-deadlock-on-unload.md)). The Merli theme added none: its textures are fetched through `ImageCache` at the point of use.
+- **Colours are theme tokens, applied once.** Every chrome colour is a token in `ui/ForgeTheme.h`, applied by `Processor::loadThemeOnce` before the first Editor exists, because controls copy tokens as they are built; a theme change takes effect on restart. A new chrome colour is a token with a value in every palette, never a literal, and a Merli look goes in as `if (isMerli()) { merli::drawX(...); return; }` at the top of the Forge primitive, leaving the layout and the Forge path alone ([Forge themes and Merli](forge-themes.md)).
 - **No knob prints its value.** A bubble beside the knob being turned does, so readouts cost no row height.
 - **A caption that does not fit its box changes font.** A `juce::Label` narrower than its text first squashes the glyphs (default minimum horizontal scale 0.7), then drops the font size, so the word reads as another face; POSITION did in a box its knob's width. So `ui::knobLabelBounds(block, cell)` (`ui/ForgeControlBlock.h`) spans the wider of the knob, fader or rocker block and its cell, and `dressControlLabel` (`src/ForgeEditor.cpp`) sets a `{1, 0, 1, 0}` border with no side padding, without which WARP 1/WARP 2 still overflowed their weight-2 cells at the minimum window. `captionsKeepTheirSizeSuite` (`forge_layout`) checks every caption-size label's string width against its box on OSC, MATRIX, MIX and FX at the minimum and default sizes. It walks visibility flags, because `isShowing()` is always false in a headless editor with no peer.
 - **Plates carry no legend.** A plate's foot is only `plateFootMargin` (6 px, `ui/ForgeModule.h`), kept clear of the housing's rail and rivet. The 20 px stamped legend strip (OSCILLATOR A … A-03) was removed in `7be9a56` because it repeated the header, and its height went to the knobs, displays, lower row and mixer strips. Part numbers (B-01…, A-06) stay in the header via `plateCode`; a group such as SUB / NOISE is keyed only by its `group` string, and `drawGroupPlate` draws just the housing.
@@ -51,4 +52,5 @@ Every frame repaints the whole panel and every ordinary knob shares one size: se
 - [Forge ARP plate, slots and waterfall](forge-arp-plate.md)
 - [Seeing the UI without taking the screen](headless-ui-snapshots.md)
 - [Colours and typography](colours-and-typography.md)
+- [Forge themes and Merli](forge-themes.md)
 - [A plugin's static Direct2D images deadlock NVIDIA's driver at unload](plugin-static-images-deadlock-on-unload.md)

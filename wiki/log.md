@@ -901,3 +901,15 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/pointer-and-selection.md (a lane click is a press that never armed; a second press ends the held lane gesture)
 - updated: pages/writing-rhino-tests.md (declare a listener a panel's teardown reaches before the panel)
 - updated: index.md (new gotcha page)
+
+## [2026-10-17] update | Forge's theme tokens (commit 425b253) and the Merli theme (working tree)
+- source: the change's brief and the coordinator's two follow-ups (drawImage opacity; the second Merli fix pass), checked against instruments/rhino-forge/ui/ForgeTheme.h, ForgeMerliMaterial.h, ForgeMerliChassis.h, ForgeMerliControls.h, ForgePerformanceWheel.h, ForgePlacement.h (`identityPlateBounds`), ui/assets/README.md, the isMerli dispatches in ui/, src/ForgeProcessorSettings.cpp, ForgeProcessor.cpp (`createEditor`), ForgeEditorTheme.cpp, ForgeEditorInput.cpp, tests/ForgeTestMain.cpp, ForgeTestTools.cpp, ForgeTestsTheme.cpp and CMakeLists.txt
+- created: pages/forge-themes.md (82 tokens, `earPink` removed, and `tokenBindings`; names kept when repainted; Settings.xml read once before the first Editor and why; the menu's two doors; the isMerli dispatch and the Merli files, with the second fix pass: `furOrigin`, the rim stopping short of the ears, `drawRoundedPlate`'s inside hairline and `topScrews`, no paw-lamp halo, the wheel and tyre washes through the art's alpha; rules that bite, drawImage at the current colour's alpha among them; the rebuilt fur tile and ears, linking ui/assets/README.md for the recipe; header plates at y 36 against Forge's 10 and 11; black keys and the contrast of legends and three known low-contrast labels; cost; the theme test area; the deferred frameless window)
+- updated: pages/colours-and-typography.md (summary; Forge's colours are theme tokens in ForgeTheme.h; text/panel/line now live there)
+- updated: pages/forge-editor.md (summary and body: nineteen units with ForgeEditorTheme.cpp; the four statics unchanged and Merli added none; a rule on tokens applied once and the isMerli dispatch)
+- updated: pages/forge.md (the two themes and how to switch; 19 test areas)
+- updated: pages/headless-ui-snapshots.md (the theme argument, `-` for no preset, exit 2 on an unknown theme, `--profile`'s theme)
+- updated: pages/build-and-test-forge.md (19 areas; the scratch Settings.xml the test main uses; the C4459 names now in ForgeTheme.h)
+- updated: pages/proving-a-forge-change-changed-nothing.md (the control build; OSC to FX hash, the ARP page does not)
+- updated: pages/git-workflow.md (two sessions and one index: the silent revert, its fix and the rule)
+- updated: index.md (new page; summaries of colours-and-typography and forge-editor)

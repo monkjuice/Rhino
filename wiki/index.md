@@ -28,7 +28,7 @@ The catalog of this wiki: every page, grouped by type, one line each (`- [Title]
 - [Drum Rack sample editor](pages/drum-rack-sample-editor.md) — How a Drum Rack sample pad plays its file (one-shot, classic or slice), kept as undoable pad content rather than automatable controls, cut at transients or into equal parts, and spread onto pads of their own.
 - [Forge ARP plate, slots and waterfall](pages/forge-arp-plate.md) — The painted plate between Forge's keys and note guide - a lamp, four slot buttons that swap the five pattern panes' 25 parameters through ARPSLOT nodes on the state tree, a door to the overlay, and a well where every note the voices play falls through the floor, a held one leaving a trace that hangs and brightens.
 - [Forge arpeggiator](pages/forge-arpeggiator.md) — Stands in front of the voices, hands notes back through two callbacks, keeps four pattern slots, and opens as an overlay from a plate between the keys and the note guide.
-- [Forge editor (panel)](pages/forge-editor.md) — One Editor class across eighteen files builds the panel from declared modules and decides what is visible in one place.
+- [Forge editor (panel)](pages/forge-editor.md) — One Editor class across nineteen files builds the panel from declared modules and decides what is visible in one place.
 - [Forge engine (Core)](pages/forge-engine.md) — The header-only voice engine that allocates sixteen voices, modulates per voice per sample and scales the output by 0.28.
 - [Forge filter](pages/forge-filter.md) — One per-voice filter of 34 types in six families, whose drawn response and audio come from the same header.
 - [Forge LFOs](pages/forge-lfos.md) — Each of the six LFOs is a NORMAL shape, a PATH across the pad with X and Y outputs, or an S&H staircase, read FORWARD, REVERSE or PING-PONG, and the panel draws it from the one function the voice reads.
@@ -39,6 +39,7 @@ The catalog of this wiki: every page, grouped by type, one line each (`- [Title]
 - [Forge oscillators and wavetables](pages/forge-oscillators.md) — Three identical oscillators, each reading its own band-limited wavetable, plus the table editor, the table field that browses tables/ by title rather than by parameter, NEW and SAVE, and the audio-thread hand-off.
 - [Forge presets and state](pages/forge-presets-and-state.md) — Presets and host state carry one tree; a preset of another format version is refused, and within a version everything is reconciled.
 - [Forge spectral oscillator](pages/forge-spectral.md) — An oscillator mode that resynthesises a loaded sample with a phase vocoder, so pitch and scan position move independently (M16).
+- [Forge themes and Merli](pages/forge-themes.md) — Every Forge chrome colour is a token in ui/ForgeTheme.h with a value per theme; the theme is a machine setting read once before the first Editor, and Merli, the second theme, redraws the chrome as fur and matte plates over the identical layout.
 - [Forge warp](pages/forge-warp.md) — Two warp stages per oscillator, 43 modes in nine families, OSC modes able to read either other oscillator, chained through one read function and anti-aliased by duller tables.
 - [Hosting Forge in Rhino](pages/forge-hosting.md) — How Rhino finds, loads and talks to the Forge VST3, and what does and does not cross the plugin boundary.
 - [Keyboard velocity curves](pages/keyboard-velocity-curves.md) — A velocity curve per MIDI keyboard port, kept per machine; a port set to anything but Linear is read by Rhino itself, bent on the MIDI thread and delivered to All Ins and a "<port> (curved)" stand-in, because Tracktion cannot rewrite a note on its way in.
@@ -113,7 +114,7 @@ The catalog of this wiki: every page, grouped by type, one line each (`- [Title]
 
 ## Conventions
 
-- [Colours and typography](pages/colours-and-typography.md) — Rhino names chrome colours in Theme.h's palette and draws text in embedded Inter; Forge has its own metal look, accent colours and four faces.
+- [Colours and typography](pages/colours-and-typography.md) — Rhino names chrome colours in Theme.h's palette and draws text in embedded Inter; Forge names its own as theme tokens in ForgeTheme.h and draws in four faces.
 - [Dependency direction](pages/dependency-direction.md) — Knowledge flows one way in both products, UI to model to devices to core, and every rule lives in the model so each UI path inherits it.
 - [Directories not to read](pages/off-limits-directories.md) — native/.deps and research/sources are not Rhino's code and are never searched; Tracktion signatures are checked in curated header snapshots, and a method body in the pinned commit on GitHub.
 - [Documentation ownership](pages/documentation-ownership.md) — READMEs introduce and build the products; the wiki is the canonical home for engineering detail, decisions and gotchas.

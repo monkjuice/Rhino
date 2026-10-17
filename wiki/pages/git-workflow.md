@@ -4,7 +4,7 @@ type: convention
 summary: Focused, verified commits pushed at milestones; stage explicit paths since the user edits Forge in the same tree; never rewrite pushed history.
 tags: [both, git, workflow, tooling]
 sources: []
-updated: 2026-10-13
+updated: 2026-10-17
 ---
 
 # Git workflow
@@ -28,6 +28,14 @@ The user edits Forge in the same working tree while an agent works elsewhere, co
 - treat changes outside your own area in `git status` as somebody else's;
 - run `git log` again before assuming the branch is where you left it, because the user pushes mid-session too;
 - check `git branch --show-current` before writing and before committing: another agent sharing the tree has checked out a different branch and back mid-task (2026-10-13, `main` to `feat/forge-lfo-types`), so a survey of the files belongs to the commit it was made on.
+
+## Two sessions, one index
+
+While the Forge themes went in (2026-10-16/17), two agent sessions committed in one checkout. Session A committed from a temporary index (`GIT_INDEX_FILE`) and never resynced the real one, which still held the old content of A's 30 files. Session B then staged its own paths in the real index and committed: that commit's tree silently reverted all 30, showing as "69 files changed, 2734 deletions" for a 39-file change. It was caught before pushing and fixed with `git reset --mixed <parent>` (index and branch only, working tree kept), re-staging B's explicit paths and committing again. So:
+
+- before pushing, read `git show --stat HEAD` and look for paths that are not yours, and a deletion count out of proportion to the change;
+- tell the other session before staging from the real index, and after committing through a temporary index, bring the real index's entries for those paths up to the new `HEAD` (`git reset -- <paths>`);
+- only one session pushes.
 
 ## Committing through the HARBIZ `git_commit` tool
 

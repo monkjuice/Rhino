@@ -1,10 +1,10 @@
 ---
 title: Colours and typography
 type: convention
-summary: Rhino names chrome colours in Theme.h's palette and draws text in embedded Inter; Forge has its own metal look, accent colours and four faces.
+summary: Rhino names chrome colours in Theme.h's palette and draws text in embedded Inter; Forge names its own as theme tokens in ForgeTheme.h and draws in four faces.
 tags: [both, ui, theme, fonts]
 sources: []
-updated: 2026-10-16
+updated: 2026-10-17
 ---
 
 # Colours and typography
@@ -34,12 +34,13 @@ The chrome is neutral on purpose. Only what carries meaning is saturated: a trac
 
 ## Forge: its own look
 
-Forge shares none of this. Its panel is a dark metal chassis (`ui/ForgePanels.h`), with colours named in `ui/ForgeStyle.h` and `ui/ForgeChrome.h`. The signal path is electric blue and the modulators are violet. Each oscillator wears a plate colour picked from its LED (red, orange, green by default, or blue), and each FX type has its own colour (`fxTypeColour`). Text uses four subset OFL faces, one per job: Chakra Petch SemiBold for headers and tabs, Rajdhani Medium for labels, Rajdhani SemiBold for buttons and IBM Plex Mono Medium for readouts. Subsetting cut them from 988 KB to 79 KB of embedded data (`ui/assets/fonts/README.md`).
+Forge shares none of this. Its panel is a dark metal chassis (`ui/ForgePanels.h`). Since commit `425b253` (2026-10-16) every chrome colour is a token in `ui/ForgeTheme.h`, with a value in each theme's palette, Forge's and Merli's; a new chrome colour is a token, never a literal ([Forge themes and Merli](forge-themes.md)). The signal path is `electricBlue` and the modulators `signalViolet`, names kept even where Merli paints them orange and violet. Each oscillator wears a plate colour picked from its LED (`oscRed`, `oscOrange`, `oscGreen` by default, or blue; `panelColourOf` in `ui/ForgeStyle.h`), and each FX type has its own colour (`fxTypeColour`), which stays a literal as content colours do. Text uses four subset OFL faces, one per job: Chakra Petch SemiBold for headers and tabs, Rajdhani Medium for labels, Rajdhani SemiBold for buttons and IBM Plex Mono Medium for readouts. Subsetting cut them from 988 KB to 79 KB of embedded data (`ui/assets/fonts/README.md`).
 
-Some of those colour names are short words at namespace scope in `rhino::forge::ui`: `text`, `panel` and `line`. Never name a local or parameter `text`, `panel` or `line` in Forge UI code: under `/W4` it raises C4459, once per translation unit that includes the header ([Build and test Forge](build-and-test-forge.md#warnings)).
+Some of those tokens are short words at namespace scope in `rhino::forge::ui` (`ui/ForgeTheme.h`): `text`, `panel` and `line`. Never name a local or parameter `text`, `panel` or `line` in Forge UI code: under `/W4` it raises C4459, once per translation unit that includes the header ([Build and test Forge](build-and-test-forge.md#warnings)).
 
 ## Related
 
 - [App shell and control bar](app-shell.md)
 - [Track and clip colours](track-and-clip-colours.md)
 - [Forge editor (panel)](forge-editor.md)
+- [Forge themes and Merli](forge-themes.md)

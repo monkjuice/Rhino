@@ -4,7 +4,7 @@ type: guide
 summary: Configure Forge against Rhino's JUCE checkout, build around the toolchain's traps, fix /W4 warnings at their source, and run one test area at a time.
 tags: [forge, build, testing, windows, warnings]
 sources: []
-updated: 2026-10-13
+updated: 2026-10-17
 ---
 
 # Build and test Forge
@@ -59,8 +59,8 @@ from 24 sites, all in Forge's own code and none in JUCE).
   [Proving a Forge change changed nothing](proving-a-forge-change-changed-nothing.md) describes. It takes a few minutes,
   and the MSB8029 it reports only means the tree is under `Temp`.
 - The causes found so far:
-  - C4459: `rhino::forge::ui` declares colours named `text` (`ui/ForgeChrome.h`), `panel` and `line`
-    (`ui/ForgeStyle.h`), so a local or parameter with one of those names hides it. Name them `textArea`, `label`,
+  - C4459: `rhino::forge::ui` declares colour tokens named `text`, `panel` and `line` (`ui/ForgeTheme.h` since
+    2026-10-16), so a local or parameter with one of those names hides it. Name them `textArea`, `label`,
     `lineTool` and the like ([Colours and typography](colours-and-typography.md)).
   - C4458: a local named after a member of its class, JUCE bases included: `properties` (`juce::Component`), `playHead`
     (`juce::AudioProcessor`), `samples` (`Processor`'s `SampleStore`). C4456 and C4457 catch a local that hides an
@@ -73,8 +73,8 @@ from 24 sites, all in Forge's own code and none in JUCE).
 
 ## Test
 
-One binary, one file per area, one CTest case per area: 18 areas as of 2026-10-03 (`forge_test_areas` in
-`CMakeLists.txt`).
+One binary, one file per area, one CTest case per area: 19 areas as of 2026-10-17, `theme` the newest
+(`forge_test_areas` in `CMakeLists.txt`).
 
 ```powershell
 cmake --build instruments/rhino-forge/build --config Release --target RhinoForgeTests --parallel 2 -- /p:BuildInParallel=false
@@ -89,6 +89,10 @@ ctest --test-dir instruments/rhino-forge/build -C Release -j 8 --output-on-failu
 - Adding an area touches four files: the new `tests/ForgeTests<Area>.cpp`, its declaration in `tests/ForgeSuites.h`, a
   row in the table in `tests/ForgeTestMain.cpp`, and two lines of `CMakeLists.txt` (the file in `target_sources`, the
   name in `forge_test_areas`). Nothing self-registers; reconfigure afterwards.
+- The test binary never reads the machine's settings. `main` (`tests/ForgeTestMain.cpp`) points
+  `Processor::setSettingsFile` at `%TEMP%\RhinoForgeTests\Settings.xml` and deletes it before anything runs, so the
+  suite and the tools render Forge even where the user picked Merli, and no run inherits an earlier one's choice
+  ([Forge themes and Merli](forge-themes.md)).
 - The test binary links with an 8 MB stack because suites keep several `Processor`s as locals; a CTest `SegFault` can
   still be an overflow ([A CTest SegFault may be a stack overflow](stack-overflow-reports-as-segfault.md)).
 - To prove a new check can fail, break the code temporarily and then restore it by editing, not with `Copy-Item`. A

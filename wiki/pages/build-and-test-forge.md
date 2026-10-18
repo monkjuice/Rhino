@@ -4,7 +4,7 @@ type: guide
 summary: Configure Forge against Rhino's JUCE checkout, build around the toolchain's traps, fix /W4 warnings at their source, and run one test area at a time.
 tags: [forge, build, testing, windows, warnings]
 sources: []
-updated: 2026-10-17
+updated: 2026-10-18
 ---
 
 # Build and test Forge
@@ -73,8 +73,9 @@ from 24 sites, all in Forge's own code and none in JUCE).
 
 ## Test
 
-One binary, one file per area, one CTest case per area: 19 areas as of 2026-10-17, `theme` the newest
-(`forge_test_areas` in `CMakeLists.txt`).
+One binary, one file per area, one CTest case per area: 20 areas as of 2026-10-18, `fxModulation` the newest
+(`forge_test_areas` in `CMakeLists.txt`). `-R` is an unanchored regex, so `-R forge_fx` runs `forge_fxModulation`
+too; `-R '^forge_fx$'` runs the one.
 
 ```powershell
 cmake --build instruments/rhino-forge/build --config Release --target RhinoForgeTests --parallel 2 -- /p:BuildInParallel=false

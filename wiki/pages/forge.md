@@ -4,7 +4,7 @@ type: component
 summary: Rhino's independent wavetable and spectral synth, a VST3 and standalone app built from one JUCE AudioProcessor.
 tags: [forge, synth, overview]
 sources: []
-updated: 2026-10-17
+updated: 2026-10-18
 ---
 
 # Rhino Forge
@@ -42,7 +42,7 @@ Forge follows Serum 2's manual for structure: layout, routing and drag-to-modula
 | `core/` | The engine, header-only ([Forge engine (Core)](forge-engine.md)) |
 | `ui/` | The declarative layout and the visuals, all headers |
 | `src/` | The translation units for the Processor and the Editor |
-| `tests/` | One file per area, 19 areas (`forge_test_areas` in `CMakeLists.txt`) |
+| `tests/` | One file per area, 20 areas (`forge_test_areas` in `CMakeLists.txt`) |
 | `tables/` | Ten factory wavetables, `make-tables.py` that writes them, and the git-ignored `user/` where the panel's NEW and SAVE write ([Forge oscillators and wavetables](forge-oscillators.md)) |
 | `presets/` | `aLiLBitDark.forgepreset`, a format 1 file that the current build refuses |
 

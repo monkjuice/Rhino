@@ -913,3 +913,10 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/proving-a-forge-change-changed-nothing.md (the control build; OSC to FX hash, the ARP page does not)
 - updated: pages/git-workflow.md (two sessions and one index: the silent revert, its fix and the rule)
 - updated: index.md (new page; summaries of colours-and-typography and forge-editor)
+
+## [2026-10-18] update | Forge FX racks: LEVEL takes modulation, drops reach the scrolled rack, selectors fit their strip
+- source: the change itself, checked against instruments/rhino-forge/core/ForgeMatrix.h, core/ForgePatch.h, src/ForgeEditorInput.cpp (`controlAt`), src/ForgeEditorPaint.cpp, ui/ForgeControlBlock.h (`controlBlock`), tests/ForgeTestsFxModulation.cpp, ForgeTestsFx.cpp, ForgeTestsModulation.cpp, ForgeTestsLayout.cpp, ForgeSuites.h, ForgeTestMain.cpp and CMakeLists.txt
+- updated: pages/forge-modulation.md (each rack slot's LEVEL is a destination; the FX LEVEL bank appended after tuning and why it is not an eighth per-slot entry; `isFxDestination` tests two ranges; rack drop targets mapped out of `fxControlViewport` and clipped to it, and the `forge_fxModulation` test)
+- updated: pages/forge-mixer-and-fx.md (every rack knob, MIX and LEVEL is a destination; rack selectors centred in the slot's strip, and the layout sweep that holds it)
+- updated: pages/append-only-stored-indices.md (the FX LEVEL bank as the rule applied)
+- updated: pages/build-and-test-forge.md, pages/forge.md (20 areas; `-R forge_fx` also selects `forge_fxModulation`)

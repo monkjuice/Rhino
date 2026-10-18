@@ -185,6 +185,11 @@ inline float* destinationField(Patch& patch, int destination)
         return tuning % tuningDestinationsPerOscillator == 0 ? &oscillator.octave : &oscillator.fine;
     }
 
+    const auto fxLevel = destination - fxLevelDestinationBase;
+    if (fxLevel >= 0 && fxLevel < fxLevelDestinationCount)
+        return &patch.racks[static_cast<size_t>(fxLevel / fxSlotCount)]
+                     .slots[static_cast<size_t>(fxLevel % fxSlotCount)].level;
+
     const auto fx = destination - fxDestinationBase;
     if (fx < 0 || fx >= fxDestinationCount) return nullptr;
     const auto control = fx % fxDestinationsPerSlot;

@@ -17,11 +17,17 @@ namespace rhino::forge
 Editor::Control* Editor::controlAt(juce::Point<int> panelPosition)
 {
     for (auto& module : moduleUis)
+    {
+        // The rack clips a partly visible row; its hidden controls must not
+        // catch a drop over the modulators below it.
+        if (isFxModule(*module.descriptor) && !fxControlViewport.getBounds().contains(panelPosition))
+            continue;
         for (auto& control : module.controls)
             if (control->slider.isVisible() && ui::showsModulation(control->style)
-                && control->slider.getBounds().contains(panelPosition)
+                && getLocalArea(&control->slider, control->slider.getLocalBounds()).contains(panelPosition)
                 && (control->style == ui::Style::knob || destinationFor(control->id) != 0))
                 return control.get();
+    }
     return nullptr;
 }
 

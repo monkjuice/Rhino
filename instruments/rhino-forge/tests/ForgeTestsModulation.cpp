@@ -368,6 +368,22 @@ void appendedDestinationsSuite()
                     && destinationField(patch, octave + 1) == &settings.fine,
                 "OCT and FINE move their own oscillator's fields");
     }
+
+    require(fxLevelDestinationBase == tuningDestinationBase + tuningDestinationCount,
+            "FX LEVEL destinations were appended after every earlier destination");
+    for (int rack = 0; rack < rackCount; ++rack)
+        for (int slot = 0; slot < fxSlotCount; ++slot)
+        {
+            const auto destination = fxLevelDestinationOf(rack, slot);
+            require(isFxDestination(destination), "an appended FX LEVEL belongs to the rack bank");
+            requireText(list[static_cast<size_t>(destination)].id,
+                        fxParameterId(rack, slot, "Level"),
+                        "each appended FX LEVEL destination names its parameter");
+            require(destinationField(patch, destination)
+                        == &patch.racks[static_cast<size_t>(rack)]
+                                 .slots[static_cast<size_t>(slot)].level,
+                    "each appended FX LEVEL destination moves its own slot");
+        }
     require(destinationField(patch, destinationCount) == nullptr,
             "an index past the end of the list points at nothing");
 

@@ -334,6 +334,10 @@ inline juce::Rectangle<int> controlBlock(juce::Rectangle<int> moduleArea, const 
         case Style::selector:
         {
             auto block = selectorBlock(moduleArea, module, rowIndex, index);
+            // The FX strip must fit all three stacked choices. Aligning this
+            // taller block to a knob's label pushes its last choice into the
+            // next strip; centring it leaves room above and below instead.
+            if (juce::String(module.id) == "fx") return block;
             // Beside knobs, on their label line, exactly as a stepper is.
             if (module.columnHeaderHeight == 0 && rowHasKnobs(module, rowIndex))
             {

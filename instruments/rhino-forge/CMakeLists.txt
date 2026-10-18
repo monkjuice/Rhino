@@ -232,6 +232,7 @@ if (BUILD_TESTING)
         noise
         mixer
         fx
+        fxModulation
         modulation
         envelope
         lfo
@@ -262,6 +263,7 @@ if (BUILD_TESTING)
         tests/ForgeTestsNoise.cpp
         tests/ForgeTestsMixer.cpp
         tests/ForgeTestsFx.cpp
+        tests/ForgeTestsFxModulation.cpp
         tests/ForgeTestsModulation.cpp
         tests/ForgeTestsEnvelope.cpp
         tests/ForgeTestsLfo.cpp

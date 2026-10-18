@@ -409,6 +409,21 @@ void fxSuite()
     renderNote(modulated, buffer);
     require(brightness(buffer, 0, 1024) > closed * 1.2f,
             "a macro pointed at a rack knob opens it");
+
+    auto levelOwner = std::make_unique<rhino::forge::Processor>();
+    auto& level = *levelOwner;
+    soloSineOnA(level);
+    place(level, 0, 0, FxType::filter);
+    setValue(level, rhino::forge::fxParameterId(0, 0, "Level").toRawUTF8(), 0.0f);
+    setSlot(level, 1, static_cast<float>(rhino::forge::ModSource::macro1),
+            static_cast<float>(rhino::forge::fxLevelDestinationOf(0, 0)), 1.0f);
+    setValue(level, "macro1", 0.0f);
+    renderNote(level, buffer);
+    const auto levelDown = rms(buffer, 0, 1024);
+    setValue(level, "macro1", 1.0f);
+    renderNote(level, buffer);
+    require(rms(buffer, 0, 1024) > levelDown + 0.01f,
+            "a macro pointed at an FX LEVEL raises the slot output");
 }
 
 void fxDisplaySuite()

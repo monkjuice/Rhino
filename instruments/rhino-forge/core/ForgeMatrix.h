@@ -161,14 +161,10 @@ inline constexpr int fxDestinationCount = rackCount * fxSlotCount * fxDestinatio
 // Whether a destination is one of a rack's controls. A range, not a lower bound:
 // the warp depths, the filter's second field and the noise controls were all
 // appended after the racks, so "at or past the racks" takes them in too.
-inline constexpr bool isFxDestination(int destination)
-{
-    return destination >= fxDestinationBase && destination < fxDestinationBase + fxDestinationCount;
-}
+inline constexpr bool isFxDestination(int destination);
 
-// Output is deliberately absent, and so are the bus levels and the sends: all
-// of them are applied once the voices are summed, so a per-voice modulation of
-// one would not mean anything.
+// Output, bus levels and sends are deliberately absent: all of them are
+// applied once the voices are summed and do not belong to one rack slot.
 //
 // The rack's own controls are applied after the voices too, and they are here
 // anyway. A rack is one process fed by every note, so a per-voice source
@@ -227,7 +223,21 @@ inline constexpr bool isEnvelopeDestination(int destination)
 inline constexpr int tuningDestinationBase = envDestinationBase + envDestinationCount;
 inline constexpr int tuningDestinationsPerOscillator = 2;
 inline constexpr int tuningDestinationCount = oscillatorCount * tuningDestinationsPerOscillator;
-inline constexpr int destinationCount = tuningDestinationBase + tuningDestinationCount;
+
+// LEVEL was added after every original destination. Keep it in an appended
+// bank rather than widening fxDestinationsPerSlot: widening the old run would
+// shift every later slot and silently retarget saved matrix routings.
+inline constexpr int fxLevelDestinationBase = tuningDestinationBase + tuningDestinationCount;
+inline constexpr int fxLevelDestinationCount = rackCount * fxSlotCount;
+inline constexpr int destinationCount = fxLevelDestinationBase + fxLevelDestinationCount;
+
+inline constexpr bool isFxDestination(int destination)
+{
+    return (destination >= fxDestinationBase
+            && destination < fxDestinationBase + fxDestinationCount)
+        || (destination >= fxLevelDestinationBase
+            && destination < fxLevelDestinationBase + fxLevelDestinationCount);
+}
 
 inline const std::array<DestinationInfo, tuningDestinationCount>& tuningDestinations()
 {
@@ -277,6 +287,11 @@ inline int fxDestinationOf(int rack, int slot, int control)
          + ((rack * fxSlotCount) + slot) * fxDestinationsPerSlot + control;
 }
 
+inline int fxLevelDestinationOf(int rack, int slot)
+{
+    return fxLevelDestinationBase + rack * fxSlotCount + slot;
+}
+
 // The whole destination list: the named controls, then every rack slot's six
 // knobs and its mix, then whatever was appended since. Built once, and held by
 // value because the generated half owns the strings it names — a `const char*`
@@ -288,7 +303,8 @@ inline const std::vector<DestinationInfo>& destinations()
         // The ids and labels the generated half needs, kept alive for as long
         // as the table points into them.
         static std::vector<juce::String> pool;
-        pool.reserve(static_cast<size_t>(fxDestinationCount + envDestinationCount) * 2);
+        pool.reserve(static_cast<size_t>(fxDestinationCount + fxLevelDestinationCount
+                                         + envDestinationCount) * 2);
 
         std::vector<DestinationInfo> built;
         built.reserve(static_cast<size_t>(destinationCount));
@@ -336,6 +352,17 @@ inline const std::vector<DestinationInfo>& destinations()
             }
 
         for (const auto& named : tuningDestinations()) built.push_back(named);
+
+        // Appended after every pre-existing destination so adding LEVEL does
+        // not change what any saved matrix index means.
+        for (int rack = 0; rack < rackCount; ++rack)
+            for (int slot = 0; slot < fxSlotCount; ++slot)
+            {
+                pool.push_back(fxParameterId(rack, slot, "Level"));
+                pool.push_back(juce::String(rackName(rack)) + " " + juce::String(slot + 1)
+                               + " LEVEL");
+                built.push_back({pool[pool.size() - 2].toRawUTF8(), pool.back().toRawUTF8()});
+            }
         return built;
     }();
     return table;

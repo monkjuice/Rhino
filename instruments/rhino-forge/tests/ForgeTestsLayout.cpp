@@ -983,6 +983,19 @@ void layoutSuite()
                                         scrolledRack, *fxModule, slot, control,
                                         rhino::forge::ui::uniformKnobDiameter(panel));
                                     require(rack.contains(block), "every visible FX control stays beside the list");
+                                    require(strip.contains(block), "every FX control stays inside its own strip");
+                                    if (row.controls[static_cast<size_t>(control)].style
+                                        == rhino::forge::ui::Style::selector)
+                                    {
+                                        require(strip.reduced(0, 4).contains(block),
+                                                "an FX selector leaves padding above and below its choices");
+                                        const auto choices = block.withTrimmedTop(
+                                            rhino::forge::ui::stepperLabelHeight);
+                                        for (const auto count : {2, 3})
+                                            require(choices.getHeight() / count
+                                                        >= rhino::forge::ui::selectorSegmentHeight,
+                                                    "two- and three-way FX choices stay readable");
+                                    }
                                 }
                             }
                         }

@@ -337,7 +337,11 @@ void Editor::paint(juce::Graphics& g)
         {
             const auto reachable = destinationFor(target->id) != 0;
             g.setColour((reachable ? ui::signalViolet : ui::mutedText).withAlpha(0.9f));
-            g.drawRoundedRectangle(target->slider.getBounds().toFloat().reduced(2.0f), 4.0f, 1.6f);
+            juce::Graphics::ScopedSaveState clipped(g);
+            if (target->slider.getParentComponent() == &fxControlViewport)
+                g.reduceClipRegion(fxControlViewport.getBounds());
+            g.drawRoundedRectangle(getLocalArea(&target->slider, target->slider.getLocalBounds())
+                                       .toFloat().reduced(2.0f), 4.0f, 1.6f);
         }
     }
 }

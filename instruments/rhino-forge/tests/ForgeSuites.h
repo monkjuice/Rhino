@@ -40,6 +40,10 @@ void mixerTests();
 // ForgeTestsFx.cpp — the three effects racks, rendered and drawn.
 void fxTests();
 
+// ForgeTestsFxModulation.cpp — dragging an ENV, an LFO or a macro onto a rack's
+// knobs, its MIX and its LEVEL, through bank switches, a scroll and the clip.
+void fxModulationTests();
+
 // ForgeTestsModulation.cpp — the matrix and the macros.
 void modulationTests();
 

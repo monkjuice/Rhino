@@ -4,7 +4,7 @@ type: decision
 summary: Why Forge is its own JUCE plugin project, hosted by Rhino through Tracktion's external-plugin wrapper rather than built in.
 tags: [forge, vst3, hosting, architecture]
 sources: []
-updated: 2026-10-13
+updated: 2026-10-18
 ---
 
 # Forge is an independent VST3
@@ -36,7 +36,7 @@ The rejected alternative was a built-in Tracktion device like Rhino Wave. That a
 
 - **Rhino never names a Forge parameter.** Rhino finds the plugin by its description (`looksLikeForge` in `native/src/model/SessionExternalPlugins.cpp`). So a Forge parameter change can only affect Forge state saved inside a `.rhinoedit`, and Forge reconciles that state when it loads ([Hosting Forge in Rhino](forge-hosting.md), [Forge presets and state](forge-presets-and-state.md)).
 - **A running host locks the VST3.** Relinking fails with LNK1104 while RhinoDAW or a DAW has the plugin loaded. Build the test binary and the standalone instead, and say the VST3 is stale ([LNK1104 means a running binary holds the file](locked-executable-lnk1104.md)).
-- **Separate build and tests.** Forge has its own CMake configure step and its own test binary with 18 areas ([Build and test Forge](build-and-test-forge.md)).
+- **Separate build and tests.** Forge has its own CMake configure step and its own test binary, one CTest case per test area ([Build and test Forge](build-and-test-forge.md)).
 - **Shipping needs a real host.** A VST3 counts as shipped only after it has been loaded and automated in at least one external host; a successful compile is not proof. Generated bundles are never committed.
 - **Code crosses the boundary with effort.** Forge's planned arp pattern editor (M13c) cannot simply reuse Rhino's `StepGrid`. That editor calls into `Session` about a hundred times, and `Session.h` pulls in Tracktion. A Session-free note-grid core would have to be extracted first ([Note editor (StepGrid)](note-editor.md)).
 - **There is no engine library.** The engine is header-only, and one source list is compiled into both the plugin and the tests ([Forge's engine splits into headers only](forge-engine-headers-only.md)).

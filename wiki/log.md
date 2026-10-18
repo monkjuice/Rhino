@@ -920,3 +920,8 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/forge-mixer-and-fx.md (every rack knob, MIX and LEVEL is a destination; rack selectors centred in the slot's strip, and the layout sweep that holds it)
 - updated: pages/append-only-stored-indices.md (the FX LEVEL bank as the rule applied)
 - updated: pages/build-and-test-forge.md, pages/forge.md (20 areas; `-R forge_fx` also selects `forge_fxModulation`)
+
+## [2026-10-18] update | Gaps after the FX rack commit (6b18e7b, de900a6)
+- source: the change's brief, checked against instruments/rhino-forge/src/ForgeEditorInput.cpp (`controlAt`), ForgeEditorLayout.cpp, ForgeEditorPages.cpp and the wiki's other Forge pages
+- updated: pages/forge-editor.md (the rack's controls are children of the clipping `fxControlViewport`, so a hit test or overlay maps them with `getLocalArea`)
+- updated: pages/forge-is-an-independent-vst3.md (dropped the stale "18 areas" count)

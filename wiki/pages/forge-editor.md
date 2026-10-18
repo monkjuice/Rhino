@@ -4,7 +4,7 @@ type: component
 summary: One Editor class across nineteen files builds the panel from declared modules and decides what is visible in one place.
 tags: [forge, ui, layout]
 sources: []
-updated: 2026-10-17
+updated: 2026-10-18
 ---
 
 # Forge editor (panel)
@@ -21,7 +21,7 @@ The panel is one `Editor` (`src/ForgeEditor.h`) defined across nineteen `.cpp` f
 
 ## Pages
 
-OSC, TABLE and MATRIX swap only the oscillator columns; MIX and FX take the whole signal row. Two modules are windows over more rows than they show, the FX rack and, since 2026-10-13, the matrix: both lay their rows at a fixed height from an area translated by the rows scrolled past (`fxScrolledRackBounds`, `matrixScrolledBounds`), hide the rows outside the window in `applyEnableStates`, and draw a thumb with `drawScrollThumb` (`src/ForgeEditorInternal.h`); the matrix also hides the rows past the count the patch has earned ([Forge modulation](forge-modulation.md)). The arp overlay is a sixth page, `Page::arp`, that is never a tab ([Forge arpeggiator](forge-arpeggiator.md)); it is opened from the ARP plate on the keyboard shelf, which is painted on the chassis rather than built of components and is hit-tested in `Editor::mouseDown` before anything a tab owns ([Forge ARP plate, slots and waterfall](forge-arp-plate.md)). Switching hides and shows components instead of rebuilding them, so a hidden knob stays attached, automated and modulated.
+OSC, TABLE and MATRIX swap only the oscillator columns; MIX and FX take the whole signal row. Two modules are windows over more rows than they show, the FX rack and, since 2026-10-13, the matrix: both lay their rows at a fixed height from an area translated by the rows scrolled past (`fxScrolledRackBounds`, `matrixScrolledBounds`), hide the rows outside the window in `applyEnableStates`, and draw a thumb with `drawScrollThumb` (`src/ForgeEditorInternal.h`); the matrix also hides the rows past the count the patch has earned ([Forge modulation](forge-modulation.md)). The rack's controls are also children of `fxControlViewport`, a component that clips a partly scrolled row at the window's edge, so their bounds are relative to it: anything that hit-tests or paints over them in the editor's coordinates must map them with `getLocalArea` and ignore points outside the viewport, as `Editor::controlAt` and the drop highlight have since 2026-10-18 (before, a source dropped on a rack knob missed it). The arp overlay is a sixth page, `Page::arp`, that is never a tab ([Forge arpeggiator](forge-arpeggiator.md)); it is opened from the ARP plate on the keyboard shelf, which is painted on the chassis rather than built of components and is hit-tested in `Editor::mouseDown` before anything a tab owns ([Forge ARP plate, slots and waterfall](forge-arp-plate.md)). Switching hides and shows components instead of rebuilding them, so a hidden knob stays attached, automated and modulated.
 
 ## Note guide
 

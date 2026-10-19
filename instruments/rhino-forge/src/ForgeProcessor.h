@@ -7,12 +7,25 @@
 #include "../core/ForgeTableFiles.h"
 #include "../core/ForgeSampleStore.h"
 #include "../ui/ForgeTheme.h"
+#include "ForgePresetBank.h"
 #include <juce_audio_utils/juce_audio_utils.h>
 #include <bitset>
 #include <map>
 
 namespace rhino::forge
 {
+// The pieces of a saved state that are not parameters, built and read the same
+// way whether the state came from Forge itself or from a converted preset.
+//
+// A table as the state tree carries it: every frame end to end, deflated and
+// base64'd, for one oscillator.
+juce::ValueTree wavetableStateNode(const float* samples, int frames, const juce::String& name, int oscillator);
+// A wavetable file's frames, resampled to Forge's frame size and thinned evenly
+// to the most a table holds. Message thread only: it reads a file.
+juce::Result readWavetableFrames(const juce::File&, std::vector<float>& samples, int& frames);
+// A drawn LFO shape as the state tree carries it.
+juce::ValueTree lfoTableStateNode(int lfo, const LfoTable&, const juce::String& name);
+
 // The Timer is what applies a learned controller. A parameter may only be
 // written from the message thread, and the MIDI that drives it only exists on
 // the audio thread, so the crossing needs something on this side to drain it —
@@ -51,8 +64,42 @@ public:
     void changeProgramName(int, const juce::String&) override {}
     void getStateInformation(juce::MemoryBlock&) override;
     void setStateInformation(const void*, int) override;
+    // Writes the patch as it stands, with this name and whatever else the
+    // patch already says about itself.
     juce::Result savePreset(const juce::File&, const juce::String& name);
+    // Writes the patch under the info given, which becomes the patch's own.
+    juce::Result savePreset(const juce::File&, const PresetInfo&);
+    // Opens a preset of any format Forge reads: its own, or a Serum 2 or Vital
+    // preset converted on the way in (ForgePresetImport.h). A converted patch
+    // keeps a line per thing that did not survive, in presetInfo().warnings.
     juce::Result loadPreset(const juce::File&);
+    // Converts a preset of another format into a Forge preset file without
+    // touching the patch that is playing: what "copy to the bank" is.
+    juce::Result convertPreset(const juce::File& source, const juce::File& destination);
+    // Back to every default, the built-in tables and no name: the INIT patch.
+    void initialisePatch();
+    // Writes a state tree as a preset file, through a temporary file, so a
+    // failed write leaves the old file whole.
+    static juce::Result writePresetFile(const juce::File&, const juce::ValueTree& state, const PresetInfo&);
+
+    // What the patch says about itself. See PresetInfo.
+    PresetInfo presetInfo() const;
+    void setPresetInfo(const PresetInfo&);
+    // The file the patch was opened from or last saved to, or nothing for a
+    // patch that came from a host or was never filed.
+    juce::File presetFile() const { return currentPresetFile; }
+    // The browser renamed or moved a file or a folder; if the patch came from
+    // it, the patch follows, and takes the new name when the file was renamed.
+    void presetFileMoved(const juce::File& from, const juce::File& to);
+    // Moves whenever the patch is replaced or its info changes, from anywhere —
+    // a preset, the host's state, the browser — so the panel can notice on its
+    // tick by comparing one number. Message thread.
+    int presetRevision() const { return presetChanges; }
+    // Favourite presets, by path. A setting of the machine, kept beside the
+    // theme: a favourite is the player's, not the preset's, and a Serum or
+    // Vital preset can be one without Forge writing into someone else's folder.
+    static juce::StringArray readFavouritePresets();
+    static void saveFavouritePresets(const juce::StringArray&);
 
     // The tables the oscillators read, and the frames behind them. The editor
     // draws on these directly; nothing else outside this class should.
@@ -439,6 +486,13 @@ private:
     const Patch& patch();
     const Modulation& modulation();
     juce::ValueTree migrated(const juce::ValueTree& savedState) const;
+    // Everything a preset or a converted preset does once its tree is in hand:
+    // the tables, samples and LFO shapes first, then the parameters, then the
+    // arp's slot. One path, so a converted patch is applied exactly as a saved
+    // one is.
+    void applySavedState(const juce::ValueTree& savedState);
+    juce::File currentPresetFile;
+    int presetChanges = 0;
     // A table is not a parameter, so it travels beside the parameter state
     // rather than inside it: written as a child node when an oscillator's table
     // has been drawn on or loaded over, and read back before the parameters are

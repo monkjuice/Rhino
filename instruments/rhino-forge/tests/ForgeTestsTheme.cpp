@@ -3,6 +3,7 @@
 #include "../ui/ForgeTheme.h"
 #include "../ui/ForgePlacement.h"
 #include "../ui/ForgeControls.h"
+#include "../ui/ForgePresetPlate.h"
 
 #include <iostream>
 #include <memory>
@@ -441,9 +442,14 @@ void merliDiffersSuite()
     const auto& merliChildren = merliPanel->editor->getChildren();
     require(forgeChildren.size() > 0, "the panel has components to compare");
     require(forgeChildren.size() == merliChildren.size(), "both themes build the same components");
+    // The one exception is the preset's name, which goes on a different plate in
+    // each theme at the user's request: Forge's maker plate, Merli's beside the
+    // cat. Its words move; nothing that takes a click does.
     int moved = 0;
     for (int i = 0; i < juce::jmin(forgeChildren.size(), merliChildren.size()); ++i)
-        if (forgeChildren[i]->getBounds() != merliChildren[i]->getBounds()) ++moved;
+        if (forgeChildren[i]->getBounds() != merliChildren[i]->getBounds()
+            && dynamic_cast<ui::PresetPlate*>(forgeChildren[i]) == nullptr)
+            ++moved;
     if (moved != 0) std::cerr << "  " << moved << " components sit elsewhere under Merli\n";
     require(moved == 0, "every component keeps its rectangle under Merli");
 }

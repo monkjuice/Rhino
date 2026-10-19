@@ -9,6 +9,9 @@ ROOT = Path(__file__).resolve().parents[1] / '.deps'
 DEPENDENCIES = (
     ('tracktion', 'Tracktion/tracktion_engine', '4536d8a21664fe6ec2aa34b25abc87fa2a0d3b86'),
     ('juce', 'juce-framework/JUCE', '37c894f83d379179b2070d437ccd0f1cd9af9576'),
+    # Rhino Forge only, for opening Serum 2 presets, whose patch is a zstd
+    # frame. The v1.5.7 release; Forge builds its decompressor sources alone.
+    ('zstd', 'facebook/zstd', 'f8745da6ff1ad1e7bab384bd1f9d742439278e99'),
 )
 
 for name, repository, revision in DEPENDENCIES:

@@ -42,6 +42,12 @@ void Editor::resized()
     savePreset.setBounds(ui::presetButtonBounds(getLocalBounds(), true));
     loadPreset.setBounds(ui::presetButtonBounds(getLocalBounds(), false));
     presetName.setBounds(ui::presetLabelBounds(getLocalBounds()));
+    presetPlate.setBounds(ui::PresetPlate::boundsFor(getLocalBounds()));
+    // On Forge's plate the two lines under the name stop at the stripes.
+    presetPlate.bylineWidth = ui::isMerli() ? 0
+        : juce::roundToInt(ui::identityHatchBounds(ui::identityPlateBounds(getLocalBounds())).getX())
+              - presetPlate.getX() - 8;
+    if (presetBrowser != nullptr) presetBrowser->setBounds(ui::contentBounds(getLocalBounds()));
 
     for (int i = 0; i < ui::tabCount && i < static_cast<int>(tabs.size()); ++i)
         tabs[static_cast<size_t>(i)]->setBounds(ui::tabBounds(i, getWidth()));

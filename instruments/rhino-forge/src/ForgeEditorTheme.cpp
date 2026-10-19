@@ -16,6 +16,7 @@ bool Editor::onThemePlate(juce::Point<int> at) const
     const auto plate = ui::identityPlateBounds(bounds);
     if (!plate.withHeight(plate.getHeight() / 2).contains(at)) return false;
     return !ui::unitMarkBounds(bounds).contains(at)
+        && !presetPlate.getBounds().contains(at)
         && !ui::presetLabelBounds(bounds).contains(at)
         && !ui::presetButtonBounds(bounds, false).contains(at)
         && !ui::presetButtonBounds(bounds, true).contains(at);

@@ -192,6 +192,13 @@ void Editor::mouseDown(const juce::MouseEvent& event)
     if (event.eventComponent == this && !event.mods.isPopupMenu())
     {
         const auto at = event.getEventRelativeTo(this).getPosition();
+        // The preset's name is a door to the browser, as LOAD is.
+        if (presetPlate.getBounds().contains(at))
+        {
+            if (presetBrowserOpen()) closePresetBrowser();
+            else openPresetBrowser(false);
+            return;
+        }
         // The title plate is the first of the theme menu's two doors, in either
         // theme: the one stretch of header that nothing else claims, so a
         // click there can mean only one thing. (The second door is a
@@ -653,6 +660,7 @@ void Editor::gatherNoteSparks()
 
 void Editor::timerCallback()
 {
+    refreshPresetPlate();
     fadeValueBubble();
     gatherNoteSparks();
     pitchWheel.setDisplayValue(processor.pitchWheelValue() / 16383.0f);

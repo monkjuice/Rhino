@@ -7,6 +7,8 @@
 #include "../ui/ForgePerformanceWheel.h"
 #include "../ui/ForgeNoteGuide.h"
 #include "../ui/ForgeFxDisplay.h"
+#include "../ui/ForgePresetPlate.h"
+#include "ForgePresetBrowser.h"
 #include <memory>
 #include <vector>
 
@@ -16,8 +18,12 @@ namespace rhino::forge
 // a filename is far too long for the header — it ran under the title when it
 // was there — and far too long to print over the spectrogram. It is what the
 // picture *is*, so the picture answers for it when the hand rests on it.
+//
+// A file drop target for presets: a Forge, Serum 2 or Vital preset dropped
+// anywhere on the panel opens. The TABLE tab's own drop target, deeper in the
+// tree, takes wavetables there first.
 class Editor final : public juce::AudioProcessorEditor, private juce::Timer,
-                     public juce::TooltipClient
+                     public juce::TooltipClient, public juce::FileDragAndDropTarget
 {
 public:
     explicit Editor(Processor&);
@@ -612,9 +618,27 @@ private:
     void showValueBubble(Control&);
     void fadeValueBubble();
     void timerCallback() override;
-    void choosePresetToLoad();
-    void choosePresetToSave();
+    // The preset browser, made the first time LOAD or SAVE opens it and kept:
+    // closing hides it, so it opens again on the folder it was showing. It
+    // stands over the modules, below the title bar and above the keys, so the
+    // piano auditions what the list loads. ForgeEditorPresets.cpp.
+    std::unique_ptr<PresetBrowser> presetBrowser;
+    void openPresetBrowser(bool save);
+    void closePresetBrowser();
+    bool presetBrowserOpen() const { return presetBrowser != nullptr && presetBrowser->isVisible(); }
+    // The loaded preset's name and what it says about itself, on the title
+    // bar's plate. Re-read when the Processor's preset revision moves, from
+    // anywhere: the browser, a drop, a host restoring its state.
+    ui::PresetPlate presetPlate;
+    juce::String presetPlateTooltip;
+    int presetRevisionShown = -1;
+    void refreshPresetPlate();
     void showPresetResult(const juce::Result&, const juce::File&);
+    // The status line: a transient message, in violet when something failed
+    // or needs a second look.
+    void showStatus(const juce::String&, bool failed);
+    bool isInterestedInFileDrag(const juce::StringArray&) override;
+    void filesDropped(const juce::StringArray&, int, int) override;
     // The theme menu, and the stretch of the title plate that opens it. The
     // choice is saved for the next start, not applied; see ForgeEditorTheme.cpp.
     void showThemeMenu();

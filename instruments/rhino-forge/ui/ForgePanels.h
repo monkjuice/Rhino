@@ -126,6 +126,25 @@ inline void drawWordmark(juce::Graphics& g, juce::Rectangle<float> area)
     g.drawImage(logo, area, juce::RectanglePlacement::xLeft | juce::RectanglePlacement::yMid);
 }
 
+// The maker plate's stamped stripes, under the plate's knee. They start far
+// enough right to leave the preset's byline the width of a name and a style.
+inline juce::Rectangle<float> identityHatchBounds(juce::Rectangle<int> plate)
+{
+    const auto box = plate.toFloat();
+    const auto knee = box.getX() + box.getWidth() * 0.48f;
+    const auto left = box.getX() + 215.0f;
+    return {left, box.getY() + 40.0f, juce::jmax(0.0f, knee + 7.0f - left), 23.0f};
+}
+
+// Where the preset is named on the maker plate: the name along the top, beside
+// the serial bar, up to the cap's diagonal, and two lines under it that stop
+// short of the stripes.
+inline juce::Rectangle<int> identityTextBounds(juce::Rectangle<int> plate)
+{
+    const auto shoulder = plate.getX() + plate.getWidth() * 67 / 100;
+    return {plate.getX() + 27, plate.getY() + 9, juce::jmax(40, shoulder - 40 - (plate.getX() + 27)), 52};
+}
+
 inline void drawIdentityPlate(juce::Graphics& g, juce::Rectangle<int> area)
 {
     const auto box = area.toFloat();
@@ -145,23 +164,16 @@ inline void drawIdentityPlate(juce::Graphics& g, juce::Rectangle<int> area)
     drawRivet(g, {x + 7, y + 6}, 2.7f, 0.9f);
     drawRivet(g, {r - 7, y + 28}, 2.7f, 0.9f);
 
-    // The vertical serial marker is aligned with the three lines of lettering.
+    // The vertical serial marker is aligned with the three lines of lettering,
+    // which name the loaded preset and are drawn live over this layer
+    // (ui/ForgePresetPlate.h): the plate itself carries no words.
     g.setColour(identityBar);
     g.fillRect(x + 9, y + 14, 7.0f, 45.0f);
     g.setColour(identityBarLit);
     g.fillRect(x + 9, y + 14, 1.0f, 45.0f);
-    const auto face = juce::Rectangle<float>(x + 29, y + 12, 169, 19);
-    g.setFont(panelFont(Face::reading, 15.0f));
-    g.setColour(identityTitle);
-    drawTrackedText(g, "RHINO FORGE", face, 2.2f, juce::Justification::centredLeft);
-    g.setColour(identityRule);
-    g.drawLine(face.getX(), face.getBottom() + 1, face.getX() + 130, face.getBottom() + 1, 0.7f);
-    stamp(g, "SYNTHESIZER UNIT 01", face.translated(0, 21).withHeight(13), 11, 0.75f);
-    stamp(g, "TOKYO-3 AUDIO RESEARCH", face.translated(0, 34).withHeight(13), 10.5f, 0.65f);
-    const auto hatchX = x + 185;
-    const auto hatchRight = knee + 7;
-    if (hatchRight - hatchX > 20)
-        drawHatch(g, {hatchX, y + 40, hatchRight - hatchX, 23}, identityHatch, 6.0f, 13.0f);
+    const auto hatch = identityHatchBounds(area);
+    if (hatch.getWidth() > 20)
+        drawHatch(g, hatch, identityHatch, 6.0f, 13.0f);
 }
 
 inline void drawUnitMark(juce::Graphics& g, juce::Rectangle<int> area)

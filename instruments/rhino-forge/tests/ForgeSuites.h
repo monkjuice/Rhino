@@ -78,4 +78,12 @@ void spectralTests();
 // ForgeTestsTheme.cpp — the theme's names, palettes, settings file and menu,
 // and the panel drawn in Merli.
 void themeTests();
+
+// ForgeTestsImport.cpp — Serum 2 and Vital presets converted, setting by
+// setting, from files the suite writes itself.
+void importTests();
+
+// ForgeTestsBrowser.cpp — the preset bank, the browser over it, LOAD, SAVE and
+// the plate that names the patch.
+void browserTests();
 }

@@ -7,6 +7,9 @@ namespace rhino::forge
 {
 void Editor::showPage(ui::Page target)
 {
+    // A tab is a request to see the panel, so the browser standing over it
+    // goes, whichever page was asked for.
+    if (presetBrowserOpen()) closePresetBrowser();
     if (page == target) return;
     page = target;
     for (int i = 0; i < ui::tabCount; ++i)

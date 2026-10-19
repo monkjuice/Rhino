@@ -20,6 +20,14 @@ int runProfile(int argc, char** argv);
 // the engine can be compared byte for byte. See ForgeTestRender.cpp.
 int runRender(int argc, char** argv);
 
+// Play a preset of any format a bass note and a chord, write it to a .wav and
+// print its peak and RMS. See ForgeTestRender.cpp.
+int runAudition(int argc, char** argv);
+
+// Convert a Serum 2 or Vital preset into a .forgepreset file and print what it
+// lost. See ForgeTestRender.cpp.
+int runConvert(int argc, char** argv);
+
 // Time blocks of that patch and count what they allocate, at a small and an
 // ordinary block size. The audio counterpart of runProfile.
 int runProfileAudio(int argc, char** argv);

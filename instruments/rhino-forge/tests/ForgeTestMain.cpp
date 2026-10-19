@@ -42,6 +42,8 @@ constexpr Area areas[] {
     {"arp", arpTests},
     {"midi", midiTests},
     {"theme", themeTests},
+    {"import", importTests},
+    {"browser", browserTests},
 };
 
 void listAreas(std::ostream& out)
@@ -74,6 +76,8 @@ int main(int argc, char** argv)
     if (first == "--profile") return runProfile(argc, argv);
     if (first == "--profile-audio") return runProfileAudio(argc, argv);
     if (first == "--render") return runRender(argc, argv);
+    if (first == "--audition") return runAudition(argc, argv);
+    if (first == "--convert") return runConvert(argc, argv);
 
     if (first == "--list")
     {

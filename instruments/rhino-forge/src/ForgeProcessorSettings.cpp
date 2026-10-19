@@ -70,6 +70,34 @@ void Processor::saveThemeChoice(ui::ThemeId theme)
     root->writeTo(file);
 }
 
+// One child per favourite, by full path. A path rather than a name because two
+// libraries can hold presets of the same name, and the browser keeps the list
+// right when it moves or renames one.
+juce::StringArray Processor::readFavouritePresets()
+{
+    juce::StringArray paths;
+    const auto root = settingsRoot(settingsFile());
+    if (root == nullptr) return paths;
+    if (const auto* favourites = root->getChildByName("Favourites"))
+        for (const auto* preset : favourites->getChildWithTagNameIterator("Preset"))
+            paths.addIfNotAlreadyThere(preset->getStringAttribute("path"));
+    paths.removeEmptyStrings();
+    return paths;
+}
+
+void Processor::saveFavouritePresets(const juce::StringArray& paths)
+{
+    const auto file = settingsFile();
+    auto root = settingsRoot(file);
+    if (root == nullptr) root = std::make_unique<juce::XmlElement>(settingsTag);
+    root->deleteAllChildElementsWithTagName("Favourites");
+    auto* favourites = root->createNewChildElement("Favourites");
+    for (const auto& path : paths)
+        favourites->createNewChildElement("Preset")->setAttribute("path", path);
+    file.getParentDirectory().createDirectory();
+    root->writeTo(file);
+}
+
 ui::ThemeId Processor::loadThemeOnce()
 {
     auto& done = themeLoaded();

@@ -2,9 +2,7 @@
 
 namespace rhino::forge
 {
-namespace
-{
-juce::ValueTree lfoNode(int index, const LfoTable& table, const juce::String& name)
+juce::ValueTree lfoTableStateNode(int index, const LfoTable& table, const juce::String& name)
 {
     juce::ValueTree node("ForgeLfoTable");
     node.setProperty("index", index, nullptr);
@@ -26,6 +24,13 @@ juce::ValueTree lfoNode(int index, const LfoTable& table, const juce::String& na
         node.addChild(point, -1, nullptr);
     }
     return node;
+}
+
+namespace
+{
+juce::ValueTree lfoNode(int index, const LfoTable& table, const juce::String& name)
+{
+    return lfoTableStateNode(index, table, name);
 }
 
 bool readLfoNode(const juce::ValueTree& node, LfoTable& table)

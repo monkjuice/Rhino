@@ -103,14 +103,26 @@ Editor::Editor(Processor& p)
         button->setColour(juce::TextButton::textColourOffId, ui::text);
         addAndMakeVisible(button);
     }
-    loadPreset.onClick = [this] { choosePresetToLoad(); };
-    savePreset.onClick = [this] { choosePresetToSave(); };
+    // LOAD opens the browser and closes it again; SAVE opens it on its save
+    // form, and closes it from there.
+    loadPreset.setTooltip("Browse presets: the bank, your favourites, and the Serum 2 and Vital presets on this "
+                          "machine. Click again to close.");
+    savePreset.setTooltip("Save the patch into the bank, with its name, author, style and notes");
+    loadPreset.onClick = [this] { if (presetBrowserOpen()) closePresetBrowser(); else openPresetBrowser(false); };
+    savePreset.onClick = [this]
+    {
+        if (presetBrowserOpen() && presetBrowser->isSaving()) closePresetBrowser();
+        else openPresetBrowser(true);
+    };
 
-    presetName.setText("INIT SIGNAL", juce::dontSendNotification);
+    // The status line beside LOAD: transient messages only. The preset's own
+    // name is on the plate to its left.
     presetName.setJustificationType(juce::Justification::centredRight);
     presetName.setFont(ui::panelFont(ui::Face::label, 10.0f));
     presetName.setColour(juce::Label::textColourId, ui::mutedText);
     addAndMakeVisible(presetName);
+    addAndMakeVisible(presetPlate);
+    refreshPresetPlate();
 
     // The default tooltip is dark text furniture on a dark panel, which leaves
     // the words floating with no edge to read them against. Given the same
@@ -724,43 +736,4 @@ void Editor::buildHandles()
     }
 }
 
-void Editor::choosePresetToLoad()
-{
-    fileChooser = std::make_unique<juce::FileChooser>("Load Rhino Forge preset", juce::File {}, "*.forgepreset", true);
-    const auto safe = juce::Component::SafePointer<Editor>(this);
-    fileChooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
-        [safe] (const juce::FileChooser& chooser)
-        {
-            if (safe == nullptr) return;
-            const auto file = chooser.getResult();
-            if (file == juce::File {}) return;
-            safe->showPresetResult(safe->processor.loadPreset(file), file);
-        });
-}
-
-void Editor::choosePresetToSave()
-{
-    fileChooser = std::make_unique<juce::FileChooser>("Save Rhino Forge preset", juce::File {}, "*.forgepreset", true);
-    const auto safe = juce::Component::SafePointer<Editor>(this);
-    fileChooser->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles
-                             | juce::FileBrowserComponent::warnAboutOverwriting,
-        [safe] (const juce::FileChooser& chooser)
-        {
-            if (safe == nullptr) return;
-            auto file = chooser.getResult();
-            if (file == juce::File {}) return;
-            file = file.withFileExtension("forgepreset");
-            safe->showPresetResult(safe->processor.savePreset(file, file.getFileNameWithoutExtension()), file);
-        });
-}
-
-void Editor::showPresetResult(const juce::Result& result, const juce::File& file)
-{
-    presetName.setText(result.wasOk() ? file.getFileNameWithoutExtension().toUpperCase()
-                                      : "ERROR // " + result.getErrorMessage(), juce::dontSendNotification);
-    presetName.setColour(juce::Label::textColourId, result.wasOk() ? ui::mutedText : ui::signalViolet);
-    // Loading a preset can switch modules on or off behind the enable LEDs.
-    applyEnableStates();
-    repaint();
-}
 }

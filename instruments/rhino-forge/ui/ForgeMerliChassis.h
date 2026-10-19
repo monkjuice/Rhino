@@ -149,11 +149,14 @@ inline void drawTitlePlate(juce::Graphics& g, juce::Rectangle<float> box)
 // in a scratch and the edge of the asset's corner screw, which are grey and so
 // pass the gate. The warmth gate drops the orange streaks that cross into it.
 // A software image, built per rebuild and let go: nothing here is static.
+inline constexpr int catArtWidth = 146;
+inline constexpr int catArtHeight = 89;
+
 inline juce::Image catSilhouette()
 {
     const auto plate = image(Asset::titlePlate);
     if (plate.isNull()) return {};
-    const auto crop = juce::Rectangle<int>(325, 24, 146, 89).getIntersection(plate.getBounds());
+    const auto crop = juce::Rectangle<int>(325, 24, catArtWidth, catArtHeight).getIntersection(plate.getBounds());
     if (crop.isEmpty()) return {};
 
     juce::Image mask(juce::Image::ARGB, crop.getWidth(), crop.getHeight(), true, juce::SoftwareImageType());
@@ -171,23 +174,57 @@ inline juce::Image catSilhouette()
     return mask;
 }
 
-// The plate that stands where Forge's identity plate was. Nothing is written
-// on it: the preset name has moved onto the housing beside it, and the cat is
-// the maker's mark.
+// The cat plate and the housing beside it, which carries LOAD and SAVE. The
+// housing starts before the status line, which is a fixed rectangle whose text
+// is set right against LOAD, so a plate edge anywhere between the line and the
+// button would fall under its last glyph; that also gives its large screw the
+// room at the left end the mockup puts it in.
+inline juce::Rectangle<float> presetHousingBounds(juce::Rectangle<int> componentBounds)
+{
+    const auto name = presetLabelBounds(componentBounds).toFloat();
+    const auto save = presetButtonBounds(componentBounds, true).toFloat();
+    return juce::Rectangle<float>::leftTopRightBottom(name.getX() - 32.0f, 52.0f, save.getRight() + 8.0f, 90.0f);
+}
+
+inline juce::Rectangle<float> catPlateBounds(juce::Rectangle<int> componentBounds)
+{
+    const auto split = static_cast<float>(headerSplit(componentBounds.getWidth()));
+    return juce::Rectangle<float>::leftTopRightBottom(split + 8.0f, headerPlateTop,
+                                                      presetHousingBounds(componentBounds).getX() - 8.0f, 90.0f);
+}
+
+// Where the cat stands on the plate: a little under half size, and never more
+// than a third of the plate, which the loaded preset's name shares with it;
+// toward the plate's right end as it does on the asset.
+inline juce::Rectangle<float> catBounds(juce::Rectangle<float> plate)
+{
+    const auto scale = juce::jmin(0.46f, plate.getWidth() * 0.34f / static_cast<float>(catArtWidth));
+    if (scale <= 0.1f) return {};
+    const auto width = static_cast<float>(catArtWidth) * scale;
+    const auto height = static_cast<float>(catArtHeight) * scale;
+    return juce::Rectangle<float>(width, height).withCentre({plate.getRight() - 18.0f - width * 0.5f, plate.getCentreY()});
+}
+
+// Where the loaded preset is named on the cat plate: everything left of the
+// cat. The words are drawn live over this layer (ui/ForgePresetPlate.h); the
+// plate itself carries none.
+inline juce::Rectangle<int> catPlateTextBounds(juce::Rectangle<int> componentBounds)
+{
+    const auto plate = catPlateBounds(componentBounds);
+    const auto cat = catBounds(plate);
+    const auto right = cat.isEmpty() ? plate.getRight() - 12.0f : cat.getX() - 8.0f;
+    return juce::Rectangle<float>::leftTopRightBottom(plate.getX() + 14.0f, plate.getY() + 5.0f,
+                                                      right, plate.getBottom() - 5.0f).toNearestInt();
+}
+
+// The plate that stands where Forge's identity plate was. The cat is the
+// maker's mark, at its right end; the preset is named to its left, live.
 inline void drawCatPlate(juce::Graphics& g, juce::Rectangle<float> box)
 {
     drawRoundedPlate(g, box, 6.0f, 1.0f, true);
     const auto cat = catSilhouette();
-    if (cat.isNull()) return;
-    // About half size, and smaller still when a narrow window leaves the plate
-    // no room for that; it stands toward the plate's right end as it does on
-    // the asset.
-    const auto scale = juce::jmin(0.55f, (box.getWidth() - 48.0f) / static_cast<float>(cat.getWidth()));
-    if (scale <= 0.1f) return;
-    const auto width = static_cast<float>(cat.getWidth()) * scale;
-    const auto height = static_cast<float>(cat.getHeight()) * scale;
-    const auto target = juce::Rectangle<float>(width, height)
-        .withCentre({box.getRight() - 24.0f - width * 0.5f, box.getCentreY()});
+    const auto target = catBounds(box);
+    if (cat.isNull() || target.isEmpty()) return;
     juce::Graphics::ScopedSaveState state(g);
     g.setImageResamplingQuality(juce::Graphics::highResamplingQuality);
     g.setColour(plateEdgeLit.withAlpha(0.75f));
@@ -248,17 +285,9 @@ inline void drawBackdrop(juce::Graphics& g, juce::Rectangle<int> componentBounds
     drawRoundedWell(g, tabs, tabWellFloor, 1.0f, 6.0f);
 
     // The right-hand end is two plates: the cat's, and a housing carrying the
-    // preset name with the two buttons it belongs to. The name is a fixed
-    // rectangle whose text is set right, against LOAD, so a plate edge
-    // anywhere between the name and the button would fall under its last
-    // glyph; the housing starts before the name instead, and that gives its
-    // large screw the room at the left end the mockup puts it in.
-    const auto name = presetLabelBounds(componentBounds).toFloat();
-    const auto save = presetButtonBounds(componentBounds, true).toFloat();
-    const auto housing = juce::Rectangle<float>::leftTopRightBottom(name.getX() - 32.0f, 52.0f,
-                                                                    save.getRight() + 8.0f, 90.0f);
-    const auto split = static_cast<float>(headerSplit(width));
-    drawCatPlate(g, juce::Rectangle<float>::leftTopRightBottom(split + 8.0f, headerPlateTop, housing.getX() - 8.0f, 90.0f));
+    // status line with the two preset buttons.
+    const auto housing = presetHousingBounds(componentBounds);
+    drawCatPlate(g, catPlateBounds(componentBounds));
     drawRoundedPlate(g, housing, 6.0f, 1.0f, false);
     drawScrew(g, {housing.getX() + 11.0f, housing.getCentreY()}, 5.5f, true, 1.0f);
 

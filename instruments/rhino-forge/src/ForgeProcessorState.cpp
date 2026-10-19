@@ -1,4 +1,5 @@
 #include "ForgeProcessor.h"
+#include "ForgePresetImport.h"
 
 // A module's plate colour is not a parameter and rides on the state tree as a
 // property; the four it can be are named in the panel's own vocabulary.
@@ -99,23 +100,7 @@ std::unique_ptr<Sample> readSampleNode(const juce::ValueTree& node)
 
 juce::ValueTree tableNode(const WavetableEdit& edit, int oscillator)
 {
-    juce::ValueTree node(tableNodeType);
-    node.setProperty("osc", oscillator, nullptr);
-    node.setProperty("frames", edit.frameCount(), nullptr);
-    node.setProperty("name", edit.title(), nullptr);
-
-    // Written a float at a time rather than as a block of memory: JUCE's streams
-    // are explicitly little-endian, so a preset written on one machine reads the
-    // same on another whatever the native order is.
-    juce::MemoryOutputStream raw;
-    for (const auto sample : edit.samples()) raw.writeFloat(sample);
-    juce::MemoryOutputStream packed;
-    {
-        juce::GZIPCompressorOutputStream deflate(packed, 9);
-        deflate.write(raw.getData(), raw.getDataSize());
-    }
-    node.setProperty("data", packed.getMemoryBlock().toBase64Encoding(), nullptr);
-    return node;
+    return wavetableStateNode(edit.samples().data(), edit.frameCount(), edit.title(), oscillator);
 }
 
 // Refuses anything it cannot account for exactly. A table whose data does not
@@ -182,6 +167,81 @@ juce::ValueTree parameterEntry(const juce::ValueTree& tree, const juce::String& 
             return child;
     return {};
 }
+
+// The preset's own words about itself, one property each on the state tree, so
+// they ride into a project and into a preset file with no step of their own.
+const juce::Identifier presetNameProperty("presetName");
+const juce::Identifier presetAuthorProperty("presetAuthor");
+const juce::Identifier presetStyleProperty("presetStyle");
+const juce::Identifier presetNotesProperty("presetNotes");
+const juce::Identifier presetSourceProperty("presetSource");
+const juce::Identifier presetWarningsProperty("presetWarnings");
+
+// Removed rather than stored empty, as a macro's name is, so a patch with
+// nothing to say about itself leaves nothing behind in a file.
+void setOrRemove(juce::ValueTree& tree, const juce::Identifier& property, const juce::String& value)
+{
+    if (value.isEmpty()) tree.removeProperty(property, nullptr);
+    else tree.setProperty(property, value, nullptr);
+}
+
+void writeInfo(juce::ValueTree& tree, const PresetInfo& info)
+{
+    setOrRemove(tree, presetNameProperty, info.name.trim());
+    setOrRemove(tree, presetAuthorProperty, info.author.trim());
+    setOrRemove(tree, presetStyleProperty, canonicalPresetStyle(info.style));
+    setOrRemove(tree, presetNotesProperty, info.notes.trim());
+    setOrRemove(tree, presetSourceProperty, info.source);
+    setOrRemove(tree, presetWarningsProperty, info.warnings.joinIntoString("\n"));
+}
+
+PresetInfo readInfo(const juce::ValueTree& tree)
+{
+    PresetInfo info;
+    info.name = tree.getProperty(presetNameProperty).toString();
+    info.author = tree.getProperty(presetAuthorProperty).toString();
+    info.style = tree.getProperty(presetStyleProperty).toString();
+    info.notes = tree.getProperty(presetNotesProperty).toString();
+    info.source = tree.getProperty(presetSourceProperty).toString();
+    info.warnings = juce::StringArray::fromLines(tree.getProperty(presetWarningsProperty).toString());
+    info.warnings.removeEmptyStrings();
+    return info;
+}
+}
+
+juce::ValueTree wavetableStateNode(const float* samples, int frames, const juce::String& name, int oscillator)
+{
+    juce::ValueTree node(tableNodeType);
+    node.setProperty("osc", oscillator, nullptr);
+    node.setProperty("frames", frames, nullptr);
+    node.setProperty("name", name, nullptr);
+
+    // Written a float at a time rather than as a block of memory: JUCE's streams
+    // are explicitly little-endian, so a preset written on one machine reads the
+    // same on another whatever the native order is.
+    juce::MemoryOutputStream raw;
+    const auto count = static_cast<size_t>(juce::jmax(0, frames)) * wavetableFrameSize;
+    for (size_t i = 0; i < count; ++i) raw.writeFloat(samples[i]);
+    juce::MemoryOutputStream packed;
+    {
+        juce::GZIPCompressorOutputStream deflate(packed, 9);
+        deflate.write(raw.getData(), raw.getDataSize());
+    }
+    node.setProperty("data", packed.getMemoryBlock().toBase64Encoding(), nullptr);
+    return node;
+}
+
+PresetInfo Processor::presetInfo() const
+{
+    auto info = readInfo(state.state);
+    if (info.name.isEmpty()) info.name = "INIT";
+    return info;
+}
+
+void Processor::setPresetInfo(const PresetInfo& info)
+{
+    writeInfo(state.state, info);
+    ++presetChanges;
 }
 
 // One property per module rather than one list, so a module that gains or loses
@@ -324,34 +384,48 @@ void Processor::setStateInformation(const void* data, int size)
     if (const auto xml = getXmlFromBinary(data, size))
         if (xml->hasTagName(state.state.getType()))
         {
-            const auto saved = juce::ValueTree::fromXml(*xml);
-            // Read before migrated() strips the table nodes back out, so the
-            // live parameter state stays parameters only.
-            applyTables(saved);
-            applySamples(saved);
-            applyLfoTables(saved);
-            state.replaceState(migrated(saved));
-            // The parameters just restored are whichever slot the state says
-            // they are; the other slots came with the tree.
-            liveArpSlot = chosenArpSlot();
+            applySavedState(juce::ValueTree::fromXml(*xml));
+            // The project knows which patch this is by its name, which came
+            // with the tree; it does not know which file, if any, it was.
+            currentPresetFile = {};
         }
 }
 
-juce::Result Processor::savePreset(const juce::File& destination, const juce::String& name)
+void Processor::applySavedState(const juce::ValueTree& saved)
+{
+    // Read before migrated() strips the table nodes back out, so the live
+    // parameter state stays parameters only.
+    applyTables(saved);
+    applySamples(saved);
+    applyLfoTables(saved);
+    state.replaceState(migrated(saved));
+    // The parameters just restored are whichever slot the state says they
+    // are; the other slots came with the tree.
+    liveArpSlot = chosenArpSlot();
+    ++presetChanges;
+}
+
+juce::Result Processor::writePresetFile(const juce::File& destination, const juce::ValueTree& stateTree,
+                                        const PresetInfo& info)
 {
     if (destination == juce::File {}) return juce::Result::fail("Choose a preset file first.");
+    // The wrapper repeats what a list shows, so the browser can read a preset's
+    // author and style without parsing the hundred kilobytes a table adds.
     juce::ValueTree preset("RhinoForgePreset");
     preset.setProperty("formatVersion", presetFormatVersion, nullptr);
-    preset.setProperty("name", name.trim().isNotEmpty() ? name.trim()
-                                                        : destination.getFileNameWithoutExtension(), nullptr);
-    auto tree = state.copyState();
-    appendTables(tree);
-    appendSamples(tree);
-    appendLfoTables(tree);
+    preset.setProperty("name", info.name.trim().isNotEmpty() ? info.name.trim()
+                                                             : destination.getFileNameWithoutExtension(), nullptr);
+    if (info.author.trim().isNotEmpty()) preset.setProperty("author", info.author.trim(), nullptr);
+    if (canonicalPresetStyle(info.style).isNotEmpty())
+        preset.setProperty("style", canonicalPresetStyle(info.style), nullptr);
+    auto tree = stateTree.createCopy();
+    writeInfo(tree, info);
     preset.addChild(tree, -1, nullptr);
     const auto xml = preset.createXml();
     if (xml == nullptr) return juce::Result::fail("Forge could not create the preset data.");
 
+    if (!destination.getParentDirectory().createDirectory())
+        return juce::Result::fail("Forge could not make the folder for that preset.");
     juce::TemporaryFile temporary(destination);
     if (!xml->writeTo(temporary.getFile(), {}))
         return juce::Result::fail("Forge could not write the preset file.");
@@ -360,8 +434,41 @@ juce::Result Processor::savePreset(const juce::File& destination, const juce::St
     return juce::Result::ok();
 }
 
+juce::Result Processor::savePreset(const juce::File& destination, const juce::String& name)
+{
+    auto info = readInfo(state.state);
+    info.name = name.trim().isNotEmpty() ? name.trim() : destination.getFileNameWithoutExtension();
+    return savePreset(destination, info);
+}
+
+juce::Result Processor::savePreset(const juce::File& destination, const PresetInfo& info)
+{
+    auto tree = state.copyState();
+    appendTables(tree);
+    appendSamples(tree);
+    appendLfoTables(tree);
+    const auto written = writePresetFile(destination, tree, info);
+    if (written.failed()) return written;
+    writeInfo(state.state, info);
+    currentPresetFile = destination;
+    ++presetChanges;
+    return written;
+}
+
 juce::Result Processor::loadPreset(const juce::File& source)
 {
+    const auto format = presetFormatOf(source);
+    if (format == PresetFormat::serum || format == PresetFormat::vital)
+    {
+        ImportedPreset imported;
+        const auto converted = importPreset(source, state, imported);
+        if (converted.failed()) return converted;
+        applySavedState(imported.state);
+        writeInfo(state.state, imported.info);
+        currentPresetFile = source;
+        return juce::Result::ok();
+    }
+
     const auto xml = juce::XmlDocument::parse(source);
     if (xml == nullptr) return juce::Result::fail("That file is not readable XML.");
     const auto preset = juce::ValueTree::fromXml(*xml);
@@ -373,12 +480,53 @@ juce::Result Processor::loadPreset(const juce::File& source)
     const auto savedState = preset.getChildWithName(state.state.getType());
     if (!savedState.isValid())
         return juce::Result::fail("The preset does not contain Forge parameter state.");
-    applyTables(savedState);
-    applySamples(savedState);
-    applyLfoTables(savedState);
-    state.replaceState(migrated(savedState));
-    liveArpSlot = chosenArpSlot();
+    applySavedState(savedState);
+
+    // The file's name is the preset's name, so renaming it in the browser
+    // renames the patch. What the wrapper says outranks the tree, because the
+    // wrapper is what the browser listed: a preset written by hand, as the
+    // factory set is, says it only there.
+    auto info = readInfo(state.state);
+    info.name = source.getFileNameWithoutExtension();
+    for (const auto& [attribute, field] : {std::pair {"author", &info.author}, std::pair {"style", &info.style},
+                                           std::pair {"notes", &info.notes}})
+        if (preset.hasProperty(attribute)) *field = preset.getProperty(attribute).toString();
+    writeInfo(state.state, info);
+    currentPresetFile = source;
     return juce::Result::ok();
+}
+
+juce::Result Processor::convertPreset(const juce::File& source, const juce::File& destination)
+{
+    ImportedPreset imported;
+    const auto converted = importPreset(source, state, imported);
+    if (converted.failed()) return converted;
+    auto info = imported.info;
+    info.name = destination.getFileNameWithoutExtension();
+    return writePresetFile(destination, imported.state, info);
+}
+
+void Processor::presetFileMoved(const juce::File& from, const juce::File& to)
+{
+    if (currentPresetFile == juce::File {}) return;
+    if (currentPresetFile == from)
+    {
+        currentPresetFile = to;
+        auto info = readInfo(state.state);
+        info.name = to.getFileNameWithoutExtension();
+        setPresetInfo(info);
+    }
+    else if (currentPresetFile.isAChildOf(from))
+    {
+        currentPresetFile = to.getChildFile(currentPresetFile.getRelativePathFrom(from));
+        ++presetChanges;
+    }
+}
+
+void Processor::initialisePatch()
+{
+    applySavedState(juce::ValueTree(state.state.getType()));
+    currentPresetFile = {};
 }
 
 // Reconcile a preset of any supported version with the parameters that exist
@@ -588,6 +736,17 @@ void Processor::applyTables(const juce::ValueTree& tree)
 // guess, it is wrong often, and it is its own problem.
 juce::Result Processor::importTable(int oscillator, const juce::File& file)
 {
+    std::vector<float> points;
+    auto frames = 0;
+    if (const auto read = readWavetableFrames(file, points, frames); read.failed()) return read;
+    if (!tables.edit(oscillator).setFrames(points.data(), frames, tableNameOf(file)))
+        return juce::Result::fail("Forge could not build a table from that file.");
+    tables.publish(oscillator);
+    return juce::Result::ok();
+}
+
+juce::Result readWavetableFrames(const juce::File& file, std::vector<float>& points, int& frames)
+{
     if (!file.existsAsFile()) return juce::Result::fail("that file is not there.");
 
     juce::AudioFormatManager formats;
@@ -612,8 +771,8 @@ juce::Result Processor::importTable(int oscillator, const juce::File& file)
 
     // A table larger than the ceiling is thinned evenly rather than cut short,
     // so a 256-frame table still sweeps from its first shape to its last.
-    const auto frames = juce::jmin(sourceFrames, maxEditableFrames);
-    std::vector<float> points(static_cast<size_t>(frames) * wavetableFrameSize);
+    frames = juce::jmin(sourceFrames, maxEditableFrames);
+    points.assign(static_cast<size_t>(frames) * wavetableFrameSize, 0.0f);
     const auto* read = source.getReadPointer(0);
     for (int frame = 0; frame < frames; ++frame)
     {
@@ -635,10 +794,6 @@ juce::Result Processor::importTable(int oscillator, const juce::File& file)
             into[i] = wavetableInterpolate(from, sourceFrameSize,
                                            static_cast<float>(i) / static_cast<float>(wavetableFrameSize));
     }
-
-    if (!tables.edit(oscillator).setFrames(points.data(), frames, tableNameOf(file)))
-        return juce::Result::fail("Forge could not build a table from that file.");
-    tables.publish(oscillator);
     return juce::Result::ok();
 }
 

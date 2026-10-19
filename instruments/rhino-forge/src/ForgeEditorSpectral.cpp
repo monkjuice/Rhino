@@ -508,6 +508,9 @@ juce::String Editor::getTooltip()
         return arpOpen ? "Put the arpeggiator's settings away"
                        : "Open the arpeggiator's settings over the envelopes and LFOs";
     }
+    // The plate naming the preset takes no clicks of its own, so its words are
+    // answered here too: what a conversion lost, when it lost anything.
+    if (presetPlate.getBounds().contains(at)) return presetPlateTooltip;
     const auto oscillator = spectralDisplayAt(at);
     if (oscillator < 0) return {};
     const auto prefix = juce::String(oscillatorPrefix(oscillator));

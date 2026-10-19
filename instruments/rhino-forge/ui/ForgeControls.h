@@ -586,7 +586,9 @@ public:
     }
 };
 
-// Preset buttons sit flush in the black inset of the maker assembly.
+// Preset buttons sit flush in the black inset of the maker assembly. One that
+// has opened something — LOAD while the browser is up — stays lit, as it would
+// under the pointer, until what it opened goes away.
 class PresetButton final : public juce::TextButton
 {
 public:
@@ -594,6 +596,8 @@ public:
 
     void paintButton(juce::Graphics& g, bool highlighted, bool down) override
     {
+        highlighted = highlighted || getToggleState();
+        down = down || getToggleState();
         const auto box = getLocalBounds().toFloat().reduced(0.7f);
         if (isMerli())
         {

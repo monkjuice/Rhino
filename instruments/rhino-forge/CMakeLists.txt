@@ -14,6 +14,30 @@ endif()
 
 add_subdirectory("${RHINO_JUCE_DIR}" juce EXCLUDE_FROM_ALL)
 
+# A Serum 2 preset's patch is one zstd frame, so opening one needs zstd's
+# decompressor: only those sources are built, from the release Rhino's
+# dependency script pins beside JUCE (native/scripts/fetch-dependencies.py).
+set(RHINO_ZSTD_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../native/.deps/zstd" CACHE PATH "zstd source checkout")
+if (NOT EXISTS "${RHINO_ZSTD_DIR}/lib/zstd.h")
+    message(FATAL_ERROR "Set RHINO_ZSTD_DIR to a zstd checkout, or run native/scripts/fetch-dependencies.py.")
+endif()
+enable_language(C)
+add_library(ForgeZstd STATIC
+    "${RHINO_ZSTD_DIR}/lib/common/debug.c"
+    "${RHINO_ZSTD_DIR}/lib/common/entropy_common.c"
+    "${RHINO_ZSTD_DIR}/lib/common/error_private.c"
+    "${RHINO_ZSTD_DIR}/lib/common/fse_decompress.c"
+    "${RHINO_ZSTD_DIR}/lib/common/xxhash.c"
+    "${RHINO_ZSTD_DIR}/lib/common/zstd_common.c"
+    "${RHINO_ZSTD_DIR}/lib/decompress/huf_decompress.c"
+    "${RHINO_ZSTD_DIR}/lib/decompress/zstd_ddict.c"
+    "${RHINO_ZSTD_DIR}/lib/decompress/zstd_decompress.c"
+    "${RHINO_ZSTD_DIR}/lib/decompress/zstd_decompress_block.c")
+target_include_directories(ForgeZstd PUBLIC "${RHINO_ZSTD_DIR}/lib")
+# The hand-written x86 Huffman loop is GNU assembler, which MSVC does not take.
+target_compile_definitions(ForgeZstd PRIVATE ZSTD_DISABLE_ASM=1)
+set_target_properties(ForgeZstd PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
 # Forge's own sources compile against a precompiled header, so splitting a file
 # in two costs roughly what the new code costs rather than another full parse of
 # JUCE. See src/ForgePch.h for what is in it and what is deliberately not.
@@ -129,6 +153,7 @@ set(forge_sources
     ui/ForgeArpPlate.h
     ui/ForgePerformanceWheel.h
     ui/ForgeNoteGuide.h
+    ui/ForgePresetPlate.h
     ui/ForgeTablePanel.h
     ui/ForgeTooltips.h
     ui/ForgeType.h
@@ -149,6 +174,21 @@ set(forge_sources
     src/ForgeProcessorLfo.cpp
     src/ForgeProcessorMidi.cpp
     src/ForgeProcessorSettings.cpp
+    src/ForgePresetBank.h
+    src/ForgePresetBank.cpp
+    src/ForgePresetImport.h
+    src/ForgePresetImportInternal.h
+    src/ForgePresetImport.cpp
+    src/ForgeCbor.h
+    src/ForgeCbor.cpp
+    src/ForgePresetImportSerum.cpp
+    src/ForgePresetImportSerumFx.cpp
+    src/ForgePresetImportVital.cpp
+    src/ForgePresetImportVitalTables.cpp
+    src/ForgePresetBrowser.h
+    src/ForgePresetBrowserInternal.h
+    src/ForgePresetBrowser.cpp
+    src/ForgePresetBrowserViews.cpp
     src/ForgeEditor.cpp
     src/ForgeEditor.h
     src/ForgeEditorInternal.h
@@ -165,6 +205,7 @@ set(forge_sources
     src/ForgeEditorNoise.cpp
     src/ForgeEditorOscMode.cpp
     src/ForgeEditorPages.cpp
+    src/ForgeEditorPresets.cpp
     src/ForgeEditorSpectral.cpp
     src/ForgeEditorPaint.cpp
     src/ForgeEditorTables.cpp
@@ -175,6 +216,7 @@ target_sources(RhinoForge PRIVATE ${forge_sources})
 forge_use_precompiled_header(RhinoForge)
 target_link_libraries(RhinoForge PRIVATE
     RhinoForgeAssets
+    ForgeZstd
     juce::juce_audio_utils
     juce::juce_dsp
     juce::juce_recommended_config_flags
@@ -240,7 +282,9 @@ if (BUILD_TESTING)
         voicing
         arp
         midi
-        theme)
+        theme
+        import
+        browser)
 
     target_sources(RhinoForgeTests PRIVATE
         tests/ForgeTestMain.cpp
@@ -272,10 +316,13 @@ if (BUILD_TESTING)
         tests/ForgeTestsArp.cpp
         tests/ForgeTestsMidi.cpp
         tests/ForgeTestsTheme.cpp
+        tests/ForgeTestsImport.cpp
+        tests/ForgeTestsBrowser.cpp
         ${forge_sources})
     forge_use_precompiled_header(RhinoForgeTests)
     target_link_libraries(RhinoForgeTests PRIVATE
         RhinoForgeAssets
+        ForgeZstd
         juce::juce_audio_utils
         juce::juce_dsp
         juce::juce_recommended_config_flags

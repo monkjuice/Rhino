@@ -2,6 +2,7 @@
 
 #include "../src/ForgeProcessor.h"
 #include "../ui/ForgeVisuals.h"
+#include "../src/ForgePresetBrowser.h"
 
 #include <iostream>
 #include <memory>
@@ -105,6 +106,34 @@ int runSnapshot(int argc, char** argv)
             wait(120.0);
         }
         juce::Thread::sleep(450);
+    }
+    // PRESETS and SAVE press LOAD and SAVE, which open the browser over the
+    // modules. The bank it lists is made beside the picture, in the working
+    // directory, from the factory set: a review never writes into the bank in
+    // Documents. The Serum 2 and Vital libraries are the machine's own, read.
+    // PRESETS:VITAL or PRESETS:SERUM 2 opens that library's row instead, and
+    // says how long its folder took to list.
+    else if (argc > 5 && (juce::String(argv[5]).startsWithIgnoreCase("PRESETS")
+                          || juce::String(argv[5]).equalsIgnoreCase("SAVE")))
+    {
+        rhino::forge::presetBank::setRootForTests(
+            juce::File::getCurrentWorkingDirectory().getChildFile("snapshot-bank"));
+        const auto caption = juce::String(argv[5]).equalsIgnoreCase("SAVE") ? "SAVE" : "LOAD";
+        for (auto* child : editor->getChildren())
+            if (auto* button = dynamic_cast<rhino::forge::ui::PresetButton*>(child))
+                if (button->getButtonText() == caption && button->onClick) button->onClick();
+        const auto library = juce::String(argv[5]).fromFirstOccurrenceOf(":", false, false).toUpperCase();
+        if (library.isNotEmpty())
+            for (auto* child : editor->getChildren())
+                if (auto* browser = dynamic_cast<rhino::forge::PresetBrowser*>(child))
+                    for (int row = 0; row < static_cast<int>(browser->folderRows.size()); ++row)
+                        if (browser->folderRows[static_cast<size_t>(row)].caption == library)
+                        {
+                            const auto started = juce::Time::getMillisecondCounterHiRes();
+                            browser->chooseFolder(row);
+                            std::cout << library << ": " << browser->listed.size() << " presets listed in "
+                                      << juce::roundToInt(juce::Time::getMillisecondCounterHiRes() - started) << " ms\n";
+                        }
     }
     else if (argc > 5)
         for (auto* child : editor->getChildren())

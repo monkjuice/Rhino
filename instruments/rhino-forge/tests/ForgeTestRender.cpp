@@ -2,6 +2,7 @@
 #include "ForgeTestSupport.h"
 
 #include "../src/ForgeProcessor.h"
+#include "../src/ForgePresetImport.h"
 
 #include <algorithm>
 #include <iostream>
@@ -227,5 +228,89 @@ int runRender(int argc, char** argv)
             }
     }
     return 0;
+}
+
+// Convert a Serum 2 or Vital preset into a .forgepreset file, to read what the
+// conversion made of it, and print what it could not carry.
+int runConvert(int argc, char** argv)
+{
+    if (argc < 4)
+    {
+        std::cerr << "usage: --convert preset output.forgepreset\n";
+        return 2;
+    }
+    auto processor = std::make_unique<Processor>();
+    const auto source = juce::File::getCurrentWorkingDirectory().getChildFile(argv[2]);
+    const auto destination = juce::File::getCurrentWorkingDirectory().getChildFile(argv[3]);
+    ImportedPreset imported;
+    const auto converted = importPreset(source, processor->state, imported);
+    if (converted.failed())
+    {
+        std::cerr << "convert: " << converted.getErrorMessage() << '\n';
+        return 1;
+    }
+    for (const auto& warning : imported.info.warnings) std::cout << "warning: " << warning << '\n';
+    return Processor::writePresetFile(destination, imported.state, imported.info).wasOk() ? 0 : 1;
+}
+
+// Play a preset of any format Forge opens and say how loud it came out, with a
+// .wav to listen to: a bass note, a chord over it and both let go, about four
+// seconds at 48 kHz. For checking a converted or a factory preset makes a sound
+// at a sane level without opening a host. Prints the warnings a conversion left.
+int runAudition(int argc, char** argv)
+{
+    if (argc < 4)
+    {
+        std::cerr << "usage: --audition preset output.wav\n";
+        return 2;
+    }
+    constexpr int blockSize = 512;
+    constexpr double rate = 48000.0;
+    auto processor = std::make_unique<Processor>();
+    const auto preset = juce::File::getCurrentWorkingDirectory().getChildFile(argv[2]);
+    const auto opened = processor->loadPreset(preset);
+    if (opened.failed())
+    {
+        std::cerr << "audition: " << opened.getErrorMessage() << '\n';
+        return 1;
+    }
+    for (const auto& warning : processor->presetInfo().warnings) std::cout << "warning: " << warning << '\n';
+    processor->prepareToPlay(rate, blockSize);
+
+    const auto blocks = static_cast<int>(4.0 * rate / blockSize);
+    juce::AudioBuffer<float> all(2, blocks * blockSize);
+    juce::AudioBuffer<float> buffer(2, blockSize);
+    juce::MidiBuffer midi;
+    const auto at = [] (double seconds) { return static_cast<int>(seconds * rate / blockSize); };
+    for (int block = 0; block < blocks; ++block)
+    {
+        if (block == 0) midi.addEvent(juce::MidiMessage::noteOn(1, 36, 0.8f), 0);
+        if (block == at(0.6)) midi.addEvent(juce::MidiMessage::noteOff(1, 36), 0);
+        if (block == at(0.8))
+            for (const auto note : {60, 64, 67}) midi.addEvent(juce::MidiMessage::noteOn(1, note, 0.8f), 0);
+        if (block == at(2.4))
+            for (const auto note : {60, 64, 67}) midi.addEvent(juce::MidiMessage::noteOff(1, note), 0);
+        buffer.clear();
+        processor->processBlock(buffer, midi);
+        midi.clear();
+        for (int channel = 0; channel < 2; ++channel)
+            all.copyFrom(channel, block * blockSize, buffer, channel, 0, blockSize);
+    }
+
+    const auto peak = all.getMagnitude(0, all.getNumSamples());
+    const auto rms = std::sqrt(0.5f * (std::pow(all.getRMSLevel(0, 0, all.getNumSamples()), 2.0f)
+                                        + std::pow(all.getRMSLevel(1, 0, all.getNumSamples()), 2.0f)));
+    std::cout << "peak " << juce::Decibels::gainToDecibels(peak) << " dBFS, rms "
+              << juce::Decibels::gainToDecibels(rms) << " dBFS\n";
+
+    const auto file = juce::File::getCurrentWorkingDirectory().getChildFile(argv[3]);
+    file.deleteFile();
+    std::unique_ptr<juce::OutputStream> stream = file.createOutputStream();
+    if (stream == nullptr) return 1;
+    juce::WavAudioFormat wav;
+    const auto writer = wav.createWriterFor(stream, juce::AudioFormatWriterOptions()
+                                                        .withSampleRate(rate).withNumChannels(2).withBitsPerSample(24));
+    if (writer == nullptr) return 1;
+    return writer->writeFromAudioSampleBuffer(all, 0, all.getNumSamples()) ? 0 : 1;
 }
 }

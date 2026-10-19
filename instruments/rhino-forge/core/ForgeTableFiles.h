@@ -38,22 +38,28 @@ struct TableEntry
 // The folder under the root that NEW and SAVE write into.
 inline constexpr const char* ownTableFolderName = "user";
 
-// A tables/ folder above a binary, or nothing. The plugin sits deepest: its
-// binary is inside the bundle (Rhino Forge.vst3/Contents/x86_64-win), and that
-// is under VST3, the configuration, the artefacts folder and build, so the
-// source tree is its eighth folder up where the standalone's is its fifth. A
+// A folder of the source tree above a binary, or nothing. The plugin sits
+// deepest: its binary is inside the bundle (Rhino Forge.vst3/Contents/x86_64-win),
+// and that is under VST3, the configuration, the artefacts folder and build, so
+// the source tree is its eighth folder up where the standalone's is its fifth. A
 // walk of eight steps stopped one short of it, and the plugin listed nothing
 // but the built-in ten.
-inline juce::File tableRootAbove(const juce::File& binary)
+inline juce::File sourceFolderAbove(const juce::File& binary, const juce::String& relativePath)
 {
     auto here = binary;
     for (int step = 0; step < 10 && here != juce::File {}; ++step)
     {
-        const auto candidate = here.getChildFile("tables");
+        const auto candidate = here.getChildFile(relativePath);
         if (candidate.isDirectory()) return candidate;
         here = here.getParentDirectory();
     }
     return {};
+}
+
+// A tables/ folder above a binary, or nothing.
+inline juce::File tableRootAbove(const juce::File& binary)
+{
+    return sourceFolderAbove(binary, "tables");
 }
 
 // The root. tables/ in the source tree in a development build, found upward

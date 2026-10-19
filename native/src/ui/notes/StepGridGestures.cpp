@@ -167,6 +167,18 @@ void StepGrid::mouseMove(const juce::MouseEvent& event)
     updateHover(event.position);
 }
 
+void StepGrid::modifierKeysChanged(const juce::ModifierKeys& modifiers)
+{
+    if (gesture != Gesture::resize)
+    {
+        juce::Component::modifierKeysChanged(modifiers);
+        return;
+    }
+    resizeFreely = modifiers.isAltDown();
+    if (dragTravelled)
+        resizeCurrentNoteTo(dragPosition, resizeFreely);
+}
+
 void StepGrid::mouseDown(const juce::MouseEvent& event)
 {
     // A press while another is still held - a second finger, or a pen beside
@@ -235,6 +247,7 @@ void StepGrid::mouseDown(const juce::MouseEvent& event)
             const auto bounds = boundsFor(note);
             resizingFromLeft = event.position.x < bounds.getCentreX();
             resizingStartStep = note.start;
+            resizeFreely = event.mods.isAltDown();
             hasResizeTarget = false;
             dragPosition = event.position;
             noteMoved = false;
@@ -426,9 +439,8 @@ void StepGrid::moveDraggedNotesAt(juce::Point<float> position)
     const auto* placed = noteForState(anchor.state);
     if (placed == nullptr)
         return;
-    // Notes follow the pointer freely along the timeline, at the same 1/16 of a
-    // step that a free resize uses: a note is only ever between two columns,
-    // never between two tones, so only the row snaps.
+    // Notes follow the pointer along the timeline at 1/16 of a step: a note is
+    // only ever between two columns, never between two tones.
     const auto pointerStep = stepScroll + (position.x - labelWidth) / cellWidth();
     const auto travelled = std::round((pointerStep - dragStartStep) * 16.0) / 16.0;
     // Asking for the distance from where the group actually sits to where the
@@ -505,10 +517,9 @@ juce::Result StepGrid::resizeCurrentNoteTo(juce::Point<float> position, bool fre
     if (resizingFromLeft)
     {
         auto newStart = static_cast<double>(stepScroll + (position.x - labelWidth) / cellWidth());
-        if (!freeLength && newStart < std::floor(resizingStartStep))
-            newStart = std::round(newStart);
-        else
-            newStart = std::round(newStart * 16.0) / 16.0;
+        if (!freeLength)
+            newStart = newStart < std::floor(resizingStartStep) ? std::round(newStart)
+                                                               : std::round(newStart * 16.0) / 16.0;
         if (hasResizeTarget && std::abs(resizeTarget - newStart) < 0.0001)
             return juce::Result::ok();
         const auto result = session.resizeNoteFromLeft(resizingNoteState, newStart);
@@ -516,19 +527,16 @@ juce::Result StepGrid::resizeCurrentNoteTo(juce::Point<float> position, bool fre
         {
             resizeTarget = newStart;
             hasResizeTarget = true;
-            resizingStartStep = newStart;
             noteMoved = true;
         }
         return result;
     }
     auto length = stepScroll + (position.x - labelWidth) / cellWidth() - resizingStartStep;
     length = std::max(0.0625, length);
-    // The first grid space may be freely adjusted. Once past it, resize snaps
-    // to grid boundaries unless Alt/Option is held.
-    if (!freeLength && length > 1.0)
-        length = std::round(length);
-    else
-        length = std::round(length * 16.0) / 16.0;
+    // Alt/Option follows the pointer continuously. Otherwise, the first grid
+    // space uses fine increments and longer notes snap to whole steps.
+    if (!freeLength)
+        length = length > 1.0 ? std::round(length) : std::round(length * 16.0) / 16.0;
     if (hasResizeTarget && std::abs(resizeTarget - length) < 0.0001)
         return juce::Result::ok();
     const auto result = session.resizeNote(resizingNoteState, length);
@@ -599,7 +607,8 @@ void StepGrid::mouseDrag(const juce::MouseEvent& event)
     }
     if (gesture == Gesture::resize)
     {
-        resizeCurrentNoteTo(event.position, event.mods.isAltDown());
+        resizeFreely = event.mods.isAltDown();
+        resizeCurrentNoteTo(event.position, resizeFreely);
         return;
     }
 
@@ -661,6 +670,7 @@ void StepGrid::mouseUp(const juce::MouseEvent& event)
     resizingNoteState = {};
     resizingFromLeft = false;
     hasResizeTarget = false;
+    resizeFreely = false;
     noteMoved = false;
     // A marker may have been left away from the pointer, so the one that
     // lights is the one a press would now take.

@@ -344,7 +344,7 @@ void StepGrid::timerCallback()
     {
         case Gesture::move:   moveDraggedNotesAt(dragPosition); break;
         case Gesture::select: updateMarqueeSelection(); repaint(); break;
-        case Gesture::resize: resizeCurrentNoteTo(dragPosition, false); break;
+        case Gesture::resize: resizeCurrentNoteTo(dragPosition, resizeFreely); break;
         case Gesture::draw:   apply(cellHit(dragPosition)); break;
         // A stroke held still at the edge paints the columns that scroll in
         // under it, as a stroke of notes does.

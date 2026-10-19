@@ -187,6 +187,8 @@ int runArrangementTest()
         // fixture of its own and leaves the clip longer than it found it.
         scenario("note gestures");
        #include "scenarios/NoteGestures.inc"
+        scenario("note resize: Alt, the gesture clock and autoscroll");
+       #include "scenarios/NoteResize.inc"
         // Each builds a document of its own, so none leans on or disturbs the
         // shared clip.
         scenario("velocity lane: markers, drags and keys");

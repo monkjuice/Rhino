@@ -19,6 +19,7 @@ public:
     void mouseUp(const juce::MouseEvent&) override;
     void mouseMove(const juce::MouseEvent&) override;
     void mouseExit(const juce::MouseEvent&) override;
+    void modifierKeysChanged(const juce::ModifierKeys&) override;
     void mouseWheelMove(const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
     bool keyPressed(const juce::KeyPress&) override;
     void zoomIn();
@@ -248,6 +249,8 @@ private:
     // The gesture clock repeats the drag while autoscrolling. Remember the
     // snapped edge so a stationary pointer does not rewrite the model at 60 Hz.
     bool hasResizeTarget = false;
+    // Pointer events and the autoscroll clock must use the same snap mode.
+    bool resizeFreely = false;
     bool drawMode = false;
     // A plain press inside a group of selected notes keeps the group, so the
     // drag carries all of it. If the press turns out never to have been a

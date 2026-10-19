@@ -4,7 +4,7 @@ type: overview
 summary: "Rhino and Rhino Forge at a glance: what they are, how they are built and where to start reading."
 tags: [overview, rhino, forge]
 sources: []
-updated: 2026-10-13
+updated: 2026-10-19
 ---
 
 # Rhino and Rhino Forge
@@ -30,7 +30,7 @@ is for Forge's.
 | `native/src/app/`, `native/src/model/`, `native/src/ui/` | Rhino's shell (`Application` in `Main.cpp`, `MainWindow`, `MainComponent` and its units, the control bar, project files), its model (`Session.h`, `Session*.cpp`) and its UI, one folder per view under `ui/` plus `ui/shared/`; laid out by layer since 2026-10-13 ([The source tree mirrors the layers](pages/source-tree-mirrors-the-layers.md)) |
 | `native/src/core/`, `native/src/devices/`, `native/src/tests/` | The `RhinoCore` target (`dsp/`, `dj/`, `content/`: JUCE-only DSP, the DJ booth's engine, the content library), the `RhinoDevices` target (built-in plugins, device catalog), and the test runners |
 | `native/assets/` | Fonts and app icons, the only assets compiled in |
-| `instruments/rhino-forge/` | Forge: `core/` engine (headers only), `ui/`, `src/`, `tests/`, `tables/` |
+| `instruments/rhino-forge/` | Forge: `core/` engine (headers only), `ui/`, `src/`, `tests/`, `tables/`, `presets/` (the factory set) |
 | `library/` | Rhino's content: samples (stored with Git LFS), device presets, drum kits and drum presets |
 | `research/` | The September 2026 DAW study; `research/sources/` is off limits |
 | `native/.deps/` | Pinned JUCE and Tracktion, fetched by script, ignored by git, never read |
@@ -92,3 +92,4 @@ The full catalog is [index.md](index.md).
 | 2026-10-11 | The session view, unreachable since the [DJ view](pages/dj-view.md) took the view switch on 2026-10-09, removed; its [clip slots](pages/clip-slots.md) stay as the DJ consoles' cells |
 | 2026-10-12 | [DJ decks play live through their track's chain](pages/dj-decks-play-live-through-the-track.md), by two hidden devices on every track; the bounces, group decks and the knob-held preview removed |
 | 2026-10-13 | `native/src` laid out by layer, `app/`, `model/`, `ui/<view>/`, `core/{dsp,dj,content}/`, with includes spelled from each target's root ([The source tree mirrors the layers](pages/source-tree-mirrors-the-layers.md)); `Main.cpp` split into `MainWindow`, `MainComponent` and its six units ([App shell](pages/app-shell.md)); Forge's arp gains four pattern slots and a waterfall on its plate, moved between the keys and the note guide ([Forge ARP plate](pages/forge-arp-plate.md)) |
+| 2026-10-18/19 | Forge gains a [preset browser and bank](pages/forge-preset-browser.md), a factory set of 18 presets, and [import of Serum 2 and Vital presets](pages/forge-preset-import.md) |

@@ -929,3 +929,27 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - source: the change's brief, checked against instruments/rhino-forge/src/ForgeEditorInput.cpp (`controlAt`), ForgeEditorLayout.cpp, ForgeEditorPages.cpp and the wiki's other Forge pages
 - updated: pages/forge-editor.md (the rack's controls are children of the clipping `fxControlViewport`, so a hit test or overlay maps them with `getLocalArea`)
 - updated: pages/forge-is-an-independent-vst3.md (dropped the stale "18 areas" count)
+
+## [2026-10-19] update | Forge's preset browser and bank, the factory set, and Serum 2 and Vital import
+- source: the change's brief (work of 2026-10-18/19, uncommitted), checked against instruments/rhino-forge/src/ForgePresetBank.*, ForgePresetBrowser.h, ForgePresetBrowserInternal.h, ForgeEditorPresets.cpp, ForgeEditorTheme.cpp, ForgeProcessor.h, ForgeProcessorState.cpp, ForgePresetImport.h, ForgePresetImportInternal.h, ForgePresetImportSerum.cpp, ForgePresetImportVital.cpp, ui/ForgePresetPlate.h, ForgePanels.h, ForgeMerliChassis.h, presets/make-presets.py and Factory/, tests/ForgeTestsTheme.cpp, ForgeTestTools.cpp, ForgeTestRender.cpp, ForgeTestMain.cpp, CMakeLists.txt and native/scripts/fetch-dependencies.py
+- created: pages/forge-preset-browser.md (the bank in Documents, the factory set copied in by `ensure`, read-only Serum 2 and Vital libraries, styles, favourites in Settings.xml, listing from file heads and `JsonHeadScanner`'s timings, the browser's layout, gestures and save rules, its tests)
+- created: pages/forge-preset-import.md (one way in through `PatchWriter` and `applySavedState`, warnings instead of approximations, the shared depth, unipolar-recentre, BI and mod-of-mod rules, Vital's domains and tables, results and the uncalibrated Serum level, the `import` tests and the drive-root walk)
+- created: pages/serum-2-preset-format.md (the container, embedded and referenced tables, the knob laws taken as facts from the GPLv3 serum2vital project)
+- created: pages/buffered-child-breaks-pixel-stability.md (a buffered `PresetPlate` broke two fresh panels' byte-for-byte match under Direct2D; drawn unbuffered)
+- updated: pages/forge-presets-and-state.md (summary; `PresetInfo` properties and the wrapper's attributes; `applySavedState` as the one path; file name as preset name; `presetRevision`; the factory set and `make-presets.py`)
+- updated: pages/forge.md (preset browser, factory set and import done; `presets/` and 22 test areas; Serum presets converted, never shipped)
+- updated: pages/forge-editor.md (summary: twenty units with ForgeEditorPresets.cpp; the title plate's `PresetPlate`, its doors and tooltip, the removed legend and moved hatch; the status label now transient)
+- updated: pages/forge-themes.md (Merli's cat plate names the preset and the cat shrank to a third; factored plate bounds; the PresetPlate exempt from the same-rectangle check; Merli's commit `286e146`)
+- updated: pages/build-and-test-forge.md (summary; zstd fetched and built as `ForgeZstd`, re-run the fetch script; 22 areas; `--audition` and `--convert`)
+- updated: pages/headless-ui-snapshots.md (`PRESETS`, `SAVE` and `PRESETS:<LIBRARY>` with their scratch bank in the working directory; a Serum or Vital preset as the snapshot's patch)
+- updated: pages/serum-patches-sound-different.md (Serum 2 stores plain gain; converted presets play about 11 dB quieter, uncalibrated)
+- updated: pages/known-hazards.md (item 13, slot 1's stale destination, still open; the factory set and importers avoid it)
+- updated: pages/off-limits-directories.md (`native/.deps` now also holds zstd)
+- updated: overview.md (`presets/` in the layout; a history row for 2026-10-18/19)
+- updated: index.md (four new pages; summaries of forge-editor, forge-presets-and-state and build-and-test-forge)
+
+## [2026-10-19] update | Forge import's clamp warning names the end, and the Serum 2 sweep re-run
+- source: the change's brief, checked against instruments/rhino-forge/src/ForgePresetImport.cpp (`PatchWriter::set`), ForgeParameters.cpp (`asSeconds`) and tests/ForgeTestsImport.cpp
+- updated: pages/forge-preset-import.md (the clamp warning names the end it holds the value at, and why; merged the caller's Results bullet into the PatchWriter section; the re-run sweep: 50 silent, two at 0 dBFS)
+- created: pages/juce-parameter-text-clamps-to-range.md (NormalisableRange clamps, so getText cannot print an out-of-range value)
+- updated: index.md (new gotcha page)

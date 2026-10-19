@@ -4,12 +4,12 @@ type: component
 summary: Every Forge chrome colour is a token in ui/ForgeTheme.h with a value per theme; the theme is a machine setting read once before the first Editor, and Merli, the second theme, redraws the chrome as fur and matte plates over the identical layout.
 tags: [forge, ui, theme]
 sources: []
-updated: 2026-10-17
+updated: 2026-10-19
 ---
 
 # Forge themes and Merli
 
-Forge has two looks: **Forge**, the gunmetal default, and **Merli**, tortoiseshell fur around dark matte plates with bronze knobs and orange and violet accents. The tokens are commit `425b253` (2026-10-16); Merli's drawing was in the working tree on 2026-10-17, to be committed next. Paths below are under `instruments/rhino-forge/`.
+Forge has two looks: **Forge**, the gunmetal default, and **Merli**, tortoiseshell fur around dark matte plates with bronze knobs and orange and violet accents. The tokens are commit `425b253` (2026-10-16); Merli's drawing is commit `286e146`. Paths below are under `instruments/rhino-forge/`.
 
 ## Tokens
 
@@ -23,16 +23,22 @@ A token keeps its name when a theme paints it otherwise: `electricBlue` is the s
 
 Why once: components copy tokens as they are built (`setColour`, member initialisers such as `accent = electricBlue`), so a live switch would recolour the painted chrome and miss the controls. The user decided on 2026-10-16 that a switch takes effect on restart, which is also why the cached chassis and plate layers carry no theme in their keys ([Forge's panel repaints whole at 24 Hz](forge-panel-repaint-cost.md)).
 
-The menu is `Editor::showThemeMenu` (`src/ForgeEditorTheme.cpp`, from `ui::themeMenu`: ids one-based, the current one ticked). It opens on a plain click on the top half of the title plate (`ui::identityPlateBounds` less the unit mark, the preset label and LOAD/SAVE: `Editor::onThemePlate`) or on a right-click on bare chassis that no control claims (`src/ForgeEditorInput.cpp`). Choosing the other theme saves it and shows `MERLI ON RESTART` (or `FORGE ...`) in the preset label in `signalViolet`.
+The menu is `Editor::showThemeMenu` (`src/ForgeEditorTheme.cpp`, from `ui::themeMenu`: ids one-based, the current one ticked). It opens on a plain click on the top half of the title plate (`ui::identityPlateBounds` less the unit mark, the preset's name on the `PresetPlate`, the status label and LOAD/SAVE: `Editor::onThemePlate`) or on a right-click on bare chassis that no control claims (`src/ForgeEditorInput.cpp`). Choosing the other theme saves it and shows `MERLI ON RESTART` (or `FORGE ...`) in the preset label in `signalViolet`.
 
 ## How Merli draws
 
 The layout is the same in both themes: nothing in `ForgePlacement.h`, `ForgeModule.h`, `ForgeModules.h` or `ForgeControlBlock.h` changed, and a test holds every child component's bounds identical. A Forge primitive that Merli redraws starts with `if (isMerli()) { merli::drawX(...); return; }`, leaving the Forge path below it untouched. It is `isMerli()` because `merli` is the namespace.
 
 - `ui/ForgeMerliMaterial.h`: `Asset` and `merli::image()` (through `ImageCache`), `fillTexture`, the procedural paw, rounded plates, screws, wells and matte fills. `drawRoundedPlate` strokes its hairline half a pixel inside the edge (straddling it, the outer half showed as a grey row above the lip at 2x) and takes `topScrews`: SUB's and NOISE's inner plates have screws at the foot only, because a top-left screw crowded the paw.
-- `ui/ForgeMerliChassis.h`: `drawBackdrop` (backdrop above y 28, fur, ears, module well, title and cat plates, tabs well, LOAD/SAVE housing, shelf) and `drawModuleShell` (rounded r7 plates with corner screws, a paw before titles that have no enable LED, handle or bank cards). The fur is filled from `merli::furOrigin()`, (-80, 0): one small symmetric whorl survives in the tile, and from there every copy of it in the header falls under a plate or the tabs well at 1440 and 1180 wide. `furRimLit` lights only the band's top edge and stops short of the ears (from `earWidth - earOverhang` in from each side): a lit line under the ear art's faded base read as a wire across each ear.
+- `ui/ForgeMerliChassis.h`: `drawBackdrop` (backdrop above y 28, fur, ears, module well, title and cat plates, tabs well, LOAD/SAVE housing, shelf), whose plate geometry is factored out as `presetHousingBounds`, `catPlateBounds` and `catBounds`, and `drawModuleShell` (rounded r7 plates with corner screws, a paw before titles that have no enable LED, handle or bank cards). The fur is filled from `merli::furOrigin()`, (-80, 0): one small symmetric whorl survives in the tile, and from there every copy of it in the header falls under a plate or the tabs well at 1440 and 1180 wide. `furRimLit` lights only the band's top edge and stops short of the ears (from `earWidth - earOverhang` in from each side): a lit line under the ear art's faded base read as a wire across each ear.
 - `ui/ForgeMerliControls.h`: `drawKnobFace` (a bronze ring at 0.70-0.81 r that is also the value track, a cap at 0.68 r; `knobCircle`, `onModRing` and the 0.88 mod ring unchanged) and `drawPawLamp`, which throws no halo: at a usable alpha over a dark plate a halo read as a shadow ring.
 - Dispatches in `ForgePanels.h`, `ForgeChrome.h` (rails, wear, hatch and grain draw nothing), `ForgeDisplays.h` (a flat display that keeps `crtPath`'s silhouette, because `drawWaveform` clips to it), `ForgeControls.h`, `ForgeArpPlate.h`, `ForgeNoteGuide.h` (black keys `#262829`), `ForgeLookAndFeel.h` and `ForgePerformanceWheel.h`. The wheel's bronze wash (`knobRimLit` at 24%) and the tyre's dark-bronze one (`knobRimDark` at 45%, so it reads as rubber) are drawn through the wheel art's own alpha (`drawImage` with `fillAlphaChannelWithCurrentBrush`, each in a `ScopedSaveState`); a `fillRect` over the art's box first painted a tan rectangle on the deck plate.
+
+### The cat plate names the preset
+
+Since 2026-10-19 Merli's cat plate shows the loaded preset's name, byline and origin to the left of the cat, in `merli::catPlateTextBounds` ([Forge editor (panel)](forge-editor.md#title-plate-and-presets)). Forge shows the same lines on its maker plate. To make room, the cat now draws at most a third of the plate's width (`catBounds`: 0.46 scale, capped at 34% of the plate), toward the plate's right end.
+
+The `PresetPlate` is therefore the one component whose rectangle differs between the themes, placed per theme at the user's request. The test that every component keeps its rectangle under Merli exempts it.
 
 ## Rules that bite
 
@@ -57,7 +63,7 @@ Contrast, measured 2026-10-17: Merli's `legendText` (`#8A8C8F`) puts the module 
 
 ## Tests and tools
 
-Area `theme` (`tests/ForgeTestsTheme.cpp`, CTest `forge_theme`) checks names, that `applyTheme` sets every token and restores Forge's bytes, the settings round trip through the override only, read-once, the menu, that Merli renders deterministically and keeps every bound, and that Forge is pixel-stable in-process. The test binary always starts on Forge ([Build and test Forge](build-and-test-forge.md)); `--snapshot` and `--profile` take a theme ([Seeing the UI without taking the screen](headless-ui-snapshots.md)).
+Area `theme` (`tests/ForgeTestsTheme.cpp`, CTest `forge_theme`) checks names, that `applyTheme` sets every token and restores Forge's bytes, the settings round trip through the override only, read-once, the menu, that Merli renders deterministically and keeps every bound but the `PresetPlate`'s, and that Forge is pixel-stable in-process. That last check is what caught a buffered `PresetPlate` ([A buffered child broke Forge's byte-identical paint](buffered-child-breaks-pixel-stability.md)). The test binary always starts on Forge ([Build and test Forge](build-and-test-forge.md)); `--snapshot` and `--profile` take a theme ([Seeing the UI without taking the screen](headless-ui-snapshots.md)).
 
 ## Deferred
 

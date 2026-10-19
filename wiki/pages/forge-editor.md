@@ -1,15 +1,15 @@
 ---
 title: Forge editor (panel)
 type: component
-summary: One Editor class across nineteen files builds the panel from declared modules and decides what is visible in one place.
+summary: One Editor class across twenty files builds the panel from declared modules and decides what is visible in one place.
 tags: [forge, ui, layout]
 sources: []
-updated: 2026-10-18
+updated: 2026-10-19
 ---
 
 # Forge editor (panel)
 
-The panel is one `Editor` (`src/ForgeEditor.h`) defined across nineteen `.cpp` files, `src/ForgeEditor.cpp` plus `ForgeEditor{Envelope,Filter,Fx,FxView,Input,Layout,Lfo,MatrixView,Modulation,Noise,NoteGuide,OscMode,Pages,Paint,Spectral,Tables,Theme,Warp}.cpp`, sharing the private `src/ForgeEditorInternal.h`. This is the split Rhino uses ([Keeping files small](keeping-files-small.md)); unlike the engine, the panel may span translation units freely ([Forge's engine splits into headers only](forge-engine-headers-only.md)).
+The panel is one `Editor` (`src/ForgeEditor.h`) defined across twenty `.cpp` files: `src/ForgeEditor.cpp` plus `ForgeEditor{Envelope,Filter,Fx,FxView,Input,Layout,Lfo,MatrixView,Modulation,Noise,NoteGuide,OscMode,Pages,Paint,Presets,Spectral,Tables,Theme,Warp}.cpp`. They share the private `src/ForgeEditorInternal.h`. This is the split Rhino uses ([Keeping files small](keeping-files-small.md)); unlike the engine, the panel may span translation units freely ([Forge's engine splits into headers only](forge-engine-headers-only.md)).
 
 ## Declared, not computed
 
@@ -28,6 +28,22 @@ OSC, TABLE and MATRIX swap only the oscillator columns; MIX and FX take the whol
 The note-guide plate on the keyboard shelf is a compact two-row control, not a titled module: it deliberately has no `NOTE GUIDE` heading so ROOT/CHORD occupy the first row and the MAJ/MIN quality switch with SCALE occupy the second. `Editor::resized` in `src/ForgeEditorLayout.cpp` uses the plate's full inset face with relaxed 7 px horizontal and 6 px vertical insets, rows clamped to 24--29 px, and a 6 px row gap; keep the plate's bevel and rivets visible when altering it. Its stored choices and the keyboard's note-mask/MIDI behaviour are independent of this visual geometry (`src/ForgeEditorNoteGuide.cpp`).
 
 The guide uses ASCII-only musical and directional spellings (`C#/Db`, `7#5`, `m7b5`, `->`). Unicode accidentals and arrows have rendered as broken glyphs in its popup font/environment; do not restore them unless the exact font path is proven to support them. The key-overlay fills and edge marker are deliberately strong enough to stay legible over both black and white keys.
+
+## Title plate and presets
+
+Since 2026-10-19 the title plate names the loaded preset. `ui::PresetPlate` (`ui/ForgePresetPlate.h`) is a component over the cached chassis that shows three lines:
+
+1. The preset's name, letter-spaced, which shrinks before it truncates.
+2. `BY AUTHOR / STYLE`.
+3. Where the preset came from: its bank folder, or `FROM SERUM 2 / n WARNINGS` in violet for a conversion.
+
+`Editor::refreshPresetPlate` (`src/ForgeEditorPresets.cpp`) re-reads these only when `processor.presetRevision()` moves.
+
+The plate takes no clicks itself; the editor routes them. A click on the name opens the browser, and the rest of the plate's top half is still the theme menu (`onThemePlate`). The plate's tooltip, answered by `Editor::getTooltip`, lists a conversion's warnings.
+
+In Forge the plate sits in `identityTextBounds` on the maker plate. The stamped legend "RHINO FORGE / SYNTHESIZER UNIT 01 / TOKYO-3 AUDIO RESEARCH" was removed from `drawIdentityPlate`, and the hatch now starts at x + 215 (`identityHatchBounds`) to leave the byline room. In Merli the plate sits beside the cat ([Forge themes and Merli](forge-themes.md)). It is drawn unbuffered on purpose ([A buffered child broke Forge's byte-identical paint](buffered-child-breaks-pixel-stability.md)).
+
+The status label beside LOAD (`presetName`, set by `showStatus`) now carries only short-lived messages: errors in violet, or "N THINGS DID NOT CONVERT". The old "INIT SIGNAL" placeholder is gone. The browser that LOAD and SAVE open covers `ui::contentBounds` ([Forge preset browser and bank](forge-preset-browser.md)).
 
 ## Rules that bite
 
@@ -53,4 +69,5 @@ Every frame repaints the whole panel and every ordinary knob shares one size: se
 - [Seeing the UI without taking the screen](headless-ui-snapshots.md)
 - [Colours and typography](colours-and-typography.md)
 - [Forge themes and Merli](forge-themes.md)
+- [Forge preset browser and bank](forge-preset-browser.md)
 - [A plugin's static Direct2D images deadlock NVIDIA's driver at unload](plugin-static-images-deadlock-on-unload.md)

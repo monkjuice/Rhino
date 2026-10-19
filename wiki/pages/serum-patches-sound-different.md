@@ -4,7 +4,7 @@ type: gotcha
 summary: Check matrix polarity, PD warp depth, the filter's FREQ and the output stage before suspecting Forge's tuning or DSP.
 tags: [forge, serum, sound-design]
 sources: []
-updated: 2026-10-13
+updated: 2026-10-19
 ---
 
 # Why a patch copied from Serum sounds different
@@ -31,6 +31,8 @@ Core's master stage is `output × 0.28`, so a full-scale oscillator at the defau
 
 Note names misled too: Forge called MIDI 60 C4, so keys labelled alike sounded an octave apart. It now says C3, as Serum, Live, FL and Logic do (`src/ForgeEditor.cpp`).
 
+A Serum 2 preset stores its levels and master as plain gain. Reading them with Serum 1's cubic law put the factory presets' masters at −37 dB. Even read correctly, presets converted by Forge's importer play quieter: as of 2026-10-19 their median peak is about −27 dBFS, against about −16 dBFS for Forge's own presets. Their absolute level has not yet been calibrated against Serum ([Forge preset import](forge-preset-import.md), [Serum 2's preset format](serum-2-preset-format.md)).
+
 ## Related
 
 - [Forge modulation: matrix, envelopes, LFOs and macros](forge-modulation.md)
@@ -38,3 +40,4 @@ Note names misled too: Forge called MIDI 60 C4, so keys labelled alike sounded a
 - [Forge warp](forge-warp.md)
 - [Forge filter](forge-filter.md)
 - [Comparing Forge with Serum](comparing-forge-with-serum.md)
+- [Forge preset import (Serum 2 and Vital)](forge-preset-import.md)

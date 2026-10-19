@@ -4,7 +4,7 @@ type: analysis
 summary: Probable bugs traced by reading the code on 2026-10-03; every Rhino item was fixed by 2026-10-05, and the four Forge items are still open.
 tags: [both, bugs, maintenance]
 sources: []
-updated: 2026-10-11
+updated: 2026-10-19
 ---
 
 # Hazards found while seeding the wiki
@@ -30,7 +30,7 @@ Each item below was **traced in the code on 2026-10-03 while seeding this wiki**
 
 All four are still open as of 2026-10-05.
 
-13. **Slot 1's default destination is wrong.** It is the literal `13` in `src/ForgeParameters.cpp`, commented as the cutoff; since format 3, 13 is C PAN and the cutoff is `cutoffDestination`. Silent until its depth is raised.
+13. **Slot 1's default destination is wrong.** It is the literal `13` in `src/ForgeParameters.cpp` (`slot == 1 ? 13 : 0`), meant as the cutoff; since format 3, 13 is C PAN and the cutoff is `cutoffDestination`. Silent until its depth is raised. Still open on 2026-10-19. The factory set (`presets/make-presets.py`) and the Serum 2 and Vital importers write every unused slot as off, so neither inherits it ([Forge presets and state](forge-presets-and-state.md), [Forge preset import](forge-preset-import.md)).
 14. **Forge state in older Rhino projects is misrouted.** Host state carries no version, so a project saved before 2026-09-28 reopens with modulation destinations from index 11 up naming other controls ([Stored indices are append-only](append-only-stored-indices.md)).
 15. **The knob-size layout check cannot fail.** `uniformKnobDiameter` never returns less than 40, and the test's threshold is 40 ([One knob diameter for the whole Forge panel](forge-knob-diameter-is-panel-wide.md)).
 16. **Warp does nothing on a spectral oscillator**, and a warp stage reading a spectral oscillator as its source probably reads a constant ([Forge spectral oscillator](forge-spectral.md)).

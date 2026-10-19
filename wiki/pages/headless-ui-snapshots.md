@@ -4,7 +4,7 @@ type: guide
 summary: Render a Rhino panel, the whole Rhino shell or Forge's editor to a PNG without a window, then measure it instead of eyeballing it.
 tags: [both, ui, testing, snapshots]
 sources: []
-updated: 2026-10-17
+updated: 2026-10-19
 ---
 
 # Seeing the UI without taking the screen
@@ -79,8 +79,10 @@ binary before blaming the change; that is how the source move of 2026-10-13 was 
 The Forge test binary renders the real editor, controls and cached layers included, in about a second:
 
 ```
-RhinoForgeTests --snapshot out.png [width height [OSC|TABLE|MATRIX|MIX|FX|ARP|ARPHELD [scale [preset.forgepreset|- [forge|merli]]]]]
+RhinoForgeTests --snapshot out.png [width height [OSC|TABLE|MATRIX|MIX|FX|ARP|ARPHELD|PRESETS|SAVE|PRESETS:<LIBRARY> [scale [preset.forgepreset|- [forge|merli]]]]]
 ```
+
+`PRESETS` and `SAVE` press LOAD or SAVE and so open the preset browser ([Forge preset browser and bank](forge-preset-browser.md)). `PRESETS:<LIBRARY>`, for example `"PRESETS:SERUM 2"` or `PRESETS:VITAL`, opens that library's folder and prints how long the listing took. The bank these pages show is a scratch one, `snapshot-bank`, made from the factory set in the **working directory**, so run them from a scratch folder rather than the repository root. The Serum 2 and Vital libraries are the machine's own and are only read.
 
 Paths resolve against the working directory. The last argument is the theme, chosen with `ui::selectTheme` before the editor is built; give `-` for the preset to name a theme with none. An unknown theme exits 2 rather than defaulting, so a typo cannot silently render Forge against a Merli baseline. With no theme argument the snapshot is Forge whatever the machine's user picked, because the test binary points the settings at a scratch file it deletes first ([Forge themes and Merli](forge-themes.md)). `--profile [width height [theme]]` takes the same names. `ARP` presses the name column of the ARP plate on the keyboard shelf
 (`arpPlateNameBounds`; the lamp and the slot buttons beside it do other things), the only way in, then plays an
@@ -100,7 +102,8 @@ call, until the wait ends, as a message loop would. Any snapshot that needs more
 
 The preset
 is loaded before the editor is built, which is the only way to review what the panel draws from the patch, such as
-modulation rings. A hand-written one needs only `<RhinoForgePreset formatVersion="3" name="x">` around a
+modulation rings. It goes through `Processor::loadPreset`, so since 2026-10-19 a `.SerumPreset` or `.vital` also works,
+converted on the way and named on the title plate ([Forge preset import](forge-preset-import.md)). A hand-written one needs only `<RhinoForgePreset formatVersion="3" name="x">` around a
 `<RhinoForgeState>` holding the `<PARAM id="..." value="..."/>` entries you care about; `Processor::migrated` defaults
 the rest. The version must equal `presetFormatVersion` in `src/ForgeProcessorState.cpp` (3 on 2026-10-03), or the
 preset is refused, the tool exits 1 and no PNG is written. A spectral sample cannot be hand-written: decode the

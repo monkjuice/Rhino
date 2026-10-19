@@ -1,10 +1,10 @@
 ---
 title: Build and test Forge
 type: guide
-summary: Configure Forge against Rhino's JUCE checkout, build around the toolchain's traps, fix /W4 warnings at their source, and run one test area at a time.
+summary: Configure Forge against the JUCE and zstd checkouts Rhino's script fetches, build around the toolchain's traps, fix /W4 warnings at their source, run one test area at a time, and audition or convert any preset from the command line.
 tags: [forge, build, testing, windows, warnings]
 sources: []
-updated: 2026-10-18
+updated: 2026-10-19
 ---
 
 # Build and test Forge
@@ -13,6 +13,13 @@ Forge is its own CMake project under `instruments/rhino-forge/`, with no Trackti
 Rhino's pinned JUCE: `RHINO_JUCE_DIR` defaults to `native/.deps/juce`, so run `python native/scripts/fetch-dependencies.py`
 first ([Build and test Rhino](build-and-test-rhino.md)). The Forge README has the newcomer quick start; this page carries
 the development detail.
+
+Since 2026-10-19 the same script also fetches zstd v1.5.7 (commit `f8745da`, BSD licensed) into `native/.deps/zstd`.
+Forge needs it to open Serum 2 presets ([Serum 2's preset format](serum-2-preset-format.md)). `RHINO_ZSTD_DIR` points
+at it, and configure stops with a `FATAL_ERROR` if it is missing, so a checkout fetched before that date must run the
+script again. `CMakeLists.txt` builds only zstd's decompressor sources, as the static library `ForgeZstd`, with
+`ZSTD_DISABLE_ASM=1`, because the amd64 Huffman loop is GNU assembler that MSVC rejects. Forge reads CBOR with its
+own reader (`src/ForgeCbor.*`), not a library.
 
 ## Build
 
@@ -73,8 +80,9 @@ from 24 sites, all in Forge's own code and none in JUCE).
 
 ## Test
 
-One binary, one file per area, one CTest case per area: 20 areas as of 2026-10-18, `fxModulation` the newest
-(`forge_test_areas` in `CMakeLists.txt`). `-R` is an unanchored regex, so `-R forge_fx` runs `forge_fxModulation`
+One binary, one file per area, one CTest case per area: 22 areas as of 2026-10-19, `import` and `browser` the newest
+(`forge_test_areas` in `CMakeLists.txt`; [Forge preset import](forge-preset-import.md),
+[Forge preset browser and bank](forge-preset-browser.md)). `-R` is an unanchored regex, so `-R forge_fx` runs `forge_fxModulation`
 too; `-R '^forge_fx$'` runs the one.
 
 ```powershell
@@ -104,6 +112,11 @@ ctest --test-dir instruments/rhino-forge/build -C Release -j 8 --output-on-failu
   only then run CTest ([Editing only a scenario .inc does not rebuild the tests](inc-edits-do-not-rebuild.md)).
 - `--snapshot`, `--profile`, `--profile-audio` and `--render` are development tools in the same binary, not test cases
   ([Proving a Forge change changed nothing](proving-a-forge-change-changed-nothing.md)).
+- Two more tools in `tests/ForgeTestRender.cpp` take a preset of any format: `.forgepreset`, `.SerumPreset` or `.vital`.
+  - `--audition <preset> <out.wav>` plays a bass note and then a chord, writes them to the WAV, and prints the
+    conversion's warnings and the peak and RMS level. It is the quick way to hear a conversion, or to find one that is
+    silent.
+  - `--convert <preset> <out.forgepreset>` writes the converted patch.
 - The test binary replaces the global `operator new` to count allocations (`AllocationCounter`,
   `tests/ForgeTestSupport.h`), which is how area `engine` proves a block allocates nothing. It cannot see
   `juce::HeapBlock`, so a growing `MidiBuffer` or `AudioBuffer` needs a check of its own

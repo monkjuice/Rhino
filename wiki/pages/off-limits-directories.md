@@ -4,7 +4,7 @@ type: convention
 summary: native/.deps and research/sources are not Rhino's code and are never searched; Tracktion signatures are checked in curated header snapshots, and a method body in the pinned commit on GitHub.
 tags: [both, workspace, search]
 sources: []
-updated: 2026-10-10
+updated: 2026-10-19
 ---
 
 # Directories not to read
@@ -13,7 +13,7 @@ Two large trees in the workspace hold no Rhino or Forge code. Nothing in either 
 
 ## `native/.deps/`
 
-This holds the pinned JUCE and Tracktion Engine checkouts. `python native/scripts/fetch-dependencies.py` fetches them, pins each by hash and leaves a `.rhino-revision` marker in each tree, and git ignores the directory. `AGENTS.md` puts it at over 400,000 lines. The builds do use it: `native/CMakeLists.txt` adds both trees as subdirectories, and Forge finds JUCE there through `RHINO_JUCE_DIR`. `AGENTS.md` says neither tree is compiled; it means neither is Rhino's code. Because the directory is gitignored, a default ripgrep search skips it. An explicit path, or a tool that ignores `.gitignore`, does not, so never point one there.
+This holds the pinned JUCE and Tracktion Engine checkouts. `python native/scripts/fetch-dependencies.py` fetches them, pins each by hash and leaves a `.rhino-revision` marker in each tree, and git ignores the directory. `AGENTS.md` puts it at over 400,000 lines. The builds do use it: `native/CMakeLists.txt` adds both trees as subdirectories, and Forge finds JUCE there through `RHINO_JUCE_DIR`. Since 2026-10-19 the directory also holds zstd, which Forge alone builds through `RHINO_ZSTD_DIR` ([Build and test Forge](build-and-test-forge.md)). `AGENTS.md` says neither tree is compiled; it means neither is Rhino's code. Because the directory is gitignored, a default ripgrep search skips it. An explicit path, or a tool that ignores `.gitignore`, does not, so never point one there.
 
 ## `research/sources/`
 

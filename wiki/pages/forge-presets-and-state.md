@@ -1,24 +1,38 @@
 ---
 title: Forge presets and state
 type: component
-summary: Presets and host state carry one tree; a preset of another format version is refused, and within a version everything is reconciled.
+summary: Presets and host state carry one tree, which also holds the patch's name, author, style, notes and conversion warnings; every arriving patch goes through applySavedState; a preset of another format version is refused, and within a version everything is reconciled.
 tags: [forge, presets, state, compatibility]
 sources: []
-updated: 2026-10-13
+updated: 2026-10-19
 ---
 
 # Forge presets and state
 
-Persistence is `src/ForgeProcessorState.cpp`, with LFO tables in `src/ForgeProcessorLfo.cpp`. A `.forgepreset` and the host's plugin state hold the same `RhinoForgeState` tree; the preset wraps it in `<RhinoForgePreset formatVersion="3" name="...">` and is written through a temporary file.
+Persistence is in `src/ForgeProcessorState.cpp`, with the LFO tables in `src/ForgeProcessorLfo.cpp`. A `.forgepreset` and the host's plugin state hold the same `RhinoForgeState` tree. The preset wraps the tree in `<RhinoForgePreset formatVersion="3" name="..." author="..." style="...">` and is written through a temporary file (`writePresetFile`). The wrapper repeats the name, author and style so a list can read them without parsing the tree ([Forge preset browser and bank](forge-preset-browser.md)).
 
 ## What the tree holds
 
 - A `<PARAM id value>` per parameter, as plain values.
 - Properties: each oscillator's plate colour (`panelColour_<module>`) and the macro names (`macroName_<n>`), one property each so one changing shifts nothing else.
+- Since 2026-10-19, the patch's `PresetInfo` as the properties `presetName`, `presetAuthor`, `presetStyle`, `presetNotes`, `presetSource` and `presetWarnings` (one line per warning). Each is removed when empty, as macro names are. Because the info rides on the tree, a project reopens showing the patch's name. `presetSource` and `presetWarnings` are set only by a conversion ([Forge preset import](forge-preset-import.md)).
 - Child nodes, only when they differ from what every copy of Forge already has: `TABLE` (a drawn or loaded wavetable, deflated then base64), `SAMPLE` (a spectral sample as 16-bit FLAC then base64; the spectrogram is re-analysed on load), `ForgeLfoTable` (a custom LFO shape or grid) and, since 2026-10-13, `ForgeLfoPath` (a drawn PATH route as `Point x y` children, the default diamond never written; [Forge LFOs](forge-lfos.md)). A patch never points at a file on disk.
-- `ARPSLOT` nodes (since 2026-10-13), one per arp slot that has been left at least once: property `slot` (0-3) and one property per id in `arpSlotParameterIds()` holding the plain value ([Forge ARP plate, slots and waterfall](forge-arp-plate.md)). They are read from the parameter state itself, so they ride through `copyState` with no append or apply step, and `migrated` keeps them because they carry no `id`. **A slot's node is written only when the slot is left**, so the live slot's node is stale in a saved file whenever a knob moved since; harmless, because the only read is a switch *to* a slot, preceded by the write of the slot being left. A slot never visited has no node and opens on the defaults, as does a control a node predates. `liveArpSlot` is set from `arpSlot` after `setStateInformation` and `loadPreset`.
+- `ARPSLOT` nodes (since 2026-10-13), one per arp slot that has been left at least once: property `slot` (0-3) and one property per id in `arpSlotParameterIds()` holding the plain value ([Forge ARP plate, slots and waterfall](forge-arp-plate.md)). They are read from the parameter state itself, so they ride through `copyState` with no append or apply step, and `migrated` keeps them because they carry no `id`. **A slot's node is written only when the slot is left**, so the live slot's node is stale in a saved file whenever a knob moved since; harmless, because the only read is a switch *to* a slot, preceded by the write of the slot being left. A slot never visited has no node and opens on the defaults, as does a control a node predates. `liveArpSlot` is set from `arpSlot` in `applySavedState`.
 
-Not in it: view settings (tab, the bank on show, envelope zoom, FX scroll) and MIDI bindings, which describe the desk rather than the sound ([Forge MIDI learn](forge-midi-learn.md)). The standalone keeps its patch as `filterState` in `%APPDATA%\Rhino Forge\Rhino Forge.settings`.
+Not in it: view settings (tab, the bank on show, envelope zoom, FX scroll), MIDI bindings and favourite presets. They describe the desk rather than the sound ([Forge MIDI learn](forge-midi-learn.md)). The standalone keeps its patch as `filterState` in `%APPDATA%\Rhino Forge\Rhino Forge.settings`.
+
+## One way a patch arrives
+
+`Processor::applySavedState` applies the tables, samples and LFO tables, then `replaceState(migrated(...))`, then sets the arp slot. Every route that brings in a patch uses it:
+
+- `loadPreset`.
+- `setStateInformation`, which clears `presetFile()` because host state does not know the file.
+- `initialisePatch`, the INIT patch, which applies an empty tree.
+- The importers: `loadPreset` sends a `.SerumPreset` or `.vital` to them and applies the tree they build. `convertPreset` writes such a tree to a file without touching the patch that is playing.
+
+On a `.forgepreset` load, the file's name is the preset's name, so renaming the file renames the patch. The wrapper's `author`, `style` and `notes` outrank the tree's, because the wrapper is what the browser listed.
+
+`presetRevision()` moves on every load, save or info change, so the panel notices on its 24 Hz tick by comparing one number. `presetFileMoved` keeps the loaded file in step when the browser renames or moves it. `wavetableStateNode`, `lfoTableStateNode` and `readWavetableFrames` are free functions, so the importers build nodes exactly as a save does. None of this changed the format version: it is all additive.
 
 ## A format version is a hard boundary
 
@@ -32,13 +46,21 @@ Not in it: view settings (tab, the bank on show, envelope zoom, FX scroll) and M
 
 `getStateInformation` writes the tree without a version and `setStateInformation` always runs `migrated`, so a Rhino project holding old Forge state still opens. The flip side: a project saved before format 3 reopens with its modulation destinations past B PITCH read in the new numbering (checked against commit `a5103e9`). Rhino's own documents take the opposite line ([No backward compatibility for .rhinoedit](no-rhinoedit-back-compat.md)).
 
+## The factory set
+
+`presets/Factory/*.forgepreset` holds 18 original presets, added on 2026-10-19: basses, leads, keys, pads, percussion, a sequence that uses the arp, SFX and an Init Saw template. `presets/make-presets.py` generates them. Edit the script, not the files.
+
+Each preset holds only the `PARAM`s that differ from Forge's defaults. The script starts every preset from a `BASE` that switches off what a fresh Forge demos: oscillators B and C, the sub, the noise, and matrix slot 1's stale default. It writes the name, author and style on both the wrapper and the tree. On first use the set is copied into the player's bank ([Forge preset browser and bank](forge-preset-browser.md)).
+
 ## Stale and missing
 
-- The only bundled preset, `presets/aLiLBitDark.forgepreset`, is format 1, referenced by nothing and refused. The M8 factory set was never authored.
+- `presets/aLiLBitDark.forgepreset` is still format 1. Nothing references it, the current build refuses it, and it is not part of the factory set.
 - A hand-written preset for `--snapshot` needs `formatVersion="3"`, or the tool exits 1 without a PNG ([Seeing the UI without taking the screen](headless-ui-snapshots.md)).
 
 ## Related
 
+- [Forge preset browser and bank](forge-preset-browser.md)
+- [Forge preset import (Serum 2 and Vital)](forge-preset-import.md)
 - [Forge modulation: matrix, envelopes, LFOs and macros](forge-modulation.md)
 - [Forge LFOs](forge-lfos.md)
 - [Forge ARP plate, slots and waterfall](forge-arp-plate.md)

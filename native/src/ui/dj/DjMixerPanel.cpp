@@ -97,13 +97,20 @@ void DjMixerPanel::paint(juce::Graphics& g)
     g.fillAll(palette::sideSurface);
     g.setColour(palette::border);
     g.drawRect(getLocalBounds());
-    const auto top = 4, bottom = getHeight() - crossfaderHeight - 8;
+    const auto top = mixerArea.getY(), bottom = mixerArea.getBottom() - crossfaderHeight - 4;
     // A rule between strips, and one before the master section.
     for (size_t i = 1; i < strips.size(); ++i)
         g.fillRect(4 + static_cast<int>(i) * stripPitch, top, 1, bottom - top);
     const auto masterX = getWidth() - masterWidth - 4;
     g.fillRect(masterX, top, 1, bottom - top);
-    g.fillRect(4, getHeight() - crossfaderHeight - 2, getWidth() - 8, 1);
+    g.fillRect(4, mixerArea.getBottom() - crossfaderHeight + 2, getWidth() - 8, 1);
+    if (!fxRackArea.isEmpty())
+    {
+        g.fillRect(4, fxRackArea.getY(), getWidth() - 8, 1);
+        if (fxRackDividerX > 0)
+            g.fillRect(fxRackDividerX, fxRackArea.getY() + titleHeight + 8, 1,
+                       std::max(0, fxRackArea.getBottom() - fxRackArea.getY() - titleHeight - 16));
+    }
     const auto draw = [this, &g](const ShapedLine& line)
     {
         if (!cullRepaints || line.isIn(g))
@@ -116,7 +123,7 @@ void DjMixerPanel::paint(juce::Graphics& g)
     for (const auto& caption : masterCaptions)
         draw(caption);
     draw(faderCurveCaption);
-    for (const auto* title : {&masterTitle, &isolatorTitle, &phonesTitle, &micTitle, &sendTitle, &fxTitle})
+    for (const auto* title : {&masterTitle, &isolatorTitle, &phonesTitle, &micTitle, &fxRackTitle, &sendTitle, &fxTitle})
         draw(*title);
     // The readouts: the tempo the effect follows, and its beat.
     for (const auto& [area, line] : {std::pair<juce::Rectangle<int>, const ShapedLine*>{bpmArea, &bpmLine}, {beatArea, &beatLine}})
@@ -136,14 +143,22 @@ void DjMixerPanel::paint(juce::Graphics& g)
 void DjMixerPanel::resized()
 {
     auto bounds = getLocalBounds().reduced(4);
-    auto foot = bounds.removeFromBottom(crossfaderHeight);
+    const auto mixerHeight = juce::jlimit(std::min(minimumMixerHeight, bounds.getHeight()),
+                                          std::min(preferredMixerHeight, bounds.getHeight()),
+                                          bounds.getHeight() - preferredFxRackHeight);
+    mixerArea = bounds.removeFromTop(mixerHeight);
+    fxRackArea = bounds;
+    auto mixer = mixerArea;
+    auto foot = mixer.removeFromBottom(crossfaderHeight);
     crossfaderCurve.setBounds(foot.removeFromRight(56).reduced(0, 12));
     foot.removeFromRight(4);
     crossfader.setBounds(foot.withTrimmedLeft(16).withTrimmedRight(16).reduced(0, 6));
-    bounds.removeFromBottom(4);
-    layoutStrips(bounds);
-    layoutMaster(bounds.removeFromRight(masterWidth));
-    const auto footArea = juce::Rectangle<int>(4, getHeight() - crossfaderHeight, getWidth() - 8, crossfaderHeight);
+    mixer.removeFromBottom(4);
+    layoutStrips(mixer);
+    layoutMaster(mixer.removeFromRight(masterWidth));
+    layoutEffects(fxRackArea);
+    const auto footArea = juce::Rectangle<int>(4, mixerArea.getBottom() - crossfaderHeight,
+                                               getWidth() - 8, crossfaderHeight);
     const auto footFont = uiFontBold(9.0f);
     aLine.set("A", footFont, footArea.withWidth(16), juce::Justification::centred);
     bLine.set("B", footFont, juce::Rectangle<int>(crossfader.getRight(), footArea.getY(), 16, footArea.getHeight()),

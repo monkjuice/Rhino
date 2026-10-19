@@ -378,6 +378,14 @@
                     for (auto* child : panel->getChildren())
                         require(inside(child->getBounds(), panel->getLocalBounds()), "A deck's keys sit inside its console");
                 require(view->mixer.strips.size() == 2, "The mixer has a strip per deck");
+                require(view->mixer.getBottom() == view->getHeight() - 4,
+                        "The mixer and its FX rack fill the centre column");
+                require(view->mixer.fxType.getY() > view->mixer.crossfader.getBottom()
+                            && view->mixer.sendType.getY() > view->mixer.crossfader.getBottom(),
+                        "The FX rack stands below the mixer");
+                require(view->mixer.strips[0]->knobs[0].getWidth() >= 32
+                            && view->mixer.masterKnobs[DjMixerPanel::masterLevel].getWidth() >= 32,
+                        "The mixer controls use the larger working size");
                 // A third deck added while the view stands lands its strip
                 // beside the others, not under the master section: the view
                 // syncs the mixer before it lays out (the bug of 2026-10-09).

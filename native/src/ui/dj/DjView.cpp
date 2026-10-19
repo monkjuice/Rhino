@@ -256,8 +256,9 @@ void DjView::paint(juce::Graphics& g)
 }
 
 // Decks stand either side of the mixer, odd on the left and even on the
-// right, each column stacking up to three. The mixer keeps its own height
-// at the top of the middle; the decks take the full height of their side.
+// right, each column stacking up to three. The centre panel takes the full
+// height: the mixer stands above its FX rack instead of leaving the lower
+// half of the middle empty.
 void DjView::resized()
 {
     auto bounds = getLocalBounds();
@@ -276,8 +277,7 @@ void DjView::resized()
     const auto narrowest = mixer.minimumWidth();
     const auto mixerWidth = juce::jlimit(narrowest, std::max(narrowest, bounds.getWidth() / 2), mixer.preferredWidth());
     laidOutMixerWidth = mixer.preferredWidth();
-    const auto mixerArea = bounds.withSizeKeepingCentre(mixerWidth, bounds.getHeight())
-                               .withHeight(std::min(DjMixerPanel::preferredHeight, bounds.getHeight()));
+    const auto mixerArea = bounds.withSizeKeepingCentre(mixerWidth, bounds.getHeight());
     mixer.setBounds(mixerArea);
     const auto toolbarFont = uiFontBold(10.0f);
     titleLine.set("DJ", toolbarFont, juce::Rectangle<int>(10, 0, 30, toolbarHeight));

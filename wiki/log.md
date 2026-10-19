@@ -902,6 +902,10 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/writing-rhino-tests.md (declare a listener a panel's teardown reaches before the panel)
 - updated: index.md (new gotcha page)
 
+## [2026-10-16] update | DJ effects rack moves below a larger mixer
+- source: the change's brief, checked against native/src/ui/dj/DjView.cpp, DjMixerPanel.h, DjMixerPanelInternal.h, DjMixerPanel.cpp, DjMixerPanelMaster.cpp and native/src/tests/Arrangement/scenarios/DjBooth.inc
+- updated: pages/dj-view.md (the full-height centre column; responsive 520-620 px upper mixer; crossfader boundary; SEND FX and BEAT FX rack below; two-column master; wider strips and larger controls; workflow layout contract)
+
 ## [2026-10-17] update | Forge's theme tokens (commit 425b253) and the Merli theme (working tree)
 - source: the change's brief and the coordinator's two follow-ups (drawImage opacity; the second Merli fix pass), checked against instruments/rhino-forge/ui/ForgeTheme.h, ForgeMerliMaterial.h, ForgeMerliChassis.h, ForgeMerliControls.h, ForgePerformanceWheel.h, ForgePlacement.h (`identityPlateBounds`), ui/assets/README.md, the isMerli dispatches in ui/, src/ForgeProcessorSettings.cpp, ForgeProcessor.cpp (`createEditor`), ForgeEditorTheme.cpp, ForgeEditorInput.cpp, tests/ForgeTestMain.cpp, ForgeTestTools.cpp, ForgeTestsTheme.cpp and CMakeLists.txt
 - created: pages/forge-themes.md (82 tokens, `earPink` removed, and `tokenBindings`; names kept when repainted; Settings.xml read once before the first Editor and why; the menu's two doors; the isMerli dispatch and the Merli files, with the second fix pass: `furOrigin`, the rim stopping short of the ears, `drawRoundedPlate`'s inside hairline and `topScrews`, no paw-lamp halo, the wheel and tyre washes through the art's alpha; rules that bite, drawImage at the current colour's alpha among them; the rebuilt fur tile and ears, linking ui/assets/README.md for the recipe; header plates at y 36 against Forge's 10 and 11; black keys and the contrast of legends and three known low-contrast labels; cost; the theme test area; the deferred frameless window)

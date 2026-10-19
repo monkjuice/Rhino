@@ -265,16 +265,81 @@ void DjMixerPanel::refreshMaster(bool meters)
     }
 }
 
-// The master section's three columns, and the words over them.
+// The effects that used to be squeezed into the master section now share a
+// rack beneath the mixer.
+void DjMixerPanel::layoutEffects(juce::Rectangle<int> area)
+{
+    if (area.isEmpty()) return;
+    area.reduce(8, 6);
+    const auto titleFont = uiFontBold(9.0f);
+    fxRackTitle.set("FX RACK", titleFont, area.removeFromTop(titleHeight), juce::Justification::centredLeft);
+    area.removeFromTop(4);
+    area = area.withSizeKeepingCentre(area.getWidth(), std::min(190, area.getHeight()));
+    const auto sendWidth = std::max(150, area.getWidth() * 2 / 5);
+    auto send = area.removeFromLeft(sendWidth);
+    area.removeFromLeft(12);
+    auto beat = area;
+    fxRackDividerX = send.getRight() + 6;
+    sendTitle.set("SEND FX", titleFont, send.removeFromTop(titleHeight), juce::Justification::centred);
+    fxTitle.set("BEAT FX", titleFont, beat.removeFromTop(titleHeight), juce::Justification::centred);
+    sendType.setBounds(send.removeFromTop(24));
+    auto boxes = beat.removeFromTop(24);
+    fxType.setBounds(boxes.removeFromLeft(boxes.getWidth() / 2 - 2));
+    fxTarget.setBounds(boxes.withTrimmedLeft(4));
+    send.removeFromTop(6);
+    beat.removeFromTop(6);
+
+    auto sendKnobs = send.removeFromTop(std::min(send.getHeight(), knobLabelHeight + knobSize + 2));
+    const auto sendKnobWidth = std::max(1, sendKnobs.getWidth() / 4);
+    for (int i = sendSize; i <= sendMix; ++i)
+    {
+        auto cell = sendKnobs.removeFromLeft(i == sendMix ? sendKnobs.getWidth() : sendKnobWidth);
+        auto& knob = masterKnobs[static_cast<size_t>(i)];
+        knob.setBounds(cell.withTrimmedTop(knobLabelHeight).withSizeKeepingCentre(knobSize, knobSize));
+    }
+
+    auto keys = beat.removeFromTop(keyHeight);
+    const auto keyWidth = std::max(1, (keys.getWidth() - 8) / 5);
+    for (auto* key : {&fxLow, &fxMid, &fxHigh, &fxAuto, &fxTap})
+    {
+        key->setBounds(keys.removeFromLeft(keyWidth));
+        keys.removeFromLeft(2);
+    }
+    beat.removeFromTop(6);
+    auto lower = beat;
+    auto beatColumn = lower.removeFromLeft(std::max(78, lower.getWidth() / 3));
+    lower.removeFromLeft(8);
+    auto beatChoice = beatColumn.removeFromTop(24);
+    fxBeatDown.setBounds(beatChoice.removeFromLeft(22));
+    fxBeatUp.setBounds(beatChoice.removeFromRight(22));
+    beatArea = beatChoice.reduced(2, 0);
+    beatColumn.removeFromTop(6);
+    fxOn.setBounds(beatColumn.removeFromTop(24));
+    const auto effectKnobWidth = std::max(1, lower.getWidth() / 2);
+    for (int i = fxTime; i <= fxDepth; ++i)
+    {
+        auto cell = lower.removeFromLeft(i == fxDepth ? lower.getWidth() : effectKnobWidth);
+        auto& knob = masterKnobs[static_cast<size_t>(i)];
+        knob.setBounds(cell.withTrimmedTop(knobLabelHeight).withSizeKeepingCentre(knobSize, knobSize));
+    }
+
+    const auto captionFont = uiFontBold(8.0f);
+    for (int i = sendSize; i <= fxDepth; ++i)
+        masterCaptions[static_cast<size_t>(i)].set(masterKnobSpecs[static_cast<size_t>(i)].caption, captionFont,
+                                                  captionOver(masterKnobs[static_cast<size_t>(i)]),
+                                                  juce::Justification::centred);
+    if (shownBeat >= 0)
+        beatLine.set(beatChoiceNames[shownBeat], readoutFont, beatArea, juce::Justification::centred);
+}
+
+// The master section's two columns, and the words over them.
 void DjMixerPanel::layoutMaster(juce::Rectangle<int> area)
 {
     area.reduce(4, 0);
-    const auto columnWidth = (area.getWidth() - 8) / 3;
+    const auto columnWidth = (area.getWidth() - 4) / 2;
     auto first = area.removeFromLeft(columnWidth);
     area.removeFromLeft(4);
-    auto second = area.removeFromLeft(columnWidth);
-    area.removeFromLeft(4);
-    auto third = area;
+    auto second = area;
     const auto titleFont = uiFontBold(9.0f);
     const auto title = [&titleFont](ShapedLine& line, const juce::String& text, juce::Rectangle<int> box)
     {
@@ -314,44 +379,10 @@ void DjMixerPanel::layoutMaster(juce::Rectangle<int> area)
     micMode.setBounds(second.removeFromTop(keyHeight));
     second.removeFromTop(3);
     micMeter.setBounds(second.removeFromTop(6));
-    // Three: the send unit, then the beat effect.
-    title(sendTitle, "SEND FX", third.removeFromTop(titleHeight));
-    sendType.setBounds(third.removeFromTop(20));
-    third.removeFromTop(3);
-    knobPair(third, masterKnobs[sendSize], masterKnobs[sendTime]);
-    knobPair(third, masterKnobs[sendTone], masterKnobs[sendMix]);
-    third.removeFromTop(8);
-    title(fxTitle, "BEAT FX", third.removeFromTop(titleHeight));
-    fxType.setBounds(third.removeFromTop(20));
-    third.removeFromTop(3);
-    fxTarget.setBounds(third.removeFromTop(20));
-    third.removeFromTop(3);
-    auto bands = third.removeFromTop(keyHeight);
-    const auto bandWidth = (bands.getWidth() - 4) / 3;
-    fxLow.setBounds(bands.removeFromLeft(bandWidth));
-    bands.removeFromLeft(2);
-    fxMid.setBounds(bands.removeFromLeft(bandWidth));
-    bands.removeFromLeft(2);
-    fxHigh.setBounds(bands);
-    third.removeFromTop(3);
-    auto beat = third.removeFromTop(20);
-    fxBeatDown.setBounds(beat.removeFromLeft(18));
-    fxBeatUp.setBounds(beat.removeFromRight(18));
-    beatArea = beat.reduced(2, 0);
-    third.removeFromTop(3);
-    auto timing = third.removeFromTop(keyHeight);
-    fxAuto.setBounds(timing.removeFromLeft(timing.getWidth() / 2 - 1));
-    fxTap.setBounds(timing.withTrimmedLeft(2));
-    third.removeFromTop(3);
-    knobPair(third, masterKnobs[fxTime], masterKnobs[fxDepth]);
-    third.removeFromTop(3);
-    fxOn.setBounds(third.removeFromTop(22));
     const auto captionFont = uiFontBold(8.0f);
-    for (size_t i = 0; i < masterKnobSpecs.size(); ++i)
+    for (size_t i = 0; i <= micLow; ++i)
         masterCaptions[i].set(masterKnobSpecs[i].caption, captionFont, captionOver(masterKnobs[i]), juce::Justification::centred);
     faderCurveCaption.set("CH CURVE", captionFont, captionOver(faderCurve), juce::Justification::centred);
-    if (shownBeat >= 0)
-        beatLine.set(beatChoiceNames[shownBeat], readoutFont, beatArea, juce::Justification::centred);
     bpmLine.set(shownBpm, readoutFont, bpmArea, juce::Justification::centred);
 }
 }

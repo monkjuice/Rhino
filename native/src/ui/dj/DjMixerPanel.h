@@ -12,13 +12,14 @@ namespace rhino
 // strip per deck carries what the V10's channel does, top to bottom: trim,
 // the compressor, the four EQ bands, the colour filter, the send, cue and
 // the effect assign, the fader with its meter, and the crossfader assign.
-// The master section beside the strips is three columns: the master level
+// The master section beside the strips is two columns: the master level
 // and isolator with the meters, the filter resonance and the fader curve;
-// the headphones and the mic; the send/return unit and the beat effect.
-// The crossfader runs along the foot.
+// the headphones and the mic. The crossfader runs along the foot of that
+// mixer, and the send/return unit and beat effect form an FX rack beneath it.
 //
-// The mixer stands at one height, as the hardware does: its strips do not
-// stretch with the window. Its width follows the strips.
+// The upper mixer grows only until its controls and faders have their useful
+// height; the FX rack takes the rest of the centre column. Its width follows
+// the strips.
 //
 // Every value it shows - knobs, keys, faders, meters, the readouts - is read
 // on the view's 30 Hz tick, so a value changed anywhere shows within a tick
@@ -40,8 +41,9 @@ public:
     void paint(juce::Graphics&) override;
     void resized() override;
 
-    static constexpr int preferredHeight = 560, masterWidth = 246, crossfaderHeight = 44;
-    static constexpr int stripWidth = 68, minimumStripWidth = 50;
+    static constexpr int preferredMixerHeight = 620, minimumMixerHeight = 520, preferredFxRackHeight = 300;
+    static constexpr int masterWidth = 198, crossfaderHeight = 50;
+    static constexpr int stripWidth = 80, minimumStripWidth = 56;
     int preferredWidth() const;
     int minimumWidth() const;
 
@@ -81,6 +83,7 @@ private:
     void dressMaster();
     void refreshMaster(bool meters);
     void layoutMaster(juce::Rectangle<int> area);
+    void layoutEffects(juce::Rectangle<int> area);
     void stepFxBeats(int direction);
     // Whether a repaint reaches an area; everything does with culling off.
     bool reaches(const juce::Graphics&, juce::Rectangle<int> area) const;
@@ -110,7 +113,10 @@ private:
     // The painted words, shaped where resized() puts them: the section
     // titles, the fader curve's caption, A and B at the crossfader's ends,
     // and the two readouts, whose text the tick decides and the paint draws.
-    ShapedLine masterTitle, isolatorTitle, phonesTitle, micTitle, sendTitle, fxTitle, faderCurveCaption, aLine, bLine;
+    ShapedLine masterTitle, isolatorTitle, phonesTitle, micTitle, fxRackTitle, sendTitle, fxTitle;
+    ShapedLine faderCurveCaption, aLine, bLine;
+    juce::Rectangle<int> mixerArea, fxRackArea;
+    int fxRackDividerX = 0;
     juce::Rectangle<int> bpmArea, beatArea;
     ShapedLine bpmLine, beatLine;
     juce::String shownBpm;

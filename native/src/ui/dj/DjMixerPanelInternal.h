@@ -8,7 +8,7 @@
 
 namespace rhino::mixerpanel
 {
-inline constexpr int knobSize = 28, knobLabelHeight = 10, keyHeight = 18, titleHeight = 14;
+inline constexpr int knobSize = 32, knobLabelHeight = 10, keyHeight = 20, titleHeight = 16;
 
 // A knob under its caption: the caption's ten pixels, the knob, a gap.
 inline void knobRow(juce::Rectangle<int>& column, juce::Slider& knob)

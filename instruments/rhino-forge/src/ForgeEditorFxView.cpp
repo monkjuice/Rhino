@@ -133,10 +133,11 @@ void Editor::paintFxShelves(juce::Graphics& g, juce::Rectangle<int> area, const 
             paintFxFrame(g, strip, rack, slot, bypassed);
             // A slot that is bypassed still says what is in it, dimmed — the point
             // of a bypass is to hear a rack without it and put it straight back.
+            paintFxPanels(g, strip, held, bypassed);
             for (int well = 0; well < strip.wellCount; ++well)
-                ui::drawFxDisplay(g, strip.wells[static_cast<size_t>(well)].area, held,
-                                  processor.getSampleRate() > 0.0 ? processor.getSampleRate() : 48000.0,
-                                  processor.hostTempo(), bypassed ? 0.3f : 1.0f);
+                ui::drawFxWell(g, strip.wells[static_cast<size_t>(well)], held,
+                               processor.getSampleRate() > 0.0 ? processor.getSampleRate() : 48000.0,
+                               processor.hostTempo(), bypassed ? 0.3f : 1.0f);
             paintFxReadings(g, strip, rack, slot, juce::roundToInt(held.type), bypassed);
             if (slot == fxSelectedSlot)
             {
@@ -147,6 +148,31 @@ void Editor::paintFxShelves(juce::Graphics& g, juce::Rectangle<int> area, const 
     }
     drawScrollThumb(g, ui::fxRackScrollBounds(area), fxFirstVisibleSlot(),
                     ui::fxVisibleSlotCount(area), fxActiveSlotCount(rack));
+}
+
+// A strip's panels, and the chevron between two of them where the type has
+// one. A panel's gate and lamp are read from the slot as it stands.
+void Editor::paintFxPanels(juce::Graphics& g, const ui::FxStrip& strip, const FxSlot& held, bool bypassed)
+{
+    const auto type = fxTypeOf(held.type);
+    const auto colour = ui::fxTypeColour(static_cast<int>(type));
+    const auto& info = fxTypeInfo(held.type);
+    const auto alpha = bypassed ? 0.5f : 1.0f;
+    for (int index = 0; index < strip.panelCount; ++index)
+    {
+        const auto& panel = strip.panels[static_cast<size_t>(index)];
+        auto dim = false;
+        if (panel.gate == ui::FxRole::modeA) dim = fxModeOf(info.modeA, held.modeA) == panel.gateOff;
+        else if (panel.gate == ui::FxRole::modeB) dim = fxModeOf(info.modeB, held.modeB) == panel.gateOff;
+        const auto tint = panel.lamp == ui::FxLamp::highBand ? ui::fxEqHighColour : colour;
+        ui::drawFxPanel(g, panel, tint, dim, ui::fxLampLevel(panel, held, {}), alpha);
+    }
+    if (!strip.chevron.isEmpty() && type == FxType::distortion)
+    {
+        const auto placement = fxDistortionFilterPlacement(held);
+        ui::drawFxChevron(g, strip.chevron, placement == 0 ? 0 : placement == 1 ? 1 : -1,
+                          placement == 1 ? "PRE" : "POST", colour, alpha);
+    }
 }
 
 // What every strip draws round its body: the slot's automation name under its

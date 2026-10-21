@@ -5,6 +5,7 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <array>
 #include <cmath>
+#include <complex>
 #include <vector>
 
 // The rack, rendered.
@@ -224,6 +225,26 @@ inline float fxShape(int shape, float x, float drive)
     return juce::jlimit(-1.0f, 1.0f, driven);
 }
 
+// The distortion filter's gain at one frequency. distortionFilter is the
+// topology-preserving form of an analog state-variable filter -- the bilinear
+// transform, prewarped at its cutoff -- so its response at `hz` is exactly the
+// analog prototype's at the ratio of the two prewarped frequencies. The panel
+// draws this, and a test holds it to a rendered sweep.
+inline float distortionFilterMagnitude(float hz, float cutoff, float q, bool highPass, double sampleRate)
+{
+    const auto rate = static_cast<float>(juce::jmax(1000.0, sampleRate));
+    const auto warp = [rate] (float f)
+    {
+        return std::tan(juce::MathConstants<float>::pi * juce::jlimit(20.0f, rate * 0.45f, f) / rate);
+    };
+    const auto ratio = warp(hz) / warp(cutoff);
+    const auto damping = 1.0f / juce::jmax(0.05f, q);
+    const auto real = 1.0f - ratio * ratio;
+    const auto bottom = std::sqrt(real * real + damping * damping * ratio * ratio);
+    const auto top = highPass ? ratio * ratio : 1.0f;
+    return bottom <= 1.0e-9f ? 1.0f : top / bottom;
+}
+
 // --- One slot's state ---------------------------------------------------------
 
 // Every type's state, in one place. A slot holds all of it because its type can
@@ -312,6 +333,107 @@ inline const std::array<int, FxSlotState::allpassCount>& reverbAllpassLengths()
 // 44.1 kHz. Without it both channels would be the same reverb and the tail
 // would be mono however wide it was spread.
 inline constexpr int reverbStereoSpread = 23;
+
+// --- What the slots draw of themselves -------------------------------------------
+//
+// Each of these is the gain or the time a slot's own arithmetic gives, worked
+// out from the same coefficients the render below builds, so a strip's
+// picture is a reading of the effect rather than a drawing of it in general.
+
+// The rack filter's gain at one frequency, at small signal. The state-variable
+// models are the topology-preserving form of the analog filter, so their
+// response is the prototype's at the ratio of the prewarped frequencies,
+// exactly; the two six-decibel models are one-poles. FAT's parallel path is
+// included, at the level where tanh is the identity, and PEAK 12's band is
+// added to the dry signal as the render adds it. DRIVE is a level rather than a
+// shape and is left out.
+inline float fxFilterMagnitude(const FxSlot& slot, float hz, double sampleRate)
+{
+    using Complex = std::complex<float>;
+    const auto& info = fxTypes()[static_cast<size_t>(FxType::filter)];
+    const auto model = fxModeOf(info.modeA, slot.modeA);
+    const auto rate = static_cast<float>(juce::jmax(1000.0, sampleRate));
+    const auto cutoff = fxHertz(slot.knobs[0], 30.0f, 18000.0f);
+    const auto damping = juce::jmax(0.05f, 2.0f - juce::jlimit(0.0f, 0.98f, slot.knobs[1]) * 1.96f);
+    const auto fat = juce::jlimit(0.0f, 1.0f, slot.knobs[3]);
+    const auto at = juce::jlimit(1.0f, rate * 0.49f, hz);
+    Complex response;
+    if (model == 1 || model == 5)
+    {
+        const auto c = onePoleCoefficient(cutoff, sampleRate);
+        const auto w = juce::MathConstants<float>::twoPi * at / rate;
+        const Complex back(std::cos(w), -std::sin(w));
+        const auto low = Complex(c, 0.0f) / (Complex(1.0f, 0.0f) - (1.0f - c) * back);
+        response = model == 1 ? low : Complex(1.0f, 0.0f) - low;
+    }
+    else
+    {
+        const auto warp = [rate] (float f)
+        {
+            return std::tan(juce::MathConstants<float>::pi * juce::jlimit(1.0f, rate * 0.45f, f) / rate);
+        };
+        const auto ratio = std::tan(juce::MathConstants<float>::pi * juce::jmin(at, rate * 0.4999f) / rate)
+                         / warp(cutoff);
+        const Complex s(0.0f, ratio);
+        const auto shared = s * s + damping * s + Complex(1.0f, 0.0f);
+        const auto low = Complex(1.0f, 0.0f) / shared;
+        const auto band = s / shared;
+        const auto high = s * s / shared;
+        switch (model)
+        {
+            case 0: response = low; break;
+            case 2: response = low * low; break;
+            case 3: response = low + high; break;
+            case 4: response = high; break;
+            case 6: response = Complex(1.0f, 0.0f) + band * (0.5f + fat * 1.5f); break;
+            default: response = band; break;
+        }
+    }
+    if (model != 6) response = response * (1.0f - fat * 0.35f) + Complex(fat * 0.35f, 0.0f);
+    return std::abs(response);
+}
+
+// What the delay's repeats pass through on every trip round the loop: the
+// one-pole at FREQ, of which Q keeps the dry share. Applied once per repeat,
+// which is why the repeats darken as they go.
+inline float fxDelayLoopGain(const FxSlot& slot, float hz, double sampleRate)
+{
+    using Complex = std::complex<float>;
+    const auto rate = static_cast<float>(juce::jmax(1000.0, sampleRate));
+    const auto c = onePoleCoefficient(fxHertz(slot.knobs[3], 200.0f, 16000.0f), sampleRate);
+    const auto width = juce::jlimit(0.0f, 1.0f, slot.knobs[4]);
+    const auto w = juce::MathConstants<float>::twoPi * juce::jlimit(1.0f, rate * 0.49f, hz) / rate;
+    const Complex back(std::cos(w), -std::sin(w));
+    const auto low = Complex(c, 0.0f) / (Complex(1.0f, 0.0f) - (1.0f - c) * back);
+    return std::abs(Complex(width, 0.0f) + (1.0f - width) * low);
+}
+
+// The reverb's mean round trip, in seconds: the length a comb's echo comes
+// back after, and so the time the decay is applied once per.
+inline float fxReverbMeanTrip(const FxSlot& slot)
+{
+    auto mean = 0.0f;
+    for (const auto length : reverbCombLengths()) mean += static_cast<float>(length);
+    return mean / static_cast<float>(FxSlotState::combCount) * fxScaled(slot.knobs[0], 0.35f, 1.0f) / 44100.0f;
+}
+
+// How long the tail takes to fall sixty decibels: the decay a comb applies per
+// trip, times the damping's loss there when a frequency is asked for. At zero
+// it is the broadband figure SIZE reads as.
+inline float fxReverbRt60(const FxSlot& slot, float hz, double sampleRate)
+{
+    auto perTrip = fxReverbDecay(slot);
+    if (hz > 0.0f)
+    {
+        using Complex = std::complex<float>;
+        const auto rate = static_cast<float>(juce::jmax(1000.0, sampleRate));
+        const auto c = onePoleCoefficient(fxHertz(1.0f - slot.knobs[2], 800.0f, 16000.0f), sampleRate);
+        const auto w = juce::MathConstants<float>::twoPi * juce::jlimit(1.0f, rate * 0.49f, hz) / rate;
+        const Complex back(std::cos(w), -std::sin(w));
+        perTrip *= std::abs(Complex(c, 0.0f) / (Complex(1.0f, 0.0f) - (1.0f - c) * back));
+    }
+    return fxReverbMeanTrip(slot) * std::log(0.001f) / std::log(juce::jlimit(0.01f, 0.9999f, perTrip));
+}
 
 // The whole rack, rendered. One of these per rack.
 class FxRack
@@ -722,7 +844,7 @@ private:
         const auto inputDb = juce::Decibels::gainToDecibels(amplitude, -100.0f);
         const auto outputDb = fxCompressorOutputDb(inputDb, threshold, ratio, knee);
         const auto reduction = outputDb - inputDb;
-        const auto makeup = automatic ? juce::jlimit(0.0f, 18.0f, -threshold * (1.0f - 1.0f / ratio) * 0.5f)
+        const auto makeup = automatic ? fxCompressorAutoMakeup(threshold, ratio)
                                       : fxCompressorMakeup(slot.knobs[4]);
         const auto targetGain = juce::Decibels::decibelsToGain(reduction + makeup);
         state.compressorGain += (targetGain - state.compressorGain) * (targetGain < state.compressorGain ? 0.2f : 0.02f);

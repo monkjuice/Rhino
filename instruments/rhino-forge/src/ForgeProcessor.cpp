@@ -458,11 +458,20 @@ juce::String Processor::fxKnobText(int rack, int slot, int knob, float value) co
         return state.getRawParameterValue(fxParameterId(rack, slot, "Knob")
                                           + juce::String(which + 1))->load();
     };
-    juce::ignoreUnused(read);
 
     switch (fxTypeOf(state.getRawParameterValue(fxParameterId(rack, slot, "Type"))->load()))
     {
         case FxType::reverb:
+            // SIZE reads as the tail it makes: the time to fall sixty decibels,
+            // which the room TYPE beside it lengthens.
+            if (knob == 0)
+            {
+                FxSlot room;
+                room.type = static_cast<float>(FxType::reverb);
+                room.modeA = state.getRawParameterValue(fxParameterId(rack, slot, "ModeA"))->load();
+                room.knobs[0] = value;
+                return juce::String(fxReverbRt60(room, 0.0f, getSampleRate()), 2) + " s";
+            }
             if (knob == 1) return asMilliseconds(fxScaled(value, 0.0f, 0.2f));
             if (knob == 4) return hertz(fxHertz(value, 20.0f, 1200.0f));
             if (knob == 5) return hertz(fxHertz(value, 1200.0f, 20000.0f));
@@ -488,6 +497,9 @@ juce::String Processor::fxKnobText(int rack, int slot, int knob, float value) co
                 return juce::String(ratio, 2) + " x";
             }
             if (knob == 3) return hertz(fxHertz(value, 200.0f, 16000.0f));
+            // The loop never feeds back more than this, so the top of the knob
+            // reads what is heard rather than what it was turned to.
+            if (knob == 2) return juce::String(juce::roundToInt(juce::jmin(value, 0.95f) * 100.0f)) + " %";
             return percent();
         }
 
@@ -508,6 +520,20 @@ juce::String Processor::fxKnobText(int rack, int slot, int knob, float value) co
         }
 
         case FxType::distortion:
+            // DRIVE is a gain into six of the shapes, a number of steps for
+            // CRUSH and a hold for DOWNSMP, and says which it is.
+            if (knob == 0)
+            {
+                const auto shape = fxModeOf(fxTypes()[static_cast<size_t>(FxType::distortion)].modeA,
+                                            state.getRawParameterValue(fxParameterId(rack, slot, "ModeA"))->load());
+                if (shape == 6)
+                    return juce::String(juce::roundToInt(juce::jmax(2.0f, 64.0f * std::pow(1.0f - juce::jmin(value, 0.99f), 3.0f))))
+                           + " STEPS";
+                if (shape == 7)
+                    return hertz(static_cast<float>((getSampleRate() > 0.0 ? getSampleRate() : 48000.0)
+                                                    / fxScaled(value, 1.0f, 48.0f)));
+                return "+" + juce::String(20.0f * std::log10(1.0f + 24.0f * value), 1) + " dB";
+            }
             if (knob == 1) return hertz(fxHertz(value, 40.0f, 16000.0f));
             if (knob == 2) return juce::String(fxScaled(value, 0.4f, 8.0f), 2);
             return percent();
@@ -537,8 +563,11 @@ juce::String Processor::fxKnobText(int rack, int slot, int knob, float value) co
                 const auto automatic = fxModeOf(fxTypes()[static_cast<size_t>(FxType::compressor)].modeB,
                                                  state.getRawParameterValue(
                                                      fxParameterId(rack, slot, "ModeB"))->load()) == 1;
-                return automatic ? juce::String("AUTO")
-                                 : juce::String(fxCompressorMakeup(value), 1) + " dB";
+                // AUTO says what it is applying, which THRESH and RATIO decide.
+                if (automatic)
+                    return "AUTO +" + juce::String(fxCompressorAutoMakeup(fxCompressorThreshold(read(0)),
+                                                                          fxCompressorRatio(read(1))), 1) + " dB";
+                return juce::String(fxCompressorMakeup(value), 1) + " dB";
             }
             if (knob == 5) return juce::String(fxCompressorKnee(value), 1) + " dB";
             break;

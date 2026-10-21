@@ -45,6 +45,7 @@ struct Theme
 
     juce::Colour valueText, knobPointer, knobArcDot, pawTint, pawHighlight;
     juce::Colour furRimLit, furLip, backdrop;
+    juce::Colour meterFace, meterInk, meterRed;
 };
 
 // Forge: gunmetal lit from above. Every value here is the literal the panel
@@ -142,6 +143,10 @@ inline const Theme& forgeTheme()
         .furRimLit    = juce::Colour(0xffD4A173),
         .furLip       = juce::Colour(0xff794628),
         .backdrop     = juce::Colour(0xff020304),
+        // A studio meter's face: cream card, black scale, red past -10.
+        .meterFace    = juce::Colour(0xffefe6cf),
+        .meterInk     = juce::Colour(0xff2a2620),
+        .meterRed     = juce::Colour(0xffb3261e),
     };
     return theme;
 }
@@ -238,6 +243,9 @@ inline const Theme& merliTheme()
         .furRimLit    = juce::Colour(0xffD4A173),
         .furLip       = juce::Colour(0xff794628),
         .backdrop     = juce::Colour(0xff0A0B0C),
+        .meterFace    = juce::Colour(0xffEFE2C4),
+        .meterInk     = juce::Colour(0xff2A2118),
+        .meterRed     = juce::Colour(0xffB3402E),
     };
     return theme;
 }
@@ -449,6 +457,10 @@ inline juce::Colour furRimLit = forgeTheme().furRimLit;
 inline juce::Colour furLip = forgeTheme().furLip;
 // The strip above the fur band, outside the ears, that makes them a silhouette.
 inline juce::Colour backdrop = forgeTheme().backdrop;
+// The compressor's gain-reduction meter: its face, its scale and its red.
+inline juce::Colour meterFace = forgeTheme().meterFace;
+inline juce::Colour meterInk = forgeTheme().meterInk;
+inline juce::Colour meterRed = forgeTheme().meterRed;
 
 // --- Applying a theme -------------------------------------------------------
 
@@ -497,6 +509,7 @@ inline const std::vector<TokenBinding>& tokenBindings()
         RHINO_FORGE_TOKEN(valueText), RHINO_FORGE_TOKEN(knobPointer), RHINO_FORGE_TOKEN(knobArcDot),
         RHINO_FORGE_TOKEN(pawTint), RHINO_FORGE_TOKEN(pawHighlight), RHINO_FORGE_TOKEN(furRimLit),
         RHINO_FORGE_TOKEN(furLip), RHINO_FORGE_TOKEN(backdrop),
+        RHINO_FORGE_TOKEN(meterFace), RHINO_FORGE_TOKEN(meterInk), RHINO_FORGE_TOKEN(meterRed),
     };
 #undef RHINO_FORGE_TOKEN
     return bindings;

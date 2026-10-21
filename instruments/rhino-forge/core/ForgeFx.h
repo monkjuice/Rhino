@@ -269,9 +269,31 @@ inline bool fxKnobLive(const FxSlot& slot, int knob)
         case FxType::compressor:
             return knob != 4 || fxModeOf(info.modeB, slot.modeB) == 0;
 
+        // RES belongs to the two-pole models. The two six-decibel ones are a
+        // single pole, with no resonance to set.
+        case FxType::filter:
+        {
+            const auto model = fxModeOf(info.modeA, slot.modeA);
+            return knob != 1 || (model != 1 && model != 5);
+        }
+
         default: break;
     }
     return true;
+}
+
+// The caption a knob wears in its slot: the table's name, except where a mode
+// makes the knob something else. On PEAK 12 the filter's FAT is no longer the
+// warm parallel path but the height of the peak, so it says PEAK. The
+// parameter keeps its name, so a host's automation lane does not change under
+// anyone.
+inline const char* fxKnobLabel(const FxSlot& slot, int knob)
+{
+    if (knob < 0 || knob >= fxKnobCount) return nullptr;
+    const auto& info = fxTypeInfo(slot.type);
+    if (fxTypeOf(slot.type) == FxType::filter && knob == 3 && fxModeOf(info.modeA, slot.modeA) == 6)
+        return "PEAK";
+    return info.knobs[static_cast<size_t>(knob)];
 }
 
 // --- Turning a normalised knob into what it means -----------------------------
@@ -373,6 +395,12 @@ inline float fxCompressorAttack(float knob) { return fxScaled(knob, 0.0001f, 0.1
 inline float fxCompressorRelease(float knob) { return fxScaled(knob, 0.01f, 1.0f, 2.0f); }
 inline float fxCompressorMakeup(float knob) { return fxScaled(knob, 0.0f, 24.0f); }
 inline float fxCompressorKnee(float knob) { return fxScaled(knob, 0.0f, 24.0f); }
+// The makeup AUTO applies: half of what a full-scale signal is reduced by,
+// capped at eighteen decibels. Read by the render, the curve and the readout.
+inline float fxCompressorAutoMakeup(float thresholdDb, float ratio)
+{
+    return juce::jlimit(0.0f, 18.0f, -thresholdDb * (1.0f - 1.0f / juce::jmax(1.0f, ratio)) * 0.5f);
+}
 
 inline float fxCompressorOutputDb(float inputDb, float thresholdDb, float ratio, float kneeDb)
 {

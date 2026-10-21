@@ -442,6 +442,7 @@ private:
     // The shelves the slots sit on, drawn behind their controls.
     void paintFxShelves(juce::Graphics&, juce::Rectangle<int> area, const ui::Module&);
     void paintFxFrame(juce::Graphics&, const ui::FxStrip&, int rack, int slot, bool bypassed);
+    void paintFxPanels(juce::Graphics&, const ui::FxStrip&, const FxSlot&, bool bypassed);
     void paintFxReadings(juce::Graphics&, const ui::FxStrip&, int rack, int slot, int type, bool bypassed);
     // The compact signal-flow overview at the left of the rack. It is a
     // painted view of the same slot parameters, not another component

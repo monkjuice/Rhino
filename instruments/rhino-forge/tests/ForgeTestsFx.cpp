@@ -268,6 +268,142 @@ void fxSuite()
     setValue(reading, rhino::forge::fxParameterId(0, 0, "ModeA").toRawUTF8(), 1.0f);
     requireText(textFor(reading, rhino::forge::fxParameterId(0, 0, "Knob1").toRawUTF8(), 1.0f),
                 "2/1", "a synced phaser's RATE reads the division its LFO uses");
+    // A distortion's DRIVE is a gain into six of its shapes, a number of
+    // steps for CRUSH and a hold for DOWNSMP, and reads as whichever it is.
+    place(reading, 0, 0, FxType::distortion);
+    setValue(reading, rhino::forge::fxParameterId(0, 0, "ModeA").toRawUTF8(), 0.0f);
+    requireText(textFor(reading, rhino::forge::fxParameterId(0, 0, "Knob1").toRawUTF8(), 0.3f),
+                "+" + juce::String(20.0f * std::log10(1.0f + 24.0f * 0.3f), 1) + " dB",
+                "a distortion's DRIVE reads the gain its shape is driven by");
+    setValue(reading, rhino::forge::fxParameterId(0, 0, "ModeA").toRawUTF8(), 6.0f / 7.0f);
+    requireText(textFor(reading, rhino::forge::fxParameterId(0, 0, "Knob1").toRawUTF8(), 0.5f),
+                "8 STEPS", "a crushing DRIVE reads the steps it quantises to");
+    setValue(reading, rhino::forge::fxParameterId(0, 0, "ModeA").toRawUTF8(), 1.0f);
+    require(textFor(reading, rhino::forge::fxParameterId(0, 0, "Knob1").toRawUTF8(), 0.5f).endsWith("Hz"),
+            "a downsampling DRIVE reads the rate it holds at");
+    // A reverb's SIZE reads the tail it makes, which a HALL lengthens.
+    place(reading, 0, 0, FxType::reverb);
+    {
+        rhino::forge::FxSlot room;
+        room.type = static_cast<float>(FxType::reverb);
+        room.knobs[0] = 0.5f;
+        setValue(reading, rhino::forge::fxParameterId(0, 0, "ModeA").toRawUTF8(), 0.0f);
+        const auto plate = textFor(reading, rhino::forge::fxParameterId(0, 0, "Knob1").toRawUTF8(), 0.5f);
+        requireText(plate, juce::String(rhino::forge::fxReverbRt60(room, 0.0f, 48000.0), 2) + " s",
+                    "a reverb's SIZE reads the time its tail takes to fall sixty decibels");
+        setValue(reading, rhino::forge::fxParameterId(0, 0, "ModeA").toRawUTF8(), 1.0f);
+        const auto hall = textFor(reading, rhino::forge::fxParameterId(0, 0, "Knob1").toRawUTF8(), 0.5f);
+        require(hall.getFloatValue() > plate.getFloatValue(), "the same SIZE rings longer in a HALL");
+    }
+    // A delay's feedback reads no higher than the loop lets it go.
+    place(reading, 0, 0, FxType::delay);
+    requireText(textFor(reading, rhino::forge::fxParameterId(0, 0, "Knob3").toRawUTF8(), 1.0f),
+                "95 %", "a delay's FEEDBACK at the top reads the most the loop feeds back");
+    // AUTO says what it is applying.
+    place(reading, 0, 0, FxType::compressor);
+    setValue(reading, rhino::forge::fxParameterId(0, 0, "ModeB").toRawUTF8(), 1.0f);
+    setValue(reading, rhino::forge::fxParameterId(0, 0, "Knob1").toRawUTF8(), 0.5f);
+    setValue(reading, rhino::forge::fxParameterId(0, 0, "Knob2").toRawUTF8(), 0.5f);
+    requireText(textFor(reading, rhino::forge::fxParameterId(0, 0, "Knob5").toRawUTF8(), 0.0f),
+                "AUTO +" + juce::String(rhino::forge::fxCompressorAutoMakeup(rhino::forge::fxCompressorThreshold(0.5f),
+                                                                            rhino::forge::fxCompressorRatio(0.5f)), 1) + " dB",
+                "automatic makeup reads the gain it applies");
+
+    // --- The distortion's filter, drawn from its own arithmetic -----------------
+    //
+    // The TONE well draws distortionFilterMagnitude. That is only honest if it
+    // is what the slot does, so a sine is run through the slot at frequencies
+    // either side of the corner -- HARD at no drive passes what it is given --
+    // and the level that comes out is held to the curve within half a decibel.
+    for (const auto highPass : {false, true})
+    {
+        rhino::forge::FxRack rack;
+        const auto sampleRate = 48000.0;
+        rack.prepare(sampleRate);
+        rhino::forge::Rack settings;
+        auto& slot = settings.slots[0];
+        slot.type = static_cast<float>(FxType::distortion);
+        slot.modeA = 2.0f / 7.0f;                    // HARD: the identity at no drive
+        slot.modeB = highPass ? 0.25f : 0.5f;        // PRE HP or PRE LP
+        slot.knobs = {0.0f, 0.5f, 0.3f, 0.0f, 0.0f, 0.0f};
+        const auto cutoff = rhino::forge::fxHertz(slot.knobs[1], 40.0f, 16000.0f);
+        const auto q = rhino::forge::fxScaled(slot.knobs[2], 0.4f, 8.0f);
+        for (const auto ratio : {0.25f, 0.6f, 1.0f, 1.7f, 4.0f})
+        {
+            const auto hz = cutoff * ratio;
+            rack.reset();
+            double phase = 0.0;
+            auto in = 0.0, out = 0.0;
+            const auto sweepLength = 48000;
+            for (int i = 0; i < sweepLength; ++i)
+            {
+                const auto x = 0.2f * static_cast<float>(std::sin(phase));
+                phase += juce::MathConstants<double>::twoPi * hz / sampleRate;
+                auto left = x, right = x;
+                rack.process(settings, 120.0, left, right);
+                if (i >= sweepLength / 2)
+                {
+                    in += static_cast<double>(x) * x;
+                    out += static_cast<double>(left) * left;
+                }
+            }
+            const auto measured = 10.0 * std::log10(out / in);
+            const auto drawn = 20.0 * std::log10(rhino::forge::distortionFilterMagnitude(hz, cutoff, q, highPass,
+                                                                                         sampleRate));
+            if (std::abs(measured - drawn) > 0.5)
+                std::cerr << "       " << (highPass ? "HP" : "LP") << " at " << hz << " Hz: heard " << measured
+                          << " dB, drawn " << drawn << " dB" << '\n';
+            require(std::abs(measured - drawn) <= 0.5,
+                    "the distortion's filter curve is the gain the slot actually applies");
+        }
+    }
+
+    // --- The rack filter, drawn from its own arithmetic --------------------------
+    //
+    // The FILTER well draws fxFilterMagnitude, so each of the eight models is
+    // held to what the slot does with a sine either side of its cutoff. Where
+    // the curve falls out of the window, a notch or a steep skirt, it is enough
+    // that the slot is just as deep.
+    for (int model = 0; model < 8; ++model)
+    {
+        rhino::forge::FxRack rack;
+        const auto sampleRate = 48000.0;
+        rack.prepare(sampleRate);
+        rhino::forge::Rack settings;
+        auto& slot = settings.slots[0];
+        slot.type = static_cast<float>(FxType::filter);
+        slot.modeA = static_cast<float>(model) / 7.0f;
+        slot.knobs = {0.5f, 0.5f, 0.0f, 0.0f, 0.5f, 0.0f};
+        const auto cutoff = rhino::forge::fxHertz(slot.knobs[0], 30.0f, 18000.0f);
+        for (const auto ratio : {0.25f, 0.6f, 1.0f, 1.7f, 4.0f})
+        {
+            const auto hz = cutoff * ratio;
+            rack.reset();
+            double phase = 0.0;
+            auto in = 0.0, out = 0.0;
+            const auto sweepLength = 48000;
+            for (int i = 0; i < sweepLength; ++i)
+            {
+                const auto x = 0.2f * static_cast<float>(std::sin(phase));
+                phase += juce::MathConstants<double>::twoPi * hz / sampleRate;
+                auto left = x, right = x;
+                rack.process(settings, 120.0, left, right);
+                if (i >= sweepLength / 2)
+                {
+                    in += static_cast<double>(x) * x;
+                    out += static_cast<double>(left) * left;
+                }
+            }
+            const auto measured = 10.0 * std::log10(out / in);
+            const auto drawn = 20.0 * std::log10(juce::jmax(1.0e-9f,
+                rhino::forge::fxFilterMagnitude(slot, hz, sampleRate)));
+            const auto agrees = drawn < -30.0 ? measured < -24.0 : std::abs(measured - drawn) <= 0.5;
+            if (!agrees)
+                std::cerr << "       model " << model << " at " << hz << " Hz: heard " << measured
+                          << " dB, drawn " << drawn << " dB" << '\n';
+            require(agrees, "the filter's curve is the gain the slot actually applies");
+        }
+    }
 
     // --- What a type opens on --------------------------------------------------
     //
@@ -998,10 +1134,27 @@ void fxDisplaySuite()
         require(rhino::forge::fxKnobLive(compressor, 0),
                 "automatic gain does not disable the compressor threshold");
 
+        // The filter's six-decibel models are one pole each and have no
+        // resonance; every other model has, and nothing else is taken away.
+        // On PEAK 12 FAT sets the peak's height, and its caption says so.
+        rhino::forge::FxSlot filter;
+        filter.type = static_cast<float>(FxType::filter);
+        for (int model = 0; model < 8; ++model)
+        {
+            filter.modeA = static_cast<float>(model) / 7.0f;
+            const auto onePole = model == 1 || model == 5;
+            require(rhino::forge::fxKnobLive(filter, 1) == !onePole,
+                    onePole ? "a six-decibel filter has no resonance to set"
+                            : "a two-pole filter's RES is live");
+            for (const auto knob : {0, 2, 3, 4, 5})
+                require(rhino::forge::fxKnobLive(filter, knob), "RES is the only knob a filter model takes away");
+            requireText(rhino::forge::fxKnobLabel(filter, 3), model == 6 ? "PEAK" : "FAT",
+                        "the filter's fourth knob is captioned for what it does in this model");
+        }
+
         // Every other type leaves every knob alone, so a rule added by accident
         // to one of them is caught rather than merely unnoticed.
-        for (const auto type : {FxType::reverb, FxType::delay, FxType::chorus, FxType::filter,
-                                FxType::phaser})
+        for (const auto type : {FxType::reverb, FxType::delay, FxType::chorus, FxType::phaser})
         {
             rhino::forge::FxSlot other;
             other.type = static_cast<float>(type);

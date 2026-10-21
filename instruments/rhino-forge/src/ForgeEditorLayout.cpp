@@ -290,9 +290,21 @@ void Editor::placeFxControl(Control& control, const ui::FxSpot& spot, juce::Poin
         auto& knobProperties = control.slider.getProperties();
         knobProperties.set("fxHero", spot.knob == ui::FxKnobSize::hero);
         knobProperties.set("fxDim", spot.knob != ui::FxKnobSize::hero);
+        knobProperties.set("fxBipolar", spot.bipolar);
+        knobProperties.set("fxRedZone", spot.redZone);
+        knobProperties.set("fxSecond", spot.secondPointer);
+        juce::String marks;
+        for (int mark = 0; mark < spot.markCount; ++mark)
+            marks << (mark > 0 ? "," : "") << juce::String(spot.marks[static_cast<size_t>(mark)], 4);
+        knobProperties.set("fxMarks", marks);
+        control.label.setJustificationType(spot.captionLeft ? juce::Justification::centredLeft
+                                                            : juce::Justification::centred);
     }
     if (control.selector != nullptr)
+    {
+        control.selector->presentation = spot.presentation;
         control.selector->forceList = spot.presentation == ui::FxPresentation::list;
+    }
     switch (control.style)
     {
         case ui::Style::plate:

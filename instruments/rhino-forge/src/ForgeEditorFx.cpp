@@ -209,11 +209,15 @@ bool Editor::fxKnobLive(const Control& control) const
     return rhino::forge::fxKnobLive(fxSlotOf(rack, slot), control.id.getTrailingIntValue() - 1);
 }
 
+// A slot's type is read through value(), the parameter itself, rather than the
+// processor's cached atomic: the attachment that announces a new type can run
+// before that atomic is updated, and a strip laid out for one type then wore
+// the captions of the type before it.
 bool Editor::fxControlUsed(const Control& control) const
 {
     int rack = 0, slot = 0;
     if (!fxControlAt(control.id, rack, slot)) return true;
-    const auto& info = processor.fxSlotType(rack, slot);
+    const auto& info = fxTypeInfo(value(fxParameterId(rack, slot, "Type")));
     if (control.id.contains("Knob"))
     {
         const auto knob = control.id.getTrailingIntValue() - 1;
@@ -249,14 +253,21 @@ void Editor::refreshFxSlots()
             auto& control = *held;
             int rack = 0, slot = 0;
             if (!fxControlAt(control.id, rack, slot)) continue;
-            const auto& info = processor.fxSlotType(rack, slot);
+            const auto& info = fxTypeInfo(value(fxParameterId(rack, slot, "Type")));
             const auto type = juce::roundToInt(value(fxParameterId(rack, slot, "Type")));
             const auto colour = ui::fxTypeColour(type);
+            // An equaliser's high band wears a tint of its own, so its two
+            // bands are told apart before their captions are read.
+            const auto equaliser = fxTypeOf(static_cast<float>(type)) == FxType::equaliser;
+            const auto highBand = equaliser
+                && (control.id.endsWith("ModeB")
+                    || (control.id.contains("Knob") && control.id.getTrailingIntValue() >= 4));
+            const auto tint = highBand ? ui::fxEqHighColour : colour;
 
             // Everything in the slot takes the type's colour, so a rack is read
             // by colour down its rows before a single word on it is.
-            control.slider.setColour(juce::Slider::rotarySliderFillColourId, colour);
-            control.slider.setColour(juce::Slider::thumbColourId, colour);
+            control.slider.setColour(juce::Slider::rotarySliderFillColourId, tint);
+            control.slider.setColour(juce::Slider::thumbColourId, tint);
             if (control.chip != nullptr) control.chip->accent = colour;
             if (control.plate != nullptr)
             {
@@ -279,8 +290,7 @@ void Editor::refreshFxSlots()
                 // value moves, so it is pushed here instead.
                 control.slider.updateText();
                 const auto knob = control.id.getTrailingIntValue() - 1;
-                const auto* label = knob >= 0 && knob < fxKnobCount
-                    ? info.knobs[static_cast<size_t>(knob)] : nullptr;
+                const auto* label = rhino::forge::fxKnobLabel(fxSlotOf(rack, slot), knob);
                 apply(label, label == nullptr ? juce::String()
                           : juce::String(label) + ", on the " + info.name + " in this slot");
                 continue;
@@ -297,7 +307,19 @@ void Editor::refreshFxSlots()
                     control.selector->choices.assign(mode.choices.begin(),
                                                      mode.choices.begin() + juce::jmax(0, mode.count));
                     control.selector->chosen = fxModeOf(mode, value(control.id));
-                    control.selector->accent = colour;
+                    control.selector->accent = tint;
+                    // An equaliser's band shapes are chosen by their pictures.
+                    // Set for every type, so another type never keeps them.
+                    if (equaliser)
+                        control.selector->glyph = [high = highBand] (juce::Graphics& g, juce::Rectangle<float> box,
+                                                                     int choice, juce::Colour ink)
+                        {
+                            const auto shape = high ? (choice == 0 ? 3 : choice == 1 ? 1 : 4)
+                                                    : (choice == 0 ? 0 : choice == 1 ? 1 : 2);
+                            ui::drawEqBandGlyph(g, box, shape, ink);
+                        };
+                    else
+                        control.selector->glyph = nullptr;
                     control.selector->setTooltip(
                         mode.label == nullptr ? juce::String()
                             : juce::String(mode.label) + ", on the " + info.name + " in this slot");
@@ -355,7 +377,7 @@ void Editor::showFxModeMenu(Control& control)
 // about reverbs and not about this panel.
 void Editor::initialiseFxSlot(int rack, int slot)
 {
-    const auto& info = processor.fxSlotType(rack, slot);
+    const auto& info = fxTypeInfo(value(fxParameterId(rack, slot, "Type")));
     const auto set = [this] (const juce::String& id, float value)
     {
         if (auto* parameter = processor.state.getParameter(id))

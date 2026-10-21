@@ -114,6 +114,15 @@ struct FxSpot
     FxPresentation presentation = FxPresentation::none;
     // A small knob's caption sits to its left rather than above it.
     bool captionLeft = false;
+    // What a knob says about its own travel beyond the pointer: a detent at
+    // twelve o'clock for a control that is bipolar, a zone in red where it
+    // starts to scream, marks engraved at positions that mean something, and
+    // a second LED for the other channel of a stereo pair.
+    bool bipolar = false;
+    float redZone = 0.0f;
+    std::array<float, 4> marks {};
+    int markCount = 0;
+    bool secondPointer = false;
     // The well this control is seated in, or -1. A seated control is the one
     // thing allowed to stand on a picture.
     int well = -1;
@@ -124,7 +133,33 @@ struct FxSpot
 // generic well draws whatever drawFxDisplay draws for the type.
 enum class FxWellKind
 {
-    generic
+    generic,
+    distortionTone,   // the filter's response, with the node that is FREQ and Q
+    distortionShape,  // the transfer curve DRIVE bends, under the SHAPE field
+    filterResponse,   // the filter's response at the cutoff the voice hears
+    delayTape,        // every repeat: when, on which side, how loud and how dark
+    delayLoop,        // the filter the repeats pass through on every trip
+    reverbTail,       // the decay on a fixed time axis, after the pre-delay
+    reverbDecay,      // how long each frequency rings, and the band the cuts keep
+    eqResponse,       // the two bands and their sum
+    compressorCurve,  // what comes out for what goes in
+    compressorMeter,  // the gain being taken off, on a needle
+    chorusTaps,       // each tap's delay across a few seconds of its sweep
+    phaserComb        // the notches, where the sweep has them now
+};
+
+// What lights a panel's lamp: nothing, one of the slot's knobs, or something
+// only the running effect knows -- its LFO, its level -- which the engine
+// publishes once a block.
+enum class FxLamp
+{
+    none,
+    knob,
+    rate,       // pulses with the LFO the slot sweeps by
+    clip,       // lights as the shaper is driven onto its rails
+    repeats,    // flashes with what is coming back round the loop
+    lowBand,    // an equaliser band doing something
+    highBand
 };
 
 struct FxWell
@@ -141,7 +176,14 @@ struct FxPanel
 {
     juce::Rectangle<int> frame, lane;
     const char* caption = "";
-    bool lamp = false;
+    bool legendRight = false;
+    // What lights the panel's lamp; for FxLamp::knob, which knob.
+    FxLamp lamp = FxLamp::none;
+    int lampKnob = -1;
+    // A mode that switches the whole panel out, and the choice that does: the
+    // distortion's filter at OFF dims its TONE panel, curve and knobs together.
+    FxRole gate = FxRole::type;
+    int gateOff = -1;
 };
 
 inline constexpr int maxFxWells = 2;
@@ -158,6 +200,9 @@ struct FxStrip
     int wellCount = 0;
     std::array<FxPanel, maxFxPanels> panels {};
     int panelCount = 0;
+    // Which way the signal runs between two panels, where a type has one to
+    // say: the distortion's filter before or after its shaper.
+    juce::Rectangle<int> chevron;
 
     const FxSpot& spot(FxRole role) const { return spots[static_cast<size_t>(fxRoleIndex(role))]; }
     FxSpot& spot(FxRole role) { return spots[static_cast<size_t>(fxRoleIndex(role))]; }
@@ -275,6 +320,50 @@ inline int addFxWell(FxStrip& strip, juce::Rectangle<int> column, FxWellKind kin
     return strip.wellCount++;
 }
 
+// A framed group across a column. Its caption is engraved up one edge, in a
+// lane of its own, so the group's controls keep the strip's whole height.
+inline constexpr int fxPanelLaneWidth = 13;
+
+inline FxPanel& addFxPanel(FxStrip& strip, juce::Rectangle<int> column, const char* caption,
+                           bool legendRight = false)
+{
+    auto& group = strip.panels[static_cast<size_t>(juce::jmin(strip.panelCount, maxFxPanels - 1))];
+    strip.panelCount = juce::jmin(strip.panelCount + 1, maxFxPanels);
+    group.frame = column.reduced(2, 0).withTrimmedTop(3).withTrimmedBottom(3);
+    group.lane = legendRight ? group.frame.withLeft(group.frame.getRight() - fxPanelLaneWidth)
+                             : group.frame.withWidth(fxPanelLaneWidth);
+    group.caption = caption;
+    group.legendRight = legendRight;
+    return group;
+}
+
+// What a group leaves for its controls: the column less its frame and lane,
+// at the strip's full height, so knobs in it stand on the strip's own lines.
+inline juce::Rectangle<int> fxPanelContent(const FxStrip& strip, const FxPanel& group)
+{
+    const auto left = group.legendRight ? group.frame.getX() + 2 : group.lane.getRight() + 2;
+    const auto right = group.legendRight ? group.lane.getX() - 2 : group.frame.getRight() - 2;
+    return juce::Rectangle<int>::leftTopRightBottom(left, strip.strip.getY(), right, strip.strip.getBottom());
+}
+
+// A mode field seated along the top of a well: the picture loses the strip it
+// stands in, and the field is the one control allowed on the picture.
+inline constexpr int fxSeatHeight = 17;
+
+inline void seatFxField(FxStrip& strip, int well, FxRole role, FxPresentation presentation,
+                        int width = 0)
+{
+    if (well < 0 || well >= strip.wellCount) return;
+    auto& picture = strip.wells[static_cast<size_t>(well)];
+    auto& spot = strip.spot(role);
+    const auto seat = picture.area.reduced(3, 0).withTrimmedTop(3).withHeight(fxSeatHeight);
+    spot.component = width > 0 ? seat.withWidth(juce::jmin(width, seat.getWidth())) : seat;
+    spot.presentation = presentation;
+    spot.well = well;
+    spot.placed = true;
+    picture.plot = picture.area.withTrimmedTop(fxSeatHeight + 6);
+}
+
 // The frame: card, automation name, hatch, MIX and LEVEL. Returns the body.
 inline juce::Rectangle<int> placeFxFrame(FxStrip& strip, const FxKnobSizes& sizes)
 {
@@ -340,11 +429,382 @@ inline FxStrip fxGenericStrip(int type, juce::Rectangle<int> stripBounds, const 
     return strip;
 }
 
+// A column of the strip between two x positions, at the strip's full height.
+inline juce::Rectangle<int> fxColumn(const FxStrip& strip, int left, int right)
+{
+    return juce::Rectangle<int>::leftTopRightBottom(left, strip.strip.getY(), right, strip.strip.getBottom());
+}
+
+// A field of two or three choices standing on the knob line with no caption:
+// the choices name themselves (PLATE, HALL; PEAK, RMS).
+inline void placeFxStack(FxStrip& strip, FxRole role, juce::Rectangle<int> column, int height,
+                         FxPresentation presentation = FxPresentation::stack)
+{
+    auto& spot = strip.spot(role);
+    spot.component = juce::Rectangle<int>(column.getWidth() - 4, height)
+                         .withCentre({column.getCentreX(), column.getY() + fxKnobCentre});
+    spot.presentation = presentation;
+    spot.placed = true;
+}
+
+// A mode that is its knob's caption: the pill stands where the caption would,
+// and the knob shows no other.
+inline void placeFxCaptionSwitch(FxStrip& strip, FxRole role, FxRole knob)
+{
+    auto& owner = strip.spot(knob);
+    auto& spot = strip.spot(role);
+    spot.component = owner.caption.withSizeKeepingCentre(juce::jmin(46, owner.caption.getWidth() - 4),
+                                                         fxCaptionHeight);
+    // The caption row and a full-size knob share a pixel, which a word can
+    // afford and a button cannot: it would take the knob's clicks there.
+    if (owner.component.getY() < spot.component.getBottom()) spot.component.setBottom(owner.component.getY());
+    spot.presentation = FxPresentation::captionSwitch;
+    spot.placed = true;
+    owner.caption = {};
+}
+
+// Where a scale's marks go on a knob whose law is a logarithm or a power.
+inline float fxLogMark(float value, float low, float high) { return std::log(value / low) / std::log(high / low); }
+inline float fxPowerMark(float value, float low, float high, float skew)
+{
+    return std::pow(juce::jlimit(0.0f, 1.0f, (value - low) / (high - low)), 1.0f / skew);
+}
+
+inline void setFxMarks(FxSpot& spot, std::initializer_list<float> marks)
+{
+    spot.markCount = 0;
+    for (const auto mark : marks)
+        if (spot.markCount < static_cast<int>(spot.marks.size()))
+            spot.marks[static_cast<size_t>(spot.markCount++)] = mark;
+}
+
+// --- DIST: the amp head -------------------------------------------------------------
+//
+// Two blocks, in the order the signal can meet them. TONE is the filter: its
+// placement and tap (one five-way field, OFF / PRE / POST beside LP / HP), its
+// response with FREQ and Q beside it -- one call into the DSP, framed as one
+// thing, and dimmed as one when the filter is switched out. SHAPE is the
+// shaper: DRIVE as the hero, and the transfer curve it bends with the shape
+// seated on top of it. A chevron between them says which way the signal runs.
+inline FxStrip fxDistortionStrip(juce::Rectangle<int> stripBounds, const FxKnobSizes& sizes)
+{
+    FxStrip strip;
+    strip.strip = stripBounds;
+    placeFxFrame(strip, sizes);
+    const FxGrid grid {stripBounds};
+
+    auto& tone = addFxPanel(strip, grid.span(5.0f, 20.0f), "TONE");
+    tone.gate = FxRole::modeB;
+    tone.gateOff = 0;
+    const auto toneContent = fxPanelContent(strip, tone);
+    auto& route = strip.spot(FxRole::modeB);
+    route.component = juce::Rectangle<int>::leftTopRightBottom(toneContent.getX(), stripBounds.getY() + 9,
+                                                               grid.x(9.0f) - 3, stripBounds.getBottom() - 9);
+    route.presentation = FxPresentation::route;
+    route.placed = true;
+    addFxWell(strip, juce::Rectangle<int>::leftTopRightBottom(grid.x(9.0f), stripBounds.getY(), grid.x(19.0f),
+                                                              stripBounds.getBottom()),
+              FxWellKind::distortionTone);
+    const auto rows = juce::Rectangle<int>::leftTopRightBottom(grid.x(19.0f) + 2, stripBounds.getY(),
+                                                               toneContent.getRight(), stripBounds.getBottom());
+    placeFxMiniRow(strip, FxRole::knob2, rows, stripBounds.getY() + 24, sizes, 32);
+    placeFxMiniRow(strip, FxRole::knob3, rows, stripBounds.getY() + 52, sizes, 32);
+
+    strip.chevron = juce::Rectangle<int>::leftTopRightBottom(grid.x(25.0f), stripBounds.getY() + 22,
+                                                             grid.x(26.0f), stripBounds.getBottom() - 16);
+
+    auto& shape = addFxPanel(strip, grid.span(26.0f, 17.0f), "SHAPE");
+    shape.lamp = FxLamp::clip;
+    const auto shapeContent = fxPanelContent(strip, shape);
+    const auto drive = shapeContent.withRight(grid.x(30.0f));
+    placeFxKnob(strip, FxRole::knob1, drive, FxKnobSize::hero, sizes);
+    const auto well = addFxWell(strip, juce::Rectangle<int>::leftTopRightBottom(drive.getRight(), stripBounds.getY(),
+                                                                                shapeContent.getRight(),
+                                                                                stripBounds.getBottom()),
+                                FxWellKind::distortionShape);
+    seatFxField(strip, well, FxRole::modeA, FxPresentation::list);
+    return strip;
+}
+
+// --- FILTER: the big cutoff ---------------------------------------------------------
+//
+// CORNER is the filter: CUTOFF as the hero on the left of its response, RES on
+// the right with its scream in red, the model seated on top. COLOUR is what the
+// filter is fed and what is blended back -- DRIVE and FAT -- with a lamp that
+// glows with the drive. PAN, which only ever turns one side down, stands alone.
+inline FxStrip fxFilterStrip(juce::Rectangle<int> stripBounds, const FxKnobSizes& sizes)
+{
+    FxStrip strip;
+    strip.strip = stripBounds;
+    placeFxFrame(strip, sizes);
+    const FxGrid grid {stripBounds};
+    const auto top = stripBounds.getY();
+
+    auto& colour = addFxPanel(strip, grid.span(5.0f, 7.0f), "COLOUR");
+    colour.lamp = FxLamp::knob;
+    colour.lampKnob = 2;
+    const auto colourContent = fxPanelContent(strip, colour);
+    placeFxMiniRow(strip, FxRole::knob3, colourContent, top + 24, sizes, 34);
+    placeFxMiniRow(strip, FxRole::knob4, colourContent, top + 52, sizes, 34);
+
+    auto& corner = addFxPanel(strip, grid.span(12.0f, 28.0f), "CORNER");
+    const auto content = fxPanelContent(strip, corner);
+    placeFxKnob(strip, FxRole::knob1, fxColumn(strip, content.getX(), grid.x(17.0f)), FxKnobSize::hero, sizes);
+    setFxMarks(strip.spot(FxRole::knob1), {fxLogMark(100.0f, 30.0f, 18000.0f), fxLogMark(1000.0f, 30.0f, 18000.0f),
+                                           fxLogMark(10000.0f, 30.0f, 18000.0f)});
+    const auto well = addFxWell(strip, fxColumn(strip, grid.x(17.0f), grid.x(35.0f)), FxWellKind::filterResponse);
+    seatFxField(strip, well, FxRole::modeA, FxPresentation::list, 132);
+    placeFxKnob(strip, FxRole::knob2, fxColumn(strip, grid.x(35.0f), content.getRight()), FxKnobSize::normal, sizes);
+    strip.spot(FxRole::knob2).redZone = 0.92f;
+
+    placeFxKnob(strip, FxRole::knob5, grid.span(40.0f, 3.0f), FxKnobSize::normal, sizes);
+    strip.spot(FxRole::knob5).bipolar = true;
+    return strip;
+}
+
+// --- DELAY: the echo machine ---------------------------------------------------------
+//
+// TIME holds what decides when a repeat lands: the time, its unit as a BPM
+// chip against it, and OFFSET with TRIP and DOT engraved where it lands on them.
+// The tape between shows every repeat. LOOP holds everything that goes round
+// again -- FEEDBACK as the hero, the filter the repeats pass through, FREQ and
+// Q -- because the filter is inside the loop and darkens every trip.
+inline FxStrip fxDelayStrip(juce::Rectangle<int> stripBounds, const FxKnobSizes& sizes)
+{
+    FxStrip strip;
+    strip.strip = stripBounds;
+    placeFxFrame(strip, sizes);
+    const FxGrid grid {stripBounds};
+    const auto top = stripBounds.getY();
+
+    auto& time = addFxPanel(strip, grid.span(5.0f, 9.0f), "TIME");
+    const auto timeContent = fxPanelContent(strip, time);
+    const auto width = timeContent.getWidth();
+    const auto left = timeContent.getX();
+    placeFxKnob(strip, FxRole::knob1, fxColumn(strip, left, left + width * 38 / 100), FxKnobSize::normal, sizes);
+    placeFxChip(strip, FxRole::modeB, fxColumn(strip, left + width * 38 / 100, left + width * 62 / 100));
+    placeFxKnob(strip, FxRole::knob2, fxColumn(strip, left + width * 62 / 100, timeContent.getRight()),
+                FxKnobSize::normal, sizes);
+    setFxMarks(strip.spot(FxRole::knob2), {(4.0f / 3.0f) - 0.5f, 1.0f});
+
+    const auto tape = addFxWell(strip, grid.span(14.0f, 13.0f), FxWellKind::delayTape);
+    seatFxField(strip, tape, FxRole::modeA, FxPresentation::segmented, 150);
+
+    auto& loop = addFxPanel(strip, grid.span(27.0f, 16.0f), "LOOP");
+    loop.lamp = FxLamp::repeats;
+    const auto loopContent = fxPanelContent(strip, loop);
+    placeFxKnob(strip, FxRole::knob3, fxColumn(strip, loopContent.getX(), grid.x(31.0f)), FxKnobSize::hero, sizes);
+    addFxWell(strip, fxColumn(strip, grid.x(31.0f), grid.x(37.0f)), FxWellKind::delayLoop);
+    const auto rows = fxColumn(strip, grid.x(37.0f) + 2, loopContent.getRight());
+    placeFxMiniRow(strip, FxRole::knob4, rows, top + 24, sizes, 28);
+    placeFxMiniRow(strip, FxRole::knob5, rows, top + 52, sizes, 28);
+    return strip;
+}
+
+// --- REVERB: the space ------------------------------------------------------------------
+//
+// ROOM is TYPE and SIZE, one function between them: SIZE is the hero and reads
+// the decay time the two make. PRE-DLY stands before the tail it delays, drawn
+// on a fixed time axis so SIZE and TYPE visibly lengthen it. TONE is the three
+// one-poles on the tail -- DAMP inside the loop, the cuts after it -- beside how
+// long each frequency rings.
+inline FxStrip fxReverbStrip(juce::Rectangle<int> stripBounds, const FxKnobSizes& sizes)
+{
+    FxStrip strip;
+    strip.strip = stripBounds;
+    placeFxFrame(strip, sizes);
+    const FxGrid grid {stripBounds};
+    const auto top = stripBounds.getY();
+
+    auto& room = addFxPanel(strip, grid.span(5.0f, 8.0f), "ROOM");
+    const auto roomContent = fxPanelContent(strip, room);
+    const auto split = roomContent.getX() + roomContent.getWidth() * 42 / 100;
+    placeFxStack(strip, FxRole::modeA, fxColumn(strip, roomContent.getX(), split), 50);
+    placeFxKnob(strip, FxRole::knob1, fxColumn(strip, split, roomContent.getRight()), FxKnobSize::hero, sizes);
+
+    placeFxKnob(strip, FxRole::knob2, grid.span(13.0f, 3.0f), FxKnobSize::normal, sizes);
+    addFxWell(strip, grid.span(16.0f, 10.0f), FxWellKind::reverbTail);
+
+    auto& tone = addFxPanel(strip, grid.span(26.0f, 14.0f), "TONE");
+    const auto toneContent = fxPanelContent(strip, tone);
+    placeFxKnob(strip, FxRole::knob3, fxColumn(strip, toneContent.getX(), grid.x(29.0f)), FxKnobSize::normal, sizes);
+    addFxWell(strip, fxColumn(strip, grid.x(29.0f), grid.x(33.0f)), FxWellKind::reverbDecay);
+    const auto rows = fxColumn(strip, grid.x(33.0f) + 2, toneContent.getRight());
+    placeFxMiniRow(strip, FxRole::knob5, rows, top + 24, sizes, 36);
+    placeFxMiniRow(strip, FxRole::knob6, rows, top + 52, sizes, 36);
+
+    placeFxKnob(strip, FxRole::knob4, grid.span(40.0f, 3.0f), FxKnobSize::normal, sizes);
+    return strip;
+}
+
+// --- EQ: the console ---------------------------------------------------------------------
+//
+// Two bands mirrored about their sum: each band's knobs outside, its shape as
+// glyphs hugging the curve, its gain bipolar. A band's lamp lights as far as it
+// is from flat.
+inline FxStrip fxEqualiserStrip(juce::Rectangle<int> stripBounds, const FxKnobSizes& sizes)
+{
+    FxStrip strip;
+    strip.strip = stripBounds;
+    placeFxFrame(strip, sizes);
+    const FxGrid grid {stripBounds};
+
+    const auto band = [&] (float from, const char* caption, bool right, FxLamp lamp, std::array<FxRole, 3> roles)
+    {
+        auto& group = addFxPanel(strip, grid.span(from, 9.0f), caption, right);
+        group.lamp = lamp;
+        const auto content = fxPanelContent(strip, group);
+        const auto third = content.getWidth() / 3;
+        for (int i = 0; i < 3; ++i)
+        {
+            const auto column = fxColumn(strip, content.getX() + i * third,
+                                         i == 2 ? content.getRight() : content.getX() + (i + 1) * third);
+            placeFxKnob(strip, roles[static_cast<size_t>(i)], column, FxKnobSize::normal, sizes);
+        }
+    };
+    band(5.0f, "LOW", false, FxLamp::lowBand, {FxRole::knob1, FxRole::knob2, FxRole::knob3});
+    strip.spot(FxRole::knob3).bipolar = true;
+    placeFxStack(strip, FxRole::modeA, grid.span(14.0f, 2.0f), 56, FxPresentation::glyphs);
+    addFxWell(strip, grid.span(16.0f, 16.0f), FxWellKind::eqResponse);
+    placeFxStack(strip, FxRole::modeB, grid.span(32.0f, 2.0f), 56, FxPresentation::glyphs);
+    band(34.0f, "HIGH", true, FxLamp::highBand, {FxRole::knob6, FxRole::knob5, FxRole::knob4});
+    strip.spot(FxRole::knob6).bipolar = true;
+    return strip;
+}
+
+// --- COMP: the dynamics unit ---------------------------------------------------------------
+//
+// CURVE is the gain computer -- THRESH as the hero, the curve, RATIO and KNEE.
+// TIMING is the detector and its two times, engraved in decades. Then the
+// needle, and OUT: MAKEUP with the AUTO chip against it.
+inline FxStrip fxCompressorStrip(juce::Rectangle<int> stripBounds, const FxKnobSizes& sizes)
+{
+    FxStrip strip;
+    strip.strip = stripBounds;
+    placeFxFrame(strip, sizes);
+    const FxGrid grid {stripBounds};
+
+    auto& curve = addFxPanel(strip, grid.span(5.0f, 19.0f), "CURVE");
+    const auto curveContent = fxPanelContent(strip, curve);
+    placeFxKnob(strip, FxRole::knob1, fxColumn(strip, curveContent.getX(), grid.x(9.0f)), FxKnobSize::hero, sizes);
+    addFxWell(strip, fxColumn(strip, grid.x(9.0f), grid.x(18.0f)), FxWellKind::compressorCurve);
+    placeFxKnob(strip, FxRole::knob2, fxColumn(strip, grid.x(18.0f), grid.x(21.0f)), FxKnobSize::normal, sizes);
+    placeFxKnob(strip, FxRole::knob6, fxColumn(strip, grid.x(21.0f), curveContent.getRight()), FxKnobSize::normal, sizes);
+
+    auto& timing = addFxPanel(strip, grid.span(24.0f, 8.0f), "TIMING");
+    const auto timingContent = fxPanelContent(strip, timing);
+    const auto stackRight = timingContent.getX() + juce::jmax(30, grid.x(26.0f) - grid.x(24.0f) - 4);
+    placeFxStack(strip, FxRole::modeA, fxColumn(strip, timingContent.getX(), stackRight), 50);
+    const auto half = (timingContent.getRight() - stackRight) / 2;
+    placeFxKnob(strip, FxRole::knob3, fxColumn(strip, stackRight, stackRight + half), FxKnobSize::normal, sizes);
+    placeFxKnob(strip, FxRole::knob4, fxColumn(strip, stackRight + half, timingContent.getRight()),
+                FxKnobSize::normal, sizes);
+    setFxMarks(strip.spot(FxRole::knob3), {fxPowerMark(0.001f, 0.0001f, 0.1f, 2.0f), fxPowerMark(0.01f, 0.0001f, 0.1f, 2.0f)});
+    setFxMarks(strip.spot(FxRole::knob4), {fxPowerMark(0.03f, 0.01f, 1.0f, 2.0f), fxPowerMark(0.1f, 0.01f, 1.0f, 2.0f),
+                                           fxPowerMark(0.3f, 0.01f, 1.0f, 2.0f)});
+
+    addFxWell(strip, grid.span(32.0f, 5.0f), FxWellKind::compressorMeter);
+
+    auto& out = addFxPanel(strip, grid.span(37.0f, 6.0f), "OUT");
+    const auto outContent = fxPanelContent(strip, out);
+    const auto makeupRight = outContent.getX() + outContent.getWidth() * 55 / 100;
+    placeFxKnob(strip, FxRole::knob5, fxColumn(strip, outContent.getX(), makeupRight), FxKnobSize::normal, sizes);
+    placeFxChip(strip, FxRole::modeB, fxColumn(strip, makeupRight, outContent.getRight()));
+    return strip;
+}
+
+// --- CHORUS: the stereo box ------------------------------------------------------------------
+//
+// SWEEP is the LFO -- RATE, its BPM chip, DEPTH -- with a lamp that breathes at
+// the rate. TAPS is the two delays and the picture of them swinging. FILTER's
+// caption is its LPF/HPF switch.
+inline FxStrip fxChorusStrip(juce::Rectangle<int> stripBounds, const FxKnobSizes& sizes)
+{
+    FxStrip strip;
+    strip.strip = stripBounds;
+    placeFxFrame(strip, sizes);
+    const FxGrid grid {stripBounds};
+
+    auto& sweep = addFxPanel(strip, grid.span(5.0f, 9.0f), "SWEEP");
+    sweep.lamp = FxLamp::rate;
+    const auto sweepContent = fxPanelContent(strip, sweep);
+    const auto width = sweepContent.getWidth();
+    const auto left = sweepContent.getX();
+    placeFxKnob(strip, FxRole::knob1, fxColumn(strip, left, left + width * 38 / 100), FxKnobSize::normal, sizes);
+    placeFxChip(strip, FxRole::modeA, fxColumn(strip, left + width * 38 / 100, left + width * 62 / 100));
+    placeFxKnob(strip, FxRole::knob4, fxColumn(strip, left + width * 62 / 100, sweepContent.getRight()),
+                FxKnobSize::normal, sizes);
+
+    auto& taps = addFxPanel(strip, grid.span(14.0f, 23.0f), "TAPS");
+    const auto tapsContent = fxPanelContent(strip, taps);
+    addFxWell(strip, fxColumn(strip, tapsContent.getX(), grid.x(31.0f)), FxWellKind::chorusTaps);
+    placeFxKnob(strip, FxRole::knob2, fxColumn(strip, grid.x(31.0f), grid.x(34.0f)), FxKnobSize::normal, sizes);
+    placeFxKnob(strip, FxRole::knob3, fxColumn(strip, grid.x(34.0f), tapsContent.getRight()), FxKnobSize::normal, sizes);
+
+    placeFxKnob(strip, FxRole::knob5, grid.span(37.0f, 3.0f), FxKnobSize::normal, sizes);
+    placeFxKnob(strip, FxRole::knob6, grid.span(40.0f, 3.0f), FxKnobSize::normal, sizes);
+    placeFxCaptionSwitch(strip, FxRole::modeB, FxRole::knob6);
+    return strip;
+}
+
+// --- PHASER: the swirl -----------------------------------------------------------------------
+//
+// MOTION is RATE, the hero as on every phase pedal, with its BPM chip and a lamp
+// that pulses with the LFO. SWEEP is the comb and the three things that place
+// it: the stage count seated on top, FREQ and DEPTH beside it. FEEDBACK is
+// bipolar. STEREO is SPREAD, which draws both channels' LFOs, and WIDTH.
+inline FxStrip fxPhaserStrip(juce::Rectangle<int> stripBounds, const FxKnobSizes& sizes)
+{
+    FxStrip strip;
+    strip.strip = stripBounds;
+    placeFxFrame(strip, sizes);
+    const FxGrid grid {stripBounds};
+
+    auto& motion = addFxPanel(strip, grid.span(5.0f, 7.0f), "MOTION");
+    motion.lamp = FxLamp::rate;
+    const auto motionContent = fxPanelContent(strip, motion);
+    const auto rateRight = motionContent.getX() + motionContent.getWidth() * 62 / 100;
+    placeFxKnob(strip, FxRole::knob1, fxColumn(strip, motionContent.getX(), rateRight), FxKnobSize::hero, sizes);
+    placeFxChip(strip, FxRole::modeA, fxColumn(strip, rateRight, motionContent.getRight()));
+
+    auto& sweep = addFxPanel(strip, grid.span(12.0f, 22.0f), "SWEEP");
+    const auto sweepContent = fxPanelContent(strip, sweep);
+    const auto comb = addFxWell(strip, fxColumn(strip, sweepContent.getX(), grid.x(28.0f)), FxWellKind::phaserComb);
+    seatFxField(strip, comb, FxRole::modeB, FxPresentation::segmented, 112);
+    placeFxKnob(strip, FxRole::knob3, fxColumn(strip, grid.x(28.0f), grid.x(31.0f)), FxKnobSize::normal, sizes);
+    placeFxKnob(strip, FxRole::knob2, fxColumn(strip, grid.x(31.0f), sweepContent.getRight()), FxKnobSize::normal, sizes);
+
+    placeFxKnob(strip, FxRole::knob4, grid.span(34.0f, 3.0f), FxKnobSize::normal, sizes);
+    strip.spot(FxRole::knob4).bipolar = true;
+
+    auto& stereo = addFxPanel(strip, grid.span(37.0f, 6.0f), "STEREO");
+    const auto stereoContent = fxPanelContent(strip, stereo);
+    const auto half = stereoContent.getX() + stereoContent.getWidth() / 2;
+    placeFxKnob(strip, FxRole::knob5, fxColumn(strip, stereoContent.getX(), half), FxKnobSize::normal, sizes);
+    strip.spot(FxRole::knob5).secondPointer = true;
+    strip.spot(FxRole::knob5).bipolar = true;
+    placeFxKnob(strip, FxRole::knob6, fxColumn(strip, half, stereoContent.getRight()), FxKnobSize::normal, sizes);
+    return strip;
+}
+
 // One slot's strip, for the effect type it holds. OFF is a slot with nothing in
-// it and is never shown; it gets the frame so that nothing asking for it gets
-// nothing.
+// it and is never shown; it gets the generic frame so that nothing asking for
+// it gets nothing.
 inline FxStrip fxStripLayout(int type, juce::Rectangle<int> strip, const FxKnobSizes& sizes)
 {
+    switch (fxTypeOf(static_cast<float>(type)))
+    {
+        case FxType::distortion: return fxDistortionStrip(strip, sizes);
+        case FxType::filter:     return fxFilterStrip(strip, sizes);
+        case FxType::delay:      return fxDelayStrip(strip, sizes);
+        case FxType::reverb:     return fxReverbStrip(strip, sizes);
+        case FxType::equaliser:  return fxEqualiserStrip(strip, sizes);
+        case FxType::compressor: return fxCompressorStrip(strip, sizes);
+        case FxType::chorus:     return fxChorusStrip(strip, sizes);
+        case FxType::phaser:     return fxPhaserStrip(strip, sizes);
+        case FxType::off:
+            break;
+    }
     return fxGenericStrip(type, strip, sizes);
 }
 }

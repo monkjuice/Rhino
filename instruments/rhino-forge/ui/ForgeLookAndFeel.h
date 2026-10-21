@@ -318,6 +318,39 @@ public:
                 }
             }
 
+            // What a rack knob says about its own travel. A bipolar control has
+            // a detent engraved at twelve o'clock; a control that screams past
+            // a point has that end of its scale in red; a scale with positions
+            // that mean something -- a dotted note, a decade of frequency --
+            // has them marked. See ForgeFxStrips.h.
+            const auto rimAt = [&] (float fraction) { return juce::jmap(juce::jlimit(0.0f, 1.0f, fraction),
+                                                                        startAngle, endAngle); };
+            if (static_cast<bool>(properties.getWithDefault("fxBipolar", false)))
+            {
+                g.setColour(labelText.withAlpha(enabled ? 0.85f : 0.3f));
+                g.fillEllipse(juce::Rectangle<float>(2.4f, 2.4f).withCentre(polar(radius * 0.86f, 0.0f)));
+            }
+            if (const auto red = static_cast<float>(properties.getWithDefault("fxRedZone", 0.0f)); red > 0.0f)
+            {
+                juce::Path zone;
+                const auto rim = radius * 0.785f;
+                zone.addCentredArc(centre.x, centre.y, rim, rim, 0.0f, rimAt(red), endAngle, true);
+                g.setColour(markRed.withAlpha(enabled ? 0.8f : 0.25f));
+                g.strokePath(zone, juce::PathStrokeType(2.0f));
+            }
+            if (const auto marks = properties.getWithDefault("fxMarks", juce::String()).toString(); marks.isNotEmpty())
+            {
+                juce::Path engraved;
+                for (const auto& mark : juce::StringArray::fromTokens(marks, ",", ""))
+                {
+                    const auto at = rimAt(mark.getFloatValue());
+                    engraved.startNewSubPath(polar(radius * 0.8f, at));
+                    engraved.lineTo(polar(radius * 0.97f, at));
+                }
+                g.setColour(labelText.withAlpha(enabled ? 0.8f : 0.3f));
+                g.strokePath(engraved, juce::PathStrokeType(1.2f));
+            }
+
             // The cap. A machined rim lit along its top edge and black along its
             // foot — the same bevel a plate has, bent into a circle — with an
             // anodised dome inside it.
@@ -377,6 +410,14 @@ public:
             g.fillEllipse(juce::Rectangle<float>(9.0f, 9.0f).withCentre(led));
             g.setColour(accent.withAlpha(enabled ? 1.0f : 0.3f));
             g.fillEllipse(juce::Rectangle<float>(4.0f, 4.0f).withCentre(led));
+            // The other channel of a stereo pair, mirrored about the centre: a
+            // phaser's SPREAD sends the left LFO one way and the right the other.
+            if (static_cast<bool>(properties.getWithDefault("fxSecond", false)))
+            {
+                const auto other = polar(radius * 0.71f, juce::jmap(1.0f - position, startAngle, endAngle));
+                g.setColour(accent.interpolatedWith(juce::Colours::white, 0.45f).withAlpha(enabled ? 0.85f : 0.25f));
+                g.fillEllipse(juce::Rectangle<float>(3.4f, 3.4f).withCentre(other));
+            }
         }
 
         // A modulated knob carries a ring outside the LED, so the two never read

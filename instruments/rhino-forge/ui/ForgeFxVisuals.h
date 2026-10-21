@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ForgeControls.h"
+#include "ForgeFxStrips.h"
 
 // How a rack is read by colour before a word on it is: each type's colour and
 // its mark, the plate that names a slot, the shelf it sits on, and the rows
@@ -196,6 +197,75 @@ inline void drawFxMark(juce::Graphics& g, juce::Rectangle<float> box, int type, 
     }
 }
 
+// The equaliser's second band's colour. A band is read by its tint before its
+// words, and two tints of one family keep the two bands one effect: the type's
+// amber for the low band, a pale cream for the high.
+inline const juce::Colour fxEqHighColour {0xfffff1c4};
+
+// An equaliser band's shape as a picture, for the glyph stacks hugging its
+// curve: 0 low shelf, 1 bell, 2 high pass, 3 high shelf, 4 low pass.
+inline void drawEqBandGlyph(juce::Graphics& g, juce::Rectangle<float> box, int shape, juce::Colour colour)
+{
+    const auto x0 = box.getX(), x1 = box.getRight(), cx = box.getCentreX();
+    const auto top = box.getY() + box.getHeight() * 0.2f, bottom = box.getBottom() - box.getHeight() * 0.2f;
+    const auto middle = box.getCentreY();
+    juce::Path path;
+    switch (shape)
+    {
+        case 0:
+            path.startNewSubPath(x0, top);
+            path.lineTo(cx - box.getWidth() * 0.15f, top);
+            path.quadraticTo(cx, top, cx + box.getWidth() * 0.1f, middle);
+            path.quadraticTo(cx + box.getWidth() * 0.2f, bottom, x1, bottom);
+            break;
+        case 3:
+            path.startNewSubPath(x0, bottom);
+            path.quadraticTo(cx - box.getWidth() * 0.2f, bottom, cx - box.getWidth() * 0.1f, middle);
+            path.quadraticTo(cx, top, cx + box.getWidth() * 0.15f, top);
+            path.lineTo(x1, top);
+            break;
+        case 1:
+            path.startNewSubPath(x0, bottom);
+            path.quadraticTo(cx - box.getWidth() * 0.18f, bottom, cx, top);
+            path.quadraticTo(cx + box.getWidth() * 0.18f, bottom, x1, bottom);
+            break;
+        case 2:
+            path.startNewSubPath(x0, box.getBottom());
+            path.quadraticTo(x0 + box.getWidth() * 0.35f, top, cx, top);
+            path.lineTo(x1, top);
+            break;
+        default:
+            path.startNewSubPath(x0, top);
+            path.lineTo(cx, top);
+            path.quadraticTo(x0 + box.getWidth() * 0.65f, top, x1, box.getBottom());
+            break;
+    }
+    g.setColour(colour);
+    g.strokePath(path, juce::PathStrokeType(1.5f));
+}
+
+// A filter's tap as a picture: a low pass falls away to the right of its
+// corner, a high pass rises into it from the left.
+inline void drawFilterTapGlyph(juce::Graphics& g, juce::Rectangle<float> box, bool highPass, juce::Colour colour)
+{
+    juce::Path path;
+    const auto top = box.getY() + box.getHeight() * 0.3f;
+    if (highPass)
+    {
+        path.startNewSubPath(box.getX(), box.getBottom());
+        path.quadraticTo(box.getX() + box.getWidth() * 0.35f, top, box.getCentreX(), top);
+        path.lineTo(box.getRight(), top);
+    }
+    else
+    {
+        path.startNewSubPath(box.getX(), top);
+        path.lineTo(box.getCentreX(), top);
+        path.quadraticTo(box.getX() + box.getWidth() * 0.65f, top, box.getRight(), box.getBottom());
+    }
+    g.setColour(colour);
+    g.strokePath(path, juce::PathStrokeType(1.5f));
+}
+
 // A slot's mode field, drawn as whatever the choice in front of you actually is.
 //
 // The field behind it is one float per slot, because what it steps through
@@ -281,19 +351,81 @@ public:
     // Serum draws this particular field as (p. 104).
     bool forceList = false;
 
+    // How a rack slot's strip asks for this field to be drawn. None leaves it
+    // to the count: a stack for two or three choices, a list past that. The
+    // others are what a strip can ask for instead; see FxPresentation.
+    FxPresentation presentation = FxPresentation::none;
+    // The picture for one choice, for a field drawn as glyphs: an equaliser
+    // band's shelf, bell and pass. Given the choice and the box to draw in.
+    std::function<void(juce::Graphics&, juce::Rectangle<float>, int choice, juce::Colour)> glyph;
+
     int count() const { return static_cast<int>(choices.size()); }
 
-    bool inlineChoices() const { return !forceList && count() > 0 && count() <= inlineLimit; }
+    // What is actually drawn, once the count has had its say: a field asked
+    // for a stack that has too many choices to stack draws a list instead.
+    FxPresentation drawnAs() const
+    {
+        if (count() <= 0) return FxPresentation::none;
+        switch (presentation)
+        {
+            case FxPresentation::chip:          return count() == 2 ? presentation : FxPresentation::list;
+            case FxPresentation::route:         return count() == 5 ? presentation : FxPresentation::list;
+            case FxPresentation::captionSwitch:
+            case FxPresentation::segmented:     return presentation;
+            case FxPresentation::glyphs:
+                return glyph != nullptr && count() <= inlineLimit ? presentation : FxPresentation::list;
+            case FxPresentation::list:          return FxPresentation::list;
+            case FxPresentation::stack:
+            case FxPresentation::none:          break;
+        }
+        return !forceList && count() <= inlineLimit ? FxPresentation::stack : FxPresentation::list;
+    }
+
+    bool inlineChoices() const { return drawnAs() == FxPresentation::stack; }
+
+    // The distortion's filter is one field of five choices -- OFF, PRE HP,
+    // PRE LP, POST HP, POST LP -- drawn as the two things it is: where the
+    // filter stands (OFF, PRE, POST) and which tap it takes (LP, HP). These
+    // turn one into the other, in both directions.
+    static int routePlacement(int choice) { return choice <= 0 ? 0 : choice <= 2 ? 1 : 2; }
+    static bool routeHighPass(int choice) { return choice == 1 || choice == 3; }
+    static int routeChoice(int placement, bool highPass)
+    {
+        if (placement <= 0) return 0;
+        return placement == 1 ? (highPass ? 1 : 2) : (highPass ? 3 : 4);
+    }
+
+    // The route's two columns: placement on the left, the tap on the right.
+    juce::Rectangle<int> routePlacementBounds() const
+    {
+        return getLocalBounds().withWidth(getWidth() * 3 / 5);
+    }
+    juce::Rectangle<int> routeTapBounds() const
+    {
+        return getLocalBounds().withTrimmedLeft(getWidth() * 3 / 5 + 3);
+    }
+
+    // One of `parts` equal segments of `area`, down it or across it. The last
+    // takes the remainder, so the segments end exactly where the area does.
+    static juce::Rectangle<int> partOf(juce::Rectangle<int> area, int index, int parts, bool across)
+    {
+        if (parts <= 0) return area;
+        if (across)
+        {
+            const auto width = area.getWidth() / parts;
+            return {area.getX() + index * width, area.getY(),
+                    index == parts - 1 ? area.getRight() - (area.getX() + index * width) : width, area.getHeight()};
+        }
+        const auto height = area.getHeight() / parts;
+        return {area.getX(), area.getY() + index * height, area.getWidth(),
+                index == parts - 1 ? area.getBottom() - (area.getY() + index * height) : height};
+    }
 
     juce::Rectangle<int> segmentBounds(int index) const
     {
-        const auto area = getLocalBounds();
-        if (count() <= 0) return area;
-        const auto height = area.getHeight() / count();
         // The last one takes the remainder, so the column ends exactly where
         // the field does rather than a pixel or two short.
-        return {area.getX(), area.getY() + index * height, area.getWidth(),
-                index == count() - 1 ? area.getBottom() - (area.getY() + index * height) : height};
+        return partOf(getLocalBounds(), index, count(), drawnAs() == FxPresentation::segmented);
     }
 
     // The list style is one line whatever the box is, centred in it, so a field
@@ -315,22 +447,104 @@ public:
             return;
         }
 
-        if (inlineChoices())
+        // One choice's box: lit when it is the live one.
+        const auto drawChoice = [&] (juce::Rectangle<float> box, bool live, const juce::String& name,
+                                     float textSize, int glyphChoice)
         {
-            for (int i = 0; i < count(); ++i)
+            g.setColour(live ? accent.withAlpha(alpha * 0.22f) : fieldFloor.withAlpha(alpha));
+            g.fillRoundedRectangle(box, 3.0f);
+            g.setColour((live ? accent : line).withAlpha(alpha * (live ? 1.0f : 0.7f)));
+            g.drawRoundedRectangle(box, 3.0f, 1.0f);
+            const auto ink = (live ? accent : mutedText).withAlpha(alpha);
+            if (glyphChoice >= 0 && glyph != nullptr)
             {
-                const auto box = segmentBounds(i).toFloat().reduced(1.0f);
-                const auto live = i == chosen;
-                g.setColour((live ? accent.withAlpha(alpha * 0.22f) : fieldFloor)
-                                .withAlpha(live ? alpha * 0.22f : alpha));
-                g.fillRoundedRectangle(box, 3.0f);
-                g.setColour((live ? accent : line).withAlpha(alpha * (live ? 1.0f : 0.7f)));
-                g.drawRoundedRectangle(box, 3.0f, 1.0f);
-                g.setColour((live ? accent : mutedText).withAlpha(alpha));
-                g.setFont(panelFont(Face::emphasis, 12.0f));
-                g.drawText(choices[static_cast<size_t>(i)], box, juce::Justification::centred);
+                glyph(g, box.reduced(5.0f, 3.0f), glyphChoice, ink);
+                return;
             }
-            return;
+            g.setColour(ink);
+            g.setFont(panelFont(Face::emphasis, textSize));
+            g.drawText(name, box, juce::Justification::centred);
+        };
+
+        switch (drawnAs())
+        {
+            case FxPresentation::stack:
+            case FxPresentation::segmented:
+            case FxPresentation::glyphs:
+            {
+                const auto glyphs = drawnAs() == FxPresentation::glyphs;
+                for (int i = 0; i < count(); ++i)
+                    drawChoice(segmentBounds(i).toFloat().reduced(drawnAs() == FxPresentation::segmented
+                                                                      ? 0.5f : 1.0f),
+                               i == chosen, choices[static_cast<size_t>(i)],
+                               drawnAs() == FxPresentation::segmented ? 11.0f : 12.0f, glyphs ? i : -1);
+                return;
+            }
+            case FxPresentation::chip:
+            {
+                // One latching button, lit on the second choice: BPM, AUTO.
+                // The first choice is what it is when it is not lit.
+                const auto box = getLocalBounds().toFloat().reduced(0.5f);
+                const auto on = chosen == 1;
+                g.setColour(on ? accent.withAlpha(alpha * 0.2f) : chipFloor.withAlpha(alpha));
+                g.fillRoundedRectangle(box, 3.0f);
+                g.setColour((on ? accent : line).withAlpha(alpha));
+                g.drawRoundedRectangle(box, 3.0f, 1.0f);
+                const auto lamp = juce::Rectangle<float>(5.0f, 5.0f)
+                                      .withCentre({box.getX() + 8.0f, box.getCentreY()});
+                if (on)
+                {
+                    g.setColour(accent.withAlpha(alpha * 0.3f));
+                    g.fillEllipse(lamp.expanded(2.5f));
+                }
+                g.setColour(on ? accent.withAlpha(alpha) : lampOff.withAlpha(alpha));
+                g.fillEllipse(lamp);
+                g.setColour((on ? accent : mutedText).withAlpha(alpha));
+                g.setFont(panelFont(Face::emphasis, 11.0f));
+                g.drawText(choices[1], box.withTrimmedLeft(14.0f), juce::Justification::centred);
+                return;
+            }
+            case FxPresentation::captionSwitch:
+            {
+                // The caption over a knob that is that knob's mode: a pill
+                // naming the live choice. Clicking it steps to the next.
+                const auto box = getLocalBounds().toFloat().reduced(0.5f);
+                g.setColour(accent.withAlpha(alpha * 0.18f));
+                g.fillRoundedRectangle(box, box.getHeight() * 0.5f);
+                g.setColour(accent.withAlpha(alpha));
+                g.drawRoundedRectangle(box, box.getHeight() * 0.5f, 1.0f);
+                g.setFont(panelFont(Face::emphasis, 11.0f));
+                g.drawText(choices[static_cast<size_t>(juce::jlimit(0, count() - 1, chosen))], box,
+                           juce::Justification::centred);
+                return;
+            }
+            case FxPresentation::route:
+            {
+                const auto placement = routePlacement(chosen);
+                const auto highPass = routeHighPass(chosen);
+                static const char* const places[] {"OFF", "PRE", "POST"};
+                for (int i = 0; i < 3; ++i)
+                    drawChoice(partOf(routePlacementBounds(), i, 3, false).toFloat().reduced(1.0f),
+                               i == placement, places[i], 11.5f, -1);
+                // The tap is meaningless with the filter out of the path, so
+                // it greys with it rather than going away.
+                const auto tapAlpha = placement == 0 ? 0.35f : 1.0f;
+                for (int i = 0; i < 2; ++i)
+                {
+                    const auto box = partOf(routeTapBounds(), i, 2, false).toFloat().reduced(1.0f);
+                    const auto live = placement != 0 && (i == 1) == highPass;
+                    g.setColour(live ? accent.withAlpha(alpha * 0.22f) : fieldFloor.withAlpha(alpha));
+                    g.fillRoundedRectangle(box, 3.0f);
+                    g.setColour((live ? accent : line).withAlpha(alpha * tapAlpha * (live ? 1.0f : 0.7f)));
+                    g.drawRoundedRectangle(box, 3.0f, 1.0f);
+                    drawFilterTapGlyph(g, box.reduced(5.0f, 4.0f), i == 1,
+                                       (live ? accent : mutedText).withAlpha(alpha * tapAlpha));
+                }
+                return;
+            }
+            case FxPresentation::list:
+            case FxPresentation::none:
+                break;
         }
 
         const auto area = listBounds().toFloat().reduced(1.0f);
@@ -413,15 +627,41 @@ public:
     void mouseDown(const juce::MouseEvent& event) override
     {
         if (!isEnabled() || count() <= 0) return;
-        if (inlineChoices())
+        const auto at = event.getPosition();
+        switch (drawnAs())
         {
-            for (int i = 0; i < count(); ++i)
-                if (segmentBounds(i).contains(event.getPosition()))
-                {
-                    if (i != chosen && onChoose) onChoose(i);
-                    return;
-                }
-            return;
+            case FxPresentation::stack:
+            case FxPresentation::segmented:
+            case FxPresentation::glyphs:
+                for (int i = 0; i < count(); ++i)
+                    if (segmentBounds(i).contains(at))
+                    {
+                        if (i != chosen && onChoose) onChoose(i);
+                        return;
+                    }
+                return;
+            case FxPresentation::chip:
+                if (onChoose) onChoose(chosen == 1 ? 0 : 1);
+                return;
+            case FxPresentation::captionSwitch:
+                if (onChoose) onChoose((juce::jmax(0, chosen) + 1) % count());
+                return;
+            case FxPresentation::route:
+            {
+                const auto placement = routePlacement(chosen);
+                const auto highPass = routeHighPass(chosen);
+                auto next = chosen;
+                for (int i = 0; i < 3; ++i)
+                    if (partOf(routePlacementBounds(), i, 3, false).contains(at)) next = routeChoice(i, highPass);
+                if (placement != 0)
+                    for (int i = 0; i < 2; ++i)
+                        if (partOf(routeTapBounds(), i, 2, false).contains(at)) next = routeChoice(placement, i == 1);
+                if (next != chosen && onChoose) onChoose(next);
+                return;
+            }
+            case FxPresentation::list:
+            case FxPresentation::none:
+                break;
         }
         if (!listBounds().contains(event.getPosition())) return;
         if (event.x < arrowSpan()) { if (chosen > 0 && onChoose) onChoose(chosen - 1); return; }
@@ -586,6 +826,72 @@ inline void drawFxHatch(juce::Graphics& g, juce::Rectangle<int> area, float alph
     }
     g.setColour(identityHatch.withAlpha(alpha * 0.45f));
     g.strokePath(rules, juce::PathStrokeType(1.0f));
+}
+
+// A strip's panel: a frame round controls the DSP couples, its caption
+// engraved up the lane at one edge, and a lamp at the top of the lane where
+// the panel has one. Dimmed whole when the mode that gates it switches it out.
+inline void drawFxPanel(juce::Graphics& g, const FxPanel& group, juce::Colour colour, bool dim,
+                        float lamp, float alpha)
+{
+    const auto frame = group.frame.toFloat().reduced(0.5f);
+    g.setColour(colour.withAlpha(alpha * (dim ? 0.015f : 0.035f)));
+    g.fillRoundedRectangle(frame, 4.0f);
+    g.setColour(colour.withAlpha(alpha * (dim ? 0.16f : 0.38f)));
+    g.drawRoundedRectangle(frame, 4.0f, 1.0f);
+    const auto lane = group.lane.toFloat();
+    const auto edge = group.legendRight ? lane.getX() : lane.getRight();
+    g.setColour(colour.withAlpha(alpha * (dim ? 0.12f : 0.28f)));
+    g.drawLine(edge, frame.getY() + 4.0f, edge, frame.getBottom() - 4.0f, 1.0f);
+
+    const auto hasLamp = lamp >= 0.0f;
+    {
+        juce::Graphics::ScopedSaveState state(g);
+        const auto centre = lane.getCentre().translated(0.0f, hasLamp ? 5.0f : 0.0f);
+        g.addTransform(juce::AffineTransform::rotation(-juce::MathConstants<float>::halfPi, centre.x, centre.y));
+        g.setColour(colour.withAlpha(alpha * (dim ? 0.35f : 0.95f)));
+        g.setFont(panelFont(Face::header, 8.0f).withExtraKerningFactor(0.2f));
+        g.drawText(group.caption, juce::Rectangle<float>(lane.getHeight(), lane.getWidth()).withCentre(centre),
+                   juce::Justification::centred, false);
+    }
+    if (hasLamp)
+    {
+        const auto on = juce::jlimit(0.0f, 1.0f, lamp) * (dim ? 0.4f : 1.0f);
+        const auto dot = juce::Rectangle<float>(5.6f, 5.6f).withCentre({lane.getCentreX(), lane.getY() + 9.0f});
+        if (on > 0.02f)
+        {
+            g.setColour(colour.withAlpha(alpha * 0.32f * on));
+            g.fillEllipse(dot.expanded(4.5f));
+        }
+        g.setColour(lampOff.interpolatedWith(colour, on).withAlpha(alpha));
+        g.fillEllipse(dot);
+    }
+}
+
+// Which way the signal runs between two panels: a chevron pointing from the
+// block that hears it first, its word under it. Nothing but a rule when the
+// block it points from is out of the path.
+inline void drawFxChevron(juce::Graphics& g, juce::Rectangle<int> area, int direction, const char* word,
+                          juce::Colour colour, float alpha)
+{
+    if (area.isEmpty()) return;
+    const auto box = area.toFloat();
+    const auto centre = box.getCentre().translated(0.0f, -5.0f);
+    if (direction == 0)
+    {
+        g.setColour(line.withAlpha(alpha));
+        g.drawLine(centre.x - 5.0f, centre.y, centre.x + 5.0f, centre.y, 1.5f);
+        return;
+    }
+    const auto d = static_cast<float>(direction);
+    juce::Path chevron;
+    chevron.startNewSubPath(centre.x - 4.5f * d, centre.y - 7.0f);
+    chevron.lineTo(centre.x + 4.5f * d, centre.y);
+    chevron.lineTo(centre.x - 4.5f * d, centre.y + 7.0f);
+    g.setColour(colour.withAlpha(alpha));
+    g.strokePath(chevron, juce::PathStrokeType(2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    g.setFont(panelFont(Face::reading, 7.5f));
+    g.drawText(word, box.withTop(centre.y + 10.0f).withHeight(10.0f), juce::Justification::centredTop, false);
 }
 
 // The list at the left of the rack is deliberately quieter than the editors

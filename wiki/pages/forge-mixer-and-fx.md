@@ -1,10 +1,10 @@
 ---
 title: Forge mixer and effects racks
 type: component
-summary: The MIX tab's nine channels and two busses, and three eight-slot effects racks that run on the summed voices.
+summary: The MIX tab's nine channels and two busses, and three eight-slot effects racks of nine types that run on the summed voices, each slot printing its readings and fed meters by the engine once a block.
 tags: [forge, mixer, fx, signal-flow]
 sources: []
-updated: 2026-10-18
+updated: 2026-10-21
 ---
 
 # Forge mixer and effects racks
@@ -21,21 +21,29 @@ Nine channels in signal order: SUB, OSC A, OSC B, OSC C, NOISE, FILTER, BUS 1, B
 
 ## The racks
 
-Three racks (MAIN, BUS 1, BUS 2) of eight slots (`fxSlotCount`); a slot holds one of eight types: reverb, delay, chorus, distortion, EQ, filter, compressor, phaser (`FxType`). A bus runs sends → its rack → its fader and pan → its destination; everything reaching MAIN runs the MAIN rack, then the master level. Why every slot has the same anonymous parameters: [Forge's FX slots declare generic parameters](forge-fx-slots-have-generic-parameters.md).
+Three racks (MAIN, BUS 1, BUS 2) of eight slots (`fxSlotCount`); a slot holds one of nine types: reverb, delay, chorus, distortion, EQ, filter, compressor, phaser and, since 2026-10-21, flanger (`FxType`, append-only, so FLANGER is 9). A bus runs sends → its rack → its fader and pan → its destination; everything reaching MAIN runs the MAIN rack, then the master level. Why every slot has the same anonymous parameters: [Forge's FX slots declare generic parameters](forge-fx-slots-have-generic-parameters.md).
 
 - Each slot holds state for every type, sized at `prepare` (delay lines of 1.6 s), so changing type mid-note never allocates.
 - Every rack knob, MIX and LEVEL is a modulation destination; drag a source's handle onto it as anywhere else ([Forge modulation](forge-modulation.md)).
 - A per-voice source on a rack knob resolves to the loudest voice; an LFO in OFF drives a rack cleanly. Only the racks come from that voice: the busses are always read from the patch as it stands. Until commit `7e135cd` any modulation counted as "on a rack" (see `isFxDestination` in [Forge modulation](forge-modulation.md)), and the busses were then resolved from a scratch patch holding only the racks, so every bus came back on, routed to MAIN at 0.75.
 - Nothing clears a rack in normal playing, and all-notes-off no longer does either, so a rack zeroes non-finite input, and a slot that produces a NaN or infinity itself is reset rather than fed back (commit `2cc79de`). Before, one bad sample rang on in a feedback line for good.
 - A knob the type lacks is removed; one a mode has made meaningless (`fxKnobLive`) is greyed. Both are decided in `Editor::applyEnableStates`, because the 24 Hz refresh overwrites the decision anywhere else, which is how the first rack failed.
-- A selector in a slot (reverb's PLATE/HALL, the EQ's three-way bands) is centred in the slot's strip instead of sitting on the knobs' label line as it does in other modules (`controlBlock`, `ui/ForgeControlBlock.h`). On the label line the stacked choices ran into the next slot's strip. The layout sweep in `tests/ForgeTestsLayout.cpp` keeps every rack control inside its own strip, with at least 4 px above and below a selector.
-- Slot displays are computed from the DSP's own functions ([Displays draw from the DSP](displays-draw-from-the-dsp.md)).
-- In the list, **+ ADD EFFECT** fills the next free slot. Dragging a row reorders the chain by moving values between slots, and removing a row closes the gap. Alt+F expands the rack over both module rows.
+- Since 2026-10-21 each slot is laid out by its type's own strip plan (`ui/ForgeFxStrips.h`), and its identity card is its bypass switch ([Forge's FX strips are per-type plans in a pure header](forge-fx-strip-plans.md)). The plan replaced the declared row and `controlBlock` for rack slots.
+- Each type draws one or two pictures (`ui/ForgeFxDisplay.h`) from the DSP's own functions, held to measured audio ([Displays draw from the DSP](displays-draw-from-the-dsp.md)). Most can be dragged by their nodes to set the knobs they stand for (`ui/ForgeFxGestures.h`).
+- In the list, **+ ADD EFFECT** fills the next free slot. Dragging a row reorders the chain by moving values between slots, and removing a row closes the gap. A filled slot's type cannot be changed. Alt+F expands the rack over both module rows.
 
-Still absent as of 2026-10-03: a `DIRECT` output, Serum's Bode, Convolve, Flanger, Hyper/Dimension and splitter types, rack presets, and any metering.
+## Readings and meters
+
+- **Readings.** Every rack knob prints its value under it at rest (`Editor::paintFxReadings`). The text is the parameter's own (`Processor::fxKnobText`), so it matches the bubble and the DSP. This is the panel's one exception to "no knob prints its value" ([Forge editor (panel)](forge-editor.md)).
+- **Meters.** `FxRack` keeps an `FxSlotMeter` per slot as it renders (`core/ForgeFxDsp.h`). It records whether the slot rendered, the input peak, the wet output peak, the compressor's gain reduction, and the LFO phase of a chorus, phaser or flanger.
+- **Publishing.** `Processor::processBlock` takes the meters once a block into atomics, which only ever raise a peak or deepen a reduction, so a reading holds until it is taken and a lost race costs one frame. `Editor::takeFxMeters` runs on the 24 Hz timer, but only for the shown rack and only while the FX page shows. It copies them into `ui::FxLive`, easing the gain-reduction needle back over a few frames.
+- **Readers.** The meters drive the panel lamps (`fxLampLevel`), the compressor's needle and the input dot on its curve, and the chorus, phaser and flanger sweeps. Until a slot has published, its pictures draw from the settings alone and its live lamps stay dark.
+
+Still absent as of 2026-10-21: a `DIRECT` output, Serum's Bode, Convolve, Hyper/Dimension and splitter types, and rack presets.
 
 ## Related
 
+- [Forge's FX strips are per-type plans in a pure header](forge-fx-strip-plans.md)
 - [Forge modulation: matrix, envelopes, LFOs and macros](forge-modulation.md)
 - [Forge filter](forge-filter.md)
 - [Forge noise module](forge-noise.md)

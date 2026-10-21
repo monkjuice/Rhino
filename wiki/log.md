@@ -953,3 +953,22 @@ Append-only history of this wiki, newest entry at the bottom. Every entry starts
 - updated: pages/forge-preset-import.md (the clamp warning names the end it holds the value at, and why; merged the caller's Results bullet into the PatchWriter section; the re-run sweep: 50 silent, two at 0 dBFS)
 - created: pages/juce-parameter-text-clamps-to-range.md (NormalisableRange clamps, so getText cannot print an out-of-range value)
 - updated: index.md (new gotcha page)
+
+## [2026-10-21] update | Forge FX rack strips redesigned per type, meters, readings and a FLANGER (7f3e81e..a350964)
+- source: the change's brief, checked against instruments/rhino-forge/ui/ForgeFxStrips.h, ForgeFxDisplay.h, ForgeFxVisuals.h, core/ForgeFx.h, core/ForgeFxDsp.h, src/ForgeProcessor.cpp, ForgeEditorFx.cpp, ForgeEditorFxView.cpp, ForgeEditorLayout.cpp, ForgeEditorInput.cpp, ForgePresetImportSerumFx.cpp, ForgePresetImportVital.cpp, tests/ForgeTestsFx.cpp and ForgeTestsLayout.cpp
+- created: pages/forge-fx-strip-plans.md (decision: `fxStripLayout` as a pure per-type plan on a 48-unit grid; spots, wells, panels; the refactor-first phase; the card as bypass with no BYP chip or replace gesture; `fxTypesShown`; `fxGenericStrip` fallback; `requireFxStripsHold`)
+- updated: pages/forge-mixer-and-fx.md (summary; nine types with FLANGER as 9; strips and card-as-bypass; readings and the per-slot meter flow from `FxRack` through `processBlock` and `takeFxMeters` to `FxLive`; flanger and metering struck from the absent list; stale `controlBlock` selector note replaced)
+- updated: pages/forge-fx-slots-have-generic-parameters.md (nine types; readouts that follow the DSP; `fxKnobLabel` PEAK; FLANGER's knob meanings)
+- updated: pages/displays-draw-from-the-dsp.md (each strip picture's engine function; the sine-through-the-slot tests within 0.5 dB)
+- updated: pages/forge-editor.md (rack slots laid out by strip plan; stale `displayWeight` removed; the rack's readings as the exception to "no knob prints its value", and why)
+- updated: pages/forge-preset-import.md (Serum and Vital flangers now convert; Vital's centre-pitch-to-DELAY mapping)
+- updated: pages/serum-2-preset-format.md (FXFlanger's keys; `kParamLevelOut` not read)
+- updated: pages/append-only-stored-indices.md (FLANGER appended as `FxType` 9)
+- updated: pages/forge-knob-diameter-is-panel-wide.md (rack knob sizes now derive from the shared diameter)
+- updated: index.md (new decision page; forge-mixer-and-fx summary)
+
+## [2026-10-21] update | Forge FX pictures dragged by their nodes; the generic pictures removed (f4241e4, dae2411)
+- source: instruments/rhino-forge/ui/ForgeFxGestures.h, ui/ForgeFxDisplay.h, src/ForgeEditorFxView.cpp, src/ForgeEditorInput.cpp, tests/ForgeTestsFx.cpp
+- updated: pages/forge-fx-strip-plans.md (the node gestures as pure functions, `Editor::fxWellAt`, one host gesture per knob; the fallback well now shows the type's mark, the old generic pictures deleted)
+- updated: pages/displays-draw-from-the-dsp.md (gestures invert the drawn axes through `fxPictureBox`, read from the slot as pressed)
+- updated: pages/forge-mixer-and-fx.md (pictures can be dragged by their nodes)

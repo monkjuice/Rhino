@@ -4,7 +4,7 @@ type: component
 summary: Forge opens Serum 2 and Vital presets by converting each one into a Forge state tree through one PatchWriter and loading that tree like a .forgepreset; anything Forge lacks is left out with one warning each, and all 75 local Vital presets and all 626 Serum 2 factory presets convert.
 tags: [forge, presets, serum, vital, import]
 sources: []
-updated: 2026-10-19
+updated: 2026-10-21
 ---
 
 # Forge preset import (Serum 2 and Vital)
@@ -32,7 +32,7 @@ Conversion runs on the message thread only.
 - It writes `TABLE` nodes, LFO-table nodes and macro names through the same helpers a save uses (`wavetableStateNode`, `lfoTableStateNode`).
 - It writes every unused slot as off, so slot 1's stale default never survives into a converted patch ([Hazards found while seeding the wiki](known-hazards.md)).
 
-**Leave things out, and say so.** At the user's request, anything Forge has no equivalent for is left out with one warning, not approximated. Examples are Vital's random sources and wavetable modifiers, Serum's spectral, sample, multisample and granular oscillators, a second filter, a flanger and chaos LFOs. The warnings travel with the patch, so the title plate, its tooltip and the browser still show them after the preset is saved into the bank ([Forge preset browser and bank](forge-preset-browser.md)).
+**Leave things out, and say so.** At the user's request, anything Forge has no equivalent for is left out with one warning, not approximated. Examples are Vital's random sources and wavetable modifiers, Serum's spectral, sample, multisample and granular oscillators, a second filter, chaos LFOs and its Hyper/Dimension, Bode, Convolve, utility and splitter effects. Both synths' flangers were on that list until 2026-10-21, when Forge gained a FLANGER effect. The warnings travel with the patch, so the title plate, its tooltip and the browser still show them after the preset is saved into the bank ([Forge preset browser and bank](forge-preset-browser.md)).
 
 ## Rules both converters share
 
@@ -49,11 +49,12 @@ Conversion runs on the message thread only.
 - **Wavetables** are rendered from keyframes to at most 64 frames. The importer handles Wave Source (time or frequency interpolation), Line Source and Audio File Source. Modifiers are not rendered, and each one is warned.
 - **LFO lines** are fitted to Forge's bent segments (`import::lfoTableFrom`) or matched to one of Forge's four shapes.
 - **Effects** go onto the MAIN rack in `effect_chain_order`.
+- **The flanger** (`flanger_*` keys, checked against the 75 local presets) is converted as follows. Vital's `center` is a note whose period is the delay, and its sweep is in pitch around that centre; Forge sweeps in time, up from DELAY. So `mod_depth` crosses as a share of DEPTH's range, and DELAY is set half that depth below the centre so that the two sweeps straddle the same place. `feedback` (−1..1) is clamped to ±0.95. `phase_offset` becomes SPREAD in degrees. Rate, sync and tempo go through the shared rate helper, and `dry_wet` becomes MIX.
 - **The sample oscillator** is played by Forge's noise module, with the noise source chosen from the sample's name. A name that does not describe a noise falls back to white noise with a warning, and the sample's pitch is not converted.
 
 ## Serum 2
 
-The file layout and the knob laws the converter relies on are in [Serum 2's preset format](serum-2-preset-format.md). Forge's warps and matrix were already calibrated to Serum's, so warp depths and routing depths map one to one. Serum's racks 0, 1 and 2 become Forge's MAIN, BUS 1 and BUS 2.
+The file layout and the knob laws the converter relies on are in [Serum 2's preset format](serum-2-preset-format.md). Forge's warps and matrix were already calibrated to Serum's, so warp depths and routing depths map one to one. Serum's racks 0, 1 and 2 become Forge's MAIN, BUS 1 and BUS 2. Since 2026-10-21 `FXFlanger` becomes a FLANGER slot (`ForgePresetImportSerumFx.cpp`). Serum has no centre delay, so DELAY keeps Forge's default ([Serum 2's preset format](serum-2-preset-format.md)).
 
 ## Results and open items
 

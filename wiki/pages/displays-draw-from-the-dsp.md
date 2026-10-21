@@ -4,7 +4,7 @@ type: convention
 summary: A curve on screen is computed by the same functions the audio runs, never from a second set of formulas, and tests hold the two together.
 tags: [both, ui, dsp, testing]
 sources: []
-updated: 2026-10-13
+updated: 2026-10-21
 ---
 
 # Displays draw from the DSP
@@ -18,7 +18,18 @@ A display is drawn from the arithmetic the engine actually runs, never from a pi
 - **[Rhino EQ](rhino-eq.md).** `core/dsp/EqFilter.h` is a pure header that the curve and the audio share. The panel draws `EqEngine::responseDbAt` from the scaled bands (`EqEngine::scaledBand`); drawn from the stored bands, display and audio would part once Scale leaves 100%.
 - **[Forge filter](forge-filter.md).** `core/ForgeFilter.h` holds `filterSample`, the audio, and `filterMagnitude`, the picture, written from the same coefficients a few lines apart.
 - **[Drum Rack](drum-rack.md).** A synth pad's picture is a strike rendered by the engine's own voice (`DrumRackEngine::renderStrike`), held sample-identical to live playback by a test, and Slice draws the cuts `DrumSlicer` returns. The sample editor's envelope line is the exception: `shapeAt` in `DeviceEditorPanelDrumSample.cpp` restates the voice's fades, Decay and envelope as a closed form in the UI, and no test holds the two together (2026-10-07; [Drum Rack sample editor](drum-rack-sample-editor.md)).
-- **Forge FX slots** (`ui/ForgeFxDisplay.h`). A distortion's curve is `fxShape` per pixel, an equaliser's response is the magnitude of the very biquads `setBand` builds, and a delay's repeats are placed by `fxDelaySeconds`.
+- **Forge FX slots** (`ui/ForgeFxDisplay.h`, since the 2026-10-21 strips one or two pictures per type; [Forge's FX strips are per-type plans in a pure header](forge-fx-strip-plans.md)). Each picture calls the engine's own arithmetic in `core/ForgeFxDsp.h` and `core/ForgeFx.h`:
+  - the distortion's transfer curve is `fxShape` per pixel, and its TONE well is `distortionFilterMagnitude`;
+  - the filter is `fxFilterMagnitude`;
+  - the equaliser is the magnitude of the very biquads `setBand` builds;
+  - a delay's repeats are placed by `fxDelaySeconds` and darkened by `fxDelayLoopGain`;
+  - the reverb's tail and its per-frequency decay are `fxReverbMeanTrip` and `fxReverbRt60`;
+  - the flanger's comb is `fxFlangerMagnitude`;
+  - the compressor's curve is `fxCompressorOutputDb` with `fxCompressorAutoMakeup`.
+
+  What only the running effect knows, such as an LFO's phase or the gain reduction, comes from the meters the engine publishes ([Forge mixer and effects racks](forge-mixer-and-fx.md)). The flanger's render reads its tap before writing the line, so the loop is exactly the delay and the picture can be the transfer function the slot runs.
+
+  Most of these pictures can also be dragged by their nodes (`ui/ForgeFxGestures.h`, commit `f4241e4`). A gesture inverts the axes its picture is drawn on, through the shared `fxPictureBox`, so a press lands on the value drawn under it. It reads those axes from the slot as it was pressed, because the delay's time axis rescales with TIME and would otherwise chase the pointer.
 - **Forge LFO graph.** `drawLfo` (`ui/ForgeEnvelopeVisuals.h`) samples `lfoOutputAt`, the one function the voice reads, across a cycle for a NORMAL shape and for an S&H staircase, the staircase being the loudest voice's own steps published once a block; a PATH is drawn from its route, which `lfoOutputAt` walks by the same `LfoPath::at` ([Forge LFOs](forge-lfos.md)).
 - **Forge oscillator display.** It draws the frames in `WavetableStore` as authored, warped as the voice warps them, at the POSITION and warp depths the loudest voice is modulated to (`Editor::modulatedValue`, since `2d14aba`).
 - **Forge modulation rings.** `modulationOffset` is the reading the loudest voice renders with, the same voice ENV 1's display follows.
@@ -30,7 +41,7 @@ Where no true picture exists, draw the truest thing that can be said instead of 
 
 ## How the rule is held
 
-Tests compare picture and sound by different routes. `native/src/tests/EqTest.cpp` sweeps sines through `EqEngine`, measures what comes out, and requires it within 0.35 dB of `responseDbAt`. `ForgeTestsDisplays.cpp` checks each slot curve against the function the engine calls. `ForgeTestsEnvelope.cpp` requires the offset drawn on a knob to equal ENV 2's own display reading. `modulatedTraceSuite` (`ForgeTestsDisplays.cpp`, `forge_displays`) routes MACRO 1 to POSITION and to a BEND + warp depth, holds a note, and requires the tube to match pixel for pixel a tube whose knob is set by hand to the modulated value. A macro holds still where an LFO would not; depth 0.5 and macro 1.0 are exact as floats; and it paints only `editor->paint` clipped to `ui::wavetableTubeBounds`, so the knob rings, which change while a note sounds, stay out of the picture. With `modulatedValue` forced back to `value` both checks fail.
+Tests compare picture and sound by different routes. `native/src/tests/EqTest.cpp` sweeps sines through `EqEngine`, measures what comes out, and requires it within 0.35 dB of `responseDbAt`. `ForgeTestsDisplays.cpp` checks each slot curve against the function the engine calls. `tests/ForgeTestsFx.cpp` (`forge_fx`) goes further for three pictures: it runs sines through an `FxRack` slot and requires the measured gain within 0.5 dB of the drawn curve. The three are the distortion's filter (LP and HP), all eight filter models and the flanger's comb held still at DEPTH 0. Where the curve drops below −30 dB, the slot need only be below −24 dB. `ForgeTestsEnvelope.cpp` requires the offset drawn on a knob to equal ENV 2's own display reading. `modulatedTraceSuite` (`ForgeTestsDisplays.cpp`, `forge_displays`) routes MACRO 1 to POSITION and to a BEND + warp depth, holds a note, and requires the tube to match pixel for pixel a tube whose knob is set by hand to the modulated value. A macro holds still where an LFO would not; depth 0.5 and macro 1.0 are exact as floats; and it paints only `editor->paint` clipped to `ui::wavetableTubeBounds`, so the knob rings, which change while a note sounds, stay out of the picture. With `modulatedValue` forced back to `value` both checks fail.
 
 ## How to apply
 
@@ -41,6 +52,7 @@ Put the transfer function in the DSP header as a free function and call it from 
 - [Measure sound, don't read the DSP](measure-sound-dont-read-dsp.md)
 - [Drum Rack sample editor](drum-rack-sample-editor.md)
 - [Forge mixer and effects racks](forge-mixer-and-fx.md)
+- [Forge's FX strips are per-type plans in a pure header](forge-fx-strip-plans.md)
 - [Forge modulation: matrix, envelopes, LFOs and macros](forge-modulation.md)
 - [Forge LFOs](forge-lfos.md)
 - [Forge warp](forge-warp.md)

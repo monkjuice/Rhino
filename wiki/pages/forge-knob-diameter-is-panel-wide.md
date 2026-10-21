@@ -4,7 +4,7 @@ type: gotcha
 summary: Every ordinary knob takes the tightest cell's size, so crowding one module shrinks them all; the test meant to catch it cannot fail.
 tags: [forge, ui, layout, testing]
 sources: []
-updated: 2026-10-03
+updated: 2026-10-21
 ---
 
 # One knob diameter for the whole Forge panel
@@ -13,7 +13,7 @@ Every ordinary knob on Forge's panel is drawn at one size, `ui::uniformKnobDiame
 
 ## Who competes
 
-Modules declared with `compactKnobs` size their knobs to their own cells and are left out of the minimum: the macros, the nine MIX strips, the FX rack and the six arp panes (`ui/ForgeModules.h`). Without that, the narrow mixer channels alone would set the size for everything. The oscillators, sub, noise, filter, GLOBAL, ENV and LFO share the one budget.
+Modules declared with `compactKnobs` size their knobs to their own cells and are left out of the minimum: the macros, the nine MIX strips, the FX rack and the six arp panes (`ui/ForgeModules.h`). Without that, the narrow mixer channels alone would set the size for everything. The oscillators, sub, noise, filter, GLOBAL, ENV and LFO share the one budget. The rack does not compete, but since 2026-10-21 it follows the shared size. Its strips size their knobs by `fxKnobSizesFor` (`ui/ForgeFxStrips.h`): a hero knob is the shared diameter capped at 48, an ordinary one 80% of it capped at 40, and a mini 26. So crowding any module also shrinks the rack's hero knobs ([Forge's FX strips are per-type plans in a pure header](forge-fx-strip-plans.md)).
 
 Height usually binds, because the rule takes 14 px off the height and only 6 off the width. On 2026-09-22, with two oscillators, the oscillators set the size at 54 px from 74×68 cells, and narrowing the filter's cells from 104 to 69 px wide changed nothing. The third oscillator (commit `a5103e9`, 2026-09-28) narrowed each oscillator plate to 16/3 grid columns and cut their display share from 44% to 30%, so those figures are history. Since commit `7be9a56` (2026-10-03) dropped the 20 px plate legend for a 6 px foot margin, the diameter at 1440×900 is 46 px, still bound by the oscillators' two knob rows (95×60 cells); with the legend it was 43 px (95×57). Print the limits before trusting any number.
 

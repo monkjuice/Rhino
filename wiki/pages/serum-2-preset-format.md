@@ -4,7 +4,7 @@ type: concept
 summary: A .SerumPreset is a JSON metadata header followed by one zstd frame of CBOR; this page records the layout and the knob laws Forge's importer relies on, measured by the GPLv3 serum2vital project and taken from it as facts, not code.
 tags: [forge, serum, presets, import, file-format]
 sources: []
-updated: 2026-10-19
+updated: 2026-10-21
 ---
 
 # Serum 2's preset format
@@ -35,6 +35,15 @@ These were measured by the serum2vital project, which is GPLv3. Its facts were u
 - **Compressor threshold** runs down from 0 dB, so a stored 0 is 0 dB. Read the other way, final limiters silenced whole patches.
 - **LFO curve** y values are measured from the top.
 - **Effects** are addressed from the matrix as rack × 100 + position (`serumFxTarget`).
+- **FXFlanger** (found in 52 factory flanger modules, 2026-10-21) has these keys:
+  - `kParamRate`, with `kParamBeatSync` to sync it;
+  - `kParamDepth` in %;
+  - `kParamFeedback` in %, one-sided: it becomes the upper half of Forge's bipolar FEEDBACK;
+  - `kParamWidth`, the panel's PHASE, in degrees 0-360: the offset between the two sides' LFOs, which Forge reads as SPREAD after wrapping past 180 to negative;
+  - `kParamWet`;
+  - `kParamLevelOut`, which the importer does not read.
+
+  There is no centre-delay parameter.
 - **Filter balance** is set per source: −100 sends it to filter 1 and +100 to filter 2. A filter that is switched off passes audio. Forge has one filter, and it becomes whichever filter the sources reach most.
 - **Sends:** a source turned down but sent to an FX bus takes its send as its level, because Serum's sends do not follow the source's level.
 - **The FIXED source** (id 38) is a constant, so the importer folds it into the knob instead of routing it.

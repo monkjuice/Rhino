@@ -1193,17 +1193,17 @@ void fxDisplaySuite()
             filtered.knobs = rhino::forge::fxTypes()[static_cast<size_t>(FxType::distortion)].init;
             juce::Image image(juce::Image::ARGB, 220, 60, true);
             juce::Graphics graphics(image);
-            ui::drawFxDistortion(graphics, image.getBounds().toFloat(), filtered,
-                                 ui::fxTypeColour(static_cast<int>(FxType::distortion)), 1.0f);
+            ui::drawFxDistortionTone(graphics, image.getBounds().toFloat(), filtered, 48000.0,
+                                     ui::fxTypeColour(static_cast<int>(FxType::distortion)), 1.0f);
             return image;
         };
         const auto lp = draw(0.5f), hp = draw(0.25f);
         auto differentFilterPixels = 0;
         for (int y = 0; y < lp.getHeight(); ++y)
-            for (int x = 0; x < lp.getWidth() / 2; ++x)
+            for (int x = 0; x < lp.getWidth(); ++x)
                 if (lp.getPixelAt(x, y) != hp.getPixelAt(x, y)) ++differentFilterPixels;
         require(differentFilterPixels > 20,
-                "the distortion display visibly distinguishes its LP and HP responses");
+                "the distortion's TONE picture visibly distinguishes its LP and HP responses");
     }
 
     // --- The delay -------------------------------------------------------------
